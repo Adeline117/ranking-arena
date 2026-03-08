@@ -383,22 +383,42 @@ export async function GET(request: Request) {
   const mode = url.searchParams.get('mode') || 'auto' // 'bulk', 'individual', 'auto'
   const plog = await PipelineLogger.start(`backfill-avatars-${platform || 'unknown'}`)
 
+  // Skip dead platforms that will just waste time
+  const DEAD_PLATFORMS = new Set(['kucoin', 'lbank', 'weex', 'phemex', 'blofin'])
+
   // Support comma-separated platforms for consolidated cron jobs
   if (platform && platform.includes(',')) {
-    const platforms = platform.split(',').map(p => p.trim()).filter(Boolean)
+    const platforms = platform.split(',').map(p => p.trim()).filter(p => p && !DEAD_PLATFORMS.has(p))
     const results: AvatarResult[] = []
     const perPlatformLimit = Math.floor(limit / platforms.length) || 50
+    const PER_PLATFORM_TIMEOUT = 45_000 // 45s per platform
+
     for (const p of platforms) {
-      const subUrl = new URL(request.url)
-      subUrl.searchParams.set('platform', p)
-      subUrl.searchParams.set('limit', String(perPlatformLimit))
-      const subReq = new Request(subUrl.toString(), { headers: request.headers })
-      const subRes = await GET(subReq)
-      const subData = await subRes.json() as AvatarResult
-      results.push(subData)
+      try {
+        const subUrl = new URL(request.url)
+        subUrl.searchParams.set('platform', p)
+        subUrl.searchParams.set('limit', String(perPlatformLimit))
+        const subReq = new Request(subUrl.toString(), { headers: request.headers })
+        const subRes = await Promise.race([
+          GET(subReq),
+          new Promise<Response>((_, reject) =>
+            setTimeout(() => reject(new Error(`Avatar backfill ${p} timed out`)), PER_PLATFORM_TIMEOUT)
+          ),
+        ])
+        const subData = await subRes.json() as AvatarResult
+        results.push(subData)
+      } catch (err) {
+        results.push({ platform: p, total: 0, updated: 0, errors: 1 })
+      }
     }
     await plog.success(results.reduce((s, r) => s + r.updated, 0))
     return NextResponse.json({ platforms: results })
+  }
+
+  // Skip single dead platform
+  if (platform && DEAD_PLATFORMS.has(platform)) {
+    await plog.success(0)
+    return NextResponse.json({ platform, total: 0, updated: 0, errors: 0, message: 'Platform skipped (dead/blocked)' })
   }
 
   if (!platform) {
