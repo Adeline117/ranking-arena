@@ -19,6 +19,7 @@ interface PlatformHealth {
   oldest_snapshot: string | null
   age_hours: number | null
   status: 'healthy' | 'warning' | 'critical' | 'no_data'
+  fieldCoverage?: { roi: number; winRate: number; maxDrawdown: number }
 }
 
 interface HealthData {
@@ -51,10 +52,11 @@ export default function DataHealthPage() {
         const platforms: PlatformHealth[] = (d.platforms || []).map((p: Record<string, unknown>) => ({
           source: p.source as string,
           total: (p.total as number) || 0,
-          latest_snapshot: p.latestSnapshot as string | null,
+          latest_snapshot: (p.lastUpdate || p.latestSnapshot) as string | null,
           oldest_snapshot: null,
           age_hours: p.ageHours as number | null,
           status: p.status as string || 'no_data',
+          fieldCoverage: p.fieldCoverage as { roi: number; winRate: number; maxDrawdown: number } | undefined,
         }))
         setData({
           platforms,
@@ -89,10 +91,11 @@ export default function DataHealthPage() {
         const platforms: PlatformHealth[] = (d.platforms || []).map((p: Record<string, unknown>) => ({
           source: p.source as string,
           total: (p.total as number) || 0,
-          latest_snapshot: p.latestSnapshot as string | null,
+          latest_snapshot: (p.lastUpdate || p.latestSnapshot) as string | null,
           oldest_snapshot: null,
           age_hours: p.ageHours as number | null,
           status: p.status as string || 'no_data',
+          fieldCoverage: p.fieldCoverage as { roi: number; winRate: number; maxDrawdown: number } | undefined,
         }))
         setData({
           platforms,
@@ -164,6 +167,9 @@ export default function DataHealthPage() {
               <th style={{ textAlign: 'right', padding: '8px 12px', color: tokens.colors.text.tertiary, fontWeight: 500 }}>{t('dataHealthCount')}</th>
               <th style={{ textAlign: 'right', padding: '8px 12px', color: tokens.colors.text.tertiary, fontWeight: 500 }}>{t('dataHealthLastUpdate')}</th>
               <th style={{ textAlign: 'right', padding: '8px 12px', color: tokens.colors.text.tertiary, fontWeight: 500 }}>{t('dataHealthAge')}</th>
+              <th style={{ textAlign: 'right', padding: '8px 12px', color: tokens.colors.text.tertiary, fontWeight: 500 }}>ROI%</th>
+              <th style={{ textAlign: 'right', padding: '8px 12px', color: tokens.colors.text.tertiary, fontWeight: 500 }}>WR%</th>
+              <th style={{ textAlign: 'right', padding: '8px 12px', color: tokens.colors.text.tertiary, fontWeight: 500 }}>DD%</th>
               <th style={{ textAlign: 'center', padding: '8px 12px', color: tokens.colors.text.tertiary, fontWeight: 500 }}>{t('dataHealthStatus')}</th>
             </tr>
           </thead>
@@ -187,6 +193,15 @@ export default function DataHealthPage() {
                     : p.age_hours < 24 ? t('dataHealthHours').replace('{n}', String(Math.round(p.age_hours)))
                     : t('dataHealthDays').replace('{n}', String(Math.round(p.age_hours / 24)))
                     : '-'}
+                </td>
+                <td style={{ padding: '10px 12px', textAlign: 'right', fontSize: 12, color: (p.fieldCoverage?.roi ?? 0) >= 90 ? 'var(--color-accent-success)' : tokens.colors.text.tertiary }}>
+                  {p.fieldCoverage ? `${p.fieldCoverage.roi}%` : '-'}
+                </td>
+                <td style={{ padding: '10px 12px', textAlign: 'right', fontSize: 12, color: (p.fieldCoverage?.winRate ?? 0) >= 50 ? 'var(--color-accent-success)' : tokens.colors.text.tertiary }}>
+                  {p.fieldCoverage ? `${p.fieldCoverage.winRate}%` : '-'}
+                </td>
+                <td style={{ padding: '10px 12px', textAlign: 'right', fontSize: 12, color: (p.fieldCoverage?.maxDrawdown ?? 0) >= 50 ? 'var(--color-accent-success)' : tokens.colors.text.tertiary }}>
+                  {p.fieldCoverage ? `${p.fieldCoverage.maxDrawdown}%` : '-'}
                 </td>
                 <td style={{ padding: '10px 12px', textAlign: 'center' }}>
                   <span style={{
