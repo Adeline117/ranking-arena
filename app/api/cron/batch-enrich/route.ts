@@ -5,7 +5,8 @@
  * avoiding Cloudflare timeouts and Vercel deployment protection issues.
  *
  * Query params:
- *   period=90D|30D|7D (default: 90D) - which time period to enrich
+ *   period=90D|30D|7D|all (default: 90D) - which time period to enrich
+ *     When period=all, runs all 3 periods (90D, 30D, 7D) sequentially
  *   all=true - enrich all platforms including lower priority ones
  */
 
@@ -65,12 +66,19 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
   }
 
-  const period = request.nextUrl.searchParams.get('period') || '90D'
+  const periodParam = request.nextUrl.searchParams.get('period') || '90D'
   const enrichAll = request.nextUrl.searchParams.get('all') === 'true'
 
-  if (!['7D', '30D', '90D'].includes(period)) {
-    return NextResponse.json({ error: 'Invalid period, must be 7D, 30D, or 90D' }, { status: 400 })
+  const VALID_PERIODS = ['7D', '30D', '90D'] as const
+  type Period = typeof VALID_PERIODS[number]
+
+  if (periodParam !== 'all' && !VALID_PERIODS.includes(periodParam as Period)) {
+    return NextResponse.json({ error: 'Invalid period, must be 7D, 30D, 90D, or all' }, { status: 400 })
   }
+
+  const periodsToRun: Period[] = periodParam === 'all'
+    ? ['90D', '30D', '7D']
+    : [periodParam as Period]
 
   // Determine which platforms to enrich
   let platforms: string[]
@@ -81,41 +89,44 @@ export async function GET(request: NextRequest) {
   }
 
   const results: BatchResult[] = []
-  const plog = await PipelineLogger.start(`batch-enrich-${period}`, { period, enrichAll, platforms })
+  const plog = await PipelineLogger.start(`batch-enrich-${periodParam}`, { period: periodParam, enrichAll, platforms })
 
-  // Run enrichments inline in parallel batches of 3
-  const BATCH_CONCURRENCY = 3
-  for (let i = 0; i < platforms.length; i += BATCH_CONCURRENCY) {
-    const batch = platforms.slice(i, i + BATCH_CONCURRENCY)
-    const batchResults = await Promise.all(
-      batch.map(async (platform): Promise<BatchResult> => {
-        const config = PLATFORM_LIMITS[platform]
-        if (!config) return { platform, period, status: 'error', durationMs: 0, error: 'No config' }
+  // Run each period sequentially (when period=all, this runs 90D → 30D → 7D)
+  for (const period of periodsToRun) {
+    // Run enrichments inline in parallel batches of 3
+    const BATCH_CONCURRENCY = 3
+    for (let i = 0; i < platforms.length; i += BATCH_CONCURRENCY) {
+      const batch = platforms.slice(i, i + BATCH_CONCURRENCY)
+      const batchResults = await Promise.all(
+        batch.map(async (platform): Promise<BatchResult> => {
+          const config = PLATFORM_LIMITS[platform]
+          if (!config) return { platform, period, status: 'error', durationMs: 0, error: 'No config' }
 
-        const limit = period === '90D' ? config.limit90 : period === '30D' ? config.limit30 : config.limit7
-        const start = Date.now()
+          const limit = period === '90D' ? config.limit90 : period === '30D' ? config.limit30 : config.limit7
+          const start = Date.now()
 
-        try {
-          const result: EnrichmentResult = await runEnrichment({ platform, period, limit })
-          return {
-            platform, period,
-            status: result.ok ? 'success' : 'error',
-            durationMs: Date.now() - start,
-            enriched: result.summary.enriched,
-            failed: result.summary.failed,
-            error: result.ok ? undefined : `${result.summary.failed} enrichments failed`,
+          try {
+            const result: EnrichmentResult = await runEnrichment({ platform, period, limit })
+            return {
+              platform, period,
+              status: result.ok ? 'success' : 'error',
+              durationMs: Date.now() - start,
+              enriched: result.summary.enriched,
+              failed: result.summary.failed,
+              error: result.ok ? undefined : `${result.summary.failed} enrichments failed`,
+            }
+          } catch (err) {
+            return {
+              platform, period,
+              status: 'error',
+              durationMs: Date.now() - start,
+              error: err instanceof Error ? err.message : String(err),
+            }
           }
-        } catch (err) {
-          return {
-            platform, period,
-            status: 'error',
-            durationMs: Date.now() - start,
-            error: err instanceof Error ? err.message : String(err),
-          }
-        }
-      })
-    )
-    results.push(...batchResults)
+        })
+      )
+      results.push(...batchResults)
+    }
   }
 
   const succeeded = results.filter(r => r.status === 'success').length
@@ -132,7 +143,8 @@ export async function GET(request: NextRequest) {
 
   return NextResponse.json({
     ok: succeeded === results.length,
-    period,
+    period: periodParam,
+    periodsRun: periodsToRun,
     platforms: platforms.length,
     succeeded,
     failed,
