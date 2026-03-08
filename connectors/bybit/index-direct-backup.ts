@@ -38,41 +38,25 @@ export class BybitConnector extends BaseConnector {
       const pages = Math.ceil(limit / pageSize);
 
       for (let page = 1; page <= pages && entries.length < limit; page++) {
-        // Try VPS scraper first (bypasses WAF)
-        let vpsResponse = await this.fetchViaVPS<BybitListResponse>('/bybit/leaderboard', {
-          page,
-          pageSize,
+        const body = {
+          pageNo: page,
+          pageSize: pageSize,
           timeRange: WINDOW_MAP[window],
-        });
+          dataType: 'ROI',
+          sortField: 'ROI',
+          sortType: 'DESC',
+        };
 
-        let list: BybitLeaderItem[] = [];
+        const response = await this.postJSON<BybitListResponse>(
+          LIST_URL,
+          body,
+          {
+            'Referer': 'https://www.bybit.com/copyTrade/tradeCenter/leaderBoard',
+            'Origin': 'https://www.bybit.com',
+          }
+        );
 
-        if (vpsResponse?.result?.list || vpsResponse?.result?.leaderList) {
-          list = vpsResponse.result.list || vpsResponse.result.leaderList || [];
-        } else if (vpsResponse?.data?.list) {
-          list = vpsResponse.data.list;
-        } else {
-          // Fallback to direct API (likely to fail with 403)
-          const body = {
-            pageNo: page,
-            pageSize: pageSize,
-            timeRange: WINDOW_MAP[window],
-            dataType: 'ROI',
-            sortField: 'ROI',
-            sortType: 'DESC',
-          };
-
-          const response = await this.postJSON<BybitListResponse>(
-            LIST_URL,
-            body,
-            {
-              'Referer': 'https://www.bybit.com/copyTrade/tradeCenter/leaderBoard',
-              'Origin': 'https://www.bybit.com',
-            }
-          );
-
-          list = response?.result?.list || response?.data?.list || [];
-        }
+        const list = response?.result?.list || response?.data?.list || [];
         if (list.length === 0) break;
 
         for (const item of list) {

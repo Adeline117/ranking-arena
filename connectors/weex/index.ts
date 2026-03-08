@@ -26,27 +26,48 @@ export class WeexConnector extends BaseConnector {
   async discoverLeaderboard(window: Window, limit = 50): Promise<ConnectorResult<LeaderboardEntry[]>> {
     try {
       const periodMap: Record<Window, string> = { '7d': '7', '30d': '30', '90d': '90' };
-      const params = new URLSearchParams({
-        page: '1',
-        pageSize: String(Math.min(limit, 50)),
-        sortBy: 'roi',
+
+      // Try VPS scraper first
+      let vpsResponse = await this.fetchViaVPS<{ data: { list: Record<string, unknown>[] } }>('/weex/leaderboard', {
+        page: 1,
+        pageSize: Math.min(limit, 50),
         period: periodMap[window],
       });
 
-      const url = `${API_BASE}/api/copy-trade/public/trader/ranking?${params.toString()}`;
-      const response = await this.fetchJSON<{ data: { list: Record<string, unknown>[] } }>(url, {
-        headers: { 'Origin': API_BASE, 'Referer': `${API_BASE}/copy-trading` },
-      });
+      let list: Record<string, unknown>[] = [];
+      let sourceUrl = `${API_BASE}/api/copy-trade/public/trader/ranking`;
 
-      if (!response?.data?.list) {
+      if (vpsResponse?.data?.list) {
+        list = vpsResponse.data.list;
+      } else {
+        // Fallback to direct API
+        const params = new URLSearchParams({
+          page: '1',
+          pageSize: String(Math.min(limit, 50)),
+          sortBy: 'roi',
+          period: periodMap[window],
+        });
+
+        const url = `${API_BASE}/api/copy-trade/public/trader/ranking?${params.toString()}`;
+        sourceUrl = url;
+        const response = await this.fetchJSON<{ data: { list: Record<string, unknown>[] } }>(url, {
+          headers: { 'Origin': API_BASE, 'Referer': `${API_BASE}/copy-trading` },
+        });
+
+        if (response?.data?.list) {
+          list = response.data.list;
+        }
+      }
+
+      if (list.length === 0) {
         return this.success([], {
-          source_url: url,
+          source_url: sourceUrl,
           platform_sorting: 'default',
           reason: 'WEEX leaderboard endpoint not confirmed',
         }, { window_not_supported: window === '90d' });
       }
 
-      const entries: LeaderboardEntry[] = response.data.list.map((item, idx) => ({
+      const entries: LeaderboardEntry[] = list.map((item, idx) => ({
         trader_key: String(item.traderId || item.uid),
         display_name: (item.nickName as string) || null,
         avatar_url: (item.avatar as string) || null,
@@ -60,7 +81,7 @@ export class WeexConnector extends BaseConnector {
       entries.sort((a, b) => ((b.metrics.roi_pct ?? -Infinity) - (a.metrics.roi_pct ?? -Infinity)));
 
       return this.success(entries.slice(0, limit), {
-        source_url: url,
+        source_url: sourceUrl,
         platform_sorting: 'default',
         reason: 'WEEX may not support server-side ROI sort',
       });
