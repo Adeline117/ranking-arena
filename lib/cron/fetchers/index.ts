@@ -53,6 +53,7 @@ import { fetchWeb3Bot } from './web3-bot'
 import { fetchDrift } from './drift'
 import { fetchBitunix } from './bitunix'
 import { fetchParadex } from './paradex'
+import { fetchBtcc } from './btcc'
 
 export const INLINE_FETCHERS: Record<string, PlatformFetcher> = {
   // CEX Futures
@@ -103,6 +104,7 @@ export const INLINE_FETCHERS: Record<string, PlatformFetcher> = {
   drift: fetchDrift,
   bitunix: fetchBitunix,
   paradex: fetchParadex,
+  btcc: fetchBtcc,
 }
 
 export function getInlineFetcher(platform: string): PlatformFetcher | undefined {

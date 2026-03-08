@@ -53,8 +53,8 @@ const GROUPS: Record<string, string[]> = {
   e: ['coinex', 'binance_web3', 'kwenta', 'synthetix'],
   // Group F: Slow CEX (every 6h) — 2 platforms, parallel (~141s + ~60s = ~200s)
   f: ['mexc', 'bingx'],
-  // Group H: Fast CEX (every 6h) — 2 platforms, parallel (~25s each)
-  h: ['gateio', 'bitmart'],
+  // Group H: Fast CEX (every 6h) — 3 platforms, parallel (~25s each)
+  h: ['gateio', 'bitmart', 'btcc'],
   // Group G: New CEX + DEX (every 6h) — 6 platforms
   g: ['drift', 'bitunix', 'web3_bot', 'uniswap', 'pancakeswap', 'paradex'],
 }
