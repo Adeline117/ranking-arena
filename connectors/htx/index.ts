@@ -25,40 +25,58 @@ export class HtxConnector extends BaseConnector {
 
   async discoverLeaderboard(window: Window, limit = 50): Promise<ConnectorResult<LeaderboardEntry[]>> {
     try {
-      const periodMap: Record<Window, string> = { '7d': '7', '30d': '30', '90d': '90' };
-      const params = new URLSearchParams({
-        page: '1',
-        pageSize: String(Math.min(limit, 50)),
-        sortField: 'yield_rate',
-        sortOrder: 'desc',
-        periodDays: periodMap[window],
-      });
+      const periodMap: Record<Window, string> = { '7d': '7D', '30d': '30D', '90d': '90D' };
+      const workerUrl = process.env.CLOUDFLARE_PROXY_URL;
 
-      const url = `${API_BASE}/v1/copy-trading/public/trader/list?${params.toString()}`;
-      const response = await this.fetchJSON<{ data: { list: Record<string, unknown>[] } }>(url, {
-        headers: { 'Origin': API_BASE, 'Referer': `${API_BASE}/copy-trading` },
-      });
+      let response: { data?: { list?: Record<string, unknown>[] } } | null = null;
+      let sourceUrl = '';
+
+      // Try Cloudflare Worker first (bypasses geo-blocking)
+      if (workerUrl) {
+        const url = `${workerUrl}/htx/copy-trading?page=1&pageSize=${Math.min(limit, 50)}&period=${periodMap[window]}`;
+        sourceUrl = url;
+        response = await this.fetchJSON<{ data: { list: Record<string, unknown>[] } }>(url, {
+          headers: { 'Origin': API_BASE, 'Referer': `${API_BASE}/copy-trading` },
+        });
+      }
+
+      // Fallback to direct API
+      if (!response?.data?.list) {
+        const params = new URLSearchParams({
+          page: '1',
+          pageSize: String(Math.min(limit, 50)),
+          sortField: 'yield_rate',
+          sortOrder: 'desc',
+          periodDays: periodMap[window].replace('D', ''),
+        });
+
+        const url = `${API_BASE}/v1/copy-trading/public/trader/list?${params.toString()}`;
+        sourceUrl = url;
+        response = await this.fetchJSON<{ data: { list: Record<string, unknown>[] } }>(url, {
+          headers: { 'Origin': API_BASE, 'Referer': `${API_BASE}/copy-trading` },
+        });
+      }
 
       if (!response?.data?.list) {
         return this.success([], {
-          source_url: url,
+          source_url: sourceUrl,
           platform_sorting: 'roi_desc',
           reason: 'HTX leaderboard endpoint may require different path',
         });
       }
 
       const entries: LeaderboardEntry[] = response.data.list.map((item, idx) => ({
-        trader_key: String(item.trader_id || item.uid),
-        display_name: (item.nick_name as string) || null,
-        avatar_url: (item.avatar as string) || null,
-        profile_url: `${API_BASE}/copy-trading/trader/${item.trader_id}`,
+        trader_key: String(item.trader_id || item.uid || item.leadTraderUid),
+        display_name: (item.nick_name as string) || (item.nickname as string) || null,
+        avatar_url: (item.avatar as string) || (item.avatarUrl as string) || null,
+        profile_url: `${API_BASE}/copy-trading/trader/${item.trader_id || item.leadTraderUid}`,
         rank: idx + 1,
         metrics: this.normalize(item, {}),
         raw: item,
       }));
 
       return this.success(entries.slice(0, limit), {
-        source_url: url,
+        source_url: sourceUrl,
         platform_sorting: 'roi_desc',
         platform_window: window,
       });
