@@ -53,12 +53,11 @@ function detectTraderType(
 const logger = createLogger('compute-leaderboard')
 
 const SEASONS: Period[] = ['7D', '30D', '90D']
-/** Per-platform freshness thresholds: CEX=7d, DEX=7d
- *  Widened from 24h/48h to 168h — many fetchers are intermittently broken
- *  (Cloudflare WAF, geo-blocking), so trader data can be days old but still valid.
- *  Better to show slightly stale data than to drop 70% of traders. */
-const DATA_FRESHNESS_HOURS_CEX = 168
-const DATA_FRESHNESS_HOURS_DEX = 168
+/** Per-platform freshness thresholds: CEX=48h, DEX=72h
+ *  Tightened from 168h (7d) now that all fetcher groups run every 3-6h.
+ *  If a platform's data is >2-3 days old, it's genuinely stale. */
+const DATA_FRESHNESS_HOURS_CEX = 48
+const DATA_FRESHNESS_HOURS_DEX = 72
 
 function getFreshnessHours(source: string): number {
   const sourceType = SOURCE_TYPE_MAP[source]

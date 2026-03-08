@@ -6,7 +6,7 @@
   "crons": [
     {
       "path": "/api/cron/compute-leaderboard",
-      "schedule": "0 * * * *"
+      "schedule": "0,30 * * * *"
     },
     {
       "path": "/api/cron/check-data-freshness",
@@ -65,32 +65,16 @@
       "schedule": "5 */2 * * *"
     },
     {
-      "path": "/api/cron/fetch-traders/binance_futures",
-      "schedule": "45 */3 * * *"
-    },
-    {
-      "path": "/api/cron/fetch-traders/binance_spot",
-      "schedule": "48 */3 * * *"
-    },
-    {
-      "path": "/api/cron/fetch-traders/bybit",
-      "schedule": "50 */3 * * *"
-    },
-    {
       "path": "/api/cron/batch-fetch-traders?group=a",
-      "schedule": "55 */3 * * *"
+      "schedule": "45 */3 * * *"
     },
     {
       "path": "/api/cron/batch-fetch-traders?group=b",
       "schedule": "2 */4 * * *"
     },
     {
-      "path": "/api/cron/fetch-traders/bybit_spot",
-      "schedule": "10 */6 * * *"
-    },
-    {
       "path": "/api/cron/batch-fetch-traders?group=c",
-      "schedule": "15 */6 * * *"
+      "schedule": "15 */4 * * *"
     },
     {
       "path": "/api/cron/batch-fetch-traders?group=d",
@@ -98,15 +82,15 @@
     },
     {
       "path": "/api/cron/batch-fetch-traders?group=e",
-      "schedule": "35 */8 * * *"
+      "schedule": "35 */6 * * *"
     },
     {
       "path": "/api/cron/batch-fetch-traders?group=f",
-      "schedule": "45 */12 * * *"
+      "schedule": "45 */6 * * *"
     },
     {
       "path": "/api/cron/batch-fetch-traders?group=g",
-      "schedule": "55 */12 * * *"
+      "schedule": "55 */6 * * *"
     },
     {
       "path": "/api/cron/batch-enrich",
@@ -157,11 +141,11 @@
       "schedule": "0 */2 * * *"
     },
     {
-      "path": "/api/cron/backfill-avatars?platform=binance_futures,bybit,bitget_futures,okx_futures,mexc,kucoin,htx_futures,bingx&limit=400",
+      "path": "/api/cron/backfill-avatars?platform=binance_futures,bybit,bitget_futures,okx_futures,mexc,htx_futures,bingx,drift&limit=400",
       "schedule": "30 2 * * *"
     },
     {
-      "path": "/api/cron/backfill-avatars?platform=coinex,lbank,binance_spot,bitget_spot,weex,phemex,blofin,xt&limit=400",
+      "path": "/api/cron/backfill-avatars?platform=coinex,binance_spot,weex,phemex,xt,bitunix,gateio,bitmart&limit=400",
       "schedule": "30 8 * * *"
     }
   ],

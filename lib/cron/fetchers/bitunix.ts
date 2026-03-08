@@ -23,7 +23,7 @@ import { captureException } from '@/lib/utils/logger'
 
 const SOURCE = 'bitunix'
 const API_URL = 'https://api.bitunix.com/copy/trading/v1/trader/list'
-const TARGET = 500
+const TARGET = 2000
 const PAGE_SIZE = 200
 
 // statisticType: 1=7D, 2=30D, 3=90D, 4=180D

@@ -5,13 +5,13 @@
  * avoiding Cloudflare timeouts and Vercel deployment protection issues.
  *
  * Query params:
- *   group=a  → bitget_futures, okx_futures (every 3h)
+ *   group=a  → binance_futures, binance_spot, bybit, bitget_futures, okx_futures (every 3h)
  *   group=b  → hyperliquid, gmx, jupiter_perps (every 4h)
  *   group=c  → okx_web3, aevo, xt (every 4h)
- *   group=d  → gains, htx_futures, dydx, phemex (every 6h)
- *   group=e  → coinex, binance_web3, kwenta, synthetix, mux (every 8h)
- *   group=f  → mexc, bingx, gateio, weex, bitmart (every 12h)
- *   group=g  → drift, bitunix, web3_bot, uniswap, pancakeswap (every 12h)
+ *   group=d  → gains, htx_futures, dydx, phemex, bybit_spot (every 6h)
+ *   group=e  → coinex, binance_web3, kwenta, synthetix, mux (every 6h)
+ *   group=f  → mexc, bingx, gateio, weex, bitmart (every 6h)
+ *   group=g  → drift, bitunix, web3_bot, uniswap, pancakeswap (every 6h)
  *
  * Dead/blocked platforms removed:
  *   - kucoin: APIs return 404, feature discontinued
@@ -32,26 +32,20 @@ export const maxDuration = 300
 export const preferredRegion = 'hnd1' // Tokyo — avoids Binance/OKX/Bybit geo-blocking
 
 const GROUPS: Record<string, string[]> = {
-  // Group A: High-priority CEX (every 3h) — 2 platforms, ~190s parallel
-  // binance_futures, binance_spot, bybit have dedicated crons
-  a: ['bitget_futures', 'okx_futures'],
-  // Group B: DEX + slow APIs (every 4h) — 3 platforms, ~110s parallel
+  // Group A: High-priority CEX (every 3h) — 5 platforms
+  // Consolidated: dedicated crons (binance_futures/spot, bybit) merged here
+  a: ['binance_futures', 'binance_spot', 'bybit', 'bitget_futures', 'okx_futures'],
+  // Group B: Top DEX (every 4h) — 3 platforms, ~110s parallel
   b: ['hyperliquid', 'gmx', 'jupiter_perps'],
-  // Group C: Mid-priority CEX (every 4h) — 3 platforms, ~70s parallel
-  // okx_spot removed: OKX only supports instType=SWAP, no spot copy trading leaderboard
+  // Group C: Mid-priority (every 4h) — 3 platforms, ~70s parallel
   c: ['okx_web3', 'aevo', 'xt'],
-  // Group D: Working CEX+DEX (every 6h) — 4 platforms
-  // perpetual_protocol removed: Studio subgraph returns 404 (dead)
-  d: ['gains', 'htx_futures', 'dydx', 'phemex'],
-  // Group E: Lower-priority (every 8h) — 5 platforms
-  // bitget_spot removed: no public API (all endpoints return 404)
+  // Group D: CEX+DEX (every 6h) — 5 platforms
+  d: ['gains', 'htx_futures', 'dydx', 'phemex', 'bybit_spot'],
+  // Group E: Lower-priority DEX (every 6h) — 5 platforms (was 8h)
   e: ['coinex', 'binance_web3', 'kwenta', 'synthetix', 'mux'],
-  // Group F: Lower-priority CEX (every 12h) — 6 platforms
-  // kucoin removed: APIs return 404, feature discontinued
-  // lbank removed: needs session auth, crashes headless browser
-  // blofin removed: needs BLOFIN env vars (not configured)
+  // Group F: Mid-tier CEX (every 6h) — 5 platforms (was 12h)
   f: ['mexc', 'bingx', 'gateio', 'weex', 'bitmart'],
-  // Group G: DEX + new CEX (every 12h) — Drift, Bitunix first for priority
+  // Group G: New CEX + DEX (every 6h) — 5 platforms (was 12h)
   g: ['drift', 'bitunix', 'web3_bot', 'uniswap', 'pancakeswap'],
 }
 
