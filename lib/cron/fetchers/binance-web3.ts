@@ -1,25 +1,19 @@
 /**
- * Binance Web3 Leaderboard — Inline fetcher for Vercel serverless
+ * Binance Web3 Wallet Leaderboard — Inline fetcher for Vercel serverless
  *
- * Source page: https://web3.binance.com/zh-CN/leaderboard?chain=bsc
+ * Source page: https://web3.binance.com/en/leaderboard
  *
- * The Binance Web3 leaderboard is an SPA that loads trader data via internal
- * APIs. The exact endpoint is not publicly documented, so we try the known
- * Binance bapi patterns. If none work, we return gracefully with zero results
- * (the cron scheduler will retry on the next run).
+ * API: web3.binance.com/bapi/defi/v1/public/wallet-direct/market/leaderboard/query
+ * - GET request, query params: chainId, period, tag, pageNo, pageSize (max 25)
+ * - Returns on-chain wallet PnL data (BSC, Base, Solana)
+ * - No geo-blocking on this endpoint (works globally)
  *
- * [WARN] GEO-BLOCKED from US IPs (HTTP 451).
- * Works correctly from Vercel Japan/Singapore datacenters.
- *
- * Known API patterns tried:
- *  1. /bapi/composite/v1/public/future/leaderboard/getLeaderboardRank
- *  2. /bapi/futures/v1/public/future/leaderboard/getOtherLeaderboardBaseInfo (single)
- *
- * Field mappings based on original import_binance_web3.mjs:
- *  - traderId: address / wallet / walletAddress
- *  - roi: roi / pnlPct / returnRate / profitRate (decimal → *100 if <10)
- *  - pnl: pnl / profit / totalPnl
- *  - winRate: winRate / win_rate / successRate
+ * Field mappings:
+ *  - address: wallet address (0x...)
+ *  - addressLabel: display name
+ *  - realizedPnl: absolute PnL in USD
+ *  - realizedPnlPercent: decimal ROI (0.27 = 27%)
+ *  - winRate: decimal (0.65 = 65%)
  */
 
 import type { SupabaseClient } from '@supabase/supabase-js'
@@ -31,9 +25,6 @@ import {
   fetchJson,
   sleep,
   parseNum,
-  normalizeWinRate,
-  normalizeROI,
-  getWinRateFormat,
 } from './shared'
 import { type StatsDetail, upsertStatsDetail } from './enrichment'
 import { logger } from '@/lib/logger'
@@ -41,273 +32,157 @@ import { captureException } from '@/lib/utils/logger'
 
 const SOURCE = 'binance_web3'
 const TARGET = 500
-const PROXY_URL = process.env.CLOUDFLARE_PROXY_URL || 'https://ranking-arena-proxy.broosbook.workers.dev'
+const PAGE_SIZE = 25 // API max
 
-// Binance community leaderboard API (works for on-chain/web3 traders)
-// Note: /bapi/composite/ returns 404, /bapi/futures/ is the correct prefix (returns 451 geo-block)
-const LEADERBOARD_URL =
-  'https://www.binance.com/bapi/futures/v1/public/future/leaderboard/getLeaderboardRank'
+// Binance Web3 Wallet on-chain leaderboard (no geo-blocking)
+const WEB3_LEADERBOARD_URL =
+  'https://web3.binance.com/bapi/defi/v1/public/wallet-direct/market/leaderboard/query'
 
-const HEADERS: Record<string, string> = {
-  'Content-Type': 'application/json',
-  Origin: 'https://www.binance.com',
-  Referer: 'https://www.binance.com/en/leaderboard',
+const WEB3_PERIOD_MAP: Record<string, string> = {
+  '7D': '7d',
+  '30D': '30d',
+  '90D': '90d',
 }
 
-// Strategy cache: once we find a working method, reuse it for all subsequent requests
-let _cachedStrategy: 'direct' | 'vps' | 'cf' | null = null
+// Chain IDs to query (BSC, Base, Solana)
+const CHAIN_IDS = ['56', '8453', 'CT_501']
 
-async function fetchViaVps<T>(vpsUrl: string, targetUrl: string, opts: { method?: string; headers?: Record<string, string>; body?: unknown }): Promise<T> {
-  const res = await fetch(vpsUrl, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'X-Proxy-Key': process.env.VPS_PROXY_KEY || '',
-    },
-    body: JSON.stringify({
-      url: targetUrl,
-      method: opts.method || 'POST',
-      headers: opts.headers || {},
-      body: opts.body || null,
-    }),
-    signal: AbortSignal.timeout(20_000),
-  })
-  if (!res.ok) throw new Error(`VPS proxy HTTP ${res.status}`)
-  return (await res.json()) as T
+// ── Types ──
+
+interface Web3LeaderboardEntry {
+  address: string
+  addressLabel?: string
+  addressLogo?: string
+  realizedPnl?: string
+  realizedPnlPercent?: string
+  winRate?: string
+  txCount?: number
+  balance?: string
+  tags?: string[]
 }
 
-// Helper to fetch with proxy fallback (direct → VPS proxy → CF Worker)
-async function fetchWithProxyFallback<T>(
-  url: string,
-  opts: { method?: string; headers?: Record<string, string>; body?: unknown; timeoutMs?: number }
-): Promise<T> {
-  // JP VPS first — SG is restricted for Binance Web3 since Aug 2024
-  const vpsUrl = process.env.VPS_PROXY_JP || process.env.VPS_PROXY_URL || process.env.VPS_PROXY_SG
-
-  // If we already know a working strategy, skip the rest
-  if (_cachedStrategy === 'vps' && vpsUrl) {
-    return await fetchViaVps<T>(vpsUrl, url, opts)
+interface Web3Response {
+  code?: string
+  data?: {
+    data?: Web3LeaderboardEntry[]
+    total?: number
   }
-  if (_cachedStrategy === 'cf' && PROXY_URL) {
-    const proxyTarget = `${PROXY_URL}?url=${encodeURIComponent(url)}`
-    return await fetchJson<T>(proxyTarget, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: opts.body, timeoutMs: opts.timeoutMs })
-  }
-
-  // Try direct first (short timeout)
-  try {
-    const result = await fetchJson<T>(url, { ...opts, timeoutMs: 8000 })
-    _cachedStrategy = 'direct'
-    return result
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : ''
-    const isBlocked = msg.includes('451') || msg.includes('403') || msg.includes('Access Denied')
-    const isTimeout = msg.includes('abort') || msg.includes('timeout') || msg.includes('ETIMEDOUT') || msg.includes('ECONNRESET')
-    if (!isBlocked && !isTimeout) throw err
-
-    logger.warn(`[binance-web3] Direct failed (${isBlocked ? 'geo-blocked' : 'timeout'}), trying VPS proxy`)
-  }
-
-  // Try VPS proxy
-  if (vpsUrl) {
-    try {
-      const result = await fetchViaVps<T>(vpsUrl, url, opts)
-      _cachedStrategy = 'vps'
-      return result
-    } catch (err) {
-      logger.warn(`[binance-web3] VPS proxy failed: ${err instanceof Error ? err.message : String(err)}`)
-    }
-  }
-
-  // Try CF Worker proxy
-  if (PROXY_URL) {
-    try {
-      const proxyTarget = `${PROXY_URL}?url=${encodeURIComponent(url)}`
-      const result = await fetchJson<T>(proxyTarget, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: opts.body, timeoutMs: opts.timeoutMs })
-      _cachedStrategy = 'cf'
-      return result
-    } catch (err) {
-      logger.warn(`[binance-web3] CF Worker proxy failed: ${err instanceof Error ? err.message : String(err)}`)
-    }
-  }
-
-  throw new Error(`All strategies failed (direct, VPS, CF Worker) — likely geo-blocked from all regions`)
 }
 
-const PERIOD_MAP: Record<string, string> = {
-  '7D': 'WEEKLY',
-  '30D': 'MONTHLY',
-  '90D': 'QUARTERLY',
-}
+// ── Fetch helpers ──
 
-// ---------------------------------------------------------------------------
-// Types
-// ---------------------------------------------------------------------------
-
-interface LeaderboardEntry {
-  encryptedUid?: string
-  nickName?: string
-  userPhotoUrl?: string
-  rank?: number
-  value?: number          // ROI value (decimal)
-  pnl?: number
-  roi?: number
-  followerCount?: number
-  // On-chain specific
-  address?: string
-  wallet?: string
-  walletAddress?: string
-  pnlPct?: number
-  returnRate?: number
-  profitRate?: number
-  winRate?: number
-  win_rate?: number
-  successRate?: number
-  mdd?: number
-  maxDrawdown?: number
-  max_drawdown?: number
-  totalPnl?: number
-  profit?: number
-}
-
-// ---------------------------------------------------------------------------
-// Fetch helpers
-// ---------------------------------------------------------------------------
-
-async function tryLeaderboardApi(
+async function fetchWeb3Leaderboard(
   period: string
-): Promise<LeaderboardEntry[]> {
-  const timeRange = PERIOD_MAP[period] || 'QUARTERLY'
-  try {
-    const data = await fetchWithProxyFallback<{
-      data?: LeaderboardEntry[]
-      code?: string
-      msg?: string
-    }>(LEADERBOARD_URL, {
-      method: 'POST',
-      headers: HEADERS,
-      body: {
-        isShared: true,
-        isTrader: false,
-        periodType: timeRange,
-        statisticsType: 'ROI',
-        tradeType: 'PERPETUAL',
-      },
-      timeoutMs: 20000,
-    })
+): Promise<TraderData[]> {
+  const web3Period = WEB3_PERIOD_MAP[period] || '30d'
+  const allTraders = new Map<string, TraderData>()
+  const capturedAt = new Date().toISOString()
 
-    if (data?.data && Array.isArray(data.data)) {
-      return data.data
+  for (const chainId of CHAIN_IDS) {
+    const maxPages = Math.ceil(TARGET / PAGE_SIZE / CHAIN_IDS.length)
+
+    for (let page = 1; page <= maxPages; page++) {
+      try {
+        const url = `${WEB3_LEADERBOARD_URL}?chainId=${chainId}&period=${web3Period}&tag=ALL&pageNo=${page}&pageSize=${PAGE_SIZE}`
+
+        const data = await fetchJson<Web3Response>(url, {
+          headers: {
+            'Origin': 'https://web3.binance.com',
+            'Referer': 'https://web3.binance.com/',
+            'Accept-Encoding': 'gzip, deflate, br',
+          },
+          timeoutMs: 15000,
+        })
+
+        const entries = data?.data?.data
+        if (!entries?.length) break
+
+        for (const entry of entries) {
+          if (!entry.address || allTraders.has(entry.address)) continue
+
+          // ROI is decimal (0.27 = 27%)
+          const roiDecimal = parseNum(entry.realizedPnlPercent)
+          if (roiDecimal == null) continue
+          const roi = roiDecimal * 100
+
+          const pnl = parseNum(entry.realizedPnl)
+          const winRateDecimal = parseNum(entry.winRate)
+          const winRate = winRateDecimal != null ? winRateDecimal * 100 : null
+
+          allTraders.set(entry.address, {
+            source: SOURCE,
+            source_trader_id: entry.address,
+            handle: entry.addressLabel || `${entry.address.slice(0, 6)}...${entry.address.slice(-4)}`,
+            profile_url: `https://web3.binance.com/en/leaderboard/detail/${entry.address}`,
+            season_id: period,
+            roi,
+            pnl,
+            win_rate: winRate,
+            max_drawdown: null,
+            followers: null,
+            avatar_url: entry.addressLogo || null,
+            arena_score: calculateArenaScore(roi, pnl, null, winRate, period),
+            captured_at: capturedAt,
+          })
+        }
+
+        if (entries.length < PAGE_SIZE) break
+        await sleep(300)
+      } catch (err) {
+        logger.warn(`[${SOURCE}] Chain ${chainId} page ${page} failed: ${err instanceof Error ? err.message : String(err)}`)
+        break
+      }
     }
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err)
-    // Binance returns HTTP 451 for geo-blocked requests
-    if (msg.includes('451') || msg.includes('403')) {
-      logger.warn(`[binance-web3] Geo-blocked (HTTP 451/403) — proxy fallback failed`)
-    } else {
-      logger.warn(`[binance-web3] leaderboard API failed: ${msg}`)
-    }
+
+    if (allTraders.size >= TARGET) break
+    await sleep(500)
   }
-  return []
+
+  return Array.from(allTraders.values())
 }
 
-// ---------------------------------------------------------------------------
-// Period fetcher
-// ---------------------------------------------------------------------------
+// ── Period fetcher ──
 
 async function fetchPeriod(
   supabase: SupabaseClient,
   period: string
 ): Promise<{ total: number; saved: number; error?: string }> {
-  const entries = await tryLeaderboardApi(period)
+  const traders = await fetchWeb3Leaderboard(period)
 
-  if (entries.length === 0) {
-    logger.warn(`[binance-web3] No data for ${period}`)
-    return { total: 0, saved: 0, error: 'No data — likely geo-blocked (HTTP 451). Deploy to Vercel Japan/SG.' }
+  if (traders.length === 0) {
+    return { total: 0, saved: 0, error: 'No data from Binance Web3 wallet leaderboard' }
   }
 
-  const capturedAt = new Date().toISOString()
-  const traders: TraderData[] = []
-
-  for (const item of entries) {
-    const id =
-      item.encryptedUid ||
-      item.address ||
-      item.wallet ||
-      item.walletAddress ||
-      ''
-    if (!id) continue
-
-    // ROI: try multiple field names
-    let roi = parseNum(
-      item.value ?? item.roi ?? item.pnlPct ?? item.returnRate ?? item.profitRate
-    )
-    if (roi == null) continue
-    // If ROI is in decimal form (< 10), convert to percentage
-    roi = normalizeROI(roi, SOURCE) ?? roi
-
-    const pnl = parseNum(item.pnl ?? item.profit ?? item.totalPnl)
-    const wrRaw = parseNum(item.winRate ?? item.win_rate ?? item.successRate)
-    const winRate = normalizeWinRate(wrRaw, getWinRateFormat(SOURCE))
-    const mddRaw = parseNum(item.mdd ?? item.maxDrawdown ?? item.max_drawdown)
-    const maxDrawdown = mddRaw != null ? Math.abs(mddRaw) : null
-
-    traders.push({
-      source: SOURCE,
-      source_trader_id: id,
-      handle: item.nickName || `${id.slice(0, 10)}...`,
-      profile_url: item.address
-        ? `https://web3.binance.com/en/leaderboard/detail/${item.address}`
-        : null,
-      season_id: period,
-      roi,
-      pnl,
-      win_rate: winRate,
-      max_drawdown: maxDrawdown,
-      followers: item.followerCount || null,
-      arena_score: calculateArenaScore(roi, pnl, maxDrawdown, winRate, period),
-      captured_at: capturedAt,
-    })
-  }
-
+  // Sort by ROI and assign ranks
   traders.sort((a, b) => (b.roi ?? 0) - (a.roi ?? 0))
   const top = traders.slice(0, TARGET)
+  top.forEach((t, idx) => { t.rank = idx + 1 })
+
   const { saved, error } = await upsertTraders(supabase, top)
 
   // Save stats_detail for 90D period
   if (saved > 0 && period === '90D') {
-    logger.warn(`[${SOURCE}] Saving stats details for top ${Math.min(top.length, 50)} traders...`)
     let statsSaved = 0
     for (const trader of top.slice(0, 50)) {
       const stats: StatsDetail = {
         totalTrades: null,
         profitableTradesPct: trader.win_rate ?? null,
-        avgHoldingTimeHours: null,
-        avgProfit: null,
-        avgLoss: null,
-        largestWin: null,
-        largestLoss: null,
-        sharpeRatio: null,
-        maxDrawdown: trader.max_drawdown ?? null,
-        currentDrawdown: null,
-        volatility: null,
-        copiersCount: trader.followers ?? null,
-        copiersPnl: null,
-        aum: null,
-        winningPositions: null,
-        totalPositions: null,
+        avgHoldingTimeHours: null, avgProfit: null, avgLoss: null,
+        largestWin: null, largestLoss: null, sharpeRatio: null,
+        maxDrawdown: null, currentDrawdown: null, volatility: null,
+        copiersCount: null, copiersPnl: null, aum: null,
+        winningPositions: null, totalPositions: null,
       }
       const { saved: s } = await upsertStatsDetail(supabase, SOURCE, trader.source_trader_id, period, stats)
       if (s) statsSaved++
     }
-    logger.warn(`[${SOURCE}] Saved ${statsSaved} stats details`)
+    logger.info(`[${SOURCE}] Saved ${statsSaved} stats details`)
   }
 
   return { total: top.length, saved, error }
 }
 
-// ---------------------------------------------------------------------------
-// Export
-// ---------------------------------------------------------------------------
+// ── Export ──
 
 export async function fetchBinanceWeb3(
   supabase: SupabaseClient,

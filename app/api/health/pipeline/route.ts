@@ -10,6 +10,7 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { PipelineLogger } from '@/lib/services/pipeline-logger'
+import { DEAD_BLOCKED_PLATFORMS } from '@/lib/constants/exchanges'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -26,18 +27,27 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
-  const [jobStatuses, jobStats, recentFailures] = await Promise.all([
+  const [jobStatuses, jobStats, recentFailuresRaw] = await Promise.all([
     PipelineLogger.getJobStatuses(),
     PipelineLogger.getJobStats(),
     PipelineLogger.getRecentFailures(10),
   ])
 
-  // Calculate overall pipeline health
-  const totalJobs = jobStatuses.length
-  const healthyJobs = jobStatuses.filter(j => j.health_status === 'healthy').length
-  const failedJobs = jobStatuses.filter(j => j.health_status === 'failed').length
-  const staleJobs = jobStatuses.filter(j => j.health_status === 'stale').length
-  const stuckJobs = jobStatuses.filter(j => j.health_status === 'stuck').length
+  // Filter out dead/blocked platforms from failure counts
+  const deadSet = new Set<string>(DEAD_BLOCKED_PLATFORMS)
+  const isDeadPlatformJob = (jobName: string) =>
+    deadSet.has(jobName.replace('fetch-traders-', '').replace('batch-fetch-traders-', ''))
+  const recentFailures = recentFailuresRaw.filter(
+    (f: { job_name?: string }) => !isDeadPlatformJob(f.job_name || '')
+  )
+
+  // Calculate overall pipeline health (excluding dead platforms)
+  const activeJobs = jobStatuses.filter(j => !isDeadPlatformJob(j.job_name || ''))
+  const totalJobs = activeJobs.length
+  const healthyJobs = activeJobs.filter(j => j.health_status === 'healthy').length
+  const failedJobs = activeJobs.filter(j => j.health_status === 'failed').length
+  const staleJobs = activeJobs.filter(j => j.health_status === 'stale').length
+  const stuckJobs = activeJobs.filter(j => j.health_status === 'stuck').length
 
   let overallStatus: 'healthy' | 'degraded' | 'critical' = 'healthy'
   if (stuckJobs > 0 || failedJobs > totalJobs * 0.3) {

@@ -33,6 +33,11 @@ const TELEGRAM_CHAT_ID = process.env.TELEGRAM_ALERT_CHAT_ID
 const AUTO_FIX_COOLDOWN_MS = 6 * 60 * 60 * 1000
 const fixAttempts = new Map() // platform -> last attempt timestamp
 
+// Dead/blocked platforms - skip in alerts & auto-fix
+const DEAD_PLATFORMS = new Set([
+  'kucoin', 'lbank', 'phemex', 'bitget_spot', 'blofin',
+])
+
 if (!CRON_SECRET) {
   console.error('CRON_SECRET is required')
   process.exit(1)
@@ -150,6 +155,7 @@ async function triggerAutoFix(pipelineHealth) {
       platform: f.job_name.replace('fetch-traders-', ''),
       reason: classifyErrorMsg(f.error_message),
     }))
+    .filter(f => !DEAD_PLATFORMS.has(f.platform))
   if (failingJobs.length === 0) { console.log('[auto-fix] No fetcher failures'); return }
   const seen = new Set()
   for (const { platform, reason } of failingJobs) {
