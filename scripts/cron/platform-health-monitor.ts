@@ -102,8 +102,8 @@ async function checkAllPlatforms(): Promise<HealthReport> {
 
   // Test all platforms sequentially (to avoid overwhelming VPS scraper)
   for (const key of connectorKeys) {
-    const [platform, marketType] = key.split('/') as [Platform, MarketType];
-    console.warn(`  Testing ${platform}/${marketType}...`);
+    const [platform, marketType] = key.split(':') as [Platform, MarketType];
+    console.warn(`  Testing ${platform}:${marketType}...`);
     
     const health = await testPlatform(platform, marketType);
     platforms.push(health);
