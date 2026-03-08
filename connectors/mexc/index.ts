@@ -47,12 +47,15 @@ export class MexcConnector extends BaseConnector {
         let traderList: any[] = [];
 
         if (vpsResponse) {
-          // VPS scraper returns: { goldTraders: [...], silverTraders: [...] }
+          // VPS scraper returns: { code, data: { goldTraders: [...], silverTraders: [...], ... } }
+          const vpsData = vpsResponse.data || vpsResponse;
           const allTraders = [
-            ...(vpsResponse.goldTraders || []),
-            ...(vpsResponse.silverTraders || []),
+            ...(vpsData.goldTraders || []),
+            ...(vpsData.silverTraders || []),
+            ...(vpsData.bullsTraders || []),
+            ...(vpsData.bearsTraders || []),
           ];
-          traderList = allTraders;
+          traderList = allTraders.slice(0, pageSize);
         } else {
           // Fallback to direct API
           const params = new URLSearchParams({
