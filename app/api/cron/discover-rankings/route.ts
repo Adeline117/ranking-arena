@@ -90,6 +90,7 @@ export async function GET(request: Request) {
       }));
 
     if (jobs.length === 0) {
+      await plog.success(0, { message: 'All platforms circuit-open' })
       return NextResponse.json({
         message: 'All platforms are circuit-open, no jobs created',
         blocked: Array.from(blockedPlatforms),

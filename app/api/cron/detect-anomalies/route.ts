@@ -129,6 +129,7 @@ export async function GET(request: NextRequest) {
     const traders = await getActiveTraders()
 
     if (traders.length === 0) {
+      await plog.success(0, { message: 'No active traders to check' })
       return NextResponse.json({
         success: true,
         message: 'No active traders to check',
