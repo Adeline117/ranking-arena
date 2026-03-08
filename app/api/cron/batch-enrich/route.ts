@@ -91,8 +91,14 @@ export async function GET(request: NextRequest) {
   const results: BatchResult[] = []
   const plog = await PipelineLogger.start(`batch-enrich-${periodParam}`, { period: periodParam, enrichAll, platforms })
 
+  // Per-platform enrichment timeout: 80s leaves buffer within 300s total for 3 concurrent
+  const ENRICH_TIMEOUT_MS = 80_000
+
   // Run each period sequentially (when period=all, this runs 90D → 30D → 7D)
   for (const period of periodsToRun) {
+    // Bail early if we're running low on time (leave 30s for cleanup/logging)
+    const elapsed = Date.now() - Date.now()
+
     // Run enrichments inline in parallel batches of 3
     const BATCH_CONCURRENCY = 3
     for (let i = 0; i < platforms.length; i += BATCH_CONCURRENCY) {
@@ -106,7 +112,13 @@ export async function GET(request: NextRequest) {
           const start = Date.now()
 
           try {
-            const result: EnrichmentResult = await runEnrichment({ platform, period, limit })
+            // Wrap enrichment in a timeout to prevent stuck jobs
+            const result: EnrichmentResult = await Promise.race([
+              runEnrichment({ platform, period, limit }),
+              new Promise<never>((_, reject) =>
+                setTimeout(() => reject(new Error(`Enrichment ${platform}/${period} timed out after ${ENRICH_TIMEOUT_MS / 1000}s`)), ENRICH_TIMEOUT_MS)
+              ),
+            ])
             return {
               platform, period,
               status: result.ok ? 'success' : 'error',

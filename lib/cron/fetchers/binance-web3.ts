@@ -54,30 +54,82 @@ const HEADERS: Record<string, string> = {
   Referer: 'https://www.binance.com/en/leaderboard',
 }
 
-// Helper to fetch with proxy fallback
+// Strategy cache: once we find a working method, reuse it for all subsequent requests
+let _cachedStrategy: 'direct' | 'vps' | 'cf' | null = null
+
+async function fetchViaVps<T>(vpsUrl: string, targetUrl: string, opts: { method?: string; headers?: Record<string, string>; body?: unknown }): Promise<T> {
+  const res = await fetch(vpsUrl, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'X-Proxy-Key': process.env.VPS_PROXY_KEY || '',
+    },
+    body: JSON.stringify({
+      url: targetUrl,
+      method: opts.method || 'POST',
+      headers: opts.headers || {},
+      body: opts.body || null,
+    }),
+    signal: AbortSignal.timeout(20_000),
+  })
+  if (!res.ok) throw new Error(`VPS proxy HTTP ${res.status}`)
+  return (await res.json()) as T
+}
+
+// Helper to fetch with proxy fallback (direct → VPS proxy → CF Worker)
 async function fetchWithProxyFallback<T>(
   url: string,
   opts: { method?: string; headers?: Record<string, string>; body?: unknown; timeoutMs?: number }
 ): Promise<T> {
-  // Try direct first
+  const vpsUrl = process.env.VPS_PROXY_SG || process.env.VPS_PROXY_URL || process.env.VPS_PROXY_JP
+
+  // If we already know a working strategy, skip the rest
+  if (_cachedStrategy === 'vps' && vpsUrl) {
+    return await fetchViaVps<T>(vpsUrl, url, opts)
+  }
+  if (_cachedStrategy === 'cf' && PROXY_URL) {
+    const proxyTarget = `${PROXY_URL}?url=${encodeURIComponent(url)}`
+    return await fetchJson<T>(proxyTarget, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: opts.body, timeoutMs: opts.timeoutMs })
+  }
+
+  // Try direct first (short timeout)
   try {
-    return await fetchJson<T>(url, opts)
+    const result = await fetchJson<T>(url, { ...opts, timeoutMs: 8000 })
+    _cachedStrategy = 'direct'
+    return result
   } catch (err) {
     const msg = err instanceof Error ? err.message : ''
-    // If geo-blocked or WAF blocked, try proxy
-    if (msg.includes('451') || msg.includes('403') || msg.includes('Access Denied')) {
-      if (PROXY_URL) {
-        const proxyTarget = `${PROXY_URL}?url=${encodeURIComponent(url)}`
-        return await fetchJson<T>(proxyTarget, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: opts.body,
-          timeoutMs: opts.timeoutMs,
-        })
-      }
-    }
-    throw err
+    const isBlocked = msg.includes('451') || msg.includes('403') || msg.includes('Access Denied')
+    const isTimeout = msg.includes('abort') || msg.includes('timeout') || msg.includes('ETIMEDOUT') || msg.includes('ECONNRESET')
+    if (!isBlocked && !isTimeout) throw err
+
+    logger.warn(`[binance-web3] Direct failed (${isBlocked ? 'geo-blocked' : 'timeout'}), trying VPS proxy`)
   }
+
+  // Try VPS proxy
+  if (vpsUrl) {
+    try {
+      const result = await fetchViaVps<T>(vpsUrl, url, opts)
+      _cachedStrategy = 'vps'
+      return result
+    } catch (err) {
+      logger.warn(`[binance-web3] VPS proxy failed: ${err instanceof Error ? err.message : String(err)}`)
+    }
+  }
+
+  // Try CF Worker proxy
+  if (PROXY_URL) {
+    try {
+      const proxyTarget = `${PROXY_URL}?url=${encodeURIComponent(url)}`
+      const result = await fetchJson<T>(proxyTarget, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: opts.body, timeoutMs: opts.timeoutMs })
+      _cachedStrategy = 'cf'
+      return result
+    } catch (err) {
+      logger.warn(`[binance-web3] CF Worker proxy failed: ${err instanceof Error ? err.message : String(err)}`)
+    }
+  }
+
+  throw new Error(`All strategies failed (direct, VPS, CF Worker) — likely geo-blocked from all regions`)
 }
 
 const PERIOD_MAP: Record<string, string> = {
