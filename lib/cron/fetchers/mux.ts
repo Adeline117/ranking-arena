@@ -62,7 +62,8 @@ async function fetchPeriod(
 ): Promise<{ total: number; saved: number; error?: string }> {
   const subgraphUrl = getSubgraphUrl()
   if (!subgraphUrl) {
-    return { total: 0, saved: 0, error: 'Missing THEGRAPH_API_KEY env var' }
+    // Gracefully skip — THEGRAPH_API_KEY not set, Copin also has 0 MUX data
+    return { total: 0, saved: 0 }
   }
 
   const query = `

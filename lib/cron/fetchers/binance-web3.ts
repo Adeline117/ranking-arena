@@ -81,7 +81,8 @@ async function fetchWithProxyFallback<T>(
   url: string,
   opts: { method?: string; headers?: Record<string, string>; body?: unknown; timeoutMs?: number }
 ): Promise<T> {
-  const vpsUrl = process.env.VPS_PROXY_SG || process.env.VPS_PROXY_URL || process.env.VPS_PROXY_JP
+  // JP VPS first — SG is restricted for Binance Web3 since Aug 2024
+  const vpsUrl = process.env.VPS_PROXY_JP || process.env.VPS_PROXY_URL || process.env.VPS_PROXY_SG
 
   // If we already know a working strategy, skip the rest
   if (_cachedStrategy === 'vps' && vpsUrl) {
