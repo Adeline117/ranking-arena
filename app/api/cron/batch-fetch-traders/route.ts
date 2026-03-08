@@ -9,7 +9,7 @@
  *   group=a2 → bybit, bitget_futures, okx_futures (every 3h)
  *   group=b  → hyperliquid, gmx, jupiter_perps (every 4h)
  *   group=c  → okx_web3, aevo, xt (every 4h)
- *   group=d  → gains, htx_futures, phemex, bybit_spot (every 6h)
+ *   group=d  → gains, htx_futures, dydx, bybit_spot, toobit (every 6h)
  *   group=e  → coinex, binance_web3, kwenta, synthetix, mux (every 6h)
  *   group=f  → mexc, bingx (every 6h)
  *   group=h  → gateio, weex, bitmart (every 6h)
@@ -43,8 +43,8 @@ const GROUPS: Record<string, string[]> = {
   b: ['hyperliquid', 'gmx', 'jupiter_perps'],
   // Group C: Mid-priority (every 4h) — 3 platforms, ~70s parallel
   c: ['okx_web3', 'aevo', 'xt'],
-  // Group D: CEX+DEX (every 6h) — 4 platforms (phemex: CloudFront blocked)
-  d: ['gains', 'htx_futures', 'dydx', 'bybit_spot'],
+  // Group D: CEX+DEX (every 6h) — 5 platforms (phemex: CloudFront blocked)
+  d: ['gains', 'htx_futures', 'dydx', 'bybit_spot', 'toobit'],
   // Group E: Lower-priority DEX (every 6h) — 5 platforms (was 8h)
   e: ['coinex', 'binance_web3', 'kwenta', 'synthetix', 'mux'],
   // Group F: Slow CEX (every 6h) — 2 platforms, parallel (~141s + ~60s = ~200s)

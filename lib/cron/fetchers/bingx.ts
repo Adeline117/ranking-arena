@@ -23,8 +23,6 @@ import {
 import { type StatsDetail, upsertStatsDetail } from './enrichment'
 import { logger } from '@/lib/logger'
 import { captureException } from '@/lib/utils/logger'
-// Dynamic import to avoid bundling puppeteer on Vercel
-const getInterceptApiResponses = () => import('../scrapers/cloudflare-bypass').then(m => m.interceptApiResponses)
 
 const SOURCE = 'bingx'
 const TARGET = 500
@@ -384,34 +382,6 @@ async function fetchPeriod(
       if (allTraders.size > 0) {
         logger.warn(`[${SOURCE}] VPS scraper got ${allTraders.size} traders across pages`)
       }
-    }
-  }
-
-  // Stealth browser fallback when all HTTP methods fail
-  if (allTraders.size === 0) {
-    logger.warn(`[${SOURCE}] All HTTP methods failed, trying stealth browser fallback...`)
-    try {
-      const interceptApiResponses = await getInterceptApiResponses()
-      const { responses } = await interceptApiResponses(
-        'https://bingx.com/en/CopyTrading/leaderBoard',
-        ['copy', 'trader', 'ranking', 'leaderboard', 'leaderBoard'],
-        { proxy: process.env.STEALTH_PROXY || undefined, maxWaitMs: 20_000 }
-      )
-      for (const resp of responses) {
-        try {
-          const data = JSON.parse(resp.body) as BingxResponse
-          const list = extractList(data)
-          for (const item of list) {
-            const id = String(item.uniqueId || item.uid || item.traderId || item.trader || item.apiIdentity || item.id || '')
-            if (id && id !== 'undefined' && !allTraders.has(id)) allTraders.set(id, item)
-          }
-        } catch { /* skip unparseable */ }
-      }
-      if (allTraders.size > 0) {
-        logger.warn(`[${SOURCE}] Stealth browser got ${allTraders.size} traders`)
-      }
-    } catch (err) {
-      logger.warn(`[${SOURCE}] Stealth browser fallback failed: ${err instanceof Error ? err.message : String(err)}`)
     }
   }
 
