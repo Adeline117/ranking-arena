@@ -38,14 +38,30 @@ export class CoinexConnector extends BaseConnector {
 
       for (let page = 1; page <= pages && entries.length < limit; page++) {
         // Try VPS scraper first
-        let response = await this.fetchViaVPS<CoinexListResponse>('/coinex/leaderboard', {
+        let vpsResponse = await this.fetchViaVPS<CoinexVPSResponse>('/coinex/leaderboard', {
           page,
           pageSize,
-          days: WINDOW_MAP[window],
+          period: WINDOW_MAP[window],
         });
 
-        // Fallback to direct API if VPS failed
-        if (!response) {
+        let traders: CoinexTraderItem[] = [];
+
+        if (vpsResponse?.data?.data) {
+          // VPS scraper returns: { data: { data: [...] } }
+          traders = vpsResponse.data.data.map((item: any) => ({
+            trader_id: item.trader_id,
+            nick_name: item.nickname || item.account_name,
+            avatar: item.avatar,
+            roi: this.parseNumber(item.profit_rate) as number,
+            win_rate: this.parseNumber(item.winning_rate) as number,
+            pnl: this.parseNumber(item.profit_amount) as number,
+            trade_count: this.parseNumber(item.trade_count) as number,
+            aum: this.parseNumber(item.aum) as number,
+            max_drawdown: this.parseNumber(item.mdd) as number,
+            raw: item,
+          }));
+        } else {
+          // Fallback to direct API
           const params = new URLSearchParams({
             page: String(page),
             limit: String(pageSize),
@@ -54,7 +70,7 @@ export class CoinexConnector extends BaseConnector {
             days: WINDOW_MAP[window],
           });
 
-          response = await this.fetchJSON<CoinexListResponse>(
+          const apiResponse = await this.fetchJSON<CoinexListResponse>(
             `${LIST_API}?${params.toString()}`,
             {
               headers: {
@@ -63,11 +79,15 @@ export class CoinexConnector extends BaseConnector {
               },
             }
           );
+
+          if (apiResponse?.data?.items) {
+            traders = apiResponse.data.items;
+          }
         }
 
-        if (!response?.data?.items) break;
+        if (traders.length === 0) break;
 
-        for (const item of response.data.items) {
+        for (const item of traders) {
           entries.push({
             trader_key: item.trader_id || String(item.user_id),
             display_name: item.nick_name || null,
@@ -79,7 +99,7 @@ export class CoinexConnector extends BaseConnector {
           });
         }
 
-        if (response.data.items.length < pageSize) break;
+        if (traders.length < pageSize) break;
         await this.sleep(this.getRandomDelay(3000, 5000));
       }
 
@@ -180,10 +200,20 @@ interface CoinexListResponse {
   data: { items: CoinexTraderItem[] };
 }
 
+interface CoinexVPSResponse {
+  data: { data: any[] };
+}
+
 interface CoinexTraderItem {
   trader_id: string;
-  user_id: number;
+  user_id?: number;
   nick_name: string;
   avatar: string;
   roi: number;
+  win_rate?: number;
+  pnl?: number;
+  trade_count?: number;
+  aum?: number;
+  max_drawdown?: number;
+  raw?: any;
 }
