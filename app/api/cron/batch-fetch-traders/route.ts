@@ -19,6 +19,7 @@
  *   - lbank: needs session auth, crashes headless browser
  *   - bitget_spot: no public API (all endpoints return 404)
  *   - blofin: needs credentials (BLOFIN env vars not set)
+ *   - dydx: /v4/leaderboard/pnl endpoint removed from indexer (404 globally since ~2026-03)
  */
 
 import { NextRequest, NextResponse } from 'next/server'
@@ -40,8 +41,8 @@ const GROUPS: Record<string, string[]> = {
   b: ['hyperliquid', 'gmx', 'jupiter_perps'],
   // Group C: Mid-priority (every 4h) — 3 platforms, ~70s parallel
   c: ['okx_web3', 'aevo', 'xt'],
-  // Group D: CEX+DEX (every 6h) — 5 platforms
-  d: ['gains', 'htx_futures', 'dydx', 'phemex', 'bybit_spot'],
+  // Group D: CEX+DEX (every 6h) — 4 platforms (dydx removed: API discontinued)
+  d: ['gains', 'htx_futures', 'phemex', 'bybit_spot'],
   // Group E: Lower-priority DEX (every 6h) — 5 platforms (was 8h)
   e: ['coinex', 'binance_web3', 'kwenta', 'synthetix', 'mux'],
   // Group F: Slow CEX (every 6h) — 2 platforms, parallel (~141s + ~60s = ~200s)
@@ -82,6 +83,9 @@ export async function GET(request: NextRequest) {
   const overallStart = Date.now()
   const plog = await PipelineLogger.start(`batch-fetch-traders-${group}`, { group, platforms })
 
+  // Per-platform timeout: 240s leaves 60s buffer for logging/cleanup within 300s limit
+  const PLATFORM_TIMEOUT_MS = 240_000
+
   // Run a single platform fetch and return the result
   async function runPlatform(platform: string): Promise<BatchResult> {
     const start = Date.now()
@@ -91,7 +95,13 @@ export async function GET(request: NextRequest) {
         return { platform, status: 'error', durationMs: Date.now() - start, error: `No fetcher for ${platform}` }
       }
 
-      const result = await fetcher(supabase, ['7D', '30D', '90D'])
+      // Wrap fetcher in a timeout to prevent stuck jobs
+      const result = await Promise.race([
+        fetcher(supabase, ['7D', '30D', '90D']),
+        new Promise<never>((_, reject) =>
+          setTimeout(() => reject(new Error(`Platform ${platform} timed out after ${PLATFORM_TIMEOUT_MS / 1000}s`)), PLATFORM_TIMEOUT_MS)
+        ),
+      ])
       const hasErrors = Object.values(result.periods).some((p) => p.error)
       const totalSaved = Object.values(result.periods).reduce((sum, p) => sum + (p.saved || 0), 0)
 

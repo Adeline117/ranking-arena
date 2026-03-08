@@ -27,6 +27,12 @@ import type {
 } from '@/lib/types/leaderboard';
 import { logger } from '@/lib/logger'
 
+// Derive market_type from platform name for v2 table upserts
+function getMarketType(platform: string): 'perp' | 'spot' {
+  if (platform.endsWith('_spot')) return 'spot'
+  return 'perp'
+}
+
 // ============================================
 // Types
 // ============================================
@@ -160,14 +166,15 @@ export class JobRunner {
       const traders = await connector.discoverLeaderboard(window);
 
       for (const trader of traders) {
+        const marketType = getMarketType(trader.platform);
         await query(
-          `INSERT INTO trader_sources_v2 (platform, trader_key, display_name, avatar_url, profile_url, last_seen)
-           VALUES ($1, $2, $3, $4, $5, $6)
-           ON CONFLICT (platform, trader_key) DO UPDATE SET
-             display_name = COALESCE($3, trader_sources_v2.display_name),
-             avatar_url = COALESCE($4, trader_sources_v2.avatar_url),
-             last_seen = $6`,
-          [trader.platform, trader.trader_key, trader.display_name, null, trader.profile_url, new Date().toISOString()],
+          `INSERT INTO trader_sources_v2 (platform, market_type, trader_key, display_name, avatar_url, profile_url, last_seen)
+           VALUES ($1, $2, $3, $4, $5, $6, $7)
+           ON CONFLICT (platform, market_type, trader_key) DO UPDATE SET
+             display_name = COALESCE($4, trader_sources_v2.display_name),
+             avatar_url = COALESCE($5, trader_sources_v2.avatar_url),
+             last_seen = $7`,
+          [trader.platform, marketType, trader.trader_key, trader.display_name, null, trader.profile_url, new Date().toISOString()],
         );
       }
     }
@@ -192,16 +199,17 @@ export class JobRunner {
         ...arenaScores,
       };
 
+      const marketType = getMarketType(job.platform);
       await query(
         `INSERT INTO trader_snapshots_v2
-           (platform, trader_key, "window", as_of_ts, metrics, quality,
+           (platform, market_type, trader_key, "window", as_of_ts, metrics, quality,
             arena_score, roi_pct, pnl_usd, max_drawdown_pct, win_rate_pct, trades_count, copier_count)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
-         ON CONFLICT (platform, trader_key, "window", as_of_ts) DO UPDATE SET
-           metrics = $5, quality = $6, arena_score = $7, roi_pct = $8, pnl_usd = $9,
-           max_drawdown_pct = $10, win_rate_pct = $11, trades_count = $12, copier_count = $13`,
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+         ON CONFLICT (platform, market_type, trader_key, "window", trunc_hour(as_of_ts)) DO UPDATE SET
+           metrics = $6, quality = $7, arena_score = $8, roi_pct = $9, pnl_usd = $10,
+           max_drawdown_pct = $11, win_rate_pct = $12, trades_count = $13, copier_count = $14`,
         [
-          job.platform, job.trader_key, window, snapshot.as_of_ts,
+          job.platform, marketType, job.trader_key, window, snapshot.as_of_ts,
           JSON.stringify(enrichedMetrics), JSON.stringify(snapshot.quality),
           arenaScores.arena_score, metrics.roi_pct, metrics.pnl_usd,
           metrics.max_drawdown_pct, metrics.win_rate_pct,
@@ -218,17 +226,18 @@ export class JobRunner {
     const profile = await connector.fetchTraderProfile(job.trader_key);
     if (!profile) throw new Error(`No profile data for ${job.platform}/${job.trader_key}`);
 
+    const marketType = getMarketType(profile.platform);
     await query(
       `INSERT INTO trader_profiles_v2
-         (platform, trader_key, display_name, avatar_url, copier_count, aum_usd, last_enriched_at)
-       VALUES ($1, $2, $3, $4, $5, $6, $7)
-       ON CONFLICT (platform, trader_key) DO UPDATE SET
-         display_name = COALESCE($3, trader_profiles_v2.display_name),
-         avatar_url = COALESCE($4, trader_profiles_v2.avatar_url),
-         copier_count = COALESCE($5, trader_profiles_v2.copier_count),
-         aum_usd = COALESCE($6, trader_profiles_v2.aum_usd),
-         last_enriched_at = $7`,
-      [profile.platform, profile.trader_key, profile.display_name, profile.avatar_url,
+         (platform, market_type, trader_key, display_name, avatar_url, copier_count, aum_usd, last_enriched_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+       ON CONFLICT (platform, market_type, trader_key) DO UPDATE SET
+         display_name = COALESCE($4, trader_profiles_v2.display_name),
+         avatar_url = COALESCE($5, trader_profiles_v2.avatar_url),
+         copier_count = COALESCE($6, trader_profiles_v2.copier_count),
+         aum_usd = COALESCE($7, trader_profiles_v2.aum_usd),
+         last_enriched_at = $8`,
+      [profile.platform, marketType, profile.trader_key, profile.display_name, profile.avatar_url,
        profile.copier_count, profile.aum_usd, new Date().toISOString()],
     );
   }
@@ -243,12 +252,13 @@ export class JobRunner {
       const result = await connector.fetchTimeseries(job.trader_key, seriesType);
       if (!result || result.data.length === 0) continue;
 
+      const marketType = getMarketType(result.platform);
       await query(
-        `INSERT INTO trader_timeseries (platform, trader_key, series_type, data, as_of_ts)
-         VALUES ($1, $2, $3, $4, $5)
-         ON CONFLICT (platform, trader_key, series_type) DO UPDATE SET
-           data = $4, as_of_ts = $5`,
-        [result.platform, result.trader_key, result.series_type,
+        `INSERT INTO trader_timeseries (platform, market_type, trader_key, series_type, data, as_of_ts)
+         VALUES ($1, $2, $3, $4, $5, $6)
+         ON CONFLICT (platform, market_type, trader_key, series_type, trunc_hour(as_of_ts)) DO UPDATE SET
+           data = $5, as_of_ts = $6`,
+        [result.platform, marketType, result.trader_key, result.series_type,
          JSON.stringify(result.data), result.as_of_ts],
       );
     }
