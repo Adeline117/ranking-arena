@@ -37,27 +37,45 @@ export class KucoinConnector extends BaseConnector {
       const pages = Math.ceil(limit / pageSize);
 
       for (let page = 1; page <= pages && entries.length < limit; page++) {
-        const params = new URLSearchParams({
-          page: String(page),
-          pageSize: String(pageSize),
-          sortBy: 'ROI',
-          sortOrder: 'DESC',
+        // Try VPS scraper first
+        let vpsResponse = await this.fetchViaVPS<KucoinListResponse>('/kucoin/leaderboard', {
+          page,
+          pageSize,
           period: WINDOW_MAP[window],
         });
 
-        const response = await this.fetchJSON<KucoinListResponse>(
-          `${LIST_API}?${params.toString()}`,
-          {
-            headers: {
-              'Referer': `${API_BASE}/copy-trading`,
-              'Origin': API_BASE,
-            },
+        let items: KucoinTraderItem[] = [];
+
+        if (vpsResponse?.data?.items) {
+          items = vpsResponse.data.items;
+        } else {
+          // Fallback to direct API
+          const params = new URLSearchParams({
+            page: String(page),
+            pageSize: String(pageSize),
+            sortBy: 'ROI',
+            sortOrder: 'DESC',
+            period: WINDOW_MAP[window],
+          });
+
+          const response = await this.fetchJSON<KucoinListResponse>(
+            `${LIST_API}?${params.toString()}`,
+            {
+              headers: {
+                'Referer': `${API_BASE}/copy-trading`,
+                'Origin': API_BASE,
+              },
+            }
+          );
+
+          if (response?.data?.items) {
+            items = response.data.items;
           }
-        );
+        }
 
-        if (!response?.data?.items) break;
+        if (items.length === 0) break;
 
-        for (const item of response.data.items) {
+        for (const item of items) {
           entries.push({
             trader_key: item.leaderId || item.uid,
             display_name: item.nickName || null,
@@ -69,7 +87,7 @@ export class KucoinConnector extends BaseConnector {
           });
         }
 
-        if (response.data.items.length < pageSize) break;
+        if (items.length < pageSize) break;
         await this.sleep(this.getRandomDelay(3000, 5000));
       }
 
