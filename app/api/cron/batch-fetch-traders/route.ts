@@ -10,8 +10,8 @@
  *   group=c  → okx_web3, aevo, xt (every 4h)
  *   group=d  → gains, htx_futures, dydx, phemex (every 6h)
  *   group=e  → coinex, binance_web3, kwenta, synthetix, mux (every 8h)
- *   group=f  → mexc, bingx, gateio, weex, bitmart, bitunix (every 12h)
- *   group=g  → uniswap, pancakeswap, web3_bot, drift (every 12h)
+ *   group=f  → mexc, bingx, gateio, weex, bitmart (every 12h)
+ *   group=g  → drift, bitunix, web3_bot, uniswap, pancakeswap (every 12h)
  *
  * Dead/blocked platforms removed:
  *   - kucoin: APIs return 404, feature discontinued
@@ -50,9 +50,9 @@ const GROUPS: Record<string, string[]> = {
   // kucoin removed: APIs return 404, feature discontinued
   // lbank removed: needs session auth, crashes headless browser
   // blofin removed: needs BLOFIN env vars (not configured)
-  f: ['mexc', 'bingx', 'gateio', 'weex', 'bitmart', 'bitunix'],
-  // Group G: DEX Subgraph + Solana (every 12h) — The Graph queries + Drift
-  g: ['uniswap', 'pancakeswap', 'web3_bot', 'drift'],
+  f: ['mexc', 'bingx', 'gateio', 'weex', 'bitmart'],
+  // Group G: DEX + new CEX (every 12h) — Drift, Bitunix first for priority
+  g: ['drift', 'bitunix', 'web3_bot', 'uniswap', 'pancakeswap'],
 }
 
 interface BatchResult {
