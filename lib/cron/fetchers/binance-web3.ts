@@ -22,7 +22,7 @@ import {
   type TraderData,
   calculateArenaScore,
   upsertTraders,
-  fetchJson,
+  fetchWithFallback,
   sleep,
   parseNum,
 } from './shared'
@@ -85,13 +85,14 @@ async function fetchWeb3Leaderboard(
       try {
         const url = `${WEB3_LEADERBOARD_URL}?chainId=${chainId}&period=${web3Period}&tag=ALL&pageNo=${page}&pageSize=${PAGE_SIZE}`
 
-        const data = await fetchJson<Web3Response>(url, {
+        const { data } = await fetchWithFallback<Web3Response>(url, {
           headers: {
             'Origin': 'https://web3.binance.com',
             'Referer': 'https://web3.binance.com/',
             'Accept-Encoding': 'gzip, deflate, br',
           },
           timeoutMs: 15000,
+          platform: SOURCE,
         })
 
         const entries = data?.data?.data
