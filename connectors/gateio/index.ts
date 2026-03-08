@@ -27,17 +27,27 @@ export class GateioConnector extends BaseConnector {
       const periodMap: Record<Window, string> = { '7d': '7d', '30d': '30d', '90d': '90d' };
       const period = periodMap[window] || '30d';
 
-      const url = `${API_BASE}/api/v1/copy/leaders?page=1&limit=${Math.min(limit, 100)}&period=${period}&sort=roi`;
-      const response = await this.fetchJSON<{ data: { list: Record<string, unknown>[] } }>(url, {
-        headers: {
-          'Origin': API_BASE,
-          'Referer': `${API_BASE}/copy_trading`,
-        },
+      // Try VPS scraper first
+      let response = await this.fetchViaVPS<{ data: { list: Record<string, unknown>[] } }>('/gateio/leaderboard', {
+        page: 1,
+        pageSize: Math.min(limit, 100),
+        period,
       });
+
+      // Fallback to direct API if VPS failed
+      const apiUrl = `${API_BASE}/api/v1/copy/leaders?page=1&limit=${Math.min(limit, 100)}&period=${period}&sort=roi`;
+      if (!response) {
+        response = await this.fetchJSON<{ data: { list: Record<string, unknown>[] } }>(apiUrl, {
+          headers: {
+            'Origin': API_BASE,
+            'Referer': `${API_BASE}/copy_trading`,
+          },
+        });
+      }
 
       if (!response?.data?.list) {
         return this.success([], {
-          source_url: url,
+          source_url: apiUrl,
           platform_sorting: 'default',
           reason: 'Gate.io leaderboard may not be publicly accessible or endpoint changed',
         });
