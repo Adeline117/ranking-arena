@@ -36,6 +36,7 @@ const fixAttempts = new Map() // platform -> last attempt timestamp
 // Dead/blocked platforms - skip in alerts & auto-fix
 const DEAD_PLATFORMS = new Set([
   'kucoin', 'lbank', 'phemex', 'bitget_spot', 'blofin',
+  'weex', 'mux', 'kwenta', 'synthetix',
 ])
 
 if (!CRON_SECRET) {

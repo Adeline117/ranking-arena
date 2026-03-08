@@ -53,6 +53,9 @@ export type TraderSource =
   | 'gains'
   | 'jupiter_perps'
   | 'aevo'
+  | 'kwenta'
+  | 'synthetix'
+  | 'mux'
   | 'perpetual_protocol'
   // Solana DEX
   | 'drift'
@@ -125,6 +128,10 @@ export const DEAD_BLOCKED_PLATFORMS: TraderSource[] = [
   'phemex',       // CloudFront blocks all VPS/Vercel IPs since 2026-03
   'bitget_spot',  // No public API (all endpoints return 404)
   'blofin',       // Requires BLOFIN env vars (not set)
+  'weex',         // Copy-trade API returning 521 (origin down) since 2026-03
+  'mux',          // Requires THEGRAPH_API_KEY (not set), Copin has 0 traders
+  'kwenta',       // Copin stale (last April 2025), TheGraph needs THEGRAPH_API_KEY
+  'synthetix',    // Copin stale (last April 2025), TheGraph needs THEGRAPH_API_KEY
 ]
 
 // ---------------------------------------------------------------------------
@@ -271,6 +278,9 @@ export const EXCHANGE_CONFIG: Record<TraderSource, ExchangeConfig> = {
   dune_defi: { name: 'DeFi (Dune)', sourceType: 'web3', reliability: 80, trustWeight: 0.80, roiType: 'mixed' },
   bitunix: { name: 'Bitunix', sourceType: 'futures', reliability: 65, trustWeight: 0.75, roiType: 'mixed' },
   web3_bot: { name: 'Web3 Bot', sourceType: 'web3', reliability: 75, trustWeight: 0.70, roiType: 'mixed' },
+  kwenta: { name: 'Kwenta', sourceType: 'futures', reliability: 70, trustWeight: 0.75, roiType: 'mixed' },
+  synthetix: { name: 'Synthetix', sourceType: 'futures', reliability: 70, trustWeight: 0.75, roiType: 'mixed' },
+  mux: { name: 'MUX Protocol', sourceType: 'futures', reliability: 60, trustWeight: 0.70, roiType: 'mixed' },
 }
 
 // ---------------------------------------------------------------------------
