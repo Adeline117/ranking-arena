@@ -1,8 +1,8 @@
 /**
  * Kwenta (Optimism) — Inline fetcher for Vercel serverless
- * API: The Graph decentralized network (requires THEGRAPH_API_KEY)
- * Subgraph ID: 5sbJJTTJQQ4kYuVYNBVw9sX8C5juRpVJNLHg7uFugw2e
- * Messari standard schema — accounts with positions
+ *
+ * Primary: Copin API (free, no API key, 858+ traders)
+ * Fallback: The Graph decentralized network (requires THEGRAPH_API_KEY)
  */
 
 import type { SupabaseClient } from '@supabase/supabase-js'
@@ -24,24 +24,41 @@ const SUBGRAPH_ID = '5sbJJTTJQQ4kYuVYNBVw9sX8C5juRpVJNLHg7uFugw2e'
 
 const WINDOW_DAYS: Record<string, number> = { '7D': 7, '30D': 30, '90D': 90 }
 
-// ── API response types ──
+// Copin API period mapping
+const COPIN_PERIOD: Record<string, string> = { '7D': 'WEEK', '30D': 'MONTH', '90D': 'MONTH' }
+
+// ── Copin API types ──
+
+interface CopinTrader {
+  account: string
+  ranking: number
+  totalPnl: number
+  totalRealisedPnl: number
+  totalVolume: number
+  totalFee: number
+  totalTrade: number
+  totalWin: number
+  totalLose: number
+  totalLiquidation: number
+}
+
+interface CopinResponse {
+  data: CopinTrader[]
+  meta: { total: number; totalPages: number; limit: number; offset: number }
+}
+
+// ── TheGraph API types ──
 
 interface KwentaPosition {
   id: string
-  timestampOpened?: string
   timestampClosed?: string
-  leverage?: string
-  balance?: string
   collateral?: string
   realisedPnlUSD?: string
-  fundingrateClosed?: string
 }
 
 interface KwentaAccount {
   id: string
   cumulativeClosedPositionCount: number
-  cumulativePositionCount?: number
-  openPositionCount?: number
   positions?: KwentaPosition[]
 }
 
@@ -50,7 +67,61 @@ interface GraphQLResponse {
   errors?: Array<{ message: string }>
 }
 
-// ── Helpers ──
+// ── Strategy 1: Copin API (free, no key needed) ──
+
+async function fetchViaCopinApi(period: string): Promise<TraderData[]> {
+  const statisticType = COPIN_PERIOD[period] || 'MONTH'
+  // Use first of current month as queryDate
+  const now = new Date()
+  const queryDate = new Date(now.getFullYear(), now.getMonth(), 1).getTime()
+
+  const traders: TraderData[] = []
+  const capturedAt = new Date().toISOString()
+  const pageSize = 100
+  const maxPages = Math.ceil(TARGET / pageSize)
+
+  for (let page = 0; page < maxPages; page++) {
+    const url = `https://api.copin.io/leaderboards/page?protocol=KWENTA&statisticType=${statisticType}&queryDate=${queryDate}&limit=${pageSize}&offset=${page * pageSize}&sort_by=ranking&sort_type=asc`
+
+    const data = await fetchJson<CopinResponse>(url, { timeoutMs: 15000 })
+    if (!data?.data?.length) break
+
+    for (const t of data.data) {
+      if (!t.account) continue
+
+      // Compute ROI from PnL / estimated capital (volume / avg leverage ~10x)
+      const estimatedCapital = t.totalVolume > 0 ? t.totalVolume / 10 : 0
+      const roi = estimatedCapital > 100 ? (t.totalPnl / estimatedCapital) * 100 : 0
+      if (roi === 0 && t.totalPnl === 0) continue
+
+      const winRate = t.totalTrade > 0 ? (t.totalWin / t.totalTrade) * 100 : null
+      const addr = t.account.toLowerCase()
+
+      traders.push({
+        source: SOURCE,
+        source_trader_id: addr,
+        handle: `${addr.slice(0, 6)}...${addr.slice(-4)}`,
+        profile_url: `https://kwenta.eth.limo/stats/${addr}`,
+        season_id: period,
+        rank: t.ranking || traders.length + 1,
+        roi,
+        pnl: t.totalPnl || null,
+        win_rate: winRate,
+        max_drawdown: null,
+        trades_count: t.totalTrade,
+        arena_score: calculateArenaScore(roi, t.totalPnl, null, winRate, period),
+        captured_at: capturedAt,
+      })
+    }
+
+    if (data.data.length < pageSize) break
+    await sleep(300)
+  }
+
+  return traders
+}
+
+// ── Strategy 2: TheGraph (requires THEGRAPH_API_KEY) ──
 
 function getSubgraphUrl(): string | null {
   const apiKey = process.env.THEGRAPH_API_KEY || ''
@@ -58,16 +129,9 @@ function getSubgraphUrl(): string | null {
   return `https://gateway.thegraph.com/api/${apiKey}/subgraphs/id/${SUBGRAPH_ID}`
 }
 
-// ── Per-period fetch ──
-
-async function fetchPeriod(
-  supabase: SupabaseClient,
-  period: string
-): Promise<{ total: number; saved: number; error?: string }> {
+async function fetchViaTheGraph(period: string): Promise<TraderData[]> {
   const subgraphUrl = getSubgraphUrl()
-  if (!subgraphUrl) {
-    return { total: 0, saved: 0, error: 'Missing THEGRAPH_API_KEY env var' }
-  }
+  if (!subgraphUrl) return []
 
   const query = `
     query GetTopTraders {
@@ -79,17 +143,11 @@ async function fetchPeriod(
       ) {
         id
         cumulativeClosedPositionCount
-        cumulativePositionCount
-        openPositionCount
         positions(first: 100, orderBy: timestampClosed, orderDirection: desc) {
           id
-          timestampOpened
           timestampClosed
-          leverage
-          balance
           collateral
           realisedPnlUSD
-          fundingrateClosed
         }
       }
     }
@@ -102,43 +160,21 @@ async function fetchPeriod(
     timeoutMs: 30000,
   })
 
-  if (json.errors?.length) {
-    return { total: 0, saved: 0, error: json.errors[0].message }
-  }
+  if (json.errors?.length || !json.data?.accounts?.length) return []
 
-  const accounts = json.data?.accounts || []
-  if (accounts.length === 0) {
-    return { total: 0, saved: 0, error: 'No accounts returned' }
-  }
-
-  // Time window filter
   const days = WINDOW_DAYS[period] || 90
-  const windowStart = Math.floor(
-    (Date.now() - days * 24 * 60 * 60 * 1000) / 1000
-  )
+  const windowStart = Math.floor((Date.now() - days * 24 * 60 * 60 * 1000) / 1000)
+  const capturedAt = new Date().toISOString()
 
-  interface ParsedKwentaTrader {
-    traderId: string
-    nickname: string
-    roi: number
-    pnl: number
-    winRate: number | null
-    tradesCount: number
-  }
+  const parsed: { id: string; roi: number; pnl: number; winRate: number | null; trades: number }[] = []
 
-  const parsed: ParsedKwentaTrader[] = []
-
-  for (const account of accounts) {
-    // Filter positions within the time window
+  for (const account of json.data.accounts) {
     const positions = (account.positions || []).filter(
       (p) => p.timestampClosed && parseInt(p.timestampClosed) >= windowStart
     )
     if (positions.length === 0) continue
 
-    let totalPnl = 0
-    let totalCollateral = 0
-    let wins = 0
-
+    let totalPnl = 0, totalCollateral = 0, wins = 0
     for (const pos of positions) {
       const pnl = parseFloat(pos.realisedPnlUSD || '0')
       const collateral = parseFloat(pos.collateral || '0')
@@ -150,73 +186,91 @@ async function fetchPeriod(
     const roi = totalCollateral > 0 ? (totalPnl / totalCollateral) * 100 : 0
     if (roi === 0) continue
 
-    const winRate =
-      positions.length > 0 ? (wins / positions.length) * 100 : null
-    const id = account.id.toLowerCase()
-
     parsed.push({
-      traderId: id,
-      nickname: `${id.slice(0, 6)}...${id.slice(-4)}`,
+      id: account.id.toLowerCase(),
       roi,
       pnl: totalPnl,
-      winRate,
-      tradesCount: positions.length,
+      winRate: positions.length > 0 ? (wins / positions.length) * 100 : null,
+      trades: positions.length,
     })
   }
 
-  // Sort and cap
   parsed.sort((a, b) => b.roi - a.roi)
-  const top = parsed.slice(0, TARGET)
 
-  const capturedAt = new Date().toISOString()
-  const traders: TraderData[] = top.map((t, idx) => ({
+  return parsed.slice(0, TARGET).map((t, idx) => ({
     source: SOURCE,
-    source_trader_id: t.traderId,
-    handle: t.nickname,
-    profile_url: `https://kwenta.eth.limo/stats/${t.traderId}`,
+    source_trader_id: t.id,
+    handle: `${t.id.slice(0, 6)}...${t.id.slice(-4)}`,
+    profile_url: `https://kwenta.eth.limo/stats/${t.id}`,
     season_id: period,
     rank: idx + 1,
     roi: t.roi,
     pnl: t.pnl || null,
     win_rate: t.winRate,
-    max_drawdown: null, // Not available from subgraph
-    trades_count: t.tradesCount,
+    max_drawdown: null,
+    trades_count: t.trades,
     arena_score: calculateArenaScore(t.roi, t.pnl, null, t.winRate, period),
     captured_at: capturedAt,
   }))
+}
 
-  const { saved, error } = await upsertTraders(supabase, traders)
+// ── Per-period fetch ──
+
+async function fetchPeriod(
+  supabase: SupabaseClient,
+  period: string
+): Promise<{ total: number; saved: number; error?: string }> {
+  // Strategy 1: Copin API (free, no key, 858+ traders)
+  let traders: TraderData[] = []
+  try {
+    traders = await fetchViaCopinApi(period)
+    if (traders.length > 0) {
+      logger.info(`[${SOURCE}] Copin API returned ${traders.length} traders for ${period}`)
+    }
+  } catch (err) {
+    logger.warn(`[${SOURCE}] Copin API failed: ${err instanceof Error ? err.message : String(err)}`)
+  }
+
+  // Strategy 2: TheGraph fallback
+  if (traders.length === 0) {
+    try {
+      traders = await fetchViaTheGraph(period)
+      if (traders.length > 0) {
+        logger.info(`[${SOURCE}] TheGraph returned ${traders.length} traders for ${period}`)
+      }
+    } catch (err) {
+      logger.warn(`[${SOURCE}] TheGraph failed: ${err instanceof Error ? err.message : String(err)}`)
+    }
+  }
+
+  if (traders.length === 0) {
+    return { total: 0, saved: 0, error: 'No data from Copin API or TheGraph' }
+  }
+
+  traders.sort((a, b) => (b.roi ?? 0) - (a.roi ?? 0))
+  const top = traders.slice(0, TARGET)
+  const { saved, error } = await upsertTraders(supabase, top)
 
   // Save stats_detail for 90D period
   if (saved > 0 && period === '90D') {
-    logger.warn(`[${SOURCE}] Saving stats details for top ${Math.min(top.length, 50)} traders...`)
     let statsSaved = 0
     for (const t of top.slice(0, 50)) {
       const stats: StatsDetail = {
-        totalTrades: t.tradesCount ?? null,
-        profitableTradesPct: t.winRate,
-        avgHoldingTimeHours: null,
-        avgProfit: null,
-        avgLoss: null,
-        largestWin: null,
-        largestLoss: null,
-        sharpeRatio: null,
-        maxDrawdown: null,
-        currentDrawdown: null,
-        volatility: null,
-        copiersCount: null,
-        copiersPnl: null,
-        aum: null,
-        winningPositions: null,
-        totalPositions: t.tradesCount ?? null,
+        totalTrades: t.trades_count ?? null,
+        profitableTradesPct: t.win_rate ?? null,
+        avgHoldingTimeHours: null, avgProfit: null, avgLoss: null,
+        largestWin: null, largestLoss: null, sharpeRatio: null,
+        maxDrawdown: null, currentDrawdown: null, volatility: null,
+        copiersCount: null, copiersPnl: null, aum: null,
+        winningPositions: null, totalPositions: t.trades_count ?? null,
       }
-      const { saved: s } = await upsertStatsDetail(supabase, SOURCE, t.traderId, period, stats)
+      const { saved: s } = await upsertStatsDetail(supabase, SOURCE, t.source_trader_id, period, stats)
       if (s) statsSaved++
     }
-    logger.warn(`[${SOURCE}] Saved ${statsSaved} stats details`)
+    logger.info(`[${SOURCE}] Saved ${statsSaved} stats details`)
   }
 
-  return { total: traders.length, saved, error }
+  return { total: top.length, saved, error }
 }
 
 // ── Exported entry point ──
