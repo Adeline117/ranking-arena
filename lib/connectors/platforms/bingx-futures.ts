@@ -70,11 +70,21 @@ export class BingxFuturesConnector extends BaseConnector {
     const period = periodMap[window] || '30'
 
     try {
-      // Try BingX copy trading API endpoint
-      const _rawLb = await this.request<{ data?: { list?: BingXLeaderboardEntry[] } }>(
-        `https://bingx.com/api/uc/v1/public/copyTrade/traders?page=1&pageSize=${limit}&period=${period}&sortBy=roi&sortOrder=desc`,
-        { method: 'GET', headers: this.getHeaders() }
-      )
+      // Try VPS scraper first
+      let _rawLb = await this.fetchViaVPS<{ data?: { list?: BingXLeaderboardEntry[] } }>('/bingx/leaderboard', {
+        pageIndex: 1,
+        pageSize: limit,
+        period,
+      });
+
+      // Fallback to direct BingX API if VPS failed
+      if (!_rawLb) {
+        _rawLb = await this.request<{ data?: { list?: BingXLeaderboardEntry[] } }>(
+          `https://bingx.com/api/uc/v1/public/copyTrade/traders?page=1&pageSize=${limit}&period=${period}&sortBy=roi&sortOrder=desc`,
+          { method: 'GET', headers: this.getHeaders() }
+        );
+      }
+
       const data = warnValidate(BingxFuturesLeaderboardResponseSchema, _rawLb, 'bingx-futures/leaderboard')
 
       const list = data?.data?.list || []

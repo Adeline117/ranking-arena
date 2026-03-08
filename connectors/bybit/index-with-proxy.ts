@@ -53,7 +53,7 @@ export class BybitProxyConnector extends BaseConnector {
       ).toString();
       const url = `${endpoint}?${queryString}`;
 
-      console.log(`[Bybit] Trying proxy: ${url}`);
+      console.warn(`[Bybit] Trying proxy: ${url}`);
       const response = await fetch(url, {
         method: 'GET',
         headers: {
@@ -69,7 +69,7 @@ export class BybitProxyConnector extends BaseConnector {
       }
 
       const data = await response.json() as T;
-      console.log(`[Bybit] ✅ Proxy success`);
+      console.warn(`[Bybit] ✅ Proxy success`);
       return data;
     } catch (error) {
       console.warn(`[Bybit] Proxy failed:`, (error as Error).message);
@@ -79,7 +79,7 @@ export class BybitProxyConnector extends BaseConnector {
 
   private async fetchDirectly<T>(url: string, options: RequestInit): Promise<T | null> {
     try {
-      console.log(`[Bybit] Trying direct: ${url}`);
+      console.warn(`[Bybit] Trying direct: ${url}`);
       const response = await fetch(url, {
         ...options,
         signal: AbortSignal.timeout(30000),
@@ -91,7 +91,7 @@ export class BybitProxyConnector extends BaseConnector {
       }
 
       const data = await response.json() as T;
-      console.log(`[Bybit] ✅ Direct success`);
+      console.warn(`[Bybit] ✅ Direct success`);
       return data;
     } catch (error) {
       console.warn(`[Bybit] Direct failed:`, (error as Error).message);

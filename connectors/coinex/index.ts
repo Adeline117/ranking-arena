@@ -37,23 +37,33 @@ export class CoinexConnector extends BaseConnector {
       const pages = Math.ceil(limit / pageSize);
 
       for (let page = 1; page <= pages && entries.length < limit; page++) {
-        const params = new URLSearchParams({
-          page: String(page),
-          limit: String(pageSize),
-          order_by: 'roi',
-          order_type: 'desc',
+        // Try VPS scraper first
+        let response = await this.fetchViaVPS<CoinexListResponse>('/coinex/leaderboard', {
+          page,
+          pageSize,
           days: WINDOW_MAP[window],
         });
 
-        const response = await this.fetchJSON<CoinexListResponse>(
-          `${LIST_API}?${params.toString()}`,
-          {
-            headers: {
-              'Referer': `${API_BASE}/copy-trading`,
-              'Origin': API_BASE,
-            },
-          }
-        );
+        // Fallback to direct API if VPS failed
+        if (!response) {
+          const params = new URLSearchParams({
+            page: String(page),
+            limit: String(pageSize),
+            order_by: 'roi',
+            order_type: 'desc',
+            days: WINDOW_MAP[window],
+          });
+
+          response = await this.fetchJSON<CoinexListResponse>(
+            `${LIST_API}?${params.toString()}`,
+            {
+              headers: {
+                'Referer': `${API_BASE}/copy-trading`,
+                'Origin': API_BASE,
+              },
+            }
+          );
+        }
 
         if (!response?.data?.items) break;
 

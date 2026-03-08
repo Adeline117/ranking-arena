@@ -335,6 +335,55 @@ export abstract class BaseConnector implements PlatformConnector {
     throw lastError || new ConnectorError('Max retries exceeded', this.platform, this.marketType)
   }
 
+  /**
+   * Fetch via VPS Scraper
+   * 
+   * @param endpoint - VPS endpoint path (e.g., '/bingx/leaderboard')
+   * @param params - Query parameters
+   * @param timeoutMs - Request timeout (default: 120000ms = 2min)
+   * @returns Response data or null if failed
+   */
+  protected async fetchViaVPS<T = unknown>(
+    endpoint: string,
+    params: Record<string, string | number> = {},
+    timeoutMs = 120000
+  ): Promise<T | null> {
+    const vpsHost = process.env.VPS_PROXY_URL || process.env.VPS_SCRAPER_HOST;
+    const vpsKey = process.env.VPS_PROXY_KEY;
+
+    if (!vpsHost || !vpsKey) {
+      return null; // VPS not configured, return null to allow fallback
+    }
+
+    try {
+      const queryString = new URLSearchParams(
+        Object.entries(params).map(([k, v]) => [k, String(v)])
+      ).toString();
+      const url = `${vpsHost}${endpoint}${queryString ? `?${queryString}` : ''}`;
+
+      const response = await fetch(url, {
+        method: 'GET',
+        headers: {
+          'X-Proxy-Key': vpsKey,
+          'User-Agent': this.config.userAgent,
+          'Accept': 'application/json',
+        },
+        signal: AbortSignal.timeout(timeoutMs),
+      });
+
+      if (!response.ok) {
+        console.warn(`[VPS] ${this.platform} returned ${response.status}`);
+        return null;
+      }
+
+      const data = await response.json() as T;
+      return data;
+    } catch (error) {
+      console.warn(`[VPS] ${this.platform} failed:`, toError(error).message);
+      return null;
+    }
+  }
+
   // ============================================
   // Quality Flag Helpers
   // ============================================
