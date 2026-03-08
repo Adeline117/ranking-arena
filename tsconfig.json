@@ -49,6 +49,8 @@
     "build",
     "lib/archive",
     "docs/archive",
-    "scripts/test-connectors.ts"
+    "scripts/test-connectors.ts",
+    "scripts/discover-api-endpoints.ts",
+    "scripts/test-vps-scraper-quick.ts"
   ]
 }
