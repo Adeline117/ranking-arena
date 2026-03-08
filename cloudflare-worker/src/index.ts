@@ -75,6 +75,14 @@ const ALLOWED_HOSTS = [
   'crypto.com',
   // LBank copy trading
   'www.lbank.com',
+  // Gate.io copy trading
+  'www.gate.com',
+  // Bitunix copy trading
+  'api.bitunix.com',
+  // Drift DEX
+  'data.api.drift.trade',
+  // Paradex DEX
+  'api.prod.paradex.trade',
 ];
 
 const worker = {
@@ -154,6 +162,31 @@ const worker = {
       return handleHtxCopyTrading(request, url);
     }
 
+    // Shortcut: /coinex/copy-trading
+    if (url.pathname === '/coinex/copy-trading') {
+      return handleCoinexCopyTrading(request, url);
+    }
+
+    // Shortcut: /gateio/copy-trading
+    if (url.pathname === '/gateio/copy-trading') {
+      return handleGateioCopyTrading(request, url);
+    }
+
+    // Shortcut: /bitunix/copy-trading
+    if (url.pathname === '/bitunix/copy-trading') {
+      return handleBitunixCopyTrading(request, url);
+    }
+
+    // Shortcut: /drift/leaderboard
+    if (url.pathname === '/drift/leaderboard') {
+      return handleDriftLeaderboard(request, url);
+    }
+
+    // Shortcut: /paradex/leaderboard
+    if (url.pathname === '/paradex/leaderboard') {
+      return handleParadexLeaderboard(request, url);
+    }
+
     // Shortcut: /bingx/leaderboard
     if (url.pathname === '/bingx/leaderboard') {
       return handleBingxLeaderboard(request, url);
@@ -211,8 +244,11 @@ const worker = {
         '/binance/copy-trading', '/binance/spot-copy-trading',
         '/bybit/copy-trading', '/bitget/copy-trading', '/kucoin/copy-trading',
         '/mexc/copy-trading', '/htx/copy-trading',
+        '/coinex/copy-trading', '/gateio/copy-trading', '/bitunix/copy-trading',
+        '/drift/leaderboard', '/paradex/leaderboard',
         '/dydx/leaderboard', '/dydx/historical-pnl', '/dydx/subaccount',
         '/blofin/leaderboard', '/blofin/trader-info',
+        '/bingx/leaderboard', '/bingx/trader-detail',
         '/gains/leaderboard-all', '/gains/open-trades', '/gains/trader-stats',
       ]
     }, { status: 404 });
@@ -1054,6 +1090,239 @@ async function handleGainsTraderStats(_request: Request, url: URL): Promise<Resp
     const msg = error instanceof Error ? error.message : String(error);
     console.error('[proxy] error:', msg);
     return Response.json({ error: 'Gains trader stats proxy error', details: 'Upstream API unavailable' }, {
+      status: 500,
+      headers: { 'Access-Control-Allow-Origin': corsOrigin() },
+    });
+  }
+}
+
+// ============================================
+// CoinEx Proxy Endpoint
+// ============================================
+
+async function handleCoinexCopyTrading(_request: Request, url: URL): Promise<Response> {
+  const page = parseInt(url.searchParams.get('page') || '1');
+  const limit = parseInt(url.searchParams.get('limit') || '20');
+  const sortBy = url.searchParams.get('sortBy') || 'roi';
+
+  const apiUrl = `https://www.coinex.com/res/copy-trading/public/traders?page=${page}&limit=${limit}&sort_by=${sortBy}`;
+
+  try {
+    const response = await fetch(apiUrl, {
+      method: 'GET',
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
+        'Accept': 'application/json',
+        'Accept-Language': 'en-US,en;q=0.9',
+        'Referer': 'https://www.coinex.com/copy-trading',
+        'Origin': 'https://www.coinex.com',
+      },
+    });
+
+    const data = await response.text();
+    return new Response(data, {
+      status: response.status,
+      headers: {
+        'Content-Type': response.headers.get('Content-Type') || 'application/json',
+        'Access-Control-Allow-Origin': corsOrigin(),
+      },
+    });
+  } catch (error) {
+    const msg = error instanceof Error ? error.message : String(error);
+    console.error('[proxy] CoinEx error:', msg);
+    return Response.json({
+      error: 'CoinEx API error',
+      details: msg.slice(0, 200),
+    }, {
+      status: 500,
+      headers: { 'Access-Control-Allow-Origin': corsOrigin() },
+    });
+  }
+}
+
+// ============================================
+// Gate.io Proxy Endpoint
+// ============================================
+
+async function handleGateioCopyTrading(request: Request, url: URL): Promise<Response> {
+  const page = parseInt(url.searchParams.get('page') || '1');
+  const pageSize = parseInt(url.searchParams.get('pageSize') || '20');
+  const period = url.searchParams.get('period') || '30D';
+
+  const apiUrl = 'https://www.gate.com/apiw/v2/copy/leader/list';
+
+  try {
+    const response = await fetch(apiUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
+        'Accept': 'application/json',
+        'Accept-Language': 'en-US,en;q=0.9',
+        'Referer': 'https://www.gate.com/copy-trading',
+        'Origin': 'https://www.gate.com',
+      },
+      body: request.method === 'POST' ? await request.text() : JSON.stringify({
+        page,
+        page_size: pageSize,
+        period,
+        sort_by: 'roi',
+        sort_direction: 'desc',
+      }),
+    });
+
+    const data = await response.text();
+    return new Response(data, {
+      status: response.status,
+      headers: {
+        'Content-Type': response.headers.get('Content-Type') || 'application/json',
+        'Access-Control-Allow-Origin': corsOrigin(),
+      },
+    });
+  } catch (error) {
+    const msg = error instanceof Error ? error.message : String(error);
+    console.error('[proxy] Gate.io error:', msg);
+    return Response.json({
+      error: 'Gate.io API error',
+      details: msg.slice(0, 200),
+    }, {
+      status: 500,
+      headers: { 'Access-Control-Allow-Origin': corsOrigin() },
+    });
+  }
+}
+
+// ============================================
+// Bitunix Proxy Endpoint (POST)
+// ============================================
+
+async function handleBitunixCopyTrading(request: Request, url: URL): Promise<Response> {
+  const page = parseInt(url.searchParams.get('page') || '1');
+  const pageSize = parseInt(url.searchParams.get('pageSize') || '200');
+  const period = url.searchParams.get('period') || '30D';
+
+  const apiUrl = 'https://api.bitunix.com/copy/trading/v1/trader/list';
+
+  try {
+    const response = await fetch(apiUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
+        'Accept': 'application/json',
+        'Accept-Language': 'en-US,en;q=0.9',
+        'Referer': 'https://www.bitunix.com/copy-trading',
+        'Origin': 'https://www.bitunix.com',
+      },
+      body: request.method === 'POST' ? await request.text() : JSON.stringify({
+        page,
+        pageSize,
+        period,
+        sortBy: 'roi',
+        sortDirection: 'desc',
+      }),
+    });
+
+    const data = await response.text();
+    return new Response(data, {
+      status: response.status,
+      headers: {
+        'Content-Type': response.headers.get('Content-Type') || 'application/json',
+        'Access-Control-Allow-Origin': corsOrigin(),
+      },
+    });
+  } catch (error) {
+    const msg = error instanceof Error ? error.message : String(error);
+    console.error('[proxy] Bitunix error:', msg);
+    return Response.json({
+      error: 'Bitunix API error',
+      details: msg.slice(0, 200),
+    }, {
+      status: 500,
+      headers: { 'Access-Control-Allow-Origin': corsOrigin() },
+    });
+  }
+}
+
+// ============================================
+// Drift DEX Proxy Endpoint
+// ============================================
+
+async function handleDriftLeaderboard(_request: Request, url: URL): Promise<Response> {
+  const limit = url.searchParams.get('limit') || '500';
+  const offset = url.searchParams.get('offset') || '0';
+  const orderBy = url.searchParams.get('orderBy') || 'totalPnl';
+  const orderDirection = url.searchParams.get('orderDirection') || 'desc';
+
+  const apiUrl = `https://data.api.drift.trade/stats/leaderboard?limit=${limit}&offset=${offset}&orderBy=${orderBy}&orderDirection=${orderDirection}`;
+
+  try {
+    const response = await fetch(apiUrl, {
+      method: 'GET',
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
+        'Accept': 'application/json',
+        'Accept-Language': 'en-US,en;q=0.9',
+      },
+    });
+
+    const data = await response.text();
+    return new Response(data, {
+      status: response.status,
+      headers: {
+        'Content-Type': response.headers.get('Content-Type') || 'application/json',
+        'Access-Control-Allow-Origin': corsOrigin(),
+      },
+    });
+  } catch (error) {
+    const msg = error instanceof Error ? error.message : String(error);
+    console.error('[proxy] Drift error:', msg);
+    return Response.json({
+      error: 'Drift API error',
+      details: msg.slice(0, 200),
+    }, {
+      status: 500,
+      headers: { 'Access-Control-Allow-Origin': corsOrigin() },
+    });
+  }
+}
+
+// ============================================
+// Paradex DEX Proxy Endpoint (placeholder)
+// ============================================
+
+async function handleParadexLeaderboard(_request: Request, url: URL): Promise<Response> {
+  const limit = url.searchParams.get('limit') || '100';
+  const period = url.searchParams.get('period') || '30D';
+
+  // Paradex production API endpoint
+  const apiUrl = `https://api.prod.paradex.trade/v1/leaderboard?limit=${limit}&period=${period}`;
+
+  try {
+    const response = await fetch(apiUrl, {
+      method: 'GET',
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
+        'Accept': 'application/json',
+        'Accept-Language': 'en-US,en;q=0.9',
+      },
+    });
+
+    const data = await response.text();
+    return new Response(data, {
+      status: response.status,
+      headers: {
+        'Content-Type': response.headers.get('Content-Type') || 'application/json',
+        'Access-Control-Allow-Origin': corsOrigin(),
+      },
+    });
+  } catch (error) {
+    const msg = error instanceof Error ? error.message : String(error);
+    console.error('[proxy] Paradex error:', msg);
+    return Response.json({
+      error: 'Paradex API error',
+      details: msg.slice(0, 200),
+    }, {
       status: 500,
       headers: { 'Access-Control-Allow-Origin': corsOrigin() },
     });
