@@ -31,6 +31,8 @@ const TARGET = 500
 const PAGE_SIZE = 50
 const VPS_SCRAPER_URL = process.env.VPS_SCRAPER_URL || 'http://45.76.152.169:3456'
 const VPS_SCRAPER_KEY = process.env.VPS_PROXY_KEY || ''
+const VPS_PROXY_URL = process.env.VPS_PROXY_SG || process.env.VPS_PROXY_URL || process.env.VPS_PROXY_JP || ''
+const VPS_PROXY_KEY = process.env.VPS_PROXY_KEY || ''
 
 const HEADERS: Record<string, string> = {
   Referer: 'https://www.coinex.com/en/copy-trading/futures',
@@ -203,9 +205,94 @@ async function fetchPeriod(
     if (allTraders.size > 0) break
   }
 
-  // VPS Playwright scraper fallback (browser-based bypass for CF challenge)
+  // Strategy 2: VPS proxy with pagination — bypass Cloudflare via server-to-server request from SG VPS
+  if (allTraders.size < TARGET && VPS_PROXY_URL) {
+    logger.warn(`[${SOURCE}] Direct HTTP got ${allTraders.size} traders, trying VPS proxy with pagination...`)
+
+    const VPS_PROXY_ENDPOINTS = [
+      // Primary — public/traders (confirmed working via VPS browser)
+      (page: number) =>
+        `https://www.coinex.com/res/copy-trading/public/traders?data_type=profit_rate&time_range=${TIME_RANGE_MAP[period] || 'DAY30'}&hide_full=0&page=${page}&limit=${PAGE_SIZE}`,
+      // Fallback — copy-trade/rank
+      (page: number) =>
+        `https://www.coinex.com/res/copy-trade/rank?period=${PERIOD_MAP[period] || '30d'}&page=${page}&limit=${PAGE_SIZE}&sort=roi`,
+    ]
+
+    for (const makeUrl of VPS_PROXY_ENDPOINTS) {
+      if (allTraders.size >= TARGET) break
+      const maxPages = Math.ceil(TARGET / PAGE_SIZE)
+      let consecutiveEmpty = 0
+
+      for (let page = 1; page <= maxPages; page++) {
+        try {
+          const targetUrl = makeUrl(page)
+          const res = await fetch(VPS_PROXY_URL, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'X-Proxy-Key': VPS_PROXY_KEY,
+            },
+            body: JSON.stringify({
+              url: targetUrl,
+              method: 'GET',
+              headers: {
+                ...HEADERS,
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
+              },
+            }),
+            signal: AbortSignal.timeout(20_000),
+          })
+
+          if (!res.ok) {
+            logger.warn(`[${SOURCE}] VPS proxy HTTP ${res.status} on page ${page}`)
+            break
+          }
+
+          const data = (await res.json()) as CoinexApiResponse
+
+          // Skip "unknown method" responses
+          if (data?.code === 4009) {
+            logger.warn(`[${SOURCE}] VPS proxy got code 4009 (unknown method), trying next endpoint`)
+            break
+          }
+
+          const list = extractList(data)
+          if (list.length === 0) {
+            consecutiveEmpty++
+            if (consecutiveEmpty >= 2) break
+            continue
+          }
+          consecutiveEmpty = 0
+
+          let newCount = 0
+          for (const item of list) {
+            const id = String(item.trader_id || item.traderId || item.uid || item.id || '')
+            if (id && !allTraders.has(id)) {
+              allTraders.set(id, item)
+              newCount++
+            }
+          }
+
+          logger.warn(`[${SOURCE}] VPS proxy page ${page}: ${list.length} items, ${newCount} new (total: ${allTraders.size})`)
+
+          if (list.length < PAGE_SIZE || allTraders.size >= TARGET) break
+          await sleep(800) // polite delay between pages
+        } catch (err) {
+          logger.warn(`[${SOURCE}] VPS proxy page ${page} failed: ${err instanceof Error ? err.message : String(err)}`)
+          break
+        }
+      }
+
+      if (allTraders.size > 0) {
+        logger.warn(`[${SOURCE}] VPS proxy total: ${allTraders.size} traders`)
+        break // got data from this endpoint, no need to try fallback
+      }
+    }
+  }
+
+  // Strategy 3: VPS Playwright scraper fallback (browser-based bypass for CF challenge)
   if (allTraders.size === 0 && VPS_SCRAPER_KEY) {
-    logger.warn(`[${SOURCE}] All HTTP methods failed, trying VPS Playwright scraper...`)
+    logger.warn(`[${SOURCE}] VPS proxy failed, trying VPS Playwright scraper...`)
     try {
       const scraperUrl = `${VPS_SCRAPER_URL}/coinex/leaderboard?period=${PERIOD_MAP[period] || '30d'}&pageSize=${PAGE_SIZE}`
       const res = await fetch(scraperUrl, {
