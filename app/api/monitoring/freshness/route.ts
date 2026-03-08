@@ -12,6 +12,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import logger from '@/lib/logger'
+import { DEAD_BLOCKED_PLATFORMS } from '@/lib/constants/exchanges'
 
 const PLATFORM_THRESHOLDS: Record<string, number> = {
   okx_futures: 8,
@@ -115,10 +116,11 @@ export async function GET(request: NextRequest) {
     platforms: [],
   }
 
+  const deadSet = new Set(DEAD_BLOCKED_PLATFORMS as string[])
   const allSources = new Set([
     ...Object.keys(platformData),
     ...Object.keys(PLATFORM_THRESHOLDS),
-  ])
+  ].filter(src => !deadSet.has(src)))
 
   for (const src of allSources) {
     results.summary.totalPlatforms++

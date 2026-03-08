@@ -114,6 +114,20 @@ export const ALL_SOURCES: TraderSource[] = [
 ]
 
 // ---------------------------------------------------------------------------
+// DEAD_BLOCKED_PLATFORMS – excluded from health alerts & freshness checks
+// These platforms are structurally unable to fetch data and should not
+// trigger pipeline alerts or auto-fix attempts.
+// ---------------------------------------------------------------------------
+
+export const DEAD_BLOCKED_PLATFORMS: TraderSource[] = [
+  'kucoin',       // APIs return 404, feature discontinued
+  'lbank',        // Session auth required, crashes headless browser
+  'phemex',       // CloudFront blocks all VPS/Vercel IPs since 2026-03
+  'bitget_spot',  // No public API (all endpoints return 404)
+  'blofin',       // Requires BLOFIN env vars (not set)
+]
+
+// ---------------------------------------------------------------------------
 // SOURCE_TYPE_MAP – classifies each source as futures / spot / web3
 // ---------------------------------------------------------------------------
 
