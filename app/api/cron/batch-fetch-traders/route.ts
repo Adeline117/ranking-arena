@@ -10,9 +10,9 @@
  *   group=b  → hyperliquid, gmx, jupiter_perps (every 4h)
  *   group=c  → okx_web3, aevo, xt (every 4h)
  *   group=d  → gains, htx_futures, dydx, bybit_spot, toobit (every 6h)
- *   group=e  → coinex, binance_web3, kwenta, synthetix, mux (every 6h)
+ *   group=e  → coinex, binance_web3 (every 6h)
  *   group=f  → mexc, bingx (every 6h)
- *   group=h  → gateio, weex, bitmart (every 6h)
+ *   group=h  → gateio, bitmart (every 6h)
  *   group=g  → drift, bitunix, web3_bot, uniswap, pancakeswap, paradex (every 6h)
  *
  * Dead/blocked platforms removed:
@@ -21,6 +21,10 @@
  *   - bitget_spot: no public API (all endpoints return 404)
  *   - blofin: needs credentials (BLOFIN env vars not set)
  *   - phemex: CloudFront blocks all our IPs (VPS SG, Vercel hnd1, scraper) since ~2026-03-06
+ *   - weex: copy-trade API returning 521 (origin down) since 2026-03
+ *   - mux: requires THEGRAPH_API_KEY (not set), Copin has 0 traders
+ *   - kwenta: Copin stale (last data April 2025), TheGraph needs API key
+ *   - synthetix: Copin stale (last data April 2025), TheGraph needs API key
  */
 
 import { NextRequest, NextResponse } from 'next/server'
@@ -45,12 +49,12 @@ const GROUPS: Record<string, string[]> = {
   c: ['okx_web3', 'aevo', 'xt'],
   // Group D: CEX+DEX (every 6h) — 5 platforms (phemex: CloudFront blocked)
   d: ['gains', 'htx_futures', 'dydx', 'bybit_spot', 'toobit'],
-  // Group E: Lower-priority DEX (every 6h) — 5 platforms (was 8h)
-  e: ['coinex', 'binance_web3', 'kwenta', 'synthetix', 'mux'],
+  // Group E: Lower-priority DEX (every 6h) — 2 platforms
+  e: ['coinex', 'binance_web3'],
   // Group F: Slow CEX (every 6h) — 2 platforms, parallel (~141s + ~60s = ~200s)
   f: ['mexc', 'bingx'],
-  // Group H: Fast CEX (every 6h) — 3 platforms, parallel (~25s each)
-  h: ['gateio', 'weex', 'bitmart'],
+  // Group H: Fast CEX (every 6h) — 2 platforms, parallel (~25s each)
+  h: ['gateio', 'bitmart'],
   // Group G: New CEX + DEX (every 6h) — 6 platforms
   g: ['drift', 'bitunix', 'web3_bot', 'uniswap', 'pancakeswap', 'paradex'],
 }
