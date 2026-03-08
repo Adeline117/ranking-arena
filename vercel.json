@@ -69,6 +69,10 @@
       "schedule": "45 */3 * * *"
     },
     {
+      "path": "/api/cron/batch-fetch-traders?group=a2",
+      "schedule": "50 */3 * * *"
+    },
+    {
       "path": "/api/cron/batch-fetch-traders?group=b",
       "schedule": "2 */4 * * *"
     },

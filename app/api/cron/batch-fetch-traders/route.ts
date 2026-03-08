@@ -5,13 +5,14 @@
  * avoiding Cloudflare timeouts and Vercel deployment protection issues.
  *
  * Query params:
- *   group=a  → binance_futures, binance_spot, bybit, bitget_futures, okx_futures (every 3h)
+ *   group=a  → binance_futures, binance_spot (every 3h)
+ *   group=a2 → bybit, bitget_futures, okx_futures (every 3h)
  *   group=b  → hyperliquid, gmx, jupiter_perps (every 4h)
  *   group=c  → okx_web3, aevo, xt (every 4h)
- *   group=d  → gains, htx_futures, dydx, phemex, bybit_spot (every 6h)
+ *   group=d  → gains, htx_futures, phemex, bybit_spot (every 6h)
  *   group=e  → coinex, binance_web3, kwenta, synthetix, mux (every 6h)
- *   group=f  → mexc, bingx (every 6h) — slow platforms, parallel ~200s
- *   group=h  → gateio, weex, bitmart (every 6h) — fast platforms, parallel ~25s
+ *   group=f  → mexc, bingx (every 6h)
+ *   group=h  → gateio, weex, bitmart (every 6h)
  *   group=g  → drift, bitunix, web3_bot, uniswap, pancakeswap, paradex (every 6h)
  *
  * Dead/blocked platforms removed:
@@ -34,9 +35,10 @@ export const maxDuration = 300
 export const preferredRegion = 'hnd1' // Tokyo — avoids Binance/OKX/Bybit geo-blocking
 
 const GROUPS: Record<string, string[]> = {
-  // Group A: High-priority CEX (every 3h) — 5 platforms
-  // Consolidated: dedicated crons (binance_futures/spot, bybit) merged here
-  a: ['binance_futures', 'binance_spot', 'bybit', 'bitget_futures', 'okx_futures'],
+  // Group A1: Binance (every 3h) — 2 platforms, parallel ~120s
+  a: ['binance_futures', 'binance_spot'],
+  // Group A2: Other high-priority CEX (every 3h) — 3 platforms, parallel ~100s
+  a2: ['bybit', 'bitget_futures', 'okx_futures'],
   // Group B: Top DEX (every 4h) — 3 platforms, ~110s parallel
   b: ['hyperliquid', 'gmx', 'jupiter_perps'],
   // Group C: Mid-priority (every 4h) — 3 platforms, ~70s parallel
