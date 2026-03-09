@@ -151,26 +151,26 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
         seen.add(w)
         const metrics: SnapshotMetrics = s.metrics || {
           // Core metrics
-          roi: s.roi ? parseFloat(s.roi) : null,
-          pnl: s.pnl ? parseFloat(s.pnl) : null,
-          win_rate: s.win_rate ? parseFloat(s.win_rate) : null,
-          max_drawdown: s.max_drawdown ? parseFloat(s.max_drawdown) : null,
-          sharpe_ratio: s.sharpe_ratio ? parseFloat(s.sharpe_ratio) : null,
-          sortino_ratio: s.sortino_ratio ? parseFloat(s.sortino_ratio) : null,
+          roi: s.roi != null ? parseFloat(s.roi) : null,
+          pnl: s.pnl != null ? parseFloat(s.pnl) : null,
+          win_rate: s.win_rate != null ? parseFloat(s.win_rate) : null,
+          max_drawdown: s.max_drawdown != null ? parseFloat(s.max_drawdown) : null,
+          sharpe_ratio: s.sharpe_ratio != null ? parseFloat(s.sharpe_ratio) : null,
+          sortino_ratio: s.sortino_ratio != null ? parseFloat(s.sortino_ratio) : null,
           trades_count: s.trades_count,
           followers: s.followers,
           copiers: s.copiers,
-          aum: s.aum ? parseFloat(s.aum) : null,
-          platform_rank: s.platform_rank || s.rank,
+          aum: s.aum != null ? parseFloat(s.aum) : null,
+          platform_rank: s.platform_rank ?? s.rank,
           // Arena Score V2
-          arena_score: s.arena_score ? parseFloat(s.arena_score) : null,
-          return_score: s.return_score ? parseFloat(s.return_score) : null,
-          drawdown_score: s.drawdown_score ? parseFloat(s.drawdown_score) : null,
-          stability_score: s.stability_score ? parseFloat(s.stability_score) : null,
+          arena_score: s.arena_score != null ? parseFloat(s.arena_score) : null,
+          return_score: s.return_score != null ? parseFloat(s.return_score) : null,
+          drawdown_score: s.drawdown_score != null ? parseFloat(s.drawdown_score) : null,
+          stability_score: s.stability_score != null ? parseFloat(s.stability_score) : null,
           // Extended metrics (V3)
-          volatility_pct: s.volatility_pct ? parseFloat(s.volatility_pct) : null,
-          avg_holding_hours: s.avg_holding_hours ? parseFloat(s.avg_holding_hours) : null,
-          profit_factor: s.profit_factor ? parseFloat(s.profit_factor) : null,
+          volatility_pct: s.volatility_pct != null ? parseFloat(s.volatility_pct) : null,
+          avg_holding_hours: s.avg_holding_hours != null ? parseFloat(s.avg_holding_hours) : null,
+          profit_factor: s.profit_factor != null ? parseFloat(s.profit_factor) : null,
         }
 
         // V3 Advanced metrics extension

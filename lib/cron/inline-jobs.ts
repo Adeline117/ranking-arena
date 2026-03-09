@@ -117,7 +117,7 @@ export async function runWorkerInline(): Promise<InlineJobResult> {
               const arenaScore = result.data.metrics.roi_pct != null
                 ? calculateArenaScoreV1(result.data.metrics.roi_pct, result.data.metrics.pnl_usd, result.data.metrics.max_drawdown, result.data.metrics.win_rate, window)
                 : null
-              await supabase.from('trader_snapshots_v2').insert({
+              const { error: snapInsertErr } = await supabase.from('trader_snapshots_v2').upsert({
                 ...result.data,
                 roi_pct: result.data.metrics.roi_pct,
                 pnl_usd: result.data.metrics.pnl_usd,
@@ -128,7 +128,8 @@ export async function runWorkerInline(): Promise<InlineJobResult> {
                 copiers: result.data.metrics.copiers,
                 sharpe_ratio: result.data.metrics.sharpe_ratio,
                 arena_score: arenaScore,
-              })
+              }, { onConflict: 'platform,market_type,trader_key,window' })
+              if (snapInsertErr) logger.warn(`[inline-jobs] SNAPSHOT upsert error: ${snapInsertErr.message}`)
             }
           }
         } else if (job.job_type === 'PROFILE' && job.trader_key) {
@@ -211,7 +212,11 @@ async function upsertLeaderboardData(
       }
     })
   for (let i = 0; i < snapshots.length; i += 50) {
-    await supabase.from('trader_snapshots_v2').insert(snapshots.slice(i, i + 50))
+    const { error: batchErr } = await supabase.from('trader_snapshots_v2').upsert(
+      snapshots.slice(i, i + 50),
+      { onConflict: 'platform,market_type,trader_key,window' }
+    )
+    if (batchErr) logger.warn(`[inline-jobs] DISCOVER upsert batch error: ${batchErr.message}`)
   }
 }
 

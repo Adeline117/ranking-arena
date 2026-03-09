@@ -35,6 +35,8 @@ export async function GET(request: NextRequest) {
     const yesterday = new Date()
     yesterday.setUTCDate(yesterday.getUTCDate() - 1)
     const dateStr = yesterday.toISOString().split('T')[0]
+    const today = new Date()
+    const todayStr = today.toISOString().split('T')[0]
 
     // Step 1: Fetch ALL yesterday's snapshots in one query using RPC or direct query
     // Use distinct on (source, source_trader_id) ordered by captured_at desc to get latest per trader
@@ -58,9 +60,10 @@ export async function GET(request: NextRequest) {
 
       const { data: fallbackData, error: fallbackError } = await supabase
         .from('trader_snapshots')
-        .select('source, source_trader_id, roi, pnl, win_rate, max_drawdown, followers, trades_count, captured_at')
+        .select('source, source_trader_id, season_id, roi, pnl, win_rate, max_drawdown, followers, trades_count, captured_at')
+        .eq('season_id', '90D')
         .gte('captured_at', `${dateStr}T00:00:00Z`)
-        .lt('captured_at', `${dateStr}T23:59:59Z`)
+        .lt('captured_at', `${todayStr}T00:00:00Z`)
         .order('captured_at', { ascending: false })
         .limit(50000)
 
@@ -193,7 +196,8 @@ export async function GET(request: NextRequest) {
           if (stdDev === 0) continue
           const sharpe = (mean / stdDev) * Math.sqrt(365)
           if (sharpe < -10 || sharpe > 10) continue
-          const [platform, trader_key] = key.split(':')
+          const [platform, ...traderKeyParts] = key.split(':')
+          const trader_key = traderKeyParts.join(':')
           sharpeUpdates.push({
             source: platform,
             source_trader_id: trader_key,
