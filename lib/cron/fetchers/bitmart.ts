@@ -95,7 +95,7 @@ async function fetchViaVpsScraper(period: string): Promise<BitmartTrader[]> {
   const resp = await fetchJson(url, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body),
+    body,
   })
 
   if (!resp) return []
