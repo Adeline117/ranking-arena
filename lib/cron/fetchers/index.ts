@@ -107,8 +107,33 @@ export const INLINE_FETCHERS: Record<string, PlatformFetcher> = {
   btcc: fetchBtcc,
 }
 
+/**
+ * Get a fetcher with automatic retry wrapper.
+ * Retries once on transient errors (network, 5xx, timeout) with 2s delay.
+ */
 export function getInlineFetcher(platform: string): PlatformFetcher | undefined {
-  return INLINE_FETCHERS[platform]
+  const baseFetcher = INLINE_FETCHERS[platform]
+  if (!baseFetcher) return undefined
+
+  // Wrap with retry logic for transient failures
+  const wrappedFetcher: PlatformFetcher = async (supabase, periods) => {
+    const maxRetries = 1
+    let lastError: unknown
+    for (let attempt = 0; attempt <= maxRetries; attempt++) {
+      try {
+        return await baseFetcher(supabase, periods)
+      } catch (error) {
+        lastError = error
+        const msg = error instanceof Error ? error.message : String(error)
+        const isTransient = /timeout|abort|ECONNRESET|ETIMEDOUT|fetch failed|5\d\d|429|socket hang up/i.test(msg)
+        if (attempt >= maxRetries || !isTransient) throw error
+        // Wait 2s before retry with jitter
+        await new Promise(r => setTimeout(r, 2000 + Math.random() * 1000))
+      }
+    }
+    throw lastError
+  }
+  return wrappedFetcher
 }
 
 export function getSupportedInlinePlatforms(): string[] {

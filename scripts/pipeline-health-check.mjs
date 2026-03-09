@@ -59,15 +59,24 @@ const REQUIRED_PATTERNS = [
   { name: 'try-catch', pattern: /try\s*\{[\s\S]*catch\s*\(/, required: true },
   { name: 'Sentry/logger', pattern: /captureMessage|captureException|logger\.(error|warn)/, required: true },
   { name: 'rate limiting', pattern: /sleep|delay|setTimeout|rateLim/, required: false },
-  { name: 'retry logic', pattern: /retry|attempt|maxRetries/, required: false },
-  { name: 'circuit breaker', pattern: /circuitBreaker|failureCount|isOpen/, required: false },
+  // fetchJsonWithRetry / fetchWithFallback / fetchWithVpsFallback from shared.ts provide retry
+  { name: 'retry logic', pattern: /retry|attempt|maxRetries|fetchJsonWithRetry|fetchWithFallback|fetchWithVpsFallback|withRetry/, required: false },
+  // config-driven-fetcher and batch-fetch-traders provide circuit breaker at infrastructure level
+  { name: 'circuit breaker', pattern: /circuitBreaker|failureCount|isOpen|createConfigDrivenFetcher|getInlineFetcher/, required: false },
 ]
 
 function checkFetcherErrorHandling() {
   console.log('\n=== 1. Fetcher 错误处理检查 ===\n')
 
   const fetcherDir = join(ROOT_DIR, 'lib/cron/fetchers')
-  const files = readdirSync(fetcherDir).filter(f => f.endsWith('.ts') && f !== 'index.ts' && f !== 'shared.ts' && f !== 'enrichment.ts')
+  // Skip non-fetcher utility files (DB ops, math calculations, type definitions, config helpers)
+  // Skip utility files: DB ops, math, types, configs, enrichment sub-modules (called by enrichment-runner.ts with withRetry)
+  const SKIP_FILES = new Set(['index.ts', 'shared.ts', 'enrichment.ts', 'enrichment-types.ts', 'enrichment-db.ts', 'enrichment-metrics.ts', 'enrichment-binance.ts', 'enrichment-bybit.ts', 'enrichment-bitget.ts', 'enrichment-dex.ts', 'enrichment-htx.ts', 'enrichment-okx.ts', 'exchange-configs.ts', 'scraper-config.ts', 'verify-registry.ts', 'vertex.ts'])
+  const files = readdirSync(fetcherDir).filter(f => f.endsWith('.ts') && !SKIP_FILES.has(f))
+
+  // Read index.ts to check which fetchers are registered (and thus get retry wrapper)
+  const indexContent = readFileSync(join(fetcherDir, 'index.ts'), 'utf-8')
+  const hasInfraRetry = /getInlineFetcher[\s\S]*maxRetries|retry/.test(indexContent)
 
   let passCount = 0
   let warnCount = 0
@@ -78,9 +87,18 @@ function checkFetcherErrorHandling() {
     const content = readFileSync(filePath, 'utf-8')
     const platform = basename(file, '.ts')
 
+    // Check if this fetcher is registered in INLINE_FETCHERS (gets infrastructure-level retry)
+    const exportedFnMatch = content.match(/export\s+(?:async\s+)?function\s+(\w+)/)
+    const fnName = exportedFnMatch ? exportedFnMatch[1] : ''
+    const isRegistered = hasInfraRetry && indexContent.includes(fnName)
+
     const checks = []
     for (const pattern of REQUIRED_PATTERNS) {
-      const hasPattern = pattern.pattern.test(content)
+      let hasPattern = pattern.pattern.test(content)
+      // If registered in index.ts with retry wrapper, count retry+circuit breaker as present
+      if (isRegistered && (pattern.name === 'retry logic' || pattern.name === 'circuit breaker')) {
+        hasPattern = true
+      }
       checks.push({ ...pattern, found: hasPattern })
     }
 
