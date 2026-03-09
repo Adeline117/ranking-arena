@@ -32,15 +32,28 @@ export const PLATFORMS = [
 
 export type Platform = typeof PLATFORMS[number]
 
-/** Platforms that provide leaderboard data */
+/** Platforms that provide leaderboard data — must match `source` column in DB */
 export const LEADERBOARD_PLATFORMS = [
-  'binance', 'bybit', 'bitget', 'mexc', 'coinex', 'okx', 'kucoin',
-  'bitmart', 'phemex', 'htx', 'weex', 'bingx', 'gateio', 'xt',
-  'pionex', 'kwenta', 'mux',
-  'lbank', 'blofin',
-  'gmx', 'dydx', 'hyperliquid', 'gains',
+  // CEX futures
+  'binance_futures', 'bybit', 'bitget_futures', 'okx_futures',
+  'mexc', 'coinex', 'htx_futures', 'bingx', 'gateio', 'xt',
+  'bitmart', 'btcc', 'bitunix', 'bitfinex',
+  // CEX spot
+  'binance_spot', 'bybit_spot', 'okx_spot',
+  // Web3 / DEX
+  'binance_web3', 'okx_web3',
+  'hyperliquid', 'gmx', 'dydx', 'gains', 'jupiter_perps', 'aevo',
+  'drift', 'paradex',
+  // Bots
+  'web3_bot',
+  // Dead/blocked but may have historical data or connectors
+  'kucoin', 'phemex', 'lbank', 'blofin', 'weex', 'toobit',
+  'kwenta', 'synthetix', 'mux', 'perpetual_protocol', 'pionex',
+  'bitget_spot', 'okx_wallet',
   // Dune on-chain leaderboards
   'dune_gmx', 'dune_hyperliquid', 'dune_uniswap', 'dune_defi',
+  // Legacy short names (backward compat for v2 API callers)
+  'binance', 'bitget', 'okx', 'htx',
 ] as const
 
 export type LeaderboardPlatform = typeof LEADERBOARD_PLATFORMS[number]

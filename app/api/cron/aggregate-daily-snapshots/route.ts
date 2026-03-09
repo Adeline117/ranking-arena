@@ -240,19 +240,26 @@ export async function GET(request: NextRequest) {
     }
 
     // Step 6: Cleanup old trader_snapshots_v2 rows (keep 180 days)
+    // Batch delete in chunks of 5000 to avoid long table locks
     let cleanedUp = 0
     try {
       const cutoffDate = new Date(Date.now() - 180 * 24 * 3600 * 1000).toISOString()
-      const { count, error: cleanupErr } = await supabase
-        .from('trader_snapshots_v2')
-        .delete({ count: 'exact' })
-        .lt('as_of_ts', cutoffDate)
-      if (cleanupErr) {
-        logger.warn(`[aggregate] Snapshot cleanup error: ${cleanupErr.message}`)
-      } else {
-        cleanedUp = count ?? 0
-        if (cleanedUp > 0) logger.info(`[aggregate] Cleaned up ${cleanedUp} old snapshots_v2 rows (>180d)`)
+      const MAX_CLEANUP_BATCHES = 20
+      for (let batch = 0; batch < MAX_CLEANUP_BATCHES; batch++) {
+        const { count, error: cleanupErr } = await supabase
+          .from('trader_snapshots_v2')
+          .delete({ count: 'exact' })
+          .lt('as_of_ts', cutoffDate)
+          .limit(5000)
+        if (cleanupErr) {
+          logger.warn(`[aggregate] Snapshot cleanup error: ${cleanupErr.message}`)
+          break
+        }
+        const deleted = count ?? 0
+        cleanedUp += deleted
+        if (deleted < 5000) break // No more rows to delete
       }
+      if (cleanedUp > 0) logger.info(`[aggregate] Cleaned up ${cleanedUp} old snapshots_v2 rows (>180d)`)
     } catch (cleanupErr) {
       logger.warn(`[aggregate] Snapshot cleanup failed: ${cleanupErr}`)
     }
