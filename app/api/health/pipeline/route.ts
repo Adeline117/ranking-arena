@@ -35,8 +35,15 @@ export async function GET(req: NextRequest) {
 
   // Filter out dead/blocked platforms from failure counts
   const deadSet = new Set<string>(DEAD_BLOCKED_PLATFORMS)
-  const isDeadPlatformJob = (jobName: string) =>
-    deadSet.has(jobName.replace('fetch-traders-', '').replace('batch-fetch-traders-', ''))
+  const isDeadPlatformJob = (jobName: string) => {
+    // Extract platform name from various job name patterns
+    const platform = jobName
+      .replace('fetch-traders-', '')
+      .replace('batch-fetch-traders-', '')
+      .replace('verify-', '')
+      .replace('enrich-', '')
+    return deadSet.has(platform)
+  }
   const recentFailures = recentFailuresRaw.filter(
     (f: { job_name?: string }) => !isDeadPlatformJob(f.job_name || '')
   )
@@ -56,9 +63,10 @@ export async function GET(req: NextRequest) {
     overallStatus = 'degraded'
   }
 
-  // Average success rate across all jobs
-  const avgSuccessRate = jobStats.length > 0
-    ? jobStats.reduce((sum, j) => sum + (j.success_rate || 0), 0) / jobStats.length
+  // Average success rate across active jobs only (exclude dead platforms)
+  const activeStats = jobStats.filter(j => !isDeadPlatformJob(j.job_name || ''))
+  const avgSuccessRate = activeStats.length > 0
+    ? activeStats.reduce((sum, j) => sum + (j.success_rate || 0), 0) / activeStats.length
     : 0
 
   return NextResponse.json({
