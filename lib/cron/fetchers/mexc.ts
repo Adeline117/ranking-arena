@@ -260,15 +260,9 @@ async function fetchPeriod(
     }
   }
 
-  // Try each strategy in order; stop at first success
-  await tryCopyFuturesApi()
-  if (allTraders.size === 0) await tryRecommendApi()
-  if (allTraders.size === 0) await tryLegacyApi()
-  if (allTraders.size === 0) await tryFuturesApi()
-
-  // VPS Playwright scraper fallback (browser-based bypass for Akamai WAF)
-  if (allTraders.size === 0 && VPS_SCRAPER_KEY) {
-    logger.warn(`[${SOURCE}] All HTTP methods failed, trying VPS Playwright scraper...`)
+  // VPS Playwright scraper first (most reliable — direct APIs are WAF-blocked/404)
+  if (VPS_SCRAPER_KEY) {
+    logger.warn(`[${SOURCE}] Trying VPS Playwright scraper first...`)
     try {
       const scraperUrl = `${VPS_SCRAPER_URL}/mexc/leaderboard?periodType=${periodType}&pageSize=${PAGE_SIZE}`
       const res = await fetch(scraperUrl, {
@@ -290,6 +284,12 @@ async function fetchPeriod(
       logger.warn(`[${SOURCE}] VPS scraper failed: ${err instanceof Error ? err.message : String(err)}`)
     }
   }
+
+  // Direct API fallbacks (usually WAF-blocked, but try in case WAF lifts)
+  if (allTraders.size === 0) await tryCopyFuturesApi()
+  if (allTraders.size === 0) await tryRecommendApi()
+  if (allTraders.size === 0) await tryLegacyApi()
+  if (allTraders.size === 0) await tryFuturesApi()
 
   // CF Worker fallback (US-based proxy, tries 3 MEXC endpoints)
   if (allTraders.size === 0) {
