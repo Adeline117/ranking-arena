@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { useRouter, useSearchParams, usePathname } from 'next/navigation'
 import Link from 'next/link'
+import Image from 'next/image'
 import dynamic from 'next/dynamic'
 import useSWR from 'swr'
 import { fetcher } from '@/lib/hooks/useSWR'
@@ -214,7 +215,7 @@ export default function TraderProfileClient({ data, serverTraderData }: TraderPr
         <div className={`trader-sticky-mini-header${showMiniHeader ? ' visible' : ''}`}>
           <div className="mini-avatar" style={{ background: 'var(--color-bg-tertiary)', display: 'grid', placeItems: 'center', fontSize: 12, fontWeight: 700, color: 'var(--color-text-primary)' }}>
             {data.avatar_url ? (
-              <img src={`/api/avatar?url=${encodeURIComponent(data.avatar_url)}`} alt="" width={28} height={28} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+              <Image src={`/api/avatar?url=${encodeURIComponent(data.avatar_url)}`} alt="" width={28} height={28} style={{ width: '100%', height: '100%', objectFit: 'cover' }} unoptimized />
             ) : (
               displayName.charAt(0).toUpperCase()
             )}
