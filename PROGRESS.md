@@ -87,6 +87,11 @@ Branch: `feature/desoc-platform`, 23 files, +1310 lines
 7. Pipeline cleanup: deleted 357 ghost entries (discover-rankings, refresh-hot-scores, verify-weex, dead platform avatars, old group-g, batch-enrich-all)
 8. Expected pipeline success rate: 80%→90%+
 9. Lighthouse performance: AsyncStylesheets moved before Providers, ThreeColumnLayout CLS fix (CSS-only mobile widget), direct CDN avatar preloads
+10. Full-stack audit: 5 parallel agents audited exchange data, avatars, pipeline, frontend, live data
+11. max_drawdown validation: Zod schema capped 0-100%, Hyperliquid MDD threshold <=100
+12. Arena score >100 bug: composite leaderboard now caps at 100 (was 125-180 for bitget_futures)
+13. Rankings API: ROI/PnL null handling (was 0→null), ExchangeLogo 17 source name aliases
+14. Sharpe ratio N+1→parallel batch (50x fewer DB calls)
 
 ## In Progress
 - Full Japanese/Korean translations (4200+ keys each)
