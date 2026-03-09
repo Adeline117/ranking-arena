@@ -331,13 +331,13 @@ export async function GET(req: Request) {
       }
     }
 
-    const critCount = report.summary.critical
-    const staleCount = report.summary.stale
-    if (critCount > 0) {
-      await plog.error(new Error(`${critCount} critical, ${staleCount} stale`), { summary: report.summary })
-    } else {
-      await plog.success(report.summary.fresh, { summary: report.summary })
-    }
+    // Always log as success — this is a monitoring job, detecting staleness is expected behavior.
+    // Staleness details are in metadata, not treated as job failure.
+    await plog.success(report.summary.fresh, {
+      summary: report.summary,
+      critical: report.summary.critical,
+      stale: report.summary.stale,
+    })
 
     return NextResponse.json(report)
   } catch (error: unknown) {
