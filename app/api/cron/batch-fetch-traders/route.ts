@@ -13,7 +13,7 @@
  *   group=d2 → dydx, bybit_spot (every 6h)
  *   group=e  → coinex, binance_web3 (every 6h)
  *   group=f  → mexc, bingx (every 6h)
- *   group=h  → gateio, bitmart, btcc (every 6h)
+ *   group=h  → gateio, btcc (every 6h)
  *   group=g1 → drift, bitunix (every 6h)
  *   group=g2 → web3_bot (every 6h)
  *
@@ -30,6 +30,7 @@
  *   - uniswap/pancakeswap: need THEGRAPH_API_KEY (not set)
  *   - toobit: API returns HTML (needs browser session), only 238 snapshots
  *   - okx_spot: OKX copy-trading API only supports instType=SWAP, no spot leaderboard
+ *   - bitmart: gw-api/copytrade-streamer returns "service not open" (all IPs/regions)
  */
 
 import { NextRequest, NextResponse } from 'next/server'
@@ -60,8 +61,8 @@ const GROUPS: Record<string, string[]> = {
   e: ['coinex', 'binance_web3', 'bitfinex'],
   // Group F: Slow CEX (every 6h) — 2 platforms, parallel (~141s + ~60s = ~200s)
   f: ['mexc', 'bingx'],
-  // Group H: Fast CEX (every 6h) — 3 platforms, parallel (~25s each)
-  h: ['gateio', 'bitmart', 'btcc'],
+  // Group H: Fast CEX (every 6h) — 2 platforms, parallel (~25s each)
+  h: ['gateio', 'btcc'],
   // Group G1: DEX (every 6h) — 2 platforms, parallel
   g1: ['drift', 'bitunix'],
   // Group G2: DEX (every 6h) — 1 platform

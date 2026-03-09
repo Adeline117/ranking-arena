@@ -68,7 +68,7 @@ async function discoverRankingsInline(): Promise<BatchResult> {
       { platform: 'mexc', market_type: 'futures', priority: 15 },
       { platform: 'coinex', market_type: 'futures', priority: 20 },
       { platform: 'okx', market_type: 'futures', priority: 10 },
-      { platform: 'bitmart', market_type: 'futures', priority: 25 },
+      // bitmart removed: gw-api/copytrade-streamer returns "service not open"
       { platform: 'htx', market_type: 'futures', priority: 25 },
       { platform: 'gmx', market_type: 'perp', priority: 15 },
       { platform: 'dydx', market_type: 'perp', priority: 15 },
