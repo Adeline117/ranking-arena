@@ -84,18 +84,11 @@ function parseTrader(item: BitmartTrader, period: string, rank: number): TraderD
 
 async function fetchViaVpsScraper(period: string): Promise<BitmartTrader[]> {
   const scraperPeriod = period === '7D' ? '7d' : '30d'
-  const url = `${VPS_SCRAPER_URL}/scrape`
-  const body = {
-    url: `https://www.bitmart.com/copy-trading/list?period=${scraperPeriod}`,
-    exchange: 'bitmart',
-    type: 'futures',
-    key: VPS_SCRAPER_KEY,
-  }
+  const url = `${VPS_SCRAPER_URL}/bitmart/leaderboard?period=${scraperPeriod}&pageSize=50`
 
   const resp = await fetchJson(url, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'X-Proxy-Key': VPS_SCRAPER_KEY },
-    body,
+    headers: { 'X-Proxy-Key': VPS_SCRAPER_KEY },
+    timeoutMs: 45_000, // Browser scraping takes time
   })
 
   if (!resp) return []
