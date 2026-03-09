@@ -48,10 +48,8 @@ const PLATFORM_THRESHOLDS: Record<string, number> = {
   gateio: 72,
   bitfinex: 24,
   // Tier 5: Not actively fetched (no cron group) — high threshold to avoid noise
-  toobit: 168,
-  bingx_spot: 168,
-  xt_spot: 168,
   phemex: 72,
+  // xt_spot, bingx_spot, toobit: removed — not in any cron group, no public API
 }
 
 interface PlatformStatus {
@@ -130,7 +128,11 @@ export async function GET(request: NextRequest) {
     platforms: [],
   }
 
-  const deadSet = new Set(DEAD_BLOCKED_PLATFORMS as string[])
+  const deadSet = new Set([
+    ...(DEAD_BLOCKED_PLATFORMS as string[]),
+    // Platforms with stale DB data but no active fetcher or public API (not in TraderSource type)
+    'xt_spot', 'bingx_spot',
+  ])
   const allSources = new Set([
     ...Object.keys(platformData),
     ...Object.keys(PLATFORM_THRESHOLDS),
