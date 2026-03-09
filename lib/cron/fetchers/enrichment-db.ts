@@ -17,12 +17,14 @@ export async function upsertEquityCurve(
   const capturedAt = new Date().toISOString()
 
   // Delete existing data for this period
-  await supabase
+  const { error: delErr } = await supabase
     .from('trader_equity_curve')
     .delete()
     .eq('source', source)
     .eq('source_trader_id', traderId)
     .eq('period', period)
+
+  if (delErr) return { saved: 0, error: `Delete failed: ${delErr.message}` }
 
   const records = curve.map((point) => ({
     source,
@@ -142,12 +144,14 @@ export async function upsertAssetBreakdown(
   const capturedAt = new Date().toISOString()
 
   // Delete existing data for this period
-  await supabase
+  const { error: delErr } = await supabase
     .from('trader_asset_breakdown')
     .delete()
     .eq('source', source)
     .eq('source_trader_id', traderId)
     .eq('period', period)
+
+  if (delErr) return { saved: 0, error: `Delete failed: ${delErr.message}` }
 
   const records = assets.map((asset) => ({
     source,
@@ -178,11 +182,13 @@ export async function upsertPortfolio(
   const capturedAt = new Date().toISOString()
 
   // Delete existing portfolio data
-  await supabase
+  const { error: delErr } = await supabase
     .from('trader_portfolio')
     .delete()
     .eq('source', source)
     .eq('source_trader_id', traderId)
+
+  if (delErr) return { saved: 0, error: `Delete failed: ${delErr.message}` }
 
   const records = positions.map((pos) => ({
     source,

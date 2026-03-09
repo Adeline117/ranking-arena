@@ -388,7 +388,7 @@ export async function upsertTraders(
       bio: null,
       tags: [],
       profile_url: t.profile_url || null,
-      followers: t.followers || 0,
+      followers: t.followers ?? null,
       copiers: 0,
       aum: t.aum || null,
       provenance: {
@@ -461,8 +461,8 @@ export async function upsertTraders(
       .upsert(snapshots, { onConflict: 'platform,market_type,trader_key,window' })
 
     if (snapErr) {
-      dataLogger.warn(`[upsert] trader_snapshots_v2 error: ${snapErr.message}`)
-      return { saved, error: snapErr.message }
+      dataLogger.error(`[upsert] trader_snapshots_v2 error: ${snapErr.message}`)
+      // Continue processing remaining batches — don't abort v1 writes for v2 failures
     }
 
     saved += batch.length

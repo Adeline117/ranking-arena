@@ -210,7 +210,7 @@ export async function GET(
         // Normalize win_rate: if <= 1, treat as decimal and multiply by 100
         const winRate = snap.win_rate != null ? (snap.win_rate <= 1 ? snap.win_rate * 100 : snap.win_rate) : null
         snapshots[windows[i]] = {
-          roi: (snap.roi ?? 0) * 100, // old table stores as decimal
+          roi: snap.roi ?? 0, // v1 table stores ROI as percentage (50 = 50%)
           pnl: snap.pnl ?? 0,
           win_rate: winRate,
           max_drawdown: snap.max_drawdown ?? null,

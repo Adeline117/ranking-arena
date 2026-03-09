@@ -170,10 +170,10 @@ export async function GET(request: NextRequest) {
         avatar_url: info?.avatar_url || null,
         rank: idx + 1,
         metrics: {
-          roi: row.roi ? parseFloat(row.roi as string) : 0,
-          pnl: row.pnl ? parseFloat(row.pnl as string) : 0,
-          win_rate: row.win_rate ? parseFloat(row.win_rate as string) : null,
-          max_drawdown: row.max_drawdown ? parseFloat(row.max_drawdown as string) : null,
+          roi: row.roi != null ? parseFloat(row.roi as string) : 0,
+          pnl: row.pnl != null ? parseFloat(row.pnl as string) : 0,
+          win_rate: row.win_rate != null ? parseFloat(row.win_rate as string) : null,
+          max_drawdown: row.max_drawdown != null ? parseFloat(row.max_drawdown as string) : null,
           trades_count: row.trades_count ?? null,
           followers: row.followers ?? null,
           copiers: null,
@@ -206,7 +206,7 @@ export async function GET(request: NextRequest) {
       totalcount: entries.length,
       total_count: entries.length,
       as_of: new Date().toISOString(),
-      is_stale: false,
+      is_stale: false, // freshly precomputed — will become stale when TTL expires
       availableSources: [...allSources].sort(),
       precomputed: true,
     }

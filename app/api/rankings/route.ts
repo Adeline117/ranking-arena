@@ -211,7 +211,7 @@ async function getRankingsFallback(rankingsQuery: RankingsQuery, cursor?: string
     roi: 'roi',
     pnl: 'pnl',
     drawdown: 'max_drawdown',
-    copiers: 'copiers',
+    copiers: 'followers',
   };
   const sortColumn = sortColumnMap[sort_by] || 'arena_score';
 
@@ -340,10 +340,10 @@ async function getRankingsFallback(rankingsQuery: RankingsQuery, cursor?: string
       avatar_url: sourceInfo?.avatar_url || null,
       rank: offset + idx + 1,
       metrics: {
-        roi: row.roi ? parseFloat(row.roi) : 0,
-        pnl: row.pnl ? parseFloat(row.pnl) : 0,
-        win_rate: row.win_rate ? parseFloat(row.win_rate) : null,
-        max_drawdown: row.max_drawdown ? parseFloat(row.max_drawdown) : null,
+        roi: row.roi != null ? parseFloat(row.roi) : 0,
+        pnl: row.pnl != null ? parseFloat(row.pnl) : 0,
+        win_rate: row.win_rate != null ? parseFloat(row.win_rate) : null,
+        max_drawdown: row.max_drawdown != null ? parseFloat(row.max_drawdown) : null,
         trades_count: row.trades_count ?? null,
         followers: row.followers ?? null,
         copiers: null,
@@ -407,13 +407,15 @@ async function getCompositeRankings(params: {
   const { category, platform, limit, offset, sort_by, sort_dir, min_pnl, min_trades } = params;
   const supabase = getSupabaseAdmin();
 
-  // Fetch all three windows in parallel
+  // Fetch all three windows in parallel (only data from last 72 hours)
+  const freshnessThreshold = new Date(Date.now() - 72 * 3600 * 1000).toISOString()
   const fetchWindow = async (seasonId: string) => {
     let q = supabase
       .from('trader_snapshots')
       .select('source, source_trader_id, captured_at, arena_score, arena_score_v3, roi, pnl, max_drawdown, win_rate, trades_count, followers, profitability_score, risk_control_score, execution_score, score_completeness, trading_style, avg_holding_hours, style_confidence, trader_type')
       .eq('season_id', seasonId)
       .not('arena_score', 'is', null)
+      .gte('captured_at', freshnessThreshold)
       .lte('roi', ROI_ANOMALY_THRESHOLD)
       .gte('roi', -ROI_ANOMALY_THRESHOLD)
       .or('roi.neq.0,pnl.neq.0')
@@ -499,7 +501,8 @@ async function getCompositeRankings(params: {
 
     const compositeScore = totalWeight > 0 ? weightedSum / totalWeight : 0;
     const primaryRow = r90 || r30 || r7!;
-    const [source, source_trader_id] = key.split(':');
+    const [source, ...restParts] = key.split(':');
+    const source_trader_id = restParts.join(':');
 
     entries.push({ key, source, source_trader_id, compositeScore, primaryRow });
   }
@@ -508,8 +511,8 @@ async function getCompositeRankings(params: {
   const sortFn = (a: CompositeEntry, b: CompositeEntry) => {
     let aVal = a.compositeScore, bVal = b.compositeScore;
     if (sort_by === 'roi') {
-      aVal = a.primaryRow.roi ? parseFloat(a.primaryRow.roi as string) : 0;
-      bVal = b.primaryRow.roi ? parseFloat(b.primaryRow.roi as string) : 0;
+      aVal = a.primaryRow.roi != null ? parseFloat(a.primaryRow.roi as string) : 0;
+      bVal = b.primaryRow.roi != null ? parseFloat(b.primaryRow.roi as string) : 0;
     }
     return sort_dir === 'desc' ? bVal - aVal : aVal - bVal;
   };
@@ -546,10 +549,10 @@ async function getCompositeRankings(params: {
       avatar_url: info?.avatar_url || null,
       rank: offset + idx + 1,
       metrics: {
-        roi: row.roi ? parseFloat(row.roi as string) : 0,
-        pnl: row.pnl ? parseFloat(row.pnl as string) : 0,
-        win_rate: row.win_rate ? parseFloat(row.win_rate as string) : null,
-        max_drawdown: row.max_drawdown ? parseFloat(row.max_drawdown as string) : null,
+        roi: row.roi != null ? parseFloat(row.roi as string) : 0,
+        pnl: row.pnl != null ? parseFloat(row.pnl as string) : 0,
+        win_rate: row.win_rate != null ? parseFloat(row.win_rate as string) : null,
+        max_drawdown: row.max_drawdown != null ? parseFloat(row.max_drawdown as string) : null,
         trades_count: row.trades_count ?? null,
         followers: row.followers ?? null,
         copiers: null,
@@ -593,13 +596,20 @@ async function getCompositeRankings(params: {
   [map7d, map30d, map90d].forEach(m => m.forEach(r => allSources.add(r.source)));
   const availableSources = [...allSources].sort();
 
+  // Check freshness: composite is stale if all underlying data is >2 hours old
+  const latestCaptured = Math.max(
+    ...entries.slice(0, 100).map(e => new Date(e.primaryRow.captured_at).getTime()).filter(t => t > 0),
+    0
+  )
+  const compositeIsStale = latestCaptured > 0 ? (Date.now() - latestCaptured) > 2 * 3600 * 1000 : true
+
   return {
     traders: dedupedCompositeTraders,
     window: 'COMPOSITE' as const,
     totalcount: total,
     total_count: total,
-    as_of: new Date().toISOString(),
-    is_stale: false,
+    as_of: latestCaptured > 0 ? new Date(latestCaptured).toISOString() : new Date().toISOString(),
+    is_stale: compositeIsStale,
     availableSources,
   };
 }

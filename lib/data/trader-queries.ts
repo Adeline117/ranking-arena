@@ -167,6 +167,7 @@ export async function getTraderStats(handle: string): Promise<TraderStats> {
             .select('roi, captured_at, pnl, win_rate, max_drawdown, trades_count, holding_days')
             .eq('source', source.source)
             .eq('source_trader_id', source.source_trader_id)
+            .eq('season_id', '90D')
             .order('captured_at', { ascending: false })
             .limit(1)
             .maybeSingle(),
@@ -175,6 +176,7 @@ export async function getTraderStats(handle: string): Promise<TraderStats> {
             .select('roi, captured_at')
             .eq('source', source.source)
             .eq('source_trader_id', source.source_trader_id)
+            .eq('season_id', '90D')
             .order('captured_at', { ascending: false })
             .limit(200),
           supabase
@@ -226,7 +228,7 @@ export async function getTraderStats(handle: string): Promise<TraderStats> {
 
         let profitableWeeksPct: number | undefined = undefined
         if (snapshots.length > 1) {
-          const profitableWeeks = snapshots.filter(s => (s.roi || 0) > 0).length
+          const profitableWeeks = snapshots.filter(s => (s.roi ?? 0) > 0).length
           profitableWeeksPct = (profitableWeeks / snapshots.length) * 100
         }
 
@@ -594,6 +596,7 @@ export async function getSimilarTraders(handle: string, limit: number = 6): Prom
       .from('trader_snapshots')
       .select('captured_at, roi')
       .eq('source', source.source)
+      .eq('season_id', '90D')
       .order('captured_at', { ascending: false })
       .limit(1)
       .maybeSingle()
@@ -605,6 +608,7 @@ export async function getSimilarTraders(handle: string, limit: number = 6): Prom
       .select('roi')
       .eq('source', source.source)
       .eq('source_trader_id', source.source_trader_id)
+      .eq('season_id', '90D')
       .order('captured_at', { ascending: false })
       .limit(1)
       .maybeSingle()
@@ -618,6 +622,7 @@ export async function getSimilarTraders(handle: string, limit: number = 6): Prom
       .from('trader_snapshots')
       .select('source_trader_id, roi')
       .eq('source', source.source)
+      .eq('season_id', '90D')
       .eq('captured_at', latestSnapshot.captured_at)
       .neq('source_trader_id', source.source_trader_id)
       .gte('roi', minRoi)
@@ -629,6 +634,7 @@ export async function getSimilarTraders(handle: string, limit: number = 6): Prom
         .from('trader_snapshots')
         .select('source_trader_id, roi')
         .eq('source', source.source)
+        .eq('season_id', '90D')
         .eq('captured_at', latestSnapshot.captured_at)
         .neq('source_trader_id', source.source_trader_id)
         .order('roi', { ascending: false })
