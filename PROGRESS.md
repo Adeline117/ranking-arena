@@ -93,6 +93,15 @@ Branch: `feature/desoc-platform`, 23 files, +1310 lines
 13. Rankings API: ROI/PnL null handling (was 0→null), ExchangeLogo 17 source name aliases
 14. Sharpe ratio N+1→parallel batch (50x fewer DB calls)
 
+## Recently Completed (2026-03-08) — Data Quality Fixes
+- Composite leaderboard: freshness threshold 72h→168h (Bybit was excluded due to stale data)
+- DEX avatars: SVG blockie generator for wallet addresses (MetaMask-style pixel art)
+- v2/rankings: avatar_url now fetched from trader_sources fallback
+- Bitunix ROI: fixed format from 'percentage' to 'decimal' + normalizeROI call
+- Gains ROI: improved capital estimation, returns null when unreliable
+- Avatar proxy: 403 retry with minimal headers for CDN hotlink protection
+- Exchange logos: added bitunix.png + bitmart.png files
+
 ## In Progress
 - Full Japanese/Korean translations (4200+ keys each)
 
