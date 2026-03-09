@@ -59,7 +59,7 @@
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.985.0",
-    "@aws-sdk/s3-request-presigner": "^3.985.0",
+    "@aws-sdk/s3-request-presigner": "^3.1005.0",
     "@privy-io/react-auth": "^3.13.1",
     "@rainbow-me/rainbowkit": "^2.2.10",
     "@sentry/nextjs": "10.35.0",
