@@ -26,7 +26,6 @@ const PLATFORM_THRESHOLDS: Record<string, number> = {
   hyperliquid: 8,
   gmx: 8,
   gains: 8,
-  htx: 8,
   htx_futures: 8,
   dydx: 12,
   aevo: 12,
@@ -42,17 +41,17 @@ const PLATFORM_THRESHOLDS: Record<string, number> = {
   web3_bot: 24,
   // Tier 4: Slower / less reliable
   mexc: 48,
-  kucoin: 48,
   coinex: 48,
   xt: 48,
   okx_spot: 48,
   bingx: 72,
-  blofin: 72,
-  lbank: 72,
-  weex: 72,
-  phemex: 72,
   gateio: 72,
-  bitget_spot: 48,
+  bitfinex: 24,
+  // Tier 5: Not actively fetched (no cron group) — high threshold to avoid noise
+  toobit: 168,
+  bingx_spot: 168,
+  xt_spot: 168,
+  phemex: 72,
 }
 
 interface PlatformStatus {
