@@ -87,6 +87,7 @@ export async function GET(request: NextRequest) {
     }
 
     if (snapshotMap.size === 0) {
+      await plog.success(0)
       return NextResponse.json({
         success: true,
         message: 'No snapshots found for yesterday',

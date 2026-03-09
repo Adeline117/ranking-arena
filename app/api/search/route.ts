@@ -7,6 +7,7 @@ import { withPublic } from '@/lib/api/middleware'
 import { success } from '@/lib/api/response'
 import { get as cacheGet, set as cacheSet } from '@/lib/cache'
 import { fireAndForget } from '@/lib/utils/logger'
+import { DEAD_BLOCKED_PLATFORMS } from '@/lib/constants/exchanges'
 
 export const dynamic = 'force-dynamic'
 
@@ -88,6 +89,9 @@ export const GET = withPublic(
     // Fetch more traders to allow relevance ranking, then trim to limit
     const traderFetchLimit = Math.max(limitPerCategory * 4, 20)
 
+    // Filter out dead/blocked platforms from trader search
+    const deadSet = new Set(DEAD_BLOCKED_PLATFORMS as string[])
+
     const [tradersData, postsData, libraryData, usersData, groupsData] = await Promise.all([
       safeQuery(supabase
         .from('trader_sources')
@@ -95,7 +99,8 @@ export const GET = withPublic(
         .or(
           `handle.ilike.%${sanitizedQuery}%,source_trader_id.ilike.%${sanitizedQuery}%`
         )
-        .limit(traderFetchLimit)),
+        .limit(traderFetchLimit))
+        .then(results => results.filter(t => !deadSet.has(t.source))),
 
       safeQuery(supabase
         .from('posts')

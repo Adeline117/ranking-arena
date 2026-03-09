@@ -28,12 +28,8 @@ const PLATFORM_LIMITS: Record<string, { limit90: number; limit30: number; limit7
   bitget_spot: { limit90: 80, limit30: 60, limit7: 40 },
   hyperliquid: { limit90: 120, limit30: 100, limit7: 60 },
   gmx: { limit90: 100, limit30: 80, limit7: 50 },
-  mexc: { limit90: 80, limit30: 60, limit7: 40 },
   htx_futures: { limit90: 80, limit30: 60, limit7: 40 },
-  dydx: { limit90: 80, limit30: 60, limit7: 40 },
-  gains: { limit90: 60, limit30: 50, limit7: 30 },
-  jupiter_perps: { limit90: 60, limit30: 50, limit7: 30 },
-  aevo: { limit90: 60, limit30: 50, limit7: 30 },
+  // mexc, dydx, gains, jupiter_perps, aevo removed — no enrichment functions available
 }
 
 // High priority platforms (always enriched)
@@ -41,11 +37,11 @@ const HIGH_PRIORITY = ['binance_futures', 'bybit', 'okx_futures', 'bitget_future
 
 // Medium priority (enriched with all=true or period=90D)
 // bitget_spot removed: no public enrichment API available
-const MEDIUM_PRIORITY = ['binance_spot', 'bybit_spot', 'mexc', 'htx_futures', 'dydx', 'gains', 'aevo']
+// mexc, dydx, gains, aevo, jupiter_perps removed — no enrichment functions (empty-shell configs)
+const MEDIUM_PRIORITY = ['binance_spot', 'bybit_spot', 'htx_futures']
 
 // Lower priority (enriched only with all=true)
-// kwenta/synthetix/mux removed: no viable data source since 2025
-const LOWER_PRIORITY = ['jupiter_perps']
+const LOWER_PRIORITY: string[] = []
 
 interface BatchResult {
   platform: string
@@ -88,6 +84,14 @@ export async function GET(request: NextRequest) {
 
   const results: BatchResult[] = []
   const plog = await PipelineLogger.start(`batch-enrich-${periodParam}`, { period: periodParam, enrichAll, platforms })
+
+  // Safety timeout: ensure plog gets called before Vercel kills the function at 300s
+  const SAFETY_TIMEOUT_MS = 280_000
+  const safetyTimer = setTimeout(async () => {
+    try {
+      await plog.error(new Error('Safety timeout: function approaching 300s limit'), { results })
+    } catch { /* best effort */ }
+  }, SAFETY_TIMEOUT_MS)
 
   // Per-platform enrichment timeout: scale down when running multiple periods
   const ENRICH_TIMEOUT_MS = periodsToRun.length > 1 ? 45_000 : 80_000
@@ -157,6 +161,7 @@ export async function GET(request: NextRequest) {
     }
   }
 
+  clearTimeout(safetyTimer)
   const succeeded = results.filter(r => r.status === 'success').length
   const failed = results.length - succeeded
 

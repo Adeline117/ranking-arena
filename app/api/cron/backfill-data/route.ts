@@ -24,21 +24,17 @@ export const dynamic = 'force-dynamic'
 export const maxDuration = 300
 
 const ALL_PLATFORMS = [
-  'binance_futures',
-  'binance_spot',
-  'bybit',
-  'bybit_spot',
-  'okx_futures',
-  'bitget_futures',
-  'bitget_spot',
-  'hyperliquid',
-  'gmx',
-  'mexc',
-  'kucoin',
-  'dydx',
-  'gains',
-  'jupiter_perps',
-  'aevo',
+  // CEX futures
+  'binance_futures', 'binance_spot', 'bybit', 'bitget_futures',
+  'okx_futures', 'mexc', 'coinex', 'htx_futures', 'bingx',
+  'gateio', 'xt', 'bitmart', 'btcc', 'bitunix', 'bitfinex',
+  // CEX spot
+  'bybit_spot', 'okx_spot',
+  // Web3/DEX
+  'binance_web3', 'okx_web3', 'hyperliquid', 'gmx', 'dydx',
+  'gains', 'jupiter_perps', 'aevo', 'drift', 'paradex',
+  // Bots
+  'web3_bot',
 ]
 
 const TIME_PERIODS = ['7D', '30D', '90D']
