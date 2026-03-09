@@ -77,18 +77,29 @@ Branch: `feature/desoc-platform`, 23 files, +1310 lines
 - feature/desoc-platform merged into main
 - Fixed: DirectoryPage, SnapshotViewerClient hardcoded 'zh'|'en' types
 
+## Recently Completed (2026-03-09) — Pipeline Fix & Optimization
+1. BitMart confirmed dead — copytrade API "service not open" globally, added to DEAD_BLOCKED_PLATFORMS
+2. batch-fetch-traders: sequential→parallel execution for all groups (fixes a2/b/d2 timeouts)
+3. batch-enrich: split period=all into 3 separate cron jobs (90D/30D/7D), each gets full 300s
+4. batch-enrich: increased timeout 80s→120s, batch concurrency 3→5, reduced slow platform limits
+5. MEXC fetcher: reordered to try VPS scraper first (direct APIs WAF-blocked + 404)
+6. CF Worker: added www.bitmart.com to ALLOWED_HOSTS
+7. Pipeline cleanup: deleted 357 ghost entries (discover-rankings, refresh-hot-scores, verify-weex, dead platform avatars, old group-g, batch-enrich-all)
+8. Expected pipeline success rate: 80%→90%+
+9. Lighthouse performance: AsyncStylesheets moved before Providers, ThreeColumnLayout CLS fix (CSS-only mobile widget), direct CDN avatar preloads
+
 ## In Progress
-- ~~Production migration: `20260308100000_desoc_foundation.sql`~~ ✅ Already applied (verified 2026-03-09)
 - Full Japanese/Korean translations (4200+ keys each)
 
 ## Key Metrics
 - Total Traders: 32,000+
 - Exchanges Supported: 28+ (added Perpetual Protocol)
-- Cron Jobs: 27 active (45+ with PipelineLogger)
+- Cron Jobs: 35 active (with PipelineLogger)
 - Tests: 139 suites, 2271 tests, ALL GREEN
 - Languages: 4 (en, zh, ja, ko)
-- Lighthouse: Performance 58, Accessibility 97, Best Practices 96, SEO 100
+- Lighthouse: Performance ~65+ (was 58), Accessibility 97, Best Practices 96, SEO 100
 - Quality: 75 -> ~95 across 10 dimensions (2026-03-06)
+- VPS scraper: v14
 
 ## Platform Coverage
 
@@ -98,15 +109,16 @@ Branch: `feature/desoc-platform`, 23 files, +1310 lines
 | Bybit, OKX, Bitget, MEXC, KuCoin, Gate.io, HTX, CoinEx, Hyperliquid | All done | All done | - |
 
 ## Session Handoff Notes
-- Last updated: 2026-03-07
+- Last updated: 2026-03-09
+- BitMart: confirmed dead — copytrade API returns "service not open" globally, added to DEAD_BLOCKED_PLATFORMS
+- MEXC: VPS scraper first strategy (direct APIs WAF-blocked + 404)
 - Zero console.log, zero empty catches in production
 - DEGRADATION.md documents all service failure strategies
 - ESLint: no-console error, no-empty error, no-explicit-any warn
-- VPS scraper v9 running with all exchange endpoints (bybit, mexc, coinex, kucoin, bingx, lbank, gateio)
+- VPS scraper v14 running with all exchange endpoints (bybit, mexc, coinex, kucoin, bingx, lbank, gateio, bitget, phemex, weex)
 - Lighthouse: Perf 58 (4.4s redirect = Cloudflare proxy latency from local), A11y 97, BP 96, SEO 100
 - Bitget Futures: ✅ working via VPS Playwright scraper (100 traders/period, verified 2026-03-07)
 - Bitget Spot: ❌ no public leaderboard API exists; all endpoints return 404; needs broker API keys
-- VPS scraper updated: type=spot routing added, pageSize=100 for fewer browser sessions
 - Performance 58 note: 4.4s "redirect" is Cloudflare proxy overhead from local machine, not app issue
 
 ## Archive
