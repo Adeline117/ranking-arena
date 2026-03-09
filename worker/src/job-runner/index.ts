@@ -234,6 +234,7 @@ async function executeSnapshotRefresh(
         .from('trader_snapshots_v2')
         .upsert({
           platform: job.platform,
+          market_type: 'perp', // Default; worker only supports futures connectors
           trader_key: job.trader_key,
           window,
           as_of_ts: new Date().toISOString(),
@@ -245,8 +246,7 @@ async function executeSnapshotRefresh(
           },
           updated_at: new Date().toISOString(),
         }, {
-          onConflict: 'platform,trader_key,window,date_trunc(\'hour\', as_of_ts)',
-          ignoreDuplicates: true,
+          onConflict: 'platform,market_type,trader_key,window',
         })
 
       if (error) {
@@ -292,8 +292,7 @@ async function executeTimeseriesRefresh(
           data: series.data,
           updated_at: new Date().toISOString(),
         }, {
-          onConflict: 'platform,trader_key,series_type,date_trunc(\'hour\', as_of_ts)',
-          ignoreDuplicates: true,
+          onConflict: 'platform,trader_key,series_type',
         })
 
       if (error && error.code !== '23505') {

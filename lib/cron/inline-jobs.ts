@@ -135,7 +135,8 @@ export async function runWorkerInline(): Promise<InlineJobResult> {
         } else if (job.job_type === 'PROFILE' && job.trader_key) {
           const result = await connector.fetchTraderProfile(job.trader_key)
           if (result.success && result.data) {
-            await supabase.from('trader_profiles_v2').upsert(result.data, { onConflict: 'platform,market_type,trader_key' })
+            const { error: profileErr } = await supabase.from('trader_profiles_v2').upsert(result.data, { onConflict: 'platform,market_type,trader_key' })
+            if (profileErr) logger.warn(`[inline-jobs] PROFILE upsert error: ${profileErr.message}`)
           }
         }
 

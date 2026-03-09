@@ -67,7 +67,7 @@ export const TraderCard = memo(function TraderCard({
     <Link
       href={href}
       style={{ textDecoration: 'none', display: 'block' }}
-      aria-label={`#${rank} ${displayName}, ROI ${(trader.roi || 0) >= 0 ? '+' : ''}${(trader.roi || 0).toFixed(2)}%`}
+      aria-label={`#${rank} ${displayName}, ROI ${(trader.roi ?? 0) >= 0 ? '+' : ''}${(trader.roi ?? 0).toFixed(2)}%`}
     >
       <Box
         className="ranking-row trader-card-contained glass-card glass-card-hover"
@@ -191,9 +191,9 @@ export const TraderCard = memo(function TraderCard({
 
         {/* Sparkline */}
         <Box style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[2] }}>
-          <Sparkline roi={trader.roi || 0} width={120} height={24} />
-          <Text size="lg" weight="black" style={{ color: (trader.roi || 0) >= 0 ? tokens.colors.accent.success : TRADER_ACCENT_ERROR, marginLeft: 'auto' }}>
-            {formatROI(trader.roi || 0)}
+          <Sparkline roi={trader.roi ?? 0} width={120} height={24} />
+          <Text size="lg" weight="black" style={{ color: (trader.roi ?? 0) >= 0 ? tokens.colors.accent.success : TRADER_ACCENT_ERROR, marginLeft: 'auto' }}>
+            {formatROI(trader.roi ?? 0)}
           </Text>
         </Box>
 
@@ -201,8 +201,8 @@ export const TraderCard = memo(function TraderCard({
         <Box style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: tokens.spacing[2] }}>
           <MetricStat
             label="ROI"
-            value={formatROI(trader.roi || 0)}
-            color={(trader.roi || 0) >= 0 ? tokens.colors.accent.success : TRADER_ACCENT_ERROR}
+            value={formatROI(trader.roi ?? 0)}
+            color={(trader.roi ?? 0) >= 0 ? tokens.colors.accent.success : TRADER_ACCENT_ERROR}
           />
           <MetricStat
             label="PnL"

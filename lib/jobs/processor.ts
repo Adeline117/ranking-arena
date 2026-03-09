@@ -240,7 +240,7 @@ export class JobProcessor {
         source_trader_id: job.trader_key,
         market_type: job.market_type,
         window: job.window,
-        season_id: `${job.platform}_${job.market_type}_${job.window}`,
+        season_id: job.window?.toUpperCase() || '90D',
         as_of_ts: now,
         roi: result.metrics.roi,
         pnl: result.metrics.pnl,

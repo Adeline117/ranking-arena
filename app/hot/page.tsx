@@ -127,9 +127,9 @@ function HotContent() {
         setTraders(uniqueData.map(item => ({
           id: item.source_trader_id || '',
           handle: handleMap[item.source_trader_id] || (item.source_trader_id ? `${item.source_trader_id.slice(0, 6)}...${item.source_trader_id.slice(-4)}` : null),
-          roi: typeof item.roi === 'string' ? parseFloat(item.roi) : (item.roi || 0),
-          win_rate: typeof item.win_rate === 'string' ? parseFloat(item.win_rate) : (item.win_rate || 0),
-          followers: item.followers || 0,
+          roi: typeof item.roi === 'string' ? parseFloat(item.roi) : (item.roi ?? 0),
+          win_rate: typeof item.win_rate === 'string' ? parseFloat(item.win_rate) : (item.win_rate ?? null),
+          followers: item.followers ?? 0,
           source: item.source || 'binance',
         })))
       } catch (error) {

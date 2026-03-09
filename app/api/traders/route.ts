@@ -170,7 +170,7 @@ async function fetchFromLeaderboard(
     source: row.source as string,
     source_type: row.source_type as string,
     avatar_url: row.avatar_url as string | null,
-    arena_score: Number(row.arena_score) || 0,
+    arena_score: row.arena_score != null ? Number(row.arena_score) : 0,
     rank: Number(row.rank),
     // Score breakdown
     profitability_score: row.profitability_score != null ? Number(row.profitability_score) : null,
