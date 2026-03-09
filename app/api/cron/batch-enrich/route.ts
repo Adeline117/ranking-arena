@@ -23,12 +23,12 @@ const PLATFORM_LIMITS: Record<string, { limit90: number; limit30: number; limit7
   binance_spot: { limit90: 100, limit30: 80, limit7: 50 },
   bybit: { limit90: 200, limit30: 150, limit7: 100 },
   bybit_spot: { limit90: 80, limit30: 60, limit7: 40 },
-  okx_futures: { limit90: 150, limit30: 120, limit7: 80 },
-  bitget_futures: { limit90: 150, limit30: 120, limit7: 80 },
-  bitget_spot: { limit90: 80, limit30: 60, limit7: 40 },
-  hyperliquid: { limit90: 120, limit30: 100, limit7: 60 },
-  gmx: { limit90: 100, limit30: 80, limit7: 50 },
-  htx_futures: { limit90: 80, limit30: 60, limit7: 40 },
+  okx_futures: { limit90: 80, limit30: 80, limit7: 60 },
+  bitget_futures: { limit90: 60, limit30: 60, limit7: 50 },
+  bitget_spot: { limit90: 40, limit30: 40, limit7: 30 },
+  hyperliquid: { limit90: 100, limit30: 80, limit7: 60 },
+  gmx: { limit90: 60, limit30: 50, limit7: 40 },
+  htx_futures: { limit90: 40, limit30: 40, limit7: 30 },
   // mexc, dydx, gains, jupiter_perps, aevo removed — no enrichment functions available
 }
 
@@ -93,8 +93,9 @@ export async function GET(request: NextRequest) {
     } catch { /* best effort */ }
   }, SAFETY_TIMEOUT_MS)
 
-  // Per-platform enrichment timeout: scale down when running multiple periods
-  const ENRICH_TIMEOUT_MS = periodsToRun.length > 1 ? 45_000 : 80_000
+  // Per-platform enrichment timeout
+  // okx/bitget/htx need 100s+ for 90D (high trader count × slow concurrency × delay)
+  const ENRICH_TIMEOUT_MS = periodsToRun.length > 1 ? 60_000 : 120_000
 
   const functionStart = Date.now()
   // Budget per period: divide 270s (leaving 30s buffer) by number of periods
@@ -111,8 +112,9 @@ export async function GET(request: NextRequest) {
 
     const periodStart = Date.now()
 
-    // Run enrichments inline in parallel batches of 3
-    const BATCH_CONCURRENCY = 3
+    // Run enrichments inline in parallel batches of 5
+    // With 9 platforms: 2 batches × ~120s = ~240s (within 270s budget)
+    const BATCH_CONCURRENCY = 5
     for (let i = 0; i < platforms.length; i += BATCH_CONCURRENCY) {
       // Check per-period budget before starting next batch
       if (Date.now() - periodStart > PER_PERIOD_BUDGET_MS) {
