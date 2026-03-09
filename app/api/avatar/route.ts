@@ -137,6 +137,36 @@ export async function GET(request: Request) {
       },
     }).finally(() => clearTimeout(timeout))
 
+    if (!response.ok && (response.status === 403 || response.status === 401)) {
+      // Retry with minimal headers — some CDNs block specific header combos
+      const controller2 = new AbortController()
+      const timeout2 = setTimeout(() => controller2.abort(), 8_000)
+      try {
+        const retryResponse = await fetch(decodedUrl, {
+          signal: controller2.signal,
+          headers: {
+            'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36',
+            'Accept': 'image/*,*/*;q=0.8',
+          },
+        }).finally(() => clearTimeout(timeout2))
+
+        if (retryResponse.ok) {
+          const ct = retryResponse.headers.get('content-type') || 'image/png'
+          const buf = await retryResponse.arrayBuffer()
+          const origin2 = request.headers.get('Origin')
+          return new NextResponse(buf, {
+            headers: {
+              'Content-Type': ct,
+              'Cache-Control': `public, max-age=${CACHE_MAX_AGE}`,
+              'Access-Control-Allow-Origin': getCorsOrigin(origin2),
+            },
+          })
+        }
+      } catch {
+        // Retry failed, fall through to original error
+      }
+    }
+
     if (!response.ok) {
       return new NextResponse('Failed to fetch image', { status: response.status })
     }

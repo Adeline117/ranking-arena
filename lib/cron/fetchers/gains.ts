@@ -145,11 +145,15 @@ async function fetchPeriod(
     const avgWin = parseFloat(String(t.avg_win || 0))
     const avgLoss = Math.abs(parseFloat(String(t.avg_loss || 0)))
 
-    // Estimate capital from avg position size × trade count
+    // Estimate ROI from avg position size (proxy for capital per trade)
+    // Only compute when we have reliable data; null otherwise
     const avgPositionSize = (avgWin + avgLoss) / 2
-    const estimatedCapital =
-      avgPositionSize > 0 ? avgPositionSize * totalTrades : Math.abs(totalPnl)
-    const roi = estimatedCapital > 0 ? (totalPnl / estimatedCapital) * 100 : 0
+    let roi: number | null = null
+    if (avgPositionSize > 0 && totalTrades > 0) {
+      // Capital proxy: avg position size represents typical trade capital
+      const estimatedCapital = avgPositionSize * Math.max(totalTrades, 1)
+      roi = estimatedCapital > 0 ? (totalPnl / estimatedCapital) * 100 : null
+    }
     const winRate = totalTrades > 0 ? (wins / totalTrades) * 100 : null
 
     tradersMap.set(addr, {

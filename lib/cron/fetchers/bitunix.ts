@@ -16,6 +16,7 @@ import {
   upsertTraders,
   sleep,
   parseNum,
+  normalizeROI,
   normalizeWinRate,
   getWinRateFormat,
 } from './shared'
@@ -62,7 +63,10 @@ function parseTrader(item: BitunixTrader, period: string, rank: number): TraderD
   const id = String(item.uid || '')
   if (!id || id === 'undefined') return null
 
-  const roi = parseNum(item.roi)
+  const rawRoi = parseNum(item.roi)
+  if (rawRoi === null) return null
+  // Bitunix API returns ROI as decimal (0.05 = 5%) — same pattern as MDD and WinRate
+  const roi = normalizeROI(rawRoi, SOURCE)
   if (roi === null) return null
 
   const pnl = parseNum(item.pl)

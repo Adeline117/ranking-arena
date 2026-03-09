@@ -190,7 +190,7 @@ export async function GET(request: NextRequest) {
   if (traderKeys.length > 0) {
     const { data: sourceData } = await supabase
       .from('trader_sources')
-      .select('source_trader_id, handle, display_name')
+      .select('source_trader_id, handle, display_name, avatar_url')
       .eq('source', platform)
       .in('source_trader_id', traderKeys)
 
@@ -199,8 +199,11 @@ export async function GET(request: NextRequest) {
         if (!profiles[s.source_trader_id]) {
           profiles[s.source_trader_id] = {
             display_name: s.display_name || s.handle,
-            avatar_url: null,
+            avatar_url: s.avatar_url || null,
           }
+        } else if (!profiles[s.source_trader_id].avatar_url && s.avatar_url) {
+          // Fill avatar from trader_sources if trader_profiles didn't have one
+          profiles[s.source_trader_id].avatar_url = s.avatar_url
         }
       }
     }

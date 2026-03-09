@@ -69,6 +69,67 @@ export function getAvatarInitial(name: string | null | undefined): string {
 
 
 /**
+ * Check if a trader ID looks like a wallet address (EVM 0x... or Solana base58)
+ */
+export function isWalletAddress(traderId: string): boolean {
+  // EVM: 0x followed by 40 hex chars
+  if (/^0x[a-fA-F0-9]{40,42}$/i.test(traderId)) return true
+  // Solana: 32-44 base58 chars (no 0, O, I, l)
+  if (/^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(traderId)) return true
+  return false
+}
+
+/**
+ * Generate a deterministic SVG blockie (Ethereum-style) for a wallet address.
+ * Returns a data URI that can be used as an img src.
+ * 8×8 grid, mirrored horizontally for symmetry (like MetaMask blockies).
+ */
+export function generateBlockieSvg(address: string, size = 64): string {
+  // Simple deterministic hash from address
+  let seed = 0
+  const addr = address.toLowerCase()
+  for (let i = 0; i < addr.length; i++) {
+    seed = ((seed << 5) - seed + addr.charCodeAt(i)) | 0
+  }
+
+  // Generate 3 colors from seed
+  const nextSeed = () => {
+    seed = (seed * 1103515245 + 12345) & 0x7fffffff
+    return seed
+  }
+
+  const hue1 = nextSeed() % 360
+  const hue2 = (hue1 + 120 + (nextSeed() % 120)) % 360
+  const bgHue = (hue1 + 240) % 360
+
+  const color1 = `hsl(${hue1},65%,50%)`
+  const color2 = `hsl(${hue2},65%,55%)`
+  const bgColor = `hsl(${bgHue},25%,75%)`
+
+  // Generate 8×8 grid (only left half, mirror for symmetry)
+  const grid: number[] = []
+  for (let i = 0; i < 32; i++) {
+    grid.push(nextSeed() % 3) // 0=bg, 1=color1, 2=color2
+  }
+
+  const cellSize = size / 8
+  let rects = ''
+  for (let y = 0; y < 8; y++) {
+    for (let x = 0; x < 4; x++) {
+      const val = grid[y * 4 + x]
+      if (val === 0) continue
+      const fill = val === 1 ? color1 : color2
+      const mirrorX = 7 - x
+      rects += `<rect x="${x * cellSize}" y="${y * cellSize}" width="${cellSize}" height="${cellSize}" fill="${fill}"/>`
+      rects += `<rect x="${mirrorX * cellSize}" y="${y * cellSize}" width="${cellSize}" height="${cellSize}" fill="${fill}"/>`
+    }
+  }
+
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}" viewBox="0 0 ${size} ${size}"><rect width="${size}" height="${size}" fill="${bgColor}"/>${rects}</svg>`
+  return `data:image/svg+xml,${encodeURIComponent(svg)}`
+}
+
+/**
  * 获取用户头像URL（优先使用真实头像，否则返回null由前端显示首字母）
  */
 export function getUserAvatarUrl(
