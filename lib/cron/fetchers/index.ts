@@ -2,11 +2,13 @@
  * Platform fetcher registry
  * Maps platform names to their inline fetch functions
  * All fetchers run without child_process or puppeteer — Vercel serverless compatible
+ * 
+ * 2026-03-09: Deep clean - removed all failing platforms
  */
 
 import type { PlatformFetcher } from './shared'
 
-// CEX - Pure API
+// CEX - Pure API (Working platforms only)
 import { fetchOkxFutures } from './okx-futures'
 import { fetchHtx } from './htx'
 import { fetchBinanceFutures } from './binance-futures'
@@ -23,25 +25,30 @@ import { fetchGateio } from './gateio'
 import { fetchMexc } from './mexc'
 import { fetchCoinex } from './coinex'
 import { fetchPhemex } from './phemex'
-// Removed: fetchWeex (disabled 2026-02-08: API returns 521)
-// Removed: fetchLbank (disabled 2026-03-08: API returns "no data")
-// Removed: fetchKucoin (disabled 2026-03-08: API returns 404)
 import { fetchBlofin } from './blofin'
-import { fetchCryptocom } from './cryptocom'
 import { fetchBitfinex } from './bitfinex'
 import { fetchWhitebit } from './whitebit'
 import { fetchBtse } from './btse'
-import { fetchToobit } from './toobit'
+// Removed: fetchWeex (disabled 2026-02-08: API returns 521)
+// Removed: fetchLbank (disabled 2026-03-08: API returns "no data")
+// Removed: fetchKucoin (disabled 2026-03-08: API returns 404)
+// Removed: fetchToobit (2026-03-09: API returns HTML, not JSON)
+// Removed: fetchCryptocom (2026-03-09: WAF blocked, HTTP 403)
+// Removed: fetchPionex (2026-03-09: WAF blocked, HTTP 403)
 
-// DEX - On-chain / Subgraph
+// DEX - On-chain / Subgraph (Working platforms only)
 import { fetchHyperliquid } from './hyperliquid'
 import { fetchGmx } from './gmx'
 import { fetchGains } from './gains'
 import { fetchJupiterPerps } from './jupiter-perps'
 import { fetchAevo } from './aevo'
 import { fetchDydx } from './dydx'
-import { fetchUniswap } from './uniswap'
-import { fetchPancakeSwap } from './pancakeswap'
+// Removed: fetchUniswap (2026-03-09: empty_data - no usable data)
+// Removed: fetchPancakeSwap (2026-03-09: empty_data - no usable data)
+// Removed: fetchSynthetix (2026-03-09: requires THEGRAPH_API_KEY)
+// Removed: fetchKwenta (2026-03-09: requires THEGRAPH_API_KEY)
+// Removed: fetchMux (2026-03-09: requires THEGRAPH_API_KEY)
+// Removed: fetchPerpetualProtocol (2026-03-09: The Graph subgraph deprecated)
 
 export const INLINE_FETCHERS: Record<string, PlatformFetcher> = {
   // CEX Futures
@@ -62,13 +69,10 @@ export const INLINE_FETCHERS: Record<string, PlatformFetcher> = {
   mexc: fetchMexc,
   coinex: fetchCoinex,
   phemex: fetchPhemex,
-  // Removed: weex, lbank, kucoin (all disabled in config.ts)
   blofin: fetchBlofin,
-  cryptocom: fetchCryptocom,
   bitfinex: fetchBitfinex,
   whitebit: fetchWhitebit,
   btse: fetchBtse,
-  toobit: fetchToobit,
 
   // DEX
   hyperliquid: fetchHyperliquid,
@@ -77,8 +81,6 @@ export const INLINE_FETCHERS: Record<string, PlatformFetcher> = {
   jupiter_perps: fetchJupiterPerps,
   aevo: fetchAevo,
   dydx: fetchDydx,
-  uniswap: fetchUniswap,
-  pancakeswap: fetchPancakeSwap,
 }
 
 export function getInlineFetcher(platform: string): PlatformFetcher | undefined {
