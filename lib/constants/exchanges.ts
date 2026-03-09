@@ -125,16 +125,21 @@ export const ALL_SOURCES: TraderSource[] = [
 // ---------------------------------------------------------------------------
 
 export const DEAD_BLOCKED_PLATFORMS: TraderSource[] = [
-  'kucoin',       // APIs return 404, feature discontinued
-  'lbank',        // Session auth required, crashes headless browser
-  'phemex',       // CloudFront blocks Vercel/VPS — data fetched via Mac Mini crontab (fetch-phemex.mjs)
-  'bitget_spot',  // No public API (all endpoints return 404)
-  'blofin',       // Requires BLOFIN env vars (not set)
+  // Truly dead — no recovery path
   'weex',         // Copy-trade API returning 521 (origin down) since 2026-03
-  'mux',          // Requires THEGRAPH_API_KEY (not set), Copin has 0 traders
-  'kwenta',       // Copin stopped indexing Sep 2025, TheGraph needs THEGRAPH_API_KEY
-  'synthetix',    // Copin stopped indexing Sep 2025, TheGraph needs THEGRAPH_API_KEY
   'perpetual_protocol', // TheGraph subgraph returns empty data since 2026-03
+  // Recoverable via Mac Mini Puppeteer scrapers (scripts/openclaw/fetch-*.mjs)
+  'kucoin',       // fetch-kucoin.mjs — browser intercepts copy-trade API
+  'lbank',        // fetch-lbank.mjs — browser intercepts uuapi session API
+  'blofin',       // fetch-blofin.mjs — browser intercepts copy-trade API
+  // Recoverable via credentials (set env vars to activate)
+  'bitget_spot',  // Set BITGET_API_KEY/SECRET/PASSPHRASE for broker API
+  // Working via Mac Mini — excluded from Vercel pipeline alerts
+  'phemex',       // fetch-phemex.mjs (confirmed working, every 6h)
+  // Stale data via Copin — re-enabled in fetchers with graceful fallback
+  'mux',          // TheGraph needs THEGRAPH_API_KEY, Copin has 0 traders
+  'kwenta',       // Merged into Synthetix, Copin stale since Sep 2025
+  'synthetix',    // Copin stale since Sep 2025, TheGraph needs API key
 ]
 
 // ---------------------------------------------------------------------------
