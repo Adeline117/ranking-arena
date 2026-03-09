@@ -233,7 +233,7 @@ export const TraderDataSchema = z.object({
   roi: z.number().finite().nullable(),
   pnl: z.number().finite().nullable(),
   win_rate: z.number().finite().min(0).max(100).nullable(),
-  max_drawdown: z.number().finite().nullable(),
+  max_drawdown: z.number().finite().min(0).max(100).nullable(),
   followers: z.number().finite().nonnegative().nullable().optional(),
   trades_count: z.number().finite().nonnegative().nullable().optional(),
   arena_score: z.number().finite().nullable(),

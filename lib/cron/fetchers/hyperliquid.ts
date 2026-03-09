@@ -178,7 +178,7 @@ async function fetchMaxDrawdown(
     }
 
     const result = Math.abs(maxDrawdown) * 100
-    return result > 0 && result < 200 ? result : null
+    return result > 0 && result <= 100 ? result : null
   } catch (err) {
     logger.warn(`[${SOURCE}] Drawdown calculation failed: ${err instanceof Error ? err.message : String(err)}`)
     return null
