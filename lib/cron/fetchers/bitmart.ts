@@ -94,7 +94,7 @@ async function fetchViaVpsScraper(period: string): Promise<BitmartTrader[]> {
 
   const resp = await fetchJson(url, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', 'X-Proxy-Key': VPS_SCRAPER_KEY },
     body,
   })
 
