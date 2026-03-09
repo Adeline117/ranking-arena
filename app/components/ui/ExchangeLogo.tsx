@@ -49,6 +49,23 @@ const LOCAL_LOGOS: Record<string, string> = {
   mux: '/icons/exchanges/mux.png',
   gains: '/icons/exchanges/gains.png',
   btcc: '/icons/exchanges/btcc.png',
+  // Aliases for DB source names (e.g. "binance_futures" -> binance logo)
+  binance_futures: '/icons/exchanges/binance.jpg',
+  binance_spot: '/icons/exchanges/binance.jpg',
+  binance_web3: '/icons/exchanges/binance.jpg',
+  bybit_spot: '/icons/exchanges/bybit.png',
+  bitget_futures: '/icons/exchanges/bitget.png',
+  bitget_spot: '/icons/exchanges/bitget.png',
+  okx_futures: '/icons/exchanges/okx.png',
+  okx_spot: '/icons/exchanges/okx.png',
+  okx_web3: '/icons/exchanges/okx.png',
+  okx_wallet: '/icons/exchanges/okx.png',
+  htx_futures: '/icons/exchanges/htx.png',
+  gateio: '/icons/exchanges/gate.jpg',
+  jupiter_perps: '/icons/exchanges/jupiter.png',
+  dune_gmx: '/icons/exchanges/gmx.png',
+  dune_hyperliquid: '/icons/exchanges/hyperliquid.png',
+  dune_uniswap: '/icons/exchanges/uniswap.png',
 }
 
 // CoinGecko CDN fallback URLs
