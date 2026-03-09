@@ -162,22 +162,11 @@ export async function GET(request: NextRequest) {
     }
   }
 
-  // Groups with ≤2 platforms run in parallel.
-  // Groups with 3+ platforms run sequentially with delays to avoid
-  // module-scoped state corruption (e.g. _bybitStrategy, _cachedStrategy caches
-  // in bybit.ts and okx-futures.ts are shared across concurrent calls).
-  let results: BatchResult[]
-  if (platforms.length <= 2) {
-    results = await Promise.all(platforms.map(runPlatform))
-  } else {
-    results = []
-    for (const platform of platforms) {
-      results.push(await runPlatform(platform))
-      if (platforms.indexOf(platform) < platforms.length - 1) {
-        await new Promise((r) => setTimeout(r, 1000))
-      }
-    }
-  }
+  // All platforms run in parallel — each platform uses a different fetcher module
+  // so there's no shared state corruption risk.
+  // Module-scoped strategy caches (_bybitStrategy, _cachedStrategy) are only shared
+  // if the SAME fetcher is called concurrently, which doesn't happen within a group.
+  const results = await Promise.all(platforms.map(runPlatform))
 
   clearTimeout(safetyTimer)
   const succeeded = results.filter((r) => r.status === 'success').length
