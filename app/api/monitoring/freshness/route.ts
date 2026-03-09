@@ -34,7 +34,7 @@ const PLATFORM_THRESHOLDS: Record<string, number> = {
   drift: 24,
   bitunix: 24,
   btcc: 24,
-  bitmart: 24,
+  // bitmart removed: copytrade API returns "service not open"
   paradex: 24,
   bybit_spot: 24,
   binance_web3: 24,

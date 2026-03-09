@@ -83,6 +83,9 @@ const ALLOWED_HOSTS = [
   'data.api.drift.trade',
   // Paradex DEX
   'api.prod.paradex.trade',
+  // BitMart copy trading (geo-restricted, needs US/EU IP)
+  'www.bitmart.com',
+  'api-cloud.bitmart.com',
 ];
 
 const worker = {

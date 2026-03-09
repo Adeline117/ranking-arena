@@ -149,6 +149,7 @@ export const DEAD_BLOCKED_PLATFORMS: TraderSource[] = [
   'toobit',       // API returns HTML (needs browser session), only 238 snapshots
   'paradex',      // API now requires JWT auth (was public, changed ~2026-03)
   'okx_spot',     // OKX copy-trading API only supports instType=SWAP, no spot leaderboard
+  'bitmart',      // gw-api/copytrade-streamer returns "service not open" (all IPs), SPA doesn't render
 ]
 
 // ---------------------------------------------------------------------------
