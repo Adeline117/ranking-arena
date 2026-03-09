@@ -148,6 +148,7 @@ export const DEAD_BLOCKED_PLATFORMS: TraderSource[] = [
   'synthetix',    // Copin stale since Sep 2025, TheGraph needs API key
   'toobit',       // API returns HTML (needs browser session), only 238 snapshots
   'paradex',      // API now requires JWT auth (was public, changed ~2026-03)
+  'okx_spot',     // OKX copy-trading API only supports instType=SWAP, no spot leaderboard
 ]
 
 // ---------------------------------------------------------------------------
