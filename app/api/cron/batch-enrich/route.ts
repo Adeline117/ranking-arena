@@ -89,10 +89,12 @@ export async function GET(request: NextRequest) {
   const results: BatchResult[] = []
   const plog = await PipelineLogger.start(`batch-enrich-${periodParam}`, { period: periodParam, enrichAll, platforms })
 
-  // Per-platform enrichment timeout: 80s leaves buffer within 300s total for 3 concurrent
-  const ENRICH_TIMEOUT_MS = 80_000
+  // Per-platform enrichment timeout: scale down when running multiple periods
+  const ENRICH_TIMEOUT_MS = periodsToRun.length > 1 ? 45_000 : 80_000
 
   const functionStart = Date.now()
+  // Budget per period: divide 270s (leaving 30s buffer) by number of periods
+  const PER_PERIOD_BUDGET_MS = Math.floor(270_000 / periodsToRun.length)
 
   // Run each period sequentially (when period=all, this runs 90D → 30D → 7D)
   for (const period of periodsToRun) {
@@ -103,9 +105,19 @@ export async function GET(request: NextRequest) {
       continue
     }
 
+    const periodStart = Date.now()
+
     // Run enrichments inline in parallel batches of 3
     const BATCH_CONCURRENCY = 3
     for (let i = 0; i < platforms.length; i += BATCH_CONCURRENCY) {
+      // Check per-period budget before starting next batch
+      if (Date.now() - periodStart > PER_PERIOD_BUDGET_MS) {
+        const remaining = platforms.slice(i)
+        for (const p of remaining) {
+          results.push({ platform: p, period, status: 'error', durationMs: 0, error: `Skipped: period budget ${Math.round(PER_PERIOD_BUDGET_MS / 1000)}s exhausted` })
+        }
+        break
+      }
       const batch = platforms.slice(i, i + BATCH_CONCURRENCY)
       const batchResults = await Promise.all(
         batch.map(async (platform): Promise<BatchResult> => {
