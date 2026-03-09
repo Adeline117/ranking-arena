@@ -725,64 +725,78 @@ async function handleDydxSubaccount(request: Request, url: URL): Promise<Respons
 // ============================================
 
 async function handleMexcCopyTrading(request: Request, url: URL): Promise<Response> {
+  const pageSize = parseInt(url.searchParams.get('pageSize') || '50');
+  const periodType = parseInt(url.searchParams.get('periodType') || '3');
   const page = parseInt(url.searchParams.get('page') || '1');
-  const pageSize = parseInt(url.searchParams.get('pageSize') || '20');
-  const period = url.searchParams.get('period') || '30D';
 
-  // MEXC copy trading endpoints to try (need to discover current working endpoint)
-  const endpoints = [
-    // Try futures subdomain first
-    `https://futures.mexc.com/api/v1/private/copytrading/trader/list?page=${page}&pageSize=${pageSize}&period=${period}`,
-    // Try contract subdomain
-    `https://contract.mexc.com/api/v1/private/copytrading/trader/list?page=${page}&pageSize=${pageSize}&period=${period}`,
-    // Try main domain
-    `https://www.mexc.com/api/platform/copy-trade/trader/list?page=${page}&pageSize=${pageSize}&period=${period}`,
-    // Try different path
-    `https://www.mexc.com/api/v1/copy-trade/public/traders?page=${page}&pageSize=${pageSize}&period=${period}`,
-  ];
+  const commonHeaders = {
+    'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
+    'Accept': 'application/json',
+    'Accept-Language': 'en-US,en;q=0.9',
+    'Referer': 'https://www.mexc.com/futures/copyTrade/home',
+    'Origin': 'https://www.mexc.com',
+  };
 
-  for (const apiUrl of endpoints) {
-    try {
-      const response = await fetch(apiUrl, {
-        method: 'GET',
-        headers: {
-          'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
-          'Accept': 'application/json',
-          'Accept-Language': 'en-US,en;q=0.9',
-          'Referer': 'https://www.mexc.com/copy-trading',
-          'Origin': 'https://www.mexc.com',
-        },
-      });
-
-      const contentType = response.headers.get('content-type') || '';
-      
-      // Skip if we get HTML (404 or error page)
-      if (!contentType.includes('application/json') && !contentType.includes('text/plain')) {
-        continue;
-      }
-
-      const data = await response.json();
-      
-      // Check for valid response
+  // Strategy 1: GET copyFutures/api/v1/traders/top (simple, no auth)
+  try {
+    const apiUrl = `https://www.mexc.com/api/platform/futures/copyFutures/api/v1/traders/top?limit=${pageSize}`;
+    const response = await fetch(apiUrl, { method: 'GET', headers: commonHeaders });
+    const contentType = response.headers.get('content-type') || '';
+    if (contentType.includes('application/json') || contentType.includes('text/plain')) {
+      const data = await response.json() as Record<string, unknown>;
       if (response.status === 200 || data.code === 0 || data.success) {
         return Response.json(data, {
           headers: { 'Access-Control-Allow-Origin': corsOrigin() },
         });
       }
-      
-      // If we get a proper error response, try next endpoint
-      continue;
-    } catch (err) {
-      console.error(`[proxy] MEXC endpoint failed:`, err instanceof Error ? err.message : String(err));
-      continue;
     }
+  } catch (err) {
+    console.error(`[proxy] MEXC copyFutures/traders/top failed:`, err instanceof Error ? err.message : String(err));
+  }
+
+  // Strategy 2: POST copy-trade/rank/list
+  try {
+    const apiUrl = 'https://www.mexc.com/api/platform/copy-trade/rank/list';
+    const response = await fetch(apiUrl, {
+      method: 'POST',
+      headers: { ...commonHeaders, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ pageNum: page, pageSize, periodType, sortField: 'ROI' }),
+    });
+    const contentType = response.headers.get('content-type') || '';
+    if (contentType.includes('application/json') || contentType.includes('text/plain')) {
+      const data = await response.json() as Record<string, unknown>;
+      if (response.status === 200 || data.code === 0 || data.success) {
+        return Response.json(data, {
+          headers: { 'Access-Control-Allow-Origin': corsOrigin() },
+        });
+      }
+    }
+  } catch (err) {
+    console.error(`[proxy] MEXC copy-trade/rank/list failed:`, err instanceof Error ? err.message : String(err));
+  }
+
+  // Strategy 3: GET futures.mexc.com copy-trading trader/list
+  try {
+    const apiUrl = `https://futures.mexc.com/api/v1/private/account/assets/copy-trading/trader/list?page=${page}&pageSize=${pageSize}&sortField=yield&sortType=DESC&timeType=${periodType}`;
+    const response = await fetch(apiUrl, { method: 'GET', headers: commonHeaders });
+    const contentType = response.headers.get('content-type') || '';
+    if (contentType.includes('application/json') || contentType.includes('text/plain')) {
+      const data = await response.json() as Record<string, unknown>;
+      if (response.status === 200 || data.code === 0 || data.success) {
+        return Response.json(data, {
+          headers: { 'Access-Control-Allow-Origin': corsOrigin() },
+        });
+      }
+    }
+  } catch (err) {
+    console.error(`[proxy] MEXC futures trader/list failed:`, err instanceof Error ? err.message : String(err));
   }
 
   // All endpoints failed
   return Response.json({
     error: 'MEXC API error',
-    details: 'All API endpoints returned 404 or invalid responses. Endpoint may have changed.',
-    note: 'Please verify current MEXC copy trading API by inspecting Network requests on https://www.mexc.com/copy-trading',
+    details: 'All 3 API endpoints failed. Endpoints may have changed.',
+    note: 'Please verify current MEXC copy trading API by inspecting Network requests on https://www.mexc.com/futures/copyTrade/home',
   }, {
     status: 502,
     headers: { 'Access-Control-Allow-Origin': corsOrigin() },

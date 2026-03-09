@@ -23,11 +23,9 @@ import { tieredGet, tieredSet } from '@/lib/cache/redis-layer'
 
 export const dynamic = 'force-dynamic'
 
-const VALID_PLATFORMS: string[] = [
-  'binance_futures', 'binance_spot', 'bybit', 'bitget_futures',
-  'bitget_spot', 'mexc', 'okx_web3', 'kucoin', 'coinex', 'gmx',
-  'htx_futures',
-]
+import { ALL_SOURCES } from '@/lib/constants/exchanges'
+
+const VALID_PLATFORMS: string[] = ALL_SOURCES as string[]
 
 export async function GET(
   request: NextRequest,

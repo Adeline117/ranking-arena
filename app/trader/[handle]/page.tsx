@@ -2,20 +2,13 @@ import type { Metadata } from 'next'
 import { redirect, notFound } from 'next/navigation'
 import { getSupabaseAdmin } from '@/lib/supabase/server'
 import { JsonLd } from '@/app/components/Providers/JsonLd'
+import { EXCHANGE_CONFIG } from '@/lib/constants/exchanges'
 import TraderProfileClient, { type UnregisteredTraderData } from './TraderProfileClient'
 
-const EXCHANGE_DISPLAY: Record<string, string> = {
-  binance_futures: 'Binance', binance_spot: 'Binance Spot', binance_web3: 'Binance Web3',
-  bybit: 'Bybit', bybit_spot: 'Bybit Spot',
-  bitget: 'Bitget', bitget_spot: 'Bitget Spot',
-  okx: 'OKX', okx_spot: 'OKX Spot', okx_web3: 'OKX Web3',
-  hyperliquid: 'Hyperliquid', gmx: 'GMX', dydx: 'dYdX', gains: 'Gains',
-  mexc: 'MEXC', kucoin: 'KuCoin', kucoin_spot: 'KuCoin Spot',
-  bingx: 'BingX', bingx_spot: 'BingX Spot', gateio: 'Gate.io',
-  htx_futures: 'HTX', weex: 'Weex', blofin: 'Blofin',
-  bitfinex: 'Bitfinex', toobit: 'Toobit', phemex: 'Phemex',
-  coinex: 'CoinEx', aevo: 'Aevo',
-}
+// Derive display names from central config
+const EXCHANGE_DISPLAY: Record<string, string> = Object.fromEntries(
+  Object.entries(EXCHANGE_CONFIG).map(([k, v]) => [k, v.name])
+)
 
 export async function generateMetadata({ params }: { params: Promise<{ handle: string }> }): Promise<Metadata> {
   const { handle } = await params

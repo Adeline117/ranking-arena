@@ -291,8 +291,33 @@ async function fetchPeriod(
     }
   }
 
+  // CF Worker fallback (US-based proxy, tries 3 MEXC endpoints)
   if (allTraders.size === 0) {
-    return { total: 0, saved: 0, error: lastError || 'No data from MEXC — all endpoints and VPS scraper failed' }
+    const CF_WORKER_URL = process.env.CLOUDFLARE_PROXY_URL || 'https://ranking-arena-proxy.broosbook.workers.dev'
+    logger.warn(`[${SOURCE}] All HTTP + VPS methods failed, trying CF Worker proxy...`)
+    try {
+      const cfUrl = `${CF_WORKER_URL}/mexc/copy-trading?periodType=${periodType}&pageSize=${PAGE_SIZE}`
+      const res = await fetch(cfUrl, {
+        signal: AbortSignal.timeout(30_000),
+      })
+      if (res.ok) {
+        const data = (await res.json()) as MexcApiResponse
+        const list = extractList(data)
+        for (const item of list) {
+          const id = String(item.traderId || item.uid || item.id || item.userId || '')
+          if (id && !allTraders.has(id)) allTraders.set(id, item)
+        }
+        if (allTraders.size > 0) {
+          logger.warn(`[${SOURCE}] CF Worker proxy got ${allTraders.size} traders`)
+        }
+      }
+    } catch (err) {
+      logger.warn(`[${SOURCE}] CF Worker proxy failed: ${err instanceof Error ? err.message : String(err)}`)
+    }
+  }
+
+  if (allTraders.size === 0) {
+    return { total: 0, saved: 0, error: lastError || 'No data from MEXC — all endpoints, VPS scraper, and CF Worker failed' }
   }
 
   const traders: TraderData[] = []
