@@ -77,16 +77,21 @@ function parseTrader(item, period) {
   const id = String(item.leadConfigId || item.leaderId || item.uid || item.id || '')
   if (!id || id === 'undefined' || id === '0') return null
 
-  let roi = parseNum(item.roi)
-  if (roi === null) return null
-  // KuCoin ROI is already percentage (e.g. 123.45 = 123.45%)
+  // KuCoin APIs use various field names for ROI depending on endpoint
+  let roi = parseNum(item.roi ?? item.totalReturn ?? item.returnRate ?? item.roiRate ?? item.thirtyDayPnlRatio ?? item.totalPnlRatio)
+  // thirtyDayPnlRatio/totalPnlRatio are decimal (0.5 = 50%), convert to percentage
+  if (roi !== null && Math.abs(roi) > 0 && Math.abs(roi) < 10) roi *= 100
 
-  const pnl = parseNum(item.totalPnl ?? item.pnl ?? item.thirtyDayPnl ?? item.totalProfit)
+  const pnl = parseNum(item.totalPnl ?? item.pnl ?? item.thirtyDayPnl ?? item.totalProfit ?? item.profit)
+  // Accept trader if we have ROI or PnL (don't require both)
+  if (roi === null && pnl === null) return null
+  if (roi === null) roi = 0
+
   let winRate = parseNum(item.winRatio ?? item.winRate)
   if (winRate !== null && winRate > 0 && winRate <= 1) winRate *= 100
   let mdd = parseNum(item.maxDrawdown ?? item.mdd)
   if (mdd !== null && Math.abs(mdd) > 0 && Math.abs(mdd) <= 1) mdd *= 100
-  const followers = parseNum(item.followerCount ?? item.copierCount)
+  const followers = parseNum(item.followerCount ?? item.copierCount ?? item.currentCopyCount)
   const handle = item.nickName || item.nickname || `Trader_${id.slice(0, 8)}`
 
   return {
@@ -136,6 +141,7 @@ async function fetchWithBrowser(periods) {
           list = list.filter(item => item && typeof item === 'object' && (item.leadConfigId || item.leaderId || item.uid))
           if (list.length > 0) {
             console.log(`  [capture] ${list.length} traders from ${url.slice(0, 120)}`)
+            if (allCaptured.length === 0) console.log(`  [debug] First item keys: ${Object.keys(list[0]).join(', ')}`)
             allCaptured.push(...list)
           }
         } catch { /* not JSON */ }
@@ -229,7 +235,7 @@ async function saveTraders(traders) {
   const profiles = traders.map(t => ({
     platform: t.source, market_type: 'futures', trader_key: t.source_trader_id,
     display_name: t.handle || null, avatar_url: t.avatar_url, profile_url: t.profile_url,
-    followers: t.followers || 0, copiers: 0, tags: [], bio: null, aum: null,
+    followers: t.followers ?? 0, copiers: 0, tags: [], bio: null, aum: null,
     provenance: { source_url: t.profile_url, created_by: 'mac-mini-fetcher', created_at: new Date().toISOString() },
     updated_at: new Date().toISOString(),
   }))
@@ -245,12 +251,12 @@ async function saveTraders(traders) {
   if (v1Err) return { total: traders.length, saved: 0, error: v1Err.message }
 
   const snapshotsV2 = traders.map(t => ({
-    platform: t.source, trader_key: t.source_trader_id, window: t.season_id, as_of_ts: t.captured_at,
+    platform: t.source, market_type: 'futures', trader_key: t.source_trader_id, window: t.season_id, as_of_ts: t.captured_at,
     metrics: { roi: t.roi ?? 0, pnl: t.pnl ?? 0, win_rate: t.win_rate ?? null, max_drawdown: t.max_drawdown ?? null, followers: t.followers ?? null, arena_score: t.arena_score ?? null },
     quality_flags: { is_suspicious: false, suspicion_reasons: [], data_completeness: 0.7 },
     updated_at: new Date().toISOString(),
   }))
-  const { error: v2Err } = await supabase.from('trader_snapshots_v2').insert(snapshotsV2)
+  const { error: v2Err } = await supabase.from('trader_snapshots_v2').upsert(snapshotsV2, { onConflict: 'platform,market_type,trader_key,window' })
   if (v2Err && !v2Err.message.includes('duplicate') && !v2Err.message.includes('unique')) console.error('v2 error:', v2Err.message)
 
   return { total: traders.length, saved: traders.length }

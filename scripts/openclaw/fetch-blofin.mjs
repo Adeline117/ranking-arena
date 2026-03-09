@@ -120,7 +120,8 @@ async function fetchWithBrowser(periods) {
 
     page.on('response', async (response) => {
       const url = response.url()
-      if (url.includes('copy') || url.includes('trader') || url.includes('lead') || url.includes('rank') || url.includes('blofin')) {
+      // Only intercept API calls, not all page resources
+      if (url.includes('openapi.blofin') || url.includes('/api/') || url.includes('copytrading') || url.includes('leaderboard') || url.includes('lead-trader')) {
         try {
           const ct = response.headers()['content-type'] || ''
           if (!ct.includes('json') && !ct.includes('text')) return
@@ -131,14 +132,16 @@ async function fetchWithBrowser(periods) {
           let list = []
           if (json.data?.rows) list = json.data.rows
           else if (json.data?.list) list = json.data.list
+          else if (json.data?.items) list = json.data.items
           else if (Array.isArray(json.data)) list = json.data
           else if (json.rows) list = json.rows
 
           list = list.filter(item => item && typeof item === 'object' &&
-            (item.uniqueName || item.traderId || item.uid))
+            (item.uniqueName || item.traderId || item.uid || item.nickName))
 
           if (list.length > 0) {
             console.log(`  [capture] ${list.length} traders from ${url.slice(0, 120)}`)
+            if (allCaptured.length === 0) console.log(`  [debug] First item keys: ${Object.keys(list[0]).join(', ')}`)
             allCaptured.push(...list)
           }
         } catch { /* not JSON */ }
@@ -149,6 +152,47 @@ async function fetchWithBrowser(periods) {
     await page.goto('https://blofin.com/en/copy-trade', { waitUntil: 'networkidle2', timeout: 60000 })
     await new Promise(r => setTimeout(r, 5000))
     console.log(`  After initial load: ${allCaptured.length} traders captured`)
+
+    // Strategy 2: Direct API fetch from browser context (uses browser's session cookies)
+    if (allCaptured.length === 0) {
+      console.log('  Trying direct API fetch from browser context...')
+      const apiEndpoints = [
+        'https://openapi.blofin.com/api/v1/copytrading/public/leaderboard?period=30&limit=100',
+        'https://openapi.blofin.com/api/v1/copytrading/current-traders?pageNo=1&pageSize=50&range=2',
+        'https://openapi.blofin.com/api/v1/copytrading/traders?pageNo=1&pageSize=50&range=2',
+        'https://openapi.blofin.com/api/v1/copytrading/ranking?pageNo=1&pageSize=50&range=2',
+      ]
+      for (const endpoint of apiEndpoints) {
+        try {
+          const result = await page.evaluate(async (url) => {
+            try {
+              const res = await fetch(url, {
+                headers: { 'Accept': 'application/json' },
+                credentials: 'include',
+              })
+              if (!res.ok) return { status: res.status, error: `HTTP ${res.status}` }
+              return await res.json()
+            } catch (e) { return { error: e.message } }
+          }, endpoint)
+          if (result?.error) {
+            console.log(`  [api] ${endpoint.split('?')[0].split('/').pop()}: ${result.error || result.status}`)
+            continue
+          }
+          let list = []
+          if (result?.data?.rows) list = result.data.rows
+          else if (result?.data?.list) list = result.data.list
+          else if (result?.data?.items) list = result.data.items
+          else if (Array.isArray(result?.data)) list = result.data
+          list = list.filter(item => item && typeof item === 'object' && (item.uniqueName || item.traderId || item.uid || item.nickName))
+          if (list.length > 0) {
+            console.log(`  [api] Got ${list.length} traders from ${endpoint.split('?')[0].split('/').pop()}`)
+            if (allCaptured.length === 0) console.log(`  [debug] First item keys: ${Object.keys(list[0]).join(', ')}`)
+            allCaptured.push(...list)
+            break
+          }
+        } catch (err) { console.log(`  [api] Error: ${err.message}`) }
+      }
+    }
 
     // Scroll to trigger lazy loading
     for (let round = 0; round < 15; round++) {
@@ -223,7 +267,7 @@ async function saveTraders(traders) {
   const profiles = traders.map(t => ({
     platform: t.source, market_type: 'futures', trader_key: t.source_trader_id,
     display_name: t.handle || null, avatar_url: t.avatar_url, profile_url: t.profile_url,
-    followers: t.followers || 0, copiers: 0, tags: [], bio: null, aum: null,
+    followers: t.followers ?? 0, copiers: 0, tags: [], bio: null, aum: null,
     provenance: { source_url: t.profile_url, created_by: 'mac-mini-fetcher', created_at: new Date().toISOString() },
     updated_at: new Date().toISOString(),
   }))
@@ -239,12 +283,12 @@ async function saveTraders(traders) {
   if (v1Err) return { total: traders.length, saved: 0, error: v1Err.message }
 
   const snapshotsV2 = traders.map(t => ({
-    platform: t.source, trader_key: t.source_trader_id, window: t.season_id, as_of_ts: t.captured_at,
+    platform: t.source, market_type: 'futures', trader_key: t.source_trader_id, window: t.season_id, as_of_ts: t.captured_at,
     metrics: { roi: t.roi ?? 0, pnl: t.pnl ?? 0, win_rate: t.win_rate ?? null, max_drawdown: t.max_drawdown ?? null, followers: t.followers ?? null, arena_score: t.arena_score ?? null },
     quality_flags: { is_suspicious: false, suspicion_reasons: [], data_completeness: 0.7 },
     updated_at: new Date().toISOString(),
   }))
-  const { error: v2Err } = await supabase.from('trader_snapshots_v2').insert(snapshotsV2)
+  const { error: v2Err } = await supabase.from('trader_snapshots_v2').upsert(snapshotsV2, { onConflict: 'platform,market_type,trader_key,window' })
   if (v2Err && !v2Err.message.includes('duplicate') && !v2Err.message.includes('unique')) console.error('v2 error:', v2Err.message)
 
   return { total: traders.length, saved: traders.length }
