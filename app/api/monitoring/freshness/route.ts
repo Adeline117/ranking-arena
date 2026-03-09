@@ -43,7 +43,7 @@ const PLATFORM_THRESHOLDS: Record<string, number> = {
   mexc: 48,
   coinex: 48,
   xt: 48,
-  okx_spot: 48,
+  // okx_spot: removed — OKX has no spot copy-trading leaderboard
   bingx: 72,
   gateio: 72,
   bitfinex: 24,

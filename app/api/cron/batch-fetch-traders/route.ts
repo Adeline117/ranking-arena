@@ -10,7 +10,7 @@
  *   group=b  → hyperliquid, gmx, jupiter_perps (every 4h)
  *   group=c  → okx_web3, aevo, xt (every 4h)
  *   group=d1 → gains, htx_futures (every 6h)
- *   group=d2 → dydx, bybit_spot, okx_spot (every 6h)
+ *   group=d2 → dydx, bybit_spot (every 6h)
  *   group=e  → coinex, binance_web3 (every 6h)
  *   group=f  → mexc, bingx (every 6h)
  *   group=h  → gateio, bitmart, btcc (every 6h)
@@ -29,6 +29,7 @@
  *   - synthetix: migrated to ETH mainnet, no public leaderboard API
  *   - uniswap/pancakeswap: need THEGRAPH_API_KEY (not set)
  *   - toobit: API returns HTML (needs browser session), only 238 snapshots
+ *   - okx_spot: OKX copy-trading API only supports instType=SWAP, no spot leaderboard
  */
 
 import { NextRequest, NextResponse } from 'next/server'
@@ -54,7 +55,7 @@ const GROUPS: Record<string, string[]> = {
   // Group D1: CEX (every 6h) — 2 platforms, parallel
   d1: ['gains', 'htx_futures'],
   // Group D2: DEX+CEX (every 6h) — 2 platforms, parallel
-  d2: ['dydx', 'bybit_spot', 'okx_spot'],
+  d2: ['dydx', 'bybit_spot'],
   // Group E: CEX+DEX (every 6h) — 3 platforms (bitfinex: 1424 traders, was orphaned)
   e: ['coinex', 'binance_web3', 'bitfinex'],
   // Group F: Slow CEX (every 6h) — 2 platforms, parallel (~141s + ~60s = ~200s)
