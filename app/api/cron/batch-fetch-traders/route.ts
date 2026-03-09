@@ -55,8 +55,8 @@ const GROUPS: Record<string, string[]> = {
   d1: ['gains', 'htx_futures'],
   // Group D2: DEX+CEX (every 6h) — 2 platforms, parallel
   d2: ['dydx', 'bybit_spot'],
-  // Group E: CEX+DEX (every 6h) — 2 platforms
-  e: ['coinex', 'binance_web3'],
+  // Group E: CEX+DEX (every 6h) — 3 platforms (bitfinex: 1424 traders, was orphaned)
+  e: ['coinex', 'binance_web3', 'bitfinex'],
   // Group F: Slow CEX (every 6h) — 2 platforms, parallel (~141s + ~60s = ~200s)
   f: ['mexc', 'bingx'],
   // Group H: Fast CEX (every 6h) — 3 platforms, parallel (~25s each)
