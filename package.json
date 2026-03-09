@@ -77,7 +77,7 @@
     "ccxt": "^4.5.42",
     "currency.js": "^2.0.4",
     "epubjs": "^0.3.93",
-    "framer-motion": "^12.33.2",
+    "framer-motion": "^12.35.2",
     "isomorphic-dompurify": "^2.35.0",
     "lightweight-charts": "^5.1.0",
     "lucide-react": "^0.562.0",
