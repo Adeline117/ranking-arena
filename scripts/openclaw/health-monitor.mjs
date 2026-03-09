@@ -34,9 +34,10 @@ const AUTO_FIX_COOLDOWN_MS = 6 * 60 * 60 * 1000
 const fixAttempts = new Map() // platform -> last attempt timestamp
 
 // Dead/blocked platforms - skip in alerts & auto-fix
+// Keep in sync with DEAD_BLOCKED_PLATFORMS in lib/constants/exchanges.ts
 const DEAD_PLATFORMS = new Set([
   'kucoin', 'lbank', 'phemex', 'bitget_spot', 'blofin',
-  'weex', 'mux',
+  'weex', 'mux', 'kwenta', 'synthetix',
 ])
 
 if (!CRON_SECRET) {

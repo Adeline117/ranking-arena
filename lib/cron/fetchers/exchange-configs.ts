@@ -146,5 +146,9 @@ export const EXCHANGE_CONFIGS: ExchangeConfig[] = [toobitConfig, btseConfig, cry
 
 export const CONFIG_DRIVEN_FETCHERS: Record<string, PlatformFetcher> = {}
 for (const config of EXCHANGE_CONFIGS) {
-  CONFIG_DRIVEN_FETCHERS[config.source] = createConfigDrivenFetcher(config)
+  try {
+    CONFIG_DRIVEN_FETCHERS[config.source] = createConfigDrivenFetcher(config)
+  } catch (err) {
+    console.error(`[exchange-configs] Failed to create fetcher for ${config.source}:`, err)
+  }
 }

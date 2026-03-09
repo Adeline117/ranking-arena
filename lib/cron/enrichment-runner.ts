@@ -149,7 +149,7 @@ export const ENRICHMENT_PLATFORM_CONFIGS: Record<string, EnrichmentConfig> = {
   },
   dydx: {
     platform: 'dydx',
-    fetchPositionHistory: fetchGmxPositionHistory,
+    // dYdX has no dedicated position history fetcher — removed incorrect GMX reference
     concurrency: 2, delayMs: 1500,
   },
   kucoin: {
@@ -201,12 +201,14 @@ export async function runEnrichment(params: {
   const supabaseUrl = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL || ''
   const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || ''
   if (!supabaseUrl || !supabaseKey) {
+    await plog.error(new Error('Supabase env vars missing'))
     return { ok: false, duration: 0, period, summary: { total: 0, enriched: 0, failed: 0 }, results: {} }
   }
   const supabase = createClient(supabaseUrl, supabaseKey, { auth: { persistSession: false } })
 
   const platforms = [platformParam].filter((p) => p in ENRICHMENT_PLATFORM_CONFIGS)
   if (platforms.length === 0) {
+    await plog.error(new Error(`Unknown platform: ${platformParam}`))
     return { ok: false, duration: 0, period, summary: { total: 0, enriched: 0, failed: 0 }, results: {} }
   }
 

@@ -9,6 +9,7 @@ import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { checkHealth as checkCacheHealth, getCacheStats } from '@/lib/cache'
 import { getSupportedPlatforms } from '@/lib/cron/utils'
+import { DEAD_BLOCKED_PLATFORMS } from '@/lib/constants/exchanges'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -118,8 +119,9 @@ async function checkDatabaseAndCron(): Promise<{
       }
     }
 
-    // 2. 获取最近的 Cron 运行记录
-    const platforms = getSupportedPlatforms()
+    // 2. 获取最近的 Cron 运行记录 (filter out dead/blocked platforms)
+    const deadSet = new Set(DEAD_BLOCKED_PLATFORMS as string[])
+    const platforms = getSupportedPlatforms().filter(p => !deadSet.has(p))
     const cronRuns: CronRunInfo[] = []
 
     try {

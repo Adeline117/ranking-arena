@@ -710,7 +710,10 @@ export function getAllVerifiablePlatforms(): string[] {
  * Run all verifiers in batches (concurrency=5) to avoid overwhelming networks.
  */
 export async function verifyAll(): Promise<VerifyResult[]> {
-  const platforms = getAllVerifiablePlatforms()
+  // Dynamically import to avoid circular dependency
+  const { DEAD_BLOCKED_PLATFORMS } = await import('@/lib/constants/exchanges')
+  const deadSet = new Set(DEAD_BLOCKED_PLATFORMS as string[])
+  const platforms = getAllVerifiablePlatforms().filter(p => !deadSet.has(p))
   const results: VerifyResult[] = []
   const BATCH_SIZE = 5
 

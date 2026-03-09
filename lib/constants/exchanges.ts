@@ -134,6 +134,7 @@ export const DEAD_BLOCKED_PLATFORMS: TraderSource[] = [
   'mux',          // Requires THEGRAPH_API_KEY (not set), Copin has 0 traders
   'kwenta',       // Copin stopped indexing Sep 2025, TheGraph needs THEGRAPH_API_KEY
   'synthetix',    // Copin stopped indexing Sep 2025, TheGraph needs THEGRAPH_API_KEY
+  'perpetual_protocol', // TheGraph subgraph returns empty data since 2026-03
 ]
 
 // ---------------------------------------------------------------------------

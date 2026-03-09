@@ -15,29 +15,44 @@ import logger from '@/lib/logger'
 import { DEAD_BLOCKED_PLATFORMS } from '@/lib/constants/exchanges'
 
 const PLATFORM_THRESHOLDS: Record<string, number> = {
+  // Tier 1: High-frequency platforms (every 3h)
   okx_futures: 8,
   okx_web3: 8,
-  htx: 8,
-  htx_futures: 8,
   binance_futures: 12,
   binance_spot: 12,
+  bybit: 48,
+  bitget_futures: 48,
+  // Tier 2: Mid-frequency platforms (every 4-6h)
   hyperliquid: 8,
   gmx: 8,
   gains: 8,
+  htx: 8,
+  htx_futures: 8,
   dydx: 12,
+  aevo: 12,
+  jupiter_perps: 12,
+  // Tier 3: Every 6h platforms — threshold 24h (4x interval)
+  drift: 24,
+  bitunix: 24,
+  btcc: 24,
+  bitmart: 24,
+  paradex: 24,
+  bybit_spot: 24,
+  binance_web3: 24,
+  web3_bot: 24,
+  // Tier 4: Slower / less reliable
   mexc: 48,
   kucoin: 48,
   coinex: 48,
-  bybit: 48,
-  bitget_futures: 48,
-  bitget_spot: 48,
   xt: 48,
+  okx_spot: 48,
   bingx: 72,
   blofin: 72,
   lbank: 72,
   weex: 72,
   phemex: 72,
   gateio: 72,
+  bitget_spot: 48,
 }
 
 interface PlatformStatus {
@@ -70,7 +85,7 @@ export async function GET(request: NextRequest) {
   // Security: Verify CRON_SECRET or ADMIN_SECRET
   const authHeader = request.headers.get('authorization')
   const validSecret = process.env.ADMIN_SECRET || process.env.CRON_SECRET
-  if (validSecret && authHeader !== `Bearer ${validSecret}`) {
+  if (!validSecret || authHeader !== `Bearer ${validSecret}`) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
