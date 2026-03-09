@@ -143,31 +143,8 @@ export const ENRICHMENT_PLATFORM_CONFIGS: Record<string, EnrichmentConfig> = {
     fetchPositionHistory: fetchGmxPositionHistory,
     concurrency: 2, delayMs: 1000,
   },
-  mexc: {
-    platform: 'mexc',
-    concurrency: 2, delayMs: 2000,
-  },
-  dydx: {
-    platform: 'dydx',
-    // dYdX has no dedicated position history fetcher — removed incorrect GMX reference
-    concurrency: 2, delayMs: 1500,
-  },
-  kucoin: {
-    platform: 'kucoin',
-    concurrency: 2, delayMs: 2500,
-  },
-  gains: {
-    platform: 'gains',
-    concurrency: 2, delayMs: 1500,
-  },
-  jupiter_perps: {
-    platform: 'jupiter_perps',
-    concurrency: 2, delayMs: 1500,
-  },
-  aevo: {
-    platform: 'aevo',
-    concurrency: 2, delayMs: 1500,
-  },
+  // Empty-shell configs removed (mexc, dydx, kucoin, gains, jupiter_perps, aevo)
+  // — they had no fetch functions, wasting cron time. Re-add when enrichment APIs are available.
   htx_futures: {
     platform: 'htx_futures',
     fetchEquityCurve: fetchHtxEquityCurve,
