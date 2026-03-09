@@ -44,15 +44,21 @@ async function discoverRankingsInline(): Promise<BatchResult> {
     const supabase = createClient(supabaseUrl, supabaseKey)
 
     // Check which platforms have healthy status (not circuit-open)
-    const { data: healthData } = await supabase
-      .from('platform_health')
-      .select('platform, status')
+    // platform_health table may not exist — skip gracefully
+    let blockedPlatforms = new Set<string>()
+    try {
+      const { data: healthData } = await supabase
+        .from('platform_health')
+        .select('platform, status')
 
-    const blockedPlatforms = new Set(
-      (healthData || [])
-        .filter((h: { status: string }) => h.status === 'circuit_open')
-        .map((h: { platform: string }) => h.platform)
-    )
+      blockedPlatforms = new Set(
+        (healthData || [])
+          .filter((h: { status: string }) => h.status === 'circuit_open')
+          .map((h: { platform: string }) => h.platform)
+      )
+    } catch {
+      // platform_health table may not exist — continue without blocking
+    }
 
     const RANKING_PLATFORMS = [
       { platform: 'binance', market_type: 'futures', priority: 5 },
