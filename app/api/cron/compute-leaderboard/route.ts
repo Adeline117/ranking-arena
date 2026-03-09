@@ -103,20 +103,15 @@ export async function GET(request: NextRequest) {
     }
 
     for (const season of SEASONS) {
-      const count = await computeSeason(supabase, season)
+      const count = await computeSeason(supabase, season, previousCounts[season])
       stats.seasons[season] = count
 
-      // P0-2: Degradation protection
-      const prev = previousCounts[season]
-      if (prev > 0 && count < prev * (1 - DEGRADATION_THRESHOLD)) {
-        const msg = `${season}: count dropped ${prev} → ${count} (>${DEGRADATION_THRESHOLD * 100}% drop). Keeping old data.`
-        logger.error(msg)
+      // Degradation protection: computeSeason returns -1 if it aborted
+      if (count === -1) {
+        const msg = `${season}: degradation detected, upsert SKIPPED (previous: ${previousCounts[season]})`
         warnings.push(msg)
         rolledBack.push(season)
-        // Delete newly computed rows and rely on old data still being there
-        // Since we upsert, old rows with same keys are overwritten.
-        // To truly rollback we'd need a transaction. Instead, we alert loudly.
-        // The upsert already happened, so we log the warning for investigation.
+        stats.seasons[season] = previousCounts[season] // Keep old count in stats
       }
     }
 
@@ -165,7 +160,8 @@ export async function GET(request: NextRequest) {
 
 async function computeSeason(
   supabase: ReturnType<typeof getSupabaseAdmin>,
-  season: Period
+  season: Period,
+  previousCount?: number
 ): Promise<number> {
   // Per-source freshness thresholds
   const freshnessISOBySource = (source: string): string => {
@@ -286,7 +282,9 @@ async function computeSeason(
           .in('source_trader_id', chunk)
 
         data?.forEach((s: { source_trader_id: string; handle: string | null; avatar_url: string | null }) => {
-          handleMap.set(`${source}:${s.source_trader_id}`, {
+          // Normalize 0x addresses to lowercase to match dedup key
+          const tid = s.source_trader_id.startsWith('0x') ? s.source_trader_id.toLowerCase() : s.source_trader_id
+          handleMap.set(`${source}:${tid}`, {
             handle: s.handle,
             avatar_url: s.avatar_url || null,
           })
@@ -336,10 +334,12 @@ async function computeSeason(
 
   // Calculate arena_score and rank
   const scored = uniqueTraders.map(t => {
-    // Normalize win_rate
+    // Win rate should already be percentage (0-100) from fetcher normalization.
+    // Only clamp to valid range; don't re-normalize decimal→percentage.
     let normalizedWinRate: number | null = null
     if (t.win_rate != null && !isNaN(t.win_rate)) {
-      const wr = t.win_rate <= 1 ? t.win_rate * 100 : t.win_rate
+      // Safety: if somehow still decimal (0-1 range), convert
+      const wr = t.win_rate > 0 && t.win_rate <= 1 ? t.win_rate * 100 : t.win_rate
       normalizedWinRate = Math.max(0, Math.min(100, wr))
     }
 
@@ -405,6 +405,12 @@ async function computeSeason(
     if (mddA !== mddB) return mddA - mddB
     return a.source_trader_id.localeCompare(b.source_trader_id)
   })
+
+  // Pre-upsert degradation check: abort if count drops >70% from previous
+  if (previousCount && previousCount > 0 && scored.length < previousCount * (1 - DEGRADATION_THRESHOLD)) {
+    logger.error(`${season}: computed ${scored.length} vs previous ${previousCount} (>${DEGRADATION_THRESHOLD * 100}% drop). SKIPPING upsert to preserve data.`)
+    return -1 // Signal degradation — caller handles alerting
+  }
 
   // Upsert into leaderboard_ranks in batches
   let upsertErrors = 0

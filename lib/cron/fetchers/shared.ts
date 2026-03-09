@@ -339,14 +339,18 @@ export async function upsertTraders(
       validated.push(t)
     } else {
       rejected++
-      if (rejected <= 5) {
+      if (rejected <= 10) {
         const issues = result.error.issues.map(i => `${i.path.join('.')}: ${i.message}`).join(', ')
         dataLogger.warn(`[validation] Rejected trader ${t.source}/${t.source_trader_id}: ${issues}`)
       }
     }
   }
   if (rejected > 0) {
-    dataLogger.warn(`[validation] ${rejected}/${traders.length} traders rejected by schema validation (source: ${traders[0]?.source})`)
+    // Log total + first issue summary to detect systemic API format changes
+    const severity = rejected > traders.length * 0.5 ? 'error' : 'warn'
+    const msg = `[validation] ${rejected}/${traders.length} traders rejected (source: ${traders[0]?.source})`
+    if (severity === 'error') dataLogger.error(msg)
+    else dataLogger.warn(msg)
   }
   if (validated.length === 0) return { saved: 0, error: `All ${traders.length} traders failed validation` }
 
@@ -427,12 +431,13 @@ export async function upsertTraders(
     // Upsert trader_snapshots_v2
     const snapshots = batch.map((t) => ({
       platform: t.source,
+      market_type: getMarketType(t.source),
       trader_key: t.source_trader_id,
       window: t.season_id,
       as_of_ts: t.captured_at,
       metrics: {
-        roi: t.roi ?? 0,
-        pnl: t.pnl ?? 0,
+        roi: t.roi ?? null,
+        pnl: t.pnl ?? null,
         win_rate: t.win_rate ?? null,
         max_drawdown: t.max_drawdown ?? null,
         trades_count: t.trades_count ?? null,
@@ -450,12 +455,12 @@ export async function upsertTraders(
       updated_at: new Date().toISOString(),
     }))
 
-    // Insert snapshots (allow duplicates to fail silently)
+    // Upsert snapshots — update metrics on conflict so re-runs refresh data
     const { error: snapErr } = await supabase
       .from('trader_snapshots_v2')
-      .insert(snapshots)
+      .upsert(snapshots, { onConflict: 'platform,market_type,trader_key,window' })
 
-    if (snapErr && !snapErr.message.includes('duplicate key') && !snapErr.message.includes('violates unique constraint')) {
+    if (snapErr) {
       dataLogger.warn(`[upsert] trader_snapshots_v2 error: ${snapErr.message}`)
       return { saved, error: snapErr.message }
     }

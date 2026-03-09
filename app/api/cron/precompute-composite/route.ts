@@ -38,12 +38,16 @@ export async function GET(request: NextRequest) {
 
   try {
     // Fetch all three windows in parallel (top 2000 per window)
+    // Only include data from the last 72 hours to prevent stale composite scores
+    const freshnessThreshold = new Date(Date.now() - 72 * 3600 * 1000).toISOString()
+
     const fetchWindow = async (seasonId: string) => {
       const { data, error } = await supabase
         .from('trader_snapshots')
         .select('source, source_trader_id, captured_at, arena_score, arena_score_v3, roi, pnl, max_drawdown, win_rate, trades_count, followers, profitability_score, risk_control_score, execution_score, score_completeness, trading_style, avg_holding_hours, style_confidence')
         .eq('season_id', seasonId)
         .not('arena_score', 'is', null)
+        .gte('captured_at', freshnessThreshold)
         .lte('roi', ROI_ANOMALY_THRESHOLD)
         .gte('roi', -ROI_ANOMALY_THRESHOLD)
         .or('roi.neq.0,pnl.neq.0')
