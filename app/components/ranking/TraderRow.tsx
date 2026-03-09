@@ -259,7 +259,7 @@ export const TraderRow = memo(function TraderRow({
       href={href}
       className="ranking-row-link"
       style={{ textDecoration: 'none', display: 'block' }}
-      aria-label={`#${rank} ${displayName}, ROI ${(trader.roi || 0) >= 0 ? '+' : ''}${(trader.roi || 0).toFixed(2)}%`}
+      aria-label={`#${rank} ${displayName}, ROI ${(trader.roi ?? 0) >= 0 ? '+' : ''}${(trader.roi ?? 0).toFixed(2)}%`}
       tabIndex={0}
       onMouseEnter={handleMouseEnter}
       onMouseLeave={handleMouseLeave}
@@ -437,7 +437,7 @@ export const TraderRow = memo(function TraderRow({
 
         {/* ROI */}
         {(() => {
-          const roi = trader.roi || 0
+          const roi = trader.roi ?? 0
           const roiColor = roi >= 0 ? tokens.colors.accent.success : tokens.colors.accent.error
           return (
             <Box className="roi-cell" style={{ textAlign: 'right', display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 2 }}>
