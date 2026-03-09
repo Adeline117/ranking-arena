@@ -239,12 +239,30 @@ export async function GET(request: NextRequest) {
       }
     }
 
+    // Step 6: Cleanup old trader_snapshots_v2 rows (keep 180 days)
+    let cleanedUp = 0
+    try {
+      const cutoffDate = new Date(Date.now() - 180 * 24 * 3600 * 1000).toISOString()
+      const { count, error: cleanupErr } = await supabase
+        .from('trader_snapshots_v2')
+        .delete({ count: 'exact' })
+        .lt('as_of_ts', cutoffDate)
+      if (cleanupErr) {
+        logger.warn(`[aggregate] Snapshot cleanup error: ${cleanupErr.message}`)
+      } else {
+        cleanedUp = count ?? 0
+        if (cleanedUp > 0) logger.info(`[aggregate] Cleaned up ${cleanedUp} old snapshots_v2 rows (>180d)`)
+      }
+    } catch (cleanupErr) {
+      logger.warn(`[aggregate] Snapshot cleanup failed: ${cleanupErr}`)
+    }
+
     const duration = Date.now() - startTime
 
     if (errors > 0) {
-      await plog.error(new Error(`${errors} upsert errors`), { inserted, errors, date: dateStr })
+      await plog.error(new Error(`${errors} upsert errors`), { inserted, errors, date: dateStr, cleanedUp })
     } else {
-      await plog.success(inserted, { date: dateStr })
+      await plog.success(inserted, { date: dateStr, cleanedUp })
     }
 
     return NextResponse.json({
@@ -253,7 +271,8 @@ export async function GET(request: NextRequest) {
       processed: snapshotMap.size,
       inserted,
       errors,
-      queries: 3, // vs N*3 before
+      cleanedUp,
+      queries: 3,
       duration: `${duration}ms`,
     })
   } catch (error) {
