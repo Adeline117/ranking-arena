@@ -84,29 +84,13 @@ function HotContent() {
     const load = async () => {
       setLoadingTraders(true)
       try {
-        let { data, error: supabaseError } = await supabase
-          .from('trader_snapshots')
+        const { data, error: supabaseError } = await supabase
+          .from('leaderboard_ranks')
           .select('source, source_trader_id, roi, arena_score, followers, win_rate')
-          .eq('season_id', '90D')
           .not('arena_score', 'is', null)
           .gt('arena_score', 0)
-          .lt('roi', 10000)
           .order('arena_score', { ascending: false })
           .limit(30)
-
-        if (!data || data.length === 0) {
-          const fallbackResult = await supabase
-            .from('trader_snapshots')
-            .select('source, source_trader_id, roi, arena_score, followers, win_rate')
-            .eq('season_id', '90D')
-            .not('roi', 'is', null)
-            .lt('roi', 10000)
-            .order('roi', { ascending: false })
-            .limit(30)
-
-          data = fallbackResult.data
-          supabaseError = fallbackResult.error
-        }
 
         if (supabaseError) {
           logger.error('Trader load error:', supabaseError)

@@ -12,7 +12,9 @@
 
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
-import { isAuthorized, getSupabaseEnv, getSupportedPlatforms } from '@/lib/cron/utils'
+import { isAuthorized, getSupabaseEnv } from '@/lib/cron/utils'
+import { getSupportedInlinePlatforms } from '@/lib/cron/fetchers'
+import { DEAD_BLOCKED_PLATFORMS } from '@/lib/constants/exchanges'
 import { sendScraperAlert } from '@/lib/alerts/send-alert'
 import { captureMessage } from '@/lib/utils/logger'
 import { logger } from '@/lib/logger'
@@ -49,6 +51,7 @@ const PLATFORM_NAMES: Record<string, string> = {
   kucoin: 'KuCoin',
   gmx: 'GMX',
   htx: 'HTX',
+  htx_futures: 'HTX Futures',
   weex: 'WEEX',
   phemex: 'Phemex',
   bingx: 'BingX',
@@ -57,6 +60,19 @@ const PLATFORM_NAMES: Record<string, string> = {
   gains: 'Gains Network',
   lbank: 'LBank',
   blofin: 'BloFin',
+  drift: 'Drift',
+  bitunix: 'Bitunix',
+  btcc: 'BTCC',
+  bitmart: 'BitMart',
+  paradex: 'Paradex',
+  bitfinex: 'Bitfinex',
+  web3_bot: 'Web3 Bot',
+  toobit: 'Toobit',
+  jupiter_perps: 'Jupiter Perps',
+  hyperliquid: 'Hyperliquid',
+  dydx: 'dYdX',
+  aevo: 'Aevo',
+  bybit_spot: 'Bybit Spot',
 }
 
 export interface PlatformFreshnessStatus {
@@ -99,7 +115,9 @@ export async function buildFreshnessReport(): Promise<FreshnessReport> {
     auth: { persistSession: false },
   })
 
-  const platforms = getSupportedPlatforms()
+  const allPlatforms = getSupportedInlinePlatforms()
+  const deadSet = new Set(DEAD_BLOCKED_PLATFORMS as string[])
+  const platforms = allPlatforms.filter(p => !deadSet.has(p))
   const results: PlatformFreshnessStatus[] = []
   const stalePlatforms: string[] = []
   const criticalPlatforms: string[] = []

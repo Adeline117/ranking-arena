@@ -6,8 +6,8 @@ import { getAuthUser } from '@/lib/supabase/server'
 
 const logger = createLogger('exchange-oauth-authorize')
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
-const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || ''
+const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || ''
 
 // OAuth 配置（根据 Binance 官方文档）
 const OAUTH_CONFIG: Record<string, {

@@ -137,30 +137,10 @@ export function formatDisplayName(name: string, platform?: string): string {
 
 /** Short platform label for display */
 function formatPlatformShort(platform: string): string {
-  const map: Record<string, string> = {
-    binance_futures: 'Binance',
-    binance_spot: 'Binance',
-    okx_futures: 'OKX',
-    okx_web3: 'OKX',
-    bybit: 'Bybit',
-    bitget_futures: 'Bitget',
-    bitget_spot: 'Bitget',
-    hyperliquid: 'HL',
-    gmx: 'GMX',
-    mexc: 'MEXC',
-    kucoin: 'KuCoin',
-    coinex: 'CoinEx',
-    htx_futures: 'HTX',
-    xt: 'XT',
-    lbank: 'LBank',
-    dydx: 'dYdX',
-    gains: 'Gains',
-    weex: 'Weex',
-    blofin: 'BloFin',
-    phemex: 'Phemex',
-    aevo: 'Aevo',
-  }
-  return map[platform] || platform
+  // Derive from central EXCHANGE_NAMES, strip " Spot"/" Web3"/" Perps" suffixes for short label
+  const name = EXCHANGE_NAMES[platform]
+  if (!name) return platform
+  return name.replace(/ (?:Spot|Web3|Perps|Network|Protocol)$/i, '')
 }
 
 /**
