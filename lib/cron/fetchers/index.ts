@@ -8,7 +8,6 @@ import type { PlatformFetcher } from './shared'
 
 // CEX - Pure API
 import { fetchOkxFutures } from './okx-futures'
-import { fetchOkxSpot } from './okx-spot'
 import { fetchHtx } from './htx'
 import { fetchBinanceFutures } from './binance-futures'
 import { fetchBinanceSpot } from './binance-spot'
@@ -22,18 +21,17 @@ import { fetchXt } from './xt'
 import { fetchBingx } from './bingx'
 import { fetchGateio } from './gateio'
 import { fetchMexc } from './mexc'
-import { fetchKucoin } from './kucoin'
 import { fetchCoinex } from './coinex'
 import { fetchPhemex } from './phemex'
-import { fetchWeex } from './weex'
-import { fetchLbank } from './lbank'
+// Removed: fetchWeex (disabled 2026-02-08: API returns 521)
+// Removed: fetchLbank (disabled 2026-03-08: API returns "no data")
+// Removed: fetchKucoin (disabled 2026-03-08: API returns 404)
 import { fetchBlofin } from './blofin'
 import { fetchCryptocom } from './cryptocom'
 import { fetchBitfinex } from './bitfinex'
 import { fetchWhitebit } from './whitebit'
 import { fetchBtse } from './btse'
 import { fetchToobit } from './toobit'
-import { fetchPionex } from './pionex'
 
 // DEX - On-chain / Subgraph
 import { fetchHyperliquid } from './hyperliquid'
@@ -44,16 +42,6 @@ import { fetchAevo } from './aevo'
 import { fetchDydx } from './dydx'
 import { fetchUniswap } from './uniswap'
 import { fetchPancakeSwap } from './pancakeswap'
-import fetchPerpetualProtocol from './perpetual'
-import { fetchKwenta } from './kwenta'
-import { fetchSynthetix } from './synthetix'
-import { fetchMux } from './mux'
-import { fetchBitmart } from './bitmart'
-import { fetchWeb3Bot } from './web3-bot'
-import { fetchDrift } from './drift'
-import { fetchBitunix } from './bitunix'
-import { fetchParadex } from './paradex'
-import { fetchBtcc } from './btcc'
 
 export const INLINE_FETCHERS: Record<string, PlatformFetcher> = {
   // CEX Futures
@@ -65,7 +53,6 @@ export const INLINE_FETCHERS: Record<string, PlatformFetcher> = {
   binance_web3: fetchBinanceWeb3,
   bybit: fetchBybit,
   bybit_spot: fetchBybitSpot,
-  okx_spot: fetchOkxSpot,
   okx_web3: fetchOkxWeb3,
   bitget_futures: fetchBitgetFutures,
   bitget_spot: fetchBitgetSpot,
@@ -73,18 +60,15 @@ export const INLINE_FETCHERS: Record<string, PlatformFetcher> = {
   bingx: fetchBingx,
   gateio: fetchGateio,
   mexc: fetchMexc,
-  kucoin: fetchKucoin,
   coinex: fetchCoinex,
   phemex: fetchPhemex,
-  weex: fetchWeex,
-  lbank: fetchLbank,
+  // Removed: weex, lbank, kucoin (all disabled in config.ts)
   blofin: fetchBlofin,
   cryptocom: fetchCryptocom,
   bitfinex: fetchBitfinex,
   whitebit: fetchWhitebit,
   btse: fetchBtse,
   toobit: fetchToobit,
-  pionex: fetchPionex,
 
   // DEX
   hyperliquid: fetchHyperliquid,
@@ -95,45 +79,10 @@ export const INLINE_FETCHERS: Record<string, PlatformFetcher> = {
   dydx: fetchDydx,
   uniswap: fetchUniswap,
   pancakeswap: fetchPancakeSwap,
-  perpetual_protocol: fetchPerpetualProtocol,
-  kwenta: fetchKwenta,
-  synthetix: fetchSynthetix,
-  mux: fetchMux,
-  bitmart: fetchBitmart,
-  web3_bot: fetchWeb3Bot,
-  drift: fetchDrift,
-  bitunix: fetchBitunix,
-  paradex: fetchParadex,
-  btcc: fetchBtcc,
 }
 
-/**
- * Get a fetcher with automatic retry wrapper.
- * Retries once on transient errors (network, 5xx, timeout) with 2s delay.
- */
 export function getInlineFetcher(platform: string): PlatformFetcher | undefined {
-  const baseFetcher = INLINE_FETCHERS[platform]
-  if (!baseFetcher) return undefined
-
-  // Wrap with retry logic for transient failures
-  const wrappedFetcher: PlatformFetcher = async (supabase, periods) => {
-    const maxRetries = 1
-    let lastError: unknown
-    for (let attempt = 0; attempt <= maxRetries; attempt++) {
-      try {
-        return await baseFetcher(supabase, periods)
-      } catch (error) {
-        lastError = error
-        const msg = error instanceof Error ? error.message : String(error)
-        const isTransient = /timeout|abort|ECONNRESET|ETIMEDOUT|fetch failed|5\d\d|429|socket hang up/i.test(msg)
-        if (attempt >= maxRetries || !isTransient) throw error
-        // Wait 2s before retry with jitter
-        await new Promise(r => setTimeout(r, 2000 + Math.random() * 1000))
-      }
-    }
-    throw lastError
-  }
-  return wrappedFetcher
+  return INLINE_FETCHERS[platform]
 }
 
 export function getSupportedInlinePlatforms(): string[] {
