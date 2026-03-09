@@ -147,6 +147,7 @@ export const DEAD_BLOCKED_PLATFORMS: TraderSource[] = [
   'kwenta',       // Merged into Synthetix, Copin stale since Sep 2025
   'synthetix',    // Copin stale since Sep 2025, TheGraph needs API key
   'toobit',       // API returns HTML (needs browser session), only 238 snapshots
+  'paradex',      // API now requires JWT auth (was public, changed ~2026-03)
 ]
 
 // ---------------------------------------------------------------------------

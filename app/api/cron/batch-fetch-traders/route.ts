@@ -15,7 +15,7 @@
  *   group=f  → mexc, bingx (every 6h)
  *   group=h  → gateio, bitmart, btcc (every 6h)
  *   group=g1 → drift, bitunix (every 6h)
- *   group=g2 → web3_bot, paradex (every 6h)
+ *   group=g2 → web3_bot (every 6h)
  *
  * Dead/blocked platforms removed:
  *   - kucoin: APIs return 404, feature discontinued
@@ -63,8 +63,9 @@ const GROUPS: Record<string, string[]> = {
   h: ['gateio', 'bitmart', 'btcc'],
   // Group G1: DEX (every 6h) — 2 platforms, parallel
   g1: ['drift', 'bitunix'],
-  // Group G2: DEX (every 6h) — 2 platforms, parallel
-  g2: ['web3_bot', 'paradex'],
+  // Group G2: DEX (every 6h) — 1 platform
+  // paradex removed: API now requires JWT auth since 2026-03
+  g2: ['web3_bot'],
 }
 
 interface BatchResult {
