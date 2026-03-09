@@ -68,6 +68,7 @@ export async function GET(request: NextRequest) {
         .limit(50000)
 
       if (fallbackError || !fallbackData) {
+        await plog.error(fallbackError || new Error('No snapshot data returned'))
         return NextResponse.json(
           { error: 'Failed to fetch snapshots', details: fallbackError?.message },
           { status: 500 }
@@ -206,19 +207,23 @@ export async function GET(request: NextRequest) {
         }
 
         // Batch update sharpe_ratio in trader_snapshots
+        // Use Promise.all with batches of 50 to reduce N+1 pattern (was 1 query per trader)
         if (sharpeUpdates.length > 0) {
           let sharpeUpdated = 0
-          for (let i = 0; i < sharpeUpdates.length; i += 100) {
-            const batch = sharpeUpdates.slice(i, i + 100)
-            for (const upd of batch) {
-              const { error: shErr } = await supabase
-                .from('trader_snapshots')
-                .update({ sharpe_ratio: upd.sharpe_ratio })
-                .eq('source', upd.source)
-                .eq('source_trader_id', upd.source_trader_id)
-                .is('sharpe_ratio', null)
-              if (!shErr) sharpeUpdated++
-            }
+          const SHARPE_BATCH = 50
+          for (let i = 0; i < sharpeUpdates.length; i += SHARPE_BATCH) {
+            const batch = sharpeUpdates.slice(i, i + SHARPE_BATCH)
+            const results = await Promise.all(
+              batch.map(upd =>
+                supabase
+                  .from('trader_snapshots')
+                  .update({ sharpe_ratio: upd.sharpe_ratio })
+                  .eq('source', upd.source)
+                  .eq('source_trader_id', upd.source_trader_id)
+                  .is('sharpe_ratio', null)
+              )
+            )
+            sharpeUpdated += results.filter(r => !r.error).length
           }
           logger.info(`[aggregate] Computed Sharpe ratio for ${sharpeUpdated}/${sharpeUpdates.length} traders`)
         }
