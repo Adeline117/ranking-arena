@@ -204,10 +204,12 @@ export default function RootLayout({
           <CapacitorProvider>
             {/* Load non-critical CSS after hydration */}
             <AsyncStylesheets />
-            {/* Analytics deferred via dynamic import */}
-            <WebVitals />
-            <SpeedInsights />
-            <Analytics />
+            {/* Analytics deferred: loaded after LCP via Suspense */}
+            <Suspense fallback={null}>
+              <WebVitals />
+              <SpeedInsights />
+              <Analytics />
+            </Suspense>
             <NetworkStatusBanner />
             <SkipLink targetId="main-content" />
             <ServiceWorkerRegistration />
