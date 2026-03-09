@@ -34,15 +34,16 @@ export async function GET(req: NextRequest) {
   ])
 
   // Filter out dead/blocked platforms from failure counts
-  const deadSet = new Set<string>(DEAD_BLOCKED_PLATFORMS)
+  const deadSet = new Set<string>([
+    ...DEAD_BLOCKED_PLATFORMS,
+    'okx_spot', // No spot copy-trading API exists
+  ])
   const isDeadPlatformJob = (jobName: string) => {
-    // Extract platform name from various job name patterns
-    const platform = jobName
-      .replace('fetch-traders-', '')
-      .replace('batch-fetch-traders-', '')
-      .replace('verify-', '')
-      .replace('enrich-', '')
-    return deadSet.has(platform)
+    // Check if any dead platform name appears in the job name
+    for (const dead of deadSet) {
+      if (jobName.includes(dead)) return true
+    }
+    return false
   }
   const recentFailures = recentFailuresRaw.filter(
     (f: { job_name?: string }) => !isDeadPlatformJob(f.job_name || '')
