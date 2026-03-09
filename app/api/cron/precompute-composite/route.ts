@@ -25,6 +25,7 @@ const logger = createLogger('precompute-composite')
 const COMPOSITE_WEIGHTS = { '7D': 0.20, '30D': 0.45, '90D': 0.35 } as const
 const ROI_ANOMALY_THRESHOLD = 5000
 const _CACHE_TTL_SECONDS = 10800 // 3 hours (cron runs every 2h, overlap for safety)
+const FRESHNESS_HOURS = 168 // 7 days — resilient to intermittent fetch failures
 
 export async function GET(request: NextRequest) {
   const authHeader = request.headers.get('authorization')
@@ -38,8 +39,9 @@ export async function GET(request: NextRequest) {
 
   try {
     // Fetch all three windows in parallel (top 2000 per window)
-    // Only include data from the last 72 hours to prevent stale composite scores
-    const freshnessThreshold = new Date(Date.now() - 72 * 3600 * 1000).toISOString()
+    // Include data from the last 7 days — some platforms (Bybit VPS scraper) may
+    // have intermittent failures; 72h was too aggressive and dropped platforms entirely
+    const freshnessThreshold = new Date(Date.now() - 168 * 3600 * 1000).toISOString()
 
     const fetchWindow = async (seasonId: string) => {
       const { data, error } = await supabase

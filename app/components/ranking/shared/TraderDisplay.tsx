@@ -6,7 +6,7 @@ import Image from 'next/image'
 import { tokens } from '@/lib/design-tokens'
 import { RankingBadge } from '../../ui/icons'
 import { Box, Text } from '../../base'
-import { getAvatarGradient, getAvatarInitial, getTraderAvatarUrl } from '@/lib/utils/avatar'
+import { getAvatarGradient, getAvatarInitial, getTraderAvatarUrl, isWalletAddress, generateBlockieSvg } from '@/lib/utils/avatar'
 import { getScoreColorInfo, getScoreColor } from '@/lib/utils/score-colors'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import type { Trader } from '../RankingTable'
@@ -97,6 +97,8 @@ export function TraderAvatar({ traderId, displayName, avatarUrl, rank, size = 36
   size?: number
 }) {
   const proxyAvatarUrl = getTraderAvatarUrl(avatarUrl)
+  // For DEX wallet addresses without avatar, generate a blockie
+  const blockieSrc = !proxyAvatarUrl && isWalletAddress(traderId) ? generateBlockieSvg(traderId, size * 2) : null
   const medalGlow = rank <= 3
     ? `0 0 12px ${rank === 1 ? 'var(--color-gold-glow)' : rank === 2 ? 'var(--color-silver-glow)' : 'var(--color-bronze-glow)'}`
     : 'none'
@@ -122,7 +124,7 @@ export function TraderAvatar({ traderId, displayName, avatarUrl, rank, size = 36
       }}>
         {getAvatarInitial(displayName)}
       </span>
-      {proxyAvatarUrl && (
+      {proxyAvatarUrl ? (
         <Image
           src={proxyAvatarUrl}
           alt={displayName}
@@ -135,7 +137,16 @@ export function TraderAvatar({ traderId, displayName, avatarUrl, rank, size = 36
           style={{ width: '100%', height: '100%', objectFit: 'cover', position: 'absolute', inset: 0, zIndex: 1 }}
           onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none' }}
         />
-      )}
+      ) : blockieSrc ? (
+        /* eslint-disable-next-line @next/next/no-img-element */
+        <img
+          src={blockieSrc}
+          alt={displayName}
+          width={size}
+          height={size}
+          style={{ width: '100%', height: '100%', objectFit: 'cover', position: 'absolute', inset: 0, zIndex: 1, imageRendering: 'pixelated' }}
+        />
+      ) : null}
     </div>
   )
 }
