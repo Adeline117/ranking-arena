@@ -81,24 +81,32 @@
       "schedule": "15 */4 * * *"
     },
     {
-      "path": "/api/cron/batch-fetch-traders?group=d",
-      "schedule": "25 */6 * * *"
+      "path": "/api/cron/batch-fetch-traders?group=d1",
+      "schedule": "20 */6 * * *"
+    },
+    {
+      "path": "/api/cron/batch-fetch-traders?group=d2",
+      "schedule": "28 */6 * * *"
     },
     {
       "path": "/api/cron/batch-fetch-traders?group=e",
-      "schedule": "35 */6 * * *"
+      "schedule": "36 */6 * * *"
     },
     {
       "path": "/api/cron/batch-fetch-traders?group=f",
-      "schedule": "45 */6 * * *"
+      "schedule": "44 */6 * * *"
     },
     {
       "path": "/api/cron/batch-fetch-traders?group=h",
-      "schedule": "50 */6 * * *"
+      "schedule": "52 */6 * * *"
     },
     {
-      "path": "/api/cron/batch-fetch-traders?group=g",
-      "schedule": "55 */6 * * *"
+      "path": "/api/cron/batch-fetch-traders?group=g1",
+      "schedule": "8 1,7,13,19 * * *"
+    },
+    {
+      "path": "/api/cron/batch-fetch-traders?group=g2",
+      "schedule": "16 1,7,13,19 * * *"
     },
     {
       "path": "/api/cron/batch-enrich?period=all",
@@ -118,7 +126,7 @@
     },
     {
       "path": "/api/cron/backfill-data?type=snapshots&limit=200",
-      "schedule": "50 */2 * * *"
+      "schedule": "40 1,3,5,7,9,11,13,15,17,19,21,23 * * *"
     },
     {
       "path": "/api/cron/backfill-data?type=enrichment&limit=150",
@@ -138,14 +146,14 @@
     },
     {
       "path": "/api/cron/precompute-composite",
-      "schedule": "0 */2 * * *"
+      "schedule": "12 */2 * * *"
     },
     {
       "path": "/api/cron/backfill-avatars?platform=binance_futures,bybit,bitget_futures,okx_futures,mexc,htx_futures,bingx,drift&limit=400",
       "schedule": "30 2 * * *"
     },
     {
-      "path": "/api/cron/backfill-avatars?platform=coinex,binance_spot,weex,phemex,xt,bitunix,gateio,bitmart&limit=400",
+      "path": "/api/cron/backfill-avatars?platform=coinex,binance_spot,xt,bitunix,gateio,bitmart,drift,btcc&limit=400",
       "schedule": "30 8 * * *"
     }
   ],

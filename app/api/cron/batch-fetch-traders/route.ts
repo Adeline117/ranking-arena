@@ -9,11 +9,13 @@
  *   group=a2 → bybit, bitget_futures, okx_futures (every 3h)
  *   group=b  → hyperliquid, gmx, jupiter_perps (every 4h)
  *   group=c  → okx_web3, aevo, xt (every 4h)
- *   group=d  → gains, htx_futures, dydx, bybit_spot (every 6h)
- *   group=e  → coinex, binance_web3, toobit (every 6h)
+ *   group=d1 → gains, htx_futures (every 6h)
+ *   group=d2 → dydx, bybit_spot (every 6h)
+ *   group=e  → coinex, binance_web3 (every 6h)
  *   group=f  → mexc, bingx (every 6h)
  *   group=h  → gateio, bitmart, btcc (every 6h)
- *   group=g  → drift, bitunix, web3_bot, paradex (every 6h)
+ *   group=g1 → drift, bitunix (every 6h)
+ *   group=g2 → web3_bot, paradex (every 6h)
  *
  * Dead/blocked platforms removed:
  *   - kucoin: APIs return 404, feature discontinued
@@ -49,17 +51,20 @@ const GROUPS: Record<string, string[]> = {
   b: ['hyperliquid', 'gmx', 'jupiter_perps'],
   // Group C: Mid-priority (every 4h) — 3 platforms, ~70s parallel
   c: ['okx_web3', 'aevo', 'xt'],
-  // Group D: CEX+DEX (every 6h) — 4 platforms
-  d: ['gains', 'htx_futures', 'dydx', 'bybit_spot'],
+  // Group D1: CEX (every 6h) — 2 platforms, parallel
+  d1: ['gains', 'htx_futures'],
+  // Group D2: DEX+CEX (every 6h) — 2 platforms, parallel
+  d2: ['dydx', 'bybit_spot'],
   // Group E: CEX+DEX (every 6h) — 2 platforms
   e: ['coinex', 'binance_web3'],
   // Group F: Slow CEX (every 6h) — 2 platforms, parallel (~141s + ~60s = ~200s)
   f: ['mexc', 'bingx'],
   // Group H: Fast CEX (every 6h) — 3 platforms, parallel (~25s each)
   h: ['gateio', 'bitmart', 'btcc'],
-  // Group G: DEX (every 6h) — 4 platforms
-  // uniswap/pancakeswap removed: need THEGRAPH_API_KEY (not set)
-  g: ['drift', 'bitunix', 'web3_bot', 'paradex'],
+  // Group G1: DEX (every 6h) — 2 platforms, parallel
+  g1: ['drift', 'bitunix'],
+  // Group G2: DEX (every 6h) — 2 platforms, parallel
+  g2: ['web3_bot', 'paradex'],
 }
 
 interface BatchResult {
@@ -147,10 +152,12 @@ export async function GET(request: NextRequest) {
     }
   }
 
-  // Small groups (≤3): run in parallel to maximize use of 300s budget
-  // Large groups: run sequentially with delays to avoid upstream rate limits
+  // Groups with ≤2 platforms run in parallel.
+  // Groups with 3+ platforms run sequentially with delays to avoid
+  // module-scoped state corruption (e.g. _bybitStrategy, _cachedStrategy caches
+  // in bybit.ts and okx-futures.ts are shared across concurrent calls).
   let results: BatchResult[]
-  if (platforms.length <= 3) {
+  if (platforms.length <= 2) {
     results = await Promise.all(platforms.map(runPlatform))
   } else {
     results = []

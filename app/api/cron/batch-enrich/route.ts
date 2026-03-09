@@ -30,21 +30,18 @@ const PLATFORM_LIMITS: Record<string, { limit90: number; limit30: number; limit7
   gmx: { limit90: 100, limit30: 80, limit7: 50 },
   mexc: { limit90: 80, limit30: 60, limit7: 40 },
   htx_futures: { limit90: 80, limit30: 60, limit7: 40 },
-  kucoin: { limit90: 60, limit30: 50, limit7: 30 },
   dydx: { limit90: 80, limit30: 60, limit7: 40 },
   gains: { limit90: 60, limit30: 50, limit7: 30 },
   jupiter_perps: { limit90: 60, limit30: 50, limit7: 30 },
   aevo: { limit90: 60, limit30: 50, limit7: 30 },
-  kwenta: { limit90: 60, limit30: 50, limit7: 30 },
-  synthetix: { limit90: 60, limit30: 50, limit7: 30 },
-  mux: { limit90: 40, limit30: 30, limit7: 20 },
 }
 
 // High priority platforms (always enriched)
 const HIGH_PRIORITY = ['binance_futures', 'bybit', 'okx_futures', 'bitget_futures', 'hyperliquid', 'gmx']
 
 // Medium priority (enriched with all=true or period=90D)
-const MEDIUM_PRIORITY = ['binance_spot', 'bybit_spot', 'bitget_spot', 'mexc', 'htx_futures', 'dydx', 'gains', 'aevo']
+// bitget_spot removed: no public enrichment API available
+const MEDIUM_PRIORITY = ['binance_spot', 'bybit_spot', 'mexc', 'htx_futures', 'dydx', 'gains', 'aevo']
 
 // Lower priority (enriched only with all=true)
 // kwenta/synthetix/mux removed: no viable data source since 2025
