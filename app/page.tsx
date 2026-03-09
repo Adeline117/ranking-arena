@@ -70,17 +70,17 @@ const webSiteJsonLd = {
 export default async function Page() {
   const { traders: initialTraders } = await getInitialTraders('90D', 25)
 
-  // Preload top 3 trader avatars — critical for LCP (saves ~200ms)
+  // Preload top 3 trader avatars — use direct CDN URLs (avoids /api/avatar proxy roundtrip)
   const top3Avatars = initialTraders
     .slice(0, 3)
-    .filter(t => t.avatar_url)
-    .map(t => `/api/avatar?url=${encodeURIComponent(t.avatar_url!)}`)
+    .filter(t => t.avatar_url && !t.avatar_url.startsWith('/'))
+    .map(t => t.avatar_url!)
 
   return (
     <>
-      {/* Preload top 3 avatars for faster LCP */}
+      {/* Preload top 3 avatars for faster LCP — direct CDN URLs */}
       {top3Avatars.map(url => (
-        <link key={url} rel="preload" as="image" href={url} />
+        <link key={url} rel="preload" as="image" href={url} crossOrigin="anonymous" />
       ))}
       <JsonLd data={organizationJsonLd} />
       <JsonLd data={webSiteJsonLd} />
