@@ -200,10 +200,10 @@ export default function RootLayout({
         style={{ fontFamily: 'var(--font-inter), "PingFang SC", "Microsoft YaHei", "Noto Sans CJK SC", system-ui, sans-serif' }}
         suppressHydrationWarning
       >
+        {/* Load non-critical CSS early — outside Providers to avoid waiting for hydration */}
+        <AsyncStylesheets />
         <Providers>
           <CapacitorProvider>
-            {/* Load non-critical CSS after hydration */}
-            <AsyncStylesheets />
             {/* Analytics deferred: loaded after LCP via Suspense */}
             <Suspense fallback={null}>
               <WebVitals />

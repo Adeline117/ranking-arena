@@ -94,6 +94,7 @@ main{min-height:100vh;background:var(--bg-primary,#0B0A10)}
 @media(min-width:1024px){
   .hide-tablet{display:block}
   .show-tablet{display:none}
+  .show-below-lg{display:none}
 }
 
 /* ============================================
