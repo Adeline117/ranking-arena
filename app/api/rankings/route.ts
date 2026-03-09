@@ -340,8 +340,8 @@ async function getRankingsFallback(rankingsQuery: RankingsQuery, cursor?: string
       avatar_url: sourceInfo?.avatar_url || null,
       rank: offset + idx + 1,
       metrics: {
-        roi: row.roi != null ? parseFloat(row.roi) : 0,
-        pnl: row.pnl != null ? parseFloat(row.pnl) : 0,
+        roi: row.roi != null ? parseFloat(row.roi) : null,
+        pnl: row.pnl != null ? parseFloat(row.pnl) : null,
         win_rate: row.win_rate != null ? parseFloat(row.win_rate) : null,
         max_drawdown: row.max_drawdown != null ? parseFloat(row.max_drawdown) : null,
         trades_count: row.trades_count ?? null,
@@ -549,8 +549,8 @@ async function getCompositeRankings(params: {
       avatar_url: info?.avatar_url || null,
       rank: offset + idx + 1,
       metrics: {
-        roi: row.roi != null ? parseFloat(row.roi as string) : 0,
-        pnl: row.pnl != null ? parseFloat(row.pnl as string) : 0,
+        roi: row.roi != null ? parseFloat(row.roi as string) : null,
+        pnl: row.pnl != null ? parseFloat(row.pnl as string) : null,
         win_rate: row.win_rate != null ? parseFloat(row.win_rate as string) : null,
         max_drawdown: row.max_drawdown != null ? parseFloat(row.max_drawdown as string) : null,
         trades_count: row.trades_count ?? null,
