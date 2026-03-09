@@ -104,8 +104,9 @@ export async function GET(request: NextRequest) {
       const getScore = (r: SnapshotRow | undefined) => {
         if (!r) return null
         const v3 = r.arena_score_v3 != null ? parseFloat(r.arena_score_v3 as string) : null
-        if (v3 != null) return v3
-        return r.arena_score != null ? parseFloat(r.arena_score as string) : null
+        if (v3 != null) return Math.min(v3, 100)
+        const v2 = r.arena_score != null ? parseFloat(r.arena_score as string) : null
+        return v2 != null ? Math.min(v2, 100) : null
       }
 
       const s7 = getScore(r7)
@@ -120,7 +121,7 @@ export async function GET(request: NextRequest) {
       if (s30 != null) { weightedSum += s30 * COMPOSITE_WEIGHTS['30D']; totalWeight += COMPOSITE_WEIGHTS['30D'] }
       if (s90 != null) { weightedSum += s90 * COMPOSITE_WEIGHTS['90D']; totalWeight += COMPOSITE_WEIGHTS['90D'] }
 
-      const compositeScore = totalWeight > 0 ? weightedSum / totalWeight : 0
+      const compositeScore = totalWeight > 0 ? Math.min(weightedSum / totalWeight, 100) : 0
       const primaryRow = r90 || r30 || r7!
       const [source, ...rest] = key.split(':')
       const source_trader_id = rest.join(':')
