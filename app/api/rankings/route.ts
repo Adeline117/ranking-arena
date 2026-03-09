@@ -348,7 +348,7 @@ async function getRankingsFallback(rankingsQuery: RankingsQuery, cursor?: string
         followers: row.followers ?? null,
         copiers: null,
         aum: null,
-        arena_score: row.arena_score ? parseFloat(row.arena_score) : null,
+        arena_score: row.arena_score != null ? parseFloat(row.arena_score) : null,
         return_score: null,
         drawdown_score: null,
         stability_score: null,

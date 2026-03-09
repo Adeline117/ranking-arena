@@ -70,6 +70,10 @@ export type TraderSource =
   | 'dune_uniswap'
   | 'dune_defi'
   // Web3 bots / AI agents
+  // CEX margin
+  | 'bitfinex'
+  | 'toobit'
+  // Web3 bots / AI agents
   | 'web3_bot'
 
 // ---------------------------------------------------------------------------
@@ -114,6 +118,8 @@ export const ALL_SOURCES: TraderSource[] = [
   // New CEX
   'bitunix',
   'btcc',
+  'bitfinex',
+  'toobit',
   // Web3 bots
   'web3_bot',
 ]
@@ -140,6 +146,7 @@ export const DEAD_BLOCKED_PLATFORMS: TraderSource[] = [
   'mux',          // TheGraph needs THEGRAPH_API_KEY, Copin has 0 traders
   'kwenta',       // Merged into Synthetix, Copin stale since Sep 2025
   'synthetix',    // Copin stale since Sep 2025, TheGraph needs API key
+  'toobit',       // API returns HTML (needs browser session), only 238 snapshots
 ]
 
 // ---------------------------------------------------------------------------
@@ -286,6 +293,8 @@ export const EXCHANGE_CONFIG: Record<TraderSource, ExchangeConfig> = {
   dune_defi: { name: 'DeFi (Dune)', sourceType: 'web3', reliability: 80, trustWeight: 0.80, roiType: 'mixed' },
   bitunix: { name: 'Bitunix', sourceType: 'futures', reliability: 65, trustWeight: 0.75, roiType: 'mixed' },
   btcc: { name: 'BTCC', sourceType: 'futures', reliability: 65, trustWeight: 0.75, roiType: 'mixed' },
+  bitfinex: { name: 'Bitfinex', sourceType: 'futures', reliability: 70, trustWeight: 0.80, roiType: 'mixed' },
+  toobit: { name: 'Toobit', sourceType: 'futures', reliability: 50, trustWeight: 0.65, roiType: 'mixed' },
   web3_bot: { name: 'Web3 Bot', sourceType: 'web3', reliability: 75, trustWeight: 0.70, roiType: 'mixed' },
   kwenta: { name: 'Kwenta', sourceType: 'futures', reliability: 70, trustWeight: 0.75, roiType: 'mixed' },
   synthetix: { name: 'Synthetix', sourceType: 'futures', reliability: 70, trustWeight: 0.75, roiType: 'mixed' },

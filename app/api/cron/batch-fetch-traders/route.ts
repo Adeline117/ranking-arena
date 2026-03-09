@@ -10,7 +10,7 @@
  *   group=b  → hyperliquid, gmx, jupiter_perps (every 4h)
  *   group=c  → okx_web3, aevo, xt (every 4h)
  *   group=d1 → gains, htx_futures (every 6h)
- *   group=d2 → dydx, bybit_spot (every 6h)
+ *   group=d2 → dydx, bybit_spot, okx_spot (every 6h)
  *   group=e  → coinex, binance_web3 (every 6h)
  *   group=f  → mexc, bingx (every 6h)
  *   group=h  → gateio, bitmart, btcc (every 6h)
@@ -54,7 +54,7 @@ const GROUPS: Record<string, string[]> = {
   // Group D1: CEX (every 6h) — 2 platforms, parallel
   d1: ['gains', 'htx_futures'],
   // Group D2: DEX+CEX (every 6h) — 2 platforms, parallel
-  d2: ['dydx', 'bybit_spot'],
+  d2: ['dydx', 'bybit_spot', 'okx_spot'],
   // Group E: CEX+DEX (every 6h) — 3 platforms (bitfinex: 1424 traders, was orphaned)
   e: ['coinex', 'binance_web3', 'bitfinex'],
   // Group F: Slow CEX (every 6h) — 2 platforms, parallel (~141s + ~60s = ~200s)
@@ -96,6 +96,13 @@ export async function GET(request: NextRequest) {
 
   const overallStart = Date.now()
   const plog = await PipelineLogger.start(`batch-fetch-traders-${group}`, { group, platforms })
+
+  // Safety timeout: ensure plog gets called before Vercel kills the function at 300s
+  const safetyTimer = setTimeout(async () => {
+    try {
+      await plog.error(new Error('Safety timeout: function approaching 300s limit'))
+    } catch { /* best effort */ }
+  }, 280_000)
 
   // Per-platform timeout: 240s leaves 60s buffer for logging/cleanup within 300s limit
   const PLATFORM_TIMEOUT_MS = 240_000
@@ -169,6 +176,7 @@ export async function GET(request: NextRequest) {
     }
   }
 
+  clearTimeout(safetyTimer)
   const succeeded = results.filter((r) => r.status === 'success').length
   const failed = results.length - succeeded
 

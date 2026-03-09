@@ -222,7 +222,7 @@ export default function TraderProfileClient({ data, serverTraderData }: TraderPr
           <span className="mini-name">{displayName}</span>
           {data.roi != null && (
             <span className="mini-roi" style={{ color: data.roi >= 0 ? 'var(--color-success)' : 'var(--color-error)' }}>
-              {data.roi >= 0 ? '+' : ''}{(data.roi * 100).toFixed(1)}%
+              {data.roi >= 0 ? '+' : ''}{data.roi.toFixed(1)}%
             </span>
           )}
         </div>
@@ -239,7 +239,7 @@ export default function TraderProfileClient({ data, serverTraderData }: TraderPr
           copiers={traderProfile?.copiers}
           source={traderProfile?.source || data.source}
           isPro={isPro}
-          roi90d={traderPerformance?.roi_90d ?? (data.roi != null ? data.roi * 100 : undefined)}
+          roi90d={traderPerformance?.roi_90d ?? (data.roi != null ? data.roi : undefined)}
           maxDrawdown={traderPerformance?.max_drawdown ?? data.max_drawdown ?? undefined}
           winRate={traderPerformance?.win_rate ?? data.win_rate ?? undefined}
           rank={data.rank ?? null}
