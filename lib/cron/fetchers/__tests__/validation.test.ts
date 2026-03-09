@@ -29,7 +29,7 @@ function validTrader(overrides: Record<string, unknown> = {}) {
     roi: 42.5,
     pnl: 10000,
     win_rate: 65.3,
-    max_drawdown: -12.5,
+    max_drawdown: 12.5,
     arena_score: 78.2,
     captured_at: '2025-01-15T00:00:00Z',
     ...overrides,

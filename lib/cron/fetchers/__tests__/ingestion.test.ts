@@ -536,7 +536,7 @@ describe('Deduplication & data integrity', () => {
       roi: 50,
       pnl: 1000,
       win_rate: 60,
-      max_drawdown: -10,
+      max_drawdown: 10,
       arena_score: 70,
       captured_at: '2025-01-01T00:00:00Z',
     })
@@ -552,7 +552,7 @@ describe('Deduplication & data integrity', () => {
       roi: 120.5,
       pnl: 50000,
       win_rate: 72,
-      max_drawdown: -15,
+      max_drawdown: 15,
       arena_score: 85.5,
       captured_at: '2025-03-01T12:00:00Z',
     })
