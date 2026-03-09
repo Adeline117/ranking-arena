@@ -273,36 +273,39 @@ async function fetchPeriod(
     await sleep(DELAY_MS)
   }
 
-  // Phase 3: Save equity curves and stats_detail for ALL periods (extended from 90D only)
+  // Phase 3: Save equity curves and stats_detail in parallel batches (was sequential, caused 240s timeouts)
   logger.warn(`[${SOURCE}] Saving equity curves and stats details for ${period}...`)
   let curvesSaved = 0
   let statsSaved = 0
-  for (const trader of toEnrich) {
-    if (trader.equityCurve.length > 0) {
-      await upsertEquityCurve(supabase, SOURCE, trader.address, period, trader.equityCurve)
-      curvesSaved++
-    }
-    // Save stats_detail
-    const stats: StatsDetail = {
-      totalTrades: trader.tradesCount,
-      profitableTradesPct: trader.winRate,
-      avgHoldingTimeHours: null,
-      avgProfit: null,
-      avgLoss: null,
-      largestWin: null,
-      largestLoss: null,
-      sharpeRatio: null,
-      maxDrawdown: trader.maxDrawdown,
-      currentDrawdown: null,
-      volatility: null,
-      copiersCount: null,
-      copiersPnl: null,
-      aum: null,
-      winningPositions: null,
-      totalPositions: trader.tradesCount,
-    }
-    const { saved: s } = await upsertStatsDetail(supabase, SOURCE, trader.address, period, stats)
-    if (s) statsSaved++
+  const WRITE_BATCH = 10
+  for (let wi = 0; wi < toEnrich.length; wi += WRITE_BATCH) {
+    const batch = toEnrich.slice(wi, wi + WRITE_BATCH)
+    await Promise.all(batch.map(async (trader) => {
+      if (trader.equityCurve.length > 0) {
+        await upsertEquityCurve(supabase, SOURCE, trader.address, period, trader.equityCurve)
+        curvesSaved++
+      }
+      const stats: StatsDetail = {
+        totalTrades: trader.tradesCount,
+        profitableTradesPct: trader.winRate,
+        avgHoldingTimeHours: null,
+        avgProfit: null,
+        avgLoss: null,
+        largestWin: null,
+        largestLoss: null,
+        sharpeRatio: null,
+        maxDrawdown: trader.maxDrawdown,
+        currentDrawdown: null,
+        volatility: null,
+        copiersCount: null,
+        copiersPnl: null,
+        aum: null,
+        winningPositions: null,
+        totalPositions: trader.tradesCount,
+      }
+      const { saved: s } = await upsertStatsDetail(supabase, SOURCE, trader.address, period, stats)
+      if (s) statsSaved++
+    }))
   }
   logger.warn(`[${SOURCE}] Saved ${curvesSaved} curves, ${statsSaved} stats for ${period}`)
 

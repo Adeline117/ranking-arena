@@ -58,7 +58,9 @@ interface BtccResponse {
     total?: number
     totalPage?: number
     pages?: number
-  }
+  } | null
+  rows?: BtccTrader[]
+  total?: number
   msg?: string
   message?: string
 }
@@ -105,6 +107,11 @@ function parseTrader(item: BtccTrader, period: string, rank: number): TraderData
 
 function extractList(data: BtccResponse): BtccTrader[] {
   if (!data) return []
+  // New format: traders in top-level `rows` array (data is null)
+  if (Array.isArray(data.rows) && data.rows.length > 0) {
+    return data.rows
+  }
+  // Legacy format: traders nested in data.list or data.records
   if (data.data && typeof data.data === 'object') {
     return data.data.list || data.data.records || []
   }
