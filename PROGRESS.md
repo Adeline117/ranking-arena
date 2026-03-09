@@ -78,7 +78,7 @@ Branch: `feature/desoc-platform`, 23 files, +1310 lines
 - Fixed: DirectoryPage, SnapshotViewerClient hardcoded 'zh'|'en' types
 
 ## In Progress
-- Production migration: `20260308100000_desoc_foundation.sql` (apply via Supabase Dashboard)
+- ~~Production migration: `20260308100000_desoc_foundation.sql`~~ ✅ Already applied (verified 2026-03-09)
 - Full Japanese/Korean translations (4200+ keys each)
 
 ## Key Metrics
