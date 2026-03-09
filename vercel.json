@@ -109,11 +109,19 @@
       "schedule": "16 1,7,13,19 * * *"
     },
     {
-      "path": "/api/cron/batch-enrich?period=all",
+      "path": "/api/cron/batch-enrich?period=90D",
       "schedule": "10 */4 * * *"
     },
     {
-      "path": "/api/cron/batch-enrich?all=true",
+      "path": "/api/cron/batch-enrich?period=30D",
+      "schedule": "25 */4 * * *"
+    },
+    {
+      "path": "/api/cron/batch-enrich?period=7D",
+      "schedule": "40 */4 * * *"
+    },
+    {
+      "path": "/api/cron/batch-enrich?period=90D&all=true",
       "schedule": "40 3,15 * * *"
     },
     {
