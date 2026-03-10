@@ -147,11 +147,13 @@ describe('GET /api/cron/precompute-composite', () => {
       select: jest.fn().mockReturnValue({
         eq: jest.fn().mockReturnValue({
           not: jest.fn().mockReturnValue({
-            lte: jest.fn().mockReturnValue({
-              gte: jest.fn().mockReturnValue({
-                or: jest.fn().mockReturnValue({
-                  order: jest.fn().mockReturnValue({
-                    limit: jest.fn().mockResolvedValue({ data: rows, error: null }),
+            gte: jest.fn().mockReturnValue({
+              lte: jest.fn().mockReturnValue({
+                gte: jest.fn().mockReturnValue({
+                  or: jest.fn().mockReturnValue({
+                    order: jest.fn().mockReturnValue({
+                      limit: jest.fn().mockResolvedValue({ data: rows, error: null }),
+                    }),
                   }),
                 }),
               }),
@@ -226,11 +228,13 @@ describe('GET /api/cron/precompute-composite', () => {
       select: jest.fn().mockReturnValue({
         eq: jest.fn().mockReturnValue({
           not: jest.fn().mockReturnValue({
-            lte: jest.fn().mockReturnValue({
-              gte: jest.fn().mockReturnValue({
-                or: jest.fn().mockReturnValue({
-                  order: jest.fn().mockReturnValue({
-                    limit: jest.fn().mockResolvedValue({ data: [], error: null }),
+            gte: jest.fn().mockReturnValue({
+              lte: jest.fn().mockReturnValue({
+                gte: jest.fn().mockReturnValue({
+                  or: jest.fn().mockReturnValue({
+                    order: jest.fn().mockReturnValue({
+                      limit: jest.fn().mockResolvedValue({ data: [], error: null }),
+                    }),
                   }),
                 }),
               }),
@@ -272,13 +276,15 @@ describe('GET /api/cron/precompute-composite', () => {
       select: jest.fn().mockReturnValue({
         eq: jest.fn().mockReturnValue({
           not: jest.fn().mockReturnValue({
-            lte: jest.fn().mockReturnValue({
-              gte: jest.fn().mockReturnValue({
-                or: jest.fn().mockReturnValue({
-                  order: jest.fn().mockReturnValue({
-                    limit: jest.fn().mockResolvedValue({
-                      data: null,
-                      error: { message: 'relation does not exist' },
+            gte: jest.fn().mockReturnValue({
+              lte: jest.fn().mockReturnValue({
+                gte: jest.fn().mockReturnValue({
+                  or: jest.fn().mockReturnValue({
+                    order: jest.fn().mockReturnValue({
+                      limit: jest.fn().mockResolvedValue({
+                        data: null,
+                        error: { message: 'relation does not exist' },
+                      }),
                     }),
                   }),
                 }),
@@ -305,11 +311,13 @@ describe('GET /api/cron/precompute-composite', () => {
       select: jest.fn().mockReturnValue({
         eq: jest.fn().mockReturnValue({
           not: jest.fn().mockReturnValue({
-            lte: jest.fn().mockReturnValue({
-              gte: jest.fn().mockReturnValue({
-                or: jest.fn().mockReturnValue({
-                  order: jest.fn().mockReturnValue({
-                    limit: jest.fn().mockResolvedValue({ data: rows, error: null }),
+            gte: jest.fn().mockReturnValue({
+              lte: jest.fn().mockReturnValue({
+                gte: jest.fn().mockReturnValue({
+                  or: jest.fn().mockReturnValue({
+                    order: jest.fn().mockReturnValue({
+                      limit: jest.fn().mockResolvedValue({ data: rows, error: null }),
+                    }),
                   }),
                 }),
               }),

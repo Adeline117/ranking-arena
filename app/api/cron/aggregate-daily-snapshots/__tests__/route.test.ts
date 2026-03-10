@@ -152,10 +152,12 @@ describe('POST /api/cron/aggregate-daily-snapshots', () => {
       if (table === 'trader_snapshots') {
         return {
           select: jest.fn().mockReturnValue({
-            gte: jest.fn().mockReturnValue({
-              lt: jest.fn().mockReturnValue({
-                order: jest.fn().mockReturnValue({
-                  limit: jest.fn().mockResolvedValue({ data: [], error: null }),
+            eq: jest.fn().mockReturnValue({
+              gte: jest.fn().mockReturnValue({
+                lt: jest.fn().mockReturnValue({
+                  order: jest.fn().mockReturnValue({
+                    limit: jest.fn().mockResolvedValue({ data: [], error: null }),
+                  }),
                 }),
               }),
             }),
