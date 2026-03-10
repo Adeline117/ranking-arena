@@ -142,23 +142,24 @@ export class CoinexScraper extends BaseScraper {
     )
     if (!nickname) return null
 
-    let roi = parseFloat(String(item.roi ?? item.roi_rate ?? item.return_rate ?? 0))
+    let roi = parseFloat(String(item.roi ?? item.roi_rate ?? item.return_rate ?? item.profit_rate ?? 0))
     if (roi === 0) return null
     if (Math.abs(roi) > 0 && Math.abs(roi) < 10) roi *= 100
 
-    let winRate = parseFloat(String(item.win_rate ?? item.winRate ?? 0))
+    let winRate = parseFloat(String(item.win_rate ?? item.winRate ?? item.winning_rate ?? 0))
     if (winRate > 0 && winRate <= 1) winRate *= 100
 
     let maxDrawdown = parseFloat(String(item.max_drawdown ?? item.maxDrawdown ?? item.mdd ?? 0))
     if (maxDrawdown > 0 && maxDrawdown <= 1) maxDrawdown *= 100
     maxDrawdown = Math.abs(maxDrawdown)
 
+    // CoinEx public/traders API returns profit_amount (period PnL) and total_profit_amount (cumulative)
     return {
       traderId,
       nickname,
       avatar: String(item.avatar || item.avatar_url || '') || null,
       roi,
-      pnl: parseFloat(String(item.pnl ?? item.profit ?? item.total_pnl ?? 0)),
+      pnl: parseFloat(String(item.profit_amount ?? item.pnl ?? item.profit ?? item.total_pnl ?? item.total_profit_amount ?? 0)),
       winRate: winRate || null,
       maxDrawdown: maxDrawdown || null,
       followers: parseInt(String(item.follower_count ?? item.followerCount ?? item.copier_num ?? 0), 10),

@@ -65,8 +65,11 @@ interface CoinexTrader {
   profit?: number | string
   total_pnl?: number | string
   total_profit?: number | string
+  profit_amount?: number | string        // CoinEx public/traders API: period PnL
+  total_profit_amount?: number | string   // CoinEx public/traders API: cumulative PnL
   win_rate?: number | string
   winRate?: number | string
+  winning_rate?: number | string          // CoinEx public/traders API
   max_drawdown?: number | string
   maxDrawdown?: number | string
   mdd?: number | string
@@ -74,6 +77,8 @@ interface CoinexTrader {
   followerCount?: number | string
   copier_num?: number | string
   cur_follower_num?: number | string
+  aum?: number | string                  // CoinEx public/traders API
+  trade_count?: number | string           // CoinEx public/traders API
   status?: string
 }
 
@@ -111,9 +116,11 @@ function parseTrader(item: CoinexTrader, period: string): TraderData | null {
   // CoinEx may use decimal or percentage — normalize
   roi = normalizeROI(roi, SOURCE) ?? roi
 
-  const pnl = parseNum(item.pnl ?? item.profit ?? item.total_pnl ?? item.total_profit)
+  // CoinEx public/traders API returns profit_amount (period PnL) and total_profit_amount (cumulative)
+  // Use period profit_amount first, then fall back to other field names
+  const pnl = parseNum(item.profit_amount ?? item.pnl ?? item.profit ?? item.total_pnl ?? item.total_profit ?? item.total_profit_amount)
 
-  let winRate = parseNum(item.win_rate ?? item.winRate)
+  let winRate = parseNum(item.win_rate ?? item.winRate ?? item.winning_rate)
   winRate = normalizeWinRate(winRate, getWinRateFormat(SOURCE))
 
   let maxDrawdown = parseNum(item.max_drawdown ?? item.maxDrawdown ?? item.mdd)
