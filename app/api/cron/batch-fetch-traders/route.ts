@@ -15,7 +15,7 @@
  *   group=f  → mexc, bingx (every 6h)
  *   group=h  → gateio, btcc (every 6h)
  *   group=g1 → drift, bitunix (every 6h)
- *   group=g2 → web3_bot (every 6h)
+ *   group=g2 → web3_bot, kwenta (every 6h)
  *
  * Dead/blocked platforms removed:
  *   - kucoin: APIs return 404, feature discontinued
@@ -25,8 +25,7 @@
  *   - phemex: CloudFront blocks — data fetched via Mac Mini crontab (fetch-phemex.mjs)
  *   - weex: copy-trade API returning 521 (origin down) since 2026-03
  *   - mux: requires THEGRAPH_API_KEY (not set), Copin has 0 traders
- *   - kwenta: merged into Synthetix, Copin stopped indexing Sep 2025
- *   - synthetix: migrated to ETH mainnet, no public leaderboard API
+ *   - synthetix: Copin returns only 9 stale traders, TheGraph needs API key
  *   - uniswap/pancakeswap: need THEGRAPH_API_KEY (not set)
  *   - toobit: API returns HTML (needs browser session), only 238 snapshots
  *   - okx_spot: OKX copy-trading API only supports instType=SWAP, no spot leaderboard
@@ -65,9 +64,9 @@ const GROUPS: Record<string, string[]> = {
   h: ['gateio', 'btcc'],
   // Group G1: DEX (every 6h) — 2 platforms, parallel
   g1: ['drift', 'bitunix'],
-  // Group G2: DEX (every 6h) — 1 platform
+  // Group G2: DEX (every 6h) — 2 platforms
   // paradex removed: API now requires JWT auth since 2026-03
-  g2: ['web3_bot'],
+  g2: ['web3_bot', 'kwenta'],
   // Group I: Social trading (every 6h) — large dataset (2000 traders × 3 periods)
   i: ['etoro'],
 }

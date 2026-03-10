@@ -305,12 +305,12 @@ async function saveTraders(traders) {
   if (v1Err) return { total: traders.length, saved: 0, error: v1Err.message }
 
   const snapshotsV2 = traders.map(t => ({
-    platform: t.source, trader_key: t.source_trader_id, window: t.season_id, as_of_ts: t.captured_at,
+    platform: t.source, market_type: 'futures', trader_key: t.source_trader_id, window: t.season_id, as_of_ts: t.captured_at,
     metrics: { roi: t.roi ?? 0, pnl: t.pnl ?? 0, win_rate: t.win_rate ?? null, max_drawdown: t.max_drawdown ?? null, followers: t.followers ?? null, arena_score: t.arena_score ?? null },
     quality_flags: { is_suspicious: false, suspicion_reasons: [], data_completeness: 0.7 },
     updated_at: new Date().toISOString(),
   }))
-  const { error: v2Err } = await supabase.from('trader_snapshots_v2').insert(snapshotsV2)
+  const { error: v2Err } = await supabase.from('trader_snapshots_v2').upsert(snapshotsV2, { onConflict: 'platform,market_type,trader_key,window' })
   if (v2Err && !v2Err.message.includes('duplicate') && !v2Err.message.includes('unique')) console.error('v2 error:', v2Err.message)
 
   return { total: traders.length, saved: traders.length }
