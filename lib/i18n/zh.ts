@@ -4291,6 +4291,23 @@ shareRankCard: '分享排名卡片',
 weeklyTop10: '每周 Top 10',
 embedWidget: '嵌入组件',
 
+// Auto-generated profile tags
+tagTopPercent: '前 {pct}%',
+tagScalper: '高频交易',
+tagSwing: '波段交易',
+tagTrend: '趋势跟踪',
+tagPosition: '长线持仓',
+tagLowRisk: '低风险',
+tagModerateRisk: '中风险',
+tagHighRisk: '高风险',
+tagWhale: '巨鲸',
+tagActive: '活跃',
+tagBot: '机器人',
+tagElite: '精英',
+tagHighWinrate: '高胜率',
+tagHighRoi: '高收益',
+tagDefi: 'DeFi',
+
 } as const
 
 export default zh

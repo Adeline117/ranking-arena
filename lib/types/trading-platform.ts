@@ -73,6 +73,8 @@ export interface TraderProfileRow {
   display_name: string | null
   avatar_url: string | null
   bio: string | null
+  /** Source of the bio: 'auto' = generated, 'manual' = user-written, 'exchange' = from exchange API */
+  bio_source: 'auto' | 'manual' | 'exchange' | null
   tags: string[]
   follower_count: number | null
   copier_count: number | null

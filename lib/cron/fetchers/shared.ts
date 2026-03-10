@@ -385,8 +385,7 @@ export async function upsertTraders(
       trader_key: t.source_trader_id,
       display_name: t.handle || null,
       avatar_url: t.avatar_url || null,
-      bio: null,
-      tags: [],
+      // bio, bio_source, tags intentionally omitted — managed by generate-profiles cron
       profile_url: t.profile_url || null,
       followers: t.followers ?? null,
       copiers: 0,

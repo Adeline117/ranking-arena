@@ -167,6 +167,10 @@
     {
       "path": "/api/cron/backfill-avatars?platform=coinex,binance_spot,xt,bitunix,gateio,bitmart,drift,btcc&limit=400",
       "schedule": "30 8 * * *"
+    },
+    {
+      "path": "/api/cron/generate-profiles?limit=500",
+      "schedule": "55 */6 * * *"
     }
   ],
   "headers": [
