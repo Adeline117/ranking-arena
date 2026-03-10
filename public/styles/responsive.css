@@ -1654,6 +1654,91 @@
 }
 
 /* ============================================
+   Mobile UI Fix — Screenshot Audit (2026-03-10)
+   ============================================ */
+
+@media (max-width: 767px) {
+  /* 1. Trader detail: action buttons — smaller on mobile, scrollable */
+  .profile-header-actions button {
+    font-size: 11px !important;
+    padding: 5px 8px !important;
+    white-space: nowrap;
+    flex-shrink: 0;
+  }
+
+  /* Ensure scroll container has edge padding so first/last items aren't clipped */
+  .profile-header-actions {
+    padding-left: 4px !important;
+    padding-right: 4px !important;
+    margin-left: -4px;
+    margin-right: -4px;
+    scroll-padding: 0 4px;
+  }
+
+  /* 2. Founding Member banner: prevent CTA button clipping */
+  .founding-member-banner {
+    flex-wrap: wrap !important;
+    gap: 4px !important;
+  }
+
+  /* 3. Ranking toolbar: hide text labels on mobile, keep icons */
+  .toolbar-btn > span {
+    display: none !important;
+  }
+
+  /* 4. Ranking toolbar: ensure category tabs get full width, tools wrap below */
+  .ranking-toolbar-row {
+    gap: 4px !important;
+  }
+  .ranking-toolbar-row > *:first-child {
+    width: 100%;
+    flex: unset !important;
+  }
+
+  /* 4. Hot page: ensure post title links have adequate touch targets */
+  .hot-post-title,
+  .post-title-link {
+    min-height: 36px !important;
+    display: flex;
+    align-items: center;
+    padding: 8px 0 !important;
+  }
+
+  /* 5. Groups page: prevent excessive text truncation in card grid */
+  .group-card-title {
+    -webkit-line-clamp: 2;
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+    white-space: normal !important;
+  }
+
+  /* 6. Login page footer links: ensure minimum touch target */
+  .auth-footer a,
+  .login-footer a,
+  a[href*="terms"],
+  a[href*="privacy"] {
+    min-height: 36px !important;
+    display: inline-flex;
+    align-items: center;
+    padding: 8px 4px !important;
+  }
+
+  /* 7. Watchlist / 404 pages: contain decorative elements */
+  .glow-orb,
+  .not-found-bg .glow-orb {
+    max-width: 100vw !important;
+    overflow: hidden;
+  }
+
+  /* 8. Market page price ticker: already uses overflow:hidden on container,
+     but ensure no horizontal page scroll from any child */
+  .price-ticker-container {
+    max-width: 100vw;
+  }
+}
+
+/* ============================================
    Me Tab / User Profile Mobile
    ============================================ */
 
