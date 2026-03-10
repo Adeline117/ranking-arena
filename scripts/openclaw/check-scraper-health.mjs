@@ -3,7 +3,7 @@
  * Mac Mini Scraper Health Check
  *
  * Checks data freshness for platforms that run exclusively on the Mac Mini:
- *   - kucoin   (fetch-kucoin.mjs, crontab every 6h at :10)
+ *   - kucoin   (DEAD — copy trading discontinued 2026-03, all APIs 404)
  *   - lbank    (fetch-lbank.mjs, crontab every 6h at :20)
  *   - blofin   (fetch-blofin.mjs, crontab every 6h at :30)
  *   - phemex   (fetch-phemex.mjs, crontab every 6h at :00)
@@ -40,9 +40,10 @@ const MAC_MINI_PLATFORMS = [
   {
     source: 'kucoin',
     script: 'fetch-kucoin.mjs',
-    cron: 'Every 6h at :10 (0 0,6,12,18 * * *)',
-    url: 'kucoin.com/copytrading (browser intercept)',
-    target: 200,
+    cron: 'DISABLED — copy trading discontinued 2026-03',
+    url: 'kucoin.com/copytrading (DEAD — all APIs 404, page empty)',
+    target: 0,
+    dead: true,
   },
   {
     source: 'lbank',
@@ -200,11 +201,18 @@ async function main() {
 
   console.log(`[${new Date().toISOString()}] Checking Mac Mini scraper health...`)
 
+  const activePlatforms = MAC_MINI_PLATFORMS.filter(p => !p.dead)
+  const deadPlatforms = MAC_MINI_PLATFORMS.filter(p => p.dead)
   const results = await Promise.all(MAC_MINI_PLATFORMS.map(checkPlatform))
   const report = formatReport(results)
   console.log('\n' + report)
 
-  const stale = results.filter(r => r.isStale)
+  if (deadPlatforms.length > 0) {
+    console.log(`\n[info] Dead platforms (excluded from alerts): ${deadPlatforms.map(p => p.source).join(', ')}`)
+  }
+
+  // Only alert on stale active (non-dead) platforms
+  const stale = results.filter(r => r.isStale && !MAC_MINI_PLATFORMS.find(p => p.source === r.source)?.dead)
 
   if (shouldAlert && stale.length > 0) {
     const alertLines = stale.map(r => {

@@ -2,10 +2,19 @@
 /**
  * KuCoin Copy Trading Fetcher — Mac Mini (residential IP + real Chrome)
  *
- * KuCoin APIs return 404 from all endpoints. The copy trading feature may
- * still be accessible via browser (kucoin.com/copytrading).
+ * STATUS: DEAD as of 2026-03-09
+ * KuCoin has removed their copy trading feature entirely:
+ * - All copy-trade APIs return 404 (tested 10+ endpoint patterns)
+ * - /copytrading page renders empty SPA shell (no content)
+ * - Copy trading removed from sitemap
+ * - No announcement found, feature silently discontinued
  *
- * Strategy:
+ * This script now:
+ * 1. Probes the API to check if copy trading has returned
+ * 2. If still dead, exits cleanly with a message
+ * 3. If alive again, falls back to browser scraping
+ *
+ * Previous strategy:
  * 1. Launch Chrome → kucoin.com/copytrading
  * 2. Capture API responses via page.on('response')
  * 3. Use pagination clicks for more data
@@ -272,11 +281,64 @@ async function sendTelegram(text) {
   } catch (err) { console.error('Telegram failed:', err.message) }
 }
 
+/**
+ * Quick probe: check if KuCoin copy trading API has come back online.
+ * Tests the known API endpoint without launching a browser.
+ * Returns true if the API responds with data (feature is back).
+ */
+async function probeApiAlive() {
+  const endpoints = [
+    'https://www.kucoin.com/_api/copy-trade/leader/public/list?pageNo=1&pageSize=5&orderBy=ROI&period=THIRTY_DAY',
+    'https://www.kucoin.com/_api/copy-trading/leaderboard/query?pageNo=1&pageSize=5',
+    'https://www.kucoin.com/_api/ct-copy-trade/public/leaders?page=1&pageSize=5',
+  ]
+  for (const url of endpoints) {
+    try {
+      const res = await fetch(url, {
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36',
+          'Referer': 'https://www.kucoin.com/copytrading',
+          'Origin': 'https://www.kucoin.com',
+        },
+        signal: AbortSignal.timeout(10000),
+      })
+      if (res.ok) {
+        const text = await res.text()
+        if (text.startsWith('{') || text.startsWith('[')) {
+          const json = JSON.parse(text)
+          const items = json?.data?.items || json?.data?.list || json?.data || []
+          if (Array.isArray(items) && items.length > 0) {
+            console.log(`  API alive! ${items.length} traders from ${url.slice(0, 80)}`)
+            return true
+          }
+        }
+      }
+    } catch { /* expected — 404 or timeout */ }
+  }
+  return false
+}
+
 async function main() {
   const arg = process.argv[2]?.toUpperCase()
+  const forceMode = process.argv.includes('--force')
   const periods = arg && { '7D': 1, '30D': 1, '90D': 1 }[arg] ? [arg] : ['7D', '30D', '90D']
   console.log(`[${new Date().toISOString()}] KuCoin Mac Mini fetcher (${periods.join(', ')})`)
   const start = Date.now()
+
+  // Quick probe: is the API still dead?
+  if (!forceMode) {
+    console.log('  Probing KuCoin copy trading API...')
+    const alive = await probeApiAlive()
+    if (!alive) {
+      console.log('  KuCoin copy trading still dead (all APIs return 404)')
+      console.log('  Feature was discontinued ~2026-03. Skipping browser scrape.')
+      console.log('  Use --force to attempt browser scraping anyway.')
+      console.log(`\nDone in ${((Date.now() - start) / 1000).toFixed(1)}s. Total saved: 0`)
+      return
+    }
+    console.log('  API appears alive! Proceeding with browser scrape...')
+  }
+
   const results = await fetchWithBrowser(periods)
   const duration = ((Date.now() - start) / 1000).toFixed(1)
   const totalSaved = Object.values(results).reduce((s, r) => s + (r.saved || 0), 0)

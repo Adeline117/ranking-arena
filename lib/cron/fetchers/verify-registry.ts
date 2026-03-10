@@ -404,19 +404,16 @@ const VERIFY_REGISTRY: Record<string, VerifyFn> = {
       }
     ),
 
-  // KuCoin internal API — may return 404 if endpoint changed
+  // KuCoin — DEAD: copy trading feature removed 2026-03, all APIs return 404
   kucoin: () =>
-    verifyEndpoint(
-      'kucoin',
-      'https://www.kucoin.com/_api/copy-trading/leaderboard/query?pageNo=1&pageSize=1',
-      {
-        headers: {
-          Referer: 'https://www.kucoin.com/copytrading',
-          Origin: 'https://www.kucoin.com',
-        },
-        validateResponse: (d: ApiResponse) => !!d?.data,
-      }
-    ),
+    Promise.resolve({
+      platform: 'kucoin',
+      healthy: false,
+      latencyMs: 0,
+      failureReason: 'api_error' as FailureReason,
+      details: 'Copy trading feature discontinued (all APIs 404 since 2026-03)',
+      checkedAt: new Date().toISOString(),
+    }),
 
   // CoinEx perpetual copy trading API
   coinex: () =>

@@ -138,8 +138,8 @@ export const DEAD_BLOCKED_PLATFORMS: TraderSource[] = [
   // Truly dead — no recovery path
   'weex',         // Copy-trade API returning 521 (origin down) since 2026-03
   'perpetual_protocol', // TheGraph subgraph returns empty data since 2026-03
+  'kucoin',       // Copy trading feature removed — all APIs 404, page empty shell since 2026-03
   // Recoverable via Mac Mini Puppeteer scrapers (scripts/openclaw/fetch-*.mjs)
-  'kucoin',       // fetch-kucoin.mjs — browser intercepts copy-trade API
   'lbank',        // fetch-lbank.mjs — browser intercepts uuapi session API
   'blofin',       // fetch-blofin.mjs — browser intercepts copy-trade API
   // Recoverable via credentials (set env vars to activate)
@@ -178,7 +178,7 @@ export const PRIORITY_SOURCES: TraderSource[] = [
   'okx_futures',
   // Secondary CEX futures
   'mexc',
-  'kucoin',
+  // kucoin: removed — copy trading feature discontinued (all APIs 404 since 2026-03)
   'htx_futures',
   'coinex',
   'bingx',
@@ -213,7 +213,7 @@ export const SOURCES_WITH_DATA: TraderSource[] = [
   'htx_futures',
   'okx_futures',
   'mexc',
-  'kucoin',
+  // kucoin: removed — copy trading discontinued
   'bybit',
   'coinex',
   'xt',
