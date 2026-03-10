@@ -31,7 +31,7 @@ import { recordFetchResult } from '@/lib/utils/pipeline-monitor'
 import { logger } from '@/lib/logger'
 
 export const dynamic = 'force-dynamic'
-export const maxDuration = 300
+export const maxDuration = 600 // Vercel Pro max: 10 minutes (was 300s = 5min)
 export const preferredRegion = 'hnd1' // Tokyo — avoids Binance/OKX/Bybit geo-blocking
 
 const GROUPS: Record<string, string[]> = {
@@ -92,15 +92,15 @@ export async function GET(request: NextRequest) {
   const overallStart = Date.now()
   const plog = await PipelineLogger.start(`batch-fetch-traders-${group}`, { group, platforms })
 
-  // Safety timeout: ensure plog gets called before Vercel kills the function at 300s
+  // Safety timeout: ensure plog gets called before Vercel kills the function at 600s
   const safetyTimer = setTimeout(async () => {
     try {
-      await plog.error(new Error('Safety timeout: function approaching 300s limit'))
+      await plog.error(new Error('Safety timeout: function approaching 600s limit'))
     } catch { /* best effort */ }
-  }, 280_000)
+  }, 580_000) // Was 280s, now 580s for 600s maxDuration
 
-  // Per-platform timeout: 180s leaves 120s buffer for logging/cleanup within 300s limit
-  const PLATFORM_TIMEOUT_MS = 180_000
+  // Per-platform timeout: configurable, default 420s leaves 180s buffer for logging/cleanup within 600s limit
+  const PLATFORM_TIMEOUT_MS = parseInt(process.env.PLATFORM_FETCH_TIMEOUT_MS || '420000', 10)
 
   // Run a single platform fetch and return the result
   async function runPlatform(platform: string): Promise<BatchResult> {
