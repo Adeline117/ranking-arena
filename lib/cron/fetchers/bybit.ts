@@ -253,7 +253,11 @@ async function fetchPeriod(
   const allTraders = new Map<string, BybitLeaderDetail>()
   let lastError: string | undefined
 
-  for (let pageNo = 1; pageNo <= maxPages; pageNo++) {
+  // When using VPS scraper, limit to 1 page (~50 traders) to avoid 73s/page timeout spiral.
+  // Multi-page only if a fast API strategy works (direct/cf_proxy/vps_proxy).
+  const effectiveMaxPages = (_bybitStrategy === 'scraper' || _bybitStrategy === null) ? 1 : maxPages
+
+  for (let pageNo = 1; pageNo <= effectiveMaxPages; pageNo++) {
     const data = await fetchBybitPage(pageNo, PAGE_SIZE, duration)
 
     if (!data) {
