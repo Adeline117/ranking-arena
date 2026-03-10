@@ -82,7 +82,11 @@ export const ScoreBreakdown = memo(function ScoreBreakdown(props: ScoreBreakdown
   if (!hasAnyScore) {
     return (
       <Box style={{ padding: `${tokens.spacing[3]} ${tokens.spacing[4]}`, textAlign: 'center' }}>
-        <Text size="sm" color="tertiary">{t('scoreNoDetails')}</Text>
+        <Text size="sm" style={{ color: tokens.colors.text.tertiary }}>
+          {arena_score != null
+            ? (t('scoreBasisRoiPnl') || 'Score based on ROI and PnL data')
+            : t('scoreNoDetails')}
+        </Text>
       </Box>
     )
   }
@@ -120,20 +124,29 @@ export const ScoreBreakdown = memo(function ScoreBreakdown(props: ScoreBreakdown
         <ScoreBar label={t('scoreExecution')} score={execution_score} maxScore={25} color="var(--color-score-execution)" />
 
         {/* 置信度标签 */}
-        <Box style={{ marginTop: 8, display: 'flex', alignItems: 'center', gap: 6 }}>
-          <Text size="xs" style={{ color: tokens.colors.text.tertiary }}>{t('scoreDataConfidence')}</Text>
-          <span style={{
-            display: 'inline-block',
-            padding: '1px 8px',
-            borderRadius: tokens.radius.md,
-            fontSize: 11,
-            fontWeight: 600,
-            color: completenessColor,
-            background: `${completenessColor}18`,
-            border: `1px solid ${completenessColor}40`,
-          }}>
-            {completenessLabel}
-          </span>
+        <Box style={{ marginTop: 8, display: 'flex', flexDirection: 'column', gap: 4 }}>
+          <Box style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            <Text size="xs" style={{ color: tokens.colors.text.tertiary }}>{t('scoreDataConfidence')}</Text>
+            <span style={{
+              display: 'inline-block',
+              padding: '1px 8px',
+              borderRadius: tokens.radius.md,
+              fontSize: 11,
+              fontWeight: 600,
+              color: completenessColor,
+              background: `${completenessColor}18`,
+              border: `1px solid ${completenessColor}40`,
+            }}>
+              {completenessLabel}
+            </span>
+          </Box>
+          {(score_completeness === 'partial' || score_completeness === 'minimal') && (
+            <Text size="xs" style={{ color: completenessColor, opacity: 0.85, lineHeight: 1.5 }}>
+              {score_completeness === 'minimal'
+                ? (t('confidenceMinimalReason') || `Score based on limited data: ${[!win_rate && 'win rate', !max_drawdown && 'drawdown'].filter(Boolean).join(' and ')} not available`)
+                : (t('confidencePartialReason') || `Score adjusted: ${[!win_rate && 'win rate', !max_drawdown && 'drawdown'].filter(Boolean).join(' and ')} not available from this exchange`)}
+            </Text>
+          )}
         </Box>
       </Box>
 

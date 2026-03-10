@@ -67,6 +67,20 @@ export default function AdvancedMetricsCard({
     return tokens.colors.text.secondary
   }
 
+  // Hide entirely when ALL metrics are null — no point showing a card of dashes
+  const hasAnyData =
+    metrics.sortino_ratio != null ||
+    metrics.calmar_ratio != null ||
+    metrics.profit_factor != null ||
+    metrics.recovery_factor != null ||
+    metrics.max_consecutive_wins != null ||
+    metrics.max_consecutive_losses != null ||
+    metrics.avg_holding_hours != null ||
+    metrics.volatility_pct != null ||
+    metrics.downside_volatility_pct != null
+
+  if (!hasAnyData && !isLoading) return null
+
   if (isLoading) {
     return (
       <Box

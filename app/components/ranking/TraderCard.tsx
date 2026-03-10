@@ -18,6 +18,8 @@ import {
   getScoreStyle,
 } from './shared/TraderDisplay'
 import { useComparisonStore } from '@/lib/stores'
+import { getPlatformNote } from '@/lib/constants/platform-metrics'
+import { EXCHANGE_NAMES } from '@/lib/constants/exchanges'
 
 export interface TraderCardProps {
   trader: Trader
@@ -211,13 +213,15 @@ export const TraderCard = memo(function TraderCard({
           />
           <MetricStat
             label={language === 'zh' ? '胜率' : 'Win%'}
-            value={trader.win_rate != null ? `${trader.win_rate.toFixed(0)}%` : '—'}
+            value={trader.win_rate != null ? `${trader.win_rate.toFixed(0)}%` : undefined}
             color={trader.win_rate != null && trader.win_rate > 50 ? tokens.colors.accent.success : undefined}
+            nullTooltip={trader.win_rate == null ? (getPlatformNote(trader.source || source || '') || `Not available for ${EXCHANGE_NAMES[trader.source || source || ''] || (trader.source || source || '').replace('_', ' ')}`) : undefined}
           />
           <MetricStat
             label="MDD"
-            value={trader.max_drawdown != null ? (Math.abs(trader.max_drawdown) < 0.5 ? '< 1%' : `-${Math.abs(trader.max_drawdown).toFixed(0)}%`) : '—'}
+            value={trader.max_drawdown != null ? (Math.abs(trader.max_drawdown) < 0.5 ? '< 1%' : `-${Math.abs(trader.max_drawdown).toFixed(0)}%`) : undefined}
             color={trader.max_drawdown != null ? TRADER_ACCENT_ERROR : undefined}
+            nullTooltip={trader.max_drawdown == null ? (getPlatformNote(trader.source || source || '') || `Not available for ${EXCHANGE_NAMES[trader.source || source || ''] || (trader.source || source || '').replace('_', ' ')}`) : undefined}
           />
         </Box>
 

@@ -47,9 +47,17 @@ export function generateExplanation(result: ScoreResult): string {
   }
 
   if (result.score_completeness === 'minimal') {
-    parts.push('数据较少，评分置信度低')
+    const missing = [
+      result.win_rate == null ? '胜率' : null,
+      result.max_drawdown == null ? '回撤' : null,
+    ].filter(Boolean)
+    parts.push(`数据较少(${missing.join('、')}缺失)，评分置信度低`)
   } else if (result.score_completeness === 'partial') {
-    parts.push('部分数据缺失')
+    const missing = [
+      result.win_rate == null ? '胜率' : null,
+      result.max_drawdown == null ? '回撤' : null,
+    ].filter(Boolean)
+    parts.push(`${missing.join('、')}数据缺失`)
   }
 
   return parts.join('，') || '暂无评分数据'
