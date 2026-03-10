@@ -150,6 +150,8 @@ export const DEAD_BLOCKED_PLATFORMS: TraderSource[] = [
   'paradex',      // API now requires JWT auth (was public, changed ~2026-03)
   'okx_spot',     // OKX copy-trading API only supports instType=SWAP, no spot leaderboard
   'bitmart',      // gw-api/copytrade-streamer returns "service not open" (all IPs), SPA doesn't render
+  'whitebit' as TraderSource,     // No copy-trading feature or API exists
+  'btse' as TraderSource,         // Leaderboard behind internal auth, no public endpoints
 ]
 
 // ---------------------------------------------------------------------------
