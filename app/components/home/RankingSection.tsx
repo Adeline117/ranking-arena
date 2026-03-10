@@ -50,6 +50,7 @@ function getStoredPreferences() {
 }
 
 // Lazy load heavy components to reduce initial bundle
+const MobileFilterSheet = dynamic(() => import('../ranking/MobileFilterSheet'), { ssr: false })
 const AdvancedFilter = dynamic(() => import('../premium/AdvancedFilter'), {
   ssr: false,
   loading: () => (
@@ -107,6 +108,7 @@ export default function RankingSection({
 
   // 高级筛选状态
   const [showAdvancedFilter, setShowAdvancedFilter] = useState(false)
+  const [showMobileFilter, setShowMobileFilter] = useState(false)
   const [filterConfig, setFilterConfig] = useState<FilterConfig>({})
   const [savedFilters, setSavedFilters] = useState<SavedFilter[]>([])
 
@@ -675,6 +677,16 @@ export default function RankingSection({
         </Box>
       )}
 
+      {/* Mobile filter bottom sheet */}
+      <MobileFilterSheet
+        open={showMobileFilter}
+        onClose={() => setShowMobileFilter(false)}
+        filterConfig={filterConfig}
+        onFilterChange={handleFilterChange}
+        onReset={() => handleFilterChange({})}
+        hasActiveFilters={hasActiveFilters}
+      />
+
       {/* Hero section removed per Adeline's request */}
 
       {/* Exchange trader count hint */}
@@ -740,7 +752,13 @@ export default function RankingSection({
         category={category}
         onCategoryChange={setCategory}
         onProRequired={handleProRequired}
-        onFilterToggle={() => setShowAdvancedFilter(prev => !prev)}
+        onFilterToggle={() => {
+          if (window.matchMedia('(max-width: 768px)').matches) {
+            setShowMobileFilter(true)
+          } else {
+            setShowAdvancedFilter(prev => !prev)
+          }
+        }}
         hasActiveFilters={hasActiveFilters}
         error={error}
         onRetry={onRetry}

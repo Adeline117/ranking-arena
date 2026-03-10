@@ -15,6 +15,7 @@ import dynamic from 'next/dynamic'
 const WalletSection = dynamic(() => import('@/lib/web3/wallet-components').then(m => ({ default: m.WalletSection })), { ssr: false })
 const LazyWeb3Boundary = dynamic(() => import('@/lib/web3/wallet-components').then(m => ({ default: m.Web3Boundary })), { ssr: false })
 const ImageCropper = dynamic(() => import('@/app/components/ui/ImageCropper').then(m => ({ default: m.ImageCropper })), { ssr: false })
+const MobileProfileMenu = dynamic(() => import('@/app/components/profile/MobileProfileMenu'), { ssr: false })
 import { useSubscription } from '@/app/components/home/hooks/useSubscription'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import ErrorBoundary from '@/app/components/utils/ErrorBoundary'
@@ -107,6 +108,11 @@ function SettingsContent() {
   return (
     <Box style={{ minHeight: '100vh', background: tokens.colors.bg.primary, color: tokens.colors.text.primary }}>
       <TopNav email={h.email} />
+
+      {/* Mobile profile quick-nav — shown above settings on small screens */}
+      <Box className="settings-mobile-profile-menu" style={{ display: 'none', maxWidth: 900, margin: '0 auto' }}>
+        <MobileProfileMenu />
+      </Box>
 
       <Box style={{ maxWidth: 900, margin: '0 auto', paddingLeft: tokens.spacing[6], paddingRight: tokens.spacing[6] }}>
         <Breadcrumb items={[{ label: t('settings') }]} />
@@ -339,6 +345,7 @@ function SettingsContent() {
           .settings-sidebar { display: none !important; }
           .settings-mobile-nav { display: flex !important; }
           .settings-mobile-nav::-webkit-scrollbar { display: none; }
+          .settings-mobile-profile-menu { display: block !important; }
         }
         @media (max-width: 400px) {
           .settings-mobile-nav { gap: ${tokens.spacing[1]} !important; }

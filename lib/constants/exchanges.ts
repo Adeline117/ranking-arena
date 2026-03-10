@@ -178,27 +178,33 @@ export const PRIORITY_SOURCES: TraderSource[] = [
   'okx_futures',
   // Secondary CEX futures
   'mexc',
-  // kucoin: removed — copy trading feature discontinued (all APIs 404 since 2026-03)
   'htx_futures',
   'coinex',
   'bingx',
   'gateio',
-  'phemex',
   'xt',
-  'weex',
-  'lbank',
   'blofin',
+  'btcc',
+  'bitfinex',
+  'bitunix',
+  'toobit',
+  // Social trading
+  'etoro',
   // Web3 / DEX
   'gmx',
   'hyperliquid',
   'gains',
   'okx_web3',
   'dydx',
+  'jupiter_perps',
+  'aevo',
+  'drift',
+  'kwenta',
+  'web3_bot',
   // Spot
-  'bitget_spot',
   'binance_spot',
   'bybit_spot',
-  'okx_spot',
+  'binance_web3',
 ]
 
 // ---------------------------------------------------------------------------
@@ -209,24 +215,25 @@ export const PRIORITY_SOURCES: TraderSource[] = [
 export const SOURCES_WITH_DATA: TraderSource[] = [
   // CEX futures
   'binance_futures',
+  'bybit',
   'bitget_futures',
-  'htx_futures',
   'okx_futures',
   'mexc',
-  // kucoin: removed — copy trading discontinued
-  'bybit',
+  'htx_futures',
   'coinex',
-  'xt',
-  'weex',
-  'phemex',
-  'lbank',
-  'blofin',
   'bingx',
+  'gateio',
+  'xt',
+  'blofin',
+  'btcc',
+  'bitfinex',
+  'bitunix',
+  'toobit',
+  // Social trading
+  'etoro',
   // CEX spot
   'binance_spot',
-  'bitget_spot',
   'bybit_spot',
-  'okx_spot',
   // Web3 / DEX
   'gmx',
   'hyperliquid',
@@ -237,8 +244,8 @@ export const SOURCES_WITH_DATA: TraderSource[] = [
   'jupiter_perps',
   'binance_web3',
   'drift',
-  'bitunix',
   'kwenta',
+  'web3_bot',
 ]
 
 // ---------------------------------------------------------------------------

@@ -394,7 +394,7 @@ export async function GET(request: Request) {
     const platforms = platform.split(',').map(p => p.trim()).filter(p => p && !DEAD_PLATFORMS.has(p))
     const results: AvatarResult[] = []
     const perPlatformLimit = Math.floor(limit / platforms.length) || 50
-    const PER_PLATFORM_TIMEOUT = 45_000 // 45s per platform
+    const PER_PLATFORM_TIMEOUT = 18_000 // 18s per platform (14 platforms × 18s = 252s < 300s limit)
 
     for (const p of platforms) {
       try {

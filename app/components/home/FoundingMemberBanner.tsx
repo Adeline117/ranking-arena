@@ -17,6 +17,7 @@ export default function FoundingMemberBanner() {
 
   return (
     <div
+      className="founding-member-banner"
       style={{
         display: 'flex',
         alignItems: 'center',

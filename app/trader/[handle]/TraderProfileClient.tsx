@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback, useRef } from 'react'
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import { useRouter, useSearchParams, usePathname } from 'next/navigation'
 import Link from 'next/link'
 import Image from 'next/image'
@@ -37,6 +37,7 @@ const StatsPage = dynamic(() => import('@/app/components/trader/stats/StatsPage'
 const PortfolioTable = dynamic(() => import('@/app/components/trader/PortfolioTable'), {
   loading: () => <RankingSkeleton />,
 })
+const SwipeableView = dynamic(() => import('@/app/components/ui/SwipeableView'), { ssr: false })
 
 export interface UnregisteredTraderData {
   handle: string
@@ -61,6 +62,7 @@ export interface UnregisteredTraderData {
 }
 
 type TraderTabKey = 'overview' | 'stats' | 'portfolio'
+const TAB_KEYS: TraderTabKey[] = ['overview', 'stats', 'portfolio']
 type TraderPageData = import('@/app/u/[handle]/components/types').TraderPageData
 
 interface TraderProfileClientProps {
@@ -256,14 +258,14 @@ export default function TraderProfileClient({ data, serverTraderData }: TraderPr
           onProRequired={() => router.push('/pricing')}
         />
 
-        {/* Tab Content */}
-        <Box
-          key={activeTab}
-          style={{
-            animation: 'fadeInUp 0.4s ease-out forwards',
-          }}
+        {/* Tab Content — swipeable on mobile */}
+        <SwipeableView
+          activeIndex={TAB_KEYS.indexOf(activeTab)}
+          onIndexChange={(i) => handleTabChange(TAB_KEYS[i])}
         >
-          {activeTab === 'overview' && (
+          {/* Overview Tab */}
+          <Box style={{ minHeight: 200 }}>
+            {(activeTab === 'overview' || true) && (
             <Box
               className="profile-grid"
               style={{
@@ -404,9 +406,11 @@ export default function TraderProfileClient({ data, serverTraderData }: TraderPr
               )}
             </Box>
           )}
+          </Box>
 
-          {activeTab === 'stats' && (
-            traderStats ? (
+          {/* Stats Tab */}
+          <Box style={{ minHeight: 200 }}>
+            {traderStats ? (
               <StatsPage
                 stats={traderStats}
                 traderHandle={traderProfile?.handle || data.handle}
@@ -428,18 +432,19 @@ export default function TraderProfileClient({ data, serverTraderData }: TraderPr
                   {t('noStatsData')}
                 </Text>
               </Box>
-            )
-          )}
+            )}
+          </Box>
 
-          {activeTab === 'portfolio' && (
+          {/* Portfolio Tab */}
+          <Box style={{ minHeight: 200 }}>
             <PortfolioTable
               items={traderPortfolio}
               history={traderPositionHistory}
               isPro={isPro}
               onUnlock={() => router.push('/pricing')}
             />
-          )}
-        </Box>
+          </Box>
+        </SwipeableView>
 
         <style>{`
           .profile-tabs::-webkit-scrollbar { display: none; }

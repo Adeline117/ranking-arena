@@ -660,7 +660,7 @@ export const PLATFORM_FORMAT: Record<string, PlatformFormatConfig> = {
   cryptocom:        { roiFormat: 'decimal', winRateFormat: 'decimal' },
   pionex:           { roiFormat: 'decimal', winRateFormat: 'decimal' },
   mexc:             { roiFormat: 'decimal', winRateFormat: 'decimal' },
-  bitget_futures:   { roiFormat: 'decimal', winRateFormat: 'decimal' },
+  bitget_futures:   { roiFormat: 'decimal', winRateFormat: 'percentage' },
   bitget_spot:      { roiFormat: 'decimal', winRateFormat: 'decimal' },
   kucoin:           { roiFormat: 'decimal', winRateFormat: 'decimal' },
   blofin:           { roiFormat: 'decimal', winRateFormat: 'decimal' },

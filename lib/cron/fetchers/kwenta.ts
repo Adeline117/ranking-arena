@@ -251,8 +251,8 @@ async function fetchPeriod(
   const top = traders.slice(0, TARGET)
   const { saved, error } = await upsertTraders(supabase, top)
 
-  // Save stats_detail for 90D period
-  if (saved > 0 && period === '90D') {
+  // Save stats_detail for all periods
+  if (saved > 0) {
     let statsSaved = 0
     for (const t of top.slice(0, 50)) {
       const stats: StatsDetail = {

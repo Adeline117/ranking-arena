@@ -32,13 +32,18 @@ const PLATFORM_LIMITS: Record<string, { limit90: number; limit30: number; limit7
   gateio: { limit90: 60, limit30: 50, limit7: 40 },
   mexc: { limit90: 60, limit30: 50, limit7: 40 },
   drift: { limit90: 60, limit30: 50, limit7: 40 },
+  dydx: { limit90: 80, limit30: 60, limit7: 40 },
+  aevo: { limit90: 60, limit30: 50, limit7: 40 },
+  gains: { limit90: 60, limit30: 50, limit7: 40 },
+  kwenta: { limit90: 60, limit30: 50, limit7: 40 },
+  jupiter_perps: { limit90: 80, limit30: 60, limit7: 40 },
 }
 
 // High priority platforms (always enriched)
-const HIGH_PRIORITY = ['binance_futures', 'bybit', 'okx_futures', 'bitget_futures', 'hyperliquid', 'gmx']
+const HIGH_PRIORITY = ['binance_futures', 'bybit', 'okx_futures', 'bitget_futures', 'hyperliquid', 'gmx', 'dydx', 'jupiter_perps']
 
 // Medium priority (enriched with all=true or period=90D)
-const MEDIUM_PRIORITY = ['binance_spot', 'bybit_spot', 'htx_futures', 'gateio', 'mexc', 'drift']
+const MEDIUM_PRIORITY = ['binance_spot', 'bybit_spot', 'htx_futures', 'gateio', 'mexc', 'drift', 'aevo', 'gains', 'kwenta']
 
 // Lower priority (enriched only with all=true)
 const LOWER_PRIORITY: string[] = []

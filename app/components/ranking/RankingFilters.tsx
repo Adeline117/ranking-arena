@@ -78,6 +78,7 @@ function ExportRankingButton({ traders, source, timeRange }: ExportRankingButton
         aria-expanded={showMenu}
         aria-haspopup="true"
         aria-label={t('exportRanking')}
+        className="export-ranking-btn"
         style={{
           padding: '6px 12px', borderRadius: tokens.radius.sm,
           border: `1px solid ${tokens.colors.border.primary}`,
@@ -86,7 +87,10 @@ function ExportRankingButton({ traders, source, timeRange }: ExportRankingButton
           fontSize: 12, fontWeight: 600, cursor: 'pointer',
         }}
       >
-        {t('exportRanking')}
+        <svg width={12} height={12} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className="hide-desktop">
+          <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
+        <span className="hide-mobile">{t('exportRanking')}</span>
       </button>
       {showMenu && (
         <div style={{
@@ -181,7 +185,7 @@ export function RankingFilters({
   return (
     <>
       {/* Category tabs row */}
-      <Box style={{
+      <Box className="ranking-toolbar-row" style={{
         padding: `${tokens.spacing[2]} ${tokens.spacing[4]}`,
         display: 'flex', alignItems: 'center', justifyContent: 'space-between',
         gap: tokens.spacing[2],

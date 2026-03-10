@@ -18,7 +18,6 @@ import { fetchBybit } from './bybit'
 import { fetchBybitSpot } from './bybit-spot'
 import { fetchOkxWeb3 } from './okx-web3'
 import { fetchBitgetFutures } from './bitget-futures'
-import { fetchBitgetSpot } from './bitget-spot'
 import { fetchXt } from './xt'
 import { fetchBingx } from './bingx'
 import { fetchGateio } from './gateio'
@@ -62,8 +61,7 @@ import { fetchKwenta } from './kwenta'
 export const INLINE_FETCHERS: Record<string, PlatformFetcher> = {
   // CEX Futures
   okx_futures: fetchOkxFutures,
-  htx: fetchHtx,
-  htx_futures: fetchHtx, // alias
+  htx_futures: fetchHtx,
   binance_futures: fetchBinanceFutures,
   binance_spot: fetchBinanceSpot,
   binance_web3: fetchBinanceWeb3,
@@ -71,7 +69,6 @@ export const INLINE_FETCHERS: Record<string, PlatformFetcher> = {
   bybit_spot: fetchBybitSpot,
   okx_web3: fetchOkxWeb3,
   bitget_futures: fetchBitgetFutures,
-  bitget_spot: fetchBitgetSpot,
   xt: fetchXt,
   bingx: fetchBingx,
   gateio: fetchGateio,
