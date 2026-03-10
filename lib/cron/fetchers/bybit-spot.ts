@@ -4,6 +4,7 @@
  *
  * Same beehive API as Bybit futures, labelled as bybit_spot.
  * metricValues: [ROI, Drawdown, followerProfit, WinRate, PLRatio, SharpeRatio]
+ * NOTE: mv[2] is followerProfit (copier PnL), NOT trader PnL. Set pnl=null.
  *
  * Uses api2.bybit.com to bypass Akamai WAF on www.bybit.com.
  */
@@ -16,7 +17,6 @@ import {
   upsertTraders,
   fetchJson,
   sleep,
-  parseNum,
   normalizeWinRate,
   getWinRateFormat,
 } from './shared'
@@ -207,7 +207,8 @@ async function fetchPeriod(
     if (roi == null || roi === 0) continue
 
     const maxDrawdown = parsePercent(mv[1])
-    const pnl = parseNum(mv[2])
+    // mv[2] is followerProfit (copier PnL), NOT trader PnL — set null to avoid wrong data
+    const pnl = null
     const winRate = normalizeWinRate(parsePercent(mv[3]), getWinRateFormat(SOURCE))
     const followers = parseInt(String(item.currentFollowerCount || '0'), 10) || null
 
