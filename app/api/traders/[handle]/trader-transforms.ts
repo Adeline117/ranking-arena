@@ -103,7 +103,7 @@ export async function getTraderDetails(
       .eq('source_trader_id', traderId).eq('period', '7D')
       .order('data_date', { ascending: true }).limit(7)),
     safeQuery(() => supabase.from('trader_stats_detail')
-      .select('sharpe_ratio, copiers_pnl, copiers_count, winning_positions, total_positions, avg_holding_time_hours, avg_profit, avg_loss, period')
+      .select('sharpe_ratio, copiers_pnl, copiers_count, winning_positions, total_positions, avg_holding_time_hours, avg_profit, avg_loss, aum, period')
       .in('source', getSourceAliases(sourceType)).eq('source_trader_id', traderId)
       .order('captured_at', { ascending: false }).limit(3)),
     supabase.from('trader_snapshots')
@@ -550,6 +550,7 @@ function buildTraderResponse(p: {
       bio: p.userProfile?.bio || undefined,
       followers: p.arenaFollowers,
       copiers: p.statsDetail90d?.copiers_count ?? undefined,
+      aum: p.statsDetail90d?.aum ?? undefined,
       avatar_url: p.source.avatar_url || undefined,
       cover_url: undefined,
       profile_url: p.source.profile_url || undefined,

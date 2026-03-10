@@ -30,7 +30,7 @@ const BLOCKSCOUT_URLS: Record<string, string> = {
 // Platform → chain mapping
 // 'auto' = detect from address format (0x = ethereum, base58 = solana)
 const PLATFORM_CHAIN: Record<string, string> = {
-  hyperliquid: 'arbitrum', // deposits on Arbitrum
+  hyperliquid: 'hyperliquid', // Native L1 — use Hyperliquid clearinghouse API
   gmx: 'arbitrum',
   gains: 'arbitrum',
   kwenta: 'base',
@@ -88,6 +88,35 @@ const SOLANA_STABLECOINS: Record<string, { symbol: string; decimals: number }> =
 }
 
 const SOLANA_RPC = 'https://api.mainnet-beta.solana.com'
+
+// Hyperliquid L1 API
+const HYPERLIQUID_API = 'https://api.hyperliquid.xyz'
+
+// ============================================
+// Live price cache (refreshed per enrichment batch)
+// ============================================
+
+let _solPriceCache: { price: number; ts: number } | null = null
+
+async function getSolPrice(): Promise<number> {
+  // Cache for 5 minutes
+  if (_solPriceCache && Date.now() - _solPriceCache.ts < 300_000) return _solPriceCache.price
+  try {
+    const resp = await fetch(
+      'https://api.coingecko.com/api/v3/simple/price?ids=solana&vs_currencies=usd',
+      { signal: AbortSignal.timeout(5000) }
+    )
+    if (resp.ok) {
+      const data = await resp.json() as { solana?: { usd?: number } }
+      const price = data.solana?.usd
+      if (price && price > 10) {
+        _solPriceCache = { price, ts: Date.now() }
+        return price
+      }
+    }
+  } catch { /* fallback */ }
+  return _solPriceCache?.price ?? 150 // last known or conservative fallback
+}
 
 // ============================================
 // Blockscout wallet data (EVM chains)
@@ -312,8 +341,8 @@ export async function fetchSolanaWalletAUM(address: string): Promise<number | nu
       }
     }
 
-    // SOL price estimate (conservative)
-    const solPrice = 150 // fallback
+    // SOL price — live from CoinGecko with fallback
+    const solPrice = await getSolPrice()
     const totalUsd = solBalance * solPrice + stablecoinTotal
 
     return totalUsd > 1 ? Math.round(totalUsd * 100) / 100 : null
@@ -377,8 +406,35 @@ export async function fetchSolanaWalletPortfolio(address: string): Promise<Portf
 }
 
 // ============================================
-// Unified interface for enrichment runner
+// Hyperliquid wallet data (native L1)
 // ============================================
+
+/**
+ * Fetch Hyperliquid account equity via native API (free, no key).
+ * Hyperliquid has its own L1 — trader addresses are EVM-format but
+ * balances live on Hyperliquid chain, not Arbitrum.
+ */
+export async function fetchHyperliquidWalletAUM(address: string): Promise<number | null> {
+  try {
+    const resp = await fetch(`${HYPERLIQUID_API}/info`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ type: 'clearinghouseState', user: address }),
+      signal: AbortSignal.timeout(10000),
+    })
+    if (!resp.ok) return null
+    const data = await resp.json() as {
+      marginSummary?: { accountValue?: string }
+      crossMarginSummary?: { accountValue?: string }
+    }
+    const equity = parseFloat(
+      data.marginSummary?.accountValue || data.crossMarginSummary?.accountValue || '0'
+    )
+    return equity > 1 ? Math.round(equity * 100) / 100 : null
+  } catch {
+    return null
+  }
+}
 
 // ============================================
 // dYdX wallet data (Cosmos-based)
@@ -456,6 +512,7 @@ export async function fetchWalletAUM(
 
   if (chain === 'solana') return fetchSolanaWalletAUM(address)
   if (chain === 'dydx') return fetchDydxWalletAUM(address)
+  if (chain === 'hyperliquid') return fetchHyperliquidWalletAUM(address)
 
   return fetchEvmWalletAUM(chain, address)
 }
@@ -477,6 +534,7 @@ export async function fetchWalletPortfolio(
 
   if (chain === 'solana') return fetchSolanaWalletPortfolio(address)
   if (chain === 'dydx') return [] // dYdX indexer doesn't expose token holdings
+  if (chain === 'hyperliquid') return [] // Positions fetched via enrichment-dex, not wallet module
 
   return fetchEvmWalletPortfolio(chain, address)
 }
