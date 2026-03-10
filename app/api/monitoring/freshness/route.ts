@@ -49,7 +49,8 @@ const PLATFORM_THRESHOLDS: Record<string, number> = {
   bitfinex: 24,
   // Tier 5: Not actively fetched (no cron group) — high threshold to avoid noise
   phemex: 72,
-  // xt_spot, bingx_spot, toobit: removed — not in any cron group, no public API
+  toobit: 24,  // Re-enabled via VPS scraper in group G2 (2026-03-09)
+  // xt_spot, bingx_spot: removed — not in any cron group, no public API
 }
 
 interface PlatformStatus {

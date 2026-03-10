@@ -479,9 +479,8 @@ const VERIFY_REGISTRY: Record<string, VerifyFn> = {
   cryptocom: () =>
     skipResult('cryptocom', 'endpoint_gone', 'No public API — requires stealth browser (CF challenge + session cookies)'),
 
-  // Toobit: CF WAF returns HTML — requires stealth browser
-  toobit: () =>
-    skipResult('toobit', 'endpoint_gone', 'CF WAF returns HTML — requires stealth browser'),
+  // Toobit: re-enabled via VPS Playwright scraper (2026-03-09)
+  // toobit: now handled by inline fetcher with VPS scraper strategy
 
   // LBank: no public API — all endpoints return HTML (CF challenge)
   lbank: () =>
