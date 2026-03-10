@@ -84,6 +84,8 @@ export {
 // DEX (Hyperliquid + GMX)
 export {
   fetchHyperliquidPositionHistory,
+  fetchHyperliquidEquityCurve,
+  fetchHyperliquidStatsDetail,
   fetchGmxPositionHistory,
 } from './enrichment-dex'
 
