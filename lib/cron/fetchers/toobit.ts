@@ -4,8 +4,24 @@
  * Toobit copy trading page: https://www.toobit.com/en-US/copy-trading
  * API endpoint discovered: https://www.toobit.com/api/v1/copy/leader/rank
  *
- * The copy trading leaderboard may be accessible via their internal API.
- * Toobit is a smaller exchange — endpoints may require session auth.
+ * Strategy order:
+ * 1. VPS Playwright scraper (primary — direct APIs return HTML due to Cloudflare WAF)
+ * 2. Direct API endpoints (fallback — in case WAF is lifted)
+ *
+ * VPS scraper handler spec (to deploy at /opt/scraper/server.js on SG VPS):
+ *   Endpoint: GET /toobit/leaderboard?period=30&pageSize=50
+ *   Behavior:
+ *     1. Navigate to https://www.toobit.com/en-US/copy-trading
+ *     2. setupInterception() to capture API responses matching:
+ *        - /api/v1/copy/leader/rank
+ *        - /api/v1/copy-trading/leaders
+ *        - /api/v1/copy/leader/list
+ *     3. Wait for network idle / API response
+ *     4. If no intercepted API data, use safeFetchJson fallback:
+ *        POST https://www.toobit.com/api/v1/copy/leader/rank
+ *        Body: { sortBy: "roi", period: "30", page: 1, pageSize: 50 }
+ *        Headers: { Referer, Origin, Accept, Cookie (from browser context) }
+ *     5. Return: { data: { list: [{ leaderId, nickname, roi, pnl, winRate, maxDrawdown, followers, avatar }] } }
  */
 
 import type { SupabaseClient } from '@supabase/supabase-js'
@@ -27,6 +43,8 @@ import { captureException } from '@/lib/utils/logger'
 const SOURCE = 'toobit'
 const TARGET = 500
 const PAGE_SIZE = 50
+const VPS_SCRAPER_URL = process.env.VPS_SCRAPER_URL || 'http://45.76.152.169:3456'
+const VPS_SCRAPER_KEY = process.env.VPS_PROXY_KEY || ''
 
 const PERIOD_MAP: Record<string, string> = {
   '7D': '7',
@@ -138,6 +156,34 @@ async function fetchPeriod(
   const periodStr = PERIOD_MAP[period] || '30'
   const allTraders = new Map<string, ToobitTrader>()
 
+  // Strategy 1: VPS Playwright scraper (primary — bypasses Cloudflare WAF)
+  if (VPS_SCRAPER_KEY) {
+    try {
+      const scraperUrl = `${VPS_SCRAPER_URL}/toobit/leaderboard?period=${periodStr}&pageSize=${PAGE_SIZE}`
+      logger.warn(`[${SOURCE}] Trying VPS Playwright scraper...`)
+      const res = await fetch(scraperUrl, {
+        headers: { 'X-Proxy-Key': VPS_SCRAPER_KEY },
+        signal: AbortSignal.timeout(60_000),
+      })
+      if (res.ok) {
+        const data = (await res.json()) as ToobitResponse
+        const list = extractList(data)
+        for (const item of list) {
+          const id = String(item.leaderId || item.uid || item.userId || item.id || '')
+          if (id && id !== 'undefined' && !allTraders.has(id)) allTraders.set(id, item)
+        }
+        if (allTraders.size > 0) {
+          logger.info(`[${SOURCE}] VPS scraper got ${allTraders.size} traders`)
+        }
+      } else {
+        logger.warn(`[${SOURCE}] VPS scraper HTTP ${res.status}`)
+      }
+    } catch (err) {
+      logger.warn(`[${SOURCE}] VPS scraper failed: ${err instanceof Error ? err.message : String(err)}`)
+    }
+  }
+
+  // Strategy 2: Direct API endpoints (fallback — usually returns HTML due to CF WAF)
   for (const buildUrl of API_ENDPOINTS) {
     if (allTraders.size >= TARGET) break
     let consecutiveEmpty = 0

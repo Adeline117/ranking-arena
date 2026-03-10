@@ -66,7 +66,7 @@ const GROUPS: Record<string, string[]> = {
   g1: ['drift', 'bitunix'],
   // Group G2: DEX (every 6h) — 2 platforms
   // paradex removed: API now requires JWT auth since 2026-03
-  g2: ['web3_bot', 'kwenta'],
+  g2: ['web3_bot', 'kwenta', 'toobit'],
   // Group I: Social trading (every 6h) — large dataset (2000 traders × 3 periods)
   i: ['etoro'],
 }

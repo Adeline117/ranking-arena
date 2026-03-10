@@ -32,7 +32,7 @@ import { fetchBitfinex } from './bitfinex'
 // Removed: fetchWeex (disabled 2026-02-08: API returns 521)
 // Removed: fetchLbank (disabled 2026-03-08: API returns "no data")
 // Removed: fetchKucoin (disabled 2026-03-08: API returns 404)
-// Removed: fetchToobit (2026-03-09: API returns HTML, not JSON)
+import { fetchToobit } from './toobit' // Re-enabled: VPS Playwright scraper (2026-03-09)
 // Removed: fetchCryptocom (2026-03-09: WAF blocked, HTTP 403)
 // Removed: fetchPionex (2026-03-09: WAF blocked, HTTP 403)
 
