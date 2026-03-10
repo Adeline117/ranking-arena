@@ -27,7 +27,7 @@ export async function fetchBybitEquityCurve(
 ): Promise<EquityCurvePoint[]> {
   try {
     const data = await fetchWithProxyFallback<BybitChartResponse>(
-      'https://www.bybit.com/x-api/fapi/beehive/public/v1/common/leader-chart',
+      'https://api2.bybit.com/fapi/beehive/public/v1/common/leader-chart',
       {
         method: 'POST',
         headers: {
@@ -36,7 +36,7 @@ export async function fetchBybitEquityCurve(
           Referer: 'https://www.bybit.com/copyTrade',
         },
         body: { leaderId: traderId, days },
-        timeoutMs: 15000,
+        timeoutMs: 5000,
       }
     )
 
@@ -88,7 +88,7 @@ export async function fetchBybitPositionHistory(
 ): Promise<PositionHistoryItem[]> {
   try {
     const data = await fetchWithProxyFallback<BybitHistoryOrderResponse>(
-      'https://www.bybit.com/x-api/fapi/beehive/public/v1/common/leader-history-order',
+      'https://api2.bybit.com/fapi/beehive/public/v1/common/leader-history-order',
       {
         method: 'POST',
         headers: {
@@ -97,7 +97,7 @@ export async function fetchBybitPositionHistory(
           Referer: 'https://www.bybit.com/copyTrade',
         },
         body: { leaderId: traderId, pageNo: 1, pageSize },
-        timeoutMs: 15000,
+        timeoutMs: 5000,
       }
     )
 
@@ -157,7 +157,7 @@ export async function fetchBybitStatsDetail(
 ): Promise<StatsDetail | null> {
   try {
     const data = await fetchWithProxyFallback<BybitTraderDetailResponse>(
-      `https://www.bybit.com/x-api/fapi/beehive/public/v1/common/leader-detail`,
+      `https://api2.bybit.com/fapi/beehive/public/v1/common/leader-detail`,
       {
         method: 'POST',
         headers: {
@@ -166,7 +166,7 @@ export async function fetchBybitStatsDetail(
           Referer: 'https://www.bybit.com/copyTrade',
         },
         body: { leaderId: traderId },
-        timeoutMs: 15000,
+        timeoutMs: 5000,
       }
     )
 
