@@ -42,6 +42,9 @@ import { fetchBitunix } from './bitunix'
 import { fetchBtcc } from './btcc'
 import { fetchWeb3Bot } from './web3-bot'
 
+// Social trading platforms
+import { fetchEtoro } from './etoro'
+
 // DEX - On-chain / Subgraph (Working platforms only)
 import { fetchHyperliquid } from './hyperliquid'
 import { fetchGmx } from './gmx'
@@ -85,6 +88,9 @@ export const INLINE_FETCHERS: Record<string, PlatformFetcher> = {
   bitunix: fetchBitunix,
   btcc: fetchBtcc,
   web3_bot: fetchWeb3Bot,
+
+  // Social trading
+  etoro: fetchEtoro,
 
   // DEX
   hyperliquid: fetchHyperliquid,

@@ -73,6 +73,8 @@ export type TraderSource =
   // CEX margin
   | 'bitfinex'
   | 'toobit'
+  // Social trading
+  | 'etoro'
   // Web3 bots / AI agents
   | 'web3_bot'
 
@@ -120,6 +122,8 @@ export const ALL_SOURCES: TraderSource[] = [
   'btcc',
   'bitfinex',
   'toobit',
+  // Social trading
+  'etoro',
   // Web3 bots
   'web3_bot',
 ]
@@ -300,6 +304,7 @@ export const EXCHANGE_CONFIG: Record<TraderSource, ExchangeConfig> = {
   btcc: { name: 'BTCC', sourceType: 'futures', reliability: 65, trustWeight: 0.75, roiType: 'mixed' },
   bitfinex: { name: 'Bitfinex', sourceType: 'futures', reliability: 70, trustWeight: 0.80, roiType: 'mixed' },
   toobit: { name: 'Toobit', sourceType: 'futures', reliability: 50, trustWeight: 0.65, roiType: 'mixed' },
+  etoro: { name: 'eToro', sourceType: 'spot', reliability: 90, trustWeight: 0.85, roiType: 'realized' },
   web3_bot: { name: 'Web3 Bot', sourceType: 'web3', reliability: 75, trustWeight: 0.70, roiType: 'mixed' },
   kwenta: { name: 'Kwenta', sourceType: 'futures', reliability: 70, trustWeight: 0.75, roiType: 'mixed' },
   synthetix: { name: 'Synthetix', sourceType: 'futures', reliability: 70, trustWeight: 0.75, roiType: 'mixed' },
