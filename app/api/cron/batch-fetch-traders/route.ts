@@ -21,7 +21,7 @@
  *   - kucoin: APIs return 404, feature discontinued
  *   - lbank: needs session auth, crashes headless browser
  *   - bitget_spot: no public API (all endpoints return 404)
- *   - blofin: needs credentials (BLOFIN env vars not set)
+ *   - blofin: re-enabled with VPS Playwright scraper (2026-03-10)
  *   - phemex: CloudFront blocks — data fetched via Mac Mini crontab (fetch-phemex.mjs)
  *   - weex: copy-trade API returning 521 (origin down) since 2026-03
  *   - mux: requires THEGRAPH_API_KEY (not set), Copin has 0 traders
@@ -64,9 +64,9 @@ const GROUPS: Record<string, string[]> = {
   h: ['gateio', 'btcc'],
   // Group G1: DEX (every 6h) — 2 platforms, parallel
   g1: ['drift', 'bitunix'],
-  // Group G2: DEX (every 6h) — 2 platforms
+  // Group G2: DEX+CEX (every 6h) — 4 platforms
   // paradex removed: API now requires JWT auth since 2026-03
-  g2: ['web3_bot', 'kwenta', 'toobit'],
+  g2: ['web3_bot', 'kwenta', 'toobit', 'blofin'],
   // Group I: Social trading (every 6h) — large dataset (2000 traders × 3 periods)
   i: ['etoro'],
 }
@@ -108,8 +108,8 @@ export async function GET(request: NextRequest) {
     } catch { /* best effort */ }
   }, 280_000)
 
-  // Per-platform timeout: 240s leaves 60s buffer for logging/cleanup within 300s limit
-  const PLATFORM_TIMEOUT_MS = 240_000
+  // Per-platform timeout: 180s leaves 120s buffer for logging/cleanup within 300s limit
+  const PLATFORM_TIMEOUT_MS = 180_000
 
   // Run a single platform fetch and return the result
   async function runPlatform(platform: string): Promise<BatchResult> {

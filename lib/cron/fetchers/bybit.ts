@@ -40,10 +40,10 @@ const VPS_SCRAPER_KEY = process.env.VPS_PROXY_KEY || ''
 const TARGET = 500
 const PAGE_SIZE = 50
 
-// Phase 2: Enrichment settings
-const ENRICH_LIMIT = 50
-const ENRICH_CONCURRENCY = 5 // Increased concurrency
-const ENRICH_DELAY_MS = 1000
+// Phase 2: Enrichment settings — reduced to fit within 180s timeout
+const ENRICH_LIMIT = 30
+const ENRICH_CONCURRENCY = 5
+const ENRICH_DELAY_MS = 500
 
 const PERIOD_MAP: Record<string, string> = {
   '7D': 'DATA_DURATION_SEVEN_DAY',
