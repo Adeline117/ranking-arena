@@ -303,6 +303,20 @@ export async function runEnrichment(params: {
                   stats = enhanceStatsWithDerivedMetrics(stats, curve, period)
                 }
                 await withRetry(() => upsertStatsDetail(supabase, platformKey, traderId, period, stats!), `${platformKey}:${traderId} save stats detail`)
+
+                // Write win_rate and max_drawdown back to snapshot so leaderboard shows them
+                const snapshotUpdate: Record<string, unknown> = {}
+                if (stats.profitableTradesPct != null) snapshotUpdate.win_rate = stats.profitableTradesPct
+                if (stats.maxDrawdown != null) snapshotUpdate.max_drawdown = stats.maxDrawdown
+                if (stats.totalTrades != null) snapshotUpdate.trades_count = stats.totalTrades
+                if (Object.keys(snapshotUpdate).length > 0) {
+                  await supabase
+                    .from('trader_snapshots')
+                    .update(snapshotUpdate)
+                    .eq('source', platformKey)
+                    .eq('source_trader_id', traderId)
+                    .eq('season_id', period)
+                }
               }
             }
 
