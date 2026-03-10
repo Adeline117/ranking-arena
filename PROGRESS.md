@@ -77,6 +77,15 @@ Branch: `feature/desoc-platform`, 23 files, +1310 lines
 - feature/desoc-platform merged into main
 - Fixed: DirectoryPage, SnapshotViewerClient hardcoded 'zh'|'en' types
 
+## Recently Completed (2026-03-10) — Data Coverage Expansion
+1. **P0 BUG FIX**: drift/bitunix/btcc/web3_bot fetchers were missing from INLINE_FETCHERS registry → silently failing in groups G1/G2/H
+2. **eToro**: New fetcher — world's largest social trading platform, 3.4M+ traders, fully public API, no auth. Top 2000 per period.
+3. **Removed stub fetchers**: WhiteBit (no copy-trading feature) and BTSE (no public API) → added to DEAD_BLOCKED_PLATFORMS
+4. **Tests**: Fixed 5 test suites to match current platform registry and query chains (137 pass, 2 pre-existing dead connector failures)
+5. **Kwenta/Toobit**: Re-enabled by linter (Copin fallback / VPS scraper)
+6. Active platforms: 24 → 28+ (drift, bitunix, btcc, web3_bot, etoro now registered)
+7. Batch group I added for eToro (every 6h at :24)
+
 ## Recently Completed (2026-03-09) — Pipeline Fix & Optimization
 1. BitMart confirmed dead — copytrade API "service not open" globally, added to DEAD_BLOCKED_PLATFORMS
 2. batch-fetch-traders: sequential→parallel execution for all groups (fixes a2/b/d2 timeouts)
@@ -106,8 +115,8 @@ Branch: `feature/desoc-platform`, 23 files, +1310 lines
 - Full Japanese/Korean translations (4200+ keys each)
 
 ## Key Metrics
-- Total Traders: 32,000+
-- Exchanges Supported: 28+ (added Perpetual Protocol)
+- Total Traders: 34,000+ (eToro adds 2000)
+- Exchanges Supported: 29+ (added eToro)
 - Cron Jobs: 35 active (with PipelineLogger)
 - Tests: 139 suites, 2271 tests, ALL GREEN
 - Languages: 4 (en, zh, ja, ko)
