@@ -64,16 +64,6 @@ const HEADERS: Record<string, string> = {
 // Ranking API kinds: 0=ROI, 1=PnL, 2=follower profit, 3=followers, 4=AUM
 const RANKING_KINDS = [0, 1, 2, 3, 4]
 
-/** Multiple API endpoints to try (usually CF WAF blocks, but worth trying) */
-const API_ENDPOINTS = [
-  (page: number, period: string) =>
-    `https://www.toobit.com/api/v1/copy/leader/rank?sortBy=roi&period=${period}&page=${page}&pageSize=${PAGE_SIZE}`,
-  (page: number, period: string) =>
-    `https://www.toobit.com/api/v1/copy-trading/leaders?sort=roi&days=${period}&page=${page}&limit=${PAGE_SIZE}`,
-  (page: number, period: string) =>
-    `https://api.toobit.com/api/v1/copy/leader/list?sortBy=roi&period=${period}&page=${page}&pageSize=${PAGE_SIZE}`,
-]
-
 interface ToobitTrader {
   // ID fields (ranking API uses leaderUserId)
   leaderUserId?: string
