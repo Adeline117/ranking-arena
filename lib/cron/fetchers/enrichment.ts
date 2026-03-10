@@ -63,6 +63,24 @@ export {
   fetchHtxStatsDetail,
 } from './enrichment-htx'
 
+// Gate.io
+export {
+  fetchGateioEquityCurve,
+  fetchGateioStatsDetail,
+} from './enrichment-gateio'
+
+// MEXC
+export {
+  fetchMexcEquityCurve,
+  fetchMexcStatsDetail,
+} from './enrichment-mexc'
+
+// Drift
+export {
+  fetchDriftPositionHistory,
+  fetchDriftStatsDetail,
+} from './enrichment-drift'
+
 // DEX (Hyperliquid + GMX)
 export {
   fetchHyperliquidPositionHistory,

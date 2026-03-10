@@ -1,7 +1,8 @@
 import { Metadata } from 'next'
 import { notFound } from 'next/navigation'
 import { createClient } from '@supabase/supabase-js'
-import { EXCHANGE_NAMES, SOURCE_TYPE_MAP } from '@/lib/constants/exchanges'
+import { EXCHANGE_NAMES, SOURCE_TYPE_MAP, EXCHANGE_CONFIG, DEAD_BLOCKED_PLATFORMS } from '@/lib/constants/exchanges'
+import type { TraderSource } from '@/lib/constants/exchanges'
 import { tokens } from '@/lib/design-tokens'
 import MobileBottomNav from '@/app/components/layout/MobileBottomNav'
 import { Box } from '@/app/components/base'
@@ -21,9 +22,23 @@ function getSupabase() {
   return _supabaseInstance
 }
 
-// No generateStaticParams — pages are ISR-rendered on first request
-// This avoids empty cached pages from build time
+// Pre-render pages for active exchanges at build time
+const deadSet = new Set(DEAD_BLOCKED_PLATFORMS)
+const ACTIVE_EXCHANGES = Object.keys(EXCHANGE_CONFIG).filter(
+  (k) => !deadSet.has(k as TraderSource) && !k.startsWith('dune_') && k !== 'okx_wallet'
+)
+
+export async function generateStaticParams() {
+  return ACTIVE_EXCHANGES.map((exchange) => ({ exchange }))
+}
+
 export const dynamicParams = true
+
+const TYPE_LABELS: Record<string, { en: string; zh: string }> = {
+  futures: { en: 'Futures', zh: '合约' },
+  spot: { en: 'Spot', zh: '现货' },
+  web3: { en: 'On-Chain', zh: '链上' },
+}
 
 export async function generateMetadata({
   params,
@@ -33,11 +48,11 @@ export async function generateMetadata({
   const { exchange } = await params
   const displayName = EXCHANGE_NAMES[exchange] || exchange
   const sourceType = SOURCE_TYPE_MAP[exchange] || 'futures'
-  const typeLabel = sourceType === 'futures' ? '合约' : sourceType === 'spot' ? '现货' : '链上'
+  const labels = TYPE_LABELS[sourceType] || TYPE_LABELS.futures
   const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://www.arenafi.org'
 
-  const title = `${displayName} ${typeLabel}交易员排行榜 - Arena`
-  const description = `查看 ${displayName} 平台最新${typeLabel}交易员排行榜，包含 ROI、胜率、最大回撤、Arena Score 等关键指标。实时更新，助你发现顶级交易员。`
+  const title = `${displayName} ${labels.en} Trader Rankings | Arena`
+  const description = `Top ${displayName} ${labels.en.toLowerCase()} traders ranked by Arena Score. Compare ROI, win rate, max drawdown, and PnL across 90-day windows. Updated every 3 hours.`
 
   return {
     title,
@@ -47,11 +62,12 @@ export async function generateMetadata({
     },
     keywords: [
       displayName,
-      '交易员排行榜',
-      'trader ranking',
+      `${displayName} trader ranking`,
+      `${displayName} copy trading`,
+      'crypto trader leaderboard',
       'ROI',
       'Arena Score',
-      typeLabel,
+      labels.en.toLowerCase(),
       'crypto',
       'Arena',
     ],
@@ -62,7 +78,7 @@ export async function generateMetadata({
       url: `${baseUrl}/rankings/${exchange}`,
       siteName: 'Arena',
       images: [{
-        url: `${baseUrl}/api/og?title=${encodeURIComponent(`${displayName} 排行榜`)}&subtitle=${encodeURIComponent(description.slice(0, 80))}`,
+        url: `${baseUrl}/api/og?title=${encodeURIComponent(`${displayName} Rankings`)}&subtitle=${encodeURIComponent(description.slice(0, 80))}`,
         width: 1200,
         height: 630,
         alt: title,
@@ -153,10 +169,34 @@ export default async function ExchangeRankingPage({
   const displayName = EXCHANGE_NAMES[exchange]
   const traders = await fetchExchangeTraders(exchange)
   const sourceType = SOURCE_TYPE_MAP[exchange] || 'futures'
-  const typeLabel = sourceType === 'futures' ? '合约' : sourceType === 'spot' ? '现货' : '链上'
+  const labels = TYPE_LABELS[sourceType] || TYPE_LABELS.futures
+
+  // JSON-LD ItemList for top traders (SEO structured data)
+  const top100 = traders.slice(0, 100)
+  const jsonLd = {
+    '@context': 'https://schema.org',
+    '@type': 'ItemList',
+    name: `${displayName} ${labels.en} Trader Rankings`,
+    description: `Top ${displayName} ${labels.en.toLowerCase()} traders ranked by Arena Score`,
+    numberOfItems: top100.length,
+    itemListElement: top100.map((t, i) => ({
+      '@type': 'ListItem',
+      position: i + 1,
+      item: {
+        '@type': 'Person',
+        name: t.display_name || t.trader_key,
+        url: `https://www.arenafi.org/trader/${encodeURIComponent(t.trader_key)}`,
+        ...(t.avatar_url ? { image: t.avatar_url } : {}),
+      },
+    })),
+  }
 
   return (
     <Box style={{ minHeight: '100vh', background: tokens.colors.bg.primary, color: tokens.colors.text.primary }}>
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
+      />
       <div className="max-w-5xl mx-auto px-4 py-6" style={{ paddingBottom: 80 }}>
         <h1
           style={{
@@ -166,7 +206,7 @@ export default async function ExchangeRankingPage({
             marginBottom: tokens.spacing[2],
           }}
         >
-          {displayName} {typeLabel}交易员排行榜
+          {displayName} {labels.en} Trader Rankings
         </h1>
         <p
           style={{
@@ -175,7 +215,7 @@ export default async function ExchangeRankingPage({
             marginBottom: tokens.spacing[6],
           }}
         >
-          共 {traders.length} 名交易员 | 按 Arena Score 排序 | 90 天数据窗口
+          {traders.length} traders | Ranked by Arena Score | 90-day window
         </p>
 
         <ExchangeRankingClient traders={traders} exchange={exchange} />
