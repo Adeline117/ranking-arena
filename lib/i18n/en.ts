@@ -4287,6 +4287,23 @@ shareRankCard: 'Share Rank Card',
 weeklyTop10: 'Weekly Top 10',
 embedWidget: 'Embed Widget',
 
+// Auto-generated profile tags
+tagTopPercent: 'Top {pct}%',
+tagScalper: 'Scalper',
+tagSwing: 'Swing',
+tagTrend: 'Trend',
+tagPosition: 'Position',
+tagLowRisk: 'Low Risk',
+tagModerateRisk: 'Moderate Risk',
+tagHighRisk: 'High Risk',
+tagWhale: 'Whale',
+tagActive: 'Active',
+tagBot: 'Bot',
+tagElite: 'Elite',
+tagHighWinrate: 'High Win Rate',
+tagHighRoi: 'High ROI',
+tagDefi: 'DeFi',
+
 } as const
 
 export default en
