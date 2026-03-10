@@ -78,8 +78,15 @@ export {
 // Drift
 export {
   fetchDriftPositionHistory,
+  fetchDriftEquityCurve,
   fetchDriftStatsDetail,
 } from './enrichment-drift'
+
+// dYdX
+export {
+  fetchDydxEquityCurve,
+  fetchDydxStatsDetail,
+} from './enrichment-dydx'
 
 // DEX (Hyperliquid + GMX)
 export {
@@ -87,6 +94,10 @@ export {
   fetchHyperliquidEquityCurve,
   fetchHyperliquidStatsDetail,
   fetchGmxPositionHistory,
+  fetchGmxEquityCurve,
+  fetchGmxStatsDetail,
+  computeStatsFromPositions,
+  buildEquityCurveFromPositions,
 } from './enrichment-dex'
 
 // Database operations

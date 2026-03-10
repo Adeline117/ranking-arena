@@ -1,12 +1,123 @@
 /**
  * DEX enrichment: Hyperliquid + GMX
  * - Position history (existing)
- * - Equity curves (new: derived from portfolio snapshots / fills)
+ * - Equity curves (derived from fills)
+ * - Stats detail: win_rate, totalTrades, maxDrawdown, avgProfit/Loss (computed from fills)
+ * - Asset breakdown (computed from position history)
  */
 
 import { fetchJson } from './shared'
 import { logger } from '@/lib/logger'
 import type { EquityCurvePoint, PositionHistoryItem, StatsDetail } from './enrichment-types'
+
+// ============================================
+// Shared: compute stats from position history
+// ============================================
+
+/**
+ * Compute trading stats from position history fills.
+ * Works for any DEX where we have closed trades with PnL.
+ */
+export function computeStatsFromPositions(positions: PositionHistoryItem[]): Partial<StatsDetail> {
+  const withPnl = positions.filter((p) => p.pnlUsd != null)
+  if (withPnl.length === 0) return {}
+
+  const wins = withPnl.filter((p) => (p.pnlUsd ?? 0) > 0)
+  const losses = withPnl.filter((p) => (p.pnlUsd ?? 0) < 0)
+
+  const totalTrades = withPnl.length
+  const winCount = wins.length
+  const profitableTradesPct = totalTrades > 0 ? (winCount / totalTrades) * 100 : null
+
+  const avgProfit = wins.length > 0
+    ? wins.reduce((sum, p) => sum + (p.pnlUsd ?? 0), 0) / wins.length
+    : null
+  const avgLoss = losses.length > 0
+    ? losses.reduce((sum, p) => sum + (p.pnlUsd ?? 0), 0) / losses.length
+    : null
+
+  const allPnls = withPnl.map((p) => p.pnlUsd ?? 0)
+  const largestWin = wins.length > 0 ? Math.max(...wins.map((p) => p.pnlUsd ?? 0)) : null
+  const largestLoss = losses.length > 0 ? Math.min(...losses.map((p) => p.pnlUsd ?? 0)) : null
+
+  // Max drawdown from cumulative PnL
+  let cumPnl = 0
+  let peak = 0
+  let maxDD = 0
+  for (const pnl of allPnls) {
+    cumPnl += pnl
+    if (cumPnl > peak) peak = cumPnl
+    if (peak > 0) {
+      const dd = ((peak - cumPnl) / peak) * 100
+      if (dd > maxDD) maxDD = dd
+    }
+  }
+
+  return {
+    totalTrades,
+    profitableTradesPct: profitableTradesPct != null ? Math.round(profitableTradesPct * 10) / 10 : null,
+    winningPositions: winCount,
+    totalPositions: totalTrades,
+    avgProfit: avgProfit != null ? Math.round(avgProfit * 100) / 100 : null,
+    avgLoss: avgLoss != null ? Math.round(avgLoss * 100) / 100 : null,
+    largestWin: largestWin != null ? Math.round(largestWin * 100) / 100 : null,
+    largestLoss: largestLoss != null ? Math.round(largestLoss * 100) / 100 : null,
+    maxDrawdown: maxDD > 0 && maxDD < 200 ? Math.round(maxDD * 100) / 100 : null,
+  }
+}
+
+/**
+ * Build equity curve from position history (cumulative PnL by day).
+ * Works for any DEX with timestamped trades + PnL.
+ */
+export function buildEquityCurveFromPositions(
+  positions: PositionHistoryItem[],
+  days: number
+): EquityCurvePoint[] {
+  const cutoff = Date.now() - days * 86400000
+  const withPnl = positions.filter(
+    (p) => p.pnlUsd != null && p.closeTime != null && new Date(p.closeTime).getTime() >= cutoff
+  )
+
+  if (withPnl.length === 0) return []
+
+  // Sort by close time ascending
+  withPnl.sort((a, b) => new Date(a.closeTime!).getTime() - new Date(b.closeTime!).getTime())
+
+  // Aggregate PnL by day
+  const dailyPnl = new Map<string, number>()
+  for (const p of withPnl) {
+    const date = p.closeTime!.split('T')[0]
+    dailyPnl.set(date, (dailyPnl.get(date) || 0) + (p.pnlUsd ?? 0))
+  }
+
+  if (dailyPnl.size === 0) return []
+
+  const sortedDates = [...dailyPnl.keys()].sort()
+  let cumPnl = 0
+  const points: EquityCurvePoint[] = []
+
+  for (const date of sortedDates) {
+    cumPnl += dailyPnl.get(date) || 0
+    points.push({ date, roi: 0, pnl: cumPnl })
+  }
+
+  // Estimate ROI from cumulative PnL
+  const totalVolume = withPnl.reduce((sum, p) => {
+    const size = p.maxPositionSize ?? p.closedSize ?? 0
+    const price = p.exitPrice ?? 0
+    return sum + Math.abs(size * price || p.pnlUsd || 0)
+  }, 0)
+  // Estimate capital as ~10% of total volume (average leverage ~10x)
+  const estimatedCapital = totalVolume > 0 ? totalVolume / 10 : Math.abs(cumPnl) * 5
+  if (estimatedCapital > 0) {
+    for (const p of points) {
+      p.roi = ((p.pnl || 0) / estimatedCapital) * 100
+    }
+  }
+
+  return points
+}
 
 // ============================================
 // Hyperliquid Position History (from userFills)
@@ -24,50 +135,60 @@ interface HyperliquidFill {
   startPosition?: string
 }
 
+/**
+ * Fetch raw fills from Hyperliquid API (cached for reuse across position history + equity curve + stats).
+ */
+async function fetchHyperliquidFills(address: string): Promise<HyperliquidFill[]> {
+  const fills = await fetchJson<HyperliquidFill[]>(
+    'https://api.hyperliquid.xyz/info',
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: { type: 'userFills', user: address },
+      timeoutMs: 15000,
+    }
+  )
+  return Array.isArray(fills) ? fills : []
+}
+
+function parseFillsToPositions(fills: HyperliquidFill[], limit = 200): PositionHistoryItem[] {
+  const closingFills = fills
+    .filter((f) => {
+      const pnl = parseFloat(f.closedPnl || '0')
+      return pnl !== 0
+    })
+    .slice(0, limit)
+
+  return closingFills.map((f) => {
+    const dir = (f.dir || '').toLowerCase()
+    const isShort = dir.includes('short') || (dir === 'buy' && parseFloat(f.startPosition || '0') < 0)
+
+    return {
+      symbol: (f.coin || '').replace('@', 'HL-'),
+      direction: isShort ? 'short' as const : 'long' as const,
+      positionType: 'perpetual',
+      marginMode: f.crossed ? 'cross' : 'isolated',
+      openTime: null,
+      closeTime: f.time ? new Date(f.time).toISOString() : null,
+      entryPrice: null,
+      exitPrice: f.px != null ? Number(f.px) : null,
+      maxPositionSize: null,
+      closedSize: f.sz != null ? Number(f.sz) : null,
+      pnlUsd: f.closedPnl != null ? Number(f.closedPnl) : null,
+      pnlPct: null,
+      status: 'closed',
+    }
+  })
+}
+
 export async function fetchHyperliquidPositionHistory(
   address: string,
   limit = 200
 ): Promise<PositionHistoryItem[]> {
   try {
-    const fills = await fetchJson<HyperliquidFill[]>(
-      'https://api.hyperliquid.xyz/info',
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: { type: 'userFills', user: address },
-        timeoutMs: 15000,
-      }
-    )
-
-    if (!Array.isArray(fills) || fills.length === 0) return []
-
-    const closingFills = fills
-      .filter((f) => {
-        const pnl = parseFloat(f.closedPnl || '0')
-        return pnl !== 0
-      })
-      .slice(0, limit)
-
-    return closingFills.map((f) => {
-      const dir = (f.dir || '').toLowerCase()
-      const isShort = dir.includes('short') || (dir === 'buy' && parseFloat(f.startPosition || '0') < 0)
-
-      return {
-        symbol: (f.coin || '').replace('@', 'HL-'),
-        direction: isShort ? 'short' as const : 'long' as const,
-        positionType: 'perpetual',
-        marginMode: f.crossed ? 'cross' : 'isolated',
-        openTime: null,
-        closeTime: f.time ? new Date(f.time).toISOString() : null,
-        entryPrice: null,
-        exitPrice: f.px != null ? Number(f.px) : null,
-        maxPositionSize: null,
-        closedSize: f.sz != null ? Number(f.sz) : null,
-        pnlUsd: f.closedPnl != null ? Number(f.closedPnl) : null,
-        pnlPct: null,
-        status: 'closed',
-      }
-    })
+    const fills = await fetchHyperliquidFills(address)
+    if (fills.length === 0) return []
+    return parseFillsToPositions(fills, limit)
   } catch (err) {
     logger.warn(`[enrichment] Hyperliquid position history failed: ${err}`)
     return []
@@ -177,17 +298,8 @@ export async function fetchHyperliquidEquityCurve(
   days: number
 ): Promise<EquityCurvePoint[]> {
   try {
-    const fills = await fetchJson<HyperliquidFill[]>(
-      'https://api.hyperliquid.xyz/info',
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: { type: 'userFills', user: address },
-        timeoutMs: 15000,
-      }
-    )
-
-    if (!Array.isArray(fills) || fills.length === 0) return []
+    const fills = await fetchHyperliquidFills(address)
+    if (fills.length === 0) return []
 
     // Aggregate closedPnl by day
     const cutoff = Date.now() - days * 86400000
@@ -230,50 +342,116 @@ export async function fetchHyperliquidEquityCurve(
 }
 
 /**
- * Hyperliquid stats from clearinghouse state.
+ * Hyperliquid stats from clearinghouse state + computed from fills.
+ * Combines account info (AUM, open positions) with trade stats (win rate, drawdown).
  */
 export async function fetchHyperliquidStatsDetail(
   address: string
 ): Promise<StatsDetail | null> {
   try {
-    const state = await fetchJson<{
-      marginSummary?: { accountValue?: string; totalMarginUsed?: string }
-      assetPositions?: Array<{ position?: { unrealizedPnl?: string; positionValue?: string } }>
-    }>(
-      'https://api.hyperliquid.xyz/info',
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: { type: 'clearinghouseState', user: address },
-        timeoutMs: 10000,
-      }
-    )
+    // Fetch both clearinghouse state and fills in parallel
+    const [state, fills] = await Promise.all([
+      fetchJson<{
+        marginSummary?: { accountValue?: string; totalMarginUsed?: string }
+        assetPositions?: Array<{ position?: { unrealizedPnl?: string; positionValue?: string } }>
+      }>(
+        'https://api.hyperliquid.xyz/info',
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: { type: 'clearinghouseState', user: address },
+          timeoutMs: 10000,
+        }
+      ).catch(() => null),
+      fetchHyperliquidFills(address).catch(() => [] as HyperliquidFill[]),
+    ])
 
-    if (!state?.marginSummary) return null
+    const accountValue = state?.marginSummary
+      ? parseFloat(state.marginSummary.accountValue || '0')
+      : 0
+    const openPositions = state?.assetPositions?.length || 0
 
-    const accountValue = parseFloat(state.marginSummary.accountValue || '0')
-    const totalPositions = state.assetPositions?.length || 0
+    // Compute trade stats from fills
+    const positions = parseFillsToPositions(fills, 500)
+    const derivedStats = computeStatsFromPositions(positions)
 
     return {
-      totalTrades: null,
-      profitableTradesPct: null,
+      totalTrades: derivedStats.totalTrades ?? null,
+      profitableTradesPct: derivedStats.profitableTradesPct ?? null,
       avgHoldingTimeHours: null,
-      avgProfit: null,
-      avgLoss: null,
-      largestWin: null,
-      largestLoss: null,
-      sharpeRatio: null,
-      maxDrawdown: null,
+      avgProfit: derivedStats.avgProfit ?? null,
+      avgLoss: derivedStats.avgLoss ?? null,
+      largestWin: derivedStats.largestWin ?? null,
+      largestLoss: derivedStats.largestLoss ?? null,
+      sharpeRatio: null, // Computed from equity curve in enhanceStatsWithDerivedMetrics
+      maxDrawdown: derivedStats.maxDrawdown ?? null,
       currentDrawdown: null,
       volatility: null,
       copiersCount: null,
       copiersPnl: null,
       aum: accountValue > 0 ? accountValue : null,
-      winningPositions: null,
-      totalPositions: totalPositions > 0 ? totalPositions : null,
+      winningPositions: derivedStats.winningPositions ?? null,
+      totalPositions: openPositions > 0 ? openPositions : (derivedStats.totalPositions ?? null),
     }
   } catch (err) {
     logger.warn(`[enrichment] Hyperliquid stats failed: ${err}`)
+    return null
+  }
+}
+
+// ============================================
+// GMX Equity Curve + Stats
+// ============================================
+
+/**
+ * Build GMX equity curve from position history PnL.
+ */
+export async function fetchGmxEquityCurve(
+  address: string,
+  days: number
+): Promise<EquityCurvePoint[]> {
+  try {
+    const positions = await fetchGmxPositionHistory(address, 200)
+    if (positions.length === 0) return []
+    return buildEquityCurveFromPositions(positions, days)
+  } catch (err) {
+    logger.warn(`[enrichment] GMX equity curve failed: ${err}`)
+    return []
+  }
+}
+
+/**
+ * GMX stats computed from position history.
+ */
+export async function fetchGmxStatsDetail(
+  address: string
+): Promise<StatsDetail | null> {
+  try {
+    const positions = await fetchGmxPositionHistory(address, 200)
+    if (positions.length === 0) return null
+
+    const derivedStats = computeStatsFromPositions(positions)
+
+    return {
+      totalTrades: derivedStats.totalTrades ?? null,
+      profitableTradesPct: derivedStats.profitableTradesPct ?? null,
+      avgHoldingTimeHours: null,
+      avgProfit: derivedStats.avgProfit ?? null,
+      avgLoss: derivedStats.avgLoss ?? null,
+      largestWin: derivedStats.largestWin ?? null,
+      largestLoss: derivedStats.largestLoss ?? null,
+      sharpeRatio: null,
+      maxDrawdown: derivedStats.maxDrawdown ?? null,
+      currentDrawdown: null,
+      volatility: null,
+      copiersCount: null,
+      copiersPnl: null,
+      aum: null,
+      winningPositions: derivedStats.winningPositions ?? null,
+      totalPositions: derivedStats.totalPositions ?? null,
+    }
+  } catch (err) {
+    logger.warn(`[enrichment] GMX stats failed: ${err}`)
     return null
   }
 }

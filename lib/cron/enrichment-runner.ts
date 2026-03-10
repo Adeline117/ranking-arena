@@ -22,6 +22,8 @@ import {
   fetchHyperliquidEquityCurve,
   fetchHyperliquidStatsDetail,
   fetchGmxPositionHistory,
+  fetchGmxEquityCurve,
+  fetchGmxStatsDetail,
   fetchHtxEquityCurve,
   fetchHtxStatsDetail,
   fetchGateioEquityCurve,
@@ -29,12 +31,17 @@ import {
   fetchMexcEquityCurve,
   fetchMexcStatsDetail,
   fetchDriftPositionHistory,
+  fetchDriftEquityCurve,
   fetchDriftStatsDetail,
+  fetchDydxEquityCurve,
+  fetchDydxStatsDetail,
   upsertEquityCurve,
   upsertStatsDetail,
   upsertPositionHistory,
+  upsertAssetBreakdown,
   upsertPortfolio,
   enhanceStatsWithDerivedMetrics,
+  calculateAssetBreakdown,
   type StatsDetail,
   type EquityCurvePoint,
   type PositionHistoryItem,
@@ -150,6 +157,8 @@ export const ENRICHMENT_PLATFORM_CONFIGS: Record<string, EnrichmentConfig> = {
   },
   gmx: {
     platform: 'gmx',
+    fetchEquityCurve: fetchGmxEquityCurve,
+    fetchStatsDetail: fetchGmxStatsDetail,
     fetchPositionHistory: fetchGmxPositionHistory,
     concurrency: 2, delayMs: 1000,
   },
@@ -173,9 +182,16 @@ export const ENRICHMENT_PLATFORM_CONFIGS: Record<string, EnrichmentConfig> = {
   },
   drift: {
     platform: 'drift',
-    fetchPositionHistory: fetchDriftPositionHistory,
+    fetchEquityCurve: fetchDriftEquityCurve,
     fetchStatsDetail: fetchDriftStatsDetail,
+    fetchPositionHistory: fetchDriftPositionHistory,
     concurrency: 2, delayMs: 1000,
+  },
+  dydx: {
+    platform: 'dydx',
+    fetchEquityCurve: fetchDydxEquityCurve,
+    fetchStatsDetail: fetchDydxStatsDetail,
+    concurrency: 3, delayMs: 500,
   },
 }
 
@@ -261,6 +277,11 @@ export async function runEnrichment(params: {
               const positions = await withRetry(() => config.fetchPositionHistory!(traderId), `${platformKey}:${traderId} position history`)
               if (positions.length > 0) {
                 await withRetry(() => upsertPositionHistory(supabase, platformKey, traderId, positions), `${platformKey}:${traderId} save position history`)
+                // Compute and save asset breakdown from position history
+                const breakdown = calculateAssetBreakdown(positions)
+                if (breakdown.length > 0) {
+                  await withRetry(() => upsertAssetBreakdown(supabase, platformKey, traderId, period, breakdown), `${platformKey}:${traderId} save asset breakdown`)
+                }
               }
             }
 
