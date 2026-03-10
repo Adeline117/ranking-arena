@@ -27,14 +27,20 @@ import { fetchCoinex } from './coinex'
 import { fetchPhemex } from './phemex'
 import { fetchBlofin } from './blofin'
 import { fetchBitfinex } from './bitfinex'
-import { fetchWhitebit } from './whitebit'
-import { fetchBtse } from './btse'
+// Removed: fetchWhitebit (2026-03-10: stub — no copy-trading API exists)
+// Removed: fetchBtse (2026-03-10: stub — no public leaderboard API)
 // Removed: fetchWeex (disabled 2026-02-08: API returns 521)
 // Removed: fetchLbank (disabled 2026-03-08: API returns "no data")
 // Removed: fetchKucoin (disabled 2026-03-08: API returns 404)
 // Removed: fetchToobit (2026-03-09: API returns HTML, not JSON)
 // Removed: fetchCryptocom (2026-03-09: WAF blocked, HTTP 403)
 // Removed: fetchPionex (2026-03-09: WAF blocked, HTTP 403)
+
+// New CEX/DEX - Verified working, were missing registration
+import { fetchDrift } from './drift'
+import { fetchBitunix } from './bitunix'
+import { fetchBtcc } from './btcc'
+import { fetchWeb3Bot } from './web3-bot'
 
 // DEX - On-chain / Subgraph (Working platforms only)
 import { fetchHyperliquid } from './hyperliquid'
@@ -71,8 +77,14 @@ export const INLINE_FETCHERS: Record<string, PlatformFetcher> = {
   phemex: fetchPhemex,
   blofin: fetchBlofin,
   bitfinex: fetchBitfinex,
-  whitebit: fetchWhitebit,
-  btse: fetchBtse,
+  // whitebit: stub (no copy-trading API)
+  // btse: stub (no public leaderboard API)
+
+  // New platforms (previously missing registration)
+  drift: fetchDrift,
+  bitunix: fetchBitunix,
+  btcc: fetchBtcc,
+  web3_bot: fetchWeb3Bot,
 
   // DEX
   hyperliquid: fetchHyperliquid,
