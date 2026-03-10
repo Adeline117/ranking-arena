@@ -5,7 +5,7 @@
 ## Current Sprint Focus
 - All P0-P3 tasks complete. Backlog 5/6 done (only multi-language remains).
 
-## Recently Completed (2026-03-10) — SEO + Enrichment Optimization
+## Recently Completed (2026-03-10) — SEO + Enrichment + UX Optimization
 1. **SEO: Exchange ranking pages** — English-first metadata, `generateStaticParams` for 30+ exchanges, JSON-LD ItemList schema (top 100 traders), h1/subtitle English rewrite
 2. **SEO: Sitemap** — Added `/rankings/{exchange}` entries (~30 URLs), revalidation reduced from 6h to 1h
 3. **SEO: ExchangePartners** — Fixed missing source links (toobit, btcc, bitfinex), added eToro to scrolling bar
@@ -14,7 +14,10 @@
 6. **Enrichment: Drift** — New `enrichment-drift.ts` module: position history from fills API, stats from user stats endpoint
 7. **Enrichment: Hyperliquid** — Expanded from position-history-only to full enrichment (equity curve from userFills, stats from clearinghouseState)
 8. **Enrichment platforms**: 10 → 13 (added gateio, mexc, drift), Hyperliquid upgraded from position-only
-9. **Tests**: Updated batch-enrich platform counts 9→12, all 137/139 suites GREEN
+9. **Trader detail ISR**: Removed `force-dynamic`, added `revalidate=300` (sidebar is client-only SWR, no server Redis dependency)
+10. **Trader Watchlist**: Full feature — DB migration, API (GET/POST/DELETE), `useWatchlist` hook with SWR optimistic updates, `WatchlistButton` star icon
+11. **eToro crypto-only filter**: Added `InstrumentTypeID=10` to API + fallback `TopTradedAssetClassName` filter to exclude stock/forex/commodity traders
+12. **Tests**: Updated batch-enrich platform counts 9→12, all 137/139 suites GREEN
 
 ## Recently Completed (2026-03-06)
 - Backlog: WebSocket real-time rankings (useRealtimeRankings hook + ExchangeRankingClient live merge)
