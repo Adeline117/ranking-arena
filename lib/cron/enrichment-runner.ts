@@ -47,6 +47,9 @@ import {
   fetchJupiterPositionHistory,
   fetchJupiterEquityCurve,
   fetchJupiterStatsDetail,
+  fetchGainsOnchainEquityCurve,
+  fetchGainsOnchainStatsDetail,
+  fetchGainsOnchainPositionHistory,
   upsertEquityCurve,
   upsertStatsDetail,
   upsertPositionHistory,
@@ -248,10 +251,27 @@ export const ENRICHMENT_PLATFORM_CONFIGS: Record<string, EnrichmentConfig> = {
   },
   gains: {
     platform: 'gains',
-    fetchEquityCurve: fetchGainsEquityCurve,
-    fetchStatsDetail: fetchGainsStatsDetail,
-    fetchPositionHistory: fetchGainsPositionHistory,
-    concurrency: 2, delayMs: 1000,
+    fetchEquityCurve: async (traderId: string, days: number) => {
+      // Primary: on-chain via Etherscan V2 (Arbitrum)
+      const onchain = await fetchGainsOnchainEquityCurve(traderId, days)
+      if (onchain.length > 0) return onchain
+      // Fallback: Copin (returns [] but keeps the chain)
+      return fetchGainsEquityCurve(traderId, days)
+    },
+    fetchStatsDetail: async (traderId: string) => {
+      // Try on-chain first for richer data (win/loss, drawdown)
+      const onchain = await fetchGainsOnchainStatsDetail(traderId)
+      if (onchain) return onchain
+      // Fallback: Copin leaderboard stats
+      return fetchGainsStatsDetail(traderId)
+    },
+    fetchPositionHistory: async (traderId: string) => {
+      // Primary: on-chain trade events
+      const onchain = await fetchGainsOnchainPositionHistory(traderId)
+      if (onchain.length > 0) return onchain
+      return fetchGainsPositionHistory(traderId)
+    },
+    concurrency: 2, delayMs: 1500, // Slower due to Etherscan rate limits
   },
   kwenta: {
     platform: 'kwenta',
