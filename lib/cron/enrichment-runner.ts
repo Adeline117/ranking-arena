@@ -99,6 +99,7 @@ async function withRetry<T>(
 /**
  * Build equity curve from daily snapshots in our DB.
  * Used as fallback when platform APIs don't provide historical data.
+ * Uses trader_daily_snapshots table (populated by aggregate-daily-snapshots cron).
  */
 async function buildEquityCurveFromSnapshots(
   supabase: import('@supabase/supabase-js').SupabaseClient,
@@ -109,10 +110,10 @@ async function buildEquityCurveFromSnapshots(
   try {
     const cutoff = new Date(Date.now() - days * 86400000).toISOString().split('T')[0]
     const { data, error } = await supabase
-      .from('trader_snapshots_v2')
+      .from('trader_daily_snapshots')
       .select('date, roi, pnl')
-      .eq('source', source)
-      .eq('source_trader_id', traderId)
+      .eq('platform', source)
+      .eq('trader_key', traderId)
       .gte('date', cutoff)
       .order('date', { ascending: true })
       .limit(days)
