@@ -22,6 +22,12 @@ import {
   fetchGmxPositionHistory,
   fetchHtxEquityCurve,
   fetchHtxStatsDetail,
+  fetchGateioEquityCurve,
+  fetchGateioStatsDetail,
+  fetchMexcEquityCurve,
+  fetchMexcStatsDetail,
+  fetchDriftPositionHistory,
+  fetchDriftStatsDetail,
   upsertEquityCurve,
   upsertStatsDetail,
   upsertPositionHistory,
@@ -143,13 +149,29 @@ export const ENRICHMENT_PLATFORM_CONFIGS: Record<string, EnrichmentConfig> = {
     fetchPositionHistory: fetchGmxPositionHistory,
     concurrency: 2, delayMs: 1000,
   },
-  // Empty-shell configs removed (mexc, dydx, kucoin, gains, jupiter_perps, aevo)
-  // — they had no fetch functions, wasting cron time. Re-add when enrichment APIs are available.
   htx_futures: {
     platform: 'htx_futures',
     fetchEquityCurve: fetchHtxEquityCurve,
     fetchStatsDetail: fetchHtxStatsDetail,
     concurrency: 2, delayMs: 2000,
+  },
+  gateio: {
+    platform: 'gateio',
+    fetchEquityCurve: fetchGateioEquityCurve,
+    fetchStatsDetail: fetchGateioStatsDetail,
+    concurrency: 2, delayMs: 2000,
+  },
+  mexc: {
+    platform: 'mexc',
+    fetchEquityCurve: fetchMexcEquityCurve,
+    fetchStatsDetail: fetchMexcStatsDetail,
+    concurrency: 2, delayMs: 2000,
+  },
+  drift: {
+    platform: 'drift',
+    fetchPositionHistory: fetchDriftPositionHistory,
+    fetchStatsDetail: fetchDriftStatsDetail,
+    concurrency: 2, delayMs: 1000,
   },
 }
 

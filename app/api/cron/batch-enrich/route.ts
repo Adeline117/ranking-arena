@@ -29,16 +29,16 @@ const PLATFORM_LIMITS: Record<string, { limit90: number; limit30: number; limit7
   hyperliquid: { limit90: 100, limit30: 80, limit7: 60 },
   gmx: { limit90: 60, limit30: 50, limit7: 40 },
   htx_futures: { limit90: 40, limit30: 40, limit7: 30 },
-  // mexc, dydx, gains, jupiter_perps, aevo removed — no enrichment functions available
+  gateio: { limit90: 60, limit30: 50, limit7: 40 },
+  mexc: { limit90: 60, limit30: 50, limit7: 40 },
+  drift: { limit90: 60, limit30: 50, limit7: 40 },
 }
 
 // High priority platforms (always enriched)
 const HIGH_PRIORITY = ['binance_futures', 'bybit', 'okx_futures', 'bitget_futures', 'hyperliquid', 'gmx']
 
 // Medium priority (enriched with all=true or period=90D)
-// bitget_spot removed: no public enrichment API available
-// mexc, dydx, gains, aevo, jupiter_perps removed — no enrichment functions (empty-shell configs)
-const MEDIUM_PRIORITY = ['binance_spot', 'bybit_spot', 'htx_futures']
+const MEDIUM_PRIORITY = ['binance_spot', 'bybit_spot', 'htx_futures', 'gateio', 'mexc', 'drift']
 
 // Lower priority (enriched only with all=true)
 const LOWER_PRIORITY: string[] = []

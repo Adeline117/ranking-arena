@@ -164,6 +164,18 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
 
   const now = new Date().toISOString()
   
+  // Exchange ranking pages (generated from EXCHANGE_CONFIG)
+  const { EXCHANGE_CONFIG, DEAD_BLOCKED_PLATFORMS } = await import('@/lib/constants/exchanges')
+  const deadSet = new Set(DEAD_BLOCKED_PLATFORMS)
+  const exchangePages: MetadataRoute.Sitemap = Object.keys(EXCHANGE_CONFIG)
+    .filter(k => !deadSet.has(k as import('@/lib/constants/exchanges').TraderSource) && !k.startsWith('dune_') && k !== 'okx_wallet')
+    .map(source => ({
+      url: `${BASE_URL}/rankings/${source}`,
+      lastModified: now,
+      changeFrequency: 'daily' as const,
+      priority: 0.85,
+    }))
+
   // 静态页面
   const staticPages: MetadataRoute.Sitemap = [
     {
@@ -335,6 +347,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   // 合并所有页面（traders 优先，总量控制在 Google 50k 限制内）
   return [
     ...staticPages,
+    ...exchangePages,       // ~30 exchange ranking pages
     ...traderPages,         // ~44,962 — SEO 核心资产
     ...postPages,
     ...groupPages,
@@ -343,5 +356,5 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   ]
 }
 
-// 配置：每 6 小时重新生成
-export const revalidate = 21600
+// 配置：每 1 小时重新生成
+export const revalidate = 3600

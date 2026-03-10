@@ -25,9 +25,10 @@ const EXCHANGE_SOURCE_MAP: Record<string, string> = {
   gmx: 'gmx',
   dydx: 'dydx',
   jupiter: 'jupiter_perps',
-  toobit: '',
-  btcc: '',
-  bitfinex: '',
+  toobit: 'toobit',
+  btcc: 'btcc',
+  bitfinex: 'bitfinex',
+  etoro: 'etoro',
   lbank: 'lbank',
   blofin: 'blofin',
   xt: 'xt',
@@ -59,6 +60,7 @@ const EXCHANGES: { name: string; key: Exchange }[] = [
   { name: 'BloFin', key: 'blofin' as Exchange },
   { name: 'XT.com', key: 'xt' as Exchange },
   { name: 'Gains', key: 'gains' as Exchange },
+  { name: 'eToro', key: 'etoro' as Exchange },
 ]
 
 export default function ExchangePartners() {
