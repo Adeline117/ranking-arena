@@ -12,6 +12,7 @@ import dynamic from 'next/dynamic'
 import TraderRefreshButton from './TraderRefreshButton'
 import DataStateWrapper from '@/app/components/ui/DataStateWrapper'
 import TradingStyleBadge from './TradingStyleBadge'
+import { isWalletAddress, generateBlockieSvg, getAvatarGradient } from '@/lib/utils/avatar'
 
 // Lazy load heavy below-the-fold components
 const AdvancedMetricsCard = dynamic(() => import('./AdvancedMetricsCard'), { ssr: false })
@@ -50,7 +51,7 @@ export default function TraderPageV2({ platform, traderKey }: TraderPageV2Props)
             <div className="flex items-center gap-4">
               <div
                 className="w-16 h-16 rounded-full flex items-center justify-center overflow-hidden"
-                style={{ backgroundColor: tokens.colors.bg.secondary }}
+                style={{ background: data.profile.avatar_url ? tokens.colors.bg.secondary : getAvatarGradient(traderKey), position: 'relative' }}
               >
                 {data.profile.avatar_url ? (
                   <img
@@ -61,8 +62,18 @@ export default function TraderPageV2({ platform, traderKey }: TraderPageV2Props)
                     className="w-full h-full object-cover"
                     onError={(e) => { (e.target as HTMLImageElement).style.display = 'none' }}
                   />
+                ) : isWalletAddress(traderKey) ? (
+                  /* eslint-disable-next-line @next/next/no-img-element */
+                  <img
+                    src={generateBlockieSvg(traderKey, 128)}
+                    alt={data.profile.display_name || traderKey}
+                    width={64}
+                    height={64}
+                    className="w-full h-full object-cover"
+                    style={{ imageRendering: 'pixelated' }}
+                  />
                 ) : (
-                  <span className="text-2xl font-bold" style={{ color: tokens.colors.text.tertiary }}>
+                  <span className="text-2xl font-bold" style={{ color: '#fff', textShadow: '0 1px 3px rgba(0,0,0,0.3)' }}>
                     {(data.profile.display_name || traderKey).charAt(0).toUpperCase()}
                   </span>
                 )}
@@ -82,9 +93,13 @@ export default function TraderPageV2({ platform, traderKey }: TraderPageV2Props)
                   >
                     {platform.replace('_', ' ')}
                   </span>
-                  {data.profile.bio && (
+                  {data.profile.bio ? (
                     <span className="text-sm truncate max-w-[200px]" style={{ color: tokens.colors.text.secondary }}>
                       {data.profile.bio}
+                    </span>
+                  ) : (
+                    <span className="text-sm" style={{ color: tokens.colors.text.tertiary, opacity: 0.6 }}>
+                      {platform.replace('_', ' ')} trader
                     </span>
                   )}
                 </div>
@@ -215,8 +230,9 @@ function StatItem({ label, value, format }: {
   value: number | null | undefined
   format: 'number' | 'currency' | 'percent'
 }) {
+  const isNull = value == null
   const formatValue = (): string => {
-    if (value == null) return '--'
+    if (isNull) return '—'
     switch (format) {
       case 'currency':
         return `$${value.toLocaleString(undefined, { maximumFractionDigits: 0 })}`
@@ -230,7 +246,15 @@ function StatItem({ label, value, format }: {
   return (
     <div className="text-center">
       <div className="text-xs mb-1" style={{ color: tokens.colors.text.secondary }}>{label}</div>
-      <div className="text-base font-semibold" style={{ color: tokens.colors.text.primary }}>{formatValue()}</div>
+      <div
+        className="text-base font-semibold"
+        style={{
+          color: isNull ? tokens.colors.text.tertiary : tokens.colors.text.primary,
+          opacity: isNull ? 0.4 : 1,
+        }}
+      >
+        {formatValue()}
+      </div>
     </div>
   )
 }

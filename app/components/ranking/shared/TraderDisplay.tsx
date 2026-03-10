@@ -165,7 +165,9 @@ export function ScoreConfidenceIndicator({ trader }: { trader: Trader }) {
   if (confidence === 'full') return null
 
   const isMinimal = confidence === 'minimal'
-  const title = isMinimal ? 'Incomplete data (-20%)' : 'Partial data (-8%)'
+  const title = isMinimal
+    ? 'Limited data: win rate & drawdown unavailable (score -20%)'
+    : 'Partial data: some metrics unavailable (score -8%)'
   const background = isMinimal
     ? (tokens.colors.accent.error)
     : tokens.colors.accent.warning
@@ -267,23 +269,29 @@ export function ArenaScoreBadge({ score, showConfidence, trader }: {
 }
 
 // Metric stat display (for card view)
-export function MetricStat({ label, value, color }: {
+export function MetricStat({ label, value, color, nullTooltip }: {
   label: string
   value: React.ReactNode
   color?: string
+  nullTooltip?: string
 }) {
+  const isNull = value == null || value === '—'
   return (
-    <Box style={{
-      textAlign: 'center',
-      padding: `${tokens.spacing[2]} 0`,
-      background: tokens.glass.bg.light,
-      borderRadius: tokens.radius.md
-    }}>
+    <Box
+      style={{
+        textAlign: 'center',
+        padding: `${tokens.spacing[2]} 0`,
+        background: tokens.glass.bg.light,
+        borderRadius: tokens.radius.md,
+        cursor: isNull && nullTooltip ? 'help' : undefined,
+      }}
+      title={isNull && nullTooltip ? nullTooltip : undefined}
+    >
       <Text size="xs" style={{ marginBottom: 2, display: 'block', color: TRADER_TEXT_TERTIARY }}>
         {label}
       </Text>
-      <Text size="md" weight="semibold" style={{ color: color || TRADER_TEXT_TERTIARY, fontVariantNumeric: 'tabular-nums' }}>
-        {value}
+      <Text size="md" weight="semibold" style={{ color: isNull ? TRADER_TEXT_TERTIARY : (color || TRADER_TEXT_TERTIARY), fontVariantNumeric: 'tabular-nums', opacity: isNull ? 0.4 : 1 }}>
+        {isNull ? '—' : value}
       </Text>
     </Box>
   )

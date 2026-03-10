@@ -3831,6 +3831,9 @@ scoreRadarExec: 'Exec',
 scoreRoiScore: 'ROI Score',
 scorePnlScore: 'PnL Score',
 scoreTotal: 'Total',
+scoreBasisRoiPnl: 'Score based on ROI and PnL data',
+confidenceMinimalReason: 'Score based on limited data: win rate and drawdown not available',
+confidencePartialReason: 'Score adjusted: some metrics not available from this exchange',
 
 // Export ranking
 exportRanking: 'Export Ranking',
