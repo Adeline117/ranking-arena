@@ -30,11 +30,11 @@ interface HtxTrader {
   imgUrl?: string
   copyUserNum?: number
   fullUserNum?: number
-  winRate?: number
-  profitRate90?: number
-  profit90?: number
-  copyProfit?: number
-  mdd?: number
+  winRate?: number | string
+  profitRate90?: number | string
+  profit90?: number | string
+  copyProfit?: number | string
+  mdd?: number | string
   aum?: string | number
   profitList?: number[]
   tradeDays?: number
@@ -122,7 +122,13 @@ async function fetchPeriod(
     if (roi === null || roi === 0) continue
     const winRate = item.winRate != null ? Number(item.winRate) * 100 : null
 
-    const pnl = Number(item.profit90 || item.copyProfit || 0) || null
+    // profit90 is 90D PnL (string from API), copyProfit is copier PnL
+    // Use profit90 if non-zero, otherwise fall back to copyProfit
+    const profit90Val = item.profit90 != null ? Number(item.profit90) : null
+    const copyProfitVal = item.copyProfit != null ? Number(item.copyProfit) : null
+    const pnl = (profit90Val != null && profit90Val !== 0) ? profit90Val
+      : (copyProfitVal != null && copyProfitVal !== 0) ? copyProfitVal
+      : profit90Val ?? copyProfitVal
     const aumVal = item.aum != null ? Number(item.aum) : null
 
     traders.push({
@@ -135,7 +141,7 @@ async function fetchPeriod(
       pnl,
       win_rate: winRate,
       max_drawdown: maxDrawdown,
-      followers: item.copyUserNum || null,
+      followers: item.copyUserNum != null ? Number(item.copyUserNum) : null,
       aum: aumVal && aumVal > 0 ? aumVal : null,
       arena_score: calculateArenaScore(roi, pnl, maxDrawdown, winRate, period),
       captured_at: capturedAt,

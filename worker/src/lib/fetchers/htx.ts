@@ -116,6 +116,14 @@ async function fetchPeriod(
     if (roi === null || roi === 0) continue
     const winRate = item.winRate != null ? Number(item.winRate) * 100 : null
 
+    // profit90 is 90D PnL (string from API), copyProfit is copier PnL
+    // Use profit90 if non-zero, otherwise fall back to copyProfit
+    const profit90Val = item.profit90 != null ? Number(item.profit90) : null
+    const copyProfitVal = item.copyProfit != null ? Number(item.copyProfit) : null
+    const pnl = (profit90Val != null && profit90Val !== 0) ? profit90Val
+      : (copyProfitVal != null && copyProfitVal !== 0) ? copyProfitVal
+      : profit90Val ?? copyProfitVal
+
     traders.push({
       source: SOURCE,
       source_trader_id: id,
@@ -123,11 +131,11 @@ async function fetchPeriod(
       profile_url: `https://futures.htx.com/en-us/copytrading/futures/detail/${id}`,
       season_id: period,
       roi,
-      pnl: Number(item.profit90 || item.copyProfit || 0) || null,
+      pnl,
       win_rate: winRate,
       max_drawdown: maxDrawdown,
-      followers: item.copyUserNum || null,
-      arena_score: calculateArenaScore(roi, Number(item.profit90 || 0), maxDrawdown, winRate, period),
+      followers: item.copyUserNum != null ? Number(item.copyUserNum) : null,
+      arena_score: calculateArenaScore(roi, pnl, maxDrawdown, winRate, period),
       captured_at: capturedAt,
     })
   }
