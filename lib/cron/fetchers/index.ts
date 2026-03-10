@@ -54,8 +54,8 @@ import { fetchAevo } from './aevo'
 import { fetchDydx } from './dydx'
 // Removed: fetchUniswap (2026-03-09: empty_data - no usable data)
 // Removed: fetchPancakeSwap (2026-03-09: empty_data - no usable data)
-// Removed: fetchSynthetix (2026-03-09: requires THEGRAPH_API_KEY)
-// Removed: fetchKwenta (2026-03-09: requires THEGRAPH_API_KEY)
+import { fetchKwenta } from './kwenta'
+// Removed: fetchSynthetix (2026-03-09: Copin returns only 9 stale traders)
 // Removed: fetchMux (2026-03-09: requires THEGRAPH_API_KEY)
 // Removed: fetchPerpetualProtocol (2026-03-09: The Graph subgraph deprecated)
 
@@ -99,6 +99,7 @@ export const INLINE_FETCHERS: Record<string, PlatformFetcher> = {
   jupiter_perps: fetchJupiterPerps,
   aevo: fetchAevo,
   dydx: fetchDydx,
+  kwenta: fetchKwenta,
 }
 
 export function getInlineFetcher(platform: string): PlatformFetcher | undefined {

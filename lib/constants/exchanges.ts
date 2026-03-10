@@ -148,9 +148,8 @@ export const DEAD_BLOCKED_PLATFORMS: TraderSource[] = [
   'phemex',       // fetch-phemex.mjs (confirmed working, every 6h)
   // Stale data via Copin — re-enabled in fetchers with graceful fallback
   'mux',          // TheGraph needs THEGRAPH_API_KEY, Copin has 0 traders
-  'kwenta',       // Merged into Synthetix, Copin stale since Sep 2025
-  'synthetix',    // Copin stale since Sep 2025, TheGraph needs API key
-  'toobit',       // API returns HTML (needs browser session), only 238 snapshots
+  'synthetix',    // Copin returns only 9 stale traders (1 trade each), TheGraph needs API key
+  // toobit: re-enabled with VPS Playwright scraper (2026-03-09)
   'paradex',      // API now requires JWT auth (was public, changed ~2026-03)
   'okx_spot',     // OKX copy-trading API only supports instType=SWAP, no spot leaderboard
   'bitmart',      // gw-api/copytrade-streamer returns "service not open" (all IPs), SPA doesn't render
@@ -239,6 +238,7 @@ export const SOURCES_WITH_DATA: TraderSource[] = [
   'binance_web3',
   'drift',
   'bitunix',
+  'kwenta',
 ]
 
 // ---------------------------------------------------------------------------
@@ -306,7 +306,7 @@ export const EXCHANGE_CONFIG: Record<TraderSource, ExchangeConfig> = {
   toobit: { name: 'Toobit', sourceType: 'futures', reliability: 50, trustWeight: 0.65, roiType: 'mixed' },
   etoro: { name: 'eToro', sourceType: 'spot', reliability: 90, trustWeight: 0.85, roiType: 'realized' },
   web3_bot: { name: 'Web3 Bot', sourceType: 'web3', reliability: 75, trustWeight: 0.70, roiType: 'mixed' },
-  kwenta: { name: 'Kwenta', sourceType: 'futures', reliability: 70, trustWeight: 0.75, roiType: 'mixed' },
+  kwenta: { name: 'Kwenta', sourceType: 'web3', reliability: 70, trustWeight: 0.75, roiType: 'realized' },
   synthetix: { name: 'Synthetix', sourceType: 'futures', reliability: 70, trustWeight: 0.75, roiType: 'mixed' },
   mux: { name: 'MUX Protocol', sourceType: 'futures', reliability: 60, trustWeight: 0.70, roiType: 'mixed' },
 }
