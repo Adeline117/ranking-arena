@@ -51,6 +51,7 @@ const LOCAL_LOGOS: Record<string, string> = {
   btcc: '/icons/exchanges/btcc.png',
   bitunix: '/icons/exchanges/bitunix.png',
   bitmart: '/icons/exchanges/bitmart.png',
+  etoro: '/icons/exchanges/etoro.svg',
   // Aliases for DB source names (e.g. "binance_futures" -> binance logo)
   binance_futures: '/icons/exchanges/binance.jpg',
   binance_spot: '/icons/exchanges/binance.jpg',
