@@ -55,14 +55,20 @@ interface CoinexTrader {
   pnl?: number | string
   profit?: number | string
   total_pnl?: number | string
+  profit_amount?: number | string        // CoinEx public/traders API: period PnL
+  total_profit_amount?: number | string   // CoinEx public/traders API: cumulative PnL
   win_rate?: number | string
   winRate?: number | string
+  winning_rate?: number | string          // CoinEx public/traders API
   max_drawdown?: number | string
   maxDrawdown?: number | string
   mdd?: number | string
   follower_count?: number | string
   followerCount?: number | string
   copier_num?: number | string
+  cur_follower_num?: number | string
+  aum?: number | string
+  trade_count?: number | string
 }
 
 interface CoinexApiResponse {
@@ -98,9 +104,10 @@ function parseTrader(item: CoinexTrader, period: string): TraderData | null {
   // CoinEx may use decimal or percentage — normalize
   if (Math.abs(roi) > 0 && Math.abs(roi) < 10) roi *= 100
 
-  const pnl = parseNum(item.pnl ?? item.profit ?? item.total_pnl)
+  // CoinEx public/traders API returns profit_amount (period PnL) and total_profit_amount (cumulative)
+  const pnl = parseNum(item.profit_amount ?? item.pnl ?? item.profit ?? item.total_pnl ?? item.total_profit_amount)
 
-  let winRate = parseNum(item.win_rate ?? item.winRate)
+  let winRate = parseNum(item.win_rate ?? item.winRate ?? item.winning_rate)
   if (winRate !== null && winRate > 0 && winRate <= 1) winRate *= 100
   winRate = normalizeWinRate(winRate)
 
@@ -110,7 +117,7 @@ function parseTrader(item: CoinexTrader, period: string): TraderData | null {
     if (maxDrawdown > 0 && maxDrawdown <= 1) maxDrawdown *= 100
   }
 
-  const followers = parseNum(item.follower_count ?? item.followerCount ?? item.copier_num)
+  const followers = parseNum(item.follower_count ?? item.followerCount ?? item.copier_num ?? item.cur_follower_num)
 
   return {
     source: SOURCE,
