@@ -528,9 +528,25 @@
    ============================================ */
 
 @media (max-width: 767px) {
+  .profile-header {
+    flex-direction: column !important;
+    gap: 16px !important;
+    padding: 16px !important;
+  }
+
   .profile-header-actions {
     width: 100%;
     justify-content: center !important;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+    flex-wrap: nowrap !important;
+    gap: 6px !important;
+    padding-bottom: 4px;
+  }
+
+  .profile-header-actions::-webkit-scrollbar {
+    display: none;
   }
 
   .profile-header-info {
@@ -548,6 +564,15 @@
   /* Hide secondary badges on mobile to reduce header bloat */
   .trader-name-badges-row > *:nth-child(n+5) {
     display: none;
+  }
+
+  .trader-name-badges-row {
+    justify-content: center !important;
+  }
+
+  .trader-name-truncate {
+    max-width: 240px !important;
+    font-size: 18px !important;
   }
 }
 
@@ -1530,5 +1555,124 @@
   .ranking-row .trader-avatar {
     width: 28px !important;
     height: 28px !important;
+  }
+}
+
+/* ============================================
+   Phase 2: Mobile Touch & Interaction
+   ============================================ */
+
+/* Active press feedback for interactive elements on touch devices */
+@media (hover: none) and (pointer: coarse) {
+  .ranking-row:active,
+  .trader-card-contained:active,
+  .glass-card-hover:active {
+    transform: scale(0.98);
+    transition: transform 0.1s ease;
+  }
+
+  .btn-press:active {
+    transform: scale(0.95);
+    opacity: 0.85;
+  }
+
+  /* Larger touch targets for small buttons */
+  .info-btn-circle {
+    min-width: 36px !important;
+    min-height: 36px !important;
+  }
+
+  /* Disable hover effects that look wrong on mobile */
+  .ranking-row:hover {
+    background: inherit !important;
+  }
+
+  /* Smoother scroll momentum */
+  .mobile-search-results,
+  .ranking-table-container {
+    -webkit-overflow-scrolling: touch;
+    scroll-behavior: smooth;
+  }
+}
+
+/* ============================================
+   Phase 3: Mobile Performance Optimizations
+   ============================================ */
+
+/* Lazy image placeholders */
+.lazy-img-placeholder {
+  background: var(--color-bg-tertiary);
+  animation: shimmer 1.5s ease-in-out infinite;
+}
+
+/* Reduce motion for users who prefer it */
+@media (prefers-reduced-motion: reduce) {
+  .ranking-row,
+  .trader-card-contained,
+  .glass-card-hover,
+  .btn-press,
+  .profile-tabs,
+  .trader-sticky-mini-header,
+  .mobile-bottom-nav {
+    transition: none !important;
+    animation: none !important;
+  }
+}
+
+/* ============================================
+   Phase 4: Social/Groups Mobile
+   ============================================ */
+
+/* Group member avatars stacked on mobile */
+@media (max-width: 767px) {
+  .group-member-stack {
+    display: flex;
+    align-items: center;
+  }
+
+  .group-member-stack > * + * {
+    margin-left: -8px;
+  }
+
+  /* Post card full-width on mobile */
+  .post-card {
+    border-radius: 0 !important;
+    border-left: none !important;
+    border-right: none !important;
+    margin-left: -16px;
+    margin-right: -16px;
+    padding-left: 16px !important;
+    padding-right: 16px !important;
+  }
+
+  /* Comment section as overlay */
+  .comments-section {
+    max-height: 60vh;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+}
+
+/* ============================================
+   Me Tab / User Profile Mobile
+   ============================================ */
+
+@media (max-width: 767px) {
+  .user-settings-grid {
+    grid-template-columns: 1fr !important;
+    gap: 12px !important;
+  }
+
+  .settings-menu-item {
+    min-height: 52px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px 16px;
+    border-bottom: 1px solid var(--color-border-primary);
+  }
+
+  .settings-menu-item:active {
+    background: var(--color-bg-tertiary);
   }
 }
