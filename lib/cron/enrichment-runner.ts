@@ -96,6 +96,39 @@ async function withRetry<T>(
   throw lastError
 }
 
+/**
+ * Build equity curve from daily snapshots in our DB.
+ * Used as fallback when platform APIs don't provide historical data.
+ */
+async function buildEquityCurveFromSnapshots(
+  supabase: import('@supabase/supabase-js').SupabaseClient,
+  source: string,
+  traderId: string,
+  days: number
+): Promise<EquityCurvePoint[]> {
+  try {
+    const cutoff = new Date(Date.now() - days * 86400000).toISOString().split('T')[0]
+    const { data, error } = await supabase
+      .from('trader_snapshots_v2')
+      .select('date, roi, pnl')
+      .eq('source', source)
+      .eq('source_trader_id', traderId)
+      .gte('date', cutoff)
+      .order('date', { ascending: true })
+      .limit(days)
+
+    if (error || !data || data.length < 2) return []
+
+    return data.map((row: { date: string; roi: number | null; pnl: number | null }) => ({
+      date: row.date,
+      roi: row.roi ?? 0,
+      pnl: row.pnl ?? null,
+    }))
+  } catch {
+    return []
+  }
+}
+
 interface EnrichmentConfig {
   platform: string
   fetchEquityCurve?: (traderId: string, days: number) => Promise<Array<{ date: string; roi: number; pnl: number | null }>>
@@ -308,9 +341,15 @@ export async function runEnrichment(params: {
 
             if (config.fetchEquityCurve) {
               curve = await withRetry(() => config.fetchEquityCurve!(traderId, days), `${platformKey}:${traderId} equity curve`)
-              if (curve.length > 0) {
-                await withRetry(() => upsertEquityCurve(supabase, platformKey, traderId, period, curve), `${platformKey}:${traderId} save equity curve`)
-              }
+            }
+
+            // Fallback: build equity curve from daily snapshots in our DB
+            if (curve.length === 0) {
+              curve = await buildEquityCurveFromSnapshots(supabase, platformKey, traderId, days)
+            }
+
+            if (curve.length > 0) {
+              await withRetry(() => upsertEquityCurve(supabase, platformKey, traderId, period, curve), `${platformKey}:${traderId} save equity curve`)
             }
 
             if (config.fetchPositionHistory) {

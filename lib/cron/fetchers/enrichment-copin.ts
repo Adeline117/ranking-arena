@@ -1,16 +1,18 @@
 /**
  * Copin API Enrichment — shared module for DEX protocols
  *
- * Copin (api.copin.io) is a free DEX aggregator that supports:
- * - Position statistics: win/loss counts, trade counts, PnL, volume
- * - Position history: individual trades with timestamps, PnL, size
- * - Protocols: DYDX, KWENTA, GNS_V8, AEVO, SYNTHETIX_V3, etc.
+ * Copin (api.copin.io) supports leaderboard data for:
+ * DYDX, KWENTA, SYNTHETIX, SYNTHETIX_V3, GNS, etc.
  *
- * Used for platforms where native APIs don't expose trade-level data.
+ * Note: Copin position filter API now requires txHash — bulk position queries
+ * no longer work. We use the leaderboard data for stats and compute equity
+ * curves from our own snapshot data when native APIs aren't available.
+ *
+ * For platforms without native trade history APIs (Aevo, Kwenta, Gains),
+ * we compute equity curves from daily PnL diffs in trader_snapshots.
  */
 
 import type { EquityCurvePoint, PositionHistoryItem, StatsDetail } from './enrichment-types'
-import { buildEquityCurveFromPositions, computeStatsFromPositions } from './enrichment-dex'
 import { fetchJson } from './shared'
 import { logger } from '@/lib/logger'
 
@@ -19,7 +21,7 @@ const COPIN_BASE = 'https://api.copin.io'
 // Protocol name mapping for Copin API
 export const COPIN_PROTOCOLS: Record<string, string> = {
   kwenta: 'KWENTA',
-  gains: 'GNS_V8',
+  gains: 'GNS',
   aevo: 'AEVO',
   dydx: 'DYDX',
   synthetix: 'SYNTHETIX_V3',
@@ -27,202 +29,126 @@ export const COPIN_PROTOCOLS: Record<string, string> = {
 
 // ── Copin API types ──
 
-interface CopinPosition {
-  id?: string
-  key?: string
+interface CopinTraderStats {
   account: string
-  smartAccount?: string
-  indexToken?: string
-  collateralToken?: string
-  pair?: string
-  size?: number
-  collateral?: number
-  averagePrice?: number
-  closePrice?: number
-  pnl?: number
-  realisedPnl?: number
-  roi?: number
-  isLong?: boolean
-  isWin?: boolean
-  isLiquidate?: boolean
-  openBlockTime?: string
-  closeBlockTime?: string
-  durationInSecond?: number
-  leverage?: number
-  orderCount?: number
-  fee?: number
-}
-
-interface CopinPositionResponse {
-  data: CopinPosition[]
-  meta?: { total: number; totalPages: number; limit: number; offset: number }
-}
-
-interface CopinStatistic {
-  totalTrade?: number
-  totalWin?: number
-  totalLose?: number
-  totalVolume?: number
-  totalPnl?: number
-  totalRealisedPnl?: number
+  totalPnl: number
+  totalVolume: number
+  totalTrade: number
+  totalWin: number
+  totalLose: number
+  totalLiquidation?: number
   totalFee?: number
-  maxDrawdown?: number
-  maxDrawdownPnl?: number
-  avgRoi?: number
-  avgLeverage?: number
-  avgDuration?: number
 }
 
-interface CopinStatisticResponse {
-  data: CopinStatistic[]
+interface CopinLeaderboardResponse {
+  data: CopinTraderStats[]
+  meta?: { total: number; totalPages: number; limit: number; offset: number }
 }
 
 // ── Fetch functions ──
 
 /**
- * Fetch position history from Copin API.
- * Returns individual closed trades with PnL, size, direction, timestamps.
+ * Fetch trader stats from Copin leaderboard API.
+ * Returns win/loss/trade counts for a specific trader.
  */
-export async function fetchCopinPositionHistory(
+async function fetchCopinTraderStats(
   protocol: string,
-  account: string,
-  limit = 100
-): Promise<PositionHistoryItem[]> {
+  account: string
+): Promise<CopinTraderStats | null> {
   const copinProtocol = COPIN_PROTOCOLS[protocol] || protocol.toUpperCase()
 
   try {
-    const url = `${COPIN_BASE}/${copinProtocol}/position/filter?accounts=${account}&status=CLOSE&limit=${limit}&offset=0&sortBy=closeBlockTime&sortType=desc`
-    const data = await fetchJson<CopinPositionResponse>(url, { timeoutMs: 15000 })
+    // Search leaderboard for this specific account
+    const now = new Date()
+    const queryDate = new Date(now.getFullYear(), now.getMonth(), 1).getTime()
+    const url = `${COPIN_BASE}/leaderboards/page?protocol=${copinProtocol}&statisticType=MONTH&queryDate=${queryDate}&limit=1000&offset=0&sort_by=ranking&sort_type=asc`
 
-    if (!data?.data || data.data.length === 0) return []
+    const data = await fetchJson<CopinLeaderboardResponse>(url, { timeoutMs: 15000 })
+    if (!data?.data) return null
 
-    return data.data
-      .filter((p) => p.closeBlockTime)
-      .map((p) => ({
-        symbol: p.pair || p.indexToken || 'UNKNOWN',
-        direction: p.isLong ? 'long' as const : 'short' as const,
-        positionType: 'perpetual',
-        marginMode: 'cross',
-        openTime: p.openBlockTime || null,
-        closeTime: p.closeBlockTime || null,
-        entryPrice: p.averagePrice || null,
-        exitPrice: p.closePrice || null,
-        maxPositionSize: p.size || null,
-        closedSize: p.size || null,
-        pnlUsd: p.realisedPnl ?? p.pnl ?? null,
-        pnlPct: p.roi != null ? p.roi * 100 : null,
-        status: p.isLiquidate ? 'liquidated' : 'closed',
-      }))
+    // Find our trader in the leaderboard
+    const accountLower = account.toLowerCase()
+    const found = data.data.find((t) => t.account.toLowerCase() === accountLower)
+    return found || null
   } catch (err) {
-    logger.warn(`[copin] Position history failed for ${protocol}/${account}: ${err instanceof Error ? err.message : String(err)}`)
-    return []
-  }
-}
-
-/**
- * Fetch trader statistics from Copin API.
- */
-export async function fetchCopinStatistics(
-  protocol: string,
-  account: string
-): Promise<CopinStatistic | null> {
-  const copinProtocol = COPIN_PROTOCOLS[protocol] || protocol.toUpperCase()
-
-  try {
-    const url = `${COPIN_BASE}/${copinProtocol}/position/statistic/filter?accounts=${account}&statisticType=MONTH`
-    const data = await fetchJson<CopinStatisticResponse>(url, { timeoutMs: 10000 })
-    if (data?.data && data.data.length > 0) {
-      return data.data[0]
-    }
-  } catch {
-    // Not critical
-  }
-  return null
-}
-
-/**
- * Build equity curve from Copin position history.
- */
-export async function fetchCopinEquityCurve(
-  protocol: string,
-  account: string,
-  days: number
-): Promise<EquityCurvePoint[]> {
-  try {
-    const positions = await fetchCopinPositionHistory(protocol, account, 200)
-    if (positions.length === 0) return []
-    return buildEquityCurveFromPositions(positions, days)
-  } catch (err) {
-    logger.warn(`[copin] Equity curve failed for ${protocol}/${account}: ${err instanceof Error ? err.message : String(err)}`)
-    return []
-  }
-}
-
-/**
- * Build stats detail from Copin data.
- * Combines position statistics + computed stats from position history.
- */
-export async function fetchCopinStatsDetail(
-  protocol: string,
-  account: string
-): Promise<StatsDetail | null> {
-  try {
-    // Fetch statistics and position history in parallel
-    const [copinStats, positions] = await Promise.all([
-      fetchCopinStatistics(protocol, account),
-      fetchCopinPositionHistory(protocol, account, 200),
-    ])
-
-    // Compute trade stats from position history
-    const derivedStats = positions.length > 0 ? computeStatsFromPositions(positions) : {}
-
-    const totalTrades = copinStats?.totalTrade ?? derivedStats.totalTrades ?? null
-    const totalWin = copinStats?.totalWin ?? derivedStats.winningPositions ?? null
-    const profitableTradesPct = totalTrades && totalTrades > 0 && totalWin != null
-      ? Math.round((totalWin / totalTrades) * 1000) / 10
-      : (derivedStats.profitableTradesPct ?? null)
-
-    return {
-      totalTrades,
-      profitableTradesPct,
-      avgHoldingTimeHours: copinStats?.avgDuration != null
-        ? Math.round((copinStats.avgDuration / 3600) * 10) / 10
-        : null,
-      avgProfit: derivedStats.avgProfit ?? null,
-      avgLoss: derivedStats.avgLoss ?? null,
-      largestWin: derivedStats.largestWin ?? null,
-      largestLoss: derivedStats.largestLoss ?? null,
-      sharpeRatio: null, // Computed from equity curve
-      maxDrawdown: copinStats?.maxDrawdown != null
-        ? Math.abs(copinStats.maxDrawdown * 100) // Copin returns as ratio
-        : (derivedStats.maxDrawdown ?? null),
-      currentDrawdown: null,
-      volatility: null,
-      copiersCount: null,
-      copiersPnl: null,
-      aum: null,
-      winningPositions: totalWin,
-      totalPositions: totalTrades,
-    }
-  } catch (err) {
-    logger.warn(`[copin] Stats detail failed for ${protocol}/${account}: ${err instanceof Error ? err.message : String(err)}`)
+    logger.warn(`[copin] Stats lookup failed for ${protocol}/${account}: ${err instanceof Error ? err.message : String(err)}`)
     return null
   }
 }
 
+/**
+ * Build stats detail from Copin leaderboard data.
+ */
+async function buildCopinStatsDetail(
+  protocol: string,
+  account: string
+): Promise<StatsDetail | null> {
+  const copinStats = await fetchCopinTraderStats(protocol, account)
+  if (!copinStats) return null
+
+  const totalTrades = copinStats.totalTrade || 0
+  const totalWin = copinStats.totalWin || 0
+  const profitableTradesPct = totalTrades > 0
+    ? Math.round((totalWin / totalTrades) * 1000) / 10
+    : null
+
+  return {
+    totalTrades: totalTrades > 0 ? totalTrades : null,
+    profitableTradesPct,
+    avgHoldingTimeHours: null,
+    avgProfit: null,
+    avgLoss: null,
+    largestWin: null,
+    largestLoss: null,
+    sharpeRatio: null,
+    maxDrawdown: null,
+    currentDrawdown: null,
+    volatility: null,
+    copiersCount: null,
+    copiersPnl: null,
+    aum: null,
+    winningPositions: totalWin > 0 ? totalWin : null,
+    totalPositions: totalTrades > 0 ? totalTrades : null,
+  }
+}
+
 // ── Platform-specific wrappers ──
+// These return null/empty when Copin doesn't have data for the protocol.
+// The enrichment runner handles this gracefully.
 
 // Kwenta
-export const fetchKwentaEquityCurve = (addr: string, days: number) => fetchCopinEquityCurve('kwenta', addr, days)
-export const fetchKwentaStatsDetail = (addr: string) => fetchCopinStatsDetail('kwenta', addr)
-export const fetchKwentaPositionHistory = (addr: string) => fetchCopinPositionHistory('kwenta', addr, 100)
+export async function fetchKwentaEquityCurve(_addr: string, _days: number): Promise<EquityCurvePoint[]> {
+  // Kwenta doesn't have a public trade history API.
+  // Equity curves come from our own daily snapshot diffs (aggregate-daily-snapshots cron).
+  return []
+}
+export async function fetchKwentaStatsDetail(addr: string): Promise<StatsDetail | null> {
+  return buildCopinStatsDetail('kwenta', addr)
+}
+export async function fetchKwentaPositionHistory(_addr: string): Promise<PositionHistoryItem[]> {
+  return []
+}
 
 // Gains Network
-export const fetchGainsEquityCurve = (addr: string, days: number) => fetchCopinEquityCurve('gains', addr, days)
-export const fetchGainsStatsDetail = (addr: string) => fetchCopinStatsDetail('gains', addr)
-export const fetchGainsPositionHistory = (addr: string) => fetchCopinPositionHistory('gains', addr, 100)
+export async function fetchGainsEquityCurve(_addr: string, _days: number): Promise<EquityCurvePoint[]> {
+  // Gains leaderboard API only returns aggregate stats, no trade-level history.
+  return []
+}
+export async function fetchGainsStatsDetail(addr: string): Promise<StatsDetail | null> {
+  return buildCopinStatsDetail('gains', addr)
+}
+export async function fetchGainsPositionHistory(_addr: string): Promise<PositionHistoryItem[]> {
+  return []
+}
 
 // Aevo
-export const fetchAevoEquityCurve = (addr: string, days: number) => fetchCopinEquityCurve('aevo', addr, days)
-export const fetchAevoStatsDetail = (addr: string) => fetchCopinStatsDetail('aevo', addr)
-export const fetchAevoPositionHistory = (addr: string) => fetchCopinPositionHistory('aevo', addr, 100)
+export async function fetchAevoEquityCurve(_addr: string, _days: number): Promise<EquityCurvePoint[]> {
+  // Aevo API only provides leaderboard with aggregate PnL/volume.
+  return []
+}
+export async function fetchAevoStatsDetail(addr: string): Promise<StatsDetail | null> {
+  return buildCopinStatsDetail('aevo', addr)
+}
+export async function fetchAevoPositionHistory(_addr: string): Promise<PositionHistoryItem[]> {
+  return []
+}
