@@ -23,19 +23,24 @@ const BLOCKSCOUT_URLS: Record<string, string> = {
   base: 'https://base.blockscout.com',
   optimism: 'https://optimism.blockscout.com',
   ethereum: 'https://eth.blockscout.com',
+  bsc: 'https://bsc.blockscout.com',
   aevo: 'https://explorer.aevo.xyz',
 }
 
 // Platform → chain mapping
+// 'auto' = detect from address format (0x = ethereum, base58 = solana)
 const PLATFORM_CHAIN: Record<string, string> = {
   hyperliquid: 'arbitrum', // deposits on Arbitrum
   gmx: 'arbitrum',
   gains: 'arbitrum',
   kwenta: 'base',
   aevo: 'aevo',
-  dydx: 'dydx', // Cosmos-based, skip
+  dydx: 'dydx', // Cosmos-based, use indexer API
   jupiter_perps: 'solana',
   drift: 'solana',
+  binance_web3: 'auto', // Mixed EVM (BSC/ETH) + Solana wallets
+  okx_web3: 'skip', // OKX internal IDs, not wallet addresses
+  web3_bot: 'auto', // Mixed — some have wallet addresses
 }
 
 // Known stablecoin addresses per chain (for AUM calculation)
@@ -60,6 +65,12 @@ const STABLECOINS: Record<string, Record<string, { symbol: string; decimals: num
     '0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48': { symbol: 'USDC', decimals: 6 },
     '0xdac17f958d2ee523a2206206994597c13d831ec7': { symbol: 'USDT', decimals: 6 },
     '0x6b175474e89094c44da98b954eedeac495271d0f': { symbol: 'DAI', decimals: 18 },
+  },
+  bsc: {
+    '0x8ac76a51cc950d9822d68b83fe1ad97b32cd580d': { symbol: 'USDC', decimals: 18 },
+    '0x55d398326f99059ff775485246999027b3197955': { symbol: 'USDT', decimals: 18 },
+    '0xe9e7cea3dedca5984780bafc599bd69add087d56': { symbol: 'BUSD', decimals: 18 },
+    '0x1af3f329e8be154074d8769d1ffa4ee058b1dbc3': { symbol: 'DAI', decimals: 18 },
   },
 }
 
@@ -369,6 +380,64 @@ export async function fetchSolanaWalletPortfolio(address: string): Promise<Portf
 // Unified interface for enrichment runner
 // ============================================
 
+// ============================================
+// dYdX wallet data (Cosmos-based)
+// ============================================
+
+const DYDX_INDEXER = 'https://indexer.dydx.trade/v4'
+
+/**
+ * Fetch dYdX wallet AUM via indexer API (free, no key).
+ */
+async function fetchDydxWalletAUM(address: string): Promise<number | null> {
+  try {
+    const resp = await fetch(
+      `${DYDX_INDEXER}/addresses/${address}/subaccountNumber/0`,
+      { signal: AbortSignal.timeout(10000) }
+    )
+    if (!resp.ok) return null
+    const data = await resp.json() as { subaccount?: { equity?: string } }
+    const equity = parseFloat(data?.subaccount?.equity || '0')
+    return equity > 1 ? Math.round(equity * 100) / 100 : null
+  } catch {
+    return null
+  }
+}
+
+// ============================================
+// Auto-detection helpers
+// ============================================
+
+function isEvmAddress(address: string): boolean {
+  return address.startsWith('0x') && address.length === 42
+}
+
+function isSolanaAddress(address: string): boolean {
+  return /^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(address)
+}
+
+function isDydxAddress(address: string): boolean {
+  return address.startsWith('dydx1')
+}
+
+/**
+ * Detect chain for mixed-format platforms (binance_web3, web3_bot).
+ * EVM addresses try BSC first (Binance ecosystem), then Ethereum.
+ */
+function detectChainForAddress(address: string, platform: string): string | null {
+  if (isEvmAddress(address)) {
+    // binance_web3 EVM addresses are typically BSC
+    return platform === 'binance_web3' ? 'bsc' : 'ethereum'
+  }
+  if (isSolanaAddress(address)) return 'solana'
+  if (isDydxAddress(address)) return 'dydx'
+  return null
+}
+
+// ============================================
+// Unified interface for enrichment runner
+// ============================================
+
 /**
  * Fetch AUM for any DEX trader based on platform.
  */
@@ -376,15 +445,17 @@ export async function fetchWalletAUM(
   platform: string,
   address: string
 ): Promise<number | null> {
-  const chain = PLATFORM_CHAIN[platform]
-  if (!chain) return null
+  let chain: string | null = PLATFORM_CHAIN[platform] ?? null
+  if (!chain || chain === 'skip') return null
 
-  if (chain === 'solana') {
-    return fetchSolanaWalletAUM(address)
+  // Auto-detect chain from address format
+  if (chain === 'auto') {
+    chain = detectChainForAddress(address, platform)
+    if (!chain) return null
   }
-  if (chain === 'dydx') {
-    return null // Cosmos-based, no free RPC for balances
-  }
+
+  if (chain === 'solana') return fetchSolanaWalletAUM(address)
+  if (chain === 'dydx') return fetchDydxWalletAUM(address)
 
   return fetchEvmWalletAUM(chain, address)
 }
@@ -396,15 +467,16 @@ export async function fetchWalletPortfolio(
   platform: string,
   address: string
 ): Promise<PortfolioPosition[]> {
-  const chain = PLATFORM_CHAIN[platform]
-  if (!chain) return []
+  let chain: string | null = PLATFORM_CHAIN[platform] ?? null
+  if (!chain || chain === 'skip') return []
 
-  if (chain === 'solana') {
-    return fetchSolanaWalletPortfolio(address)
+  if (chain === 'auto') {
+    chain = detectChainForAddress(address, platform)
+    if (!chain) return []
   }
-  if (chain === 'dydx') {
-    return []
-  }
+
+  if (chain === 'solana') return fetchSolanaWalletPortfolio(address)
+  if (chain === 'dydx') return [] // dYdX indexer doesn't expose token holdings
 
   return fetchEvmWalletPortfolio(chain, address)
 }
@@ -413,5 +485,6 @@ export async function fetchWalletPortfolio(
  * Check if a platform is a DEX with on-chain wallet data.
  */
 export function isDexPlatform(platform: string): boolean {
-  return platform in PLATFORM_CHAIN
+  const chain = PLATFORM_CHAIN[platform]
+  return !!chain && chain !== 'skip'
 }
