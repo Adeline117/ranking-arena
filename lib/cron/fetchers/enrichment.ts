@@ -100,6 +100,26 @@ export {
   buildEquityCurveFromPositions,
 } from './enrichment-dex'
 
+// Copin-powered DEX (Aevo, Gains, Kwenta)
+export {
+  fetchAevoEquityCurve,
+  fetchAevoStatsDetail,
+  fetchAevoPositionHistory,
+  fetchGainsEquityCurve,
+  fetchGainsStatsDetail,
+  fetchGainsPositionHistory,
+  fetchKwentaEquityCurve,
+  fetchKwentaStatsDetail,
+  fetchKwentaPositionHistory,
+} from './enrichment-copin'
+
+// Jupiter Perps
+export {
+  fetchJupiterPositionHistory,
+  fetchJupiterEquityCurve,
+  fetchJupiterStatsDetail,
+} from './enrichment-jupiter'
+
 // Database operations
 export {
   upsertEquityCurve,
