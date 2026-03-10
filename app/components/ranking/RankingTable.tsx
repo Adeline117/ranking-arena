@@ -128,6 +128,22 @@ function useDebounce<T>(value: T, delay: number): T {
 
 // ExportRankingButton moved to RankingFilters.tsx
 
+/** Infinite scroll sentinel — triggers onVisible when scrolled into view */
+function CardLoadMoreSentinel({ onVisible }: { onVisible: () => void }) {
+  const ref = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    const el = ref.current
+    if (!el) return
+    const obs = new IntersectionObserver(
+      ([entry]) => { if (entry.isIntersecting) onVisible() },
+      { rootMargin: '200px' }
+    )
+    obs.observe(el)
+    return () => obs.disconnect()
+  }, [onVisible])
+  return <div ref={ref} style={{ height: 1 }} aria-hidden />
+}
+
 /**
  * 排行榜页面 - 核心功能，突出前三名
  */
@@ -583,26 +599,30 @@ function RankingTableInner(props: {
             })}
           </Box>
           {cardVisibleCount < sortedTraders.length && (
-            <Box style={{ display: 'flex', justifyContent: 'center', padding: tokens.spacing[4] }}>
-              <button
-                onClick={() => setCardVisibleCount(prev => Math.min(prev + 20, sortedTraders.length))}
-                style={{
-                  padding: `${tokens.spacing[2]} ${tokens.spacing[6]}`,
-                  borderRadius: tokens.radius.md,
-                  fontSize: tokens.typography.fontSize.sm,
-                  fontWeight: tokens.typography.fontWeight.semibold,
-                  color: tokens.colors.accent.primary,
-                  background: `${tokens.colors.accent.primary}10`,
-                  border: `1px solid ${tokens.colors.accent.primary}30`,
-                  cursor: 'pointer',
-                  transition: `all ${tokens.transition.fast}`,
-                  width: '100%',
-                  maxWidth: 320,
-                }}
-              >
-                {t('loadMore')} ({cardVisibleCount}/{sortedTraders.length})
-              </button>
-            </Box>
+            <>
+              {/* Auto-load more via IntersectionObserver */}
+              <CardLoadMoreSentinel onVisible={() => setCardVisibleCount(prev => Math.min(prev + 20, sortedTraders.length))} />
+              <Box style={{ display: 'flex', justifyContent: 'center', padding: tokens.spacing[4] }}>
+                <button
+                  onClick={() => setCardVisibleCount(prev => Math.min(prev + 20, sortedTraders.length))}
+                  style={{
+                    padding: `${tokens.spacing[2]} ${tokens.spacing[6]}`,
+                    borderRadius: tokens.radius.md,
+                    fontSize: tokens.typography.fontSize.sm,
+                    fontWeight: tokens.typography.fontWeight.semibold,
+                    color: tokens.colors.accent.primary,
+                    background: `${tokens.colors.accent.primary}10`,
+                    border: `1px solid ${tokens.colors.accent.primary}30`,
+                    cursor: 'pointer',
+                    transition: `all ${tokens.transition.fast}`,
+                    width: '100%',
+                    maxWidth: 320,
+                  }}
+                >
+                  {t('loadMore')} ({cardVisibleCount}/{sortedTraders.length})
+                </button>
+              </Box>
+            </>
           )}
         </>
       ) : (

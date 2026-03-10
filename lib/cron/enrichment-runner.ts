@@ -8,9 +8,7 @@ import {
   fetchBinanceEquityCurve,
   fetchBinanceStatsDetail,
   fetchBinancePositionHistory,
-  fetchBybitEquityCurve,
-  fetchBybitStatsDetail,
-  fetchBybitPositionHistory,
+  // Bybit enrichment removed — api2.bybit.com endpoints return 404 globally (2026-03-10)
   fetchOkxEquityCurve,
   fetchOkxStatsDetail,
   fetchOkxCurrentPositions,
@@ -22,6 +20,8 @@ import {
   fetchHyperliquidEquityCurve,
   fetchHyperliquidStatsDetail,
   fetchGmxPositionHistory,
+  fetchGmxEquityCurve,
+  fetchGmxStatsDetail,
   fetchHtxEquityCurve,
   fetchHtxStatsDetail,
   fetchGateioEquityCurve,
@@ -29,12 +29,38 @@ import {
   fetchMexcEquityCurve,
   fetchMexcStatsDetail,
   fetchDriftPositionHistory,
+  fetchDriftEquityCurve,
   fetchDriftStatsDetail,
+  fetchDydxEquityCurve,
+  fetchDydxStatsDetail,
+  fetchAevoEquityCurve,
+  fetchAevoStatsDetail,
+  fetchAevoPositionHistory,
+  fetchGainsEquityCurve,
+  fetchGainsStatsDetail,
+  fetchGainsPositionHistory,
+  fetchKwentaEquityCurve,
+  fetchKwentaStatsDetail,
+  fetchKwentaPositionHistory,
+  fetchJupiterPositionHistory,
+  fetchJupiterEquityCurve,
+  fetchJupiterStatsDetail,
+  fetchGainsOnchainEquityCurve,
+  fetchGainsOnchainStatsDetail,
+  fetchGainsOnchainPositionHistory,
+  fetchKwentaOnchainEquityCurve,
+  fetchKwentaOnchainStatsDetail,
+  fetchKwentaOnchainPositionHistory,
+  fetchWalletAUM,
+  fetchWalletPortfolio,
+  isDexPlatform,
   upsertEquityCurve,
   upsertStatsDetail,
   upsertPositionHistory,
+  upsertAssetBreakdown,
   upsertPortfolio,
   enhanceStatsWithDerivedMetrics,
+  calculateAssetBreakdown,
   type StatsDetail,
   type EquityCurvePoint,
   type PositionHistoryItem,
@@ -77,6 +103,40 @@ async function withRetry<T>(
   throw lastError
 }
 
+/**
+ * Build equity curve from daily snapshots in our DB.
+ * Used as fallback when platform APIs don't provide historical data.
+ * Uses trader_daily_snapshots table (populated by aggregate-daily-snapshots cron).
+ */
+async function buildEquityCurveFromSnapshots(
+  supabase: import('@supabase/supabase-js').SupabaseClient,
+  source: string,
+  traderId: string,
+  days: number
+): Promise<EquityCurvePoint[]> {
+  try {
+    const cutoff = new Date(Date.now() - days * 86400000).toISOString().split('T')[0]
+    const { data, error } = await supabase
+      .from('trader_daily_snapshots')
+      .select('date, roi, pnl')
+      .eq('platform', source)
+      .eq('trader_key', traderId)
+      .gte('date', cutoff)
+      .order('date', { ascending: true })
+      .limit(days)
+
+    if (error || !data || data.length < 2) return []
+
+    return data.map((row: { date: string; roi: number | null; pnl: number | null }) => ({
+      date: row.date,
+      roi: row.roi ?? 0,
+      pnl: row.pnl ?? null,
+    }))
+  } catch {
+    return []
+  }
+}
+
 interface EnrichmentConfig {
   platform: string
   fetchEquityCurve?: (traderId: string, days: number) => Promise<Array<{ date: string; roi: number; pnl: number | null }>>
@@ -107,19 +167,7 @@ export const ENRICHMENT_PLATFORM_CONFIGS: Record<string, EnrichmentConfig> = {
     fetchStatsDetail: fetchBinanceStatsDetail,
     concurrency: 4, delayMs: 1200,
   },
-  bybit: {
-    platform: 'bybit',
-    fetchEquityCurve: fetchBybitEquityCurve,
-    fetchStatsDetail: fetchBybitStatsDetail,
-    fetchPositionHistory: fetchBybitPositionHistory,
-    concurrency: 5, delayMs: 1000,
-  },
-  bybit_spot: {
-    platform: 'bybit_spot',
-    fetchEquityCurve: fetchBybitEquityCurve,
-    fetchStatsDetail: fetchBybitStatsDetail,
-    concurrency: 4, delayMs: 1200,
-  },
+  // bybit/bybit_spot: enrichment disabled — api2.bybit.com endpoints return 404 globally (2026-03-10)
   okx_futures: {
     platform: 'okx_futures',
     fetchEquityCurve: fetchOkxEquityCurve,
@@ -135,12 +183,7 @@ export const ENRICHMENT_PLATFORM_CONFIGS: Record<string, EnrichmentConfig> = {
     fetchPositionHistory: fetchBitgetPositionHistory,
     concurrency: 2, delayMs: 2000,
   },
-  bitget_spot: {
-    platform: 'bitget_spot',
-    fetchEquityCurve: fetchBitgetEquityCurve,
-    fetchStatsDetail: fetchBitgetStatsDetail,
-    concurrency: 2, delayMs: 2000,
-  },
+  // bitget_spot: removed — no public API exists (all endpoints 404)
   hyperliquid: {
     platform: 'hyperliquid',
     fetchEquityCurve: fetchHyperliquidEquityCurve,
@@ -150,6 +193,8 @@ export const ENRICHMENT_PLATFORM_CONFIGS: Record<string, EnrichmentConfig> = {
   },
   gmx: {
     platform: 'gmx',
+    fetchEquityCurve: fetchGmxEquityCurve,
+    fetchStatsDetail: fetchGmxStatsDetail,
     fetchPositionHistory: fetchGmxPositionHistory,
     concurrency: 2, delayMs: 1000,
   },
@@ -173,9 +218,78 @@ export const ENRICHMENT_PLATFORM_CONFIGS: Record<string, EnrichmentConfig> = {
   },
   drift: {
     platform: 'drift',
-    fetchPositionHistory: fetchDriftPositionHistory,
+    fetchEquityCurve: fetchDriftEquityCurve,
     fetchStatsDetail: fetchDriftStatsDetail,
+    fetchPositionHistory: fetchDriftPositionHistory,
     concurrency: 2, delayMs: 1000,
+  },
+  dydx: {
+    platform: 'dydx',
+    fetchEquityCurve: fetchDydxEquityCurve,
+    fetchStatsDetail: fetchDydxStatsDetail,
+    concurrency: 3, delayMs: 500,
+  },
+  aevo: {
+    platform: 'aevo',
+    fetchEquityCurve: fetchAevoEquityCurve,
+    fetchStatsDetail: fetchAevoStatsDetail,
+    fetchPositionHistory: fetchAevoPositionHistory,
+    concurrency: 2, delayMs: 1000,
+  },
+  gains: {
+    platform: 'gains',
+    fetchEquityCurve: async (traderId: string, days: number) => {
+      // Primary: on-chain via Etherscan V2 (Arbitrum)
+      const onchain = await fetchGainsOnchainEquityCurve(traderId, days)
+      if (onchain.length > 0) return onchain
+      // Fallback: Copin (returns [] but keeps the chain)
+      return fetchGainsEquityCurve(traderId, days)
+    },
+    fetchStatsDetail: async (traderId: string) => {
+      // Try on-chain first for richer data (win/loss, drawdown)
+      const onchain = await fetchGainsOnchainStatsDetail(traderId)
+      if (onchain) return onchain
+      // Fallback: Copin leaderboard stats
+      return fetchGainsStatsDetail(traderId)
+    },
+    fetchPositionHistory: async (traderId: string) => {
+      // Primary: on-chain trade events
+      const onchain = await fetchGainsOnchainPositionHistory(traderId)
+      if (onchain.length > 0) return onchain
+      return fetchGainsPositionHistory(traderId)
+    },
+    concurrency: 2, delayMs: 1500, // Slower due to Etherscan rate limits
+  },
+  kwenta: {
+    platform: 'kwenta',
+    fetchEquityCurve: async (traderId: string, days: number) => {
+      // Primary: on-chain via Blockscout Base (free, no API key)
+      const onchain = await fetchKwentaOnchainEquityCurve(traderId, days)
+      if (onchain.length > 0) return onchain
+      // Fallback: Copin (returns [])
+      return fetchKwentaEquityCurve(traderId, days)
+    },
+    fetchStatsDetail: async (traderId: string) => {
+      // Primary: on-chain OrderSettled events
+      const onchain = await fetchKwentaOnchainStatsDetail(traderId)
+      if (onchain) return onchain
+      // Fallback: Copin leaderboard stats
+      return fetchKwentaStatsDetail(traderId)
+    },
+    fetchPositionHistory: async (traderId: string) => {
+      // Primary: on-chain OrderSettled events
+      const onchain = await fetchKwentaOnchainPositionHistory(traderId)
+      if (onchain.length > 0) return onchain
+      return fetchKwentaPositionHistory(traderId)
+    },
+    concurrency: 2, delayMs: 1500, // Slower due to Blockscout rate limits
+  },
+  jupiter_perps: {
+    platform: 'jupiter_perps',
+    fetchEquityCurve: fetchJupiterEquityCurve,
+    fetchStatsDetail: fetchJupiterStatsDetail,
+    fetchPositionHistory: fetchJupiterPositionHistory,
+    concurrency: 3, delayMs: 300,
   },
 }
 
@@ -252,15 +366,26 @@ export async function runEnrichment(params: {
 
             if (config.fetchEquityCurve) {
               curve = await withRetry(() => config.fetchEquityCurve!(traderId, days), `${platformKey}:${traderId} equity curve`)
-              if (curve.length > 0) {
-                await withRetry(() => upsertEquityCurve(supabase, platformKey, traderId, period, curve), `${platformKey}:${traderId} save equity curve`)
-              }
+            }
+
+            // Fallback: build equity curve from daily snapshots in our DB
+            if (curve.length === 0) {
+              curve = await buildEquityCurveFromSnapshots(supabase, platformKey, traderId, days)
+            }
+
+            if (curve.length > 0) {
+              await withRetry(() => upsertEquityCurve(supabase, platformKey, traderId, period, curve), `${platformKey}:${traderId} save equity curve`)
             }
 
             if (config.fetchPositionHistory) {
               const positions = await withRetry(() => config.fetchPositionHistory!(traderId), `${platformKey}:${traderId} position history`)
               if (positions.length > 0) {
                 await withRetry(() => upsertPositionHistory(supabase, platformKey, traderId, positions), `${platformKey}:${traderId} save position history`)
+                // Compute and save asset breakdown from position history
+                const breakdown = calculateAssetBreakdown(positions)
+                if (breakdown.length > 0) {
+                  await withRetry(() => upsertAssetBreakdown(supabase, platformKey, traderId, period, breakdown), `${platformKey}:${traderId} save asset breakdown`)
+                }
               }
             }
 
@@ -282,6 +407,46 @@ export async function runEnrichment(params: {
                   stats = enhanceStatsWithDerivedMetrics(stats, curve, period)
                 }
                 await withRetry(() => upsertStatsDetail(supabase, platformKey, traderId, period, stats!), `${platformKey}:${traderId} save stats detail`)
+
+                // Write win_rate and max_drawdown back to snapshot so leaderboard shows them
+                const snapshotUpdate: Record<string, unknown> = {}
+                if (stats.profitableTradesPct != null) snapshotUpdate.win_rate = stats.profitableTradesPct
+                if (stats.maxDrawdown != null) snapshotUpdate.max_drawdown = stats.maxDrawdown
+                if (stats.totalTrades != null) snapshotUpdate.trades_count = stats.totalTrades
+                if (Object.keys(snapshotUpdate).length > 0) {
+                  await supabase
+                    .from('trader_snapshots')
+                    .update(snapshotUpdate)
+                    .eq('source', platformKey)
+                    .eq('source_trader_id', traderId)
+                    .eq('season_id', period)
+                }
+              }
+            }
+
+            // On-chain wallet enrichment for DEX platforms (AUM + portfolio)
+            if (isDexPlatform(platformKey)) {
+              try {
+                const walletAum = await fetchWalletAUM(platformKey, traderId)
+                if (walletAum != null && walletAum > 10) {
+                  // Update AUM in stats_detail
+                  await supabase
+                    .from('trader_stats_detail')
+                    .update({ aum: walletAum })
+                    .eq('source', platformKey)
+                    .eq('source_trader_id', traderId)
+                    .eq('season_id', period)
+
+                  // Also save on-chain portfolio if no current positions exist
+                  if (!config.fetchCurrentPositions) {
+                    const walletPortfolio = await fetchWalletPortfolio(platformKey, traderId)
+                    if (walletPortfolio.length > 0) {
+                      await upsertPortfolio(supabase, platformKey, traderId, walletPortfolio)
+                    }
+                  }
+                }
+              } catch {
+                // Non-critical — wallet enrichment failure shouldn't block
               }
             }
 

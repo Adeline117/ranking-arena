@@ -27,9 +27,12 @@ const PROXY_URL = process.env.CLOUDFLARE_PROXY_URL || 'https://ranking-arena-pro
 const INDEXER_URL = 'https://indexer.dydx.trade'
 const HEROKU_API = 'https://pp-external-api-ffb2ad95ef03.herokuapp.com/api'
 const TARGET = 500
-const ENRICH_LIMIT = 300
+const ENRICH_LIMIT = 100 // Reduced from 300 to fit within 240s timeout
 const ENRICH_CONCURRENCY = 5
 const ENRICH_DELAY_MS = 300
+
+// Cache Heroku data across periods to avoid re-fetching 3x
+let _herokuCache: HerokuClcEntry[] | null = null
 
 // ── API response types ──
 
@@ -192,7 +195,7 @@ async function fetchHistoricalPnl(address: string): Promise<EquityCurvePoint[]> 
     let historicalPnl: DydxHistoricalPnl[] | undefined
 
     try {
-      const data = await fetchJson<DydxHistoricalPnlResponse>(proxyUrl, { timeoutMs: 10000 })
+      const data = await fetchJson<DydxHistoricalPnlResponse>(proxyUrl, { timeoutMs: 5000 })
       historicalPnl = data?.historicalPnl
     } catch {
       // Proxy failed, try direct
@@ -200,7 +203,7 @@ async function fetchHistoricalPnl(address: string): Promise<EquityCurvePoint[]> 
 
     if (!historicalPnl || historicalPnl.length === 0) {
       const directUrl = `${INDEXER_URL}/v4/historical-pnl?address=${address}&subaccountNumber=0&limit=90`
-      const directData = await fetchJson<DydxHistoricalPnlResponse>(directUrl, { timeoutMs: 10000 })
+      const directData = await fetchJson<DydxHistoricalPnlResponse>(directUrl, { timeoutMs: 5000 })
       historicalPnl = directData?.historicalPnl
     }
 
@@ -230,7 +233,7 @@ async function fetchHistoricalPnl(address: string): Promise<EquityCurvePoint[]> 
 async function fetchSubaccountEquity(address: string): Promise<number | null> {
   try {
     const proxyUrl = `${PROXY_URL}/dydx/subaccount?address=${address}&subaccountNumber=0`
-    const data = await fetchJson<DydxSubaccountResponse>(proxyUrl, { timeoutMs: 10000 })
+    const data = await fetchJson<DydxSubaccountResponse>(proxyUrl, { timeoutMs: 5000 })
     if (data?.subaccount?.equity) {
       return parseFloat(data.subaccount.equity)
     }
@@ -239,7 +242,7 @@ async function fetchSubaccountEquity(address: string): Promise<number | null> {
   }
   try {
     const directUrl = `${INDEXER_URL}/v4/addresses/${address}/subaccounts/0`
-    const data = await fetchJson<DydxSubaccountResponse>(directUrl, { timeoutMs: 10000 })
+    const data = await fetchJson<DydxSubaccountResponse>(directUrl, { timeoutMs: 5000 })
     if (data?.subaccount?.equity) {
       return parseFloat(data.subaccount.equity)
     }
@@ -301,8 +304,11 @@ async function fetchPeriod(
   period: string
 ): Promise<{ total: number; saved: number; error?: string }> {
   // The Heroku API only has weekly competition data (no period filter).
-  // We use the same data for all periods but the enrichment/scoring varies by period.
-  const entries = await fetchLeaderboardFromHeroku()
+  // Cache across periods to avoid fetching 3x (saves ~40s).
+  if (!_herokuCache) {
+    _herokuCache = await fetchLeaderboardFromHeroku()
+  }
+  const entries = _herokuCache
 
   // Strategy 2: Copin API fallback
   if (entries.length === 0) {
@@ -435,6 +441,7 @@ export async function fetchDydx(
     logger.error(`[${SOURCE}] Fetch failed`, err instanceof Error ? err : new Error(String(err)))
   }
 
+  _herokuCache = null // Clear cache for next invocation
   result.duration = Date.now() - start
   return result
 }

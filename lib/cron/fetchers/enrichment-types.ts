@@ -24,10 +24,14 @@ export async function fetchWithProxyFallback<T>(
     return await fetchJson<T>(url, opts)
   } catch (err) {
     const msg = err instanceof Error ? err.message : ''
-    // If geo-blocked (451) or WAF blocked (403), try proxy
-    if (msg.includes('451') || msg.includes('403') || msg.includes('Access Denied')) {
-      if (PROXY_URL) {
-        logger.warn(`[enrichment] Geo-blocked, retrying via proxy: ${url.slice(0, 80)}...`)
+    // If geo-blocked (451), WAF blocked (403), or timeout, try proxies
+    const isBlocked = msg.includes('451') || msg.includes('403') || msg.includes('Access Denied') || msg.includes('timeout') || msg.includes('ETIMEDOUT') || msg.includes('ECONNREFUSED')
+    if (!isBlocked) throw err
+
+    // Strategy 2: CF Worker proxy
+    if (PROXY_URL) {
+      try {
+        logger.warn(`[enrichment] Blocked, retrying via CF proxy: ${url.slice(0, 80)}...`)
         const proxyTarget = `${PROXY_URL}?url=${encodeURIComponent(url)}`
         return await fetchJson<T>(proxyTarget, {
           method: 'POST',
@@ -35,8 +39,39 @@ export async function fetchWithProxyFallback<T>(
           body: opts.body,
           timeoutMs: opts.timeoutMs,
         })
+      } catch (cfErr) {
+        logger.warn(`[enrichment] CF proxy also failed: ${cfErr instanceof Error ? cfErr.message : String(cfErr)}`)
       }
     }
+
+    // Strategy 3: VPS proxy (bypasses WAF for Bybit, Bitget, etc.)
+    const vpsUrl = process.env.VPS_PROXY_SG || process.env.VPS_PROXY_URL
+    if (vpsUrl) {
+      try {
+        logger.warn(`[enrichment] Trying VPS proxy: ${url.slice(0, 80)}...`)
+        const res = await fetch(vpsUrl, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-Proxy-Key': process.env.VPS_PROXY_KEY || '',
+          },
+          body: JSON.stringify({
+            url,
+            method: opts.method || 'GET',
+            headers: opts.headers || {},
+            body: opts.body ? JSON.stringify(opts.body) : undefined,
+          }),
+          signal: AbortSignal.timeout(opts.timeoutMs || 10_000),
+        })
+        if (res.ok) {
+          return (await res.json()) as T
+        }
+        logger.warn(`[enrichment] VPS proxy returned ${res.status}`)
+      } catch (vpsErr) {
+        logger.warn(`[enrichment] VPS proxy failed: ${vpsErr instanceof Error ? vpsErr.message : String(vpsErr)}`)
+      }
+    }
+
     throw err
   }
 }

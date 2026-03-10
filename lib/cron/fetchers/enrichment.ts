@@ -78,8 +78,15 @@ export {
 // Drift
 export {
   fetchDriftPositionHistory,
+  fetchDriftEquityCurve,
   fetchDriftStatsDetail,
 } from './enrichment-drift'
+
+// dYdX
+export {
+  fetchDydxEquityCurve,
+  fetchDydxStatsDetail,
+} from './enrichment-dydx'
 
 // DEX (Hyperliquid + GMX)
 export {
@@ -87,7 +94,41 @@ export {
   fetchHyperliquidEquityCurve,
   fetchHyperliquidStatsDetail,
   fetchGmxPositionHistory,
+  fetchGmxEquityCurve,
+  fetchGmxStatsDetail,
+  computeStatsFromPositions,
+  buildEquityCurveFromPositions,
 } from './enrichment-dex'
+
+// Copin-powered DEX (Aevo, Gains, Kwenta)
+export {
+  fetchAevoEquityCurve,
+  fetchAevoStatsDetail,
+  fetchAevoPositionHistory,
+  fetchGainsEquityCurve,
+  fetchGainsStatsDetail,
+  fetchGainsPositionHistory,
+  fetchKwentaEquityCurve,
+  fetchKwentaStatsDetail,
+  fetchKwentaPositionHistory,
+} from './enrichment-copin'
+
+// Jupiter Perps
+export {
+  fetchJupiterPositionHistory,
+  fetchJupiterEquityCurve,
+  fetchJupiterStatsDetail,
+} from './enrichment-jupiter'
+
+// On-chain (Etherscan V2 + Blockscout)
+export {
+  fetchGainsOnchainPositionHistory,
+  fetchGainsOnchainEquityCurve,
+  fetchGainsOnchainStatsDetail,
+  fetchKwentaOnchainPositionHistory,
+  fetchKwentaOnchainEquityCurve,
+  fetchKwentaOnchainStatsDetail,
+} from './enrichment-onchain'
 
 // Database operations
 export {
@@ -97,6 +138,13 @@ export {
   upsertAssetBreakdown,
   upsertPortfolio,
 } from './enrichment-db'
+
+// On-chain wallet data (AUM, portfolio)
+export {
+  fetchWalletAUM,
+  fetchWalletPortfolio,
+  isDexPlatform,
+} from './enrichment-wallet'
 
 // Derived metrics
 export {

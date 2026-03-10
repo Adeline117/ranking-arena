@@ -1,9 +1,12 @@
 'use client'
 
 import { useState, useEffect, useRef } from 'react'
+import dynamic from 'next/dynamic'
 import { tokens } from '@/lib/design-tokens'
 import { Box, Text } from '../../../base'
 import { useLanguage } from '../../../Providers/LanguageProvider'
+
+const ChartFullscreen = dynamic(() => import('../../../ui/ChartFullscreen'), { ssr: false })
 
 interface EquityCurveData {
   '90D': Array<{ date: string; roi: number; pnl: number }>
@@ -49,6 +52,7 @@ export function EquityCurveSection({
   const [chartType, setChartType] = useState<'roi' | 'pnl'>(() => getBestChartType(equityCurve))
   const [mounted, setMounted] = useState(false)
   const [prefersReducedMotion, setPrefersReducedMotion] = useState(false)
+  const [showFullscreen, setShowFullscreen] = useState(false)
 
   useEffect(() => {
     const mq = window.matchMedia('(prefers-reduced-motion: reduce)')
@@ -179,8 +183,32 @@ export function EquityCurveSection({
           ))}
         </Box>
 
-        {/* Period Selector */}
-        <PeriodSelector value={period} onChange={setPeriod} t={t} />
+        <Box style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[2] }}>
+          {/* Period Selector */}
+          <PeriodSelector value={period} onChange={setPeriod} t={t} />
+          {/* Fullscreen button */}
+          <button
+            onClick={() => setShowFullscreen(true)}
+            aria-label={language === 'zh' ? '全屏查看' : 'Fullscreen'}
+            style={{
+              background: 'none',
+              border: `1px solid ${tokens.colors.border.primary}`,
+              borderRadius: tokens.radius.sm,
+              padding: tokens.spacing[1],
+              color: tokens.colors.text.secondary,
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              width: 32,
+              height: 32,
+            }}
+          >
+            <svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
+              <path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+          </button>
+        </Box>
       </Box>
 
       {hasData && currentData.length <= 3 ? (
@@ -234,6 +262,21 @@ export function EquityCurveSection({
           </Text>
         </Box>
       )}
+
+      {/* Fullscreen chart overlay */}
+      <ChartFullscreen
+        open={showFullscreen}
+        onClose={() => setShowFullscreen(false)}
+        title={chartType === 'roi' ? t('roi') : t('pnl')}
+      >
+        {hasData && currentData.length > 3 ? (
+          <SimpleLineChart data={currentData} dataKey={chartType} period={period} />
+        ) : (
+          <Box style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <Text size="sm" color="tertiary">{t('noDataForPeriod')}</Text>
+          </Box>
+        )}
+      </ChartFullscreen>
     </Box>
   )
 }

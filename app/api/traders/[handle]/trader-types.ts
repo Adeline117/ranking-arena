@@ -73,5 +73,6 @@ export interface StatsDetailData {
   avg_holding_time_hours: number | null
   avg_profit: number | null
   avg_loss: number | null
+  aum: number | null
   period: string | null
 }

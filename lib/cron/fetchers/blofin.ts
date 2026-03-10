@@ -149,6 +149,32 @@ async function fetchPeriod(
   const allTraders = new Map<string, BlofinTrader>()
   let lastError = ''
 
+  // Strategy 0: VPS Playwright scraper (most reliable for BloFin)
+  const VPS_SCRAPER_URL = process.env.VPS_SCRAPER_URL || 'http://45.76.152.169:3456'
+  const VPS_SCRAPER_KEY = process.env.VPS_PROXY_KEY || ''
+  if (VPS_SCRAPER_KEY) {
+    try {
+      const url = `${VPS_SCRAPER_URL}/blofin/leaderboard?period=${periodDays}&limit=${TARGET}`
+      const res = await fetch(url, {
+        headers: { 'X-Proxy-Key': VPS_SCRAPER_KEY },
+        signal: AbortSignal.timeout(60_000),
+      })
+      if (res.ok) {
+        const data = (await res.json()) as BlofinApiResponse
+        const list = extractList(data)
+        for (const item of list) {
+          const id = String(item.uniqueName || item.traderId || item.uid || item.id || '')
+          if (id && !allTraders.has(id)) allTraders.set(id, item)
+        }
+        if (allTraders.size > 0) {
+          logger.info(`[${SOURCE}] VPS scraper got ${allTraders.size} traders`)
+        }
+      }
+    } catch (err) {
+      logger.warn(`[${SOURCE}] VPS scraper failed: ${err instanceof Error ? err.message : String(err)}`)
+    }
+  }
+
   // Strategy 1: CF Worker proxy — routes through Cloudflare network to bypass blocks
   // The CF Worker has a dedicated /blofin/leaderboard endpoint that proxies to openapi.blofin.com
   try {
