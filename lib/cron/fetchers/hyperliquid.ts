@@ -23,9 +23,9 @@ const SOURCE = 'hyperliquid'
 const STATS_API = 'https://stats-data.hyperliquid.xyz/Mainnet'
 const INFO_API = 'https://api.hyperliquid.xyz/info'
 const TARGET = 500
-const ENRICH_LIMIT = 300 // Increased for better field coverage (local cron can handle more)
-const CONCURRENCY = 8
-const DELAY_MS = 100
+const ENRICH_LIMIT = 500 // Match TARGET for 100% win_rate/max_drawdown coverage
+const CONCURRENCY = 12
+const DELAY_MS = 50
 
 const WINDOW_MAP: Record<string, string> = {
   '7D': 'week',
