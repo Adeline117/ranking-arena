@@ -15,21 +15,12 @@
  *   group=f  → mexc, bingx (every 6h)
  *   group=h  → gateio, btcc (every 6h)
  *   group=g1 → drift, bitunix (every 6h)
- *   group=g2 → web3_bot, kwenta, toobit (every 6h)
+ *   group=g2 → web3_bot, kwenta, toobit, blofin (every 6h)
+ *   group=i  → etoro (every 6h)
  *
- * Dead/blocked platforms removed:
- *   - kucoin: APIs return 404, feature discontinued
- *   - lbank: needs session auth, crashes headless browser
- *   - bitget_spot: no public API (all endpoints return 404)
- *   - blofin: re-enabled with VPS Playwright scraper (2026-03-10)
- *   - phemex: CloudFront blocks — data fetched via Mac Mini crontab (fetch-phemex.mjs)
- *   - weex: copy-trade API returning 521 (origin down) since 2026-03
- *   - mux: requires THEGRAPH_API_KEY (not set), Copin has 0 traders
- *   - synthetix: Copin returns only 9 stale traders, TheGraph needs API key
- *   - uniswap/pancakeswap: need THEGRAPH_API_KEY (not set)
- *   - toobit: re-enabled with VPS Playwright scraper (2026-03-09)
- *   - okx_spot: OKX copy-trading API only supports instType=SWAP, no spot leaderboard
- *   - bitmart: gw-api/copytrade-streamer returns "service not open" (all IPs/regions)
+ * Dead/blocked platforms (fetcher files deleted 2026-03-10):
+ *   kucoin, lbank, bitget_spot, weex, mux, synthetix, bitmart,
+ *   whitebit, btse, cryptocom, pionex, vertex, okx_spot, paradex
  */
 
 import { NextRequest, NextResponse } from 'next/server'

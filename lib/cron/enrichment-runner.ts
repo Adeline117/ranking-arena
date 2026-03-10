@@ -8,9 +8,7 @@ import {
   fetchBinanceEquityCurve,
   fetchBinanceStatsDetail,
   fetchBinancePositionHistory,
-  fetchBybitEquityCurve,
-  fetchBybitStatsDetail,
-  fetchBybitPositionHistory,
+  // Bybit enrichment removed — api2.bybit.com endpoints return 404 globally (2026-03-10)
   fetchOkxEquityCurve,
   fetchOkxStatsDetail,
   fetchOkxCurrentPositions,
@@ -169,19 +167,7 @@ export const ENRICHMENT_PLATFORM_CONFIGS: Record<string, EnrichmentConfig> = {
     fetchStatsDetail: fetchBinanceStatsDetail,
     concurrency: 4, delayMs: 1200,
   },
-  bybit: {
-    platform: 'bybit',
-    fetchEquityCurve: fetchBybitEquityCurve,
-    fetchStatsDetail: fetchBybitStatsDetail,
-    fetchPositionHistory: fetchBybitPositionHistory,
-    concurrency: 5, delayMs: 1000,
-  },
-  bybit_spot: {
-    platform: 'bybit_spot',
-    fetchEquityCurve: fetchBybitEquityCurve,
-    fetchStatsDetail: fetchBybitStatsDetail,
-    concurrency: 4, delayMs: 1200,
-  },
+  // bybit/bybit_spot: enrichment disabled — api2.bybit.com endpoints return 404 globally (2026-03-10)
   okx_futures: {
     platform: 'okx_futures',
     fetchEquityCurve: fetchOkxEquityCurve,
@@ -197,12 +183,7 @@ export const ENRICHMENT_PLATFORM_CONFIGS: Record<string, EnrichmentConfig> = {
     fetchPositionHistory: fetchBitgetPositionHistory,
     concurrency: 2, delayMs: 2000,
   },
-  bitget_spot: {
-    platform: 'bitget_spot',
-    fetchEquityCurve: fetchBitgetEquityCurve,
-    fetchStatsDetail: fetchBitgetStatsDetail,
-    concurrency: 2, delayMs: 2000,
-  },
+  // bitget_spot: removed — no public API exists (all endpoints 404)
   hyperliquid: {
     platform: 'hyperliquid',
     fetchEquityCurve: fetchHyperliquidEquityCurve,

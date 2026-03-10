@@ -25,7 +25,7 @@ import {
   normalizeWinRate,
   getWinRateFormat,
 } from './shared'
-import { fetchBybitEquityCurve, fetchBybitStatsDetail, upsertEquityCurve, upsertStatsDetail, enhanceStatsWithDerivedMetrics, type EquityCurvePoint } from './enrichment'
+// Bybit enrichment imports removed — api2.bybit.com endpoints return 404 globally (2026-03-10)
 import { logger } from '@/lib/logger'
 import { captureException } from '@/lib/utils/logger'
 
@@ -40,10 +40,7 @@ const VPS_SCRAPER_KEY = process.env.VPS_PROXY_KEY || ''
 const TARGET = 500
 const PAGE_SIZE = 50
 
-// Phase 2: Enrichment settings — reduced to fit within 180s timeout
-const ENRICH_LIMIT = 30
-const ENRICH_CONCURRENCY = 5
-const ENRICH_DELAY_MS = 500
+// Bybit enrichment disabled — api2.bybit.com/fapi/beehive endpoints return 404 (2026-03-10)
 
 const PERIOD_MAP: Record<string, string> = {
   '7D': 'DATA_DURATION_SEVEN_DAY',
@@ -323,51 +320,8 @@ async function fetchPeriod(
   const top = traders.slice(0, TARGET)
   const { saved, error } = await upsertTraders(supabase, top)
 
-  // Phase 2: Enrich top traders with equity curve and stats detail
-  // DISABLED 2026-03-10: api2.bybit.com/fapi/beehive enrichment endpoints return 404 globally
-  // (both www.bybit.com/x-api and api2.bybit.com). Re-enable when Bybit provides new endpoints.
-  if (false && saved > 0 && period === '90D') {
-    const toEnrich = top.slice(0, ENRICH_LIMIT)
-    logger.info(`[${SOURCE}] Enriching ${toEnrich.length} traders for ${period}...`)
-
-    // Map period to days for equity curve API
-    const daysMap: Record<string, number> = { '7D': 7, '30D': 30, '90D': 90 }
-    const days = daysMap[period] || 90
-
-    let enrichedCount = 0
-    for (let i = 0; i < toEnrich.length; i += ENRICH_CONCURRENCY) {
-      const batch = toEnrich.slice(i, i + ENRICH_CONCURRENCY)
-      await Promise.all(
-        batch.map(async (trader) => {
-          try {
-            // Equity curve
-            let curve: EquityCurvePoint[] = []
-            curve = await fetchBybitEquityCurve(trader.source_trader_id, days)
-            if (curve.length > 0) {
-              await upsertEquityCurve(supabase, SOURCE, trader.source_trader_id, period, curve)
-            }
-
-            // Stats detail with derived metrics
-            let stats = await fetchBybitStatsDetail(trader.source_trader_id)
-            if (stats) {
-              // Phase 4: Enhance with derived metrics from equity curve
-              if (curve.length > 0) {
-                stats = enhanceStatsWithDerivedMetrics(stats, curve, period)
-              }
-              await upsertStatsDetail(supabase, SOURCE, trader.source_trader_id, period, stats)
-              enrichedCount++
-            }
-          } catch (err) {
-            logger.warn(`[${SOURCE}] Enrichment failed for ${trader.source_trader_id}: ${err instanceof Error ? err.message : String(err)}`)
-          }
-        })
-      )
-      if (i + ENRICH_CONCURRENCY < toEnrich.length) {
-        await sleep(ENRICH_DELAY_MS)
-      }
-    }
-    logger.info(`[${SOURCE}] Enrichment complete for ${period}: ${enrichedCount} stats details saved`)
-  }
+  // Bybit enrichment disabled: api2.bybit.com/fapi/beehive endpoints return 404 globally (2026-03-10)
+  // Core leaderboard metrics (ROI, MDD, win rate, sharpe) come from metricValues in leaderboard API.
 
   return { total: top.length, saved, error }
 }
