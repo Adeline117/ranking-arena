@@ -141,7 +141,7 @@ export const DEAD_BLOCKED_PLATFORMS: TraderSource[] = [
   'kucoin',       // Copy trading feature removed — all APIs 404, page empty shell since 2026-03
   // Recoverable via Mac Mini Puppeteer scrapers (scripts/openclaw/fetch-*.mjs)
   'lbank',        // fetch-lbank.mjs — browser intercepts uuapi session API
-  'blofin',       // fetch-blofin.mjs — browser intercepts copy-trade API
+  // blofin: RECOVERED — Mac Mini fetch-blofin.mjs uses /uapi/v1/copy/v2/trader/list (600 traders)
   // Recoverable via credentials (set env vars to activate)
   'bitget_spot',  // Set BITGET_API_KEY/SECRET/PASSPHRASE for broker API
   // Working via Mac Mini — excluded from Vercel pipeline alerts

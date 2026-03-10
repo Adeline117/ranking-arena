@@ -36,7 +36,7 @@ const fixAttempts = new Map() // platform -> last attempt timestamp
 // Dead/blocked platforms - skip in alerts & auto-fix
 // Keep in sync with DEAD_BLOCKED_PLATFORMS in lib/constants/exchanges.ts
 const DEAD_PLATFORMS = new Set([
-  'kucoin', 'lbank', 'phemex', 'bitget_spot', 'blofin',
+  'kucoin', 'lbank', 'phemex', 'bitget_spot',
   'weex', 'mux', 'kwenta', 'synthetix',
 ])
 
