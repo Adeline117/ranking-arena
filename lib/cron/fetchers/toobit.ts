@@ -1,27 +1,29 @@
 /**
  * Toobit — Inline fetcher for Vercel serverless
  *
- * Toobit copy trading page: https://www.toobit.com/en-US/copy-trading
- * API endpoint discovered: https://www.toobit.com/api/v1/copy/leader/rank
+ * Toobit copy trading page: https://www.toobit.com/copytrading
+ * Ranking page: https://www.toobit.com/copytrading/ranking
+ *
+ * API endpoints (discovered 2026-03-10):
+ *   - bapi.toobit.com/bapi/v1/copy-trading/ranking?page=1&dataType={7|30|90}&kind={0-4}
+ *     Returns: { code: 200, data: { list: [...], total, pages } }
+ *     Fields: leaderUserId, name, avatar, profitRatio (ROI as ratio), profit (PnL USDT),
+ *             followerTotal, maxFollowerCount, followerProfit, rank, level, status
+ *     kind: 0=ROI, 1=PnL, 2=follower profit, 3=followers, 4=AUM
+ *     NOTE: Pagination broken — always returns page 1 (20 items). Use all kinds for ~70 unique.
+ *
+ *   - bapi.toobit.com/bapi/v1/copy-trading/identity-type-leaders?dataType={7|30|90}
+ *     Returns: { code: 200, data: { topProfitRate: [...], topProfit: [...], ... } }
+ *     Fields: leaderUserId, nickname, avatar, leaderAvgProfitRatio, pnl, followTotalProfit,
+ *             currentFollowerCount, maxLeadCount, leaderProfitOrderRatio, sharpeRatio
  *
  * Strategy order:
- * 1. VPS Playwright scraper (primary — direct APIs return HTML due to Cloudflare WAF)
- * 2. Direct API endpoints (fallback — in case WAF is lifted)
+ * 1. VPS scraper (primary — aggregates from ranking API kinds + identity-type-leaders, ~70 traders)
+ * 2. Direct bapi.toobit.com API (fallback — no WAF, works from any IP)
  *
- * VPS scraper handler spec (to deploy at /opt/scraper/server.js on SG VPS):
+ * VPS scraper deployed at /opt/scraper/server.js on SG VPS (2026-03-10, v15):
  *   Endpoint: GET /toobit/leaderboard?period=30&pageSize=50
- *   Behavior:
- *     1. Navigate to https://www.toobit.com/en-US/copy-trading
- *     2. setupInterception() to capture API responses matching:
- *        - /api/v1/copy/leader/rank
- *        - /api/v1/copy-trading/leaders
- *        - /api/v1/copy/leader/list
- *     3. Wait for network idle / API response
- *     4. If no intercepted API data, use safeFetchJson fallback:
- *        POST https://www.toobit.com/api/v1/copy/leader/rank
- *        Body: { sortBy: "roi", period: "30", page: 1, pageSize: 50 }
- *        Headers: { Referer, Origin, Accept, Cookie (from browser context) }
- *     5. Return: { data: { list: [{ leaderId, nickname, roi, pnl, winRate, maxDrawdown, followers, avatar }] } }
+ *   No Playwright needed — uses direct API calls to bapi.toobit.com
  */
 
 import type { SupabaseClient } from '@supabase/supabase-js'
@@ -34,7 +36,6 @@ import {
   sleep,
   parseNum,
   normalizeWinRate,
-  normalizeROI,
   getWinRateFormat,
 } from './shared'
 import { logger } from '@/lib/logger'
@@ -53,12 +54,17 @@ const PERIOD_MAP: Record<string, string> = {
 }
 
 const HEADERS: Record<string, string> = {
-  Referer: 'https://www.toobit.com/en-US/copy-trading',
+  Referer: 'https://www.toobit.com/copytrading/ranking',
   Origin: 'https://www.toobit.com',
   Accept: 'application/json',
   'Accept-Language': 'en-US,en;q=0.9',
+  'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/131.0.0.0 Safari/537.36',
 }
 
+// Ranking API kinds: 0=ROI, 1=PnL, 2=follower profit, 3=followers, 4=AUM
+const RANKING_KINDS = [0, 1, 2, 3, 4]
+
+/** Multiple API endpoints to try (usually CF WAF blocks, but worth trying) */
 const API_ENDPOINTS = [
   (page: number, period: string) =>
     `https://www.toobit.com/api/v1/copy/leader/rank?sortBy=roi&period=${period}&page=${page}&pageSize=${PAGE_SIZE}`,
@@ -69,28 +75,46 @@ const API_ENDPOINTS = [
 ]
 
 interface ToobitTrader {
+  // ID fields (ranking API uses leaderUserId)
+  leaderUserId?: string
   leaderId?: string
   uid?: string
   userId?: string
   id?: string | number
+  // Name fields (ranking API uses name, identity-type uses nickname)
+  name?: string
   nickname?: string
   nickName?: string
   displayName?: string
-  name?: string
+  // Avatar
   avatar?: string
   avatarUrl?: string
+  // ROI (ranking API: profitRatio as decimal ratio e.g. 2.7061 = 270.61%)
+  profitRatio?: number | string
+  leaderAvgProfitRatio?: number | string
   roi?: number | string
   returnRate?: number | string
-  pnl?: number | string
+  // PnL (ranking API: profit in USDT, identity-type: pnl)
   profit?: number | string
+  pnl?: number | string
+  // Win rate (identity-type-leaders: leaderProfitOrderRatio)
+  leaderProfitOrderRatio?: number | string
   winRate?: number | string
   win_rate?: number | string
+  // Drawdown
   maxDrawdown?: number | string
   max_drawdown?: number | string
+  // Followers (ranking API: followerTotal)
+  followerTotal?: number | string
   followers?: number | string
   followerCount?: number | string
+  maxFollowerCount?: number | string
+  currentFollowerCount?: number | string
   copiers?: number | string
   copyCount?: number | string
+  // Extra
+  sharpeRatio?: number | string
+  rank?: number
 }
 
 interface ToobitResponse {
@@ -105,27 +129,32 @@ interface ToobitResponse {
 }
 
 function parseTrader(item: ToobitTrader, period: string, rank: number): TraderData | null {
-  const id = String(item.leaderId || item.uid || item.userId || item.id || '')
+  const id = String(item.leaderUserId || item.leaderId || item.uid || item.userId || item.id || '')
   if (!id || id === 'undefined') return null
 
-  let roi = parseNum(item.roi ?? item.returnRate)
+  // ROI: profitRatio is a decimal ratio (e.g. 2.7061 = 270.61%)
+  // leaderAvgProfitRatio from identity-type-leaders is also a ratio
+  let roi = parseNum(item.profitRatio ?? item.leaderAvgProfitRatio ?? item.roi ?? item.returnRate)
   if (roi === null) return null
-  roi = normalizeROI(roi, SOURCE) ?? roi
+  // Convert ratio to percentage (API returns e.g. 2.7061 meaning 270.61%)
+  roi = roi * 100
 
-  const pnl = parseNum(item.pnl ?? item.profit)
-  const winRate = normalizeWinRate(parseNum(item.winRate ?? item.win_rate), getWinRateFormat(SOURCE))
+  const pnl = parseNum(item.profit ?? item.pnl)
+  // leaderProfitOrderRatio from identity-type-leaders is win rate as ratio (0-1)
+  const rawWinRate = parseNum(item.leaderProfitOrderRatio ?? item.winRate ?? item.win_rate)
+  const winRate = normalizeWinRate(rawWinRate, getWinRateFormat(SOURCE))
   let maxDrawdown = parseNum(item.maxDrawdown ?? item.max_drawdown)
   if (maxDrawdown !== null && Math.abs(maxDrawdown) > 0 && Math.abs(maxDrawdown) <= 1) maxDrawdown *= 100
 
-  const followers = parseNum(item.followers ?? item.followerCount ?? item.copiers ?? item.copyCount)
-  const handle = item.nickname || item.nickName || item.displayName || item.name || `Trader_${id.slice(0, 8)}`
+  const followers = parseNum(item.followerTotal ?? item.currentFollowerCount ?? item.followers ?? item.followerCount ?? item.copiers ?? item.copyCount)
+  const handle = item.name || item.nickname || item.nickName || item.displayName || `Trader_${id.slice(0, 8)}`
 
   return {
     source: SOURCE,
     source_trader_id: id,
     handle,
     avatar_url: item.avatar || item.avatarUrl || null,
-    profile_url: `https://www.toobit.com/en-US/copy-trading/leader/${id}`,
+    profile_url: `https://www.toobit.com/copytrading/trader/info?id=${id}`,
     season_id: period,
     rank,
     roi,
@@ -156,20 +185,20 @@ async function fetchPeriod(
   const periodStr = PERIOD_MAP[period] || '30'
   const allTraders = new Map<string, ToobitTrader>()
 
-  // Strategy 1: VPS Playwright scraper (primary — bypasses Cloudflare WAF)
+  // Strategy 1: VPS scraper (primary — aggregates ranking API kinds + identity-type-leaders)
   if (VPS_SCRAPER_KEY) {
     try {
       const scraperUrl = `${VPS_SCRAPER_URL}/toobit/leaderboard?period=${periodStr}&pageSize=${PAGE_SIZE}`
-      logger.warn(`[${SOURCE}] Trying VPS Playwright scraper...`)
+      logger.warn(`[${SOURCE}] Trying VPS scraper...`)
       const res = await fetch(scraperUrl, {
         headers: { 'X-Proxy-Key': VPS_SCRAPER_KEY },
-        signal: AbortSignal.timeout(60_000),
+        signal: AbortSignal.timeout(30_000),
       })
       if (res.ok) {
         const data = (await res.json()) as ToobitResponse
         const list = extractList(data)
         for (const item of list) {
-          const id = String(item.leaderId || item.uid || item.userId || item.id || '')
+          const id = String(item.leaderUserId || item.leaderId || item.uid || item.userId || item.id || '')
           if (id && id !== 'undefined' && !allTraders.has(id)) allTraders.set(id, item)
         }
         if (allTraders.size > 0) {
@@ -183,36 +212,52 @@ async function fetchPeriod(
     }
   }
 
-  // Strategy 2: Direct API endpoints (fallback — usually returns HTML due to CF WAF)
-  for (const buildUrl of API_ENDPOINTS) {
-    if (allTraders.size >= TARGET) break
-    let consecutiveEmpty = 0
-
-    for (let page = 1; page <= Math.ceil(TARGET / PAGE_SIZE); page++) {
+  // Strategy 2: Direct bapi.toobit.com API (fallback — no WAF, works from any IP)
+  if (allTraders.size === 0) {
+    for (const kind of RANKING_KINDS) {
       try {
-        const url = buildUrl(page, periodStr)
+        const url = `https://bapi.toobit.com/bapi/v1/copy-trading/ranking?page=1&dataType=${periodStr}&kind=${kind}`
         const data = await fetchJson<ToobitResponse>(url, { headers: HEADERS, timeoutMs: 10000 })
         const list = extractList(data)
-
-        if (list.length === 0) {
-          consecutiveEmpty++
-          if (consecutiveEmpty >= 2) break
-          continue
-        }
-
+        let newCount = 0
         for (const item of list) {
-          const id = String(item.leaderId || item.uid || item.userId || item.id || '')
-          if (id && id !== 'undefined' && !allTraders.has(id)) allTraders.set(id, item)
+          const id = String(item.leaderUserId || item.leaderId || item.id || '')
+          if (id && id !== 'undefined' && !allTraders.has(id)) {
+            allTraders.set(id, item)
+            newCount++
+          }
         }
-
-        if (list.length < PAGE_SIZE || allTraders.size >= TARGET) break
-        await sleep(300)
+        if (newCount > 0) logger.info(`[${SOURCE}] Direct API kind=${kind}: ${newCount} new traders`)
       } catch (err) {
-        logger.warn(`[${SOURCE}] Page fetch failed: ${err instanceof Error ? err.message : String(err)}`)
-        break
+        logger.warn(`[${SOURCE}] Direct API kind=${kind} failed: ${err instanceof Error ? err.message : String(err)}`)
       }
     }
-    if (allTraders.size > 0) break
+
+    // Also try identity-type-leaders for extra traders
+    try {
+      const url = `https://bapi.toobit.com/bapi/v1/copy-trading/identity-type-leaders?dataType=${periodStr}`
+      const res = await fetch(url, { headers: HEADERS, signal: AbortSignal.timeout(10000) })
+      if (res.ok) {
+        const json = await res.json() as { code?: number; data?: Record<string, ToobitTrader[]> }
+        if (json.data && typeof json.data === 'object') {
+          let newCount = 0
+          for (const key of Object.keys(json.data)) {
+            const items = json.data[key]
+            if (!Array.isArray(items)) continue
+            for (const item of items) {
+              const id = String(item.leaderUserId || '')
+              if (id && !allTraders.has(id)) {
+                allTraders.set(id, item)
+                newCount++
+              }
+            }
+          }
+          if (newCount > 0) logger.info(`[${SOURCE}] identity-type-leaders: ${newCount} new traders`)
+        }
+      }
+    } catch (err) {
+      logger.warn(`[${SOURCE}] identity-type-leaders failed: ${err instanceof Error ? err.message : String(err)}`)
+    }
   }
 
   if (allTraders.size === 0) {
