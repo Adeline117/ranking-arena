@@ -320,8 +320,9 @@ async function fetchPeriod(
   const { saved, error } = await upsertTraders(supabase, top)
 
   // Phase 2: Enrich top traders with equity curve and stats detail
-  // Only enrich 90D to save time budget (enrichment APIs use same WAF-blocked endpoints)
-  if (saved > 0 && period === '90D') {
+  // DISABLED 2026-03-10: api2.bybit.com/fapi/beehive enrichment endpoints return 404 globally
+  // (both www.bybit.com/x-api and api2.bybit.com). Re-enable when Bybit provides new endpoints.
+  if (false && saved > 0 && period === '90D') {
     const toEnrich = top.slice(0, ENRICH_LIMIT)
     logger.info(`[${SOURCE}] Enriching ${toEnrich.length} traders for ${period}...`)
 
