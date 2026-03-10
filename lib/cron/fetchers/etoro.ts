@@ -42,6 +42,10 @@ const HEADERS: Record<string, string> = {
   'Accept-Language': 'en-US,en;q=0.9',
 }
 
+// eToro InstrumentTypeID for crypto assets
+// Adding this filter to the API request ensures only crypto traders are returned
+const CRYPTO_INSTRUMENT_TYPE = 10 // Crypto = 10
+
 interface EtoroTrader {
   CustomerId: number
   UserName: string
@@ -60,6 +64,8 @@ interface EtoroTrader {
   PopularInvestor?: boolean
   Trades?: number
   ActiveWeeks?: number
+  TopTradedInstrumentId?: number
+  TopTradedAssetClassName?: string
 }
 
 interface EtoroResponse {
@@ -68,8 +74,14 @@ interface EtoroResponse {
   Items: EtoroTrader[]
 }
 
+// Known non-crypto asset class names from eToro
+const NON_CRYPTO_CLASSES = new Set(['Stocks', 'ETFs', 'Currencies', 'Commodities', 'Indices'])
+
 function parseTrader(item: EtoroTrader, period: string, rank: number): TraderData | null {
   if (!item.CustomerId || !item.UserName) return null
+
+  // Skip non-crypto traders (fallback if API InstrumentTypeID filter is ignored)
+  if (item.TopTradedAssetClassName && NON_CRYPTO_CLASSES.has(item.TopTradedAssetClassName)) return null
 
   const roi = item.Gain // Already in percentage format
   if (roi == null) return null
@@ -118,7 +130,8 @@ async function fetchPeriod(
   const totalPages = Math.ceil(TARGET / PAGE_SIZE)
 
   for (let page = 1; page <= totalPages; page++) {
-    const url = `${API_BASE}?Period=${etoroPeriod}&page=${page}&pagesize=${PAGE_SIZE}`
+    // Filter by crypto instrument type to exclude stock/forex/commodity traders
+    const url = `${API_BASE}?Period=${etoroPeriod}&page=${page}&pagesize=${PAGE_SIZE}&InstrumentTypeID=${CRYPTO_INSTRUMENT_TYPE}`
 
     try {
       const data = await fetchJson<EtoroResponse>(url, {

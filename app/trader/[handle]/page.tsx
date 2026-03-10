@@ -94,16 +94,9 @@ export async function generateMetadata({ params }: { params: Promise<{ handle: s
 // Allow non-pre-rendered trader pages to be dynamically generated at runtime
 export const dynamicParams = true
 
-// Skip static pre-rendering — Upstash Redis calls in layout tree use
-// fetch({cache:'no-store'}) which breaks static generation.
-// Pages are generated on-demand with ISR instead (revalidate=300).
-export async function generateStaticParams() {
-  return []
-}
-
-// Force dynamic — layout sidebar components call Upstash Redis (no-store fetch)
-// which is incompatible with ISR. Dynamic rendering is fine since TTFB is ~0.16s.
-export const dynamic = 'force-dynamic'
+// ISR: regenerate trader pages every 5 minutes
+// Sidebar widgets are client components using SWR (no server-side Redis dependency)
+export const revalidate = 300
 
 // Find the user profile associated with this trader handle
 // Uses chained query: traders -> trader_authorizations -> user_profiles
