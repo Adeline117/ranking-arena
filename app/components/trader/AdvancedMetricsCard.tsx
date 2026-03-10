@@ -67,7 +67,6 @@ export default function AdvancedMetricsCard({
     return tokens.colors.text.secondary
   }
 
-  // Hide entirely when ALL metrics are null — no point showing a card of dashes
   const hasAnyData =
     metrics.sortino_ratio != null ||
     metrics.calmar_ratio != null ||
@@ -78,8 +77,6 @@ export default function AdvancedMetricsCard({
     metrics.avg_holding_hours != null ||
     metrics.volatility_pct != null ||
     metrics.downside_volatility_pct != null
-
-  if (!hasAnyData && !isLoading) return null
 
   if (isLoading) {
     return (
@@ -141,6 +138,7 @@ export default function AdvancedMetricsCard({
           gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))',
           gap: tokens.spacing[3],
           marginBottom: tokens.spacing[4],
+          opacity: hasAnyData ? 1 : 0.5,
         }}
       >
         {/* Sortino Ratio */}
@@ -199,6 +197,15 @@ export default function AdvancedMetricsCard({
         />
       </Box>
 
+      {/* Insufficient data note */}
+      {!hasAnyData && (
+        <Box style={{ marginBottom: tokens.spacing[3], padding: `${tokens.spacing[2]} ${tokens.spacing[3]}`, background: `${tokens.colors.bg.tertiary}80`, borderRadius: tokens.radius.md, border: `1px solid ${tokens.colors.border.primary}40` }}>
+          <Text size="xs" style={{ color: tokens.colors.text.tertiary, lineHeight: 1.5 }}>
+            {t('metricsInsufficientData') || 'Insufficient trading history to compute these metrics. They will populate as more data becomes available.'}
+          </Text>
+        </Box>
+      )}
+
       {/* Secondary Metrics */}
       <Box
         style={{
@@ -207,6 +214,7 @@ export default function AdvancedMetricsCard({
           gap: tokens.spacing[2],
           paddingTop: tokens.spacing[3],
           borderTop: `1px solid ${tokens.colors.border.primary}40`,
+          opacity: hasAnyData ? 1 : 0.5,
         }}
       >
         {/* Consecutive Wins */}
@@ -241,14 +249,12 @@ export default function AdvancedMetricsCard({
         />
 
         {/* Downside Volatility */}
-        {metrics.downside_volatility_pct !== null && (
-          <SecondaryBadge
-            label={t('downsideVol') || 'Downside Vol'}
-            value={`${metrics.downside_volatility_pct.toFixed(1)}%`}
-            icon={<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="12" y1="5" x2="12" y2="19"/><polyline points="19 12 12 19 5 12"/></svg>}
-            negative={metrics.downside_volatility_pct > 30}
-          />
-        )}
+        <SecondaryBadge
+          label={t('downsideVol') || 'Downside Vol'}
+          value={metrics.downside_volatility_pct !== null ? `${metrics.downside_volatility_pct.toFixed(1)}%` : '—'}
+          icon={<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="12" y1="5" x2="12" y2="19"/><polyline points="19 12 12 19 5 12"/></svg>}
+          negative={metrics.downside_volatility_pct !== null && metrics.downside_volatility_pct > 30}
+        />
       </Box>
     </div>
   )
