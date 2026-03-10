@@ -139,6 +139,13 @@ export {
   upsertPortfolio,
 } from './enrichment-db'
 
+// On-chain wallet data (AUM, portfolio)
+export {
+  fetchWalletAUM,
+  fetchWalletPortfolio,
+  isDexPlatform,
+} from './enrichment-wallet'
+
 // Derived metrics
 export {
   calculateVolatility,

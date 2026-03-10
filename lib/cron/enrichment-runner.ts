@@ -53,6 +53,9 @@ import {
   fetchKwentaOnchainEquityCurve,
   fetchKwentaOnchainStatsDetail,
   fetchKwentaOnchainPositionHistory,
+  fetchWalletAUM,
+  fetchWalletPortfolio,
+  isDexPlatform,
   upsertEquityCurve,
   upsertStatsDetail,
   upsertPositionHistory,
@@ -437,6 +440,32 @@ export async function runEnrichment(params: {
                     .eq('source_trader_id', traderId)
                     .eq('season_id', period)
                 }
+              }
+            }
+
+            // On-chain wallet enrichment for DEX platforms (AUM + portfolio)
+            if (isDexPlatform(platformKey)) {
+              try {
+                const walletAum = await fetchWalletAUM(platformKey, traderId)
+                if (walletAum != null && walletAum > 10) {
+                  // Update AUM in stats_detail
+                  await supabase
+                    .from('trader_stats_detail')
+                    .update({ aum: walletAum })
+                    .eq('source', platformKey)
+                    .eq('source_trader_id', traderId)
+                    .eq('season_id', period)
+
+                  // Also save on-chain portfolio if no current positions exist
+                  if (!config.fetchCurrentPositions) {
+                    const walletPortfolio = await fetchWalletPortfolio(platformKey, traderId)
+                    if (walletPortfolio.length > 0) {
+                      await upsertPortfolio(supabase, platformKey, traderId, walletPortfolio)
+                    }
+                  }
+                }
+              } catch {
+                // Non-critical — wallet enrichment failure shouldn't block
               }
             }
 
