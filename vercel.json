@@ -400,6 +400,15 @@
       ]
     },
     {
+      "source": "/api/watchlist/:path*",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "private, no-store"
+        }
+      ]
+    },
+    {
       "source": "/api/presence/:path*",
       "headers": [
         {
