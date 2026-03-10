@@ -79,19 +79,7 @@ export const ScoreBreakdown = memo(function ScoreBreakdown(props: ScoreBreakdown
 
   const hasAnyScore = profitability_score != null || risk_control_score != null || execution_score != null
 
-  if (!hasAnyScore) {
-    return (
-      <Box style={{ padding: `${tokens.spacing[3]} ${tokens.spacing[4]}`, textAlign: 'center' }}>
-        <Text size="sm" style={{ color: tokens.colors.text.tertiary }}>
-          {arena_score != null
-            ? (t('scoreBasisRoiPnl') || 'Score based on ROI and PnL data')
-            : t('scoreNoDetails')}
-        </Text>
-      </Box>
-    )
-  }
-
-  const explanation = generateExplanation({
+  const explanation = hasAnyScore ? generateExplanation({
     profitability_score,
     risk_control_score,
     execution_score,
@@ -99,7 +87,9 @@ export const ScoreBreakdown = memo(function ScoreBreakdown(props: ScoreBreakdown
     max_drawdown,
     win_rate,
     roi,
-  })
+  }) : (arena_score != null
+    ? (t('scoreBasisRoiPnl') || 'Score based on ROI and PnL data. Detailed breakdown not yet available for this trader.')
+    : (t('scoreNoDetails') || 'Score breakdown not yet computed. Data will populate as trading history accumulates.'))
 
   const completenessLabel = getCompletenessLabel(score_completeness)
   const completenessColor = getCompletenessColor(score_completeness)
@@ -115,7 +105,7 @@ export const ScoreBreakdown = memo(function ScoreBreakdown(props: ScoreBreakdown
       alignItems: 'flex-start',
     }}>
       {/* 左侧：条形图 */}
-      <Box style={{ flex: '1 1 200px', minWidth: 0 }}>
+      <Box style={{ flex: '1 1 200px', minWidth: 0, opacity: hasAnyScore ? 1 : 0.5 }}>
         <Text size="xs" weight="bold" style={{ marginBottom: 8, color: tokens.colors.text.secondary }}>
           {t('scoreBreakdownTitle')}
         </Text>
@@ -151,7 +141,7 @@ export const ScoreBreakdown = memo(function ScoreBreakdown(props: ScoreBreakdown
       </Box>
 
       {/* 右侧：雷达图 */}
-      <Box style={{ flex: '0 0 120px', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+      <Box style={{ flex: '0 0 120px', display: 'flex', flexDirection: 'column', alignItems: 'center', opacity: hasAnyScore ? 1 : 0.5 }}>
         <CompactErrorBoundary>
           <ScoreRadar
             profitability={profitability_score ?? 0}
