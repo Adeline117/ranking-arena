@@ -15,7 +15,7 @@
  *   group=f  → mexc, bingx (every 6h)
  *   group=h  → gateio, btcc (every 6h)
  *   group=g1 → drift, bitunix (every 6h)
- *   group=g2 → web3_bot, kwenta (every 6h)
+ *   group=g2 → web3_bot, kwenta, toobit (every 6h)
  *
  * Dead/blocked platforms removed:
  *   - kucoin: APIs return 404, feature discontinued
@@ -27,7 +27,7 @@
  *   - mux: requires THEGRAPH_API_KEY (not set), Copin has 0 traders
  *   - synthetix: Copin returns only 9 stale traders, TheGraph needs API key
  *   - uniswap/pancakeswap: need THEGRAPH_API_KEY (not set)
- *   - toobit: API returns HTML (needs browser session), only 238 snapshots
+ *   - toobit: re-enabled with VPS Playwright scraper (2026-03-09)
  *   - okx_spot: OKX copy-trading API only supports instType=SWAP, no spot leaderboard
  *   - bitmart: gw-api/copytrade-streamer returns "service not open" (all IPs/regions)
  */

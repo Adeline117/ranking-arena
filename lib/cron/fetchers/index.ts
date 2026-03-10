@@ -80,6 +80,7 @@ export const INLINE_FETCHERS: Record<string, PlatformFetcher> = {
   phemex: fetchPhemex,
   blofin: fetchBlofin,
   bitfinex: fetchBitfinex,
+  toobit: fetchToobit,
   // whitebit: stub (no copy-trading API)
   // btse: stub (no public leaderboard API)
 
