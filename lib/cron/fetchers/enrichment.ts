@@ -120,11 +120,14 @@ export {
   fetchJupiterStatsDetail,
 } from './enrichment-jupiter'
 
-// On-chain (Etherscan V2)
+// On-chain (Etherscan V2 + Blockscout)
 export {
   fetchGainsOnchainPositionHistory,
   fetchGainsOnchainEquityCurve,
   fetchGainsOnchainStatsDetail,
+  fetchKwentaOnchainPositionHistory,
+  fetchKwentaOnchainEquityCurve,
+  fetchKwentaOnchainStatsDetail,
 } from './enrichment-onchain'
 
 // Database operations

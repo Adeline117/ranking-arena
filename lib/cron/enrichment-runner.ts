@@ -50,6 +50,9 @@ import {
   fetchGainsOnchainEquityCurve,
   fetchGainsOnchainStatsDetail,
   fetchGainsOnchainPositionHistory,
+  fetchKwentaOnchainEquityCurve,
+  fetchKwentaOnchainStatsDetail,
+  fetchKwentaOnchainPositionHistory,
   upsertEquityCurve,
   upsertStatsDetail,
   upsertPositionHistory,
@@ -275,10 +278,27 @@ export const ENRICHMENT_PLATFORM_CONFIGS: Record<string, EnrichmentConfig> = {
   },
   kwenta: {
     platform: 'kwenta',
-    fetchEquityCurve: fetchKwentaEquityCurve,
-    fetchStatsDetail: fetchKwentaStatsDetail,
-    fetchPositionHistory: fetchKwentaPositionHistory,
-    concurrency: 2, delayMs: 1000,
+    fetchEquityCurve: async (traderId: string, days: number) => {
+      // Primary: on-chain via Blockscout Base (free, no API key)
+      const onchain = await fetchKwentaOnchainEquityCurve(traderId, days)
+      if (onchain.length > 0) return onchain
+      // Fallback: Copin (returns [])
+      return fetchKwentaEquityCurve(traderId, days)
+    },
+    fetchStatsDetail: async (traderId: string) => {
+      // Primary: on-chain OrderSettled events
+      const onchain = await fetchKwentaOnchainStatsDetail(traderId)
+      if (onchain) return onchain
+      // Fallback: Copin leaderboard stats
+      return fetchKwentaStatsDetail(traderId)
+    },
+    fetchPositionHistory: async (traderId: string) => {
+      // Primary: on-chain OrderSettled events
+      const onchain = await fetchKwentaOnchainPositionHistory(traderId)
+      if (onchain.length > 0) return onchain
+      return fetchKwentaPositionHistory(traderId)
+    },
+    concurrency: 2, delayMs: 1500, // Slower due to Blockscout rate limits
   },
   jupiter_perps: {
     platform: 'jupiter_perps',
