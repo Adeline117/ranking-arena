@@ -25,7 +25,14 @@ jest.mock('@/lib/cron/utils', () => ({
     url: 'http://supabase.test',
     serviceKey: 'test-key',
   })),
-  getSupportedPlatforms: jest.fn(() => ['binance_futures', 'bybit']),
+}))
+
+jest.mock('@/lib/cron/fetchers', () => ({
+  getSupportedInlinePlatforms: jest.fn(() => ['binance_futures', 'bybit']),
+}))
+
+jest.mock('@/lib/constants/exchanges', () => ({
+  DEAD_BLOCKED_PLATFORMS: [],
 }))
 
 jest.mock('@/lib/alerts/send-alert', () => ({

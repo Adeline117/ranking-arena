@@ -89,9 +89,9 @@ describe('GET /api/cron/batch-enrich', () => {
     expect(res.status).toBe(200)
     expect(body.ok).toBe(true)
     expect(body.period).toBe('7D')
-    // 7D enriches high + medium priority (6 + 8 = 14 platforms)
-    expect(body.platforms).toBe(14)
-    expect(body.succeeded).toBe(14)
+    // 7D enriches high + medium priority (6 + 3 = 9 platforms)
+    expect(body.platforms).toBe(9)
+    expect(body.succeeded).toBe(9)
   })
 
   it('enriches high + medium priority for 90D period', async () => {
@@ -101,7 +101,7 @@ describe('GET /api/cron/batch-enrich', () => {
     const body = await res.json()
 
     expect(body.period).toBe('90D')
-    expect(body.platforms).toBe(14) // 6 high + 8 medium
+    expect(body.platforms).toBe(9) // 6 high + 3 medium
   })
 
   it('enriches all platforms when all=true', async () => {
@@ -110,7 +110,7 @@ describe('GET /api/cron/batch-enrich', () => {
     const res = await GET(createCronRequest(CRON_SECRET, { period: '7D', all: 'true' }))
     const body = await res.json()
 
-    expect(body.platforms).toBe(19) // 6 + 8 + 5
+    expect(body.platforms).toBe(9) // 6 + 3 + 0
   })
 
   // ---- Error handling ------------------------------------------------------
@@ -122,7 +122,7 @@ describe('GET /api/cron/batch-enrich', () => {
     const body = await res.json()
 
     expect(body.ok).toBe(false)
-    expect(body.failed).toBe(14)
+    expect(body.failed).toBe(9)
   })
 
   it('handles thrown errors gracefully', async () => {

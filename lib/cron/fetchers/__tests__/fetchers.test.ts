@@ -20,9 +20,10 @@ describe('Fetcher Registry', () => {
   const expectedPlatforms = [
     'okx_futures', 'htx', 'htx_futures', 'binance_futures', 'binance_spot',
     'binance_web3', 'bybit', 'bybit_spot', 'okx_web3', 'bitget_futures',
-    'bitget_spot', 'xt', 'bingx', 'gateio', 'mexc', 'kucoin',
-    'coinex', 'phemex', 'weex', 'lbank', 'blofin',
-    'hyperliquid', 'gmx', 'gains',
+    'bitget_spot', 'xt', 'bingx', 'gateio', 'mexc',
+    'coinex', 'phemex', 'blofin', 'bitfinex',
+    'drift', 'bitunix', 'btcc', 'web3_bot', 'etoro',
+    'hyperliquid', 'gmx', 'gains', 'jupiter_perps', 'aevo', 'dydx', 'kwenta',
   ]
 
   test('INLINE_FETCHERS has all expected platform keys', () => {
