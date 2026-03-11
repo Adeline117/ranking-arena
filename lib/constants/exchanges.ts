@@ -151,6 +151,8 @@ export const DEAD_BLOCKED_PLATFORMS: TraderSource[] = [
   'synthetix',    // Copin returns only 9 stale traders (1 trade each), TheGraph needs API key
   // toobit: re-enabled with VPS Playwright scraper (2026-03-09)
   'paradex',      // API now requires JWT auth (was public, changed ~2026-03)
+  'kwenta',       // Copin API stopped serving Kwenta data (returned 1000+ traders on 2026-03-09, now returns 0)
+  'blofin',       // openapi.blofin.com requires authentication (401), VPS scraper endpoint missing
   'okx_spot',     // OKX copy-trading API only supports instType=SWAP, no spot leaderboard
   'bitmart',      // gw-api/copytrade-streamer returns "service not open" (all IPs), SPA doesn't render
   'whitebit' as TraderSource,     // No copy-trading feature or API exists
