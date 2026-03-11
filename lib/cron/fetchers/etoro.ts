@@ -130,8 +130,9 @@ async function fetchPeriod(
   const totalPages = Math.ceil(TARGET / PAGE_SIZE)
 
   for (let page = 1; page <= totalPages; page++) {
-    // Filter by crypto instrument type to exclude stock/forex/commodity traders
-    const url = `${API_BASE}?Period=${etoroPeriod}&page=${page}&pagesize=${PAGE_SIZE}&InstrumentTypeID=${CRYPTO_INSTRUMENT_TYPE}`
+    // Note: InstrumentTypeID filter was removed due to API 403 errors (2026-03-11)
+    // Crypto filtering is handled by TopTradedAssetClassName check in parseTrader()
+    const url = `${API_BASE}?Period=${etoroPeriod}&page=${page}&pagesize=${PAGE_SIZE}`
 
     try {
       const data = await fetchJson<EtoroResponse>(url, {
