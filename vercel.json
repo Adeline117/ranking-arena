@@ -33,6 +33,10 @@
       "schedule": "0 3 * * *"
     },
     {
+      "path": "/api/cron/cleanup-stuck-logs",
+      "schedule": "*/15 * * * *"
+    },
+    {
       "path": "/api/cron/batch-discover",
       "schedule": "56 */6 * * *"
     },
