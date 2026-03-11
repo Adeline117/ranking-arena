@@ -55,9 +55,11 @@ const GROUPS: Record<string, string[]> = {
   h: ['gateio', 'btcc'],
   // Group G1: DEX (every 6h) — 2 platforms, parallel
   g1: ['drift', 'bitunix'],
-  // Group G2: DEX+CEX (every 6h) — 4 platforms
+  // Group G2: DEX+CEX (every 6h) — 2 platforms
   // paradex removed: API now requires JWT auth since 2026-03
-  g2: ['web3_bot', 'kwenta', 'toobit', 'blofin'],
+  // kwenta removed: Copin API stopped serving Kwenta data (2026-03-11)
+  // blofin removed: openapi.blofin.com requires auth, VPS scraper endpoint missing (2026-03-11)
+  g2: ['web3_bot', 'toobit'],
   // Group I: Social trading (every 6h) — large dataset (2000 traders × 3 periods)
   i: ['etoro'],
 }
