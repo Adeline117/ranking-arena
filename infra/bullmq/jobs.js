@@ -8,6 +8,7 @@ const JOBS = [
   { name: 'check-data-freshness', path: '/api/cron/check-data-freshness', cron: '0 */3 * * *' },
   { name: 'subscription-expiry', path: '/api/cron/subscription-expiry', cron: '0 0 * * *' },
   { name: 'cleanup-deleted-accounts', path: '/api/cron/cleanup-deleted-accounts', cron: '0 3 * * *' },
+  { name: 'cleanup-stuck-logs', path: '/api/cron/cleanup-stuck-logs', cron: '*/15 * * * *' },
 
   // === Batch & Jobs ===
   { name: 'batch-5min', path: '/api/cron/batch-5min', cron: '*/5 * * * *' },
