@@ -151,7 +151,7 @@ async function fetchPeriod(
 
   // Strategy 0: VPS Playwright scraper (most reliable for BloFin)
   const VPS_SCRAPER_URL = process.env.VPS_SCRAPER_URL || 'http://45.76.152.169:3456'
-  const VPS_SCRAPER_KEY = process.env.VPS_PROXY_KEY || ''
+  const VPS_SCRAPER_KEY = process.env.VPS_SCRAPER_KEY || process.env.VPS_PROXY_KEY || ''
   if (VPS_SCRAPER_KEY) {
     try {
       const url = `${VPS_SCRAPER_URL}/blofin/leaderboard?period=${periodDays}&limit=${TARGET}`
