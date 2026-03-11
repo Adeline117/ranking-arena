@@ -3,7 +3,42 @@
 > Auto-read by Claude Code at session start. Keep concise — archive completed items weekly.
 
 ## Current Sprint Focus
+- Mobile comprehensive plan implemented on `feature/mobile-comprehensive`
 - All P0-P3 tasks complete. Backlog 5/6 done (only multi-language remains).
+
+## Recently Completed (2026-03-10) — Mobile Comprehensive Plan
+Branch: `feature/mobile-comprehensive`
+
+**New components built:**
+1. **BottomSheet** (`ui/BottomSheet.tsx`) — drag-to-resize (half/full/close), swipe-down-to-close, backdrop dismiss
+2. **SwipeableView** (`ui/SwipeableView.tsx`) — horizontal swipe between children with direction lock
+3. **MobileFilterSheet** (`ranking/MobileFilterSheet.tsx`) — quick filter chips + range sliders in BottomSheet
+4. **ChartFullscreen** (`ui/ChartFullscreen.tsx`) — landscape-optimized overlay for charts
+5. **MobileProfileMenu** (`profile/MobileProfileMenu.tsx`) — iOS Settings-style user profile + nav
+
+**Enhancements to existing:**
+6. **MobileSearchOverlay** — search history (localStorage, 10 items), chip-style recall
+7. **TraderProfileClient** — swipeable tab content (overview/stats/portfolio via SwipeableView)
+8. **TraderHeader** — stacks vertically on mobile, horizontal-scrolling action buttons
+9. **RankingTable** — infinite scroll via IntersectionObserver sentinel (200px prefetch)
+10. **Sticky tabs** — profile tabs sticky on mobile with mini header offset
+
+**CSS improvements (responsive.css):**
+11. Touch feedback: active press scale on cards/rows/buttons
+12. Disabled hover on touch devices (`@media (hover: none)`)
+13. Larger touch targets (36px minimum for info buttons)
+14. Reduced motion support for accessibility
+15. Groups/posts mobile (full-width cards, member avatar stacks)
+16. Settings mobile layout (52px menu items)
+
+**Already existed (no changes needed):**
+- PullToRefresh component + hook
+- Mobile gesture hooks (swipe, long press, swipe-to-delete)
+- Card view with auto-switch on mobile (<768px)
+- MobileBottomNav (5 tabs, scroll hide, haptics)
+- Service Worker (full caching + push notifications)
+- Capacitor (iOS + Android, splash, keyboard, status bar, share, haptics, biometrics, push, camera)
+- Offline page
 
 ## Recently Completed (2026-03-10) — SEO + Enrichment + UX Optimization
 1. **SEO: Exchange ranking pages** — English-first metadata, `generateStaticParams` for 30+ exchanges, JSON-LD ItemList schema (top 100 traders), h1/subtitle English rewrite
