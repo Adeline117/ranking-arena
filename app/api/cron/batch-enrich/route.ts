@@ -15,7 +15,7 @@ import { PipelineLogger } from '@/lib/services/pipeline-logger'
 import { runEnrichment, type EnrichmentResult } from '@/lib/cron/enrichment-runner'
 
 export const dynamic = 'force-dynamic'
-export const maxDuration = 300
+export const maxDuration = 600 // Vercel Pro max: 10 minutes (was 300s)
 
 // Platform configs with limits per period
 const PLATFORM_LIMITS: Record<string, { limit90: number; limit30: number; limit7: number }> = {
@@ -92,11 +92,11 @@ export async function GET(request: NextRequest) {
   const results: BatchResult[] = []
   const plog = await PipelineLogger.start(`batch-enrich-${periodParam}`, { period: periodParam, enrichAll, platforms })
 
-  // Safety timeout: ensure plog gets called before Vercel kills the function at 300s
-  const SAFETY_TIMEOUT_MS = 280_000
+  // Safety timeout: ensure plog gets called before Vercel kills the function at 600s
+  const SAFETY_TIMEOUT_MS = 580_000 // Was 280s for 300s limit, now 580s for 600s limit
   const safetyTimer = setTimeout(async () => {
     try {
-      await plog.error(new Error('Safety timeout: function approaching 300s limit'), { results })
+      await plog.error(new Error('Safety timeout: function approaching 600s limit'), { results })
     } catch { /* best effort */ }
   }, SAFETY_TIMEOUT_MS)
 
@@ -105,14 +105,14 @@ export async function GET(request: NextRequest) {
   const ENRICH_TIMEOUT_MS = periodsToRun.length > 1 ? 60_000 : 120_000
 
   const functionStart = Date.now()
-  // Budget per period: divide 270s (leaving 30s buffer) by number of periods
-  const PER_PERIOD_BUDGET_MS = Math.floor(270_000 / periodsToRun.length)
+  // Budget per period: divide 570s (leaving 30s buffer from 600s total) by number of periods
+  const PER_PERIOD_BUDGET_MS = Math.floor(570_000 / periodsToRun.length)
 
   // Run each period sequentially (when period=all, this runs 90D → 30D → 7D)
   for (const period of periodsToRun) {
-    // Bail early if we're running low on time (leave 30s for cleanup/logging)
+    // Bail early if we're running low on time (leave 50s for cleanup/logging)
     const elapsed = Date.now() - functionStart
-    if (elapsed > 250_000) {
+    if (elapsed > 550_000) {
       results.push({ platform: '*', period, status: 'error', durationMs: 0, error: `Skipped: ${Math.round(elapsed / 1000)}s elapsed, <50s remaining` })
       continue
     }
