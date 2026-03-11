@@ -101,8 +101,9 @@ export async function GET(request: NextRequest) {
   }, SAFETY_TIMEOUT_MS)
 
   // Per-platform enrichment timeout
-  // okx/bitget/htx need 100s+ for 90D (high trader count × slow concurrency × delay)
-  const ENRICH_TIMEOUT_MS = periodsToRun.length > 1 ? 60_000 : 120_000
+  // gains/okx/bitget/htx need 180s+ for chain data (high trader count × slow API × delay)
+  // With 570s total budget and BATCH_CONCURRENCY=5, max 3 batches × 180s = 540s < 570s ✅
+  const ENRICH_TIMEOUT_MS = periodsToRun.length > 1 ? 90_000 : 180_000
 
   const functionStart = Date.now()
   // Budget per period: divide 570s (leaving 30s buffer from 600s total) by number of periods
