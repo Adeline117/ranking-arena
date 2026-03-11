@@ -21,11 +21,10 @@ export const maxDuration = 300
 const PLATFORM_LIMITS: Record<string, { limit90: number; limit30: number; limit7: number }> = {
   binance_futures: { limit90: 200, limit30: 150, limit7: 100 },
   binance_spot: { limit90: 100, limit30: 80, limit7: 50 },
-  bybit: { limit90: 200, limit30: 150, limit7: 100 },
-  bybit_spot: { limit90: 80, limit30: 60, limit7: 40 },
+  // bybit/bybit_spot removed: api2.bybit.com endpoints return 404 globally (2026-03-10)
   okx_futures: { limit90: 80, limit30: 80, limit7: 60 },
   bitget_futures: { limit90: 60, limit30: 60, limit7: 50 },
-  bitget_spot: { limit90: 40, limit30: 40, limit7: 30 },
+  // bitget_spot removed: no public API exists (all endpoints 404)
   hyperliquid: { limit90: 100, limit30: 80, limit7: 60 },
   gmx: { limit90: 60, limit30: 50, limit7: 40 },
   htx_futures: { limit90: 40, limit30: 40, limit7: 30 },
@@ -35,15 +34,18 @@ const PLATFORM_LIMITS: Record<string, { limit90: number; limit30: number; limit7
   dydx: { limit90: 80, limit30: 60, limit7: 40 },
   aevo: { limit90: 60, limit30: 50, limit7: 40 },
   gains: { limit90: 60, limit30: 50, limit7: 40 },
-  kwenta: { limit90: 60, limit30: 50, limit7: 40 },
+  // kwenta removed: Copin API stopped serving Kwenta data (2026-03-11)
   jupiter_perps: { limit90: 80, limit30: 60, limit7: 40 },
 }
 
 // High priority platforms (always enriched)
-const HIGH_PRIORITY = ['binance_futures', 'bybit', 'okx_futures', 'bitget_futures', 'hyperliquid', 'gmx', 'dydx', 'jupiter_perps']
+// bybit removed: api2.bybit.com endpoints return 404 globally (2026-03-10)
+const HIGH_PRIORITY = ['binance_futures', 'okx_futures', 'bitget_futures', 'hyperliquid', 'gmx', 'dydx', 'jupiter_perps']
 
 // Medium priority (enriched with all=true or period=90D)
-const MEDIUM_PRIORITY = ['binance_spot', 'bybit_spot', 'htx_futures', 'gateio', 'mexc', 'drift', 'aevo', 'gains', 'kwenta']
+// bybit_spot removed: api2.bybit.com endpoints return 404 globally (2026-03-10)
+// kwenta removed: Copin API stopped serving Kwenta data (2026-03-11)
+const MEDIUM_PRIORITY = ['binance_spot', 'htx_futures', 'gateio', 'mexc', 'drift', 'aevo', 'gains']
 
 // Lower priority (enriched only with all=true)
 const LOWER_PRIORITY: string[] = []
