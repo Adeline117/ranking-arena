@@ -103,11 +103,14 @@ export async function GET(request: NextRequest) {
   }, SAFETY_TIMEOUT_MS)
 
   // Per-platform enrichment timeout
-  // dydx/gains/okx/bitget/htx need 240s+ for chain data (high trader count × slow API × delay)
-  // dydx consistently hits 180s timeout for 90D enrichments, needs 240s+
-  // With 570s total budget and BATCH_CONCURRENCY=5, max 3 batches × 240s = 720s theoretical,
-  // but in practice batches run in parallel, so real time ≈ slowest platform per batch (~240s × 3 = ~420s < 570s ✅)
+  // Onchain platforms (gmx/dydx/jupiter_perps/hyperliquid/drift) need 360s+ for chain data
+  // CEX platforms typically complete in <180s
+  // With 570s total budget and BATCH_CONCURRENCY=5:
+  //   - Worst case: 3 batches × 360s = 1080s theoretical
+  //   - Real time: batches run in parallel, slowest platform per batch (~360s) < 570s ✅
+  const ONCHAIN_PLATFORMS = new Set(['gmx', 'dydx', 'jupiter_perps', 'hyperliquid', 'drift', 'aevo', 'gains'])
   const ENRICH_TIMEOUT_MS = periodsToRun.length > 1 ? 90_000 : 240_000
+  const ONCHAIN_TIMEOUT_MS = periodsToRun.length > 1 ? 120_000 : 360_000
 
   const functionStart = Date.now()
   // Budget per period: divide 570s (leaving 30s buffer from 600s total) by number of periods
@@ -147,10 +150,12 @@ export async function GET(request: NextRequest) {
 
           try {
             // Wrap enrichment in a timeout to prevent stuck jobs
+            // Use longer timeout for onchain platforms (360s vs 240s)
+            const timeoutMs = ONCHAIN_PLATFORMS.has(platform) ? ONCHAIN_TIMEOUT_MS : ENRICH_TIMEOUT_MS
             const result: EnrichmentResult = await Promise.race([
               runEnrichment({ platform, period, limit }),
               new Promise<never>((_, reject) =>
-                setTimeout(() => reject(new Error(`Enrichment ${platform}/${period} timed out after ${ENRICH_TIMEOUT_MS / 1000}s`)), ENRICH_TIMEOUT_MS)
+                setTimeout(() => reject(new Error(`Enrichment ${platform}/${period} timed out after ${timeoutMs / 1000}s`)), timeoutMs)
               ),
             ])
             return {
