@@ -18,6 +18,7 @@ export const dynamic = 'force-dynamic'
 export const maxDuration = 600 // Vercel Pro max: 10 minutes (was 300s)
 
 // Platform configs with limits per period
+// INCREASED LIMITS FOR ONCHAIN PLATFORMS (2026-03-11)
 const PLATFORM_LIMITS: Record<string, { limit90: number; limit30: number; limit7: number }> = {
   binance_futures: { limit90: 200, limit30: 150, limit7: 100 },
   binance_spot: { limit90: 100, limit30: 80, limit7: 50 },
@@ -25,17 +26,18 @@ const PLATFORM_LIMITS: Record<string, { limit90: number; limit30: number; limit7
   okx_futures: { limit90: 80, limit30: 80, limit7: 60 },
   bitget_futures: { limit90: 60, limit30: 60, limit7: 50 },
   // bitget_spot removed: no public API exists (all endpoints 404)
-  hyperliquid: { limit90: 100, limit30: 80, limit7: 60 },
-  gmx: { limit90: 60, limit30: 50, limit7: 40 },
+  // ONCHAIN PLATFORMS: Increased limits to cover all missing data
+  hyperliquid: { limit90: 500, limit30: 400, limit7: 300 },
+  gmx: { limit90: 500, limit30: 400, limit7: 300 },
   htx_futures: { limit90: 40, limit30: 40, limit7: 30 },
   gateio: { limit90: 60, limit30: 50, limit7: 40 },
   mexc: { limit90: 60, limit30: 50, limit7: 40 },
-  drift: { limit90: 60, limit30: 50, limit7: 40 },
-  dydx: { limit90: 80, limit30: 60, limit7: 40 },
-  aevo: { limit90: 60, limit30: 50, limit7: 40 },
-  gains: { limit90: 60, limit30: 50, limit7: 40 },
+  drift: { limit90: 500, limit30: 400, limit7: 300 },
+  dydx: { limit90: 500, limit30: 400, limit7: 300 },
+  aevo: { limit90: 500, limit30: 400, limit7: 300 },
+  gains: { limit90: 300, limit30: 250, limit7: 200 },
   // kwenta removed: Copin API stopped serving Kwenta data (2026-03-11)
-  jupiter_perps: { limit90: 80, limit30: 60, limit7: 40 },
+  jupiter_perps: { limit90: 300, limit30: 250, limit7: 200 },
 }
 
 // High priority platforms (always enriched)
