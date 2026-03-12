@@ -36,13 +36,19 @@ import {
 // Hyperliquid API types
 // ============================================
 
+interface WindowPerf {
+  pnl?: string | number;
+  roi?: string | number;
+}
+
 interface HyperliquidLeaderEntry {
   ethAddress: string;
   displayName?: string;
-  accountValue: number;
-  pnl: number;
-  roi: number;
-  vlm: number;
+  accountValue?: string | number;
+  windowPerformances?: Array<[string, WindowPerf]> | Record<string, WindowPerf>;
+  pnl?: number;
+  roi?: number;
+  vlm?: number;
   maxDrawdown?: number;
   nTrades?: number;
   winRate?: number;
@@ -95,7 +101,8 @@ const WINDOW_TO_PERIOD: Record<RankingWindow, string> = {
 
 export class HyperliquidConnector extends BaseConnectorLegacy implements LegacyPlatformConnector {
   readonly platform = 'hyperliquid' as const;
-  private readonly apiUrl = 'https://api.hyperliquid.xyz/info';
+  private readonly statsApiUrl = 'https://stats-data.hyperliquid.xyz/Mainnet/leaderboard';
+  private readonly infoApiUrl = 'https://api.hyperliquid.xyz/info';
 
   constructor() {
     super();
@@ -103,16 +110,29 @@ export class HyperliquidConnector extends BaseConnectorLegacy implements LegacyP
   }
 
   async discoverLeaderboard(window: RankingWindow): Promise<TraderIdentity[]> {
-    const period = WINDOW_TO_PERIOD[window];
+    const windowKey = WINDOW_TO_PERIOD[window];
     const traders: TraderIdentity[] = [];
 
-    const data = await this.requestWithCircuitBreaker<HyperliquidLeaderEntry[]>(
-      () => this.fetchLeaderboard(period),
+    const data = await this.requestWithCircuitBreaker<{ leaderboardRows?: HyperliquidLeaderEntry[] }>(
+      () => this.fetchLeaderboard(),
       { label: `discoverLeaderboard(${window})` },
     );
 
-    for (const entry of data.slice(0, 100)) {
+    const rows = data.leaderboardRows || [];
+
+    // Filter entries that have performance for this window
+    for (const entry of rows) {
       if (!entry.ethAddress) continue;
+
+      // Check if trader has data for this window
+      let hasWindowData = false;
+      if (Array.isArray(entry.windowPerformances)) {
+        hasWindowData = entry.windowPerformances.some(([key]) => key === windowKey);
+      } else if (entry.windowPerformances) {
+        hasWindowData = windowKey in entry.windowPerformances;
+      }
+
+      if (!hasWindowData) continue;
 
       traders.push({
         platform: this.platform,
@@ -123,6 +143,8 @@ export class HyperliquidConnector extends BaseConnectorLegacy implements LegacyP
         discovered_at: new Date().toISOString(),
         last_seen: new Date().toISOString(),
       });
+
+      if (traders.length >= 100) break;
     }
 
     return traders;
