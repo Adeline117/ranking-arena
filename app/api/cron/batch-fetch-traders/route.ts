@@ -37,16 +37,16 @@ export const preferredRegion = 'hnd1' // Tokyo — avoids Binance/OKX/Bybit geo-
 const GROUPS: Record<string, string[]> = {
   // Group A1: Binance (every 3h) — 2 platforms, parallel ~120s
   a: ['binance_futures', 'binance_spot'],
-  // Group A2: Other high-priority CEX (every 3h) — 3 platforms, parallel ~100s
-  a2: ['bybit', 'bitget_futures', 'okx_futures'],
+  // Group A2: Other high-priority CEX (every 3h) — 2 platforms (bybit removed: api2.bybit.com 404 globally)
+  a2: ['bitget_futures', 'okx_futures'],
   // Group B: Top DEX (every 4h) — 3 platforms, ~110s parallel
   b: ['hyperliquid', 'gmx', 'jupiter_perps'],
   // Group C: Mid-priority (every 4h) — 3 platforms, ~70s parallel
   c: ['okx_web3', 'aevo', 'xt'],
   // Group D1: CEX (every 6h) — 2 platforms, parallel
   d1: ['gains', 'htx_futures'],
-  // Group D2: DEX+CEX (every 6h) — 2 platforms, parallel
-  d2: ['dydx', 'bybit_spot'],
+  // Group D2: DEX only (every 6h) — 1 platform (bybit_spot removed: api2.bybit.com 404 globally)
+  d2: ['dydx'],
   // Group E: CEX+DEX (every 6h) — 3 platforms (bitfinex: 1424 traders, was orphaned)
   e: ['coinex', 'binance_web3', 'bitfinex'],
   // Group F: Slow CEX (every 6h) — 2 platforms, parallel (~141s + ~60s = ~200s)
