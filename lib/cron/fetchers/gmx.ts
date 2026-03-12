@@ -273,41 +273,28 @@ async function fetchPeriod(
     await sleep(DELAY_MS)
   }
 
+  // DISABLED 2026-03-12: Enrichment moved to dedicated enrich-gmx job to avoid Cloudflare 120s timeout
+  // Inline enrichment causes batch-fetch-traders to exceed timeout when combined with fetch
+  // GMX enrichment is now handled by /api/cron/enrich-gmx (600s maxDuration, no HTTP)
+  //
   // Phase 3: Save equity curves and stats_detail in parallel batches (was sequential, caused 240s timeouts)
-  logger.warn(`[${SOURCE}] Saving equity curves and stats details for ${period}...`)
+  // logger.warn(`[${SOURCE}] Saving equity curves and stats details for ${period}...`)
   let curvesSaved = 0
   let statsSaved = 0
-  const WRITE_BATCH = 10
-  for (let wi = 0; wi < toEnrich.length; wi += WRITE_BATCH) {
-    const batch = toEnrich.slice(wi, wi + WRITE_BATCH)
-    await Promise.all(batch.map(async (trader) => {
-      if (trader.equityCurve.length > 0) {
-        await upsertEquityCurve(supabase, SOURCE, trader.address, period, trader.equityCurve)
-        curvesSaved++
-      }
-      const stats: StatsDetail = {
-        totalTrades: trader.tradesCount,
-        profitableTradesPct: trader.winRate,
-        avgHoldingTimeHours: null,
-        avgProfit: null,
-        avgLoss: null,
-        largestWin: null,
-        largestLoss: null,
-        sharpeRatio: null,
-        maxDrawdown: trader.maxDrawdown,
-        currentDrawdown: null,
-        volatility: null,
-        copiersCount: null,
-        copiersPnl: null,
-        aum: null,
-        winningPositions: null,
-        totalPositions: trader.tradesCount,
-      }
-      const { saved: s } = await upsertStatsDetail(supabase, SOURCE, trader.address, period, stats)
-      if (s) statsSaved++
-    }))
-  }
-  logger.warn(`[${SOURCE}] Saved ${curvesSaved} curves, ${statsSaved} stats for ${period}`)
+  // const WRITE_BATCH = 10
+  // for (let wi = 0; wi < toEnrich.length; wi += WRITE_BATCH) {
+  //   const batch = toEnrich.slice(wi, wi + WRITE_BATCH)
+  //   await Promise.all(batch.map(async (trader) => {
+  //     if (trader.equityCurve.length > 0) {
+  //       await upsertEquityCurve(supabase, SOURCE, trader.address, period, trader.equityCurve)
+  //       curvesSaved++
+  //     }
+  //     const stats: StatsDetail = { ... }
+  //     const { saved: s } = await upsertStatsDetail(supabase, SOURCE, trader.address, period, stats)
+  //     if (s) statsSaved++
+  //   }))
+  // }
+  // logger.warn(`[${SOURCE}] Saved ${curvesSaved} curves, ${statsSaved} stats for ${period}`)
 
   const capturedAt = new Date().toISOString()
   const traders: TraderData[] = topTraders.map((t, idx) => ({

@@ -282,8 +282,10 @@ async function fetchPeriod(
 
   // Phase 2: Enrich top traders with equity curve, position history, and stats detail
   // Skip enrichment when using VPS proxy — enrichment APIs also geo-blocked,
+  // DISABLED 2026-03-12: Enrichment moved to batch-enrich to avoid Cloudflare 120s timeout
+  // Inline enrichment causes batch-fetch-traders to exceed timeout when combined with fetch
   // each failed call wastes ~30s. Use batch-enrich cron instead.
-  if (saved > 0 && _cachedStrategy !== 'vps') {
+  if (saved > 0 && _cachedStrategy !== 'vps' && false) {  // Disabled with "&& false"
     const toEnrich = top.slice(0, ENRICH_LIMIT)
     logger.info(`[${SOURCE}] Enriching ${toEnrich.length} traders for ${period}...`)
 

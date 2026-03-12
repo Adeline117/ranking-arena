@@ -344,44 +344,18 @@ async function fetchPeriod(
   validTraders.sort((a, b) => Math.abs(b.pnl) - Math.abs(a.pnl))
   const topTraders = validTraders.slice(0, TARGET)
 
-  // Enrich with historical PnL and equity (only for 90D to save time)
-  if (period === '90D') {
-    await enrichTraders(topTraders)
-  }
-
-  // Save equity curves and stats_detail
-  if (period === '90D') {
-    logger.warn(`[${SOURCE}] Saving equity curves and stats details for ${period}...`)
-    let curvesSaved = 0
-    let statsSaved = 0
-    for (const trader of topTraders.slice(0, ENRICH_LIMIT)) {
-      if (trader.equityCurve.length > 0) {
-        await upsertEquityCurve(supabase, SOURCE, trader.address, period, trader.equityCurve)
-        curvesSaved++
-      }
-      const stats: StatsDetail = {
-        totalTrades: null,
-        profitableTradesPct: null,
-        avgHoldingTimeHours: null,
-        avgProfit: null,
-        avgLoss: null,
-        largestWin: null,
-        largestLoss: null,
-        sharpeRatio: null,
-        maxDrawdown: trader.maxDrawdown,
-        currentDrawdown: null,
-        volatility: null,
-        copiersCount: null,
-        copiersPnl: null,
-        aum: trader.equity,
-        winningPositions: null,
-        totalPositions: null,
-      }
-      const { saved: s } = await upsertStatsDetail(supabase, SOURCE, trader.address, period, stats)
-      if (s) statsSaved++
-    }
-    logger.warn(`[${SOURCE}] Saved ${curvesSaved} curves, ${statsSaved} stats for ${period}`)
-  }
+  // DISABLED 2026-03-12: Enrichment moved to batch-enrich to avoid Cloudflare 120s timeout
+  // Inline enrichment causes batch-fetch-traders to exceed timeout when combined with fetch
+  // Enrichment will be handled by dedicated batch-enrich jobs (no HTTP, no Cloudflare limit)
+  //
+  // if (period === '90D') {
+  //   await enrichTraders(topTraders)
+  // }
+  //
+  // if (period === '90D') {
+  //   logger.warn(`[${SOURCE}] Saving equity curves and stats details for ${period}...`)
+  //   ...
+  // }
 
   // Build TraderData
   const capturedAt = new Date().toISOString()
