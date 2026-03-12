@@ -29,6 +29,9 @@ export interface UnifiedConnectorConfig {
   
   /** Periods to fetch (default: all) */
   periods?: RankingWindow[]
+  
+  /** Timeout in milliseconds (default: 300000 = 5min) */
+  timeoutMs?: number
 }
 
 /**
@@ -44,6 +47,7 @@ export class UnifiedPlatformConnector {
         enableEnrichment: true,
         enrichmentLimit: 300,
         periods: ['7d', '30d', '90d'],
+        timeoutMs: 300000, // Default 5min
       }
     } else {
       this.config = {
@@ -51,6 +55,7 @@ export class UnifiedPlatformConnector {
         enableEnrichment: config.enableEnrichment ?? true,
         enrichmentLimit: config.enrichmentLimit ?? 300,
         periods: config.periods ?? ['7d', '30d', '90d'],
+        timeoutMs: config.timeoutMs ?? 300000, // Default 5min
       }
     }
   }
@@ -142,42 +147,47 @@ export class UnifiedPlatformConnector {
 /**
  * Platform connector registry
  * Maps platform names to connector configs
+ * 
+ * Timeout guidance:
+ * - Small platforms (<100 traders): 300s (5min)
+ * - Medium platforms (100-300 traders): 420s (7min)
+ * - Large platforms (>300 traders, onchain): 600s (10min)
  */
 export const PLATFORM_CONNECTORS: Record<string, UnifiedConnectorConfig> = {
   // Group A: High-priority CEX (every 3h)
-  binance_futures: { platform: 'binance_futures', enrichmentLimit: 200 },
-  binance_spot: { platform: 'binance_spot', enrichmentLimit: 100 },
-  bybit: { platform: 'bybit', enrichmentLimit: 150 },
-  bitget_futures: { platform: 'bitget_futures', enrichmentLimit: 60 },
-  okx_futures: { platform: 'okx_futures', enrichmentLimit: 80 },
+  binance_futures: { platform: 'binance_futures', enrichmentLimit: 200, timeoutMs: 420000 },
+  binance_spot: { platform: 'binance_spot', enrichmentLimit: 100, timeoutMs: 300000 },
+  bybit: { platform: 'bybit', enrichmentLimit: 150, timeoutMs: 360000 },
+  bitget_futures: { platform: 'bitget_futures', enrichmentLimit: 60, timeoutMs: 300000 },
+  okx_futures: { platform: 'okx_futures', enrichmentLimit: 80, timeoutMs: 300000 },
   
-  // Group B: Top DEX (every 4h)
-  hyperliquid: { platform: 'hyperliquid', enrichmentLimit: 500 },
-  gmx: { platform: 'gmx', enrichmentLimit: 150 },
-  jupiter_perps: { platform: 'jupiter_perps', enrichmentLimit: 300 },
+  // Group B: Top DEX (every 4h) - Large onchain platforms need 10min
+  hyperliquid: { platform: 'hyperliquid', enrichmentLimit: 500, timeoutMs: 600000 },
+  gmx: { platform: 'gmx', enrichmentLimit: 150, timeoutMs: 600000 }, // Handled by dedicated enrich-gmx, but keep safe timeout
+  jupiter_perps: { platform: 'jupiter_perps', enrichmentLimit: 300, timeoutMs: 600000 },
   
   // Group C: Mid-priority (every 4h)
-  okx_web3: { platform: 'okx_web3', enrichmentLimit: 100 },
-  aevo: { platform: 'aevo', enrichmentLimit: 500 },
-  xt: { platform: 'xt', enrichmentLimit: 60 },
+  okx_web3: { platform: 'okx_web3', enrichmentLimit: 100, timeoutMs: 300000 },
+  aevo: { platform: 'aevo', enrichmentLimit: 500, timeoutMs: 600000 },
+  xt: { platform: 'xt', enrichmentLimit: 60, timeoutMs: 300000 },
   
   // Group D-I: Lower priority (every 6h)
-  gains: { platform: 'gains', enrichmentLimit: 300 },
-  htx_futures: { platform: 'htx_futures', enrichmentLimit: 40 },
-  dydx: { platform: 'dydx', enrichmentLimit: 500 },
-  bybit_spot: { platform: 'bybit_spot', enrichmentLimit: 50 },
-  coinex: { platform: 'coinex', enrichmentLimit: 40 },
-  binance_web3: { platform: 'binance_web3', enrichmentLimit: 50 },
-  bitfinex: { platform: 'bitfinex', enrichmentLimit: 50 },
-  mexc: { platform: 'mexc', enrichmentLimit: 60 },
-  bingx: { platform: 'bingx', enrichmentLimit: 40 },
-  gateio: { platform: 'gateio', enrichmentLimit: 60 },
-  btcc: { platform: 'btcc', enrichmentLimit: 30 },
-  drift: { platform: 'drift', enrichmentLimit: 500 },
-  bitunix: { platform: 'bitunix', enrichmentLimit: 50 },
-  web3_bot: { platform: 'web3_bot', enrichmentLimit: 50 },
-  toobit: { platform: 'toobit', enrichmentLimit: 50 },
-  etoro: { platform: 'etoro', enrichmentLimit: 200 },
+  gains: { platform: 'gains', enrichmentLimit: 300, timeoutMs: 600000 },
+  htx_futures: { platform: 'htx_futures', enrichmentLimit: 40, timeoutMs: 300000 },
+  dydx: { platform: 'dydx', enrichmentLimit: 500, timeoutMs: 600000 },
+  bybit_spot: { platform: 'bybit_spot', enrichmentLimit: 50, timeoutMs: 300000 },
+  coinex: { platform: 'coinex', enrichmentLimit: 40, timeoutMs: 300000 },
+  binance_web3: { platform: 'binance_web3', enrichmentLimit: 50, timeoutMs: 300000 },
+  bitfinex: { platform: 'bitfinex', enrichmentLimit: 50, timeoutMs: 300000 },
+  mexc: { platform: 'mexc', enrichmentLimit: 60, timeoutMs: 300000 },
+  bingx: { platform: 'bingx', enrichmentLimit: 40, timeoutMs: 300000 },
+  gateio: { platform: 'gateio', enrichmentLimit: 60, timeoutMs: 300000 },
+  btcc: { platform: 'btcc', enrichmentLimit: 30, timeoutMs: 300000 },
+  drift: { platform: 'drift', enrichmentLimit: 500, timeoutMs: 600000 },
+  bitunix: { platform: 'bitunix', enrichmentLimit: 50, timeoutMs: 300000 },
+  web3_bot: { platform: 'web3_bot', enrichmentLimit: 50, timeoutMs: 300000 },
+  toobit: { platform: 'toobit', enrichmentLimit: 50, timeoutMs: 300000 },
+  etoro: { platform: 'etoro', enrichmentLimit: 200, timeoutMs: 420000 },
 }
 
 /**
