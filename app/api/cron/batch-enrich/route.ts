@@ -42,7 +42,8 @@ const PLATFORM_LIMITS: Record<string, { limit90: number; limit30: number; limit7
 
 // High priority platforms (always enriched)
 // bybit removed: api2.bybit.com endpoints return 404 globally (2026-03-10)
-const HIGH_PRIORITY = ['binance_futures', 'okx_futures', 'bitget_futures', 'hyperliquid', 'gmx', 'dydx', 'jupiter_perps']
+// gmx removed from batch: runs in dedicated job due to >360s enrichment time (2026-03-11)
+const HIGH_PRIORITY = ['binance_futures', 'okx_futures', 'bitget_futures', 'hyperliquid', 'dydx', 'jupiter_perps']
 
 // Medium priority (enriched with all=true or period=90D)
 // bybit_spot removed: api2.bybit.com endpoints return 404 globally (2026-03-10)
