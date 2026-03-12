@@ -119,20 +119,25 @@ async function runSinglePlatform(
   const connectorFactory = PLATFORM_CONNECTORS[platform]
   const connector = connectorFactory()
 
-  // 2. Wrap in runner
+  // 2. Get timeout from platform config
+  const platformConfig = UNIFIED_PLATFORMS[platform]
+  const timeoutMs = platformConfig?.timeoutMs || 300000 // Default 5min
+
+  // 3. Wrap in runner
   const runner = new ConnectorRunner(connector, {
     platform,
     enableAlerts: !params.dryRun, // Disable alerts in dry-run mode
+    timeoutMs,
   })
 
-  // 3. Execute
+  // 4. Execute
   const result = await runner.execute({
     window: params.window,
     page: params.page,
     pageSize: params.pageSize,
   })
 
-  // 4. Get status from Redis
+  // 5. Get status from Redis
   const status = await runner.getStatus()
 
   const response = {
@@ -171,11 +176,15 @@ async function runAllPlatforms(params: {
   const runners = platforms.map(platform => {
     const connectorFactory = PLATFORM_CONNECTORS[platform]
     const connector = connectorFactory()
+    
+    const platformConfig = UNIFIED_PLATFORMS[platform]
+    const timeoutMs = platformConfig?.timeoutMs || 300000 // Default 5min
 
     return {
       runner: new ConnectorRunner(connector, {
         platform,
         enableAlerts: !params.dryRun,
+        timeoutMs,
       }),
       params: {
         window: params.window,
