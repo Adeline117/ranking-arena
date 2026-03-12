@@ -15,9 +15,9 @@ export const dynamic = 'force-dynamic'
 export const maxDuration = 600 // Vercel Pro max: 10 minutes
 
 const GMX_LIMITS = {
-  limit90: 500,
-  limit30: 400,
-  limit7: 300,
+  limit90: 150, // Reduced from 500 to fit in 600s budget (2026-03-11)
+  limit30: 120, // Reduced from 400
+  limit7: 100, // Reduced from 300
 }
 
 export async function GET(request: NextRequest) {
