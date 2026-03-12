@@ -196,7 +196,8 @@ export const ENRICHMENT_PLATFORM_CONFIGS: Record<string, EnrichmentConfig> = {
     fetchEquityCurve: fetchGmxEquityCurve,
     fetchStatsDetail: fetchGmxStatsDetail,
     fetchPositionHistory: fetchGmxPositionHistory,
-    concurrency: 2, delayMs: 1000,
+    concurrency: 15, // Increased from 2 - GraphQL endpoint is fast
+    delayMs: 200, // Reduced from 1000ms (2026-03-11)
   },
   htx_futures: {
     platform: 'htx_futures',
