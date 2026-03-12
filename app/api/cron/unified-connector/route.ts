@@ -26,26 +26,23 @@ import type { RankingWindow } from '@/lib/types/leaderboard'
 // Platform Registry
 // ============================================
 
+import { createUnifiedConnector, getRegisteredPlatforms, PLATFORM_CONNECTORS as UNIFIED_PLATFORMS } from '@/lib/connectors/unified-platform-connector'
+
 /**
  * Platform connectors registry
- * Add new platforms here
+ * All platforms now use UnifiedPlatformConnector adapter (2026-03-11)
  */
-const PLATFORM_CONNECTORS = {
-  hyperliquid: () => new HyperliquidConnector(),
-  // TODO: Add more platforms as they are migrated
-  // binance: () => new BinanceFuturesConnector(),
-  // okx: () => new OKXFuturesConnector(),
-  // bitget: () => new BitgetFuturesConnector(),
-  // htx: () => new HTXFuturesConnector(),
-  // gmx: () => new GMXConnector(),
-  // dydx: () => new dYdXConnector(),
-  // gains: () => new GainsConnector(),
-  // aevo: () => new AevoConnector(),
-  // drift: () => new DriftConnector(),
-  // jupiter: () => new JupiterPerpsConnector(),
-} as const
+const PLATFORM_CONNECTORS: Record<string, () => any> = {}
 
-type SupportedPlatform = keyof typeof PLATFORM_CONNECTORS
+// Register all unified platforms
+for (const platform of Object.keys(UNIFIED_PLATFORMS)) {
+  PLATFORM_CONNECTORS[platform] = () => createUnifiedConnector(platform)
+}
+
+// Legacy native connector (will be migrated)
+PLATFORM_CONNECTORS['hyperliquid-native'] = () => new HyperliquidConnector()
+
+type SupportedPlatform = string
 
 // ============================================
 // Main Handler
