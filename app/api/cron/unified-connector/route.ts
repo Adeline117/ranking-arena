@@ -22,6 +22,9 @@ import { HyperliquidConnector } from '@/lib/connectors/hyperliquid'
 import { dataLogger } from '@/lib/utils/logger'
 import type { RankingWindow } from '@/lib/types/leaderboard'
 
+export const dynamic = 'force-dynamic'
+export const maxDuration = 600 // Vercel Pro max: 10 minutes for large platforms
+
 // ============================================
 // Platform Registry
 // ============================================
