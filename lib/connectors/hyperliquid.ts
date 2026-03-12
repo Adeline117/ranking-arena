@@ -255,39 +255,42 @@ export class HyperliquidConnector extends BaseConnectorLegacy implements LegacyP
   // Private
   // ============================================
 
-  private async fetchWithTimeout(body: Record<string, unknown>): Promise<Response> {
+  private async fetchWithTimeout(url: string, body?: Record<string, unknown>): Promise<Response> {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 30_000);
 
     try {
-      return await fetch(this.apiUrl, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body),
-        signal: controller.signal,
-      });
+      if (body) {
+        return await fetch(url, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body),
+          signal: controller.signal,
+        });
+      } else {
+        return await fetch(url, {
+          method: 'GET',
+          signal: controller.signal,
+        });
+      }
     } finally {
       clearTimeout(timeout);
     }
   }
 
-  private async fetchLeaderboard(period: string): Promise<HyperliquidLeaderEntry[]> {
-    const response = await this.fetchWithTimeout({
-      type: 'leaderboard',
-      timeWindow: period,
-    });
+  private async fetchLeaderboard(): Promise<{ leaderboardRows?: HyperliquidLeaderEntry[] }> {
+    const response = await this.fetchWithTimeout(this.statsApiUrl);
 
     if (!response.ok) {
-      throw new Error(`Hyperliquid API returned ${response.status}`);
+      throw new Error(`Hyperliquid stats API returned ${response.status}`);
     }
 
     const json = await response.json();
-    const rows = json.leaderboardRows || json || [];
-    return warnValidate(z.array(HyperliquidLeaderEntrySchema), rows, 'hyperliquid/leaderboard') as HyperliquidLeaderEntry[];
+    return json as { leaderboardRows?: HyperliquidLeaderEntry[] };
   }
 
   private async fetchUserState(address: string): Promise<HyperliquidUserState> {
-    const response = await this.fetchWithTimeout({
+    const response = await this.fetchWithTimeout(this.infoApiUrl, {
       type: 'clearinghouseState',
       user: address,
     });
@@ -307,21 +310,35 @@ export class HyperliquidConnector extends BaseConnectorLegacy implements LegacyP
     const startTime = Date.now() - WINDOW_TO_MS[window];
 
     // Fetch fills and leaderboard in parallel so we can get windowed ROI
-    const period = WINDOW_TO_PERIOD[window];
-    const [fillsResponse, lbEntries] = await Promise.all([
-      this.fetchWithTimeout({
+    const windowKey = WINDOW_TO_PERIOD[window];
+    const [fillsResponse, lbData] = await Promise.all([
+      this.fetchWithTimeout(this.infoApiUrl, {
         type: 'userFills',
         user: address,
         startTime,
       }),
-      this.fetchLeaderboard(period).catch(() => [] as HyperliquidLeaderEntry[]),
+      this.fetchLeaderboard().catch(() => ({ leaderboardRows: [] as HyperliquidLeaderEntry[] })),
     ]);
 
-    // Look up ROI from leaderboard (accurate per-window value, decimal e.g. 0.35)
+    const lbEntries = lbData.leaderboardRows || [];
+
+    // Look up ROI from leaderboard (accurate per-window value)
     const lbEntry = lbEntries.find(
       (e) => e.ethAddress.toLowerCase() === address.toLowerCase(),
     );
-    const lbRoi = lbEntry?.roi ?? 0;
+
+    let lbRoi = 0;
+    if (lbEntry) {
+      let windowData: WindowPerf | undefined;
+      if (Array.isArray(lbEntry.windowPerformances)) {
+        windowData = lbEntry.windowPerformances.find(([key]) => key === windowKey)?.[1];
+      } else if (lbEntry.windowPerformances) {
+        windowData = (lbEntry.windowPerformances as Record<string, WindowPerf>)[windowKey];
+      }
+      if (windowData?.roi != null) {
+        lbRoi = typeof windowData.roi === 'string' ? parseFloat(windowData.roi) : windowData.roi;
+      }
+    }
 
     if (!fillsResponse.ok) {
       return { pnl: 0, roi: lbRoi, nTrades: 0, winRate: null, maxDrawdownPct: null };
@@ -380,7 +397,7 @@ export class HyperliquidConnector extends BaseConnectorLegacy implements LegacyP
   private async fetchUserFills(address: string): Promise<HyperliquidFill[]> {
     const startTime = Date.now() - 90 * 24 * 60 * 60 * 1000; // Last 90 days
 
-    const response = await this.fetchWithTimeout({
+    const response = await this.fetchWithTimeout(this.infoApiUrl, {
       type: 'userFills',
       user: address,
       startTime,
