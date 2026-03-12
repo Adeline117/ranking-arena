@@ -41,6 +41,10 @@
       "schedule": "56 */6 * * *"
     },
     {
+      "path": "/api/cron/unified-connector?platform=hyperliquid&window=90d",
+      "schedule": "0 */6 * * *"
+    },
+    {
       "path": "/api/scrape/proxy?period=all",
       "schedule": "0 6,18 * * *"
     },
