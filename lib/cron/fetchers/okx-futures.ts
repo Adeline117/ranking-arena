@@ -297,7 +297,9 @@ async function fetchPeriod(
 
   // DISABLED 2026-03-12: Enrichment moved to batch-enrich to avoid Cloudflare 120s timeout
   // Phase 2: Save equity curves and stats detail (only 90D to save time budget)
-  if (saved > 0 && period === '90D' && false) {  // Disabled with "&& false"
+  // Commented out to avoid TypeScript errors and reduce bundle size
+  /*
+  if (saved > 0 && period === '90D') {
     const tradersArray = Array.from(allTraders.entries())
     const toEnrich = tradersArray.slice(0, ENRICH_LIMIT)
     logger.warn(`[${SOURCE}] Enriching ${toEnrich.length} traders for ${period}...`)
@@ -349,6 +351,7 @@ async function fetchPeriod(
     }
     logger.warn(`[${SOURCE}] Enrichment complete for ${period}: ${curvesSaved} curves, ${statsSaved} stats`)
   }
+  */
 
   return { total: top.length, saved, error }
 }
