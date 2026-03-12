@@ -297,13 +297,15 @@ async function fetchPeriod(
   parsed.sort((a, b) => b.roi - a.roi)
   const topTraders = parsed.slice(0, TARGET)
 
-  // Enrich with win rate + MDD (limited for serverless)
-  await enrichTraders(topTraders, period)
-
+  // DISABLED 2026-03-12: Enrichment moved to batch-enrich to avoid Cloudflare 120s timeout
+  // Inline enrichment causes batch-fetch-traders to exceed timeout when combined with fetch
+  // 
+  // await enrichTraders(topTraders, period)
+  //
   // Phase 3: Save stats_detail for ALL periods (extended from 90D only)
-  logger.warn(`[${SOURCE}] Saving stats details for ${Math.min(topTraders.length, ENRICH_LIMIT)} traders (${period})...`)
+  // logger.warn(`[${SOURCE}] Saving stats details for ${Math.min(topTraders.length, ENRICH_LIMIT)} traders (${period})...`)
   let statsSaved = 0
-  for (const trader of topTraders.slice(0, ENRICH_LIMIT)) {
+  for (const trader of topTraders.slice(0, 0)) {  // Disabled: was ENRICH_LIMIT
     const stats: StatsDetail = {
       totalTrades: trader.tradesCount,
       profitableTradesPct: trader.winRate,
