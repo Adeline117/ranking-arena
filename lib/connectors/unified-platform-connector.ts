@@ -154,27 +154,27 @@ export class UnifiedPlatformConnector {
  * - Large platforms (>300 traders, onchain): 600s (10min)
  */
 export const PLATFORM_CONNECTORS: Record<string, UnifiedConnectorConfig> = {
-  // Group A: High-priority CEX (every 3h)
+  // Group A: High-priority CEX (every 3h) - Fast platforms keep enrichment
   binance_futures: { platform: 'binance_futures', enrichmentLimit: 200, timeoutMs: 420000 },
   binance_spot: { platform: 'binance_spot', enrichmentLimit: 100, timeoutMs: 300000 },
   bybit: { platform: 'bybit', enrichmentLimit: 150, timeoutMs: 360000 },
-  bitget_futures: { platform: 'bitget_futures', enrichmentLimit: 60, timeoutMs: 300000 },
-  okx_futures: { platform: 'okx_futures', enrichmentLimit: 80, timeoutMs: 300000 },
+  bitget_futures: { platform: 'bitget_futures', enrichmentLimit: 60, timeoutMs: 300000, enableEnrichment: false },
+  okx_futures: { platform: 'okx_futures', enrichmentLimit: 80, timeoutMs: 300000, enableEnrichment: false },
   
-  // Group B: Top DEX (every 4h) - Optimize for Cloudflare 120s timeout
-  hyperliquid: { platform: 'hyperliquid', enrichmentLimit: 150, timeoutMs: 600000 },
-  gmx: { platform: 'gmx', enrichmentLimit: 150, timeoutMs: 600000 }, // Handled by dedicated enrich-gmx, but keep safe timeout
-  jupiter_perps: { platform: 'jupiter_perps', enrichmentLimit: 150, timeoutMs: 600000 },
+  // Group B: Top DEX (every 4h) - Disable enrichment to fit Cloudflare 120s timeout
+  hyperliquid: { platform: 'hyperliquid', enrichmentLimit: 150, timeoutMs: 600000, enableEnrichment: false },
+  gmx: { platform: 'gmx', enrichmentLimit: 150, timeoutMs: 600000, enableEnrichment: false }, // Dedicated enrich-gmx job handles enrichment
+  jupiter_perps: { platform: 'jupiter_perps', enrichmentLimit: 150, timeoutMs: 600000, enableEnrichment: false },
   
   // Group C: Mid-priority (every 4h)
-  okx_web3: { platform: 'okx_web3', enrichmentLimit: 100, timeoutMs: 300000 },
-  aevo: { platform: 'aevo', enrichmentLimit: 150, timeoutMs: 600000 },
+  okx_web3: { platform: 'okx_web3', enrichmentLimit: 100, timeoutMs: 300000, enableEnrichment: false },
+  aevo: { platform: 'aevo', enrichmentLimit: 150, timeoutMs: 600000, enableEnrichment: false },
   xt: { platform: 'xt', enrichmentLimit: 60, timeoutMs: 300000 },
   
-  // Group D-I: Lower priority (every 6h) - Optimize for Cloudflare timeout
-  gains: { platform: 'gains', enrichmentLimit: 150, timeoutMs: 600000 },
+  // Group D-I: Lower priority (every 6h) - Disable enrichment for large/slow platforms
+  gains: { platform: 'gains', enrichmentLimit: 150, timeoutMs: 600000, enableEnrichment: false },
   htx_futures: { platform: 'htx_futures', enrichmentLimit: 40, timeoutMs: 300000 },
-  dydx: { platform: 'dydx', enrichmentLimit: 150, timeoutMs: 600000 },
+  dydx: { platform: 'dydx', enrichmentLimit: 150, timeoutMs: 600000, enableEnrichment: false },
   bybit_spot: { platform: 'bybit_spot', enrichmentLimit: 50, timeoutMs: 300000 },
   coinex: { platform: 'coinex', enrichmentLimit: 40, timeoutMs: 300000 },
   binance_web3: { platform: 'binance_web3', enrichmentLimit: 50, timeoutMs: 300000, enableEnrichment: false }, // Wallet-based, no equity curve
@@ -183,7 +183,7 @@ export const PLATFORM_CONNECTORS: Record<string, UnifiedConnectorConfig> = {
   bingx: { platform: 'bingx', enrichmentLimit: 40, timeoutMs: 300000, enableEnrichment: false }, // CF-protected, enrichment not supported
   gateio: { platform: 'gateio', enrichmentLimit: 60, timeoutMs: 300000 },
   btcc: { platform: 'btcc', enrichmentLimit: 30, timeoutMs: 300000 },
-  drift: { platform: 'drift', enrichmentLimit: 150, timeoutMs: 600000 },
+  drift: { platform: 'drift', enrichmentLimit: 150, timeoutMs: 600000, enableEnrichment: false },
   bitunix: { platform: 'bitunix', enrichmentLimit: 50, timeoutMs: 300000 },
   web3_bot: { platform: 'web3_bot', enrichmentLimit: 50, timeoutMs: 300000 },
   toobit: { platform: 'toobit', enrichmentLimit: 50, timeoutMs: 300000 },
