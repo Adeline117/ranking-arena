@@ -177,10 +177,10 @@ export const PLATFORM_CONNECTORS: Record<string, UnifiedConnectorConfig> = {
   dydx: { platform: 'dydx', enrichmentLimit: 150, timeoutMs: 600000 },
   bybit_spot: { platform: 'bybit_spot', enrichmentLimit: 50, timeoutMs: 300000 },
   coinex: { platform: 'coinex', enrichmentLimit: 40, timeoutMs: 300000 },
-  binance_web3: { platform: 'binance_web3', enrichmentLimit: 50, timeoutMs: 300000 },
+  binance_web3: { platform: 'binance_web3', enrichmentLimit: 50, timeoutMs: 300000, enableEnrichment: false }, // Wallet-based, no equity curve
   bitfinex: { platform: 'bitfinex', enrichmentLimit: 50, timeoutMs: 300000 },
   mexc: { platform: 'mexc', enrichmentLimit: 60, timeoutMs: 300000 },
-  bingx: { platform: 'bingx', enrichmentLimit: 40, timeoutMs: 300000 },
+  bingx: { platform: 'bingx', enrichmentLimit: 40, timeoutMs: 300000, enableEnrichment: false }, // CF-protected, enrichment not supported
   gateio: { platform: 'gateio', enrichmentLimit: 60, timeoutMs: 300000 },
   btcc: { platform: 'btcc', enrichmentLimit: 30, timeoutMs: 300000 },
   drift: { platform: 'drift', enrichmentLimit: 150, timeoutMs: 600000 },

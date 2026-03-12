@@ -26,18 +26,18 @@ const PLATFORM_LIMITS: Record<string, { limit90: number; limit30: number; limit7
   okx_futures: { limit90: 80, limit30: 80, limit7: 60 },
   bitget_futures: { limit90: 60, limit30: 60, limit7: 50 },
   // bitget_spot removed: no public API exists (all endpoints 404)
-  // ONCHAIN PLATFORMS: Increased limits to cover all missing data
-  hyperliquid: { limit90: 500, limit30: 400, limit7: 300 },
-  gmx: { limit90: 500, limit30: 400, limit7: 300 },
+  // ONCHAIN PLATFORMS: Optimized for 600s timeout budget (2026-03-12)
+  hyperliquid: { limit90: 150, limit30: 120, limit7: 100 },
+  gmx: { limit90: 150, limit30: 120, limit7: 100 },
   htx_futures: { limit90: 40, limit30: 40, limit7: 30 },
   gateio: { limit90: 60, limit30: 50, limit7: 40 },
   mexc: { limit90: 60, limit30: 50, limit7: 40 },
-  drift: { limit90: 500, limit30: 400, limit7: 300 },
-  dydx: { limit90: 500, limit30: 400, limit7: 300 },
-  aevo: { limit90: 500, limit30: 400, limit7: 300 },
-  gains: { limit90: 300, limit30: 250, limit7: 200 },
+  drift: { limit90: 150, limit30: 120, limit7: 100 },
+  dydx: { limit90: 150, limit30: 120, limit7: 100 },
+  aevo: { limit90: 150, limit30: 120, limit7: 100 },
+  gains: { limit90: 150, limit30: 120, limit7: 100 },
   // kwenta removed: Copin API stopped serving Kwenta data (2026-03-11)
-  jupiter_perps: { limit90: 300, limit30: 250, limit7: 200 },
+  jupiter_perps: { limit90: 150, limit30: 120, limit7: 100 },
 }
 
 // High priority platforms (always enriched)
