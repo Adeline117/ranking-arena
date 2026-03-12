@@ -161,20 +161,20 @@ export const PLATFORM_CONNECTORS: Record<string, UnifiedConnectorConfig> = {
   bitget_futures: { platform: 'bitget_futures', enrichmentLimit: 60, timeoutMs: 300000 },
   okx_futures: { platform: 'okx_futures', enrichmentLimit: 80, timeoutMs: 300000 },
   
-  // Group B: Top DEX (every 4h) - Large onchain platforms need 10min
-  hyperliquid: { platform: 'hyperliquid', enrichmentLimit: 500, timeoutMs: 600000 },
+  // Group B: Top DEX (every 4h) - Optimize for Cloudflare 120s timeout
+  hyperliquid: { platform: 'hyperliquid', enrichmentLimit: 150, timeoutMs: 600000 },
   gmx: { platform: 'gmx', enrichmentLimit: 150, timeoutMs: 600000 }, // Handled by dedicated enrich-gmx, but keep safe timeout
-  jupiter_perps: { platform: 'jupiter_perps', enrichmentLimit: 300, timeoutMs: 600000 },
+  jupiter_perps: { platform: 'jupiter_perps', enrichmentLimit: 150, timeoutMs: 600000 },
   
   // Group C: Mid-priority (every 4h)
   okx_web3: { platform: 'okx_web3', enrichmentLimit: 100, timeoutMs: 300000 },
-  aevo: { platform: 'aevo', enrichmentLimit: 500, timeoutMs: 600000 },
+  aevo: { platform: 'aevo', enrichmentLimit: 150, timeoutMs: 600000 },
   xt: { platform: 'xt', enrichmentLimit: 60, timeoutMs: 300000 },
   
-  // Group D-I: Lower priority (every 6h)
-  gains: { platform: 'gains', enrichmentLimit: 300, timeoutMs: 600000 },
+  // Group D-I: Lower priority (every 6h) - Optimize for Cloudflare timeout
+  gains: { platform: 'gains', enrichmentLimit: 150, timeoutMs: 600000 },
   htx_futures: { platform: 'htx_futures', enrichmentLimit: 40, timeoutMs: 300000 },
-  dydx: { platform: 'dydx', enrichmentLimit: 500, timeoutMs: 600000 },
+  dydx: { platform: 'dydx', enrichmentLimit: 150, timeoutMs: 600000 },
   bybit_spot: { platform: 'bybit_spot', enrichmentLimit: 50, timeoutMs: 300000 },
   coinex: { platform: 'coinex', enrichmentLimit: 40, timeoutMs: 300000 },
   binance_web3: { platform: 'binance_web3', enrichmentLimit: 50, timeoutMs: 300000 },
@@ -183,7 +183,7 @@ export const PLATFORM_CONNECTORS: Record<string, UnifiedConnectorConfig> = {
   bingx: { platform: 'bingx', enrichmentLimit: 40, timeoutMs: 300000 },
   gateio: { platform: 'gateio', enrichmentLimit: 60, timeoutMs: 300000 },
   btcc: { platform: 'btcc', enrichmentLimit: 30, timeoutMs: 300000 },
-  drift: { platform: 'drift', enrichmentLimit: 500, timeoutMs: 600000 },
+  drift: { platform: 'drift', enrichmentLimit: 150, timeoutMs: 600000 },
   bitunix: { platform: 'bitunix', enrichmentLimit: 50, timeoutMs: 300000 },
   web3_bot: { platform: 'web3_bot', enrichmentLimit: 50, timeoutMs: 300000 },
   toobit: { platform: 'toobit', enrichmentLimit: 50, timeoutMs: 300000 },
