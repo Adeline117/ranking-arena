@@ -226,6 +226,12 @@ export class ConnectorRunner<T = unknown> {
     // Try to detect connector type and call appropriate method
     const connector = this.connector as any
 
+    // UnifiedPlatformConnector interface (new architecture 2026-03-11)
+    if (typeof connector.execute === 'function') {
+      const result = await connector.execute(params)
+      return { recordsProcessed: result.recordsProcessed || 0 }
+    }
+
     // Legacy PlatformConnector interface
     if (typeof connector.discoverLeaderboard === 'function') {
       const window = params?.window || '90d'
