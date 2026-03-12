@@ -120,21 +120,20 @@ async function refreshViaApi(platform) {
     }
   } catch {}
   
-  // Fallback: run the fetcher directly
+  // Fallback: try production API
   try {
-    const result = execSync(`node -e "
-      import('./lib/cron/fetchers/index.ts').then(async m => {
-        const { createClient } = await import('@supabase/supabase-js');
-        const sb = createClient('${process.env.NEXT_PUBLIC_SUPABASE_URL}', '${process.env.SUPABASE_SERVICE_ROLE_KEY}');
-        const fetcher = m.getInlineFetcher('${platform}');
-        if (fetcher) {
-          const result = await fetcher(sb, ['30D']);
-          console.log(JSON.stringify(result));
-        }
-      });
-    "`, { encoding: 'utf8', timeout: 60000, cwd: projectRoot })
+    const prodUrl = `https://www.arenafi.org/api/cron/unified-connector?platform=${platform}`
+    const res = await fetch(prodUrl, {
+      method: 'GET',
+      headers: { Authorization: `Bearer ${process.env.CRON_SECRET || ''}` },
+    })
     
-    return { success: true, result }
+    if (res?.ok) {
+      const data = await res.json()
+      return { success: true, ...data }
+    }
+    
+    return { success: false, error: `API returned ${res?.status}` }
   } catch (err) {
     return { success: false, error: err.message }
   }
