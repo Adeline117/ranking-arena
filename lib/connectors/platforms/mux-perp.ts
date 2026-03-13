@@ -61,8 +61,19 @@ export class MuxPerpConnector extends BaseConnector {
     notes: ['Multi-chain DEX', 'Arbitrum primary', 'GraphQL subgraph', 'No copy trading', 'Metrics calculated from position history'],
   }
 
-  // MUX subgraph on Arbitrum (primary chain)
-  private readonly SUBGRAPH_URL = 'https://api.thegraph.com/subgraphs/name/messari/mux-arbitrum'
+  // MUX subgraph on Arbitrum — Graph Network gateway (requires THEGRAPH_API_KEY)
+  // Old hosted service URL (deprecated): https://api.thegraph.com/subgraphs/name/messari/mux-arbitrum
+  // Subgraph ID: find on https://thegraph.com/explorer by searching "mux"
+  private get SUBGRAPH_URL(): string {
+    const apiKey = process.env.THEGRAPH_API_KEY
+    // MUX Arbitrum subgraph ID (Messari deployment)
+    const subgraphId = process.env.MUX_SUBGRAPH_ID || '8v1fBiN7BWDjb9DpH9bUKGJfv7N1H9PJbsRQpqe7JEtc'
+    if (apiKey) {
+      return `https://gateway.thegraph.com/api/${apiKey}/subgraphs/id/${subgraphId}`
+    }
+    // Fallback to old hosted service (may be deprecated/down)
+    return 'https://api.thegraph.com/subgraphs/name/messari/mux-arbitrum'
+  }
 
   async discoverLeaderboard(window: Window, limit = 100, _offset = 0): Promise<DiscoverResult> {
     try {

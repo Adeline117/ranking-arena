@@ -63,7 +63,16 @@ export class KwentaPerpConnector extends BaseConnector {
     notes: ['Optimism DEX', 'Synthetix-powered', 'GraphQL subgraph', 'No copy trading', 'Metrics calculated from position history'],
   }
 
-  private readonly SUBGRAPH_URL = 'https://api.thegraph.com/subgraphs/name/kwenta/optimism-perps'
+  // Kwenta subgraph — Graph Network gateway (requires THEGRAPH_API_KEY)
+  private get SUBGRAPH_URL(): string {
+    const apiKey = process.env.THEGRAPH_API_KEY
+    const subgraphId = process.env.KWENTA_SUBGRAPH_ID || '' // Find on thegraph.com/explorer
+    if (apiKey && subgraphId) {
+      return `https://gateway.thegraph.com/api/${apiKey}/subgraphs/id/${subgraphId}`
+    }
+    // Fallback to old hosted service (deprecated, may return 301)
+    return 'https://api.thegraph.com/subgraphs/name/kwenta/optimism-perps'
+  }
 
   async discoverLeaderboard(window: Window, limit = 100, _offset = 0): Promise<DiscoverResult> {
     try {
