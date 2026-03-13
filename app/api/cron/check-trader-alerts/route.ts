@@ -10,6 +10,7 @@ import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import logger from '@/lib/logger'
 import { PipelineLogger } from '@/lib/services/pipeline-logger'
+import { getPushNotificationService } from '@/lib/services/push-notification'
 
 export const runtime = 'nodejs'
 export const preferredRegion = 'sfo1'
@@ -407,6 +408,23 @@ export async function POST(req: Request) {
         logger.error('[TraderAlerts Cron] 发送通知Failed:', notifyError)
       } else {
         alertsSent = alertsToSend.length
+      }
+
+      // Send push notifications (fire-and-forget)
+      try {
+        const pushService = getPushNotificationService()
+        let pushSent = 0
+        for (const alert of alertsToSend) {
+          await pushService.sendToUser(alert.user_id, {
+            title: alert.title,
+            body: alert.message,
+            data: { url: alert.link || '/notifications', type: 'rank_change' },
+          })
+          pushSent++
+        }
+        logger.info(`[TraderAlerts Cron] Push notifications sent: ${pushSent}`)
+      } catch (pushError) {
+        logger.warn('[TraderAlerts Cron] Failed to send push notifications', { error: pushError })
       }
     }
 
