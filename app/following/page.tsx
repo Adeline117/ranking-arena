@@ -276,8 +276,8 @@ export default function FollowingPage() {
       const q = searchQuery.trim().toLowerCase()
       filtered = filtered.filter(i => (i.handle || '').toLowerCase().includes(q))
     }
-    // 平台筛选
-    if (platformFilter !== 'all') {
+    // 平台筛选 (ignore 'user' filter when social is off)
+    if (platformFilter !== 'all' && !(platformFilter === 'user' && !features.social)) {
       filtered = filtered.filter(i => i.source === platformFilter || (platformFilter === 'user' && i.type === 'user'))
     }
     const sorted = filtered
