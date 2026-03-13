@@ -1,7 +1,7 @@
 import React, { memo, useCallback, useRef, useState, useEffect } from 'react'
 import Link from 'next/link'
 import { mutate } from 'swr'
-import { fetcher } from '@/lib/hooks/useSWR'
+import { fetcher as rawFetcher } from '@/lib/hooks/useSWR'
 import dynamic from 'next/dynamic'
 import { tokens } from '@/lib/design-tokens'
 import { Box, Text } from '../base'
@@ -131,7 +131,7 @@ export const TraderRow = memo(function TraderRow({
     if (hoverTimerRef.current) clearTimeout(hoverTimerRef.current)
     hoverTimerRef.current = setTimeout(() => {
       const detailUrl = `/api/traders/${encodeURIComponent(traderHandle)}`
-      mutate(detailUrl, fetcher(detailUrl), { revalidate: false })
+      mutate(detailUrl, rawFetcher<{ success: boolean; data: unknown }>(detailUrl).then(r => r && typeof r === 'object' && 'data' in r ? r.data : r), { revalidate: false })
     }, 150)
   }, [traderHandle])
   const handleMouseLeave = useCallback(() => {
