@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useRef, Suspense, useTransition } from 'react'
 import useSWR from 'swr'
-import { fetcher } from '@/lib/hooks/useSWR'
+import { fetcher as rawFetcher } from '@/lib/hooks/useSWR'
 import Link from 'next/link'
 import dynamic from 'next/dynamic'
 import { useSearchParams, useRouter, usePathname } from 'next/navigation'
@@ -83,6 +83,15 @@ interface ExtendedPositionHistoryItem {
 }
 
 // SWR response type for /api/traders/[handle]
+// Unwrap the API envelope { success, data } to get the raw TraderPageData
+async function traderFetcher(url: string): Promise<TraderPageData> {
+  const raw = await rawFetcher<{ success: boolean; data: TraderPageData }>(url)
+  if (raw && typeof raw === 'object' && 'data' in raw && 'success' in raw) {
+    return raw.data
+  }
+  return raw as unknown as TraderPageData
+}
+
 interface TraderPageData {
   profile: TraderProfile
   performance: TraderPerformance
@@ -119,7 +128,7 @@ function TraderContent({ handle, serverData }: { handle: string; serverData: Tra
   // SWR with server-side fallback data for instant render
   const { data: traderData, error: fetchError, isLoading: swrLoading } = useSWR<TraderPageData>(
     handle ? `/api/traders/${encodeURIComponent(handle)}` : null,
-    fetcher,
+    traderFetcher,
     {
       revalidateOnFocus: false,
       refreshInterval: 300_000, // 5min — data only updates every few hours
