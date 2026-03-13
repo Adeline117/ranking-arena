@@ -14,8 +14,9 @@ import { fetchHtx } from './htx'
 import { fetchBinanceFutures } from './binance-futures'
 import { fetchBinanceSpot } from './binance-spot'
 import { fetchBinanceWeb3 } from './binance-web3'
-import { fetchBybit } from './bybit'
-import { fetchBybitSpot } from './bybit-spot'
+// REMOVED 2026-03-13: bybit API endpoints (api2.bybit.com) return 404 globally
+// import { fetchBybit } from './bybit'
+// import { fetchBybitSpot } from './bybit-spot'
 import { fetchOkxWeb3 } from './okx-web3'
 import { fetchBitgetFutures } from './bitget-futures'
 import { fetchXt } from './xt'
@@ -65,8 +66,9 @@ export const INLINE_FETCHERS: Record<string, PlatformFetcher> = {
   binance_futures: fetchBinanceFutures,
   binance_spot: fetchBinanceSpot,
   binance_web3: fetchBinanceWeb3,
-  bybit: fetchBybit,
-  bybit_spot: fetchBybitSpot,
+  // REMOVED 2026-03-13: bybit API endpoints return 404 globally
+  // bybit: fetchBybit,
+  // bybit_spot: fetchBybitSpot,
   okx_web3: fetchOkxWeb3,
   bitget_futures: fetchBitgetFutures,
   xt: fetchXt,

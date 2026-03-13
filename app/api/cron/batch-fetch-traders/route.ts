@@ -38,15 +38,15 @@ const GROUPS: Record<string, string[]> = {
   // Group A1: Binance (every 3h) — 2 platforms, parallel ~120s
   a: ['binance_futures', 'binance_spot'],
   // Group A2: Other high-priority CEX (every 3h) — 2 platforms (bybit removed: api2.bybit.com 404 globally)
-  a2: ['bitget_futures', 'okx_futures'],
+  a2: ['bitget_futures', 'okx_futures'], // bybit removed from array 2026-03-13
   // Group B: Top DEX (every 4h) — 3 platforms, ~110s parallel
   b: ['hyperliquid', 'gmx', 'jupiter_perps'],
   // Group C: Mid-priority (every 4h) — 3 platforms, ~70s parallel
   c: ['okx_web3', 'aevo', 'xt'],
   // Group D1: CEX (every 6h) — 2 platforms, parallel
   d1: ['gains', 'htx_futures'],
-  // Group D2: DEX only (every 6h) — 1 platform (bybit_spot removed: api2.bybit.com 404 globally)
-  d2: ['dydx'],
+  // Group D2: DEX only (every 6h) — 1 platform (bybit_spot removed: api2.bybit.com 404 globally 2026-03-13)
+  d2: ['dydx'], // bybit_spot removed from array 2026-03-13
   // Group E: CEX+DEX (every 6h) — 3 platforms (bitfinex: 1424 traders, was orphaned)
   e: ['coinex', 'binance_web3', 'bitfinex'],
   // Group F: Slow CEX (every 6h) — 2 platforms, parallel (~141s + ~60s = ~200s)
