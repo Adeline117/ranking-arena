@@ -6,11 +6,11 @@
  *
  * Query params:
  *   group=a  → binance_futures, binance_spot (every 3h)
- *   group=a2 → bybit, bitget_futures, okx_futures (every 3h)
+ *   group=a2 → bitget_futures, okx_futures (every 3h)
  *   group=b  → hyperliquid, gmx, jupiter_perps (every 4h)
  *   group=c  → okx_web3, aevo, xt (every 4h)
  *   group=d1 → gains, htx_futures (every 6h)
- *   group=d2 → dydx, bybit_spot (every 6h)
+ *   group=d2 → dydx (every 6h)
  *   group=e  → coinex, binance_web3 (every 6h)
  *   group=f  → mexc, bingx (every 6h)
  *   group=h  → gateio, btcc (every 6h)
