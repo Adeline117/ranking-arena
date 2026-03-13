@@ -108,6 +108,7 @@ interface TraderData {
   followers: number | null
   trader_type?: string | null
   is_bot?: boolean
+  captured_at?: string | null
 }
 
 async function fetchExchangeTraders(exchange: string): Promise<TraderData[]> {
@@ -121,7 +122,7 @@ async function fetchExchangeTraders(exchange: string): Promise<TraderData[]> {
     // Use leaderboard_ranks (the primary ranking table) instead of trader_snapshots_v2
     const { data, error } = await supabase
       .from('leaderboard_ranks')
-      .select('source_trader_id, handle, avatar_url, source, roi, pnl, win_rate, max_drawdown, arena_score, followers, trader_type')
+      .select('source_trader_id, handle, avatar_url, source, roi, pnl, win_rate, max_drawdown, arena_score, followers, trader_type, computed_at')
       .eq('source', exchange)
       .eq('season_id', '90D')
       .not('arena_score', 'is', null)
@@ -148,6 +149,7 @@ async function fetchExchangeTraders(exchange: string): Promise<TraderData[]> {
       followers: row.followers as number | null,
       trader_type: (row.trader_type as string) || null,
       is_bot: row.source === 'web3_bot' || row.trader_type === 'bot',
+      captured_at: (row.computed_at as string) || null,
     }))
   } catch (e) {
     logger.error(`[ExchangeRanking] Exception for ${exchange}:`, e)
