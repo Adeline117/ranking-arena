@@ -3909,13 +3909,28 @@ hotDiscussionsTagRising: 'Rising',
 hotDiscussionsTagActive: 'Active',
 
 // Guest signup prompt
-guestSignupTitle: 'Join Arena',
-guestSignupSubtitle: 'Sign up free to unlock more features',
-guestSignupFeature1: 'Follow traders and track their moves',
-guestSignupFeature2: 'Join communities to discuss strategies',
-guestSignupFeature3: 'Access the Library and learning resources',
+guestSignupTitle: 'Track Top Traders',
+guestSignupSubtitle: 'Create a free account to follow traders and get alerts when their performance changes',
+guestSignupFeature1: 'Follow traders and get rank change alerts',
+guestSignupFeature2: 'Compare up to 5 traders side by side',
+guestSignupFeature3: 'Save watchlists and personalize rankings',
 guestSignupButton: 'Sign Up Free',
 guestSignupDismiss: 'Maybe later',
+
+// Data freshness
+lastUpdated: 'Updated',
+dataStaleWarning: 'Data may be delayed',
+
+// Trader rank context
+traderRankOf: 'Ranked #{rank} of {total} on {platform}',
+traderRankTop: 'Top {pct}%',
+
+// Footer links
+footerMethodology: 'Methodology',
+
+// DEX trading links
+dexTradeOn: 'Trade on {platform}',
+dexViewOn: 'View on {platform}',
 
 // News flash labels
 newsFlash_imp_breaking: 'Breaking',

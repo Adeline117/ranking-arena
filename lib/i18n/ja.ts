@@ -3649,13 +3649,28 @@ const ja = {
     hotDiscussionsTagRising: '急上昇',
     hotDiscussionsTagActive: 'アクティブ',
 
-    guestSignupTitle: 'Arenaに参加',
-    guestSignupSubtitle: '無料登録でさらに多くの機能をロック解除',
-    guestSignupFeature1: 'トレーダーをフォローして動きをトラッキング',
-    guestSignupFeature2: 'コミュニティに参加して戦略を議論',
-    guestSignupFeature3: 'ライブラリと学習リソースにアクセス',
+    guestSignupTitle: 'トップトレーダーを追跡',
+    guestSignupSubtitle: '無料アカウントを作成して、トレーダーをフォローしパフォーマンス変動時にアラートを受け取りましょう',
+    guestSignupFeature1: 'トレーダーをフォローしてランク変動アラートを受信',
+    guestSignupFeature2: '最大5名のトレーダーを並べて比較',
+    guestSignupFeature3: 'ウォッチリストを保存してランキングをカスタマイズ',
     guestSignupButton: '無料登録',
     guestSignupDismiss: 'あとで',
+
+    // Data freshness
+    lastUpdated: '更新',
+    dataStaleWarning: 'データが遅延している可能性があります',
+
+    // Trader rank context
+    traderRankOf: '{platform} で {total} 人中 #{rank} 位',
+    traderRankTop: '上位 {pct}%',
+
+    // Footer links
+    footerMethodology: '評価方法',
+
+    // DEX trading links
+    dexTradeOn: '{platform} で取引',
+    dexViewOn: '{platform} で表示',
 
     newsFlash_imp_breaking: '速報',
     newsFlash_imp_important: '重要',

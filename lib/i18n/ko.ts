@@ -3896,13 +3896,28 @@ const ko = {
     hotDiscussionsTagActive: '활발',
 
     // Guest signup prompt
-    guestSignupTitle: 'Arena 가입',
-    guestSignupSubtitle: '무료로 가입하고 더 많은 기능을 잠금 해제하세요',
-    guestSignupFeature1: '트레이더를 팔로우하고 동향을 추적하세요',
-    guestSignupFeature2: '커뮤니티에 가입하여 전략을 논의하세요',
-    guestSignupFeature3: '라이브러리 및 학습 자료에 접근하세요',
+    guestSignupTitle: '최고의 트레이더 추적',
+    guestSignupSubtitle: '무료 계정을 만들어 트레이더를 팔로우하고 성과 변동 시 알림을 받으세요',
+    guestSignupFeature1: '트레이더를 팔로우하고 순위 변동 알림 받기',
+    guestSignupFeature2: '최대 5명의 트레이더를 나란히 비교',
+    guestSignupFeature3: '관심 목록을 저장하고 순위를 맞춤 설정',
     guestSignupButton: '무료 가입',
     guestSignupDismiss: '나중에',
+
+    // Data freshness
+    lastUpdated: '업데이트',
+    dataStaleWarning: '데이터가 지연될 수 있습니다',
+
+    // Trader rank context
+    traderRankOf: '{platform}에서 {total}명 중 #{rank}위',
+    traderRankTop: '상위 {pct}%',
+
+    // Footer links
+    footerMethodology: '평가 방법',
+
+    // DEX trading links
+    dexTradeOn: '{platform}에서 거래',
+    dexViewOn: '{platform}에서 보기',
 
     // News flash labels
     newsFlash_imp_breaking: '속보',

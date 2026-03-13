@@ -3916,13 +3916,28 @@ hotDiscussionsTagRising: '升温',
 hotDiscussionsTagActive: '讨论',
 
 // Guest signup prompt (访客注册提示)
-guestSignupTitle: '加入 Arena',
-guestSignupSubtitle: '免费注册，解锁更多功能',
-guestSignupFeature1: '关注交易员，追踪实时动态',
-guestSignupFeature2: '加入社区，与高手交流策略',
-guestSignupFeature3: '访问专属图书馆和学习资源',
+guestSignupTitle: '追踪顶级交易员',
+guestSignupSubtitle: '免费注册，关注交易员并在排名变动时收到提醒',
+guestSignupFeature1: '关注交易员，排名变动时收到提醒',
+guestSignupFeature2: '最多 5 位交易员并排对比',
+guestSignupFeature3: '保存自选列表，个性化排行榜',
 guestSignupButton: '免费注册',
 guestSignupDismiss: '稍后再说',
+
+// Data freshness
+lastUpdated: '已更新',
+dataStaleWarning: '数据可能有延迟',
+
+// Trader rank context
+traderRankOf: '在 {platform} 排名第 {rank} / 共 {total} 人',
+traderRankTop: '前 {pct}%',
+
+// Footer links
+footerMethodology: '评分方法',
+
+// DEX trading links
+dexTradeOn: '在 {platform} 交易',
+dexViewOn: '在 {platform} 查看',
 
 // News flash labels (快讯标签)
 newsFlash_imp_breaking: '突发',
