@@ -18,7 +18,6 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { ConnectorRunner, getAllConnectorStatuses, runConnectorsBatch } from '@/lib/connectors/connector-runner'
-import { HyperliquidConnector } from '@/lib/connectors/_deprecated/hyperliquid'
 import { dataLogger } from '@/lib/utils/logger'
 import type { RankingWindow } from '@/lib/types/leaderboard'
 
@@ -42,8 +41,7 @@ for (const platform of Object.keys(UNIFIED_PLATFORMS)) {
   PLATFORM_CONNECTORS[platform] = () => createUnifiedConnector(platform)
 }
 
-// Legacy native connector (will be migrated)
-PLATFORM_CONNECTORS['hyperliquid-native'] = () => new HyperliquidConnector()
+// Legacy hyperliquid-native connector removed — now uses Connector framework via registry
 
 type SupportedPlatform = string
 

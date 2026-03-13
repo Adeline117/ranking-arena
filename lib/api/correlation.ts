@@ -1,16 +1,27 @@
 /**
  * Correlation ID system for request tracing
- * Uses AsyncLocalStorage to propagate correlation IDs through async call chains
+ * Uses AsyncLocalStorage to propagate correlation IDs through async call chains.
+ *
+ * Safe for Edge/Client bundles: AsyncLocalStorage is only loaded on Node.js.
  */
 
-import { AsyncLocalStorage } from 'node:async_hooks'
 import { NextRequest } from 'next/server'
 
 // ============================================
-// AsyncLocalStorage context
+// AsyncLocalStorage context (Node.js only)
 // ============================================
 
-const correlationStore = new AsyncLocalStorage<string>()
+// Dynamic import to prevent Turbopack from bundling node:async_hooks in Client/Edge
+let correlationStore: { getStore(): string | undefined; run<T>(id: string, fn: () => T): T } | null = null
+if (typeof globalThis.process !== 'undefined' && typeof globalThis.process.versions?.node === 'string') {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { AsyncLocalStorage } = require('node:async_hooks')
+    correlationStore = new AsyncLocalStorage<string>()
+  } catch {
+    // Edge Runtime or restricted environment — no AsyncLocalStorage
+  }
+}
 
 // ============================================
 // ID Generation
@@ -46,17 +57,19 @@ export function getOrCreateCorrelationId(request: NextRequest): string {
 
 /**
  * Retrieve the correlation ID for the current async context.
- * Returns undefined if called outside of a correlation context.
+ * Returns undefined if called outside of a correlation context or in Edge/Client.
  */
 export function getCorrelationId(): string | undefined {
-  return correlationStore.getStore()
+  return correlationStore?.getStore()
 }
 
 /**
  * Run a callback within a correlation ID context.
  * All code (including async continuations) executed inside `fn`
  * will be able to retrieve the ID via `getCorrelationId()`.
+ * Falls back to direct execution if AsyncLocalStorage is unavailable.
  */
 export function runWithCorrelationId<T>(correlationId: string, fn: () => T): T {
+  if (!correlationStore) return fn()
   return correlationStore.run(correlationId, fn)
 }

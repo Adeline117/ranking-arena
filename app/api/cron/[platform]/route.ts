@@ -10,7 +10,7 @@ import { createClient } from '@supabase/supabase-js'
 import { z } from 'zod'
 import { verifyQStashSignature } from '@/lib/cron/qstash-client'
 import { createLogger } from '@/lib/utils/logger'
-import { circuitBreakerManager } from '@/lib/connectors/_deprecated/circuit-breaker'
+import { circuitBreaker as circuitBreakerManager } from '@/lib/middleware/circuit-breaker'
 
 const logger = createLogger('CronRoute')
 

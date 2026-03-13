@@ -17,14 +17,5 @@ export { TokenBucketRateLimiter, DelayRateLimiter, createRateLimiter } from './r
 export type { PlatformConnector, ConnectorConfig, RateLimiter as RateLimiterType, CircuitState, CircuitBreaker } from './types'
 export { ConnectorError, DEFAULT_CONNECTOR_CONFIG } from './types'
 
-// Individual platform connectors (legacy)
-export { BinanceFuturesConnector } from './_deprecated/binance-futures'
-export { BinanceSpotConnector } from './_deprecated/binance-spot'
-export { BybitConnector } from './_deprecated/bybit'
-export { BitgetFuturesConnector } from './_deprecated/bitget-futures'
-export { OKXConnector } from './_deprecated/okx'
-export { MEXCConnector } from './_deprecated/mexc'
-export { KuCoinConnector } from './_deprecated/kucoin'
-export { HyperliquidConnector } from './_deprecated/hyperliquid'
-export { CoinExConnector } from './_deprecated/coinex'
-export { BitgetSpotConnector } from './_deprecated/bitget-spot'
+// Individual platform connectors — now in lib/connectors/platforms/ via registry
+// Legacy re-exports removed (2026-03-13) — use connectorRegistry.get() instead

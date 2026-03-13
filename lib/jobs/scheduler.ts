@@ -15,7 +15,7 @@ import type { LeaderboardPlatform, MarketType, Window } from '../types/leaderboa
  
 type AnySupabaseClient = SupabaseClient<any, any, any>
 import { createRefreshJob, createPreheatJobs } from './processor'
-import { PLATFORM_CAPABILITIES } from '../connectors/_deprecated/capabilities'
+import { PLATFORM_CAPABILITIES } from '../connectors/capabilities'
 
 // ============================================
 // Scheduling Configuration
