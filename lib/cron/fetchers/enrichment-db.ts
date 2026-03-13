@@ -33,16 +33,51 @@ export async function upsertEquityCurve(
     const batch = records.slice(i, i + BATCH_SIZE)
     const { error } = await supabase
       .from('trader_equity_curve')
-      .upsert(batch, { 
+      .upsert(batch, {
         onConflict: 'source,source_trader_id,period,data_date',
-        ignoreDuplicates: false 
+        ignoreDuplicates: false
       })
-    
+
     if (error) {
       console.error(`Batch ${i} failed:`, error)
       return { saved, error: error.message }
     }
     saved += batch.length
+  }
+
+  // Sync period-specific ROI from equity curve to v2 flat columns.
+  // This fixes the issue where APIs return all-time ROI for all windows
+  // (e.g., binance_futures, aevo). The last point in the curve gives
+  // the correct cumulative ROI for that specific period.
+  if (curve.length >= 2) {
+    const lastPoint = curve[curve.length - 1]
+    const periodRoi = lastPoint.roi
+    const periodPnl = lastPoint.pnl
+
+    if (periodRoi != null) {
+      const v2Update: Record<string, unknown> = { roi_pct: periodRoi }
+      if (periodPnl != null) v2Update.pnl_usd = periodPnl
+
+      // Map enrichment period names to v2 window column values
+      const windowMap: Record<string, string> = {
+        '7D': '7D', '30D': '30D', '90D': '90D',
+        'WEEKLY': '7D', 'MONTHLY': '30D', 'QUARTERLY': '90D',
+        '7d': '7D', '30d': '30D', '90d': '90D',
+      }
+      const v2Window = windowMap[period]
+
+      if (v2Window) {
+        await supabase
+          .from('trader_snapshots_v2')
+          .update(v2Update)
+          .eq('platform', source)
+          .eq('trader_key', traderId)
+          .eq('window', v2Window)
+          .then(({ error: v2Err }) => {
+            if (v2Err) console.warn(`[enrichment-db] equity ROI sync failed for ${source}/${traderId}/${v2Window}:`, v2Err.message)
+          })
+      }
+    }
   }
 
   return { saved }
