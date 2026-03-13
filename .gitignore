@@ -85,7 +85,9 @@ cloudflare-worker/node_modules/
 # Worker
 worker/node_modules/
 
-# Infrastructure secrets
+# Infrastructure
+infra/*/node_modules/
+infra/*/package-lock.json
 infra/bullmq/.env
 
 # Generated reports and artifacts
