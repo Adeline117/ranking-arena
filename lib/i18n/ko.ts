@@ -2292,15 +2292,7 @@ bookmarkFoldersTitle: '북마크 폴더',
 saveBookmark: '북마크',
 manageFolders: '폴더 관리',
 
-// TraderReviews
-originalText: '원문',
-translateText: '번역',
 pleaseSignInFirst: '먼저 로그인해 주세요',
-pleaseSelectRating: '평점을 선택해 주세요',
-pleaseWriteReview: '리뷰를 작성해 주세요',
-reviewPosted: '리뷰가 게시되었습니다',
-reviewPlaceholder: '이 트레이더에 대한 의견을 공유해 주세요...',
-confirmDeleteReview: '이 리뷰를 삭제하시겠습니까?',
 
 // Trader page
 loadFailedRetryMsg: '로드 실패, 다시 시도해 주세요',
