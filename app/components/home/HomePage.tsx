@@ -15,7 +15,7 @@ const GuestSignupPrompt = lazy(() => import('./GuestSignupPrompt'))
 const HomeHero = lazy(() => import('./HomeHero'))
 import HomePageClient from './HomePageClient'
 import { SectionErrorBoundary } from '../utils/ErrorBoundary'
-// HomePageWithSubNav removed from homepage - only used in groups page
+import { features } from '@/lib/features'
 // Lazy-load sidebar widgets
 const HotDiscussions = lazy(() => import('../sidebar/HotDiscussions'))
 const WatchlistMarket = lazy(() => import('../sidebar/WatchlistMarket'))
@@ -73,11 +73,13 @@ export default function HomePage() {
         <Suspense fallback={null}><ExchangePartners /></Suspense>
         <ThreeColumnLayout
           leftSidebar={
-            <SectionErrorBoundary>
-              <Suspense fallback={<div className="skeleton" style={{ height: 400, borderRadius: tokens.radius.lg }} />}>
-                <HotDiscussions />
-              </Suspense>
-            </SectionErrorBoundary>
+            features.social ? (
+              <SectionErrorBoundary>
+                <Suspense fallback={<div className="skeleton" style={{ height: 400, borderRadius: tokens.radius.lg }} />}>
+                  <HotDiscussions />
+                </Suspense>
+              </SectionErrorBoundary>
+            ) : null
           }
           rightSidebar={
             <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>

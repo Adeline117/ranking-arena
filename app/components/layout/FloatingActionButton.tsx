@@ -5,6 +5,7 @@ import { useRouter, usePathname } from 'next/navigation'
 import { tokens } from '@/lib/design-tokens'
 import { useLanguage } from '../Providers/LanguageProvider'
 import { supabase } from '@/lib/supabase/client'
+import { features } from '@/lib/features'
 
 export default function FloatingActionButton() {
   const router = useRouter()
