@@ -85,7 +85,11 @@ export async function POST(request: NextRequest) {
         .insert({ user_id: user.id, exp: 0, level: 1, daily_exp_date: today })
         .select()
         .single()
-      levelData = newLevel!
+      levelData = newLevel
+    }
+
+    if (!levelData) {
+      return new Response(JSON.stringify({ error: 'Failed to initialize user level' }), { status: 500 })
     }
 
     // 重置日计数（如果是新的一天）
