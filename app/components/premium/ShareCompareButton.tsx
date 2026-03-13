@@ -3,27 +3,40 @@
 import React from 'react'
 import { Button } from '../base'
 import { useLanguage } from '../Providers/LanguageProvider'
+import { useToast } from '../ui/Toast'
 
 interface ShareCompareButtonProps {
   traderIds: string[]
+  traderNames?: string[]
   comparisonRef?: React.RefObject<HTMLDivElement | null>
 }
 
-export default function ShareCompareButton({ traderIds }: ShareCompareButtonProps) {
+export default function ShareCompareButton({ traderIds, traderNames }: ShareCompareButtonProps) {
   const { t } = useLanguage()
+  const { showToast } = useToast()
 
   const handleShare = () => {
     const url = `${window.location.origin}/compare?ids=${traderIds.join(',')}`
-    if (navigator.share) {
-      navigator.share({ title: 'Trader Comparison', url }).catch(err => console.warn('[ShareCompareButton] share failed', err))
+    const text = traderNames && traderNames.length > 0
+      ? `Comparing ${traderNames.join(' vs ')} on Arena\n\n${url}`
+      : `Trader comparison on Arena\n\n${url}`
+
+    if (typeof navigator !== 'undefined' && typeof navigator.share === 'function' && /Mobi|Android/i.test(navigator.userAgent)) {
+      navigator.share({ title: 'Trader Comparison', text, url }).catch(_err => {
+        // user cancelled
+      })
     } else {
-      navigator.clipboard.writeText(url).catch(err => console.warn('[ShareCompareButton] share failed', err))
+      navigator.clipboard.writeText(url).then(() => {
+        showToast(t('compareShareCopied'), 'success')
+      }).catch(_err => {
+        console.warn('[ShareCompareButton] clipboard failed')
+      })
     }
   }
 
   return (
     <Button variant="ghost" size="sm" onClick={handleShare}>
-      {t('share')}
+      {t('compareShareBtn')}
     </Button>
   )
 }
