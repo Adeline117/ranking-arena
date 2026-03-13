@@ -158,9 +158,11 @@ export async function initializeConnectors(): Promise<void> {
   const { BinanceWeb3Connector } = await import('./platforms/binance-web3')
 
   // Proxy URL for geo-blocked exchanges (Binance, OKX, BingX, HTX, BitMart, dYdX)
-  const proxyUrl = process.env.CLOUDFLARE_PROXY_URL || process.env.CF_WORKER_PROXY_URL
+  // DISABLED 2026-03-13: CF Worker proxy geo-blocked by Binance/OKX ("Service unavailable from a restricted location")
+  // Using direct requests from Vercel Tokyo (hnd1) region instead
+  const proxyUrl = undefined // process.env.CLOUDFLARE_PROXY_URL || process.env.CF_WORKER_PROXY_URL
 
-  // CEX Connectors (geo-blocked ones get proxyUrl)
+  // CEX Connectors (proxy disabled for Binance/OKX/Bitget - direct requests from Vercel Tokyo)
   connectorRegistry.register(new BinanceFuturesConnector({ proxyUrl }))
   connectorRegistry.register(new BybitFuturesConnector())
   connectorRegistry.register(new BitgetFuturesConnector())
