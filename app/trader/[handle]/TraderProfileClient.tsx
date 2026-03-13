@@ -452,13 +452,15 @@ export default function TraderProfileClient({ data, serverTraderData }: TraderPr
             from { opacity: 0; transform: translateY(8px); }
             to { opacity: 1; transform: translateY(0); }
           }
+          @media (max-width: 1024px) {
+            .profile-grid {
+              grid-template-columns: 1fr !important;
+            }
+          }
           @media (max-width: 768px) {
             .page-container {
               padding: ${tokens.spacing[3]} !important;
               padding-bottom: 100px !important;
-            }
-            .profile-grid {
-              grid-template-columns: 1fr !important;
             }
           }
         `}</style>

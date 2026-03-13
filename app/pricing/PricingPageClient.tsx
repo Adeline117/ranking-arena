@@ -67,7 +67,7 @@ export default function PricingPageClient({ lifetimeCount = 0 }: PricingPageClie
       <TopNav email={email} />
       <div style={{ maxWidth: 960, margin: '0 auto', padding: `${tokens.spacing[10]} ${tokens.spacing[6]}`, textAlign: 'center' }}>
         {/* Header */}
-        <h1 style={{ fontSize: 40, fontWeight: 800, marginBottom: tokens.spacing[3], letterSpacing: '-0.02em' }}>
+        <h1 style={{ fontSize: 36, fontWeight: 800, marginBottom: tokens.spacing[3], letterSpacing: '-0.02em' }}>
           {resolved(t('pricingTitle'), 'pricingTitle', 'Upgrade to Pro')}
         </h1>
         <p style={{ fontSize: 17, color: tokens.colors.text.secondary, marginBottom: tokens.spacing[8], lineHeight: 1.5 }}>
