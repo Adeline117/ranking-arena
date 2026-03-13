@@ -362,8 +362,16 @@ export async function runEnrichment(params: {
       await Promise.all(
         batch.map(async (trader) => {
           const traderId = trader.source_trader_id
+          // EMERGENCY FIX (2026-03-13): Add per-trader timeout to prevent slow traders from blocking batch
+          // 15s timeout = enough for most API calls, prevents hung requests from blocking others
+          const traderTimeout = new Promise<void>((_, reject) =>
+            setTimeout(() => reject(new Error(`Trader ${traderId} timed out after 15s`)), 15_000)
+          )
+          
           try {
-            let curve: EquityCurvePoint[] = []
+            await Promise.race([
+              (async () => {
+                let curve: EquityCurvePoint[] = []
 
             if (config.fetchEquityCurve) {
               curve = await withRetry(() => config.fetchEquityCurve!(traderId, days), `${platformKey}:${traderId} equity curve`)
@@ -451,7 +459,10 @@ export async function runEnrichment(params: {
               }
             }
 
-            results[platformKey].enriched++
+                results[platformKey].enriched++
+              })(),
+              traderTimeout
+            ])
           } catch (err) {
             results[platformKey].failed++
             const errMsg = err instanceof Error ? err.message : String(err)
