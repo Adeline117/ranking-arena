@@ -104,12 +104,26 @@ export async function fetchDriftEquityCurve(
   authority: string,
   days: number
 ): Promise<EquityCurvePoint[]> {
+  // Hard timeout protection: 2 minutes max per trader
+  const timeoutPromise = new Promise<never>((_, reject) =>
+    setTimeout(() => reject(new Error('Hard timeout: fetchDriftEquityCurve exceeded 2 minutes')), 120000)
+  )
+
+  const mainWork = async (): Promise<EquityCurvePoint[]> => {
+    try {
+      const positions = await fetchDriftPositionHistory(authority, 500)
+      if (positions.length === 0) return []
+      return buildEquityCurveFromPositions(positions, days)
+    } catch (err) {
+      logger.warn(`[drift] Equity curve failed for ${authority}: ${err instanceof Error ? err.message : String(err)}`)
+      return []
+    }
+  }
+
   try {
-    const positions = await fetchDriftPositionHistory(authority, 500)
-    if (positions.length === 0) return []
-    return buildEquityCurveFromPositions(positions, days)
+    return await Promise.race([mainWork(), timeoutPromise])
   } catch (err) {
-    logger.warn(`[drift] Equity curve failed for ${authority}: ${err instanceof Error ? err.message : String(err)}`)
+    logger.warn(`[drift] Equity curve timeout for ${authority}: ${err instanceof Error ? err.message : String(err)}`)
     return []
   }
 }
@@ -121,46 +135,60 @@ export async function fetchDriftEquityCurve(
 export async function fetchDriftStatsDetail(
   authority: string
 ): Promise<StatsDetail | null> {
+  // Hard timeout protection: 2 minutes max per trader
+  const timeoutPromise = new Promise<never>((_, reject) =>
+    setTimeout(() => reject(new Error('Hard timeout: fetchDriftStatsDetail exceeded 2 minutes')), 120000)
+  )
+
+  const mainWork = async (): Promise<StatsDetail | null> => {
+    try {
+      // Fetch user stats and fills in parallel (with error tolerance)
+      const results = await Promise.allSettled([
+        fetchJson<DriftUserStats>(`${DATA_API}/stats/user/${authority}`, { timeoutMs: 10000 })
+          .catch(() => null),
+        fetchDriftPositionHistory(authority, 500),
+      ])
+      
+      const stats = results[0].status === 'fulfilled' ? results[0].value : null
+      const positions = results[1].status === 'fulfilled' ? results[1].value : []
+      
+      if (results[0].status === 'rejected') {
+        console.error(`Drift stats fetch failed for ${authority}:`, results[0].reason)
+      }
+      if (results[1].status === 'rejected') {
+        console.error(`Drift positions fetch failed for ${authority}:`, results[1].reason)
+      }
+
+      const derivedStats = computeStatsFromPositions(positions)
+
+      return {
+        totalTrades: derivedStats.totalTrades ?? null,
+        profitableTradesPct: derivedStats.profitableTradesPct ?? null,
+        avgHoldingTimeHours: null,
+        avgProfit: derivedStats.avgProfit ?? null,
+        avgLoss: derivedStats.avgLoss ?? null,
+        largestWin: derivedStats.largestWin ?? null,
+        largestLoss: derivedStats.largestLoss ?? null,
+        sharpeRatio: null, // Computed from equity curve
+        maxDrawdown: derivedStats.maxDrawdown ?? null,
+        currentDrawdown: null,
+        volatility: null,
+        copiersCount: null,
+        copiersPnl: null,
+        aum: null,
+        winningPositions: derivedStats.winningPositions ?? null,
+        totalPositions: derivedStats.totalPositions ?? null,
+      }
+    } catch (err) {
+      logger.warn(`[drift] Stats detail failed for ${authority}: ${err instanceof Error ? err.message : String(err)}`)
+      return null
+    }
+  }
+
   try {
-    // Fetch user stats and fills in parallel (with error tolerance)
-    const results = await Promise.allSettled([
-      fetchJson<DriftUserStats>(`${DATA_API}/stats/user/${authority}`, { timeoutMs: 10000 })
-        .catch(() => null),
-      fetchDriftPositionHistory(authority, 500),
-    ])
-    
-    const stats = results[0].status === 'fulfilled' ? results[0].value : null
-    const positions = results[1].status === 'fulfilled' ? results[1].value : []
-    
-    if (results[0].status === 'rejected') {
-      console.error(`Drift stats fetch failed for ${authority}:`, results[0].reason)
-    }
-    if (results[1].status === 'rejected') {
-      console.error(`Drift positions fetch failed for ${authority}:`, results[1].reason)
-    }
-
-    const derivedStats = computeStatsFromPositions(positions)
-
-    return {
-      totalTrades: derivedStats.totalTrades ?? null,
-      profitableTradesPct: derivedStats.profitableTradesPct ?? null,
-      avgHoldingTimeHours: null,
-      avgProfit: derivedStats.avgProfit ?? null,
-      avgLoss: derivedStats.avgLoss ?? null,
-      largestWin: derivedStats.largestWin ?? null,
-      largestLoss: derivedStats.largestLoss ?? null,
-      sharpeRatio: null, // Computed from equity curve
-      maxDrawdown: derivedStats.maxDrawdown ?? null,
-      currentDrawdown: null,
-      volatility: null,
-      copiersCount: null,
-      copiersPnl: null,
-      aum: null,
-      winningPositions: derivedStats.winningPositions ?? null,
-      totalPositions: derivedStats.totalPositions ?? null,
-    }
+    return await Promise.race([mainWork(), timeoutPromise])
   } catch (err) {
-    logger.warn(`[drift] Stats detail failed for ${authority}: ${err instanceof Error ? err.message : String(err)}`)
+    logger.warn(`[drift] Stats detail timeout for ${authority}: ${err instanceof Error ? err.message : String(err)}`)
     return null
   }
 }
