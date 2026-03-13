@@ -68,10 +68,12 @@ export class HyperliquidPerpConnector extends BaseConnector {
       const roi = rawRoi != null ? rawRoi * 100 : null // decimal → percentage
       // Anomaly fix: if roi ≈ pnl (wrong scale), recalculate
       const accountValue = item.accountValue != null ? Number(item.accountValue) : null
-      const correctedRoi = (roi != null && rawPnl != null && accountValue != null
+      let correctedRoi = (roi != null && rawPnl != null && accountValue != null
         && Math.abs(roi - rawPnl) < 1 && accountValue > 0)
         ? (rawPnl / accountValue) * 100
         : roi
+      // Cap extreme ROI values (Arena Score caps at 10000% internally anyway)
+      if (correctedRoi != null && correctedRoi > 10000) correctedRoi = 10000
 
       return {
         platform: 'hyperliquid' as const, market_type: 'perp' as const,
