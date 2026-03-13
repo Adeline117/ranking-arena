@@ -54,7 +54,7 @@ export function LanguageProvider({ children }: { children: ReactNode }) {
     const currentLang = isMounted ? language : 'en'
     return (key: string): string => {
       const k = key as keyof typeof translations.en
-      return translations[currentLang][k] || translations.en[k] || key
+      return translations[currentLang][k] ?? translations.en[k] ?? key
     }
   }, [language, isMounted])
 
@@ -76,7 +76,7 @@ export function useLanguage() {
       setLanguage: setLang,
       t: ((key: string): string => {
         const k = key as keyof typeof translations.en
-        return translations[defaultLanguage][k] || translations.en[k] || key
+        return translations[defaultLanguage][k] ?? translations.en[k] ?? key
       }) as TranslationFunction
     }
   }
