@@ -129,8 +129,36 @@ export class CoinexFuturesConnector extends BaseConnector {
     return { series: [], fetched_at: new Date().toISOString() }
   }
 
+  /**
+   * Normalize raw CoinEx leaderboard entry.
+   * Raw fields: trader_id/traderId/uid, nick_name/nickName/nickname,
+   * roi/roi_rate/return_rate/profit_rate (decimal), profit_amount/pnl/profit,
+   * win_rate/winRate/winning_rate (decimal), max_drawdown/maxDrawdown/mdd,
+   * follower_count/followerCount/copier_num, avatar/avatar_url.
+   */
   normalize(raw: Record<string, unknown>): Record<string, unknown> {
-    return { trader_key: raw.trader_id, display_name: raw.nickname, roi: this.num(raw.roi), pnl: this.num(raw.profit) }
+    const rawRoi = this.num(raw.roi ?? raw.roi_rate ?? raw.return_rate ?? raw.profit_rate)
+    const roi = rawRoi != null ? (Math.abs(rawRoi) <= 1 ? rawRoi * 100 : rawRoi) : null
+    const rawWr = this.num(raw.win_rate ?? raw.winRate ?? raw.winning_rate)
+    const winRate = rawWr != null ? (rawWr <= 1 ? rawWr * 100 : rawWr) : null
+    const rawMdd = this.num(raw.max_drawdown ?? raw.maxDrawdown ?? raw.mdd)
+    const maxDrawdown = rawMdd != null ? Math.abs(rawMdd <= 1 ? rawMdd * 100 : rawMdd) : null
+
+    return {
+      trader_key: raw.trader_id ?? raw.traderId ?? raw.uid ?? raw.id ?? null,
+      display_name: raw.nick_name ?? raw.nickName ?? raw.nickname ?? raw.account_name ?? raw.name ?? null,
+      avatar_url: raw.avatar ?? raw.avatar_url ?? null,
+      roi,
+      pnl: this.num(raw.profit_amount ?? raw.pnl ?? raw.profit ?? raw.total_pnl_amount),
+      win_rate: winRate,
+      max_drawdown: maxDrawdown,
+      trades_count: null,
+      followers: this.num(raw.follower_count ?? raw.followerCount ?? raw.copier_num ?? raw.cur_follower_num),
+      copiers: null,
+      aum: null,
+      sharpe_ratio: null,
+      platform_rank: null,
+    }
   }
 
   private num(val: unknown): number | null {

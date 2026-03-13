@@ -107,8 +107,36 @@ export class MexcFuturesConnector extends BaseConnector {
     return { series: [], fetched_at: new Date().toISOString() }
   }
 
+  /**
+   * Normalize raw MEXC leaderboard entry.
+   * Raw fields: uid, nickname/nickName, yield/totalRoi/pnlRate (ROI decimal),
+   * pnl/totalPnl/profit, winRate, mdd/maxDrawdown, followerCount/copierCount,
+   * avatar/avatarUrl/headImg.
+   * Note: ROI in decimal format (0.5 = 50%), normalized via ×100 if ≤1.
+   */
   normalize(raw: Record<string, unknown>): Record<string, unknown> {
-    return { trader_key: raw.uid, display_name: raw.nickname, roi: this.num(raw.yield), pnl: this.num(raw.pnl) }
+    const rawRoi = this.num(raw.yield ?? raw.roi ?? raw.totalRoi ?? raw.pnlRate)
+    const roi = rawRoi != null ? (Math.abs(rawRoi) <= 1 ? rawRoi * 100 : rawRoi) : null
+    const rawWr = this.num(raw.winRate)
+    const winRate = rawWr != null ? (rawWr <= 1 ? rawWr * 100 : rawWr) : null
+    const rawMdd = this.num(raw.mdd ?? raw.maxDrawdown)
+    const maxDrawdown = rawMdd != null ? Math.abs(rawMdd <= 1 ? rawMdd * 100 : rawMdd) : null
+
+    return {
+      trader_key: raw.uid ?? raw.traderId ?? raw.id ?? raw.userId ?? null,
+      display_name: raw.nickname ?? raw.nickName ?? raw.name ?? raw.displayName ?? raw.traderName ?? null,
+      avatar_url: raw.avatar ?? raw.avatarUrl ?? raw.headImg ?? null,
+      roi,
+      pnl: this.num(raw.pnl ?? raw.totalPnl ?? raw.profit),
+      win_rate: winRate,
+      max_drawdown: maxDrawdown,
+      trades_count: null,
+      followers: this.num(raw.followerCount ?? raw.copierCount ?? raw.followers),
+      copiers: null,
+      aum: null,
+      sharpe_ratio: null,
+      platform_rank: null,
+    }
   }
 
   private num(val: unknown): number | null {

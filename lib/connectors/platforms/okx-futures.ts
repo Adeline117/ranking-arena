@@ -126,8 +126,29 @@ export class OkxFuturesConnector extends BaseConnector {
     return { series, fetched_at: new Date().toISOString() }
   }
 
+  /**
+   * Normalize raw OKX leaderboard entry.
+   * Raw fields: uniqueName, nickName, profitRatio (decimal), profit,
+   * winRatio (decimal 0-1), copyTraderNum, portLink (avatar), sharpeRatio.
+   * MDD computed from pnlRatios in discoverLeaderboard → stored as _computed_mdd.
+   */
   normalize(raw: Record<string, unknown>): Record<string, unknown> {
-    return { trader_key: raw.uniqueName, display_name: raw.nickName, roi: this.decimalToPercent(raw.profitRatio), pnl: this.num(raw.profit) }
+    const winRatio = this.num(raw.winRatio)
+    return {
+      trader_key: raw.uniqueName ?? raw.uniqueCode ?? null,
+      display_name: raw.nickName ?? null,
+      avatar_url: raw.portLink ?? null,
+      roi: this.decimalToPercent(raw.profitRatio),
+      pnl: this.num(raw.profit ?? raw.pnl),
+      win_rate: winRatio != null ? winRatio * 100 : null,
+      max_drawdown: raw._computed_mdd != null ? Number(raw._computed_mdd) : null,
+      trades_count: null,
+      followers: this.num(raw.copyTraderNum),
+      copiers: null,
+      aum: null,
+      sharpe_ratio: raw.sharpeRatio != null ? Number(raw.sharpeRatio) : null,
+      platform_rank: null,
+    }
   }
 
   private num(val: unknown): number | null {

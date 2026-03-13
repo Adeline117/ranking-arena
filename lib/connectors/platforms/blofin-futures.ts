@@ -181,12 +181,36 @@ export class BlofinFuturesConnector extends BaseConnector {
     return { series: [], fetched_at: new Date().toISOString() }
   }
 
+  /**
+   * Normalize raw BloFin leaderboard entry.
+   * Raw fields: uniqueName/traderId/uid, nickName/nickname/name,
+   * roi/returnRate/pnlRatio (decimal), pnl/profit/totalPnl,
+   * winRate (decimal), maxDrawdown/mdd (decimal),
+   * followers/followerCount/copyTraderNum, avatar/avatarUrl/portraitLink.
+   * Note: All decimal values normalized ×100 if ≤1.
+   */
   normalize(raw: Record<string, unknown>): Record<string, unknown> {
+    const rawRoi = this.num(raw.roi ?? raw.returnRate ?? raw.pnlRatio)
+    const roi = rawRoi != null ? (Math.abs(rawRoi) <= 1 ? rawRoi * 100 : rawRoi) : null
+    const rawWr = this.num(raw.winRate)
+    const winRate = rawWr != null ? (rawWr <= 1 ? rawWr * 100 : rawWr) : null
+    const rawMdd = this.num(raw.maxDrawdown ?? raw.mdd)
+    const maxDrawdown = rawMdd != null ? Math.abs(rawMdd <= 1 ? rawMdd * 100 : rawMdd) : null
+
     return {
-      trader_key: raw.traderId,
-      display_name: raw.nickName,
-      roi: this.num(raw.roi),
-      pnl: this.num(raw.pnl),
+      trader_key: raw.uniqueName ?? raw.traderId ?? raw.uid ?? raw.id ?? null,
+      display_name: raw.nickName ?? raw.nickname ?? raw.name ?? null,
+      avatar_url: raw.avatar ?? raw.avatarUrl ?? raw.portraitLink ?? null,
+      roi,
+      pnl: this.num(raw.pnl ?? raw.profit ?? raw.totalPnl),
+      win_rate: winRate,
+      max_drawdown: maxDrawdown,
+      trades_count: null,
+      followers: this.num(raw.followers ?? raw.followerCount ?? raw.copyTraderNum),
+      copiers: null,
+      aum: null,
+      sharpe_ratio: null,
+      platform_rank: null,
     }
   }
 

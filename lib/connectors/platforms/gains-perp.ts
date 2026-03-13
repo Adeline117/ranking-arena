@@ -70,42 +70,52 @@ export class GainsPerpConnector extends BaseConnector {
     }
   }
 
+  /**
+   * Discover traders from Gains leaderboard API across 3 chains.
+   * Uses /leaderboard endpoint (ranked by performance) instead of /open-trades
+   * to match inline fetcher behavior.
+   */
   async discoverLeaderboard(window: Window, limit = 100, _offset = 0): Promise<DiscoverResult> {
-    try {
-      // Get open trades to discover active traders
-      const _rawTrades = await this.request<GainsTrade[]>(
-        `${this.API_BASE}/open-trades`,
-        { method: 'GET', headers: this.getHeaders() }
-      )
-      const data = warnValidate(GainsOpenTradesResponseSchema, _rawTrades, 'gains-perp/leaderboard')
+    const chains = ['arbitrum', 'polygon', 'base']
+    const seen = new Set<string>()
+    const allTraders: TraderSource[] = []
 
-      // Extract unique trader addresses
-      const traderSet = new Set<string>()
-      const traders: TraderSource[] = []
+    for (const chain of chains) {
+      try {
+        const data = await this.request<Array<Record<string, unknown>>>(
+          `https://backend-${chain}.gains.trade/leaderboard`,
+          { method: 'GET', headers: this.getHeaders() }
+        )
 
-      for (const trade of data || []) {
-        if (trade.trader && !traderSet.has(trade.trader.toLowerCase())) {
-          traderSet.add(trade.trader.toLowerCase())
-          traders.push({
+        if (!Array.isArray(data)) continue
+
+        for (const entry of data) {
+          const address = String(entry.address || entry.trader || '').toLowerCase()
+          if (!address || seen.has(address)) continue
+          seen.add(address)
+
+          allTraders.push({
             platform: 'gains',
             market_type: 'perp' as const,
-            trader_key: trade.trader.toLowerCase(),
-            display_name: `${trade.trader.slice(0, 6)}...${trade.trader.slice(-4)}`,
-            profile_url: `https://gains.trade/trader/${trade.trader}`,
+            trader_key: address,
+            display_name: `${address.slice(0, 6)}...${address.slice(-4)}`,
+            profile_url: `https://gains.trade/trader/${address}`,
             discovered_at: new Date().toISOString(),
             last_seen_at: new Date().toISOString(),
             is_active: true,
-            raw: trade as unknown as Record<string, unknown>,
+            raw: { ...entry, _chain: chain },
           })
 
-          if (traders.length >= limit) break
+          if (allTraders.length >= limit) break
         }
+      } catch (err) {
+        if (allTraders.length === 0 && chain === chains[chains.length - 1]) throw err
+        // Continue with other chains
       }
-
-      return { traders, total_available: traders.length, window, fetched_at: new Date().toISOString() }
-    } catch {
-      return { traders: [], total_available: 0, window, fetched_at: new Date().toISOString() }
+      if (allTraders.length >= limit) break
     }
+
+    return { traders: allTraders.slice(0, limit), total_available: allTraders.length, window, fetched_at: new Date().toISOString() }
   }
 
   async fetchTraderProfile(traderKey: string): Promise<ProfileResult | null> {
@@ -252,11 +262,38 @@ export class GainsPerpConnector extends BaseConnector {
     return { series: [], fetched_at: new Date().toISOString() }
   }
 
+  /**
+   * Normalize raw Gains leaderboard entry.
+   * Raw fields: address/trader, total_pnl_usd/total_pnl/pnl,
+   * count_win/count (for win_rate), count (trades), avg_win, avg_loss,
+   * avgPositionSize. ROI estimated from PnL / (avgPositionSize × trades).
+   */
   normalize(raw: Record<string, unknown>): Record<string, unknown> {
+    const pnl = this.num(raw.total_pnl_usd ?? raw.total_pnl ?? raw.pnl)
+    const wins = this.num(raw.count_win) ?? 0
+    const total = this.num(raw.count ?? raw.totalTrades) ?? 0
+    const winRate = total > 0 ? (wins / total) * 100 : null
+    // Estimate ROI: pnl / (avgPositionSize × totalTrades)
+    const avgPos = this.num(raw.avgPositionSize)
+    let roi: number | null = null
+    if (pnl != null && avgPos != null && total > 0 && avgPos > 0) {
+      roi = Math.max(-100, Math.min(10000, (pnl / (avgPos * total)) * 100))
+    }
+
     return {
-      trader_key: raw.trader || raw.address,
-      pnl: this.num(raw.pnl),
-      trades_count: this.num(raw.totalTrades),
+      trader_key: String(raw.address ?? raw.trader ?? '').toLowerCase(),
+      display_name: null,
+      avatar_url: null,
+      roi,
+      pnl,
+      win_rate: winRate,
+      max_drawdown: null,
+      trades_count: total > 0 ? total : null,
+      followers: null,
+      copiers: null,
+      aum: null,
+      sharpe_ratio: null,
+      platform_rank: null,
     }
   }
 

@@ -202,12 +202,35 @@ export class BingxFuturesConnector extends BaseConnector {
     return { series: [], fetched_at: new Date().toISOString() }
   }
 
+  /**
+   * Normalize raw BingX leaderboard entry.
+   * Raw fields: uniqueId/uid/traderId, traderName/nickname/nickName,
+   * roi/roiRate/returnRate/pnlRatio (decimal), pnl/totalPnl/totalEarnings,
+   * winRate (decimal), maxDrawdown (decimal), followerNum/followers.
+   * Note: ROI in decimal format, normalized via ×100 if ≤1.
+   */
   normalize(raw: Record<string, unknown>): Record<string, unknown> {
+    const rawRoi = this.num(raw.roi ?? raw.roiRate ?? raw.returnRate ?? raw.pnlRatio)
+    const roi = rawRoi != null ? (Math.abs(rawRoi) <= 1 ? rawRoi * 100 : rawRoi) : null
+    const rawWr = this.num(raw.winRate)
+    const winRate = rawWr != null ? (rawWr <= 1 ? rawWr * 100 : rawWr) : null
+    const rawMdd = this.num(raw.maxDrawdown)
+    const maxDrawdown = rawMdd != null ? Math.abs(rawMdd <= 1 ? rawMdd * 100 : rawMdd) : null
+
     return {
-      trader_key: raw.uniqueId,
-      display_name: raw.traderName,
-      roi: this.num(raw.roi),
-      pnl: this.num(raw.pnl),
+      trader_key: raw.uniqueId ?? raw.uid ?? raw.traderId ?? null,
+      display_name: raw.traderName ?? raw.nickname ?? raw.nickName ?? raw.displayName ?? null,
+      avatar_url: null,
+      roi,
+      pnl: this.num(raw.pnl ?? raw.totalPnl ?? raw.totalEarnings ?? raw.profit),
+      win_rate: winRate,
+      max_drawdown: maxDrawdown,
+      trades_count: null,
+      followers: this.num(raw.followerNum ?? raw.followers ?? raw.followerCount),
+      copiers: null,
+      aum: null,
+      sharpe_ratio: null,
+      platform_rank: null,
     }
   }
 

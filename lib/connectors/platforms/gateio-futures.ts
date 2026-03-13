@@ -58,35 +58,63 @@ export class GateioFuturesConnector extends BaseConnector {
     }
   }
 
+  /**
+   * Discover traders from Gate.io copy-trading leaderboard.
+   * Uses /apiw/v2/copy/leader/list (correct endpoint matching inline fetcher).
+   * Gate.io profit_rate is a RATIO (9.54 = 954%), converted in normalize().
+   * Pagination: 50/page, up to 500 traders.
+   */
   async discoverLeaderboard(window: Window, limit = 100, _offset = 0): Promise<DiscoverResult> {
-    const periodMap: Record<Window, string> = { '7d': '7d', '30d': '30d', '90d': '90d' }
-    const period = periodMap[window] || '30d'
+    const cycleMap: Record<Window, string> = { '7d': 'week', '30d': 'month', '90d': 'quarter' }
+    const cycle = cycleMap[window]
+    const pageSize = 50
+    const maxPages = Math.ceil(Math.min(limit, 500) / pageSize)
+    const allTraders: TraderSource[] = []
 
-    try {
-      // Attempt to use Gate.io strategy bot API
-      const _rawLb = await this.request<{ data?: { list?: GateioLeaderboardEntry[] } }>(
-        `https://www.gate.io/api/v1/copy/leaders?page=1&limit=${limit}&period=${period}&sort=roi`,
-        { method: 'GET', headers: this.getHeaders() }
-      )
-      const data = warnValidate(GateioFuturesLeaderboardResponseSchema, _rawLb, 'gateio-futures/leaderboard')
+    for (let page = 1; page <= maxPages; page++) {
+      try {
+        const url = `https://www.gate.com/apiw/v2/copy/leader/list?page=${page}&page_size=${pageSize}&order_by=profit_rate&cycle=${cycle}`
+        const data = await this.request<Record<string, unknown>>(url, {
+          method: 'GET',
+          headers: this.getHeaders(),
+        })
 
-      const list = data?.data?.list || []
-      const traders: TraderSource[] = list.map((item) => ({
-        platform: 'gateio' as const,
-        market_type: 'futures' as const,
-        trader_key: String(item.uid || ''),
-        display_name: item.nickname || null,
-        profile_url: `https://www.gate.io/strategybot/trader/${item.uid}`,
-        discovered_at: new Date().toISOString(),
-        last_seen_at: new Date().toISOString(),
-        is_active: true,
-        raw: item as Record<string, unknown>,
-      }))
+        // Handle multiple response formats
+        const list: Array<Record<string, unknown>> = (
+          (data as Record<string, unknown>)?.list ??
+          ((data as Record<string, unknown>)?.data as Record<string, unknown>)?.list ??
+          (data as Record<string, unknown>)?.items ??
+          []
+        ) as Array<Record<string, unknown>>
 
-      return { traders, total_available: traders.length, window, fetched_at: new Date().toISOString() }
-    } catch {
-      return { traders: [], total_available: 0, window, fetched_at: new Date().toISOString() }
+        if (!list.length) break
+
+        for (const item of list) {
+          const id = String(item.leader_id ?? item.user_id ?? item.uid ?? item.trader_id ?? item.id ?? item.userId ?? '')
+          if (!id) continue
+          const userInfo = item.user_info as Record<string, unknown> | undefined
+          allTraders.push({
+            platform: 'gateio' as const,
+            market_type: 'futures' as const,
+            trader_key: id,
+            display_name: (userInfo?.nickname ?? userInfo?.nick ?? item.nickname ?? item.name ?? item.nickName ?? null) as string | null,
+            profile_url: `https://www.gate.io/strategybot/trader/${id}`,
+            discovered_at: new Date().toISOString(),
+            last_seen_at: new Date().toISOString(),
+            is_active: true,
+            raw: item as Record<string, unknown>,
+          })
+        }
+
+        if (list.length < pageSize) break
+        if (allTraders.length >= limit) break
+      } catch (err) {
+        if (page === 1) throw err  // First page failure is fatal, not silenced
+        break
+      }
     }
+
+    return { traders: allTraders.slice(0, limit), total_available: allTraders.length, window, fetched_at: new Date().toISOString() }
   }
 
   async fetchTraderProfile(traderKey: string): Promise<ProfileResult | null> {
@@ -183,12 +211,44 @@ export class GateioFuturesConnector extends BaseConnector {
     return { series: [], fetched_at: new Date().toISOString() }
   }
 
+  /**
+   * Normalize raw Gate.io leaderboard entry.
+   * IMPORTANT: Gate.io profit_rate is a RATIO (9.54 = 954%), multiply ×100.
+   * Raw fields: leader_id/user_id/uid, user_info.nickname/nickname,
+   * profit_rate/pnl_ratio/pl_ratio/roi (ratio), pnl/profit/totalPnl,
+   * win_rate/winRate (decimal), max_drawdown/maxDrawdown,
+   * curr_follow_num/follower_num/followers, user_info.avatar/avatar.
+   */
   normalize(raw: Record<string, unknown>): Record<string, unknown> {
+    // profit_rate is ratio: 9.54 means 954%
+    const rawProfitRate = this.num(
+      raw.profit_rate ?? raw.pnl_ratio ?? raw.pl_ratio ?? raw.roi ?? raw.returnRate
+    )
+    const roi = rawProfitRate != null ? rawProfitRate * 100 : null
+
+    const rawWr = this.num(raw.win_rate ?? raw.winRate)
+    const winRate = rawWr != null ? (rawWr <= 1 ? rawWr * 100 : rawWr) : null
+    const rawMdd = this.num(raw.max_drawdown ?? raw.maxDrawdown)
+    const maxDrawdown = rawMdd != null ? Math.abs(rawMdd <= 1 ? rawMdd * 100 : rawMdd) : null
+
+    // Extract avatar from nested user_info or direct field
+    const userInfo = raw.user_info as Record<string, unknown> | undefined
+    const avatar = userInfo?.avatar ?? raw.avatar ?? raw.avatarUrl ?? raw.head_url ?? null
+
     return {
-      trader_key: raw.uid,
-      display_name: raw.nickname,
-      roi: this.num(raw.roi),
-      pnl: this.num(raw.pnl),
+      trader_key: raw.leader_id ?? raw.user_id ?? raw.uid ?? raw.trader_id ?? raw.id ?? raw.userId ?? null,
+      display_name: userInfo?.nickname ?? userInfo?.nick ?? raw.nickname ?? raw.name ?? raw.nickName ?? null,
+      avatar_url: avatar,
+      roi,
+      pnl: this.num(raw.pnl ?? raw.profit ?? raw.totalPnl ?? raw.follow_profit),
+      win_rate: winRate,
+      max_drawdown: maxDrawdown,
+      trades_count: null,
+      followers: this.num(raw.curr_follow_num ?? raw.follower_num ?? raw.followers ?? raw.followerCount ?? raw.copier_num),
+      copiers: null,
+      aum: null,
+      sharpe_ratio: null,
+      platform_rank: null,
     }
   }
 

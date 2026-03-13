@@ -186,16 +186,26 @@ export class BitgetFuturesConnector extends BaseConnector {
     return { series, fetched_at: new Date().toISOString() }
   }
 
+  /**
+   * Normalize raw Bitget leaderboard entry.
+   * Raw fields: traderId, traderName, roi, profit, winRate, drawDown,
+   * followerNum, copyTraderNum, totalFollowAssets (AUM), headUrl (avatar).
+   */
   normalize(raw: Record<string, unknown>): Record<string, unknown> {
     return {
-      trader_key: raw.traderId,
-      display_name: raw.traderName,
-      roi: this.parseNumber(raw.roi),
-      pnl: this.parseNumber(raw.profit),
+      trader_key: raw.traderId ?? raw.traderUid ?? raw.uid ?? null,
+      display_name: raw.traderName ?? raw.nickName ?? null,
+      avatar_url: raw.headUrl ?? raw.avatar ?? null,
+      roi: this.parseNumber(raw.roi ?? raw.profitRate ?? raw.yieldRate),
+      pnl: this.parseNumber(raw.profit ?? raw.totalProfit),
       win_rate: this.parseNumber(raw.winRate),
-      max_drawdown: this.parseNumber(raw.drawDown),
-      followers: raw.followerNum,
-      copiers: raw.copyTraderNum,
+      max_drawdown: this.parseNumber(raw.drawDown ?? raw.maxDrawdown ?? raw.mdd),
+      trades_count: null,
+      followers: this.parseNumber(raw.followerNum ?? raw.followerCount ?? raw.copyUserNum),
+      copiers: this.parseNumber(raw.copyTraderNum),
+      aum: this.parseNumber(raw.totalFollowAssets),
+      sharpe_ratio: null,
+      platform_rank: null,
     }
   }
 
