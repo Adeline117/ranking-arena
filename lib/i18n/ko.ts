@@ -2892,6 +2892,8 @@ onChainVolume: '온체인 거래량',
 swapCount: '스왑 횟수',
 estimatedPnl: '추정 PnL',
 walletAddress: '지갑 주소',
+tokenDistribution: '보유 분포',
+tokenDistributionEmpty: '토큰 보유 데이터가 없습니다',
 viewOnExplorer: '탐색기에서 보기',
 dexLeaderboard: 'DEX 리더보드',
 

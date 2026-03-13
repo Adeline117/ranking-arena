@@ -2895,6 +2895,8 @@ const zh = {
     swapCount: '交易次数',
     estimatedPnl: '预估盈亏',
     walletAddress: '钱包地址',
+    tokenDistribution: '持仓分布',
+    tokenDistributionEmpty: '暂无代币持仓数据',
     viewOnExplorer: '在浏览器查看',
     dexLeaderboard: 'DEX 排行榜',
 

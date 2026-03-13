@@ -2892,6 +2892,8 @@ const en = {
     swapCount: 'Swap Count',
     estimatedPnl: 'Estimated PnL',
     walletAddress: 'Wallet Address',
+    tokenDistribution: 'Token Distribution',
+    tokenDistributionEmpty: 'No token holdings data',
     viewOnExplorer: 'View on Explorer',
     dexLeaderboard: 'DEX Leaderboard',
 

@@ -1,3 +1,4 @@
+'use client'
 
 /**
  * TokenDistribution - 代币持仓分布可视化
@@ -5,6 +6,7 @@
  */
 
 import { tokens } from '@/lib/design-tokens'
+import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 
 interface TokenDistributionItem {
   symbol: string
@@ -28,10 +30,12 @@ const BAR_COLORS = [
 ]
 
 export default function TokenDistribution({ data }: TokenDistributionProps) {
+  const { t } = useLanguage()
+
   if (!data.length) {
     return (
       <div style={{ color: tokens.colors.text.secondary, padding: tokens.spacing[4] }}>
-        暂无代币持仓数据
+        {t('tokenDistributionEmpty')}
       </div>
     )
   }
@@ -54,7 +58,7 @@ export default function TokenDistribution({ data }: TokenDistributionProps) {
           marginTop: 0,
         }}
       >
-        持仓分布
+        {t('tokenDistribution')}
       </h4>
 
       {/* 总览条 */}
