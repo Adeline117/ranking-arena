@@ -286,6 +286,7 @@ function TraderContent({ handle, serverData }: { handle: string; serverData: Tra
           maxDrawdown={performance?.max_drawdown}
           winRate={performance?.win_rate}
           currentUserId={currentUserId}
+          isBot={profile.source === 'web3_bot' || !!(profile as unknown as { is_bot?: boolean }).is_bot}
         />
 
         {/* Alert Config (Pro only) */}

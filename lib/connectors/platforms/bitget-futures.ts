@@ -47,33 +47,47 @@ export class BitgetFuturesConnector extends BaseConnector {
     notes: ['CF protected but API accessible', 'Good field coverage'],
   }
 
-  async discoverLeaderboard(window: Window, limit = 20, offset = 0): Promise<DiscoverResult> {
+  async discoverLeaderboard(window: Window, limit = 50, offset = 0): Promise<DiscoverResult> {
     const timeRange = WINDOW_MAP[window]
-    const pageNo = Math.floor(offset / limit) + 1
 
-    const _rawLb = await this.request<Record<string, unknown>>(
-      `https://www.bitget.com/v1/trigger/trace/public/currentTrader/list?pageNo=${pageNo}&pageSize=${limit}&sortType=2&timeRange=${timeRange}`,
-      { method: 'GET' }
-    )
-    const data = warnValidate(BitgetFuturesLeaderboardResponseSchema, _rawLb, 'bitget-futures/leaderboard')
+    // Auto-paginate: fetch all pages (Bitget has 100+ traders per timeRange)
+    const allTraders: TraderSource[] = []
+    let currentPage = Math.floor(offset / limit) + 1
+    const maxPages = 5 // Safety: 5 pages × 50 = 250 max
+    let totalAvailable: number | null = null
 
-    const list = data?.data?.list || []
+    while (currentPage <= maxPages) {
+      const _rawLb = await this.request<Record<string, unknown>>(
+        `https://www.bitget.com/v1/trigger/trace/public/currentTrader/list?pageNo=${currentPage}&pageSize=${limit}&sortType=2&timeRange=${timeRange}`,
+        { method: 'GET' }
+      )
+      const data = warnValidate(BitgetFuturesLeaderboardResponseSchema, _rawLb, 'bitget-futures/leaderboard')
+      if (totalAvailable === null && data?.data?.total) totalAvailable = Number(data.data.total)
 
-    const traders: TraderSource[] = (Array.isArray(list) ? list : []).map((item: Record<string, unknown>) => ({
-      platform: 'bitget' as const,
-      market_type: 'futures' as const,
-      trader_key: String(item.traderId || ''),
-      display_name: (item.traderName as string) || null,
-      profile_url: `https://www.bitget.com/copy-trading/trader/${item.traderId}`,
-      discovered_at: new Date().toISOString(),
-      last_seen_at: new Date().toISOString(),
-      is_active: true,
-      raw: item as Record<string, unknown>,
-    }))
+      const list = data?.data?.list || []
+      if (!Array.isArray(list) || list.length === 0) break
+
+      const traders: TraderSource[] = list.map((item: Record<string, unknown>) => ({
+        platform: 'bitget' as const,
+        market_type: 'futures' as const,
+        trader_key: String(item.traderId || ''),
+        display_name: (item.traderName as string) || null,
+        profile_url: `https://www.bitget.com/copy-trading/trader/${item.traderId}`,
+        discovered_at: new Date().toISOString(),
+        last_seen_at: new Date().toISOString(),
+        is_active: true,
+        raw: item as Record<string, unknown>,
+      }))
+      allTraders.push(...traders)
+
+      if (list.length < limit) break
+      currentPage++
+      await new Promise(r => setTimeout(r, 500))
+    }
 
     return {
-      traders,
-      total_available: data?.data?.total ?? null,
+      traders: allTraders,
+      total_available: totalAvailable ?? allTraders.length,
       window,
       fetched_at: new Date().toISOString(),
     }
