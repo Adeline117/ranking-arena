@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react'
 import { tokens } from '@/lib/design-tokens'
 import { t as i18nT } from '@/lib/i18n'
+import { NULL_DISPLAY } from '@/lib/utils/format'
 import { Box, Text } from '../../../base'
 import type { TraderStats } from '@/lib/data/trader'
 import { PositionHistorySection } from './PositionHistorySection'
@@ -89,15 +90,15 @@ export function TradingSection({
             marginBottom: tokens.spacing[6],
           }}
         >
-          <MiniKpi label={i18nT('totalTrades90d')} value={trading!.totalTrades12M > 0 ? String(trading!.totalTrades12M) : '--'} />
+          <MiniKpi label={i18nT('totalTrades90d')} value={trading!.totalTrades12M > 0 ? String(trading!.totalTrades12M) : NULL_DISPLAY} />
           <MiniKpi
             label={i18nT('avgProfitLoss')}
             value={trading!.avgProfit > 0 || trading!.avgLoss < 0
               ? `${trading!.avgProfit.toFixed(2)}% / ${trading!.avgLoss.toFixed(2)}%`
-              : '--'
+              : NULL_DISPLAY
             }
           />
-          <MiniKpi label={i18nT('profitableTradesLabel')} value={trading!.profitableTradesPct > 0 ? `${trading!.profitableTradesPct.toFixed(2)}%` : '--'} />
+          <MiniKpi label={i18nT('profitableTradesLabel')} value={trading!.profitableTradesPct > 0 ? `${trading!.profitableTradesPct.toFixed(2)}%` : NULL_DISPLAY} />
         </Box>
       )}
 
@@ -136,7 +137,7 @@ export function TradingSection({
             />
             <MiniKpi
               label={t('maxDrawdown')}
-              value={additionalStats?.maxDrawdown !== undefined && Math.abs(additionalStats.maxDrawdown) <= 100 ? (Math.abs(additionalStats.maxDrawdown) < 0.005 ? '< 0.01%' : `-${Math.abs(additionalStats.maxDrawdown).toFixed(2)}%`) : '--'}
+              value={additionalStats?.maxDrawdown !== undefined && Math.abs(additionalStats.maxDrawdown) <= 100 ? (Math.abs(additionalStats.maxDrawdown) < 0.005 ? '< 0.01%' : `-${Math.abs(additionalStats.maxDrawdown).toFixed(2)}%`) : NULL_DISPLAY}
               highlight={additionalStats?.maxDrawdown !== undefined && Math.abs(additionalStats.maxDrawdown) <= 100}
               isNegative
             />
@@ -189,10 +190,10 @@ function MiniKpi({
         size="xl"
         weight="black"
         style={{
-          color: value === '--'
+          color: value === NULL_DISPLAY
             ? tokens.colors.text.tertiary
             : (highlight && isNegative ? tokens.colors.accent.error : tokens.colors.text.primary),
-          fontFamily: (value !== '--' && !value.includes('/')) ? tokens.typography.fontFamily.mono.join(', ') : 'inherit',
+          fontFamily: (value !== NULL_DISPLAY && !value.includes('/')) ? tokens.typography.fontFamily.mono.join(', ') : 'inherit',
         }}
       >
         {value}

@@ -3,6 +3,7 @@
 import React, { useRef, useState, useEffect } from 'react'
 import { tokens } from '@/lib/design-tokens'
 import { Box, Text } from '../base'
+import { NULL_DISPLAY } from '@/lib/utils/format'
 import { useLanguage } from '../Providers/LanguageProvider'
 import type { TraderAdvancedMetrics } from '@/lib/types/trader'
 
@@ -368,7 +369,7 @@ function SecondaryBadge({
           fontFamily: tokens.typography.fontFamily.mono.join(', '),
         }}
       >
-        {isNA ? '--' : value}
+        {isNA ? NULL_DISPLAY : value}
       </Text>
     </Box>
   )

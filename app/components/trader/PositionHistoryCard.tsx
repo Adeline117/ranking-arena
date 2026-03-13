@@ -4,6 +4,7 @@ import { useState, memo } from 'react'
 import { tokens } from '@/lib/design-tokens'
 import { useLanguage } from '../Providers/LanguageProvider'
 import { Box, Text } from '../base'
+import { NULL_DISPLAY } from '@/lib/utils/format'
 import CryptoIcon from '@/app/components/common/CryptoIcon'
 import PortfolioDataCell from './PortfolioDataCell'
 import type { ExtendedPositionHistoryItem } from './portfolio-table-utils'
@@ -89,7 +90,7 @@ const PositionHistoryCard = memo(function PositionHistoryCard({
         gap: tokens.spacing[4],
         marginBottom: tokens.spacing[3],
       }}>
-        <PortfolioDataCell label={t('openTime')} value={position.openTime ? formatDateTime(position.openTime) : '--'} />
+        <PortfolioDataCell label={t('openTime')} value={position.openTime ? formatDateTime(position.openTime) : NULL_DISPLAY} />
         <PortfolioDataCell label={t('openPrice')} value={`${formatPriceWithComma(position.entryPrice)}`} />
         <PortfolioDataCell
           label={t('closePnl')}
@@ -108,7 +109,7 @@ const PositionHistoryCard = memo(function PositionHistoryCard({
       }}>
         <PortfolioDataCell label={t('closePrice')} value={`${formatPriceWithComma(position.exitPrice)}`} secondary />
         <PortfolioDataCell label={t('maxPosition')} value={formatSizeWithUnit(position.maxPositionSize, coinName)} secondary />
-        <PortfolioDataCell label={t('closeTime')} value={position.closeTime ? formatDateTime(position.closeTime) : '--'} secondary />
+        <PortfolioDataCell label={t('closeTime')} value={position.closeTime ? formatDateTime(position.closeTime) : NULL_DISPLAY} secondary />
       </Box>
     </Box>
   )
