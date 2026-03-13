@@ -27,20 +27,20 @@ export const CACHE_PREFIX = {
 export const CACHE_TTL = {
   /** 排行榜缓存：5 分钟 */
   TRADERS_LIST: 300,
-  /** 交易员详情：3 分钟 */
-  TRADER_DETAIL: 180,
-  /** 交易员性能数据：3 分钟 */
-  TRADER_PERFORMANCE: 180,
-  /** 帖子列表：30 秒 */
-  POSTS_LIST: 30,
-  /** 单个帖子：1 分钟 */
-  POST_DETAIL: 60,
-  /** 评论列表：30 秒 */
-  COMMENTS_LIST: 30,
+  /** 交易员详情：10 分钟（数据每 3-6 小时更新，短 TTL 无意义） */
+  TRADER_DETAIL: 600,
+  /** 交易员性能数据：15 分钟 */
+  TRADER_PERFORMANCE: 900,
+  /** 帖子列表：2 分钟 */
+  POSTS_LIST: 120,
+  /** 单个帖子：2 分钟 */
+  POST_DETAIL: 120,
+  /** 评论列表：1 分钟 */
+  COMMENTS_LIST: 60,
   /** 用户资料：5 分钟 */
   USER_PROFILE: 300,
-  /** 市场数据：10 秒 */
-  MARKET_DATA: 10,
+  /** 市场数据：1 分钟（价格更新已有 ISR + SWR 层） */
+  MARKET_DATA: 60,
   /** 搜索结果：2 分钟 */
   SEARCH_RESULTS: 120,
   /** 小组列表：5 分钟 */
