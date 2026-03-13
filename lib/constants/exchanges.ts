@@ -147,11 +147,12 @@ export const DEAD_BLOCKED_PLATFORMS: TraderSource[] = [
   // MAC MINI ONLY — geo-blocked from VPS, needs residential IP
   // Data confirmed visible on user's browser, Mac Mini scripts deployed
   // ═══════════════════════════════════════════════════════════════
-  // 'phemex' — RECOVERED: Mac Mini fetch-phemex.mjs (183 traders)
-  // 'lbank' — RECOVERED: VPS scraper working (42 traders)
-  // 'blofin' — RECOVERED: VPS/Mac Mini working (429 traders)
-  'kucoin',       // Mac Mini fetch-kucoin-v2.mjs — trader data visible on browser, VPS geo-blocked
-  'weex',         // Mac Mini fetch-weex.mjs — trader data visible on browser, VPS geo-blocked + API 521
+  // RECOVERED via Mac Mini scrapers (2026-03-13):
+  // 'phemex' — Mac Mini fetch-phemex.mjs (183 traders)
+  // 'lbank' — VPS scraper working (42 traders)
+  // 'blofin' — VPS/Mac Mini working (429 traders)
+  // 'kucoin' — Mac Mini fetch-kucoin-v2.mjs (12 traders, browser-only API)
+  // 'weex' — Mac Mini fetch-weex.mjs (11 traders, DOM extraction)
 
   // ═══════════════════════════════════════════════════════════════
   // BLOCKED — needs API key or credentials to unlock
