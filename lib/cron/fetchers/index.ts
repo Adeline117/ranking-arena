@@ -28,6 +28,7 @@ import { fetchGateio } from './_deprecated/gateio'
 import { fetchMexc } from './_deprecated/mexc'
 import { fetchCoinex } from './_deprecated/coinex'
 import { fetchPhemex } from './_deprecated/phemex'
+import { fetchBybit } from './_deprecated/bybit'
 import { fetchBlofin } from './_deprecated/blofin'
 import { fetchBitfinex } from './_deprecated/bitfinex'
 import { fetchToobit } from './_deprecated/toobit'
@@ -59,6 +60,7 @@ export const INLINE_FETCHERS: Record<string, PlatformFetcher> = {
   mexc: fetchMexc,
   coinex: fetchCoinex,
   phemex: fetchPhemex,
+  bybit: fetchBybit,
   blofin: fetchBlofin,
   bitfinex: fetchBitfinex,
   toobit: fetchToobit,
