@@ -1,21 +1,14 @@
 #!/usr/bin/env node
-/**
- * Bybit Detail Page PnL Scraper
- *
- * Bybit leaderboard API doesn't expose trader PnL. This script uses
- * Playwright to open each trader's profile page and extract PnL from DOM.
- *
- * Usage:
- *   node bybit-detail-pnl.mjs [--limit=200] [--concurrency=3] [--period=30D]
- *
- * Deploy to VPS:
- *   scp bybit-detail-pnl.mjs root@45.76.152.169:/opt/scraper/
- *   # Then add to crontab: 0 */6 * * * cd /opt/scraper && node bybit-detail-pnl.mjs >> /var/log/bybit-detail.log 2>&1
- *
- * Requirements:
- *   - Playwright (npx playwright install chromium)
- *   - SUPABASE_URL + SUPABASE_SERVICE_ROLE_KEY env vars
- */
+
+// Bybit Detail Page PnL Scraper
+// Bybit leaderboard API doesn't expose trader PnL. Uses Playwright
+// to open each trader's profile page and extract PnL from DOM.
+//
+// Usage: node bybit-detail-pnl.mjs [--limit=200] [--concurrency=3] [--period=30D]
+// Deploy: scp to VPS, add to crontab every 6h
+// Requires: playwright, @supabase/supabase-js, dotenv
+
+import 'dotenv/config'
 
 import { chromium } from 'playwright'
 import { createClient } from '@supabase/supabase-js'
