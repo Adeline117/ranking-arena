@@ -41,10 +41,6 @@
       "schedule": "56 */6 * * *"
     },
     {
-      "path": "/api/cron/unified-connector?platform=hyperliquid&window=90d",
-      "schedule": "0 */6 * * *"
-    },
-    {
       "path": "/api/scrape/proxy?period=all",
       "schedule": "0 6,18 * * *"
     },
@@ -175,18 +171,6 @@
     {
       "path": "/api/cron/generate-profiles?limit=500",
       "schedule": "55 */6 * * *"
-    },
-    {
-      "path": "/api/cron/unified-connector?platform=binance_futures",
-      "schedule": "2 */3 * * *"
-    },
-    {
-      "path": "/api/cron/unified-connector?platform=hyperliquid",
-      "schedule": "7 */4 * * *"
-    },
-    {
-      "path": "/api/cron/unified-connector?platform=okx_futures",
-      "schedule": "22 */3 * * *"
     }
   ],
   "headers": [
