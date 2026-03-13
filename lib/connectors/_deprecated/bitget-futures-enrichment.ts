@@ -7,7 +7,7 @@
  */
 
 import { BaseExchangeConnector, TraderData, ListParams } from '../base-connector-enrichment'
-import { dataLogger } from '../utils/logger'
+import { dataLogger } from '../../utils/logger'
 
 const API_URL = 'https://www.bitget.com/v1/trigger/trace/public/cycleData'
 

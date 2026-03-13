@@ -9,7 +9,7 @@
  * - Implementation notes
  */
 
-import type { PlatformCapabilities } from '../types/leaderboard'
+import type { PlatformCapabilities } from '../../types/leaderboard'
 
 /**
  * Complete platform capabilities reference.

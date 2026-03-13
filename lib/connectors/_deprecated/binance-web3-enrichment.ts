@@ -9,7 +9,7 @@
  */
 
 import { BaseExchangeConnector, TraderData, ListParams } from '../base-connector-enrichment'
-import { dataLogger } from '../utils/logger'
+import { dataLogger } from '../../utils/logger'
 
 const API_URL = 'https://web3.binance.com/bapi/defi/v1/public/wallet-direct/market/leaderboard/query'
 

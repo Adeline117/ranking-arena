@@ -15,7 +15,7 @@
  */
 
 import { ConnectorRunner, getAllConnectorStatuses } from '../lib/connectors/connector-runner'
-import { HyperliquidConnector } from '../lib/connectors/hyperliquid'
+import { HyperliquidConnector } from '../lib/connectors/_deprecated/hyperliquid'
 import { PipelineLogger } from '../lib/services/pipeline-logger'
 
 // ============================================

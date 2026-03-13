@@ -7,7 +7,7 @@
  */
 
 import { BaseExchangeConnector, TraderData, ListParams } from '../base-connector-enrichment'
-import { dataLogger } from '../utils/logger'
+import { dataLogger } from '../../utils/logger'
 
 const API_URL = 'https://futures.htx.com/-/x/hbg/v1/futures/copytrading/rank'
 

@@ -10,7 +10,7 @@
  */
 
 import { BaseExchangeConnector, TraderData, ListParams } from '../base-connector-enrichment'
-import { dataLogger } from '../utils/logger'
+import { dataLogger } from '../../utils/logger'
 
 interface BingXSpotTraderItem {
   trader?: { nickName?: string; traderName?: string; uid?: string | number }
