@@ -89,6 +89,7 @@ export async function generateMetadata({
       title,
       description,
       creator: '@arenafi',
+      images: [`${baseUrl}/api/og?title=${encodeURIComponent(`${displayName} Rankings`)}&subtitle=${encodeURIComponent(description.slice(0, 80))}`],
     },
     robots: { index: true, follow: true },
   }
