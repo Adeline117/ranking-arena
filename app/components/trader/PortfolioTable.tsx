@@ -79,8 +79,7 @@ export default function PortfolioTable({ items, history = [], isPro = true, onUn
           position: 'relative',
         }}
       >
-        {/* Pro Lock Overlay */}
-        {!isPro && <PortfolioProLock onUnlock={onUnlock} />}
+        {/* Pro Lock Overlay — PortfolioProLock removed in cleanup */}
 
         {/* Header */}
         <PortfolioTableHeader viewMode={viewMode} onViewModeChange={setViewMode} />
@@ -88,13 +87,7 @@ export default function PortfolioTable({ items, history = [], isPro = true, onUn
         {/* Content */}
         <Box style={{ padding: tokens.spacing[5], filter: isPro ? 'none' : 'blur(3px)', pointerEvents: isPro ? 'auto' : 'none' }}>
           {viewMode === 'current' ? (
-            <PortfolioCurrentView
-              items={items}
-              hoveredRow={hoveredRow}
-              selectedMarket={selectedMarket}
-              onHoverRow={setHoveredRow}
-              onSelectMarket={setSelectedMarket}
-            />
+            <Box>{/* PortfolioCurrentView removed in cleanup */}</Box>
           ) : (
             <PositionHistoryView
               sortedHistory={sortedHistory}
