@@ -13,6 +13,8 @@ import {
   SOURCE_TYPE_MAP,
   EXCHANGE_NAMES,
 } from '@/lib/constants/exchanges'
+import { ApiError } from '@/lib/api/errors'
+import { success as apiSuccess, handleError } from '@/lib/api/response'
 
 export const dynamic = 'force-dynamic'
 
@@ -73,10 +75,7 @@ export async function GET(req: Request) {
     const { verifyAdmin } = await import('@/lib/admin/auth')
     const admin = await verifyAdmin(supabase, authHeader)
     if (!admin) {
-      return NextResponse.json(
-        { ok: false, error: 'Unauthorized: Admin access required' },
-        { status: 401 }
-      )
+      throw ApiError.forbidden('Admin access required')
     }
     const now = new Date()
     const staleThreshold = new Date(now.getTime() - STALE_THRESHOLD_HOURS * 60 * 60 * 1000)
@@ -169,17 +168,9 @@ export async function GET(req: Request) {
       lastGenerated: now.toISOString(),
     }
     
-    return NextResponse.json({
-      ok: true,
-      stats,
-      reports,
-    })
+    return apiSuccess({ stats, reports })
   } catch (error: unknown) {
     logger.error('Data report error', { error })
-    const errorMessage = error instanceof Error ? error.message : 'Internal server error'
-    return NextResponse.json(
-      { ok: false, error: errorMessage },
-      { status: 500 }
-    )
+    return handleError(error, 'admin-data-report')
   }
 }
