@@ -84,7 +84,8 @@ export class BlofinFuturesConnector extends BaseConnector {
       }))
 
       return { traders, total_available: traders.length, window, fetched_at: new Date().toISOString() }
-    } catch {
+    } catch (err) {
+    console.error(`[blofin] discoverLeaderboard error: ${err instanceof Error ? err.message : String(err)}`)
       return { traders: [], total_available: 0, window, fetched_at: new Date().toISOString() }
     }
   }
@@ -121,7 +122,7 @@ export class BlofinFuturesConnector extends BaseConnector {
         },
       }
       return { profile, fetched_at: new Date().toISOString() }
-    } catch {
+    } catch (err) {
       return null
     }
   }
@@ -172,7 +173,7 @@ export class BlofinFuturesConnector extends BaseConnector {
       }
 
       return { metrics, quality_flags, fetched_at: new Date().toISOString() }
-    } catch {
+    } catch (err) {
       return null
     }
   }
