@@ -105,7 +105,7 @@ export default function FearGreedGauge() {
   const label = getLabel(displayValue)
 
   // Dashboard arc geometry
-  const cx = 120, cy = 100, r = 80
+  const cx = 120, cy = 95, r = 70
   const startAngle = 135  // bottom-left
   const endAngle = 405    // bottom-right (135 + 270)
   const totalArc = endAngle - startAngle // 270 degrees
@@ -138,7 +138,7 @@ export default function FearGreedGauge() {
 
   // Needle endpoint
   const needleAngle = toRad(progressAngle)
-  const needleLen = r - 20
+  const needleLen = r - 16
   const nx = cx + needleLen * Math.cos(needleAngle)
   const ny = cy + needleLen * Math.sin(needleAngle)
 
@@ -148,7 +148,7 @@ export default function FearGreedGauge() {
       display: 'flex',
       flexDirection: 'column',
       position: 'relative',
-      overflow: 'hidden',
+      overflow: 'visible',
     }}>
       {/* Title */}
       <div style={{
@@ -175,7 +175,7 @@ export default function FearGreedGauge() {
 
       {/* Dashboard Gauge */}
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
-        <svg width="240" height="160" viewBox="0 0 240 160" style={{ overflow: 'visible' }}>
+        <svg width="240" height="150" viewBox="0 0 240 150" style={{ overflow: 'visible' }}>
           <defs>
             <linearGradient id="fgGradient" x1="0%" y1="0%" x2="100%" y2="0%">
               <stop offset="0%" stopColor="#ea3943" />
@@ -245,9 +245,9 @@ export default function FearGreedGauge() {
           {/* Tick marks + labels */}
           {ticks.map(val => {
             const angle = toRad(startAngle + (val / 100) * totalArc)
-            const innerR = r - 10
-            const outerR = r + 10
-            const labelR = r + 22
+            const innerR = r - 8
+            const outerR = r + 8
+            const labelR = r + 18
             const x1 = cx + innerR * Math.cos(angle)
             const y1 = cy + innerR * Math.sin(angle)
             const x2 = cx + outerR * Math.cos(angle)
@@ -291,11 +291,11 @@ export default function FearGreedGauge() {
 
           {/* Center value */}
           <text
-            x={cx} y={cy + 28}
+            x={cx} y={cy + 24}
             textAnchor="middle"
             dominantBaseline="middle"
             fill={color}
-            fontSize="32"
+            fontSize="28"
             fontWeight="800"
             fontFamily="var(--font-mono, monospace)"
             letterSpacing="-1.5"
@@ -306,11 +306,11 @@ export default function FearGreedGauge() {
 
           {/* Label below value */}
           <text
-            x={cx} y={cy + 48}
+            x={cx} y={cy + 42}
             textAnchor="middle"
             dominantBaseline="middle"
             fill={color}
-            fontSize="12"
+            fontSize="11"
             fontWeight="600"
             letterSpacing="1"
             textDecoration="none"
