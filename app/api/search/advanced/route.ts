@@ -26,6 +26,7 @@ import { createClient } from '@supabase/supabase-js'
 import { checkRateLimit, RateLimitPresets } from '@/lib/utils/rate-limit'
 import { createLogger } from '@/lib/utils/logger'
 import { escapeLikePattern } from '@/lib/sanitize'
+import { features } from '@/lib/features'
 
 const logger = createLogger('search-advanced')
 
@@ -367,11 +368,12 @@ export async function GET(req: NextRequest) {
       results.results.traders = await searchTraders(supabase, query, filters, limit)
     }
 
-    if (type === 'all' || type === 'posts') {
+    // Skip social content (posts, users) when social feature is disabled
+    if ((type === 'all' || type === 'posts') && features.social) {
       results.results.posts = await searchPosts(supabase, query, { timeRange, sortBy }, limit)
     }
 
-    if (type === 'all' || type === 'users') {
+    if ((type === 'all' || type === 'users') && features.social) {
       results.results.users = await searchUsers(supabase, query, limit)
     }
 

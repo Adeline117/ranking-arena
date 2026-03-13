@@ -13,6 +13,7 @@ import ErrorState from '@/app/components/ui/ErrorState'
 import EmptyState from '@/app/components/ui/EmptyState'
 import { logger } from '@/lib/logger'
 import type { UnifiedSearchResponse } from '@/app/api/search/route'
+import { features } from '@/lib/features'
 
 interface SearchResult {
   type: 'library' | 'group' | 'post' | 'trader'
@@ -394,9 +395,9 @@ function SearchContent() {
             {[
               { key: 'all', label: t('searchTabAll'), count: libTotal + groupTotal + postTotal + traderTotal },
               { key: 'traders', label: t('traders'), count: traderTotal },
-              { key: 'posts', label: t('searchTabPosts'), count: postTotal },
+              ...(features.social ? [{ key: 'posts', label: t('searchTabPosts'), count: postTotal }] : []),
               { key: 'library', label: t('library'), count: libTotal },
-              { key: 'groups', label: t('groups'), count: groupTotal },
+              ...(features.social ? [{ key: 'groups', label: t('groups'), count: groupTotal }] : []),
             ].filter(tab => tab.key === 'all' || tab.count > 0).map(tab => (
               <Link
                 key={tab.key}
@@ -596,12 +597,12 @@ function SearchContent() {
               libraryResults, libTotal, 'library',
               'L', tokens.colors.accent.brand, tokens.colors.accent.brandMuted || 'var(--color-accent-primary-15)',
             )}
-            {(activeTab === 'all' || activeTab === 'groups') && renderSection(
+            {features.social && (activeTab === 'all' || activeTab === 'groups') && renderSection(
               t('groups'),
               groupResults, groupTotal, 'groups',
               'G', tokens.colors.accent.warning || 'var(--color-score-average)', 'var(--color-orange-subtle)',
             )}
-            {(activeTab === 'all' || activeTab === 'posts') && renderSection(
+            {features.social && (activeTab === 'all' || activeTab === 'posts') && renderSection(
               t('searchPostsSection'),
               postResults, postTotal, 'posts',
               'P', tokens.colors.accent.primary, tokens.gradient.primarySubtle || 'var(--color-indigo-subtle)',

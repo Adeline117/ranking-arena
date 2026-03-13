@@ -11,6 +11,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { checkRateLimit, RateLimitPresets } from '@/lib/utils/rate-limit'
 import { createLogger } from '@/lib/utils/logger'
+import { features } from '@/lib/features'
 
 const logger = createLogger('search-recommend')
 
@@ -267,8 +268,12 @@ export async function GET(req: NextRequest) {
 
     if (type === 'all' || type === 'trending') {
       const trendingTraders = await getTrendingTraders(supabase, limit)
-      const trendingPosts = await getTrendingPosts(supabase, limit)
-      recommendations.push(...trendingTraders, ...trendingPosts)
+      recommendations.push(...trendingTraders)
+      // Only include social content (posts) when social feature is enabled
+      if (features.social) {
+        const trendingPosts = await getTrendingPosts(supabase, limit)
+        recommendations.push(...trendingPosts)
+      }
     }
 
     if (type === 'similar' && basedOn) {
@@ -296,7 +301,8 @@ export async function GET(req: NextRequest) {
       }
     }
 
-    if (type === 'all' || type === 'following') {
+    // Only include social content (following posts) when social feature is enabled
+    if ((type === 'all' || type === 'following') && features.social) {
       if (userId) {
         const followingPosts = await getFollowingPosts(supabase, userId, limit)
         recommendations.push(...followingPosts)

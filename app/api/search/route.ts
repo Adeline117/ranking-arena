@@ -8,6 +8,7 @@ import { success } from '@/lib/api/response'
 import { get as cacheGet, set as cacheSet } from '@/lib/cache'
 import { fireAndForget } from '@/lib/utils/logger'
 import { DEAD_BLOCKED_PLATFORMS } from '@/lib/constants/exchanges'
+import { features } from '@/lib/features'
 
 export const dynamic = 'force-dynamic'
 
@@ -102,12 +103,15 @@ export const GET = withPublic(
         .limit(traderFetchLimit))
         .then(results => results.filter(t => !deadSet.has(t.source))),
 
-      safeQuery(supabase
-        .from('posts')
-        .select('id, title, author_handle, created_at, view_count')
-        .or(`title.ilike.%${sanitizedQuery}%`)
-        .order('view_count', { ascending: false, nullsFirst: false })
-        .limit(limitPerCategory)),
+      // Skip social content queries when social feature is disabled
+      features.social
+        ? safeQuery(supabase
+            .from('posts')
+            .select('id, title, author_handle, created_at, view_count')
+            .or(`title.ilike.%${sanitizedQuery}%`)
+            .order('view_count', { ascending: false, nullsFirst: false })
+            .limit(limitPerCategory))
+        : Promise.resolve([]),
 
       safeQuery(supabase
         .from('library_items')
@@ -117,19 +121,23 @@ export const GET = withPublic(
         )
         .limit(limitPerCategory)),
 
-      safeQuery(supabase
-        .from('user_profiles')
-        .select('id, handle, display_name, avatar_url, bio')
-        .or(
-          `handle.ilike.%${sanitizedQuery}%,display_name.ilike.%${sanitizedQuery}%,bio.ilike.%${sanitizedQuery}%`
-        )
-        .limit(limitPerCategory)),
+      features.social
+        ? safeQuery(supabase
+            .from('user_profiles')
+            .select('id, handle, display_name, avatar_url, bio')
+            .or(
+              `handle.ilike.%${sanitizedQuery}%,display_name.ilike.%${sanitizedQuery}%,bio.ilike.%${sanitizedQuery}%`
+            )
+            .limit(limitPerCategory))
+        : Promise.resolve([]),
 
-      safeQuery(supabase
-        .from('groups')
-        .select('id, name, member_count, description')
-        .ilike('name', `%${sanitizedQuery}%`)
-        .limit(limitPerCategory)),
+      features.social
+        ? safeQuery(supabase
+            .from('groups')
+            .select('id, name, member_count, description')
+            .ilike('name', `%${sanitizedQuery}%`)
+            .limit(limitPerCategory))
+        : Promise.resolve([]),
     ])
 
     const sourceLabels: Record<string, string> = {
