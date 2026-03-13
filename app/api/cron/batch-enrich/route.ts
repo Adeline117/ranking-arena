@@ -18,7 +18,8 @@ export const dynamic = 'force-dynamic'
 export const maxDuration = 600 // Vercel Pro max: 10 minutes (was 300s)
 
 // Platform configs with limits per period
-// INCREASED LIMITS FOR ONCHAIN PLATFORMS (2026-03-11)
+// EMERGENCY REDUCTION (2026-03-13): batch-enrich-30D/7D/90D hitting 600s timeout
+// Onchain platforms reduced from 150/120/100 to 50/40/30 to fit in 600s budget
 const PLATFORM_LIMITS: Record<string, { limit90: number; limit30: number; limit7: number }> = {
   binance_futures: { limit90: 200, limit30: 150, limit7: 100 },
   binance_spot: { limit90: 100, limit30: 80, limit7: 50 },
@@ -26,18 +27,18 @@ const PLATFORM_LIMITS: Record<string, { limit90: number; limit30: number; limit7
   okx_futures: { limit90: 80, limit30: 80, limit7: 60 },
   bitget_futures: { limit90: 60, limit30: 60, limit7: 50 },
   // bitget_spot removed: no public API exists (all endpoints 404)
-  // ONCHAIN PLATFORMS: Optimized for 600s timeout budget (2026-03-12)
-  hyperliquid: { limit90: 150, limit30: 120, limit7: 100 },
-  gmx: { limit90: 150, limit30: 120, limit7: 100 },
+  // ONCHAIN PLATFORMS: Emergency reduction to prevent 600s timeout (2026-03-13)
+  hyperliquid: { limit90: 50, limit30: 40, limit7: 30 },
+  gmx: { limit90: 50, limit30: 40, limit7: 30 },
   htx_futures: { limit90: 40, limit30: 40, limit7: 30 },
   gateio: { limit90: 60, limit30: 50, limit7: 40 },
   mexc: { limit90: 60, limit30: 50, limit7: 40 },
-  drift: { limit90: 150, limit30: 120, limit7: 100 },
-  dydx: { limit90: 80, limit30: 60, limit7: 50 }, // REDUCED 2026-03-13: was timing out at 360s with higher limits
-  aevo: { limit90: 150, limit30: 120, limit7: 100 },
-  gains: { limit90: 150, limit30: 120, limit7: 100 },
+  drift: { limit90: 50, limit30: 40, limit7: 30 },
+  dydx: { limit90: 50, limit30: 40, limit7: 30 }, // EMERGENCY REDUCTION 2026-03-13
+  aevo: { limit90: 50, limit30: 40, limit7: 30 },
+  gains: { limit90: 50, limit30: 40, limit7: 30 },
   // kwenta removed: Copin API stopped serving Kwenta data (2026-03-11)
-  jupiter_perps: { limit90: 150, limit30: 120, limit7: 100 },
+  jupiter_perps: { limit90: 50, limit30: 40, limit7: 30 },
 }
 
 // High priority platforms (always enriched)
@@ -110,14 +111,12 @@ export async function GET(request: NextRequest) {
   }, SAFETY_TIMEOUT_MS)
 
   // Per-platform enrichment timeout
-  // Onchain platforms (gmx/dydx/jupiter_perps/hyperliquid/drift) need 360s+ for chain data
-  // CEX platforms typically complete in <180s
-  // With 570s total budget and BATCH_CONCURRENCY=5:
-  //   - Worst case: 3 batches × 360s = 1080s theoretical
-  //   - Real time: batches run in parallel, slowest platform per batch (~360s) < 570s ✅
+  // EMERGENCY REDUCTION (2026-03-13): All platforms hitting 600s timeout
+  // Reduced from 360s to 180s for onchain, 240s to 120s for CEX
+  // With reduced batch sizes (50/40/30), 180s should be sufficient
   const ONCHAIN_PLATFORMS = new Set(['gmx', 'dydx', 'jupiter_perps', 'hyperliquid', 'drift', 'aevo', 'gains'])
-  const ENRICH_TIMEOUT_MS = periodsToRun.length > 1 ? 90_000 : 240_000
-  const ONCHAIN_TIMEOUT_MS = periodsToRun.length > 1 ? 120_000 : 360_000
+  const ENRICH_TIMEOUT_MS = periodsToRun.length > 1 ? 60_000 : 120_000
+  const ONCHAIN_TIMEOUT_MS = periodsToRun.length > 1 ? 90_000 : 180_000
 
   const functionStart = Date.now()
   // Budget per period: divide 570s (leaving 30s buffer from 600s total) by number of periods
@@ -134,9 +133,9 @@ export async function GET(request: NextRequest) {
 
     const periodStart = Date.now()
 
-    // Run enrichments inline in parallel batches of 5
-    // With 9 platforms: 2 batches × ~120s = ~240s (within 270s budget)
-    const BATCH_CONCURRENCY = 5
+    // Run enrichments inline in parallel batches of 7 (increased from 5 to reduce total time)
+    // EMERGENCY INCREASE (2026-03-13): With 12 platforms, 7 concurrent = 2 batches × ~120s = ~240s
+    const BATCH_CONCURRENCY = 7
     for (let i = 0; i < platforms.length; i += BATCH_CONCURRENCY) {
       // Check per-period budget before starting next batch
       if (Date.now() - periodStart > PER_PERIOD_BUDGET_MS) {
