@@ -33,15 +33,15 @@ const PLATFORM_LIMITS: Record<string, { limit90: number; limit30: number; limit7
   // bitget_spot removed: no public API exists (all endpoints 404)
   // ONCHAIN PLATFORMS: AGGRESSIVE REDUCTION Round 4 (2026-03-13 09:00)
   // 30D/7D still timing out - matched 90D and more aggressive 7D
-  hyperliquid: { limit90: 20, limit30: 20, limit7: 10 }, // 30D: 25→20 (match 90D), 7D: 15→10
+  hyperliquid: { limit90: 50, limit30: 40, limit7: 20 }, // Increased: HL API is fast, no rate limit
   gmx: { limit90: 20, limit30: 20, limit7: 10 }, // 30D: 25→20 (match 90D), 7D: 15→10
   htx_futures: { limit90: 25, limit30: 25, limit7: 15 }, // 30D: 30→25 (match 90D), 7D: 20→15
   gateio: { limit90: 30, limit30: 30, limit7: 20 }, // 30D: 35→30 (match 90D), 7D: 25→20
   mexc: { limit90: 30, limit30: 30, limit7: 20 }, // 30D: 35→30 (match 90D), 7D: 25→20
-  drift: { limit90: 20, limit30: 20, limit7: 10 }, // 30D: 25→20 (match 90D), 7D: 15→10
-  dydx: { limit90: 20, limit30: 20, limit7: 10 }, // 30D: 25→20 (match 90D), 7D: 15→10
-  aevo: { limit90: 20, limit30: 20, limit7: 10 }, // 30D: 25→20 (match 90D), 7D: 15→10
-  gains: { limit90: 20, limit30: 20, limit7: 10 }, // 30D: 25→20 (match 90D), 7D: 15→10
+  drift: { limit90: 30, limit30: 25, limit7: 15 }, // Increased: public API, fast
+  dydx: { limit90: 30, limit30: 25, limit7: 15 }, // Increased: public API
+  aevo: { limit90: 30, limit30: 25, limit7: 15 }, // Increased: public API
+  gains: { limit90: 30, limit30: 25, limit7: 15 }, // Increased: public API, computes MDD
   // kwenta removed: Copin API stopped serving Kwenta data (2026-03-11)
   jupiter_perps: { limit90: 20, limit30: 20, limit7: 10 }, // 30D: 25→20 (match 90D), 7D: 15→10
 }
