@@ -487,7 +487,7 @@ function RankingTableInner(props: {
           <SortIndicator active={sortColumn === 'score'} dir={sortDir} />
         </Box>
         <Box className={`roi-cell sort-header sort-header-end${sortColumn === 'roi' ? ' sort-header-active' : ''} ${justSortedColumn === 'roi' ? 'just-sorted' : ''}`} as="button" onClick={() => handleSort('roi')} title={t('roiTooltip').replace('{range}', timeRange)} aria-sort={sortColumn === 'roi' ? (sortDir === 'asc' ? 'ascending' : 'descending') : 'none'} data-sortable>
-          {t('roi')} <SortIndicator active={sortColumn === 'roi'} dir={sortDir} />
+          {t('roi')} ({timeRange}) <SortIndicator active={sortColumn === 'roi'} dir={sortDir} />
         </Box>
         <Box className={`col-winrate sort-header sort-header-end${sortColumn === 'winrate' ? ' sort-header-active' : ''} ${justSortedColumn === 'winrate' ? 'just-sorted' : ''}`} as="button" onClick={() => handleSort('winrate')} title={t('winRateTooltip')} aria-sort={sortColumn === 'winrate' ? (sortDir === 'asc' ? 'ascending' : 'descending') : 'none'} data-sortable>
           {t('winRateShort')} <SortIndicator active={sortColumn === 'winrate'} dir={sortDir} />
