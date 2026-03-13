@@ -95,10 +95,15 @@ export async function writeDiscoverResult(
       const sharpeRatio = safeNum(normalized.sharpe_ratio)
       const rank = safeInt(normalized.platform_rank ?? normalized.rank)
 
-      // Calculate Arena Score if ROI is available
+      // Calculate Arena Score: use ROI if available, PnL-only fallback otherwise
       let arenaScore: number | null = null
-      if (calculateScore && roi != null) {
-        arenaScore = calculateArenaScore(roi, pnl, maxDrawdown, winRate, window)
+      if (calculateScore) {
+        if (roi != null) {
+          arenaScore = calculateArenaScore(roi, pnl, maxDrawdown, winRate, window)
+        } else if (pnl != null && pnl > 0) {
+          // PnL-only score (max 40 points) — better than null
+          arenaScore = calculateArenaScore(0, pnl, maxDrawdown, winRate, window)
+        }
       }
 
       const traderData: TraderData = {
