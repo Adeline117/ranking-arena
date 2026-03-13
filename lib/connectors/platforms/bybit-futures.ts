@@ -57,7 +57,9 @@ export class BybitFuturesConnector extends BaseConnector {
     )
     const data = warnValidate(BybitFuturesLeaderboardResponseSchema, _rawLb, 'bybit-futures/leaderboard')
 
-    const list = data?.result?.data || []
+    // Support both old API format (result.data) and VPS scraper format (result.leaderDetails)
+    const rawList = data?.result?.data || data?.result?.leaderDetails || []
+    const list = Array.isArray(rawList) ? rawList : []
 
     const traders: TraderSource[] = list.map((item: Record<string, unknown>) => ({
       platform: 'bybit' as const,
@@ -200,16 +202,35 @@ export class BybitFuturesConnector extends BaseConnector {
   }
 
   normalize(raw: Record<string, unknown>): Record<string, unknown> {
+    // Parse metricValues array from VPS scraper (bybitglobal.com format)
+    // [0]=ROI, [1]=Drawdown, [2]=FollowerProfit, [3]=WinRate, [4]=ProfitLossRatio, [5]=SharpeRatio
+    const mv = Array.isArray(raw.metricValues) ? raw.metricValues as string[] : null
+
+    const roi = this.parseNumber(raw.roi) ?? this.parsePercent(mv?.[0])
+    const maxDrawdown = this.parseNumber(raw.maxDrawdown) ?? this.parsePercent(mv?.[1])
+    const winRate = this.parseNumber(raw.winRate) ?? this.parsePercent(mv?.[3])
+    const sharpeRatio = this.parseNumber(raw.sharpeRatio) ?? this.parsePercent(mv?.[5])
+
     return {
-      trader_key: raw.leaderMark,
+      trader_key: raw.leaderMark || raw.leaderUserId,
       display_name: raw.nickName,
-      roi: this.parseNumber(raw.roi),
-      pnl: this.parseNumber(raw.pnl),
-      win_rate: this.parseNumber(raw.winRate),
-      max_drawdown: this.parseNumber(raw.maxDrawdown),
-      followers: raw.followerCount,
-      copiers: raw.currentFollowerCount,
+      roi,
+      pnl: this.parseNumber(raw.pnl), // Only available from detail endpoint, NULL from leaderboard
+      win_rate: winRate,
+      max_drawdown: maxDrawdown,
+      sharpe_ratio: sharpeRatio,
+      followers: this.parseNumber(raw.followerCount) ?? this.parseNumber(raw.maxFollowerCount),
+      copiers: this.parseNumber(raw.currentFollowerCount),
     }
+  }
+
+  /** Parse "+1044.26%" or "34.66%" to number */
+  private parsePercent(val: string | undefined | null): number | null {
+    if (!val) return null
+    const cleaned = val.replace(/[+%]/g, '').trim()
+    if (!cleaned || cleaned === '--') return null
+    const num = Number(cleaned)
+    return isNaN(num) ? null : num
   }
 
   private parseNumber(val: unknown): number | null {

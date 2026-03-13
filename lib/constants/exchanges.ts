@@ -139,24 +139,23 @@ export const DEAD_BLOCKED_PLATFORMS: TraderSource[] = [
   'weex',         // Copy-trade API returning 521 (origin down) since 2026-03
   'perpetual_protocol', // TheGraph subgraph returns empty data since 2026-03
   'kucoin',       // Copy trading feature removed — all APIs 404, page empty shell since 2026-03
-  // Recoverable via Mac Mini Puppeteer scrapers (scripts/openclaw/fetch-*.mjs)
-  'lbank',        // fetch-lbank.mjs — browser intercepts uuapi session API
-  // blofin: RECOVERED — Mac Mini fetch-blofin.mjs uses /uapi/v1/copy/v2/trader/list (600 traders)
+  // RECOVERED 2026-03-13 — data flowing via VPS/Mac Mini, removed from DEAD:
+  // 'lbank' — VPS scraper /lbank/leaderboard working (42 traders)
+  // 'phemex' — Mac Mini Chrome scraper working (183 traders)
+  // 'blofin' — VPS/Mac Mini working (429 traders)
   // Recoverable via credentials (set env vars to activate)
-  'bitget_spot',  // Set BITGET_API_KEY/SECRET/PASSPHRASE for broker API
-  // Working via Mac Mini — excluded from Vercel pipeline alerts
-  'phemex',       // fetch-phemex.mjs (confirmed working, every 6h)
+  'bitget_spot',  // Set BITGET_API_KEY/SECRET/PASSPHRASE for broker API — API 404 confirmed 2026-03-13
+  // Bybit: data flows via BybitAdapter (api.bybit.com v5 + HMAC auth) and VPS scraper
+  // Removed from cron groups but fetch-bybit-traders route exists — needs BYBIT_API_KEY env var
   // Stale data via Copin — re-enabled in fetchers with graceful fallback
   'mux',          // TheGraph needs THEGRAPH_API_KEY, Copin has 0 traders
   'synthetix',    // Copin returns only 9 stale traders (1 trade each), TheGraph needs API key
-  // toobit: re-enabled with VPS Playwright scraper (2026-03-09)
-  'paradex',      // API now requires JWT auth (was public, changed ~2026-03)
+  'paradex',      // API requires JWT auth — markets endpoint public, leaderboard requires auth
   'kwenta',       // Copin API stopped serving Kwenta data (returned 1000+ traders on 2026-03-09, now returns 0)
-  'blofin',       // openapi.blofin.com requires authentication (401), VPS scraper endpoint missing
-  'okx_spot',     // OKX copy-trading API only supports instType=SWAP, no spot leaderboard
-  'bitmart',      // gw-api/copytrade-streamer returns "service not open" (all IPs), SPA doesn't render
-  'whitebit' as TraderSource,     // No copy-trading feature or API exists
-  'btse' as TraderSource,         // Leaderboard behind internal auth, no public endpoints
+  'okx_spot',     // OKX copy-trading API only supports instType=SWAP — confirmed 2026-03-13
+  'bitmart',      // Cloudflare challenge (403) on all endpoints — confirmed 2026-03-13
+  'whitebit' as TraderSource,     // No copy-trading feature or API — route 404 confirmed 2026-03-13
+  'btse' as TraderSource,         // Leaderboard API 404 — confirmed 2026-03-13
   // Removed from enrichment — no API support or enrichment capability (2026-03-13)
   'bybit',        // api2.bybit.com endpoints return 404 globally (2026-03-10)
   'bybit_spot',   // api2.bybit.com endpoints return 404 globally (2026-03-10)
