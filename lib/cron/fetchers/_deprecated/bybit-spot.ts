@@ -3,8 +3,8 @@
  * API: https://api2.bybit.com/fapi/beehive/public/v1/common/dynamic-leader-list
  *
  * Same beehive API as Bybit futures, labelled as bybit_spot.
- * metricValues: [ROI, Drawdown, followerProfit, WinRate, PLRatio, SharpeRatio]
- * NOTE: mv[2] is followerProfit (copier PnL), NOT trader PnL. Set pnl=null.
+ * metricValues: [ROI, TodayROI, TotalPnL, WinRate, PLRatio, SharpeRatio]
+ * mv[2] IS trader Total PnL in USDT (verified 2026-03-13).
  *
  * Uses api2.bybit.com to bypass Akamai WAF on www.bybit.com.
  */
@@ -206,9 +206,10 @@ async function fetchPeriod(
     const roi = parsePercent(mv[0])
     if (roi == null || roi === 0) continue
 
-    const maxDrawdown = parsePercent(mv[1])
-    // mv[2] is followerProfit (copier PnL), NOT trader PnL — set null to avoid wrong data
-    const pnl = null
+    // mv[1] is Today's ROI, NOT max drawdown (corrected 2026-03-13)
+    const maxDrawdown = null // MDD not available from Bybit leaderboard API
+    // mv[2] IS trader Total PnL in USDT (verified from live API)
+    const pnl = mv[2] != null ? parseFloat(String(mv[2]).replace(/[+,%]/g, '')) || null : null
     const winRate = normalizeWinRate(parsePercent(mv[3]), getWinRateFormat(SOURCE))
     const followers = parseInt(String(item.currentFollowerCount || '0'), 10) || null
 

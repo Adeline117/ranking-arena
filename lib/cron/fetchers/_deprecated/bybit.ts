@@ -2,8 +2,8 @@
  * Bybit Copy Trading — Inline fetcher for Vercel serverless
  * API: https://api2.bybit.com/fapi/beehive/public/v1/common/dynamic-leader-list
  *
- * metricValues: [ROI, Drawdown, followerProfit, WinRate, PLRatio, SharpeRatio]
- * NOTE: mv[2] is followerProfit (copier PnL), NOT trader PnL. Set pnl=null.
+ * metricValues: [ROI, TodayROI, TotalPnL, WinRate, PLRatio, SharpeRatio]
+ * mv[2] IS trader Total PnL in USDT (verified 2026-03-13).
  *
  * Strategy:
  * 1. Try VPS Playwright scraper (bybitglobal.com — bypasses Akamai WAF)
@@ -285,13 +285,14 @@ async function fetchPeriod(
 
   for (const [id, item] of Array.from(allTraders)) {
     const mv = item.metricValues || []
-    // metricValues: [ROI, Drawdown, followerProfit, WinRate, PLRatio, SharpeRatio]
-    // NOTE: mv[2] is followerProfit (copier PnL), NOT trader PnL — set null
+    // metricValues: [ROI, TodayROI, TotalPnL, WinRate, PLRatio, SharpeRatio]
+    // mv[2] IS trader Total PnL in USDT (verified from live Bybit API 2026-03-13)
     const roi = parsePercent(mv[0])
     if (roi == null || roi === 0) continue
 
-    const maxDrawdown = parsePercent(mv[1])
-    const pnl = null // mv[2] is followerProfit, not trader PnL
+    // mv[1] is Today's ROI, NOT max drawdown (corrected 2026-03-13)
+    const maxDrawdown = null // MDD not available from Bybit leaderboard API
+    const pnl = mv[2] != null ? parseFloat(String(mv[2]).replace(/[+,%]/g, '')) || null : null
     const winRate = normalizeWinRate(parsePercent(mv[3]), getWinRateFormat(SOURCE))
     // mv[4] = PLRatio (盈亏比)
     const sharpeRatio = parsePercent(mv[5]) // Phase 1: 提取 Sharpe Ratio
