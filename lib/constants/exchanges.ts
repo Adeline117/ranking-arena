@@ -136,24 +136,27 @@ export const ALL_SOURCES: TraderSource[] = [
 
 export const DEAD_BLOCKED_PLATFORMS: TraderSource[] = [
   // ═══════════════════════════════════════════════════════════════
-  // PERMANENTLY DEAD — exchange shut down or feature removed
+  // PERMANENTLY DEAD — exchange shut down, feature removed, or no data behind page
   // ═══════════════════════════════════════════════════════════════
-  'perpetual_protocol', // Domain 404, app down, Binance delisted PERP — confirmed dead 2026-03-13
+  'perpetual_protocol', // Domain 404, app down, Binance delisted PERP — confirmed 2026-03-13
   'whitebit' as TraderSource, // No copy-trading feature or API — confirmed 2026-03-13
+  'bitmart',      // CF 403 on API, Playwright found zero API calls — confirmed dead 2026-03-13
+  'btse' as TraderSource, // SPA page 200 but zero API calls intercepted — no real data 2026-03-13
 
   // ═══════════════════════════════════════════════════════════════
-  // BLOCKED — API inaccessible, needs Playwright scraper on VPS
-  // Websites are live, copy-trading pages exist, but APIs are blocked
+  // MAC MINI ONLY — geo-blocked from VPS, needs residential IP
+  // Data confirmed visible on user's browser, Mac Mini scripts deployed
   // ═══════════════════════════════════════════════════════════════
-  'kucoin',       // /copytrading page exists (SPA) but all APIs 404 — needs Playwright handler
-  'weex',         // weex.com alive (200), copy-trade page exists, API 521 from Vercel — needs Playwright
-  'kwenta',       // kwenta.eth.limo works, API suspended (503) — needs Playwright
-  'bitmart',      // Website alive, Cloudflare 403 on all API endpoints — needs Playwright
-  'btse' as TraderSource, // copy-trading page 200, all API endpoints 404 — needs Playwright
+  // 'phemex' — RECOVERED: Mac Mini fetch-phemex.mjs (183 traders)
+  // 'lbank' — RECOVERED: VPS scraper working (42 traders)
+  // 'blofin' — RECOVERED: VPS/Mac Mini working (429 traders)
+  'kucoin',       // Mac Mini fetch-kucoin-v2.mjs — trader data visible on browser, VPS geo-blocked
+  'weex',         // Mac Mini fetch-weex.mjs — trader data visible on browser, VPS geo-blocked + API 521
 
   // ═══════════════════════════════════════════════════════════════
   // BLOCKED — needs API key or credentials to unlock
   // ═══════════════════════════════════════════════════════════════
+  'kwenta',       // kwenta.eth.limo works, API suspended (503), needs Playwright or Graph API key
   'mux',          // app.mux.network alive, TheGraph subgraph needs THEGRAPH_API_KEY
   'synthetix',    // Copin 0 traders, TheGraph subgraph needs THEGRAPH_API_KEY
   'paradex',      // /v1/markets public, /v1/leaderboard needs JWT auth (Starknet wallet)
@@ -162,6 +165,7 @@ export const DEAD_BLOCKED_PLATFORMS: TraderSource[] = [
   // STRUCTURAL — API limitation, not a bug
   // ═══════════════════════════════════════════════════════════════
   'okx_spot',     // OKX API only supports instType=SWAP — no spot leaderboard possible
+  'bitget_spot',  // Bitget Spot Copy API 404 — awaiting confirmation
 ]
 
 // ---------------------------------------------------------------------------
