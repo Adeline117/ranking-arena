@@ -4,6 +4,10 @@ import { getSupabaseAdmin } from '@/lib/supabase/server'
 import { JsonLd } from '@/app/components/Providers/JsonLd'
 import { EXCHANGE_CONFIG } from '@/lib/constants/exchanges'
 import TraderProfileClient, { type UnregisteredTraderData } from './TraderProfileClient'
+import { findTraderSource, TRADER_SOURCES, type SourceType } from '@/app/api/traders/[handle]/trader-queries'
+import type { TraderSource } from '@/app/api/traders/[handle]/trader-types'
+import { getTraderDetails, getTraderDetailsFromSnapshots } from '@/app/api/traders/[handle]/trader-transforms'
+import { createClient } from '@supabase/supabase-js'
 
 // Derive display names from central config
 const EXCHANGE_DISPLAY: Record<string, string> = Object.fromEntries(
@@ -246,20 +250,40 @@ export default async function TraderPage({ params }: { params: Promise<{ handle:
 
   // 2. 展示未注册交易员数据
   if (traderData) {
-    // Fetch full trader data from API (performance, stats, portfolio, equity curve, etc.)
+    // Fetch full trader data INLINE (no HTTP call — avoids Cloudflare 524 timeout)
     let serverTraderData = null
     try {
-      const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'
-      const sourceParam = traderData.source ? `?source=${encodeURIComponent(traderData.source)}` : ''
-      const res = await fetch(
-        `${baseUrl}/api/traders/${encodeURIComponent(traderData.source_trader_id || traderData.handle)}${sourceParam}`,
-        { next: { revalidate: 60 } }
-      )
-      if (res.ok) {
-        serverTraderData = await res.json()
+      const supabaseUrl = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL || ''
+      const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || ''
+      if (supabaseUrl && supabaseKey) {
+        const sb = createClient(supabaseUrl, supabaseKey)
+        // Find trader source
+        let found: { source: TraderSource; sourceType: SourceType } | null = null
+        if (traderData.source && TRADER_SOURCES.includes(traderData.source as SourceType)) {
+          const { data: byId } = await sb
+            .from('trader_sources')
+            .select('source_trader_id, handle, profile_url, avatar_url, market_type')
+            .eq('source', traderData.source)
+            .eq('source_trader_id', traderData.source_trader_id)
+            .limit(1)
+            .maybeSingle()
+          if (byId) {
+            found = { source: byId as TraderSource, sourceType: traderData.source as SourceType }
+          }
+        }
+        if (!found) {
+          found = await findTraderSource(sb, traderData.source_trader_id || traderData.handle)
+        }
+        if (found) {
+          try {
+            serverTraderData = await getTraderDetails(sb, found.source, found.sourceType)
+          } catch {
+            serverTraderData = await getTraderDetailsFromSnapshots(sb, found.source.source_trader_id, found.sourceType)
+          }
+        }
       }
     } catch {
-      // API fetch failed — client will retry via SWR
+      // Inline fetch failed — client will retry via SWR
     }
 
     // JSON-LD structured data for this trader
@@ -289,7 +313,8 @@ export default async function TraderPage({ params }: { params: Promise<{ handle:
     return (
       <>
         <JsonLd data={jsonLd} />
-        <TraderProfileClient data={traderData} serverTraderData={serverTraderData} />
+        {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
+        <TraderProfileClient data={traderData} serverTraderData={serverTraderData as any} />
       </>
     )
   }

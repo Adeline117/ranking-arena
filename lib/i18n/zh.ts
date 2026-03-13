@@ -58,7 +58,7 @@ const zh = {
     userCenter: '用户中心',
     multiChain: '多链资产',
     notifications: '通知',
-    searchPlaceholder: '搜索交易员、帖子、小组...',
+    searchPlaceholder: '搜索交易员、交易所、工具...',
     rank: '排名',
     trader: '交易员',
     roi90d: 'ROI (90D)',

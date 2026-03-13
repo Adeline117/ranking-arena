@@ -58,7 +58,7 @@ const ja = {
     userCenter: 'ユーザーセンター',
     multiChain: 'マルチチェーン',
     notifications: '通知',
-    searchPlaceholder: 'トレーダー、投稿、グループを検索...',
+    searchPlaceholder: 'トレーダー、取引所、ツールを検索...',
     rank: '順位',
     trader: 'トレーダー',
     roi90d: 'ROI (90日)',
