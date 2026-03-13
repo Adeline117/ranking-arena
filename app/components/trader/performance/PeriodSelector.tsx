@@ -1,0 +1,134 @@
+'use client'
+
+import { tokens } from '@/lib/design-tokens'
+import { Box, Text } from '../../base'
+import { useLanguage } from '../../Providers/LanguageProvider'
+
+export type Period = '7D' | '30D' | '90D'
+
+// Data source period mapping notes
+export const DATA_SOURCE_NOTES: Record<string, { titleKey: string; periods: Record<string, string> }> = {
+  weex: {
+    titleKey: 'weexDataNote',
+    periods: {
+      '7D': '--',
+      '30D': 'weexPeriod30d',
+      '90D': 'weexPeriod90d',
+    },
+  },
+}
+
+export interface PeriodSelectorProps {
+  period: Period
+  onPeriodChange: (period: Period) => void
+  source?: string
+  lastUpdated?: string
+}
+
+export function PeriodSelector({ period, onPeriodChange, source, lastUpdated }: PeriodSelectorProps) {
+  const { t, language } = useLanguage()
+
+  return (
+    <Box
+      style={{
+        display: 'flex',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        marginBottom: tokens.spacing[5],
+      }}
+    >
+      <Box style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[3] }}>
+        <Text size="lg" weight="black" style={{ color: tokens.colors.text.primary }}>
+          {t('performance')}
+        </Text>
+        {lastUpdated && (
+          <Text size="xs" color="tertiary" style={{ opacity: 0.6 }}>
+            {t('updatedAt')} {new Date(lastUpdated).toLocaleTimeString(language === 'zh' ? 'zh-CN' : 'en-US', { hour: '2-digit', minute: '2-digit' })}
+          </Text>
+        )}
+      </Box>
+
+      {/* Period Selector */}
+      <Box style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[2] }}>
+        {/* 数据来源提示 */}
+        {source && DATA_SOURCE_NOTES[source.toLowerCase()] && (
+          <Box
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 4,
+              padding: `4px 8px`,
+              background: tokens.colors.accent.warning + '15',
+              borderRadius: tokens.radius.md,
+              border: `1px solid ${tokens.colors.accent.warning}30`,
+            }}
+            title={(() => {
+              const note = DATA_SOURCE_NOTES[source.toLowerCase()]
+              const p30 = note.periods['30D'] === '--' ? '--' : t(note.periods['30D'])
+              const p90 = note.periods['90D'] === '--' ? '--' : t(note.periods['90D'])
+              return `${t(note.titleKey)}: 30D=${p30}, 90D=${p90}`
+            })()}
+          >
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke={tokens.colors.accent.warning} strokeWidth="2">
+              <circle cx="12" cy="12" r="10" />
+              <line x1="12" y1="16" x2="12" y2="12" />
+              <line x1="12" y1="8" x2="12.01" y2="8" />
+            </svg>
+            <Text size="xs" style={{ color: tokens.colors.accent.warning, fontWeight: 500 }}>
+              {(() => {
+                const pKey = DATA_SOURCE_NOTES[source.toLowerCase()].periods[period]
+                return pKey ? (pKey === '--' ? '--' : t(pKey)) : period
+              })()}
+            </Text>
+          </Box>
+        )}
+
+        <Box
+          style={{
+            display: 'flex',
+            gap: 4,
+            background: tokens.colors.bg.tertiary,
+            padding: 3,
+            borderRadius: tokens.radius.lg,
+            border: `1px solid ${tokens.colors.border.primary}`,
+          }}
+        >
+          {(['7D', '30D', '90D'] as Period[]).map((p) => {
+            const sourceNote = source && DATA_SOURCE_NOTES[source.toLowerCase()]
+            const isDisabled = !!(sourceNote && sourceNote.periods[p] === '--')
+            const label = p === '7D' ? '7D' : p === '30D' ? '30D' : '90D'
+            return (
+              <button
+                key={p}
+                onClick={() => !isDisabled && onPeriodChange(p)}
+                disabled={isDisabled}
+                style={{
+                  padding: `6px 14px`,
+                  minHeight: 44,
+                  borderRadius: tokens.radius.md,
+                  border: 'none',
+                  background: period === p ? tokens.colors.bg.primary : 'transparent',
+                  color: isDisabled
+                    ? tokens.colors.text.tertiary
+                    : period === p
+                      ? tokens.colors.text.primary
+                      : tokens.colors.text.secondary,
+                  fontSize: 13,
+                  fontWeight: period === p ? 600 : 400,
+                  cursor: isDisabled ? 'not-allowed' : 'pointer',
+                  transition: `all ${tokens.transition.base}`,
+                  fontFamily: tokens.typography.fontFamily.sans.join(', '),
+                  boxShadow: period === p ? '0 2px 8px var(--color-overlay-subtle)' : 'none',
+                  opacity: isDisabled ? 0.5 : 1,
+                }}
+                title={isDisabled ? t('noDataForPeriod') : undefined}
+              >
+                {label}
+              </button>
+            )
+          })}
+        </Box>
+      </Box>
+    </Box>
+  )
+}
