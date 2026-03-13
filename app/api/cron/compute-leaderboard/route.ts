@@ -142,6 +142,45 @@ export async function GET(request: NextRequest) {
       logger.warn('Failed to refresh leaderboard_count_cache:', cacheErr)
     }
 
+    // Sync arena_score from leaderboard_ranks → trader_snapshots_v2 flat column
+    // This ensures the v2 table has scores matching the freshly computed leaderboard
+    try {
+      const recentCutoff = new Date(Date.now() - 7 * 24 * 3600 * 1000).toISOString()
+      // Fetch recent v2 rows missing scores
+      const { data: missingScores } = await supabase
+        .from('trader_snapshots_v2')
+        .select('id, platform, trader_key, window')
+        .is('arena_score', null)
+        .gte('created_at', recentCutoff)
+        .limit(1000)
+
+      if (missingScores && missingScores.length > 0) {
+        // Batch lookup from leaderboard_ranks
+        const traderKeys = [...new Set(missingScores.map(r => r.trader_key))]
+        const { data: ranks } = await supabase
+          .from('leaderboard_ranks')
+          .select('source, trader_key, period, arena_score')
+          .in('trader_key', traderKeys.slice(0, 500))
+          .not('arena_score', 'is', null)
+
+        if (ranks && ranks.length > 0) {
+          const scoreMap = new Map(ranks.map(r => [`${r.source}:${r.trader_key}:${r.period}`, r.arena_score]))
+          let synced = 0
+          for (const row of missingScores) {
+            const key = `${row.platform}:${row.trader_key}:${row.window}`
+            const score = scoreMap.get(key)
+            if (score != null && score > 0) {
+              await supabase.from('trader_snapshots_v2').update({ arena_score: score }).eq('id', row.id)
+              synced++
+            }
+          }
+          logger.info(`Synced arena_score to v2: ${synced}/${missingScores.length} rows`)
+        }
+      }
+    } catch (syncErr) {
+      logger.warn('arena_score sync to v2 failed (non-critical):', syncErr)
+    }
+
     const totalRanked = Object.values(stats.seasons).reduce((a, b) => a + b, 0)
     if (warnings.length > 0) {
       await plog.error(new Error(warnings.join('; ')), { stats, rolledBack })
