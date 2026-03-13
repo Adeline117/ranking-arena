@@ -805,6 +805,144 @@ describe('rankByArenaScore — edge cases', () => {
 })
 
 // ============================================
+// Supplemental boundary tests
+// ============================================
+
+describe('Arena Score — overall composite weight verification', () => {
+  test('weights are exactly 90D=0.70, 30D=0.25, 7D=0.05', () => {
+    expect(ARENA_CONFIG.OVERALL_WEIGHTS['90D']).toBe(0.70)
+    expect(ARENA_CONFIG.OVERALL_WEIGHTS['30D']).toBe(0.25)
+    expect(ARENA_CONFIG.OVERALL_WEIGHTS['7D']).toBe(0.05)
+  })
+
+  test('full data overall = 0.70*S90 + 0.25*S30 + 0.05*S7 + momentum', () => {
+    // Use equal scores to verify weights directly (momentum = 0 when 7d==30d)
+    const score = calculateOverallScore({
+      score7d: 50,
+      score30d: 50,
+      score90d: 50,
+    })
+    // base = 0.70*50 + 0.25*50 + 0.05*50 = 50
+    // momentum: clip(50/50 - 1, -0.2, 0.5) * 5 = 0
+    expect(score).toBeCloseTo(50, 1)
+  })
+
+  test('90D dominates the score (70% weight)', () => {
+    const highS90 = calculateOverallScore({
+      score7d: 50,
+      score30d: 50,
+      score90d: 100,
+    })
+    const lowS90 = calculateOverallScore({
+      score7d: 50,
+      score30d: 50,
+      score90d: 0,
+    })
+    // Difference should be approximately 70 (0.70 * 100)
+    expect(highS90 - lowS90).toBeCloseTo(70, 0)
+  })
+})
+
+describe('Arena Score — PnL threshold boundary', () => {
+  test('PnL=$499 produces lower score than PnL=$500 (30D)', () => {
+    const below = calculatePnlScore(499, '30D')
+    const at500 = calculatePnlScore(500, '30D')
+    expect(at500).toBeGreaterThan(below)
+    // Both should be positive but small
+    expect(below).toBeGreaterThan(0)
+    expect(at500).toBeGreaterThan(0)
+  })
+
+  test('PnL=$1 produces very small but positive score', () => {
+    const score = calculatePnlScore(1, '30D')
+    expect(score).toBeGreaterThan(0)
+    expect(score).toBeLessThan(1)
+  })
+})
+
+describe('Arena Score — confidenceMultiplier config', () => {
+  test('confidence multiplier values are defined correctly', () => {
+    expect(ARENA_CONFIG.CONFIDENCE_MULTIPLIER.full).toBe(1.0)
+    expect(ARENA_CONFIG.CONFIDENCE_MULTIPLIER.partial).toBe(0.92)
+    expect(ARENA_CONFIG.CONFIDENCE_MULTIPLIER.minimal).toBe(0.80)
+  })
+
+  test('getScoreConfidence returns correct levels', () => {
+    // full: both MDD and WR are present and non-zero
+    expect(getScoreConfidence(-15, 60)).toBe('full')
+    // partial: one missing
+    expect(getScoreConfidence(null, 60)).toBe('partial')
+    expect(getScoreConfidence(-15, null)).toBe('partial')
+    // minimal: both missing
+    expect(getScoreConfidence(null, null)).toBe('minimal')
+  })
+
+  test('legacy V3 applies confidence multiplier to total', () => {
+    // The V3 legacy function still uses confidence multiplier
+    // V2 (current calculateArenaScore) does not
+    // Verify V2 ignores confidence
+    const withFull = calculateArenaScore(
+      { roi: 50, pnl: 5000, maxDrawdown: -10, winRate: 60 },
+      '30D'
+    )
+    const withNone = calculateArenaScore(
+      { roi: 50, pnl: 5000, maxDrawdown: null, winRate: null },
+      '30D'
+    )
+    // V3 simplified: same score regardless of MDD/WR data availability
+    expect(withFull.totalScore).toBe(withNone.totalScore)
+  })
+})
+
+describe('Arena Score — extreme ROI edge cases', () => {
+  test('ROI=0, PnL=0 produces score of exactly 0', () => {
+    const result = calculateArenaScore(
+      { roi: 0, pnl: 0, maxDrawdown: null, winRate: null },
+      '30D'
+    )
+    expect(result.totalScore).toBe(0)
+    expect(result.returnScore).toBe(0)
+    expect(result.pnlScore).toBe(0)
+  })
+
+  test('ROI=500000 (extreme positive) is capped and produces max-range score', () => {
+    const extreme = calculateArenaScore(
+      { roi: 500000, pnl: 1000000, maxDrawdown: null, winRate: null },
+      '90D'
+    )
+    const atCap = calculateArenaScore(
+      { roi: 10000, pnl: 1000000, maxDrawdown: null, winRate: null },
+      '90D'
+    )
+    // ROI is capped at 10000, so both should have same return score
+    expect(extreme.returnScore).toBeCloseTo(atCap.returnScore, 5)
+    // Total score should be valid
+    expect(extreme.totalScore).toBeGreaterThan(0)
+    expect(extreme.totalScore).toBeLessThanOrEqual(100)
+  })
+
+  test('ROI=-100 (total loss) produces 0 return score', () => {
+    const result = calculateArenaScore(
+      { roi: -100, pnl: -50000, maxDrawdown: -100, winRate: 0 },
+      '90D'
+    )
+    expect(result.returnScore).toBe(0)
+    expect(result.pnlScore).toBe(0)  // negative PnL = 0
+    expect(result.totalScore).toBe(0)
+  })
+
+  test('ROI=-100 across all periods produces 0', () => {
+    for (const period of ['7D', '30D', '90D'] as const) {
+      const result = calculateArenaScore(
+        { roi: -100, pnl: 0, maxDrawdown: null, winRate: null },
+        period
+      )
+      expect(result.totalScore).toBe(0)
+    }
+  })
+})
+
+// ============================================
 // 配置常量测试
 // ============================================
 

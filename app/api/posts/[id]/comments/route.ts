@@ -14,6 +14,8 @@ import {
   successWithPagination,
   handleError,
   validateNumber,
+  ApiError,
+  ErrorCode,
 } from '@/lib/api'
 import { getPostComments, createComment, deleteComment } from '@/lib/data/comments'
 import { checkRateLimit, RateLimitPresets } from '@/lib/utils/rate-limit'
@@ -96,20 +98,14 @@ export async function POST(request: NextRequest, context: RouteContext) {
         .maybeSingle()
 
       if (membership?.muted_until && new Date(membership.muted_until) > new Date()) {
-        return new Response(JSON.stringify({ error: 'You have been muted', success: false }), {
-          status: 403,
-          headers: { 'Content-Type': 'application/json' },
-        })
+        throw ApiError.forbidden('You have been muted')
       }
     }
 
     const body = await request.json()
     const parsed = CreateCommentSchema.safeParse(body)
     if (!parsed.success) {
-      return NextResponse.json(
-        { error: 'Invalid input', details: parsed.error.flatten() },
-        { status: 400 }
-      )
+      throw ApiError.validation('Invalid input', { errors: parsed.error.flatten() })
     }
     const { content } = parsed.data
     const parent_id = parsed.data.parent_id ?? undefined
@@ -140,10 +136,7 @@ export async function DELETE(request: NextRequest, _context: RouteContext) {
     const body = await request.json()
     const parsed = DeleteCommentSchema.safeParse(body)
     if (!parsed.success) {
-      return NextResponse.json(
-        { error: 'Invalid input', details: parsed.error.flatten() },
-        { status: 400 }
-      )
+      throw ApiError.validation('Invalid input', { errors: parsed.error.flatten() })
     }
     const commentId = parsed.data.comment_id
 

@@ -152,7 +152,7 @@ async function fetchFromLeaderboard(
 
   if (error) {
     logger.error('leaderboard_ranks query error:', error)
-    return { traders: [], totalCount: 0, error: error.message }
+    throw new Error(`leaderboard_ranks query failed: ${error.message}`)
   }
 
   const totalCount = count ?? 0

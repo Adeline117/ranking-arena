@@ -9,6 +9,41 @@
  *   env.SUPABASE_URL // typed, guaranteed to exist
  */
 
+import { z } from 'zod'
+
+// ─── Zod Schema (critical vars) ─────────────────────────────────────────────
+//
+// Validates the most critical environment variables at import time.
+// Other vars are validated by the getEnv() helpers below.
+
+const CriticalEnvSchema = z.object({
+  NEXT_PUBLIC_SUPABASE_URL: z.string().url('NEXT_PUBLIC_SUPABASE_URL must be a valid URL'),
+  NEXT_PUBLIC_SUPABASE_ANON_KEY: z.string().min(1, 'NEXT_PUBLIC_SUPABASE_ANON_KEY is required'),
+  NODE_ENV: z.enum(['development', 'production', 'test']).optional().default('development'),
+  CRON_SECRET: z.string().optional(),
+})
+
+/** Parsed & typed critical environment variables */
+export type CriticalEnv = z.infer<typeof CriticalEnvSchema>
+
+// Validate critical vars immediately (fail fast)
+const criticalResult = CriticalEnvSchema.safeParse(process.env)
+if (!criticalResult.success) {
+  // Only throw in server context — skip during client-side bundling
+  if (typeof window === 'undefined') {
+    const formatted = criticalResult.error.format()
+    const messages = Object.entries(formatted)
+      .filter(([k]) => k !== '_errors')
+      .map(([k, v]) => `  - ${k}: ${(v as { _errors?: string[] })?._errors?.join(', ') ?? 'invalid'}`)
+      .join('\n')
+    console.error(`[env] Critical environment validation failed:\n${messages}`)
+    // Do not throw in test/dev to avoid breaking HMR; throw in production
+    if (process.env.NODE_ENV === 'production') {
+      throw new Error(`Critical environment validation failed:\n${messages}`)
+    }
+  }
+}
+
 // ─── Helper ───────────────────────────────────────────────────────────────────
 
 function getEnv(key: string, required: true): string

@@ -383,13 +383,17 @@ describe('HyperliquidPerpConnector', () => {
         ethAddress: '0xnormalize_test',
         displayName: 'NormalizeUser',
         accountValue: 150000,
+        _computed_roi: 35,
+        _computed_pnl: 50000,
       }
 
       const normalized = connector.normalize(raw)
 
       expect(normalized.trader_key).toBe('0xnormalize_test')
       expect(normalized.display_name).toBe('NormalizeUser')
-      expect(normalized.pnl).toBe(150000)
+      expect(normalized.roi).toBe(35)
+      expect(normalized.pnl).toBe(50000)
+      expect(normalized.aum).toBe(150000)
     })
 
     test('handles user field as fallback for ethAddress', () => {
@@ -404,6 +408,106 @@ describe('HyperliquidPerpConnector', () => {
 
       expect(normalized.trader_key).toBe('0xfallback_addr')
       expect(normalized.display_name).toBeNull()
+    })
+
+    test('returns all 13 standardized fields', () => {
+      const connector = createConnector()
+      const raw = {
+        ethAddress: '0xfull_fields',
+        displayName: 'FullUser',
+        accountValue: 200000,
+        _computed_roi: 42,
+        _computed_pnl: 80000,
+      }
+
+      const normalized = connector.normalize(raw)
+
+      const expectedKeys = [
+        'trader_key', 'display_name', 'avatar_url',
+        'roi', 'pnl', 'win_rate', 'max_drawdown',
+        'trades_count', 'followers', 'copiers',
+        'aum', 'sharpe_ratio', 'platform_rank',
+      ]
+      for (const key of expectedKeys) {
+        expect(normalized).toHaveProperty(key)
+      }
+      expect(Object.keys(normalized)).toHaveLength(13)
+    })
+
+    test('DEX fields are null (no copy trading)', () => {
+      const connector = createConnector()
+      const raw = {
+        ethAddress: '0xdex_test',
+        displayName: null,
+        accountValue: 100000,
+        _computed_roi: 10,
+        _computed_pnl: 10000,
+      }
+
+      const normalized = connector.normalize(raw)
+      expect(normalized.avatar_url).toBeNull()
+      expect(normalized.win_rate).toBeNull()
+      expect(normalized.max_drawdown).toBeNull()
+      expect(normalized.trades_count).toBeNull()
+      expect(normalized.followers).toBeNull()
+      expect(normalized.copiers).toBeNull()
+      expect(normalized.sharpe_ratio).toBeNull()
+      expect(normalized.platform_rank).toBeNull()
+    })
+
+    test('ROI=0 and PnL=0 when _computed values are 0', () => {
+      const connector = createConnector()
+      const raw = {
+        ethAddress: '0xzero',
+        displayName: null,
+        accountValue: 50000,
+        _computed_roi: 0,
+        _computed_pnl: 0,
+      }
+
+      const normalized = connector.normalize(raw)
+      expect(normalized.roi).toBe(0)
+      expect(normalized.pnl).toBe(0)
+    })
+
+    test('negative ROI and PnL are preserved', () => {
+      const connector = createConnector()
+      const raw = {
+        ethAddress: '0xneg',
+        displayName: null,
+        accountValue: 30000,
+        _computed_roi: -25,
+        _computed_pnl: -10000,
+      }
+
+      const normalized = connector.normalize(raw)
+      expect(normalized.roi).toBe(-25)
+      expect(normalized.pnl).toBe(-10000)
+    })
+
+    test('missing _computed fields produce null roi/pnl', () => {
+      const connector = createConnector()
+      const raw = {
+        ethAddress: '0xno_computed',
+        displayName: null,
+        accountValue: 100000,
+      }
+
+      const normalized = connector.normalize(raw)
+      expect(normalized.roi).toBeNull()
+      expect(normalized.pnl).toBeNull()
+      expect(normalized.aum).toBe(100000)
+    })
+
+    test('does not crash on empty raw object', () => {
+      const connector = createConnector()
+      const raw = {} as Record<string, unknown>
+
+      const normalized = connector.normalize(raw)
+      expect(normalized.trader_key).toBeNull()
+      expect(normalized.roi).toBeNull()
+      expect(normalized.pnl).toBeNull()
+      expect(normalized.aum).toBeNull()
     })
   })
 

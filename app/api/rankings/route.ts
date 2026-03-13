@@ -28,6 +28,8 @@ import { GRANULAR_PLATFORMS, PLATFORM_CATEGORY } from '@/lib/types/leaderboard';
 import { getSupabaseAdmin } from '@/lib/supabase/server';
 import { checkRateLimit, RateLimitPresets } from '@/lib/utils/rate-limit';
 import { tieredGetOrSet } from '@/lib/cache/redis-layer';
+import { ApiError } from '@/lib/api/errors';
+import { success as apiSuccess, handleError, withCache } from '@/lib/api/response';
 import logger from '@/lib/logger'
 
 // In-memory cache for availableSources (TTL 5 minutes)
@@ -66,35 +68,23 @@ export async function GET(request: NextRequest) {
     const window = searchParams.get('window') as RankingWindow | 'composite' | null;
     const normalizedWindow = window?.toLowerCase() as RankingWindow | 'composite';
     if (!normalizedWindow || !VALID_WINDOWS.includes(normalizedWindow)) {
-      return NextResponse.json(
-        { error: 'Invalid or missing window parameter. Must be one of: 7d, 30d, 90d, composite' },
-        { status: 400 },
-      );
+      throw ApiError.validation('Invalid or missing window parameter. Must be one of: 7d, 30d, 90d, composite');
     }
 
     // Parse optional params
     const category = searchParams.get('category') as TradingCategory | null;
     if (category && !VALID_CATEGORIES.includes(category)) {
-      return NextResponse.json(
-        { error: 'Invalid category. Must be one of: futures, spot, onchain' },
-        { status: 400 },
-      );
+      throw ApiError.validation('Invalid category. Must be one of: futures, spot, onchain');
     }
 
     const platform = searchParams.get('platform') as GranularPlatform | null;
     if (platform && !(GRANULAR_PLATFORMS as readonly string[]).includes(platform)) {
-      return NextResponse.json(
-        { error: `Invalid platform: ${platform}` },
-        { status: 400 },
-      );
+      throw ApiError.validation(`Invalid platform: ${platform}`);
     }
 
     const sortBy = (searchParams.get('sort_by') || 'arena_score') as typeof VALID_SORT_BY[number];
     if (!VALID_SORT_BY.includes(sortBy)) {
-      return NextResponse.json(
-        { error: `Invalid sort_by. Must be one of: ${VALID_SORT_BY.join(', ')}` },
-        { status: 400 },
-      );
+      throw ApiError.validation(`Invalid sort_by. Must be one of: ${VALID_SORT_BY.join(', ')}`);
     }
 
     const sortDir = (searchParams.get('sort_dir') || 'desc') as 'asc' | 'desc';
@@ -169,18 +159,11 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    return NextResponse.json(result, {
-      headers: {
-        'Cache-Control': 'public, s-maxage=60, stale-while-revalidate=300',
-      },
-    });
+    const response = apiSuccess(result);
+    return withCache(response, { maxAge: 60, staleWhileRevalidate: 300 });
   } catch (error: unknown) {
     logger.error('[API /rankings] Error:', error);
-    const msg = error instanceof Error ? error.message : String(error);
-    return NextResponse.json(
-      { error: 'Internal server error', detail: msg },
-      { status: 500 },
-    );
+    return handleError(error, 'rankings');
   }
 }
 

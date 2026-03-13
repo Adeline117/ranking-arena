@@ -414,13 +414,21 @@ describe('GmxPerpConnector', () => {
         account: '0xNORMALIZE',
         realizedPnl: 5000,
         maxCapital: 10000,
+        wins: 30,
+        losses: 10,
+        closedCount: 50,
       }
 
       const normalized = connector.normalize(raw)
 
       expect(normalized.trader_key).toBe('0xnormalize')  // lowercase
       expect(normalized.pnl).toBe(5000)
-      expect(normalized.max_capital).toBe(10000)
+      expect(normalized.aum).toBe(10000)
+      // ROI = (5000/10000)*100 = 50
+      expect(normalized.roi).toBe(50)
+      // win_rate = (30/(30+10))*100 = 75
+      expect(normalized.win_rate).toBe(75)
+      expect(normalized.trades_count).toBe(50)  // from closedCount
     })
 
     test('handles id field as fallback for account', () => {
@@ -429,6 +437,8 @@ describe('GmxPerpConnector', () => {
         id: '0xFALLBACK',
         realizedPnl: 2000,
         maxCapital: 4000,
+        wins: 5,
+        losses: 5,
       }
 
       const normalized = connector.normalize(raw)
@@ -442,15 +452,17 @@ describe('GmxPerpConnector', () => {
         account: '0xBIGNUM',
         realizedPnl: 3e30,   // 3 USD in GMX v2 raw
         maxCapital: 10e30,   // 10 USD in GMX v2 raw
+        wins: 5,
+        losses: 3,
       }
 
       const normalized = connector.normalize(raw)
 
       expect(normalized.pnl).toBeCloseTo(3)
-      expect(normalized.max_capital).toBeCloseTo(10)
+      expect(normalized.aum).toBeCloseTo(10)
     })
 
-    test('handles null/undefined PnL', () => {
+    test('handles null/undefined PnL gracefully', () => {
       const connector = createConnector()
       const raw = {
         account: '0xNULLPNL',
@@ -460,8 +472,123 @@ describe('GmxPerpConnector', () => {
 
       const normalized = connector.normalize(raw)
 
-      expect(normalized.pnl).toBe(0)  // fromGmxDecimals returns 0 for null
-      expect(normalized.max_capital).toBe(0)
+      expect(normalized.pnl).toBeNull()
+      expect(normalized.aum).toBeNull()
+    })
+
+    test('returns all 13 standardized fields', () => {
+      const connector = createConnector()
+      const raw = {
+        account: '0xFULL',
+        realizedPnl: 5000,
+        maxCapital: 10000,
+        wins: 20,
+        losses: 10,
+        closedCount: 40,
+      }
+
+      const normalized = connector.normalize(raw)
+
+      const expectedKeys = [
+        'trader_key', 'display_name', 'avatar_url',
+        'roi', 'pnl', 'win_rate', 'max_drawdown',
+        'trades_count', 'followers', 'copiers',
+        'aum', 'sharpe_ratio', 'platform_rank',
+      ]
+      for (const key of expectedKeys) {
+        expect(normalized).toHaveProperty(key)
+      }
+      expect(Object.keys(normalized)).toHaveLength(13)
+    })
+
+    test('ROI is null when maxCapital <= 100 (threshold)', () => {
+      const connector = createConnector()
+      const raw = {
+        account: '0xSMALLCAP',
+        realizedPnl: 50,
+        maxCapital: 50,  // <= 100 threshold
+        wins: 5,
+        losses: 2,
+      }
+
+      const normalized = connector.normalize(raw)
+      expect(normalized.roi).toBeNull()
+    })
+
+    test('ROI is clamped to [-100, 10000]', () => {
+      const connector = createConnector()
+      // PnL much larger than capital
+      const raw = {
+        account: '0xCLAMP',
+        realizedPnl: 5000000,
+        maxCapital: 200,
+        wins: 100,
+        losses: 0,
+      }
+
+      const normalized = connector.normalize(raw)
+      // Without clamping: (5000000/200)*100 = 2500000000
+      // Clamped to 10000
+      expect(normalized.roi).toBeLessThanOrEqual(10000)
+    })
+
+    test('win_rate is null when no trades', () => {
+      const connector = createConnector()
+      const raw = {
+        account: '0xNOTRADES',
+        realizedPnl: 0,
+        maxCapital: 1000,
+        wins: 0,
+        losses: 0,
+      }
+
+      const normalized = connector.normalize(raw)
+      expect(normalized.win_rate).toBeNull()
+    })
+
+    test('negative PnL is preserved', () => {
+      const connector = createConnector()
+      const raw = {
+        account: '0xLOSER',
+        realizedPnl: -5000,
+        maxCapital: 20000,
+        wins: 3,
+        losses: 15,
+      }
+
+      const normalized = connector.normalize(raw)
+      expect(normalized.pnl).toBe(-5000)
+      expect(normalized.roi).toBe(-25)  // (-5000/20000)*100
+    })
+
+    test('DEX-only fields are always null', () => {
+      const connector = createConnector()
+      const raw = {
+        account: '0xDEX',
+        realizedPnl: 1000,
+        maxCapital: 5000,
+        wins: 10,
+        losses: 5,
+      }
+
+      const normalized = connector.normalize(raw)
+      expect(normalized.display_name).toBeNull()
+      expect(normalized.avatar_url).toBeNull()
+      expect(normalized.max_drawdown).toBeNull()
+      expect(normalized.followers).toBeNull()
+      expect(normalized.copiers).toBeNull()
+      expect(normalized.sharpe_ratio).toBeNull()
+      expect(normalized.platform_rank).toBeNull()
+    })
+
+    test('does not crash on empty raw object', () => {
+      const connector = createConnector()
+      const raw = {} as Record<string, unknown>
+
+      const normalized = connector.normalize(raw)
+      expect(normalized.trader_key).toBe('')
+      expect(normalized.pnl).toBeNull()
+      expect(normalized.roi).toBeNull()
     })
   })
 

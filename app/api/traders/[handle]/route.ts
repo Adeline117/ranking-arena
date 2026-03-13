@@ -23,6 +23,8 @@ import { createLogger } from '@/lib/utils/logger'
 import { TRADER_SOURCES, type SourceType, findTraderSource, findTraderFromSnapshots } from './trader-queries'
 import type { TraderSource } from './trader-types'
 import { getTraderDetails, getTraderDetailsFromSnapshots } from './trader-transforms'
+import { ApiError } from '@/lib/api/errors'
+import { success as apiSuccess, handleError, withCache } from '@/lib/api/response'
 
 // 输入验证 schema（支持字母、数字、下划线、连字符、点、中文、0x 地址）
 const handleSchema = z.string().min(1).max(255)
@@ -53,14 +55,14 @@ export async function GET(
 
     const parsed = handleSchema.safeParse(rawHandle)
     if (!parsed.success) {
-      return NextResponse.json({ error: 'Invalid handle parameter' }, { status: 400 })
+      throw ApiError.validation('Invalid handle parameter')
     }
     const handle = parsed.data
 
     const supabaseUrl = getSupabaseUrl()
     const supabaseKey = getSupabaseKey()
     if (!supabaseUrl || !supabaseKey) {
-      return NextResponse.json({ error: 'Missing Supabase config' }, { status: 500 })
+      throw ApiError.internal('Missing Supabase config')
     }
 
     const decodedHandle = decodeURIComponent(handle)
@@ -72,7 +74,8 @@ export async function GET(
     // 检查缓存
     const cached = getServerCache<ReturnType<typeof getTraderDetails>>(cacheKey)
     if (cached) {
-      return NextResponse.json({ ...await cached, cached: true })
+      const cachedData = await cached
+      return apiSuccess({ ...cachedData as Record<string, unknown>, cached: true })
     }
 
     const supabase = createClient(supabaseUrl, supabaseKey)
@@ -122,10 +125,8 @@ export async function GET(
       setServerCache(cacheKey, data, CacheTTL.MEDIUM)
 
       const duration = Date.now() - startTime
-      const response = NextResponse.json({ ...data, cached: false, fetchTime: duration })
-      // Allow CDN/browser to cache for 60s, serve stale for 5min while revalidating
-      response.headers.set('Cache-Control', 'public, s-maxage=60, stale-while-revalidate=300')
-      return response
+      const response = apiSuccess({ ...data as Record<string, unknown>, cached: false, fetchTime: duration })
+      return withCache(response, { maxAge: 60, staleWhileRevalidate: 300 })
     }
 
     // trader_sources 没找到，尝试从 trader_snapshots 获取基本数据
@@ -133,13 +134,7 @@ export async function GET(
 
     if (!snapshotFound) {
       logger.warn(`No trader found for handle: ${decodedHandle}`)
-      const notFoundResponse = NextResponse.json({
-        error: 'Trader not found',
-        handle: decodedHandle,
-      }, { status: 404 })
-      // Cache 404s for 5 minutes to avoid hammering DB
-      notFoundResponse.headers.set('Cache-Control', 'public, s-maxage=300')
-      return notFoundResponse
+      throw ApiError.notFound(`Trader not found: ${decodedHandle}`)
     }
 
     // 从快照获取基本数据
@@ -149,13 +144,12 @@ export async function GET(
     setServerCache(cacheKey, data, CacheTTL.MEDIUM)
 
     const duration = Date.now() - startTime
-    const response = NextResponse.json({ ...data, cached: false, fetchTime: duration })
-    response.headers.set('Cache-Control', 'public, s-maxage=60, stale-while-revalidate=300')
-    return response
+    const response = apiSuccess({ ...data as Record<string, unknown>, cached: false, fetchTime: duration })
+    return withCache(response, { maxAge: 60, staleWhileRevalidate: 300 })
 
   } catch (error: unknown) {
     const errorMessage = error instanceof Error ? error.message : 'Unknown error'
     logger.error('Trader API error', { error: errorMessage })
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
+    return handleError(error, 'trader-detail')
   }
 }
