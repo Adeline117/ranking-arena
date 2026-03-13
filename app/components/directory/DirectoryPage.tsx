@@ -58,6 +58,8 @@ export interface DirectoryPageConfig {
   sortOptions: readonly SortOption[]
   /** Pricing label mapping (tools only) */
   pricingLabelKeys?: Record<string, string>
+  /** Pricing filter options (tools only) */
+  pricingFilterOptions?: readonly { key: string; labelKey: string }[]
   /** Category key → i18n labelKey mapping (auto-built from categoryFilters) */
   categoryLabelMap?: Record<string, string>
   /** Top leaderboard columns config */
@@ -103,10 +105,13 @@ export default function DirectoryPage({ config }: { config: DirectoryPageConfig 
   const initialSort = searchParams.get('sort') || 'rating'
   const initialSearch = searchParams.get('q') || ''
 
+  const initialPricing = searchParams.get('pricing') || 'all'
+
   const [items, setItems] = useState<DirectoryItem[]>([])
   const [loading, setLoading] = useState(true)
   const [category, setCategory] = useState(initialCategory)
   const [sort, setSort] = useState(initialSort)
+  const [pricingFilter, setPricingFilter] = useState(initialPricing)
   const [search, setSearch] = useState(initialSearch)
   const [debouncedSearch, setDebouncedSearch] = useState(initialSearch)
   const [error, setError] = useState<string | null>(null)
@@ -139,11 +144,12 @@ export default function DirectoryPage({ config }: { config: DirectoryPageConfig 
   }, [])
 
   // Sync state → URL
-  const syncUrl = useCallback((cat: string, s: string, q: string) => {
+  const syncUrl = useCallback((cat: string, s: string, q: string, p?: string) => {
     const params = new URLSearchParams()
     if (cat !== 'all') params.set('cat', cat)
     if (s !== 'rating') params.set('sort', s)
     if (q) params.set('q', q)
+    if (p && p !== 'all') params.set('pricing', p)
     const qs = params.toString()
     router.replace(`?${qs}`, { scroll: false })
   }, [router])
@@ -153,15 +159,15 @@ export default function DirectoryPage({ config }: { config: DirectoryPageConfig 
     clearTimeout(searchTimerRef.current)
     searchTimerRef.current = setTimeout(() => {
       setDebouncedSearch(search)
-      syncUrl(category, sort, search)
+      syncUrl(category, sort, search, pricingFilter)
     }, 300)
     return () => clearTimeout(searchTimerRef.current)
-  }, [search, category, sort, syncUrl])
+  }, [search, category, sort, pricingFilter, syncUrl])
 
   // Auto-scroll active filter into view on mobile
   const handleCategoryChange = useCallback((cat: string) => {
     setCategory(cat)
-    syncUrl(cat, sort, search)
+    syncUrl(cat, sort, search, pricingFilter)
     // Scroll active chip into view
     requestAnimationFrame(() => {
       const container = filterScrollRef.current
@@ -171,19 +177,24 @@ export default function DirectoryPage({ config }: { config: DirectoryPageConfig 
         activeEl.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' })
       }
     })
-  }, [sort, search, syncUrl])
+  }, [sort, search, pricingFilter, syncUrl])
 
   const handleSortChange = useCallback((s: string) => {
     setSort(s)
-    syncUrl(category, s, search)
-  }, [category, search, syncUrl])
+    syncUrl(category, s, search, pricingFilter)
+  }, [category, search, pricingFilter, syncUrl])
+
+  const handlePricingChange = useCallback((p: string) => {
+    setPricingFilter(p)
+    syncUrl(category, sort, search, p)
+  }, [category, sort, search, syncUrl])
 
   const handleClearSearch = useCallback(() => {
     setSearch('')
     setDebouncedSearch('')
-    syncUrl(category, sort, '')
+    syncUrl(category, sort, '', pricingFilter)
     searchInputRef.current?.focus()
-  }, [category, sort, syncUrl])
+  }, [category, sort, pricingFilter, syncUrl])
 
   // ─── Leaderboards ───────────────────────────────────────────────────────
 
@@ -276,15 +287,22 @@ export default function DirectoryPage({ config }: { config: DirectoryPageConfig 
         query = query.or(`name.ilike.%${cleanSearch}%,name_zh.ilike.%${cleanSearch}%`)
       }
 
+      // Pricing filter (tools only)
+      if (pricingFilter && pricingFilter !== 'all') {
+        query = query.eq('pricing', pricingFilter)
+      }
+
       if (sort === 'rating') {
         query = query.order('avg_rating', { ascending: false, nullsFirst: false })
       } else if (sort === 'newest') {
         query = query.order('created_at', { ascending: false })
       } else if (sort === 'reviews') {
         query = query.order('rating_count', { ascending: false })
+      } else if (sort === 'name') {
+        query = query.order('name', { ascending: true })
       }
 
-      query = query.limit(100)
+      query = query.limit(200)
 
       const { data, error: queryError } = await query
       if (queryError) throw queryError
@@ -294,7 +312,7 @@ export default function DirectoryPage({ config }: { config: DirectoryPageConfig 
     } finally {
       setLoading(false)
     }
-  }, [category, sort, debouncedSearch, t, config.table, config.categoryGroups, selectColumns])
+  }, [category, sort, pricingFilter, debouncedSearch, t, config.table, config.categoryGroups, selectColumns])
 
   useEffect(() => {
     fetchData()
@@ -375,17 +393,28 @@ export default function DirectoryPage({ config }: { config: DirectoryPageConfig 
           </p>
         </div>
 
-        {/* Filter bar — horizontally scrollable on mobile */}
+        {/* Filter bar — horizontally scrollable on mobile with fade edges */}
         <style>{`
-          .directory-filters { display: flex; gap: 8px; margin-bottom: 20px; align-items: center; }
+          .directory-filters { display: flex; gap: 8px; margin-bottom: 20px; align-items: center; flex-wrap: wrap; }
+          .directory-filter-scroll-wrapper {
+            position: relative; flex: 1; min-width: 0;
+          }
+          .directory-filter-scroll-wrapper::after {
+            content: ''; position: absolute; right: 0; top: 0; bottom: 0; width: 32px;
+            background: linear-gradient(90deg, transparent, var(--color-bg-primary));
+            pointer-events: none; z-index: 1;
+          }
+          @media (min-width: 768px) {
+            .directory-filter-scroll-wrapper::after { display: none; }
+          }
           .directory-filter-scroll {
-            display: flex; gap: 8px; flex: 1; min-width: 0;
+            display: flex; gap: 8px; min-width: 0;
             overflow-x: auto; -webkit-overflow-scrolling: touch;
-            scrollbar-width: none; padding-bottom: 4px;
+            scrollbar-width: none; padding-bottom: 4px; padding-right: 32px;
           }
           .directory-filter-scroll::-webkit-scrollbar { display: none; }
           @media (min-width: 768px) {
-            .directory-filter-scroll { flex-wrap: wrap; overflow-x: visible; }
+            .directory-filter-scroll { flex-wrap: wrap; overflow-x: visible; padding-right: 0; }
           }
           .directory-filter-chip {
             display: inline-flex; align-items: center; gap: 6px;
@@ -454,32 +483,55 @@ export default function DirectoryPage({ config }: { config: DirectoryPageConfig 
         `}</style>
 
         <div className="directory-filters">
-          <div className="directory-filter-scroll" ref={filterScrollRef}>
-            {config.categoryFilters.map(f => {
-              const active = category === f.key
-              const count = categoryCounts[f.key]
-              return (
-                <button
-                  key={f.key}
-                  className={`directory-filter-chip${active ? ' active' : ''}`}
-                  onClick={() => handleCategoryChange(f.key)}
-                >
-                  {t(f.labelKey)}
-                  {count != null && count > 0 && (
-                    <span style={{
-                      fontSize: tokens.typography.fontSize.xs, fontWeight: 600,
-                      padding: '1px 7px', borderRadius: tokens.radius.full,
-                      background: active ? 'var(--glass-bg-heavy)' : 'var(--color-accent-primary-12)',
-                      color: active ? 'var(--color-text-primary)' : accentVar,
-                      lineHeight: '1.5', minWidth: 20, textAlign: 'center' as const,
-                    }}>
-                      {count}
-                    </span>
-                  )}
-                </button>
-              )
-            })}
+          <div className="directory-filter-scroll-wrapper">
+            <div className="directory-filter-scroll" ref={filterScrollRef}>
+              {config.categoryFilters.map(f => {
+                const active = category === f.key
+                const count = categoryCounts[f.key]
+                return (
+                  <button
+                    key={f.key}
+                    className={`directory-filter-chip${active ? ' active' : ''}`}
+                    onClick={() => handleCategoryChange(f.key)}
+                  >
+                    {t(f.labelKey)}
+                    {count != null && count > 0 && (
+                      <span style={{
+                        fontSize: tokens.typography.fontSize.xs, fontWeight: 600,
+                        padding: '1px 7px', borderRadius: tokens.radius.full,
+                        background: active ? 'var(--glass-bg-heavy)' : 'var(--color-accent-primary-12)',
+                        color: active ? 'var(--color-text-primary)' : accentVar,
+                        lineHeight: '1.5', minWidth: 20, textAlign: 'center' as const,
+                      }}>
+                        {count}
+                      </span>
+                    )}
+                  </button>
+                )
+              })}
+            </div>
           </div>
+
+          {/* Pricing filter (tools only) */}
+          {config.pricingFilterOptions && (
+            <select
+              value={pricingFilter}
+              onChange={e => handlePricingChange(e.target.value)}
+              aria-label={t('toolsPricingAll') || 'Pricing'}
+              style={{
+                padding: '9px 14px', borderRadius: tokens.radius.full,
+                border: '1px solid var(--color-border-primary)',
+                background: 'var(--color-bg-secondary)', color: 'var(--color-text-primary)',
+                fontSize: tokens.typography.fontSize.sm, cursor: 'pointer', outline: 'none',
+                flexShrink: 0, transition: `all ${tokens.transition.base}`,
+              }}
+            >
+              {config.pricingFilterOptions.map(opt => (
+                <option key={opt.key} value={opt.key}>{t(opt.labelKey)}</option>
+              ))}
+            </select>
+          )}
+
           <select
             value={sort}
             onChange={e => handleSortChange(e.target.value)}
@@ -623,9 +675,9 @@ export default function DirectoryPage({ config }: { config: DirectoryPageConfig 
             <p style={{ color: 'var(--color-text-tertiary)', fontSize: tokens.typography.fontSize.base, marginBottom: 8 }}>
               {t(config.i18n.emptyText)}
             </p>
-            {(debouncedSearch || category !== 'all') && (
+            {(debouncedSearch || category !== 'all' || pricingFilter !== 'all') && (
               <button
-                onClick={() => { setSearch(''); setDebouncedSearch(''); setCategory('all'); syncUrl('all', sort, '') }}
+                onClick={() => { setSearch(''); setDebouncedSearch(''); setCategory('all'); setPricingFilter('all'); syncUrl('all', sort, '', 'all') }}
                 style={{
                   padding: '8px 20px', borderRadius: tokens.radius.full,
                   background: 'var(--color-bg-secondary)', color: 'var(--color-text-primary)',
@@ -660,6 +712,20 @@ export default function DirectoryPage({ config }: { config: DirectoryPageConfig 
 
 // ─── Card (memoized) ─────────────────────────────────────────────────────────
 
+function InitialAvatar({ name, accentVar }: { name: string; accentVar: string }) {
+  return (
+    <div style={{
+      width: 44, height: 44, borderRadius: tokens.radius.xl, flexShrink: 0,
+      background: tokens.gradient.primarySubtle,
+      border: '1px solid var(--color-border-primary)',
+      display: 'flex', alignItems: 'center', justifyContent: 'center',
+      fontSize: tokens.typography.fontSize.md, fontWeight: 700, color: accentVar,
+    }}>
+      {name?.[0] || '?'}
+    </div>
+  )
+}
+
 const DirectoryCard = memo(function DirectoryCard({
   item, language, categoryLabelMap, pricingLabelKeys, noRatingsKey, accentVar, accentMutedVar,
 }: {
@@ -676,10 +742,14 @@ const DirectoryCard = memo(function DirectoryCard({
   const desc = language === 'zh' ? (item.description_zh || item.description) : item.description
   const href = item.website || item.github_url || '#'
   const hasLink = !!(item.website || item.github_url)
+  const [logoError, setLogoError] = useState(false)
 
   const pricingLabel = pricingLabelKeys && item.pricing
     ? (pricingLabelKeys[item.pricing] ? t(pricingLabelKeys[item.pricing]) : item.pricing)
     : null
+
+  const visibleTags = item.tags?.slice(0, 3) || []
+  const extraTagCount = (item.tags?.length || 0) - 3
 
   return (
     <a
@@ -689,7 +759,7 @@ const DirectoryCard = memo(function DirectoryCard({
       className="directory-card"
     >
       <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginBottom: 12 }}>
-        {item.logo_url ? (
+        {item.logo_url && !logoError ? (
           <img
             src={item.logo_url}
             alt={`${item.name} logo`}
@@ -699,18 +769,10 @@ const DirectoryCard = memo(function DirectoryCard({
               borderRadius: tokens.radius.xl, objectFit: 'cover', flexShrink: 0,
               border: '1px solid var(--color-border-primary)',
             }}
-            onError={e => { (e.target as HTMLImageElement).style.display = 'none' }}
+            onError={() => setLogoError(true)}
           />
         ) : (
-          <div style={{
-            width: 44, height: 44, borderRadius: tokens.radius.xl, flexShrink: 0,
-            background: tokens.gradient.primarySubtle,
-            border: '1px solid var(--color-border-primary)',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            fontSize: tokens.typography.fontSize.md, fontWeight: 700, color: accentVar,
-          }}>
-            {name[0]}
-          </div>
+          <InitialAvatar name={name} accentVar={accentVar} />
         )}
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{
@@ -742,6 +804,12 @@ const DirectoryCard = memo(function DirectoryCard({
             )}
           </div>
         </div>
+        {/* External link indicator */}
+        {hasLink && (
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--color-text-tertiary)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0, opacity: 0.5 }}>
+            <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" /><polyline points="15 3 21 3 21 9" /><line x1="10" y1="14" x2="21" y2="3" />
+          </svg>
+        )}
       </div>
 
       {desc && (
@@ -755,9 +823,9 @@ const DirectoryCard = memo(function DirectoryCard({
         </p>
       )}
 
-      {item.tags && item.tags.length > 0 && (
-        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 12 }}>
-          {item.tags.slice(0, 3).map(tag => (
+      {visibleTags.length > 0 && (
+        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 12, alignItems: 'center' }}>
+          {visibleTags.map(tag => (
             <span key={tag} style={{
               fontSize: tokens.typography.fontSize.xs, padding: '3px 10px',
               borderRadius: tokens.radius.full, fontWeight: 500,
@@ -767,6 +835,14 @@ const DirectoryCard = memo(function DirectoryCard({
               {tag}
             </span>
           ))}
+          {extraTagCount > 0 && (
+            <span style={{
+              fontSize: tokens.typography.fontSize.xs, padding: '3px 8px',
+              color: 'var(--color-text-tertiary)', fontWeight: 500,
+            }}>
+              +{extraTagCount}
+            </span>
+          )}
         </div>
       )}
 
