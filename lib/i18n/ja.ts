@@ -2722,6 +2722,15 @@ const ja = {
     sectorPerformance: 'セクターパフォーマンス',
     exchangeVolume: '取引所出来高',
 
+    // Flash News Page
+    flashNewsCenter: 'フラッシュニュース',
+    flashNewsDesc: '暗号資産、マクロ、金融市場のリアルタイムアップデート',
+    flashNewsLastUpdated: '最終更新: ',
+    flashNewsNoNews: 'まだニュースはありません',
+    flashNewsNoNewsDesc: 'ニュースが入り次第こちらに表示されます',
+    flashNewsFetchFailed: 'ニュースの読み込みに失敗しました',
+    flashNewsTotal: '-- ニュース合計 {count}件 --',
+
     voiceCall: '音声通話',
     videoCall: 'ビデオ通話',
     calling: '発信中...',
@@ -3588,6 +3597,9 @@ scoreRadarExec: '実行',
 scoreRoiScore: 'ROIスコア',
 scorePnlScore: 'PnLスコア',
 scoreTotal: '合計',
+scoreBasisRoiPnl: 'ROIとPnLデータに基づくスコア',
+confidenceMinimalReason: '限定的なデータに基づくスコア：勝率とドローダウンのデータなし',
+confidencePartialReason: 'スコア調整済み：この取引所では一部の指標が利用できません',
 
 exportRanking: 'ランキングをエクスポート',
 exportRankingShort: 'エクスポート',
@@ -3987,6 +3999,23 @@ joinPaidGroup: '参加（{price}/月）',
 shareRankCard: 'ランクカードを共有',
 weeklyTop10: '週間トップ10',
 embedWidget: '埋め込みウィジェット',
+
+// Auto-generated profile tags
+tagTopPercent: 'トップ {pct}%',
+tagScalper: 'スキャルパー',
+tagSwing: 'スイング',
+tagTrend: 'トレンド',
+tagPosition: 'ポジション',
+tagLowRisk: '低リスク',
+tagModerateRisk: '中リスク',
+tagHighRisk: '高リスク',
+tagWhale: 'クジラ',
+tagActive: 'アクティブ',
+tagBot: 'ボット',
+tagElite: 'エリート',
+tagHighWinrate: '高勝率',
+tagHighRoi: '高ROI',
+tagDefi: 'DeFi',
 
 } as const
 
