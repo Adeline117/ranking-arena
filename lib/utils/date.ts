@@ -1,6 +1,14 @@
 export type Locale = 'en' | 'zh' | 'ja' | 'ko'
 
-const translations = {
+const translations: Record<Locale, {
+  justNow: string
+  minutesAgo: (n: number) => string
+  hoursAgo: (n: number) => string
+  daysAgo: (n: number) => string
+  weeksAgo: (n: number) => string
+  monthsAgo: (n: number) => string
+  yearsAgo: (n: number) => string
+}> = {
   zh: {
     justNow: '刚刚',
     minutesAgo: (n: number) => `${n}分钟前`,
@@ -19,21 +27,37 @@ const translations = {
     monthsAgo: (n: number) => `${n} month${n > 1 ? 's' : ''} ago`,
     yearsAgo: (n: number) => `${n} year${n > 1 ? 's' : ''} ago`,
   },
+  ja: {
+    justNow: 'たった今',
+    minutesAgo: (n: number) => `${n}分前`,
+    hoursAgo: (n: number) => `${n}時間前`,
+    daysAgo: (n: number) => `${n}日前`,
+    weeksAgo: (n: number) => `${n}週間前`,
+    monthsAgo: (n: number) => `${n}ヶ月前`,
+    yearsAgo: (n: number) => `${n}年前`,
+  },
+  ko: {
+    justNow: '방금',
+    minutesAgo: (n: number) => `${n}분 전`,
+    hoursAgo: (n: number) => `${n}시간 전`,
+    daysAgo: (n: number) => `${n}일 전`,
+    weeksAgo: (n: number) => `${n}주 전`,
+    monthsAgo: (n: number) => `${n}개월 전`,
+    yearsAgo: (n: number) => `${n}년 전`,
+  },
 }
 
 export function formatTimeAgo(dateString: string | Date, locale: Locale = 'zh'): string {
-  // ja/ko fall back to en for date formatting
-  const effectiveLocale = (locale === 'ja' || locale === 'ko') ? 'en' : locale
+  const effectiveLocale = locale
   // 处理无效输入
   if (!dateString) {
-    return effectiveLocale === 'zh' ? '未知时间' : 'unknown'
+    return effectiveLocale === 'zh' ? '未知时间' : effectiveLocale === 'ja' ? '不明' : effectiveLocale === 'ko' ? '알 수 없음' : 'unknown'
   }
-  
+
   const date = typeof dateString === 'string' ? new Date(dateString) : dateString
-  
-  // 检查日期是否有效
+
   if (isNaN(date.getTime())) {
-    return effectiveLocale === 'zh' ? '未知时间' : 'unknown'
+    return effectiveLocale === 'zh' ? '未知时间' : effectiveLocale === 'ja' ? '不明' : effectiveLocale === 'ko' ? '알 수 없음' : 'unknown'
   }
   
   const now = new Date()
