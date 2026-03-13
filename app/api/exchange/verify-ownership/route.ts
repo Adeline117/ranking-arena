@@ -88,7 +88,7 @@ export async function POST(req: NextRequest) {
     // 3. 获取用户连接
     const { data: connection, error: connError } = await adminSupabase
       .from('user_exchange_connections')
-      .select('*')
+      .select('id, api_key_encrypted, api_secret_encrypted')
       .eq('user_id', user.id)
       .eq('exchange', exchange)
       .eq('is_active', true)

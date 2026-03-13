@@ -208,7 +208,7 @@ export async function GET(request: NextRequest) {
     // 获取用户的所有申请
     const { data: applications, error } = await supabase
       .from('group_applications')
-      .select('*')
+      .select('id, applicant_id, name, name_en, description, description_en, avatar_url, role_names, rules_json, rules, is_premium_only, status, reject_reason, reviewed_at, reviewed_by, created_at')
       .eq('applicant_id', user.id)
       .order('created_at', { ascending: false })
 

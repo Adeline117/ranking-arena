@@ -104,7 +104,7 @@ export async function POST(request: NextRequest) {
 
     let { data: conversation } = await supabase
       .from('conversations')
-      .select('*')
+      .select('id, user1_id, user2_id, created_at, updated_at')
       .eq('user1_id', orderedUser1)
       .eq('user2_id', orderedUser2)
       .maybeSingle()
@@ -122,7 +122,7 @@ export async function POST(request: NextRequest) {
         if (convError.code === '23505') {
           const { data: existingConv } = await supabase
             .from('conversations')
-            .select('*')
+            .select('id, user1_id, user2_id, created_at, updated_at')
             .eq('user1_id', orderedUser1)
             .eq('user2_id', orderedUser2)
             .single()

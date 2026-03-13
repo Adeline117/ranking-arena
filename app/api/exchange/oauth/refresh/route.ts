@@ -88,7 +88,7 @@ export async function POST(request: NextRequest) {
     // 获取用户的交易所连接
     const { data: connection, error: connError } = await supabase
       .from('user_exchange_connections')
-      .select('*')
+      .select('id, refresh_token_encrypted')
       .eq('user_id', userId)
       .eq('exchange', exchange)
       .single()

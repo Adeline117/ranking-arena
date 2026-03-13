@@ -40,7 +40,7 @@ export async function GET(
     // Get channel info
     const { data: channel } = await supabase
       .from('chat_channels')
-      .select('*')
+      .select('id, name, avatar_url, description, type, created_by, created_at, updated_at')
       .eq('id', channelId)
       .single()
 
