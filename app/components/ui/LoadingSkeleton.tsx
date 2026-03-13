@@ -4,14 +4,12 @@
  * with a simple variant + count API.
  */
 
-import React from 'react'
 import { tokens } from '@/lib/design-tokens'
 import {
   SkeletonCard,
   TableSkeleton,
   ListSkeleton,
   TraderCardSkeleton,
-  Skeleton,
   SkeletonText,
 } from './Skeleton'
 
