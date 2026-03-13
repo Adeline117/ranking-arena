@@ -27,8 +27,14 @@ export default function ThreeColumnLayout({
   const [widgetsExpanded, setWidgetsExpanded] = useState(false)
   const hasSidebarContent = !!(leftSidebar || rightSidebar)
 
+  const layoutClasses = [
+    'three-col-layout',
+    !leftSidebar && 'three-col-no-left',
+    !rightSidebar && 'three-col-no-right',
+  ].filter(Boolean).join(' ')
+
   return (
-    <div className="three-col-layout">
+    <div className={layoutClasses}>
       {/* Left sidebar — CSS handles visibility via media queries to avoid CLS */}
       {leftSidebar && (
         <aside className="three-col-left hide-tablet">

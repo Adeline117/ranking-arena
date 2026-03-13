@@ -871,6 +871,34 @@ select:focus-visible {
   }
 }
 
+/* When left sidebar is absent, expand center to fill */
+.three-col-layout.three-col-no-left {
+  grid-template-columns: 1fr 260px;
+}
+.three-col-layout.three-col-no-left.three-col-no-right {
+  grid-template-columns: 1fr;
+}
+.three-col-layout.three-col-no-right:not(.three-col-no-left) {
+  grid-template-columns: 240px 1fr;
+}
+
+/* Between 1024-1280: no-left variant */
+@media (min-width: 1024px) and (max-width: 1279px) {
+  .three-col-layout.three-col-no-left {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Large desktop: no-left variant */
+@media (min-width: 1280px) and (max-width: 1440px) {
+  .three-col-layout.three-col-no-left {
+    grid-template-columns: 1fr 240px;
+  }
+  .three-col-layout.three-col-no-left.three-col-no-right {
+    grid-template-columns: 1fr;
+  }
+}
+
 .three-col-left,
 .three-col-right {
   position: sticky;
