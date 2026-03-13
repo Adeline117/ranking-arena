@@ -4,11 +4,15 @@ import { validateCsrfToken, CSRF_COOKIE_NAME, CSRF_HEADER_NAME } from '@/lib/uti
 import { logger } from '@/lib/logger'
 import { checkRateLimit, RateLimitPresets } from '@/lib/utils/rate-limit'
 import { notifyNewGroup } from '@/lib/notifications/activity-alerts'
+import { socialFeatureGuard } from '@/lib/features'
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!
 
 export async function POST(request: NextRequest) {
+  const guard = socialFeatureGuard()
+  if (guard) return guard
+
   // Rate limit: write operation
   const rateLimitResponse = await checkRateLimit(request, RateLimitPresets.write)
   if (rateLimitResponse) return rateLimitResponse
@@ -184,6 +188,9 @@ export async function POST(request: NextRequest) {
 
 // 获取当前用户的申请列表
 export async function GET(request: NextRequest) {
+  const guard = socialFeatureGuard()
+  if (guard) return guard
+
   try {
     const authHeader = request.headers.get('Authorization')
     if (!authHeader?.startsWith('Bearer ')) {

@@ -3,6 +3,7 @@ import { createClient } from '@supabase/supabase-js'
 import { createNotification } from '@/lib/data/notifications'
 import logger from '@/lib/logger'
 import { checkRateLimit, RateLimitPresets } from '@/lib/utils/rate-limit'
+import { socialFeatureGuard } from '@/lib/features'
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!
@@ -12,6 +13,9 @@ export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const guard = socialFeatureGuard()
+  if (guard) return guard
+
   const rateLimitResp = await checkRateLimit(request, RateLimitPresets.write)
   if (rateLimitResp) return rateLimitResp
 

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient, SupabaseClient } from '@supabase/supabase-js'
 import logger from '@/lib/logger'
 import { checkRateLimit, RateLimitPresets } from '@/lib/utils/rate-limit'
+import { socialFeatureGuard } from '@/lib/features'
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!
@@ -27,6 +28,9 @@ export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ id: string; commentId: string }> }
 ) {
+  const guard = socialFeatureGuard()
+  if (guard) return guard
+
   const rateLimitResp = await checkRateLimit(request, RateLimitPresets.sensitive)
   if (rateLimitResp) return rateLimitResp
 

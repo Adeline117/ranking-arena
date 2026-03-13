@@ -4,6 +4,7 @@ import crypto from 'crypto'
 import { logger } from '@/lib/logger'
 import { createLogger } from '@/lib/utils/logger'
 import { checkRateLimit, RateLimitPresets } from '@/lib/utils/rate-limit'
+import { socialFeatureGuard } from '@/lib/features'
 
 const log = createLogger('api:group-invite')
 
@@ -53,6 +54,9 @@ export function verifyInviteToken(token: string): { groupId: string; valid: bool
 
 // GET: Verify invite token
 export async function GET(request: NextRequest, context: RouteContext) {
+  const guard = socialFeatureGuard()
+  if (guard) return guard
+
   try {
     const { id: groupId } = await context.params
     const { searchParams } = new URL(request.url)
@@ -98,6 +102,9 @@ export async function GET(request: NextRequest, context: RouteContext) {
 
 // POST: Generate invite link
 export async function POST(request: NextRequest, context: RouteContext) {
+  const guard = socialFeatureGuard()
+  if (guard) return guard
+
   const rateLimitResp = await checkRateLimit(request, RateLimitPresets.write)
   if (rateLimitResp) return rateLimitResp
 

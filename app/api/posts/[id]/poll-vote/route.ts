@@ -13,11 +13,15 @@ import {
 } from '@/lib/api'
 import { checkRateLimit, RateLimitPresets } from '@/lib/utils/rate-limit'
 import logger from '@/lib/logger'
+import { socialFeatureGuard } from '@/lib/features'
 
 type RouteContext = { params: Promise<{ id: string }> }
 
 // 获取投票详情
 export async function GET(request: NextRequest, context: RouteContext) {
+  const guard = socialFeatureGuard()
+  if (guard) return guard
+
   try {
     const rateLimitResponse = await checkRateLimit(request, RateLimitPresets.write)
     if (rateLimitResponse) return rateLimitResponse
@@ -93,6 +97,9 @@ export async function GET(request: NextRequest, context: RouteContext) {
 
 // 投票
 export async function POST(request: NextRequest, context: RouteContext) {
+  const guard = socialFeatureGuard()
+  if (guard) return guard
+
   try {
     const { id: postId } = await context.params
     const user = await requireAuth(request)

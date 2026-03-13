@@ -9,12 +9,16 @@ import { apiLogger } from '@/lib/utils/logger'
 import { getAuthUser } from '@/lib/supabase/server'
 import { validateCsrfToken, CSRF_COOKIE_NAME, CSRF_HEADER_NAME } from '@/lib/utils/csrf'
 import { checkRateLimit, RateLimitPresets } from '@/lib/utils/rate-limit'
+import { socialFeatureGuard } from '@/lib/features'
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!
 
 // 批量检查多个帖子的收藏状态
 export async function POST(request: NextRequest) {
+  const guard = socialFeatureGuard()
+  if (guard) return guard
+
   const rateLimitResp = await checkRateLimit(request, RateLimitPresets.write)
   if (rateLimitResp) return rateLimitResp
 

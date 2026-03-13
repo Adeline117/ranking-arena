@@ -3,6 +3,7 @@ import { createClient } from '@supabase/supabase-js'
 import { createLogger } from '@/lib/utils/logger'
 import { deleteServerCacheByPrefix } from '@/lib/utils/server-cache'
 import { checkRateLimit, RateLimitPresets } from '@/lib/utils/rate-limit'
+import { socialFeatureGuard } from '@/lib/features'
 
 const logger = createLogger('posts-delete')
 
@@ -13,6 +14,9 @@ export async function DELETE(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const guard = socialFeatureGuard()
+  if (guard) return guard
+
   try {
     const rateLimitResponse = await checkRateLimit(request, RateLimitPresets.write)
     if (rateLimitResponse) return rateLimitResponse

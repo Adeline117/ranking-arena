@@ -15,6 +15,7 @@ import { createClient } from '@supabase/supabase-js'
 import { createLogger, fireAndForget } from '@/lib/utils/logger'
 import { getAuthUser } from '@/lib/supabase/server'
 import { tieredGet, tieredSet, tieredDel } from '@/lib/cache/redis-layer'
+import { features } from '@/lib/features'
 
 export const dynamic = 'force-dynamic'
 
@@ -254,7 +255,13 @@ export async function GET(request: NextRequest) {
       fireAndForget(tieredSet(cacheKey, result, 'hot', ['following']), 'Cache following list')
     }
 
-    const { items, traderCount, userCount } = result
+    let { items, traderCount, userCount } = result
+
+    // When social features are off, filter to trader items only
+    if (!features.social) {
+      items = items.filter(item => item.type === 'trader')
+      userCount = 0
+    }
 
     // Apply pagination if limit is provided
     const limit = limitParam ? Math.min(Math.max(parseInt(limitParam, 10) || 50, 1), 200) : undefined

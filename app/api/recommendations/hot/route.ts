@@ -10,6 +10,7 @@ import { computeHotTraders } from '@/lib/recommendations/hot-score'
 import { tieredGetOrSet } from '@/lib/cache/redis-layer'
 import { createLogger } from '@/lib/utils/logger'
 import type { HotTrader } from '@/lib/recommendations/hot-score'
+import { socialFeatureGuard } from '@/lib/features'
 
 const logger = createLogger('api-rec-hot')
 
@@ -20,6 +21,9 @@ export const preferredRegion = ['sfo1', 'hnd1']
 const CACHE_KEY = 'recommendations:hot'
 
 export async function GET(req: NextRequest) {
+  const guard = socialFeatureGuard()
+  if (guard) return guard
+
   try {
     const { searchParams } = new URL(req.url)
     const limit = Math.min(100, Math.max(1, parseInt(searchParams.get('limit') || '20', 10)))

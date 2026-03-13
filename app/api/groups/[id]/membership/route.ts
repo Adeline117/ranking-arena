@@ -2,11 +2,15 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getSupabaseAdmin, getAuthUser } from '@/lib/supabase/server'
 import { logger } from '@/lib/logger'
 import { checkRateLimit, RateLimitPresets } from '@/lib/utils/rate-limit'
+import { socialFeatureGuard } from '@/lib/features'
 
 export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const guard = socialFeatureGuard()
+  if (guard) return guard
+
   const rateLimitResp = await checkRateLimit(request, RateLimitPresets.write)
   if (rateLimitResp) return rateLimitResp
 

@@ -23,6 +23,9 @@ import {
   markAllNotificationsAsRead,
   deleteNotification,
 } from '@/lib/data/notifications'
+import { features } from '@/lib/features'
+
+const SOCIAL_NOTIFICATION_TYPES = ['post_reply', 'new_follower', 'group_update', 'like', 'comment', 'follow', 'mention']
 
 export async function GET(request: NextRequest) {
   try {
@@ -34,13 +37,20 @@ export async function GET(request: NextRequest) {
     const offset = validateNumber(searchParams.get('offset'), { min: 0 }) ?? 0
     const unread_only = searchParams.get('unread_only') === 'true'
 
-    const [notifications, unreadCount] = await Promise.all([
+    let [notifications, unreadCount] = await Promise.all([
       getUserNotifications(supabase, user.id, { limit, offset, unread_only }),
       getUnreadNotificationCount(supabase, user.id),
     ])
 
+    // When social features are off, filter out social notification types
+    if (!features.social) {
+      notifications = notifications.filter(
+        (n: { type?: string }) => !SOCIAL_NOTIFICATION_TYPES.includes(n.type || '')
+      )
+    }
+
     return successWithPagination(
-      { notifications, unread_count: unreadCount },
+      { notifications, unread_count: features.social ? unreadCount : notifications.length },
       { limit, offset, has_more: notifications.length === limit }
     )
   } catch (error: unknown) {

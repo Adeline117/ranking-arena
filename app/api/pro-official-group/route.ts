@@ -9,6 +9,7 @@ import { verifyAuth } from '@/lib/api/auth'
 import { hasFeatureAccess } from '@/lib/premium'
 import { createLogger } from '@/lib/utils/logger'
 import { checkRateLimit, RateLimitPresets } from '@/lib/utils/rate-limit'
+import { socialFeatureGuard } from '@/lib/features'
 
 // 服务端 Supabase 客户端（延迟初始化以避免构建时错误）
 function getSupabase() {
@@ -30,6 +31,9 @@ const MAX_MEMBERS_PER_GROUP = 500
  * GET - 获取当前用户的官方群信息
  */
 export async function GET(request: NextRequest) {
+  const guard = socialFeatureGuard()
+  if (guard) return guard
+
   try {
     // 验证用户
     const authResult = await verifyAuth(request)
@@ -72,6 +76,9 @@ export async function GET(request: NextRequest) {
  * POST - 加入官方群（成为 Pro 会员时调用）
  */
 export async function POST(request: NextRequest) {
+  const guard = socialFeatureGuard()
+  if (guard) return guard
+
   const rateLimitResp = await checkRateLimit(request, RateLimitPresets.write)
   if (rateLimitResp) return rateLimitResp
 
@@ -130,6 +137,9 @@ export async function POST(request: NextRequest) {
  * DELETE - 离开官方群（取消订阅时调用）
  */
 export async function DELETE(request: NextRequest) {
+  const guard = socialFeatureGuard()
+  if (guard) return guard
+
   const rateLimitResp = await checkRateLimit(request, RateLimitPresets.write)
   if (rateLimitResp) return rateLimitResp
 
