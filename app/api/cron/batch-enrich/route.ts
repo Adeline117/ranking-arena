@@ -13,6 +13,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { PipelineLogger } from '@/lib/services/pipeline-logger'
 import { runEnrichment, type EnrichmentResult } from '@/lib/cron/enrichment-runner'
+import { createLogger } from '@/lib/utils/logger'
+
+const logger = createLogger('batch-enrich')
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 600 // Vercel Pro max: 10 minutes (was 300s)
@@ -199,7 +202,7 @@ export async function GET(request: NextRequest) {
       
       const batchSucceeded = settled.filter(r => r.status === 'success').length
       const batchFailed = settled.length - batchSucceeded
-      console.log(`Batch ${period}: ${batchSucceeded} success, ${batchFailed} failed`)
+      logger.info(`Batch ${period}: ${batchSucceeded} success, ${batchFailed} failed`)
     }
   }
 
