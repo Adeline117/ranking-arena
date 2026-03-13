@@ -94,9 +94,10 @@ export async function GET(request: NextRequest) {
     const cursor = searchParams.get('cursor') || undefined; // format: "score:id" for keyset pagination
     const minPnl = searchParams.get('min_pnl') ? Number(searchParams.get('min_pnl')) : undefined;
     const minTrades = searchParams.get('min_trades') ? Number(searchParams.get('min_trades')) : undefined;
+    const traderType = searchParams.get('trader_type') as 'human' | 'bot' | null;
 
     // Use tiered cache (memory → Redis → DB) for rankings
-    const cacheKey = `api:rankings:${normalizedWindow}:${category || 'all'}:${platform || 'all'}:${sortBy}:${sortDir}:${limit}:${cursor || offset}:${minPnl || ''}:${minTrades || ''}`
+    const cacheKey = `api:rankings:${normalizedWindow}:${category || 'all'}:${platform || 'all'}:${sortBy}:${sortDir}:${limit}:${cursor || offset}:${minPnl || ''}:${minTrades || ''}:${traderType || ''}`
 
      
     let result: unknown;
@@ -150,6 +151,7 @@ export async function GET(request: NextRequest) {
         sort_dir: sortDir,
         min_pnl: minPnl,
         min_trades: minTrades,
+        trader_type: traderType || undefined,
       };
       result = await tieredGetOrSet(
         cacheKey,
@@ -183,6 +185,7 @@ async function getRankingsFallback(rankingsQuery: RankingsQuery, cursor?: string
     sort_dir = 'desc',
     min_pnl,
     min_trades,
+    trader_type,
   } = rankingsQuery;
 
   const supabase = getSupabaseAdmin();
@@ -246,6 +249,13 @@ async function getRankingsFallback(rankingsQuery: RankingsQuery, cursor?: string
   }
   if (min_trades != null) {
     dbQuery = dbQuery.gte('trades_count', min_trades);
+  }
+
+  // Filter by trader type (human/bot)
+  if (trader_type === 'bot') {
+    dbQuery = dbQuery.or('trader_type.eq.bot,source.eq.web3_bot');
+  } else if (trader_type === 'human') {
+    dbQuery = dbQuery.neq('source', 'web3_bot').or('trader_type.is.null,trader_type.neq.bot');
   }
 
   const { data: rows, count: totalCount, error } = await dbQuery;
