@@ -2,8 +2,11 @@
 
 import Link from 'next/link'
 import { tokens } from '@/lib/design-tokens'
+import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 
 export default function NotFound() {
+  const { t } = useLanguage()
+
   return (
     <div style={{
       minHeight: '60vh',
@@ -15,13 +18,13 @@ export default function NotFound() {
       textAlign: 'center',
     }}>
       <h1 style={{ fontSize: 24, fontWeight: 700, marginBottom: tokens.spacing[3], color: tokens.colors.text.primary }}>
-        Exchange Not Found
+        {t('exchangeNotFound')}
       </h1>
       <p style={{ fontSize: 14, color: tokens.colors.text.secondary, marginBottom: tokens.spacing[6] }}>
-        This exchange ranking page does not exist.
+        {t('exchangeNotFoundDesc')}
       </p>
       <Link
-        href="/rankings"
+        href="/"
         style={{
           padding: '10px 28px',
           borderRadius: tokens.radius.md,
@@ -32,7 +35,7 @@ export default function NotFound() {
           fontSize: 14,
         }}
       >
-        Back to Rankings
+        {t('backToHome')}
       </Link>
     </div>
   )
