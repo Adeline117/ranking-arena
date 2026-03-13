@@ -97,44 +97,58 @@ async function saveTraders(traders: MexcTrader[], period: string) {
   let saved = 0
   let avatarCount = 0
   
+  // Pre-process traders into batch-ready arrays
+  const sourceRows: Array<Record<string, unknown>> = []
+  const snapshotRows: Array<Record<string, unknown>> = []
+
   for (let i = 0; i < traders.length; i++) {
     const item = traders[i]
     const traderId = String(item.traderId || item.uid || item.id || item.userId || '')
     if (!traderId) continue
-    
+
     const avatar = item.avatar || item.avatarUrl || null
     if (avatar && !avatar.includes('banner')) avatarCount++
-    
+
     let roi = parseFloat(String(item.roi || item.totalRoi || item.pnlRate || 0))
     if (Math.abs(roi) < 10) roi = roi * 100
-    
-    try {
-      await supabase.from('trader_sources').upsert({
-        source: SOURCE,
-        source_type: 'leaderboard',
-        source_trader_id: traderId,
-        handle: item.nickName || item.nickname || item.name || item.displayName || `Trader_${traderId}`,
-        profile_url: (avatar && !avatar.includes('banner')) ? avatar : null,
-        is_active: true,
-      }, { onConflict: 'source,source_trader_id' })
-      
-      await supabase.from('trader_snapshots').insert({
-        source: SOURCE,
-        source_trader_id: traderId,
-        season_id: period,
-        rank: i + 1,
-        roi,
-        pnl: parseFloat(String(item.pnl || item.totalPnl || item.profit || 0)),
-        win_rate: parseFloat(String(item.winRate || 0)) * (item.winRate && item.winRate > 1 ? 1 : 100),
-        max_drawdown: parseFloat(String(item.mdd || item.maxDrawdown || 0)),
-        followers: parseInt(String(item.followerCount || item.copierCount || item.followers || 0)),
-        captured_at: capturedAt,
-      })
-      
-      saved++
-    } catch {
-      // Expected: Supabase upsert may throw on duplicate key conflict; safe to skip
-    }
+
+    sourceRows.push({
+      source: SOURCE,
+      source_type: 'leaderboard',
+      source_trader_id: traderId,
+      handle: item.nickName || item.nickname || item.name || item.displayName || `Trader_${traderId}`,
+      profile_url: (avatar && !avatar.includes('banner')) ? avatar : null,
+      is_active: true,
+    })
+
+    snapshotRows.push({
+      source: SOURCE,
+      source_trader_id: traderId,
+      season_id: period,
+      rank: i + 1,
+      roi,
+      pnl: parseFloat(String(item.pnl || item.totalPnl || item.profit || 0)),
+      win_rate: parseFloat(String(item.winRate || 0)) * (item.winRate && item.winRate > 1 ? 1 : 100),
+      max_drawdown: parseFloat(String(item.mdd || item.maxDrawdown || 0)),
+      followers: parseInt(String(item.followerCount || item.copierCount || item.followers || 0)),
+      captured_at: capturedAt,
+    })
+  }
+
+  // Batch upsert trader_sources (100 per batch)
+  for (let i = 0; i < sourceRows.length; i += 100) {
+    await supabase.from('trader_sources').upsert(
+      sourceRows.slice(i, i + 100),
+      { onConflict: 'source,source_trader_id' }
+    )
+  }
+
+  // Batch insert snapshots (100 per batch)
+  for (let i = 0; i < snapshotRows.length; i += 100) {
+    const { error } = await supabase.from('trader_snapshots').insert(
+      snapshotRows.slice(i, i + 100)
+    )
+    if (!error) saved += Math.min(100, snapshotRows.length - i)
   }
   
   return { saved, avatarCount }
