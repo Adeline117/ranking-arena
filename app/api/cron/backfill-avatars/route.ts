@@ -386,8 +386,9 @@ export async function GET(request: Request) {
   const mode = url.searchParams.get('mode') || 'auto' // 'bulk', 'individual', 'auto'
   const plog = await PipelineLogger.start(`backfill-avatars-${platform || 'unknown'}`)
 
-  // Skip dead platforms that will just waste time
-  const DEAD_PLATFORMS = new Set(['kucoin', 'lbank', 'weex', 'phemex', 'blofin'])
+  // Skip dead platforms — import from canonical source
+  const { DEAD_BLOCKED_PLATFORMS } = await import('@/lib/constants/exchanges')
+  const DEAD_PLATFORMS = new Set(DEAD_BLOCKED_PLATFORMS as string[])
 
   // Support comma-separated platforms for consolidated cron jobs
   if (platform && platform.includes(',')) {
