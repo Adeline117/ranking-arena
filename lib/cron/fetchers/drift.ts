@@ -126,21 +126,30 @@ export async function fetchDrift(
   supabase: SupabaseClient,
   periods: string[]
 ): Promise<FetchResult> {
-  const start = Date.now()
-  const result: FetchResult = { source: SOURCE, periods: {}, duration: 0 }
+  // Hard timeout protection: 5 minutes max
+  const timeoutPromise = new Promise<never>((_, reject) =>
+    setTimeout(() => reject(new Error('Hard timeout: fetchDrift exceeded 5 minutes')), 300000)
+  )
 
-  for (const period of periods) {
-    try {
-      result.periods[period] = await fetchPeriod(supabase, period)
-    } catch (err) {
-      captureException(err instanceof Error ? err : new Error(String(err)), {
-        tags: { platform: SOURCE, period },
-      })
-      result.periods[period] = { total: 0, saved: 0, error: err instanceof Error ? err.message : String(err) }
+  const mainWork = async (): Promise<FetchResult> => {
+    const start = Date.now()
+    const result: FetchResult = { source: SOURCE, periods: {}, duration: 0 }
+
+    for (const period of periods) {
+      try {
+        result.periods[period] = await fetchPeriod(supabase, period)
+      } catch (err) {
+        captureException(err instanceof Error ? err : new Error(String(err)), {
+          tags: { platform: SOURCE, period },
+        })
+        result.periods[period] = { total: 0, saved: 0, error: err instanceof Error ? err.message : String(err) }
+      }
+      if (periods.indexOf(period) < periods.length - 1) await sleep(1000)
     }
-    if (periods.indexOf(period) < periods.length - 1) await sleep(1000)
+
+    result.duration = Date.now() - start
+    return result
   }
 
-  result.duration = Date.now() - start
-  return result
+  return Promise.race([mainWork(), timeoutPromise])
 }

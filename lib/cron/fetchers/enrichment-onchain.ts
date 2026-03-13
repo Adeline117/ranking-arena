@@ -191,15 +191,29 @@ export async function fetchGainsOnchainEquityCurve(
   traderAddress: string,
   days: number
 ): Promise<EquityCurvePoint[]> {
+  // Hard timeout protection: 2 minutes max per trader
+  const timeoutPromise = new Promise<never>((_, reject) =>
+    setTimeout(() => reject(new Error('Hard timeout: fetchGainsOnchainEquityCurve exceeded 2 minutes')), 120000)
+  )
+
+  const mainWork = async (): Promise<EquityCurvePoint[]> => {
+    try {
+      const positions = await fetchGainsOnchainPositionHistory(traderAddress, 500)
+      if (positions.length === 0) return []
+      // Only use positions with PnL data
+      const withPnl = positions.filter((p) => p.pnlUsd != null)
+      if (withPnl.length < 2) return []
+      return buildEquityCurveFromPositions(withPnl, days)
+    } catch (err) {
+      logger.warn(`[gains-onchain] Equity curve failed: ${err instanceof Error ? err.message : String(err)}`)
+      return []
+    }
+  }
+
   try {
-    const positions = await fetchGainsOnchainPositionHistory(traderAddress, 500)
-    if (positions.length === 0) return []
-    // Only use positions with PnL data
-    const withPnl = positions.filter((p) => p.pnlUsd != null)
-    if (withPnl.length < 2) return []
-    return buildEquityCurveFromPositions(withPnl, days)
+    return await Promise.race([mainWork(), timeoutPromise])
   } catch (err) {
-    logger.warn(`[gains-onchain] Equity curve failed: ${err instanceof Error ? err.message : String(err)}`)
+    logger.warn(`[gains-onchain] Equity curve timeout for ${traderAddress}: ${err instanceof Error ? err.message : String(err)}`)
     return []
   }
 }
@@ -443,33 +457,47 @@ export async function fetchKwentaOnchainStatsDetail(
 export async function fetchGainsOnchainStatsDetail(
   traderAddress: string
 ): Promise<StatsDetail | null> {
-  try {
-    const positions = await fetchGainsOnchainPositionHistory(traderAddress, 500)
-    const withPnl = positions.filter((p) => p.pnlUsd != null)
-    if (withPnl.length === 0) return null
+  // Hard timeout protection: 2 minutes max per trader
+  const timeoutPromise = new Promise<never>((_, reject) =>
+    setTimeout(() => reject(new Error('Hard timeout: fetchGainsOnchainStatsDetail exceeded 2 minutes')), 120000)
+  )
 
-    const derivedStats = computeStatsFromPositions(withPnl)
+  const mainWork = async (): Promise<StatsDetail | null> => {
+    try {
+      const positions = await fetchGainsOnchainPositionHistory(traderAddress, 500)
+      const withPnl = positions.filter((p) => p.pnlUsd != null)
+      if (withPnl.length === 0) return null
 
-    return {
-      totalTrades: derivedStats.totalTrades ?? positions.length,
-      profitableTradesPct: derivedStats.profitableTradesPct ?? null,
-      avgHoldingTimeHours: null,
-      avgProfit: derivedStats.avgProfit ?? null,
-      avgLoss: derivedStats.avgLoss ?? null,
-      largestWin: derivedStats.largestWin ?? null,
-      largestLoss: derivedStats.largestLoss ?? null,
-      sharpeRatio: null,
-      maxDrawdown: derivedStats.maxDrawdown ?? null,
-      currentDrawdown: null,
-      volatility: null,
-      copiersCount: null,
-      copiersPnl: null,
-      aum: null,
-      winningPositions: derivedStats.winningPositions ?? null,
-      totalPositions: derivedStats.totalPositions ?? null,
+      const derivedStats = computeStatsFromPositions(withPnl)
+
+      return {
+        totalTrades: derivedStats.totalTrades ?? positions.length,
+        profitableTradesPct: derivedStats.profitableTradesPct ?? null,
+        avgHoldingTimeHours: null,
+        avgProfit: derivedStats.avgProfit ?? null,
+        avgLoss: derivedStats.avgLoss ?? null,
+        largestWin: derivedStats.largestWin ?? null,
+        largestLoss: derivedStats.largestLoss ?? null,
+        sharpeRatio: null,
+        maxDrawdown: derivedStats.maxDrawdown ?? null,
+        currentDrawdown: null,
+        volatility: null,
+        copiersCount: null,
+        copiersPnl: null,
+        aum: null,
+        winningPositions: derivedStats.winningPositions ?? null,
+        totalPositions: derivedStats.totalPositions ?? null,
+      }
+    } catch (err) {
+      logger.warn(`[gains-onchain] Stats failed: ${err instanceof Error ? err.message : String(err)}`)
+      return null
     }
+  }
+
+  try {
+    return await Promise.race([mainWork(), timeoutPromise])
   } catch (err) {
-    logger.warn(`[gains-onchain] Stats failed: ${err instanceof Error ? err.message : String(err)}`)
+    logger.warn(`[gains-onchain] Stats detail timeout for ${traderAddress}: ${err instanceof Error ? err.message : String(err)}`)
     return null
   }
 }
