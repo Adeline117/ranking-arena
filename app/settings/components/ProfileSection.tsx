@@ -214,6 +214,7 @@ export const ProfileSection = React.memo(function ProfileSection({
           onBlur={markTouched}
           placeholder={t('setUsername')}
           autoComplete="username"
+          aria-label={t('username')}
           style={getInputStyle(touchedHandle && !handleValidation.valid)}
         />
         <Box style={{ display: 'flex', justifyContent: 'space-between', marginTop: tokens.spacing[1] }}>
@@ -254,6 +255,7 @@ export const ProfileSection = React.memo(function ProfileSection({
           value={bio}
           onChange={(e) => setBio(e.target.value.slice(0, MAX_BIO_LENGTH))}
           placeholder={t('introduceSelf')}
+          aria-label={t('personalBio')}
           rows={4}
           style={{
             ...getInputStyle(),

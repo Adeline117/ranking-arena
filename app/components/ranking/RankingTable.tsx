@@ -485,12 +485,12 @@ function RankingTableInner(props: {
           {t('maxDrawdownShort')} <SortIndicator active={sortColumn === 'mdd'} dir={sortDir} />
         </Box>
         {visibleColumns.includes('sortino') && (
-          <Box className={`col-sortino sort-header sort-header-end${sortColumn === 'sortino' ? ' sort-header-active' : ''} ${justSortedColumn === 'sortino' ? 'just-sorted' : ''}`} as="button" onClick={() => handleSort('sortino')} title={t('sortinoTooltip') || 'Sortino Ratio'} data-sortable>
+          <Box className={`col-sortino sort-header sort-header-end${sortColumn === 'sortino' ? ' sort-header-active' : ''} ${justSortedColumn === 'sortino' ? 'just-sorted' : ''}`} as="button" onClick={() => handleSort('sortino')} title={t('sortinoTooltip') || 'Sortino Ratio'} aria-sort={sortColumn === 'sortino' ? (sortDir === 'asc' ? 'ascending' : 'descending') : 'none'} data-sortable>
             {t('sortinoRatio')} <SortIndicator active={sortColumn === 'sortino'} dir={sortDir} />
           </Box>
         )}
         {visibleColumns.includes('alpha') && (
-          <Box className={`col-alpha sort-header sort-header-end${sortColumn === 'alpha' ? ' sort-header-active' : ''} ${justSortedColumn === 'alpha' ? 'just-sorted' : ''}`} as="button" onClick={() => handleSort('alpha')} title={t('alphaTooltip') || 'Alpha (excess return)'} data-sortable>
+          <Box className={`col-alpha sort-header sort-header-end${sortColumn === 'alpha' ? ' sort-header-active' : ''} ${justSortedColumn === 'alpha' ? 'just-sorted' : ''}`} as="button" onClick={() => handleSort('alpha')} title={t('alphaTooltip') || 'Alpha (excess return)'} aria-sort={sortColumn === 'alpha' ? (sortDir === 'asc' ? 'ascending' : 'descending') : 'none'} data-sortable>
             Alpha <SortIndicator active={sortColumn === 'alpha'} dir={sortDir} />
           </Box>
         )}

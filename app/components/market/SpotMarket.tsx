@@ -173,7 +173,7 @@ export default function SpotMarket({ onTokenClick }: { onTokenClick?: (token: Sp
     },
     {
       key: 'symbol',
-      label: t('tradingPair') || '交易对',
+      label: t('tradingPair'),
       align: 'left',
       width: '20%',
       sortable: true,
@@ -237,21 +237,21 @@ export default function SpotMarket({ onTokenClick }: { onTokenClick?: (token: Sp
     },
     {
       key: 'price',
-      label: t('lastPrice') || '最新价',
+      label: t('lastPrice'),
       width: '16%',
       sortable: true,
       render: (r) => <FlashPrice value={formatPrice(r.price)} flash={flashes[r.symbol.toUpperCase()]} />,
     },
     {
       key: 'change24h',
-      label: t('change24h') || '24h涨跌',
+      label: t('change24h'),
       width: '13%',
       sortable: true,
       render: (r) => <ChangeCell value={r.change24h} />,
     },
     {
       key: 'volume24h',
-      label: t('volume24h') || '成交量',
+      label: t('volume24h'),
       width: '16%',
       sortable: true,
       render: (r) => (
@@ -262,7 +262,7 @@ export default function SpotMarket({ onTokenClick }: { onTokenClick?: (token: Sp
     },
     {
       key: 'marketCap',
-      label: t('marketCapShort') || '市值',
+      label: t('marketCapShort'),
       width: '14%',
       sortable: true,
       render: (r) => (
@@ -296,7 +296,7 @@ export default function SpotMarket({ onTokenClick }: { onTokenClick?: (token: Sp
               borderRadius: tokens.radius.md,
               transition: `all ${tokens.transition.fast}`,
             }}
-            title={t('favorite') || '收藏'}
+            title={t('favorite')}
           >
             {isFav ? '\u2605' : '\u2606'}
           </button>
@@ -344,8 +344,8 @@ export default function SpotMarket({ onTokenClick }: { onTokenClick?: (token: Sp
             type="text"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder={t('searchCoin') || '搜索币种...'}
-            aria-label={t('searchCoin') || 'Search coins'}
+            placeholder={t('searchCoin')}
+            aria-label={t('searchCoin')}
             style={{
               padding: `${tokens.spacing[3]} ${tokens.spacing[4]} ${tokens.spacing[3]} 40px`,
               background: tokens.glass.bg.medium,
@@ -384,7 +384,7 @@ export default function SpotMarket({ onTokenClick }: { onTokenClick?: (token: Sp
           }}
         >
           <span style={{ fontSize: 16 }}>{showFavOnly ? '\u2605' : '\u2606'}</span>
-          {t('favorite') || 'Favorites'}
+          {t('favorite')}
           {favorites.size > 0 && (
             <span style={{
               padding: '1px 6px',

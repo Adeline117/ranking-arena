@@ -328,18 +328,18 @@ function CompareContent() {
             }}
           >
             <Text size="sm" weight="bold" style={{ marginBottom: tokens.spacing[3] }}>
-              {t('compareFromFollowing') || '从关注列表选择'}
+              {t('compareFromFollowing')}
             </Text>
 
             {!accessToken ? (
               <Text size="sm" color="tertiary">
-                {t('compareLoginToSelect') || 'Log in to select from your following list'}
+                {t('compareLoginToSelect')}
               </Text>
             ) : followedLoading ? (
               <Text size="sm" color="tertiary">{t('loading')}</Text>
             ) : followedTraders.length === 0 ? (
               <Text size="sm" color="tertiary">
-                {t('compareNoFollowed') || '暂无关注的交易员'}
+                {t('compareNoFollowed')}
               </Text>
             ) : (
               <Box
@@ -429,7 +429,7 @@ function CompareContent() {
                       </Box>
                       {isAdded && (
                         <Text size="xs" color="tertiary" style={{ flexShrink: 0 }}>
-                          {t('compareAdded') || '已添加'}
+                          {t('compareAdded')}
                         </Text>
                       )}
                     </Box>
