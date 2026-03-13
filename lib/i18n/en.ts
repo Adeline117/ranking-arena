@@ -58,7 +58,7 @@ const en = {
     userCenter: 'User Center',
     multiChain: 'Multi-Chain',
     notifications: 'Notifications',
-    searchPlaceholder: 'Search traders, posts, groups...',
+    searchPlaceholder: 'Search traders, exchanges, tools...',
     rank: 'Rank',
     trader: 'Trader',
     roi90d: 'ROI (90D)',

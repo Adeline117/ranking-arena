@@ -126,6 +126,7 @@ export async function getTraderDetails(
      (snapshot.win_rate === 0 || snapshot.win_rate == null) &&
      (snapshot.pnl == null || Math.abs(snapshot.pnl as number) < 0.01))
   if (isEmptySnapshot) {
+    // Fallback 1: leaderboard_ranks
     const { data: lrRows } = await supabase
       .from('leaderboard_ranks')
       .select('season_id, roi, pnl, win_rate, max_drawdown, trades_count, followers, arena_score, sharpe_ratio, sortino_ratio, profit_factor, calmar_ratio, profitability_score, risk_control_score, execution_score')
@@ -153,6 +154,45 @@ export async function getTraderDetails(
       if (best) snapshot = mapLR(best)
       if (lr7) snapshot7d = mapLR(lr7)
       if (lr30) snapshot30d = mapLR(lr30)
+    }
+
+    // Fallback 2: trader_snapshots_v2 (Connector path writes here only)
+    const stillEmpty = !snapshot ||
+      ((snapshot.roi === 0 || snapshot.roi == null) &&
+       (snapshot.win_rate === 0 || snapshot.win_rate == null) &&
+       (snapshot.pnl == null || Math.abs(snapshot.pnl as number) < 0.01))
+    if (stillEmpty) {
+      const { data: v2Rows } = await supabase
+        .from('trader_snapshots_v2')
+        .select('window, roi_pct, pnl_usd, win_rate, max_drawdown, trades_count, followers, copiers, sharpe_ratio, arena_score, created_at')
+        .eq('platform', sourceType)
+        .eq('trader_key', traderId)
+        .order('created_at', { ascending: false })
+        .limit(3)
+
+      if (v2Rows && v2Rows.length > 0) {
+        const mapV2 = (row: Record<string, unknown>): SnapshotData => ({
+          roi: row.roi_pct as number | null,
+          pnl: row.pnl_usd as number | null,
+          win_rate: row.win_rate as number | null,
+          max_drawdown: row.max_drawdown as number | null,
+          trades_count: row.trades_count as number | null,
+          followers: row.followers as number | null,
+          arena_score: row.arena_score as number | null,
+          profitability_score: null,
+          risk_control_score: null,
+          execution_score: null,
+        })
+
+        const v2_90 = v2Rows.find((r: Record<string, unknown>) => r.window === '90d' || r.window === '90D')
+        const v2_30 = v2Rows.find((r: Record<string, unknown>) => r.window === '30d' || r.window === '30D')
+        const v2_7 = v2Rows.find((r: Record<string, unknown>) => r.window === '7d' || r.window === '7D')
+        const best = v2_90 || v2_30 || v2_7 || v2Rows[0]
+
+        if (best) snapshot = mapV2(best)
+        if (v2_7) snapshot7d = mapV2(v2_7)
+        if (v2_30) snapshot30d = mapV2(v2_30)
+      }
     }
   }
 

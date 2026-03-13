@@ -58,7 +58,7 @@ const ko = {
     userCenter: '사용자 센터',
     multiChain: '멀티체인',
     notifications: '알림',
-    searchPlaceholder: '트레이더, 게시글, 그룹 검색...',
+    searchPlaceholder: '트레이더, 거래소, 도구 검색...',
     rank: '순위',
     trader: '트레이더',
     roi90d: 'ROI (90일)',
