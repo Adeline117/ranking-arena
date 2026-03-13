@@ -216,6 +216,20 @@ export class DydxPerpConnector extends BaseConnector {
   }
 
   normalize(raw: Record<string, unknown>): Record<string, unknown> {
-    return { trader_key: raw.address, pnl: Number(raw.pnl) || null }
+    return {
+      trader_key: raw.address ?? null,
+      display_name: null,
+      avatar_url: null,
+      roi: null,
+      pnl: raw.pnl != null ? Number(raw.pnl) || null : null,
+      win_rate: null,
+      max_drawdown: null,
+      trades_count: null,
+      followers: null,
+      copiers: null,
+      aum: null,
+      sharpe_ratio: null,
+      platform_rank: raw.rank != null ? Number(raw.rank) : null,
+    }
   }
 }

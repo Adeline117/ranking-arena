@@ -97,8 +97,32 @@ export class PhemexFuturesConnector extends BaseConnector {
     return { series: [], fetched_at: new Date().toISOString() }
   }
 
+  /**
+   * Normalize raw Phemex leaderboard entry.
+   * Raw fields: uid, nickname, avatar, roi, pnl, winRate (decimal 0-1),
+   * maxDrawdown (decimal 0-1), followers, copiers.
+   */
   normalize(raw: Record<string, unknown>): Record<string, unknown> {
-    return { trader_key: raw.uid, roi: this.num(raw.roi), pnl: this.num(raw.pnl) }
+    const rawWr = this.num(raw.winRate)
+    const winRate = rawWr != null ? (rawWr <= 1 ? rawWr * 100 : rawWr) : null
+    const rawMdd = this.num(raw.maxDrawdown)
+    const maxDrawdown = rawMdd != null ? Math.abs(rawMdd <= 1 ? rawMdd * 100 : rawMdd) : null
+
+    return {
+      trader_key: raw.uid ?? null,
+      display_name: raw.nickname ?? null,
+      avatar_url: raw.avatar ?? null,
+      roi: this.num(raw.roi),
+      pnl: this.num(raw.pnl),
+      win_rate: winRate,
+      max_drawdown: maxDrawdown,
+      trades_count: null,
+      followers: this.num(raw.followers),
+      copiers: this.num(raw.copiers),
+      aum: null,
+      sharpe_ratio: null,
+      platform_rank: null,
+    }
   }
 
   private num(val: unknown): number | null {

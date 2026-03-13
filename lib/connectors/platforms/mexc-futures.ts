@@ -119,7 +119,7 @@ export class MexcFuturesConnector extends BaseConnector {
     const roi = rawRoi != null ? (Math.abs(rawRoi) <= 1 ? rawRoi * 100 : rawRoi) : null
     const rawWr = this.num(raw.winRate)
     const winRate = rawWr != null ? (rawWr <= 1 ? rawWr * 100 : rawWr) : null
-    const rawMdd = this.num(raw.mdd ?? raw.maxDrawdown)
+    const rawMdd = this.num(raw.maxRetrace ?? raw.mdd ?? raw.maxDrawdown)
     const maxDrawdown = rawMdd != null ? Math.abs(rawMdd <= 1 ? rawMdd * 100 : rawMdd) : null
 
     return {
