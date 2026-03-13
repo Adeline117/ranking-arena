@@ -228,10 +228,15 @@ export default function NotificationsPage() {
     ? notifications
     : notifications.filter((n) => !SOCIAL_NOTIFICATION_TYPES.includes(n.type))
 
+  // Reset filter if it's a social type and social is off
+  const effectiveFilterType = (!features.social && SOCIAL_NOTIFICATION_TYPES.includes(filterType))
+    ? 'all'
+    : filterType
+
   // 过滤后的列表
-  const filtered = filterType === 'all'
+  const filtered = effectiveFilterType === 'all'
     ? visibleNotifications
-    : visibleNotifications.filter((n) => n.type === filterType)
+    : visibleNotifications.filter((n) => n.type === effectiveFilterType)
 
   const traderAlertCount = visibleNotifications.filter((n) => n.type === 'trader_alert').length
   const postReplyCount = visibleNotifications.filter((n) => n.type === 'post_reply').length
