@@ -68,7 +68,7 @@ const useIsMobile = () => {
 // Mobile-specific components
 function MobileOverviewTab() {
   return (
-    <SectionErrorBoundary fallbackMessage="核心指标加载失败">
+    <SectionErrorBoundary fallbackMessage="Failed to load core metrics">
       <Suspense fallback={<LoadingCard height={200} />}>
         <CoreCards />
       </Suspense>
@@ -209,7 +209,7 @@ function MarketPageContent() {
       <TopNav email={email} />
 
       {/* L0: Scrolling Price Ticker */}
-      <SectionErrorBoundary fallbackMessage="币价栏加载失败">
+      <SectionErrorBoundary fallbackMessage="Failed to load price ticker">
         <Suspense fallback={<div style={{ height: 48 }} />}>
           <PriceTicker />
         </Suspense>
@@ -236,7 +236,7 @@ function MarketPageContent() {
         }}>
           {/* L1: Core Cards */}
           <section style={{ marginBottom: 20 }}>
-            <SectionErrorBoundary fallbackMessage="核心指标加载失败">
+            <SectionErrorBoundary fallbackMessage="Failed to load core metrics">
               <Suspense fallback={<LoadingCard height={160} />}>
                 <CoreCards />
               </Suspense>
@@ -245,17 +245,17 @@ function MarketPageContent() {
 
           {/* Widgets row: Fear&Greed + Arbitrage + Live Trades */}
           <section style={{ marginBottom: 16, display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12, height: 200 }}>
-            <SectionErrorBoundary fallbackMessage="恐惧贪婪指数加载失败">
+            <SectionErrorBoundary fallbackMessage="Failed to load Fear &amp; Greed index">
               <Suspense fallback={<LoadingCard height={160} />}>
                 <FearGreedGauge />
               </Suspense>
             </SectionErrorBoundary>
-            <SectionErrorBoundary fallbackMessage="套利机会加载失败">
+            <SectionErrorBoundary fallbackMessage="Failed to load arbitrage">
               <Suspense fallback={<LoadingCard height={160} />}>
                 <ArbitrageOpportunities />
               </Suspense>
             </SectionErrorBoundary>
-            <SectionErrorBoundary fallbackMessage="实时成交加载失败">
+            <SectionErrorBoundary fallbackMessage="Failed to load live trades">
               <Suspense fallback={<LoadingCard height={160} />}>
                 <LiveTradesFeed />
               </Suspense>
@@ -273,7 +273,7 @@ function MarketPageContent() {
 
           {/* L3: Sector Treemap — below table so it doesn't push ranking down */}
           <section style={{ marginBottom: 24 }}>
-            <SectionErrorBoundary fallbackMessage="板块热力图加载失败">
+            <SectionErrorBoundary fallbackMessage="Failed to load sector heatmap">
               <Suspense fallback={<LoadingCard height={300} />}>
                 <SectorTreemap onSectorClick={handleSectorClick} />
               </Suspense>
