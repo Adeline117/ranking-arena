@@ -40,7 +40,7 @@ export async function GET(request: NextRequest) {
     // 获取订阅信息
     const { data: subscription, error: subError } = await supabase
       .from('group_subscriptions')
-      .select('*')
+      .select('id, tier, status, expires_at, price_paid')
       .eq('user_id', user.id)
       .eq('group_id', groupId)
       .in('status', ['active', 'trialing'])

@@ -28,7 +28,7 @@ export const GET = withApiMiddleware(
 
     let query = supabase
       .from('copy_trade_configs')
-      .select('*')
+      .select('id, user_id, trader_id, exchange, settings, active, created_at, updated_at')
       .eq('user_id', user.id)
       .order('created_at', { ascending: false })
 

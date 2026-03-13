@@ -185,7 +185,7 @@ export async function GET(
 
     const { data: applications, error } = await supabase
       .from('group_edit_applications')
-      .select('*')
+      .select('id, group_id, applicant_id, name, name_en, description, description_en, avatar_url, rules_json, rules, role_names, is_premium_only, status, reject_reason, reviewed_at, reviewed_by, created_at')
       .eq('group_id', groupId)
       .order('created_at', { ascending: false })
 

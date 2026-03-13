@@ -29,7 +29,7 @@ export async function GET(
 
     const { data: collection, error } = await supabase
       .from('user_collections')
-      .select('*')
+      .select('id, user_id, name, description, is_public, created_at, updated_at')
       .eq('id', id)
       .single()
 
@@ -45,7 +45,7 @@ export async function GET(
     // Get items
     const { data: items } = await supabase
       .from('collection_items')
-      .select('*')
+      .select('id, collection_id, trader_id, source, source_trader_id, note, added_at')
       .eq('collection_id', id)
       .order('added_at', { ascending: false })
 

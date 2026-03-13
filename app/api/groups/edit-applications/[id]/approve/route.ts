@@ -53,7 +53,7 @@ export async function POST(
     // 获取申请信息
     const { data: application, error: fetchError } = await supabase
       .from('group_edit_applications')
-      .select('*')
+      .select('id, status')
       .eq('id', id)
       .single()
 

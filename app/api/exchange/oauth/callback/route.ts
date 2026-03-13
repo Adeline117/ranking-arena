@@ -91,7 +91,7 @@ export async function POST(request: NextRequest) {
     // 验证 state 并获取 code_verifier（如果使用 PKCE）
     const { data: stateData, error: stateError } = await supabase
       .from('oauth_states')
-      .select('*')
+      .select('id, code_verifier')
       .eq('user_id', userId)
       .eq('exchange', exchange)
       .eq('state', state)
