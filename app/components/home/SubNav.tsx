@@ -22,8 +22,14 @@ const TABS = ALL_TABS.filter(tab => {
   return true
 })
 
+/** Default tab when social is disabled (only non-social tabs remain) */
+export const DEFAULT_TAB: SubNavTab = TABS.length > 0 ? TABS[0].key : 'bookshelf'
+
 export default function SubNav({ activeTab, onTabChange }: SubNavProps) {
   const { t } = useLanguage()
+
+  // Don't render a tab bar when there's only one tab
+  if (TABS.length <= 1) return null
 
   return (
     <div
