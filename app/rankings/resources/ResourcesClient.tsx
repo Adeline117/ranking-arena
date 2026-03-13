@@ -26,11 +26,19 @@ const CATEGORY_I18N: Record<string, string> = {
   academic_paper: 'resourcesCategoryAcademic',
 }
 
-const SORT_KEYS = ['recent', 'popular', 'rating'] as const
+const SORT_KEYS = ['recent', 'popular', 'rating', 'downloads'] as const
 const SORT_I18N: Record<string, string> = {
   recent: 'resourcesSortRecent',
   popular: 'resourcesSortPopular',
   rating: 'resourcesSortRating',
+  downloads: 'resourcesSortDownloads',
+}
+
+const LANG_KEYS = ['all', 'en', 'zh'] as const
+const LANG_I18N: Record<string, string> = {
+  all: 'resourcesLangAll',
+  en: 'resourcesLangEn',
+  zh: 'resourcesLangZh',
 }
 
 const PAGE_SIZE = 24
@@ -91,6 +99,7 @@ export default function ResourcesClient({
   const [loadingMore, setLoadingMore] = useState(false)
   const [category, setCategory] = useState(searchParams.get('category') || 'all')
   const [sort, setSort] = useState('recent')
+  const [langFilter, setLangFilter] = useState('all')
   const [search, setSearch] = useState('')
   const [searchInput, setSearchInput] = useState('')
   const [page, setPage] = useState(1)
@@ -132,6 +141,7 @@ export default function ResourcesClient({
       if (category !== 'all') params.set('category', category)
       if (sort !== 'recent') params.set('sort', sort)
       if (search) params.set('search', search)
+      if (langFilter !== 'all') params.set('lang', langFilter)
       params.set('page', String(targetPage))
       params.set('limit', String(PAGE_SIZE))
       params.set('language', language)
@@ -151,7 +161,7 @@ export default function ResourcesClient({
       if (append) setLoadingMore(false)
       else setLoading(false)
     }
-  }, [category, sort, search, language])  // Note: `page` intentionally omitted — use pageRef instead
+  }, [category, sort, search, langFilter, language])  // Note: `page` intentionally omitted — use pageRef instead
 
   useEffect(() => {
     if (isInitialRender.current) {
@@ -188,6 +198,12 @@ export default function ResourcesClient({
   const handleSortChange = useCallback((s: string) => {
     setItems([])
     setSort(s)
+    setPage(1)
+  }, [])
+
+  const handleLangFilterChange = useCallback((lang: string) => {
+    setItems([])
+    setLangFilter(lang)
     setPage(1)
   }, [])
 
@@ -283,24 +299,24 @@ export default function ResourcesClient({
           )}
         </div>
 
-        {/* Category tabs + Sort — tabs aligned with Top 10 leaderboard columns */}
+        {/* Category tabs + Sort + Language filter */}
         <div style={{ display: 'flex', gap: 8, marginBottom: 24, flexWrap: 'wrap', alignItems: 'center' }}>
           {CATEGORY_KEYS.map(catKey => {
             const active = category === catKey
             const count = categoryCounts[catKey]
             const label = t(CATEGORY_I18N[catKey])
-            const displayLabel = count != null && count > 0
-              ? `${label} (${formatCount(count)})`
-              : label
             return (
               <button
                 key={catKey}
                 onClick={() => handleCategoryChange(catKey)}
                 style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 6,
                   padding: '8px 18px',
                   borderRadius: tokens.radius.full,
                   fontSize: 13,
-                  fontWeight: active ? 600 : 500,
+                  fontWeight: active ? 700 : 500,
                   letterSpacing: active ? '0.01em' : undefined,
                   border: active ? '1px solid transparent' : '1px solid var(--color-border-secondary)',
                   background: active ? tokens.gradient.purpleGold : 'var(--color-bg-secondary)',
@@ -311,10 +327,50 @@ export default function ResourcesClient({
                   whiteSpace: 'nowrap',
                 }}
               >
-                {displayLabel}
+                {label}
+                {count != null && count > 0 && (
+                  <span style={{
+                    fontSize: 11, fontWeight: 600,
+                    padding: '1px 7px', borderRadius: tokens.radius.full,
+                    background: active ? 'rgba(255,255,255,0.2)' : 'var(--color-accent-primary-12, rgba(139, 92, 246, 0.12))',
+                    color: active ? 'var(--color-on-accent, #fff)' : 'var(--color-accent-primary, #8B5CF6)',
+                    lineHeight: '1.5', minWidth: 20, textAlign: 'center' as const,
+                  }}>
+                    {formatCount(count)}
+                  </span>
+                )}
               </button>
             )
           })}
+
+          {/* Language filter */}
+          <select
+            value={langFilter}
+            aria-label={t('resourcesLanguageFilter')}
+            onChange={e => handleLangFilterChange(e.target.value)}
+            style={{
+              padding: '8px 28px 8px 14px',
+              borderRadius: tokens.radius.full,
+              border: '1px solid var(--color-border-secondary)',
+              background: 'var(--color-bg-secondary)',
+              color: 'var(--color-text-secondary)',
+              fontSize: 13,
+              fontWeight: 500,
+              cursor: 'pointer',
+              outline: 'none',
+              appearance: 'none' as const,
+              backgroundImage: `url("data:image/svg+xml,%3Csvg width='10' height='6' viewBox='0 0 10 6' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M1 1L5 5L9 1' stroke='%239CA3AF' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E")`,
+              backgroundRepeat: 'no-repeat',
+              backgroundPosition: 'right 10px center',
+              transition: `border-color ${tokens.transition.fast}`,
+            }}
+          >
+            {LANG_KEYS.map(langKey => (
+              <option key={langKey} value={langKey}>{t(LANG_I18N[langKey])}</option>
+            ))}
+          </select>
+
+          {/* Sort */}
           <select
             value={sort}
             aria-label={t('sortBy')}
