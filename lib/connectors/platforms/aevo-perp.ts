@@ -11,6 +11,7 @@
  */
 
 import { BaseConnector } from '../base'
+import { safeNumber } from '../utils'
 import type {
   LeaderboardPlatform,
   MarketType,
@@ -109,20 +110,25 @@ export class AevoPerpConnector extends BaseConnector {
     return { series: [], fetched_at: new Date().toISOString() }
   }
 
+  /**
+   * Normalize raw Aevo leaderboard entry.
+   * ROI estimated from PnL / (volume / 10). Low-volume traders get roi=null
+   * (not a hardcoded value) to avoid fake Arena Scores.
+   */
   normalize(raw: unknown): Record<string, unknown> {
     const e = raw as AevoLeaderboardEntry
-    const pnl = e.pnl != null ? parseFloat(String(e.pnl)) : null
-    const volume = e.totalVolume != null ? parseFloat(String(e.totalVolume)) : null
+    const pnl = safeNumber(e.pnl)
+    const volume = safeNumber(e.totalVolume)
 
     // Estimate ROI: pnl / (volume / 10) × 100, assumes 10x avg leverage
+    // Low-volume traders (estimatedCapital <= 100) get null ROI — not fake data
     let roi: number | null = null
     if (pnl != null && volume != null && volume > 0) {
       const estimatedCapital = volume / 10
       if (estimatedCapital > 100) {
         roi = Math.max(-100, Math.min(10000, (pnl / estimatedCapital) * 100))
-      } else {
-        roi = pnl > 0 ? 10 : -10
       }
+      // else: roi stays null — insufficient volume to estimate ROI reliably
     }
 
     return {

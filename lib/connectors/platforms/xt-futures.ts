@@ -12,6 +12,7 @@
  */
 
 import { BaseConnector } from '../base'
+import { safeNumber, safePercent, safeNonNeg, safeStr, safeMdd } from '../utils'
 import { warnValidate } from '../schemas'
 import {
   XtFuturesLeaderboardResponseSchema,
@@ -189,31 +190,31 @@ export class XtFuturesConnector extends BaseConnector {
 
   /**
    * Normalize raw XT.COM leaderboard entry.
-   * Raw fields: accountId, nickName, incomeRate (decimal, 1.0852 = 108.52%),
-   * income (PnL), winRate (decimal), maxRetraction (decimal, MDD),
-   * followerCount, totalFollowerProfit, totalFollowerMargin.
-   * Note: incomeRate is ratio (×100 for percentage).
+   *
+   * XT API returns incomeRate as RATIO (1.0852 = 108.52%), always ×100.
+   * winRate and maxRetraction are also ratios (0-1 scale).
+   * Verified against inline fetcher: xt.ts uses `incomeRate * 100` unconditionally.
    */
   normalize(raw: Record<string, unknown>): Record<string, unknown> {
-    const rawRoi = this.num(raw.incomeRate ?? raw.roi)
-    const roi = rawRoi != null ? (Math.abs(rawRoi) <= 1 ? rawRoi * 100 : rawRoi) : null
-    const rawWr = this.num(raw.winRate)
-    const winRate = rawWr != null ? (rawWr <= 1 ? rawWr * 100 : rawWr) : null
-    const rawMdd = this.num(raw.maxRetraction ?? raw.maxDrawdown)
-    const maxDrawdown = rawMdd != null ? Math.abs(rawMdd <= 1 ? rawMdd * 100 : rawMdd) : null
+    // incomeRate is ALWAYS a ratio: 1.0852 = 108.52%, 0.05 = 5%
+    const roi = safePercent(raw.incomeRate ?? raw.roi, { isRatio: true })
+    // winRate is a ratio (0-1)
+    const winRate = safePercent(raw.winRate, { isRatio: true })
+    // maxRetraction is a ratio (0-1), always positive
+    const maxDrawdown = safeMdd(raw.maxRetraction ?? raw.maxDrawdown, true)
 
     return {
-      trader_key: raw.accountId ?? raw.uid ?? null,
-      display_name: raw.nickName ?? raw.nickname ?? null,
+      trader_key: safeStr(raw.accountId ?? raw.uid),
+      display_name: safeStr(raw.nickName ?? raw.nickname),
       avatar_url: null,
       roi,
-      pnl: this.num(raw.income ?? raw.pnl),
+      pnl: safeNumber(raw.income ?? raw.pnl),
       win_rate: winRate,
       max_drawdown: maxDrawdown,
       trades_count: null,
-      followers: this.num(raw.followerCount),
+      followers: safeNonNeg(raw.followerCount),
       copiers: null,
-      aum: this.num(raw.totalFollowerMargin),
+      aum: safeNonNeg(raw.totalFollowerMargin),
       sharpe_ratio: null,
       platform_rank: null,
     }

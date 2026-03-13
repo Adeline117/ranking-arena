@@ -12,6 +12,7 @@
  */
 
 import { BaseConnector } from '../base'
+import { safeNumber, safePercent, safeStr } from '../utils'
 import type {
   LeaderboardPlatform,
   MarketType,
@@ -140,16 +141,21 @@ export class BinanceWeb3Connector extends BaseConnector {
     return { series: [], fetched_at: new Date().toISOString() }
   }
 
+  /**
+   * Normalize raw Binance Web3 entry.
+   * realizedPnlPercent and winRate are decimals (0.27 = 27%), always ×100.
+   * Uses safePercent to prevent NaN from missing fields.
+   */
   normalize(raw: unknown): Record<string, unknown> {
     const e = raw as BinanceWeb3Entry
     return {
       trader_key: e.address ? e.address.toLowerCase() : null,
-      display_name: e.addressLabel || (e.address ? `${e.address.slice(0, 6)}...${e.address.slice(-4)}` : null),
-      avatar_url: e.addressLogo || null,
-      // Decimal → percentage
-      roi: e.realizedPnlPercent != null ? e.realizedPnlPercent * 100 : null,
-      pnl: e.realizedPnl ?? null,
-      win_rate: e.winRate != null ? e.winRate * 100 : null,
+      display_name: safeStr(e.addressLabel) || (e.address ? `${e.address.slice(0, 6)}...${e.address.slice(-4)}` : null),
+      avatar_url: safeStr(e.addressLogo),
+      // Decimal → percentage (safePercent handles null/NaN)
+      roi: safePercent(e.realizedPnlPercent, { isRatio: true }),
+      pnl: safeNumber(e.realizedPnl),
+      win_rate: safePercent(e.winRate, { isRatio: true }),
       max_drawdown: null,
       followers: null,
       trades_count: null,
