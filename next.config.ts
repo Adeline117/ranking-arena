@@ -513,6 +513,10 @@ const nextConfig: NextConfig = {
       { source: '/legal/disclaimer', destination: '/disclaimer', permanent: true },
       { source: '/legal/dmca', destination: '/dmca', permanent: true },
       { source: '/community', destination: '/groups', permanent: false },
+      // Dead pages removed in frontend simplification (2026-03)
+      { source: '/pk/:a/:b', destination: '/compare', permanent: true },
+      { source: '/membership', destination: '/pricing', permanent: true },
+      { source: '/welcome', destination: '/onboarding', permanent: true },
     ];
   },
 };
