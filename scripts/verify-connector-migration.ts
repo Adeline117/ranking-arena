@@ -11,8 +11,8 @@
  * Requires: CRON_SECRET, NEXT_PUBLIC_APP_URL (or defaults to localhost:3000)
  */
 
-const APP_URL = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'
-const CRON_SECRET = process.env.CRON_SECRET
+const _appUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'
+const _cronSecret = process.env.CRON_SECRET
 
 const ALL_GROUPS = ['a', 'a2', 'b', 'c', 'd1', 'd2', 'e', 'f', 'h', 'g1', 'g2', 'i']
 const QUICK_GROUPS = ['a', 'b', 'd1', 'h']
@@ -33,12 +33,12 @@ interface GroupResult {
 }
 
 async function runGroup(group: string): Promise<GroupResult> {
-  const url = `${APP_URL}/api/cron/batch-fetch-traders?group=${group}`
+  const url = `${_appUrl}/api/cron/batch-fetch-traders?group=${group}`
   console.log(`\n⏳ Running group ${group}...`)
 
   try {
     const res = await fetch(url, {
-      headers: { Authorization: `Bearer ${CRON_SECRET}` },
+      headers: { Authorization: `Bearer ${_cronSecret}` },
       signal: AbortSignal.timeout(600_000), // 10 min timeout
     })
 
@@ -76,8 +76,8 @@ async function runGroup(group: string): Promise<GroupResult> {
 }
 
 async function main() {
-  if (!CRON_SECRET) {
-    console.error('❌ CRON_SECRET env var required')
+  if (!_cronSecret) {
+    console.error('❌ _cronSecret env var required')
     process.exit(1)
   }
 
@@ -88,7 +88,7 @@ async function main() {
   const groups = singleGroup ? [singleGroup] : (quick ? QUICK_GROUPS : ALL_GROUPS)
 
   console.log(`🔍 Verifying Connector migration for ${groups.length} groups: ${groups.join(', ')}`)
-  console.log(`   Target: ${APP_URL}`)
+  console.log(`   Target: ${_appUrl}`)
   console.log('')
 
   const allResults: GroupResult[] = []
