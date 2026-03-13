@@ -8,6 +8,8 @@ import FloatingActionButton from '@/app/components/layout/FloatingActionButton'
 import { SectionErrorBoundary } from '@/app/components/utils/ErrorBoundary'
 import ErrorBoundary from '@/app/components/utils/ErrorBoundary'
 import { tokens } from '@/lib/design-tokens'
+import LoadingSkeleton from '@/app/components/ui/LoadingSkeleton'
+import ErrorState from '@/app/components/ui/ErrorState'
 import { supabase } from '@/lib/supabase/client'
 
 // Core above-fold components: direct import for faster LCP
@@ -125,8 +127,8 @@ function MobileSectorsTab() {
       .finally(() => setLoading(false))
   }, [])
 
-  if (loading) return <div style={{ padding: 20, textAlign: 'center', color: tokens.colors.text.tertiary }}>{t('loading')}</div>
-  if (fetchError) return <div style={{ padding: 20, textAlign: 'center', color: tokens.colors.text.tertiary }}>{t('loadFailed')}</div>
+  if (loading) return <LoadingSkeleton variant="list" count={4} />
+  if (fetchError) return <ErrorState title={t('loadFailed')} variant="compact" />
 
   return (
     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 10, padding: '4px 16px' }}>
