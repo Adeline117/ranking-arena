@@ -2902,6 +2902,15 @@ const zh = {
     sectorPerformance: '板块表现',
     exchangeVolume: '交易所成交量',
 
+// Flash News Page
+    flashNewsCenter: '快讯中心',
+    flashNewsDesc: '实时跟踪加密货币与金融市场快讯',
+    flashNewsLastUpdated: '最后更新: ',
+    flashNewsNoNews: '暂无快讯',
+    flashNewsNoNewsDesc: '快讯将在有新消息时自动更新',
+    flashNewsFetchFailed: '获取快讯失败',
+    flashNewsTotal: '-- 共 {count} 条快讯 --',
+
 // Voice & Video Calls
     voiceCall: '语音通话',
     videoCall: '视频通话',

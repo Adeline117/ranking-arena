@@ -93,7 +93,7 @@ const CATEGORY_COLORS_MAPPED: Record<string, string> = {
 
 
 export default function FlashNewsPage() {
-  const { language } = useLanguage()
+  const { language, t } = useLanguage()
   const { showToast } = useToast()
 
   const [news, setNews] = useState<FlashNews[]>([])
@@ -135,7 +135,7 @@ export default function FlashNewsPage() {
       setHasMore(pag.hasNext)
       if (!append) setLastUpdated(new Date())
     } catch {
-      showToast(language === 'zh' ? '获取快讯失败' : 'Failed to load news', 'error')
+      showToast(t('flashNewsFetchFailed'), 'error')
     } finally {
       setLoading(false)
       setLoadingMore(false)
@@ -276,16 +276,14 @@ export default function FlashNewsPage() {
         {/* Header */}
         <Box style={{ marginBottom: tokens.spacing[5] }}>
           <Text style={{ fontSize: tokens.typography.fontSize['3xl'], fontWeight: tokens.typography.fontWeight.black, marginBottom: tokens.spacing[1], letterSpacing: '-0.5px' }}>
-            {language === 'zh' ? '快讯中心' : 'Flash News'}
+            {t('flashNewsCenter')}
           </Text>
           <Text style={{ color: tokens.colors.text.secondary, fontSize: tokens.typography.fontSize.md, lineHeight: tokens.typography.lineHeight.relaxed }}>
-            {language === 'zh'
-              ? '实时跟踪加密货币与金融市场快讯'
-              : 'Real-time updates on crypto, macro, and financial markets'}
+            {t('flashNewsDesc')}
           </Text>
           {lastUpdated && (
             <Text style={{ color: tokens.colors.text.tertiary, fontSize: tokens.typography.fontSize.xs, marginTop: tokens.spacing[1] }}>
-              {language === 'zh' ? '最后更新: ' : 'Last updated: '}
+              {t('flashNewsLastUpdated')}
               {lastUpdated.toLocaleTimeString(language === 'zh' ? 'zh-CN' : 'en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
             </Text>
           )}
@@ -310,8 +308,8 @@ export default function FlashNewsPage() {
                   <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" />
                 </svg>
               </div>
-              <p className="empty-state-title">{language === 'zh' ? '暂无快讯' : 'No news yet'}</p>
-              <p className="empty-state-message">{language === 'zh' ? '快讯将在有新消息时自动更新' : 'News will appear here as they come in'}</p>
+              <p className="empty-state-title">{t('flashNewsNoNews')}</p>
+              <p className="empty-state-message">{t('flashNewsNoNewsDesc')}</p>
             </div>
           ) : (
             <Box>
@@ -344,7 +342,7 @@ export default function FlashNewsPage() {
                       borderTopColor: 'transparent',
                       animation: 'spin 0.6s linear infinite',
                     }} />
-                    <Text size="sm" color="tertiary">{language === 'zh' ? '加载中...' : 'Loading...'}</Text>
+                    <Text size="sm" color="tertiary">{t('loading')}</Text>
                   </Box>
                 </Box>
               )}
@@ -355,7 +353,7 @@ export default function FlashNewsPage() {
                   marginTop: tokens.spacing[2],
                 }}>
                   <Text size="sm" color="tertiary">
-                    {language === 'zh' ? `-- 共 ${news.length} 条快讯 --` : `-- ${news.length} news total --`}
+                    {t('flashNewsTotal').replace('{count}', String(news.length))}
                   </Text>
                 </Box>
               )}
