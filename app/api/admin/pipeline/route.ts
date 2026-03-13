@@ -5,9 +5,11 @@
  * 仅限管理员访问 (通过 CRON_SECRET 或 Supabase admin 验证)
  */
 
-import { NextRequest, NextResponse } from 'next/server'
+import { NextRequest } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { getPipelineOverview, getSourceHealth } from '@/lib/utils/pipeline-monitor'
+import { success as apiSuccess, handleError } from '@/lib/api/response'
+import { ApiError } from '@/lib/api/errors'
 
 export const dynamic = 'force-dynamic'
 
@@ -33,28 +35,27 @@ function getSupabase() {
 }
 
 export async function GET(request: NextRequest) {
-  if (!isAuthorized(request)) {
-    return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
-  }
-
-  const supabase = getSupabase()
-  if (!supabase) {
-    return NextResponse.json({ error: 'Supabase not configured' }, { status: 500 })
-  }
-
   try {
+    if (!isAuthorized(request)) {
+      throw ApiError.unauthorized()
+    }
+
+    const supabase = getSupabase()
+    if (!supabase) {
+      throw ApiError.internal('Supabase not configured')
+    }
+
     const windowHours = Number(request.nextUrl.searchParams.get('hours') || '24')
     const source = request.nextUrl.searchParams.get('source')
 
     if (source) {
       const health = await getSourceHealth(supabase, source, windowHours)
-      return NextResponse.json({ ok: true, data: health })
+      return apiSuccess(health)
     }
 
     const overview = await getPipelineOverview(supabase, windowHours)
-    return NextResponse.json({ ok: true, data: overview })
+    return apiSuccess(overview)
   } catch (error) {
-    const msg = error instanceof Error ? error.message : String(error)
-    return NextResponse.json({ ok: false, error: msg }, { status: 500 })
+    return handleError(error, 'admin-pipeline')
   }
 }

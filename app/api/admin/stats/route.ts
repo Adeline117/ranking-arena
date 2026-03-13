@@ -3,105 +3,89 @@
  * GET /api/admin/stats - 获取关键统计数据
  */
 
-import { NextRequest, NextResponse } from 'next/server'
-import { getSupabaseAdmin, verifyAdmin } from '@/lib/admin/auth'
+import { withAdminAuth } from '@/lib/api/with-admin-auth'
+import { success as apiSuccess } from '@/lib/api/response'
 import { createLogger } from '@/lib/utils/logger'
-import { checkRateLimit, RateLimitPresets } from '@/lib/utils/rate-limit'
 
 const logger = createLogger('admin-stats')
 
 export const dynamic = 'force-dynamic'
 
-export async function GET(req: NextRequest) {
-  try {
-    // 速率限制检查（Admin 路由使用 sensitive 预设：15次/分钟）
-    const rateLimitResponse = await checkRateLimit(req, RateLimitPresets.sensitive)
-    if (rateLimitResponse) {
-      logger.warn('Rate limit exceeded for admin/stats')
-      return rateLimitResponse
-    }
-
-    const supabase = getSupabaseAdmin()
-    const authHeader = req.headers.get('authorization')
-
-    const admin = await verifyAdmin(supabase, authHeader)
-    if (!admin) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
-    
+export const GET = withAdminAuth(
+  async ({ supabase }) => {
     const now = new Date()
     const today = new Date(now.getFullYear(), now.getMonth(), now.getDate())
     const yesterday = new Date(today.getTime() - 24 * 60 * 60 * 1000)
     const weekAgo = new Date(today.getTime() - 7 * 24 * 60 * 60 * 1000)
-    
+
     // User statistics
     const { count: totalUsers } = await supabase
       .from('user_profiles')
       .select('id', { count: 'exact', head: true })
-    
+
     const { count: newUsersToday } = await supabase
       .from('user_profiles')
       .select('id', { count: 'exact', head: true })
       .gte('created_at', today.toISOString())
-    
+
     const { count: newUsersYesterday } = await supabase
       .from('user_profiles')
       .select('id', { count: 'exact', head: true })
       .gte('created_at', yesterday.toISOString())
       .lt('created_at', today.toISOString())
-    
+
     const { count: bannedUsers } = await supabase
       .from('user_profiles')
       .select('id', { count: 'exact', head: true })
       .not('banned_at', 'is', null)
-    
+
     // Post statistics
     const { count: totalPosts } = await supabase
       .from('posts')
       .select('id', { count: 'exact', head: true })
-    
+
     const { count: newPostsToday } = await supabase
       .from('posts')
       .select('id', { count: 'exact', head: true })
       .gte('created_at', today.toISOString())
-    
+
     const { count: newPostsYesterday } = await supabase
       .from('posts')
       .select('id', { count: 'exact', head: true })
       .gte('created_at', yesterday.toISOString())
       .lt('created_at', today.toISOString())
-    
+
     // Comment statistics
     const { count: totalComments } = await supabase
       .from('comments')
       .select('id', { count: 'exact', head: true })
-    
+
     const { count: newCommentsToday } = await supabase
       .from('comments')
       .select('id', { count: 'exact', head: true })
       .gte('created_at', today.toISOString())
-    
+
     // Report statistics
     const { count: pendingReports } = await supabase
       .from('content_reports')
       .select('id', { count: 'exact', head: true })
       .eq('status', 'pending')
-    
+
     const { count: reportsThisWeek } = await supabase
       .from('content_reports')
       .select('id', { count: 'exact', head: true })
       .gte('created_at', weekAgo.toISOString())
-    
+
     // Group statistics
     const { count: totalGroups } = await supabase
       .from('groups')
       .select('id', { count: 'exact', head: true })
-    
+
     const { count: pendingGroupApplications } = await supabase
       .from('group_applications')
       .select('id', { count: 'exact', head: true })
       .eq('status', 'pending')
-    
+
     // Scraper health summary
     const scraperHealth = { fresh: 0, stale: 0, critical: 0 }
     try {
@@ -111,7 +95,7 @@ export async function GET(req: NextRequest) {
         .not('updated_at', 'is', null)
 
       if (sources) {
-        const now = Date.now()
+        const nowMs = Date.now()
         const grouped = new Map<string, Date>()
         for (const s of sources) {
           const existing = grouped.get(s.source)
@@ -121,7 +105,7 @@ export async function GET(req: NextRequest) {
           }
         }
         for (const [, lastUpdate] of grouped) {
-          const ageHours = (now - lastUpdate.getTime()) / (1000 * 60 * 60)
+          const ageHours = (nowMs - lastUpdate.getTime()) / (1000 * 60 * 60)
           // Unified freshness SLA: fresh < 12h, stale 12-24h, critical > 24h
           if (ageHours < 12) scraperHealth.fresh++
           else if (ageHours < 24) scraperHealth.stale++
@@ -163,8 +147,7 @@ export async function GET(req: NextRequest) {
       .select('id', { count: 'exact', head: true })
       .not('pdf_url', 'is', null)
 
-    return NextResponse.json({
-      ok: true,
+    return apiSuccess({
       stats: {
         users: {
           total: totalUsers || 0,
@@ -202,9 +185,6 @@ export async function GET(req: NextRequest) {
       },
       generatedAt: now.toISOString(),
     })
-  } catch (error: unknown) {
-    logger.error('Stats API error', { error })
-    const errorMessage = error instanceof Error ? error.message : 'Internal server error'
-    return NextResponse.json({ error: errorMessage }, { status: 500 })
-  }
-}
+  },
+  { name: 'admin-stats' }
+)

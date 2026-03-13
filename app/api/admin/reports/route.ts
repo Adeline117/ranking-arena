@@ -1,18 +1,16 @@
-import { NextResponse } from 'next/server'
-import { getSupabaseAdmin, verifyAdmin } from '@/lib/admin/auth'
+import { NextRequest } from 'next/server'
+import { withAdminAuth } from '@/lib/api/with-admin-auth'
+import { success as apiSuccess } from '@/lib/api/response'
+import { ApiError } from '@/lib/api/errors'
 import { createLogger } from '@/lib/utils/logger'
 
 const logger = createLogger('api:admin-reports')
 
 export const dynamic = 'force-dynamic'
 
-export async function GET(req: Request) {
-  try {
-    const supabase = getSupabaseAdmin()
-    const admin = await verifyAdmin(supabase, req.headers.get('authorization'))
-    if (!admin) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-
-    const { searchParams } = new URL(req.url)
+export const GET = withAdminAuth(
+  async ({ supabase, request }) => {
+    const { searchParams } = new URL(request.url)
     const status = searchParams.get('status') || 'pending'
 
     const { data, error } = await supabase
@@ -22,39 +20,41 @@ export async function GET(req: Request) {
       .order('created_at', { ascending: false })
       .limit(100)
 
-    if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-    return NextResponse.json({ data })
-  } catch (error) {
-    logger.error('GET failed', { error: error instanceof Error ? error.message : String(error) })
-    return NextResponse.json({ error: 'Server error' }, { status: 500 })
-  }
-}
-
-export async function POST(req: Request) {
-  try {
-    const supabase = getSupabaseAdmin()
-    const admin = await verifyAdmin(supabase, req.headers.get('authorization'))
-    if (!admin) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-
-    const { reportId, status, action_taken } = await req.json()
-
-    if (!reportId || !['reviewed', 'actioned', 'dismissed'].includes(status)) {
-      return NextResponse.json({ error: 'Invalid parameters' }, { status: 400 })
+    if (error) {
+      throw ApiError.database(error.message)
     }
 
-    const { error } = await supabase
-      .from('content_reports')
-      .update({
-        status,
-        reviewer_id: admin.id,
-        action_taken: action_taken || null,
-      })
-      .eq('id', reportId)
+    return apiSuccess(data || [])
+  },
+  { name: 'admin-reports-get' }
+)
 
-    if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-    return NextResponse.json({ success: true })
-  } catch (error) {
-    logger.error('POST failed', { error: error instanceof Error ? error.message : String(error) })
-    return NextResponse.json({ error: 'Server error' }, { status: 500 })
-  }
+export async function POST(req: NextRequest) {
+  const handler = withAdminAuth(
+    async ({ admin, supabase }) => {
+      const { reportId, status, action_taken } = await req.json()
+
+      if (!reportId || !['reviewed', 'actioned', 'dismissed'].includes(status)) {
+        throw ApiError.validation('Invalid parameters')
+      }
+
+      const { error } = await supabase
+        .from('content_reports')
+        .update({
+          status,
+          reviewer_id: admin.id,
+          action_taken: action_taken || null,
+        })
+        .eq('id', reportId)
+
+      if (error) {
+        throw ApiError.database(error.message)
+      }
+
+      return apiSuccess({ message: 'Report updated' })
+    },
+    { name: 'admin-reports-post' }
+  )
+
+  return handler(req)
 }
