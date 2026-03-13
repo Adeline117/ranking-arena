@@ -41,8 +41,12 @@ const GROUPS: Record<string, string[]> = {
   // Group A1: Binance (every 3h) — 2 platforms, parallel ~120s
   a: ['binance_futures', 'binance_spot'],
   // Group A2: Other high-priority CEX (every 3h)
-  // bybit restored 2026-03-13: VPS Playwright scraper confirmed working (retCode:0)
-  a2: ['bitget_futures', 'okx_futures', 'bybit'],
+  // TEMPORARILY DISABLED 2026-03-13: All 3 platforms have API access issues
+  // - bybit: api2.bybit.com returns 403 Access Denied
+  // - bitget_futures: Cloudflare challenge blocking direct API access
+  // - okx_futures: API endpoint returning 404
+  // TODO: Re-enable after VPS scraper integration or proxy fix
+  a2: [],
   // Group B: Top DEX (every 4h) — 3 platforms, ~110s parallel
   b: ['hyperliquid', 'gmx', 'jupiter_perps'],
   // Group C: Mid-priority (every 4h) — 3 platforms, ~70s parallel
