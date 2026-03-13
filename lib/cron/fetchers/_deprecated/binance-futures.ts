@@ -251,6 +251,11 @@ async function fetchPeriod(
     if (roiRaw == null) continue
 
     // Binance API returns ROI as decimal: 0.5 = 50%
+    // NOTE: This is ALL-TIME ROI regardless of timeRange parameter.
+    // timeRange affects which traders appear (sorted by period performance),
+    // but the roi field is always the same all-time value.
+    // We write it for all periods as the best available estimate.
+    // Enrichment (equity curve) can later provide period-specific ROI.
     const roi = roiRaw * 100
     const pnl = parseNum(t.pnl)
     const wrRaw = parseNum(t.winRate)
