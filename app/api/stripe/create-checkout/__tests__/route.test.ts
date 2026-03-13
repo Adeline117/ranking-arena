@@ -85,6 +85,9 @@ jest.mock('@supabase/supabase-js', () => ({
     auth: { getUser: (...args: unknown[]) => mockGetUser(...args) },
     from: jest.fn(() => ({
       upsert: jest.fn().mockResolvedValue({ data: null, error: null }),
+      select: jest.fn().mockReturnValue({
+        eq: jest.fn().mockResolvedValue({ count: 0, error: null }),
+      }),
     })),
   })),
 }))
