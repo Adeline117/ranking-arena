@@ -80,8 +80,8 @@ export default function HomeHero() {
         lineHeight: tokens.typography.lineHeight.normal,
       }}>
         {language === 'zh'
-          ? '跨 27+ 交易所追踪 32,000+ 交易员表现，用 Arena Score 找到最优秀的交易员'
-          : 'Track 32,000+ traders across 27+ exchanges. Find top performers with Arena Score.'}
+          ? '跨 30+ 交易所追踪 32,000+ 交易员表现，用 Arena Score 找到最优秀的交易员'
+          : 'Track 32,000+ traders across 30+ exchanges. Find top performers with Arena Score.'}
       </p>
 
       <div style={{
@@ -92,7 +92,7 @@ export default function HomeHero() {
       }}>
         {[
           { value: '32K+', label: language === 'zh' ? '交易员' : 'Traders' },
-          { value: '27+', label: language === 'zh' ? '交易所' : 'Exchanges' },
+          { value: '30+', label: language === 'zh' ? '交易所' : 'Exchanges' },
           { value: '24/7', label: language === 'zh' ? '实时更新' : 'Live Data' },
         ].map((stat) => (
           <div key={stat.label} style={{ textAlign: 'center' }}>
