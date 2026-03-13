@@ -52,7 +52,7 @@ export function useEditPost() {
       try {
         const { data: post, error } = await supabase
           .from('posts')
-          .select('*')
+          .select('id, author_id, title, content, images, image_urls, created_at, updated_at')
           .eq('id', postId)
           .single()
 

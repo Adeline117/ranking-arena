@@ -52,13 +52,14 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     // 1. Profile
     supabase
       .from('trader_profiles')
-      .select('*')
+      .select('platform, market_type, trader_key, display_name, avatar_url, bio, tags, profile_url, followers, copiers, aum, updated_at, last_enriched_at, provenance')
       .eq('platform', platform)
       .eq('market_type', market_type)
       .eq('trader_key', trader_key)
       .single(),
 
-    // 2. Latest snapshots for each window
+    // 2. Latest snapshots for each window — select('*') intentional: code reads 30+ columns
+    //    including all core metrics, V3 advanced metrics, market correlation, and classification fields
     supabase
       .from('trader_snapshots')
       .select('*')
@@ -72,7 +73,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     // 3. Timeseries (cap at 500 rows to prevent unbounded fetches)
     supabase
       .from('trader_timeseries')
-      .select('*')
+      .select('platform, market_type, trader_key, series_type, as_of_ts, data, updated_at')
       .eq('platform', platform)
       .eq('market_type', market_type)
       .eq('trader_key', trader_key)

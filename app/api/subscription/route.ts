@@ -52,7 +52,7 @@ export async function GET(request: NextRequest) {
     // 查询订阅信息 - 优先检查 subscriptions 表
     const { data: subscription, error: subscriptionError } = await supabase
       .from('subscriptions')
-      .select('*')
+      .select('user_id, tier, status, created_at, current_period_start, current_period_end, stripe_subscription_id, api_calls_today, comparison_reports_this_month, exports_this_month')
       .eq('user_id', user.id)
       .in('status', ['active', 'trialing'])
       .maybeSingle()
@@ -112,20 +112,21 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ subscription: defaultSubscription })
     }
 
-    // 转换为 UserSubscription 格式
+    // 转换为 UserSubscription 格式 (subscription is non-null here — early return above)
+    const sub = subscription!
     const userSubscription: UserSubscription = {
-      userId: subscription.user_id,
-      tier: subscription.tier || tier,
-      status: subscription.status,
-      startDate: subscription.created_at || subscription.current_period_start || new Date().toISOString(),
-      endDate: subscription.current_period_end,
+      userId: sub.user_id,
+      tier: sub.tier || tier,
+      status: sub.status,
+      startDate: sub.created_at || sub.current_period_start || new Date().toISOString(),
+      endDate: sub.current_period_end,
       trialEndDate: null,
-      autoRenew: subscription.status === 'active',
-      paymentMethod: subscription.stripe_subscription_id ? 'stripe' : undefined,
+      autoRenew: sub.status === 'active',
+      paymentMethod: sub.stripe_subscription_id ? 'stripe' : undefined,
       usage: {
-        apiCallsToday: subscription.api_calls_today || 0,
-        comparisonReportsThisMonth: subscription.comparison_reports_this_month || 0,
-        exportsThisMonth: subscription.exports_this_month || 0,
+        apiCallsToday: sub.api_calls_today || 0,
+        comparisonReportsThisMonth: sub.comparison_reports_this_month || 0,
+        exportsThisMonth: sub.exports_this_month || 0,
         currentFollows,
         currentCustomRankings,
       },

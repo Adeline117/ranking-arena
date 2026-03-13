@@ -87,6 +87,7 @@ export async function POST(request: NextRequest) {
 
     // Collect user data in parallel
     const [postsResult, commentsResult, followingResult, followersResult, tipsSentResult, tipsReceivedResult] = await Promise.all([
+      // GDPR data export: select('*') is intentional — users are entitled to a complete copy of all their data
       supabase
         .from('posts')
         .select('*')

@@ -149,7 +149,7 @@ export async function GET(request: NextRequest) {
 
     const { data } = await supabase
       .from('trader_attestations')
-      .select('*')
+      .select('id, trader_handle, attestation_uid, tx_hash, arena_score, chain_id, score_period, minted_by, published_at, updated_at')
       .eq('trader_handle', handle)
       .maybeSingle()
 
