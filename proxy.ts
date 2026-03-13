@@ -403,7 +403,18 @@ export async function proxy(request: NextRequest) {
   if (shouldSkip(pathname)) {
     return NextResponse.next()
   }
-  
+
+  // Bot protection: block empty User-Agent on API routes
+  if (pathname.startsWith('/api/')) {
+    const ua = request.headers.get('user-agent') || ''
+    if (!ua) {
+      return new NextResponse(
+        JSON.stringify({ error: 'Forbidden' }),
+        { status: 403, headers: { 'Content-Type': 'application/json' } }
+      )
+    }
+  }
+
   // 生成请求 ID 用于追踪
   const requestId = generateRequestId()
   
