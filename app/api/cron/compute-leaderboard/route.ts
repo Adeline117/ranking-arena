@@ -133,6 +133,15 @@ export async function GET(request: NextRequest) {
       }
     }
 
+    // Refresh leaderboard count cache after all seasons computed
+    try {
+      const { query: dbQuery } = await import('@/lib/db')
+      await dbQuery('SELECT refresh_leaderboard_count_cache()', [])
+      logger.info('Refreshed leaderboard_count_cache')
+    } catch (cacheErr) {
+      logger.warn('Failed to refresh leaderboard_count_cache:', cacheErr)
+    }
+
     const totalRanked = Object.values(stats.seasons).reduce((a, b) => a + b, 0)
     if (warnings.length > 0) {
       await plog.error(new Error(warnings.join('; ')), { stats, rolledBack })

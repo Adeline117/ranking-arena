@@ -13,7 +13,7 @@ const LANG_LABELS: Record<Language, string> = {
 }
 
 export default function LanguageToggle() {
-  const { language, setLanguage } = useLanguage()
+  const { language, setLanguage, t } = useLanguage()
   const [isChanging, setIsChanging] = useState(false)
   const [isOpen, setIsOpen] = useState(false)
   const dropdownRef = useRef<HTMLDivElement>(null)
@@ -57,7 +57,7 @@ export default function LanguageToggle() {
     <div ref={dropdownRef} style={{ position: 'relative' }}>
       <button
         onClick={() => setIsOpen(!isOpen)}
-        aria-label="Switch language"
+        aria-label={t('switchLanguage')}
         disabled={isChanging}
         style={{
           display: 'flex',
@@ -103,9 +103,9 @@ export default function LanguageToggle() {
                 gap: 8,
                 width: '100%',
                 padding: `${tokens.spacing[2]} ${tokens.spacing[3]}`,
-                background: lang.code === language ? 'rgba(124,58,237,0.15)' : 'transparent',
+                background: lang.code === language ? 'var(--color-accent-primary-15, rgba(124,58,237,0.15))' : 'transparent',
                 border: 'none',
-                color: lang.code === language ? '#a78bfa' : tokens.colors.text.secondary,
+                color: lang.code === language ? 'var(--color-accent-primary, #a78bfa)' : tokens.colors.text.secondary,
                 fontSize: tokens.typography.fontSize.sm,
                 cursor: 'pointer',
                 textAlign: 'left',
