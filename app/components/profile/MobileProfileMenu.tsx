@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { tokens } from '@/lib/design-tokens'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import { supabase } from '@/lib/supabase/client'
+import { features } from '@/lib/features'
 
 interface UserInfo {
   handle: string | null
@@ -13,12 +14,14 @@ interface UserInfo {
   displayName: string | null
 }
 
-const MENU_ITEMS = [
+const ALL_MENU_ITEMS = [
   { href: '/watchlist', iconPath: 'M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z', labelZh: '我的 Watchlist', labelEn: 'My Watchlist' },
   { href: '/compare', iconPath: 'M18 20V10M12 20V4M6 20v-6', labelZh: '对比交易员', labelEn: 'Compare Traders' },
-  { href: '/groups', iconPath: 'M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2M9 7a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75', labelZh: '我的群组', labelEn: 'My Groups' },
+  { href: '/groups', iconPath: 'M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2M9 7a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75', labelZh: '我的群组', labelEn: 'My Groups', social: true },
   { href: '/notifications', iconPath: 'M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9M13.73 21a2 2 0 0 1-3.46 0', labelZh: '通知', labelEn: 'Notifications' },
 ] as const
+
+const MENU_ITEMS = ALL_MENU_ITEMS.filter(item => !('social' in item && item.social) || features.social)
 
 const SETTINGS_ITEMS = [
   { href: '/settings', iconPath: 'M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z', labelZh: '设置', labelEn: 'Settings' },
