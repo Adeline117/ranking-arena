@@ -2,12 +2,13 @@ import type { Metadata } from 'next'
 
 const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://www.arenafi.org'
 
-export async function generateMetadata({
-  searchParams,
-}: {
-  searchParams: Promise<{ ids?: string }>
-}): Promise<Metadata> {
-  const { ids } = await searchParams
+export async function generateMetadata(
+  props: {
+    searchParams?: Promise<{ ids?: string }>
+  }
+): Promise<Metadata> {
+  const resolved = props.searchParams ? await props.searchParams : {}
+  const ids = resolved.ids
   const idList = ids ? ids.split(',').slice(0, 3) : []
 
   // Build OG image URL (compare OG route handles data fetching)
