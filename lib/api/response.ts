@@ -309,29 +309,6 @@ export function withCache(
   return response
 }
 
-/**
- * 添加 CORS 头
- */
-export function withCors(
-  response: NextResponse,
-  options: {
-    origin?: string
-    methods?: string[]
-    headers?: string[]
-  } = {}
-): NextResponse {
-  const {
-    origin = '*',
-    methods = ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-    headers = ['Content-Type', 'Authorization'],
-  } = options
-  
-  response.headers.set('Access-Control-Allow-Origin', origin)
-  response.headers.set('Access-Control-Allow-Methods', methods.join(', '))
-  response.headers.set('Access-Control-Allow-Headers', headers.join(', '))
-  
-  return response
-}
 
 // ============================================
 // 导出所有错误相关类型
