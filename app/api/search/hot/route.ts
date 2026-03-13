@@ -7,6 +7,7 @@
 import { withPublic } from '@/lib/api/middleware'
 import { success } from '@/lib/api/response'
 import { get as cacheGet, set as cacheSet } from '@/lib/cache'
+import { features } from '@/lib/features'
 
 export const runtime = 'edge'
 export const dynamic = 'force-dynamic'
@@ -30,41 +31,44 @@ export const GET = withPublic(
       })
     }
 
-    // Query top posts by hot_score for keywords
-    const { data: hotPosts } = await supabase
-      .from('posts')
-      .select('title, hot_score, view_count, like_count, comment_count')
-      .not('title', 'is', null)
-      .order('hot_score', { ascending: false, nullsFirst: false })
-      .limit(20)
-
     const hotSearches: HotSearchItem[] = []
-    const seenKeywords = new Set<string>()
 
-    if (hotPosts && hotPosts.length > 0) {
-      for (const post of hotPosts) {
-        if (hotSearches.length >= 5) break
-        if (!post.title) continue
+    // Only query posts table for hot keywords when social feature is enabled
+    if (features.social) {
+      const { data: hotPosts } = await supabase
+        .from('posts')
+        .select('title, hot_score, view_count, like_count, comment_count')
+        .not('title', 'is', null)
+        .order('hot_score', { ascending: false, nullsFirst: false })
+        .limit(20)
 
-        // Extract meaningful keyword from title (first significant word/phrase)
-        const keyword = extractKeyword(post.title)
-        if (!keyword || seenKeywords.has(keyword.toLowerCase())) continue
+      const seenKeywords = new Set<string>()
 
-        seenKeywords.add(keyword.toLowerCase())
-        const score = post.hot_score ||
-          (post.view_count || 0) * 0.1 +
-          (post.like_count || 0) * 2 +
-          (post.comment_count || 0) * 3
+      if (hotPosts && hotPosts.length > 0) {
+        for (const post of hotPosts) {
+          if (hotSearches.length >= 5) break
+          if (!post.title) continue
 
-        hotSearches.push({
-          keyword,
-          count: Math.round(score),
-          trend: score > 50 ? 'up' : score > 20 ? 'stable' : 'down',
-        })
+          // Extract meaningful keyword from title (first significant word/phrase)
+          const keyword = extractKeyword(post.title)
+          if (!keyword || seenKeywords.has(keyword.toLowerCase())) continue
+
+          seenKeywords.add(keyword.toLowerCase())
+          const score = post.hot_score ||
+            (post.view_count || 0) * 0.1 +
+            (post.like_count || 0) * 2 +
+            (post.comment_count || 0) * 3
+
+          hotSearches.push({
+            keyword,
+            count: Math.round(score),
+            trend: score > 50 ? 'up' : score > 20 ? 'stable' : 'down',
+          })
+        }
       }
     }
 
-    // Fallback if no hot posts found
+    // Fallback if no hot posts found (or social disabled)
     if (hotSearches.length === 0) {
       hotSearches.push(
         { keyword: 'BTC', count: 1000, trend: 'up' },

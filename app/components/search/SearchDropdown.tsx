@@ -18,6 +18,7 @@ import { useAuthSession } from '@/lib/hooks/useAuthSession'
 import type { UnifiedSearchResponse, UnifiedSearchResult } from '@/app/api/search/route'
 import { logger } from '@/lib/logger'
 import { SearchHistory, TrendingSearches, HotPosts } from './SearchSuggestions'
+import { features } from '@/lib/features'
 
 interface TrendingSearchItem {
   query: string
@@ -105,13 +106,13 @@ export default function SearchDropdown({ open, query, onClose }: SearchDropdownP
   const abortControllerRef = useRef<AbortController | null>(null)
   const containerRef = useRef<HTMLDivElement>(null)
 
-  // Flatten results for keyboard navigation
+  // Flatten results for keyboard navigation (exclude social content when disabled)
   const flatResults: UnifiedSearchResult[] = useMemo(() => searchData
     ? [
         ...searchData.results.traders,
-        ...searchData.results.posts,
+        ...(features.social ? searchData.results.posts : []),
         ...searchData.results.library,
-        ...searchData.results.users,
+        ...(features.social ? searchData.results.users : []),
       ]
     : [], [searchData])
 
@@ -159,9 +160,9 @@ export default function SearchDropdown({ open, query, onClose }: SearchDropdownP
     }
   }, [open])
 
-  // Load hot posts
+  // Load hot posts (only when social feature is enabled)
   const loadHotPosts = useCallback(async () => {
-    if (!open) return
+    if (!open || !features.social) return
     setLoading(true)
     try {
       const { data, error } = await supabase
@@ -378,7 +379,10 @@ export default function SearchDropdown({ open, query, onClose }: SearchDropdownP
   // Calculate offset per category for keyboard highlight
   const getCategoryOffset = (category: CategoryKey): number => {
     if (!searchData) return 0
-    const order: CategoryKey[] = ['traders', 'posts', 'library', 'users']
+    // Order must match flatResults and rendered order; skip social categories when disabled
+    const order: CategoryKey[] = features.social
+      ? ['traders', 'posts', 'library', 'users']
+      : ['traders', 'library']
     let offset = 0
     for (const key of order) {
       if (key === category) break
@@ -550,9 +554,9 @@ export default function SearchDropdown({ open, query, onClose }: SearchDropdownP
           ) : searchData ? (
             <>
               {renderCategoryResults('traders', searchData.results.traders)}
-              {renderCategoryResults('posts', searchData.results.posts)}
+              {features.social && renderCategoryResults('posts', searchData.results.posts)}
               {renderCategoryResults('library', searchData.results.library)}
-              {renderCategoryResults('users', searchData.results.users)}
+              {features.social && renderCategoryResults('users', searchData.results.users)}
               <Link href={`/search?q=${encodeURIComponent(query)}`} style={{ textDecoration: 'none' }} onClick={handleResultClick}>
                 <Box
                   style={{ padding: `${tokens.spacing[3]} ${tokens.spacing[4]}`, textAlign: 'center', cursor: 'pointer' }}
@@ -583,15 +587,17 @@ export default function SearchDropdown({ open, query, onClose }: SearchDropdownP
             onClose={onClose}
             hasHistory={searchHistory.length > 0}
           />
-          <HotPosts
-            posts={hotPosts}
-            loading={loading}
-            language={language}
-            translatedTitles={translatedTitles}
-            onClose={onClose}
-            hasHistory={searchHistory.length > 0}
-            t={t}
-          />
+          {features.social && (
+            <HotPosts
+              posts={hotPosts}
+              loading={loading}
+              language={language}
+              translatedTitles={translatedTitles}
+              onClose={onClose}
+              hasHistory={searchHistory.length > 0}
+              t={t}
+            />
+          )}
         </>
       )}
     </div>

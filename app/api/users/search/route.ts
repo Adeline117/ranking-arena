@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getAuthUser, getSupabaseAdmin } from '@/lib/supabase/server'
 import { createLogger } from '@/lib/utils/logger'
+import { socialFeatureGuard } from '@/lib/features'
 
 const logger = createLogger('api:users-search')
 
@@ -8,6 +9,9 @@ export const dynamic = 'force-dynamic'
 
 export async function GET(request: NextRequest) {
   try {
+    const guard = socialFeatureGuard()
+    if (guard) return guard
+
     const user = await getAuthUser(request)
     if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
