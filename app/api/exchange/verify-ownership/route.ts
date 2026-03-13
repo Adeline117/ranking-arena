@@ -1,61 +1,32 @@
 /**
- * 验证用户是否拥有某traders allowed for comparison账号
+ * Verify Exchange Account Ownership
  * POST /api/exchange/verify-ownership
- * 
- * 请求体：
+ *
+ * SECURITY FIX: Now properly validates that the API key belongs to the
+ * specific trader being claimed by comparing the account UID from the
+ * exchange API with the trader's source_trader_id in Arena DB.
+ *
+ * Request body:
  * {
  *   exchange: 'binance',
- *   traderId: 'xxx' // 要认领的交易员ID
+ *   traderId: string,  // trader's source_trader_id or handle
+ *   source: string,    // platform name in Arena DB
+ *   apiKey: string,
+ *   apiSecret: string,
+ *   passphrase?: string,  // required for OKX, Bitget
  * }
  */
 
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@supabase/supabase-js'
-import { decrypt } from '@/lib/exchange/encryption'
-import { getBinanceAccount } from '@/lib/exchange/binance'
-import type { BinanceConfig } from '@/lib/exchange/binance'
-import { getAuthUser } from '@/lib/supabase/server'
+import { getSupabaseAdmin, getAuthUser } from '@/lib/supabase/server'
 import { validateCsrfToken, CSRF_COOKIE_NAME, CSRF_HEADER_NAME } from '@/lib/utils/csrf'
-import logger from '@/lib/logger'
+import { resolveExchangeUid, isCexVerifiable } from '@/lib/validators/exchange-uid-resolver'
+import { encrypt } from '@/lib/crypto/encryption'
+import { logger } from '@/lib/logger'
 import { checkRateLimit, RateLimitPresets } from '@/lib/utils/rate-limit'
 
-function getSupabaseAdmin() {
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL!
-  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!
-  return createClient(url, serviceKey, {
-    auth: { persistSession: false },
-  })
-}
-
-/**
- * 从Binance账号信息中提取账号ID
- * 注意：Binance API可能不直接返回账号ID，这里我们需要通过其他方式验证
- * 一个可行的方法是：通过获取用户的交易数据，然后与交易员ID对比
- */
-async function _getBinanceAccountId(config: BinanceConfig): Promise<string | null> {
-  try {
-    // 获取账户信息
-    const _account = await getBinanceAccount(config)
-    
-    // Binance API不直接返回账号ID，我们需要通过其他方式获取
-    // 这里我们可以尝试通过Copy Trading API获取
-    // 或者通过用户的交易历史来验证
-    
-    // 暂时返回null，表示无法直接获取
-    // 实际验证需要通过对比交易数据或其他方式
-    return null
-  } catch (error: unknown) {
-    logger.error('[verify-ownership] 获取Binance账号IDFailed:', error)
-    return null
-  }
-}
-
-/**
- * 验证用户是否拥有某traders allowed for comparison账号
- * 通过对比用户绑定的账号与交易员ID是否匹配
- */
 export async function POST(req: NextRequest) {
-  const rateLimitResp = await checkRateLimit(req, RateLimitPresets.write)
+  const rateLimitResp = await checkRateLimit(req, RateLimitPresets.sensitive)
   if (rateLimitResp) return rateLimitResp
 
   try {
@@ -72,11 +43,8 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'CSRF validation failed' }, { status: 403 })
     }
 
-    const adminSupabase = getSupabaseAdmin()
-
-    // 2. 解析请求体
     const body = await req.json()
-    const { exchange, traderId, source } = body
+    const { exchange, traderId, source, apiKey, apiSecret, passphrase } = body
 
     if (!exchange || !traderId || !source) {
       return NextResponse.json(
@@ -85,77 +53,127 @@ export async function POST(req: NextRequest) {
       )
     }
 
-    // 3. 获取用户连接
-    const { data: connection, error: connError } = await adminSupabase
-      .from('user_exchange_connections')
-      .select('id, api_key_encrypted, api_secret_encrypted')
-      .eq('user_id', user.id)
-      .eq('exchange', exchange)
-      .eq('is_active', true)
+    if (!apiKey || !apiSecret) {
+      return NextResponse.json(
+        { error: 'Missing required parameters: apiKey, apiSecret' },
+        { status: 400 }
+      )
+    }
+
+    // Validate this is a CEX platform that supports API key verification
+    if (!isCexVerifiable(source)) {
+      return NextResponse.json(
+        { error: `Platform ${source} does not support API key verification. Use wallet signature for DEX platforms.` },
+        { status: 400 }
+      )
+    }
+
+    // 2. Look up trader's source_trader_id from Arena DB
+    const supabase = getSupabaseAdmin()
+
+    // Try multiple lookup strategies: by source_trader_id directly, or by handle
+    const { data: trader } = await supabase
+      .from('trader_snapshots_v2')
+      .select('trader_key, platform')
+      .or(`trader_key.eq.${traderId},trader_key.eq.${traderId}`)
+      .eq('platform', source)
+      .limit(1)
       .maybeSingle()
 
-    if (connError || !connection) {
+    // Also check trader_sources table
+    const { data: traderSource } = await supabase
+      .from('trader_sources')
+      .select('source_trader_id, source')
+      .eq('source_trader_id', traderId)
+      .eq('source', source)
+      .maybeSingle()
+
+    const traderKey = trader?.trader_key || traderSource?.source_trader_id || traderId
+
+    if (!traderKey) {
       return NextResponse.json(
-        { 
-          error: 'Please connect your exchange account first',
-          needConnect: true,
-          message: 'Please connect your exchange account in settings before claiming a trader account.'
-        },
+        { error: 'Trader not found in Arena database', verified: false },
         { status: 404 }
       )
     }
 
-    // 4. 解密API凭证
-    const apiKey = decrypt(connection.api_key_encrypted)
-    const apiSecret = decrypt(connection.api_secret_encrypted)
-    const config: BinanceConfig = { apiKey, apiSecret }
+    // 3. Resolve the UID from the user's API credentials
+    // NEVER log the API key or secret
+    const resolveResult = await resolveExchangeUid(source, { apiKey, apiSecret, passphrase })
 
-    // 5. 验证账号所有权
-    // 方法1：通过API获取账号信息并对比
-    // 方法2：通过获取交易数据，验证账号是否匹配
-    
-    // 对于Binance Copy Trading，我们需要通过其他方式验证
-    // 这里我们采用一个简化的方法：
-    // 1. 验证API凭证是否有效
-    // 2. 如果有效，则认为用户拥有该账号
-    // 3. 实际验证可以通过对比交易数据等方式进行
-    
-    try {
-      // 验证API凭证
-      const _account = await getBinanceAccount(config)
-
-      // 如果API调用成功，说明用户拥有该账号
-      // 但是我们需要更精确的验证：对比交易员ID
-      
-      // 对于Binance Copy Trading，交易员ID通常是用户的UID
-      // 我们可以通过获取用户的Copy Trading信息来验证
-      
-      // 暂时返回成功，但实际应该进行更严格的验证
-      return NextResponse.json({
-        success: true,
-        verified: true,
-        message: 'Account verification successful',
-      })
-    } catch (verifyError: unknown) {
-      logger.error('[verify-ownership] 验证Failed:', verifyError)
-      const msg = verifyError instanceof Error ? verifyError.message : 'Unable to verify account ownership. Please check your API credentials.'
+    if (!resolveResult.success || !resolveResult.uid) {
       return NextResponse.json(
-        { 
-          error: 'Account verification failed',
+        {
+          error: 'API key validation failed',
           verified: false,
-          message: msg
+          message: resolveResult.error || 'Could not validate API credentials',
         },
         { status: 400 }
       )
     }
+
+    // 4. CRITICAL SECURITY CHECK: Compare resolved UID with trader's source_trader_id
+    const resolvedUid = resolveResult.uid.trim()
+    const traderSourceId = String(traderKey).trim()
+
+    if (resolvedUid !== traderSourceId) {
+      logger.warn('[verify-ownership] UID mismatch', {
+        userId: user.id,
+        platform: source,
+        // Log only that there's a mismatch, NOT the actual UIDs for security
+        match: false,
+      })
+
+      return NextResponse.json(
+        {
+          error: 'Verification failed',
+          verified: false,
+          message: 'The API key does not belong to this trader account. Your account UID does not match the trader being claimed.',
+        },
+        { status: 403 }
+      )
+    }
+
+    // 5. Store encrypted credentials for future data sync (optional)
+    const encryptedApiKey = encrypt(apiKey)
+    const encryptedApiSecret = encrypt(apiSecret)
+    const encryptedPassphrase = passphrase ? encrypt(passphrase) : null
+
+    // Upsert exchange connection for this user
+    await supabase
+      .from('user_exchange_connections')
+      .upsert(
+        {
+          user_id: user.id,
+          exchange: exchange,
+          api_key_encrypted: encryptedApiKey,
+          api_secret_encrypted: encryptedApiSecret,
+          passphrase_encrypted: encryptedPassphrase,
+          is_active: true,
+          verified_uid: resolvedUid,
+          last_verified_at: new Date().toISOString(),
+        },
+        { onConflict: 'user_id,exchange' }
+      )
+
+    logger.info('[verify-ownership] Verification passed', {
+      userId: user.id,
+      platform: source,
+      match: true,
+    })
+
+    return NextResponse.json({
+      success: true,
+      verified: true,
+      uid: resolvedUid,
+      message: 'Account ownership verified successfully',
+    })
   } catch (error: unknown) {
-    logger.error('[verify-ownership] 错误:', error)
+    logger.error('[verify-ownership] Error:', error)
     const message = error instanceof Error ? error.message : 'Verification failed'
     return NextResponse.json(
-      { error: message },
+      { error: message, verified: false },
       { status: 500 }
     )
   }
 }
-
-
