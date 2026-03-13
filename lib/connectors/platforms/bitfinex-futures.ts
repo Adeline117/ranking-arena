@@ -85,7 +85,8 @@ export class BitfinexFuturesConnector extends BaseConnector {
       // Equity proxy not critical — ROI will be null
     }
 
-    // Fetch PnL diff rankings (primary)
+    // Fetch PnL diff rankings (primary data source)
+    // plu_diff = actual PnL in USD, plr = PnL ratio ranking (not directly usable as ROI)
     for (const key of ['plu_diff', 'plr']) {
       try {
         const rows = await this.request<BitfinexRow[]>(
@@ -98,31 +99,18 @@ export class BitfinexFuturesConnector extends BaseConnector {
           if (!Array.isArray(row) || !row[2]) continue
           const username = String(row[2])
           const id = username.toLowerCase()
-          const pnl = Number(row[6]) || 0
+          const value = Number(row[6]) || 0
 
-          // If trader already exists from plu_diff but has no ROI, update with plr data
-          const existing = traderMap.get(id)
-          if (existing && key !== 'plr') continue
-          if (existing && key === 'plr') {
-            // Update ROI on existing entry from plr data
-            const plrRoi = row[6] != null ? Math.max(-500, Math.min(50000, Number(row[6]))) : null
-            if (plrRoi != null && (!existing.raw?.roi_pct || existing.raw.roi_pct === null)) {
-              existing.raw = { ...existing.raw, roi_pct: plrRoi }
-            }
-            continue
-          }
+          if (traderMap.has(id)) continue
 
-          // Estimate ROI
+          // For plu_diff, value is PnL in USD; for plr, value is a ratio metric (not ROI%)
+          const pnl = key === 'plu_diff' ? value : 0
+
+          // Estimate ROI from PnL / equity proxy
+          const equity = equityMap.get(id)
           let roi: number | null = null
-          if (key === 'plr' && row[6] != null) {
-            // 'plr' key = PnL ratio (already a percentage-like value)
-            roi = Math.max(-500, Math.min(50000, Number(row[6])))
-          } else {
-            // For 'plu_diff' key, estimate ROI from equity proxy
-            const equity = equityMap.get(id)
-            if (equity != null && Math.abs(equity) > 1) {
-              roi = Math.max(-500, Math.min(50000, (pnl / Math.abs(equity)) * 100))
-            }
+          if (equity != null && Math.abs(equity) > 1 && pnl !== 0) {
+            roi = Math.max(-500, Math.min(50000, (pnl / Math.abs(equity)) * 100))
           }
 
           traderMap.set(id, {
