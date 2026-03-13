@@ -363,9 +363,9 @@ export async function runEnrichment(params: {
         batch.map(async (trader) => {
           const traderId = trader.source_trader_id
           // EMERGENCY FIX (2026-03-13): Add per-trader timeout to prevent slow traders from blocking batch
-          // 15s timeout = enough for most API calls, prevents hung requests from blocking others
+          // 2min timeout for Jupiter/DEX platforms with slow on-chain calls, prevents hung requests
           const traderTimeout = new Promise<void>((_, reject) =>
-            setTimeout(() => reject(new Error(`Trader ${traderId} timed out after 15s`)), 15_000)
+            setTimeout(() => reject(new Error(`Trader ${traderId} timed out after 2min`)), 120_000)
           )
           
           try {
