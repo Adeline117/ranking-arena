@@ -7,6 +7,7 @@ import { Box, Text } from '@/app/components/base'
 import { RankingSkeleton } from '@/app/components/ui/Skeleton'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 
+import { features } from '@/lib/features'
 import type { ServerProfile, ProfileTabKey, TraderPageData } from './types'
 
 const StatsPage = dynamic(() => import('@/app/components/trader/stats/StatsPage'), {
@@ -58,32 +59,49 @@ export default function UserProfileContent({
           className="profile-content"
           style={{ maxWidth: 900 }}
         >
-          {/* Posts */}
-          <Box bg="secondary" p={4} radius="lg" border="primary">
-            <Box style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: tokens.spacing[4] }}>
-              <Text size="lg" weight="black">{t('posts')}</Text>
-              {isOwnProfile && (
-                <button
-                  onClick={() => router.push(`/u/${handle}/new`)}
-                  style={{
-                    padding: `${tokens.spacing[2]} ${tokens.spacing[4]}`,
-                    borderRadius: tokens.radius.md, border: 'none',
-                    background: tokens.colors.accent.brand, color: tokens.colors.white,
-                    fontSize: tokens.typography.fontSize.sm, fontWeight: tokens.typography.fontWeight.black,
-                    cursor: 'pointer',
-                  }}
-                >
-                  {t('newPost')}
-                </button>
-              )}
+          {features.social ? (
+            /* Posts — only shown when social features are enabled */
+            <Box bg="secondary" p={4} radius="lg" border="primary">
+              <Box style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: tokens.spacing[4] }}>
+                <Text size="lg" weight="black">{t('posts')}</Text>
+                {isOwnProfile && (
+                  <button
+                    onClick={() => router.push(`/u/${handle}/new`)}
+                    style={{
+                      padding: `${tokens.spacing[2]} ${tokens.spacing[4]}`,
+                      borderRadius: tokens.radius.md, border: 'none',
+                      background: tokens.colors.accent.brand, color: tokens.colors.white,
+                      fontSize: tokens.typography.fontSize.sm, fontWeight: tokens.typography.fontWeight.black,
+                      cursor: 'pointer',
+                    }}
+                  >
+                    {t('newPost')}
+                  </button>
+                )}
+              </Box>
+              <PostFeed
+                authorHandle={profile.handle}
+                variant="compact"
+                showSortButtons
+                createPostHref={isOwnProfile ? `/u/${profile.handle}/new` : undefined}
+              />
             </Box>
-            <PostFeed
-              authorHandle={profile.handle}
-              variant="compact"
-              showSortButtons
-              createPostHref={isOwnProfile ? `/u/${profile.handle}/new` : undefined}
-            />
-          </Box>
+          ) : (
+            /* Fallback when social is off — show profile summary */
+            <Box
+              style={{
+                padding: tokens.spacing[6],
+                background: tokens.colors.bg.secondary,
+                borderRadius: tokens.radius.xl,
+                border: `1px solid ${tokens.colors.border.primary}`,
+                textAlign: 'center',
+              }}
+            >
+              <Text size="sm" color="tertiary">
+                {t('userProfileNoStatsYet')}
+              </Text>
+            </Box>
+          )}
         </Box>
       )}
 

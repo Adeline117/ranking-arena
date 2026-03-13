@@ -6,6 +6,7 @@ import { tokens } from '@/lib/design-tokens'
 import { Box, Text, Button } from '../base'
 import { useLanguage } from '../Providers/LanguageProvider'
 import { useSubscription } from '../home/hooks/useSubscription'
+import { features as featureFlags } from '@/lib/features'
 
 // 图标组件
 const StarIcon = ({ size = 16 }: { size?: number }) => (
@@ -102,7 +103,11 @@ export default function ProFeaturesPanel({ compact = false, showTitle = true }: 
   const { t } = useLanguage()
   const { isPro, isLoading: _isLoading } = useSubscription()
 
-  const features = getProFeatures(t)
+  const features = getProFeatures(t).filter(f => {
+    // Hide pro_groups when social features are off
+    if (f.key === 'pro_groups') return featureFlags.social
+    return true
+  })
 
   const handleFeatureClick = (feature: typeof features[0]) => {
     if (!isPro) {

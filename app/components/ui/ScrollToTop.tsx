@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback, memo } from 'react'
 import { usePathname } from 'next/navigation'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
+import { features } from '@/lib/features'
 
 export default memo(function ScrollToTop() {
   const [visible, setVisible] = useState(false)
@@ -10,8 +11,9 @@ export default memo(function ScrollToTop() {
   const pathname = usePathname()
 
   // Pages where FAB is shown — keep scroll-to-top from overlapping
-  const fabPages = ['/', '/groups']
-  const hasFab = fabPages.some(p => pathname === p || pathname.startsWith('/groups/'))
+  // When social is off, FAB only shows on '/' (groups pages are 404)
+  const fabPages = features.social ? ['/', '/groups'] : ['/']
+  const hasFab = fabPages.some(p => pathname === p || (features.social && pathname.startsWith('/groups/')))
 
   useEffect(() => {
     const handleScroll = () => {
