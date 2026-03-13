@@ -4286,6 +4286,7 @@ allTraderTypes: 'All',
 traderTypeFilter: 'Trader Type',
 isBot: 'Bot',
 isHuman: 'Trader',
+botTooltip: 'This trader is an automated trading bot or AI agent',
 
 // DeSoc - Verified badge
 verifiedBadge: 'Verified',

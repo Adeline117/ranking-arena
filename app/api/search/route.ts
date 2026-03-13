@@ -95,7 +95,7 @@ export const GET = withPublic(
     const [tradersData, postsData, libraryData, usersData, groupsData] = await Promise.all([
       safeQuery(supabase
         .from('trader_sources')
-        .select('source_trader_id, handle, source')
+        .select('source_trader_id, handle, source, is_bot')
         .or(
           `handle.ilike.%${sanitizedQuery}%,source_trader_id.ilike.%${sanitizedQuery}%`
         )
@@ -147,7 +147,7 @@ export const GET = withPublic(
     }
 
      
-    interface TraderSourceRow { source_trader_id: string; handle: string | null; source: string }
+    interface TraderSourceRow { source_trader_id: string; handle: string | null; source: string; is_bot?: boolean }
     interface PostRow { id: string; title: string | null; author_handle: string | null; created_at: string; view_count: number | null }
     interface LibraryRow { id: string; title: string; author: string | null; slug: string | null; category: string | null }
     interface UserRow { id: string; handle: string | null; display_name: string | null; avatar_url: string | null; bio: string | null }
@@ -220,6 +220,7 @@ export const GET = withPublic(
       title: `@${name}`,
       subtitle: sourceLabels[t.source] || t.source,
       href: `/trader/${encodeURIComponent(t.source_trader_id)}?platform=${t.source}`,
+      meta: (t.is_bot || t.source === 'web3_bot') ? { is_bot: true } : undefined,
     }))
 
      

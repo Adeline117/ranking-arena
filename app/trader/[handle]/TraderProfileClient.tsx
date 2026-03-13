@@ -270,6 +270,7 @@ export default function TraderProfileClient({ data, serverTraderData }: TraderPr
           rank={data.rank ?? null}
           currentUserId={currentUserId}
           isVerifiedTrader={isVerifiedTrader}
+          isBot={data.source === 'web3_bot'}
         />
         </div>
 
