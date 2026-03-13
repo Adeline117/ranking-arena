@@ -17,6 +17,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import logger from '@/lib/logger'
 import { getOrSetWithLock } from '@/lib/cache'
+import { ApiError } from '@/lib/api/errors'
+import { success as apiSuccess, handleError, withCache } from '@/lib/api/response'
 
 export const dynamic = 'force-dynamic'
 
@@ -31,11 +33,11 @@ export async function GET(
     const { handle } = await params
     
     if (!handle) {
-      return NextResponse.json({ error: 'Missing handle parameter' }, { status: 400 })
+      throw ApiError.validation('Missing handle parameter')
     }
 
     if (!SUPABASE_URL || !SUPABASE_KEY) {
-      return NextResponse.json({ error: 'Server configuration error' }, { status: 500 })
+      throw ApiError.internal('Server configuration error')
     }
 
     const cacheKey = `trader:full:${handle}`
@@ -48,18 +50,14 @@ export async function GET(
     )
 
     if (!data) {
-      return NextResponse.json({ error: 'Trader not found' }, { status: 404 })
+      throw ApiError.notFound('Trader not found')
     }
 
-    const response = NextResponse.json({ success: true, data })
-    response.headers.set('Cache-Control', 'public, s-maxage=60, stale-while-revalidate=300')
-    return response
+    const response = apiSuccess(data)
+    return withCache(response, { maxAge: 60, staleWhileRevalidate: 300 })
   } catch (error: unknown) {
     logger.error('[API] 交易员聚合数据获取Failed:', error)
-    return NextResponse.json(
-      { error: 'Server error' },
-      { status: 500 }
-    )
+    return handleError(error, 'trader-full')
   }
 }
 

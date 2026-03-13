@@ -28,6 +28,8 @@ import type {
 } from '@/lib/types/leaderboard'
 import { WINDOWS } from '@/lib/types/leaderboard'
 import { logger } from '@/lib/logger'
+import { ApiError } from '@/lib/api/errors'
+import { success as apiSuccess, handleError, withCache } from '@/lib/api/response'
 
 export const dynamic = 'force-dynamic'
 
@@ -107,10 +109,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       .single()
 
     if (!sourceData) {
-      return NextResponse.json(
-        { error: 'Trader not found' },
-        { status: 404 }
-      )
+      throw ApiError.notFound('Trader not found')
     }
 
     profile = {
@@ -278,16 +277,10 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     },
   }
 
-  return NextResponse.json(response, {
-    headers: {
-      'Cache-Control': 'public, s-maxage=30, stale-while-revalidate=120',
-    },
-  })
+  const apiResponse = apiSuccess(response);
+  return withCache(apiResponse, { maxAge: 30, staleWhileRevalidate: 120 });
   } catch (error) {
     logger.error('[v2-trader-detail] Unexpected error:', error)
-    return NextResponse.json(
-      { error: 'Internal server error' },
-      { status: 500 }
-    )
+    return handleError(error, 'v2-trader-detail')
   }
 }

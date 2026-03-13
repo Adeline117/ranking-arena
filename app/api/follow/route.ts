@@ -7,6 +7,7 @@
 import { NextResponse } from 'next/server'
 import { z } from 'zod'
 import { withApiMiddleware, createErrorResponse } from '@/lib/api/middleware'
+import { ApiError } from '@/lib/api/errors'
 import { createLogger, fireAndForget } from '@/lib/utils/logger'
 import { invalidateFollowingCache } from '@/app/api/following/route'
 
@@ -78,10 +79,7 @@ export const POST = withApiMiddleware(
     const body = await request.json()
     const parsed = FollowActionSchema.safeParse(body)
     if (!parsed.success) {
-      return NextResponse.json(
-        { error: 'Invalid input', details: parsed.error.flatten() },
-        { status: 400 }
-      )
+      throw ApiError.validation('Invalid input', { errors: parsed.error.flatten() })
     }
     const { traderId, action } = parsed.data
 
@@ -99,10 +97,7 @@ export const POST = withApiMiddleware(
         // 如果表不存在
         if (error.message?.includes('Could not find the table')) {
           logger.warn('trader_follows 表不存在')
-          return NextResponse.json(
-            { success: false, error: 'Follow feature not available yet', tableNotFound: true },
-            { status: 503 }
-          )
+          return createErrorResponse('Follow feature not available yet', 503)
         }
         logger.error('Follow failed', { error, traderId, userId: user.id })
         return createErrorResponse('Follow failed', 500)
@@ -123,10 +118,7 @@ export const POST = withApiMiddleware(
         // 如果表不存在
         if (error.message?.includes('Could not find the table')) {
           logger.warn('trader_follows 表不存在')
-          return NextResponse.json(
-            { success: false, error: 'Follow feature not available yet', tableNotFound: true },
-            { status: 503 }
-          )
+          return createErrorResponse('Follow feature not available yet', 503)
         }
         logger.error('Unfollow failed', { error, traderId, userId: user.id })
         return createErrorResponse('Unfollow failed', 500)

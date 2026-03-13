@@ -373,6 +373,102 @@ describe('BinanceFuturesConnector', () => {
       expect(normalized.followers).toBeNull()
       expect(normalized.copiers).toBeNull()
     })
+
+    test('returns all 13 standardized fields', () => {
+      const connector = createConnector()
+      const raw = {
+        encryptedUid: 'FIELDS_TEST',
+        nickName: 'Tester',
+        userPhotoUrl: 'https://img.example.com/a.jpg',
+        rank: 1,
+        value: 0.5,
+        pnl: 10000,
+        followerCount: 50,
+        copyCount: 10,
+      }
+
+      const normalized = connector.normalize(raw)
+
+      const expectedKeys = [
+        'trader_key', 'display_name', 'avatar_url',
+        'roi', 'pnl', 'win_rate', 'max_drawdown',
+        'trades_count', 'followers', 'copiers',
+        'aum', 'sharpe_ratio', 'platform_rank',
+      ]
+      for (const key of expectedKeys) {
+        expect(normalized).toHaveProperty(key)
+      }
+      expect(Object.keys(normalized)).toHaveLength(13)
+    })
+
+    test('ROI=0 produces roi=0 (not null)', () => {
+      const connector = createConnector()
+      const raw = {
+        encryptedUid: 'ZERO_ROI',
+        nickName: null,
+        userPhotoUrl: null,
+        rank: 10,
+        value: 0,
+        pnl: 0,
+        followerCount: null,
+        copyCount: null,
+      }
+
+      const normalized = connector.normalize(raw)
+      expect(normalized.roi).toBe(0)
+      expect(normalized.pnl).toBe(0)
+    })
+
+    test('negative ROI and PnL values are preserved', () => {
+      const connector = createConnector()
+      const raw = {
+        encryptedUid: 'NEG_TEST',
+        nickName: null,
+        userPhotoUrl: null,
+        rank: 99,
+        value: -0.5,     // -50% ROI
+        pnl: -25000,
+        followerCount: 0,
+        copyCount: 0,
+      }
+
+      const normalized = connector.normalize(raw)
+      expect(normalized.roi).toBe(-50)
+      expect(normalized.pnl).toBe(-25000)
+    })
+
+    test('enrichment-only fields are null from leaderboard data', () => {
+      const connector = createConnector()
+      const raw = {
+        encryptedUid: 'ENRICH',
+        nickName: 'User',
+        userPhotoUrl: null,
+        rank: 1,
+        value: 1.0,
+        pnl: 50000,
+        followerCount: 200,
+        copyCount: 50,
+      }
+
+      const normalized = connector.normalize(raw)
+      // These require copy-trade detail API (enrichment)
+      expect(normalized.win_rate).toBeNull()
+      expect(normalized.max_drawdown).toBeNull()
+      expect(normalized.trades_count).toBeNull()
+      expect(normalized.aum).toBeNull()
+      expect(normalized.sharpe_ratio).toBeNull()
+    })
+
+    test('does not crash on empty/minimal raw object', () => {
+      const connector = createConnector()
+      const raw = {} as Record<string, unknown>
+
+      const normalized = connector.normalize(raw)
+      expect(normalized.trader_key).toBeUndefined()
+      expect(normalized.display_name).toBeNull()
+      expect(normalized.roi).toBeNull()
+      expect(normalized.pnl).toBeNull()
+    })
   })
 
   // ============================================

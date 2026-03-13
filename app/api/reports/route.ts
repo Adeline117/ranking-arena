@@ -7,6 +7,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createLogger } from '@/lib/utils/logger'
 import { checkRateLimit, RateLimitPresets } from '@/lib/utils/rate-limit'
 import { getAuthUser, getSupabaseAdmin } from '@/lib/supabase/server'
+import { ApiError, ErrorCode } from '@/lib/api/errors'
+import { success as apiSuccess, handleError } from '@/lib/api/response'
 
 const logger = createLogger('reports')
 
@@ -31,7 +33,7 @@ export async function POST(req: NextRequest) {
     // Verify authentication
     const user = await getAuthUser(req)
     if (!user) {
-      return NextResponse.json({ error: 'Please log in first' }, { status: 401 })
+      throw ApiError.unauthorized('Please log in first')
     }
 
     const auth = { userId: user.id }
@@ -41,39 +43,33 @@ export async function POST(req: NextRequest) {
 
     // Validate content_type
     if (!content_type || !VALID_CONTENT_TYPES.includes(content_type as ContentType)) {
-      return NextResponse.json(
-        { error: 'Invalid report type', valid_types: VALID_CONTENT_TYPES },
-        { status: 400 }
-      )
+      throw ApiError.validation('Invalid report type', { valid_types: VALID_CONTENT_TYPES as unknown as Record<string, unknown> })
     }
 
     // Validate content_id
     if (!content_id || typeof content_id !== 'string') {
-      return NextResponse.json({ error: 'Missing content ID' }, { status: 400 })
+      throw ApiError.validation('Missing content ID')
     }
 
     // Validate reason
     if (!reason || !VALID_REASONS.includes(reason as ReportReason)) {
-      return NextResponse.json(
-        { error: 'Please select a report reason', valid_reasons: VALID_REASONS },
-        { status: 400 }
-      )
+      throw ApiError.validation('Please select a report reason', { valid_reasons: VALID_REASONS as unknown as Record<string, unknown> })
     }
 
     // Validate description: required, min 15 chars, max 1000
     if (!description || typeof description !== 'string' || description.trim().length < 15) {
-      return NextResponse.json({ error: 'Report reason must be at least 15 characters' }, { status: 400 })
+      throw ApiError.validation('Report reason must be at least 15 characters')
     }
     if (description.length > 1000) {
-      return NextResponse.json({ error: 'Report description max 1000 characters' }, { status: 400 })
+      throw ApiError.validation('Report description max 1000 characters')
     }
 
     // Validate images: at least 1 required
     if (!images || !Array.isArray(images) || images.length === 0) {
-      return NextResponse.json({ error: 'Please upload at least one screenshot as evidence' }, { status: 400 })
+      throw ApiError.validation('Please upload at least one screenshot as evidence')
     }
     if (images.length > 4) {
-      return NextResponse.json({ error: 'Maximum 4 screenshots' }, { status: 400 })
+      throw ApiError.validation('Maximum 4 screenshots')
     }
 
     const supabase = getSupabaseAdmin()
@@ -88,13 +84,13 @@ export async function POST(req: NextRequest) {
       .maybeSingle()
 
     if (existingReport) {
-      return NextResponse.json({ error: 'You have already reported this content' }, { status: 400 })
+      throw new ApiError('You have already reported this content', {
+        code: ErrorCode.DUPLICATE_ACTION,
+      })
     }
 
     // Validate that the content exists and user has access
     if (content_type === 'message') {
-      // For messages, content_id is the conversation_id
-      // Check if user is part of this conversation
       const { data: conversation } = await supabase
         .from('conversations')
         .select('id, user1_id, user2_id')
@@ -102,14 +98,13 @@ export async function POST(req: NextRequest) {
         .maybeSingle()
 
       if (!conversation) {
-        return NextResponse.json({ error: 'Conversation not found' }, { status: 404 })
+        throw ApiError.notFound('Conversation not found')
       }
 
       if (conversation.user1_id !== auth.userId && conversation.user2_id !== auth.userId) {
-        return NextResponse.json({ error: 'No permission to report this conversation' }, { status: 403 })
+        throw ApiError.forbidden('No permission to report this conversation')
       }
     } else if (content_type === 'user') {
-      // For user reports, content_id is the user_id being reported
       const { data: reportedUser } = await supabase
         .from('user_profiles')
         .select('id')
@@ -117,12 +112,11 @@ export async function POST(req: NextRequest) {
         .maybeSingle()
 
       if (!reportedUser) {
-        return NextResponse.json({ error: 'User not found' }, { status: 404 })
+        throw ApiError.notFound('User not found')
       }
 
-      // Can't report yourself
       if (content_id === auth.userId) {
-        return NextResponse.json({ error: 'Cannot report yourself' }, { status: 400 })
+        throw ApiError.validation('Cannot report yourself')
       }
     }
 
@@ -143,13 +137,12 @@ export async function POST(req: NextRequest) {
 
     if (error) {
       logger.error('Failed to create report', { error, userId: auth.userId, content_type, content_id })
-      return NextResponse.json({ error: 'Failed to submit report' }, { status: 500 })
+      throw ApiError.database('Failed to submit report')
     }
 
     logger.info('Report created', { reportId: report.id, userId: auth.userId, content_type, content_id, reason })
 
-    return NextResponse.json({
-      ok: true,
+    return apiSuccess({
       message: 'Report submitted, we will review it shortly',
       report: {
         id: report.id,
@@ -158,10 +151,9 @@ export async function POST(req: NextRequest) {
         status: report.status,
         created_at: report.created_at,
       },
-    })
+    }, 201)
   } catch (error: unknown) {
     logger.error('Reports API error', { error })
-    const _errorMessage = error instanceof Error ? error.message : 'Internal server error'
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
+    return handleError(error, 'reports')
   }
 }

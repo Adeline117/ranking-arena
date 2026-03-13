@@ -25,6 +25,8 @@ import {
   validateEnum,
   checkRateLimit,
   RateLimitPresets,
+  ApiError,
+  ErrorCode,
 } from '@/lib/api'
 import { socialFeatureGuard } from '@/lib/features'
 import { getPosts, createPost, getUserPostReactions, getUserPostVotes } from '@/lib/data/posts'
@@ -269,10 +271,10 @@ export async function POST(request: NextRequest) {
     // Zod 输入验证
     const parsed = CreatePostSchema.safeParse(body)
     if (!parsed.success) {
-      return NextResponse.json(
-        { error: 'Invalid input', details: parsed.error.flatten() },
-        { status: 400 }
-      )
+      throw new ApiError('Invalid input', {
+        code: ErrorCode.VALIDATION_ERROR,
+        details: { errors: parsed.error.flatten() },
+      })
     }
     const { title, content, poll_enabled } = parsed.data
     const group_id = parsed.data.group_id ?? undefined

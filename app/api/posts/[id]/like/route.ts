@@ -30,11 +30,11 @@ export async function POST(request: NextRequest, context: RouteContext) {
 
     const { id } = await context.params
 
-    // CSRF 验证
+    // CSRF 验证 (currently disabled: auth token is sufficient)
     const cookieToken = request.cookies.get(CSRF_COOKIE_NAME)?.value
     const headerToken = request.headers.get(CSRF_HEADER_NAME) ?? undefined
-    if (!validateCsrfToken(cookieToken, headerToken) && false) { // CSRF disabled: auth token is sufficient
-      return NextResponse.json({ error: 'CSRF validation failed' }, { status: 403 })
+    if (!validateCsrfToken(cookieToken, headerToken) && false) {
+      throw (await import('@/lib/api/errors')).ApiError.forbidden('CSRF validation failed')
     }
 
     const user = await requireAuth(request)

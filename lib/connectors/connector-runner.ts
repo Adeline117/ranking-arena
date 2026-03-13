@@ -20,6 +20,18 @@ import { dataLogger } from '@/lib/utils/logger'
 import type { RankingWindow } from '@/lib/types/leaderboard'
 
 // ============================================
+// Sentry Integration (optional — no-ops if Sentry unavailable)
+// ============================================
+
+let Sentry: typeof import('@sentry/nextjs') | null = null
+try {
+  // Dynamic import so the module is not required at build time
+  Sentry = require('@sentry/nextjs')
+} catch {
+  // Sentry not installed or not configured — that is fine
+}
+
+// ============================================
 // 类型定义
 // ============================================
 
@@ -126,6 +138,8 @@ export class ConnectorRunner<T = unknown> {
       errors: 0,
     })
 
+    // Sentry span for observability
+    const sentrySpanFn = async (): Promise<ExecuteResult> => {
     try {
       // 3. Execute connector logic with timeout
       const result = await this.withTimeout(
@@ -140,7 +154,7 @@ export class ConnectorRunner<T = unknown> {
       await this.checkWarnings(recordsProcessed, durationMs)
 
       // 5. Success logging
-      await this.logHandle.success(recordsProcessed, {
+      await this.logHandle!.success(recordsProcessed, {
         durationMs,
         params,
       })
@@ -171,7 +185,7 @@ export class ConnectorRunner<T = unknown> {
       dataLogger.error(`[${this.config.platform}] 执行失败:`, error)
 
       // 7. Error logging
-      await this.logHandle.error(error, {
+      await this.logHandle?.error(error instanceof Error ? error : new Error(String(error)), {
         durationMs,
         params,
       })
@@ -212,6 +226,33 @@ export class ConnectorRunner<T = unknown> {
         durationMs,
       }
     }
+    } // end sentrySpanFn
+
+    // Wrap in Sentry span if available
+    if (Sentry?.startSpan) {
+      return Sentry.startSpan(
+        {
+          name: `connector.execute`,
+          op: 'connector',
+          attributes: {
+            'connector.platform': this.config.platform,
+            'connector.window': params?.window ?? 'default',
+          },
+        },
+        async (span) => {
+          const result = await sentrySpanFn()
+          span.setAttribute('connector.records', result.recordsProcessed)
+          span.setAttribute('connector.duration_ms', result.durationMs)
+          span.setAttribute('connector.success', result.success)
+          if (!result.success) {
+            span.setStatus({ code: 2, message: result.errors[0] ?? 'unknown error' })
+          }
+          return result
+        }
+      )
+    }
+
+    return sentrySpanFn()
   }
 
   // ============================================
