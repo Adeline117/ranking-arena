@@ -31,6 +31,7 @@ const EquityCurveSection = dynamic(() => import('@/app/components/trader/stats/c
 const TradingStyleRadar = dynamic(() => import('@/app/components/trader/TradingStyleRadar'), { ssr: false })
 const SimilarTraders = dynamic(() => import('@/app/components/trader/SimilarTraders'))
 const ClaimTraderButton = dynamic(() => import('@/app/components/trader/ClaimTraderButton'), { ssr: false })
+const VerifiedTraderEditor = dynamic(() => import('@/app/components/trader/VerifiedTraderEditor'), { ssr: false })
 const StatsPage = dynamic(() => import('@/app/components/trader/stats/StatsPage'), {
   loading: () => <RankingSkeleton />,
 })
@@ -78,12 +79,33 @@ export default function TraderProfileClient({ data, serverTraderData }: TraderPr
   const { isPro } = useSubscription()
 
   const [currentUserId, setCurrentUserId] = useState<string | null>(null)
+  const [isVerifiedTrader, setIsVerifiedTrader] = useState(false)
+  const [isOwner, setIsOwner] = useState(false)
 
   useEffect(() => {
     supabase.auth.getUser().then(({ data: userData }) => {
       setCurrentUserId(userData.user?.id ?? null)
     }).catch(() => { /* Intentionally swallowed: auth check non-critical for trader profile */ }) // eslint-disable-line no-restricted-syntax -- intentional fire-and-forget
   }, [])
+
+  // Check if this trader is verified (claimed) and if current user is the owner
+  useEffect(() => {
+    const traderId = data.source_trader_id
+    const source = data.source
+    if (!traderId || !source) return
+
+    fetch(`/api/traders/claim/status?trader_id=${encodeURIComponent(traderId)}&source=${encodeURIComponent(source)}`)
+      .then(res => res.ok ? res.json() : null)
+      .then(result => {
+        if (result?.data?.is_verified) {
+          setIsVerifiedTrader(true)
+          if (currentUserId && result.data.owner_id === currentUserId) {
+            setIsOwner(true)
+          }
+        }
+      })
+      .catch(() => {})
+  }, [data.source_trader_id, data.source, currentUserId])
 
   const displayName = formatDisplayName(data.handle, data.source)
   const _exchangeName = EXCHANGE_NAMES[data.source] || data.source
@@ -247,6 +269,7 @@ export default function TraderProfileClient({ data, serverTraderData }: TraderPr
           winRate={traderPerformance?.win_rate ?? data.win_rate ?? undefined}
           rank={data.rank ?? null}
           currentUserId={currentUserId}
+          isVerifiedTrader={isVerifiedTrader}
         />
         </div>
 
@@ -336,67 +359,76 @@ export default function TraderProfileClient({ data, serverTraderData }: TraderPr
                   </Box>
                 )}
 
-                {/* Claim this profile CTA */}
-                <Box
-                  style={{
-                    padding: tokens.spacing[8],
-                    background: `linear-gradient(135deg, ${tokens.colors.bg.secondary} 0%, var(--color-accent-primary-08, ${tokens.colors.bg.secondary}) 100%)`,
-                    borderRadius: tokens.radius.xl,
-                    border: '1px solid var(--color-accent-primary-30)',
-                    textAlign: 'center',
-                    display: 'flex',
-                    flexDirection: 'column',
-                    alignItems: 'center',
-                    gap: tokens.spacing[4],
-                  }}
-                >
-                  <Box style={{
-                    width: 56, height: 56,
-                    borderRadius: tokens.radius.full,
-                    background: 'var(--color-accent-primary-15)',
-                    display: 'grid', placeItems: 'center',
-                  }}>
-                    <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="var(--color-brand-accent, currentColor)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-                      <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
-                      <circle cx="12" cy="7" r="4" />
-                      <line x1="12" y1="11" x2="12" y2="17" />
-                      <line x1="9" y1="14" x2="15" y2="14" />
-                    </svg>
-                  </Box>
-                  <Text size="lg" weight="bold" style={{ color: 'var(--color-text-primary)' }}>
-                    {t('claimYourProfile')}
-                  </Text>
-                  <Text size="sm" color="tertiary" style={{ maxWidth: 400, lineHeight: 1.6 }}>
-                    {t('claimYourProfileDesc')}
-                  </Text>
-                  {currentUserId ? (
-                    <Box style={{ marginTop: tokens.spacing[2] }}>
-                      <ClaimTraderButton
-                        traderId={traderProfile?.id || data.source_trader_id}
-                        handle={traderProfile?.handle || data.handle}
-                        userId={currentUserId}
-                        source={traderProfile?.source || data.source}
-                      />
+                {/* Verified trader edit OR Claim CTA */}
+                {isOwner ? (
+                  <VerifiedTraderEditor
+                    traderId={data.source_trader_id}
+                    source={data.source}
+                    currentData={{}}
+                    onSaved={() => window.location.reload()}
+                  />
+                ) : !isVerifiedTrader && (
+                  <Box
+                    style={{
+                      padding: tokens.spacing[8],
+                      background: `linear-gradient(135deg, ${tokens.colors.bg.secondary} 0%, var(--color-accent-primary-08, ${tokens.colors.bg.secondary}) 100%)`,
+                      borderRadius: tokens.radius.xl,
+                      border: '1px solid var(--color-accent-primary-30)',
+                      textAlign: 'center',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      alignItems: 'center',
+                      gap: tokens.spacing[4],
+                    }}
+                  >
+                    <Box style={{
+                      width: 56, height: 56,
+                      borderRadius: tokens.radius.full,
+                      background: 'var(--color-accent-primary-15)',
+                      display: 'grid', placeItems: 'center',
+                    }}>
+                      <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="var(--color-brand-accent, currentColor)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
+                        <circle cx="12" cy="7" r="4" />
+                        <line x1="12" y1="11" x2="12" y2="17" />
+                        <line x1="9" y1="14" x2="15" y2="14" />
+                      </svg>
                     </Box>
-                  ) : (
-                    <a
-                      href={`/login?returnUrl=${encodeURIComponent(`/trader/${encodeURIComponent(data.handle)}`)}`}
-                      style={{
-                        marginTop: tokens.spacing[2],
-                        padding: `${tokens.spacing[3]} ${tokens.spacing[6]}`,
-                        borderRadius: tokens.radius.lg,
-                        background: 'linear-gradient(135deg, var(--color-brand) 0%, var(--color-brand-deep) 100%)',
-                        color: tokens.colors.white,
-                        fontWeight: 700,
-                        fontSize: tokens.typography.fontSize.sm,
-                        textDecoration: 'none',
-                        display: 'inline-block',
-                      }}
-                    >
-                      {t('loginToClaim')}
-                    </a>
-                  )}
-                </Box>
+                    <Text size="lg" weight="bold" style={{ color: 'var(--color-text-primary)' }}>
+                      {t('claimYourProfile')}
+                    </Text>
+                    <Text size="sm" color="tertiary" style={{ maxWidth: 400, lineHeight: 1.6 }}>
+                      {t('claimYourProfileDesc')}
+                    </Text>
+                    {currentUserId ? (
+                      <Box style={{ marginTop: tokens.spacing[2] }}>
+                        <ClaimTraderButton
+                          traderId={traderProfile?.id || data.source_trader_id}
+                          handle={traderProfile?.handle || data.handle}
+                          userId={currentUserId}
+                          source={traderProfile?.source || data.source}
+                        />
+                      </Box>
+                    ) : (
+                      <a
+                        href={`/login?returnUrl=${encodeURIComponent(`/trader/${encodeURIComponent(data.handle)}`)}`}
+                        style={{
+                          marginTop: tokens.spacing[2],
+                          padding: `${tokens.spacing[3]} ${tokens.spacing[6]}`,
+                          borderRadius: tokens.radius.lg,
+                          background: 'linear-gradient(135deg, var(--color-brand) 0%, var(--color-brand-deep) 100%)',
+                          color: tokens.colors.white,
+                          fontWeight: 700,
+                          fontSize: tokens.typography.fontSize.sm,
+                          textDecoration: 'none',
+                          display: 'inline-block',
+                        }}
+                      >
+                        {t('loginToClaim')}
+                      </a>
+                    )}
+                  </Box>
+                )}
               </Box>
 
               {traderSimilar.length > 0 && (
