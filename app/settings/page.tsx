@@ -132,7 +132,7 @@ function SettingsContent() {
               onClick={() => scrollToSection(sectionId)}
               style={{
                 display: 'flex', alignItems: 'center', gap: tokens.spacing[2],
-                padding: `${tokens.spacing[2]} ${tokens.spacing[3]}`, borderRadius: tokens.radius.md, border: 'none',
+                padding: `${tokens.spacing[2]} ${tokens.spacing[3]}`, minHeight: 44, borderRadius: tokens.radius.md, border: 'none',
                 background: activeSection === sectionId ? tokens.colors.bg.tertiary : 'transparent',
                 color: activeSection === sectionId ? tokens.colors.text.primary : tokens.colors.text.secondary,
                 fontWeight: activeSection === sectionId ? tokens.typography.fontWeight.bold : tokens.typography.fontWeight.normal,
@@ -166,7 +166,7 @@ function SettingsContent() {
                 onClick={() => scrollToSection(sectionId)}
                 style={{
                   display: 'flex', alignItems: 'center', gap: tokens.spacing[1],
-                  padding: `${tokens.spacing[2]} ${tokens.spacing[3]}`, borderRadius: tokens.radius.full,
+                  padding: `${tokens.spacing[2]} ${tokens.spacing[3]}`, minHeight: 44, borderRadius: tokens.radius.full,
                   border: `1px solid ${activeSection === sectionId ? tokens.colors.accent.primary + '60' : tokens.colors.border.primary}`,
                   background: activeSection === sectionId ? `${tokens.colors.accent.primary}15` : tokens.colors.bg.secondary,
                   color: activeSection === sectionId ? tokens.colors.accent.primary : tokens.colors.text.secondary,

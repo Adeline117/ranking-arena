@@ -5,9 +5,9 @@ import { tokens } from '@/lib/design-tokens'
 import { Box } from '../base'
 import type { PortfolioItem, PositionHistoryItem } from '@/lib/data/trader'
 import type { ExtendedPositionHistoryItem } from './portfolio-table-utils'
-import PortfolioProLock from './PortfolioProLock'
+// REMOVED: PortfolioProLock deleted in cleanup
 import PortfolioTableHeader from './PortfolioTableHeader'
-import PortfolioCurrentView from './PortfolioCurrentView'
+// REMOVED: PortfolioCurrentView deleted in cleanup
 import PositionHistoryView from './PositionHistoryView'
 import MarketDetailDrawer from './MarketDetailDrawer'
 

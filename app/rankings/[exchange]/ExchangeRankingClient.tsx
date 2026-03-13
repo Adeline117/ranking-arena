@@ -358,6 +358,7 @@ export default function ExchangeRankingClient({
           onClick={() => setViewMode('table')}
           style={{
             padding: '6px 16px',
+            minHeight: 44,
             borderRadius: tokens.radius.md,
             border: 'none',
             fontSize: 13,
@@ -373,6 +374,7 @@ export default function ExchangeRankingClient({
           onClick={() => setViewMode('card')}
           style={{
             padding: '6px 16px',
+            minHeight: 44,
             borderRadius: tokens.radius.md,
             border: 'none',
             fontSize: 13,
@@ -511,6 +513,7 @@ export default function ExchangeRankingClient({
             onClick={() => setPage(p => Math.max(1, p - 1))}
             style={{
               padding: '8px 16px',
+              minHeight: 44,
               borderRadius: tokens.radius.md,
               border: 'none',
               fontSize: 13,
@@ -531,6 +534,7 @@ export default function ExchangeRankingClient({
             onClick={() => setPage(p => Math.min(totalPages, p + 1))}
             style={{
               padding: '8px 16px',
+              minHeight: 44,
               borderRadius: tokens.radius.md,
               border: 'none',
               fontSize: 13,

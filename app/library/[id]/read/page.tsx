@@ -671,7 +671,7 @@ export default function ReadPage() {
             <div style={{ height: '100%', borderRadius: 3, width: `${progressPercent}%`, background: 'var(--color-accent-primary)', transition: 'width 0.3s ease' }} />
           </div>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-            <button onClick={goPrev} disabled={currentPage <= 1} aria-label="Previous page" style={{ background: 'none', border: 'none', color: currentPage <= 1 ? 'var(--color-text-tertiary)' : 'var(--color-text-primary)', cursor: currentPage <= 1 ? 'default' : 'pointer', padding: '4px 8px', display: 'flex', alignItems: 'center', gap: 4, fontSize: 13, fontWeight: 500 }}>
+            <button onClick={goPrev} disabled={currentPage <= 1} aria-label="Previous page" style={{ background: 'none', border: 'none', color: currentPage <= 1 ? 'var(--color-text-tertiary)' : 'var(--color-text-primary)', cursor: currentPage <= 1 ? 'default' : 'pointer', padding: '10px 16px', minHeight: 44, display: 'flex', alignItems: 'center', gap: 4, fontSize: 13, fontWeight: 500 }}>
               <IconChevronLeft /><span className="reader-hide-mobile">{t('readerPrevPage')}</span>
             </button>
             <div style={{ display: 'flex', alignItems: 'center', gap: 6, color: 'var(--color-text-secondary)', fontSize: 13 }}>
@@ -679,7 +679,7 @@ export default function ReadPage() {
               <span>/ {totalPages}</span>
               <span style={{ marginLeft: 8, opacity: 0.5 }}>{progressPercent}%</span>
             </div>
-            <button onClick={goNext} disabled={currentPage >= totalPages} aria-label="Next page" style={{ background: 'none', border: 'none', color: currentPage >= totalPages ? 'var(--color-text-tertiary)' : 'var(--color-text-primary)', cursor: currentPage >= totalPages ? 'default' : 'pointer', padding: '4px 8px', display: 'flex', alignItems: 'center', gap: 4, fontSize: 13, fontWeight: 500 }}>
+            <button onClick={goNext} disabled={currentPage >= totalPages} aria-label="Next page" style={{ background: 'none', border: 'none', color: currentPage >= totalPages ? 'var(--color-text-tertiary)' : 'var(--color-text-primary)', cursor: currentPage >= totalPages ? 'default' : 'pointer', padding: '10px 16px', minHeight: 44, display: 'flex', alignItems: 'center', gap: 4, fontSize: 13, fontWeight: 500 }}>
               <span className="reader-hide-mobile">{t('readerNextPage')}</span><IconChevronRight />
             </button>
           </div>
@@ -781,8 +781,8 @@ export default function ReadPage() {
       {showBookshelfPrompt && !addedToShelf && (
         <div style={{ position: 'fixed', bottom: 80, left: '50%', transform: 'translateX(-50%)', zIndex: 150, background: theme === 'dark' ? 'var(--color-bg-tertiary)' : 'var(--color-on-accent)', boxShadow: '0 8px 32px var(--color-overlay-medium)', borderRadius: tokens.radius.xl, padding: '14px 20px', display: 'flex', alignItems: 'center', gap: 12, border: `1px solid ${theme === 'dark' ? 'var(--glass-bg-light)' : 'var(--color-overlay-subtle)'}`, animation: 'slideUp 0.3s ease' }}>
           <span style={{ fontSize: 13 }}>{t('readerAddToShelfTitle')}</span>
-          <button onClick={handleAddToShelf} style={{ padding: '5px 14px', borderRadius: tokens.radius.md, background: 'var(--color-accent-primary)', color: 'var(--foreground)', border: 'none', cursor: 'pointer', fontSize: 12, fontWeight: 600 }}>{t('readerAddToShelf')}</button>
-          <button onClick={() => setShowBookshelfPrompt(false)} style={{ padding: '5px 10px', borderRadius: tokens.radius.md, background: 'transparent', color: themeColors.text, border: '1px solid var(--color-overlay-medium)', cursor: 'pointer', fontSize: 12, opacity: 0.6 }}>{t('readerDismiss')}</button>
+          <button onClick={handleAddToShelf} style={{ padding: '10px 14px', borderRadius: tokens.radius.md, background: 'var(--color-accent-primary)', color: 'var(--foreground)', border: 'none', cursor: 'pointer', fontSize: 12, fontWeight: 600 }}>{t('readerAddToShelf')}</button>
+          <button onClick={() => setShowBookshelfPrompt(false)} style={{ padding: '10px 10px', borderRadius: tokens.radius.md, background: 'transparent', color: themeColors.text, border: '1px solid var(--color-overlay-medium)', cursor: 'pointer', fontSize: 12, opacity: 0.6 }}>{t('readerDismiss')}</button>
         </div>
       )}
 
