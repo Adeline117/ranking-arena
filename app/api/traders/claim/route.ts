@@ -1,7 +1,10 @@
 /**
- * 交易员认领 API
- * GET /api/traders/claim - 获取用户的认领状态
- * POST /api/traders/claim - 提交认领申请
+ * Trader Claim API
+ * GET /api/traders/claim - Get user's claim status
+ * POST /api/traders/claim - Submit claim with verification
+ *
+ * After verification passes (API key UID match or wallet signature),
+ * the claim is auto-approved without manual review.
  */
 
 import { NextRequest } from 'next/server'
@@ -18,15 +21,15 @@ import {
 import {
   getUserClaim,
   getUserVerifiedTrader,
-  createClaim,
   isTraderClaimed,
   type VerificationMethod,
 } from '@/lib/data/trader-claims'
 import { notifyTraderClaim } from '@/lib/notifications/activity-alerts'
+import { logger } from '@/lib/logger'
 
 /**
  * GET /api/traders/claim
- * 获取用户的认领状态
+ * Get user's claim status
  */
 export async function GET(request: NextRequest) {
   const rateLimitResponse = await checkRateLimit(request, RateLimitPresets.read)
@@ -53,7 +56,17 @@ export async function GET(request: NextRequest) {
 
 /**
  * POST /api/traders/claim
- * 提交认领申请
+ * Submit claim with verification proof.
+ *
+ * For CEX (API key): requires prior successful verify-ownership call
+ * For DEX (wallet): requires signature verification
+ *
+ * Body: {
+ *   trader_id: string,
+ *   source: string,
+ *   verification_method: 'api_key' | 'signature',
+ *   verification_data: { verified_uid?: string, wallet_address?: string, signature?: string, message?: string },
+ * }
  */
 export async function POST(request: NextRequest) {
   const rateLimitResponse = await checkRateLimit(request, RateLimitPresets.sensitive)
@@ -75,31 +88,186 @@ export async function POST(request: NextRequest) {
       return handleError(new Error('Missing required parameters'), 'trader claim POST')
     }
 
-    // 检查是否已被认领
+    // Check if already claimed
     const isClaimed = await isTraderClaimed(supabase, trader_id, source)
     if (isClaimed) {
       return handleError(new Error('This trader account has been claimed or is under review'), 'trader claim POST')
     }
 
-    // 检查用户是否已有认领
+    // Check if user already has a verified trader
     const existingVerified = await getUserVerifiedTrader(supabase, user.id)
     if (existingVerified) {
       return handleError(new Error('You have already claimed a trader account'), 'trader claim POST')
     }
 
-    const claim = await createClaim(supabase, user.id, {
-      trader_id,
-      source,
-      verification_method: verification_method as VerificationMethod,
-      verification_data: body.verification_data,
-    })
+    // For API key verification, validate that verify-ownership was called and UID matches
+    if (verification_method === 'api_key') {
+      const verifiedUid = body.verification_data?.verified_uid
 
-    // 实时通知
+      if (!verifiedUid) {
+        return handleError(
+          new Error('API key verification required. Please complete the verification step first.'),
+          'trader claim POST'
+        )
+      }
+
+      // Double-check: the verified_uid in the exchange connection must match trader_id
+      const { data: connection } = await supabase
+        .from('user_exchange_connections')
+        .select('verified_uid')
+        .eq('user_id', user.id)
+        .eq('is_active', true)
+        .maybeSingle()
+
+      if (!connection?.verified_uid || String(connection.verified_uid) !== String(trader_id)) {
+        logger.warn('[trader-claim] UID mismatch in claim submission', {
+          userId: user.id,
+          platform: source,
+        })
+        return handleError(
+          new Error('Verification mismatch. Your verified account does not match this trader.'),
+          'trader claim POST'
+        )
+      }
+    }
+
+    // For wallet signature verification, verify the signature server-side
+    if (verification_method === 'signature') {
+      const { wallet_address, signature, message } = body.verification_data || {}
+
+      if (!wallet_address || !signature || !message) {
+        return handleError(
+          new Error('Wallet signature verification requires wallet_address, signature, and message'),
+          'trader claim POST'
+        )
+      }
+
+      // Verify that wallet_address matches trader_id
+      if (wallet_address.toLowerCase() !== trader_id.toLowerCase()) {
+        return handleError(
+          new Error('Wallet address does not match trader account'),
+          'trader claim POST'
+        )
+      }
+
+      // Signature verification is done in /api/traders/claim/verify-wallet
+      // If we reach here, it was already verified client-side.
+      // But we double-check the signature here for security.
+      const verifyUrl = new URL('/api/traders/claim/verify-wallet', request.url)
+      const verifyRes = await fetch(verifyUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: request.headers.get('Authorization') || '',
+        },
+        body: JSON.stringify({ wallet_address, signature, message, platform: source }),
+      })
+
+      if (!verifyRes.ok) {
+        const verifyData = await verifyRes.json().catch(() => ({}))
+        return handleError(
+          new Error(verifyData.error || 'Wallet signature verification failed'),
+          'trader claim POST'
+        )
+      }
+    }
+
+    // Verification passed - auto-approve the claim
+    const now = new Date().toISOString()
+
+    // Create claim record as 'verified' (auto-approved)
+    const { data: claim, error: claimError } = await supabase
+      .from('trader_claims')
+      .insert({
+        user_id: user.id,
+        trader_id,
+        source,
+        verification_method,
+        verification_data: body.verification_data || {},
+        status: 'verified',
+        verified_at: now,
+      })
+      .select()
+      .single()
+
+    if (claimError) {
+      if (claimError.code === '23505') {
+        return handleError(new Error('This trader has already been claimed'), 'trader claim POST')
+      }
+      throw claimError
+    }
+
+    // Create verified_traders record
+    const { error: verifiedError } = await supabase
+      .from('verified_traders')
+      .insert({
+        user_id: user.id,
+        trader_id,
+        source,
+        verified_at: now,
+        verification_method,
+      })
+
+    if (verifiedError && verifiedError.code !== '23505') {
+      logger.error('[trader-claim] Failed to create verified_traders record', verifiedError)
+    }
+
+    // Update user_profiles
+    await supabase
+      .from('user_profiles')
+      .update({
+        is_verified_trader: true,
+        verified_trader_id: trader_id,
+        verified_trader_source: source,
+      })
+      .eq('id', user.id)
+
+    // If there's an existing authorization flow, trigger it too
+    // This merges the "authorize" functionality into claim
+    if (verification_method === 'api_key') {
+      const { data: existingAuth } = await supabase
+        .from('trader_authorizations')
+        .select('id')
+        .eq('user_id', user.id)
+        .eq('platform', source)
+        .eq('trader_id', trader_id)
+        .maybeSingle()
+
+      if (!existingAuth) {
+        // Get encrypted credentials from exchange connection
+        const { data: conn } = await supabase
+          .from('user_exchange_connections')
+          .select('api_key_encrypted, api_secret_encrypted, passphrase_encrypted')
+          .eq('user_id', user.id)
+          .eq('is_active', true)
+          .maybeSingle()
+
+        if (conn?.api_key_encrypted) {
+          await supabase
+            .from('trader_authorizations')
+            .insert({
+              user_id: user.id,
+              platform: source,
+              trader_id,
+              encrypted_api_key: conn.api_key_encrypted,
+              encrypted_api_secret: conn.api_secret_encrypted,
+              encrypted_passphrase: conn.passphrase_encrypted,
+              permissions: ['read'],
+              status: 'active',
+              last_verified_at: now,
+              sync_frequency: 'realtime',
+            })
+        }
+      }
+    }
+
+    // Notify
     notifyTraderClaim(user.email ?? null, trader_id, source)
 
     return success({
       claim,
-      message: 'Claim request submitted, we will review it shortly',
+      message: 'Claim verified and approved! Your profile is now verified.',
+      auto_approved: true,
     })
   } catch (error: unknown) {
     return handleError(error, 'trader claim POST')
