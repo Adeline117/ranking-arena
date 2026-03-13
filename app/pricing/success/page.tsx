@@ -370,7 +370,7 @@ function PaymentSuccessContent() {
             >
               <StarIcon size={18} />
               <Text size="md" weight="bold" style={{ color: tokens.colors.white }}>
-                Pro Member
+                {t('proMember')}
               </Text>
             </Box>
 

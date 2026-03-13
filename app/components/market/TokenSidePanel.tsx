@@ -80,8 +80,10 @@ function formatPrice(n: number): string {
   return `$${n.toPrecision(4)}`
 }
 
-function formatDate(iso: string): string {
-  return new Date(iso).toLocaleDateString('zh-CN', { year: 'numeric', month: 'short', day: 'numeric' })
+// Use formatDateLocalized from shared utils instead of this local function.
+// Kept as wrapper for backward compatibility within this file.
+function formatDate(iso: string, locale = 'en'): string {
+  return new Date(iso).toLocaleDateString(locale === 'zh' ? 'zh-CN' : 'en-US', { year: 'numeric', month: 'short', day: 'numeric' })
 }
 
 function StatRow({ label, value }: { label: string; value: string }) {
@@ -132,7 +134,7 @@ export default function TokenSidePanel({ token, onClose }: {
   token: TokenInfo | null
   onClose: () => void
 }) {
-  const { t } = useLanguage()
+  const { t, language } = useLanguage()
   const panelRef = useRef<HTMLDivElement>(null)
   const [coinDetail, setCoinDetail] = useState<CoinDetail | null>(null)
   const [ohlcData, setOhlcData] = useState<OHLCVDataPoint[]>([])
@@ -356,7 +358,7 @@ export default function TokenSidePanel({ token, onClose }: {
                     color: tokens.colors.text.tertiary,
                     fontSize: 13,
                   }}>
-                    Loading...
+                    {t('loading')}
                   </div>
                 )}
                 {ohlcData.length > 0 && (
@@ -365,7 +367,7 @@ export default function TokenSidePanel({ token, onClose }: {
                     type="candlestick"
                     height={280}
                     theme={chartTheme}
-                    locale="zh"
+                    locale={language === 'zh' ? 'zh' : 'en'}
                   />
                 )}
               </div>

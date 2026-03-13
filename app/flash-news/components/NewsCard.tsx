@@ -3,6 +3,7 @@
 import { tokens } from '@/lib/design-tokens'
 import { Box, Text } from '@/app/components/base'
 import Card from '@/app/components/ui/Card'
+import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 
 interface FlashNews {
   id: string
@@ -52,6 +53,7 @@ export default function NewsCard({
   translatedContent,
   formatPublishedTime,
 }: NewsCardProps) {
+  const { t } = useLanguage()
   const impConfig = importanceConfig[item.importance]
   const catColor = categoryColors[item.category] || tokens.colors.text.secondary
   const content = getNewsContent(item)
@@ -134,7 +136,7 @@ export default function NewsCard({
                     color: 'var(--color-translated)',
                     verticalAlign: 'middle',
                   }}>
-                    {language === 'zh' ? '自动翻译' : 'Auto-translated'}
+                    {t('autoTranslated')}
                   </span>
                 )}
               </Text>
@@ -146,7 +148,7 @@ export default function NewsCard({
             }}>
               <Box style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[1] }}>
                 <Text style={{ color: tokens.colors.text.tertiary, fontSize: '12px', fontWeight: '500' }}>
-                  {language === 'zh' ? '来源:' : 'Source:'}
+                  {t('newsSource')}
                 </Text>
                 {item.source_url ? (
                   <a
