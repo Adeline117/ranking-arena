@@ -11,6 +11,7 @@ import { createClient } from '@supabase/supabase-js'
 import logger from '@/lib/logger'
 import { PipelineLogger } from '@/lib/services/pipeline-logger'
 import { getPushNotificationService } from '@/lib/services/push-notification'
+import { sendEmail, buildTraderAlertEmail } from '@/lib/services/email'
 
 export const runtime = 'nodejs'
 export const preferredRegion = 'sfo1'
@@ -425,6 +426,57 @@ export async function POST(req: Request) {
         logger.info(`[TraderAlerts Cron] Push notifications sent: ${pushSent}`)
       } catch (pushError) {
         logger.warn('[TraderAlerts Cron] Failed to send push notifications', { error: pushError })
+      }
+
+      // Send email notifications grouped by user
+      try {
+        // Group alerts by user_id
+        const alertsByUser = new Map<string, typeof alertsToSend>()
+        for (const alert of alertsToSend) {
+          const existing = alertsByUser.get(alert.user_id) || []
+          existing.push(alert)
+          alertsByUser.set(alert.user_id, existing)
+        }
+
+        // Look up user emails
+        const userIds = [...alertsByUser.keys()]
+        const { data: userProfiles } = await supabase
+          .from('user_profiles')
+          .select('id, email, email_digest')
+          .in('id', userIds)
+
+        let emailsSent = 0
+        if (userProfiles) {
+          for (const profile of userProfiles) {
+            // Skip if no email or user opted out
+            if (!profile.email) continue
+            if (profile.email_digest === 'none') continue
+
+            const userAlerts = alertsByUser.get(profile.id)
+            if (!userAlerts || userAlerts.length === 0) continue
+
+            const html = buildTraderAlertEmail(
+              userAlerts.map(a => ({
+                title: a.title,
+                message: a.message,
+                link: a.link,
+              }))
+            )
+
+            const sent = await sendEmail({
+              to: profile.email,
+              subject: `Arena: ${userAlerts.length} trader alert${userAlerts.length > 1 ? 's' : ''} triggered`,
+              html,
+            })
+            if (sent) emailsSent++
+          }
+        }
+
+        if (emailsSent > 0) {
+          logger.info(`[TraderAlerts Cron] Emails sent: ${emailsSent}`)
+        }
+      } catch (emailError) {
+        logger.warn('[TraderAlerts Cron] Failed to send email notifications', { error: emailError })
       }
     }
 

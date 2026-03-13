@@ -10,6 +10,7 @@ import { EXCHANGE_NAMES } from '@/lib/constants/exchanges'
 import { useRealtimeRankings } from '@/lib/hooks/useRealtimeRankings'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import { NULL_DISPLAY } from '@/lib/utils/format'
+import { formatTimeAgo } from '@/lib/utils/date'
 import ShareLeaderboardButton from './ShareLeaderboardButton'
 
 interface TraderData {
@@ -25,6 +26,7 @@ interface TraderData {
   followers: number | null
   trader_type?: string | null
   is_bot?: boolean
+  captured_at?: string | null
 }
 
 type ViewMode = 'table' | 'card'
@@ -291,6 +293,23 @@ export default function ExchangeRankingClient({
 
   useRealtimeRankings({ source: exchange, onUpdate: handleRealtimeUpdate })
 
+  // Compute data freshness from the most recent captured_at timestamp
+  const { lastUpdatedText, isStale } = useMemo(() => {
+    let latestTs: string | null = null
+    for (const tr of traders) {
+      if (tr.captured_at && (!latestTs || tr.captured_at > latestTs)) {
+        latestTs = tr.captured_at
+      }
+    }
+    if (!latestTs) return { lastUpdatedText: null, isStale: false }
+    const diffHours = (Date.now() - new Date(latestTs).getTime()) / (1000 * 60 * 60)
+    const locale = language === 'zh' ? 'zh' : language === 'ja' ? 'ja' : language === 'ko' ? 'ko' : 'en'
+    return {
+      lastUpdatedText: formatTimeAgo(latestTs, locale as 'zh' | 'en' | 'ja' | 'ko'),
+      isStale: diffHours > 6,
+    }
+  }, [traders, language])
+
   // Pre-compute rank map to avoid O(n*m) indexOf in render loop
   const rankMap = useMemo(() => {
     const m = new Map<TraderData, number>()
@@ -425,7 +444,7 @@ export default function ExchangeRankingClient({
           >
             <SortHeader label={t('rankingRank')} sortKey="rank" currentKey={sortKey} currentDir={sortDir} onSort={handleSort} align="left" />
             <div>{t('rankingTrader')}</div>
-            <SortHeader label={t('rankingRoi')} sortKey="roi" currentKey={sortKey} currentDir={sortDir} onSort={handleSort} />
+            <SortHeader label={`${t('rankingRoi')} (90D)`} sortKey="roi" currentKey={sortKey} currentDir={sortDir} onSort={handleSort} />
             <div style={{ textAlign: 'center' }}>{t('rankingTrend')}</div>
             <SortHeader label={t('rankingWinRate')} sortKey="win_rate" currentKey={sortKey} currentDir={sortDir} onSort={handleSort} />
             <SortHeader label={t('rankingMdd')} sortKey="max_drawdown" currentKey={sortKey} currentDir={sortDir} onSort={handleSort} />
