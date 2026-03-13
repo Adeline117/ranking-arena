@@ -49,7 +49,7 @@ export async function scrapeHtxLeaderboard(
     const page = await context.newPage()
     
     // Intercept API responses
-    const responses: Array<{ url: string; body: any }> = []
+    const responses: Array<{ url: string; body: Record<string, any> }> = []
     
     page.on('response', async (response) => {
       const url = response.url()

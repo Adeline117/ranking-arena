@@ -49,7 +49,7 @@ export async function scrapeMexcLeaderboard(
     const page = await context.newPage()
     
     // Intercept API responses
-    const responses: Array<{ url: string; body: any }> = []
+    const responses: Array<{ url: string; body: Record<string, any> }> = []
     
     page.on('response', async (response) => {
       const url = response.url()
@@ -145,7 +145,7 @@ export async function scrapeMexcBatch(
     // For each period
     for (const period of periods) {
       const periodType = PERIOD_MAP[period] || 2
-      const responses: Array<{ url: string; body: any }> = []
+      const responses: Array<{ url: string; body: Record<string, any> }> = []
       
       page.on('response', async (response) => {
         const url = response.url()

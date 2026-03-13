@@ -18,7 +18,7 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { ConnectorRunner, getAllConnectorStatuses, runConnectorsBatch } from '@/lib/connectors/connector-runner'
-import { HyperliquidConnector } from '@/lib/connectors/hyperliquid'
+import { HyperliquidConnector } from '@/lib/connectors/_deprecated/hyperliquid'
 import { dataLogger } from '@/lib/utils/logger'
 import type { RankingWindow } from '@/lib/types/leaderboard'
 

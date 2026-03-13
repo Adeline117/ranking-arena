@@ -19,17 +19,17 @@ import type { PlatformConnector } from './types'
 type AnyConnector = any
 import { TokenBucketRateLimiter } from './rate-limiter'
 
-// Individual platform connector imports (for legacy registry)
-import { BinanceFuturesConnector } from './binance-futures'
-import { BinanceSpotConnector } from './binance-spot'
-import { BybitConnector } from './bybit'
-import { BitgetFuturesConnector } from './bitget-futures'
-import { OKXConnector } from './okx'
-import { MEXCConnector } from './mexc'
-import { KuCoinConnector } from './kucoin'
-import { HyperliquidConnector } from './hyperliquid'
-import { CoinExConnector } from './coinex'
-import { BitgetSpotConnector } from './bitget-spot'
+// Legacy connector imports (deprecated — kept for run-worker backward compat)
+import { BinanceFuturesConnector } from './_deprecated/binance-futures'
+import { BinanceSpotConnector } from './_deprecated/binance-spot'
+import { BybitConnector } from './_deprecated/bybit'
+import { BitgetFuturesConnector } from './_deprecated/bitget-futures'
+import { OKXConnector } from './_deprecated/okx'
+import { MEXCConnector } from './_deprecated/mexc'
+import { KuCoinConnector } from './_deprecated/kucoin'
+import { HyperliquidConnector } from './_deprecated/hyperliquid'
+import { CoinExConnector } from './_deprecated/coinex'
+import { BitgetSpotConnector } from './_deprecated/bitget-spot'
 
 // ============================================
 // New ConnectorRegistry (multi-exchange)

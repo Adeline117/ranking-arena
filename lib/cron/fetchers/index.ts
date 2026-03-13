@@ -1,74 +1,56 @@
 /**
- * Platform fetcher registry
- * Maps platform names to their inline fetch functions
- * All fetchers run without child_process or puppeteer — Vercel serverless compatible
- * 
- * 2026-03-09: Deep clean - removed all failing platforms
+ * Platform fetcher registry (DEPRECATED — Connector framework is now primary)
+ *
+ * All 24 active platforms now use ConnectorRegistry + ConnectorDbAdapter
+ * in batch-fetch-traders. This registry is kept as:
+ * 1. Fallback if a connector fails to initialize
+ * 2. Reference for backfill-data and other legacy callers
+ * 3. getSupportedInlinePlatforms() used by check-data-freshness & daily-digest
+ *
+ * Platform fetcher files moved to _deprecated/ (March 2026).
+ *
+ * @deprecated Use ConnectorRegistry from lib/connectors/registry.ts instead
  */
 
 import type { PlatformFetcher } from './shared'
 
-// CEX - Pure API (Working platforms only)
-import { fetchOkxFutures } from './okx-futures'
-import { fetchHtx } from './htx'
-import { fetchBinanceFutures } from './binance-futures'
-import { fetchBinanceSpot } from './binance-spot'
-import { fetchBinanceWeb3 } from './binance-web3'
-// REMOVED 2026-03-13: bybit API endpoints (api2.bybit.com) return 404 globally
-// import { fetchBybit } from './bybit'
-// import { fetchBybitSpot } from './bybit-spot'
-import { fetchOkxWeb3 } from './okx-web3'
-import { fetchBitgetFutures } from './bitget-futures'
-import { fetchXt } from './xt'
-import { fetchBingx } from './bingx'
-import { fetchGateio } from './gateio'
-import { fetchMexc } from './mexc'
-import { fetchCoinex } from './coinex'
-import { fetchPhemex } from './phemex'
-import { fetchBlofin } from './blofin'
-import { fetchBitfinex } from './bitfinex'
-// Removed: fetchWhitebit (2026-03-10: stub — no copy-trading API exists)
-// Removed: fetchBtse (2026-03-10: stub — no public leaderboard API)
-// Removed: fetchWeex (disabled 2026-02-08: API returns 521)
-// Removed: fetchLbank (disabled 2026-03-08: API returns "no data")
-// Removed: fetchKucoin (disabled 2026-03-08: API returns 404)
-import { fetchToobit } from './toobit' // Re-enabled: VPS Playwright scraper (2026-03-09)
-// Removed: fetchCryptocom (2026-03-09: WAF blocked, HTTP 403)
-// Removed: fetchPionex (2026-03-09: WAF blocked, HTTP 403)
+// CEX - Pure API (imports from _deprecated/)
+import { fetchOkxFutures } from './_deprecated/okx-futures'
+import { fetchHtx } from './_deprecated/htx'
+import { fetchBinanceFutures } from './_deprecated/binance-futures'
+import { fetchBinanceSpot } from './_deprecated/binance-spot'
+import { fetchBinanceWeb3 } from './_deprecated/binance-web3'
+import { fetchOkxWeb3 } from './_deprecated/okx-web3'
+import { fetchBitgetFutures } from './_deprecated/bitget-futures'
+import { fetchXt } from './_deprecated/xt'
+import { fetchBingx } from './_deprecated/bingx'
+import { fetchGateio } from './_deprecated/gateio'
+import { fetchMexc } from './_deprecated/mexc'
+import { fetchCoinex } from './_deprecated/coinex'
+import { fetchPhemex } from './_deprecated/phemex'
+import { fetchBlofin } from './_deprecated/blofin'
+import { fetchBitfinex } from './_deprecated/bitfinex'
+import { fetchToobit } from './_deprecated/toobit'
+import { fetchDrift } from './_deprecated/drift'
+import { fetchBitunix } from './_deprecated/bitunix'
+import { fetchBtcc } from './_deprecated/btcc'
+import { fetchWeb3Bot } from './_deprecated/web3-bot'
+import { fetchEtoro } from './_deprecated/etoro'
+import { fetchHyperliquid } from './_deprecated/hyperliquid'
+import { fetchGmx } from './_deprecated/gmx'
+import { fetchGains } from './_deprecated/gains'
+import { fetchJupiterPerps } from './_deprecated/jupiter-perps'
+import { fetchAevo } from './_deprecated/aevo'
+import { fetchDydx } from './_deprecated/dydx'
+import { fetchKwenta } from './_deprecated/kwenta'
 
-// New CEX/DEX - Verified working, were missing registration
-import { fetchDrift } from './drift'
-import { fetchBitunix } from './bitunix'
-import { fetchBtcc } from './btcc'
-import { fetchWeb3Bot } from './web3-bot'
-
-// Social trading platforms
-import { fetchEtoro } from './etoro'
-
-// DEX - On-chain / Subgraph (Working platforms only)
-import { fetchHyperliquid } from './hyperliquid'
-import { fetchGmx } from './gmx'
-import { fetchGains } from './gains'
-import { fetchJupiterPerps } from './jupiter-perps'
-import { fetchAevo } from './aevo'
-import { fetchDydx } from './dydx'
-// Removed: fetchUniswap (2026-03-09: empty_data - no usable data)
-// Removed: fetchPancakeSwap (2026-03-09: empty_data - no usable data)
-import { fetchKwenta } from './kwenta'
-// Removed: fetchSynthetix (2026-03-09: Copin returns only 9 stale traders)
-// Removed: fetchMux (2026-03-09: requires THEGRAPH_API_KEY)
-// Removed: fetchPerpetualProtocol (2026-03-09: The Graph subgraph deprecated)
-
+/** @deprecated Use ConnectorRegistry instead */
 export const INLINE_FETCHERS: Record<string, PlatformFetcher> = {
-  // CEX Futures
   okx_futures: fetchOkxFutures,
   htx_futures: fetchHtx,
   binance_futures: fetchBinanceFutures,
   binance_spot: fetchBinanceSpot,
   binance_web3: fetchBinanceWeb3,
-  // REMOVED 2026-03-13: bybit API endpoints return 404 globally
-  // bybit: fetchBybit,
-  // bybit_spot: fetchBybitSpot,
   okx_web3: fetchOkxWeb3,
   bitget_futures: fetchBitgetFutures,
   xt: fetchXt,
@@ -80,19 +62,11 @@ export const INLINE_FETCHERS: Record<string, PlatformFetcher> = {
   blofin: fetchBlofin,
   bitfinex: fetchBitfinex,
   toobit: fetchToobit,
-  // whitebit: stub (no copy-trading API)
-  // btse: stub (no public leaderboard API)
-
-  // New platforms (previously missing registration)
   drift: fetchDrift,
   bitunix: fetchBitunix,
   btcc: fetchBtcc,
   web3_bot: fetchWeb3Bot,
-
-  // Social trading
   etoro: fetchEtoro,
-
-  // DEX
   hyperliquid: fetchHyperliquid,
   gmx: fetchGmx,
   gains: fetchGains,
@@ -102,10 +76,12 @@ export const INLINE_FETCHERS: Record<string, PlatformFetcher> = {
   kwenta: fetchKwenta,
 }
 
+/** @deprecated Use ConnectorRegistry instead */
 export function getInlineFetcher(platform: string): PlatformFetcher | undefined {
   return INLINE_FETCHERS[platform]
 }
 
+/** Returns list of platforms with inline fetchers. Used by check-data-freshness and daily-digest. */
 export function getSupportedInlinePlatforms(): string[] {
   return Array.from(new Set(Object.keys(INLINE_FETCHERS)))
 }

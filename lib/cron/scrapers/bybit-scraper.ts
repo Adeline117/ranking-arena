@@ -49,7 +49,7 @@ export async function scrapeBybitLeaderboard(
     
     // Intercept API responses
     const apiPattern = '/fapi/beehive/public/v1/common/dynamic-leader-list'
-    const responses: Array<{ url: string; body: any }> = []
+    const responses: Array<{ url: string; body: Record<string, any> }> = []
     
     page.on('response', async (response) => {
       const url = response.url()
@@ -123,14 +123,14 @@ export async function scrapeBybitBatch(
     // For each period, navigate directly with URL params
     for (const period of periods) {
       const duration = PERIOD_MAP[period] || PERIOD_MAP['30D']
-      const responses: Array<{ url: string; body: any }> = []
+      const responses: Array<{ url: string; body: Record<string, any> }> = []
       
       // Set up response interceptor
-      const responseHandler = async (response: any) => {
+      const responseHandler = async (response: { url(): string; json(): Promise<unknown> }) => {
         const url = response.url()
         if (url.includes('dynamic-leader-list')) {
           try {
-            const body = await response.json()
+            const body = await response.json() as Record<string, any>
             // Check if this response matches our duration
             if (url.includes(duration) || !responses.some(r => r.url.includes(duration))) {
               responses.push({ url, body })
