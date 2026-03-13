@@ -1,23 +1,20 @@
-'use client'
+"use client"
 
 /**
- * WrappedCardClient — interactive Spotify Wrapped–style rank card
+ * WrappedCardClient -- interactive rank card
  *
- * Renders the visual card in-browser, provides:
- * - Download as PNG (fetches the OG image API and triggers browser save)
- * - Share on X (opens compose window with prefilled text + link)
- *
- * The card mirrors the visual layout of /api/og/rank so what you see
- * is exactly what gets shared.
+ * Renders the visual card in-browser matching the OG image style.
+ * Provides download PNG, share on X, and view full profile actions.
  */
 
 import { useState, useCallback } from 'react'
 import { tokens } from '@/lib/design-tokens'
 import type { WrappedTraderData } from './page'
 
-// Brand colors (must stay in sync with /api/og/rank/route.tsx)
+// Brand colors (synced with /api/og/rank/route.tsx)
 const C = {
-  bg: '#060411',
+  bgTop: '#0A0A0F',
+  bgBottom: '#1A1A2E',
   purple: '#8B5CF6',
   purpleLight: '#A78BFA',
   purpleDim: 'rgba(139,92,246,0.18)',
@@ -54,12 +51,6 @@ function getTopPercent(rank: number, total: number): string {
   return `Top ${Math.ceil(pct * 100)}%`
 }
 
-function getBeatLabel(rank: number, total: number): string {
-  if (!total || !rank || rank <= 0) return ''
-  const beat = Math.round(((total - rank) / total) * 100)
-  return `Beat ${beat}% of traders`
-}
-
 function formatWindow(w: string): string {
   const map: Record<string, string> = { '7D': '7 Day', '30D': '30 Day', '90D': '90 Day' }
   return map[w] ?? w
@@ -68,46 +59,6 @@ function formatWindow(w: string): string {
 interface Props {
   data: WrappedTraderData
   ogImageUrl: string
-}
-
-interface StatBoxProps {
-  label: string
-  value: string
-  accent?: boolean
-}
-
-function StatBox({ label, value, accent }: StatBoxProps) {
-  return (
-    <div style={{
-      display: 'flex',
-      flexDirection: 'column',
-      flex: 1,
-      padding: '20px 24px',
-      background: accent ? C.purpleDim : 'rgba(255,255,255,0.04)',
-      borderRadius: 16,
-      border: `1px solid ${accent ? C.border : 'rgba(255,255,255,0.08)'}`,
-      gap: 8,
-    }}>
-      <span style={{
-        fontSize: 11,
-        fontWeight: 700,
-        color: accent ? C.purpleLight : C.dim,
-        letterSpacing: '2px',
-        textTransform: 'uppercase' as const,
-      }}>
-        {label}
-      </span>
-      <span style={{
-        fontSize: 40,
-        fontWeight: 900,
-        color: accent ? C.purpleLight : C.offWhite,
-        letterSpacing: '-1px',
-        lineHeight: 1,
-      }}>
-        {value}
-      </span>
-    </div>
-  )
 }
 
 export default function WrappedCardClient({ data, ogImageUrl }: Props) {
@@ -123,13 +74,13 @@ export default function WrappedCardClient({ data, ogImageUrl }: Props) {
   const roiColor = roiValid && roi >= 0 ? C.success : C.error
   const roiStr = roiValid ? formatRoi(roi) : '--'
   const topPct = rank && total ? getTopPercent(rank, total) : ''
-  const beatLabel = rank && total ? getBeatLabel(rank, total) : ''
   const rankDisplay = rank ? (rank <= 9999 ? `#${rank}` : `#${Math.round(rank / 1000)}K`) : '--'
+  const totalDisplay = total ? `${total.toLocaleString()}+` : '68,000+'
   const windowLabel = formatWindow(data.window)
 
   // Build X share text and link
   const shareUrl = typeof window !== 'undefined'
-    ? `${window.location.origin}/wrapped/${encodeURIComponent(data.handle)}${data.platform ? `?platform=${data.platform}` : ''}`
+    ? `${window.location.origin}/wrapped/${encodeURIComponent(data.handle)}${data.platform ? '?platform=' + data.platform : ''}`
     : `https://www.arenafi.org/wrapped/${encodeURIComponent(data.handle)}`
 
   const shareText = [
@@ -169,7 +120,7 @@ export default function WrappedCardClient({ data, ogImageUrl }: Props) {
   return (
     <div style={{
       minHeight: '100vh',
-      background: '#030208',
+      background: 'linear-gradient(180deg, #0A0A0F 0%, #1A1A2E 100%)',
       display: 'flex',
       flexDirection: 'column',
       alignItems: 'center',
@@ -198,7 +149,7 @@ export default function WrappedCardClient({ data, ogImageUrl }: Props) {
             marginBottom: 16,
           }}>
             <span style={{ fontSize: 12, fontWeight: 700, color: C.goldLight, letterSpacing: '2px' }}>
-              ARENA WRAPPED
+              ARENA RANK CARD
             </span>
           </div>
           <h1 style={{
@@ -215,13 +166,13 @@ export default function WrappedCardClient({ data, ogImageUrl }: Props) {
             fontSize: 15,
             color: C.dim,
           }}>
-            {data.platformLabel} · {windowLabel} Performance
+            {data.platformLabel} &middot; {windowLabel} Performance
           </p>
         </div>
 
         {/* Main visual card */}
         <div style={{
-          background: C.bg,
+          background: 'linear-gradient(180deg, #0E0A1A 0%, #12121F 100%)',
           borderRadius: 24,
           border: `1px solid ${C.border}`,
           overflow: 'hidden',
@@ -235,118 +186,101 @@ export default function WrappedCardClient({ data, ogImageUrl }: Props) {
           }} />
 
           {/* Card body */}
-          <div style={{ padding: '40px 40px 32px' }}>
-            {/* Rank hero section */}
+          <div style={{ padding: '36px 36px 28px' }}>
+            {/* Data cards row */}
+            <div style={{
+              display: 'grid',
+              gridTemplateColumns: '1fr 1fr',
+              gap: 14,
+              marginBottom: 20,
+            }}>
+              {/* Arena Score */}
+              <div style={{
+                padding: '20px 24px',
+                background: C.goldDim,
+                borderRadius: 16,
+                border: `1px solid ${C.borderGold}`,
+              }}>
+                <div style={{ fontSize: 11, fontWeight: 700, color: C.goldLight, letterSpacing: '2px', marginBottom: 8 }}>
+                  ARENA SCORE
+                </div>
+                <div style={{ fontSize: 44, fontWeight: 900, color: C.goldLight, letterSpacing: '-1px', lineHeight: 1 }}>
+                  {score != null ? Math.round(score).toLocaleString() : '--'}
+                </div>
+              </div>
+
+              {/* ROI */}
+              <div style={{
+                padding: '20px 24px',
+                background: roiValid && roi >= 0 ? 'rgba(47,229,125,0.07)' : 'rgba(255,85,85,0.07)',
+                borderRadius: 16,
+                border: roiValid && roi >= 0 ? '1px solid rgba(47,229,125,0.20)' : '1px solid rgba(255,85,85,0.20)',
+              }}>
+                <div style={{ fontSize: 11, fontWeight: 700, color: C.dimmer, letterSpacing: '2px', marginBottom: 8 }}>
+                  ROI
+                </div>
+                <div style={{ fontSize: 44, fontWeight: 900, color: roiColor, letterSpacing: '-1px', lineHeight: 1 }}>
+                  {roiStr}
+                </div>
+              </div>
+            </div>
+
+            {/* Win Rate row */}
             <div style={{
               display: 'flex',
-              flexDirection: 'column',
-              alignItems: 'center',
-              textAlign: 'center',
-              marginBottom: 40,
-              padding: '32px 24px',
-              background: 'radial-gradient(ellipse at center, rgba(139,92,246,0.12) 0%, transparent 70%)',
-              borderRadius: 20,
-              border: `1px solid rgba(139,92,246,0.12)`,
+              gap: 14,
+              marginBottom: 24,
             }}>
-              <span style={{
-                fontSize: 12,
-                fontWeight: 700,
-                color: C.purpleLight,
-                letterSpacing: '4px',
-                marginBottom: 16,
+              <div style={{
+                flex: 1,
+                padding: '16px 24px',
+                background: 'rgba(255,255,255,0.04)',
+                borderRadius: 12,
+                border: '1px solid rgba(255,255,255,0.08)',
               }}>
-                ARENA RANK
-              </span>
+                <div style={{ fontSize: 11, fontWeight: 700, color: C.dim, letterSpacing: '2px', marginBottom: 6 }}>
+                  WIN RATE
+                </div>
+                <div style={{ fontSize: 28, fontWeight: 900, color: C.offWhite, letterSpacing: '-1px', lineHeight: 1 }}>
+                  {winRate != null ? `${winRate.toFixed(0)}%` : '--'}
+                </div>
+              </div>
+            </div>
 
-              {/* Giant rank number */}
-              <span style={{
-                fontSize: rank ? (rankDisplay.length > 4 ? 88 : 112) : 72,
-                fontWeight: 900,
-                color: C.white,
-                letterSpacing: '-3px',
-                lineHeight: 1,
-                marginBottom: 16,
-              }}>
-                {rankDisplay}
-              </span>
-
-              {/* Top % badge */}
+            {/* Rank section */}
+            <div style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              padding: '16px 20px',
+              background: C.purpleDim,
+              borderRadius: 12,
+              border: `1px solid ${C.border}`,
+              marginBottom: 24,
+            }}>
+              <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
+                <span style={{ fontSize: 12, fontWeight: 600, color: C.dimmer, letterSpacing: '1px' }}>
+                  RANKED
+                </span>
+                <span style={{ fontSize: 32, fontWeight: 900, color: C.white, letterSpacing: '-1px' }}>
+                  {rankDisplay}
+                </span>
+                <span style={{ fontSize: 14, color: C.dim }}>
+                  / {totalDisplay} traders
+                </span>
+              </div>
               {topPct && (
                 <div style={{
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  padding: '8px 24px',
+                  padding: '4px 14px',
                   borderRadius: 999,
                   background: C.goldDim,
                   border: `1px solid ${C.borderGold}`,
-                  marginBottom: 12,
                 }}>
-                  <span style={{
-                    fontSize: 18,
-                    fontWeight: 800,
-                    color: C.goldLight,
-                    letterSpacing: '0.5px',
-                  }}>
-                    {topPct} Trader
+                  <span style={{ fontSize: 13, fontWeight: 800, color: C.goldLight }}>
+                    {topPct}
                   </span>
                 </div>
               )}
-
-              {beatLabel && (
-                <span style={{ fontSize: 14, color: C.dim, fontWeight: 500 }}>
-                  {beatLabel}
-                </span>
-              )}
-            </div>
-
-            {/* ROI block */}
-            <div style={{
-              padding: '24px 28px',
-              background: roiValid && roi >= 0
-                ? 'rgba(47,229,125,0.07)'
-                : 'rgba(255,85,85,0.07)',
-              borderRadius: 16,
-              border: roiValid && roi >= 0
-                ? '1px solid rgba(47,229,125,0.20)'
-                : '1px solid rgba(255,85,85,0.20)',
-              marginBottom: 20,
-            }}>
-              <div style={{
-                fontSize: 11,
-                fontWeight: 700,
-                color: C.dimmer,
-                letterSpacing: '2px',
-                marginBottom: 10,
-              }}>
-                RETURN ON INVESTMENT — {windowLabel.toUpperCase()}
-              </div>
-              <div style={{
-                fontSize: 80,
-                fontWeight: 900,
-                color: roiColor,
-                letterSpacing: '-2px',
-                lineHeight: 1,
-              }}>
-                {roiStr}
-              </div>
-            </div>
-
-            {/* Stats row */}
-            <div style={{
-              display: 'flex',
-              gap: 16,
-              marginBottom: 32,
-            }}>
-              <StatBox
-                label="Arena Score"
-                value={score != null ? Math.round(score).toLocaleString() : '--'}
-                accent
-              />
-              <StatBox
-                label="Win Rate"
-                value={winRate != null ? `${winRate.toFixed(0)}%` : '--'}
-              />
             </div>
 
             {/* Footer */}
@@ -383,10 +317,7 @@ export default function WrappedCardClient({ data, ogImageUrl }: Props) {
               </div>
               <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                 <div style={{
-                  width: 6,
-                  height: 6,
-                  borderRadius: 999,
-                  background: C.gold,
+                  width: 6, height: 6, borderRadius: 999, background: C.gold,
                 }} />
                 <span style={{ fontSize: 14, fontWeight: 800, color: C.gold, letterSpacing: '0.5px' }}>
                   arenafi.org
@@ -403,7 +334,7 @@ export default function WrappedCardClient({ data, ogImageUrl }: Props) {
           justifyContent: 'center',
           flexWrap: 'wrap',
         }}>
-          {/* Share on X */}
+          {/* Share on X - prominent */}
           <a
             href={xShareUrl}
             target="_blank"
@@ -428,7 +359,7 @@ export default function WrappedCardClient({ data, ogImageUrl }: Props) {
             Share on X
           </a>
 
-          {/* Download PNG */}
+          {/* Download PNG - prominent */}
           <button
             onClick={handleDownload}
             disabled={downloading}
@@ -481,7 +412,7 @@ export default function WrappedCardClient({ data, ogImageUrl }: Props) {
           color: C.dimmer,
           margin: 0,
         }}>
-          The card above is exactly what appears when shared on X
+          The card above matches what appears when shared on X
         </p>
       </div>
     </div>
