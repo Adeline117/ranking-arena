@@ -44,6 +44,8 @@ export const LEADERBOARD_PLATFORMS = [
   'binance_web3', 'okx_web3',
   'hyperliquid', 'gmx', 'dydx', 'gains', 'jupiter_perps', 'aevo',
   'drift', 'paradex',
+  // Social trading
+  'etoro',
   // Bots
   'web3_bot',
   // Dead/blocked but may have historical data or connectors

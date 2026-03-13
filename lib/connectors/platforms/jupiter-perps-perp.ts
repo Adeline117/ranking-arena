@@ -92,7 +92,7 @@ export class JupiterPerpsPerpConnector extends BaseConnector {
       for (const mint of MARKETS) {
         try {
           const url = `https://perps-api.jup.ag/v1/top-traders?marketMint=${mint}&year=${year}&week=${week}`
-          const data = await this.request<JupiterTraderEntry[]>(url, { timeout: 10000 })
+          const data = await this.request<JupiterTraderEntry[]>(url)
 
           if (!Array.isArray(data)) continue
 

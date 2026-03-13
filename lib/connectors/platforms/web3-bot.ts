@@ -94,12 +94,12 @@ export class Web3BotConnector extends BaseConnector {
 
         if (bot.category === 'tg_bot' && bot.llamaSlug) {
           // Score by 30D fees
-          const fees = await this.request<{ total30d?: number }>(`https://api.llama.fi/summary/fees/${bot.llamaSlug}`, { timeout: 8000 })
+          const fees = await this.request<{ total30d?: number }>(`https://api.llama.fi/summary/fees/${bot.llamaSlug}`)
           value = fees?.total30d || 0
           raw.fees30d = value
         } else if (bot.category === 'vault' && bot.llamaSlug) {
           // Score by TVL
-          const protocol = await this.request<{ tvl?: Array<{ totalLiquidityUSD: number }> }>(`https://api.llama.fi/protocol/${bot.llamaSlug}`, { timeout: 8000 })
+          const protocol = await this.request<{ tvl?: Array<{ totalLiquidityUSD: number }> }>(`https://api.llama.fi/protocol/${bot.llamaSlug}`)
           const tvlArr = protocol?.tvl
           value = Array.isArray(tvlArr) && tvlArr.length > 0
             ? tvlArr[tvlArr.length - 1]?.totalLiquidityUSD || 0
@@ -107,7 +107,7 @@ export class Web3BotConnector extends BaseConnector {
           raw.tvl = value
         } else if (bot.category === 'ai_agent' && bot.coingeckoId) {
           // Score by market cap
-          const coin = await this.request<{ market_data?: { market_cap?: { usd?: number } } }>(`https://api.coingecko.com/api/v3/coins/${bot.coingeckoId}?localization=false&tickers=false&community_data=false&developer_data=false`, { timeout: 8000 })
+          const coin = await this.request<{ market_data?: { market_cap?: { usd?: number } } }>(`https://api.coingecko.com/api/v3/coins/${bot.coingeckoId}?localization=false&tickers=false&community_data=false&developer_data=false`)
           value = coin?.market_data?.market_cap?.usd || 0
           raw.mcap = value
         }
