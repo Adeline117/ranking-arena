@@ -12,18 +12,22 @@ log() { echo "[$(date '+%Y-%m-%d %H:%M:%S')] $1" | tee -a "$LOG_FILE"; }
 fetch() {
   local platform=$1
   log "Fetching $platform..."
-  response=$(curl -s -w "\n%{http_code}" -X GET "${API_BASE}?platform=${platform}" \
+  
+  # Use temp file to avoid head -n -1 issue
+  temp_file="/tmp/arena-fetch-${platform}.tmp"
+  http_code=$(curl -s -w "%{http_code}" -X GET "${API_BASE}?platform=${platform}" \
     -H "Authorization: Bearer ${CRON_SECRET}" \
-    --max-time 300 2>&1)
-  http_code=$(echo "$response" | tail -1)
-  body=$(echo "$response" | head -n -1)
+    --max-time 180 -o "$temp_file" 2>&1 | tail -1)
+  
   if [ "$http_code" = "200" ]; then
-    records=$(echo "$body" | jq -r '.result.recordsProcessed // 0' 2>/dev/null || echo 0)
+    records=$(cat "$temp_file" | jq -r '.result.recordsProcessed // 0' 2>/dev/null || echo "0")
     log "✅ $platform: $records records"
   else
     log "❌ $platform: HTTP $http_code"
   fi
-  sleep 3
+  
+  rm -f "$temp_file"
+  sleep 2
 }
 
 log "========================================"
