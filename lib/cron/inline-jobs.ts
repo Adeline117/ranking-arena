@@ -325,7 +325,7 @@ export async function syncTradersInline(): Promise<InlineJobResult> {
 
     const { data: authorizations, error: authErr } = await supabase
       .from('trader_authorizations')
-      .select('*')
+      .select('id, platform, trader_id, encrypted_api_key, encrypted_api_secret, status')
       .eq('status', 'active')
 
     if (authErr) {

@@ -234,7 +234,7 @@ export async function getTraderAnomalies(
 
   let query = supabase
     .from('trader_anomalies')
-    .select('*')
+    .select('id, trader_id, platform, anomaly_type, field_name, detected_value, expected_range_min, expected_range_max, z_score, severity, status, description, metadata, detected_at')
     .eq('trader_id', traderId)
     .eq('platform', platform)
     .order('detected_at', { ascending: false })
@@ -275,7 +275,7 @@ export async function getAllAnomalies(
 
   let query = supabase
     .from('trader_anomalies')
-    .select('*')
+    .select('id, trader_id, platform, anomaly_type, field_name, detected_value, expected_range_min, expected_range_max, z_score, severity, status, description, metadata, detected_at')
     .order('detected_at', { ascending: false })
 
   if (options?.platform) {

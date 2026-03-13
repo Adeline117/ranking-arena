@@ -334,7 +334,7 @@ export class RiskAlertService {
   async getUserAlertConfigs(userId: string): Promise<AlertConfig[]> {
     const { data, error } = await this.supabase
       .from('alert_configs')
-      .select('*')
+      .select('id, user_id, trader_id, trader_handle, alert_type, threshold, enabled, created_at, updated_at')
       .eq('user_id', userId)
       .eq('enabled', true)
 
@@ -419,7 +419,7 @@ export class RiskAlertService {
   async getUnreadAlerts(userId: string, limit: number = 20): Promise<RiskAlert[]> {
     const { data, error } = await this.supabase
       .from('risk_alerts')
-      .select('*')
+      .select('id, user_id, trader_id, trader_handle, alert_type, severity, threshold, current_value, previous_value, message, created_at, is_read')
       .eq('user_id', userId)
       .eq('is_read', false)
       .order('created_at', { ascending: false })

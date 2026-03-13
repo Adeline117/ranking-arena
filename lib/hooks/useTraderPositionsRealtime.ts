@@ -230,7 +230,7 @@ export function useTraderPositionsRealtime(
 
         let query = supabase
           .from('trader_positions_live')
-          .select('*')
+          .select('id, platform, market_type, trader_key, symbol, side, entry_price, current_price, mark_price, quantity, leverage, margin, unrealized_pnl, unrealized_pnl_pct, liquidation_price, opened_at, updated_at')
           .order('updated_at', { ascending: false })
 
         if (platform) {
