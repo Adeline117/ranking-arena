@@ -316,7 +316,7 @@ export async function enrichBinanceTraders(
       }
     }
     
-    console.log(`Binance batch: ${success} success, ${failed} failed so far`)
+    logger.info(`Binance batch: ${success} success, ${failed} failed so far`)
 
     if (i + concurrency < traderIds.length) {
       await sleep(delayMs)

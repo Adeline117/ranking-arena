@@ -273,7 +273,7 @@ export async function enrichBybitTraders(
       }
     }
     
-    console.log(`Bybit batch: ${success} success, ${failed} failed so far`)
+    logger.info(`Bybit batch: ${success} success, ${failed} failed so far`)
 
     if (i + concurrency < traderIds.length) {
       await sleep(delayMs)
