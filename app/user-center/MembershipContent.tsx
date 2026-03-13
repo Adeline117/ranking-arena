@@ -133,11 +133,11 @@ export default function MembershipContent() {
   }
 
   const cardStyle: React.CSSProperties = {
-    background: tokens.colors.bg.tertiary,
-    border: `1px solid ${tokens.colors.border.primary}`,
+    background: tokens.glass.bg.light, backdropFilter: tokens.glass.blur.xs, WebkitBackdropFilter: tokens.glass.blur.xs,
+    border: tokens.glass.border.light,
     borderRadius: tokens.radius.xl,
-    padding: 24,
-    marginBottom: 24,
+    padding: tokens.spacing[6],
+    marginBottom: tokens.spacing[6],
   }
 
   return (
