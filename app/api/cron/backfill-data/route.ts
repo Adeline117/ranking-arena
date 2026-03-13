@@ -198,10 +198,13 @@ async function backfillSnapshots(
 }
 
 /**
- * Trigger enrichment for specific traders
+ * Trigger enrichment for specific traders.
+ * Uses direct function call instead of HTTP sub-call to avoid:
+ * - VERCEL_URL blocked by deployment protection (401)
+ * - NEXT_PUBLIC_APP_URL killed by Cloudflare proxy timeout (524)
  */
 async function backfillEnrichment(
-  supabase: SupabaseClient,
+  _supabase: SupabaseClient,
   platform: string,
   period: string,
   traderIds: string[]
@@ -216,28 +219,19 @@ async function backfillEnrichment(
     errors: [],
   }
 
-  // Call the enrich API internally
-  const baseUrl = process.env.NEXT_PUBLIC_APP_URL
-    || (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'http://localhost:3000')
-
-  const cronSecret = process.env.CRON_SECRET!
-
   try {
-    const res = await fetch(
-      `${baseUrl}/api/cron/enrich?platform=${platform}&period=${period}&limit=${traderIds.length}`,
-      {
-        method: 'GET',
-        headers: { Authorization: `Bearer ${cronSecret}` },
-      }
-    )
+    // Direct function call — no HTTP overhead, no auth issues
+    const { runEnrichment } = await import('@/lib/cron/enrichment-runner')
+    const enrichResult = await runEnrichment({
+      platform,
+      period,
+      limit: traderIds.length,
+    })
 
-    if (res.ok) {
-      const data = await res.json()
-      result.success = data.summary?.enriched || 0
-      result.failed = data.summary?.failed || 0
-    } else {
-      result.failed = traderIds.length
-      result.errors.push(`HTTP ${res.status}`)
+    result.success = enrichResult.summary?.enriched || 0
+    result.failed = enrichResult.summary?.failed || 0
+    if (!enrichResult.ok) {
+      result.errors.push('Enrichment returned ok=false')
     }
   } catch (err) {
     result.failed = traderIds.length
