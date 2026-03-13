@@ -25,6 +25,7 @@ const ChallengeButton = dynamic(() => import('./ChallengeButton'), { ssr: false 
 const OnChainBadge = dynamic(() => import('./OnChainBadge').then(m => ({ default: m.OnChainBadge })), { ssr: false })
 const Web3VerifiedBadge = dynamic(() => import('./Web3VerifiedBadge').then(m => ({ default: m.Web3VerifiedBadge })), { ssr: false })
 const BadgeDisplay = dynamic(() => import('./BadgeDisplay').then(m => ({ default: m.BadgeDisplay })), { ssr: false })
+const VerifiedBadge = dynamic(() => import('./VerifiedBadge'), { ssr: false })
 
 interface TraderHeaderProps {
   handle: string
@@ -50,6 +51,8 @@ interface TraderHeaderProps {
   rank?: number | null
   /** Pre-fetched current user ID to avoid duplicate auth calls */
   currentUserId?: string | null
+  /** Whether this trader has been claimed and verified */
+  isVerifiedTrader?: boolean
 }
 
 const SOURCE_CONFIG: Record<string, string> = {
@@ -294,6 +297,7 @@ export default function TraderHeader({
   winRate,
   rank,
   currentUserId: externalUserId,
+  isVerifiedTrader = false,
 }: TraderHeaderProps): React.ReactElement {
   const [userId, setUserId] = useState<string | null>(externalUserId ?? null)
   const [mounted, setMounted] = useState(false)
@@ -545,7 +549,9 @@ export default function TraderHeader({
               </Badge>
             )}
 
-            {isRegistered && (
+            {isVerifiedTrader ? (
+              <VerifiedBadge size="md" variant="prominent" />
+            ) : isRegistered ? (
               <Box
                 style={{
                   display: 'inline-flex',
@@ -563,9 +569,7 @@ export default function TraderHeader({
                   <polyline points="20 6 9 17 4 12" />
                 </svg>
               </Box>
-            )}
-
-            {isRegistered === false && (
+            ) : (
               <Badge color={tokens.colors.text.tertiary} style={{ padding: '2px 8px' }}>
                 <Text size="xs" weight="semibold" style={{ color: tokens.colors.text.tertiary, letterSpacing: '0.2px' }}>
                   {t('unclaimedBadge')}
