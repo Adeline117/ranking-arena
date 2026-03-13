@@ -56,34 +56,19 @@ bybit_*.json
 mexc_*.json
 coinex_*.json
 
-# Capacitor / Native App
-# Android
-android/app/build/
-android/.gradle/
-android/build/
-android/local.properties
-android/*.iml
-android/.idea/
+# Mobile (removed from repo)
+android/
+ios/
+capacitor.config*.json
 *.keystore
-android/app/google-services.json
-
-# iOS
-ios/App/Pods/
-ios/App/App.xcworkspace/xcuserdata/
-ios/App/build/
-ios/DerivedData/
-*.xcuserstate
-ios/App/App/GoogleService-Info.plist
-
-# APNs keys
 *.p8
 secrets/
 
 # Cloudflare Worker
 cloudflare-worker/node_modules/
 
-# Worker
-worker/node_modules/
+# Worker (removed from repo, replaced by inline cron)
+worker/
 
 # Infrastructure
 infra/*/node_modules/
@@ -118,10 +103,13 @@ backups/
 
 # Temporary/generated files
 *.bak
+*.backup
+*.old-working
 debug_*.png
 lighthouse-report.*
 screenshots/
 .archived/
+.swc/
 
 # One-off scripts
 check_gaps.mjs
