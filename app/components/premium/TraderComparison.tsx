@@ -204,7 +204,8 @@ export default function TraderComparison({ traders, onRemove, showRemoveButton =
           background: tokens.colors.bg.secondary,
           borderRadius: tokens.radius.xl,
           border: `1px solid ${tokens.colors.border.primary}`,
-          overflow: 'hidden',
+          overflowX: 'auto',
+          overflowY: 'hidden',
         }}
       >
         {/* Header: trader avatars */}
