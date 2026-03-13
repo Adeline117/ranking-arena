@@ -100,17 +100,29 @@ export class BitfinexFuturesConnector extends BaseConnector {
           const id = username.toLowerCase()
           const pnl = Number(row[6]) || 0
 
-          if (traderMap.has(id)) continue
+          // If trader already exists from plu_diff but has no ROI, update with plr data
+          const existing = traderMap.get(id)
+          if (existing && key !== 'plr') continue
+          if (existing && key === 'plr') {
+            // Update ROI on existing entry from plr data
+            const plrRoi = row[6] != null ? Math.max(-500, Math.min(50000, Number(row[6]))) : null
+            if (plrRoi != null && (!existing.raw?.roi_pct || existing.raw.roi_pct === null)) {
+              existing.raw = { ...existing.raw, roi_pct: plrRoi }
+            }
+            continue
+          }
 
-          // Estimate ROI from equity proxy (inception unrealized profit as base)
-          const equity = equityMap.get(id)
+          // Estimate ROI
           let roi: number | null = null
-          if (equity != null && Math.abs(equity) > 1) {
-            // Use equity as denominator — cap ROI at [-500%, 50000%]
-            roi = Math.max(-500, Math.min(50000, (pnl / Math.abs(equity)) * 100))
-          } else if (key === 'plr' && row[6] != null) {
+          if (key === 'plr' && row[6] != null) {
             // 'plr' key = PnL ratio (already a percentage-like value)
             roi = Math.max(-500, Math.min(50000, Number(row[6])))
+          } else {
+            // For 'plu_diff' key, estimate ROI from equity proxy
+            const equity = equityMap.get(id)
+            if (equity != null && Math.abs(equity) > 1) {
+              roi = Math.max(-500, Math.min(50000, (pnl / Math.abs(equity)) * 100))
+            }
           }
 
           traderMap.set(id, {
@@ -128,7 +140,7 @@ export class BitfinexFuturesConnector extends BaseConnector {
               pnl,
               key,
               timeframe,
-              equity: equity ?? null,
+              equity: equityMap.get(id) ?? null,
               roi,
             },
           })
