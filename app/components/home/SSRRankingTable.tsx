@@ -65,7 +65,7 @@ export default function SSRRankingTable({ traders }: Props) {
 .ssr-name{font-size:13px;font-weight:600;color:var(--color-text-primary);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .ssr-src{font-size:11px;color:var(--color-text-tertiary);text-transform:capitalize}
 .ssr-score{text-align:right;font-size:13px;font-weight:700;font-variant-numeric:tabular-nums}
-.ssr-score-s{color:#22c55e}.ssr-score-a{color:#4ade80}.ssr-score-b{color:#a78bfa}.ssr-score-c{color:#94a3b8}.ssr-score-d{color:#64748b}
+.ssr-score-s{color:var(--color-accent-success,#22c55e)}.ssr-score-a{color:var(--color-score-a,#4ade80)}.ssr-score-b{color:var(--color-accent-primary,#a78bfa)}.ssr-score-c{color:var(--color-text-secondary,#94a3b8)}.ssr-score-d{color:var(--color-text-tertiary,#64748b)}
 .ssr-roi{text-align:right;font-variant-numeric:tabular-nums}
 .ssr-roi-val{font-size:13px;font-weight:600}
 .ssr-roi-pos{color:var(--color-success)}.ssr-roi-neg{color:var(--color-danger)}
