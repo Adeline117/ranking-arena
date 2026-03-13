@@ -233,11 +233,12 @@ export function EpubNotesPanel({
           {filteredHighlights.map((h) => {
             const realIdx = highlights.indexOf(h)
             return (
-              <div key={realIdx} style={{
+              <div key={realIdx} role="button" tabIndex={0} style={{
                 padding: '14px 16px', borderBottom: `1px solid ${panelBorder}`,
                 cursor: 'pointer', transition: 'background 0.15s',
               }}
                 onClick={() => { onJumpToHighlight(h.cfiRange); onClose() }}
+                onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onJumpToHighlight(h.cfiRange); onClose() } }}
                 onMouseEnter={e => e.currentTarget.style.background = panelSubtle}
                 onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
               >
