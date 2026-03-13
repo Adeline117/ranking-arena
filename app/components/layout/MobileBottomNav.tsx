@@ -72,6 +72,19 @@ function FireIcon({ active }: IconProps): React.ReactElement {
   )
 }
 
+function RankingsIcon({ active }: IconProps): React.ReactElement {
+  return (
+    <NavIcon active={active}>
+      <path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6" />
+      <path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18" />
+      <path d="M4 22h16" />
+      <path d="M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22" />
+      <path d="M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22" />
+      <path d="M18 2H6v7a6 6 0 0 0 12 0V2Z" />
+    </NavIcon>
+  )
+}
+
 function MarketIcon({ active }: IconProps): React.ReactElement {
   return (
     <NavIcon active={active}>
@@ -223,16 +236,22 @@ export default function MobileBottomNav(): React.ReactElement {
     impact('light')
   }, [impact])
 
-  const navItems: NavItem[] = useMemo(() => [
-    { href: '/', labelKey: 'home', Icon: HomeIcon },
-    { href: '/hot', labelKey: 'hot', Icon: FireIcon },
-    { href: '/groups', labelKey: 'groups', Icon: GroupsIcon },
-    { href: '/market', labelKey: 'market', Icon: MarketIcon },
-    { href: userHandle ? `/u/${encodeURIComponent(userHandle)}` : '/settings', labelKey: 'me', Icon: UserIcon },
-  ].filter(item => {
-    if (['/hot', '/groups'].includes(item.href)) return features.social
-    return true
-  }), [userHandle])
+  const navItems: NavItem[] = useMemo(() => {
+    const items: NavItem[] = [
+      { href: '/', labelKey: 'home', Icon: HomeIcon },
+      ...(features.social
+        ? [
+            { href: '/hot', labelKey: 'hot', Icon: FireIcon },
+            { href: '/groups', labelKey: 'groups', Icon: GroupsIcon },
+          ]
+        : [
+            { href: '/rankings', labelKey: 'rankings', Icon: RankingsIcon },
+          ]),
+      { href: '/market', labelKey: 'market', Icon: MarketIcon },
+      { href: userHandle ? `/u/${encodeURIComponent(userHandle)}` : '/settings', labelKey: 'me', Icon: UserIcon },
+    ]
+    return items
+  }, [userHandle])
 
   // Hide nav on auth / onboarding pages
   if (HIDDEN_PATHS.some(p => pathname === p || pathname.startsWith(p + '/'))) {
@@ -301,6 +320,7 @@ function NavItemLink({ item, active, onClick, t }: NavItemLinkProps): React.Reac
         flexDirection: 'column',
         alignItems: 'center',
         justifyContent: 'center',
+        flex: 1,
         gap: 4,
         padding: `${tokens.spacing[1]} ${tokens.spacing[3]}`,
         textDecoration: 'none',
