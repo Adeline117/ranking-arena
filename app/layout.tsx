@@ -104,10 +104,8 @@ export const metadata: Metadata = {
   },
   alternates: {
     canonical: process.env.NEXT_PUBLIC_APP_URL || "https://www.arenafi.org",
-    languages: {
-      'zh-CN': process.env.NEXT_PUBLIC_APP_URL || "https://www.arenafi.org",
-      'en': `${process.env.NEXT_PUBLIC_APP_URL || "https://www.arenafi.org"}/en`,
-    },
+    // No per-language URLs — language is client-side only (localStorage)
+    // Removed invalid /en hreflang (no /en route exists)
   },
   openGraph: {
     type: "website",
@@ -150,6 +148,8 @@ export default function RootLayout({
   return (
     <html lang="zh-CN" dir="ltr" data-theme="dark" translate="no" className={inter.variable} suppressHydrationWarning>
       <head>
+        {/* Sync html lang attribute from localStorage before paint (prevents wrong lang for screen readers) */}
+        <script dangerouslySetInnerHTML={{ __html: `try{var l=localStorage.getItem('language');if(l&&l!=='zh')document.documentElement.lang=l==='en'?'en':l==='ja'?'ja':l==='ko'?'ko':'zh-CN'}catch(e){}` }} />
         {/* Inline critical CSS for faster initial render */}
         <style dangerouslySetInnerHTML={{ __html: getCriticalCss() }} />
 

@@ -336,13 +336,30 @@ export default function GlobalError({
               )}
             </button>
 
+            {/* Back to Home link */}
+            <a
+              href="/"
+              className="content-section"
+              style={{
+                display: 'inline-block',
+                marginTop: '16px',
+                fontSize: '0.85rem',
+                color: 'var(--color-text-secondary)',
+                textDecoration: 'underline',
+                textUnderlineOffset: '3px',
+                animationDelay: '0.35s',
+              }}
+            >
+              {t('backToHome')}
+            </a>
+
             {/* Help text */}
             <p
               className="content-section"
               style={{
                 fontSize: '0.75rem',
                 color: 'var(--color-text-tertiary, #5a5a5a)',
-                marginTop: '20px',
+                marginTop: '12px',
                 animationDelay: '0.4s',
               }}
             >
