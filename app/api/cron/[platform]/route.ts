@@ -81,8 +81,7 @@ export async function POST(
     }
 
     // 2. 检查熔断器
-    const circuitBreaker = circuitBreakerManager.get(platform)
-    if (circuitBreaker.getState() === 'OPEN') {
+    if (circuitBreakerManager.getState(platform) === 'OPEN') {
       logger.warn(`Circuit breaker OPEN for ${platform}, skipping`)
       return NextResponse.json({
         success: false,
