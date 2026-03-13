@@ -16,16 +16,6 @@ export async function upsertEquityCurve(
 
   const capturedAt = new Date().toISOString()
 
-  // Delete existing data for this period
-  const { error: delErr } = await supabase
-    .from('trader_equity_curve')
-    .delete()
-    .eq('source', source)
-    .eq('source_trader_id', traderId)
-    .eq('period', period)
-
-  if (delErr) return { saved: 0, error: `Delete failed: ${delErr.message}` }
-
   const records = curve.map((point) => ({
     source,
     source_trader_id: traderId,
@@ -36,13 +26,26 @@ export async function upsertEquityCurve(
     captured_at: capturedAt,
   }))
 
-  const { error } = await supabase.from('trader_equity_curve').insert(records)
-
-  if (error) {
-    return { saved: 0, error: error.message }
+  // Use batch upsert instead of DELETE+INSERT
+  const BATCH_SIZE = 25
+  let saved = 0
+  for (let i = 0; i < records.length; i += BATCH_SIZE) {
+    const batch = records.slice(i, i + BATCH_SIZE)
+    const { error } = await supabase
+      .from('trader_equity_curve')
+      .upsert(batch, { 
+        onConflict: 'source,source_trader_id,period,data_date',
+        ignoreDuplicates: false 
+      })
+    
+    if (error) {
+      console.error(`Batch ${i} failed:`, error)
+      return { saved, error: error.message }
+    }
+    saved += batch.length
   }
 
-  return { saved: records.length }
+  return { saved }
 }
 
 export async function upsertPositionHistory(
@@ -143,16 +146,6 @@ export async function upsertAssetBreakdown(
 
   const capturedAt = new Date().toISOString()
 
-  // Delete existing data for this period
-  const { error: delErr } = await supabase
-    .from('trader_asset_breakdown')
-    .delete()
-    .eq('source', source)
-    .eq('source_trader_id', traderId)
-    .eq('period', period)
-
-  if (delErr) return { saved: 0, error: `Delete failed: ${delErr.message}` }
-
   const records = assets.map((asset) => ({
     source,
     source_trader_id: traderId,
@@ -162,13 +155,26 @@ export async function upsertAssetBreakdown(
     captured_at: capturedAt,
   }))
 
-  const { error } = await supabase.from('trader_asset_breakdown').insert(records)
-
-  if (error) {
-    return { saved: 0, error: error.message }
+  // Use batch upsert instead of DELETE+INSERT
+  const BATCH_SIZE = 25
+  let saved = 0
+  for (let i = 0; i < records.length; i += BATCH_SIZE) {
+    const batch = records.slice(i, i + BATCH_SIZE)
+    const { error } = await supabase
+      .from('trader_asset_breakdown')
+      .upsert(batch, { 
+        onConflict: 'source,source_trader_id,period,symbol',
+        ignoreDuplicates: false 
+      })
+    
+    if (error) {
+      console.error(`Batch ${i} failed:`, error)
+      return { saved, error: error.message }
+    }
+    saved += batch.length
   }
 
-  return { saved: records.length }
+  return { saved }
 }
 
 export async function upsertPortfolio(
@@ -181,15 +187,6 @@ export async function upsertPortfolio(
 
   const capturedAt = new Date().toISOString()
 
-  // Delete existing portfolio data
-  const { error: delErr } = await supabase
-    .from('trader_portfolio')
-    .delete()
-    .eq('source', source)
-    .eq('source_trader_id', traderId)
-
-  if (delErr) return { saved: 0, error: `Delete failed: ${delErr.message}` }
-
   const records = positions.map((pos) => ({
     source,
     source_trader_id: traderId,
@@ -201,11 +198,24 @@ export async function upsertPortfolio(
     captured_at: capturedAt,
   }))
 
-  const { error } = await supabase.from('trader_portfolio').insert(records)
-
-  if (error) {
-    return { saved: 0, error: error.message }
+  // Use batch upsert instead of DELETE+INSERT
+  const BATCH_SIZE = 25
+  let saved = 0
+  for (let i = 0; i < records.length; i += BATCH_SIZE) {
+    const batch = records.slice(i, i + BATCH_SIZE)
+    const { error } = await supabase
+      .from('trader_portfolio')
+      .upsert(batch, { 
+        onConflict: 'source,source_trader_id,symbol',
+        ignoreDuplicates: false 
+      })
+    
+    if (error) {
+      console.error(`Batch ${i} failed:`, error)
+      return { saved, error: error.message }
+    }
+    saved += batch.length
   }
 
-  return { saved: records.length }
+  return { saved }
 }

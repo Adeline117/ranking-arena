@@ -146,7 +146,7 @@ export async function GET(request: NextRequest) {
         break
       }
       const batch = platforms.slice(i, i + BATCH_CONCURRENCY)
-      const batchResults = await Promise.all(
+      const batchResults = await Promise.allSettled(
         batch.map(async (platform): Promise<BatchResult> => {
           const config = PLATFORM_LIMITS[platform]
           if (!config) return { platform, period, status: 'error', durationMs: 0, error: 'No config' }
@@ -182,7 +182,22 @@ export async function GET(request: NextRequest) {
           }
         })
       )
-      results.push(...batchResults)
+      
+      // Handle Promise.allSettled results
+      const settled = batchResults.map(r => 
+        r.status === 'fulfilled' ? r.value : {
+          platform: 'unknown',
+          period,
+          status: 'error' as const,
+          durationMs: 0,
+          error: r.reason instanceof Error ? r.reason.message : String(r.reason)
+        }
+      )
+      results.push(...settled)
+      
+      const batchSucceeded = settled.filter(r => r.status === 'success').length
+      const batchFailed = settled.length - batchSucceeded
+      console.log(`Batch ${period}: ${batchSucceeded} success, ${batchFailed} failed`)
     }
   }
 

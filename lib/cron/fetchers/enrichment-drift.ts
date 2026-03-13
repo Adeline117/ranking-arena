@@ -122,12 +122,22 @@ export async function fetchDriftStatsDetail(
   authority: string
 ): Promise<StatsDetail | null> {
   try {
-    // Fetch user stats and fills in parallel
-    const [stats, positions] = await Promise.all([
+    // Fetch user stats and fills in parallel (with error tolerance)
+    const results = await Promise.allSettled([
       fetchJson<DriftUserStats>(`${DATA_API}/stats/user/${authority}`, { timeoutMs: 10000 })
         .catch(() => null),
       fetchDriftPositionHistory(authority, 500),
     ])
+    
+    const stats = results[0].status === 'fulfilled' ? results[0].value : null
+    const positions = results[1].status === 'fulfilled' ? results[1].value : []
+    
+    if (results[0].status === 'rejected') {
+      console.error(`Drift stats fetch failed for ${authority}:`, results[0].reason)
+    }
+    if (results[1].status === 'rejected') {
+      console.error(`Drift positions fetch failed for ${authority}:`, results[1].reason)
+    }
 
     const derivedStats = computeStatsFromPositions(positions)
 

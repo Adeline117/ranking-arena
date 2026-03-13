@@ -184,14 +184,20 @@ async function upsertLeaderboardData(
     display_name: e.display_name, profile_url: e.profile_url,
     last_seen_at: now, is_active: true, raw: e.raw,
   }))
-  const { error: srcUpsertErr } = await supabase.from('trader_sources_v2').upsert(sources, { onConflict: 'platform,market_type,trader_key' })
-  if (srcUpsertErr?.message?.includes('ON CONFLICT')) {
-    // Unique constraint on (platform, market_type, trader_key) missing.
-    // Fall back to plain inserts — duplicates ignored if they error.
-    for (const src of sources) {
-      const { error: insertErr } = await supabase.from('trader_sources_v2').insert(src)
-      if (insertErr && !insertErr.message.includes('duplicate key')) {
-        logger.warn(`[inline-jobs] trader_sources_v2 insert fallback error: ${insertErr.message}`)
+  const BATCH_SIZE = 25
+  
+  // Batch upsert sources
+  for (let i = 0; i < sources.length; i += BATCH_SIZE) {
+    const batch = sources.slice(i, i + BATCH_SIZE)
+    const { error: srcUpsertErr } = await supabase.from('trader_sources_v2').upsert(batch, { onConflict: 'platform,market_type,trader_key' })
+    if (srcUpsertErr?.message?.includes('ON CONFLICT')) {
+      // Unique constraint on (platform, market_type, trader_key) missing.
+      // Fall back to plain inserts — duplicates ignored if they error.
+      for (const src of batch) {
+        const { error: insertErr } = await supabase.from('trader_sources_v2').insert(src)
+        if (insertErr && !insertErr.message.includes('duplicate key')) {
+          logger.warn(`[inline-jobs] trader_sources_v2 insert fallback error: ${insertErr.message}`)
+        }
       }
     }
   }
@@ -212,12 +218,15 @@ async function upsertLeaderboardData(
         arena_score: arenaScore, quality_flags: { missing_roi: roi == null }, provenance,
       }
     })
-  for (let i = 0; i < snapshots.length; i += 50) {
+  
+  // Batch upsert snapshots with smaller batch size
+  for (let i = 0; i < snapshots.length; i += BATCH_SIZE) {
+    const batch = snapshots.slice(i, i + BATCH_SIZE)
     const { error: batchErr } = await supabase.from('trader_snapshots_v2').upsert(
-      snapshots.slice(i, i + 50),
+      batch,
       { onConflict: 'platform,market_type,trader_key,window' }
     )
-    if (batchErr) logger.warn(`[inline-jobs] DISCOVER upsert batch error: ${batchErr.message}`)
+    if (batchErr) logger.warn(`[inline-jobs] DISCOVER upsert batch ${i} error: ${batchErr.message}`)
   }
 }
 
@@ -264,15 +273,30 @@ export async function refreshHotScoresInline(): Promise<InlineJobResult> {
       return { name, status: 'error', durationMs: Date.now() - start, error: fetchErr?.message || 'No posts for fallback' }
     }
 
-    let errors = 0
-    for (const post of posts) {
+    // Calculate scores and prepare batch upsert
+    const now = new Date().toISOString()
+    const updates = posts.map(post => {
       const ageHours = (Date.now() - new Date(post.created_at).getTime()) / 3_600_000
       const score = ((post.like_count ?? 0) * 3 + (post.comment_count ?? 0) * 5 + (post.repost_count ?? 0) * 2 + (post.view_count ?? 0) * 0.1) / Math.pow(ageHours + 2, 1.5)
+      return {
+        id: post.id,
+        hot_score: Math.round(score * 100) / 100,
+        last_hot_refresh_at: now,
+      }
+    })
+
+    // Batch upsert instead of loop
+    const BATCH_SIZE = 25
+    let errors = 0
+    for (let i = 0; i < updates.length; i += BATCH_SIZE) {
+      const batch = updates.slice(i, i + BATCH_SIZE)
       const { error: upErr } = await supabase
         .from('posts')
-        .update({ hot_score: Math.round(score * 100) / 100, last_hot_refresh_at: new Date().toISOString() })
-        .eq('id', post.id)
-      if (upErr) errors++
+        .upsert(batch, { onConflict: 'id', ignoreDuplicates: false })
+      if (upErr) {
+        hotScoreLogger.error(`Batch ${i} failed:`, upErr)
+        errors++
+      }
     }
 
     if (errors > posts.length / 2) {
