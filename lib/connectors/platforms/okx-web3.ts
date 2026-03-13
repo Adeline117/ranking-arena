@@ -11,6 +11,7 @@
  */
 
 import { BaseConnector } from '../base'
+import { safeNumber, safePercent, safeStr, safeNonNeg } from '../utils'
 import type {
   LeaderboardPlatform,
   MarketType,
@@ -28,9 +29,12 @@ interface OkxLeadTrader {
   nickName: string
   portLink: string | null
   pnl: string
+  totalPnl?: string
+  accPnl?: string
   pnlRatio: string
   winRatio: string
   copyTraderNum: string
+  followerCount?: string
   pnlRatios?: Array<{ ts: string; ratio: string }>
 }
 
@@ -135,19 +139,25 @@ export class OkxWeb3Connector extends BaseConnector {
     return { series: [], fetched_at: new Date().toISOString() }
   }
 
+  /**
+   * Normalize raw OKX Web3 lead trader entry.
+   * All API values are strings — parse with safeNumber/safePercent.
+   * pnl/totalPnl/accPnl: string PnL values, use first non-null.
+   * winRatio: string decimal (0.65 = 65%), ×100 for percentage.
+   * copyTraderNum/followerCount: string integers.
+   */
   normalize(raw: unknown): Record<string, unknown> {
     const e = raw as Record<string, unknown>
-    const winRatio = e.winRatio != null ? parseFloat(String(e.winRatio)) : null
 
     return {
       trader_key: e.uniqueCode || null,
-      display_name: e.nickName || null,
-      avatar_url: e.portLink || null,
-      roi: e._computed_roi != null ? Number(e._computed_roi) : null,
-      pnl: e.pnl != null ? parseFloat(String(e.pnl)) : null,
-      win_rate: winRatio != null ? winRatio * 100 : null,
-      max_drawdown: e._computed_mdd != null ? Number(e._computed_mdd) : null,
-      followers: e.copyTraderNum != null ? parseInt(String(e.copyTraderNum), 10) : null,
+      display_name: safeStr(e.nickName),
+      avatar_url: safeStr(e.portLink),
+      roi: e._computed_roi != null ? safeNumber(e._computed_roi) : null,
+      pnl: safeNumber(e.pnl ?? e.totalPnl ?? e.accPnl),
+      win_rate: safePercent(e.winRatio, { isRatio: true }),
+      max_drawdown: e._computed_mdd != null ? safeNumber(e._computed_mdd) : null,
+      followers: safeNonNeg(e.copyTraderNum ?? e.followerCount),
       trades_count: null,
       sharpe_ratio: null,
       aum: null,

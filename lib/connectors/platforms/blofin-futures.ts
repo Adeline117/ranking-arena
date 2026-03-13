@@ -12,6 +12,7 @@
 
 import { BaseConnector } from '../base'
 import { warnValidate } from '../schemas'
+import { safeNumber, safePercent, safeNonNeg, safeStr, safeMdd } from '../utils'
 import {
   BlofinFuturesLeaderboardResponseSchema,
   BlofinFuturesDetailResponseSchema,
@@ -24,14 +25,28 @@ import type {
 
 interface BloFinTraderEntry {
   traderId?: string
+  uniqueName?: string
+  uid?: string
   nickName?: string
+  nickname?: string
+  name?: string
   avatar?: string
-  roi?: number
-  pnl?: number
-  followers?: number
-  winRate?: number
-  sharpeRatio?: number
-  maxDrawdown?: number
+  avatarUrl?: string
+  portraitLink?: string
+  roi?: number | string
+  returnRate?: number | string
+  pnlRatio?: number | string
+  pnl?: number | string
+  profit?: number | string
+  totalPnl?: number | string
+  accumulatedPnl?: number | string
+  followers?: number | string
+  followerCount?: number | string
+  copyTraderNum?: number | string
+  winRate?: number | string
+  sharpeRatio?: number | string
+  maxDrawdown?: number | string
+  mdd?: number | string
 }
 
 export class BlofinFuturesConnector extends BaseConnector {
@@ -185,32 +200,34 @@ export class BlofinFuturesConnector extends BaseConnector {
   /**
    * Normalize raw BloFin leaderboard entry.
    * Raw fields: uniqueName/traderId/uid, nickName/nickname/name,
-   * roi/returnRate/pnlRatio (decimal), pnl/profit/totalPnl,
-   * winRate (decimal), maxDrawdown/mdd (decimal),
+   * roi/returnRate/pnlRatio (decimal), pnl/profit/totalPnl/accumulatedPnl,
+   * winRate (decimal), maxDrawdown/mdd (decimal), sharpeRatio,
    * followers/followerCount/copyTraderNum, avatar/avatarUrl/portraitLink.
-   * Note: All decimal values normalized ×100 if ≤1.
+   * Note: ROI/winRate are decimals (≤1 → ×100). All values may be strings (parseFloat).
    */
   normalize(raw: Record<string, unknown>): Record<string, unknown> {
-    const rawRoi = this.num(raw.roi ?? raw.returnRate ?? raw.pnlRatio)
+    // ROI: decimal ratio → percentage (0.27 → 27%)
+    const rawRoi = safeNumber(raw.roi ?? raw.returnRate ?? raw.pnlRatio)
     const roi = rawRoi != null ? (Math.abs(rawRoi) <= 1 ? rawRoi * 100 : rawRoi) : null
-    const rawWr = this.num(raw.winRate)
+    // Win rate: decimal ratio → percentage
+    const rawWr = safeNumber(raw.winRate)
     const winRate = rawWr != null ? (rawWr <= 1 ? rawWr * 100 : rawWr) : null
-    const rawMdd = this.num(raw.maxDrawdown ?? raw.mdd)
-    const maxDrawdown = rawMdd != null ? Math.abs(rawMdd <= 1 ? rawMdd * 100 : rawMdd) : null
+    // Max drawdown: decimal ratio → absolute percentage
+    const maxDrawdown = safeMdd(raw.maxDrawdown ?? raw.mdd, safeNumber(raw.maxDrawdown ?? raw.mdd) != null && Math.abs(safeNumber(raw.maxDrawdown ?? raw.mdd)!) <= 1)
 
     return {
       trader_key: raw.uniqueName ?? raw.traderId ?? raw.uid ?? raw.id ?? null,
-      display_name: raw.nickName ?? raw.nickname ?? raw.name ?? null,
-      avatar_url: raw.avatar ?? raw.avatarUrl ?? raw.portraitLink ?? null,
+      display_name: safeStr(raw.nickName ?? raw.nickname ?? raw.name),
+      avatar_url: safeStr(raw.avatar ?? raw.avatarUrl ?? raw.portraitLink),
       roi,
-      pnl: this.num(raw.pnl ?? raw.profit ?? raw.totalPnl),
+      pnl: safeNumber(raw.pnl ?? raw.profit ?? raw.totalPnl ?? raw.accumulatedPnl),
       win_rate: winRate,
       max_drawdown: maxDrawdown,
       trades_count: null,
-      followers: this.num(raw.followers ?? raw.followerCount ?? raw.copyTraderNum),
+      followers: safeNonNeg(raw.followers ?? raw.followerCount ?? raw.copyTraderNum),
       copiers: null,
       aum: null,
-      sharpe_ratio: null,
+      sharpe_ratio: safeNumber(raw.sharpeRatio),
       platform_rank: null,
     }
   }
