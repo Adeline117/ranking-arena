@@ -28,19 +28,19 @@ const PLATFORM_LIMITS: Record<string, { limit90: number; limit30: number; limit7
   okx_futures: { limit90: 60, limit30: 60, limit7: 50 }, // Reduced from 80/80/60
   bitget_futures: { limit90: 50, limit30: 50, limit7: 40 }, // Reduced from 60/60/50
   // bitget_spot removed: no public API exists (all endpoints 404)
-  // ONCHAIN PLATFORMS: AGGRESSIVE REDUCTION Round 3 (2026-03-13 05:30)
-  // 7D and 90D still timing out - more aggressive limits needed
-  hyperliquid: { limit90: 20, limit30: 25, limit7: 15 }, // Reduced from 30/25/20
-  gmx: { limit90: 20, limit30: 25, limit7: 15 }, // Reduced from 30/25/20
-  htx_futures: { limit90: 25, limit30: 30, limit7: 20 }, // Reduced 90D from 30, 7D from 25
-  gateio: { limit90: 30, limit30: 35, limit7: 25 }, // Reduced from 40/35/30
-  mexc: { limit90: 30, limit30: 35, limit7: 25 }, // Reduced from 40/35/30
-  drift: { limit90: 20, limit30: 25, limit7: 15 }, // Reduced from 30/25/20
-  dydx: { limit90: 20, limit30: 25, limit7: 15 }, // Reduced from 30/25/20
-  aevo: { limit90: 20, limit30: 25, limit7: 15 }, // Reduced from 30/25/20
-  gains: { limit90: 20, limit30: 25, limit7: 15 }, // Reduced from 30/25/20
+  // ONCHAIN PLATFORMS: AGGRESSIVE REDUCTION Round 4 (2026-03-13 09:00)
+  // 30D/7D still timing out - matched 90D and more aggressive 7D
+  hyperliquid: { limit90: 20, limit30: 20, limit7: 10 }, // 30D: 25→20 (match 90D), 7D: 15→10
+  gmx: { limit90: 20, limit30: 20, limit7: 10 }, // 30D: 25→20 (match 90D), 7D: 15→10
+  htx_futures: { limit90: 25, limit30: 25, limit7: 15 }, // 30D: 30→25 (match 90D), 7D: 20→15
+  gateio: { limit90: 30, limit30: 30, limit7: 20 }, // 30D: 35→30 (match 90D), 7D: 25→20
+  mexc: { limit90: 30, limit30: 30, limit7: 20 }, // 30D: 35→30 (match 90D), 7D: 25→20
+  drift: { limit90: 20, limit30: 20, limit7: 10 }, // 30D: 25→20 (match 90D), 7D: 15→10
+  dydx: { limit90: 20, limit30: 20, limit7: 10 }, // 30D: 25→20 (match 90D), 7D: 15→10
+  aevo: { limit90: 20, limit30: 20, limit7: 10 }, // 30D: 25→20 (match 90D), 7D: 15→10
+  gains: { limit90: 20, limit30: 20, limit7: 10 }, // 30D: 25→20 (match 90D), 7D: 15→10
   // kwenta removed: Copin API stopped serving Kwenta data (2026-03-11)
-  jupiter_perps: { limit90: 20, limit30: 25, limit7: 15 }, // Reduced from 30/25/20
+  jupiter_perps: { limit90: 20, limit30: 20, limit7: 10 }, // 30D: 25→20 (match 90D), 7D: 15→10
 }
 
 // High priority platforms (always enriched)
