@@ -15,6 +15,7 @@ import {
   RateLimitPresets,
 } from '@/lib/api'
 import logger from '@/lib/logger'
+import { socialFeatureGuard } from '@/lib/features'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -23,6 +24,9 @@ export const dynamic = 'force-dynamic'
  * GET - 获取用户在指定群组的订阅状态
  */
 export async function GET(request: NextRequest) {
+  const guard = socialFeatureGuard()
+  if (guard) return guard
+
   try {
     const user = await requireAuth(request)
     const supabase = getSupabaseAdmin()
@@ -89,6 +93,9 @@ export async function GET(request: NextRequest) {
  * POST - 创建群组订阅
  */
 export async function POST(request: NextRequest) {
+  const guard = socialFeatureGuard()
+  if (guard) return guard
+
   const rateLimitResponse = await checkRateLimit(request, RateLimitPresets.write)
   if (rateLimitResponse) return rateLimitResponse
 
@@ -227,6 +234,9 @@ export async function POST(request: NextRequest) {
  * DELETE - 取消群组订阅
  */
 export async function DELETE(request: NextRequest) {
+  const guard = socialFeatureGuard()
+  if (guard) return guard
+
   const rateLimitResponse = await checkRateLimit(request, RateLimitPresets.write)
   if (rateLimitResponse) return rateLimitResponse
 

@@ -12,6 +12,7 @@ import { z } from 'zod'
 import { createLogger, traceMessage } from '@/lib/utils/logger'
 import { getAuthUser, getSupabaseAdmin } from '@/lib/supabase/server'
 import { checkRateLimit, RateLimitPresets } from '@/lib/utils/rate-limit'
+import { socialFeatureGuard } from '@/lib/features'
 
 const logger = createLogger('messages-api')
 
@@ -33,6 +34,9 @@ const MAX_PAGE_SIZE = 100
 
 // 获取会话消息（支持 cursor 分页）
 export async function GET(request: NextRequest) {
+  const guard = socialFeatureGuard()
+  if (guard) return guard
+
   try {
     const rateLimitResponse = await checkRateLimit(request, RateLimitPresets.authenticated)
     if (rateLimitResponse) return rateLimitResponse
@@ -155,6 +159,9 @@ export async function GET(request: NextRequest) {
 
 // 发送私信
 export async function POST(request: NextRequest) {
+  const guard = socialFeatureGuard()
+  if (guard) return guard
+
   try {
     const rateLimitResponse = await checkRateLimit(request, RateLimitPresets.write)
     if (rateLimitResponse) return rateLimitResponse

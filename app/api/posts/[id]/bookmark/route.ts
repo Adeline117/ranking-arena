@@ -10,6 +10,7 @@ import { createClient } from '@supabase/supabase-js'
 import { apiLogger } from '@/lib/utils/logger'
 import { validateCsrfToken, CSRF_COOKIE_NAME, CSRF_HEADER_NAME } from '@/lib/utils/csrf'
 import { checkRateLimit, RateLimitPresets } from '@/lib/utils/rate-limit'
+import { socialFeatureGuard } from '@/lib/features'
 
 // Zod schema for POST /api/posts/[id]/bookmark (body is optional)
 const BookmarkSchema = z.object({
@@ -23,6 +24,9 @@ type RouteContext = { params: Promise<{ id: string }> }
 
 // 检查用户是否已收藏
 export async function GET(request: NextRequest, context: RouteContext) {
+  const guard = socialFeatureGuard()
+  if (guard) return guard
+
   try {
     const rateLimitResponse = await checkRateLimit(request, RateLimitPresets.write)
     if (rateLimitResponse) return rateLimitResponse
@@ -59,6 +63,9 @@ export async function GET(request: NextRequest, context: RouteContext) {
 
 // 收藏/取消收藏
 export async function POST(request: NextRequest, context: RouteContext) {
+  const guard = socialFeatureGuard()
+  if (guard) return guard
+
   try {
     const { id } = await context.params
 

@@ -6,6 +6,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { PipelineLogger } from '@/lib/services/pipeline-logger'
+import { features } from '@/lib/features'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 30
@@ -84,6 +85,8 @@ export async function POST(req: NextRequest) {
 }
 
 async function handleCron(req: NextRequest) {
+  if (!features.social) return NextResponse.json({ success: true, skipped: true })
+
   const authHeader = req.headers.get('authorization')
   if (!CRON_SECRET) {
     if (process.env.NODE_ENV !== 'development') {

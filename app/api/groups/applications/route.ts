@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient, SupabaseClient } from '@supabase/supabase-js'
 import logger from '@/lib/logger'
+import { socialFeatureGuard } from '@/lib/features'
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!
@@ -19,6 +20,9 @@ async function isAdmin(supabase: SupabaseClient<any>, userId: string): Promise<b
 
 // 管理员获取待审核的申请列表
 export async function GET(request: NextRequest) {
+  const guard = socialFeatureGuard()
+  if (guard) return guard
+
   try {
     const authHeader = request.headers.get('Authorization')
     if (!authHeader?.startsWith('Bearer ')) {

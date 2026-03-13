@@ -14,12 +14,16 @@ import {
   RateLimitPresets,
 } from '@/lib/api'
 import { createLogger } from '@/lib/utils/logger'
+import { socialFeatureGuard } from '@/lib/features'
 
 const _logger = createLogger('comment-like')
 
 type RouteContext = { params: Promise<{ id: string }> }
 
 export async function POST(request: NextRequest, _context: RouteContext) {
+  const guard = socialFeatureGuard()
+  if (guard) return guard
+
   // 限流：每分钟最多 30 次点赞操作
   const rateLimitResponse = await checkRateLimit(request, RateLimitPresets.write)
   if (rateLimitResponse) return rateLimitResponse

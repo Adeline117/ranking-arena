@@ -18,10 +18,14 @@ import {
 import { checkRateLimit, RateLimitPresets } from '@/lib/utils/rate-limit'
 import { getPostById, updatePost, deletePost, getUserPostReaction, getUserPostVote } from '@/lib/data/posts'
 import logger from '@/lib/logger'
+import { socialFeatureGuard } from '@/lib/features'
 
 type RouteContext = { params: Promise<{ id: string }> }
 
 export async function GET(request: NextRequest, context: RouteContext) {
+  const guard = socialFeatureGuard()
+  if (guard) return guard
+
   try {
     const { id } = await context.params
     const supabase = getSupabaseAdmin()
@@ -77,6 +81,9 @@ export async function GET(request: NextRequest, context: RouteContext) {
 }
 
 export async function PUT(request: NextRequest, context: RouteContext) {
+  const guard = socialFeatureGuard()
+  if (guard) return guard
+
   const rateLimitResp = await checkRateLimit(request, RateLimitPresets.write)
   if (rateLimitResp) return rateLimitResp
 
@@ -103,6 +110,9 @@ export async function PUT(request: NextRequest, context: RouteContext) {
 }
 
 export async function DELETE(request: NextRequest, context: RouteContext) {
+  const guard = socialFeatureGuard()
+  if (guard) return guard
+
   const rateLimitResp = await checkRateLimit(request, RateLimitPresets.write)
   if (rateLimitResp) return rateLimitResp
 

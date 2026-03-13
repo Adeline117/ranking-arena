@@ -5,6 +5,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { logger } from '@/lib/logger'
+import { socialFeatureGuard } from '@/lib/features'
 
 export const dynamic = 'force-dynamic'
 
@@ -15,10 +16,13 @@ export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ handle: string }> }
 ) {
+  const guard = socialFeatureGuard()
+  if (guard) return guard
+
   try {
     const resolvedParams = await Promise.resolve(params)
     const handle = resolvedParams.handle
-    
+
     if (!handle) {
       return NextResponse.json({ error: 'Missing handle' }, { status: 400 })
     }

@@ -17,8 +17,12 @@ import {
   checkRateLimit,
   RateLimitPresets,
 } from '@/lib/api'
+import { socialFeatureGuard } from '@/lib/features'
 
 export async function GET(request: NextRequest) {
+  const guard = socialFeatureGuard()
+  if (guard) return guard
+
   const rateLimitResponse = await checkRateLimit(request, RateLimitPresets.public)
   if (rateLimitResponse) return rateLimitResponse
 

@@ -12,6 +12,7 @@ import { traceMessage } from '@/lib/utils/logger'
 import { getAuthUser, getSupabaseAdmin } from '@/lib/supabase/server'
 import { checkRateLimit, RateLimitPresets } from '@/lib/utils/rate-limit'
 import logger from '@/lib/logger'
+import { socialFeatureGuard } from '@/lib/features'
 
 // Zod schema for POST /api/messages/start
 const StartConversationSchema = z.object({
@@ -21,6 +22,9 @@ const StartConversationSchema = z.object({
 export const dynamic = 'force-dynamic'
 
 export async function POST(request: NextRequest) {
+  const guard = socialFeatureGuard()
+  if (guard) return guard
+
   try {
     const rateLimitResponse = await checkRateLimit(request, RateLimitPresets.write)
     if (rateLimitResponse) return rateLimitResponse

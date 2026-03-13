@@ -13,6 +13,7 @@ import {
 } from '@/lib/api'
 import { togglePostVote, getPostById } from '@/lib/data/posts'
 import { checkRateLimit, RateLimitPresets } from '@/lib/utils/rate-limit'
+import { socialFeatureGuard } from '@/lib/features'
 
 // Zod schema for POST /api/posts/[id]/vote
 const PostVoteSchema = z.object({
@@ -22,6 +23,9 @@ const PostVoteSchema = z.object({
 type RouteContext = { params: Promise<{ id: string }> }
 
 export async function POST(request: NextRequest, context: RouteContext) {
+  const guard = socialFeatureGuard()
+  if (guard) return guard
+
   try {
     const rateLimitResponse = await checkRateLimit(request, RateLimitPresets.write)
     if (rateLimitResponse) return rateLimitResponse
