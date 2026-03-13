@@ -27,17 +27,20 @@ interface BitunixTraderEntry {
   uid: string
   nickname: string
   header: string | null
-  roi: number            // Decimal (0.05 = 5%)
-  pl: number             // PnL in USDT
-  winRate: number         // Decimal (0.65 = 65%)
-  mdd: number            // Decimal (0.08 = 8%), may be negative
+  roi: string | number   // Decimal string (0.05 = 5%)
+  pl: string | number    // PnL in USDT (string)
+  winRate: string | number // Decimal string (0.65 = 65%)
+  mdd: string | number   // Decimal string (0.08 = 8%), may be negative
   currentFollow: number
+  aum?: string | number  // AUM in USDT
+  winCount?: number
 }
 
 interface BitunixResponse {
   code: number
   data?: {
-    list?: BitunixTraderEntry[]
+    records?: BitunixTraderEntry[]
+    list?: BitunixTraderEntry[] // Legacy field name
     total?: number
   }
 }
@@ -95,7 +98,7 @@ export class BitunixFuturesConnector extends BaseConnector {
           }
         )
 
-        const list = data?.data?.list || []
+        const list = data?.data?.records || data?.data?.list || []
         if (!list.length) break
 
         for (const entry of list) {
@@ -142,25 +145,31 @@ export class BitunixFuturesConnector extends BaseConnector {
 
   normalize(raw: unknown): Record<string, unknown> {
     const e = raw as BitunixTraderEntry
-    // All values in decimal → convert to percentage
-    const normalizeDecimal = (v: number | null | undefined): number | null => {
+    // Parse string numbers and convert decimals → percentages
+    const toNum = (v: string | number | null | undefined): number | null => {
       if (v == null) return null
-      return Math.abs(v) <= 1 ? v * 100 : v
+      const n = typeof v === 'string' ? parseFloat(v) : v
+      return isNaN(n) ? null : n
+    }
+    const toPct = (v: string | number | null | undefined): number | null => {
+      const n = toNum(v)
+      if (n == null) return null
+      return Math.abs(n) <= 1 ? n * 100 : n
     }
 
     return {
       trader_key: e.uid,
       display_name: e.nickname || null,
       avatar_url: e.header || null,
-      roi: normalizeDecimal(e.roi),
-      pnl: e.pl ?? null,
-      win_rate: normalizeDecimal(e.winRate),
-      max_drawdown: e.mdd != null ? Math.abs(normalizeDecimal(e.mdd) ?? 0) : null,
+      roi: toPct(e.roi),
+      pnl: toNum(e.pl),
+      win_rate: toPct(e.winRate),
+      max_drawdown: e.mdd != null ? Math.abs(toPct(e.mdd) ?? 0) : null,
       followers: e.currentFollow ?? null,
       platform_rank: null,
       trades_count: null,
       sharpe_ratio: null,
-      aum: null,
+      aum: toNum(e.aum),
       copiers: null,
     }
   }
