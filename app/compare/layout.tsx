@@ -2,28 +2,46 @@ import type { Metadata } from 'next'
 
 const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://www.arenafi.org'
 
-export const metadata: Metadata = {
-  title: 'Compare Traders - Arena',
-  description:
-    '并排对比加密货币交易员的 ROI、胜率、最大回撤、Arena Score 和权益曲线。',
-  alternates: {
-    canonical: `${baseUrl}/compare`,
-  },
-  openGraph: {
-    title: 'Compare Traders | Arena',
-    description: 'Compare traders side-by-side across exchanges.',
-    url: `${baseUrl}/compare`,
-    siteName: 'Arena',
-    type: 'website',
-    images: [{ url: `${baseUrl}/og-image.png`, width: 1200, height: 630, alt: 'Arena 交易员对比' }],
-  },
-  twitter: {
-    card: 'summary_large_image',
-    title: 'Compare Traders | Arena',
-    description: 'Compare traders side-by-side across exchanges.',
-    images: [`${baseUrl}/og-image.png`],
-    creator: '@arenafi',
-  },
+export async function generateMetadata({
+  searchParams,
+}: {
+  searchParams: Promise<{ ids?: string }>
+}): Promise<Metadata> {
+  const { ids } = await searchParams
+  const idList = ids ? ids.split(',').slice(0, 3) : []
+
+  // Build OG image URL (compare OG route handles data fetching)
+  const ogUrl = idList.length > 0
+    ? `${baseUrl}/api/og/compare?ids=${idList.join(',')}`
+    : `${baseUrl}/og-image.png`
+
+  const title = 'Compare Traders | Arena'
+  const description = idList.length > 0
+    ? `Comparing ${idList.length} traders side-by-side on Arena`
+    : 'Compare traders side-by-side across exchanges.'
+
+  return {
+    title,
+    description,
+    alternates: {
+      canonical: `${baseUrl}/compare`,
+    },
+    openGraph: {
+      title,
+      description,
+      url: `${baseUrl}/compare${ids ? '?ids=' + ids : ''}`,
+      siteName: 'Arena',
+      type: 'website',
+      images: [{ url: ogUrl, width: 1200, height: 630, alt: 'Arena Trader Comparison' }],
+    },
+    twitter: {
+      card: 'summary_large_image',
+      title,
+      description,
+      images: [ogUrl],
+      creator: '@arenafi',
+    },
+  }
 }
 
 export default function CompareLayout({ children }: { children: React.ReactNode }) {
