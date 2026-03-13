@@ -17,6 +17,7 @@
  */
 
 import { BaseConnector } from '../base'
+import { safeNumber, safePercent, safeNonNeg, safeStr, safeMdd } from '../utils'
 import type {
   LeaderboardPlatform,
   MarketType,
@@ -168,27 +169,31 @@ export class ToobitFuturesConnector extends BaseConnector {
     return { series: [], fetched_at: new Date().toISOString() }
   }
 
+  /**
+   * Normalize raw Toobit leaderboard entry.
+   * profitRatio is ALWAYS a ratio (2.7061 = 270.61%), always ×100.
+   * winRate from identity-type-leaders is ratio (0-1).
+   * maxDrawdown is ratio (0-1).
+   */
   normalize(raw: unknown): Record<string, unknown> {
     const e = raw as ToobitTraderEntry
-    const rawRoi = e.profitRatio ?? e.leaderAvgProfitRatio ?? null
-    const roi = rawRoi != null ? rawRoi * 100 : null
-
-    const rawWr = e.leaderProfitOrderRatio ?? e.winRate ?? null
-    const winRate = rawWr != null ? (rawWr <= 1 ? rawWr * 100 : rawWr) : null
-
-    const rawMdd = e.maxDrawdown ?? null
-    const maxDrawdown = rawMdd != null ? Math.abs(rawMdd <= 1 ? rawMdd * 100 : rawMdd) : null
+    // profitRatio is always a ratio: 2.7061 = 270.61%
+    const roi = safePercent(e.profitRatio ?? e.leaderAvgProfitRatio, { isRatio: true })
+    // winRate: ratio 0-1 from identity-type-leaders
+    const winRate = safePercent(e.leaderProfitOrderRatio ?? e.winRate, { isRatio: true })
+    // maxDrawdown: ratio 0-1
+    const maxDrawdown = safeMdd(e.maxDrawdown, true)
 
     return {
       trader_key: this.extractId(e),
-      display_name: e.name || e.nickname || e.nickName || e.displayName || null,
-      avatar_url: e.avatar || null,
+      display_name: safeStr(e.name ?? e.nickname ?? e.nickName ?? e.displayName),
+      avatar_url: safeStr(e.avatar),
       roi,
-      pnl: e.profit ?? e.pnl ?? null,
+      pnl: safeNumber(e.profit ?? e.pnl),
       win_rate: winRate,
       max_drawdown: maxDrawdown,
-      followers: e.followerTotal ?? e.currentFollowerCount ?? e.followers ?? e.followerCount ?? null,
-      sharpe_ratio: e.sharpeRatio ?? null,
+      followers: safeNonNeg(e.followerTotal ?? e.currentFollowerCount ?? e.followers ?? e.followerCount),
+      sharpe_ratio: safeNumber(e.sharpeRatio),
       trades_count: null,
       aum: null,
       copiers: null,

@@ -13,6 +13,7 @@
  */
 
 import { BaseConnector } from '../base'
+import { safeNumber } from '../utils'
 import { warnValidate } from '../schemas'
 import {
   GmxLeaderboardResponseSchema,
@@ -209,15 +210,15 @@ export class GmxPerpConnector extends BaseConnector {
     const maxCapital = this.fromGmxDecimals(raw.maxCapital)
     // ROI = realizedPnl / maxCapital × 100
     let roi: number | null = null
-    if (pnl !== 0 && maxCapital > 100) {
+    if (pnl != null && maxCapital != null && maxCapital > 100) {
       roi = Math.max(-100, Math.min(10000, (pnl / maxCapital) * 100))
     }
     // Win rate from wins/losses
-    const wins = Number(raw.wins) || 0
-    const losses = Number(raw.losses) || 0
+    const wins = safeNumber(raw.wins) ?? 0
+    const losses = safeNumber(raw.losses) ?? 0
     const totalTrades = wins + losses
     const winRate = totalTrades > 0 ? (wins / totalTrades) * 100 : null
-    const tradesCount = Number(raw.closedCount) || (totalTrades > 0 ? totalTrades : null)
+    const tradesCount = safeNumber(raw.closedCount) ?? (totalTrades > 0 ? totalTrades : null)
 
     return {
       trader_key: String(raw.account || raw.id || '').toLowerCase(),
@@ -236,11 +237,15 @@ export class GmxPerpConnector extends BaseConnector {
     }
   }
 
-  private fromGmxDecimals(val: unknown): number {
-    if (val === null || val === undefined) return 0
+  /**
+   * Convert GMX BigInt/decimal values to USD numbers.
+   * Returns null (not 0) for missing/invalid data to avoid false-zero ROI.
+   */
+  private fromGmxDecimals(val: unknown): number | null {
+    if (val === null || val === undefined) return null
     const str = String(val)
     const num = Number(str)
-    if (isNaN(num)) return 0
+    if (!Number.isFinite(num)) return null
     // GMX v2 uses 30 decimals. If value > 1e20, it's in raw form
     if (Math.abs(num) > 1e20) {
       return num / Math.pow(10, GMX_DECIMALS)
