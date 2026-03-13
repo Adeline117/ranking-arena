@@ -40,8 +40,9 @@ export const preferredRegion = 'hnd1' // Tokyo — avoids Binance/OKX/Bybit geo-
 const GROUPS: Record<string, string[]> = {
   // Group A1: Binance (every 3h) — 2 platforms, parallel ~120s
   a: ['binance_futures', 'binance_spot'],
-  // Group A2: Other high-priority CEX (every 3h) — 2 platforms (bybit removed: api2.bybit.com 404 globally)
-  a2: ['bitget_futures', 'okx_futures'], // bybit removed from array 2026-03-13
+  // Group A2: Other high-priority CEX (every 3h)
+  // bybit restored 2026-03-13: VPS Playwright scraper confirmed working (retCode:0)
+  a2: ['bitget_futures', 'okx_futures', 'bybit'],
   // Group B: Top DEX (every 4h) — 3 platforms, ~110s parallel
   b: ['hyperliquid', 'gmx', 'jupiter_perps'],
   // Group C: Mid-priority (every 4h) — 3 platforms, ~70s parallel
@@ -109,6 +110,7 @@ const SOURCE_TO_CONNECTOR: Record<string, { platform: string; marketType: string
   bitfinex: { platform: 'bitfinex', marketType: 'futures' },
   toobit: { platform: 'toobit', marketType: 'futures' },
   etoro: { platform: 'etoro', marketType: 'spot' },
+  bybit: { platform: 'bybit', marketType: 'futures' },
   hyperliquid: { platform: 'hyperliquid', marketType: 'perp' },
   gmx: { platform: 'gmx', marketType: 'perp' },
   dydx: { platform: 'dydx', marketType: 'perp' },
