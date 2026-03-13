@@ -172,32 +172,40 @@ async function saveTraders(source: string, traders: TraderData[], period: string
   const capturedAt = new Date().toISOString()
   let saved = 0
   
-  for (let i = 0; i < traders.length; i++) {
-    const t = traders[i]
-    try {
-      await supabase.from('trader_sources').upsert({
-        source,
-        source_type: 'leaderboard',
-        source_trader_id: t.traderId,
-        handle: t.nickname,
-        profile_url: t.avatar,
-        is_active: true,
-      }, { onConflict: 'source,source_trader_id' })
-      
-      await supabase.from('trader_snapshots').insert({
-        source,
-        source_trader_id: t.traderId,
-        season_id: period,
-        rank: i + 1,
-        roi: t.roi,
-        pnl: t.pnl,
-        win_rate: t.winRate,
-        max_drawdown: t.maxDrawdown,
-        followers: t.followers,
-        captured_at: capturedAt,
-      })
-      saved++
-    } catch { /* intentionally empty */ }
+  // Batch upsert trader_sources (100 per batch)
+  const sourceRows = traders.map(t => ({
+    source,
+    source_type: 'leaderboard',
+    source_trader_id: t.traderId,
+    handle: t.nickname,
+    profile_url: t.avatar,
+    is_active: true,
+  }))
+  for (let i = 0; i < sourceRows.length; i += 100) {
+    await supabase.from('trader_sources').upsert(
+      sourceRows.slice(i, i + 100),
+      { onConflict: 'source,source_trader_id' }
+    )
+  }
+
+  // Batch insert snapshots (100 per batch)
+  const snapshotRows = traders.map((t, i) => ({
+    source,
+    source_trader_id: t.traderId,
+    season_id: period,
+    rank: i + 1,
+    roi: t.roi,
+    pnl: t.pnl,
+    win_rate: t.winRate,
+    max_drawdown: t.maxDrawdown,
+    followers: t.followers,
+    captured_at: capturedAt,
+  }))
+  for (let i = 0; i < snapshotRows.length; i += 100) {
+    const { error } = await supabase.from('trader_snapshots').insert(
+      snapshotRows.slice(i, i + 100)
+    )
+    if (!error) saved += Math.min(100, snapshotRows.length - i)
   }
   
   return saved
