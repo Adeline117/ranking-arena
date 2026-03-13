@@ -64,6 +64,7 @@ export default memo(function Pagination({ currentPage, totalPages, onPageChange 
         disabled={currentPage === 1}
         style={{
           padding: `6px ${tokens.spacing[3]}`,
+          minHeight: 44,
           background: currentPage === 1 ? 'transparent' : `${tokens.colors.accent.primary}10`,
           border: `1px solid ${currentPage === 1 ? tokens.colors.border.primary : `${tokens.colors.accent.primary}30`}`,
           borderRadius: tokens.radius.md,
@@ -99,8 +100,8 @@ export default memo(function Pagination({ currentPage, totalPages, onPageChange 
               className={`pagination-btn pagination-page ${isActive ? 'pagination-active' : ''}`}
               onClick={() => onPageChange(pageNum)}
               style={{
-                minWidth: 32,
-                height: 32,
+                minWidth: 36,
+                height: 36,
                 padding: `0 ${tokens.spacing[1]}`,
                 background: isActive ? `${tokens.colors.accent.primary}20` : 'transparent',
                 border: `1px solid ${isActive ? `${tokens.colors.accent.primary}60` : 'transparent'}`,
@@ -125,6 +126,7 @@ export default memo(function Pagination({ currentPage, totalPages, onPageChange 
         disabled={currentPage === totalPages}
         style={{
           padding: `6px ${tokens.spacing[3]}`,
+          minHeight: 44,
           background: currentPage === totalPages ? 'transparent' : `${tokens.colors.accent.primary}10`,
           border: `1px solid ${currentPage === totalPages ? tokens.colors.border.primary : `${tokens.colors.accent.primary}30`}`,
           borderRadius: tokens.radius.md,
