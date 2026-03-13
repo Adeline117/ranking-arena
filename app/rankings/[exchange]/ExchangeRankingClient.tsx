@@ -9,6 +9,7 @@ import { Sparkline } from '@/app/components/ui/Sparkline'
 import { EXCHANGE_NAMES } from '@/lib/constants/exchanges'
 import { useRealtimeRankings } from '@/lib/hooks/useRealtimeRankings'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
+import { NULL_DISPLAY } from '@/lib/utils/format'
 
 interface TraderData {
   trader_key: string
@@ -104,6 +105,7 @@ function RankBadge({ rank }: { rank: number }) {
 
 // Mobile card component
 function TraderCardItem({ trader, rank }: { trader: TraderData; rank: number }) {
+  const { t } = useLanguage()
   const name = getDisplayName(trader)
   const roiColor = trader.roi >= 0 ? tokens.colors.accent.success : tokens.colors.accent.error
 
@@ -167,9 +169,9 @@ function TraderCardItem({ trader, rank }: { trader: TraderData; rank: number }) 
 
         {/* Bottom stats */}
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: tokens.spacing[2] }}>
-          <StatBlock label="Win%" value={trader.win_rate != null ? `${trader.win_rate.toFixed(1)}%` : 'N/A'} color={trader.win_rate != null ? (trader.win_rate >= 50 ? tokens.colors.accent.success : tokens.colors.accent.error) : undefined} />
-          <StatBlock label="MDD" value={trader.max_drawdown != null ? `-${Math.abs(trader.max_drawdown).toFixed(1)}%` : 'N/A'} color={trader.max_drawdown != null ? tokens.colors.accent.error + 'cc' : undefined} />
-          <StatBlock label="Arena Score" value={trader.arena_score != null ? trader.arena_score.toFixed(0) : '--'} color={trader.arena_score ? tokens.colors.accent.brand : undefined} />
+          <StatBlock label={t('rankingWinRate')} value={trader.win_rate != null ? `${trader.win_rate.toFixed(2)}%` : NULL_DISPLAY} color={trader.win_rate != null ? (trader.win_rate >= 50 ? tokens.colors.accent.success : tokens.colors.accent.error) : undefined} />
+          <StatBlock label={t('rankingMdd')} value={trader.max_drawdown != null ? `-${Math.abs(trader.max_drawdown).toFixed(2)}%` : NULL_DISPLAY} color={trader.max_drawdown != null ? tokens.colors.accent.error + 'cc' : undefined} />
+          <StatBlock label={t('rankingArenaScore')} value={trader.arena_score != null ? trader.arena_score.toFixed(0) : NULL_DISPLAY} color={trader.arena_score ? tokens.colors.accent.brand : undefined} />
         </div>
       </div>
     </Link>
@@ -260,7 +262,7 @@ export default function ExchangeRankingClient({
   traders: TraderData[]
   exchange?: string
 }) {
-  const { language } = useLanguage()
+  const { language, t } = useLanguage()
   const zh = language === 'zh'
   const [viewMode, setViewMode] = useState<ViewMode>('table')
   const [sortKey, setSortKey] = useState<SortKey>('rank')
@@ -339,10 +341,10 @@ export default function ExchangeRankingClient({
           </svg>
         </div>
         <div style={{ fontSize: tokens.typography.fontSize.base, fontWeight: 600, color: tokens.colors.text.secondary, marginBottom: tokens.spacing[2] }}>
-          {zh ? '暂无排行数据' : 'No ranking data'}
+          {t('rankingNoData')}
         </div>
         <div style={{ fontSize: tokens.typography.fontSize.sm }}>
-          {zh ? '该平台的排行数据正在收集中，请稍后再来查看' : 'Ranking data is being collected. Please check back later.'}
+          {t('rankingNoDataDesc')}
         </div>
       </div>
     )
@@ -365,7 +367,7 @@ export default function ExchangeRankingClient({
             cursor: 'pointer',
           }}
         >
-          {zh ? '表格' : 'Table'}
+          {t('rankingTableView')}
         </button>
         <button
           onClick={() => setViewMode('card')}
@@ -380,7 +382,7 @@ export default function ExchangeRankingClient({
             cursor: 'pointer',
           }}
         >
-          {zh ? '卡片' : 'Cards'}
+          {t('rankingCardView')}
         </button>
       </div>
 
@@ -415,13 +417,13 @@ export default function ExchangeRankingClient({
               borderBottom: '1px solid var(--glass-border-light)',
             }}
           >
-            <SortHeader label="#" sortKey="rank" currentKey={sortKey} currentDir={sortDir} onSort={handleSort} align="left" />
-            <div>Trader</div>
-            <SortHeader label="ROI" sortKey="roi" currentKey={sortKey} currentDir={sortDir} onSort={handleSort} />
-            <div style={{ textAlign: 'center' }}>Trend</div>
-            <SortHeader label="Win%" sortKey="win_rate" currentKey={sortKey} currentDir={sortDir} onSort={handleSort} />
-            <SortHeader label="MDD" sortKey="max_drawdown" currentKey={sortKey} currentDir={sortDir} onSort={handleSort} />
-            <SortHeader label="Score" sortKey="arena_score" currentKey={sortKey} currentDir={sortDir} onSort={handleSort} />
+            <SortHeader label={t('rankingRank')} sortKey="rank" currentKey={sortKey} currentDir={sortDir} onSort={handleSort} align="left" />
+            <div>{t('rankingTrader')}</div>
+            <SortHeader label={t('rankingRoi')} sortKey="roi" currentKey={sortKey} currentDir={sortDir} onSort={handleSort} />
+            <div style={{ textAlign: 'center' }}>{t('rankingTrend')}</div>
+            <SortHeader label={t('rankingWinRate')} sortKey="win_rate" currentKey={sortKey} currentDir={sortDir} onSort={handleSort} />
+            <SortHeader label={t('rankingMdd')} sortKey="max_drawdown" currentKey={sortKey} currentDir={sortDir} onSort={handleSort} />
+            <SortHeader label={t('rankingScore')} sortKey="arena_score" currentKey={sortKey} currentDir={sortDir} onSort={handleSort} />
           </div>
           {/* Rows */}
           {pagedTraders.map((t, i) => {
@@ -481,10 +483,10 @@ export default function ExchangeRankingClient({
                   <Sparkline roi={t.roi} width={72} height={20} />
                 </div>
                 <div style={{ textAlign: 'right', fontSize: 13, fontWeight: 600, color: wrColor }}>
-                  {t.win_rate != null ? `${t.win_rate.toFixed(1)}%` : 'N/A'}
+                  {t.win_rate != null ? `${t.win_rate.toFixed(2)}%` : NULL_DISPLAY}
                 </div>
                 <div style={{ textAlign: 'right', fontSize: 13, fontWeight: 600, color: t.max_drawdown != null ? tokens.colors.accent.error + 'cc' : tokens.colors.text.tertiary }}>
-                  {t.max_drawdown != null ? `-${Math.abs(t.max_drawdown).toFixed(1)}%` : 'N/A'}
+                  {t.max_drawdown != null ? `-${Math.abs(t.max_drawdown).toFixed(2)}%` : NULL_DISPLAY}
                 </div>
                 <div style={{ textAlign: 'right' }}>
                   {t.arena_score != null ? (
@@ -492,7 +494,7 @@ export default function ExchangeRankingClient({
                       {t.arena_score.toFixed(0)}
                     </span>
                   ) : (
-                    <span style={{ fontSize: 13, color: tokens.colors.text.tertiary }}>--</span>
+                    <span style={{ fontSize: 13, color: tokens.colors.text.tertiary }}>{NULL_DISPLAY}</span>
                   )}
                 </div>
               </Link>
@@ -519,7 +521,7 @@ export default function ExchangeRankingClient({
               opacity: page <= 1 ? 0.5 : 1,
             }}
           >
-            {zh ? '← 上一页' : '← Prev'}
+            {t('rankingPrev')}
           </button>
           <span style={{ fontSize: 13, color: tokens.colors.text.secondary }}>
             {page} / {totalPages}
@@ -539,7 +541,7 @@ export default function ExchangeRankingClient({
               opacity: page >= totalPages ? 0.5 : 1,
             }}
           >
-            {zh ? '下一页 →' : 'Next →'}
+            {t('rankingNext')}
           </button>
         </div>
       )}

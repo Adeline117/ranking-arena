@@ -484,14 +484,18 @@ export default function TraderHeader({
 
             <button
               onClick={copyHandle}
-              title={handleCopied ? 'Copied!' : `Copy: ${handle}`}
+              title={handleCopied ? t('copiedToClipboard') : `${t('copyHandle')}: ${handle}`}
+              aria-label={handleCopied ? t('copiedToClipboard') : `${t('copyHandle')}: ${handle}`}
               style={{
                 background: 'none',
                 border: 'none',
                 cursor: 'pointer',
-                padding: 4,
+                padding: 8,
+                minWidth: 44,
+                minHeight: 44,
                 display: 'inline-flex',
                 alignItems: 'center',
+                justifyContent: 'center',
                 color: handleCopied ? tokens.colors.accent.success : tokens.colors.text.tertiary,
                 transition: 'color 0.2s ease',
                 flexShrink: 0,
