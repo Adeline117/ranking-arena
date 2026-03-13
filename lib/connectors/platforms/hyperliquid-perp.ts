@@ -158,10 +158,31 @@ export class HyperliquidPerpConnector extends BaseConnector {
       roi = (totalRawPnl / (accountValue - totalRawPnl)) * 100
     }
 
+    // Compute win_rate from fills (closedPnl per trade)
+    let winRate: number | null = null
+    try {
+      const _rawFills = await this.request<Record<string, unknown>>(
+        'https://api.hyperliquid.xyz/info',
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ type: 'userFills', user: traderKey }),
+        }
+      )
+      const fills = Array.isArray(_rawFills) ? _rawFills : []
+      if (fills.length > 0) {
+        const wins = fills.filter((f: Record<string, unknown>) => Number(f.closedPnl) > 0).length
+        const closedTrades = fills.filter((f: Record<string, unknown>) => Number(f.closedPnl) !== 0).length
+        if (closedTrades > 0) winRate = (wins / closedTrades) * 100
+      }
+    } catch {
+      // Fills fetch is non-critical for snapshot
+    }
+
     const metrics: SnapshotMetrics = {
       roi,
       pnl: totalRawPnl || null,
-      win_rate: null,      // Requires computing from individual fills
+      win_rate: winRate,
       max_drawdown: null,  // Requires equity curve history
       sharpe_ratio: null, sortino_ratio: null,
       trades_count: null,
@@ -173,7 +194,7 @@ export class HyperliquidPerpConnector extends BaseConnector {
     }
 
     const quality_flags: QualityFlags = {
-      missing_fields: ['win_rate', 'max_drawdown', 'followers', 'copiers', 'sharpe_ratio', 'sortino_ratio'],
+      missing_fields: ['max_drawdown', 'followers', 'copiers', 'sharpe_ratio', 'sortino_ratio'],
       non_standard_fields: {
         roi: 'Sourced from leaderboard endpoint (per-window). Falls back to clearinghouse approximation if trader not on leaderboard.',
       },
