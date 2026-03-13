@@ -33,23 +33,22 @@ async function fetchTrader(handle: string) {
   // Try trader_sources first
   const { data: source } = await supabase
     .from('trader_sources')
-    .select('trader_key, handle, display_name, avatar_url, platform')
-    .eq('handle', handle)
+    .select('handle, display_name, avatar_url, source, source_trader_id')
+    .ilike('handle', handle)
     .limit(1)
     .maybeSingle()
 
   if (!source) return null
 
-  // Get latest snapshot
-  const { data: snapshot } = await supabase
-    .from('trader_snapshots_v2')
+  // Get leaderboard_ranks (pre-computed, always fresh)
+  const { data: rankData } = await supabase
+    .from('leaderboard_ranks')
     .select('roi, pnl, win_rate, max_drawdown, arena_score, rank')
-    .eq('trader_key', source.trader_key)
-    .eq('platform', source.platform)
-    .eq('season_id', '90D')
+    .eq('source', source.source)
+    .eq('source_trader_id', source.source_trader_id)
     .maybeSingle()
 
-  return { ...source, ...(snapshot || {}) }
+  return { ...source, platform: source.source, ...(rankData || {}) }
 }
 
 export async function GET(request: NextRequest) {
@@ -154,8 +153,8 @@ export async function GET(request: NextRequest) {
             {/* Stats row */}
             <div style={{ display: 'flex', gap: 48 }}>
               <StatItem label="Arena Score" value={score != null ? score.toFixed(0) : '--'} color={colors.brand} />
-              <StatItem label="胜率" value={winRate != null ? `${winRate.toFixed(0)}%` : 'N/A'} color={colors.text} />
-              <StatItem label="最大回撤" value={mdd != null ? `-${Math.abs(mdd).toFixed(0)}%` : 'N/A'} color={colors.error} />
+              <StatItem label="Win Rate" value={winRate != null ? `${winRate.toFixed(0)}%` : 'N/A'} color={colors.text} />
+              <StatItem label="Max Drawdown" value={mdd != null ? `-${Math.abs(mdd).toFixed(0)}%` : 'N/A'} color={colors.error} />
             </div>
           </div>
 
