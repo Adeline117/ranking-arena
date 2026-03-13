@@ -3841,6 +3841,9 @@ scoreRadarExec: '执行',
 scoreRoiScore: 'ROI 分',
 scorePnlScore: 'PnL 分',
 scoreTotal: '总分',
+scoreBasisRoiPnl: '基于 ROI 和 PnL 数据的评分',
+confidenceMinimalReason: '基于有限数据的评分：胜率和回撤数据不可用',
+confidencePartialReason: '评分已调整：该交易所部分指标不可用',
 
 // Export ranking
 exportRanking: '导出排名',

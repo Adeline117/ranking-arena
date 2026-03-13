@@ -2901,6 +2901,15 @@ dexLeaderboard: 'DEX 리더보드',
 sectorPerformance: '섹터 성과',
 exchangeVolume: '거래소 거래량',
 
+// Flash News Page
+flashNewsCenter: '속보',
+flashNewsDesc: '암호화폐, 매크로 및 금융 시장 실시간 업데이트',
+flashNewsLastUpdated: '마지막 업데이트: ',
+flashNewsNoNews: '아직 뉴스가 없습니다',
+flashNewsNoNewsDesc: '뉴스가 들어오면 여기에 표시됩니다',
+flashNewsFetchFailed: '뉴스를 불러오지 못했습니다',
+flashNewsTotal: '-- 총 {count}개 뉴스 --',
+
 // Voice & Video Calls
 voiceCall: '음성 통화',
 videoCall: '영상 통화',
@@ -3825,6 +3834,9 @@ scoreRadarExec: '실행',
 scoreRoiScore: 'ROI 점수',
 scorePnlScore: 'PnL 점수',
 scoreTotal: '합계',
+scoreBasisRoiPnl: 'ROI 및 PnL 데이터 기반 점수',
+confidenceMinimalReason: '제한된 데이터 기반 점수: 승률 및 낙폭 데이터 없음',
+confidencePartialReason: '점수 조정됨: 이 거래소에서 일부 지표를 제공하지 않음',
 
 // Export ranking
 exportRanking: '순위 내보내기',
@@ -4277,6 +4289,23 @@ joinPaidGroup: '가입 ({price}/월)',
 shareRankCard: '순위 카드 공유',
 weeklyTop10: '주간 Top 10',
 embedWidget: '위젯 임베드',
+
+// Auto-generated profile tags
+tagTopPercent: '상위 {pct}%',
+tagScalper: '스캘퍼',
+tagSwing: '스윙',
+tagTrend: '추세',
+tagPosition: '포지션',
+tagLowRisk: '저위험',
+tagModerateRisk: '중위험',
+tagHighRisk: '고위험',
+tagWhale: '고래',
+tagActive: '활발',
+tagBot: '봇',
+tagElite: '엘리트',
+tagHighWinrate: '높은 승률',
+tagHighRoi: '높은 ROI',
+tagDefi: 'DeFi',
 
 } as const
 
