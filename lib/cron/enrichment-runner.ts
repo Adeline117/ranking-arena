@@ -307,7 +307,7 @@ export interface EnrichmentResult {
  * Called inline from batch-enrich or from the /api/cron/enrich route.
  */
 // Platforms that don't support enrichment (wallet-based, CF-protected, or no enrichment API)
-const NO_ENRICHMENT_PLATFORMS = new Set([
+export const NO_ENRICHMENT_PLATFORMS = new Set([
   // Wallet-based platforms (no equity curve API)
   'binance_web3', 'okx_web3', 'web3_bot',
   // CF-protected (enrichment not feasible)
