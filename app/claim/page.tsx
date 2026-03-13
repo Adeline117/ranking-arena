@@ -891,11 +891,4 @@ export default function ClaimPage() {
   )
 }
 
-// TypeScript global augmentation for window.ethereum
-declare global {
-  interface Window {
-    ethereum?: {
-      request: (args: { method: string; params?: unknown[] }) => Promise<unknown>
-    }
-  }
-}
+// window.ethereum type is already declared globally by @privy-io/react-auth
