@@ -20,6 +20,9 @@ export interface ScoreBreakdownSectionProps {
   periodStabilityScore: number | undefined
   arenaScoreV3: number | undefined
   isVisible: boolean
+  rank?: number
+  totalTraders?: number
+  platformName?: string
 }
 
 export function ScoreBreakdownSection({
@@ -31,6 +34,9 @@ export function ScoreBreakdownSection({
   periodStabilityScore,
   arenaScoreV3,
   isVisible,
+  rank,
+  totalTraders,
+  platformName,
 }: ScoreBreakdownSectionProps) {
   const { t } = useLanguage()
 
@@ -160,6 +166,27 @@ export function ScoreBreakdownSection({
           )}
         </Box>
       </Box>
+
+      {/* Rank position & percentile */}
+      {rank != null && rank > 0 && totalTraders != null && totalTraders > 0 && platformName && (
+        <Text
+          size="xs"
+          color="secondary"
+          style={{
+            fontSize: 12,
+            marginTop: tokens.spacing[1],
+            marginBottom: tokens.spacing[2],
+            textAlign: 'right',
+          }}
+        >
+          {t('traderRankOf')
+            .replace('{rank}', rank.toLocaleString())
+            .replace('{total}', totalTraders.toLocaleString())
+            .replace('{platform}', platformName)}
+          {' · '}
+          {t('traderRankTop').replace('{pct}', (rank / totalTraders * 100).toFixed(1))}
+        </Text>
+      )}
 
       {/* 分数条 + 雷达图 */}
       <Box
