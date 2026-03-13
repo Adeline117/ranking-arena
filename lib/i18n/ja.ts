@@ -2714,6 +2714,8 @@ const ja = {
     swapCount: 'スワップ回数',
     estimatedPnl: '推定PnL',
     walletAddress: 'ウォレットアドレス',
+    tokenDistribution: 'トークン分布',
+    tokenDistributionEmpty: 'トークン保有データなし',
     viewOnExplorer: 'エクスプローラーで表示',
     dexLeaderboard: 'DEXリーダーボード',
 
