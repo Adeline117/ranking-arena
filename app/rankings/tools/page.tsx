@@ -59,6 +59,7 @@ const config: DirectoryPageConfig = {
     { key: 'rating', labelKey: 'toolsSortRating' },
     { key: 'newest', labelKey: 'toolsSortNewest' },
     { key: 'reviews', labelKey: 'toolsSortReviews' },
+    { key: 'name', labelKey: 'toolsSortName' },
   ],
   pricingLabelKeys: {
     free: 'toolsPricingFree',
@@ -66,6 +67,13 @@ const config: DirectoryPageConfig = {
     paid: 'toolsPricingPaid',
     open_source: 'toolsPricingOpenSource',
   },
+  pricingFilterOptions: [
+    { key: 'all', labelKey: 'toolsPricingAll' },
+    { key: 'free', labelKey: 'toolsPricingFree' },
+    { key: 'freemium', labelKey: 'toolsPricingFreemium' },
+    { key: 'paid', labelKey: 'toolsPricingPaid' },
+    { key: 'open_source', labelKey: 'toolsPricingOpenSource' },
+  ],
   leaderboards: [
     {
       title: 'top10TradingTools',

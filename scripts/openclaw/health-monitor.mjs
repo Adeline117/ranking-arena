@@ -35,12 +35,14 @@ const fixAttempts = new Map() // platform -> last attempt timestamp
 
 // Dead/blocked platforms - skip in alerts & auto-fix
 // Synced with DEAD_BLOCKED_PLATFORMS in lib/constants/exchanges.ts (2026-03-13)
-// Removed: lbank, phemex, blofin (recovered via VPS/Mac Mini)
+// Recovered: lbank, phemex, blofin (VPS/Mac Mini)
+// Mac Mini: kucoin, weex (geo-blocked from VPS, scripts deployed)
+// Dead: perpetual_protocol, whitebit, bitmart, btse
 const DEAD_PLATFORMS = new Set([
-  'weex', 'perpetual_protocol', 'kucoin',
-  'mux', 'synthetix',
-  'paradex', 'kwenta', 'okx_spot',
-  'bitmart', 'whitebit', 'btse',
+  'perpetual_protocol', 'whitebit', 'bitmart', 'btse',
+  'kucoin', 'weex',
+  'kwenta', 'mux', 'synthetix', 'paradex',
+  'okx_spot', 'bitget_spot',
 ])
 
 if (!CRON_SECRET) {

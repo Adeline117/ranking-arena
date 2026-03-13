@@ -3797,6 +3797,17 @@ userCenterPerDay: 'd',
 userCenterLevelOverview: 'Level Overview',
 userCenterCurrent: 'Current',
 
+// EXP action labels
+expActionLogin: 'Daily Login',
+expActionPost: 'Create Post',
+expActionComment: 'Comment',
+expActionLiked: 'Receive Like',
+expActionBookmarked: 'Get Bookmarked',
+expActionFollowed: 'Gain Follower',
+expActionReadCheckin: 'Reading Check-in',
+expActionProDaily: 'Pro Daily Bonus',
+expActionPurchaseAnnual: 'Annual Purchase',
+
 // Duration formatting
 durationSeconds: '{n}s',
 durationMinutes: '{n}min',

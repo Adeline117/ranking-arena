@@ -5,16 +5,18 @@ import { useRouter, useSearchParams } from 'next/navigation'
 import TopNav from '@/app/components/layout/TopNav'
 // MobileBottomNav is rendered by root layout — do not duplicate here
 import LevelBadge from '@/app/components/user/LevelBadge'
-import { LEVELS, EXP_ACTIONS, getLevelInfo, type LevelInfo } from '@/lib/utils/user-level'
+import { EXP_ACTIONS, getLevelInfo, type LevelInfo } from '@/lib/utils/user-level'
 import { tokens } from '@/lib/design-tokens'
 import { supabase } from '@/lib/supabase/client'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import { Box, Text, Button } from '@/app/components/base'
+import Breadcrumb from '@/app/components/ui/Breadcrumb'
 import MembershipContent from './MembershipContent'
+import LevelTab from './components/LevelTab'
 
-type Tab = 'level' | 'membership' | 'badges' | 'bookmarks' | 'settings'
+type Tab = 'level' | 'membership'
 
-const VALID_TABS: Tab[] = ['level', 'membership', 'badges', 'bookmarks', 'settings']
+const VALID_TABS: Tab[] = ['level', 'membership']
 
 interface UserLevelData extends LevelInfo {
   dailyExpEarned: number
@@ -23,25 +25,47 @@ interface UserLevelData extends LevelInfo {
   proExpiresAt: string | null
 }
 
-interface UserStats {
-  posts: number
-  followers: number
-  following: number
-  bookmarks: number
-  likes: number
-  reads: number
-}
-
-
 export default function UserCenterPageWrapper() {
   return (
-    <Suspense fallback={
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2" style={{ borderColor: tokens.colors.accent.brand }} />
-      </div>
-    }>
+    <Suspense fallback={<UserCenterSkeleton />}>
       <UserCenterPage />
     </Suspense>
+  )
+}
+
+function UserCenterSkeleton() {
+  return (
+    <Box style={{ minHeight: '100vh', background: tokens.colors.bg.primary }}>
+      <TopNav email={null} />
+      <Box style={{ maxWidth: 800, margin: '0 auto', padding: tokens.spacing[6] }}>
+        <Box style={{
+          borderRadius: tokens.radius['2xl'],
+          background: tokens.glass.bg.secondary,
+          backdropFilter: tokens.glass.blur.md,
+          WebkitBackdropFilter: tokens.glass.blur.md,
+          border: tokens.glass.border.light,
+          padding: tokens.spacing[6],
+          marginBottom: tokens.spacing[5],
+        }}>
+          <Box style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[4] }}>
+            <Box style={{ width: 56, height: 56, borderRadius: tokens.radius.full, background: tokens.colors.bg.tertiary, animation: 'pulse 1.5s ease-in-out infinite' }} />
+            <Box style={{ flex: 1 }}>
+              <Box style={{ width: 120, height: 20, borderRadius: tokens.radius.md, background: tokens.colors.bg.tertiary, animation: 'pulse 1.5s ease-in-out infinite', marginBottom: tokens.spacing[3] }} />
+              <Box style={{ width: '100%', height: 8, borderRadius: tokens.radius.full, background: tokens.colors.bg.tertiary, animation: 'pulse 1.5s ease-in-out infinite' }} />
+            </Box>
+          </Box>
+        </Box>
+        <Box style={{ display: 'flex', gap: tokens.spacing[2], marginBottom: tokens.spacing[5] }}>
+          {[1, 2].map(i => (
+            <Box key={i} style={{ width: 100, height: 44, borderRadius: tokens.radius.lg, background: tokens.colors.bg.tertiary, animation: 'pulse 1.5s ease-in-out infinite' }} />
+          ))}
+        </Box>
+        {[1, 2, 3].map(i => (
+          <Box key={i} style={{ height: 80, borderRadius: tokens.radius.xl, background: tokens.colors.bg.tertiary, animation: 'pulse 1.5s ease-in-out infinite', marginBottom: tokens.spacing[4] }} />
+        ))}
+        <style>{`@keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }`}</style>
+      </Box>
+    </Box>
   )
 }
 
@@ -54,19 +78,24 @@ function UserCenterPage() {
   const initialTab: Tab = tabFromUrl && VALID_TABS.includes(tabFromUrl) ? tabFromUrl : 'level'
   const [activeTab, setActiveTab] = useState<Tab>(initialTab)
   const [levelData, setLevelData] = useState<UserLevelData | null>(null)
-  const [stats, setStats] = useState<UserStats>({ posts: 0, followers: 0, following: 0, bookmarks: 0, likes: 0, reads: 0 })
   const [loading, setLoading] = useState(true)
   const [userId, setUserId] = useState<string | null>(null)
   const [userHandle, setUserHandle] = useState<string | null>(null)
   const [email, setEmail] = useState<string | null>(null)
 
-  // Sync tab from URL param changes
   useEffect(() => {
     const tabParam = searchParams.get('tab') as Tab | null
     if (tabParam && VALID_TABS.includes(tabParam)) {
       setActiveTab(tabParam)
     }
   }, [searchParams])
+
+  const handleTabChange = (tab: Tab) => {
+    setActiveTab(tab)
+    const url = new URL(window.location.href)
+    url.searchParams.set('tab', tab)
+    router.replace(url.pathname + url.search, { scroll: false })
+  }
 
   useEffect(() => {
     async function init() {
@@ -79,59 +108,22 @@ function UserCenterPage() {
         setUserId(user.id)
         setEmail(user.email ?? null)
 
-        // Fetch profile + stats
-        const { data: profile } = await supabase
-          .from('user_profiles')
-          .select('handle, follower_count, following_count')
-          .eq('id', user.id)
-          .maybeSingle()
+        // Fetch profile + exp in parallel (reduced from 5 separate queries)
+        const [profileResult, expResult] = await Promise.all([
+          supabase
+            .from('user_profiles')
+            .select('handle')
+            .eq('id', user.id)
+            .maybeSingle(),
+          fetch('/api/user/exp'),
+        ])
 
-        if (profile) {
-          setUserHandle(profile.handle)
-          setStats(prev => ({
-            ...prev,
-            followers: profile.follower_count ?? 0,
-            following: profile.following_count ?? 0,
-          }))
+        if (profileResult.data) {
+          setUserHandle(profileResult.data.handle)
         }
 
-        // Fetch post count
-        try {
-          const { count: postCount } = await supabase
-            .from('posts')
-            .select('id', { count: 'exact', head: true })
-            .eq('author_id', user.id)
-          if (postCount !== null) {
-            setStats(prev => ({ ...prev, posts: postCount }))
-          }
-        } catch { /* ignore */ }
-
-        // Fetch bookmark count
-        try {
-          const { count: bookmarkCount } = await supabase
-            .from('bookmarks')
-            .select('id', { count: 'exact', head: true })
-            .eq('user_id', user.id)
-          if (bookmarkCount !== null) {
-            setStats(prev => ({ ...prev, bookmarks: bookmarkCount }))
-          }
-        } catch { /* ignore */ }
-
-        // Fetch likes received count
-        try {
-          const { count: likeCount } = await supabase
-            .from('post_likes')
-            .select('id', { count: 'exact', head: true })
-            .eq('user_id', user.id)
-          if (likeCount !== null) {
-            setStats(prev => ({ ...prev, likes: likeCount }))
-          }
-        } catch { /* ignore */ }
-
-        // Fetch exp data
-        const res = await fetch('/api/user/exp')
-        if (res.ok) {
-          const json = await res.json()
+        if (expResult.ok) {
+          const json = await expResult.json()
           setLevelData(json.data)
         }
       } catch {
@@ -146,403 +138,135 @@ function UserCenterPage() {
   const tabs: { key: Tab; label: string }[] = [
     { key: 'level', label: t('userCenterMyLevel') },
     { key: 'membership', label: t('userCenterMembership') },
-    { key: 'badges', label: t('userCenterBadges') },
-    { key: 'bookmarks', label: t('userCenterBookmarksTab') },
-    { key: 'settings', label: t('settings') },
   ]
 
-  // Auth required screen
   if (!loading && !userId) {
     return (
-      <>
+      <Box style={{ minHeight: '100vh', background: tokens.colors.bg.primary }}>
         <TopNav email={null} />
         <Box style={{
-          minHeight: '80vh',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          padding: tokens.spacing[8],
+          maxWidth: 400, margin: '0 auto', padding: tokens.spacing[8],
+          textAlign: 'center', display: 'flex', flexDirection: 'column',
+          alignItems: 'center', gap: tokens.spacing[4],
         }}>
           <Box style={{
-            maxWidth: 400,
-            textAlign: 'center',
-            display: 'flex',
-            flexDirection: 'column',
-            alignItems: 'center',
-            gap: tokens.spacing[4],
+            width: 64, height: 64, borderRadius: tokens.radius.full,
+            background: `${tokens.colors.accent.primary}15`,
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            marginBottom: tokens.spacing[2],
           }}>
-            <Box style={{
-              width: 64, height: 64, borderRadius: tokens.radius.full,
-              background: `${tokens.colors.accent.primary}15`,
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              marginBottom: tokens.spacing[2],
-            }}>
-              <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke={tokens.colors.accent.primary} strokeWidth="2">
-                <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
-                <circle cx="12" cy="7" r="4" />
-              </svg>
-            </Box>
-            <Text size="xl" weight="bold">{t('userCenterLoginRequired')}</Text>
-            <Text size="sm" color="secondary" style={{ lineHeight: 1.6 }}>
-              {t('userCenterLoginDescription')}
-            </Text>
-            <Button
-              variant="primary"
-              onClick={() => router.push('/login?redirect=/user-center')}
-              style={{ marginTop: tokens.spacing[2] }}
-            >
-              {t('userCenterSignIn')}
-            </Button>
+            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke={tokens.colors.accent.primary} strokeWidth="2">
+              <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
+              <circle cx="12" cy="7" r="4" />
+            </svg>
           </Box>
+          <Text size="xl" weight="bold">{t('userCenterLoginRequired')}</Text>
+          <Text size="sm" color="secondary" style={{ lineHeight: 1.6 }}>
+            {t('userCenterLoginDescription')}
+          </Text>
+          <Button variant="primary" onClick={() => router.push('/login?redirect=/user-center')} style={{ marginTop: tokens.spacing[2] }}>
+            {t('userCenterSignIn')}
+          </Button>
         </Box>
-      </>
+      </Box>
     )
   }
 
   if (loading) {
-    return (
-      <>
-        <TopNav email={email} />
-        <div className="min-h-screen flex items-center justify-center">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2" style={{ borderColor: tokens.colors.accent.brand }} />
-        </div>
-      </>
-    )
+    return <UserCenterSkeleton />
   }
 
   const info = levelData || getLevelInfo(0)
 
   return (
-    <>
-    <TopNav email={email} />
-    <div className="max-w-4xl mx-auto px-4 sm:px-4 py-8" style={{ paddingBottom: 100 }}>
-      {/* Header */}
-      <div
-        className="rounded-xl p-4 sm:p-6 mb-6"
-        style={{ background: tokens.colors.bg.secondary }}
-      >
-        <div className="flex flex-col sm:flex-row items-center gap-4">
-          <div
-            className="w-16 h-16 rounded-full flex items-center justify-center text-2xl flex-shrink-0"
-            style={{ background: tokens.colors.bg.tertiary, color: tokens.colors.text.tertiary }}
-          >
-            {(userHandle || 'U').charAt(0).toUpperCase()}
-          </div>
-          <div className="flex-1 text-center sm:text-left">
-            <div className="flex items-center justify-center sm:justify-start gap-2 mb-2">
-              <span className="text-xl font-bold" style={{ color: tokens.colors.text.primary }}>
-                {userHandle || t('userCenterDefaultUser')}
-              </span>
-              <LevelBadge exp={info.currentExp} isPro={levelData?.isPro} size="md" showName />
-            </div>
-            <div className="w-full max-w-md">
-              <div className="flex justify-between text-xs mb-1" style={{ color: tokens.colors.text.tertiary }}>
-                <span>EXP {info.currentExp.toLocaleString()}</span>
-                <span>{info.nextExp ? `${t('userCenterNextLevel')} ${info.nextExp.toLocaleString()}` : t('userCenterMaxLevel')}</span>
-              </div>
-              <div className="h-2 rounded-full overflow-hidden" style={{ background: tokens.colors.bg.tertiary }}>
-                <div
-                  className="h-full rounded-full transition-all"
-                  style={{ width: `${info.progress}%`, background: 'linear-gradient(90deg, var(--color-chart-violet), var(--color-brand), var(--color-accent-primary))' }}
-                />
-              </div>
-            </div>
-          </div>
-        </div>
+    <Box style={{ minHeight: '100vh', background: tokens.colors.bg.primary, color: tokens.colors.text.primary }}>
+      <TopNav email={email} />
 
-        {/* Stats */}
-        <div
-          className="grid grid-cols-3 sm:grid-cols-6 gap-3 sm:gap-4 mt-6 pt-4"
-          style={{ borderTop: `1px solid ${tokens.colors.border.primary}` }}
-        >
-          {[
-            { label: t('posts'), value: stats.posts },
-            { label: t('followers'), value: stats.followers },
-            { label: t('following'), value: stats.following },
-            { label: t('bookmarks'), value: stats.bookmarks },
-            { label: t('userCenterLikes'), value: stats.likes },
-            { label: t('userCenterReads'), value: stats.reads },
-          ].map((item) => (
-            <div key={item.label} className="text-center">
-              <div className="text-lg font-bold" style={{ color: tokens.colors.text.primary }}>{item.value}</div>
-              <div className="text-xs" style={{ color: tokens.colors.text.tertiary }}>{item.label}</div>
-            </div>
+      <Box style={{ maxWidth: 800, margin: '0 auto', paddingLeft: tokens.spacing[6], paddingRight: tokens.spacing[6] }}>
+        <Breadcrumb items={[{ label: t('userCenter') || 'User Center' }]} />
+      </Box>
+
+      <Box style={{ maxWidth: 800, margin: '0 auto', padding: tokens.spacing[6], paddingTop: 0, paddingBottom: 100 }}>
+        {/* Header Card */}
+        <Box style={{
+          borderRadius: tokens.radius['2xl'], padding: tokens.spacing[6], marginBottom: tokens.spacing[5],
+          background: tokens.glass.bg.secondary, backdropFilter: tokens.glass.blur.md,
+          WebkitBackdropFilter: tokens.glass.blur.md, border: tokens.glass.border.light, boxShadow: tokens.shadow.md,
+        }}>
+          <Box style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[4] }}>
+            <Box style={{
+              width: 56, height: 56, borderRadius: tokens.radius.full,
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              fontSize: tokens.typography.fontSize['2xl'], fontWeight: tokens.typography.fontWeight.black,
+              background: tokens.glass.bg.light, backdropFilter: tokens.glass.blur.xs,
+              WebkitBackdropFilter: tokens.glass.blur.xs, border: tokens.glass.border.light,
+              color: tokens.colors.text.tertiary, flexShrink: 0,
+            }}>
+              {(userHandle || 'U').charAt(0).toUpperCase()}
+            </Box>
+
+            <Box style={{ flex: 1, minWidth: 0 }}>
+              <Box style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[2], marginBottom: tokens.spacing[3], flexWrap: 'wrap' }}>
+                <Text size="lg" weight="black" style={{ letterSpacing: '-0.2px' }}>
+                  {userHandle || t('userCenterDefaultUser')}
+                </Text>
+                <LevelBadge exp={info.currentExp} isPro={levelData?.isPro} size="md" showName />
+              </Box>
+
+              <Box style={{ width: '100%' }}>
+                <Box style={{ display: 'flex', justifyContent: 'space-between', marginBottom: tokens.spacing[1] }}>
+                  <Text size="xs" color="tertiary">EXP {info.currentExp.toLocaleString()}</Text>
+                  <Text size="xs" color="tertiary">
+                    {info.nextExp ? `${t('userCenterNextLevel')} ${info.nextExp.toLocaleString()}` : t('userCenterMaxLevel')}
+                  </Text>
+                </Box>
+                <Box style={{ height: 6, borderRadius: tokens.radius.full, background: tokens.colors.bg.tertiary, overflow: 'hidden' }}>
+                  <Box style={{
+                    height: '100%', borderRadius: tokens.radius.full, width: `${info.progress}%`,
+                    background: 'linear-gradient(90deg, var(--color-chart-violet), var(--color-brand), var(--color-accent-primary))',
+                    transition: 'width 0.5s ease',
+                  }} />
+                </Box>
+              </Box>
+            </Box>
+          </Box>
+        </Box>
+
+        {/* Tab Navigation */}
+        <Box style={{ display: 'flex', gap: tokens.spacing[2], marginBottom: tokens.spacing[5] }}>
+          {tabs.map((tab) => (
+            <button
+              key={tab.key}
+              onClick={() => handleTabChange(tab.key)}
+              style={{
+                padding: `${tokens.spacing[3]} ${tokens.spacing[5]}`,
+                borderRadius: tokens.radius.xl,
+                border: activeTab === tab.key ? `1px solid ${tokens.colors.accent.primary}60` : tokens.glass.border.light,
+                background: activeTab === tab.key ? `${tokens.colors.accent.primary}15` : tokens.glass.bg.secondary,
+                backdropFilter: tokens.glass.blur.xs, WebkitBackdropFilter: tokens.glass.blur.xs,
+                color: activeTab === tab.key ? tokens.colors.accent.primary : tokens.colors.text.secondary,
+                fontSize: tokens.typography.fontSize.sm,
+                fontWeight: activeTab === tab.key ? tokens.typography.fontWeight.bold : tokens.typography.fontWeight.medium,
+                cursor: 'pointer', transition: `all ${tokens.transition.base}`, minHeight: 44,
+              }}
+            >
+              {tab.label}
+            </button>
           ))}
-        </div>
-      </div>
+        </Box>
 
-      {/* Tabs */}
-      <div
-        className="flex gap-1 mb-6 rounded-lg p-1 overflow-x-auto"
-        style={{ background: tokens.colors.bg.secondary, scrollbarWidth: 'none' }}
-      >
-        {tabs.map((tab) => (
-          <button
-            key={tab.key}
-            onClick={() => setActiveTab(tab.key)}
-            className="flex-shrink-0 py-2.5 px-3 rounded-md text-sm font-medium transition-colors"
-            style={{
-              minHeight: 44,
-              background: activeTab === tab.key ? tokens.colors.bg.tertiary : 'transparent',
-              color: activeTab === tab.key ? tokens.colors.text.primary : tokens.colors.text.tertiary,
-            }}
-          >
-            {tab.label}
-          </button>
-        ))}
-      </div>
-
-      {/* Content */}
-      <div className="rounded-xl p-4 sm:p-6" style={{ background: tokens.colors.bg.secondary }}>
-        {activeTab === 'level' && <LevelTab info={info} dailyEarned={levelData?.dailyExpEarned ?? 0} />}
-        {activeTab === 'membership' && <MembershipContent />}
-        {activeTab === 'badges' && <div className="text-center py-12" style={{ color: tokens.colors.text.tertiary }}>{t('userCenterBadgesComingSoon')}</div>}
-        {activeTab === 'bookmarks' && (
-          <div className="text-center py-12">
-            <p style={{ color: tokens.colors.text.tertiary, marginBottom: 16 }}>
-              {t('userCenterBookmarksDescription')}
-            </p>
-            <Button variant="primary" onClick={() => router.push('/favorites')}>
-              {t('userCenterOpenFavorites')}
-            </Button>
-          </div>
-        )}
-        {activeTab === 'settings' && (
-          <div className="text-center py-12">
-            <p style={{ color: tokens.colors.text.tertiary, marginBottom: 16 }}>
-              {t('userCenterSettingsDescription')}
-            </p>
-            <Button variant="primary" onClick={() => router.push('/settings')}>
-              {t('userCenterOpenSettings')}
-            </Button>
-          </div>
-        )}
-      </div>
-    </div>
-    </>
+        {/* Content */}
+        <Box style={{
+          borderRadius: tokens.radius['2xl'], padding: tokens.spacing[6],
+          background: tokens.glass.bg.secondary, backdropFilter: tokens.glass.blur.md,
+          WebkitBackdropFilter: tokens.glass.blur.md, border: tokens.glass.border.light, boxShadow: tokens.shadow.md,
+        }}>
+          {activeTab === 'level' && (
+            <LevelTab info={info} dailyEarned={levelData?.dailyExpEarned ?? 0} expActions={EXP_ACTIONS} />
+          )}
+          {activeTab === 'membership' && <MembershipContent />}
+        </Box>
+      </Box>
+    </Box>
   )
 }
-
-function LevelTab({ info, dailyEarned }: { info: LevelInfo & { currentExp: number }; dailyEarned: number }) {
-  const { t } = useLanguage()
-  return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[8] }}>
-      {/* Current Level Card */}
-      <div>
-        <h3 style={{
-          fontSize: tokens.typography.fontSize.lg,
-          fontWeight: tokens.typography.fontWeight.bold,
-          color: tokens.colors.text.primary,
-          marginBottom: tokens.spacing[4],
-        }}>
-          {t('userCenterCurrentLevel')}
-        </h3>
-        <div style={{
-          background: tokens.colors.bg.tertiary,
-          borderRadius: tokens.radius.xl,
-          padding: tokens.spacing[6],
-          border: `1px solid ${tokens.colors.border.primary}`,
-        }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[5] }}>
-            <div style={{
-              flexShrink: 0,
-              width: 64,
-              height: 64,
-              borderRadius: tokens.radius.xl,
-              background: `linear-gradient(135deg, ${info.colorHex}22, ${info.colorHex}44)`,
-              border: `2px solid ${info.colorHex}`,
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-            }}>
-              <LevelBadge exp={info.currentExp} size="lg" showName={false} />
-            </div>
-            <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ display: 'flex', alignItems: 'baseline', gap: tokens.spacing[2], marginBottom: tokens.spacing[1], flexWrap: 'wrap' }}>
-                <span style={{ fontSize: tokens.typography.fontSize.xl, fontWeight: tokens.typography.fontWeight.bold, color: info.colorHex }}>
-                  Lv{info.level} {info.name}
-                </span>
-                <span style={{ fontSize: tokens.typography.fontSize.sm, color: tokens.colors.text.tertiary }}>
-                  {info.nameEn}
-                </span>
-              </div>
-              <div style={{
-                display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-                fontSize: tokens.typography.fontSize.xs, color: tokens.colors.text.tertiary,
-                marginBottom: tokens.spacing[2],
-              }}>
-                <span>EXP {info.currentExp.toLocaleString()}{info.nextExp ? ` / ${info.nextExp.toLocaleString()}` : ''}</span>
-                <span style={{ color: tokens.colors.accent.success, fontWeight: tokens.typography.fontWeight.semibold }}>
-                  +{dailyEarned} {t('userCenterToday')}
-                </span>
-              </div>
-              {/* Gradient progress bar */}
-              <div style={{
-                height: 8,
-                borderRadius: tokens.radius.full,
-                background: tokens.colors.bg.hover,
-                overflow: 'hidden',
-              }}>
-                <div style={{
-                  height: '100%',
-                  borderRadius: tokens.radius.full,
-                  width: `${info.progress}%`,
-                  background: 'linear-gradient(90deg, var(--color-chart-violet), var(--color-brand), var(--color-accent-primary))',
-                  transition: 'width 0.5s ease',
-                }} />
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Ways to Earn EXP */}
-      <div>
-        <h3 style={{
-          fontSize: tokens.typography.fontSize.lg,
-          fontWeight: tokens.typography.fontWeight.bold,
-          color: tokens.colors.text.primary,
-          marginBottom: tokens.spacing[4],
-        }}>
-          {t('userCenterWaysToEarnExp')}
-        </h3>
-        <div style={{
-          display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))',
-          gap: tokens.spacing[3],
-        }}>
-          {EXP_ACTIONS.map((action) => (
-            <div key={action.key} style={{
-              display: 'flex',
-              justifyContent: 'space-between',
-              alignItems: 'center',
-              padding: `${tokens.spacing[3]} ${tokens.spacing[4]}`,
-              background: tokens.colors.bg.tertiary,
-              borderRadius: tokens.radius.lg,
-              border: `1px solid ${tokens.colors.border.primary}`,
-            }}>
-              <span style={{ fontSize: tokens.typography.fontSize.sm, color: tokens.colors.text.secondary }}>
-                {action.label}
-              </span>
-              <div style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[2], flexShrink: 0 }}>
-                <span style={{
-                  display: 'inline-block',
-                  padding: `2px ${tokens.spacing[2]}`,
-                  borderRadius: tokens.radius.full,
-                  fontSize: tokens.typography.fontSize.xs,
-                  fontWeight: tokens.typography.fontWeight.bold,
-                  background: 'var(--color-accent-success)',
-                  color: tokens.colors.white,
-                }}>
-                  +{action.exp}
-                </span>
-                {action.dailyLimit !== null && (
-                  <span style={{
-                    display: 'inline-block',
-                    padding: `2px ${tokens.spacing[2]}`,
-                    borderRadius: tokens.radius.full,
-                    fontSize: tokens.typography.fontSize.xs,
-                    background: tokens.colors.bg.hover,
-                    color: tokens.colors.text.tertiary,
-                  }}>
-                    {action.dailyLimit}/{t('userCenterPerDay')}
-                  </span>
-                )}
-              </div>
-            </div>
-          ))}
-        </div>
-      </div>
-
-      {/* Level Overview */}
-      <div>
-        <h3 style={{
-          fontSize: tokens.typography.fontSize.lg,
-          fontWeight: tokens.typography.fontWeight.bold,
-          color: tokens.colors.text.primary,
-          marginBottom: tokens.spacing[4],
-        }}>
-          {t('userCenterLevelOverview')}
-        </h3>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[2] }}>
-          {LEVELS.map((lvl) => {
-            const isCurrent = info.level === lvl.level
-            return (
-              <div
-                key={lvl.level}
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'space-between',
-                  padding: `${tokens.spacing[4]} ${tokens.spacing[5]}`,
-                  borderRadius: tokens.radius.lg,
-                  background: isCurrent
-                    ? `linear-gradient(135deg, ${lvl.colorHex}18, ${lvl.colorHex}08)`
-                    : tokens.colors.bg.tertiary,
-                  border: isCurrent
-                    ? `1.5px solid ${lvl.colorHex}`
-                    : `1px solid ${tokens.colors.border.primary}`,
-                  transition: `all ${tokens.transition.base}`,
-                }}
-              >
-                <div style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[3], minWidth: 0 }}>
-                  <span style={{
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    width: 36,
-                    height: 36,
-                    borderRadius: tokens.radius.md,
-                    background: `${lvl.colorHex}20`,
-                    color: lvl.colorHex,
-                    fontWeight: tokens.typography.fontWeight.bold,
-                    fontSize: tokens.typography.fontSize.sm,
-                    flexShrink: 0,
-                  }}>
-                    {lvl.level}
-                  </span>
-                  <div style={{ minWidth: 0 }}>
-                    <div style={{ display: 'flex', alignItems: 'baseline', gap: tokens.spacing[2], flexWrap: 'wrap' }}>
-                      <span style={{
-                        fontWeight: tokens.typography.fontWeight.semibold,
-                        color: isCurrent ? lvl.colorHex : tokens.colors.text.primary,
-                      }}>
-                        {lvl.name}
-                      </span>
-                      <span style={{ fontSize: tokens.typography.fontSize.xs, color: tokens.colors.text.tertiary }}>
-                        {lvl.nameEn}
-                      </span>
-                    </div>
-                  </div>
-                </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[2], flexShrink: 0 }}>
-                  {isCurrent && (
-                    <span style={{
-                      padding: `2px ${tokens.spacing[2]}`,
-                      borderRadius: tokens.radius.full,
-                      fontSize: tokens.typography.fontSize.xs,
-                      fontWeight: tokens.typography.fontWeight.bold,
-                      background: lvl.colorHex,
-                      color: tokens.colors.white,
-                    }}>
-                      {t('userCenterCurrent')}
-                    </span>
-                  )}
-                  <span style={{
-                    fontSize: tokens.typography.fontSize.sm,
-                    color: tokens.colors.text.tertiary,
-                    fontVariantNumeric: 'tabular-nums',
-                  }}>
-                    {lvl.minExp.toLocaleString()} EXP
-                  </span>
-                </div>
-              </div>
-            )
-          })}
-        </div>
-      </div>
-    </div>
-  )
-}
-
-// MembershipTab removed - now uses MembershipContent component

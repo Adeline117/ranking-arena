@@ -3804,6 +3804,17 @@ userCenterPerDay: '天',
 userCenterLevelOverview: '等级一览',
 userCenterCurrent: '当前',
 
+// EXP action labels
+expActionLogin: '每日登录',
+expActionPost: '发动态',
+expActionComment: '评论',
+expActionLiked: '被点赞',
+expActionBookmarked: '被收藏',
+expActionFollowed: '被关注',
+expActionReadCheckin: '阅读打卡',
+expActionProDaily: 'Pro会员每日',
+expActionPurchaseAnnual: '购买年费',
+
 // Duration formatting
 durationSeconds: '{n}秒',
 durationMinutes: '{n}分钟',

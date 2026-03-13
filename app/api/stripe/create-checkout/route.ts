@@ -139,6 +139,20 @@ export async function POST(request: NextRequest) {
       if (!priceId || !priceId.startsWith('price_')) {
         throw new Error(`Invalid Stripe price ID for lifetime: "${priceId}". Please configure STRIPE_PRO_LIFETIME_PRICE_ID.`)
       }
+
+      // Enforce 200-spot limit
+      const LIFETIME_SPOTS_TOTAL = 200
+      const { count: lifetimeCount } = await getSupabaseAdmin()
+        .from('user_profiles')
+        .select('id', { count: 'exact', head: true })
+        .eq('pro_plan', 'lifetime')
+      if ((lifetimeCount ?? 0) >= LIFETIME_SPOTS_TOTAL) {
+        return NextResponse.json(
+          { error: 'All founding member spots have been claimed.' },
+          { status: 410 }
+        )
+      }
+
       checkoutSession = await getStripe().checkout.sessions.create({
         customer: customerId,
         payment_method_types: ['card', 'link'],
