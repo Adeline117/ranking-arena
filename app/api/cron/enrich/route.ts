@@ -60,7 +60,14 @@ async function handleEnrichment(req: Request) {
     return NextResponse.json({ error: 'platform param required for direct call' }, { status: 400 })
   }
 
-  const result = await runEnrichment({ platform: platformParam, period, limit, offset })
-
-  return NextResponse.json(result, { status: result.ok ? 200 : 207 })
+  try {
+    const result = await runEnrichment({ platform: platformParam, period, limit, offset })
+    return NextResponse.json(result, { status: result.ok ? 200 : 207 })
+  } catch (error) {
+    logger.error('[enrich] Unexpected error', { platform: platformParam, period }, error)
+    return NextResponse.json({
+      ok: false,
+      error: error instanceof Error ? error.message : 'Internal server error',
+    }, { status: 500 })
+  }
 }
