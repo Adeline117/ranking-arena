@@ -58,13 +58,7 @@ export default function HomePage() {
           padding: '8px 16px',
         }}
       >
-        <h1 style={{
-          fontSize: '1.5rem',
-          fontWeight: 800,
-          color: 'var(--color-text-primary)',
-          margin: '12px 0 4px',
-          letterSpacing: '-0.02em',
-        }}>Arena</h1>
+        <h1 className="sr-only">Arena</h1>
         <Suspense fallback={null}><HomeHero /></Suspense>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
           <HomeSubNav />
