@@ -303,9 +303,9 @@ export default function ExchangeRankingClient({
     }
     if (!latestTs) return { lastUpdatedText: null, isStale: false }
     const diffHours = (Date.now() - new Date(latestTs).getTime()) / (1000 * 60 * 60)
-    const locale = language === 'zh' ? 'zh' : language === 'ja' ? 'ja' : language === 'ko' ? 'ko' : 'en'
+    const locale: Locale = language === 'zh' ? 'zh' : language === 'ja' ? 'ja' : language === 'ko' ? 'ko' : 'en'
     return {
-      lastUpdatedText: formatTimeAgo(latestTs, locale as 'zh' | 'en' | 'ja' | 'ko'),
+      lastUpdatedText: formatTimeAgo(latestTs, locale),
       isStale: diffHours > 6,
     }
   }, [traders, language])
