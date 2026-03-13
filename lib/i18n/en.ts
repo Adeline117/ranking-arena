@@ -4001,6 +4001,11 @@ resourcesCategoryAcademic: 'Academic',
 resourcesSortRecent: 'Recently Added',
 resourcesSortPopular: 'Most Popular',
 resourcesSortRating: 'Highest Rated',
+resourcesSortDownloads: 'Most Downloaded',
+resourcesLangAll: 'All Languages',
+resourcesLangEn: 'English',
+resourcesLangZh: 'Chinese',
+resourcesLanguageFilter: 'Language',
 
 // Bots rankings page
 botsTitle: 'Web3 Bot Rankings',
@@ -4217,6 +4222,8 @@ toolsCatSignal: 'Signals',
 toolsSortRating: 'Highest Rated',
 toolsSortNewest: 'Newest',
 toolsSortReviews: 'Most Reviews',
+toolsSortName: 'Name A-Z',
+toolsPricingAll: 'All Pricing',
 
 // Tools page pricing labels
 toolsPricingFree: 'Free',
@@ -4252,9 +4259,16 @@ instCatMedia: 'Media',
 instSortRating: 'Highest Rated',
 instSortNewest: 'Newest',
 instSortReviews: 'Most Reviews',
+instSortName: 'Name A-Z',
 
 // Institutions page - no ratings
 instNoRatingsYet: 'No ratings yet',
+
+// Directory shared
+directorySortName: 'Name A-Z',
+directoryMoreTags: '+{count} more',
+directoryVisitWebsite: 'Visit website',
+directoryViewOnGithub: 'View on GitHub',
 
 // Library i18n migration - remaining isZh patterns
 audioReaderTitle: 'Audio Reader',

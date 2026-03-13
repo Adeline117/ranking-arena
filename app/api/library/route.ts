@@ -16,6 +16,7 @@ export async function GET(req: NextRequest) {
   const category = searchParams.get('category') || ''
   const search = (searchParams.get('search') || '').slice(0, 200) // cap search length
   const lang = searchParams.get('language') || ''  // user's UI language preference
+  const langFilter = searchParams.get('lang') || ''  // content language filter (en/zh)
   const sort = searchParams.get('sort') || 'recent'
   const hasFile = searchParams.get('has_file') === 'true'  // filter for items with readable files
   const page = Math.max(1, parseInt(searchParams.get('page') || '1') || 1)
@@ -23,10 +24,10 @@ export async function GET(req: NextRequest) {
   const offset = (page - 1) * limit
 
   // Use tiered cache (memory → Redis → DB)
-  const cacheKey = `api:library:${category}:${search}:${lang}:${sort}:${hasFile}:${page}:${limit}`
+  const cacheKey = `api:library:${category}:${search}:${lang}:${langFilter}:${sort}:${hasFile}:${page}:${limit}`
   const result = await tieredGetOrSet(
     cacheKey,
-    () => fetchLibraryData({ category, search, lang, sort, hasFile, page, limit, offset }),
+    () => fetchLibraryData({ category, search, lang, langFilter, sort, hasFile, page, limit, offset }),
     search ? 'warm' : 'hot',  // 无搜索词时用 hot 层 (Redis 300s)，有搜索词用 warm 层
     ['library']
   )
@@ -40,8 +41,8 @@ export async function GET(req: NextRequest) {
   }
 }
 
-async function fetchLibraryData({ category, search, lang, sort, hasFile, page, limit, offset }: {
-  category: string; search: string; lang: string; sort: string; hasFile: boolean; page: number; limit: number; offset: number
+async function fetchLibraryData({ category, search, lang, langFilter, sort, hasFile, page, limit, offset }: {
+  category: string; search: string; lang: string; langFilter: string; sort: string; hasFile: boolean; page: number; limit: number; offset: number
 }) {
   const supabase = getSupabaseAdmin()
   // Use RPC for language-priority sorting when user has a language preference
@@ -83,6 +84,11 @@ async function fetchLibraryData({ category, search, lang, sort, hasFile, page, l
     query = query.eq('category', category)
   }
 
+  // Content language filter
+  if (langFilter && langFilter !== 'all') {
+    query = query.eq('language', langFilter)
+  }
+
   // Only show items with at least one readable file source
   if (hasFile) {
     query = query.or('epub_url.not.is.null,pdf_url.not.is.null,file_key.not.is.null,content_url.not.is.null')
@@ -104,6 +110,9 @@ async function fetchLibraryData({ category, search, lang, sort, hasFile, page, l
       break
     case 'rating':
       query = query.order('rating', { ascending: false, nullsFirst: false })
+      break
+    case 'downloads':
+      query = query.order('download_count', { ascending: false, nullsFirst: false })
       break
     case 'date':
       query = query.order('publish_date', { ascending: false, nullsFirst: false })

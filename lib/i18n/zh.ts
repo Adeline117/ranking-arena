@@ -4008,6 +4008,11 @@ resourcesCategoryAcademic: '学术论文',
 resourcesSortRecent: '最新添加',
 resourcesSortPopular: '最受欢迎',
 resourcesSortRating: '评分最高',
+resourcesSortDownloads: '下载最多',
+resourcesLangAll: '全部语言',
+resourcesLangEn: '英文',
+resourcesLangZh: '中文',
+resourcesLanguageFilter: '语言',
 
 // Bots rankings page (机器人排行榜)
 botsTitle: 'Web3 机器人排行榜',
@@ -4224,6 +4229,8 @@ toolsCatSignal: '信号',
 toolsSortRating: '评分最高',
 toolsSortNewest: '最新',
 toolsSortReviews: '评价最多',
+toolsSortName: '名称 A-Z',
+toolsPricingAll: '全部定价',
 
 // Tools page pricing labels (工具页定价标签)
 toolsPricingFree: '免费',
@@ -4259,9 +4266,16 @@ instCatMedia: '媒体',
 instSortRating: '评分最高',
 instSortNewest: '最新',
 instSortReviews: '评价最多',
+instSortName: '名称 A-Z',
 
 // Institutions page - no ratings (机构页-暂无评分)
 instNoRatingsYet: '暂无评分',
+
+// Directory shared (目录页共享)
+directorySortName: '名称 A-Z',
+directoryMoreTags: '+{count} 更多',
+directoryVisitWebsite: '访问网站',
+directoryViewOnGithub: '在 GitHub 查看',
 
 // Library i18n migration - remaining isZh patterns
 audioReaderTitle: '朗读模式',
