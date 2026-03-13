@@ -158,8 +158,9 @@ export class HyperliquidPerpConnector extends BaseConnector {
       roi = (totalRawPnl / (accountValue - totalRawPnl)) * 100
     }
 
-    // Compute win_rate from fills (closedPnl per trade)
+    // Compute win_rate and max_drawdown from fills (closedPnl per trade)
     let winRate: number | null = null
+    let fillMDD: number | null = null
     try {
       const _rawFills = await this.request<Record<string, unknown>>(
         'https://api.hyperliquid.xyz/info',
@@ -171,9 +172,23 @@ export class HyperliquidPerpConnector extends BaseConnector {
       )
       const fills = Array.isArray(_rawFills) ? _rawFills : []
       if (fills.length > 0) {
-        const wins = fills.filter((f: Record<string, unknown>) => Number(f.closedPnl) > 0).length
-        const closedTrades = fills.filter((f: Record<string, unknown>) => Number(f.closedPnl) !== 0).length
-        if (closedTrades > 0) winRate = (wins / closedTrades) * 100
+        const closedFills = fills.filter((f: Record<string, unknown>) => Number(f.closedPnl) !== 0)
+        const wins = closedFills.filter((f: Record<string, unknown>) => Number(f.closedPnl) > 0).length
+        if (closedFills.length > 0) winRate = (wins / closedFills.length) * 100
+
+        // MDD from cumulative PnL of closed fills
+        let cumPnl = 0
+        let peak = 0
+        let maxDD = 0
+        for (const f of closedFills) {
+          cumPnl += Number((f as Record<string, unknown>).closedPnl) || 0
+          if (cumPnl > peak) peak = cumPnl
+          if (peak > 0) {
+            const dd = ((peak - cumPnl) / peak) * 100
+            if (dd > maxDD) maxDD = dd
+          }
+        }
+        if (maxDD > 0.01 && maxDD < 200) fillMDD = Math.round(maxDD * 100) / 100
       }
     } catch {
       // Fills fetch is non-critical for snapshot
@@ -183,7 +198,7 @@ export class HyperliquidPerpConnector extends BaseConnector {
       roi,
       pnl: totalRawPnl || null,
       win_rate: winRate,
-      max_drawdown: null,  // Requires equity curve history
+      max_drawdown: fillMDD,  // Computed from cumulative fills PnL
       sharpe_ratio: null, sortino_ratio: null,
       trades_count: null,
       followers: null,  // DEX - no followers
@@ -194,7 +209,7 @@ export class HyperliquidPerpConnector extends BaseConnector {
     }
 
     const quality_flags: QualityFlags = {
-      missing_fields: ['max_drawdown', 'followers', 'copiers', 'sharpe_ratio', 'sortino_ratio'],
+      missing_fields: ['followers', 'copiers', 'sharpe_ratio', 'sortino_ratio'],
       non_standard_fields: {
         roi: 'Sourced from leaderboard endpoint (per-window). Falls back to clearinghouse approximation if trader not on leaderboard.',
       },
