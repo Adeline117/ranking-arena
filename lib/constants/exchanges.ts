@@ -157,6 +157,12 @@ export const DEAD_BLOCKED_PLATFORMS: TraderSource[] = [
   'bitmart',      // gw-api/copytrade-streamer returns "service not open" (all IPs), SPA doesn't render
   'whitebit' as TraderSource,     // No copy-trading feature or API exists
   'btse' as TraderSource,         // Leaderboard behind internal auth, no public endpoints
+  // Removed from enrichment — no API support or enrichment capability (2026-03-13)
+  'bybit',        // api2.bybit.com endpoints return 404 globally (2026-03-10)
+  'bybit_spot',   // api2.bybit.com endpoints return 404 globally (2026-03-10)
+  'binance_web3', // No enrichment API available
+  'bingx',        // No enrichment API available
+  'etoro',        // No enrichment API available
 ]
 
 // ---------------------------------------------------------------------------
