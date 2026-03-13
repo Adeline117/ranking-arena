@@ -59,7 +59,8 @@ export class BaseImporter {
 
     this.source = source
     this.supabase = getSupabaseClient()
-    this.concurrency = options.concurrency || getConcurrency(5, 10)
+    // 优先级: 命令行参数 > 平台配置 > 默认值
+    this.concurrency = options.concurrency || this.config.concurrency || getConcurrency(5, 10)
     this.targetCount = options.targetCount || this.config.targetCount || 500
 
     log.info(`初始化 ${this.config.name} 导入器`)
