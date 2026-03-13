@@ -78,7 +78,7 @@ export class JupiterPerpsPerpConnector extends BaseConnector {
   ): Promise<DiscoverResult> {
     const numWeeks = this.getWeeksForWindow(window)
     const now = new Date()
-    const traderMap = new Map<string, { pnl: number; volume: number }>()
+    const traderMap = new Map<string, { pnl: number; volume: number; wins: number; losses: number; trades: number }>()
 
     // Generate week list
     const weeks: Array<{ year: number; week: number }> = []
@@ -98,9 +98,13 @@ export class JupiterPerpsPerpConnector extends BaseConnector {
 
           for (const entry of data) {
             if (!entry.owner) continue
-            const existing = traderMap.get(entry.owner) || { pnl: 0, volume: 0 }
-            existing.pnl += (entry.totalPnlUsd || 0) / 1e6
+            const existing = traderMap.get(entry.owner) || { pnl: 0, volume: 0, wins: 0, losses: 0, trades: 0 }
+            const weekPnl = (entry.totalPnlUsd || 0) / 1e6
+            existing.pnl += weekPnl
             existing.volume += (entry.totalVolume || 0) / 1e6
+            existing.trades += entry.totalTrades || 0
+            if (weekPnl > 0) existing.wins++
+            else if (weekPnl < 0) existing.losses++
             traderMap.set(entry.owner, existing)
           }
         } catch {
@@ -125,7 +129,7 @@ export class JupiterPerpsPerpConnector extends BaseConnector {
       discovered_at: new Date().toISOString(),
       last_seen_at: new Date().toISOString(),
       is_active: true,
-      raw: { owner, pnl: data.pnl, volume: data.volume } as Record<string, unknown>,
+      raw: { owner, pnl: data.pnl, volume: data.volume, wins: data.wins, losses: data.losses, trades: data.trades, _computed_win_rate: (data.wins + data.losses) > 0 ? (data.wins / (data.wins + data.losses)) * 100 : null } as Record<string, unknown>,
     }))
 
     return {
@@ -149,7 +153,7 @@ export class JupiterPerpsPerpConnector extends BaseConnector {
   }
 
   normalize(raw: unknown): Record<string, unknown> {
-    const e = raw as { owner: string; pnl: number; volume: number }
+    const e = raw as { owner: string; pnl: number; volume: number; _computed_win_rate?: number | null; trades?: number }
     // ROI estimated: pnl / (volume / 5) × 100
     let roi: number | null = null
     if (e.pnl != null && e.volume != null && e.volume > 0) {
@@ -166,10 +170,10 @@ export class JupiterPerpsPerpConnector extends BaseConnector {
         : null,
       roi,
       pnl: e.pnl ?? null,
-      win_rate: null,
+      win_rate: e._computed_win_rate ?? null,
       max_drawdown: null,
       followers: null,
-      trades_count: null,
+      trades_count: e.trades ?? null,
       sharpe_ratio: null,
       aum: null,
       copiers: null,
