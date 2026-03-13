@@ -1,4 +1,5 @@
 import { tokens } from '@/lib/design-tokens'
+import { NULL_DISPLAY } from '@/lib/utils/format'
 import type { PositionHistoryItem } from '@/lib/data/trader'
 
 // Extended position history type
@@ -12,7 +13,7 @@ export interface ExtendedPositionHistoryItem extends PositionHistoryItem {
 }
 
 export function formatPriceWithComma(price: number | undefined): string {
-  if (price === undefined || price === 0) return '--'
+  if (price === undefined || price === 0) return NULL_DISPLAY
   return price.toLocaleString('en-US', {
     minimumFractionDigits: 2,
     maximumFractionDigits: price >= 1 ? 2 : 4,
@@ -20,17 +21,17 @@ export function formatPriceWithComma(price: number | undefined): string {
 }
 
 export function formatSizeWithUnit(size: number | undefined, unit: string): string {
-  if (size === undefined || size === 0) return '--'
+  if (size === undefined || size === 0) return NULL_DISPLAY
   return `${size.toFixed(3)} ${unit}`
 }
 
 export function formatPrice(price: number | undefined): string {
-  if (price === undefined || price === 0) return '--'
+  if (price === undefined || price === 0) return NULL_DISPLAY
   return price >= 1 ? price.toFixed(2) : price.toFixed(4)
 }
 
 export function formatDateTime(timeStr: string): string {
-  if (!timeStr) return '--'
+  if (!timeStr) return NULL_DISPLAY
   const date = new Date(timeStr)
   return date.toLocaleString('zh-CN', {
     month: '2-digit',
