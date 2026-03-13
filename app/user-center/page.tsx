@@ -422,7 +422,7 @@ function LevelTab({ info, dailyEarned }: { info: LevelInfo & { currentExp: numbe
               border: `1px solid ${tokens.colors.border.primary}`,
             }}>
               <span style={{ fontSize: tokens.typography.fontSize.sm, color: tokens.colors.text.secondary }}>
-                {action.label}
+                {t(`expAction_${action.key}`) || action.key}
               </span>
               <div style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[2], flexShrink: 0 }}>
                 <span style={{
