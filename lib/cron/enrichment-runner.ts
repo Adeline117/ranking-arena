@@ -183,7 +183,7 @@ export const ENRICHMENT_PLATFORM_CONFIGS: Record<string, EnrichmentConfig> = {
     fetchPositionHistory: fetchBitgetPositionHistory,
     concurrency: 2, delayMs: 2000,
   },
-  // bitget_spot: removed — no public API exists (all endpoints 404)
+  // bitget_spot: enrichment not yet configured — spot-specific enrichment endpoints TBD
   hyperliquid: {
     platform: 'hyperliquid',
     fetchEquityCurve: fetchHyperliquidEquityCurve,

@@ -152,6 +152,7 @@ export async function initializeConnectors(): Promise<void> {
   const { AevoPerpConnector } = await import('./platforms/aevo-perp')
   const { JupiterPerpsPerpConnector } = await import('./platforms/jupiter-perps-perp')
   const { ToobitFuturesConnector } = await import('./platforms/toobit-futures')
+  const { BitgetSpotConnector: BitgetSpotConnectorNew } = await import('./platforms/bitget-spot')
   const { Web3BotConnector } = await import('./platforms/web3-bot')
   const { OkxWeb3Connector } = await import('./platforms/okx-web3')
   const { BinanceWeb3Connector } = await import('./platforms/binance-web3')
@@ -183,6 +184,7 @@ export async function initializeConnectors(): Promise<void> {
   connectorRegistry.register(new BitfinexFuturesConnector())
   connectorRegistry.register(new ToobitFuturesConnector())
   connectorRegistry.register(new EtoroSpotConnector())
+  connectorRegistry.register(new BitgetSpotConnectorNew())
 
   // DEX Connectors
   connectorRegistry.register(new HyperliquidPerpConnector())

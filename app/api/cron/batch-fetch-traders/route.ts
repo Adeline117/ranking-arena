@@ -15,11 +15,11 @@
  *   group=f  → mexc, bingx (every 6h)
  *   group=h  → gateio, btcc (every 6h)
  *   group=g1 → drift, bitunix (every 6h)
- *   group=g2 → web3_bot, kwenta, toobit, blofin (every 6h)
+ *   group=g2 → web3_bot, toobit, bitget_spot (every 6h)
  *   group=i  → etoro (every 6h)
  *
  * Dead/blocked platforms (fetcher files deleted 2026-03-10):
- *   kucoin, lbank, bitget_spot, weex, mux, synthetix, bitmart,
+ *   kucoin, lbank, weex, mux, synthetix, bitmart,
  *   whitebit, btse, cryptocom, pionex, vertex, okx_spot, paradex
  */
 
@@ -59,11 +59,12 @@ const GROUPS: Record<string, string[]> = {
   h: ['gateio', 'btcc'],
   // Group G1: DEX (every 6h) — 2 platforms, parallel
   g1: ['drift', 'bitunix'],
-  // Group G2: DEX+CEX (every 6h) — 2 platforms
+  // Group G2: DEX+CEX (every 6h) — 3 platforms
   // paradex removed: API now requires JWT auth since 2026-03
   // kwenta removed: Copin API stopped serving Kwenta data (2026-03-11)
   // blofin removed: openapi.blofin.com requires auth, VPS scraper endpoint missing (2026-03-11)
-  g2: ['web3_bot', 'toobit'],
+  // bitget_spot restored 2026-03-13: Connector with VPS scraper + direct API fallback
+  g2: ['web3_bot', 'toobit', 'bitget_spot'],
   // Group I: Social trading (every 6h) — large dataset (2000 traders × 3 periods)
   i: ['etoro'],
 }
@@ -96,6 +97,7 @@ const SOURCE_TO_CONNECTOR: Record<string, { platform: string; marketType: string
   binance_spot: { platform: 'binance_spot', marketType: 'spot' },
   binance_web3: { platform: 'binance_web3', marketType: 'web3' },
   bitget_futures: { platform: 'bitget', marketType: 'futures' },
+  bitget_spot: { platform: 'bitget_spot', marketType: 'spot' },
   okx_futures: { platform: 'okx', marketType: 'futures' },
   okx_web3: { platform: 'okx_web3', marketType: 'web3' },
   htx_futures: { platform: 'htx', marketType: 'futures' },
