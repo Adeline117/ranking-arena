@@ -65,6 +65,7 @@ const config: DirectoryPageConfig = {
     { key: 'rating', labelKey: 'instSortRating' },
     { key: 'newest', labelKey: 'instSortNewest' },
     { key: 'reviews', labelKey: 'instSortReviews' },
+    { key: 'name', labelKey: 'instSortName' },
   ],
   leaderboards: [
     {
