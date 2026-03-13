@@ -225,7 +225,25 @@ export async function GET(request: NextRequest) {
             )
             sharpeUpdated += results.filter(r => !r.error).length
           }
-          logger.info(`[aggregate] Computed Sharpe ratio for ${sharpeUpdated}/${sharpeUpdates.length} traders`)
+          logger.info(`[aggregate] Computed Sharpe ratio for ${sharpeUpdated}/${sharpeUpdates.length} traders (legacy table)`)
+
+          // Also update trader_snapshots_v2
+          let v2Updated = 0
+          for (let i = 0; i < sharpeUpdates.length; i += SHARPE_BATCH) {
+            const batch = sharpeUpdates.slice(i, i + SHARPE_BATCH)
+            const v2Results = await Promise.all(
+              batch.map(upd =>
+                supabase
+                  .from('trader_snapshots_v2')
+                  .update({ sharpe_ratio: upd.sharpe_ratio })
+                  .eq('platform', upd.source)
+                  .eq('trader_key', upd.source_trader_id)
+                  .is('sharpe_ratio', null)
+              )
+            )
+            v2Updated += v2Results.filter(r => !r.error).length
+          }
+          logger.info(`[aggregate] Synced Sharpe ratio to v2: ${v2Updated}/${sharpeUpdates.length}`)
         }
       }
     }
