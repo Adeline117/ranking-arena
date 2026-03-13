@@ -1,8 +1,10 @@
 'use client'
 
+import { useEffect } from 'react'
 import { tokens } from '@/lib/design-tokens'
 import { Box, Text } from '../../base'
 import { useLanguage } from '../../Providers/LanguageProvider'
+import { usePeriodStore } from '@/lib/stores/periodStore'
 
 export type Period = '7D' | '30D' | '90D'
 
@@ -27,6 +29,12 @@ export interface PeriodSelectorProps {
 
 export function PeriodSelector({ period, onPeriodChange, source, lastUpdated }: PeriodSelectorProps) {
   const { t, language } = useLanguage()
+  const setGlobalPeriod = usePeriodStore(s => s.setPeriod)
+
+  // Sync selected period to global store so ShareOnXButton reads the current window
+  useEffect(() => {
+    setGlobalPeriod(period)
+  }, [period, setGlobalPeriod])
 
   return (
     <Box
@@ -57,16 +65,16 @@ export function PeriodSelector({ period, onPeriodChange, source, lastUpdated }: 
               display: 'flex',
               alignItems: 'center',
               gap: 4,
-              padding: `4px 8px`,
+              padding: '4px 8px',
               background: tokens.colors.accent.warning + '15',
               borderRadius: tokens.radius.md,
-              border: `1px solid ${tokens.colors.accent.warning}30`,
+              border: '1px solid ' + tokens.colors.accent.warning + '30',
             }}
             title={(() => {
               const note = DATA_SOURCE_NOTES[source.toLowerCase()]
               const p30 = note.periods['30D'] === '--' ? '--' : t(note.periods['30D'])
               const p90 = note.periods['90D'] === '--' ? '--' : t(note.periods['90D'])
-              return `${t(note.titleKey)}: 30D=${p30}, 90D=${p90}`
+              return t(note.titleKey) + ': 30D=' + p30 + ', 90D=' + p90
             })()}
           >
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke={tokens.colors.accent.warning} strokeWidth="2">
@@ -90,7 +98,7 @@ export function PeriodSelector({ period, onPeriodChange, source, lastUpdated }: 
             background: tokens.colors.bg.tertiary,
             padding: 3,
             borderRadius: tokens.radius.lg,
-            border: `1px solid ${tokens.colors.border.primary}`,
+            border: '1px solid ' + tokens.colors.border.primary,
           }}
         >
           {(['7D', '30D', '90D'] as Period[]).map((p) => {
@@ -103,7 +111,7 @@ export function PeriodSelector({ period, onPeriodChange, source, lastUpdated }: 
                 onClick={() => !isDisabled && onPeriodChange(p)}
                 disabled={isDisabled}
                 style={{
-                  padding: `6px 14px`,
+                  padding: '6px 14px',
                   minHeight: 44,
                   borderRadius: tokens.radius.md,
                   border: 'none',
@@ -116,7 +124,7 @@ export function PeriodSelector({ period, onPeriodChange, source, lastUpdated }: 
                   fontSize: 13,
                   fontWeight: period === p ? 600 : 400,
                   cursor: isDisabled ? 'not-allowed' : 'pointer',
-                  transition: `all ${tokens.transition.base}`,
+                  transition: 'all ' + tokens.transition.base,
                   fontFamily: tokens.typography.fontFamily.sans.join(', '),
                   boxShadow: period === p ? '0 2px 8px var(--color-overlay-subtle)' : 'none',
                   opacity: isDisabled ? 0.5 : 1,
