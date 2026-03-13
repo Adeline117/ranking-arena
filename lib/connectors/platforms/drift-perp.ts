@@ -20,6 +20,8 @@ import type {
   DiscoverResult,
   ProfileResult,
   SnapshotResult,
+  SnapshotMetrics,
+  QualityFlags,
   TimeseriesResult,
   TraderSource,
 } from '../../types/leaderboard'
@@ -44,7 +46,7 @@ export class DriftPerpConnector extends BaseConnector {
     platform: 'drift',
     market_types: ['perp'],
     native_windows: ['7d', '30d', '90d'],
-    available_fields: ['roi', 'pnl', 'platform_rank'],
+    available_fields: ['roi', 'pnl', 'platform_rank', 'max_drawdown'],
     has_timeseries: false,
     has_profiles: false,
     scraping_difficulty: 1,
@@ -118,8 +120,59 @@ export class DriftPerpConnector extends BaseConnector {
     return null
   }
 
-  async fetchTraderSnapshot(_traderKey: string, _window: Window): Promise<SnapshotResult | null> {
-    return null
+  async fetchTraderSnapshot(traderKey: string, window: Window): Promise<SnapshotResult | null> {
+    // Fetch daily equity snapshots to compute MDD
+    const days = window === '7d' ? 14 : window === '30d' ? 60 : 100
+    try {
+      const snapshots = await this.request<Array<{
+        ts: number
+        accountBalance: string
+        unrealizedPnl: string
+        cumulativeRealizedPnl: string
+      }>>(
+        `https://data.api.drift.trade/authority/${traderKey}/snapshots/trading?days=${days}`
+      )
+
+      if (!Array.isArray(snapshots) || snapshots.length < 2) return null
+
+      // Compute MDD from equity curve (accountBalance + unrealizedPnl)
+      let peak = -Infinity
+      let maxDD = 0
+      for (const s of snapshots) {
+        const equity = Number(s.accountBalance || 0) + Number(s.unrealizedPnl || 0)
+        if (equity > peak) peak = equity
+        if (peak > 0) {
+          const dd = ((peak - equity) / peak) * 100
+          if (dd > maxDD) maxDD = dd
+        }
+      }
+
+      // Get latest PnL
+      const latest = snapshots[snapshots.length - 1]
+      const pnl = Number(latest?.cumulativeRealizedPnl || 0)
+
+      return {
+        metrics: {
+          roi: null, // ROI comes from leaderboard
+          pnl: pnl || null,
+          win_rate: null,
+          max_drawdown: maxDD > 0.01 ? Math.round(maxDD * 100) / 100 : null,
+          sharpe_ratio: null, sortino_ratio: null,
+          trades_count: null, followers: null, copiers: null, aum: null,
+          platform_rank: null,
+          arena_score: null, return_score: null, drawdown_score: null, stability_score: null,
+        },
+        quality_flags: {
+          missing_fields: ['win_rate', 'trades_count'],
+          non_standard_fields: { max_drawdown: 'Computed from daily equity snapshots' },
+          window_native: true,
+          notes: ['MDD computed from peak-to-trough equity curve'],
+        },
+        fetched_at: new Date().toISOString(),
+      }
+    } catch {
+      return null
+    }
   }
 
   async fetchTimeseries(_traderKey: string): Promise<TimeseriesResult> {
