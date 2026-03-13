@@ -535,6 +535,7 @@ export interface RankingsQuery {
   sort_dir?: 'asc' | 'desc'
   min_pnl?: number
   min_trades?: number
+  trader_type?: 'human' | 'bot'
 }
 
 /** Single ranked trader in the response (legacy) */
