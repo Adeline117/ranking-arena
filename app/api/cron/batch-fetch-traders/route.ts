@@ -77,15 +77,13 @@ interface BatchResult {
 }
 
 /**
- * Platforms that use the Connector framework instead of Inline Fetchers.
- * Migrate platforms here from INLINE path to CONNECTOR path.
- * Once all platforms are migrated, the Inline Fetcher path can be removed.
+ * All active platforms now use the Connector framework.
+ * Inline Fetcher is kept only as automatic fallback if a connector
+ * is not found in the registry (e.g., newly added platform not yet registered).
+ *
+ * Migration completed 2026-03-13: all 24 active platforms switched.
+ * DEAD_BLOCKED_PLATFORMS are skipped by cron groups (not in any group).
  */
-const CONNECTOR_PLATFORMS = new Set<string>([
-  // Canary batch (2B step 2)
-  'gmx',
-  'htx_futures',
-])
 
 /**
  * Map source names (used in cron groups) to connector registry keys.
@@ -156,8 +154,8 @@ export async function GET(request: NextRequest) {
   // Per-platform timeout: configurable, default 420s leaves 180s buffer for logging/cleanup within 600s limit
   const PLATFORM_TIMEOUT_MS = parseInt(process.env.PLATFORM_FETCH_TIMEOUT_MS || '420000', 10)
 
-  // Initialize connectors if any platform in this group uses Connector path
-  if (platforms.some(p => CONNECTOR_PLATFORMS.has(p)) && !connectorsInitialized) {
+  // Initialize all connectors (once per cold start)
+  if (!connectorsInitialized) {
     try {
       await initializeConnectors()
       connectorsInitialized = true
@@ -166,41 +164,36 @@ export async function GET(request: NextRequest) {
     }
   }
 
-  // Run a single platform fetch via Connector or Inline Fetcher
+  // Run a single platform: Connector first, Inline Fetcher fallback
   async function runPlatform(platform: string): Promise<BatchResult> {
     const start = Date.now()
-    const useConnector = CONNECTOR_PLATFORMS.has(platform) && connectorsInitialized
-    try {
-      let result: { source: string; periods: Record<string, { total: number; saved: number; error?: string }>; duration: number }
 
-      if (useConnector) {
-        // --- Connector path ---
-        const mapping = SOURCE_TO_CONNECTOR[platform]
-        const connector = mapping
-          ? connectorRegistry.get(
-              mapping.platform as import('@/lib/types/leaderboard').LeaderboardPlatform,
-              mapping.marketType as import('@/lib/types/leaderboard').MarketType
-            )
-          : null
-        if (!connector) {
-          // Fallback to inline fetcher if connector not found
-          logger.warn(`[batch-fetch-traders-${group}] No connector for ${platform}:${mapping?.marketType}, falling back to inline`)
-          return runPlatformInline(platform, start)
-        }
+    // Try Connector path first
+    const mapping = SOURCE_TO_CONNECTOR[platform]
+    const connector = (mapping && connectorsInitialized)
+      ? connectorRegistry.get(
+          mapping.platform as import('@/lib/types/leaderboard').LeaderboardPlatform,
+          mapping.marketType as import('@/lib/types/leaderboard').MarketType
+        )
+      : null
 
-        // sourceOverride: use the cron source name (e.g. 'htx_futures') not connector.platform ('htx')
-        result = await Promise.race([
-          runConnectorBatch(connector, { supabase, windows: ['7d', '30d', '90d'], limit: 500, sourceOverride: platform }),
-          new Promise<never>((_, reject) =>
-            setTimeout(() => reject(new Error(`Platform ${platform} timed out after ${PLATFORM_TIMEOUT_MS / 1000}s`)), PLATFORM_TIMEOUT_MS)
-          ),
-        ])
-      } else {
-        // --- Inline Fetcher path (legacy) ---
-        return runPlatformInline(platform, start)
+    if (!connector) {
+      // No connector registered → fall back to inline fetcher
+      if (mapping) {
+        logger.warn(`[batch-fetch-traders-${group}] No connector for ${platform}:${mapping.marketType}, falling back to inline`)
       }
+      return runPlatformInline(platform, start)
+    }
 
-      // Process result (same for both paths — FetchResult format is identical)
+    // --- Connector path ---
+    try {
+      const result = await Promise.race([
+        runConnectorBatch(connector, { supabase, windows: ['7d', '30d', '90d'], limit: 500, sourceOverride: platform }),
+        new Promise<never>((_, reject) =>
+          setTimeout(() => reject(new Error(`Platform ${platform} timed out after ${PLATFORM_TIMEOUT_MS / 1000}s`)), PLATFORM_TIMEOUT_MS)
+        ),
+      ])
+
       const hasErrors = Object.values(result.periods).some((p) => p.error)
       const totalSaved = Object.values(result.periods).reduce((sum, p) => sum + (p.saved || 0), 0)
 
@@ -223,7 +216,7 @@ export async function GET(request: NextRequest) {
       return { platform, status: 'success', durationMs: Date.now() - start, totalSaved, via: 'connector' }
     } catch (err) {
       const errMsg = err instanceof Error ? err.message : String(err)
-      logger.error(`[batch-fetch-traders-${group}] ${platform} (${useConnector ? 'connector' : 'inline'}) error: ${errMsg}`)
+      logger.error(`[batch-fetch-traders-${group}] ${platform} (connector) error: ${errMsg}`)
 
       try {
         await recordFetchResult(supabase, platform, {
@@ -233,7 +226,7 @@ export async function GET(request: NextRequest) {
         logger.warn(`[batch-fetch-traders-${group}] Failed to record metric for ${platform}`, { error: metricErr instanceof Error ? metricErr.message : String(metricErr) })
       }
 
-      return { platform, status: 'error', durationMs: Date.now() - start, error: errMsg, via: useConnector ? 'connector' : 'inline' }
+      return { platform, status: 'error', durationMs: Date.now() - start, error: errMsg, via: 'connector' }
     }
   }
 
