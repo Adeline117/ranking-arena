@@ -18,27 +18,28 @@ export const dynamic = 'force-dynamic'
 export const maxDuration = 600 // Vercel Pro max: 10 minutes (was 300s)
 
 // Platform configs with limits per period
-// EMERGENCY REDUCTION (2026-03-13): batch-enrich-30D/7D/90D hitting 600s timeout
-// Onchain platforms reduced from 150/120/100 to 50/40/30 to fit in 600s budget
+// EMERGENCY REDUCTION (2026-03-13 Round 2): batch-enrich STILL hitting 600s timeout
+// Onchain platforms: 50/40/30 → 30/25/20 (more aggressive)
+// CEX platforms: slightly reduced to balance load
 const PLATFORM_LIMITS: Record<string, { limit90: number; limit30: number; limit7: number }> = {
-  binance_futures: { limit90: 200, limit30: 150, limit7: 100 },
-  binance_spot: { limit90: 100, limit30: 80, limit7: 50 },
+  binance_futures: { limit90: 150, limit30: 120, limit7: 80 }, // Reduced from 200/150/100
+  binance_spot: { limit90: 80, limit30: 60, limit7: 40 }, // Reduced from 100/80/50
   // bybit/bybit_spot removed: api2.bybit.com endpoints return 404 globally (2026-03-10)
-  okx_futures: { limit90: 80, limit30: 80, limit7: 60 },
-  bitget_futures: { limit90: 60, limit30: 60, limit7: 50 },
+  okx_futures: { limit90: 60, limit30: 60, limit7: 50 }, // Reduced from 80/80/60
+  bitget_futures: { limit90: 50, limit30: 50, limit7: 40 }, // Reduced from 60/60/50
   // bitget_spot removed: no public API exists (all endpoints 404)
-  // ONCHAIN PLATFORMS: Emergency reduction to prevent 600s timeout (2026-03-13)
-  hyperliquid: { limit90: 50, limit30: 40, limit7: 30 },
-  gmx: { limit90: 50, limit30: 40, limit7: 30 },
-  htx_futures: { limit90: 40, limit30: 40, limit7: 30 },
-  gateio: { limit90: 60, limit30: 50, limit7: 40 },
-  mexc: { limit90: 60, limit30: 50, limit7: 40 },
-  drift: { limit90: 50, limit30: 40, limit7: 30 },
-  dydx: { limit90: 50, limit30: 40, limit7: 30 }, // EMERGENCY REDUCTION 2026-03-13
-  aevo: { limit90: 50, limit30: 40, limit7: 30 },
-  gains: { limit90: 50, limit30: 40, limit7: 30 },
+  // ONCHAIN PLATFORMS: AGGRESSIVE REDUCTION Round 2 (2026-03-13 04:30)
+  hyperliquid: { limit90: 30, limit30: 25, limit7: 20 }, // Reduced from 50/40/30
+  gmx: { limit90: 30, limit30: 25, limit7: 20 }, // Reduced from 50/40/30
+  htx_futures: { limit90: 30, limit30: 30, limit7: 25 }, // Reduced from 40/40/30
+  gateio: { limit90: 40, limit30: 35, limit7: 30 }, // Reduced from 60/50/40
+  mexc: { limit90: 40, limit30: 35, limit7: 30 }, // Reduced from 60/50/40
+  drift: { limit90: 30, limit30: 25, limit7: 20 }, // Reduced from 50/40/30
+  dydx: { limit90: 30, limit30: 25, limit7: 20 }, // Reduced from 50/40/30
+  aevo: { limit90: 30, limit30: 25, limit7: 20 }, // Reduced from 50/40/30
+  gains: { limit90: 30, limit30: 25, limit7: 20 }, // Reduced from 50/40/30
   // kwenta removed: Copin API stopped serving Kwenta data (2026-03-11)
-  jupiter_perps: { limit90: 50, limit30: 40, limit7: 30 },
+  jupiter_perps: { limit90: 30, limit30: 25, limit7: 20 }, // Reduced from 50/40/30
 }
 
 // High priority platforms (always enriched)
