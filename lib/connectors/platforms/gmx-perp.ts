@@ -111,12 +111,12 @@ export class GmxPerpConnector extends BaseConnector {
     const losses = Number(entry.losses) || 0
     const totalTrades = wins + losses
 
-    const roi = maxCapital > 0 ? (realizedPnl / maxCapital) * 100 : null
+    const roi = (maxCapital != null && maxCapital > 0 && realizedPnl != null) ? (realizedPnl / maxCapital) * 100 : null
     const winRate = totalTrades > 0 ? (wins / totalTrades) * 100 : null
 
     const metrics: SnapshotMetrics = {
       roi,
-      pnl: realizedPnl || null,
+      pnl: realizedPnl,
       win_rate: winRate,
       max_drawdown: null,  // Requires historical equity reconstruction
       sharpe_ratio: null, sortino_ratio: null,
@@ -184,7 +184,7 @@ export class GmxPerpConnector extends BaseConnector {
             const ts = String(item.period || '').split(':')[1]
             return {
               ts: ts ? new Date(Number(ts) * 1000).toISOString() : new Date().toISOString(),
-              value: this.fromGmxDecimals(item.realizedPnl),
+              value: this.fromGmxDecimals(item.realizedPnl) ?? 0,
             }
           }),
           updated_at: new Date().toISOString(),
@@ -231,7 +231,7 @@ export class GmxPerpConnector extends BaseConnector {
       trades_count: tradesCount,
       followers: null,
       copiers: null,
-      aum: maxCapital > 0 ? maxCapital : null,
+      aum: (maxCapital != null && maxCapital > 0) ? maxCapital : null,
       sharpe_ratio: null,
       platform_rank: null,
     }

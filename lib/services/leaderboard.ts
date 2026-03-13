@@ -145,12 +145,24 @@ export class LeaderboardService {
 
     const whereClause = conditions.join(' AND ');
 
-    // Count query
-    const countResult = await query<{ count: string }>(
-      `SELECT COUNT(*) as count FROM trader_snapshots_v2 s WHERE ${whereClause}`,
-      params,
-    );
-    const totalCount = parseInt(countResult.rows[0]?.count || '0', 10);
+    // Count query — use cache for simple filters, fall back to COUNT(*) for complex
+    let totalCount: number;
+    const hasAdvancedFilters = min_pnl != null || min_trades != null || (category && !platform);
+    if (!hasAdvancedFilters) {
+      // Fast path: read from leaderboard_count_cache (refreshed every 30 min by compute-leaderboard)
+      const cacheResult = await query<{ total_count: number }>(
+        `SELECT total_count FROM leaderboard_count_cache WHERE season_id = $1 AND source = $2`,
+        [window, platform || '_all'],
+      );
+      totalCount = cacheResult.rows[0]?.total_count ?? 0;
+    } else {
+      // Slow path: full COUNT(*) for advanced filters
+      const countResult = await query<{ count: string }>(
+        `SELECT COUNT(*) as count FROM trader_snapshots_v2 s WHERE ${whereClause}`,
+        params,
+      );
+      totalCount = parseInt(countResult.rows[0]?.count || '0', 10);
+    }
 
     // Data query with JOIN for display names
     const dataResult = await query<{
