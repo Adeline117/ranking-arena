@@ -45,9 +45,19 @@ export async function runWorkerInline(): Promise<InlineJobResult> {
     const MAX_JOBS = 3
     const results: Array<{ job_id: string; platform: string; status: string; error?: string }> = []
 
+    interface RefreshJob {
+      id: string
+      platform: string
+      market_type: string
+      job_type: string
+      trader_key?: string
+      status: string
+      attempts?: number
+      max_attempts?: number
+    }
+
     // Try to claim a job — if the RPC or table doesn't exist, gracefully skip
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    let firstJob: any = null
+    let firstJob: RefreshJob | null = null
     try {
       const { data: jobs, error: rpcError } = await supabase.rpc('claim_refresh_job', {
         p_worker_id: workerId,
@@ -67,8 +77,7 @@ export async function runWorkerInline(): Promise<InlineJobResult> {
     if (!firstJob) {
       return { name, status: 'success', durationMs: Date.now() - start, detail: { jobs_processed: 0 } }
     }
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    let job: any = firstJob
+    let job: RefreshJob | null = firstJob
 
     for (let i = 0; i < MAX_JOBS; i++) {
       if (i > 0) {
@@ -153,11 +162,13 @@ export async function runWorkerInline(): Promise<InlineJobResult> {
         results.push({ job_id: job.id, platform: job.platform, status: 'completed' })
       } catch (error: unknown) {
         const errorMsg = (error as Error).message
-        const backoffMs = Math.min(60000, 5000 * Math.pow(2, job.attempts))
+        const attempts = job.attempts ?? 0
+        const maxAttempts = job.max_attempts ?? 3
+        const backoffMs = Math.min(60000, 5000 * Math.pow(2, attempts))
         await supabase
           .from('refresh_jobs')
           .update({
-            status: job.attempts >= job.max_attempts ? 'dead' : 'failed',
+            status: attempts >= maxAttempts ? 'dead' : 'failed',
             last_error: errorMsg,
             next_run_at: new Date(Date.now() + backoffMs).toISOString(),
             locked_at: null, locked_by: null,

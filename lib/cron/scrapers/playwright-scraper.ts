@@ -95,7 +95,7 @@ export async function createStealthContext(
     
     // Override permissions
     const originalQuery = window.navigator.permissions.query
-    window.navigator.permissions.query = (parameters: any) =>
+    window.navigator.permissions.query = (parameters: PermissionDescriptor) =>
       parameters.name === 'notifications'
         ? Promise.resolve({ state: 'denied' } as PermissionStatus)
         : originalQuery(parameters)
@@ -165,9 +165,9 @@ export async function interceptApiResponses(
   page: Page,
   urlPatterns: string[],
   opts: { maxWaitMs?: number } = {}
-): Promise<Array<{ url: string; body: any }>> {
+): Promise<Array<{ url: string; body: Record<string, any> }>> {
   const { maxWaitMs = 10000 } = opts
-  const responses: Array<{ url: string; body: any }> = []
+  const responses: Array<{ url: string; body: Record<string, any> }> = []
 
   page.on('response', async (response) => {
     const url = response.url()
@@ -193,10 +193,10 @@ export async function interceptApiResponses(
 /**
  * Extract data from page using selector
  */
-export async function extractData<T = any>(
+export async function extractData<T = unknown>(
   page: Page,
   selector: string,
-  extractor: (element: any) => T
+  extractor: (element: Element) => T
 ): Promise<T[]> {
   return page.$$eval(selector, (elements, extractorStr) => {
     // eslint-disable-next-line no-new-func
