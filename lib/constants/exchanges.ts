@@ -157,7 +157,6 @@ export const DEAD_BLOCKED_PLATFORMS: TraderSource[] = [
   'mux',          // app.mux.network alive, TheGraph subgraph needs THEGRAPH_API_KEY
   'synthetix',    // Copin 0 traders, TheGraph subgraph needs THEGRAPH_API_KEY
   'paradex',      // /v1/markets public, /v1/leaderboard needs JWT auth (Starknet wallet)
-  'bitget_spot',  // Bitget Spot API 404 — awaiting confirmation if feature exists
 
   // ═══════════════════════════════════════════════════════════════
   // STRUCTURAL — API limitation, not a bug

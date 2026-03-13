@@ -38,7 +38,7 @@ const fixAttempts = new Map() // platform -> last attempt timestamp
 // Removed: lbank, phemex, blofin (recovered via VPS/Mac Mini)
 const DEAD_PLATFORMS = new Set([
   'weex', 'perpetual_protocol', 'kucoin',
-  'bitget_spot', 'mux', 'synthetix',
+  'mux', 'synthetix',
   'paradex', 'kwenta', 'okx_spot',
   'bitmart', 'whitebit', 'btse',
 ])
