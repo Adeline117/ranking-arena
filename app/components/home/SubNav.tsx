@@ -2,6 +2,7 @@
 
 import { tokens } from '@/lib/design-tokens'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
+import { features } from '@/lib/features'
 
 export type SubNavTab = 'following' | 'recommended' | 'bookshelf'
 
@@ -10,11 +11,16 @@ interface SubNavProps {
   onTabChange: (tab: SubNavTab) => void
 }
 
-const TABS: { key: SubNavTab; labelKey: string; icon: string; subKey?: string }[] = [
-  { key: 'following', labelKey: 'subNavFollowing', icon: '' },
-  { key: 'recommended', labelKey: 'subNavHot', icon: '', subKey: 'subNavHotSub' },
+const ALL_TABS: { key: SubNavTab; labelKey: string; icon: string; subKey?: string; social?: boolean }[] = [
+  { key: 'following', labelKey: 'subNavFollowing', icon: '', social: true },
+  { key: 'recommended', labelKey: 'subNavHot', icon: '', subKey: 'subNavHotSub', social: true },
   { key: 'bookshelf', labelKey: 'subNavLibrary', icon: '' },
 ]
+
+const TABS = ALL_TABS.filter(tab => {
+  if (tab.social) return features.social
+  return true
+})
 
 export default function SubNav({ activeTab, onTabChange }: SubNavProps) {
   const { t } = useLanguage()

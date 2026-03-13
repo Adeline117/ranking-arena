@@ -7,6 +7,7 @@ import { tokens } from '@/lib/design-tokens'
 import { useLanguage } from '../Providers/LanguageProvider'
 import { supabase } from '@/lib/supabase/client'
 import { useCapacitorHaptics } from '@/lib/hooks/useCapacitor'
+import { features } from '@/lib/features'
 
 interface IconProps {
   active: boolean
@@ -228,7 +229,10 @@ export default function MobileBottomNav(): React.ReactElement {
     { href: '/groups', labelKey: 'groups', Icon: GroupsIcon },
     { href: '/market', labelKey: 'market', Icon: MarketIcon },
     { href: userHandle ? `/u/${encodeURIComponent(userHandle)}` : '/settings', labelKey: 'me', Icon: UserIcon },
-  ], [userHandle])
+  ].filter(item => {
+    if (['/hot', '/groups'].includes(item.href)) return features.social
+    return true
+  }), [userHandle])
 
   // Hide nav on auth / onboarding pages
   if (HIDDEN_PATHS.some(p => pathname === p || pathname.startsWith(p + '/'))) {
