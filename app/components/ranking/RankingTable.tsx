@@ -211,6 +211,8 @@ function RankingTableInner(props: {
 
   // Trading style filter
   const [styleFilter, setStyleFilter] = useState<TradingStyle | 'all'>('all')
+  // Trader type filter (human/bot/all)
+  const [traderTypeFilter, setTraderTypeFilter] = useState<'all' | 'human' | 'bot'>('all')
   // Expanded row for score breakdown
   const [expandedRowId, setExpandedRowId] = useState<string | null>(null)
 
@@ -312,6 +314,13 @@ function RankingTableInner(props: {
         return handle.includes(q) || t.id.toLowerCase().includes(q)
       })
     }
+    // Apply trader type filter (human/bot)
+    if (traderTypeFilter !== 'all') {
+      data = data.filter(t => {
+        const isBot = t.is_bot || t.trader_type === 'bot' || t.source === 'web3_bot'
+        return traderTypeFilter === 'bot' ? isBot : !isBot
+      })
+    }
     // Apply style filter
     if (styleFilter !== 'all') {
       data = data.filter(t => {
@@ -341,7 +350,7 @@ function RankingTableInner(props: {
       if (bRaw === null) return -1
       return sortDir === 'desc' ? bRaw - aRaw : aRaw - bRaw
     })
-  }, [traders, sortColumn, sortDir, debouncedSearch, styleFilter])
+  }, [traders, sortColumn, sortDir, debouncedSearch, styleFilter, traderTypeFilter])
 
 
   const totalPages = Math.ceil(sortedTraders.length / itemsPerPage)
@@ -351,7 +360,7 @@ function RankingTableInner(props: {
 
   // Reset scroll position on page/sort/filter changes
   const tableScrollRef = useRef<HTMLDivElement>(null)
-  const resetKey = useMemo(() => `${currentPage}-${sortColumn}-${sortDir}-${debouncedSearch}-${styleFilter}`, [currentPage, sortColumn, sortDir, debouncedSearch, styleFilter])
+  const resetKey = useMemo(() => `${currentPage}-${sortColumn}-${sortDir}-${debouncedSearch}-${styleFilter}-${traderTypeFilter}`, [currentPage, sortColumn, sortDir, debouncedSearch, styleFilter, traderTypeFilter])
   useEffect(() => {
     if (tableScrollRef.current) tableScrollRef.current.scrollTop = 0
   }, [resetKey])
@@ -423,6 +432,8 @@ function RankingTableInner(props: {
           styleFilter={styleFilter}
           onStyleFilterChange={(s) => { setStyleFilter(s); setCurrentPage(1) }}
           hasStyleData={traders.some(t => t.trading_style && t.trading_style !== 'unknown')}
+          traderTypeFilter={traderTypeFilter}
+          onTraderTypeFilterChange={(type) => { setTraderTypeFilter(type); setCurrentPage(1) }}
           traders={traders}
           source={source}
           timeRange={timeRange}
