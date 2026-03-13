@@ -249,6 +249,11 @@ export default async function TraderPage({ params }: { params: Promise<{ handle:
 
   // 2. 展示未注册交易员数据
   if (traderData) {
+    // Redirect raw address URLs to human-readable handle URLs (better SEO, Cloudflare caching)
+    if (traderData.handle && traderData.handle !== decodedHandle) {
+      const platformParam = traderData.source ? `?platform=${traderData.source}` : ''
+      redirect(`/trader/${encodeURIComponent(traderData.handle)}${platformParam}`)
+    }
     // Fetch full trader data INLINE (no HTTP call — avoids Cloudflare 524 timeout)
     let serverTraderData = null
     try {

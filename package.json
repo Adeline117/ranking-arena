@@ -125,10 +125,12 @@
     "ethers": "^6.16.0",
     "jest": "^30.3.0",
     "jest-environment-jsdom": "^30.3.0",
+    "playwright": "^1.58.2",
     "prettier": "^3.8.1",
     "puppeteer": "^24.39.0",
     "puppeteer-extra": "^3.3.6",
     "puppeteer-extra-plugin-stealth": "^2.11.2",
+    "sharp": "^0.34.5",
     "tailwindcss": "^4",
     "typescript": "^5"
   }

@@ -4,7 +4,6 @@ import { Box } from '../base'
 import { RankingTable, type Trader } from '../ranking/RankingTable'
 import type { TimeRange } from './hooks/useTraderData'
 
-import RankingToolbar from './RankingToolbar'
 import AdvancedFilterPanel from './AdvancedFilterPanel'
 import FilterStatusMessages from './FilterStatusMessages'
 import ProUpgradeCTA from './ProUpgradeCTA'
@@ -89,16 +88,6 @@ export default function RankingSection({
         contain: 'layout style',
       }}
     >
-      <RankingToolbar
-        activeTimeRange={activeTimeRange}
-        onTimeRangeChange={onTimeRangeChange}
-        loading={loading}
-        onRefresh={onRefresh}
-        onCopyLink={handleCopyLink}
-        language={language}
-        t={t}
-      />
-
       <AdvancedFilterPanel
         showAdvancedFilter={showAdvancedFilter}
         showMobileFilter={showMobileFilter}

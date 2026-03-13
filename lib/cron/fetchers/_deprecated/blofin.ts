@@ -32,8 +32,9 @@ import {
 import { type StatsDetail, upsertStatsDetail } from '../enrichment'
 import { logger } from '@/lib/logger'
 import { captureException } from '@/lib/utils/logger'
-// Dynamic import to avoid bundling puppeteer on Vercel
-const getInterceptApiResponses = () => import('../../scrapers/cloudflare-bypass').then(m => m.interceptApiResponses)
+// Scrapers removed — BloFin now uses VPS scraper exclusively
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const getInterceptApiResponses = (): Promise<any> => Promise.reject(new Error('cloudflare-bypass removed, use VPS scraper'))
 
 const SOURCE = 'blofin'
 const TARGET = 500
