@@ -33,7 +33,7 @@ const PLATFORM_LIMITS: Record<string, { limit90: number; limit30: number; limit7
   gateio: { limit90: 60, limit30: 50, limit7: 40 },
   mexc: { limit90: 60, limit30: 50, limit7: 40 },
   drift: { limit90: 150, limit30: 120, limit7: 100 },
-  dydx: { limit90: 150, limit30: 120, limit7: 100 },
+  dydx: { limit90: 80, limit30: 60, limit7: 50 }, // REDUCED 2026-03-13: was timing out at 360s with higher limits
   aevo: { limit90: 150, limit30: 120, limit7: 100 },
   gains: { limit90: 150, limit30: 120, limit7: 100 },
   // kwenta removed: Copin API stopped serving Kwenta data (2026-03-11)
@@ -43,12 +43,17 @@ const PLATFORM_LIMITS: Record<string, { limit90: number; limit30: number; limit7
 // High priority platforms (always enriched)
 // bybit removed: api2.bybit.com endpoints return 404 globally (2026-03-10)
 // gmx removed from batch: runs in dedicated job due to >360s enrichment time (2026-03-11)
-const HIGH_PRIORITY = ['binance_futures', 'okx_futures', 'bitget_futures', 'hyperliquid', 'dydx', 'jupiter_perps']
+// dydx moved to end: consistently times out at 360s, blocking other platforms (2026-03-13)
+const HIGH_PRIORITY = ['binance_futures', 'okx_futures', 'bitget_futures', 'hyperliquid', 'jupiter_perps']
 
 // Medium priority (enriched with all=true or period=90D)
 // bybit_spot removed: api2.bybit.com endpoints return 404 globally (2026-03-10)
 // kwenta removed: Copin API stopped serving Kwenta data (2026-03-11)
 const MEDIUM_PRIORITY = ['binance_spot', 'htx_futures', 'gateio', 'mexc', 'drift', 'aevo', 'gains']
+
+// Low priority - dydx (moved here due to consistent 360s timeout blocking other platforms)
+// Still enriched, but runs last to avoid blocking high/medium priority platforms
+const DYDX_PRIORITY = ['dydx']
 
 // Lower priority (enriched only with all=true)
 const LOWER_PRIORITY: string[] = []
@@ -85,11 +90,12 @@ export async function GET(request: NextRequest) {
     : [periodParam as Period]
 
   // Determine which platforms to enrich
+  // Always include dydx at the END to prevent it from blocking other platforms
   let platforms: string[]
   if (enrichAll) {
-    platforms = [...HIGH_PRIORITY, ...MEDIUM_PRIORITY, ...LOWER_PRIORITY]
+    platforms = [...HIGH_PRIORITY, ...MEDIUM_PRIORITY, ...LOWER_PRIORITY, ...DYDX_PRIORITY]
   } else {
-    platforms = [...HIGH_PRIORITY, ...MEDIUM_PRIORITY]
+    platforms = [...HIGH_PRIORITY, ...MEDIUM_PRIORITY, ...DYDX_PRIORITY]
   }
 
   const results: BatchResult[] = []
