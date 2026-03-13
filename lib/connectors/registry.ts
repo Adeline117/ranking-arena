@@ -143,6 +143,19 @@ export async function initializeConnectors(): Promise<void> {
   const { LbankFuturesConnector } = await import('./platforms/lbank-futures')
   const { BlofinFuturesConnector } = await import('./platforms/blofin-futures')
 
+  // New connectors (Phase 2A migration)
+  const { EtoroSpotConnector } = await import('./platforms/etoro-spot')
+  const { BtccFuturesConnector } = await import('./platforms/btcc-futures')
+  const { BitunixFuturesConnector } = await import('./platforms/bitunix-futures')
+  const { DriftPerpConnector } = await import('./platforms/drift-perp')
+  const { BitfinexFuturesConnector } = await import('./platforms/bitfinex-futures')
+  const { AevoPerpConnector } = await import('./platforms/aevo-perp')
+  const { JupiterPerpsPerpConnector } = await import('./platforms/jupiter-perps-perp')
+  const { ToobitFuturesConnector } = await import('./platforms/toobit-futures')
+  const { Web3BotConnector } = await import('./platforms/web3-bot')
+  const { OkxWeb3Connector } = await import('./platforms/okx-web3')
+  const { BinanceWeb3Connector } = await import('./platforms/binance-web3')
+
   // Proxy URL for geo-blocked exchanges (Binance, OKX, BingX, HTX, BitMart, dYdX)
   const proxyUrl = process.env.CLOUDFLARE_PROXY_URL || process.env.CF_WORKER_PROXY_URL
 
@@ -164,6 +177,13 @@ export async function initializeConnectors(): Promise<void> {
   connectorRegistry.register(new LbankFuturesConnector())
   connectorRegistry.register(new BlofinFuturesConnector())
 
+  // New CEX Connectors
+  connectorRegistry.register(new BtccFuturesConnector())
+  connectorRegistry.register(new BitunixFuturesConnector())
+  connectorRegistry.register(new BitfinexFuturesConnector())
+  connectorRegistry.register(new ToobitFuturesConnector())
+  connectorRegistry.register(new EtoroSpotConnector())
+
   // DEX Connectors
   connectorRegistry.register(new HyperliquidPerpConnector())
   connectorRegistry.register(new DydxPerpConnector({ proxyUrl }))
@@ -171,6 +191,14 @@ export async function initializeConnectors(): Promise<void> {
   connectorRegistry.register(new GainsPerpConnector())
   connectorRegistry.register(new KwentaPerpConnector())
   connectorRegistry.register(new MuxPerpConnector())
+  connectorRegistry.register(new AevoPerpConnector())
+  connectorRegistry.register(new JupiterPerpsPerpConnector())
+  connectorRegistry.register(new DriftPerpConnector())
+
+  // Web3 Connectors
+  connectorRegistry.register(new OkxWeb3Connector())
+  connectorRegistry.register(new BinanceWeb3Connector())
+  connectorRegistry.register(new Web3BotConnector())
 }
 
 // ============================================

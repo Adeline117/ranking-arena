@@ -113,7 +113,6 @@ export class ToobitFuturesConnector extends BaseConnector {
         try {
           const data = await this.request<{ data?: { list?: ToobitTraderEntry[] } }>(
             `https://bapi.toobit.com/bapi/v1/copy-trading/ranking?page=1&dataType=${dataType}&kind=${kind}`,
-            { timeout: 10000 }
           )
           for (const entry of data?.data?.list || []) {
             const id = this.extractId(entry)
@@ -131,8 +130,7 @@ export class ToobitFuturesConnector extends BaseConnector {
     if (allTraders.length < limit) {
       try {
         const data = await this.request<{ data?: Record<string, ToobitTraderEntry[]> }>(
-          `https://bapi.toobit.com/bapi/v1/copy-trading/identity-type-leaders?dataType=${dataType}`,
-          { timeout: 10000 }
+          `https://bapi.toobit.com/bapi/v1/copy-trading/identity-type-leaders?dataType=${dataType}`
         )
         if (data?.data) {
           for (const entries of Object.values(data.data)) {
