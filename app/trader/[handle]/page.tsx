@@ -7,7 +7,6 @@ import TraderProfileClient, { type UnregisteredTraderData } from './TraderProfil
 import { findTraderSource, TRADER_SOURCES, type SourceType } from '@/app/api/traders/[handle]/trader-queries'
 import type { TraderSource } from '@/app/api/traders/[handle]/trader-types'
 import { getTraderDetails, getTraderDetailsFromSnapshots } from '@/app/api/traders/[handle]/trader-transforms'
-import { createClient } from '@supabase/supabase-js'
 
 // Derive display names from central config
 const EXCHANGE_DISPLAY: Record<string, string> = Object.fromEntries(
@@ -253,33 +252,29 @@ export default async function TraderPage({ params }: { params: Promise<{ handle:
     // Fetch full trader data INLINE (no HTTP call — avoids Cloudflare 524 timeout)
     let serverTraderData = null
     try {
-      const supabaseUrl = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL || ''
-      const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || ''
-      if (supabaseUrl && supabaseKey) {
-        const sb = createClient(supabaseUrl, supabaseKey)
-        // Find trader source
-        let found: { source: TraderSource; sourceType: SourceType } | null = null
-        if (traderData.source && TRADER_SOURCES.includes(traderData.source as SourceType)) {
-          const { data: byId } = await sb
-            .from('trader_sources')
-            .select('source_trader_id, handle, profile_url, avatar_url, market_type')
-            .eq('source', traderData.source)
-            .eq('source_trader_id', traderData.source_trader_id)
-            .limit(1)
-            .maybeSingle()
-          if (byId) {
-            found = { source: byId as TraderSource, sourceType: traderData.source as SourceType }
-          }
+      const sb = getSupabaseAdmin()
+      // Find trader source
+      let found: { source: TraderSource; sourceType: SourceType } | null = null
+      if (traderData.source && TRADER_SOURCES.includes(traderData.source as SourceType)) {
+        const { data: byId } = await sb
+          .from('trader_sources')
+          .select('source_trader_id, handle, profile_url, avatar_url, market_type')
+          .eq('source', traderData.source)
+          .eq('source_trader_id', traderData.source_trader_id)
+          .limit(1)
+          .maybeSingle()
+        if (byId) {
+          found = { source: byId as TraderSource, sourceType: traderData.source as SourceType }
         }
-        if (!found) {
-          found = await findTraderSource(sb, traderData.source_trader_id || traderData.handle)
-        }
-        if (found) {
-          try {
-            serverTraderData = await getTraderDetails(sb, found.source, found.sourceType)
-          } catch {
-            serverTraderData = await getTraderDetailsFromSnapshots(sb, found.source.source_trader_id, found.sourceType)
-          }
+      }
+      if (!found) {
+        found = await findTraderSource(sb, traderData.source_trader_id || traderData.handle)
+      }
+      if (found) {
+        try {
+          serverTraderData = await getTraderDetails(sb, found.source, found.sourceType)
+        } catch {
+          serverTraderData = await getTraderDetailsFromSnapshots(sb, found.source.source_trader_id, found.sourceType)
         }
       }
     } catch {
