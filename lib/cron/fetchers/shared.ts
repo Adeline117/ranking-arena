@@ -440,7 +440,7 @@ export async function upsertTraders(
       pnl_usd: t.pnl ?? null,
       win_rate: t.win_rate ?? null,
       max_drawdown: t.max_drawdown ?? null,
-      arena_score: t.arena_score ?? null,
+      arena_score: t.arena_score ?? (t.roi != null ? 0 : null), // 0 for computed-but-low scores, NULL only if no ROI
       sharpe_ratio: t.sharpe_ratio ?? null,
       trades_count: t.trades_count ?? null,
       followers: t.followers ?? null,
