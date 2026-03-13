@@ -23,6 +23,7 @@ import {
 } from '../shared'
 import { logger } from '@/lib/logger'
 import { captureException } from '@/lib/utils/logger'
+import { fetchViaVpsProxy } from '../shared'
 
 const SOURCE = 'btcc'
 const TARGET = 1000
@@ -122,19 +123,32 @@ async function fetchAllTraders(): Promise<Map<string, BtccTrader>> {
   const allTraders = new Map<string, BtccTrader>()
   let consecutiveEmpty = 0
 
+  // Try VPS proxy first (Vercel IP is throttled by BTCC), fall back to direct
+  const useVps = !!(process.env.VPS_PROXY_SG || process.env.VPS_PROXY_URL)
+
   for (let page = 1; page <= Math.ceil(TARGET / PAGE_SIZE); page++) {
     try {
-      const data = await fetchJson<BtccResponse>(API_URL, {
-        method: 'POST',
-        headers: HEADERS,
-        body: {
-          pageNum: page,
-          pageSize: PAGE_SIZE,
-          sortType: 4, // PnL% (ROI ranking)
-          nickName: '',
-        },
-        timeoutMs: 10000,
-      })
+      let data: BtccResponse
+      if (useVps) {
+        data = await fetchViaVpsProxy<BtccResponse>(API_URL, {
+          method: 'POST',
+          headers: HEADERS,
+          body: { pageNum: page, pageSize: PAGE_SIZE, sortType: 4, nickName: '' },
+          timeoutMs: 15000,
+        })
+      } else {
+        data = await fetchJson<BtccResponse>(API_URL, {
+          method: 'POST',
+          headers: HEADERS,
+          body: {
+            pageNum: page,
+            pageSize: PAGE_SIZE,
+            sortType: 4, // PnL% (ROI ranking)
+            nickName: '',
+          },
+          timeoutMs: 10000,
+        })
+      }
 
       const list = extractList(data)
 
