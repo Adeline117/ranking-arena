@@ -110,11 +110,21 @@ export async function fetchDydxStatsDetail(
   address: string
 ): Promise<StatsDetail | null> {
   try {
-    // Fetch subaccount and Copin stats in parallel
-    const [equity, copinStats] = await Promise.all([
+    // Fetch subaccount and Copin stats in parallel (with error tolerance)
+    const results = await Promise.allSettled([
       fetchSubaccountEquity(address),
       fetchCopinTraderStats(address),
     ])
+    
+    const equity = results[0].status === 'fulfilled' ? results[0].value : null
+    const copinStats = results[1].status === 'fulfilled' ? results[1].value : null
+    
+    if (results[0].status === 'rejected') {
+      console.error(`dYdX equity fetch failed for ${address}:`, results[0].reason)
+    }
+    if (results[1].status === 'rejected') {
+      console.error(`dYdX Copin stats fetch failed for ${address}:`, results[1].reason)
+    }
 
     const totalTrades = copinStats?.totalTrade ?? null
     const totalWin = copinStats?.totalWin ?? null

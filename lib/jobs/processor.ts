@@ -313,21 +313,29 @@ export class JobProcessor {
     const result = await connector.fetchTimeseries(job.trader_key)
     if (result.series.length === 0) return
 
-    for (const ts of result.series) {
+    // Batch upsert instead of loop
+    const records = result.series.map(ts => ({
+      platform: job.platform,
+      market_type: job.market_type,
+      trader_key: job.trader_key,
+      series_type: ts.series_type,
+      as_of_ts: ts.as_of_ts,
+      data: ts.data,
+    }))
+
+    const BATCH_SIZE = 25
+    for (let i = 0; i < records.length; i += BATCH_SIZE) {
+      const batch = records.slice(i, i + BATCH_SIZE)
       const { error } = await this.supabase
         .from('trader_timeseries')
-        .upsert({
-          platform: job.platform,
-          market_type: job.market_type,
-          trader_key: job.trader_key,
-          series_type: ts.series_type,
-          as_of_ts: ts.as_of_ts,
-          data: ts.data,
-        }, {
+        .upsert(batch, {
           onConflict: 'platform,market_type,trader_key,series_type',
         })
 
-      if (error) throw new Error(`Upsert timeseries failed: ${error.message}`)
+      if (error) {
+        jobLogger.error(`Batch ${i} failed:`, error)
+        throw new Error(`Upsert timeseries failed: ${error.message}`)
+      }
     }
 
     jobLogger.info(`[Timeseries] Updated ${result.series.length} series for ${job.platform}/${job.trader_key}`)

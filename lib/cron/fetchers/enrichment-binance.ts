@@ -292,20 +292,31 @@ export async function enrichBinanceTraders(
   for (let i = 0; i < traderIds.length; i += concurrency) {
     const batch = traderIds.slice(i, i + concurrency)
 
-    const results = await Promise.all(
+    const results = await Promise.allSettled(
       batch.map((traderId) =>
         enrichSingleTrader(supabase, traderId, collectEquityCurve, collectPositionHistory)
       )
     )
 
-    for (const result of results) {
-      if (result.ok) {
-        success++
+    for (const settledResult of results) {
+      if (settledResult.status === 'fulfilled') {
+        const result = settledResult.value
+        if (result.ok) {
+          success++
+        } else {
+          failed++
+          if (errors.length < 10) errors.push(result.error.message)
+        }
       } else {
         failed++
-        if (errors.length < 10) errors.push(result.error.message)
+        const errorMsg = settledResult.reason instanceof Error 
+          ? settledResult.reason.message 
+          : String(settledResult.reason)
+        if (errors.length < 10) errors.push(errorMsg)
       }
     }
+    
+    console.log(`Binance batch: ${success} success, ${failed} failed so far`)
 
     if (i + concurrency < traderIds.length) {
       await sleep(delayMs)

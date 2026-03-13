@@ -349,8 +349,8 @@ export async function fetchHyperliquidStatsDetail(
   address: string
 ): Promise<StatsDetail | null> {
   try {
-    // Fetch both clearinghouse state and fills in parallel
-    const [state, fills] = await Promise.all([
+    // Fetch both clearinghouse state and fills in parallel (with error tolerance)
+    const results = await Promise.allSettled([
       fetchJson<{
         marginSummary?: { accountValue?: string; totalMarginUsed?: string }
         assetPositions?: Array<{ position?: { unrealizedPnl?: string; positionValue?: string } }>
@@ -365,6 +365,16 @@ export async function fetchHyperliquidStatsDetail(
       ).catch(() => null),
       fetchHyperliquidFills(address).catch(() => [] as HyperliquidFill[]),
     ])
+    
+    const state = results[0].status === 'fulfilled' ? results[0].value : null
+    const fills = results[1].status === 'fulfilled' ? results[1].value : []
+    
+    if (results[0].status === 'rejected') {
+      console.error(`Hyperliquid state fetch failed for ${address}:`, results[0].reason)
+    }
+    if (results[1].status === 'rejected') {
+      console.error(`Hyperliquid fills fetch failed for ${address}:`, results[1].reason)
+    }
 
     const accountValue = state?.marginSummary
       ? parseFloat(state.marginSummary.accountValue || '0')
