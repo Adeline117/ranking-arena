@@ -48,6 +48,11 @@ export default function HomeHero() {
           fontSize: 18,
           lineHeight: 1,
           padding: 4,
+          minWidth: 44,
+          minHeight: 44,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
         }}
         aria-label="Dismiss"
       >
@@ -82,7 +87,7 @@ export default function HomeHero() {
       <div style={{
         display: 'flex',
         justifyContent: 'center',
-        gap: tokens.spacing[8],
+        gap: 'clamp(16px, 4vw, 32px)',
         flexWrap: 'wrap',
       }}>
         {[

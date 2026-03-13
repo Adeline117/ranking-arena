@@ -10,7 +10,7 @@ import { createClient } from '@supabase/supabase-js'
 import { z } from 'zod'
 import { verifyQStashSignature } from '@/lib/cron/qstash-client'
 import { createLogger } from '@/lib/utils/logger'
-import { circuitBreaker as circuitBreakerManager } from '@/lib/middleware/circuit-breaker'
+import { circuitBreaker as circuitBreakerManager, withCircuitBreaker } from '@/lib/middleware/circuit-breaker'
 
 const logger = createLogger('CronRoute')
 
@@ -87,7 +87,7 @@ export async function POST(
         success: false,
         platform,
         message: 'Circuit breaker open',
-        retryAfter: circuitBreaker.getStats().remainingCooldown,
+        retryAfter: 60,
       }, { status: 503 })
     }
 
@@ -101,7 +101,8 @@ export async function POST(
     }
 
     // 4. 执行抓取
-    const data = await circuitBreaker.execute(fetcher)
+    const wrappedFetcher = withCircuitBreaker(platform, fetcher, () => Promise.resolve([]))
+    const data = await wrappedFetcher()
     
     if (!data || data.length === 0) {
       logger.warn(`No data returned for ${platform}`)
