@@ -460,12 +460,24 @@ export default function SearchDropdown({ open, query, onClose }: SearchDropdownP
                   </Box>
                 )}
                 <Box style={{ flex: 1, minWidth: 0 }}>
-                  <Text size="sm" style={{
-                    color: tokens.colors.text.primary,
-                    overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-                  }}>
-                    {highlightMatch(result.title, query)}
-                  </Text>
+                  <Box style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                    <Text size="sm" style={{
+                      color: tokens.colors.text.primary,
+                      overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                    }}>
+                      {highlightMatch(result.title, query)}
+                    </Text>
+                    {Boolean(result.meta?.is_bot) && (
+                      <span style={{
+                        padding: '0px 4px', borderRadius: 4, fontSize: 10, fontWeight: 600,
+                        color: '#a78bfa', background: 'rgba(167, 139, 250, 0.12)',
+                        border: '1px solid rgba(167, 139, 250, 0.25)',
+                        lineHeight: 1.4, display: 'inline-flex', alignItems: 'center', gap: 2, flexShrink: 0,
+                      }}>
+                        <span style={{ fontSize: 8 }}>{'⚡'}</span>Bot
+                      </span>
+                    )}
+                  </Box>
                   {result.subtitle && (
                     <Text size="xs" color="tertiary" style={{
                       overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
