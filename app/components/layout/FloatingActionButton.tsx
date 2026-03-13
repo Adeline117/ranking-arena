@@ -33,9 +33,9 @@ export default function FloatingActionButton() {
     return () => document.removeEventListener('mousedown', handleClickOutside)
   }, [menuOpen])
 
-  // Only show on feed and groups pages, and only when authenticated
-  const showOnPages = ['/', '/hot', '/groups']
-  const shouldShow = isAuthenticated && showOnPages.some(p => pathname === p || pathname.startsWith('/groups/'))
+  // Only show on feed and groups pages when social is enabled
+  const showOnPages = features.social ? ['/', '/hot', '/groups'] : []
+  const shouldShow = isAuthenticated && features.social && showOnPages.some(p => pathname === p || pathname.startsWith('/groups/'))
 
   if (!shouldShow) return null
 
