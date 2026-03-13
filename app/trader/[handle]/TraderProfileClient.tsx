@@ -153,11 +153,12 @@ export default function TraderProfileClient({ data, serverTraderData }: TraderPr
     router.replace(`${pathname}${qs ? `?${qs}` : ''}`, { scroll: false })
   }, [searchParams, pathname, router])
 
-  // SWR for full trader data from API — pass platform if available for disambiguation
+  // SWR for full trader data from API — prefer handle (human-readable, Cloudflare-safe)
   const platform = searchParams?.get('platform') || data.source || ''
+  const traderApiHandle = data.handle || data.source_trader_id
   const traderApiUrl = platform
-    ? `/api/traders/${encodeURIComponent(data.source_trader_id || data.handle)}?source=${encodeURIComponent(platform)}`
-    : `/api/traders/${encodeURIComponent(data.source_trader_id || data.handle)}`
+    ? `/api/traders/${encodeURIComponent(traderApiHandle)}?source=${encodeURIComponent(platform)}`
+    : `/api/traders/${encodeURIComponent(traderApiHandle)}`
   const { data: traderData, error: traderError, isLoading: traderLoading } = useSWR<TraderPageData>(
     traderApiUrl,
     traderFetcher,
