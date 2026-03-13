@@ -435,7 +435,8 @@ export async function upsertTraders(
       window: t.season_id?.toUpperCase() || t.season_id, // Normalize to uppercase (7d → 7D)
       as_of_ts: t.captured_at,
       // Flat columns — read by leaderboard, scoring, and frontend
-      roi_pct: t.roi ?? null,
+      // Cap extreme ROI values (>100,000% is likely a normalization bug)
+      roi_pct: t.roi != null && Math.abs(t.roi) > 100000 ? null : (t.roi ?? null),
       pnl_usd: t.pnl ?? null,
       win_rate: t.win_rate ?? null,
       max_drawdown: t.max_drawdown ?? null,
