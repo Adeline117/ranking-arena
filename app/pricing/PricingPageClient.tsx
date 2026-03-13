@@ -48,14 +48,12 @@ export default function PricingPageClient({ lifetimeCount = 0 }: PricingPageClie
     resolved(t('featureProBadge'), 'featureProBadge', 'Pro Badge'),
     resolved(t('featureAdvancedFilter'), 'featureAdvancedFilter', 'Advanced Filters'),
     resolved(t('featureTraderCompare'), 'featureTraderCompare', 'Trader Comparison'),
-    resolved(t('featureProGroups'), 'featureProGroups', 'Pro Groups'),
   ]
 
   const freeFeatures = [
     resolved(t('freeFeatureRankings'), 'freeFeatureRankings', 'Basic Rankings'),
-    resolved(t('freeFeaturePosts'), 'freeFeaturePosts', 'Community Posts'),
-    resolved(t('freeFeatureGroups'), 'freeFeatureGroups', 'Public Groups'),
     resolved(t('freeFeatureLibrary'), 'freeFeatureLibrary', 'Library Access'),
+    resolved(t('freeFeatureMarket'), 'freeFeatureMarket', 'Market Overview'),
   ]
 
   const currentPrice = PRICING[billing]
@@ -389,9 +387,8 @@ export default function PricingPageClient({ lifetimeCount = 0 }: PricingPageClie
               { feature: locale === 'zh' ? '分类排行' : 'Category Rankings', free: false, pro: true },
               { feature: locale === 'zh' ? 'CSV 导出' : 'CSV Export', free: false, pro: true },
               { feature: locale === 'zh' ? '交易提醒' : 'Trader Alerts', free: false, pro: true },
-              { feature: locale === 'zh' ? '社区帖子' : 'Community Posts', free: true, pro: true },
               { feature: locale === 'zh' ? '资源库' : 'Library Access', free: true, pro: true },
-              { feature: locale === 'zh' ? '公共群组' : 'Public Groups', free: true, pro: true },
+              { feature: locale === 'zh' ? '市场概览' : 'Market Overview', free: true, pro: true },
             ].map((row, i) => (
               <div key={i} style={{
                 display: 'grid',
