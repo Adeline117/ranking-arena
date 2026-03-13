@@ -1,6 +1,7 @@
 import { cache } from 'react'
 import type { Metadata } from 'next'
-import { notFound } from 'next/navigation'
+import { notFound, redirect } from 'next/navigation'
+import { features } from '@/lib/features'
 import { getSupabaseAdmin } from '@/lib/supabase/server'
 import PostDetailClient from './PostDetailClient'
 
@@ -59,6 +60,8 @@ export async function generateMetadata({ params }: { params: Promise<{ id: strin
 }
 
 export default async function PostDetailPage({ params }: { params: Promise<{ id: string }> }) {
+  if (!features.social) redirect('/')
+
   const { id } = await params
 
   // Validate id is a valid number and check existence

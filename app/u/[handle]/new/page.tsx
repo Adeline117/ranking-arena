@@ -1,5 +1,7 @@
 'use client'
 
+import { features } from '@/lib/features'
+import { notFound } from 'next/navigation'
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase/client'
@@ -25,6 +27,8 @@ import {
 } from './types'
 
 export default function NewPostPage() {
+  if (!features.social) notFound()
+
   const params = useParams<{ handle: string }>()
   const handle = params.handle as string
   const router = useRouter()

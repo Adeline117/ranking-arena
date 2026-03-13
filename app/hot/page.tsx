@@ -1,5 +1,7 @@
 'use client'
 
+import { features } from '@/lib/features'
+import { notFound } from 'next/navigation'
 import { useEffect, useMemo, useState, useCallback, useRef, Suspense, lazy } from 'react'
 import Link from 'next/link'
 import { useRouter, useSearchParams } from 'next/navigation'
@@ -890,6 +892,8 @@ function HotContent() {
 
 
 export default function HotPage() {
+  if (!features.social) notFound()
+
   return (
     <Suspense fallback={
       <Box style={{ minHeight: '100vh', background: 'var(--color-bg-primary)', color: 'var(--color-text-primary)' }}>

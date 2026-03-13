@@ -1,5 +1,7 @@
 'use client'
 
+import { features } from '@/lib/features'
+import { notFound } from 'next/navigation'
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { tokens } from '@/lib/design-tokens'
@@ -14,6 +16,8 @@ type TabKey = 'notifications' | 'messages'
 
 
 export default function InboxPage() {
+  if (!features.social) notFound()
+
   const router = useRouter()
   const { email, authChecked, accessToken } = useAuthSession()
   const { t } = useLanguage()

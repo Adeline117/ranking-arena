@@ -1,5 +1,7 @@
 'use client'
 
+import { features } from '@/lib/features'
+import { notFound } from 'next/navigation'
 import { Suspense } from 'react'
 import { tokens } from '@/lib/design-tokens'
 import TopNav from '@/app/components/layout/TopNav'
@@ -9,6 +11,8 @@ import GroupsFeedPage from '@/app/components/groups/GroupsFeedPage'
 
 
 export default function GroupsPage() {
+  if (!features.social) notFound()
+
   return (
     <Suspense fallback={
       <Box style={{ minHeight: '100vh', background: tokens.colors.bg.primary, color: tokens.colors.text.primary }}>

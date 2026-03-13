@@ -1,5 +1,7 @@
 'use client'
 
+import { features } from '@/lib/features'
+import { notFound } from 'next/navigation'
 import { useState, useEffect, useRef } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import Image from 'next/image'
@@ -231,6 +233,8 @@ function renderContentWithControls(
 }
 
 export default function EditPostPage() {
+  if (!features.social) notFound()
+
   const params = useParams<{ id: string }>()
   const postId = params.id as string
   const router = useRouter()

@@ -1,5 +1,7 @@
 'use client'
 
+import { features } from '@/lib/features'
+import { notFound } from 'next/navigation'
 import Link from 'next/link'
 import { useEffect, useState, useCallback, useRef } from 'react'
 import { useSearchParams } from 'next/navigation'
@@ -75,6 +77,8 @@ function PageWrapper({ email, children }: PageWrapperProps): React.ReactElement 
 }
 
 export default function GroupDetailPage({ params }: { params: Promise<{ id: string }> }) {
+  if (!features.social) notFound()
+
   const [groupId, setGroupId] = useState<string>('')
   const abortControllerRef = useRef<AbortController | null>(null)
 
