@@ -93,24 +93,22 @@ export default function ChallengeButton({
     debounceRef.current = setTimeout(() => search(value), 350)
   }
 
-  // Build PK URL once an opponent is selected
-  const buildPKUrl = (opponentHandle: string): string => {
+  // Build compare URL once an opponent is selected
+  const buildCompareUrl = (opponentHandle: string): string => {
     const params = new URLSearchParams()
+    params.set('ids', `${handle},${opponentHandle}`)
     if (source) params.set('platform', source)
-    const paramStr = params.toString()
-    const path = `/pk/${encodeURIComponent(handle)}/${encodeURIComponent(opponentHandle)}`
-    return `${BASE_URL}${path}${paramStr ? `?${paramStr}` : ''}`
+    return `${BASE_URL}/compare?${params.toString()}`
   }
 
-  const pkUrl = selected ? buildPKUrl(selected.title) : ''
+  const pkUrl = selected ? buildCompareUrl(selected.title) : ''
   const opponentName = selected?.title || ''
 
   const goToPK = () => {
     if (!selected) return
-    const path = `/pk/${encodeURIComponent(handle)}/${encodeURIComponent(selected.title)}${
-      source ? `?platform=${encodeURIComponent(source)}` : ''
-    }`
-    router.push(path)
+    const params = new URLSearchParams({ ids: `${handle},${selected.title}` })
+    if (source) params.set('platform', source)
+    router.push(`/compare?${params.toString()}`)
     setOpen(false)
   }
 
