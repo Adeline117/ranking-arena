@@ -432,8 +432,19 @@ export async function upsertTraders(
       platform: t.source,
       market_type: getMarketType(t.source),
       trader_key: t.source_trader_id,
-      window: t.season_id,
+      window: t.season_id?.toUpperCase() || t.season_id, // Normalize to uppercase (7d → 7D)
       as_of_ts: t.captured_at,
+      // Flat columns — read by leaderboard, scoring, and frontend
+      roi_pct: t.roi ?? null,
+      pnl_usd: t.pnl ?? null,
+      win_rate: t.win_rate ?? null,
+      max_drawdown: t.max_drawdown ?? null,
+      arena_score: t.arena_score ?? null,
+      sharpe_ratio: t.sharpe_ratio ?? null,
+      trades_count: t.trades_count ?? null,
+      followers: t.followers ?? null,
+      copiers: null,
+      // JSONB metrics — full data for detail views and future use
       metrics: {
         roi: t.roi ?? null,
         pnl: t.pnl ?? null,
