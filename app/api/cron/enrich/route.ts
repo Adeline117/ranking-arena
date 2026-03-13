@@ -60,6 +60,20 @@ async function handleEnrichment(req: Request) {
     return NextResponse.json({ error: 'platform param required for direct call' }, { status: 400 })
   }
 
+  // Early return for NO_ENRICHMENT_PLATFORMS - don't even call runEnrichment
+  // This prevents any failed job logs for platforms that explicitly don't support enrichment
+  if (NO_ENRICHMENT_PLATFORMS.has(platformParam)) {
+    logger.info(`[enrich] Platform ${platformParam} does not support enrichment - skipping`)
+    return NextResponse.json({
+      ok: true,
+      duration: 0,
+      period,
+      summary: { total: 0, enriched: 0, failed: 0 },
+      results: {},
+      reason: 'platform does not support enrichment',
+    }, { status: 200 })
+  }
+
   try {
     const result = await runEnrichment({ platform: platformParam, period, limit, offset })
     return NextResponse.json(result, { status: result.ok ? 200 : 207 })
