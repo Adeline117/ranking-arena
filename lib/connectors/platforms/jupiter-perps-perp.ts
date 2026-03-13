@@ -20,6 +20,8 @@ import type {
   DiscoverResult,
   ProfileResult,
   SnapshotResult,
+  SnapshotMetrics,
+  QualityFlags,
   TimeseriesResult,
   TraderSource,
 } from '../../types/leaderboard'
@@ -46,7 +48,7 @@ export class JupiterPerpsPerpConnector extends BaseConnector {
     platform: 'jupiter_perps',
     market_types: ['perp'],
     native_windows: ['7d', '30d', '90d'],
-    available_fields: ['roi', 'pnl'],
+    available_fields: ['roi', 'pnl', 'win_rate', 'max_drawdown', 'trades_count'],
     has_timeseries: false,
     has_profiles: false,
     scraping_difficulty: 1,
@@ -144,8 +146,69 @@ export class JupiterPerpsPerpConnector extends BaseConnector {
     return null
   }
 
-  async fetchTraderSnapshot(_traderKey: string, _window: Window): Promise<SnapshotResult | null> {
-    return null
+  async fetchTraderSnapshot(traderKey: string, _window: Window): Promise<SnapshotResult | null> {
+    try {
+      // Jupiter has full position history with PnL — compute WR and MDD
+      const positions = await this.request<Array<{
+        pnlUsd?: number | string
+        status?: string
+        side?: string
+        collateralUsd?: number | string
+        sizeUsd?: number | string
+      }>>(
+        `https://perps-api.jup.ag/v1/positions?walletAddress=${traderKey}&includeClosedPositions=true`
+      )
+
+      if (!Array.isArray(positions) || positions.length === 0) return null
+
+      const closedPositions = positions.filter(p => p.status === 'closed' || p.pnlUsd != null)
+      if (closedPositions.length < 2) return null
+
+      // Win rate from closed positions
+      const wins = closedPositions.filter(p => Number(p.pnlUsd || 0) > 0).length
+      const losses = closedPositions.filter(p => Number(p.pnlUsd || 0) < 0).length
+      const total = wins + losses
+      const winRate = total > 0 ? (wins / total) * 100 : null
+
+      // MDD from cumulative PnL curve
+      let cumPnl = 0
+      let peak = 0
+      let maxDD = 0
+      for (const p of closedPositions) {
+        cumPnl += Number(p.pnlUsd || 0)
+        if (cumPnl > peak) peak = cumPnl
+        if (peak > 0) {
+          const dd = ((peak - cumPnl) / peak) * 100
+          if (dd > maxDD) maxDD = dd
+        }
+      }
+
+      return {
+        metrics: {
+          roi: null, // ROI comes from leaderboard
+          pnl: cumPnl || null,
+          win_rate: winRate != null ? Math.round(winRate * 100) / 100 : null,
+          max_drawdown: maxDD > 0.01 && maxDD < 200 ? Math.round(maxDD * 100) / 100 : null,
+          trades_count: total,
+          sharpe_ratio: null, sortino_ratio: null,
+          followers: null, copiers: null, aum: null,
+          platform_rank: null,
+          arena_score: null, return_score: null, drawdown_score: null, stability_score: null,
+        },
+        quality_flags: {
+          missing_fields: ['followers', 'copiers'],
+          non_standard_fields: {
+            win_rate: 'Computed from closed positions PnL',
+            max_drawdown: 'Computed from cumulative PnL curve',
+          },
+          window_native: false,
+          notes: ['WR/MDD from /v1/positions?includeClosedPositions=true'],
+        },
+        fetched_at: new Date().toISOString(),
+      }
+    } catch {
+      return null
+    }
   }
 
   async fetchTimeseries(_traderKey: string): Promise<TimeseriesResult> {
