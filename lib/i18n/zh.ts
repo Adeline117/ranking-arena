@@ -2293,15 +2293,7 @@ const zh = {
     saveBookmark: '收藏',
     manageFolders: '管理收藏夹',
 
-    // TraderReviews
-    originalText: '原文',
-    translateText: '翻译',
     pleaseSignInFirst: '请先登录',
-    pleaseSelectRating: '请选择评分',
-    pleaseWriteReview: '请输入评价内容',
-    reviewPosted: '评价已发布',
-    reviewPlaceholder: '分享你对这位交易员的看法...',
-    confirmDeleteReview: '确定删除这条评价？',
 
     // 交易员页面
     loadFailedRetryMsg: '加载失败，请稍后重试',

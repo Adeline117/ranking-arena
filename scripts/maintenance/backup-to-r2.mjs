@@ -47,7 +47,6 @@ const TRADER_TABLES = [
   'trader_merges',
   // Social
   'trader_follows',
-  'trader_reviews',
   'trader_authorizations',
   'trader_alerts',
   // Leaderboard

@@ -2292,15 +2292,7 @@ const en = {
     saveBookmark: 'Bookmark',
     manageFolders: 'Manage Folders',
 
-    // TraderReviews
-    originalText: 'Original',
-    translateText: 'Translate',
     pleaseSignInFirst: 'Please sign in first',
-    pleaseSelectRating: 'Please select a rating',
-    pleaseWriteReview: 'Please write your review',
-    reviewPosted: 'Review posted',
-    reviewPlaceholder: 'Share your thoughts about this trader...',
-    confirmDeleteReview: 'Delete this review?',
 
     // Trader page
     loadFailedRetryMsg: 'Failed to load, please try again',

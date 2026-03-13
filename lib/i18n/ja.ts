@@ -2160,14 +2160,7 @@ const ja = {
     saveBookmark: 'ブックマーク',
     manageFolders: 'フォルダを管理',
 
-    originalText: '原文',
-    translateText: '翻訳',
     pleaseSignInFirst: '最初にサインインしてください',
-    pleaseSelectRating: '評価を選択してください',
-    pleaseWriteReview: 'レビューを書いてください',
-    reviewPosted: 'レビューが投稿されました',
-    reviewPlaceholder: 'このトレーダーについての感想を共有しましょう...',
-    confirmDeleteReview: 'このレビューを削除しますか？',
 
     loadFailedRetryMsg: '読み込みに失敗しました。もう一度お試しください',
     noPerformanceData: 'パフォーマンスデータがありません',
