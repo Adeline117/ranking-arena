@@ -62,6 +62,18 @@ function ChangeCell({ value }: { value: number | null }) {
   )
 }
 
+const CATEGORY_MAP: Record<string, string> = {
+  BTC: 'L1', ETH: 'L1', SOL: 'L1', BNB: 'L1', ADA: 'L1', AVAX: 'L1', DOT: 'L1', NEAR: 'L1', ATOM: 'L1', SUI: 'L1', APT: 'L1', TRX: 'L1', TON: 'L1', XRP: 'L1',
+  LINK: 'DeFi', UNI: 'DeFi', AAVE: 'DeFi', MKR: 'DeFi', CRV: 'DeFi', SNX: 'DeFi', COMP: 'DeFi', SUSHI: 'DeFi', DYDX: 'DeFi', LDO: 'DeFi',
+  ARB: 'L2', OP: 'L2', MATIC: 'L2', STRK: 'L2', IMX: 'L2', MANTA: 'L2',
+  DOGE: 'Meme', SHIB: 'Meme', PEPE: 'Meme', WIF: 'Meme', FLOKI: 'Meme', BONK: 'Meme',
+  RNDR: 'AI', FET: 'AI', TAO: 'AI', AGIX: 'AI', WLD: 'AI',
+  AXS: 'GameFi', GALA: 'GameFi', SAND: 'GameFi', MANA: 'GameFi',
+  BLUR: 'NFT', APE: 'NFT',
+  USDT: 'Stable', USDC: 'Stable', DAI: 'Stable',
+  XLM: 'L1', ALGO: 'L1', ICP: 'L1', FIL: 'Infra', AR: 'Infra', THETA: 'Infra',
+}
+
 function FlashPrice({ value, flash }: { value: string; flash?: PriceFlashInfo }) {
   const bg = flash?.direction === 'up'
     ? 'var(--color-accent-success-20)'
@@ -91,7 +103,7 @@ function FlashPrice({ value, flash }: { value: string; flash?: PriceFlashInfo })
   )
 }
 
-export default function SpotMarket({ onTokenClick }: { onTokenClick?: (token: SpotCoin) => void } = {}) {
+export default function SpotMarket({ onTokenClick, sectorFilter }: { onTokenClick?: (token: SpotCoin) => void; sectorFilter?: string | null } = {}) {
   const { t } = useLanguage()
   const [data, setData] = useState<SpotCoin[]>([])
   const [loading, setLoading] = useState(true)
@@ -155,12 +167,15 @@ export default function SpotMarket({ onTokenClick }: { onTokenClick?: (token: Sp
   const filtered = useMemo(() => {
     let list = merged
     if (showFavOnly) list = list.filter((c) => favorites.has(c.id))
+    if (sectorFilter) {
+      list = list.filter((c) => (CATEGORY_MAP[c.symbol.toUpperCase()] || 'Other') === sectorFilter)
+    }
     if (search) {
       const q = search.toLowerCase()
       list = list.filter((c) => c.symbol.toLowerCase().includes(q) || c.name.toLowerCase().includes(q))
     }
     return list
-  }, [merged, search, showFavOnly, favorites])
+  }, [merged, search, showFavOnly, favorites, sectorFilter])
 
   const columns: Column<SpotCoin>[] = [
     {

@@ -268,7 +268,7 @@ function MarketPageContent() {
           <section style={{ marginBottom: 24 }}>
             <SectionErrorBoundary fallbackMessage="Market data failed to load">
               <Suspense fallback={<LoadingCard height={400} />}>
-                <SpotMarket onTokenClick={handleTokenClick} />
+                <SpotMarket onTokenClick={handleTokenClick} sectorFilter={sectorFilter} />
               </Suspense>
             </SectionErrorBoundary>
           </section>
