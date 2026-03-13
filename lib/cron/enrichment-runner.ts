@@ -315,7 +315,7 @@ export const NO_ENRICHMENT_PLATFORMS = new Set([
   // API removed/unavailable (2026-03-10)
   'bybit', 'bybit_spot',
   // No enrichment API available
-  'bitfinex', 'coinex', 'xt', 'bitmart', 'btcc', 'bitunix', 'paradex', 'okx_spot',
+  'bitfinex', 'coinex', 'xt', 'bitmart', 'btcc', 'bitunix', 'paradex', 'okx_spot', 'etoro',
 ])
 
 export async function runEnrichment(params: {
