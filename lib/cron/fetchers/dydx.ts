@@ -116,7 +116,7 @@ async function fetchLeaderboardFromHeroku(): Promise<HerokuClcEntry[]> {
   for (let page = 1; page <= maxPages; page++) {
     try {
       const url = `${HEROKU_API}/dydx-weekly-clc?perPage=${perPage}&page=${page}`
-      const data = await fetchJson<HerokuClcResponse>(url, { timeoutMs: 20000 })
+      const data = await fetchJson<HerokuClcResponse>(url, { timeoutMs: 10000 })  // Reduced from 20s to 10s
 
       if (!data?.success || !data.data || data.data.length === 0) break
 
@@ -124,10 +124,10 @@ async function fetchLeaderboardFromHeroku(): Promise<HerokuClcEntry[]> {
       logger.warn(`[dydx] Heroku CLC page ${page}: ${data.data.length} entries (total: ${allTraders.length}/${data.pagination.total})`)
 
       if (allTraders.length >= TARGET || page >= data.pagination.totalPages) break
-      await sleep(300)
+      await sleep(200)  // Reduced from 300ms to 200ms
     } catch (err) {
       logger.warn(`[dydx] Heroku CLC page ${page} failed: ${err instanceof Error ? err.message : String(err)}`)
-      break
+      break  // Fail fast, don't retry
     }
   }
 
@@ -151,7 +151,7 @@ async function fetchViaCopinApi(period: string): Promise<TraderData[]> {
   for (let page = 0; page < maxPages; page++) {
     const url = `https://api.copin.io/leaderboards/page?protocol=DYDX&statisticType=${statisticType}&queryDate=${queryDate}&limit=${pageSize}&offset=${page * pageSize}&sort_by=ranking&sort_type=asc`
 
-    const data = await fetchJson<CopinDydxResponse>(url, { timeoutMs: 15000 })
+    const data = await fetchJson<CopinDydxResponse>(url, { timeoutMs: 8000 })  // Reduced from 15s to 8s
     if (!data?.data?.length) break
 
     for (const t of data.data) {
@@ -182,7 +182,7 @@ async function fetchViaCopinApi(period: string): Promise<TraderData[]> {
     }
 
     if (data.data.length < pageSize) break
-    await sleep(300)
+    await sleep(150)  // Reduced from 300ms to 150ms for faster fetch
   }
 
   return traders
@@ -303,27 +303,29 @@ async function fetchPeriod(
   supabase: SupabaseClient,
   period: string
 ): Promise<{ total: number; saved: number; error?: string }> {
-  // The Heroku API only has weekly competition data (no period filter).
-  // Cache across periods to avoid fetching 3x (saves ~40s).
+  // OPTIMIZED 2026-03-12: Use Copin API as primary source (faster, more reliable)
+  // Heroku API is slow/unreliable, causing 120s+ timeouts
+  
+  // Strategy 1: Try Copin API first (fast, reliable, no auth needed)
+  try {
+    const copinTraders = await fetchViaCopinApi(period)
+    if (copinTraders.length > 0) {
+      logger.info(`[${SOURCE}] Copin API returned ${copinTraders.length} traders for ${period}`)
+      const { saved, error } = await upsertTraders(supabase, copinTraders)
+      return { total: copinTraders.length, saved, error }
+    }
+  } catch (err) {
+    logger.warn(`[${SOURCE}] Copin API failed, falling back to Heroku: ${err instanceof Error ? err.message : String(err)}`)
+  }
+
+  // Strategy 2: Heroku API fallback (slower, cache across periods)
   if (!_herokuCache) {
     _herokuCache = await fetchLeaderboardFromHeroku()
   }
   const entries = _herokuCache
 
-  // Strategy 2: Copin API fallback
   if (entries.length === 0) {
-    logger.warn(`[${SOURCE}] Heroku API returned 0 entries, trying Copin API fallback...`)
-    try {
-      const copinTraders = await fetchViaCopinApi(period)
-      if (copinTraders.length > 0) {
-        logger.info(`[${SOURCE}] Copin API returned ${copinTraders.length} traders for ${period}`)
-        const { saved, error } = await upsertTraders(supabase, copinTraders)
-        return { total: copinTraders.length, saved, error }
-      }
-    } catch (err) {
-      logger.warn(`[${SOURCE}] Copin API failed: ${err instanceof Error ? err.message : String(err)}`)
-    }
-    return { total: 0, saved: 0, error: 'No data from dYdX Heroku API or Copin API' }
+    return { total: 0, saved: 0, error: 'No data from Copin API or dYdX Heroku API' }
   }
 
   // Parse to enrichable format using Heroku CLC data
