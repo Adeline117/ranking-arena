@@ -1,192 +1,40 @@
 'use client'
 
 import { useState, useEffect, useCallback, useRef } from 'react'
-import type { Rendition, Book, NavItem, Contents } from 'epubjs'
+import type { Rendition, Book, Contents } from 'epubjs'
 import AudioReader from './AudioReader'
-import { supabase } from '@/lib/supabase/client'
 import { EpubToolbar } from './EpubToolbar'
 import { EpubSettings } from './EpubSettings'
 import { EpubSearchPanel, EpubNotesPanel, EpubStatsPanel, type EpubHighlight } from './EpubNavigation'
+import EpubNoteInputModal from './EpubNoteInputModal'
+import EpubLoadingIndicator from './EpubLoadingIndicator'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
-import { t as moduleT } from '@/lib/i18n'
+import {
+  type ReadingTheme,
+  type FontSize,
+  type FontFamily,
+  type LineHeight,
+  type PageMargin,
+  type EpubSpine,
+  type EpubContentsEntry,
+  type EpubControlsElement,
+  type SearchResult,
+  type ReadingStats,
+  type HighlightSortMode,
+  type HighlightFilterColor,
+  type EpubReaderProps,
+  HIGHLIGHT_COLORS,
+  lsGet,
+  lsSet,
+  syncEpubPositionToServer,
+  loadEpubPositionFromServer,
+  syncReadingStatsToServer,
+  estimateTimeRemaining,
+  applyTheme,
+} from './EpubReaderUtils'
 
-// ─── Types ───────────────────────────────────────────────────────────
-
-type ReadingTheme = 'white' | 'sepia' | 'dark' | 'green'
-type FontSize = 'small' | 'medium' | 'large'
-type FontFamily = 'sans' | 'serif' | 'mono' | 'kai'
-type LineHeight = 'compact' | 'normal' | 'relaxed'
-type PageMargin = 'narrow' | 'normal' | 'wide'
-
-interface EpubSpineItem {
-  load: (loader: (path: string) => Promise<object>) => Promise<Document>
-  cfiFromRange: (range: Range) => string
-  href: string
-  unload: () => void
-}
-
-interface EpubSpine {
-  items?: EpubSpineItem[]
-  spineItems?: EpubSpineItem[]
-}
-
-interface EpubContentsEntry {
-  document?: Document
-  content?: { ownerDocument?: Document }
-}
-
-interface EpubControlsElement extends HTMLElement {
-  __epubControls?: Record<string, () => void>
-}
-
-type SearchResult = {
-  cfi: string
-  excerpt: string
-}
-
-type ReadingStats = {
-  sessionStartTime: number
-  totalReadingTimeSec: number
-  pagesRead: number
-  sessionsCount: number
-  avgSpeedCharsPerMin: number
-}
-
-type HighlightSortMode = 'time' | 'position'
-type HighlightFilterColor = string | 'all'
-
-export type EpubReaderProps = {
-  url: string
-  bookId: string
-  theme: ReadingTheme
-  fontSize: FontSize
-  fontFamily: FontFamily
-  onTocLoaded?: (toc: NavItem[]) => void
-  onProgressChange?: (percent: number, currentPage: number, totalPages: number) => void
-  onReady?: () => void
-  goToHref?: string | null
-  className?: string
-  lineHeight?: LineHeight
-  pageMargin?: PageMargin
-  onLineHeightChange?: (lh: LineHeight) => void
-  onPageMarginChange?: (pm: PageMargin) => void
-}
-
-// ─── Constants ───────────────────────────────────────────────────────
-
-const THEME_STYLES: Record<ReadingTheme, { body: Record<string, string> }> = {
-  white: { body: { background: 'var(--color-on-accent)', color: 'var(--color-text-primary)' } },
-  sepia: { body: { background: 'var(--color-bg-secondary)', color: 'var(--color-bg-tertiary)' } },
-  dark:  { body: { background: 'var(--color-bg-secondary)', color: 'var(--color-border-primary)' } },
-  green: { body: { background: 'var(--color-accent-success-20)', color: 'var(--color-accent-success)' } },
-}
-
-const FONT_SIZE_MAP: Record<FontSize, number> = { small: 90, medium: 100, large: 120 }
-
-const FONT_FAMILY_MAP: Record<FontFamily, string> = {
-  sans: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "PingFang SC", "Hiragino Sans GB", sans-serif',
-  serif: 'Georgia, "Noto Serif SC", "Source Han Serif SC", "Songti SC", "SimSun", serif',
-  mono: '"SF Mono", "Fira Code", "Cascadia Code", Menlo, monospace',
-  kai: '"STKaiti", "KaiTi", "楷体", serif',
-}
-
-const LINE_HEIGHT_MAP: Record<LineHeight, string> = {
-  compact: '1.5',
-  normal: '1.8',
-  relaxed: '2.2',
-}
-
-const PAGE_MARGIN_MAP: Record<PageMargin, string> = {
-  narrow: '20px',
-  normal: '48px',
-  wide: '80px',
-}
-
-const HIGHLIGHT_COLORS = ['var(--color-chart-yellow)', 'var(--color-chart-blue)', 'var(--color-accent-success-20)', 'var(--color-accent-error)', 'var(--color-chart-pink)']
-
-const LS_PREFIX = 'reader_'
-
-function lsGet<T>(key: string, fallback: T): T {
-  if (typeof window === 'undefined') return fallback
-  try {
-    const v = localStorage.getItem(LS_PREFIX + key)
-    return v ? JSON.parse(v) : fallback
-  } catch { return fallback }
-}
-
-function lsSet(key: string, value: unknown) {
-  if (typeof window === 'undefined') return
-  try { localStorage.setItem(LS_PREFIX + key, JSON.stringify(value)) } catch { /* empty */ }
-}
-
-// ─── Supabase sync helpers ───────────────────────────────────────────
-
-async function syncEpubPositionToServer(bookId: string, cfi: string, percent: number, page: number, totalPages: number) {
-  try {
-    const { data: { session } } = await supabase.auth.getSession()
-    if (!session?.access_token) return
-    await supabase.from('reading_progress').upsert({
-      user_id: session.user.id,
-      book_id: bookId,
-      current_page: page,
-      total_pages: totalPages,
-      epub_cfi: cfi,
-      progress_percent: percent,
-      updated_at: new Date().toISOString(),
-    }, { onConflict: 'user_id,book_id' })
-  } catch { /* empty */ }
-}
-
-async function loadEpubPositionFromServer(bookId: string): Promise<{ cfi: string; percent: number } | null> {
-  try {
-    const { data: { session } } = await supabase.auth.getSession()
-    if (!session?.access_token) return null
-    const { data } = await supabase
-      .from('reading_progress')
-      .select('epub_cfi, progress_percent')
-      .eq('user_id', session.user.id)
-      .eq('book_id', bookId)
-      .maybeSingle()
-    if (data?.epub_cfi) return { cfi: data.epub_cfi, percent: data.progress_percent || 0 }
-  } catch { /* empty */ }
-  return null
-}
-
-async function syncReadingStatsToServer(bookId: string, stats: ReadingStats) {
-  try {
-    const { data: { session } } = await supabase.auth.getSession()
-    if (!session?.access_token) return
-    await supabase.from('reading_statistics').upsert({
-      user_id: session.user.id,
-      book_id: bookId,
-      total_reading_time_sec: stats.totalReadingTimeSec,
-      pages_read: stats.pagesRead,
-      sessions_count: stats.sessionsCount,
-      avg_speed_chars_per_min: stats.avgSpeedCharsPerMin,
-      updated_at: new Date().toISOString(),
-    }, { onConflict: 'user_id,book_id' })
-  } catch { /* empty */ }
-}
-
-function formatDuration(seconds: number): string {
-  const sec = moduleT('durationSec')
-  const min = moduleT('durationMin')
-  const hour = moduleT('durationHour')
-  const minSuffix = moduleT('durationMinSuffix')
-  if (seconds < 60) return `${seconds}${sec}`
-  const m = Math.floor(seconds / 60)
-  if (m < 60) return `${m}${min}`
-  const h = Math.floor(m / 60)
-  const rm = m % 60
-  return `${h}${hour}${rm > 0 ? ` ${rm}${minSuffix}` : ''}`
-}
-
-function estimateTimeRemaining(percent: number, elapsedSec: number): string {
-  if (percent <= 0 || elapsedSec < 30) return moduleT('epubCalculating')
-  const totalEstimate = elapsedSec / (percent / 100)
-  const remaining = Math.max(0, totalEstimate - elapsedSec)
-  return formatDuration(Math.round(remaining))
-}
+// Re-export types for external consumers
+export type { EpubReaderProps }
 
 // ─── Component ───────────────────────────────────────────────────────
 
@@ -521,25 +369,6 @@ export default function EpubReader({
   }, [url, bookId])
 
   // ─── Apply theme/font changes ──────────────────────────────────
-  function applyTheme(rendition: Rendition, t: ReadingTheme, fs: FontSize, ff: FontFamily, lh: LineHeight, pm: PageMargin) {
-    const styles = THEME_STYLES[t]
-    rendition.themes.default({
-      body: {
-        ...styles.body,
-        'font-family': FONT_FAMILY_MAP[ff] + ' !important',
-        'font-size': FONT_SIZE_MAP[fs] + '% !important',
-        'line-height': LINE_HEIGHT_MAP[lh] + ' !important',
-        'padding-left': PAGE_MARGIN_MAP[pm] + ' !important',
-        'padding-right': PAGE_MARGIN_MAP[pm] + ' !important',
-        'transition': 'background 0.3s ease, color 0.3s ease',
-      },
-      'p, div, span, li, td, th, h1, h2, h3, h4, h5, h6': {
-        color: styles.body.color + ' !important',
-      },
-      'a': { color: t === 'dark' ? '#8b9cf7 !important' : '#4a6fa5 !important' },
-    })
-  }
-
   useEffect(() => {
     if (renditionRef.current && ready) {
       applyTheme(renditionRef.current, theme, fontSize, fontFamily, localLineHeight, localPageMargin)
@@ -551,7 +380,7 @@ export default function EpubReader({
     if (goToHref && renditionRef.current) {
       renditionRef.current.display(goToHref)
     }
-  }, [goToHref])  
+  }, [goToHref])
 
   // ─── Navigation ────────────────────────────────────────────────
   const goNext = useCallback(() => { renditionRef.current?.next() }, [])
@@ -677,6 +506,11 @@ export default function EpubReader({
     setEditNoteText('')
   }, [])
 
+  const cancelNoteInput = useCallback(() => {
+    setShowNoteInput(false)
+    setPendingHighlight(null)
+  }, [])
+
   // Sorted/filtered highlights
   const filteredHighlights = highlights
     .filter(h => highlightFilter === 'all' || h.color === highlightFilter)
@@ -713,21 +547,7 @@ export default function EpubReader({
       />
 
       {/* Loading indicator */}
-      {!ready && (
-        <div style={{
-          position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)',
-          display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12,
-        }}>
-          <div style={{
-            width: 32, height: 32, border: '3px solid var(--color-overlay-medium)',
-            borderTopColor: accent, borderRadius: '50%',
-            animation: 'epubSpin 0.8s linear infinite',
-          }} />
-          <span style={{ fontSize: 13, color: panelText, opacity: 0.5 }}>
-            {t('epubLoading')}
-          </span>
-        </div>
-      )}
+      {!ready && <EpubLoadingIndicator panelText={panelText} accent={accent} />}
 
       {/* Audio Reader overlay */}
       {showAudioReader && currentPageText && (
@@ -755,64 +575,20 @@ export default function EpubReader({
 
       {/* Note input modal */}
       {showNoteInput && pendingHighlight && (
-        <>
-          <div onClick={() => { setShowNoteInput(false); setPendingHighlight(null) }}
-            role="presentation"
-            style={{ position: 'fixed', inset: 0, background: 'var(--color-backdrop-light)', zIndex: 300 }} />
-          <div role="dialog" aria-modal="true" aria-label={t('epubAddHighlight')} style={{
-            position: 'fixed', top: '50%', left: '50%', transform: 'translate(-50%, -50%)',
-            background: panelBg, color: panelText, borderRadius: 16, padding: '24px 28px',
-            width: 380, maxWidth: '90vw', zIndex: 301, boxShadow: '0 12px 40px var(--color-overlay-medium)',
-            border: `1px solid ${panelBorder}`,
-          }}>
-            <h3 style={{ fontSize: 16, fontWeight: 700, marginBottom: 12 }}>
-              {t('epubAddHighlight')}
-            </h3>
-            <p style={{
-              fontSize: 13, lineHeight: 1.6, marginBottom: 12, padding: '8px 12px',
-              background: panelSubtle, borderRadius: 8, borderLeft: `3px solid ${highlightColor}`,
-              maxHeight: 80, overflow: 'auto',
-            }}>
-              {pendingHighlight.text.slice(0, 200)}{pendingHighlight.text.length > 200 ? '...' : ''}
-            </p>
-            <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
-              {HIGHLIGHT_COLORS.map(c => (
-                <button key={c} onClick={() => setHighlightColor(c)} style={{
-                  width: 28, height: 28, borderRadius: '50%', background: c, border: 'none',
-                  cursor: 'pointer',
-                  outline: highlightColor === c ? `2px solid ${panelText}` : 'none',
-                  outlineOffset: 2, transition: 'transform 0.15s',
-                  transform: highlightColor === c ? 'scale(1.15)' : 'scale(1)',
-                }} />
-              ))}
-            </div>
-            <textarea
-              value={noteText}
-              onChange={e => setNoteText(e.target.value)}
-              placeholder={t('epubAddNotePlaceholder')}
-              style={{
-                width: '100%', minHeight: 72, padding: '10px 12px', borderRadius: 8,
-                border: `1px solid ${panelBorder}`, background: panelSubtle,
-                color: panelText, fontSize: 13, resize: 'vertical', outline: 'none', fontFamily: 'inherit',
-              }}
-            />
-            <div style={{ display: 'flex', gap: 8, marginTop: 14, justifyContent: 'flex-end' }}>
-              <button onClick={() => { setShowNoteInput(false); setPendingHighlight(null) }} style={{
-                padding: '8px 18px', borderRadius: 8, border: `1px solid ${panelBorder}`,
-                background: 'transparent', color: panelText, cursor: 'pointer', fontSize: 13,
-              }}>
-                {t('epubCancel')}
-              </button>
-              <button onClick={confirmHighlight} style={{
-                padding: '8px 18px', borderRadius: 8, border: 'none',
-                background: accent, color: 'var(--foreground)',
-                cursor: 'pointer', fontSize: 13, fontWeight: 600,
-              }}>
-                {t('epubSave')}
-              </button>
-            </div>
-          </div>
-        </>
+        <EpubNoteInputModal
+          pendingHighlight={pendingHighlight}
+          noteText={noteText}
+          highlightColor={highlightColor}
+          panelBg={panelBg}
+          panelText={panelText}
+          panelBorder={panelBorder}
+          panelSubtle={panelSubtle}
+          accent={accent}
+          onNoteTextChange={setNoteText}
+          onHighlightColorChange={setHighlightColor}
+          onConfirm={confirmHighlight}
+          onCancel={cancelNoteInput}
+        />
       )}
 
       {/* Search panel */}
