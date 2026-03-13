@@ -12,6 +12,7 @@ import { getAvatarGradient, getAvatarInitial } from '@/lib/utils/avatar'
 import ProBadge, { ProBadgeOverlay } from '@/app/components/ui/ProBadge'
 import LevelBadge from '@/app/components/user/LevelBadge'
 
+import { features } from '@/lib/features'
 import type { ServerProfile } from './types'
 
 const UserFollowButton = dynamic(() => import('@/app/components/ui/UserFollowButton'), { ssr: false })
@@ -191,28 +192,30 @@ export default function UserProfileHeader({
             </Text>
           )}
 
-          {/* Stats row */}
-          <Box style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[3], flexWrap: 'wrap' }}>
-            <Box
-              onClick={() => isOwnProfile && router.push('/following')}
-              style={{ cursor: isOwnProfile ? 'pointer' : 'default', display: 'flex', alignItems: 'center', gap: 4, padding: `${tokens.spacing[1]} ${tokens.spacing[2]}`, borderRadius: tokens.radius.md }}
-            >
-              <Text size="sm" style={{ color: secondaryTextColor, textShadow }}>
-                <Text as="span" weight="bold" style={{ color: textColor, marginRight: 4, textShadow }}>{followingCount}</Text>
-                {t('following')}
-              </Text>
-            </Box>
+          {/* Stats row — social follower/following counts hidden when social is off */}
+          {features.social && (
+            <Box style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[3], flexWrap: 'wrap' }}>
+              <Box
+                onClick={() => isOwnProfile && router.push('/following')}
+                style={{ cursor: isOwnProfile ? 'pointer' : 'default', display: 'flex', alignItems: 'center', gap: 4, padding: `${tokens.spacing[1]} ${tokens.spacing[2]}`, borderRadius: tokens.radius.md }}
+              >
+                <Text size="sm" style={{ color: secondaryTextColor, textShadow }}>
+                  <Text as="span" weight="bold" style={{ color: textColor, marginRight: 4, textShadow }}>{followingCount}</Text>
+                  {t('following')}
+                </Text>
+              </Box>
 
-            <Box
-              onClick={onFollowersClick}
-              style={{ cursor: profile.isRegistered && (isOwnProfile || profile.show_followers !== false) ? 'pointer' : 'default', display: 'flex', alignItems: 'center', gap: 4, padding: `${tokens.spacing[1]} ${tokens.spacing[2]}`, borderRadius: tokens.radius.md }}
-            >
-              <Text size="sm" style={{ color: secondaryTextColor, textShadow }}>
-                <Text as="span" weight="bold" style={{ color: textColor, marginRight: 4, textShadow }}>{followersCount}</Text>
-                {t('followers')}
-              </Text>
+              <Box
+                onClick={onFollowersClick}
+                style={{ cursor: profile.isRegistered && (isOwnProfile || profile.show_followers !== false) ? 'pointer' : 'default', display: 'flex', alignItems: 'center', gap: 4, padding: `${tokens.spacing[1]} ${tokens.spacing[2]}`, borderRadius: tokens.radius.md }}
+              >
+                <Text size="sm" style={{ color: secondaryTextColor, textShadow }}>
+                  <Text as="span" weight="bold" style={{ color: textColor, marginRight: 4, textShadow }}>{followersCount}</Text>
+                  {t('followers')}
+                </Text>
+              </Box>
             </Box>
-          </Box>
+          )}
         </Box>
       </Box>
 
@@ -251,7 +254,7 @@ export default function UserProfileHeader({
           </button>
         )}
 
-        {!isOwnProfile && profile.isRegistered && currentUserId && (
+        {features.social && !isOwnProfile && profile.isRegistered && currentUserId && (
           <>
             <UserFollowButton
               targetUserId={profile.id}
@@ -265,7 +268,7 @@ export default function UserProfileHeader({
           </>
         )}
 
-        {!isOwnProfile && profile.isRegistered && !currentUserId && mounted && (
+        {features.social && !isOwnProfile && profile.isRegistered && !currentUserId && mounted && (
           <Link
             href={`/login?returnUrl=${encodeURIComponent(`/u/${handle}`)}`}
             style={{

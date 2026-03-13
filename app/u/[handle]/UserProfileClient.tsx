@@ -6,6 +6,7 @@ import { Box } from '@/app/components/base'
 import { tokens } from '@/lib/design-tokens'
 import { DynamicFollowListModal as FollowListModal } from '@/app/components/ui/Dynamic'
 
+import { features } from '@/lib/features'
 import type { ServerProfile, TraderPageData, ProfileTabKey } from './components/types'
 import { userProfileStyles } from './components/profileStyles'
 import ProfileNotFound from './components/ProfileNotFound'
@@ -132,8 +133,8 @@ export default function UserProfileClient({ handle, serverProfile, serverTraderD
           traderData={traderData}
         />
 
-        {/* Followers modal */}
-        {profile.isRegistered && (
+        {/* Followers modal — hidden when social is off */}
+        {features.social && profile.isRegistered && (
           <FollowListModal
             isOpen={modalType === 'followers'}
             onClose={() => setModalType(null)}

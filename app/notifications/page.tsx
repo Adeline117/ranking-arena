@@ -13,6 +13,9 @@ import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import { useAuthSession } from '@/lib/hooks/useAuthSession'
 import { getCsrfHeaders } from '@/lib/api/client'
 import PullToRefreshWrapper from '@/app/components/ui/PullToRefreshWrapper'
+import { features } from '@/lib/features'
+
+const SOCIAL_NOTIFICATION_TYPES = ['post_reply', 'new_follower', 'group_update', 'like', 'comment', 'follow', 'mention']
 
 // ============================================
 // 类型
@@ -220,16 +223,21 @@ export default function NotificationsPage() {
     }
   }
 
+  // Filter out social notifications when social is off
+  const visibleNotifications = features.social
+    ? notifications
+    : notifications.filter((n) => !SOCIAL_NOTIFICATION_TYPES.includes(n.type))
+
   // 过滤后的列表
   const filtered = filterType === 'all'
-    ? notifications
-    : notifications.filter((n) => n.type === filterType)
+    ? visibleNotifications
+    : visibleNotifications.filter((n) => n.type === filterType)
 
-  const traderAlertCount = notifications.filter((n) => n.type === 'trader_alert').length
-  const postReplyCount = notifications.filter((n) => n.type === 'post_reply').length
-  const newFollowerCount = notifications.filter((n) => n.type === 'new_follower').length
-  const groupUpdateCount = notifications.filter((n) => n.type === 'group_update').length
-  const unreadCount = notifications.filter((n) => !n.read).length
+  const traderAlertCount = visibleNotifications.filter((n) => n.type === 'trader_alert').length
+  const postReplyCount = visibleNotifications.filter((n) => n.type === 'post_reply').length
+  const newFollowerCount = visibleNotifications.filter((n) => n.type === 'new_follower').length
+  const groupUpdateCount = visibleNotifications.filter((n) => n.type === 'group_update').length
+  const unreadCount = visibleNotifications.filter((n) => !n.read).length
 
   return (
     <Box style={{ minHeight: '100vh', background: tokens.colors.bg.primary, color: tokens.colors.text.primary }}>
@@ -294,7 +302,7 @@ export default function NotificationsPage() {
         }}>
           <FilterTab
             label={t('all')}
-            count={notifications.length}
+            count={visibleNotifications.length}
             active={filterType === 'all'}
             onClick={() => setFilterType('all')}
           />
@@ -304,7 +312,7 @@ export default function NotificationsPage() {
             active={filterType === 'trader_alert'}
             onClick={() => setFilterType('trader_alert')}
           />
-          {postReplyCount > 0 && (
+          {features.social && postReplyCount > 0 && (
             <FilterTab
               label={language === 'zh' ? '帖子回复' : 'Replies'}
               count={postReplyCount}
@@ -312,7 +320,7 @@ export default function NotificationsPage() {
               onClick={() => setFilterType('post_reply')}
             />
           )}
-          {newFollowerCount > 0 && (
+          {features.social && newFollowerCount > 0 && (
             <FilterTab
               label={language === 'zh' ? '新粉丝' : 'Followers'}
               count={newFollowerCount}
@@ -320,7 +328,7 @@ export default function NotificationsPage() {
               onClick={() => setFilterType('new_follower')}
             />
           )}
-          {groupUpdateCount > 0 && (
+          {features.social && groupUpdateCount > 0 && (
             <FilterTab
               label={language === 'zh' ? '群组更新' : 'Groups'}
               count={groupUpdateCount}

@@ -17,6 +17,7 @@ import PullToRefreshWrapper from '@/app/components/ui/PullToRefreshWrapper'
 import { getCsrfHeaders } from '@/lib/api/client'
 import { logger } from '@/lib/logger'
 import { trackInteraction } from '@/lib/tracking'
+import { features } from '@/lib/features'
 
 // 平台配置
 const sourceConfig: Record<string, { label: string; labelEn: string; color: string }> = {
@@ -255,16 +256,21 @@ export default function FollowingPage() {
   // eslint-disable-next-line react-hooks/exhaustive-deps -- fetchFollowing excluded to avoid refetch loop on callback identity change
   }, [userId])
 
+  // Filter out user follows when social is off
+  const visibleItems = useMemo(() =>
+    features.social ? items : items.filter(i => i.type === 'trader'),
+  [items])
+
   // 可用平台列表
   const availablePlatforms = useMemo(() => {
     const platforms = new Set<string>()
-    items.forEach(i => { if (i.source) platforms.add(i.source) })
+    visibleItems.forEach(i => { if (i.source) platforms.add(i.source) })
     return Array.from(platforms).sort()
-  }, [items])
+  }, [visibleItems])
 
   // 排序后的列表
   const sortedItems = useMemo(() => {
-    let filtered = [...items]
+    let filtered = [...visibleItems]
     // 搜索筛选
     if (searchQuery.trim()) {
       const q = searchQuery.trim().toLowerCase()
@@ -292,7 +298,7 @@ export default function FollowingPage() {
         break
     }
     return sorted
-  }, [items, sortMode, searchQuery, platformFilter])
+  }, [visibleItems, sortMode, searchQuery, platformFilter])
 
   // 汇总统计（基于筛选后的列表，与显示一致）
   const stats = useMemo(() => {
@@ -405,7 +411,7 @@ export default function FollowingPage() {
 
         {loading ? (
           <ListSkeleton count={5} gap={12} />
-        ) : items.length === 0 ? (
+        ) : visibleItems.length === 0 ? (
           <EmptyState
             title={t('noFollowing')}
             description={t('noFollowingCta')}
@@ -443,7 +449,9 @@ export default function FollowingPage() {
               <StatCard
                 label={t('totalFollowing')}
                 value={`${stats.traderCount + stats.userCount}`}
-                subText={`${stats.traderCount} ${t('traders')} · ${stats.userCount} ${t('users')}`}
+                subText={features.social
+                  ? `${stats.traderCount} ${t('traders')} · ${stats.userCount} ${t('users')}`
+                  : `${stats.traderCount} ${t('traders')}`}
               />
               <StatCard
                 label={t('avgRoi')}
@@ -512,7 +520,9 @@ export default function FollowingPage() {
                 }}
               >
                 <option value="all">{language === 'zh' ? '全部平台' : 'All Platforms'}</option>
-                <option value="user">{language === 'zh' ? '用户' : 'Users'}</option>
+                {features.social && (
+                  <option value="user">{language === 'zh' ? '用户' : 'Users'}</option>
+                )}
                 {availablePlatforms.map(p => (
                   <option key={p} value={p}>{getSourceDisplayName(p, language)}</option>
                 ))}
