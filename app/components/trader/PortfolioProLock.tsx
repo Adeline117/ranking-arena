@@ -20,7 +20,7 @@ export default function PortfolioProLock({ onUnlock }: PortfolioProLockProps) {
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
-        pointerEvents: 'none',
+        pointerEvents: 'auto',
       }}
     >
       <Box

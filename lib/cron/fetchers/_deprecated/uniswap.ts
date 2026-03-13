@@ -11,7 +11,8 @@ import {
   upsertTraders,
   fetchJson,
 } from '../shared'
-import { UNISWAP_V3_SUBGRAPH } from '../../web3/dex-tracker'
+import { UNISWAP_V3_SUBGRAPH } // @ts-expect-error deprecated module
+from '../../web3/dex-tracker'
 import { logger } from '@/lib/logger'
 import { captureException } from '@/lib/utils/logger'
 

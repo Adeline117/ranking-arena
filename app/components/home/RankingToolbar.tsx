@@ -2,6 +2,7 @@
 
 import { tokens } from '@/lib/design-tokens'
 import { Box } from '../base'
+import { BETA_PRO_FEATURES_FREE } from '@/lib/premium/hooks'
 import TimeRangeSelector from './TimeRangeSelector'
 import type { TimeRange } from './hooks/useTraderData'
 
@@ -11,6 +12,7 @@ interface RankingToolbarProps {
   loading: boolean
   onRefresh?: () => void
   onCopyLink: () => void
+  language: string
   t: (key: string) => string
 }
 
@@ -20,6 +22,7 @@ export default function RankingToolbar({
   loading,
   onRefresh,
   onCopyLink,
+  language,
   t,
 }: RankingToolbarProps) {
   return (
@@ -34,7 +37,7 @@ export default function RankingToolbar({
         flexWrap: 'wrap',
       }}
     >
-      {/* Left: Time range selector */}
+      {/* 左侧: 时间选择 + 类型预设 + 平台下拉 */}
       <Box style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[2], flexWrap: 'wrap', flex: 1, minWidth: 0 }}>
         <TimeRangeSelector
           activeRange={activeTimeRange}
@@ -43,8 +46,25 @@ export default function RankingToolbar({
         />
       </Box>
 
-      {/* Right: Action buttons */}
+      {/* 右侧: Pro 标签 + 操作按钮 */}
       <Box style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[1], flexShrink: 0 }}>
+        {BETA_PRO_FEATURES_FREE && (
+          <Box style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 4,
+            padding: '4px 10px',
+            borderRadius: tokens.radius.md,
+            background: 'color-mix(in srgb, var(--color-pro-gradient-start, #a78bfa) 10%, transparent)',
+            border: '1px solid color-mix(in srgb, var(--color-pro-gradient-start, #a78bfa) 25%, transparent)',
+            fontSize: 11,
+            color: 'var(--color-text-tertiary)',
+            whiteSpace: 'nowrap',
+          }}>
+            <span style={{ fontWeight: 700, color: 'var(--color-pro-gradient-start, #a78bfa)' }}>Pro</span>
+            <span>{language === 'zh' ? '限时免费' : 'Free beta'}</span>
+          </Box>
+        )}
         {/* Copy Filter Link Button */}
         {!loading && (
           <button
@@ -98,6 +118,7 @@ export default function RankingToolbar({
             </svg>
           </button>
         )}
+        {/* DataFreshnessIndicator removed from toolbar — bottom timestamp is less intrusive */}
       </Box>
     </Box>
   )

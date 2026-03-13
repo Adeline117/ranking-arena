@@ -1,13 +1,14 @@
+'use client'
 
 import React from 'react'
 import { tokens } from '@/lib/design-tokens'
-import { Box, Text } from '../base'
+import { Box, Text, Button } from '../base'
 
 type EmptyStateProps = {
   icon?: React.ReactNode
   title: string
   description?: string
-  action?: React.ReactNode
+  action?: React.ReactNode | { label: string; onClick: () => void }
   variant?: 'default' | 'compact' | 'card'
 }
 
@@ -85,7 +86,13 @@ export default function EmptyState({ icon, title, description, action, variant =
       {/* Action */}
       {action && (
         <Box style={{ marginTop: tokens.spacing[4] }}>
-          {action}
+          {typeof action === 'object' && action !== null && 'label' in action && 'onClick' in action ? (
+            <Button variant="secondary" size="sm" onClick={(action as { label: string; onClick: () => void }).onClick}>
+              {(action as { label: string; onClick: () => void }).label}
+            </Button>
+          ) : (
+            action as React.ReactNode
+          )}
         </Box>
       )}
     </Box>
