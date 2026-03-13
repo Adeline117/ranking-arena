@@ -102,11 +102,15 @@ export class BitfinexFuturesConnector extends BaseConnector {
 
           if (traderMap.has(id)) continue
 
-          // Estimate ROI from equity proxy
+          // Estimate ROI from equity proxy (inception unrealized profit as base)
           const equity = equityMap.get(id)
           let roi: number | null = null
-          if (equity != null && Math.abs(equity) > 100) {
-            roi = Math.max(-500, Math.min(10000, (pnl / equity) * 100))
+          if (equity != null && Math.abs(equity) > 1) {
+            // Use equity as denominator — cap ROI at [-500%, 50000%]
+            roi = Math.max(-500, Math.min(50000, (pnl / Math.abs(equity)) * 100))
+          } else if (key === 'plr' && row[6] != null) {
+            // 'plr' key = PnL ratio (already a percentage-like value)
+            roi = Math.max(-500, Math.min(50000, Number(row[6])))
           }
 
           traderMap.set(id, {
