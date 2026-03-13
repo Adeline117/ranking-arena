@@ -34,10 +34,8 @@ export async function GET(req: NextRequest) {
   ])
 
   // Filter out dead/blocked platforms from failure counts
-  const deadSet = new Set<string>([
-    ...DEAD_BLOCKED_PLATFORMS,
-    'okx_spot', // No spot copy-trading API exists
-  ])
+  // okx_spot already in DEAD_BLOCKED_PLATFORMS — no need to add separately
+  const deadSet = new Set<string>([...DEAD_BLOCKED_PLATFORMS])
   const isDeadPlatformJob = (jobName: string) => {
     // Check if any dead platform name appears in the job name
     for (const dead of deadSet) {
