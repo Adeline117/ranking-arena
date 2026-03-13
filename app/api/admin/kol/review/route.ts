@@ -47,7 +47,7 @@ export async function POST(req: Request) {
     // Get application
     const { data: app, error: fetchErr } = await supabase
       .from('kol_applications')
-      .select('*')
+      .select('id, user_id, status, tier, reviewed_at, reviewed_by')
       .eq('id', applicationId)
       .single()
 

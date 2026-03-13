@@ -29,7 +29,7 @@ export async function GET(request: NextRequest) {
     // 获取或创建用户等级记录
     let { data: levelData } = await supabase
       .from('user_levels')
-      .select('*')
+      .select('user_id, exp, level, daily_exp_earned, daily_exp_date, is_pro, pro_expires_at')
       .eq('user_id', user.id)
       .single()
 
@@ -75,7 +75,7 @@ export async function POST(request: NextRequest) {
     // 获取或创建用户等级记录
     let { data: levelData } = await supabase
       .from('user_levels')
-      .select('*')
+      .select('user_id, exp, level, daily_exp_earned, daily_exp_date')
       .eq('user_id', user.id)
       .single()
 

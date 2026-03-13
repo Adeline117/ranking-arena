@@ -17,7 +17,7 @@ export async function GET(req: Request) {
 
     const { data, error } = await supabase
       .from('content_reports')
-      .select('*')
+      .select('id, content_type, content_id, reporter_id, reason, details, status, created_at, resolved_by, resolved_at, action_taken')
       .eq('status', status)
       .order('created_at', { ascending: false })
       .limit(100)
