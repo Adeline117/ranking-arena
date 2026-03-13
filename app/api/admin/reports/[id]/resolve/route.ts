@@ -36,7 +36,7 @@ export async function POST(
     // Get the report
     const { data: report, error: reportError } = await supabase
       .from('content_reports')
-      .select('*')
+      .select('id, status, content_type, content_id')
       .eq('id', reportId)
       .maybeSingle()
     

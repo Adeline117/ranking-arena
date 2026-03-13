@@ -80,7 +80,7 @@ export async function GET(
     // Fetch history
     const { data: history } = await supabase
       .from('manipulation_alert_history')
-      .select('*')
+      .select('id, alert_id, action, performed_by, old_status, new_status, notes, created_at')
       .eq('alert_id', alertId)
       .order('created_at', { ascending: false })
 
@@ -140,7 +140,7 @@ export async function PATCH(
     // Get current alert
     const { data: currentAlert, error: fetchError } = await supabase
       .from('manipulation_alerts')
-      .select('*')
+      .select('id, status, platform, market_type, trader_key, alert_type, severity, details, created_at, resolved_at, resolved_by, resolution_notes')
       .eq('id', alertId)
       .single()
 

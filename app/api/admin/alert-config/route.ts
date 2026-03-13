@@ -24,7 +24,7 @@ export async function GET(req: Request) {
     
     const { data: configs, error } = await supabase
       .from('alert_config')
-      .select('*')
+      .select('key, value, enabled')
       .order('key')
     
     if (error) {

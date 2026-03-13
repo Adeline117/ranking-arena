@@ -75,7 +75,7 @@ export async function GET(
 
     const { data, error } = await supabase
       .from('trader_anomalies')
-      .select('*')
+      .select('id, platform, market_type, trader_key, anomaly_type, severity, status, details, detected_at, resolved_at, resolved_by, notes, created_at')
       .eq('id', anomalyId)
       .single()
 

@@ -74,7 +74,7 @@ export async function GET(_req: Request) {
     // 4. Query refresh queue from database views
     const { data: queueData, error: queueError } = await supabase
       .from('v_scheduler_refresh_queue')
-      .select('*')
+      .select('platform, market_type, trader_key, activity_tier, next_refresh_at, last_refreshed_at, priority_score')
 
     if (queueError) {
       logger.error('Failed to query refresh queue', { error: queueError })
