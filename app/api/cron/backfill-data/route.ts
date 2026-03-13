@@ -37,12 +37,16 @@ const ALL_PLATFORMS = [
   'web3_bot',
 ]
 
-// Platforms that don't support enrichment (wallet-based or CF-protected)
+// Platforms that don't support enrichment (wallet-based, CF-protected, or no enrichment API)
 const NO_ENRICHMENT_PLATFORMS = new Set([
-  'binance_web3', // Wallet-based, no equity curve API
-  'bingx',        // CF-protected, enrichment not feasible
-  'web3_bot',     // Wallet-based
-  'okx_web3',     // Wallet-based (may support in future)
+  // Wallet-based platforms (no equity curve API)
+  'binance_web3', 'okx_web3', 'web3_bot',
+  // CF-protected (enrichment not feasible)
+  'bingx',
+  // API removed/unavailable (2026-03-10)
+  'bybit', 'bybit_spot',
+  // No enrichment API available
+  'bitfinex', 'coinex', 'xt', 'bitmart', 'btcc', 'bitunix', 'paradex', 'okx_spot',
 ])
 
 const TIME_PERIODS = ['7D', '30D', '90D']

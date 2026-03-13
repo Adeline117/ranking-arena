@@ -54,11 +54,12 @@ export async function GET(req: Request) {
   const plog = await PipelineLogger.start('check-enrichment-freshness')
   const now = Date.now()
   const results: EnrichmentStatus[] = []
-  // Expanded platforms to monitor - cover all major platforms
+  // Only monitor platforms that support enrichment
+  // (bybit/bybit_spot/bitget_spot/kucoin removed - no enrichment API available)
   const platforms = [
-    'binance_futures', 'binance_spot', 'bybit', 'bybit_spot',
-    'okx_futures', 'bitget_futures', 'bitget_spot',
-    'hyperliquid', 'gmx', 'mexc', 'kucoin'
+    'binance_futures', 'binance_spot', 'okx_futures', 'bitget_futures',
+    'hyperliquid', 'gmx', 'htx_futures', 'gateio', 'mexc',
+    'drift', 'dydx', 'aevo', 'gains', 'jupiter_perps'
   ]
   const periods = ['7D', '30D', '90D']
   const tables = ['trader_stats_detail', 'trader_equity_curve']
