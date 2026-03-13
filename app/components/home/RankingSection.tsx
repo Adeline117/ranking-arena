@@ -2,23 +2,25 @@
 
 import { useState, useEffect, useCallback, useRef, useTransition, useMemo } from 'react'
 import { useRouter } from 'next/navigation'
-import dynamic from 'next/dynamic'
-import { tokens } from '@/lib/design-tokens'
-import { Box, Text } from '../base'
+import { Box } from '../base'
 import { useToast } from '../ui/Toast'
 import { RankingTable, type Trader } from '../ranking/RankingTable'
 
-import TimeRangeSelector from './TimeRangeSelector'
 import type { TimeRange } from './hooks/useTraderData'
 import { CategoryType, filterByCategory } from '../ranking/CategoryRankingTabs'
 import { useSubscription } from './hooks/useSubscription'
-import { BETA_PRO_FEATURES_FREE } from '@/lib/premium/hooks'
 import { useLanguage } from '../Providers/LanguageProvider'
 import type { FilterConfig, SavedFilter } from '../premium/AdvancedFilter'
 import { getScoreGradeLetter } from '@/lib/utils/score-explain'
 import { type PresetId, PRESETS, isValidPresetId } from '../ranking/FilterPresets'
 import { useAuthSession } from '@/lib/hooks/useAuthSession'
 import { getCsrfHeaders } from '@/lib/api/client'
+
+import RankingToolbar from './RankingToolbar'
+import AdvancedFilterPanel from './AdvancedFilterPanel'
+import FilterStatusMessages from './FilterStatusMessages'
+import ProUpgradeCTA from './ProUpgradeCTA'
+import RankingFooter from './RankingFooter'
 
 // localStorage keys for user preferences
 const LS_KEY_SORT_COLUMN = 'ranking-sort-column'
@@ -39,7 +41,6 @@ function getStoredPreferences() {
       } catch { /* invalid JSON */ }
     }
     return {
-      // Sort column/dir intentionally NOT restored from localStorage — always default to 'score' desc
       preset: localStorage.getItem(LS_KEY_PRESET) as PresetId | null,
       exchange: localStorage.getItem(LS_KEY_EXCHANGE),
       filterConfig,
@@ -49,39 +50,21 @@ function getStoredPreferences() {
   }
 }
 
-// Lazy load heavy components to reduce initial bundle
-const MobileFilterSheet = dynamic(() => import('../ranking/MobileFilterSheet'), { ssr: false })
-const AdvancedFilter = dynamic(() => import('../premium/AdvancedFilter'), {
-  ssr: false,
-  loading: () => (
-    <Box style={{ padding: tokens.spacing[3], background: 'var(--color-bg-secondary)', borderRadius: tokens.radius.md }}>
-      <Box className="skeleton" style={{ height: 40, borderRadius: tokens.radius.sm }} />
-    </Box>
-  ),
-})
-
 interface RankingSectionProps {
   traders: Trader[]
   loading: boolean
   isLoggedIn: boolean
   activeTimeRange: TimeRange
   onTimeRangeChange: (range: TimeRange) => void
-  /** 数据最后更新时间 */
   lastUpdated?: string | null
-  /** 错误信息 */
   error?: string | null
-  /** 重试回调 */
   onRetry?: () => void
-  /** Feature 4: Manual refresh callback */
   onRefresh?: () => void
-  /** 所有可用的数据来源 */
   availableSources?: string[]
 }
 
-/**
- * 排行榜区域组件
- * 包含时间选择器和排行榜表格
- */
+// Free users: limit to top 100 traders
+const FREE_LEADERBOARD_LIMIT = 100
 
 export default function RankingSection({
   traders,
@@ -99,23 +82,16 @@ export default function RankingSection({
   const { showToast } = useToast()
   const { language, t } = useLanguage()
   const { isFeaturesUnlocked, isLoading: premiumLoading } = useSubscription()
-  // Beta: isFeaturesUnlocked = true for all users during open beta
   const isPro = isFeaturesUnlocked
   const { getAuthHeaders } = useAuthSession()
 
-  // 分类状态
+  // State
   const [category, setCategory] = useState<CategoryType>('all')
-
-  // 高级筛选状态
   const [showAdvancedFilter, setShowAdvancedFilter] = useState(false)
   const [showMobileFilter, setShowMobileFilter] = useState(false)
   const [filterConfig, setFilterConfig] = useState<FilterConfig>({})
   const [savedFilters, setSavedFilters] = useState<SavedFilter[]>([])
-
-  // Feature 6: Filter presets
   const [activePreset, setActivePreset] = useState<PresetId | null>(null)
-
-  // Feature 8: Lifted sort/page/search state for URL sync
   const [sortColumn, setSortColumn] = useState<'score' | 'roi' | 'pnl' | 'winrate' | 'mdd' | 'sortino' | 'alpha'>('score')
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc')
   const [currentPage, setCurrentPage] = useState(1)
@@ -131,9 +107,7 @@ export default function RankingSection({
     }
   }, [activeTimeRange])
 
-  // 从 URL 恢复筛选状态 + Feature 8: sort/page/search/preset
-  // URL params take priority over localStorage preferences
-  // Use window.location.search instead of useSearchParams to keep page ISR-cacheable
+  // Restore filter state from URL + localStorage
   useEffect(() => {
     const searchParams = new URLSearchParams(window.location.search)
     const config: FilterConfig = {}
@@ -157,26 +131,21 @@ export default function RankingSection({
     if (exchange) config.exchange = exchange.split(',')
     if (fcat) config.category = fcat.split(',')
 
-    // Get stored preferences (fallback if no URL params)
     const storedPrefs = getStoredPreferences()
 
     if (Object.keys(config).length > 0) {
-      // URL filter params exist, use them
       setFilterConfig(config)
       setShowAdvancedFilter(true)
     } else if (storedPrefs.filterConfig && Object.keys(storedPrefs.filterConfig).length > 0) {
-      // No URL params, fall back to localStorage
       setFilterConfig(storedPrefs.filterConfig)
       setShowAdvancedFilter(true)
     }
 
-    // Clear any stale sort preferences from localStorage — sort always starts at 'score' desc
     try {
       localStorage.removeItem(LS_KEY_SORT_COLUMN)
       localStorage.removeItem(LS_KEY_SORT_DIR)
     } catch { /* ignore */ }
 
-    // Feature 8: Restore sort/page/search/preset from URL (with localStorage fallback)
     const urlSort = searchParams.get('sort') as typeof sortColumn | null
     const urlOrder = searchParams.get('order') as 'asc' | 'desc' | null
     const urlPage = searchParams.get('page')
@@ -184,15 +153,12 @@ export default function RankingSection({
     const urlPreset = searchParams.get('preset') as PresetId | null
     const urlEx = searchParams.get('ex')
 
-    // URL takes priority; default is always 'score' (don't restore from localStorage)
     if (urlSort && ['score', 'roi', 'pnl', 'winrate', 'mdd'].includes(urlSort)) {
       setSortColumn(urlSort)
     }
-    // Sort direction: URL takes priority, otherwise default desc
     if (urlOrder && ['asc', 'desc'].includes(urlOrder)) {
       setSortDir(urlOrder)
     }
-
     if (urlPage) setCurrentPage(Math.max(1, parseInt(urlPage, 10) || 1))
     if (urlQ) setSearchQuery(urlQ)
 
@@ -209,12 +175,8 @@ export default function RankingSection({
     }
   }, [])
 
-  // Saved filters feature removed - filters are session-only
-
   // Debounce ref for URL sync
   const syncTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-
-  // Cleanup syncTimeoutRef on unmount
   useEffect(() => {
     return () => {
       if (syncTimeoutRef.current) {
@@ -224,7 +186,7 @@ export default function RankingSection({
   }, [])
   const [, startTransition] = useTransition()
 
-  // Feature 8: Sync all state to URL via replaceState (debounced for performance)
+  // Sync state to URL (debounced)
   const syncStateToUrl = useCallback((overrides: {
     config?: FilterConfig
     sort?: string
@@ -234,22 +196,16 @@ export default function RankingSection({
     preset?: string | null
     ex?: string | null
   } = {}) => {
-    // Clear pending sync
     if (syncTimeoutRef.current) {
       clearTimeout(syncTimeoutRef.current)
     }
-
-    // Debounce URL sync to reduce INP (increased from 150ms to 300ms)
     syncTimeoutRef.current = setTimeout(() => {
-      // Wrap in startTransition to mark as non-urgent update
       startTransition(() => {
       const params = new URLSearchParams(window.location.search)
       const config = overrides.config ?? filterConfig
 
-      // Clear old filter params
       ;['roi_min', 'roi_max', 'dd_min', 'dd_max', 'min_pnl', 'min_score', 'min_wr', 'exchange', 'fcat', 'sort', 'order', 'page', 'q', 'preset', 'ex'].forEach(k => params.delete(k))
 
-      // Filter params
       if (config.roi_min != null) params.set('roi_min', String(config.roi_min))
       if (config.roi_max != null) params.set('roi_max', String(config.roi_max))
       if (config.drawdown_min != null) params.set('dd_min', String(config.drawdown_min))
@@ -260,7 +216,6 @@ export default function RankingSection({
       if (config.exchange?.length) params.set('exchange', config.exchange.join(','))
       if (config.category?.length) params.set('fcat', config.category.join(','))
 
-      // Feature 8: Sort/page/search/preset
       const sort = overrides.sort ?? sortColumn
       const order = overrides.order ?? sortDir
       const page = overrides.page ?? currentPage
@@ -273,7 +228,6 @@ export default function RankingSection({
       if (q) params.set('q', q)
       if (preset) params.set('preset', preset)
 
-      // Exchange filter
       const ex = overrides.ex !== undefined ? overrides.ex : selectedExchange
       if (ex) params.set('ex', ex)
 
@@ -281,19 +235,17 @@ export default function RankingSection({
         const newUrl = qs ? `${window.location.pathname}?${qs}` : window.location.pathname
         window.history.replaceState(null, '', newUrl)
       })
-    }, 300) // 300ms debounce (increased for better INP)
+    }, 300)
   }, [filterConfig, sortColumn, sortDir, currentPage, searchQuery, activePreset, selectedExchange])
 
-  // Keep backward compatibility for syncFilterToUrl
   const syncFilterToUrl = useCallback((config: FilterConfig) => {
     syncStateToUrl({ config })
   }, [syncStateToUrl])
 
-  // 筛选变更处理
+  // Filter change handler
   const handleFilterChange = useCallback((config: FilterConfig) => {
     setFilterConfig(config)
     syncFilterToUrl(config)
-    // Persist to localStorage
     try {
       if (Object.keys(config).length > 0) {
         localStorage.setItem(LS_KEY_FILTER_CONFIG, JSON.stringify(config))
@@ -303,8 +255,7 @@ export default function RankingSection({
     } catch { /* ignore */ }
   }, [syncFilterToUrl])
 
-  // Feature 8: Sort/page/search change handlers
-  // Sort is NOT persisted to localStorage — always defaults to 'score' desc on page load
+  // Sort/page/search handlers
   const handleSortChange = useCallback((col: 'score' | 'roi' | 'pnl' | 'winrate' | 'mdd' | 'sortino' | 'alpha', dir: 'asc' | 'desc') => {
     setSortColumn(col)
     setSortDir(dir)
@@ -323,12 +274,11 @@ export default function RankingSection({
     syncStateToUrl({ q, page: 1 })
   }, [syncStateToUrl])
 
-  // Feature 6: Preset change handler with localStorage persistence
+  // Preset change handler
   const _handlePresetChange = useCallback((preset: PresetId | null) => {
     setActivePreset(preset)
     setCurrentPage(1)
     syncStateToUrl({ preset, page: 1 })
-    // Save to localStorage
     try {
       if (preset) {
         localStorage.setItem(LS_KEY_PRESET, preset)
@@ -338,12 +288,11 @@ export default function RankingSection({
     } catch { /* ignore */ }
   }, [syncStateToUrl])
 
-  // Exchange filter change handler with localStorage persistence
+  // Exchange filter change handler
   const _handleExchangeChange = useCallback((exchange: string | null) => {
     setSelectedExchange(exchange)
     setCurrentPage(1)
     syncStateToUrl({ ex: exchange, page: 1 })
-    // Save to localStorage
     try {
       if (exchange) {
         localStorage.setItem(LS_KEY_EXCHANGE, exchange)
@@ -353,27 +302,20 @@ export default function RankingSection({
     } catch { /* ignore */ }
   }, [syncStateToUrl])
 
-  // 客户端高级筛选函数
+  // Client-side advanced filter
   const applyAdvancedFilter = (list: Trader[], config: FilterConfig): Trader[] => {
     return list.filter(trader => {
-      // 交易所筛选
       if (config.exchange?.length) {
         const src = (trader.source || '').toLowerCase()
         if (!config.exchange.some(ex => src === ex || src.startsWith(ex))) return false
       }
-      // ROI 范围
       if (config.roi_min != null && (trader.roi ?? 0) < config.roi_min) return false
       if (config.roi_max != null && (trader.roi ?? 0) > config.roi_max) return false
-      // 回撤范围
       if (config.drawdown_min != null && trader.max_drawdown != null && Math.abs(trader.max_drawdown) < config.drawdown_min) return false
       if (config.drawdown_max != null && trader.max_drawdown != null && Math.abs(trader.max_drawdown) > config.drawdown_max) return false
-      // 最小 PnL
       if (config.min_pnl != null && (trader.pnl == null || trader.pnl < config.min_pnl)) return false
-      // 最小 Arena Score
       if (config.min_score != null && (trader.arena_score == null || trader.arena_score < config.min_score)) return false
-      // 最小胜率
       if (config.min_win_rate != null && (trader.win_rate == null || trader.win_rate < config.min_win_rate)) return false
-      // 等级筛选
       if (config.grade && trader.arena_score != null) {
         if (getScoreGradeLetter(trader.arena_score) !== config.grade) return false
       }
@@ -440,7 +382,7 @@ export default function RankingSection({
     }
   }
 
-  // 检查是否有活动筛选
+  // Check for active filters
   const hasActiveFilters = Object.keys(filterConfig).some(key => {
     const value = filterConfig[key as keyof FilterConfig]
     if (Array.isArray(value)) return value.length > 0
@@ -448,11 +390,6 @@ export default function RankingSection({
   })
 
   const source = traders.length > 0 ? traders[0].source : 'all'
-
-  // Get unique data sources - prefer availableSources from API if provided (reserved for future use)
-  const _dataSources: string[] = availableSources && availableSources.length > 0
-    ? availableSources
-    : [...new Set(traders.map(trader => trader.source).filter((s): s is string => !!s))]
 
   // Format last updated time
   const formatLastUpdated = (dateStr: string | null | undefined) => {
@@ -473,9 +410,7 @@ export default function RankingSection({
     }
   }
 
-  // 根据分类过滤交易员，再应用交易所筛选、预设和高级筛选
-  // Use useMemo to stabilize array references — prevents auto-reset useEffects from
-  // firing on every render due to new array instances being created each time.
+  // Filtering pipeline
   const categoryFiltered = useMemo(
     () => category === 'all'
       ? traders
@@ -483,8 +418,6 @@ export default function RankingSection({
     [traders, category]
   )
 
-  // 交易所筛选（所有用户可用）
-  // If selectedExchange yields no results (stale localStorage), auto-fallback to all
   const exchangeFiltered = useMemo(() => {
     const raw = selectedExchange
       ? categoryFiltered.filter(trader => trader.source === selectedExchange)
@@ -494,7 +427,6 @@ export default function RankingSection({
       : raw
   }, [categoryFiltered, selectedExchange])
 
-  // Auto-reset stale exchange in localStorage
   useEffect(() => {
     if (selectedExchange && categoryFiltered.length > 0) {
       const hasMatch = categoryFiltered.some(trader => trader.source === selectedExchange)
@@ -506,8 +438,6 @@ export default function RankingSection({
     }
   }, [selectedExchange, categoryFiltered, syncStateToUrl])
 
-  // Feature 6: Apply preset filter (now source-type based)
-  // If preset yields no results (stale localStorage), auto-fallback to all
   const presetFiltered = useMemo(() => {
     if (!activePreset || activePreset === 'all') return exchangeFiltered
     const presetConfig = PRESETS.find(p => p.id === activePreset)
@@ -516,7 +446,6 @@ export default function RankingSection({
     return (raw.length === 0 && exchangeFiltered.length > 0) ? exchangeFiltered : raw
   }, [activePreset, exchangeFiltered])
 
-  // Auto-reset stale preset in localStorage
   useEffect(() => {
     if (activePreset && activePreset !== 'all' && exchangeFiltered.length > 0) {
       const presetConfig = PRESETS.find(p => p.id === activePreset)
@@ -536,18 +465,38 @@ export default function RankingSection({
     [hasActiveFilters, presetFiltered, filterConfig]
   )
 
-  // Free users: limit to top 100 traders; Pro users: full leaderboard
-  const FREE_LEADERBOARD_LIMIT = 100
   const filteredTraders = useMemo(
     () => isPro ? advancedFiltered : advancedFiltered.slice(0, FREE_LEADERBOARD_LIMIT),
     [isPro, advancedFiltered]
   )
 
-  // Pro 功能提示
+  // Handlers for sub-components
   const handleProRequired = () => {
     showToast(t('proRequired'), 'info')
     router.push('/pricing')
   }
+
+  const handleCopyLink = useCallback(() => {
+    const url = window.location.href
+    navigator.clipboard.writeText(url).then(() => {
+      showToast(t('linkCopied') || 'Link copied!', 'success')
+    }).catch(() => {
+      showToast(t('copyFailed') || 'Copy failed', 'error')
+    })
+  }, [showToast, t])
+
+  const handleResetFilters = useCallback(() => {
+    handleFilterChange({})
+    setShowAdvancedFilter(false)
+  }, [handleFilterChange])
+
+  const handleFilterToggle = useCallback(() => {
+    if (window.matchMedia('(max-width: 768px)').matches) {
+      setShowMobileFilter(true)
+    } else {
+      setShowAdvancedFilter(prev => !prev)
+    }
+  }, [])
 
   return (
     <Box
@@ -558,189 +507,39 @@ export default function RankingSection({
         contain: 'layout style',
       }}
     >
-      {/* 紧凑工具栏 - 所有筛选器整合在一行 */}
-      <Box
-        className="ranking-toolbar"
-        style={{
-          marginBottom: tokens.spacing[2],
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          gap: tokens.spacing[2],
-          flexWrap: 'wrap',
-        }}
-      >
-        {/* 左侧: 时间选择 + 类型预设 + 平台下拉 */}
-        <Box style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[2], flexWrap: 'wrap', flex: 1, minWidth: 0 }}>
-          <TimeRangeSelector
-            activeRange={activeTimeRange}
-            onChange={onTimeRangeChange}
-            disabled={loading}
-          />
-        </Box>
-
-        {/* 右侧: Pro 标签 + 操作按钮 */}
-        <Box style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[1], flexShrink: 0 }}>
-          {BETA_PRO_FEATURES_FREE && (
-            <Box style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: 4,
-              padding: '4px 10px',
-              borderRadius: tokens.radius.md,
-              background: 'color-mix(in srgb, var(--color-pro-gradient-start, #a78bfa) 10%, transparent)',
-              border: '1px solid color-mix(in srgb, var(--color-pro-gradient-start, #a78bfa) 25%, transparent)',
-              fontSize: 11,
-              color: 'var(--color-text-tertiary)',
-              whiteSpace: 'nowrap',
-            }}>
-              <span style={{ fontWeight: 700, color: 'var(--color-pro-gradient-start, #a78bfa)' }}>Pro</span>
-              <span>{language === 'zh' ? '限时免费' : 'Free beta'}</span>
-            </Box>
-          )}
-          {/* Copy Filter Link Button */}
-          {!loading && (
-            <button
-              className="btn-press"
-              onClick={() => {
-                const url = window.location.href
-                navigator.clipboard.writeText(url).then(() => {
-                  showToast(t('linkCopied') || 'Link copied!', 'success')
-                }).catch(() => {
-                  showToast(t('copyFailed') || 'Copy failed', 'error')
-                })
-              }}
-              aria-label={t('copyFilterLink') || 'Copy filter link'}
-              title={t('copyFilterLink') || 'Copy filter link'}
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                width: 32,
-                height: 32,
-                borderRadius: tokens.radius.sm,
-                background: tokens.glass.bg.light,
-                border: `1px solid var(--color-border-primary)`,
-                color: 'var(--color-text-secondary)',
-                cursor: 'pointer',
-                transition: `all ${tokens.transition.fast}`,
-              }}
-            >
-              <svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" strokeLinecap="round" strokeLinejoin="round" />
-                <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" strokeLinecap="round" strokeLinejoin="round" />
-              </svg>
-            </button>
-          )}
-          {!loading && onRefresh && (
-            <button
-              className="btn-press"
-              onClick={onRefresh}
-              aria-label={t('refreshData')}
-              title={t('refreshData')}
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                width: 32,
-                height: 32,
-                borderRadius: tokens.radius.sm,
-                background: tokens.glass.bg.light,
-                border: `1px solid var(--color-border-primary)`,
-                color: 'var(--color-text-secondary)',
-                cursor: 'pointer',
-                transition: `all ${tokens.transition.fast}`,
-              }}
-            >
-              <svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <path d="M1 4v6h6M23 20v-6h-6" strokeLinecap="round" strokeLinejoin="round" />
-                <path d="M20.49 9A9 9 0 0 0 5.64 5.64L1 10m22 4l-4.64 4.36A9 9 0 0 1 3.51 15" strokeLinecap="round" strokeLinejoin="round" />
-              </svg>
-            </button>
-          )}
-          {/* DataFreshnessIndicator removed from toolbar — bottom timestamp is less intrusive */}
-        </Box>
-      </Box>
-
-      {/* 高级筛选面板 */}
-      {showAdvancedFilter && (
-        <Box style={{ marginBottom: tokens.spacing[2] }}>
-          <AdvancedFilter
-            currentFilter={filterConfig}
-            savedFilters={savedFilters}
-            onFilterChange={handleFilterChange}
-            onSaveFilter={handleSaveFilter}
-            onLoadFilter={handleLoadFilter}
-            onDeleteFilter={handleDeleteFilter}
-            isPro={isPro}
-          />
-        </Box>
-      )}
-
-      {/* Mobile filter bottom sheet */}
-      <MobileFilterSheet
-        open={showMobileFilter}
-        onClose={() => setShowMobileFilter(false)}
-        filterConfig={filterConfig}
-        onFilterChange={handleFilterChange}
-        onReset={() => handleFilterChange({})}
-        hasActiveFilters={hasActiveFilters}
+      <RankingToolbar
+        activeTimeRange={activeTimeRange}
+        onTimeRangeChange={onTimeRangeChange}
+        loading={loading}
+        onRefresh={onRefresh}
+        onCopyLink={handleCopyLink}
+        language={language}
+        t={t}
       />
 
-      {/* Hero section removed per Adeline's request */}
+      <AdvancedFilterPanel
+        showAdvancedFilter={showAdvancedFilter}
+        showMobileFilter={showMobileFilter}
+        onCloseMobileFilter={() => setShowMobileFilter(false)}
+        filterConfig={filterConfig}
+        savedFilters={savedFilters}
+        onFilterChange={handleFilterChange}
+        onSaveFilter={handleSaveFilter}
+        onLoadFilter={handleLoadFilter}
+        onDeleteFilter={handleDeleteFilter}
+        hasActiveFilters={hasActiveFilters}
+        isPro={isPro}
+      />
 
-      {/* Exchange trader count hint */}
-      {!loading && selectedExchange && advancedFiltered.length > 0 && advancedFiltered.length < 20 && (
-        <Box style={{
-          padding: `${tokens.spacing[2]} ${tokens.spacing[3]}`,
-          marginBottom: tokens.spacing[2],
-          textAlign: 'center',
-          fontSize: tokens.typography.fontSize.sm,
-          color: 'var(--color-text-tertiary)',
-          background: tokens.glass.bg.light,
-          borderRadius: tokens.radius.md,
-        }}>
-          {language === 'zh'
-            ? `该平台共 ${advancedFiltered.length} 名交易员`
-            : `${advancedFiltered.length} traders on this exchange`}
-        </Box>
-      )}
-
-      {/* Show reset prompt when all traders filtered out by advanced filter */}
-      {!loading && advancedFiltered.length === 0 && traders.length > 0 && hasActiveFilters && (
-        <Box style={{
-          padding: `${tokens.spacing[4]} ${tokens.spacing[5]}`,
-          marginBottom: tokens.spacing[2],
-          textAlign: 'center',
-          background: tokens.glass.bg.light,
-          borderRadius: tokens.radius.md,
-          border: `1px solid var(--color-border-primary)`,
-        }}>
-          <Text size="sm" style={{ color: 'var(--color-text-secondary)', marginBottom: tokens.spacing[2], display: 'block' }}>
-            {language === 'zh'
-              ? '当前筛选条件过滤了所有交易员'
-              : 'All traders have been filtered out'}
-          </Text>
-          <button
-            onClick={() => {
-              handleFilterChange({})
-              setShowAdvancedFilter(false)
-            }}
-            style={{
-              padding: `${tokens.spacing[2]} ${tokens.spacing[4]}`,
-              background: `var(--color-accent-primary, ${tokens.colors.accent.primary})20`,
-              border: `1px solid var(--color-accent-primary, ${tokens.colors.accent.primary})40`,
-              borderRadius: tokens.radius.md,
-              color: `var(--color-accent-primary, ${tokens.colors.accent.primary})`,
-              cursor: 'pointer',
-              fontSize: tokens.typography.fontSize.sm,
-              fontWeight: tokens.typography.fontWeight.bold,
-            }}
-          >
-            {language === 'zh' ? '重置筛选' : 'Reset Filters'}
-          </button>
-        </Box>
-      )}
+      <FilterStatusMessages
+        loading={loading}
+        language={language}
+        selectedExchange={selectedExchange}
+        advancedFilteredCount={advancedFiltered.length}
+        tradersCount={traders.length}
+        hasActiveFilters={hasActiveFilters}
+        onResetFilters={handleResetFilters}
+      />
 
       <RankingTable
         traders={filteredTraders}
@@ -752,17 +551,10 @@ export default function RankingSection({
         category={category}
         onCategoryChange={setCategory}
         onProRequired={handleProRequired}
-        onFilterToggle={() => {
-          if (window.matchMedia('(max-width: 768px)').matches) {
-            setShowMobileFilter(true)
-          } else {
-            setShowAdvancedFilter(prev => !prev)
-          }
-        }}
+        onFilterToggle={handleFilterToggle}
         hasActiveFilters={hasActiveFilters}
         error={error}
         onRetry={onRetry}
-        // Feature 8: Controlled props
         controlledSortColumn={sortColumn}
         controlledSortDir={sortDir}
         controlledPage={currentPage}
@@ -772,77 +564,21 @@ export default function RankingSection({
         onSearchChange={handleSearchChange}
       />
 
-      {/* Free user limit — inline CTA card (not overlay) */}
       {!isPro && !loading && advancedFiltered.length > FREE_LEADERBOARD_LIMIT && (
-        <Box
-          style={{
-            marginTop: tokens.spacing[4],
-            padding: `${tokens.spacing[5]} ${tokens.spacing[6]}`,
-            display: 'flex',
-            alignItems: 'center',
-            gap: tokens.spacing[5],
-            background: 'linear-gradient(135deg, var(--color-bg-secondary) 0%, var(--color-pro-glow, rgba(167,139,250,0.08)) 100%)',
-            borderRadius: tokens.radius.xl,
-            border: '1px solid var(--color-pro-gradient-start, #a78bfa)',
-          }}
-        >
-          <svg width={32} height={32} viewBox="0 0 24 24" fill="var(--color-pro-gradient-start, #a78bfa)" style={{ flexShrink: 0 }}>
-            <path d="M12 2L15.09 8.26L22 9.27L17 14.14L18.18 21.02L12 17.77L5.82 21.02L7 14.14L2 9.27L8.91 8.26L12 2Z" />
-          </svg>
-          <Box style={{ flex: 1, minWidth: 0 }}>
-            <Text size="md" weight="bold" style={{ color: 'var(--color-text-primary)', marginBottom: 4 }}>
-              {t('upgradeProViewAll').replace('{count}', '32,000+')}
-            </Text>
-            <Text size="sm" style={{ color: 'var(--color-text-tertiary)', lineHeight: 1.5 }}>
-              {language === 'zh'
-                ? `当前显示 Top ${FREE_LEADERBOARD_LIMIT} · 升级解锁全部交易员、高级筛选、CSV 导出`
-                : `Showing Top ${FREE_LEADERBOARD_LIMIT} · Unlock all traders, advanced filters & CSV export`}
-            </Text>
-          </Box>
-          <button
-            className="pro-feature-teaser-cta"
-            onClick={() => router.push('/pricing')}
-            style={{ flexShrink: 0 }}
-          >
-            {t('upgradeProFull')}
-          </button>
-        </Box>
+        <ProUpgradeCTA
+          language={language}
+          t={t}
+          freeLimit={FREE_LEADERBOARD_LIMIT}
+          onUpgrade={() => router.push('/pricing')}
+        />
       )}
 
-      {/* Last updated timestamp — exchange sources shown in chip bar above */}
-      {!loading && lastUpdated && (
-        <Box
-          suppressHydrationWarning
-          style={{
-            marginTop: tokens.spacing[2],
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'flex-end',
-            gap: 4,
-            fontSize: tokens.typography.fontSize.xs,
-            color: 'var(--color-text-tertiary)',
-            paddingRight: tokens.spacing[3],
-          }}
-        >
-          <svg width={11} height={11} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-            <circle cx="12" cy="12" r="10" />
-            <path d="M12 6v6l4 2" />
-          </svg>
-          <span suppressHydrationWarning>{formatLastUpdated(lastUpdated)}</span>
-        </Box>
-      )}
-
-      {/* Compliance disclaimer */}
-      <Box
-        style={{
-          marginTop: tokens.spacing[2],
-          textAlign: 'center',
-          fontSize: tokens.typography.fontSize.xs,
-          color: 'var(--color-text-tertiary)',
-        }}
-      >
-        {t('notInvestmentAdvice')}
-      </Box>
+      <RankingFooter
+        loading={loading}
+        lastUpdated={lastUpdated}
+        formatLastUpdated={formatLastUpdated}
+        t={t}
+      />
     </Box>
   )
 }
