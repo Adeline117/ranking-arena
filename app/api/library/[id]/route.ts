@@ -9,7 +9,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
     // Get book details
     const { data: item, error } = await supabase
       .from('library_items')
-      .select('*')
+      .select('id, title, slug, type, author, description, cover_url, category, tags, difficulty, language, url, rating_avg, rating_count, view_count, created_at, updated_at')
       .eq('id', id)
       .single()
 

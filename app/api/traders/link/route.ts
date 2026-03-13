@@ -124,7 +124,7 @@ export async function GET(req: NextRequest) {
 
     const { data: links, error } = await adminSupabase
       .from('trader_links')
-      .select('*')
+      .select('id, user_id, trader_id, source, handle, verified_at, created_at')
       .eq('user_id', user.id)
       .order('created_at', { ascending: false })
 

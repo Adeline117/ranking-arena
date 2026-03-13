@@ -30,7 +30,7 @@ export async function GET(req: NextRequest) {
 
     const { data: items } = await supabase
       .from('library_items')
-      .select('*')
+      .select('id, title, slug, type, author, description, cover_url, category, tags, difficulty, language, url, rating_avg, rating_count, view_count, created_at, updated_at')
       .in('id', itemIds)
 
     // Merge status info and maintain order

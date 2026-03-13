@@ -199,7 +199,7 @@ export async function GET(request: NextRequest) {
     // 7. Market condition
     supabase
       .from('market_conditions')
-      .select('*')
+      .select('condition, volatility_regime, trend_strength, rsi_14, created_at')
       .eq('symbol', symbol)
       .order('date', { ascending: false })
       .limit(1),

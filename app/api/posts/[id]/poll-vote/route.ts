@@ -45,7 +45,7 @@ export async function GET(request: NextRequest, context: RouteContext) {
     // 获取投票信息
     const { data: poll, error: pollError } = await supabase
       .from('polls')
-      .select('*')
+      .select('id, question, options, type, end_at')
       .eq('post_id', postId)
       .single()
 
@@ -115,7 +115,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
     // 获取投票信息
     const { data: poll, error: pollError } = await supabase
       .from('polls')
-      .select('*')
+      .select('id, options, type, end_at')
       .eq('post_id', postId)
       .single()
 
@@ -186,7 +186,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
       .from('polls')
       .update({ options: updatedOptions, updated_at: new Date().toISOString() })
       .eq('id', poll.id)
-      .select('*')
+      .select('id, options')
       .single()
 
     if (updateError) {

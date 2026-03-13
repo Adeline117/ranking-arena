@@ -60,7 +60,7 @@ export async function POST(request: NextRequest) {
       // Sync specific authorization
       const { data, error } = await supabase
         .from('trader_authorizations')
-        .select('*')
+        .select('id, user_id, trader_id, platform, encrypted_api_key, encrypted_api_secret, status, last_verified_at, verification_error')
         .eq('id', authorizationId)
         .eq('status', 'active')
         .single()
@@ -77,7 +77,7 @@ export async function POST(request: NextRequest) {
       // Sync all authorizations for user
       const { data, error } = await supabase
         .from('trader_authorizations')
-        .select('*')
+        .select('id, user_id, trader_id, platform, encrypted_api_key, encrypted_api_secret, status, last_verified_at, verification_error')
         .eq('user_id', userId)
         .eq('status', 'active')
 
@@ -94,7 +94,7 @@ export async function POST(request: NextRequest) {
       // Sync all active authorizations (called by cron)
       const { data, error } = await supabase
         .from('trader_authorizations')
-        .select('*')
+        .select('id, user_id, trader_id, platform, encrypted_api_key, encrypted_api_secret, status, last_verified_at, verification_error')
         .eq('status', 'active')
 
       if (error) {

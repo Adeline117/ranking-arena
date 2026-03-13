@@ -110,7 +110,7 @@ export async function GET(
     // 获取当前持仓
     const { data: portfolio, error } = await supabase
       .from('trader_portfolio')
-      .select('*')
+      .select('id, symbol, direction, weight_pct, entry_price, mark_price, pnl, pnl_pct, leverage, margin_type, updated_at')
       .eq('source', found.source)
       .eq('source_trader_id', found.traderId)
       .order('updated_at', { ascending: false })

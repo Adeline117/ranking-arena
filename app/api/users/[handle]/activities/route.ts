@@ -28,7 +28,7 @@ export async function GET(
 
     const { data: activities, error } = await supabase
       .from('user_activities')
-      .select('*')
+      .select('id, user_id, type, title, description, metadata, link, created_at')
       .eq('user_id', profile.id)
       .order('created_at', { ascending: false })
       .range(offset, offset + limit - 1)
