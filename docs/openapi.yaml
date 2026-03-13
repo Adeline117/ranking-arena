@@ -1,0 +1,827 @@
+openapi: "3.0.3"
+info:
+  title: Arena API
+  description: >
+    Cryptocurrency trader ranking and community platform.
+    32,000+ traders across 27+ CEX/DEX exchanges.
+  version: "2.0.0"
+  contact:
+    name: Arena
+    url: https://www.arenafi.org
+
+servers:
+  - url: https://www.arenafi.org/api
+    description: Production
+  - url: http://localhost:3000/api
+    description: Local Development
+
+tags:
+  - name: Health
+    description: Health check endpoints
+  - name: Rankings
+    description: Trader leaderboard
+  - name: Traders
+    description: Individual trader data
+  - name: Search
+    description: Unified search
+  - name: Follow
+    description: Follow/unfollow traders
+  - name: Posts
+    description: Community posts
+  - name: Groups
+    description: Trading groups
+
+paths:
+  /health:
+    get:
+      tags: [Health]
+      summary: Health Check
+      description: >
+        Returns application health status including database and Redis connectivity.
+        Target response time: <200ms.
+      responses:
+        "200":
+          description: Healthy or degraded
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    enum: [healthy, degraded, unhealthy]
+                    example: healthy
+                  timestamp:
+                    type: string
+                    format: date-time
+                  version:
+                    type: string
+                    example: "0.1.0"
+                  uptime:
+                    type: integer
+                    description: Uptime in seconds
+                  responseTimeMs:
+                    type: integer
+                  checks:
+                    type: object
+                    properties:
+                      api:
+                        $ref: "#/components/schemas/HealthCheck"
+                      database:
+                        $ref: "#/components/schemas/HealthCheck"
+                      redis:
+                        $ref: "#/components/schemas/HealthCheck"
+        "503":
+          description: Unhealthy (database unreachable)
+    head:
+      tags: [Health]
+      summary: Health Ping
+      description: Lightweight health ping (no body).
+      responses:
+        "200":
+          description: OK
+
+  /rankings:
+    get:
+      tags: [Rankings]
+      summary: Get Trader Rankings
+      description: >
+        Returns ranked traders for a given time window.
+        Reads from trader_snapshots with Redis caching (TTL 60s).
+        Supports keyset pagination via cursor parameter.
+      parameters:
+        - name: window
+          in: query
+          required: true
+          description: Time window for ranking
+          schema:
+            type: string
+            enum: [7d, 30d, 90d, composite]
+        - name: category
+          in: query
+          description: Filter by trading category
+          schema:
+            type: string
+            enum: [futures, spot, onchain]
+        - name: platform
+          in: query
+          description: Filter by specific platform (overrides category)
+          schema:
+            type: string
+            example: binance_futures
+        - name: sort_by
+          in: query
+          schema:
+            type: string
+            enum: [arena_score, roi, pnl, drawdown, copiers]
+            default: arena_score
+        - name: sort_dir
+          in: query
+          schema:
+            type: string
+            enum: [asc, desc]
+            default: desc
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 100
+            maximum: 500
+        - name: offset
+          in: query
+          description: Legacy offset pagination
+          schema:
+            type: integer
+            default: 0
+        - name: cursor
+          in: query
+          description: "Keyset pagination cursor (format: score:id)"
+          schema:
+            type: string
+        - name: min_pnl
+          in: query
+          schema:
+            type: number
+        - name: min_trades
+          in: query
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Ranked traders
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  traders:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/RankedTrader"
+                  window:
+                    type: string
+                    example: "90D"
+                  totalcount:
+                    type: integer
+                  total_count:
+                    type: integer
+                  as_of:
+                    type: string
+                    format: date-time
+                  is_stale:
+                    type: boolean
+                  availableSources:
+                    type: array
+                    items:
+                      type: string
+                  next_cursor:
+                    type: string
+                    nullable: true
+        "400":
+          description: Invalid parameters
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /traders:
+    get:
+      tags: [Traders]
+      summary: Get Traders (Leaderboard)
+      description: >
+        Reads from pre-computed leaderboard_ranks table.
+        Supports cursor-based and page-based pagination.
+      parameters:
+        - name: timeRange
+          in: query
+          schema:
+            type: string
+            enum: [7D, 30D, 90D]
+            default: "90D"
+        - name: exchange
+          in: query
+          description: Filter by exchange platform
+          schema:
+            type: string
+        - name: sortBy
+          in: query
+          schema:
+            type: string
+            enum: [arena_score, roi, win_rate, max_drawdown]
+            default: arena_score
+        - name: order
+          in: query
+          schema:
+            type: string
+            enum: [asc, desc]
+            default: desc
+        - name: cursor
+          in: query
+          description: Rank value to start after (cursor-based pagination)
+          schema:
+            type: string
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 50
+            maximum: 1000
+        - name: page
+          in: query
+          description: Legacy page number (0-indexed)
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Success
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  traders:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/TraderListItem"
+                  timeRange:
+                    type: string
+                  totalCount:
+                    type: integer
+                  rankingMode:
+                    type: string
+                  lastUpdated:
+                    type: string
+                    format: date-time
+                  isStale:
+                    type: boolean
+                  nextCursor:
+                    type: integer
+                    nullable: true
+                  hasMore:
+                    type: boolean
+                  availableSources:
+                    type: array
+                    items:
+                      type: string
+
+  /v2/trader/{platform}/{market_type}/{trader_key}:
+    get:
+      tags: [Traders]
+      summary: Get Trader Detail (V2)
+      description: >
+        Returns full trader detail including profile, snapshots for all windows,
+        timeseries data, and refresh status. Database-only (no external fetching).
+        Target: <200ms.
+      parameters:
+        - name: platform
+          in: path
+          required: true
+          schema:
+            type: string
+            example: binance_futures
+        - name: market_type
+          in: path
+          required: true
+          schema:
+            type: string
+            enum: [futures, spot, perp]
+        - name: trader_key
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Trader detail
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  profile:
+                    $ref: "#/components/schemas/TraderProfile"
+                  snapshots:
+                    type: object
+                    properties:
+                      "7d":
+                        $ref: "#/components/schemas/TraderSnapshot"
+                      "30d":
+                        $ref: "#/components/schemas/TraderSnapshot"
+                      "90d":
+                        $ref: "#/components/schemas/TraderSnapshot"
+                  timeseries:
+                    type: array
+                    items:
+                      type: object
+                  refresh_status:
+                    type: object
+                    properties:
+                      last_refreshed_at:
+                        type: string
+                        format: date-time
+                        nullable: true
+                      is_refreshing:
+                        type: boolean
+                      next_refresh_at:
+                        type: string
+                        format: date-time
+                        nullable: true
+                  provenance:
+                    type: object
+        "404":
+          description: Trader not found
+
+  /search:
+    get:
+      tags: [Search]
+      summary: Unified Search
+      description: >
+        Searches across traders, posts, library items, users, and groups.
+        Results are categorized and ranked by relevance. Cached for 5 minutes.
+      parameters:
+        - name: q
+          in: query
+          required: true
+          description: Search query (min 1 character)
+          schema:
+            type: string
+            minLength: 1
+            maxLength: 100
+        - name: limit
+          in: query
+          description: Max results per category
+          schema:
+            type: integer
+            default: 5
+            maximum: 10
+      responses:
+        "200":
+          description: Search results
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: object
+                    properties:
+                      query:
+                        type: string
+                      results:
+                        type: object
+                        properties:
+                          traders:
+                            type: array
+                            items:
+                              $ref: "#/components/schemas/SearchResult"
+                          posts:
+                            type: array
+                            items:
+                              $ref: "#/components/schemas/SearchResult"
+                          library:
+                            type: array
+                            items:
+                              $ref: "#/components/schemas/SearchResult"
+                          users:
+                            type: array
+                            items:
+                              $ref: "#/components/schemas/SearchResult"
+                          groups:
+                            type: array
+                            items:
+                              $ref: "#/components/schemas/SearchResult"
+                      total:
+                        type: integer
+                  meta:
+                    $ref: "#/components/schemas/ResponseMeta"
+
+  /follow:
+    get:
+      tags: [Follow]
+      summary: Check Follow Status
+      description: Check if the authenticated user follows a trader.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: traderId
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Follow status
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  following:
+                    type: boolean
+        "401":
+          description: Unauthorized
+    post:
+      tags: [Follow]
+      summary: Follow / Unfollow Trader
+      description: Toggle follow state for a trader.
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [traderId, action]
+              properties:
+                traderId:
+                  type: string
+                action:
+                  type: string
+                  enum: [follow, unfollow]
+      responses:
+        "200":
+          description: Success
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  following:
+                    type: boolean
+        "400":
+          description: Invalid input
+        "401":
+          description: Unauthorized
+        "503":
+          description: Follow feature not available
+
+  /posts:
+    get:
+      tags: [Posts]
+      summary: List Posts
+      description: Community posts with optional filtering and sorting.
+      parameters:
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 20
+            maximum: 100
+        - name: offset
+          in: query
+          schema:
+            type: integer
+            default: 0
+        - name: sort_by
+          in: query
+          schema:
+            type: string
+            enum: [created_at, hot_score, like_count]
+            default: created_at
+        - name: sort_order
+          in: query
+          schema:
+            type: string
+            enum: [asc, desc]
+            default: desc
+        - name: group_id
+          in: query
+          schema:
+            type: string
+            format: uuid
+        - name: author_handle
+          in: query
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Success
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: object
+                    properties:
+                      posts:
+                        type: array
+                        items:
+                          $ref: "#/components/schemas/Post"
+                  pagination:
+                    $ref: "#/components/schemas/Pagination"
+
+  /groups:
+    get:
+      tags: [Groups]
+      summary: List Groups
+      parameters:
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 20
+        - name: offset
+          in: query
+          schema:
+            type: integer
+            default: 0
+      responses:
+        "200":
+          description: Success
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: object
+                    properties:
+                      groups:
+                        type: array
+                        items:
+                          $ref: "#/components/schemas/Group"
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: Supabase access token
+
+  schemas:
+    HealthCheck:
+      type: object
+      properties:
+        status:
+          type: string
+          enum: [pass, fail, skip]
+        latency:
+          type: integer
+          description: Latency in milliseconds
+        message:
+          type: string
+
+    RankedTrader:
+      type: object
+      properties:
+        platform:
+          type: string
+        trader_key:
+          type: string
+        display_name:
+          type: string
+          nullable: true
+        avatar_url:
+          type: string
+          nullable: true
+        rank:
+          type: integer
+        metrics:
+          type: object
+          properties:
+            roi:
+              type: number
+              nullable: true
+            pnl:
+              type: number
+              nullable: true
+            win_rate:
+              type: number
+              nullable: true
+            max_drawdown:
+              type: number
+              nullable: true
+            trades_count:
+              type: integer
+              nullable: true
+            followers:
+              type: integer
+              nullable: true
+            arena_score:
+              type: number
+              nullable: true
+            sharpe_ratio:
+              type: number
+              nullable: true
+        updated_at:
+          type: string
+          format: date-time
+        is_bot:
+          type: boolean
+        trader_type:
+          type: string
+          nullable: true
+
+    TraderListItem:
+      type: object
+      properties:
+        id:
+          type: string
+        handle:
+          type: string
+          nullable: true
+        roi:
+          type: number
+        pnl:
+          type: number
+          nullable: true
+        win_rate:
+          type: number
+          nullable: true
+        max_drawdown:
+          type: number
+          nullable: true
+        trades_count:
+          type: integer
+          nullable: true
+        followers:
+          type: integer
+          nullable: true
+        source:
+          type: string
+        source_type:
+          type: string
+        avatar_url:
+          type: string
+          nullable: true
+        arena_score:
+          type: number
+        rank:
+          type: integer
+        sharpe_ratio:
+          type: number
+          nullable: true
+        is_bot:
+          type: boolean
+        trader_type:
+          type: string
+          nullable: true
+
+    TraderProfile:
+      type: object
+      properties:
+        platform:
+          type: string
+        market_type:
+          type: string
+        trader_key:
+          type: string
+        display_name:
+          type: string
+          nullable: true
+        avatar_url:
+          type: string
+          nullable: true
+        bio:
+          type: string
+          nullable: true
+        tags:
+          type: array
+          items:
+            type: string
+          nullable: true
+        profile_url:
+          type: string
+          nullable: true
+        followers:
+          type: integer
+          nullable: true
+        copiers:
+          type: integer
+          nullable: true
+        aum:
+          type: number
+          nullable: true
+
+    TraderSnapshot:
+      type: object
+      properties:
+        window:
+          type: string
+        roi:
+          type: number
+          nullable: true
+        pnl:
+          type: number
+          nullable: true
+        win_rate:
+          type: number
+          nullable: true
+        max_drawdown:
+          type: number
+          nullable: true
+        trades_count:
+          type: integer
+          nullable: true
+        arena_score:
+          type: number
+          nullable: true
+        captured_at:
+          type: string
+          format: date-time
+
+    SearchResult:
+      type: object
+      properties:
+        id:
+          type: string
+        type:
+          type: string
+          enum: [trader, post, library, user, group]
+        title:
+          type: string
+        subtitle:
+          type: string
+          nullable: true
+        href:
+          type: string
+        avatar:
+          type: string
+          nullable: true
+        meta:
+          type: object
+          nullable: true
+
+    Post:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        title:
+          type: string
+        content:
+          type: string
+        author_handle:
+          type: string
+        like_count:
+          type: integer
+        comment_count:
+          type: integer
+        view_count:
+          type: integer
+        created_at:
+          type: string
+          format: date-time
+
+    Group:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        description:
+          type: string
+        member_count:
+          type: integer
+        post_count:
+          type: integer
+
+    Pagination:
+      type: object
+      properties:
+        limit:
+          type: integer
+        offset:
+          type: integer
+        has_more:
+          type: boolean
+
+    ResponseMeta:
+      type: object
+      properties:
+        timestamp:
+          type: string
+          format: date-time
+        pagination:
+          $ref: "#/components/schemas/Pagination"
+
+    ErrorResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: false
+        error:
+          type: object
+          properties:
+            code:
+              type: string
+            message:
+              type: string
+            timestamp:
+              type: string
+              format: date-time
