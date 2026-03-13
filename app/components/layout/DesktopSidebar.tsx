@@ -6,6 +6,7 @@ import { useEffect, useState } from 'react'
 import { tokens } from '@/lib/design-tokens'
 import { useLanguage } from '../Providers/LanguageProvider'
 import { supabase } from '@/lib/supabase/client'
+import { features } from '@/lib/features'
 
 function HomeIcon({ active }: { active: boolean }) {
   return (
@@ -84,7 +85,10 @@ export default function DesktopSidebar() {
     { href: '/rankings', labelKey: 'rankings' as const, icon: TrophyIcon },
     { href: '/groups', labelKey: 'groups' as const, icon: GroupIcon },
     { href: userHandle ? `/u/${encodeURIComponent(userHandle)}` : '/settings', labelKey: 'me' as const, icon: UserIcon },
-  ]
+  ].filter(item => {
+    if (item.href === '/groups') return features.social
+    return true
+  })
 
   const isActive = (href: string) => {
     if (href === '/') return pathname === '/'

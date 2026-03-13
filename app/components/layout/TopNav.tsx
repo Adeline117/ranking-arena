@@ -16,6 +16,7 @@ import { SearchIcon, UserIcon, NotificationIcon } from '../ui/icons'
 import { Box } from '../base'
 import { useInboxStore } from '@/lib/stores/inboxStore'
 import { usePostStore } from '@/lib/stores/postStore'
+import { features } from '@/lib/features'
 
 // Lazy load non-critical components
 const MobileSearchOverlay = dynamic(() => import('../search/MobileSearchOverlay'), { ssr: false })
@@ -369,7 +370,10 @@ export default function TopNav({ email = null }: { email?: string | null }) {
               { href: '/groups', labelKey: 'groups' as const, tooltip: language === 'zh' ? '加入讨论小组' : 'Join discussion groups' },
               { href: '/market', labelKey: 'market' as const, tooltip: language === 'zh' ? '市场数据总览' : 'Market overview' },
               { href: '/hot', labelKey: 'hot' as const, tooltip: language === 'zh' ? '全站热门帖子' : 'Trending posts' },
-            ].map((item) => {
+            ].filter(item => {
+              if (['/groups', '/hot'].includes(item.href)) return features.social
+              return true
+            }).map((item) => {
               const label = t(item.labelKey)
               const isActive = item.href === '/' ? (pathname === '/' || pathname.startsWith('/rankings')) : pathname.startsWith(item.href)
               return (
@@ -565,6 +569,7 @@ export default function TopNav({ email = null }: { email?: string | null }) {
           ) : myId ? (
             <>
               {/* 通知铃铛图标 - desktop opens panel, mobile navigates to /inbox */}
+              {features.social && (
               <button
                 data-inbox-trigger
                 className="top-nav-notif-btn"
@@ -625,6 +630,7 @@ export default function TopNav({ email = null }: { email?: string | null }) {
                   </Box>
                 )}
               </button>
+              )}
               <Box
                 as="button"
                 onClick={() => setShowUserMenu(!showUserMenu)}
@@ -750,6 +756,7 @@ export default function TopNav({ email = null }: { email?: string | null }) {
                     <span>{t('userCenter') || '用户中心'}</span>
                   </Link>
                   {/* 持仓和多链资产已移到个人主页 tabs */}
+                  {features.social && (
                   <Link
                     href="/inbox"
                     role="menuitem"
@@ -784,6 +791,7 @@ export default function TopNav({ email = null }: { email?: string | null }) {
                     </Box>
                     <span>{t('inbox')}</span>
                   </Link>
+                  )}
                   {/* 升级Pro已合并到用户中心 */}
                   <Link
                     href="/settings"
