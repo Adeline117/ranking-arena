@@ -234,10 +234,21 @@ async function fetchLeaderboardFromDBInner(
     // Sort by recalculated arena_score descending
     traders.sort((a, b) => b.arena_score - a.arena_score)
 
-    // Strict ranking by arena_score — no platform diversity filtering
-    // Return top traders purely based on calculated score
+    // Platform diversity: cap max traders per platform to ensure cross-platform mix
+    // Without this, a single high-PnL platform (e.g. Hyperliquid whales) monopolizes top 25
+    const MAX_PER_PLATFORM = 5
+    const platformCounts = new Map<string, number>()
+    const diverseTraders: InitialTrader[] = []
+    for (const t of traders) {
+      const count = platformCounts.get(t.source) || 0
+      if (count >= MAX_PER_PLATFORM) continue
+      platformCounts.set(t.source, count + 1)
+      diverseTraders.push(t)
+      if (diverseTraders.length >= limit) break
+    }
+
     return {
-      traders: traders.slice(0, limit),
+      traders: diverseTraders,
       lastUpdated: latestSnapshot?.captured_at || null,
     }
   } catch (err) {

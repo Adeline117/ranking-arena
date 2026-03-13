@@ -140,12 +140,13 @@ async function fetchFromLeaderboard(
     query = query.order(sortColumn, { ascending, nullsFirst: false })
   }
 
-  // Pagination
+  // Pagination — over-fetch when diversity filtering will be applied (no exchange filter)
+  const diversityOverfetch = (!exchangeFilter && sortBy === 'arena_score' && !cursor) ? 3 : 1
   if (useLegacyPaging) {
     const startIdx = page * limit
-    query = query.range(startIdx, startIdx + limit - 1)
+    query = query.range(startIdx, startIdx + limit * diversityOverfetch - 1)
   } else {
-    query = query.limit(limit)
+    query = query.limit(limit * diversityOverfetch)
   }
 
   const { data, error, count } = await query
@@ -190,12 +191,25 @@ async function fetchFromLeaderboard(
 
   // Deduplicate 0x addresses (case-insensitive) — VPS imports may write checksum-case
   const seen = new Set<string>()
-  const dedupedTraders = traders.filter((t: { id: string; source: string }) => {
+  let dedupedTraders = traders.filter((t: { id: string; source: string }) => {
     const key = (t.id.startsWith('0x') ? t.id.toLowerCase() : t.id) + '|' + t.source
     if (seen.has(key)) return false
     seen.add(key)
     return true
   })
+
+  // Platform diversity: when viewing overall (no exchange filter), cap per-platform
+  // to prevent a single high-PnL platform from monopolizing the ranking
+  if (!exchangeFilter && sortBy === 'arena_score' && !cursor) {
+    const MAX_PER_PLATFORM = Math.max(5, Math.ceil(limit * 0.3))
+    const platformCounts = new Map<string, number>()
+    dedupedTraders = dedupedTraders.filter((t: { source: string }) => {
+      const count = platformCounts.get(t.source) || 0
+      if (count >= MAX_PER_PLATFORM) return false
+      platformCounts.set(t.source, count + 1)
+      return true
+    })
+  }
 
   // Next cursor
   const lastTrader = dedupedTraders[dedupedTraders.length - 1]
