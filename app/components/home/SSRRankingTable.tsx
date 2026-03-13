@@ -20,17 +20,17 @@ function getScoreColor(score: number): string {
 }
 
 function formatROI(roi: number): string {
-  if (roi >= 1000) return `+${(roi / 1000).toFixed(1)}K%`
-  if (roi >= 0) return `+${roi.toFixed(0)}%`
-  return `${roi.toFixed(0)}%`
+  if (roi >= 1000) return `+${(roi / 1000).toFixed(2)}K%`
+  if (roi >= 0) return `+${roi.toFixed(2)}%`
+  return `${roi.toFixed(2)}%`
 }
 
 function formatPnL(pnl: number): string {
   const abs = Math.abs(pnl)
   const sign = pnl >= 0 ? '+' : '-'
-  if (abs >= 1_000_000) return `${sign}$${(abs / 1_000_000).toFixed(1)}M`
-  if (abs >= 1_000) return `${sign}$${(abs / 1_000).toFixed(1)}K`
-  return `${sign}$${abs.toFixed(0)}`
+  if (abs >= 1_000_000) return `${sign}$${(abs / 1_000_000).toFixed(2)}M`
+  if (abs >= 1_000) return `${sign}$${(abs / 1_000).toFixed(2)}K`
+  return `${sign}$${abs.toFixed(2)}`
 }
 
 function getInitial(name: string): string {
