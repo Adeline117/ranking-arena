@@ -2,6 +2,7 @@
 
 import { useRouter } from 'next/navigation'
 import { tokens } from '@/lib/design-tokens'
+import { Button } from '@/app/components/base'
 import type { MembershipInfo } from './membership-config'
 
 interface NftMembershipCardProps {
@@ -60,21 +61,9 @@ export default function NftMembershipCard({ info, language, cardStyle, t }: NftM
           <p style={{ marginBottom: 12, fontSize: 14 }}>
             {t('proMintNft')}
           </p>
-          <button
-            onClick={() => router.push('/settings')}
-            style={{
-              padding: '10px 20px',
-              background: tokens.colors.bg.hover,
-              border: `1px solid ${tokens.colors.border.primary}`,
-              borderRadius: tokens.radius.md,
-              color: tokens.colors.text.primary,
-              fontWeight: 600,
-              cursor: 'pointer',
-              fontSize: 14,
-            }}
-          >
+          <Button variant="secondary" onClick={() => router.push('/settings')}>
             {t('linkWallet')}
-          </button>
+          </Button>
         </div>
       )}
     </div>
