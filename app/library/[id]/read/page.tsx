@@ -563,7 +563,7 @@ export default function ReadPage() {
         <h2 style={{ color: 'var(--color-text-primary)', fontSize: 20, fontWeight: 700, marginBottom: 8 }}>{t('readerUpgradeTitle')}</h2>
         <p style={{ color: 'var(--color-text-tertiary)', fontSize: 14, marginBottom: 24, textAlign: 'center', maxWidth: 400 }}>{t('readerUpgradeDesc')}</p>
         <div style={{ display: 'flex', gap: 12 }}>
-          <Link href="/membership" style={{ padding: '10px 24px', borderRadius: tokens.radius.lg, background: tokens.gradient.primary, color: 'var(--foreground)', textDecoration: 'none', fontSize: 14, fontWeight: 600 }}>{t('readerUpgrade')}</Link>
+          <Link href="/pricing" style={{ padding: '10px 24px', borderRadius: tokens.radius.lg, background: tokens.gradient.primary, color: 'var(--foreground)', textDecoration: 'none', fontSize: 14, fontWeight: 600 }}>{t('readerUpgrade')}</Link>
           <Link href={`/library/${id}`} style={{ padding: '10px 24px', borderRadius: tokens.radius.lg, border: '1px solid var(--color-border-primary)', color: 'var(--color-text-primary)', textDecoration: 'none', fontSize: 14, fontWeight: 600 }}>{t('readerBack')}</Link>
         </div>
       </div>

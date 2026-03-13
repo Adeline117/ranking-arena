@@ -210,7 +210,7 @@ function isActivePath(href: string, pathname: string): boolean {
 }
 
 /** Pages where the bottom nav should be completely hidden */
-const HIDDEN_PATHS = ['/login', '/welcome', '/reset-password', '/auth/callback']
+const HIDDEN_PATHS = ['/login', '/onboarding', '/reset-password', '/auth/callback']
 
 export default function MobileBottomNav(): React.ReactElement {
   const pathname = usePathname()
