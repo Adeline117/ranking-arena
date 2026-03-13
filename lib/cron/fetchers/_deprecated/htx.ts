@@ -15,9 +15,12 @@ import {
 import { type StatsDetail, upsertStatsDetail } from '../enrichment'
 import { logger } from '@/lib/logger'
 import { captureException } from '@/lib/utils/logger'
+import { fetchViaVpsProxy } from '../shared'
 
 const SOURCE = 'htx_futures'
 const API_URL = 'https://futures.htx.com/-/x/hbg/v1/futures/copytrading/rank'
+// VPS scraper endpoint for HTX (Playwright-based, intercepts XHR)
+const VPS_SCRAPER_URL = process.env.VPS_SCRAPER_URL || ''
 const TARGET = 500
 const PAGE_SIZE = 50
 
@@ -80,8 +83,13 @@ async function fetchPeriod(
   for (let page = 1; page <= maxPages; page++) {
     try {
       const url = `${API_URL}?rankType=1&pageNo=${page}&pageSize=${PAGE_SIZE}`
-      // HTX API is not geo-blocked — use direct fetch (no VPS proxy needed)
-      const data = await fetchJson<{ code: number; data?: { itemList?: HtxTrader[] } }>(url, { timeoutMs: 15000 })
+      // HTX API returns 405 from Vercel — try VPS proxy first, fall back to direct
+      let data: { code: number; data?: { itemList?: HtxTrader[] } }
+      try {
+        data = await fetchViaVpsProxy<{ code: number; data?: { itemList?: HtxTrader[] } }>(url, { timeoutMs: 15000 })
+      } catch {
+        data = await fetchJson<{ code: number; data?: { itemList?: HtxTrader[] } }>(url, { timeoutMs: 15000 })
+      }
 
       if (data.code !== 200 || !data.data?.itemList) break
       const list = data.data.itemList
