@@ -9,6 +9,8 @@ import { useToast } from '@/app/components/ui/Toast'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import Link from 'next/link'
 import { tokens } from '@/lib/design-tokens'
+import ErrorState from '@/app/components/ui/ErrorState'
+import EmptyState from '@/app/components/ui/EmptyState'
 import { logger } from '@/lib/logger'
 import type { UnifiedSearchResponse } from '@/app/api/search/route'
 
@@ -433,25 +435,10 @@ function SearchContent() {
             ))}
           </div>
         ) : searchError ? (
-          <div style={{ textAlign: 'center', padding: '80px 24px' }}>
-            <div style={{
-              width: 72, height: 72, borderRadius: '50%',
-              background: 'var(--color-accent-error-10)',
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              margin: '0 auto 20px',
-            }}>
-              <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="var(--color-accent-error)" strokeWidth="1.5">
-                <circle cx="12" cy="12" r="10" />
-                <line x1="15" y1="9" x2="9" y2="15" /><line x1="9" y1="9" x2="15" y2="15" />
-              </svg>
-            </div>
-            <div style={{ fontSize: 17, fontWeight: 600, color: tokens.colors.text.primary, marginBottom: 6 }}>
-              {t('searchErrorTitle')}
-            </div>
-            <div style={{ fontSize: 13, color: tokens.colors.text.tertiary }}>
-              {t('searchTryAgainLater')}
-            </div>
-          </div>
+          <ErrorState
+            title={t('searchErrorTitle')}
+            description={t('searchTryAgainLater')}
+          />
         ) : !query ? (
           <div style={{ textAlign: 'center', padding: '80px 24px' }}>
             <div style={{
@@ -558,22 +545,16 @@ function SearchContent() {
           </div>
         ) : totalResults === 0 ? (
           <div style={{ textAlign: 'center', padding: '80px 24px' }}>
-            <div style={{
-              width: 72, height: 72, borderRadius: '50%',
-              background: tokens.gradient.primarySubtle,
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              margin: '0 auto 20px', opacity: 0.8,
-            }}>
-              <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke={tokens.colors.text.tertiary} strokeWidth="1.5">
-                <circle cx="11" cy="11" r="8" /><path d="m21 21-4.3-4.3" /><line x1="8" y1="11" x2="14" y2="11" />
-              </svg>
-            </div>
-            <div style={{ fontSize: 17, fontWeight: 600, color: tokens.colors.text.primary, marginBottom: 6 }}>
-              {t('searchNoResultsTitle')}
-            </div>
-            <div style={{ fontSize: 13, color: tokens.colors.text.tertiary, marginBottom: 24 }}>
-              {t('searchNoResultsFor').replace('{query}', query)}
-            </div>
+            <EmptyState
+              icon={
+                <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke={tokens.colors.text.tertiary} strokeWidth="1.5">
+                  <circle cx="11" cy="11" r="8" /><path d="m21 21-4.3-4.3" /><line x1="8" y1="11" x2="14" y2="11" />
+                </svg>
+              }
+              title={t('searchNoResultsTitle')}
+              description={t('searchNoResultsFor').replace('{query}', query)}
+              variant="compact"
+            />
             <div style={{ maxWidth: 360, margin: '0 auto', textAlign: 'left' }}>
               <div style={{ fontSize: 12, color: tokens.colors.text.secondary, marginBottom: 10, fontWeight: 600 }}>
                 {t('searchSuggestions')}:

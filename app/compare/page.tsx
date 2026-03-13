@@ -6,6 +6,7 @@ import { useState, useEffect, Suspense } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { supabase } from '@/lib/supabase/client'
 import { tokens } from '@/lib/design-tokens'
+import LoadingSkeleton from '@/app/components/ui/LoadingSkeleton'
 import TopNav from '@/app/components/layout/TopNav'
 import { Box, Text, Button } from '@/app/components/base'
 import TraderComparison from '@/app/components/premium/TraderComparison'
@@ -197,8 +198,8 @@ function CompareContent() {
     return (
       <Box style={{ minHeight: '100vh', background: tokens.colors.bg.primary }}>
         <TopNav email={email} />
-        <Box style={{ maxWidth: 1200, margin: '0 auto', padding: tokens.spacing[6], textAlign: 'center' }}>
-          <Text size="lg" color="tertiary">{t('loading')}</Text>
+        <Box style={{ maxWidth: 1200, margin: '0 auto', padding: tokens.spacing[6] }}>
+          <LoadingSkeleton variant="detail" count={2} />
         </Box>
       </Box>
     )

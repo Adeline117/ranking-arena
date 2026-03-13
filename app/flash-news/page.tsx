@@ -9,6 +9,7 @@ import MobileBottomNav from '@/app/components/layout/MobileBottomNav'
 import { useToast } from '@/app/components/ui/Toast'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import { getCsrfHeaders } from '@/lib/api/client'
+import EmptyState from '@/app/components/ui/EmptyState'
 import CategoryFilter from './components/CategoryFilter'
 import NewsCard from './components/NewsCard'
 import NewsTimelineSkeleton from './components/NewsTimelineSkeleton'
@@ -302,15 +303,15 @@ export default function FlashNewsPage() {
           {loading && news.length === 0 ? (
             <NewsTimelineSkeleton />
           ) : news.length === 0 ? (
-            <div className="empty-state" style={{ padding: '80px 24px' }}>
-              <div className="empty-state-icon">
+            <EmptyState
+              icon={
                 <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
                   <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" />
                 </svg>
-              </div>
-              <p className="empty-state-title">{t('flashNewsNoNews')}</p>
-              <p className="empty-state-message">{t('flashNewsNoNewsDesc')}</p>
-            </div>
+              }
+              title={t('flashNewsNoNews')}
+              description={t('flashNewsNoNewsDesc')}
+            />
           ) : (
             <Box>
               <Box style={{ marginBottom: tokens.spacing[5] }}>

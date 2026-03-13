@@ -1,0 +1,122 @@
+'use client'
+
+import { tokens } from '@/lib/design-tokens'
+import { Box } from '../../base'
+import { useLanguage } from '../../Providers/LanguageProvider'
+import { MetricBadge } from './MetricBadge'
+
+export interface MetricBadgesGridProps {
+  sharpeRatio: number | undefined
+  maxDrawdown: number | undefined
+  winRate: number | undefined
+  winningPositions: number | undefined
+  totalPositions: number | undefined
+  sortinoRatio: number | undefined
+  calmarRatio: number | undefined
+  alpha: number | undefined
+  tradesCount: number | undefined
+  avgHoldingTimeHours: number | undefined
+  copiersPnl: number | undefined
+  isVisible: boolean
+}
+
+export function MetricBadgesGrid({
+  sharpeRatio,
+  maxDrawdown,
+  winRate,
+  winningPositions,
+  totalPositions,
+  sortinoRatio,
+  calmarRatio,
+  alpha,
+  tradesCount,
+  avgHoldingTimeHours,
+  copiersPnl,
+  isVisible,
+}: MetricBadgesGridProps) {
+  const { t } = useLanguage()
+
+  return (
+    <Box
+      className="metric-badges-grid"
+      style={{
+        display: 'flex',
+        flexWrap: 'wrap',
+        gap: `${tokens.spacing[2]} ${tokens.spacing[2]}`,
+        opacity: isVisible ? 1 : 0,
+        transform: isVisible ? 'translateY(0)' : 'translateY(10px)',
+        transition: 'all 0.5s cubic-bezier(0.4, 0, 0.2, 1) 0.3s',
+      }}
+    >
+      <MetricBadge
+        label={t('sharpe')}
+        value={sharpeRatio !== undefined && sharpeRatio < 9000 ? sharpeRatio.toFixed(2) : '—'}
+        highlight={sharpeRatio !== undefined && sharpeRatio > 1 && sharpeRatio < 9000}
+        tooltip={sharpeRatio === undefined ? t('sharpeNotAvailable') : sharpeRatio >= 9000 ? t('sharpeNotAvailable') : undefined}
+      />
+      <MetricBadge
+        label={t('maxDrawdownShort')}
+        value={maxDrawdown !== undefined && Math.abs(maxDrawdown) <= 100 ? (Math.abs(maxDrawdown) < 0.05 ? '< 0.1%' : `${Math.abs(maxDrawdown).toFixed(1)}%`) : '—'}
+        negative
+        tooltip={maxDrawdown === undefined ? t('drawdownNotAvailable') : maxDrawdown !== undefined && Math.abs(maxDrawdown) > 100 ? t('drawdownNotAvailable') : undefined}
+      />
+      <MetricBadge
+        label={t('winRateShort')}
+        value={winRate !== undefined ? `${winRate.toFixed(1)}%` : '—'}
+        highlight={winRate !== undefined && winRate > 60}
+        tooltip={winRate === undefined ? t('winRateNotAvailable') : undefined}
+      />
+      <MetricBadge
+        label={t('winningPositions')}
+        value={winningPositions !== undefined && totalPositions !== undefined ? `${winningPositions}/${totalPositions}` : '—'}
+        tooltip={winningPositions === undefined ? t('positionStatsNotAvailable') : undefined}
+      />
+      {/* V3 Advanced Metrics */}
+      {sortinoRatio !== undefined && (
+        <MetricBadge
+          label="Sortino"
+          value={sortinoRatio.toFixed(2)}
+          highlight={sortinoRatio >= 2}
+          tooltip={t('sortinoTooltip') || 'Risk-adjusted return using downside volatility'}
+        />
+      )}
+      {calmarRatio !== undefined && (
+        <MetricBadge
+          label="Calmar"
+          value={calmarRatio.toFixed(2)}
+          highlight={calmarRatio >= 3}
+          tooltip={t('calmarTooltip') || 'Annualized return / max drawdown'}
+        />
+      )}
+      {alpha !== undefined && (
+        <MetricBadge
+          label="Alpha"
+          value={`${alpha >= 0 ? '+' : ''}${alpha.toFixed(2)}%`}
+          highlight={alpha > 0}
+          negative={alpha < 0}
+          tooltip={t('alphaTooltip') || 'Excess return vs market benchmark'}
+        />
+      )}
+      {tradesCount !== undefined && (
+        <MetricBadge
+          label={t('tradesLabel') || 'Trades'}
+          value={String(tradesCount)}
+        />
+      )}
+      {avgHoldingTimeHours !== undefined && (
+        <MetricBadge
+          label={t('avgHoldingTime') || 'Avg Hold'}
+          value={avgHoldingTimeHours < 1 ? `${Math.round(avgHoldingTimeHours * 60)}m` : `${Math.round(avgHoldingTimeHours)}h`}
+        />
+      )}
+      {copiersPnl !== undefined && (
+        <MetricBadge
+          label={t('copiersPnl') || 'Copiers PnL'}
+          value={`${copiersPnl >= 0 ? '+' : ''}$${Math.abs(copiersPnl).toLocaleString('en-US', { maximumFractionDigits: 0 })}`}
+          highlight={copiersPnl > 0}
+          negative={copiersPnl < 0}
+        />
+      )}
+    </Box>
+  )
+}

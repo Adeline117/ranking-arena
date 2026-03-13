@@ -22,9 +22,9 @@ interface AdvancedFilterPanelProps {
   filterConfig: FilterConfig
   savedFilters: SavedFilter[]
   onFilterChange: (config: FilterConfig) => void
-  onSaveFilter: (name: string, description?: string) => void
+  onSaveFilter: (name: string, description?: string) => void | Promise<void>
   onLoadFilter: (filter: SavedFilter) => void
-  onDeleteFilter: (filterId: string) => void
+  onDeleteFilter: (filterId: string) => void | Promise<void>
   hasActiveFilters: boolean
   isPro: boolean
 }
