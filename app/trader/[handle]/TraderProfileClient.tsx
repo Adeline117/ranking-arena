@@ -307,7 +307,7 @@ export default function TraderProfileClient({ data, serverTraderData }: TraderPr
                   />
                 ) : (
                   <Box style={{
-                    padding: `${tokens.spacing[8]} ${tokens.spacing[6]}`,
+                    padding: `${tokens.spacing[6]} ${tokens.spacing[5]}`,
                     background: tokens.colors.bg.secondary,
                     borderRadius: tokens.radius.xl,
                     border: `1px solid ${tokens.colors.border.primary}`,
@@ -315,14 +315,14 @@ export default function TraderProfileClient({ data, serverTraderData }: TraderPr
                     display: 'flex',
                     flexDirection: 'column',
                     alignItems: 'center',
-                    gap: tokens.spacing[3],
+                    gap: tokens.spacing[2],
                   }}>
-                    <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" style={{ color: 'var(--color-text-tertiary)', opacity: 0.4 }}>
+                    <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" style={{ color: 'var(--color-text-tertiary)', opacity: 0.3 }}>
                       <path d="M3 3v18h18" strokeLinecap="round" strokeLinejoin="round" />
                       <path d="M7 16l4-8 4 4 4-6" strokeLinecap="round" strokeLinejoin="round" />
                     </svg>
                     <Text size="sm" color="tertiary">
-                      {t('noPerformanceData')}
+                      {language === 'zh' ? '性能图表将在下一次数据采集后可用' : 'Performance charts will be available after the next data collection'}
                     </Text>
                   </Box>
                 )}
@@ -371,58 +371,57 @@ export default function TraderProfileClient({ data, serverTraderData }: TraderPr
                 ) : !isVerifiedTrader && (
                   <Box
                     style={{
-                      padding: tokens.spacing[8],
-                      background: `linear-gradient(135deg, ${tokens.colors.bg.secondary} 0%, var(--color-accent-primary-08, ${tokens.colors.bg.secondary}) 100%)`,
-                      borderRadius: tokens.radius.xl,
-                      border: '1px solid var(--color-accent-primary-30)',
-                      textAlign: 'center',
+                      padding: `${tokens.spacing[4]} ${tokens.spacing[5]}`,
+                      background: tokens.colors.bg.secondary,
+                      borderRadius: tokens.radius.lg,
+                      border: '1px solid var(--color-accent-primary-20)',
                       display: 'flex',
-                      flexDirection: 'column',
                       alignItems: 'center',
                       gap: tokens.spacing[4],
                     }}
                   >
                     <Box style={{
-                      width: 56, height: 56,
+                      width: 36, height: 36,
                       borderRadius: tokens.radius.full,
-                      background: 'var(--color-accent-primary-15)',
+                      background: 'var(--color-accent-primary-10)',
                       display: 'grid', placeItems: 'center',
+                      flexShrink: 0,
                     }}>
-                      <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="var(--color-brand-accent, currentColor)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--color-brand-accent, currentColor)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
                         <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
                         <circle cx="12" cy="7" r="4" />
                         <line x1="12" y1="11" x2="12" y2="17" />
                         <line x1="9" y1="14" x2="15" y2="14" />
                       </svg>
                     </Box>
-                    <Text size="lg" weight="bold" style={{ color: 'var(--color-text-primary)' }}>
-                      {t('claimYourProfile')}
-                    </Text>
-                    <Text size="sm" color="tertiary" style={{ maxWidth: 400, lineHeight: 1.6 }}>
-                      {t('claimYourProfileDesc')}
-                    </Text>
+                    <Box style={{ flex: 1, minWidth: 0 }}>
+                      <Text size="sm" weight="bold" style={{ color: 'var(--color-text-primary)' }}>
+                        {t('claimYourProfile')}
+                      </Text>
+                      <Text size="xs" color="tertiary" style={{ lineHeight: 1.5, marginTop: 2 }}>
+                        {t('claimYourProfileDesc')}
+                      </Text>
+                    </Box>
                     {currentUserId ? (
-                      <Box style={{ marginTop: tokens.spacing[2] }}>
-                        <ClaimTraderButton
-                          traderId={traderProfile?.id || data.source_trader_id}
-                          handle={traderProfile?.handle || data.handle}
-                          userId={currentUserId}
-                          source={traderProfile?.source || data.source}
-                        />
-                      </Box>
+                      <ClaimTraderButton
+                        traderId={traderProfile?.id || data.source_trader_id}
+                        handle={traderProfile?.handle || data.handle}
+                        userId={currentUserId}
+                        source={traderProfile?.source || data.source}
+                      />
                     ) : (
                       <a
                         href={`/login?returnUrl=${encodeURIComponent(`/trader/${encodeURIComponent(data.handle)}`)}`}
                         style={{
-                          marginTop: tokens.spacing[2],
-                          padding: `${tokens.spacing[3]} ${tokens.spacing[6]}`,
-                          borderRadius: tokens.radius.lg,
+                          padding: `${tokens.spacing[2]} ${tokens.spacing[4]}`,
+                          borderRadius: tokens.radius.md,
                           background: 'linear-gradient(135deg, var(--color-brand) 0%, var(--color-brand-deep) 100%)',
                           color: tokens.colors.white,
-                          fontWeight: 700,
-                          fontSize: tokens.typography.fontSize.sm,
+                          fontWeight: 600,
+                          fontSize: tokens.typography.fontSize.xs,
                           textDecoration: 'none',
-                          display: 'inline-block',
+                          whiteSpace: 'nowrap',
+                          flexShrink: 0,
                         }}
                       >
                         {t('loginToClaim')}
