@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useRef, useCallback } from 'react'
 import useSWR from 'swr'
-import { fetcher } from '@/lib/hooks/useSWR'
+import { fetcher as rawFetcher } from '@/lib/hooks/useSWR'
 import { useRouter, useSearchParams, usePathname } from 'next/navigation'
 import { supabase } from '@/lib/supabase/client'
 import { useSubscription } from '@/app/components/home/hooks/useSubscription'
@@ -11,6 +11,15 @@ import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import { logger } from '@/lib/logger'
 
 import type { ServerProfile, ProfileTabKey, TraderPageData } from '../components/types'
+
+// Unwrap the API envelope { success, data } to get the raw TraderPageData
+async function traderFetcher(url: string): Promise<TraderPageData> {
+  const raw = await rawFetcher<{ success: boolean; data: TraderPageData }>(url)
+  if (raw && typeof raw === 'object' && 'data' in raw && 'success' in raw) {
+    return raw.data
+  }
+  return raw as unknown as TraderPageData
+}
 
 interface UseUserProfileProps {
   handle: string
@@ -40,7 +49,7 @@ export function useUserProfile({ handle, serverProfile, serverTraderData }: UseU
   const isTrader = !!serverProfile?.traderHandle
   const { data: traderData, error: traderError, isLoading: traderLoading } = useSWR<TraderPageData>(
     isTrader ? `/api/traders/${encodeURIComponent(serverProfile!.traderHandle!)}` : null,
-    fetcher,
+    traderFetcher,
     {
       revalidateOnFocus: false,
       refreshInterval: 60_000,

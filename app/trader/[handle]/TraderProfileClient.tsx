@@ -6,7 +6,7 @@ import Link from 'next/link'
 import Image from 'next/image'
 import dynamic from 'next/dynamic'
 import useSWR from 'swr'
-import { fetcher } from '@/lib/hooks/useSWR'
+import { fetcher as rawFetcher } from '@/lib/hooks/useSWR'
 import { tokens } from '@/lib/design-tokens'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import { useSubscription } from '@/app/components/home/hooks/useSubscription'
@@ -65,6 +65,17 @@ export interface UnregisteredTraderData {
 type TraderTabKey = 'overview' | 'stats' | 'portfolio'
 const TAB_KEYS: TraderTabKey[] = ['overview', 'stats', 'portfolio']
 type TraderPageData = import('@/app/u/[handle]/components/types').TraderPageData
+
+// Unwrap the API envelope { success, data } to get the raw TraderPageData
+async function traderFetcher(url: string): Promise<TraderPageData> {
+  const raw = await rawFetcher<{ success: boolean; data: TraderPageData }>(url)
+  // The API wraps responses in { success, data }; unwrap for SWR consumers
+  if (raw && typeof raw === 'object' && 'data' in raw && 'success' in raw) {
+    return raw.data
+  }
+  // Fallback: if response is already unwrapped (e.g. direct shape), return as-is
+  return raw as unknown as TraderPageData
+}
 
 interface TraderProfileClientProps {
   data: UnregisteredTraderData
@@ -149,7 +160,7 @@ export default function TraderProfileClient({ data, serverTraderData }: TraderPr
     : `/api/traders/${encodeURIComponent(data.source_trader_id || data.handle)}`
   const { data: traderData, error: traderError, isLoading: traderLoading } = useSWR<TraderPageData>(
     traderApiUrl,
-    fetcher,
+    traderFetcher,
     {
       revalidateOnFocus: false,
       refreshInterval: 60_000,
