@@ -35,8 +35,9 @@ function getSupabaseAdmin() {
 
 // 从价格 ID 获取订阅等级
 function getTierFromPriceId(priceId: string): 'free' | 'pro' {
-  if (priceId === process.env.STRIPE_PRO_MONTHLY_PRICE_ID || 
+  if (priceId === process.env.STRIPE_PRO_MONTHLY_PRICE_ID ||
       priceId === process.env.STRIPE_PRO_YEARLY_PRICE_ID ||
+      priceId === process.env.STRIPE_PRO_LIFETIME_PRICE_ID ||
       priceId === process.env.STRIPE_PRO_PRICE_ID) {
     return 'pro'
   }
@@ -79,18 +80,9 @@ export async function POST(request: NextRequest) {
       }, { status: 400 })
     }
 
-    // 检查是否为订阅模式
-    if (session.mode !== 'subscription') {
-      return NextResponse.json({
-        error: 'Session is not a subscription',
-        mode: session.mode
-      }, { status: 400 })
-    }
-
     const userId = session.metadata?.supabase_user_id || session.metadata?.userId
     const customerId = session.customer as string
-    // session.subscription 在未 expand 时始终是 string | null
-    const subscriptionId = session.subscription as string | null
+    const plan = session.metadata?.plan
 
     if (!userId) {
       return NextResponse.json({ error: 'User ID not found in session' }, { status: 400 })
@@ -101,6 +93,62 @@ export async function POST(request: NextRequest) {
       logger.warn('Session user mismatch', { sessionUserId: userId, authUserId: authUser.id })
       return NextResponse.json({ error: 'Session does not belong to current user' }, { status: 403 })
     }
+
+    // Lifetime one-time payment (mode=payment)
+    if (session.mode === 'payment' && plan === 'lifetime') {
+      const { error: subError } = await supabaseAdmin
+        .from('subscriptions')
+        .upsert({
+          user_id: userId,
+          stripe_customer_id: customerId,
+          stripe_subscription_id: `lifetime_${userId}`,
+          status: 'active',
+          tier: 'pro',
+          plan: 'lifetime',
+          current_period_start: new Date().toISOString(),
+          current_period_end: null,
+          cancel_at_period_end: false,
+          updated_at: new Date().toISOString(),
+        }, { onConflict: 'user_id' })
+
+      if (subError) {
+        logger.error('Failed to update subscriptions for lifetime', { error: subError, userId })
+      }
+
+      const { error: profileError } = await supabaseAdmin
+        .from('user_profiles')
+        .update({
+          subscription_tier: 'pro',
+          pro_plan: 'lifetime',
+          stripe_customer_id: customerId,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', userId)
+
+      if (profileError) {
+        logger.error('Failed to update user_profiles for lifetime', { error: profileError, userId })
+        return NextResponse.json({ error: 'Failed to update user profile' }, { status: 500 })
+      }
+
+      logger.info('Lifetime payment verified', { userId })
+      return NextResponse.json({
+        success: true,
+        tier: 'pro' as const,
+        status: 'active',
+        plan: 'lifetime',
+      })
+    }
+
+    // Subscription mode (monthly/yearly)
+    if (session.mode !== 'subscription') {
+      return NextResponse.json({
+        error: 'Session is not a subscription',
+        mode: session.mode
+      }, { status: 400 })
+    }
+
+    // session.subscription 在未 expand 时始终是 string | null
+    const subscriptionId = session.subscription as string | null
 
     if (!subscriptionId) {
       return NextResponse.json({ error: 'Subscription ID not found in session' }, { status: 400 })
@@ -164,7 +212,6 @@ export async function POST(request: NextRequest) {
 
     if (subscriptionError) {
       logger.error('Failed to update subscriptions table', { error: subscriptionError, userId })
-      // 继续执行，因为 user_profiles 更新可能成功
     } else {
       logger.info('Updated subscriptions table', { userId })
     }

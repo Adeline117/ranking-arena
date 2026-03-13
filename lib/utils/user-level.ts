@@ -93,3 +93,8 @@ export function getExpForAction(action: string, dailyEarned: number): number {
 
   return Math.min(config.exp, remaining)
 }
+
+/** Get localized label for an EXP action key */
+export function getExpActionLabel(key: string, t: (k: string) => string): string {
+  return t(`expAction_${key}`) || key
+}
