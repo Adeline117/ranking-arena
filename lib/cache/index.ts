@@ -212,7 +212,7 @@ export async function get<T>(key: string): Promise<T | null> {
 export async function set<T>(key: string, value: T, options: CacheOptions = {}): Promise<boolean> {
   const redis = await getRedis()
   const memoryCache = getMemoryCache()
-  const { ttl = 60, tags, skipMemory = false } = options
+  const { ttl = 120, tags, skipMemory = false } = options
 
   // 1. 写入内存缓存（始终成功）
   if (!skipMemory) {
@@ -386,7 +386,7 @@ export async function getOrSetWithLock<T>(
 ): Promise<T> {
   const redis = await getRedis()
   const {
-    ttl = 60,
+    ttl = 120,
     lockTtl = 10,
     maxWaitMs = 5000,
     retryDelayMs = 50,
