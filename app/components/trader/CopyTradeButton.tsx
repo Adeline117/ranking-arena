@@ -62,6 +62,39 @@ function getCopyTradeUrl(source: string | undefined, traderId: string): string |
   return urlMap[source.toLowerCase()] || null
 }
 
+/** DEX platforms: link to trading page or trader profile (not copy-trade) */
+function getDexTradingUrl(source: string | undefined, traderId: string): string | null {
+  if (!source) return null
+
+  const urlMap: Record<string, string> = {
+    hyperliquid: `https://app.hyperliquid.xyz/explorer/address/${traderId}`,
+    dydx: `https://trade.dydx.exchange/portfolio/${traderId}`,
+    gmx: `https://app.gmx.io/#/actions/v2/${traderId}`,
+    jupiter_perps: `https://www.jup.ag/perps/${traderId}`,
+    drift: `https://app.drift.trade/overview?userAccount=${traderId}`,
+    aevo: `https://app.aevo.xyz/portfolio/${traderId}`,
+    gains: `https://gains.trade`,
+    vertex: `https://app.vertexprotocol.com/portfolio/${traderId}`,
+  }
+
+  return urlMap[source.toLowerCase()] || null
+}
+
+function getDexPlatformName(source: string | undefined): string | null {
+  if (!source) return null
+  const nameMap: Record<string, string> = {
+    hyperliquid: 'Hyperliquid',
+    dydx: 'dYdX',
+    gmx: 'GMX',
+    jupiter_perps: 'Jupiter Perps',
+    drift: 'Drift',
+    aevo: 'Aevo',
+    gains: 'Gains Network',
+    vertex: 'Vertex',
+  }
+  return nameMap[source.toLowerCase()] || null
+}
+
 /**
  * 获取交易所名称
  * v2.0: 仅保留 4 个核心交易所
@@ -90,7 +123,7 @@ function getExchangeName(source: string | undefined): string {
     weex: 'Weex',
   }
 
-  return nameMap[source.toLowerCase()] || source
+  return nameMap[source.toLowerCase()] || getDexPlatformName(source) || source
 }
 
 interface CopyTradeButtonProps {
@@ -114,9 +147,39 @@ export default function CopyTradeButton({
   const [acknowledged, setAcknowledged] = useState(false)
 
   const copyTradeUrl = getCopyTradeUrl(source, traderId)
+  const dexUrl = getDexTradingUrl(source, traderId)
+  const dexName = getDexPlatformName(source)
   const exchangeName = getExchangeName(source)
 
-  // 如果不支持跟单，显示醒目的锁定按钮
+  // DEX: show "View on [Platform]" link instead of copy-trade
+  if (!copyTradeUrl && dexUrl && dexName) {
+    return (
+      <a
+        href={dexUrl}
+        target="_blank"
+        rel="noopener noreferrer"
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: tokens.spacing[2],
+          padding: `${tokens.spacing[3]} ${tokens.spacing[5]}`,
+          borderRadius: tokens.radius.xl,
+          background: `linear-gradient(135deg, ${tokens.colors.accent.brand}15, ${tokens.colors.accent.brand}08)`,
+          border: `1px solid ${tokens.colors.accent.brand}30`,
+          cursor: 'pointer',
+          textDecoration: 'none',
+          transition: 'all 0.2s',
+        }}
+      >
+        <ExternalLinkIcon size={14} />
+        <Text size="sm" weight="bold" style={{ color: tokens.colors.accent.brand, fontSize: 14 }}>
+          {t('dexViewOn').replace('{platform}', dexName)}
+        </Text>
+      </a>
+    )
+  }
+
+  // No CEX copy-trade and no DEX link
   if (!copyTradeUrl) {
     return (
       <Box
