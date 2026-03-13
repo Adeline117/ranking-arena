@@ -135,33 +135,34 @@ export const ALL_SOURCES: TraderSource[] = [
 // ---------------------------------------------------------------------------
 
 export const DEAD_BLOCKED_PLATFORMS: TraderSource[] = [
-  // Truly dead — no recovery path
-  'weex',         // Copy-trade API returning 521 (origin down) since 2026-03
-  'perpetual_protocol', // TheGraph subgraph returns empty data since 2026-03
-  'kucoin',       // Copy trading feature removed — all APIs 404, page empty shell since 2026-03
-  // RECOVERED 2026-03-13 — data flowing via VPS/Mac Mini, removed from DEAD:
-  // 'lbank' — VPS scraper /lbank/leaderboard working (42 traders)
-  // 'phemex' — Mac Mini Chrome scraper working (183 traders)
-  // 'blofin' — VPS/Mac Mini working (429 traders)
-  // Recoverable via credentials (set env vars to activate)
-  'bitget_spot',  // Set BITGET_API_KEY/SECRET/PASSPHRASE for broker API — API 404 confirmed 2026-03-13
-  // Bybit: data flows via BybitAdapter (api.bybit.com v5 + HMAC auth) and VPS scraper
-  // Removed from cron groups but fetch-bybit-traders route exists — needs BYBIT_API_KEY env var
-  // Stale data via Copin — re-enabled in fetchers with graceful fallback
-  'mux',          // TheGraph needs THEGRAPH_API_KEY, Copin has 0 traders
-  'synthetix',    // Copin returns only 9 stale traders (1 trade each), TheGraph needs API key
-  'paradex',      // API requires JWT auth — markets endpoint public, leaderboard requires auth
-  'kwenta',       // Copin API stopped serving Kwenta data (returned 1000+ traders on 2026-03-09, now returns 0)
-  'okx_spot',     // OKX copy-trading API only supports instType=SWAP — confirmed 2026-03-13
-  'bitmart',      // Cloudflare challenge (403) on all endpoints — confirmed 2026-03-13
-  'whitebit' as TraderSource,     // No copy-trading feature or API — route 404 confirmed 2026-03-13
-  'btse' as TraderSource,         // Leaderboard API 404 — confirmed 2026-03-13
-  // Removed from enrichment — no API support or enrichment capability (2026-03-13)
-  'bybit',        // api2.bybit.com endpoints return 404 globally (2026-03-10)
-  'bybit_spot',   // api2.bybit.com endpoints return 404 globally (2026-03-10)
-  'binance_web3', // No enrichment API available
-  'bingx',        // No enrichment API available
-  'etoro',        // No enrichment API available
+  // ═══════════════════════════════════════════════════════════════
+  // PERMANENTLY DEAD — exchange shut down or feature removed
+  // ═══════════════════════════════════════════════════════════════
+  'perpetual_protocol', // Domain 404, app down, Binance delisted PERP — confirmed dead 2026-03-13
+  'whitebit' as TraderSource, // No copy-trading feature or API — confirmed 2026-03-13
+
+  // ═══════════════════════════════════════════════════════════════
+  // BLOCKED — API inaccessible, needs Playwright scraper on VPS
+  // Websites are live, copy-trading pages exist, but APIs are blocked
+  // ═══════════════════════════════════════════════════════════════
+  'kucoin',       // /copytrading page exists (SPA) but all APIs 404 — needs Playwright handler
+  'weex',         // weex.com alive (200), copy-trade page exists, API 521 from Vercel — needs Playwright
+  'kwenta',       // kwenta.eth.limo works, API suspended (503) — needs Playwright
+  'bitmart',      // Website alive, Cloudflare 403 on all API endpoints — needs Playwright
+  'btse' as TraderSource, // copy-trading page 200, all API endpoints 404 — needs Playwright
+
+  // ═══════════════════════════════════════════════════════════════
+  // BLOCKED — needs API key or credentials to unlock
+  // ═══════════════════════════════════════════════════════════════
+  'mux',          // app.mux.network alive, TheGraph subgraph needs THEGRAPH_API_KEY
+  'synthetix',    // Copin 0 traders, TheGraph subgraph needs THEGRAPH_API_KEY
+  'paradex',      // /v1/markets public, /v1/leaderboard needs JWT auth (Starknet wallet)
+  'bitget_spot',  // Bitget Spot API 404 — awaiting confirmation if feature exists
+
+  // ═══════════════════════════════════════════════════════════════
+  // STRUCTURAL — API limitation, not a bug
+  // ═══════════════════════════════════════════════════════════════
+  'okx_spot',     // OKX API only supports instType=SWAP — no spot leaderboard possible
 ]
 
 // ---------------------------------------------------------------------------
