@@ -100,7 +100,7 @@ export class PipelineLogger {
     const client = getClient()
     const { data, error } = await client
       .from('pipeline_job_status')
-      .select('*')
+      .select('job_name, started_at, status, records_processed, error_message, health_status')
 
     if (error) {
       logger.warn(`[PipelineLogger] Failed to get job statuses: ${error.message}`)
@@ -124,7 +124,7 @@ export class PipelineLogger {
     const client = getClient()
     const { data, error } = await client
       .from('pipeline_job_stats')
-      .select('*')
+      .select('job_name, total_runs, success_count, error_count, success_rate, avg_duration_ms, last_run_at')
 
     if (error) {
       logger.warn(`[PipelineLogger] Failed to get job stats: ${error.message}`)

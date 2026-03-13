@@ -159,7 +159,7 @@ export async function getSourceHealth(
   // 获取所有最近的指标
   const { data: metrics } = await supabase
     .from('pipeline_metrics')
-    .select('*')
+    .select('metric_type, value, created_at, metadata')
     .eq('source', source)
     .gte('created_at', since)
     .order('created_at', { ascending: false })
@@ -185,7 +185,7 @@ export async function getSourceHealth(
 
   const recentErrors = errors.slice(0, 10).map(e => ({
     created_at: e.created_at,
-    metadata: e.metadata as Record<string, unknown>,
+    metadata: (e as Record<string, unknown>).metadata as Record<string, unknown> | undefined,
   }))
 
   // 健康分数计算

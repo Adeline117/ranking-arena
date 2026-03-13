@@ -66,7 +66,7 @@ export async function getUserTradingData(
   
   let query = supabase
     .from('user_trading_data')
-    .select('*')
+    .select('total_trades, avg_profit, avg_loss, profitable_trades_pct, trades_per_week, avg_holding_time_days, profitable_holding_time_days, active_since, profitable_weeks, profitable_weeks_pct, return_ytd, return_2y, period_start, period_end, exchange')
     .eq('user_id', userId)
     .order('period_end', { ascending: false })
     .limit(1)

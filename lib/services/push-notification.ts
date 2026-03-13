@@ -185,7 +185,7 @@ export class PushNotificationService {
      
     const { data, error } = await (this.supabase as UntypedSupabaseClient)
       .from('push_subscriptions')
-      .select('*')
+      .select('id, user_id, token, provider, device_id, device_name, platform, enabled, created_at, updated_at')
       .eq('user_id', userId)
       .eq('enabled', true)
 
