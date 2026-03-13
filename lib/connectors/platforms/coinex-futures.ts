@@ -32,7 +32,7 @@ export class CoinexFuturesConnector extends BaseConnector {
     notes: ['No 90d window', 'No timeseries endpoint'],
   }
 
-  async discoverLeaderboard(window: Window, limit = 20, offset = 0): Promise<DiscoverResult> {
+  async discoverLeaderboard(window: Window, limit = 50, offset = 0): Promise<DiscoverResult> {
     // CoinEx does not support 90d
     if (window === '90d') {
       return {
@@ -41,24 +41,38 @@ export class CoinexFuturesConnector extends BaseConnector {
       }
     }
 
-    const page = Math.floor(offset / limit) + 1
-    const _rawLb = await this.request<Record<string, unknown>>(
-      `https://www.coinex.com/res/copy-trading/traders?page=${page}&limit=${limit}&sort_by=roi&period=${window}`,
-      { method: 'GET' }
-    )
-    const data = warnValidate(CoinexFuturesLeaderboardResponseSchema, _rawLb, 'coinex-futures/leaderboard')
-    const list = data?.data?.items || []
+    // Auto-paginate: fetch all pages (CoinEx has ~176 traders across 4 pages)
+    const allTraders: TraderSource[] = []
+    let currentPage = Math.floor(offset / limit) + 1
+    const maxPages = 10 // Safety limit
 
-    const traders: TraderSource[] = (Array.isArray(list) ? list : []).map((item: Record<string, unknown>) => ({
-      platform: 'coinex' as const, market_type: 'futures' as const,
-      trader_key: String(item.trader_id || ''),
-      display_name: (item.nickname as string) || null,
-      profile_url: `https://www.coinex.com/copy-trading/trader/${item.trader_id}`,
-      discovered_at: new Date().toISOString(), last_seen_at: new Date().toISOString(),
-      is_active: true, raw: item as Record<string, unknown>,
-    }))
+    while (currentPage <= maxPages) {
+      const _rawLb = await this.request<Record<string, unknown>>(
+        `https://www.coinex.com/res/copy-trading/traders?page=${currentPage}&limit=${limit}&sort_by=roi&period=${window}`,
+        { method: 'GET' }
+      )
+      const data = warnValidate(CoinexFuturesLeaderboardResponseSchema, _rawLb, 'coinex-futures/leaderboard')
+      const list = data?.data?.items || []
+      if (!Array.isArray(list) || list.length === 0) break
 
-    return { traders, total_available: data?.data?.total || null, window, fetched_at: new Date().toISOString() }
+      const traders: TraderSource[] = list.map((item: Record<string, unknown>) => ({
+        platform: 'coinex' as const, market_type: 'futures' as const,
+        trader_key: String(item.trader_id || ''),
+        display_name: (item.nickname as string) || null,
+        profile_url: `https://www.coinex.com/copy-trading/trader/${item.trader_id}`,
+        discovered_at: new Date().toISOString(), last_seen_at: new Date().toISOString(),
+        is_active: true, raw: item as Record<string, unknown>,
+      }))
+      allTraders.push(...traders)
+
+      // Check if there are more pages
+      const hasNext = data?.data?.has_next ?? (list.length >= limit)
+      if (!hasNext) break
+      currentPage++
+      await new Promise(r => setTimeout(r, 500)) // Rate limit between pages
+    }
+
+    return { traders: allTraders, total_available: allTraders.length, window, fetched_at: new Date().toISOString() }
   }
 
   async fetchTraderProfile(traderKey: string): Promise<ProfileResult | null> {
