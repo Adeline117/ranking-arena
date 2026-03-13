@@ -117,6 +117,37 @@ export default function WrappedCardClient({ data, ogImageUrl }: Props) {
     }
   }, [ogImageUrl, data.handle])
 
+  const handleNativeShare = useCallback(async () => {
+    if (typeof navigator !== 'undefined' && typeof navigator.share === 'function') {
+      try {
+        // On mobile, try to share the OG image as a file
+        const res = await fetch(ogImageUrl)
+        const blob = await res.blob()
+        const file = new File([blob], 'arena-rank-' + data.handle + '.png', { type: 'image/png' })
+
+        if (navigator.canShare && navigator.canShare({ files: [file] })) {
+          await navigator.share({
+            title: 'Arena Rank Card',
+            text: shareText,
+            files: [file],
+          })
+        } else {
+          await navigator.share({
+            title: 'Arena Rank Card',
+            text: shareText,
+            url: shareUrl,
+          })
+        }
+      } catch {
+        // User cancelled or share failed, fall back to X share
+        window.open(xShareUrl, '_blank', 'noopener,noreferrer,width=600,height=500')
+      }
+    }
+  }, [ogImageUrl, data.handle, shareText, shareUrl, xShareUrl])
+
+  // Detect if navigator.share is available (mobile)
+  const hasNativeShare = typeof navigator !== 'undefined' && typeof navigator.share === 'function' && /Mobi|Android/i.test(navigator.userAgent)
+
   return (
     <div style={{
       minHeight: '100vh',
@@ -334,7 +365,35 @@ export default function WrappedCardClient({ data, ogImageUrl }: Props) {
           justifyContent: 'center',
           flexWrap: 'wrap',
         }}>
-          {/* Share on X - prominent */}
+          {/* Native share (mobile) */}
+          {hasNativeShare && (
+            <button
+              onClick={handleNativeShare}
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 10,
+                padding: '14px 28px',
+                borderRadius: 12,
+                background: 'linear-gradient(135deg, #8B5CF6 0%, #D4AF37 100%)',
+                border: 'none',
+                color: '#FFFFFF',
+                fontSize: 15,
+                fontWeight: 700,
+                cursor: 'pointer',
+              }}
+            >
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <circle cx="18" cy="5" r="3" />
+                <circle cx="6" cy="12" r="3" />
+                <circle cx="18" cy="19" r="3" />
+                <path d="M8.59 13.51l6.83 3.98M15.41 6.51l-6.82 3.98" />
+              </svg>
+              Share
+            </button>
+          )}
+
+          {/* Share on X */}
           <a
             href={xShareUrl}
             target="_blank"
@@ -415,6 +474,13 @@ export default function WrappedCardClient({ data, ogImageUrl }: Props) {
           The card above matches what appears when shared on X
         </p>
       </div>
+
+      {/* Responsive styles for mobile */}
+      <style dangerouslySetInnerHTML={{ __html: `
+        @media (max-width: 480px) {
+          .wrapped-card-grid { grid-template-columns: 1fr !important; }
+        }
+      ` }} />
     </div>
   )
 }
