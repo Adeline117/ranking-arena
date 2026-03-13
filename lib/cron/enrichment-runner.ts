@@ -359,7 +359,7 @@ export async function runEnrichment(params: {
     for (let i = 0; i < traders.length; i += config.concurrency) {
       const batch = traders.slice(i, i + config.concurrency)
 
-      await Promise.all(
+      const batchResults = await Promise.allSettled(
         batch.map(async (trader) => {
           const traderId = trader.source_trader_id
           // EMERGENCY FIX (2026-03-13): Add per-trader timeout to prevent slow traders from blocking batch
@@ -469,9 +469,22 @@ export async function runEnrichment(params: {
             if (results[platformKey].errors.length < 5) {
               results[platformKey].errors.push(`${traderId}: ${errMsg}`)
             }
+            throw err // Re-throw to be caught by allSettled
           }
         })
       )
+
+      // Process allSettled results
+      const successful = batchResults.filter(r => r.status === 'fulfilled')
+      const failed = batchResults.filter(r => r.status === 'rejected')
+      
+      if (failed.length > 0) {
+        logger.warn(`[enrich] Batch ${platformKey}: ${successful.length} success, ${failed.length} failed`)
+        failed.forEach((result, idx) => {
+          const reason = result.reason instanceof Error ? result.reason.message : String(result.reason)
+          logger.error(`[enrich] Failed trader ${idx}: ${reason}`)
+        })
+      }
 
       if (i + config.concurrency < traders.length) {
         await sleep(config.delayMs)
