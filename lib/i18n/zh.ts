@@ -4293,6 +4293,7 @@ allTraderTypes: '全部',
 traderTypeFilter: '交易员类型',
 isBot: '机器人',
 isHuman: '交易员',
+botTooltip: '该交易员是自动化交易机器人或 AI 代理',
 
 // DeSoc - Verified badge
 verifiedBadge: '已认证',

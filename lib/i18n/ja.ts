@@ -3970,6 +3970,7 @@ allTraderTypes: 'すべて',
 traderTypeFilter: 'トレーダータイプ',
 isBot: 'ボット',
 isHuman: 'トレーダー',
+botTooltip: 'このトレーダーは自動取引ボットまたはAIエージェントです',
 
 verifiedBadge: '認証済み',
 verifiedTraderProfile: '認証済みトレーダー',

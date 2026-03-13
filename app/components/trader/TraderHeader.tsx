@@ -53,6 +53,8 @@ interface TraderHeaderProps {
   currentUserId?: string | null
   /** Whether this trader has been claimed and verified */
   isVerifiedTrader?: boolean
+  /** Whether this trader is a bot/AI agent */
+  isBot?: boolean
 }
 
 const SOURCE_CONFIG: Record<string, string> = {
@@ -298,6 +300,7 @@ export default function TraderHeader({
   rank,
   currentUserId: externalUserId,
   isVerifiedTrader = false,
+  isBot = false,
 }: TraderHeaderProps): React.ReactElement {
   const [userId, setUserId] = useState<string | null>(externalUserId ?? null)
   const [mounted, setMounted] = useState(false)
@@ -573,6 +576,15 @@ export default function TraderHeader({
               <Badge color={tokens.colors.text.tertiary} style={{ padding: '2px 8px' }}>
                 <Text size="xs" weight="semibold" style={{ color: tokens.colors.text.tertiary, letterSpacing: '0.2px' }}>
                   {t('unclaimedBadge')}
+                </Text>
+              </Badge>
+            )}
+
+            {isBot && (
+              <Badge color="#a78bfa" style={{ padding: '3px 10px' }} title={t('botTooltip')}>
+                <span style={{ fontSize: 12, marginRight: 3 }}>{'⚡'}</span>
+                <Text size="xs" weight="bold" style={{ color: '#a78bfa', letterSpacing: '0.3px' }}>
+                  {t('botLabel')}
                 </Text>
               </Badge>
             )}

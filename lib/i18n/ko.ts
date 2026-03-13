@@ -4284,6 +4284,7 @@ allTraderTypes: '전체',
 traderTypeFilter: '트레이더 유형',
 isBot: '봇',
 isHuman: '트레이더',
+botTooltip: '이 트레이더는 자동 거래 봇 또는 AI 에이전트입니다',
 
 // DeSoc - Verified badge
 verifiedBadge: '인증됨',
