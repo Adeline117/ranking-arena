@@ -179,42 +179,12 @@ export default function CopyTradeButton({
     )
   }
 
-  // No CEX copy-trade and no DEX link
+  // No CEX copy-trade and no DEX link — show small subtle text
   if (!copyTradeUrl) {
     return (
-      <Box
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          gap: tokens.spacing[3],
-          padding: `${tokens.spacing[3]} ${tokens.spacing[5]}`,
-          borderRadius: tokens.radius.xl,
-          background: `linear-gradient(135deg, var(--color-overlay-subtle) 0%, var(--color-overlay-subtle) 100%)`,
-          border: `2px dashed var(--color-overlay-medium)`,
-          cursor: 'not-allowed',
-          boxShadow: `0 2px 8px var(--color-overlay-subtle)`,
-        }}
-      >
-        <Box
-          style={{
-            width: 28,
-            height: 28,
-            borderRadius: tokens.radius.full,
-            background: 'var(--color-overlay-subtle)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-          }}
-        >
-          <svg width={16} height={16} viewBox="0 0 24 24" fill="none" stroke="var(--color-text-tertiary)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
-            <path d="M7 11V7a5 5 0 0 1 10 0v4" />
-          </svg>
-        </Box>
-        <Text size="sm" weight="bold" style={{ color: 'var(--color-text-tertiary)', fontSize: 14 }}>
+      <Text size="xs" style={{ color: 'var(--color-text-tertiary)', opacity: 0.6, fontSize: 11, whiteSpace: 'nowrap' }}>
           {t('copyTradeUnavailable')}
         </Text>
-      </Box>
     )
   }
 

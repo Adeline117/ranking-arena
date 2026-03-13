@@ -196,16 +196,8 @@ interface CopyTradeSectionProps {
   t: (key: string) => string
 }
 
-function CopyTradeSection({ isPro: _isPro, traderId, source, handle, router: _router, t }: CopyTradeSectionProps): React.ReactElement {
-  // Only show "Go to Exchange" button — no in-app copy trading
-  return (
-    <Box style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4 }}>
-      <CopyTradeButton traderId={traderId} source={source} traderHandle={handle} />
-      <Text size="xs" color="tertiary" style={{ fontSize: 11, opacity: 0.7 }}>
-        {t('jumpToExchange')}
-      </Text>
-    </Box>
-  )
+function CopyTradeSection({ isPro: _isPro, traderId, source, handle, router: _router, t: _t }: CopyTradeSectionProps): React.ReactElement {
+  return <CopyTradeButton traderId={traderId} source={source} traderHandle={handle} />
 }
 
 interface BadgeProps {
@@ -573,8 +565,8 @@ export default function TraderHeader({
                 </svg>
               </Box>
             ) : (
-              <Badge color={tokens.colors.text.tertiary} style={{ padding: '2px 8px' }}>
-                <Text size="xs" weight="semibold" style={{ color: tokens.colors.text.tertiary, letterSpacing: '0.2px' }}>
+              <Badge color={tokens.colors.text.tertiary} style={{ padding: '1px 6px', opacity: 0.6 }}>
+                <Text style={{ fontSize: 10, fontWeight: 500, color: tokens.colors.text.tertiary, letterSpacing: '0.2px' }}>
                   {t('unclaimedBadge')}
                 </Text>
               </Badge>
@@ -597,19 +589,23 @@ export default function TraderHeader({
 
           </Box>
           
-          {/* Stats row */}
+          {/* Stats row — hide followers/following when both are 0 */}
           <Box style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[2], flexWrap: 'wrap', marginTop: tokens.spacing[1] }}>
-            <StatItem
-              icon={
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke={hasCover ? tokens.colors.white : tokens.colors.accent.primary} strokeWidth="2" strokeLinecap="round">
-                  <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z" />
-                </svg>
-              }
-              value={followerCount}
-              label={t('arenaFollowers') || 'Arena Followers'}
-              hasCover={hasCover}
-            />
-            <StatItem value={following} label={t('following') || '关注中'} hasCover={hasCover} />
+            {(followerCount > 0 || following > 0) && (
+              <>
+                <StatItem
+                  icon={
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke={hasCover ? tokens.colors.white : tokens.colors.accent.primary} strokeWidth="2" strokeLinecap="round">
+                      <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z" />
+                    </svg>
+                  }
+                  value={followerCount}
+                  label={t('arenaFollowers') || 'Arena Followers'}
+                  hasCover={hasCover}
+                />
+                <StatItem value={following} label={t('following') || '关注中'} hasCover={hasCover} />
+              </>
+            )}
 
             {copiers !== undefined && copiers > 0 && (
               <StatItem
@@ -684,10 +680,6 @@ export default function TraderHeader({
           zIndex: 1,
         }}
       >
-        <ActionButton onClick={() => router.push('/')} variant="ghost">
-          ← {t('back')}
-        </ActionButton>
-
         {isOwnProfile && (
           <ActionButton
             onClick={() => router.push('/settings')}
