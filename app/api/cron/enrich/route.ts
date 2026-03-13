@@ -13,7 +13,7 @@
 
 import { NextResponse } from 'next/server'
 import { logger } from '@/lib/logger'
-import { runEnrichment, ENRICHMENT_PLATFORM_CONFIGS } from '@/lib/cron/enrichment-runner'
+import { runEnrichment, ENRICHMENT_PLATFORM_CONFIGS, NO_ENRICHMENT_PLATFORMS } from '@/lib/cron/enrichment-runner'
 
 export const runtime = 'nodejs'
 export const preferredRegion = 'hnd1'
@@ -47,7 +47,8 @@ async function handleEnrichment(req: Request) {
   const limit = parseInt(url.searchParams.get('limit') || '50')
   const offset = parseInt(url.searchParams.get('offset') || '0')
 
-  if (platformParam && !(platformParam in ENRICHMENT_PLATFORM_CONFIGS)) {
+  // Allow NO_ENRICHMENT_PLATFORMS - runEnrichment will handle them gracefully
+  if (platformParam && !(platformParam in ENRICHMENT_PLATFORM_CONFIGS) && !NO_ENRICHMENT_PLATFORMS.has(platformParam)) {
     return NextResponse.json({
       error: 'Invalid platform',
       supported: Object.keys(ENRICHMENT_PLATFORM_CONFIGS),
