@@ -11,6 +11,7 @@ import type { Platform, MarketType, Window, LeaderboardEntry } from '@/connector
 import { getSupabaseAdmin } from '@/lib/api'
 import { del as cacheDelete } from '@/lib/cache'
 import { decrypt } from '@/lib/crypto/encryption'
+import { SOURCE_TYPE_MAP } from '@/lib/constants/exchanges'
 import { BybitAdapter } from '@/lib/adapters/bybit-adapter'
 import { logger } from '@/lib/logger'
 import { createLogger } from '@/lib/utils/logger'
@@ -126,8 +127,11 @@ export async function runWorkerInline(): Promise<InlineJobResult> {
               const arenaScore = result.data.metrics.roi_pct != null
                 ? calculateArenaScoreV1(result.data.metrics.roi_pct, result.data.metrics.pnl_usd, result.data.metrics.max_drawdown, result.data.metrics.win_rate, window)
                 : null
+              // Override market_type with canonical value from SOURCE_TYPE_MAP
+              const canonicalMT = SOURCE_TYPE_MAP[job.platform] || job.market_type
               const { error: snapInsertErr } = await supabase.from('trader_snapshots_v2').upsert({
                 ...result.data,
+                market_type: canonicalMT,
                 roi_pct: result.data.metrics.roi_pct,
                 pnl_usd: result.data.metrics.pnl_usd,
                 win_rate: result.data.metrics.win_rate,
@@ -144,7 +148,12 @@ export async function runWorkerInline(): Promise<InlineJobResult> {
         } else if (job.job_type === 'PROFILE' && job.trader_key) {
           const result = await connector.fetchTraderProfile(job.trader_key)
           if (result.success && result.data) {
-            const { error: profileErr } = await supabase.from('trader_profiles_v2').upsert(result.data, { onConflict: 'platform,market_type,trader_key' })
+            // Override market_type with canonical value from SOURCE_TYPE_MAP
+            const canonicalMT = SOURCE_TYPE_MAP[job.platform] || job.market_type
+            const { error: profileErr } = await supabase.from('trader_profiles_v2').upsert(
+              { ...result.data, market_type: canonicalMT },
+              { onConflict: 'platform,market_type,trader_key' }
+            )
             if (profileErr) logger.warn(`[inline-jobs] PROFILE upsert error: ${profileErr.message}`)
           }
         }
@@ -186,9 +195,12 @@ export async function runWorkerInline(): Promise<InlineJobResult> {
 
 async function upsertLeaderboardData(
   supabase: ReturnType<typeof createClient<any>>,
-  platform: Platform, market_type: MarketType, window: Window,
+  platform: Platform, _market_type: MarketType, window: Window,
   entries: LeaderboardEntry[], provenance: Record<string, unknown>,
 ) {
+  // Resolve canonical market_type from SOURCE_TYPE_MAP to avoid duplicates
+  // (connector uses 'perp' for DEX, but SOURCE_TYPE_MAP uses 'web3')
+  const market_type = (SOURCE_TYPE_MAP[platform] || _market_type) as MarketType
   const now = new Date().toISOString()
   const sources = entries.map(e => ({
     platform, market_type, trader_key: e.trader_key,
