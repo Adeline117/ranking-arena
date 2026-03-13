@@ -11,7 +11,7 @@ Sentry.init({
   dsn: SENTRY_DSN,
   
   // 启用性能监控
-  tracesSampleRate: process.env.NODE_ENV === 'production' ? 0.1 : 1.0,
+  tracesSampleRate: process.env.NODE_ENV === 'production' ? 0.05 : 1.0,
   
   // 环境标识
   environment: process.env.NODE_ENV,
