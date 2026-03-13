@@ -37,6 +37,14 @@ const ALL_PLATFORMS = [
   'web3_bot',
 ]
 
+// Platforms that don't support enrichment (wallet-based or CF-protected)
+const NO_ENRICHMENT_PLATFORMS = new Set([
+  'binance_web3', // Wallet-based, no equity curve API
+  'bingx',        // CF-protected, enrichment not feasible
+  'web3_bot',     // Wallet-based
+  'okx_web3',     // Wallet-based (may support in future)
+])
+
 const TIME_PERIODS = ['7D', '30D', '90D']
 
 interface BackfillResult {
@@ -290,6 +298,12 @@ export async function GET(req: NextRequest) {
 
       // Find and backfill enrichment gaps
       if (type === 'all' || type === 'enrichment') {
+        // Skip platforms that don't support enrichment
+        if (NO_ENRICHMENT_PLATFORMS.has(platform)) {
+          logger.info(`[backfill] Skipping enrichment for ${platform} (not supported)`)
+          continue
+        }
+
         const missingEnrichmentTraders = await findMissingEnrichmentTraders(supabase, platform, period, limit)
 
         if (missingEnrichmentTraders.length > 0) {
