@@ -1,16 +1,15 @@
 /**
- * /share/rank/[trader_key] — shareable rank card by source_trader_id
+ * /share/rank/[trader_key] -- redirect to /wrapped/[handle]
  *
- * This route is designed for the "Share on X" button on trader profiles.
- * It accepts trader_key (source_trader_id) instead of handle, so the URL
- * works regardless of whether the trader has a readable handle.
+ * Legacy share URL. Looks up trader_key -> handle mapping and redirects.
+ * If handle can't be resolved, renders the wrapped card in place as fallback.
  *
- * X/Twitter scrapes this page's OG meta tags and displays the rank card image.
- * The page body shows WrappedCardClient for humans who follow the link.
+ * Bot crawlers (X/Twitter) see the OG meta tags in generateMetadata before
+ * the redirect happens, so social cards still work even during redirect.
  */
 
 import type { Metadata } from 'next'
-import { notFound } from 'next/navigation'
+import { redirect, notFound } from 'next/navigation'
 import { getSupabaseAdmin } from '@/lib/supabase/server'
 import WrappedCardClient from '@/app/wrapped/[handle]/WrappedCardClient'
 import type { WrappedTraderData } from '@/app/wrapped/[handle]/page'
@@ -32,11 +31,11 @@ interface Props {
   searchParams: Promise<{ platform?: string; window?: string }>
 }
 
-async function fetchShareData(
+async function resolveTrader(
   traderKey: string,
   platform?: string,
   windowParam = '7d',
-): Promise<WrappedTraderData | null> {
+): Promise<{ handle: string | null; data: WrappedTraderData | null }> {
   try {
     const supabase = getSupabaseAdmin()
     const seasonMap: Record<string, string> = {
@@ -45,7 +44,6 @@ async function fetchShareData(
     }
     const seasonId = seasonMap[windowParam] ?? '7D'
 
-    // Look up by source_trader_id first, then fall back to handle
     let tsQuery = supabase
       .from('trader_sources')
       .select('handle, display_name, source, source_trader_id')
@@ -55,7 +53,6 @@ async function fetchShareData(
     if (platform) tsQuery = tsQuery.eq('source', platform)
     let { data: ts } = await tsQuery.maybeSingle()
 
-    // Fallback: try matching handle
     if (!ts) {
       let hQuery = supabase
         .from('trader_sources')
@@ -67,11 +64,11 @@ async function fetchShareData(
       ts = byHandle
     }
 
-    if (!ts) return null
+    if (!ts) return { handle: null, data: null }
 
     const effectivePlatform = platform || ts.source
     const platformLabel = PLATFORM_LABELS[effectivePlatform]
-      ?? effectivePlatform.replace(/_/g, ' ').replace(/\b\w/g, (c: string) => c.toUpperCase())
+      ?? effectivePlatform.replace(/_/g, ' ').replace(/\\b\\w/g, (c: string) => c.toUpperCase())
 
     const { data: lr } = await supabase
       .from('leaderboard_ranks')
@@ -87,7 +84,7 @@ async function fetchShareData(
       .eq('source', ts.source)
       .eq('season_id', seasonId)
 
-    return {
+    const data: WrappedTraderData = {
       handle: ts.handle || traderKey,
       displayName: ts.display_name || ts.handle || traderKey,
       platform: effectivePlatform,
@@ -100,9 +97,11 @@ async function fetchShareData(
       maxDrawdown: lr?.max_drawdown ?? null,
       window: seasonId,
     }
+
+    return { handle: ts.handle || null, data }
   } catch (error) {
-    console.warn('[share/rank] fetchTraderRank failed:', error instanceof Error ? error.message : String(error))
-    return null
+    console.warn('[share/rank] resolve failed:', error instanceof Error ? error.message : String(error))
+    return { handle: null, data: null }
   }
 }
 
@@ -111,7 +110,7 @@ export async function generateMetadata({ params, searchParams }: Props): Promise
   const { platform, window: windowParam = '7d' } = await searchParams
   const decoded = decodeURIComponent(trader_key)
 
-  const data = await fetchShareData(decoded, platform, windowParam)
+  const { data } = await resolveTrader(decoded, platform, windowParam)
 
   const name = data?.displayName || decoded
   const rank = data?.rank
@@ -141,7 +140,8 @@ export async function generateMetadata({ params, searchParams }: Props): Promise
   if (data?.score != null) ogParams.set('score', String(data.score))
 
   const ogImageUrl = `${BASE_URL}/api/og/rank?${ogParams}`
-  const pageUrl = `${BASE_URL}/share/rank/${encodeURIComponent(decoded)}${platform ? `?platform=${platform}` : ''}`
+  const handle = data?.handle ?? decoded
+  const pageUrl = `${BASE_URL}/wrapped/${encodeURIComponent(handle)}${platform ? '?platform=' + platform : ''}`
 
   return {
     title,
@@ -172,7 +172,18 @@ export default async function ShareRankPage({ params, searchParams }: Props) {
   const { platform, window: windowParam = '7d' } = await searchParams
   const decoded = decodeURIComponent(trader_key)
 
-  const data = await fetchShareData(decoded, platform, windowParam)
+  const { handle, data } = await resolveTrader(decoded, platform, windowParam)
+
+  // If we found a handle, redirect to the canonical /wrapped/ URL
+  if (handle) {
+    const redirectParams = new URLSearchParams()
+    if (platform) redirectParams.set('platform', platform)
+    if (windowParam !== '7d') redirectParams.set('window', windowParam)
+    const qs = redirectParams.toString()
+    redirect(`/wrapped/${encodeURIComponent(handle)}${qs ? '?' + qs : ''}`)
+  }
+
+  // Fallback: render in place if no handle mapping found
   if (!data) notFound()
 
   const ogParams = new URLSearchParams({
