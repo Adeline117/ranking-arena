@@ -136,7 +136,7 @@ async function fetchExchangeTraders(exchange: string): Promise<TraderData[]> {
     }
 
     // Map to TraderData shape — use handle as trader_key for correct routing to /trader/[handle]
-    return (data || []).map((row: Record<string, unknown>) => ({
+    const rows = (data || []).map((row: Record<string, unknown>) => ({
       trader_key: String(row.handle || row.source_trader_id || ''),
       display_name: row.handle ? String(row.handle) : null,
       avatar_url: row.avatar_url as string | null,
@@ -150,7 +150,27 @@ async function fetchExchangeTraders(exchange: string): Promise<TraderData[]> {
       trader_type: (row.trader_type as string) || null,
       is_bot: row.source === 'web3_bot' || row.trader_type === 'bot',
       captured_at: (row.computed_at as string) || null,
+      _source_id: String(row.source_trader_id || ''),
     }))
+
+    // Disambiguate duplicate display names by appending short ID suffix
+    const nameCount = new Map<string, number>()
+    for (const r of rows) {
+      const name = (r.display_name || '').toLowerCase()
+      nameCount.set(name, (nameCount.get(name) || 0) + 1)
+    }
+    const nameIndex = new Map<string, number>()
+    for (const r of rows) {
+      const name = (r.display_name || '').toLowerCase()
+      if (nameCount.get(name)! > 1 && r.display_name) {
+        const idx = (nameIndex.get(name) || 0) + 1
+        nameIndex.set(name, idx)
+        const suffix = r._source_id.slice(-4)
+        r.display_name = `${r.display_name} #${suffix}`
+      }
+    }
+
+    return rows
   } catch (e) {
     logger.error(`[ExchangeRanking] Exception for ${exchange}:`, e)
     return []
