@@ -514,17 +514,29 @@ export class BinanceFuturesConnector extends BaseConnector {
     }
   }
 
+  /**
+   * Normalize raw leaderboard entry to standard fields.
+   * Leaderboard API provides: encryptedUid, nickName, userPhotoUrl, rank,
+   * value (ROI decimal), pnl, followerCount, copyCount.
+   * win_rate, max_drawdown, trades_count require copy-trade detail API
+   * and are filled by enrichment — set to null here.
+   */
   normalize(raw: unknown): Record<string, unknown> {
     const entry = raw as BinanceTraderEntry
     return {
       trader_key: entry.encryptedUid,
-      display_name: entry.nickName,
-      avatar_url: entry.userPhotoUrl,
-      roi: entry.value * 100,
-      pnl: entry.pnl,
-      followers: entry.followerCount,
-      copiers: entry.copyCount,
-      platform_rank: entry.rank,
+      display_name: entry.nickName ?? null,
+      avatar_url: entry.userPhotoUrl ?? null,
+      roi: entry.value != null ? entry.value * 100 : null,
+      pnl: entry.pnl ?? null,
+      win_rate: null,        // Requires copy-trade detail API (enrichment)
+      max_drawdown: null,    // Requires copy-trade detail API (enrichment)
+      trades_count: null,    // Requires copy-trade detail API (enrichment)
+      followers: entry.followerCount ?? null,
+      copiers: entry.copyCount ?? null,
+      aum: null,
+      sharpe_ratio: null,
+      platform_rank: entry.rank ?? null,
     }
   }
 

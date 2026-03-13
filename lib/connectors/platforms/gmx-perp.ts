@@ -196,11 +196,43 @@ export class GmxPerpConnector extends BaseConnector {
     return { series, fetched_at: new Date().toISOString() }
   }
 
+  /**
+   * Normalize raw GMX leaderboard entry.
+   * Raw fields: account/id, realizedPnl (BigInt scale 1e30 or USD),
+   * maxCapital, wins, losses, closedCount.
+   * ROI computed as realizedPnl / maxCapital × 100.
+   * win_rate computed as wins / (wins + losses) × 100.
+   * Note: max_capital mapped to aum (closest semantic match).
+   */
   normalize(raw: Record<string, unknown>): Record<string, unknown> {
+    const pnl = this.fromGmxDecimals(raw.realizedPnl)
+    const maxCapital = this.fromGmxDecimals(raw.maxCapital)
+    // ROI = realizedPnl / maxCapital × 100
+    let roi: number | null = null
+    if (pnl !== 0 && maxCapital > 100) {
+      roi = Math.max(-100, Math.min(10000, (pnl / maxCapital) * 100))
+    }
+    // Win rate from wins/losses
+    const wins = Number(raw.wins) || 0
+    const losses = Number(raw.losses) || 0
+    const totalTrades = wins + losses
+    const winRate = totalTrades > 0 ? (wins / totalTrades) * 100 : null
+    const tradesCount = Number(raw.closedCount) || (totalTrades > 0 ? totalTrades : null)
+
     return {
       trader_key: String(raw.account || raw.id || '').toLowerCase(),
-      pnl: this.fromGmxDecimals(raw.realizedPnl),
-      max_capital: this.fromGmxDecimals(raw.maxCapital),
+      display_name: null,
+      avatar_url: null,
+      roi,
+      pnl,
+      win_rate: winRate,
+      max_drawdown: null,    // Requires equity reconstruction (enrichment)
+      trades_count: tradesCount,
+      followers: null,
+      copiers: null,
+      aum: maxCapital > 0 ? maxCapital : null,
+      sharpe_ratio: null,
+      platform_rank: null,
     }
   }
 

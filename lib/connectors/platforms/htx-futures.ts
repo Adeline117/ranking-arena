@@ -98,8 +98,34 @@ export class HtxFuturesConnector extends BaseConnector {
     return { series: [], fetched_at: new Date().toISOString() }
   }
 
+  /**
+   * Normalize raw HTX leaderboard entry.
+   * Raw fields: uid/userSign, nickName, profitRate90 (90D ROI decimal),
+   * profit90/copyProfit, winRate (decimal 0-1), mdd (decimal),
+   * copyUserNum, aum, profitList (cumulative return series).
+   * Note: Period ROI computed from profitList in inline fetcher — not in normalize().
+   */
   normalize(raw: Record<string, unknown>): Record<string, unknown> {
-    return { trader_key: raw.uid, roi: this.num(raw.roi), pnl: this.num(raw.pnl) }
+    const rawWr = this.num(raw.winRate)
+    const winRate = rawWr != null ? (rawWr <= 1 ? rawWr * 100 : rawWr) : null
+    const rawMdd = this.num(raw.mdd ?? raw.maxDrawdown)
+    const maxDrawdown = rawMdd != null ? Math.abs(rawMdd <= 1 ? rawMdd * 100 : rawMdd) : null
+
+    return {
+      trader_key: raw.uid ?? raw.userSign ?? null,
+      display_name: raw.nickName ?? null,
+      avatar_url: raw.avatar ?? null,
+      roi: this.num(raw.roi ?? raw.profitRate90),
+      pnl: this.num(raw.pnl ?? raw.profit90 ?? raw.copyProfit),
+      win_rate: winRate,
+      max_drawdown: maxDrawdown,
+      trades_count: null,
+      followers: this.num(raw.copyUserNum),
+      copiers: null,
+      aum: this.num(raw.aum),
+      sharpe_ratio: null,
+      platform_rank: null,
+    }
   }
 
   private num(val: unknown): number | null {

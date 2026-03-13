@@ -56,15 +56,35 @@ export class HyperliquidPerpConnector extends BaseConnector {
     // For 90d with allTime, we take top entries (platform doesn't have 90d natively, uses allTime)
     const entries = Array.isArray(leaderboard) ? leaderboard.slice(0, limit) : []
 
+    // Map window to windowPerformances key
+    const windowKey = window === '7d' ? 'week' : window === '30d' ? 'month' : 'allTime'
+
     const traders: TraderSource[] = entries.map((item: Record<string, unknown>) => {
       const address = String(item.ethAddress || item.user || '')
+      // Extract ROI/PnL from windowPerformances for the requested window
+      const perf = (item.windowPerformances as Record<string, Record<string, unknown>> | undefined)?.[windowKey]
+      const rawRoi = perf?.roi != null ? Number(perf.roi) : null
+      const rawPnl = perf?.pnl != null ? Number(perf.pnl) : null
+      const roi = rawRoi != null ? rawRoi * 100 : null // decimal → percentage
+      // Anomaly fix: if roi ≈ pnl (wrong scale), recalculate
+      const accountValue = item.accountValue != null ? Number(item.accountValue) : null
+      const correctedRoi = (roi != null && rawPnl != null && accountValue != null
+        && Math.abs(roi - rawPnl) < 1 && accountValue > 0)
+        ? (rawPnl / accountValue) * 100
+        : roi
+
       return {
         platform: 'hyperliquid' as const, market_type: 'perp' as const,
         trader_key: address,
         display_name: (item.displayName as string) || null,
         profile_url: `https://app.hyperliquid.xyz/leaderboard/${address}`,
         discovered_at: new Date().toISOString(), last_seen_at: new Date().toISOString(),
-        is_active: true, raw: item as Record<string, unknown>,
+        is_active: true,
+        raw: {
+          ...item as Record<string, unknown>,
+          _computed_roi: correctedRoi,
+          _computed_pnl: rawPnl,
+        },
       }
     })
 
@@ -201,11 +221,35 @@ export class HyperliquidPerpConnector extends BaseConnector {
     return { series, fetched_at: new Date().toISOString() }
   }
 
+  /**
+   * Normalize raw Hyperliquid leaderboard entry.
+   * Raw fields: ethAddress/user, displayName, accountValue (equity/AUM — NOT PnL),
+   * windowPerformances (keyed by window: week/month/allTime with roi/pnl).
+   *
+   * IMPORTANT: accountValue is total equity (AUM), not PnL.
+   * ROI and PnL come from windowPerformances, stored as _computed_roi/_computed_pnl
+   * by discoverLeaderboard().
+   */
   normalize(raw: Record<string, unknown>): Record<string, unknown> {
+    // Extract window-specific ROI/PnL if pre-computed in discover
+    const roi = raw._computed_roi != null ? Number(raw._computed_roi) : null
+    const pnl = raw._computed_pnl != null ? Number(raw._computed_pnl) : null
+    const accountValue = raw.accountValue != null ? Number(raw.accountValue) : null
+
     return {
-      trader_key: raw.ethAddress || raw.user,
-      display_name: raw.displayName || null,
-      pnl: Number(raw.accountValue) || null,
+      trader_key: raw.ethAddress ?? raw.user ?? null,
+      display_name: raw.displayName ?? null,
+      avatar_url: null,
+      roi,
+      pnl,
+      win_rate: null,        // Requires fill-level analysis (enrichment)
+      max_drawdown: null,    // Requires portfolio endpoint (enrichment)
+      trades_count: null,
+      followers: null,
+      copiers: null,
+      aum: accountValue,     // accountValue is equity/AUM, NOT PnL
+      sharpe_ratio: null,
+      platform_rank: null,
     }
   }
 }
