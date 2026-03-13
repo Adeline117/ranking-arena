@@ -17,19 +17,19 @@
  * immediate recomputation.
  */
 
-const APP_URL = process.env.NEXT_PUBLIC_APP_URL || 'https://www.arenafi.org'
-const CRON_SECRET = process.env.CRON_SECRET
+const RECOMPUTE_APP_URL = process.env.NEXT_PUBLIC_RECOMPUTE_APP_URL || 'https://www.arenafi.org'
+const RECOMPUTE_CRON_SECRET = process.env.RECOMPUTE_CRON_SECRET
 
-async function main() {
-  if (!CRON_SECRET) {
-    console.error('CRON_SECRET env var required')
+async function recomputeMain() {
+  if (!RECOMPUTE_CRON_SECRET) {
+    console.error('RECOMPUTE_CRON_SECRET env var required')
     process.exit(1)
   }
 
   console.log('Triggering composite recomputation with new weights (7D×0.05 + 30D×0.25 + 90D×0.70)...')
 
-  const res = await fetch(`${APP_URL}/api/cron/precompute-composite`, {
-    headers: { Authorization: `Bearer ${CRON_SECRET}` },
+  const res = await fetch(`${RECOMPUTE_APP_URL}/api/cron/precompute-composite`, {
+    headers: { Authorization: `Bearer ${RECOMPUTE_CRON_SECRET}` },
   })
 
   if (!res.ok) {
@@ -43,7 +43,7 @@ async function main() {
   console.log('Recomputation complete:', JSON.stringify(data, null, 2))
 }
 
-main().catch(err => {
+recomputeMain().catch(err => {
   console.error(err)
   process.exit(1)
 })

@@ -185,7 +185,7 @@ export async function getSourceHealth(
 
   const recentErrors = errors.slice(0, 10).map(e => ({
     created_at: e.created_at,
-    metadata: (e as Record<string, unknown>).metadata as Record<string, unknown> | undefined,
+    metadata: ((e as Record<string, unknown>).metadata ?? {}) as Record<string, unknown>,
   }))
 
   // 健康分数计算
