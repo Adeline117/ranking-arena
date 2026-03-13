@@ -306,6 +306,18 @@ export interface EnrichmentResult {
  * Run enrichment for a specific platform and period.
  * Called inline from batch-enrich or from the /api/cron/enrich route.
  */
+// Platforms that don't support enrichment (wallet-based, CF-protected, or no enrichment API)
+const NO_ENRICHMENT_PLATFORMS = new Set([
+  // Wallet-based platforms (no equity curve API)
+  'binance_web3', 'okx_web3', 'web3_bot',
+  // CF-protected (enrichment not feasible)
+  'bingx',
+  // API removed/unavailable (2026-03-10)
+  'bybit', 'bybit_spot',
+  // No enrichment API available
+  'bitfinex', 'coinex', 'xt', 'bitmart', 'btcc', 'bitunix', 'paradex', 'okx_spot',
+])
+
 export async function runEnrichment(params: {
   platform: string
   period: string
@@ -315,6 +327,13 @@ export async function runEnrichment(params: {
   const { platform: platformParam, period, limit, offset = 0 } = params
   const startTime = Date.now()
   const plog = await PipelineLogger.start(`enrich-${platformParam}`)
+
+  // Early exit for platforms that don't support enrichment
+  if (NO_ENRICHMENT_PLATFORMS.has(platformParam)) {
+    logger.info(`[enrich] Skipping ${platformParam} - enrichment not supported`)
+    await plog.success(0, { reason: 'platform does not support enrichment' })
+    return { ok: true, duration: 0, period, summary: { total: 0, enriched: 0, failed: 0 }, results: {} }
+  }
 
   const supabaseUrl = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL || ''
   const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || ''
