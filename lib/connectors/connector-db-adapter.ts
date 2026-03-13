@@ -36,6 +36,12 @@ export interface AdapterOptions {
   dryRun?: boolean
   /** Calculate Arena Score for each trader (default: true) */
   calculateScore?: boolean
+  /**
+   * Override the source name used in DB writes (trader_sources.source, etc).
+   * Needed when connector.platform differs from the cron group source name.
+   * E.g., connector platform='htx' but DB source='htx_futures'.
+   */
+  sourceOverride?: string
 }
 
 export interface AdapterResult {
@@ -64,8 +70,8 @@ export async function writeDiscoverResult(
   result: DiscoverResult,
   options: AdapterOptions = {}
 ): Promise<AdapterResult> {
-  const { dryRun = false, calculateScore = true } = options
-  const platform = connector.platform
+  const { dryRun = false, calculateScore = true, sourceOverride } = options
+  const platform = sourceOverride || connector.platform
   const marketType = connector.marketType
   const window = result.window.toUpperCase() // '7d' → '7D'
   const capturedAt = result.fetched_at || new Date().toISOString()
@@ -196,9 +202,9 @@ export async function runConnectorBatch(
   connector: PlatformConnector,
   options: BatchRunOptions = {}
 ): Promise<FetchResult> {
-  const { windows = ['7d', '30d', '90d'], limit = 500 } = options
+  const { windows = ['7d', '30d', '90d'], limit = 500, sourceOverride } = options
   const startTime = Date.now()
-  const platform = connector.platform
+  const platform = sourceOverride || connector.platform
   const periods: FetchResult['periods'] = {}
 
   // Get Supabase client once for all windows
