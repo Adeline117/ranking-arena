@@ -59,14 +59,27 @@ export function formatCurrency(
   return `${currency}${formatNumber(n, decimals, locale)}`
 }
 
-/** Format large numbers compactly: 1200 → "1.20K", 3400000 → "3.40M". Unified for all locales. */
-export function formatCompact(num: number | string | null | undefined, decimals = 2): string {
+/** Format large numbers compactly. CJK locales use 万/億 notation; others use K/M/B. */
+export function formatCompact(num: number | string | null | undefined, decimals = 2, locale?: string): string {
   if (num === null || num === undefined) return NULL_DISPLAY
   const n = typeof num === 'string' ? parseFloat(num) : num
   if (!Number.isFinite(n)) return NULL_DISPLAY
 
   const abs = Math.abs(n)
   const sign = n < 0 ? '-' : ''
+
+  // CJK locales: 万 (10K) / 億 (100M)
+  if (locale === 'zh' || locale === 'ja') {
+    const yi = locale === 'zh' ? '亿' : '億'
+    if (abs >= 1e8) return `${sign}${(abs / 1e8).toFixed(decimals)}${yi}`
+    if (abs >= 1e4) return `${sign}${(abs / 1e4).toFixed(decimals)}万`
+    return `${sign}${abs.toFixed(decimals)}`
+  }
+  if (locale === 'ko') {
+    if (abs >= 1e8) return `${sign}${(abs / 1e8).toFixed(decimals)}억`
+    if (abs >= 1e4) return `${sign}${(abs / 1e4).toFixed(decimals)}만`
+    return `${sign}${abs.toFixed(decimals)}`
+  }
 
   if (abs >= 1e9) return `${sign}${(abs / 1e9).toFixed(decimals)}B`
   if (abs >= 1e6) return `${sign}${(abs / 1e6).toFixed(decimals)}M`
@@ -80,7 +93,8 @@ export function formatCompact(num: number | string | null | undefined, decimals 
  * Use with formatNumber/formatCurrency for locale-aware number formatting.
  */
 export function getLocaleFromLanguage(language: string): string {
-  return language === 'zh' ? 'zh-CN' : 'en-US'
+  const map: Record<string, string> = { zh: 'zh-CN', ja: 'ja-JP', ko: 'ko-KR' }
+  return map[language] || 'en-US'
 }
 
 /**
