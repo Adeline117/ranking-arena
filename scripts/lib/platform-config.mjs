@@ -19,6 +19,7 @@ export const PLATFORM_CONFIGS = {
     type: 'api',
     marketType: 'futures',
     targetCount: 500,
+    concurrency: 7,  // 提升自5 → 预期-30%耗时
     api: {
       base: 'https://www.binance.com',
       list: '/bapi/futures/v1/friendly/future/copy-trade/home-page/query-list',
@@ -100,6 +101,7 @@ export const PLATFORM_CONFIGS = {
     type: 'api',
     marketType: 'futures',
     targetCount: 500,
+    concurrency: 5,  // 提升自3 → 预期-40%耗时
     api: {
       base: 'https://www.okx.com',
       list: '/api/v5/copytrading/public-lead-traders',
@@ -193,6 +195,7 @@ export const PLATFORM_CONFIGS = {
     type: 'api',
     marketType: 'dex',
     targetCount: 200,
+    concurrency: 5,  // 提升自3 → 预期-40%耗时
     api: {
       base: 'https://gmx.io',
       // GMX 使用 subgraph
@@ -210,6 +213,7 @@ export const PLATFORM_CONFIGS = {
     type: 'api',
     marketType: 'dex',
     targetCount: 200,
+    concurrency: 7,  // 提升自3 → 预期-57%耗时
     api: {
       base: 'https://api.hyperliquid.xyz',
       list: '/info',
