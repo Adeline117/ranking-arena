@@ -6,7 +6,8 @@
 
 import { cache } from 'react'
 import type { Metadata } from 'next'
-import { notFound } from 'next/navigation'
+import { notFound, redirect } from 'next/navigation'
+import { features } from '@/lib/features'
 import Link from 'next/link'
 import Image from 'next/image'
 import { createClient } from '@supabase/supabase-js'
@@ -87,6 +88,8 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
 // ---------------------------------------------------------------------------
 
 export default async function ActivitySharePage({ params }: PageProps) {
+  if (!features.social) redirect('/')
+
   const { id } = await params
   const activity = await fetchActivity(id)
 

@@ -1,5 +1,7 @@
 'use client'
 
+import { features } from '@/lib/features'
+import { notFound } from 'next/navigation'
 import { useEffect, useState, useRef, useCallback } from 'react'
 import { tokens } from '@/lib/design-tokens'
 import TopNav from '@/app/components/layout/TopNav'
@@ -21,6 +23,8 @@ import { useConversationMessages } from './hooks/useConversationMessages'
 import { useFileUpload } from './hooks/useFileUpload'
 
 export default function ConversationPage({ params }: { params: Promise<{ conversationId: string }> }) {
+  if (!features.social) notFound()
+
   const { t, language } = useLanguage()
   const [conversationId, setConversationId] = useState<string>('')
   const [settingsOpen, setSettingsOpen] = useState(false)

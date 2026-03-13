@@ -1,5 +1,7 @@
 'use client'
 
+import { features } from '@/lib/features'
+import { notFound } from 'next/navigation'
 import Link from 'next/link'
 import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase/client'
@@ -85,6 +87,8 @@ function ActivityLogSection({ groupId }: { groupId: string }) {
 }
 
 export default function GroupManagePage({ params }: { params: Promise<{ id: string }> }) {
+  if (!features.social) notFound()
+
   const [groupId, setGroupId] = useState<string>('')
   useEffect(() => {
     if (params && typeof params === 'object' && 'then' in params) { (params as Promise<{ id: string }>).then(resolved => setGroupId(resolved.id)).catch(() => { /* Intentionally swallowed: params resolution should not fail */ }) } // eslint-disable-line no-restricted-syntax -- intentional fire-and-forget

@@ -1,5 +1,7 @@
 'use client'
 
+import { features } from '@/lib/features'
+import { notFound } from 'next/navigation'
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase/client'
@@ -23,6 +25,8 @@ import { ImageUploader } from './components/ImageUploader'
 import { VideoUploader } from './components/VideoUploader'
 
 export default function NewGroupPostPage(): React.ReactElement {
+  if (!features.social) notFound()
+
   const params = useParams<{ id: string }>()
   const groupId = params.id as string
   const router = useRouter()

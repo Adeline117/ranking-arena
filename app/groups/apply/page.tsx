@@ -1,5 +1,7 @@
 'use client'
 
+import { features } from '@/lib/features'
+import { notFound } from 'next/navigation'
 import { useState, useEffect, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
@@ -19,6 +21,8 @@ import { RoleNameSettings } from './components/RoleNameSettings'
 import type { RoleNames, Rule } from './types'
 
 export default function ApplyGroupPage() {
+  if (!features.social) notFound()
+
   const _router = useRouter()
   const { t, language } = useLanguage()
   const { isPro } = useSubscription()

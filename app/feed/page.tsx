@@ -5,7 +5,9 @@
  */
 
 import type { Metadata } from 'next'
+import { redirect } from 'next/navigation'
 import { Suspense } from 'react'
+import { features } from '@/lib/features'
 import { createClient } from '@supabase/supabase-js'
 import ActivityFeed from '@/app/components/feed/ActivityFeed'
 import type { TraderActivity } from '@/lib/types/activities'
@@ -80,6 +82,8 @@ async function fetchInitialActivities(): Promise<{
 // ---------------------------------------------------------------------------
 
 export default async function FeedPage() {
+  if (!features.social) redirect('/')
+
   const { activities, hasMore, nextCursor } = await fetchInitialActivities()
 
   return (

@@ -1,5 +1,7 @@
 'use client'
 
+import { features } from '@/lib/features'
+import { notFound } from 'next/navigation'
 import { useEffect, useState, useCallback, useRef } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
@@ -31,6 +33,8 @@ interface Post {
 
 
 export default function MyPostsPage() {
+  if (!features.social) notFound()
+
   const router = useRouter()
   const { showToast } = useToast()
   const { showDangerConfirm } = useDialog()
