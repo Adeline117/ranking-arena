@@ -113,9 +113,12 @@ export class Web3BotConnector extends BaseConnector {
         }
 
         results.push({ bot, value, raw })
-        await this.sleep(300) // Rate limit between API calls
-      } catch {
-        // Skip failed bots
+        // CoinGecko free tier: ~10 req/min. DeFi Llama is more generous.
+        const delay = bot.coingeckoId ? 2500 : 500
+        await this.sleep(delay)
+      } catch (err) {
+        // Log but continue — don't silently drop bots
+        console.warn(`[web3-bot] Failed to fetch ${bot.name}:`, err instanceof Error ? err.message : 'unknown')
       }
     }
 
