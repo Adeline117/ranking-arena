@@ -41,7 +41,7 @@ export default function PrivyLoginButton({ redirectUrl, onError }: PrivyLoginBut
         });
 
         if (result.isNew) {
-          router.push('/welcome');
+          router.push('/onboarding');
         } else {
           router.push(redirectUrl || (result.handle ? `/u/${result.handle}` : '/'));
         }
