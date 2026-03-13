@@ -726,7 +726,6 @@ export default function TraderHeader({
           platform={source}
           rank={rank}
           roi={roi90d}
-          window="7d"
         />
 
         <ShareButton

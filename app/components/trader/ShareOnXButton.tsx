@@ -4,8 +4,8 @@
  * ShareOnXButton — opens the X compose window pre-filled with the trader's
  * wrapped rank card link and a concise share text.
  *
- * The button links to /share/rank/[trader_key] so X scrapes the OG image
- * from that page and shows the Spotify Wrapped–style card inline in the tweet.
+ * The button links to /wrapped/[handle] so X scrapes the OG image
+ * from that page and shows the rank card inline in the tweet.
  *
  * Props:
  *   handle       — trader handle (used for /wrapped/ URL)
@@ -13,11 +13,12 @@
  *   platform     — exchange source string (binance_futures, bybit, …)
  *   rank         — leaderboard rank number (optional)
  *   roi          — ROI percentage (optional)
- *   window       — time window, defaults to "7d"
+ *   window       — time window override; if omitted, reads from global period store
  */
 
 import { useCallback } from 'react'
 import { tokens } from '@/lib/design-tokens'
+import { usePeriodStore } from '@/lib/stores/periodStore'
 
 interface ShareOnXButtonProps {
   handle: string
@@ -63,8 +64,11 @@ export default function ShareOnXButton({
   platform,
   rank,
   roi,
-  window: windowParam = '7d',
+  window: windowProp,
 }: ShareOnXButtonProps) {
+  const storePeriod = usePeriodStore(s => s.period)
+  // Use prop if explicitly provided, otherwise read from global period store
+  const windowParam = windowProp || storePeriod.toLowerCase()
   const name = displayName || handle
 
   const buildXUrl = useCallback(() => {
@@ -73,7 +77,10 @@ export default function ShareOnXButton({
         ? `${window.location.origin}`
         : 'https://www.arenafi.org'
 
-    const sharePageUrl = `${base}/wrapped/${encodeURIComponent(handle)}${platform ? `?platform=${encodeURIComponent(platform)}` : ''}`
+    const params = new URLSearchParams()
+    if (platform) params.set('platform', platform)
+    params.set('window', windowParam)
+    const sharePageUrl = `${base}/wrapped/${encodeURIComponent(handle)}?${params}`
 
     const platformLabel = platform ? (PLATFORM_LABELS[platform] ?? platform.replace(/_/g, ' ')) : ''
     const windowLabel = windowParam.toUpperCase()
