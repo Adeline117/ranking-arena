@@ -10,6 +10,7 @@ import { EXCHANGE_NAMES } from '@/lib/constants/exchanges'
 import { useRealtimeRankings } from '@/lib/hooks/useRealtimeRankings'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import { NULL_DISPLAY } from '@/lib/utils/format'
+import ShareLeaderboardButton from './ShareLeaderboardButton'
 
 interface TraderData {
   trader_key: string
@@ -352,8 +353,9 @@ export default function ExchangeRankingClient({
 
   return (
     <div>
-      {/* View toggle */}
-      <div style={{ display: 'flex', gap: 8, marginBottom: tokens.spacing[4] }}>
+      {/* View toggle + Share button */}
+      <div style={{ display: 'flex', gap: 8, marginBottom: tokens.spacing[4], justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap' }}>
+        <div style={{ display: 'flex', gap: 8 }}>
         <button
           onClick={() => setViewMode('table')}
           style={{
@@ -386,6 +388,8 @@ export default function ExchangeRankingClient({
         >
           {t('rankingCardView')}
         </button>
+        </div>
+        <ShareLeaderboardButton traders={traders} exchange={exchange} />
       </div>
 
       {viewMode === 'card' ? (
