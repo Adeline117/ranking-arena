@@ -78,7 +78,7 @@ function MobileOverviewTab() {
 
 function MobileMoversTab() {
   return (
-    <SectionErrorBoundary fallbackMessage="行情数据加载失败">
+    <SectionErrorBoundary fallbackMessage="Market data failed to load">
       <Suspense fallback={<LoadingCard height={300} />}>
         <SpotMarket />
       </Suspense>
@@ -87,6 +87,7 @@ function MobileMoversTab() {
 }
 
 function MobileSectorsTab() {
+  const { t } = useLanguage()
   const [sectors, setSectors] = useState<{ name: string; change: number }[]>([])
   const [loading, setLoading] = useState(true)
   const [fetchError, setFetchError] = useState(false)
@@ -124,8 +125,8 @@ function MobileSectorsTab() {
       .finally(() => setLoading(false))
   }, [])
 
-  if (loading) return <div style={{ padding: 20, textAlign: 'center', color: tokens.colors.text.tertiary }}>加载中...</div>
-  if (fetchError) return <div style={{ padding: 20, textAlign: 'center', color: tokens.colors.text.tertiary }}>加载失败</div>
+  if (loading) return <div style={{ padding: 20, textAlign: 'center', color: tokens.colors.text.tertiary }}>{t('loading')}</div>
+  if (fetchError) return <div style={{ padding: 20, textAlign: 'center', color: tokens.colors.text.tertiary }}>{t('loadFailed')}</div>
 
   return (
     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 10, padding: '4px 16px' }}>
@@ -181,6 +182,7 @@ function WatchlistPlaceholder() {
 }
 
 function MarketPageContent() {
+  const { t } = useLanguage()
   const [email, setEmail] = useState<string | null>(null)
   const [selectedToken, setSelectedToken] = useState<{ id: string; symbol: string; name: string; image: string; price: number; change24h: number; marketCap: number; volume24h: number; high24h: number; low24h: number; rank: number } | null>(null)
   const [sectorFilter, setSectorFilter] = useState<string | null>(null)
@@ -262,7 +264,7 @@ function MarketPageContent() {
 
           {/* L2: Data Table — ranking table immediately visible after dashboard */}
           <section style={{ marginBottom: 24 }}>
-            <SectionErrorBoundary fallbackMessage="行情数据加载失败">
+            <SectionErrorBoundary fallbackMessage="Market data failed to load">
               <Suspense fallback={<LoadingCard height={400} />}>
                 <SpotMarket onTokenClick={handleTokenClick} />
               </Suspense>
@@ -288,7 +290,7 @@ function MarketPageContent() {
                 fontSize: 12,
                 color: tokens.colors.text.secondary,
               }}>
-                筛选: {sectorFilter}
+                {t('filter')}: {sectorFilter}
                 <button
                   onClick={() => setSectorFilter(null)}
                   style={{

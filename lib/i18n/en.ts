@@ -2899,6 +2899,15 @@ const en = {
     sectorPerformance: 'Sector Performance',
     exchangeVolume: 'Exchange Volume',
 
+// Flash News Page
+    flashNewsCenter: 'Flash News',
+    flashNewsDesc: 'Real-time updates on crypto, macro, and financial markets',
+    flashNewsLastUpdated: 'Last updated: ',
+    flashNewsNoNews: 'No news yet',
+    flashNewsNoNewsDesc: 'News will appear here as they come in',
+    flashNewsFetchFailed: 'Failed to load news',
+    flashNewsTotal: '-- {count} news total --',
+
 // Voice & Video Calls
     voiceCall: 'Voice Call',
     videoCall: 'Video Call',
