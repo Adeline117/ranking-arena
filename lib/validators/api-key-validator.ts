@@ -1,10 +1,11 @@
 /**
  * Exchange API Key Validator
- * Validates API keys by making test requests to exchange APIs
+ * Validates API keys by making test requests to exchange APIs.
+ * Now properly extracts account UIDs for ownership verification.
  */
 
-import { createHmac } from 'crypto'
 import { logger } from '@/lib/logger'
+import { resolveExchangeUid } from './exchange-uid-resolver'
 
 export interface ApiKeyValidationResult {
   isValid: boolean
@@ -18,255 +19,161 @@ export interface ApiKeyValidationResult {
 export interface ExchangeCredentials {
   apiKey: string
   apiSecret: string
-  passphrase?: string // For OKX
+  passphrase?: string // For OKX, Bitget
 }
 
 /**
- * Validate Binance API Key
+ * Validate Binance API Key - extracts real UID
  */
 export async function validateBinanceApiKey(
   credentials: ExchangeCredentials
 ): Promise<ApiKeyValidationResult> {
   try {
-    const { apiKey, apiSecret } = credentials
+    const uidResult = await resolveExchangeUid('binance', credentials)
 
-    // Test endpoint: Account information
-    const timestamp = Date.now()
-    const queryString = `timestamp=${timestamp}`
-
-    const signature = createHmac('sha256', apiSecret)
-      .update(queryString)
-      .digest('hex')
-
-    const response = await fetch(
-      `https://api.binance.com/api/v3/account?${queryString}&signature=${signature}`,
-      {
-        headers: {
-          'X-MBX-APIKEY': apiKey,
-        },
-      }
-    )
-
-    if (!response.ok) {
-      const error = await response.json()
-      return {
-        isValid: false,
-        error: error.msg || 'Invalid API key',
-      }
+    if (!uidResult.success) {
+      return { isValid: false, error: uidResult.error || 'Invalid API key' }
     }
-
-    const data = await response.json()
-
-    // Check if account has trading permissions
-    const permissions = []
-    if (data.canTrade) permissions.push('trade')
-    if (data.canWithdraw) permissions.push('withdraw')
-    if (data.canDeposit) permissions.push('deposit')
 
     return {
       isValid: true,
-      traderId: data.uid?.toString() || apiKey.substring(0, 16),
-      permissions,
-      details: {
-        accountType: data.accountType,
-        updateTime: data.updateTime,
-      },
+      traderId: uidResult.uid,
+      nickname: uidResult.nickname,
+      permissions: ['read'],
     }
   } catch (error) {
     logger.error('[Validator] Binance API key validation failed', {}, error as Error)
-    return {
-      isValid: false,
-      error: 'Failed to validate API key',
-    }
+    return { isValid: false, error: 'Failed to validate API key' }
   }
 }
 
 /**
- * Validate Bybit API Key
+ * Validate Bybit API Key - extracts real UID
  */
 export async function validateBybitApiKey(
   credentials: ExchangeCredentials
 ): Promise<ApiKeyValidationResult> {
   try {
-    const { apiKey, apiSecret } = credentials
+    const uidResult = await resolveExchangeUid('bybit', credentials)
 
-    const timestamp = Date.now().toString()
-    const recvWindow = '5000'
-
-    // Create signature
-    const paramStr = `${timestamp}${apiKey}${recvWindow}`
-    const signature = createHmac('sha256', apiSecret)
-      .update(paramStr)
-      .digest('hex')
-
-    // Test endpoint: Get API key information
-    const response = await fetch(
-      'https://api.bybit.com/v5/user/query-api',
-      {
-        headers: {
-          'X-BAPI-API-KEY': apiKey,
-          'X-BAPI-TIMESTAMP': timestamp,
-          'X-BAPI-SIGN': signature,
-          'X-BAPI-RECV-WINDOW': recvWindow,
-        },
-      }
-    )
-
-    const data = await response.json()
-
-    if (data.retCode !== 0) {
-      return {
-        isValid: false,
-        error: data.retMsg || 'Invalid API key',
-      }
+    if (!uidResult.success) {
+      return { isValid: false, error: uidResult.error || 'Invalid API key' }
     }
-
-    const result = data.result
 
     return {
       isValid: true,
-      traderId: result.uid || result.userID || apiKey.substring(0, 16),
-      permissions: result.permissions || [],
-      details: {
-        readOnly: result.readOnly,
-        type: result.type,
-        expiredAt: result.expiredAt,
-      },
+      traderId: uidResult.uid,
+      nickname: uidResult.nickname,
+      permissions: ['read'],
     }
   } catch (error) {
     logger.error('[Validator] Bybit API key validation failed', {}, error as Error)
-    return {
-      isValid: false,
-      error: 'Failed to validate API key',
-    }
+    return { isValid: false, error: 'Failed to validate API key' }
   }
 }
 
 /**
- * Validate OKX API Key
+ * Validate OKX API Key - uses /api/v5/account/config for UID
  */
 export async function validateOKXApiKey(
   credentials: ExchangeCredentials
 ): Promise<ApiKeyValidationResult> {
   try {
-    const { apiKey, apiSecret, passphrase } = credentials
-
-    if (!passphrase) {
-      return {
-        isValid: false,
-        error: 'Passphrase is required for OKX',
-      }
+    if (!credentials.passphrase) {
+      return { isValid: false, error: 'Passphrase is required for OKX' }
     }
 
-    const timestamp = new Date().toISOString()
-    const method = 'GET'
-    const requestPath = '/api/v5/account/balance'
+    const uidResult = await resolveExchangeUid('okx', credentials)
 
-    // Create signature
-    const prehash = timestamp + method + requestPath
-    const signature = createHmac('sha256', apiSecret)
-      .update(prehash)
-      .digest('base64')
-
-    const response = await fetch(
-      `https://www.okx.com${requestPath}`,
-      {
-        headers: {
-          'OK-ACCESS-KEY': apiKey,
-          'OK-ACCESS-SIGN': signature,
-          'OK-ACCESS-TIMESTAMP': timestamp,
-          'OK-ACCESS-PASSPHRASE': passphrase,
-          'Content-Type': 'application/json',
-        },
-      }
-    )
-
-    const data = await response.json()
-
-    if (data.code !== '0') {
-      return {
-        isValid: false,
-        error: data.msg || 'Invalid API key',
-      }
+    if (!uidResult.success) {
+      return { isValid: false, error: uidResult.error || 'Invalid API key' }
     }
 
     return {
       isValid: true,
-      traderId: apiKey.substring(0, 16), // OKX doesn't return UID in this endpoint
+      traderId: uidResult.uid,
+      nickname: uidResult.nickname,
       permissions: ['read_balance', 'read_positions'],
-      details: {
-        dataLength: data.data?.length || 0,
-      },
     }
   } catch (error) {
     logger.error('[Validator] OKX API key validation failed', {}, error as Error)
-    return {
-      isValid: false,
-      error: 'Failed to validate API key',
-    }
+    return { isValid: false, error: 'Failed to validate API key' }
   }
 }
 
 /**
- * Validate Bitget API Key
+ * Validate Bitget API Key - uses /api/v2/spot/account/info for userId
  */
 export async function validateBitgetApiKey(
   credentials: ExchangeCredentials
 ): Promise<ApiKeyValidationResult> {
   try {
-    const { apiKey, apiSecret, passphrase } = credentials
-
-    if (!passphrase) {
-      return {
-        isValid: false,
-        error: 'Passphrase is required for Bitget',
-      }
+    if (!credentials.passphrase) {
+      return { isValid: false, error: 'Passphrase is required for Bitget' }
     }
 
-    const timestamp = Date.now().toString()
-    const method = 'GET'
-    const requestPath = '/api/v2/spot/account/info'
+    const uidResult = await resolveExchangeUid('bitget', credentials)
 
-    // Create signature
-    const prehash = timestamp + method + requestPath
-    const signature = createHmac('sha256', apiSecret)
-      .update(prehash)
-      .digest('base64')
-
-    const response = await fetch(
-      `https://api.bitget.com${requestPath}`,
-      {
-        headers: {
-          'ACCESS-KEY': apiKey,
-          'ACCESS-SIGN': signature,
-          'ACCESS-TIMESTAMP': timestamp,
-          'ACCESS-PASSPHRASE': passphrase,
-          'Content-Type': 'application/json',
-        },
-      }
-    )
-
-    const data = await response.json()
-
-    if (data.code !== '00000') {
-      return {
-        isValid: false,
-        error: data.msg || 'Invalid API key',
-      }
+    if (!uidResult.success) {
+      return { isValid: false, error: uidResult.error || 'Invalid API key' }
     }
 
     return {
       isValid: true,
-      traderId: data.data?.userId || apiKey.substring(0, 16),
+      traderId: uidResult.uid,
       permissions: ['read_account'],
-      details: data.data,
     }
   } catch (error) {
     logger.error('[Validator] Bitget API key validation failed', {}, error as Error)
-    return {
-      isValid: false,
-      error: 'Failed to validate API key',
+    return { isValid: false, error: 'Failed to validate API key' }
+  }
+}
+
+/**
+ * Validate Gate.io API Key
+ */
+export async function validateGateApiKey(
+  credentials: ExchangeCredentials
+): Promise<ApiKeyValidationResult> {
+  try {
+    const uidResult = await resolveExchangeUid('gateio', credentials)
+
+    if (!uidResult.success) {
+      return { isValid: false, error: uidResult.error || 'Invalid API key' }
     }
+
+    return {
+      isValid: true,
+      traderId: uidResult.uid,
+      permissions: ['read'],
+    }
+  } catch (error) {
+    logger.error('[Validator] Gate.io API key validation failed', {}, error as Error)
+    return { isValid: false, error: 'Failed to validate API key' }
+  }
+}
+
+/**
+ * Validate HTX API Key
+ */
+export async function validateHtxApiKey(
+  credentials: ExchangeCredentials
+): Promise<ApiKeyValidationResult> {
+  try {
+    const uidResult = await resolveExchangeUid('htx', credentials)
+
+    if (!uidResult.success) {
+      return { isValid: false, error: uidResult.error || 'Invalid API key' }
+    }
+
+    return {
+      isValid: true,
+      traderId: uidResult.uid,
+      permissions: ['read'],
+    }
+  } catch (error) {
+    logger.error('[Validator] HTX API key validation failed', {}, error as Error)
+    return { isValid: false, error: 'Failed to validate API key' }
   }
 }
 
@@ -297,6 +204,15 @@ export async function validateExchangeApiKey(
     case 'bitget_futures':
     case 'bitget_spot':
       return validateBitgetApiKey(credentials)
+
+    case 'gateio':
+    case 'gate':
+      return validateGateApiKey(credentials)
+
+    case 'htx':
+    case 'htx_futures':
+    case 'huobi':
+      return validateHtxApiKey(credentials)
 
     default:
       return {
