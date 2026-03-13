@@ -4,6 +4,7 @@
 
 import { BaseConnector } from '../base'
 import { warnValidate } from '../schemas'
+import { safeNumber, safeStr, safeMdd } from '../utils'
 import { HtxFuturesLeaderboardResponseSchema, HtxFuturesDetailResponseSchema } from './schemas'
 import type {
   DiscoverResult, ProfileResult, SnapshotResult, TimeseriesResult,
@@ -100,29 +101,29 @@ export class HtxFuturesConnector extends BaseConnector {
 
   /**
    * Normalize raw HTX leaderboard entry.
-   * Raw fields: uid/userSign, nickName, profitRate90 (90D ROI decimal),
-   * profit90/copyProfit, winRate (decimal 0-1), mdd (decimal),
+   * Raw fields: uid/userSign, nickName, profitRate90/totalProfitRate (90D ROI decimal),
+   * profit90/copyProfit/cumulativePnl/profit (PnL), winRate (decimal 0-1), mdd (decimal),
    * copyUserNum, aum, profitList (cumulative return series).
    * Note: Period ROI computed from profitList in inline fetcher — not in normalize().
+   * All values may be strings from API — use safeNumber for parseFloat.
    */
   normalize(raw: Record<string, unknown>): Record<string, unknown> {
-    const rawWr = this.num(raw.winRate)
+    const rawWr = safeNumber(raw.winRate)
     const winRate = rawWr != null ? (rawWr <= 1 ? rawWr * 100 : rawWr) : null
-    const rawMdd = this.num(raw.mdd ?? raw.maxDrawdown)
-    const maxDrawdown = rawMdd != null ? Math.abs(rawMdd <= 1 ? rawMdd * 100 : rawMdd) : null
+    const maxDrawdown = safeMdd(raw.mdd ?? raw.maxDrawdown, safeNumber(raw.mdd ?? raw.maxDrawdown) != null && Math.abs(safeNumber(raw.mdd ?? raw.maxDrawdown)!) <= 1)
 
     return {
       trader_key: raw.uid ?? raw.userSign ?? null,
-      display_name: raw.nickName ?? null,
-      avatar_url: raw.avatar ?? null,
-      roi: this.num(raw.roi ?? raw.profitRate90),
-      pnl: this.num(raw.pnl ?? raw.profit90 ?? raw.copyProfit),
+      display_name: safeStr(raw.nickName),
+      avatar_url: safeStr(raw.avatar),
+      roi: safeNumber(raw.roi ?? raw.profitRate90 ?? raw.totalProfitRate),
+      pnl: safeNumber(raw.pnl ?? raw.profit90 ?? raw.cumulativePnl ?? raw.copyProfit ?? raw.profit),
       win_rate: winRate,
       max_drawdown: maxDrawdown,
       trades_count: null,
-      followers: this.num(raw.copyUserNum),
+      followers: safeNumber(raw.copyUserNum),
       copiers: null,
-      aum: this.num(raw.aum),
+      aum: safeNumber(raw.aum),
       sharpe_ratio: null,
       platform_rank: null,
     }
