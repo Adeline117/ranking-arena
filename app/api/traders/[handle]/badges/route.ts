@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getSupabaseAdmin } from '@/lib/supabase/server'
+import { resolveTrader } from '@/lib/data/unified'
 import { calculateBadges, type EarnedBadge } from '@/lib/badges'
 import { tieredGet, tieredSet } from '@/lib/cache/redis-layer'
 
@@ -29,38 +30,26 @@ export async function GET(
 
   const supabase = getSupabaseAdmin()
 
-  // Fetch trader data from trader_snapshots (90D period for comprehensive stats)
-  const { data: snapshot, error } = await supabase
-    .from('trader_snapshots')
-    .select(`
-      source_trader_id,
-      roi,
-      pnl,
-      win_rate,
-      max_drawdown,
-      followers,
-      arena_score,
-      source,
-      captured_at
-    `)
-    .eq('source_trader_id', handle)
-    .eq('season_id', '90D')
-    .order('captured_at', { ascending: false })
-    .limit(1)
-    .maybeSingle()
-
-  if (error || !snapshot) {
+  // Resolve trader via unified layer
+  const resolved = await resolveTrader(supabase, { handle })
+  if (!resolved) {
     return NextResponse.json({ badges: [] })
   }
 
-  // Get global rank by counting traders with higher arena_score
-  const { count: rankBefore } = await supabase
-    .from('trader_snapshots')
-    .select('id', { count: 'exact', head: true })
+  // Fetch trader data from leaderboard_ranks (precomputed, fast)
+  const { data: rankData, error } = await supabase
+    .from('leaderboard_ranks')
+    .select('source_trader_id, roi, pnl, win_rate, max_drawdown, followers, arena_score, rank, source, computed_at')
+    .eq('source', resolved.platform)
+    .eq('source_trader_id', resolved.traderKey)
     .eq('season_id', '90D')
-    .gt('arena_score', snapshot.arena_score ?? 0)
+    .maybeSingle()
 
-  const rank = (rankBefore ?? 0) + 1
+  if (error || !rankData) {
+    return NextResponse.json({ badges: [] })
+  }
+
+  const rank = rankData.rank ?? 999999
 
   // Check for on-chain attestation (table not yet created)
   const _attestation = null
@@ -86,7 +75,7 @@ export async function GET(
 
   // Calculate badges
   const badges: EarnedBadge[] = calculateBadges({
-    handle: snapshot.source_trader_id,
+    handle: rankData.source_trader_id,
     rank,
   })
 

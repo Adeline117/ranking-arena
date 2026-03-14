@@ -5,17 +5,12 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@supabase/supabase-js'
+import { getSupabaseAdmin } from '@/lib/supabase/server'
+import { resolveTrader } from '@/lib/data/unified'
 import { getServerCache, setServerCache, CacheTTL } from '@/lib/utils/server-cache'
 import logger from '@/lib/logger'
 
 export const revalidate = 60 // 1分钟，与 Cache-Control s-maxage 一致
-
-const SUPABASE_URL = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL || ''
-const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || ''
-
-const _TRADER_SOURCES = ['binance', 'binance_web3', 'bybit', 'bitget', 'okx', 'kucoin', 'gate', 'mexc', 'coinex'] as const
-type SourceType = typeof _TRADER_SOURCES[number]
 
 interface EquityDataPoint {
   time: string
@@ -37,27 +32,6 @@ interface SnapshotRow {
   pnl: number | null
   captured_at: string
   season_id: string | null
-}
-
-// 查找交易员来源 - single query instead of looping 9 sources × 2 queries
-async function findTraderSource(
-  supabase: ReturnType<typeof createClient<any>>,
-  handle: string
-): Promise<{ traderId: string; source: SourceType } | null> {
-  const decodedHandle = decodeURIComponent(handle)
-  
-  const { data } = await supabase
-    .from('trader_sources')
-    .select('source_trader_id, source')
-    .or(`handle.eq.${decodedHandle},source_trader_id.eq.${decodedHandle}`)
-    .limit(1)
-    .maybeSingle()
-  
-  if (data) {
-    return { traderId: data.source_trader_id, source: data.source as SourceType }
-  }
-  
-  return null
 }
 
 // 生成资金曲线数据
@@ -145,13 +119,9 @@ export async function GET(
       return NextResponse.json({ error: 'Handle is required' }, { status: 400 })
     }
 
-    if (!SUPABASE_URL || !SUPABASE_KEY) {
-      return NextResponse.json({ error: 'Missing Supabase config' }, { status: 500 })
-    }
-
     const decodedHandle = decodeURIComponent(handle)
     const cacheKey = `equity:${decodedHandle.toLowerCase()}`
-    
+
     // 检查缓存
     type CacheType = { equity: EquityDataPoint[]; pnl: PnLDataPoint[]; drawdown: DrawdownDataPoint[] }
     const cached = getServerCache<CacheType>(cacheKey)
@@ -161,14 +131,16 @@ export async function GET(
       return cachedResponse
     }
 
-    const supabase = createClient(SUPABASE_URL, SUPABASE_KEY)
-    
-    // 查找交易员
-    const found = await findTraderSource(supabase, handle)
-    
-    if (!found) {
+    const supabase = getSupabaseAdmin()
+
+    // 查找交易员 via unified resolveTrader
+    const resolved = await resolveTrader(supabase, { handle })
+
+    if (!resolved) {
       return NextResponse.json({ error: 'Trader not found' }, { status: 404 })
     }
+
+    const found = { traderId: resolved.traderKey, source: resolved.platform }
 
     // 获取历史快照数据（最近90天）
     const ninetyDaysAgo = new Date()

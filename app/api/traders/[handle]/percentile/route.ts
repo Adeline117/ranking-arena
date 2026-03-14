@@ -11,6 +11,7 @@ import {
   error,
   handleError,
 } from '@/lib/api'
+import { resolveTrader } from '@/lib/data/unified'
 import { hasFeatureAccess } from '@/lib/types/premium'
 import logger from '@/lib/logger'
 
@@ -53,31 +54,40 @@ export async function GET(
     const resolvedParams = await params
     const handle = decodeURIComponent(resolvedParams.handle)
 
-    // 获取该交易员的数据
-    const { data: trader, error: traderError } = await supabase
-      .from('trader_sources')
-      .select('source_trader_id, source, arena_score, return_score, drawdown_score, stability_score')
-      .eq('source_trader_id', handle)
+    // Resolve trader via unified layer
+    const resolved = await resolveTrader(supabase, { handle })
+    if (!resolved) {
+      return error('Trader not found', 404)
+    }
+
+    // Get trader scores from leaderboard_ranks
+    const { data: traderScores, error: traderError } = await supabase
+      .from('leaderboard_ranks')
+      .select('arena_score, return_score, drawdown_score, stability_score')
+      .eq('source', resolved.platform)
+      .eq('source_trader_id', resolved.traderKey)
+      .eq('season_id', '90D')
       .maybeSingle()
 
-    if (traderError || !trader) {
+    if (traderError || !traderScores) {
       return error('Trader not found', 404)
     }
 
     // 确定同类类型（futures/spot/web3）
     let categoryFilter: string
-    if (trader.source.includes('web3')) {
+    if (resolved.platform.includes('web3')) {
       categoryFilter = 'web3'
-    } else if (trader.source.includes('spot')) {
+    } else if (resolved.platform.includes('spot')) {
       categoryFilter = 'spot'
     } else {
       categoryFilter = 'futures'
     }
 
-    // 获取同类交易员的分数分布
+    // 获取同类交易员的分数分布 from leaderboard_ranks
     const { data: categoryTraders, error: catError } = await supabase
-      .from('trader_sources')
+      .from('leaderboard_ranks')
       .select('arena_score, return_score, drawdown_score, stability_score')
+      .eq('season_id', '90D')
       .or(`source.ilike.%${categoryFilter}%`)
       .not('arena_score', 'is', null)
 
@@ -111,10 +121,10 @@ export async function GET(
     }
 
     const percentile: PercentileData = {
-      overall: calculatePercentile(trader.arena_score, categoryTraders.map(t => t.arena_score)),
-      return: calculatePercentile(trader.return_score, categoryTraders.map(t => t.return_score)),
-      drawdown: calculatePercentile(trader.drawdown_score, categoryTraders.map(t => t.drawdown_score)),
-      stability: calculatePercentile(trader.stability_score, categoryTraders.map(t => t.stability_score)),
+      overall: calculatePercentile(traderScores.arena_score, categoryTraders.map(t => t.arena_score)),
+      return: calculatePercentile(traderScores.return_score, categoryTraders.map(t => t.return_score)),
+      drawdown: calculatePercentile(traderScores.drawdown_score, categoryTraders.map(t => t.drawdown_score)),
+      stability: calculatePercentile(traderScores.stability_score, categoryTraders.map(t => t.stability_score)),
       totalInCategory,
     }
 

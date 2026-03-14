@@ -5,7 +5,8 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@supabase/supabase-js'
+import { getSupabaseAdmin } from '@/lib/supabase/server'
+import { resolveTrader } from '@/lib/data/unified'
 import { getServerCache, setServerCache, CacheTTL } from '@/lib/utils/server-cache'
 import { computeIndicators, IndicatorResults } from '@/lib/utils/technical-analysis'
 import { createLogger } from '@/lib/utils/logger'
@@ -14,39 +15,9 @@ const logger = createLogger('trader-indicators-api')
 
 export const revalidate = 300 // 5分钟
 
-const SUPABASE_URL = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL || ''
-const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || ''
-
-const _TRADER_SOURCES = ['binance', 'binance_web3', 'bybit', 'bitget', 'okx', 'kucoin', 'gate', 'mexc', 'coinex'] as const
-type SourceType = typeof _TRADER_SOURCES[number]
-
 interface SnapshotRow {
   roi: number | null
   captured_at: string
-}
-
-/**
- * 查找交易员来源
- */
-async function findTraderSource(
-  supabase: ReturnType<typeof createClient<any>>,
-  handle: string
-): Promise<{ traderId: string; source: SourceType } | null> {
-  const decodedHandle = decodeURIComponent(handle)
-
-  // Single query instead of looping through 9 sources × 2 queries each
-  const { data } = await supabase
-    .from('trader_sources')
-    .select('source_trader_id, source')
-    .or(`handle.eq.${decodedHandle},source_trader_id.eq.${decodedHandle}`)
-    .limit(1)
-    .maybeSingle()
-
-  if (data) {
-    return { traderId: data.source_trader_id, source: data.source as SourceType }
-  }
-
-  return null
 }
 
 export async function GET(
@@ -67,15 +38,11 @@ export async function GET(
       return NextResponse.json(cached)
     }
 
-    if (!SUPABASE_URL || !SUPABASE_KEY) {
-      return NextResponse.json({ error: 'Server configuration error' }, { status: 500 })
-    }
+    const supabase = getSupabaseAdmin()
 
-    const supabase = createClient(SUPABASE_URL, SUPABASE_KEY)
-
-    // 查找交易员
-    const traderInfo = await findTraderSource(supabase, handle)
-    if (!traderInfo) {
+    // 查找交易员 via unified resolveTrader
+    const resolved = await resolveTrader(supabase, { handle })
+    if (!resolved) {
       return NextResponse.json({ error: 'Trader not found' }, { status: 404 })
     }
 
@@ -83,8 +50,8 @@ export async function GET(
     const { data: snapshots, error } = await supabase
       .from('trader_snapshots')
       .select('roi, captured_at')
-      .eq('source_trader_id', traderInfo.traderId)
-      .eq('source', traderInfo.source)
+      .eq('source_trader_id', resolved.traderKey)
+      .eq('source', resolved.platform)
       .not('roi', 'is', null)
       .order('captured_at', { ascending: true })
       .limit(1000) as { data: SnapshotRow[] | null; error: { message: string } | null }
