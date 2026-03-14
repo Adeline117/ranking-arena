@@ -15,6 +15,7 @@ import {
 } from '@/lib/api'
 import { hasFeatureAccess, getFeatureLimits } from '@/lib/types/premium'
 import logger from '@/lib/logger'
+import { resolveTrader, getTraderDetail, toTraderPageData } from '@/lib/data/unified'
 
 export const runtime = 'nodejs'
 export const preferredRegion = ['sfo1', 'hnd1']
@@ -90,172 +91,59 @@ export async function GET(request: NextRequest) {
       return error(`Maximum ${MAX_TRADERS_TO_COMPARE} traders allowed for comparison`, 400)
     }
 
-    // 查询交易员来源信息 (handle, avatar_url)
-    const { data: sources, error: sourcesError } = await supabase
-      .from('trader_sources')
-      .select('source_trader_id, source, handle, avatar_url')
-      .in('source_trader_id', traderIds)
+    // ── Unified data layer: resolve + fetch detail for each trader ──
+    const includeEquity = searchParams.get('include_equity') === '1'
 
-    if (sourcesError) {
-      logger.error('[compare] 查询 trader_sources Failed:', sourcesError)
-      return error('Failed to fetch trader data', 500)
-    }
+    // Resolve all traders in parallel (max 5)
+    const resolvedTraders = await Promise.all(
+      traderIds.map(id => resolveTrader(supabase, { handle: id }))
+    )
 
-    // 查询交易员快照数据 (performance metrics) — 90D (default), 30D, 7D
-    const [snapshotsRes, snapshots30dRes, snapshots7dRes] = await Promise.all([
-      supabase
-        .from('trader_snapshots')
-        .select('source_trader_id, source, roi, pnl, win_rate, max_drawdown, trades_count, arena_score, profitability_score, risk_control_score, execution_score, arena_score_v3')
-        .in('source_trader_id', traderIds)
-        .not('season_id', 'in', '("7D","30D")')
-        .order('captured_at', { ascending: false }),
-      supabase
-        .from('trader_snapshots')
-        .select('source_trader_id, roi')
-        .in('source_trader_id', traderIds)
-        .eq('season_id', '30D')
-        .order('captured_at', { ascending: false }),
-      supabase
-        .from('trader_snapshots')
-        .select('source_trader_id, roi')
-        .in('source_trader_id', traderIds)
-        .eq('season_id', '7D')
-        .order('captured_at', { ascending: false }),
-    ])
-
-    if (snapshotsRes.error) {
-      logger.error('[compare] 查询 trader_snapshots Failed:', snapshotsRes.error)
-      return error('Failed to fetch trader data', 500)
-    }
-
-    // Deduplicate snapshots - keep latest per trader
-    const snapshotMap = new Map<string, (typeof snapshotsRes.data)[0]>()
-    for (const snap of (snapshotsRes.data || [])) {
-      if (!snapshotMap.has(snap.source_trader_id)) {
-        snapshotMap.set(snap.source_trader_id, snap)
-      }
-    }
-
-    // Period snapshot maps
-    const roi30dMap = new Map<string, number>()
-    for (const snap of (snapshots30dRes.data || [])) {
-      if (!roi30dMap.has(snap.source_trader_id)) {
-        roi30dMap.set(snap.source_trader_id, snap.roi)
-      }
-    }
-    const roi7dMap = new Map<string, number>()
-    for (const snap of (snapshots7dRes.data || [])) {
-      if (!roi7dMap.has(snap.source_trader_id)) {
-        roi7dMap.set(snap.source_trader_id, snap.roi)
-      }
-    }
-
-    // Build source map
-    const sourceMap = new Map<string, typeof sources[0]>()
-    for (const src of (sources || [])) {
-      if (!sourceMap.has(src.source_trader_id)) {
-        sourceMap.set(src.source_trader_id, src)
-      }
-    }
-
-    // Fallback: query leaderboard_ranks for display_name when trader_sources has no handle
-    const missingHandleIds = traderIds.filter(id => {
-      const src = sourceMap.get(id)
-      return !src?.handle
-    })
-    if (missingHandleIds.length > 0) {
-      const { data: lrRows } = await supabase
-        .from('leaderboard_ranks')
-        .select('source_trader_id, display_name, source, avatar_url')
-        .in('source_trader_id', missingHandleIds)
-        .not('display_name', 'is', null)
-        .limit(missingHandleIds.length)
-      for (const lr of (lrRows || [])) {
-        if (!sourceMap.has(lr.source_trader_id)) {
-          sourceMap.set(lr.source_trader_id, {
-            source_trader_id: lr.source_trader_id,
-            source: lr.source,
-            handle: lr.display_name,
-            avatar_url: lr.avatar_url,
+    // Fetch details for resolved traders in parallel
+    const detailResults = await Promise.all(
+      resolvedTraders.map(async (resolved, i) => {
+        if (!resolved) return null
+        try {
+          const detail = await getTraderDetail(supabase, {
+            platform: resolved.platform,
+            traderKey: resolved.traderKey,
           })
-        } else {
-          const existing = sourceMap.get(lr.source_trader_id)!
-          if (!existing.handle && lr.display_name) {
-            existing.handle = lr.display_name
-          }
-          if (!existing.avatar_url && lr.avatar_url) {
-            existing.avatar_url = lr.avatar_url
-          }
-        }
-      }
-    }
+          if (!detail) return null
+          const pageData = toTraderPageData(detail)
+          const perf = pageData.performance as Record<string, unknown> | null
+          const profile = pageData.profile as Record<string, unknown> | null
+          const equityCurve: Array<{ date: string; roi: number }> | undefined = includeEquity
+            ? ((pageData.equityCurve as Record<string, Array<{ date: string; roi: number }>>)?.['90D'] || [])
+            : undefined
 
-    // 获取关注数 — per-trader count queries in parallel (max 5 traders)
-    const followerMap = new Map<string, number>()
-    const countResults = await Promise.all(
-      traderIds.map(async (id) => {
-        const { count } = await supabase
-          .from('trader_follows')
-          .select('id', { count: 'exact', head: true })
-          .eq('trader_id', id)
-        return { id, count: count || 0 }
+          const result: TraderCompareData = {
+            id: traderIds[i],
+            handle: (profile?.handle as string) || traderIds[i],
+            source: (profile?.source as string) || resolved.platform,
+            roi: (perf?.roi_90d as number) ?? 0,
+            roi_7d: perf?.roi_7d as number | undefined,
+            roi_30d: perf?.roi_30d as number | undefined,
+            pnl: perf?.pnl as number | undefined,
+            max_drawdown: perf?.max_drawdown as number | undefined,
+            win_rate: perf?.win_rate as number | undefined,
+            trades_count: perf?.trades_count as number | undefined,
+            arena_score: perf?.arena_score as number | undefined,
+            return_score: perf?.return_score as number | undefined,
+            drawdown_score: perf?.drawdown_score as number | undefined,
+            stability_score: perf?.stability_score as number | undefined,
+            avatar_url: (profile?.avatar_url as string) || undefined,
+            followers: (profile?.followers as number) || 0,
+            ...(includeEquity ? { equity_curve: equityCurve } : {}),
+          }
+          return result
+        } catch (err) {
+          logger.warn(`[compare] Failed to fetch detail for ${traderIds[i]}:`, err)
+          return null
+        }
       })
     )
-    for (const { id, count } of countResults) {
-      followerMap.set(id, count)
-    }
 
-    // Equity curve (optional)
-    const includeEquity = searchParams.get('include_equity') === '1'
-    const equityMap = new Map<string, Array<{ date: string; roi: number }>>()
-    if (includeEquity) {
-      const { data: curves } = await supabase
-        .from('trader_equity_curve')
-        .select('source_trader_id, date, roi')
-        .in('source_trader_id', traderIds)
-        .gte('date', new Date(Date.now() - 90 * 86400000).toISOString().slice(0, 10))
-        .order('date', { ascending: true })
-      for (const row of (curves || [])) {
-        if (!equityMap.has(row.source_trader_id)) {
-          equityMap.set(row.source_trader_id, [])
-        }
-        equityMap.get(row.source_trader_id)!.push({ date: row.date, roi: row.roi })
-      }
-    }
-
-    // Helper: normalise win_rate to percentage
-    const normalizeWinRate = (wr: number | null | undefined): number | undefined => {
-      if (wr == null) return undefined
-      return wr > 0 && wr <= 1 ? wr * 100 : wr
-    }
-
-    // 格式化返回数据
-    const compareData: TraderCompareData[] = traderIds
-      .map(id => {
-        const src = sourceMap.get(id)
-        const snap = snapshotMap.get(id)
-        if (!src && !snap) return null
-        return {
-          id,
-          handle: src?.handle || id,
-          source: src?.source || snap?.source || '',
-          roi: snap?.roi ?? 0,
-          roi_7d: roi7dMap.get(id),
-          roi_30d: roi30dMap.get(id),
-          pnl: snap?.pnl,
-          max_drawdown: snap?.max_drawdown,
-          win_rate: normalizeWinRate(snap?.win_rate),
-          trades_count: snap?.trades_count,
-          arena_score: snap?.arena_score_v3 ?? snap?.arena_score,
-          return_score: snap?.profitability_score,
-          drawdown_score: snap?.risk_control_score,
-          stability_score: snap?.execution_score,
-          avatar_url: src?.avatar_url,
-          followers: followerMap.get(id) || 0,
-          ...(includeEquity ? { equity_curve: equityMap.get(id) || [] } : {}),
-        }
-      })
-      .filter(Boolean) as TraderCompareData[]
+    const compareData = detailResults.filter(Boolean) as TraderCompareData[]
 
     // 按请求的 ID 顺序排序
     const sortedData = traderIds
