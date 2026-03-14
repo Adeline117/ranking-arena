@@ -74,6 +74,7 @@ export const GET = withPublic(
     )
 
     // Apply profanity filter after cache (ensures all cached + fresh data is filtered)
+    // This runs on every request, applying sanitization to both cached and fresh data
     const sanitizedData = {
       ...cachedData,
       traders: cachedData.traders?.map((t: any) => ({

@@ -106,6 +106,39 @@ export async function GET(
         }
       }
     }
+    // If source-specific lookup failed, try building a synthetic TraderSource
+    // from leaderboard_ranks/snapshots_v2 (for platforms without trader_sources entries)
+    if (!found && sourceParam && TRADER_SOURCES.includes(sourceParam as SourceType)) {
+      const { data: lrRow } = await supabase
+        .from('leaderboard_ranks')
+        .select('source_trader_id, avatar_url')
+        .eq('source', sourceParam)
+        .eq('source_trader_id', decodedHandle)
+        .limit(1)
+        .maybeSingle()
+
+      if (lrRow) {
+        const { data: profile } = await supabase
+          .from('trader_profiles_v2')
+          .select('display_name, avatar_url, profile_url, market_type')
+          .eq('platform', sourceParam)
+          .eq('trader_key', decodedHandle)
+          .limit(1)
+          .maybeSingle()
+
+        found = {
+          source: {
+            source_trader_id: decodedHandle,
+            handle: profile?.display_name || decodedHandle,
+            profile_url: profile?.profile_url || null,
+            avatar_url: lrRow.avatar_url || profile?.avatar_url || null,
+            market_type: profile?.market_type || null,
+          } as TraderSource,
+          sourceType: sourceParam as SourceType,
+        }
+      }
+    }
+
     if (!found) {
       found = await findTraderSource(supabase, handle)
     }
