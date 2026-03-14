@@ -3,14 +3,14 @@ import type { Metadata } from 'next'
 const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://www.arenafi.org'
 
 export const metadata: Metadata = {
-  title: 'Help Center — Arena | FAQs & Support',
+  title: 'Help Center | FAQs & Support',
   description:
     'Get help with Arena — Find answers to frequently asked questions about subscriptions, platform features, account settings, trading data, rankings methodology, and more. Complete support documentation.',
   alternates: {
     canonical: `${baseUrl}/help`,
   },
   openGraph: {
-    title: 'Help Center — Arena | FAQs & Support',
+    title: 'Help Center | FAQs & Support',
     description: 'Find answers to frequently asked questions about Arena — subscriptions, features, account settings, trading data, and rankings methodology.',
     url: `${baseUrl}/help`,
     siteName: 'Arena',
@@ -19,7 +19,7 @@ export const metadata: Metadata = {
   },
   twitter: {
     card: 'summary_large_image',
-    title: 'Help Center — Arena | FAQs & Support',
+    title: 'Help Center | FAQs & Support',
     description: 'Find answers to frequently asked questions about Arena platform features and account settings.',
     images: [`${baseUrl}/og-image.png`],
     creator: '@arenafi',

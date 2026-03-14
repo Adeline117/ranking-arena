@@ -6,7 +6,7 @@ import PricingPageClient from './PricingPageClient'
 const logger = createLogger('pricing-page')
 
 export const metadata: Metadata = {
-  title: 'Pricing | Arena',
+  title: 'Pricing',
   description: 'Arena Pro membership plans - unlock advanced trading analytics, alerts, and exclusive features.',
 }
 

@@ -78,7 +78,7 @@ export async function generateMetadata({ params }: { params: Promise<{ id: strin
   const data = await getBookData(id)
 
   if (!data) {
-    return { title: 'Book Not Found | Arena' }
+    return { title: 'Book Not Found' }
   }
 
   const item = data.book
@@ -86,13 +86,13 @@ export async function generateMetadata({ params }: { params: Promise<{ id: strin
   const description = item.description?.slice(0, 160) || `${title} by ${item.author || 'Unknown'}`
 
   return {
-    title: `${title} | Arena Library`,
+    title: `${title} Library`,
     description,
     alternates: {
       canonical: `${BASE_URL}/library/${id}`,
     },
     openGraph: {
-      title: `${title} | Arena Library`,
+      title: `${title} Library`,
       description,
       url: `${BASE_URL}/library/${id}`,
       siteName: 'Arena',
@@ -101,7 +101,7 @@ export async function generateMetadata({ params }: { params: Promise<{ id: strin
     },
     twitter: {
       card: 'summary_large_image',
-      title: `${title} | Arena Library`,
+      title: `${title} Library`,
       description,
     },
   }

@@ -9,7 +9,7 @@ export const metadata: Metadata = {
     canonical: '/library',
   },
   openGraph: {
-    title: 'Library | Arena',
+    title: 'Library',
     description: 'Browse trading books, papers, and whitepapers curated for crypto traders.',
     url: '/library',
     siteName: 'Arena',
@@ -18,7 +18,7 @@ export const metadata: Metadata = {
   },
   twitter: {
     card: 'summary_large_image',
-    title: 'Library | Arena',
+    title: 'Library',
     description: 'Browse trading books, papers, and whitepapers curated for crypto traders.',
     images: ['/og-image.png'],
   },
