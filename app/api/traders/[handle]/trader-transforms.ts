@@ -51,18 +51,15 @@ export async function getTraderDetails(
     trackedSinceResult,
     v3ScoresResult,
   ] = await withTimeout(Promise.all([
-    supabase.from('trader_snapshots')
-      .select('roi, pnl, win_rate, max_drawdown, trades_count, followers, captured_at, season_id, profitability_score, risk_control_score, execution_score, arena_score, arena_score_v3, score_completeness, score_penalty')
+    // Primary: leaderboard_ranks for all periods (replaces 3 separate v1 snapshot queries)
+    supabase.from('leaderboard_ranks')
+      .select('season_id, roi, pnl, win_rate, max_drawdown, trades_count, followers, arena_score, profitability_score, risk_control_score, execution_score, sharpe_ratio, sortino_ratio, profit_factor, calmar_ratio, computed_at')
       .eq('source', sourceType).eq('source_trader_id', traderId)
-      .order('captured_at', { ascending: false }).limit(1).maybeSingle(),
-    supabase.from('trader_snapshots')
-      .select('roi, pnl, win_rate, max_drawdown, trades_count')
-      .eq('source', sourceType).eq('source_trader_id', traderId).eq('season_id', '7D')
-      .order('captured_at', { ascending: false }).limit(1).maybeSingle(),
-    supabase.from('trader_snapshots')
-      .select('roi, pnl, win_rate, max_drawdown, trades_count')
-      .eq('source', sourceType).eq('source_trader_id', traderId).eq('season_id', '30D')
-      .order('captured_at', { ascending: false }).limit(1).maybeSingle(),
+      .limit(5),
+    // Placeholder for 7D (resolved from leaderboard_ranks result below)
+    Promise.resolve({ data: null }),
+    // Placeholder for 30D (resolved from leaderboard_ranks result below)
+    Promise.resolve({ data: null }),
     supabase.from('trader_follows')
       .select('id', { count: 'exact', head: true }).eq('trader_id', traderId),
     supabase.from('user_profiles')
@@ -106,93 +103,72 @@ export async function getTraderDetails(
       .select('sharpe_ratio, copiers_pnl, copiers_count, winning_positions, total_positions, avg_holding_time_hours, avg_profit, avg_loss, aum, period')
       .in('source', getSourceAliases(sourceType)).eq('source_trader_id', traderId)
       .order('captured_at', { ascending: false }).limit(3)),
-    supabase.from('trader_snapshots')
-      .select('captured_at').eq('source', sourceType).eq('source_trader_id', traderId)
-      .order('captured_at', { ascending: true }).limit(1).maybeSingle(),
-    supabase.from('trader_snapshots')
-      .select('profitability_score, risk_control_score, execution_score, arena_score_v3, score_completeness, score_penalty')
-      .eq('source', sourceType).eq('source_trader_id', traderId)
-      .not('profitability_score', 'is', null)
-      .order('captured_at', { ascending: false }).limit(1).maybeSingle(),
+    // trackedSince from leaderboard_ranks computed_at (placeholder, resolved below)
+    Promise.resolve({ data: null }),
+    // v3 scores from leaderboard_ranks (placeholder, resolved below)
+    Promise.resolve({ data: null }),
   ]), 10000)
 
-  let snapshot = snapshotResult.data as SnapshotData | null
-  let snapshot7d = snapshot7dResult.data as SnapshotData | null
-  let snapshot30d = snapshot30dResult.data as SnapshotData | null
+  // Primary data source: leaderboard_ranks (snapshotResult now contains LR rows)
+  const lrRows = (snapshotResult.data || []) as Array<Record<string, unknown>>
+  const mapLR = (lr: Record<string, unknown>): SnapshotData => ({
+    roi: lr.roi as number | null,
+    pnl: lr.pnl as number | null,
+    win_rate: lr.win_rate as number | null,
+    max_drawdown: lr.max_drawdown as number | null,
+    trades_count: lr.trades_count as number | null,
+    followers: lr.followers as number | null,
+    arena_score: lr.arena_score as number | null,
+    profitability_score: lr.profitability_score as number | null,
+    risk_control_score: lr.risk_control_score as number | null,
+    execution_score: lr.execution_score as number | null,
+  })
 
-  // Fallback to leaderboard_ranks when trader_snapshots has no/empty data
+  const lr90 = lrRows.find(r => r.season_id === '90D')
+  const lr30 = lrRows.find(r => r.season_id === '30D')
+  const lr7 = lrRows.find(r => r.season_id === '7D')
+  const lrBest = lr90 || lr30 || lr7 || lrRows[0]
+
+  let snapshot: SnapshotData | null = lrBest ? mapLR(lrBest) : null
+  let snapshot7d: SnapshotData | null = lr7 ? mapLR(lr7) : null
+  let snapshot30d: SnapshotData | null = lr30 ? mapLR(lr30) : null
+
+  // Fallback: trader_snapshots_v2 when leaderboard_ranks has no data
   const isEmptySnapshot = !snapshot ||
     ((snapshot.roi === 0 || snapshot.roi == null) &&
      (snapshot.win_rate === 0 || snapshot.win_rate == null) &&
      (snapshot.pnl == null || Math.abs(snapshot.pnl as number) < 0.01))
   if (isEmptySnapshot) {
-    // Fallback 1: leaderboard_ranks
-    const { data: lrRows } = await supabase
-      .from('leaderboard_ranks')
-      .select('season_id, roi, pnl, win_rate, max_drawdown, trades_count, followers, arena_score, sharpe_ratio, sortino_ratio, profit_factor, calmar_ratio, profitability_score, risk_control_score, execution_score')
-      .eq('source', sourceType).eq('source_trader_id', traderId).limit(5)
+    const { data: v2Rows } = await supabase
+      .from('trader_snapshots_v2')
+      .select('window, roi_pct, pnl_usd, win_rate, max_drawdown, trades_count, followers, copiers, sharpe_ratio, arena_score, created_at')
+      .eq('platform', sourceType)
+      .eq('trader_key', traderId)
+      .order('created_at', { ascending: false })
+      .limit(3)
 
-    if (lrRows && lrRows.length > 0) {
-      const lr90 = lrRows.find((r: Record<string, unknown>) => r.season_id === '90D')
-      const lr30 = lrRows.find((r: Record<string, unknown>) => r.season_id === '30D')
-      const lr7 = lrRows.find((r: Record<string, unknown>) => r.season_id === '7D')
-      const best = lr90 || lr30 || lr7 || lrRows[0]
-
-      const mapLR = (lr: Record<string, unknown>): SnapshotData => ({
-        roi: lr.roi as number | null,
-        pnl: lr.pnl as number | null,
-        win_rate: lr.win_rate as number | null,
-        max_drawdown: lr.max_drawdown as number | null,
-        trades_count: lr.trades_count as number | null,
-        followers: lr.followers as number | null,
-        arena_score: lr.arena_score as number | null,
-        profitability_score: lr.profitability_score as number | null,
-        risk_control_score: lr.risk_control_score as number | null,
-        execution_score: lr.execution_score as number | null,
+    if (v2Rows && v2Rows.length > 0) {
+      const mapV2 = (row: Record<string, unknown>): SnapshotData => ({
+        roi: row.roi_pct as number | null,
+        pnl: row.pnl_usd as number | null,
+        win_rate: row.win_rate as number | null,
+        max_drawdown: row.max_drawdown as number | null,
+        trades_count: row.trades_count as number | null,
+        followers: row.followers as number | null,
+        arena_score: row.arena_score as number | null,
+        profitability_score: null,
+        risk_control_score: null,
+        execution_score: null,
       })
 
-      if (best) snapshot = mapLR(best)
-      if (lr7) snapshot7d = mapLR(lr7)
-      if (lr30) snapshot30d = mapLR(lr30)
-    }
+      const v2_90 = v2Rows.find((r: Record<string, unknown>) => r.window === '90d' || r.window === '90D')
+      const v2_30 = v2Rows.find((r: Record<string, unknown>) => r.window === '30d' || r.window === '30D')
+      const v2_7 = v2Rows.find((r: Record<string, unknown>) => r.window === '7d' || r.window === '7D')
+      const best = v2_90 || v2_30 || v2_7 || v2Rows[0]
 
-    // Fallback 2: trader_snapshots_v2 (Connector path writes here only)
-    const stillEmpty = !snapshot ||
-      ((snapshot.roi === 0 || snapshot.roi == null) &&
-       (snapshot.win_rate === 0 || snapshot.win_rate == null) &&
-       (snapshot.pnl == null || Math.abs(snapshot.pnl as number) < 0.01))
-    if (stillEmpty) {
-      const { data: v2Rows } = await supabase
-        .from('trader_snapshots_v2')
-        .select('window, roi_pct, pnl_usd, win_rate, max_drawdown, trades_count, followers, copiers, sharpe_ratio, arena_score, created_at')
-        .eq('platform', sourceType)
-        .eq('trader_key', traderId)
-        .order('created_at', { ascending: false })
-        .limit(3)
-
-      if (v2Rows && v2Rows.length > 0) {
-        const mapV2 = (row: Record<string, unknown>): SnapshotData => ({
-          roi: row.roi_pct as number | null,
-          pnl: row.pnl_usd as number | null,
-          win_rate: row.win_rate as number | null,
-          max_drawdown: row.max_drawdown as number | null,
-          trades_count: row.trades_count as number | null,
-          followers: row.followers as number | null,
-          arena_score: row.arena_score as number | null,
-          profitability_score: null,
-          risk_control_score: null,
-          execution_score: null,
-        })
-
-        const v2_90 = v2Rows.find((r: Record<string, unknown>) => r.window === '90d' || r.window === '90D')
-        const v2_30 = v2Rows.find((r: Record<string, unknown>) => r.window === '30d' || r.window === '30D')
-        const v2_7 = v2Rows.find((r: Record<string, unknown>) => r.window === '7d' || r.window === '7D')
-        const best = v2_90 || v2_30 || v2_7 || v2Rows[0]
-
-        if (best) snapshot = mapV2(best)
-        if (v2_7) snapshot7d = mapV2(v2_7)
-        if (v2_30) snapshot30d = mapV2(v2_30)
-      }
+      if (best) snapshot = mapV2(best)
+      if (v2_7) snapshot7d = mapV2(v2_7)
+      if (v2_30) snapshot30d = mapV2(v2_30)
     }
   }
 
@@ -215,16 +191,18 @@ export async function getTraderDetails(
   const statsDetail30d = statsDetailList.find(s => s.period === '30D')
   const statsDetail7d = statsDetailList.find(s => s.period === '7D')
 
-  const trackedSince = trackedSinceResult.data?.captured_at || null
+  // trackedSince: use leaderboard_ranks computed_at as proxy
+  const trackedSince = lrBest?.computed_at as string | null ?? null
 
-  const v3Scores = v3ScoresResult.data as {
-    profitability_score: number | null
-    risk_control_score: number | null
-    execution_score: number | null
-    arena_score_v3: number | null
-    score_completeness: string | null
-    score_penalty: number | null
-  } | null
+  // v3 scores: extract from leaderboard_ranks data (already fetched)
+  const v3Scores = lrBest ? {
+    profitability_score: lrBest.profitability_score as number | null,
+    risk_control_score: lrBest.risk_control_score as number | null,
+    execution_score: lrBest.execution_score as number | null,
+    arena_score_v3: null as number | null,
+    score_completeness: null as string | null,
+    score_penalty: null as number | null,
+  } : null
 
   // 获取相似交易员
   const similarTraders = await fetchSimilarTraders(
@@ -278,56 +256,61 @@ export async function getTraderDetails(
   })
 }
 
-// 从 trader_snapshots 获取交易员数据（回退方案）
+// 从 leaderboard_ranks 获取交易员数据（回退方案）
 export async function getTraderDetailsFromSnapshots(
   supabase: SupabaseClient,
   traderId: string,
   sourceType: SourceType
 ) {
   let snapshotQueryResults: unknown[] = [
-    { data: null }, { data: null }, { data: null },
-    { count: 0 }, { data: null }, { data: null },
+    { data: null },
+    { count: 0 }, { data: null },
   ]
   try {
     snapshotQueryResults = await withTimeout(Promise.all([
-      supabase.from('trader_snapshots')
-        .select('roi, pnl, win_rate, max_drawdown, trades_count, followers, captured_at, season_id')
+      supabase.from('leaderboard_ranks')
+        .select('season_id, roi, pnl, win_rate, max_drawdown, trades_count, followers, arena_score, computed_at')
         .eq('source', sourceType).eq('source_trader_id', traderId)
-        .order('captured_at', { ascending: false }).limit(1).maybeSingle(),
-      supabase.from('trader_snapshots')
-        .select('roi, pnl, win_rate, max_drawdown, trades_count')
-        .eq('source', sourceType).eq('source_trader_id', traderId).eq('season_id', '7D')
-        .order('captured_at', { ascending: false }).limit(1).maybeSingle(),
-      supabase.from('trader_snapshots')
-        .select('roi, pnl, win_rate, max_drawdown, trades_count')
-        .eq('source', sourceType).eq('source_trader_id', traderId).eq('season_id', '30D')
-        .order('captured_at', { ascending: false }).limit(1).maybeSingle(),
+        .limit(5),
       supabase.from('trader_follows')
         .select('id', { count: 'exact', head: true }).eq('trader_id', traderId),
-      supabase.from('trader_snapshots')
-        .select('captured_at').eq('source', sourceType).eq('source_trader_id', traderId)
-        .order('captured_at', { ascending: true }).limit(1).maybeSingle(),
       supabase.from('trader_sources')
         .select('avatar_url').eq('source', sourceType).eq('source_trader_id', traderId)
         .limit(1).maybeSingle(),
     ]), 8000)
   } catch {
-    // Intentionally swallowed: parallel snapshot queries timed out (8s), use null defaults for all fields
+    // Intentionally swallowed: parallel queries timed out (8s), use null defaults for all fields
   }
-  const [snapshotResult, snapshot7dResult, snapshot30dResult, arenaFollowersResult, trackedSinceResult, avatarResult] = snapshotQueryResults as [
-    { data: SnapshotData | null },
-    { data: SnapshotData | null },
-    { data: SnapshotData | null },
+  const [lrResult, arenaFollowersResult, avatarResult] = snapshotQueryResults as [
+    { data: Array<Record<string, unknown>> | null },
     { count?: number | null },
-    { data: { captured_at?: string | null } | null },
     { data: { avatar_url?: string | null } | null },
   ]
 
-  const snapshot = snapshotResult.data
-  const snapshot7d = snapshot7dResult.data
-  const snapshot30d = snapshot30dResult.data
+  const lrRows = lrResult.data || []
+  const mapLR = (lr: Record<string, unknown>): SnapshotData => ({
+    roi: lr.roi as number | null,
+    pnl: lr.pnl as number | null,
+    win_rate: lr.win_rate as number | null,
+    max_drawdown: lr.max_drawdown as number | null,
+    trades_count: lr.trades_count as number | null,
+    followers: lr.followers as number | null,
+    arena_score: lr.arena_score as number | null,
+    profitability_score: null,
+    risk_control_score: null,
+    execution_score: null,
+  })
+
+  const lr90 = lrRows.find(r => r.season_id === '90D')
+  const lr30 = lrRows.find(r => r.season_id === '30D')
+  const lr7 = lrRows.find(r => r.season_id === '7D')
+  const lrBest = lr90 || lr30 || lr7 || lrRows[0]
+
+  const snapshot = lrBest ? mapLR(lrBest) : null
+  const snapshot7d = lr7 ? mapLR(lr7) : null
+  const snapshot30d = lr30 ? mapLR(lr30) : null
   const arenaFollowers = arenaFollowersResult.count || 0
-  const trackedSince = trackedSinceResult.data?.captured_at || null
+  const trackedSince = (lrBest?.computed_at as string) || null
   const avatarUrl = avatarResult.data?.avatar_url || null
 
   const score90d = snapshot?.roi != null && snapshot?.pnl != null
@@ -455,7 +438,7 @@ async function fetchSimilarTraders(
     const currentScore = typeof snapshot.arena_score === 'number' ? snapshot.arena_score : parseFloat(String(snapshot.arena_score))
     const scoreRange = Math.max(currentScore * 0.25, 10)
     const { data } = await supabase
-      .from('trader_snapshots')
+      .from('leaderboard_ranks')
       .select('source_trader_id, roi, arena_score, followers')
       .eq('source', sourceType).eq('season_id', '90D')
       .neq('source_trader_id', traderId)
@@ -468,7 +451,7 @@ async function fetchSimilarTraders(
     const currentRoi = snapshot.roi
     const roiRange = Math.max(Math.abs(currentRoi) * 0.3, 20)
     const { data } = await supabase
-      .from('trader_snapshots')
+      .from('leaderboard_ranks')
       .select('source_trader_id, roi, arena_score, followers')
       .eq('source', sourceType).eq('season_id', '90D')
       .neq('source_trader_id', traderId)
