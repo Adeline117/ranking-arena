@@ -404,17 +404,6 @@ const VERIFY_REGISTRY: Record<string, VerifyFn> = {
       }
     ),
 
-  // KuCoin — DEAD: copy trading feature removed 2026-03, all APIs return 404
-  kucoin: () =>
-    Promise.resolve({
-      platform: 'kucoin',
-      healthy: false,
-      latencyMs: 0,
-      failureReason: 'api_error' as FailureReason,
-      details: 'Copy trading feature discontinued (all APIs 404 since 2026-03)',
-      checkedAt: new Date().toISOString(),
-    }),
-
   // CoinEx perpetual copy trading API
   coinex: () =>
     verifyEndpoint(
