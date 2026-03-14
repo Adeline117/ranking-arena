@@ -105,7 +105,7 @@ export class ToobitFuturesConnector extends BaseConnector {
         }
       }
     } catch {
-      // VPS failed, try direct API
+      // Intentionally swallowed: VPS proxy failed, fall through to direct API strategies
     }
 
     // Strategy 2: Direct ranking API (cycles through kind values)
@@ -122,7 +122,7 @@ export class ToobitFuturesConnector extends BaseConnector {
             allTraders.push(this.toTraderSource(entry, id))
           }
         } catch {
-          // Skip failed kind
+          // Intentionally swallowed: individual ranking kind fetch failed, continue with other kinds
         }
       }
     }
@@ -145,7 +145,7 @@ export class ToobitFuturesConnector extends BaseConnector {
           }
         }
       } catch {
-        // Continue with what we have
+        // Intentionally swallowed: identity-type leaders fetch failed, return already-collected results
       }
     }
 

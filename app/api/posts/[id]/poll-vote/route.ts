@@ -39,7 +39,7 @@ export async function GET(request: NextRequest, context: RouteContext) {
         userId = user?.id || null
       }
     } catch {
-      // 未登录，继续
+      // Intentionally swallowed: auth token parse failed, continue as anonymous user (userId = null)
     }
 
     // 获取投票信息

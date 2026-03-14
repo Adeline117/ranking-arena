@@ -312,7 +312,7 @@ export async function getTraderDetailsFromSnapshots(
         .limit(1).maybeSingle(),
     ]), 8000)
   } catch {
-    // timeout — use null defaults
+    // Intentionally swallowed: parallel snapshot queries timed out (8s), use null defaults for all fields
   }
   const [snapshotResult, snapshot7dResult, snapshot30dResult, arenaFollowersResult, trackedSinceResult, avatarResult] = snapshotQueryResults as [
     { data: SnapshotData | null },

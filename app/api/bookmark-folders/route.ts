@@ -24,7 +24,7 @@ export async function GET(request: NextRequest) {
     try {
       await supabase.rpc('ensure_default_bookmark_folder', { p_user_id: user.id })
     } catch {
-      // 函数可能不存在，忽略错误
+      // Intentionally swallowed: RPC function may not be deployed yet, folder creation continues without it
     }
 
     // 获取用户的所有收藏夹

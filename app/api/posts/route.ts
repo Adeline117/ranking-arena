@@ -171,7 +171,7 @@ export async function GET(request: NextRequest) {
           posts = cachedHot.slice(0, limit)
         }
       } catch {
-        // Redis cache miss, continue
+        // Intentionally swallowed: Redis cache miss or error, fall through to DB query
       }
     }
 

@@ -58,7 +58,7 @@ export async function GET(request: NextRequest, context: RouteContext) {
         .eq('folder_id', id)
       subscriberCount = count || 0
     } catch {
-      // 表可能不存在，忽略
+      // Intentionally swallowed: folder_subscriptions table may not exist yet, subscriber count defaults to 0
     }
 
     // 检查访问权限

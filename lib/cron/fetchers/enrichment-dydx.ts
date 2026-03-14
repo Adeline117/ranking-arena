@@ -57,7 +57,7 @@ export async function fetchDydxEquityCurve(
       const data = await fetchJson<DydxHistoricalPnlResponse>(proxyUrl, { timeoutMs: 10000 })
       historicalPnl = data?.historicalPnl
     } catch {
-      // Proxy failed, try direct
+      // Intentionally swallowed: VPS proxy for dYdX historical PnL failed, fall through to direct indexer
     }
 
     if (!historicalPnl || historicalPnl.length === 0) {
@@ -165,7 +165,7 @@ async function fetchSubaccountEquity(address: string): Promise<number | null> {
       return parseFloat(data.subaccount.equity)
     }
   } catch {
-    // Proxy failed
+    // Intentionally swallowed: VPS proxy for dYdX equity failed, fall through to direct indexer
   }
 
   try {

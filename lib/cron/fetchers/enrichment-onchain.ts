@@ -154,7 +154,7 @@ export async function fetchGainsOnchainPositionHistory(
               pnlUsd = pnlValue
             }
           } catch {
-            // Can't parse PnL, leave null
+            // Intentionally swallowed: PnL value unparseable (invalid format or overflow), leave as null
           }
         }
 
