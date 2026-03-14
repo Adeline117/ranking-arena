@@ -55,11 +55,14 @@ const HIGH_PRIORITY = ['binance_futures', 'okx_futures', 'bitget_futures', 'hype
 // Medium priority (enriched with all=true or period=90D)
 // bybit_spot removed: api2.bybit.com endpoints return 404 globally (2026-03-10)
 // kwenta removed: Copin API stopped serving Kwenta data (2026-03-11)
-const MEDIUM_PRIORITY = ['binance_spot', 'htx_futures', 'gateio', 'mexc', 'drift', 'aevo', 'gains']
+// binance_spot moved to end: repeatedly hangs 45-76min, process last to avoid blocking (2026-03-14)
+const MEDIUM_PRIORITY = ['htx_futures', 'gateio', 'mexc', 'drift', 'aevo', 'gains']
 
-// Low priority - dydx (moved here due to consistent 360s timeout blocking other platforms)
-// Still enriched, but runs last to avoid blocking high/medium priority platforms
-const DYDX_PRIORITY = ['dydx']
+// Low priority - platforms that frequently timeout or hang
+// Moved here to prevent blocking high/medium priority platforms
+// dydx: consistent 360s timeout
+// binance_spot: repeatedly hangs 45-76min (2026-03-14)
+const LOW_PRIORITY = ['dydx', 'binance_spot']
 
 // Lower priority (enriched only with all=true)
 const LOWER_PRIORITY: string[] = []
@@ -96,12 +99,12 @@ export async function GET(request: NextRequest) {
     : [periodParam as Period]
 
   // Determine which platforms to enrich
-  // Always include dydx at the END to prevent it from blocking other platforms
+  // Low priority platforms (dydx, binance_spot) run LAST to prevent blocking
   let platforms: string[]
   if (enrichAll) {
-    platforms = [...HIGH_PRIORITY, ...MEDIUM_PRIORITY, ...LOWER_PRIORITY, ...DYDX_PRIORITY]
+    platforms = [...HIGH_PRIORITY, ...MEDIUM_PRIORITY, ...LOWER_PRIORITY, ...LOW_PRIORITY]
   } else {
-    platforms = [...HIGH_PRIORITY, ...MEDIUM_PRIORITY, ...DYDX_PRIORITY]
+    platforms = [...HIGH_PRIORITY, ...MEDIUM_PRIORITY, ...LOW_PRIORITY]
   }
 
   const results: BatchResult[] = []
@@ -116,12 +119,15 @@ export async function GET(request: NextRequest) {
   }, SAFETY_TIMEOUT_MS)
 
   // Per-platform enrichment timeout
-  // EMERGENCY REDUCTION (2026-03-13): All platforms hitting 600s timeout
-  // Reduced from 360s to 180s for onchain, 240s to 120s for CEX
-  // With reduced batch sizes (50/40/30), 180s should be sufficient
+  // EMERGENCY FIX Round 5 (2026-03-14): binance_spot repeatedly hanging 45-76min
+  // ROOT CAUSE: fetchBinanceEquityCurve + fetchBinanceStatsDetail both call API with 15s timeout
+  //             If both hang repeatedly (retry logic), 15s×3 retries×2 calls = 90s+ per trader
+  // FIX: Aggressive timeout reduction for ALL platforms to prevent cascade hangs
+  //      CEX: 30s (single) / 20s (multi) - enough for 1-2 API calls
+  //      Onchain: 60s (single) / 40s (multi) - GraphQL/RPC needs slightly more time
   const ONCHAIN_PLATFORMS = new Set(['gmx', 'dydx', 'jupiter_perps', 'hyperliquid', 'drift', 'aevo', 'gains'])
-  const ENRICH_TIMEOUT_MS = periodsToRun.length > 1 ? 60_000 : 120_000
-  const ONCHAIN_TIMEOUT_MS = periodsToRun.length > 1 ? 90_000 : 180_000
+  const ENRICH_TIMEOUT_MS = periodsToRun.length > 1 ? 20_000 : 30_000  // Was 60s/120s
+  const ONCHAIN_TIMEOUT_MS = periodsToRun.length > 1 ? 40_000 : 60_000  // Was 90s/180s
 
   const functionStart = Date.now()
   // Budget per period: divide 570s (leaving 30s buffer from 600s total) by number of periods
