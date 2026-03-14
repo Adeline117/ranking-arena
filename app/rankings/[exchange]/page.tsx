@@ -46,7 +46,16 @@ export async function generateMetadata({
   params: Promise<{ exchange: string }>
 }): Promise<Metadata> {
   const { exchange } = await params
-  const displayName = EXCHANGE_NAMES[exchange] || exchange
+  
+  // Validate exchange — return 404 metadata for unknown exchanges
+  if (!EXCHANGE_NAMES[exchange]) {
+    return {
+      title: 'Exchange Not Found | Arena',
+      description: 'The requested exchange ranking page does not exist.',
+    }
+  }
+  
+  const displayName = EXCHANGE_NAMES[exchange]
   const sourceType = SOURCE_TYPE_MAP[exchange] || 'futures'
   const labels = TYPE_LABELS[sourceType] || TYPE_LABELS.futures
   const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://www.arenafi.org'
