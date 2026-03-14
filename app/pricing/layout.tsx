@@ -5,7 +5,7 @@ const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://www.arenafi.org'
 export const metadata: Metadata = {
   title: 'Pro 会员',
   description:
-    'Upgrade to Arena Pro for trader alerts, comparison tools, advanced filters, and 1-year historical data. From $4.99/month. Founding Member Lifetime access at $49.99.',
+    'Upgrade to Arena Pro for advanced trader alerts, unlimited comparison tools, enhanced filters, and 1-year historical performance data. Flexible plans starting from $4.99/month. Limited Founding Member Lifetime access available at $49.99.',
   alternates: {
     canonical: `${baseUrl}/pricing`,
   },
