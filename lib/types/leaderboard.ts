@@ -1,6 +1,9 @@
 /**
  * Multi-Exchange Leaderboard Canonical Schema
  *
+ * @deprecated Most types here are superseded by UnifiedTrader in lib/types/unified-trader.ts.
+ * New code should import from unified-trader.ts. These types remain for backward compatibility.
+ *
  * Defines unified types for trader identity, snapshots, timeseries,
  * and data provenance across all supported platforms.
  *

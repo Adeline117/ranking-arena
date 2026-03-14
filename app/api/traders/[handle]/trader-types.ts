@@ -1,5 +1,8 @@
 /**
  * Type definitions for the trader detail API.
+ *
+ * @deprecated Most types here are superseded by UnifiedTrader in lib/types/unified-trader.ts.
+ * New code should import from unified-trader.ts. These types remain for backward compatibility.
  */
 
 /** @deprecated Use UnifiedTrader from '@/lib/types/unified-trader' for application code */

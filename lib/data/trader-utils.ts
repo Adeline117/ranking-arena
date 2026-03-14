@@ -91,21 +91,22 @@ async function findTraderAcrossSourcesInner(
       return null
     }
 
-    // 如果有多个结果，优先返回有快照数据的
+    // 如果有多个结果，优先返回有排名数据的
     if (data.length > 1) {
       const traderIds = data.map(d => d.source_trader_id)
 
-      const { data: snapshots } = await client
-        .from('trader_snapshots')
+      const { data: rankedTraders } = await client
+        .from('leaderboard_ranks')
         .select('source_trader_id')
         .in('source_trader_id', traderIds)
+        .eq('season_id', '90D')
         .limit(traderIds.length)
 
-      if (snapshots && snapshots.length > 0) {
-        const snapshotIds = new Set(snapshots.map(s => s.source_trader_id))
-        const withSnapshot = data.find(d => snapshotIds.has(d.source_trader_id))
-        if (withSnapshot) {
-          return withSnapshot as TraderSourceRecord
+      if (rankedTraders && rankedTraders.length > 0) {
+        const rankedIds = new Set(rankedTraders.map(s => s.source_trader_id))
+        const withRank = data.find(d => rankedIds.has(d.source_trader_id))
+        if (withRank) {
+          return withRank as TraderSourceRecord
         }
       }
     }

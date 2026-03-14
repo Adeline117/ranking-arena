@@ -1,6 +1,9 @@
 /**
  * Trading Platform MVP - Canonical Type Definitions
  * These types are the source of truth for the trading platform data model.
+ *
+ * @deprecated Most types here are DB row types. Use UnifiedTrader from lib/types/unified-trader.ts
+ * for application code. These types remain for backward compatibility with the data layer.
  */
 
 // ============================================
