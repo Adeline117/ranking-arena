@@ -50,6 +50,7 @@ export function safeJsonParse<T>(json: string, fallback: T): T {
   try {
     return JSON.parse(json) as T
   } catch {
+    // Intentionally swallowed: malformed JSON string, return provided fallback value
     return fallback
   }
 }

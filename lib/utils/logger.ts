@@ -15,6 +15,7 @@ function correlationId(): string | undefined {
       // eslint-disable-next-line @typescript-eslint/no-require-imports
       _getCorrelationId = require(mod).getCorrelationId
     } catch {
+      // Intentionally swallowed: correlation module unavailable (Edge Runtime), disable correlation IDs
       _getCorrelationId = () => undefined
     }
   }

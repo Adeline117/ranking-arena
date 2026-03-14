@@ -308,6 +308,7 @@ function isLikelyImageUrl(url: string): boolean {
 
     return false
   } catch {
+    // Intentionally swallowed: invalid URL format, assume not a valid avatar image
     return false
   }
 }

@@ -235,17 +235,17 @@ class ConsentManager {
           detail: { enabled: false } 
         })
         window.dispatchEvent(event)
-      } catch { /* intentionally empty */ }
+      } catch { /* Intentionally swallowed: CustomEvent dispatch may fail in restricted environments */ }
     } else {
       // 启用分析
       delete window['ga-disable-GA_MEASUREMENT_ID']
-      
+
       try {
-        const event = new CustomEvent('consent:analytics', { 
-          detail: { enabled: true } 
+        const event = new CustomEvent('consent:analytics', {
+          detail: { enabled: true }
         })
         window.dispatchEvent(event)
-      } catch { /* intentionally empty */ }
+      } catch { /* Intentionally swallowed: CustomEvent dispatch may fail in restricted environments */ }
     }
   }
 

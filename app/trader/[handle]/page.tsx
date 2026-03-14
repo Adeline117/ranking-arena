@@ -209,7 +209,7 @@ export default async function TraderPage({ params, searchParams }: { params: Pro
       serverTraderData = toTraderPageData(detail)
     }
   } catch {
-    // Inline fetch failed — client will retry via SWR
+    // Intentionally swallowed: SSR trader detail fetch failed, client will retry via SWR
   }
 
   // Build UnregisteredTraderData for initial render

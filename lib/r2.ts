@@ -91,6 +91,7 @@ export async function fileExists(key: string): Promise<boolean> {
     )
     return true
   } catch {
+    // Intentionally swallowed: R2 delete operation failed, non-critical for user flow
     return false
   }
 }

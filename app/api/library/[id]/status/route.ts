@@ -103,7 +103,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
         }
       }
     } catch {
-      // Non-critical: don't fail the status update if post creation fails
+      // Intentionally swallowed: auto-post for reading status is non-critical, status update already succeeded
     }
 
     return NextResponse.json({ success: true, status })

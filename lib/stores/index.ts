@@ -24,15 +24,15 @@ import { persist, createJSONStorage, type StateStorage } from 'zustand/middlewar
 const safeStorage: StateStorage = {
   getItem: (name) => {
     if (typeof window === 'undefined') return null
-    try { return localStorage.getItem(name) } catch { return null }
+    try { return localStorage.getItem(name) } catch { /* Intentionally swallowed: localStorage unavailable (SSR/private mode) */ return null }
   },
   setItem: (name, value) => {
     if (typeof window === 'undefined') return
-    try { localStorage.setItem(name, value) } catch { /* ignore */ }
+    try { localStorage.setItem(name, value) } catch { /* Intentionally swallowed: localStorage full or unavailable */ }
   },
   removeItem: (name) => {
     if (typeof window === 'undefined') return
-    try { localStorage.removeItem(name) } catch { /* ignore */ }
+    try { localStorage.removeItem(name) } catch { /* Intentionally swallowed: localStorage unavailable */ }
   },
 }
 

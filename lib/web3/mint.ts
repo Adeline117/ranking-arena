@@ -306,6 +306,7 @@ function extractTokenIdFromLogs(logs: readonly { topics: readonly string[]; data
       try {
         return BigInt(log.topics[3])
       } catch {
+        // Intentionally swallowed: BigInt parse of topic failed, try next log entry
         continue
       }
     }

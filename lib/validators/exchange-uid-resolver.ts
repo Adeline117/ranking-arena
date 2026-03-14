@@ -53,7 +53,7 @@ async function resolveBinanceUid(credentials: ExchangeCredentials): Promise<UidR
       }
     }
   } catch {
-    // Fall through to next strategy
+    // Intentionally swallowed: futures account UID lookup failed, fall through to next strategy
   }
 
   // Strategy 2: Try /sapi/v1/account/info (requires enable "Spot & Margin Trading" or similar)
@@ -77,7 +77,7 @@ async function resolveBinanceUid(credentials: ExchangeCredentials): Promise<UidR
       }
     }
   } catch {
-    // Fall through
+    // Intentionally swallowed: account info UID lookup failed, fall through to next strategy
   }
 
   // Strategy 3: Try spot account (basic validation - may not return uid)

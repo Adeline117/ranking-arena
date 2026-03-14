@@ -62,6 +62,7 @@ export function validateTimedCsrfToken(token: string): boolean {
 
     return true
   } catch {
+    // Intentionally swallowed: crypto API unavailable, CSRF validation fails safely
     return false
   }
 }

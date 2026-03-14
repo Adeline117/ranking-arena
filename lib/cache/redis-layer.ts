@@ -532,6 +532,7 @@ export async function checkCacheHealth(): Promise<{
       await redis.ping()
       redisLatency = Date.now() - start
     } catch {
+      // Intentionally swallowed: Redis ping failed, mark as unavailable for health check
       redisAvailable = false
     }
   }
