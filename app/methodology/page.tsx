@@ -1,10 +1,35 @@
 import { Metadata } from 'next'
 import Link from 'next/link'
 
+const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://www.arenafi.org'
+
 export const metadata: Metadata = {
-  title: 'How Arena Ranks Traders | Methodology',
+  title: 'Arena Score Methodology — How We Rank Crypto Traders | Arena',
   description:
-    'Learn how Arena collects data from 30+ exchanges and calculates the Arena Score to rank crypto traders.',
+    'Learn how Arena collects performance data from 30+ exchanges and calculates the Arena Score to rank crypto traders. Understand our methodology for evaluating ROI, win rate, risk metrics, and overall trader quality.',
+  alternates: {
+    canonical: `${baseUrl}/methodology`,
+  },
+  openGraph: {
+    title: 'Arena Score Methodology — How We Rank Crypto Traders',
+    description: 'Learn how Arena Score is calculated from 30+ exchanges to rank the top crypto traders. Transparent methodology for ROI, win rate, and risk evaluation.',
+    url: `${baseUrl}/methodology`,
+    siteName: 'Arena',
+    type: 'website',
+    images: [{ 
+      url: `${baseUrl}/og-image.png`, 
+      width: 1200, 
+      height: 630, 
+      alt: 'Arena Methodology' 
+    }],
+  },
+  twitter: {
+    card: 'summary_large_image',
+    title: 'Arena Score Methodology — How We Rank Traders',
+    description: 'Learn how Arena Score is calculated from 30+ exchanges to rank the top crypto traders.',
+    images: [`${baseUrl}/og-image.png`],
+    creator: '@arenafi',
+  },
 }
 
 export default function MethodologyPage() {

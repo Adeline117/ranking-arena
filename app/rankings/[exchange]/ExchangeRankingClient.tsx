@@ -460,7 +460,7 @@ export default function ExchangeRankingClient({
           <div
             style={{
               display: 'grid',
-              gridTemplateColumns: '40px 1fr 80px 80px 70px 70px 70px',
+              gridTemplateColumns: '40px minmax(180px, 0.35fr) 90px 80px 80px 80px 90px',
               gap: 8,
               padding: '12px 16px',
               fontSize: 12,
@@ -492,7 +492,7 @@ export default function ExchangeRankingClient({
                 href={`/trader/${encodeURIComponent(t.trader_key)}?platform=${t.platform}`}
                 style={{
                   display: 'grid',
-                  gridTemplateColumns: '40px 1fr 80px 80px 70px 70px 70px',
+                  gridTemplateColumns: '40px minmax(180px, 0.35fr) 90px 80px 80px 80px 90px',
                   gap: 8,
                   padding: '10px 16px',
                   alignItems: 'center',
