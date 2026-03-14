@@ -19,7 +19,7 @@ import TraderHeader from '@/app/components/trader/TraderHeader'
 import TraderTabs from '@/app/components/trader/TraderTabs'
 import OverviewPerformanceCard, { type ExtendedPerformance } from '@/app/components/trader/OverviewPerformanceCard'
 import { RankingSkeleton } from '@/app/components/ui/Skeleton'
-import { formatDisplayName } from '@/app/components/ranking/utils'
+import { formatDisplayName, formatROI } from '@/app/components/ranking/utils'
 import { JsonLd } from '@/app/components/Providers/JsonLd'
 import {
   generateTraderProfilePageSchema,
@@ -259,7 +259,7 @@ export default function TraderProfileClient({ data, serverTraderData }: TraderPr
           <span className="mini-name">{displayName}</span>
           {data.roi != null && (
             <span className="mini-roi" style={{ color: data.roi >= 0 ? 'var(--color-success)' : 'var(--color-error)' }}>
-              {data.roi >= 0 ? '+' : ''}{data.roi.toFixed(1)}%
+              {formatROI(data.roi)}
             </span>
           )}
         </div>
