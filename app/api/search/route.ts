@@ -69,7 +69,7 @@ async function handleTrendingSearch(supabase: Parameters<Parameters<typeof withP
       return success(cached)
     }
   } catch {
-    // cache miss
+    // Intentionally swallowed: Redis cache miss or unavailable, fall through to DB query
   }
 
   const sevenDaysAgo = new Date()
@@ -132,7 +132,7 @@ async function handleTrendingSearch(supabase: Parameters<Parameters<typeof withP
   try {
     await cacheSet(cacheKey, result, { ttl: 3600 })
   } catch {
-    // non-critical
+    // Intentionally swallowed: cache write failure is non-critical, response already built
   }
 
   return success(result, 200, {
@@ -268,7 +268,7 @@ export const GET = withPublic(
         return success(cached)
       }
     } catch {
-      // 缓存未命中
+      // Intentionally swallowed: Redis cache miss or unavailable, fall through to DB query
     }
 
     const sanitizedQuery = query
@@ -403,7 +403,7 @@ export const GET = withPublic(
     try {
       await cacheSet(cacheKey, result, { ttl: 300 })
     } catch {
-      // 非关键
+      // Intentionally swallowed: cache write failure is non-critical, response already built
     }
 
     // 搜索分析（异步）

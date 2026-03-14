@@ -104,7 +104,7 @@ async function discoverRankingsInline(): Promise<BatchResult> {
     try {
       await supabase.rpc('release_stale_locks')
     } catch {
-      // RPC not deployed — skip
+      // Intentionally swallowed: release_stale_locks RPC not deployed, stale locks will expire naturally
     }
 
     return { name, status: 'success', durationMs: Date.now() - start, detail: { jobs_created: jobs.length, blocked: Array.from(blockedPlatforms) } }

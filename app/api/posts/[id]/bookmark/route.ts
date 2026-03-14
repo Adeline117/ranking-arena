@@ -114,7 +114,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
         )
       }
     } catch {
-      // 没有请求体，使用默认收藏夹或取消收藏
+      // Intentionally swallowed: no request body or invalid JSON, proceed with default folder / toggle bookmark
     }
 
     // 检查是否已收藏

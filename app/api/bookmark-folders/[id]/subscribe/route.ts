@@ -172,7 +172,7 @@ export async function DELETE(request: NextRequest, context: RouteContext) {
         .eq('folder_id', folderId)
       subscriberCount = count || 0
     } catch {
-      // 忽略错误
+      // Intentionally swallowed: subscriber count query failed, return 0 as default
     }
 
     return success({

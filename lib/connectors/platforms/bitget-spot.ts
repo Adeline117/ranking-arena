@@ -123,7 +123,7 @@ export class BitgetSpotConnector extends BaseConnector {
         }
       }
     } catch {
-      // VPS failed, try direct API
+      // Intentionally swallowed: VPS scraper failed, fall through to direct API strategy
     }
 
     // Strategy 2: Direct POST to /v1/copy/spot/trader/list (CF protected, works from Vercel hnd1)
@@ -229,7 +229,7 @@ export class BitgetSpotConnector extends BaseConnector {
         return { profile, fetched_at: new Date().toISOString() }
       }
     } catch {
-      // Profile fetch failed
+      // Intentionally swallowed: trader profile enrichment failed, return null to skip
     }
 
     return null
@@ -272,7 +272,7 @@ export class BitgetSpotConnector extends BaseConnector {
         return { metrics, quality_flags, fetched_at: new Date().toISOString() }
       }
     } catch {
-      // Snapshot fetch failed
+      // Intentionally swallowed: historical snapshot fetch failed, return null to skip
     }
 
     return null

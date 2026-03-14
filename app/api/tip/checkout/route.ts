@@ -142,7 +142,7 @@ export async function POST(request: NextRequest) {
           customerId = session.customer
         }
       } catch {
-        // 忽略错误，将创建新客户
+        // Intentionally swallowed: existing Stripe session lookup failed, will create new customer below
       }
     }
 
