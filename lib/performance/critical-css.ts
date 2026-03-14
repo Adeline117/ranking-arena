@@ -213,7 +213,7 @@ export function getResourceHints(): Array<{ rel: string; href: string; crossOrig
       upstashOrigin = new URL(upstashUrl).origin
     }
   } catch {
-    // Ignore invalid URL
+    // Intentionally swallowed: invalid Upstash URL format, preconnect hint will be omitted
   }
 
   const hints: Array<{ rel: string; href: string; crossOrigin?: 'anonymous' | 'use-credentials' | '' }> = [

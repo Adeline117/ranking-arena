@@ -217,6 +217,7 @@ export function needsProxy(url: string | null | undefined): boolean {
     const hostname = new URL(url).hostname.toLowerCase()
     return PROXY_REQUIRED_DOMAINS.some(domain => hostname.includes(domain))
   } catch {
+    // Intentionally swallowed: invalid URL format, no proxy needed
     return false
   }
 }

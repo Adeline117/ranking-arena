@@ -51,7 +51,7 @@ async function isDeduplicated(key: string): Promise<boolean> {
       return false
     }
   } catch {
-    // Redis not available — fall through to in-memory
+    // Intentionally swallowed: Redis unavailable for dedup, falling through to in-memory rate limit
   }
 
   // In-memory fallback (won't survive Vercel cold starts, but better than nothing)
@@ -71,7 +71,7 @@ async function clearDedup(key: string): Promise<void> {
       await redis.del(`alert:dedup:${key}`)
     }
   } catch {
-    // Best effort
+    // Intentionally swallowed: Redis dedup clear is best-effort, in-memory always cleared below
   }
   inMemoryMap.delete(key)
 }
@@ -133,7 +133,7 @@ export async function sendTelegramAlert(opts: TelegramAlertOptions): Promise<boo
     try {
       await recordWarningForDigest(opts)
     } catch {
-      // Best effort
+      // Intentionally swallowed: warning digest recording is best-effort, individual alert still logged above
     }
     return false
   }
@@ -245,7 +245,7 @@ async function recordWarningForDigest(opts: TelegramAlertOptions): Promise<void>
     const cutoff = Date.now() - 24 * 60 * 60 * 1000
     await redis.zremrangebyscore('alert:warnings:24h', 0, cutoff)
   } catch {
-    // Best effort
+    // Intentionally swallowed: Redis warning aggregation is best-effort, alerts still sent via primary channel
   }
 }
 

@@ -474,7 +474,7 @@ export async function runEnrichment(params: {
                   }
                 }
               } catch {
-                // Non-critical — wallet enrichment failure shouldn't block
+                // Intentionally swallowed: wallet enrichment is optional, main trader data already upserted
               }
             }
 

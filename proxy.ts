@@ -463,7 +463,7 @@ export async function proxy(request: NextRequest) {
             return rateLimitResponse
           }
         } catch {
-          // 限流检查失败时放行 (fail-open)
+          // Intentionally swallowed: rate limit check failure uses fail-open policy to avoid blocking legitimate requests
         }
       }
     }

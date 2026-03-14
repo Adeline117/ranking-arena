@@ -57,7 +57,7 @@ export async function getTradersArenaFollowersCount(
       }
     }
   } catch {
-    // Keep all as 0 on error
+    // Intentionally swallowed: follower count lookup is non-critical, all counts default to 0
   }
 
   return resultMap

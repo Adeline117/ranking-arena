@@ -107,7 +107,8 @@ export async function fetchUniswapTopTraders(
         addrMap.set(addr, prev)
       }
     } catch {
-      break // subgraph may limit pages
+      // Intentionally swallowed: subgraph pagination limit reached or RPC error, return collected data
+      break
     }
   }
 

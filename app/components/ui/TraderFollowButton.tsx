@@ -94,7 +94,7 @@ export default function TraderFollowButton({ traderId, userId, initialFollowing 
         onFollowChange?.(actualFollowing)
       }
     } catch {
-      // Non-critical: follow state refresh failed, UI will use cached/optimistic value
+      // Intentionally swallowed: follow state refresh failed, UI uses cached/optimistic value
     }
   }, [userId, traderId, getAuthHeadersAsync, onFollowChange])
 

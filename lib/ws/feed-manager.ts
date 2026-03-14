@@ -171,7 +171,7 @@ export class FeedManager extends EventEmitter {
       try {
         sub(event, data)
       } catch {
-        // 订阅者错误不应中断其他订阅者
+        // Intentionally swallowed: subscriber callback error must not break iteration over other subscribers
       }
     }
   }

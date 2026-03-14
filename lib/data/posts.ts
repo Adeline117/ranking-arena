@@ -381,7 +381,7 @@ export async function createPost(
     authorScore = result?.data?.reputation_score ?? 0
     authorVerified = result?.data?.is_verified_trader ?? false
   } catch {
-    // Non-critical: proceed without reputation data
+    // Intentionally swallowed: reputation score lookup failed, post will be created with default score 0
   }
 
   const { data, error } = await supabase

@@ -126,7 +126,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
           }
         }
       } catch {
-        // Non-critical
+        // Intentionally swallowed: auto-post creation for library rating is non-critical side effect
       }
     }
 

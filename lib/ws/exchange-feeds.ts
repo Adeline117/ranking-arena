@@ -331,7 +331,7 @@ export class ExchangeFeed extends EventEmitter {
           this.emit('ticker', ticker)
         }
       } catch {
-        // 忽略解析错误 (如 Bybit pong 响应)
+        // Intentionally swallowed: malformed WS message (e.g., Bybit pong response), skip non-ticker data
       }
     }
 

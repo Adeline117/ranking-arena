@@ -66,11 +66,11 @@ export function useWallet(): WalletState {
             setHasNFT(nft)
           }
         } catch {
-          // NFT check is non-critical
+          // Intentionally swallowed: NFT ownership check is optional enrichment
         }
       }
     } catch {
-      // Fail silently
+      // Intentionally swallowed: wallet connection check failed, loading state will clear via finally
     } finally {
       setIsLoading(false)
     }

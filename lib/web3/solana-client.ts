@@ -63,6 +63,7 @@ export function isSolanaAddress(address: string): boolean {
     const key = new PublicKey(address)
     return PublicKey.isOnCurve(key.toBytes())
   } catch {
+    // Intentionally swallowed: invalid base58 or off-curve key means not a valid Solana address
     return false
   }
 }

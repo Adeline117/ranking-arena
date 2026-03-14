@@ -270,6 +270,7 @@ export async function getUserTokenId(walletAddress: string): Promise<bigint | nu
 
     return tokenId
   } catch {
+    // Intentionally swallowed: tokenOfOwnerByIndex call failed, wallet may not own any NFTs
     return null
   }
 }
