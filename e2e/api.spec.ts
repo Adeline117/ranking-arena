@@ -60,7 +60,9 @@ test.describe('API 端点测试', () => {
       const response = await request.get(`/api/traders/${encodeURIComponent(handle)}`)
       
       if (response.ok()) {
-        const data = await response.json()
+        const json = await response.json()
+        // API wraps response in { success, data: { profile, performance, ... } }
+        const data = json.data || json
         expect(data).toHaveProperty('profile')
         expect(data).toHaveProperty('performance')
       }
