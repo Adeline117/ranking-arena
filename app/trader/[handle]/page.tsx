@@ -219,7 +219,7 @@ async function fetchUnregisteredTrader(handle: string, platform?: string): Promi
           .maybeSingle()
 
         return {
-          handle: profile?.display_name || handle,
+          handle: handle, // Keep URL handle to prevent redirect (display_name differs from source_trader_id)
           avatar_url: directRank.avatar_url || profile?.avatar_url || null,
           source: platform,
           source_trader_id: handle,
@@ -261,7 +261,7 @@ async function fetchUnregisteredTrader(handle: string, platform?: string): Promi
           .maybeSingle()
 
         return {
-          handle: profile?.display_name || handle,
+          handle: handle, // Keep URL handle to prevent redirect
           avatar_url: profile?.avatar_url || null,
           source: platform,
           source_trader_id: handle,
