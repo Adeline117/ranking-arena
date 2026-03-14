@@ -42,6 +42,7 @@
     "check:tables": "node scripts/check_tables.mjs",
     "check:enrichment": "node scripts/check_enrichment.mjs",
     "check:scripts-boundary": "node scripts/check-production-boundary.mjs",
+    "lighthouse": "node scripts/lighthouse-test.mjs",
     "backfill:24h": "npx tsx scripts/backfill-window-24h.ts",
     "backfill:risk:7d30d": "npx tsx scripts/backfill-risk-metrics-7d30d.ts",
     "clean:outliers": "npx tsx scripts/clean-mdd-roi-outliers.ts",
