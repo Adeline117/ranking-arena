@@ -114,6 +114,7 @@ export async function computeHotTraders(limit = 50): Promise<HotTrader[]> {
   const typedRanks = ranks as unknown as RankRow[]
 
   // 2. Fetch recent snapshots for momentum calculation
+  // Use trader_snapshots_v2 (the active data pipeline table) instead of legacy trader_snapshots
   const cutoff = new Date(Date.now() - LOOKBACK_HOURS * 3600 * 1000).toISOString()
   const traderIds = typedRanks.map(r => r.source_trader_id)
 
@@ -124,14 +125,22 @@ export async function computeHotTraders(limit = 50): Promise<HotTrader[]> {
   for (let i = 0; i < traderIds.length; i += batchSize) {
     const batch = traderIds.slice(i, i + batchSize)
     const { data: snaps } = await supabase
-      .from('trader_snapshots')
-      .select('source, source_trader_id, roi, followers, trades_count, captured_at')
-      .in('source_trader_id', batch)
-      .gte('captured_at', cutoff)
-      .order('captured_at', { ascending: true })
+      .from('trader_snapshots_v2')
+      .select('platform, trader_key, roi_pct, followers, trades_count, created_at')
+      .in('trader_key', batch)
+      .gte('created_at', cutoff)
+      .order('created_at', { ascending: true })
 
     if (snaps) {
-      allSnapshots.push(...(snaps as unknown as SnapshotRow[]))
+      // Map v2 fields to SnapshotRow shape
+      allSnapshots.push(...(snaps as unknown as Array<Record<string, unknown>>).map(s => ({
+        source: String(s.platform || ''),
+        source_trader_id: String(s.trader_key || ''),
+        roi: s.roi_pct != null ? Number(s.roi_pct) : null,
+        followers: s.followers != null ? Number(s.followers) : null,
+        trades_count: s.trades_count != null ? Number(s.trades_count) : null,
+        captured_at: String(s.created_at || ''),
+      })))
     }
   }
 

@@ -11,6 +11,7 @@
 import type { Metadata } from 'next'
 import { redirect, notFound } from 'next/navigation'
 import { getSupabaseAdmin } from '@/lib/supabase/server'
+import { resolveTrader as resolveTraderUnified } from '@/lib/data/unified'
 import WrappedCardClient from '@/app/wrapped/[handle]/WrappedCardClient'
 import type { WrappedTraderData } from '@/app/wrapped/[handle]/page'
 
@@ -31,7 +32,7 @@ interface Props {
   searchParams: Promise<{ platform?: string; window?: string }>
 }
 
-async function resolveTrader(
+async function resolveTraderForWrapped(
   traderKey: string,
   platform?: string,
   windowParam = '7d',
@@ -44,49 +45,32 @@ async function resolveTrader(
     }
     const seasonId = seasonMap[windowParam] ?? '7D'
 
-    let tsQuery = supabase
-      .from('trader_sources')
-      .select('handle, display_name, source, source_trader_id')
-      .eq('source_trader_id', traderKey)
-      .limit(1)
+    // Use unified resolveTrader instead of direct trader_sources queries
+    const resolved = await resolveTraderUnified(supabase, { handle: traderKey, platform })
 
-    if (platform) tsQuery = tsQuery.eq('source', platform)
-    let { data: ts } = await tsQuery.maybeSingle()
+    if (!resolved) return { handle: null, data: null }
 
-    if (!ts) {
-      let hQuery = supabase
-        .from('trader_sources')
-        .select('handle, display_name, source, source_trader_id')
-        .ilike('handle', traderKey)
-        .limit(1)
-      if (platform) hQuery = hQuery.eq('source', platform)
-      const { data: byHandle } = await hQuery.maybeSingle()
-      ts = byHandle
-    }
-
-    if (!ts) return { handle: null, data: null }
-
-    const effectivePlatform = platform || ts.source
+    const effectivePlatform = platform || resolved.platform
     const platformLabel = PLATFORM_LABELS[effectivePlatform]
-      ?? effectivePlatform.replace(/_/g, ' ').replace(/\\b\\w/g, (c: string) => c.toUpperCase())
+      ?? effectivePlatform.replace(/_/g, ' ').replace(/\b\w/g, (c: string) => c.toUpperCase())
 
     const { data: lr } = await supabase
       .from('leaderboard_ranks')
       .select('rank, roi, win_rate, arena_score, max_drawdown, season_id')
-      .eq('source', ts.source)
-      .eq('source_trader_id', ts.source_trader_id)
+      .eq('source', resolved.platform)
+      .eq('source_trader_id', resolved.traderKey)
       .eq('season_id', seasonId)
       .maybeSingle()
 
     const { count } = await supabase
       .from('leaderboard_ranks')
       .select('*', { count: 'exact', head: true })
-      .eq('source', ts.source)
+      .eq('source', resolved.platform)
       .eq('season_id', seasonId)
 
     const data: WrappedTraderData = {
-      handle: ts.handle || traderKey,
-      displayName: ts.display_name || ts.handle || traderKey,
+      handle: resolved.handle || traderKey,
+      displayName: resolved.handle || traderKey,
       platform: effectivePlatform,
       platformLabel,
       rank: lr?.rank ?? null,
@@ -98,7 +82,7 @@ async function resolveTrader(
       window: seasonId,
     }
 
-    return { handle: ts.handle || null, data }
+    return { handle: resolved.handle || null, data }
   } catch (error) {
     console.warn('[share/rank] resolve failed:', error instanceof Error ? error.message : String(error))
     return { handle: null, data: null }
@@ -110,7 +94,7 @@ export async function generateMetadata({ params, searchParams }: Props): Promise
   const { platform, window: windowParam = '7d' } = await searchParams
   const decoded = decodeURIComponent(trader_key)
 
-  const { data } = await resolveTrader(decoded, platform, windowParam)
+  const { data } = await resolveTraderForWrapped(decoded, platform, windowParam)
 
   const name = data?.displayName || decoded
   const rank = data?.rank
@@ -172,7 +156,7 @@ export default async function ShareRankPage({ params, searchParams }: Props) {
   const { platform, window: windowParam = '7d' } = await searchParams
   const decoded = decodeURIComponent(trader_key)
 
-  const { handle, data } = await resolveTrader(decoded, platform, windowParam)
+  const { handle, data } = await resolveTraderForWrapped(decoded, platform, windowParam)
 
   // If we found a handle, redirect to the canonical /wrapped/ URL
   if (handle) {

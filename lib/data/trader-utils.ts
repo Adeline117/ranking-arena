@@ -1,4 +1,8 @@
 /**
+ * @deprecated Use `lib/data/unified.ts` (specifically `resolveTrader()`) instead. This file
+ * contains legacy trader lookup utilities that query trader_sources directly. They are still
+ * used by trader-queries.ts but should not be used in new code.
+ *
  * Core utility functions for trader data lookups.
  * Eliminates duplicate code with unified source-finding logic.
  */

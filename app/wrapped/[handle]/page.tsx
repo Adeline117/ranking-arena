@@ -9,6 +9,7 @@
 import type { Metadata } from 'next'
 import { notFound } from 'next/navigation'
 import { getSupabaseAdmin } from '@/lib/supabase/server'
+import { resolveTrader } from '@/lib/data/unified'
 import WrappedCardClient from './WrappedCardClient'
 
 const BASE_URL = process.env.NEXT_PUBLIC_APP_URL || process.env.NEXT_PUBLIC_SITE_URL || 'https://www.arenafi.org'
@@ -68,30 +69,20 @@ async function fetchWrappedData(handle: string, platform?: string, windowParam =
     }
     const seasonId = seasonMap[windowParam] ?? '7D'
 
-    // Fetch trader_sources row (case-insensitive handle match)
-    let tsQuery = supabase
-      .from('trader_sources')
-      .select('handle, display_name, source, source_trader_id, avatar_url')
-      .ilike('handle', handle)
-      .limit(1)
+    // Use unified resolveTrader instead of direct trader_sources query
+    const resolved = await resolveTrader(supabase, { handle, platform })
 
-    if (platform) {
-      tsQuery = tsQuery.eq('source', platform)
-    }
+    if (!resolved) return null
 
-    const { data: ts } = await tsQuery.maybeSingle()
-
-    if (!ts) return null
-
-    const effectivePlatform = platform || ts.source
+    const effectivePlatform = platform || resolved.platform
     const platformLabel = PLATFORM_LABELS[effectivePlatform] ?? effectivePlatform.replace(/_/g, ' ').replace(/\b\w/g, (c: string) => c.toUpperCase())
 
     // Fetch leaderboard rank for this trader + window
     const { data: lr } = await supabase
       .from('leaderboard_ranks')
       .select('rank, roi, win_rate, arena_score, max_drawdown, season_id')
-      .eq('source', ts.source)
-      .eq('source_trader_id', ts.source_trader_id)
+      .eq('source', resolved.platform)
+      .eq('source_trader_id', resolved.traderKey)
       .eq('season_id', seasonId)
       .maybeSingle()
 
@@ -99,12 +90,12 @@ async function fetchWrappedData(handle: string, platform?: string, windowParam =
     const { count } = await supabase
       .from('leaderboard_ranks')
       .select('*', { count: 'exact', head: true })
-      .eq('source', ts.source)
+      .eq('source', resolved.platform)
       .eq('season_id', seasonId)
 
     return {
-      handle: ts.handle || handle,
-      displayName: ts.display_name || ts.handle || handle,
+      handle: resolved.handle || handle,
+      displayName: resolved.handle || handle,
       platform: effectivePlatform,
       platformLabel,
       rank: lr?.rank ?? null,

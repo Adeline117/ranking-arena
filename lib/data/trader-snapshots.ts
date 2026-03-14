@@ -1,4 +1,8 @@
 /**
+ * @deprecated Use `lib/data/unified.ts` instead. This file contains legacy trader snapshot
+ * query functions that directly query trader_snapshots v1 and trader_sources. They are kept
+ * for backward compatibility but should not be used in new code.
+ *
  * 交易员快照数据查询 - 优化版
  */
 

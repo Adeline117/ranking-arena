@@ -65,7 +65,7 @@ export function useHotPageData() {
       try {
         const { data, error: supabaseError } = await supabase
           .from('leaderboard_ranks')
-          .select('source, source_trader_id, roi, arena_score, followers, win_rate')
+          .select('source, source_trader_id, handle, roi, arena_score, followers, win_rate')
           .not('arena_score', 'is', null)
           .gt('arena_score', 0)
           .order('arena_score', { ascending: false })
@@ -85,32 +85,23 @@ export function useHotPageData() {
           return true
         }).slice(0, 10)
 
-        const traderKeys = uniqueData.map(t => t.source_trader_id)
-        const handleMap: Record<string, string> = {}
-        if (traderKeys.length > 0) {
-          const { data: sources } = await supabase
-            .from('trader_sources')
-            .select('source_trader_id, handle')
-            .in('source_trader_id', traderKeys)
-          if (sources) {
-            for (const s of sources) {
-              const h = s.handle
-              const sid = s.source_trader_id
-              const isAddr = (v: string) => /^0x[0-9a-fA-F]{10,}$/.test(v)
-              const fmtAddr = (v: string) => `${v.slice(0, 6)}...${v.slice(-4)}`
-              handleMap[sid] = h && !isAddr(h) ? h : h ? fmtAddr(h) : fmtAddr(sid)
-            }
-          }
-        }
+        // Use handle from leaderboard_ranks directly (no trader_sources lookup needed)
+        const isAddr = (v: string) => /^0x[0-9a-fA-F]{10,}$/.test(v)
+        const fmtAddr = (v: string) => `${v.slice(0, 6)}...${v.slice(-4)}`
 
-        setTraders(uniqueData.map(item => ({
-          id: item.source_trader_id || '',
-          handle: handleMap[item.source_trader_id] || (item.source_trader_id ? `${item.source_trader_id.slice(0, 6)}...${item.source_trader_id.slice(-4)}` : null),
-          roi: typeof item.roi === 'string' ? parseFloat(item.roi) : (item.roi || 0),
-          win_rate: typeof item.win_rate === 'string' ? parseFloat(item.win_rate) : (item.win_rate || 0),
-          followers: item.followers || 0,
-          source: item.source || 'binance',
-        })))
+        setTraders(uniqueData.map(item => {
+          const h = (item as Record<string, unknown>).handle as string | null
+          const sid = item.source_trader_id || ''
+          const displayHandle = h && !isAddr(h) ? h : h ? fmtAddr(h) : (sid ? fmtAddr(sid) : null)
+          return {
+            id: sid,
+            handle: displayHandle,
+            roi: typeof item.roi === 'string' ? parseFloat(item.roi) : (item.roi || 0),
+            win_rate: typeof item.win_rate === 'string' ? parseFloat(item.win_rate) : (item.win_rate || 0),
+            followers: item.followers || 0,
+            source: item.source || 'binance',
+          }
+        }))
       } catch (error) {
         logger.error('Trader load error:', error)
         setTraders([])
