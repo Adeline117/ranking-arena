@@ -3,15 +3,15 @@ import type { Metadata } from 'next'
 const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://www.arenafi.org'
 
 export const metadata: Metadata = {
-  title: 'Bot Rankings - Arena',
+  title: 'Crypto Trading Bot Rankings — Arena | AI Agents, DeFi Vaults & TG Bots',
   description:
-    'Discover top-performing crypto trading bots, AI agents, and on-chain vaults. Compare ROI, AUM, and risk metrics across TG bots, DeFi vaults, and AI trading agents.',
+    'Discover and compare top-performing crypto trading bots, AI agents, and on-chain vaults. Rankings by ROI, AUM, TVL, and Arena Score across Telegram bots, DeFi vaults, and AI trading agents. Updated daily.',
   alternates: {
     canonical: `${baseUrl}/rankings/bots`,
   },
   openGraph: {
-    title: 'Bot Rankings | Arena',
-    description: 'Top-performing crypto trading bots, AI agents, and on-chain vaults ranked by ROI and AUM.',
+    title: 'Crypto Trading Bot Rankings — Arena | AI Agents, DeFi Vaults & TG Bots',
+    description: 'Top-performing crypto trading bots, AI agents, and on-chain vaults ranked by ROI, AUM, and Arena Score. Compare performance metrics across platforms.',
     url: `${baseUrl}/rankings/bots`,
     siteName: 'Arena',
     type: 'website',
@@ -19,9 +19,10 @@ export const metadata: Metadata = {
   },
   twitter: {
     card: 'summary_large_image',
-    title: 'Bot Rankings | Arena',
-    description: 'Top-performing crypto trading bots, AI agents, and on-chain vaults.',
+    title: 'Crypto Trading Bot Rankings — Arena',
+    description: 'Top-performing crypto trading bots, AI agents, and on-chain vaults ranked by ROI and AUM.',
     images: [`${baseUrl}/og-image.png`],
+    creator: '@arenafi',
   },
 }
 

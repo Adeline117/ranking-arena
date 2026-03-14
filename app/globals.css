@@ -2956,3 +2956,8 @@ td[data-numeric],
   color: var(--color-accent-error) !important;
 }
 
+/* Hide scrollbar for home subnav horizontal scroll */
+.home-subnav-scroll::-webkit-scrollbar {
+  display: none;
+}
+

@@ -24,6 +24,7 @@ export const metadata: Metadata = {
     title: 'Best Crypto Trading Tools | Arena',
     description: '190+ crypto tools ranked by community — bots, analytics, quant platforms.',
     images: [`${baseUrl}/og-image.png`],
+    creator: '@arenafi',
   },
 }
 

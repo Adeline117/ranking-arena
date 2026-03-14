@@ -24,6 +24,7 @@ export const metadata: Metadata = {
     title: 'Top Crypto Institutions | Arena',
     description: '600+ crypto institutions ranked by community — exchanges, VCs, hedge funds.',
     images: [`${baseUrl}/og-image.png`],
+    creator: '@arenafi',
   },
 }
 
