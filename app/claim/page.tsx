@@ -269,7 +269,7 @@ function StatsSection() {
           fontWeight: 800,
           color: tokens.colors.accent.primary,
         }}>
-          68,000+
+          32,000+
         </Text>
         <Text style={{ color: tokens.colors.text.secondary, fontSize: tokens.typography.fontSize.sm }}>
           {t('claimPageTotalTraders')}
