@@ -453,6 +453,7 @@ export default function NotFoundPage() {
           </div>
         </div>
       </div>
+      </div>
     </>
   )
 }
