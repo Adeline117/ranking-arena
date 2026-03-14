@@ -16,6 +16,7 @@ import { withPublic } from '@/lib/api/middleware'
 import { getOrSetWithLock } from '@/lib/cache'
 import type { Period } from '@/lib/utils/arena-score'
 import { createLogger } from '@/lib/utils/logger'
+import { sanitizeDisplayName } from '@/lib/utils/profanity'
 
 const logger = createLogger('traders-api')
 
@@ -239,8 +240,14 @@ async function fetchFromLeaderboard(
   // Latest computed_at
   const computedAt = data?.[0]?.computed_at || new Date().toISOString()
 
+  // Apply profanity filter to all handles before returning
+  const sanitizedTraders = dedupedTraders.map((t: any) => ({
+    ...t,
+    handle: sanitizeDisplayName(t.handle)
+  }))
+
   return {
-    traders: dedupedTraders,
+    traders: sanitizedTraders,
     timeRange,
     totalCount,
     rankingMode: 'arena_score',
