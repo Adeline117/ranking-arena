@@ -48,7 +48,7 @@ const PLATFORM_NAMES: Record<string, string> = {
   coinex: 'CoinEx',
   okx_web3: 'OKX Web3',
   okx_futures: 'OKX 合约',
-  kucoin: 'KuCoin',
+  // kucoin: 'KuCoin', — DEAD
   gmx: 'GMX',
   htx: 'HTX',
   htx_futures: 'HTX Futures',

@@ -28,7 +28,7 @@ const ALL_PLATFORMS = [
   'hyperliquid',
   'gmx',
   'mexc',
-  'kucoin',
+  // 'kucoin', — DEAD
   'dydx',
   'gains',
   'jupiter_perps',
