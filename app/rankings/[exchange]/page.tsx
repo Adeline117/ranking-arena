@@ -198,6 +198,11 @@ export default async function ExchangeRankingPage({
     notFound()
   }
 
+  // Return 404 for DEAD/blocked exchanges
+  if (DEAD_BLOCKED_PLATFORMS.includes(exchange as TraderSource)) {
+    notFound()
+  }
+
   const displayName = EXCHANGE_NAMES[exchange]
   const traders = await fetchExchangeTraders(exchange)
   const sourceType = SOURCE_TYPE_MAP[exchange] || 'futures'
