@@ -26,7 +26,9 @@ export const maxDuration = 600 // Vercel Pro max: 10 minutes (was 300s)
 // CEX platforms: slightly reduced to balance load
 const PLATFORM_LIMITS: Record<string, { limit90: number; limit30: number; limit7: number }> = {
   binance_futures: { limit90: 150, limit30: 120, limit7: 80 }, // Reduced from 200/150/100
-  binance_spot: { limit90: 80, limit30: 60, limit7: 40 }, // Reduced from 100/80/50
+  // binance_spot: COMPLETELY DISABLED (2026-03-14 Round 6) - repeatedly hangs 45-76min despite all timeout fixes
+  //   Root cause: enrichment-runner.ts has hardcoded 120s per-trader timeout, ignored batch-enrich 30s limit
+  //   Until per-trader timeout is configurable, binance_spot enrichment is too unreliable
   // bybit/bybit_spot removed: api2.bybit.com endpoints return 404 globally (2026-03-10)
   okx_futures: { limit90: 60, limit30: 60, limit7: 50 }, // Reduced from 80/80/60
   bitget_futures: { limit90: 50, limit30: 50, limit7: 40 }, // Reduced from 60/60/50
@@ -61,8 +63,8 @@ const MEDIUM_PRIORITY = ['htx_futures', 'gateio', 'mexc', 'drift', 'aevo', 'gain
 // Low priority - platforms that frequently timeout or hang
 // Moved here to prevent blocking high/medium priority platforms
 // dydx: consistent 360s timeout
-// binance_spot: repeatedly hangs 45-76min (2026-03-14)
-const LOW_PRIORITY = ['dydx', 'binance_spot']
+// binance_spot: COMPLETELY DISABLED (2026-03-14 Round 6) - see PLATFORM_LIMITS comment
+const LOW_PRIORITY = ['dydx']
 
 // Lower priority (enriched only with all=true)
 const LOWER_PRIORITY: string[] = []
