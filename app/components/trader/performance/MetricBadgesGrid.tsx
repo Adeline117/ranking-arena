@@ -97,7 +97,7 @@ export function MetricBadgesGrid({
           tooltip={t('alphaTooltip') || 'Excess return vs market benchmark'}
         />
       )}
-      {tradesCount !== undefined && (
+      {tradesCount != null && (
         <MetricBadge
           label={t('tradesLabel') || 'Trades'}
           value={String(tradesCount)}
