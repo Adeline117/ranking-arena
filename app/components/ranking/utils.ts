@@ -1,6 +1,7 @@
 import { SOURCE_TYPE_MAP, EXCHANGE_NAMES } from '@/lib/constants/exchanges'
 import { tokens } from '@/lib/design-tokens'
 import { getLanguage, t } from '@/lib/i18n'
+import { sanitizeDisplayName } from '@/lib/utils/profanity'
 
 /**
  * 格式化 PnL 显示
@@ -101,46 +102,48 @@ export function parseSourceInfo(src: string, t: (key: string) => string): Source
 export function formatDisplayName(name: string, platform?: string): string {
   if (!name) return 'Unknown'
   
+  let formatted: string
+  
   // Wallet addresses (0x...)
   if (name.startsWith('0x') && name.length > 20) {
-    return `${name.substring(0, 6)}...${name.substring(name.length - 4)}`
+    formatted = `${name.substring(0, 6)}...${name.substring(name.length - 4)}`
   }
-  
   // Filter out known placeholder / test-data patterns
-  if (/^中台未注册/.test(name)) {
+  else if (/^中台未注册/.test(name)) {
     const label = platform ? formatPlatformShort(platform) : ''
-    return label ? `${label} Trader` : 'Trader'
+    formatted = label ? `${label} Trader` : 'Trader'
   }
-  
   // Platform-generated placeholder names → show as "Platform #ID"
-  const placeholderMatch = name.match(/^(?:XT|MEXC|CoinEx|KuCoin|BingX|Binance)\s+Trader\s+(\w+)$/i)
-  if (placeholderMatch) {
+  else if (name.match(/^(?:XT|MEXC|CoinEx|KuCoin|BingX|Binance)\s+Trader\s+(\w+)$/i)) {
+    const placeholderMatch = name.match(/^(?:XT|MEXC|CoinEx|KuCoin|BingX|Binance)\s+Trader\s+(\w+)$/i)!
     const label = platform ? formatPlatformShort(platform) : name.split(' ')[0]
-    return `${label} #${placeholderMatch[1].slice(-6)}`
+    formatted = `${label} #${placeholderMatch[1].slice(-6)}`
   }
-  
   // "Mexctrader-XXXXX" pattern
-  if (/^Mexctrader-/i.test(name)) {
+  else if (/^Mexctrader-/i.test(name)) {
     const label = platform ? formatPlatformShort(platform) : 'MEXC'
-    return `${label} #${name.slice(-6)}`
+    formatted = `${label} #${name.slice(-6)}`
   }
-  
   // Masked emails like "ma***6@gmail.com" or "*******277"
-  if (/^\*+\d+$/.test(name) || /\*{3,}.*@/.test(name)) {
+  else if (/^\*+\d+$/.test(name) || /\*{3,}.*@/.test(name)) {
     const label = platform ? formatPlatformShort(platform) : ''
-    return label ? `${label} Trader` : 'Trader'
+    formatted = label ? `${label} Trader` : 'Trader'
   }
-  
   // Pure numeric IDs
-  if (/^\d+$/.test(name)) {
+  else if (/^\d+$/.test(name)) {
     const platformLabel = platform ? formatPlatformShort(platform) : ''
-    return platformLabel ? `${platformLabel} #${name.slice(-6)}` : `#${name.slice(-6)}`
+    formatted = platformLabel ? `${platformLabel} #${name.slice(-6)}` : `#${name.slice(-6)}`
+  }
+  // Truncate long names
+  else if (name.length > 60) {
+    formatted = name.slice(0, 57) + '...'
+  }
+  else {
+    formatted = name
   }
   
-  // Truncate long names
-  if (name.length > 60) return name.slice(0, 57) + '...'
-  
-  return name
+  // Apply profanity filter to all display names
+  return sanitizeDisplayName(formatted)
 }
 
 /** Short platform label for display */
