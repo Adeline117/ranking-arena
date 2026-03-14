@@ -5,7 +5,7 @@
  * This prevents users from accessing other users' private following lists.
  *
  * Optimizations:
- * - Batched queries (sources + snapshots + leaderboard_ranks in single Promise.all)
+ * - Uses leaderboard_ranks as unified data source for trader performance data
  * - Redis cache with 60s TTL via tiered cache
  * - Pagination support via limit/offset params
  */
@@ -111,94 +111,58 @@ async function fetchFollowingItems(userId: string): Promise<FollowingResult> {
     const traderIds = traderFollows.map(f => f.trader_id)
     const followedAtMap = new Map(traderFollows.map(f => [f.trader_id, f.created_at]))
 
-    // Single batched Promise.all: sources + snapshots + leaderboard_ranks
-    // Previously leaderboard_ranks was a conditional N+1; now fetched upfront
-    const [sourcesResult, snapshotsResult, lrResult] = await Promise.all([
-      supabase
-        .from('trader_sources')
-        .select('source_trader_id, handle, source, avatar_url, arena_score')
-        .in('source_trader_id', traderIds),
-      supabase
-        .from('trader_snapshots')
-        .select('source_trader_id, source, rank, roi, pnl_7d, pnl_30d, followers, pnl, win_rate, arena_score, captured_at')
-        .in('source_trader_id', traderIds)
-        .eq('season_id', '90D')
-        .not('arena_score', 'is', null),
-      // Pre-fetch leaderboard_ranks for all traders (avoids conditional 4th query)
-      supabase
-        .from('leaderboard_ranks')
-        .select('source_trader_id, display_name, source, avatar_url')
-        .in('source_trader_id', traderIds)
-        .not('display_name', 'is', null)
-        .limit(traderIds.length)
-    ])
+    // Use leaderboard_ranks as the single source of truth (unified data layer)
+    // instead of separate trader_snapshots v1 + trader_sources + leaderboard_ranks queries.
+    // leaderboard_ranks already has handle, avatar_url, roi, pnl, win_rate, followers, arena_score.
+    const { data: lrData } = await supabase
+      .from('leaderboard_ranks')
+      .select('source_trader_id, handle, source, avatar_url, roi, pnl, win_rate, followers, arena_score, rank')
+      .in('source_trader_id', traderIds)
+      .eq('season_id', '90D')
+      .not('arena_score', 'is', null)
 
-    const sources = sourcesResult.data || []
-    const allSnapshots = snapshotsResult.data || []
-    const lrRows = lrResult.data || []
+    // Build map: best arena_score row per trader
+    const traderDataMap = new Map<string, {
+      handle: string; source: string; avatar_url?: string
+      roi: number; pnl?: number; win_rate: number; followers: number; arena_score?: number
+    }>()
 
-    // 构建映射
-    const sourcesMap = new Map<string, { handle: string; source: string; avatar_url?: string; arena_score?: number }>()
-    sources.forEach((s: { source_trader_id: string; handle: string | null; source: string; avatar_url?: string | null; arena_score?: number | null }) => {
-      sourcesMap.set(s.source_trader_id, {
-        handle: s.handle || s.source_trader_id,
-        source: s.source,
-        avatar_url: s.avatar_url || undefined,
-        arena_score: s.arena_score ?? undefined
-      })
-    })
-
-    // Apply leaderboard_ranks fallback for missing/matching-id handles
-    for (const lr of lrRows) {
-      if (!sourcesMap.has(lr.source_trader_id)) {
-        sourcesMap.set(lr.source_trader_id, {
-          handle: lr.display_name,
-          source: lr.source,
-          avatar_url: lr.avatar_url || undefined,
+    for (const row of (lrData || [])) {
+      const existing = traderDataMap.get(row.source_trader_id)
+      if (!existing || (row.arena_score || 0) > (existing.arena_score || 0)) {
+        traderDataMap.set(row.source_trader_id, {
+          handle: row.handle || row.source_trader_id,
+          source: row.source,
+          avatar_url: row.avatar_url || undefined,
+          roi: row.roi ?? 0,
+          pnl: row.pnl ?? undefined,
+          win_rate: row.win_rate ?? 0,
+          followers: row.followers ?? 0,
+          arena_score: row.arena_score ?? undefined,
         })
-      } else {
-        const existing = sourcesMap.get(lr.source_trader_id)!
-        if (existing.handle === lr.source_trader_id && lr.display_name) {
-          existing.handle = lr.display_name
-        }
-        if (!existing.avatar_url && lr.avatar_url) {
-          existing.avatar_url = lr.avatar_url
-        }
-      }
-    }
-
-    // Build map: one snapshot per trader (best arena_score)
-    const latestSnapshotsMap = new Map<string, typeof allSnapshots[0]>()
-    for (const snapshot of allSnapshots) {
-      const key = snapshot.source_trader_id
-      if (!latestSnapshotsMap.has(key) || (snapshot.arena_score || 0) > (latestSnapshotsMap.get(key)!.arena_score || 0)) {
-        latestSnapshotsMap.set(key, snapshot)
       }
     }
 
     // 添加交易员到列表
     for (const traderId of traderIds) {
-      const sourceInfo = sourcesMap.get(traderId)
-      const snapshot = latestSnapshotsMap.get(traderId)
-      
-      if (!sourceInfo && !snapshot) {
-        logger.warn(`Trader not found in trader_sources or trader_snapshots: ${traderId}`)
+      const data = traderDataMap.get(traderId)
+
+      if (!data) {
+        logger.warn(`Trader not found in leaderboard_ranks: ${traderId}`)
         continue
       }
-      
+
       items.push({
         id: traderId,
-        handle: sourceInfo?.handle || traderId,
+        handle: data.handle || traderId,
         type: 'trader',
-        avatar_url: sourceInfo?.avatar_url,
-        roi: snapshot?.roi ?? 0,
-        roi_7d: snapshot?.pnl_7d ?? undefined,
-        roi_30d: snapshot?.pnl_30d ?? undefined,
-        pnl: snapshot?.pnl !== null && snapshot?.pnl !== undefined ? snapshot.pnl : undefined,
-        win_rate: snapshot?.win_rate !== null && snapshot?.win_rate !== undefined ? snapshot.win_rate : 0,
-        followers: snapshot?.followers ?? 0,
-        source: snapshot?.source || sourceInfo?.source || 'binance_futures',
-        arena_score: snapshot?.arena_score ?? sourceInfo?.arena_score ?? undefined,
+        avatar_url: data.avatar_url,
+        roi: data.roi,
+        pnl: data.pnl,
+        win_rate: data.win_rate,
+        followers: data.followers,
+        source: data.source || 'binance_futures',
+        arena_score: data.arena_score,
         followed_at: followedAtMap.get(traderId)
       })
     }

@@ -30,6 +30,7 @@ import { getSupabaseAdmin } from '@/lib/supabase/server'
 import type { Window, LeaderboardPlatform, RankingEntry, RankingsResponse } from '@/lib/types/leaderboard'
 import { VALID_TRADING_STYLES, TRADING_STYLE_LEGACY_MAP, type TradingStyle } from '@/lib/types/trader'
 import { LEADERBOARD_PLATFORMS, WINDOWS } from '@/lib/types/leaderboard'
+import { SOURCE_TYPE_MAP } from '@/lib/constants/exchanges'
 import logger from '@/lib/logger'
 
 export const dynamic = 'force-dynamic'
@@ -94,23 +95,31 @@ export async function GET(request: NextRequest) {
     ? (TRADING_STYLE_LEGACY_MAP[tradingStyle as keyof typeof TRADING_STYLE_LEGACY_MAP] || tradingStyle as TradingStyle)
     : null
 
-  // Database query (server-side service role to keep backend policy consistent)
+  // Database query — use leaderboard_ranks (precomputed, unified source of truth)
+  // instead of trader_snapshots v1 which has stale/inconsistent data
   const supabase = getSupabaseAdmin()
 
-  // Build query for latest snapshots per trader for this window
+  // Map window to season_id format used in leaderboard_ranks (uppercase)
+  const seasonId = window.toUpperCase()
+
   let query = supabase
-    .from('trader_snapshots')
-    .select('id, source, source_trader_id, season_id, captured_at, arena_score, arena_score_v3, roi, pnl, max_drawdown, win_rate, trades_count, followers, rank, sortino_ratio, calmar_ratio, profit_factor, alpha, volatility_pct, avg_holding_hours, trading_style, profitability_score, risk_control_score, execution_score, score_completeness, aum, sharpe_ratio', { count: 'exact' })
+    .from('leaderboard_ranks')
+    .select(
+      `source, source_trader_id, handle, avatar_url, source_type,
+       roi, pnl, win_rate, max_drawdown, trades_count, followers,
+       arena_score, rank, computed_at, season_id,
+       sharpe_ratio, sortino_ratio, calmar_ratio, profit_factor,
+       profitability_score, risk_control_score, execution_score, score_completeness,
+       trading_style, avg_holding_hours, trader_type, is_outlier`,
+      { count: 'exact' }
+    )
     .eq('source', platform)
-    .eq('season_id', window.toUpperCase())
+    .eq('season_id', seasonId)
     .not('arena_score', 'is', null)
 
   // V3 Filters
   if (normalizedStyle) {
     query = query.eq('trading_style', normalizedStyle)
-  }
-  if (minAlpha !== null) {
-    query = query.gte('alpha', minAlpha)
   }
   if (minSortino !== null) {
     query = query.gte('sortino_ratio', minSortino)
@@ -131,7 +140,8 @@ export async function GET(request: NextRequest) {
     query = query.gte('arena_score', minScore)
   }
 
-  // Sort
+  // Sort — leaderboard_ranks doesn't have alpha/arena_score_v3 columns,
+  // fall back to arena_score for those sorts
   switch (sort) {
     case 'roi':
       query = query.order('roi', { ascending: false, nullsFirst: false })
@@ -139,26 +149,25 @@ export async function GET(request: NextRequest) {
     case 'pnl':
       query = query.order('pnl', { ascending: false, nullsFirst: false })
       break
-    case 'arena_score_v3':
-      query = query.order('arena_score_v3', { ascending: false, nullsFirst: false })
-      break
     case 'sortino':
       query = query.order('sortino_ratio', { ascending: false, nullsFirst: false })
       break
     case 'calmar':
       query = query.order('calmar_ratio', { ascending: false, nullsFirst: false })
       break
+    case 'arena_score_v3':
     case 'alpha':
-      query = query.order('alpha', { ascending: false, nullsFirst: false })
-      break
     default:
       query = query.order('arena_score', { ascending: false, nullsFirst: false })
   }
 
   query = query.range(offset, offset + limit - 1)
 
-   
-  const { data: snapshots, count, error } = await query as { data: Record<string, any>[] | null; count: number | null; error: { message: string } | null }
+  const { data: rows, count, error } = await query as {
+    data: Record<string, unknown>[] | null
+    count: number | null
+    error: { message: string } | null
+  }
 
   if (error) {
     logger.error('[Rankings API] Query error:', error)
@@ -168,101 +177,57 @@ export async function GET(request: NextRequest) {
     )
   }
 
-  // Join with profiles for display_name and avatar
-  const traderKeys = (snapshots || []).map(s => s.source_trader_id)
-
-  let profiles: Record<string, { display_name: string | null; avatar_url: string | null }> = {}
-  if (traderKeys.length > 0) {
-    const { data: profileData } = await supabase
-      .from('trader_profiles')
-      .select('trader_key, display_name, avatar_url')
-      .eq('platform', platform)
-      .in('trader_key', traderKeys)
-
-    if (profileData) {
-      profiles = Object.fromEntries(
-        profileData.map(p => [p.trader_key, { display_name: p.display_name, avatar_url: p.avatar_url }])
-      )
-    }
-  }
-
-  // Also check trader_sources for handle/display_name fallback
-  if (traderKeys.length > 0) {
-    const { data: sourceData } = await supabase
-      .from('trader_sources')
-      .select('source_trader_id, handle, display_name, avatar_url')
-      .eq('source', platform)
-      .in('source_trader_id', traderKeys)
-
-    if (sourceData) {
-      for (const s of sourceData) {
-        if (!profiles[s.source_trader_id]) {
-          profiles[s.source_trader_id] = {
-            display_name: s.display_name || s.handle,
-            avatar_url: s.avatar_url || null,
-          }
-        } else if (!profiles[s.source_trader_id].avatar_url && s.avatar_url) {
-          // Fill avatar from trader_sources if trader_profiles didn't have one
-          profiles[s.source_trader_id].avatar_url = s.avatar_url
-        }
-      }
-    }
-  }
+  // leaderboard_ranks already has handle + avatar_url — no need for separate
+  // trader_profiles / trader_sources joins (eliminated 2 extra DB queries)
 
   // Calculate staleness
-  const latestUpdate = snapshots && snapshots.length > 0
-    ? new Date(Math.max(...snapshots.map(s => new Date(s.captured_at || s.created_at).getTime())))
+  const latestUpdate = rows && rows.length > 0
+    ? new Date(Math.max(...rows.map(r => new Date(String(r.computed_at || '')).getTime()).filter(t => !isNaN(t))))
     : new Date(0)
   const stalenessSeconds = Math.floor((Date.now() - latestUpdate.getTime()) / 1000)
 
-  // Build response
-  // NOTE: Do NOT filter traders by display_name — many traders lack profile entries
-  // and display_name=null is a valid state. Filtering on display_name was the root
-  // cause of traders=[] despite total_count>0 (bug: stale build had .filter(e=>e.display_name!=null)).
-  const traders: RankingEntry[] = (snapshots || []).map(s => {
+  // Build response — maintain exact same response format for frontend consumers
+  const traders: RankingEntry[] = (rows || []).map(r => {
+    const sourceType = (r.source_type as string) || SOURCE_TYPE_MAP[String(r.source)] || marketType
     const baseEntry = {
-      platform: s.source as LeaderboardPlatform,
-      market_type: marketType,
-      trader_key: s.source_trader_id,
-      display_name: profiles[s.source_trader_id]?.display_name || null,
-      avatar_url: profiles[s.source_trader_id]?.avatar_url || null,
+      platform: r.source as LeaderboardPlatform,
+      market_type: sourceType,
+      trader_key: String(r.source_trader_id),
+      display_name: (r.handle as string) || null,
+      avatar_url: (r.avatar_url as string) || null,
       window: window as Window,
-      metrics: s.metrics || {
-        roi: s.roi != null ? parseFloat(s.roi) : null,
-        pnl: s.pnl != null ? parseFloat(s.pnl) : null,
-        win_rate: s.win_rate != null ? parseFloat(s.win_rate) : null,
-        max_drawdown: s.max_drawdown != null ? parseFloat(s.max_drawdown) : null,
-        sharpe_ratio: s.sharpe_ratio != null ? parseFloat(s.sharpe_ratio) : null,
-        sortino_ratio: s.sortino_ratio != null ? parseFloat(s.sortino_ratio) : null,
-        trades_count: s.trades_count,
-        followers: s.followers,
-        copiers: s.copiers,
-        aum: s.aum != null ? parseFloat(s.aum) : null,
-        platform_rank: s.platform_rank ?? s.rank,
-        arena_score: s.arena_score != null ? parseFloat(s.arena_score) : null,
-        return_score: s.return_score != null ? parseFloat(s.return_score) : null,
-        drawdown_score: s.drawdown_score != null ? parseFloat(s.drawdown_score) : null,
-        stability_score: s.stability_score != null ? parseFloat(s.stability_score) : null,
-        // V3 metrics
-        volatility_pct: s.volatility_pct != null ? parseFloat(s.volatility_pct) : null,
-        avg_holding_hours: s.avg_holding_hours != null ? parseFloat(s.avg_holding_hours) : null,
-        profit_factor: s.profit_factor != null ? parseFloat(s.profit_factor) : null,
+      metrics: {
+        roi: r.roi != null ? Number(r.roi) : null,
+        pnl: r.pnl != null ? Number(r.pnl) : null,
+        win_rate: r.win_rate != null ? Number(r.win_rate) : null,
+        max_drawdown: r.max_drawdown != null ? Number(r.max_drawdown) : null,
+        sharpe_ratio: r.sharpe_ratio != null ? Number(r.sharpe_ratio) : null,
+        sortino_ratio: r.sortino_ratio != null ? Number(r.sortino_ratio) : null,
+        trades_count: r.trades_count != null ? Number(r.trades_count) : null,
+        followers: r.followers != null ? Number(r.followers) : null,
+        copiers: null as number | null,
+        aum: null as number | null,
+        platform_rank: r.rank != null ? Number(r.rank) : null,
+        arena_score: r.arena_score != null ? Number(r.arena_score) : null,
+        return_score: null as number | null,
+        drawdown_score: null as number | null,
+        stability_score: null as number | null,
+        volatility_pct: null as number | null,
+        avg_holding_hours: r.avg_holding_hours != null ? Number(r.avg_holding_hours) : null,
+        profit_factor: r.profit_factor != null ? Number(r.profit_factor) : null,
       },
-      quality_flags: s.quality_flags || { missing_fields: [], non_standard_fields: {}, window_native: true, notes: [] },
-      updated_at: s.captured_at || s.created_at,
+      quality_flags: { missing_fields: [] as string[], non_standard_fields: {} as Record<string, string>, window_native: true, notes: [] as string[] },
+      updated_at: String(r.computed_at || ''),
     }
 
-    // Add V3 extended fields (optional - only if available)
     return {
       ...baseEntry,
-      // V3 Arena Score
-      arena_score_v3: s.arena_score_v3 ? parseFloat(s.arena_score_v3) : null,
-      // Advanced metrics summary
-      sortino_ratio: s.sortino_ratio ? parseFloat(s.sortino_ratio) : null,
-      calmar_ratio: s.calmar_ratio ? parseFloat(s.calmar_ratio) : null,
-      alpha: s.alpha ? parseFloat(s.alpha) : null,
-      // Classification
-      trading_style: s.trading_style || null,
+      // V3 extended fields
+      arena_score_v3: null,
+      sortino_ratio: r.sortino_ratio != null ? Number(r.sortino_ratio) : null,
+      calmar_ratio: r.calmar_ratio != null ? Number(r.calmar_ratio) : null,
+      alpha: null,
+      trading_style: (r.trading_style as string) || null,
     } as RankingEntry & {
       arena_score_v3: number | null
       sortino_ratio: number | null

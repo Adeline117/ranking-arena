@@ -2,7 +2,7 @@
  * GET /api/v2/trader/:platform/:market_type/:trader_key
  *
  * Trader detail endpoint.
- * Reads ONLY from database - no external fetching.
+ * Uses unified data layer for profile + snapshot data.
  * Target: <200ms response time.
  *
  * Response includes:
@@ -13,8 +13,8 @@
  *   - provenance: DataProvenance
  */
 
-import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@supabase/supabase-js'
+import { NextRequest } from 'next/server'
+import { getSupabaseAdmin } from '@/lib/supabase/server'
 import type {
   Window,
   LeaderboardPlatform,
@@ -26,10 +26,11 @@ import type {
   SnapshotMetrics,
   QualityFlags,
 } from '@/lib/types/leaderboard'
-import { WINDOWS } from '@/lib/types/leaderboard'
 import { logger } from '@/lib/logger'
 import { ApiError } from '@/lib/api/errors'
 import { success as apiSuccess, handleError, withCache } from '@/lib/api/response'
+import { getTraderDetail } from '@/lib/data/unified'
+import { SOURCE_TYPE_MAP } from '@/lib/constants/exchanges'
 
 export const dynamic = 'force-dynamic'
 
@@ -45,34 +46,14 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
   try {
   const { platform, market_type, trader_key } = await params
 
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
-  const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-  const supabase = createClient(supabaseUrl, supabaseAnonKey)
+  const supabase = getSupabaseAdmin()
 
-  // Parallel queries for performance (<200ms target)
-  const [profileResult, snapshotsResult, timeseriesResult, jobsResult] = await Promise.all([
-    // 1. Profile
-    supabase
-      .from('trader_profiles')
-      .select('platform, market_type, trader_key, display_name, avatar_url, bio, tags, profile_url, followers, copiers, aum, updated_at, last_enriched_at, provenance')
-      .eq('platform', platform)
-      .eq('market_type', market_type)
-      .eq('trader_key', trader_key)
-      .single(),
+  // Fetch unified trader detail + timeseries + refresh jobs in parallel
+  const [unifiedDetail, timeseriesResult, jobsResult] = await Promise.all([
+    // 1. Unified data layer: profile + snapshots + enrichment
+    getTraderDetail(supabase, { platform, traderKey: trader_key }),
 
-    // 2. Latest snapshots for each window — select('*') intentional: code reads 30+ columns
-    //    including all core metrics, V3 advanced metrics, market correlation, and classification fields
-    supabase
-      .from('trader_snapshots')
-      .select('*')
-      .eq('source', platform)
-      .eq('market_type', market_type)
-      .eq('source_trader_id', trader_key)
-      .in('window', ['7d', '30d', '90d'])
-      .order('captured_at', { ascending: false })
-      .limit(10),
-
-    // 3. Timeseries (cap at 500 rows to prevent unbounded fetches)
+    // 2. Timeseries (not in unified layer — kept as direct query)
     supabase
       .from('trader_timeseries')
       .select('platform, market_type, trader_key, series_type, as_of_ts, data, updated_at')
@@ -82,7 +63,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       .order('timestamp', { ascending: false })
       .limit(500),
 
-    // 4. Refresh status
+    // 3. Refresh status (not in unified layer — kept as direct query)
     supabase
       .from('refresh_jobs')
       .select('status, created_at, next_run_at')
@@ -94,153 +75,121 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       .limit(1),
   ])
 
-  // Build profile (fallback to trader_sources if no profile)
-  let profile: TraderProfile
-  if (profileResult.data) {
-    profile = profileResult.data as unknown as TraderProfile
-  } else {
-    // Fallback: check trader_sources
-    const { data: sourceData } = await supabase
-      .from('trader_sources')
-      .select('source_trader_id, handle, display_name, profile_url, updated_at')
-      .eq('source', platform)
-      .eq('market_type', market_type)
-      .eq('source_trader_id', trader_key)
-      .single()
-
-    if (!sourceData) {
-      throw ApiError.notFound('Trader not found')
-    }
-
-    profile = {
-      platform: platform as LeaderboardPlatform,
-      market_type: market_type as MarketType,
-      trader_key: trader_key,
-      display_name: sourceData.display_name || sourceData.handle || trader_key,
-      avatar_url: null,
-      bio: null,
-      tags: [],
-      profile_url: sourceData.profile_url,
-      followers: null,
-      copiers: null,
-      aum: null,
-      updated_at: sourceData.updated_at,
-      last_enriched_at: null,
-      provenance: {
-        source_platform: platform,
-        acquisition_method: 'scrape',
-        fetched_at: sourceData.updated_at,
-        source_url: sourceData.profile_url,
-        scraper_version: null,
-      },
-    }
+  if (!unifiedDetail) {
+    throw ApiError.notFound('Trader not found')
   }
 
-  // Build snapshots map (latest per window)
+  const t = unifiedDetail.trader
+
+  // Build profile from unified trader data — maintain TraderProfile response format
+  const profile: TraderProfile = {
+    platform: platform as LeaderboardPlatform,
+    market_type: market_type as MarketType,
+    trader_key: trader_key,
+    display_name: t.handle || trader_key,
+    avatar_url: t.avatarUrl || null,
+    bio: null,
+    tags: [],
+    profile_url: t.profileUrl || null,
+    followers: t.followers ?? null,
+    copiers: t.copiers ?? null,
+    aum: null,
+    updated_at: t.lastUpdated || new Date().toISOString(),
+    last_enriched_at: null,
+    provenance: {
+      source_platform: platform,
+      acquisition_method: 'scrape' as const,
+      fetched_at: t.lastUpdated || new Date().toISOString(),
+      source_url: t.profileUrl || null,
+      scraper_version: null,
+    },
+  }
+
+  // Build snapshots map from unified periods — reshape to TraderDetailResponse format
+  const windowMap: Record<string, Window> = { '90D': '90d', '30D': '30d', '7D': '7d' }
   const snapshotsMap: Record<Window, TraderSnapshot | null> = {
     '7d': null,
     '30d': null,
     '90d': null,
   }
 
-  if (snapshotsResult.data) {
-    const seen = new Set<string>()
-    for (const s of snapshotsResult.data) {
-      const w = s.window as Window
-      if (w && WINDOWS.includes(w) && !seen.has(w)) {
-        seen.add(w)
-        const metrics: SnapshotMetrics = s.metrics || {
-          // Core metrics
-          roi: s.roi != null ? parseFloat(s.roi) : null,
-          pnl: s.pnl != null ? parseFloat(s.pnl) : null,
-          win_rate: s.win_rate != null ? parseFloat(s.win_rate) : null,
-          max_drawdown: s.max_drawdown != null ? parseFloat(s.max_drawdown) : null,
-          sharpe_ratio: s.sharpe_ratio != null ? parseFloat(s.sharpe_ratio) : null,
-          sortino_ratio: s.sortino_ratio != null ? parseFloat(s.sortino_ratio) : null,
-          trades_count: s.trades_count,
-          followers: s.followers,
-          copiers: s.copiers,
-          aum: s.aum != null ? parseFloat(s.aum) : null,
-          platform_rank: s.platform_rank ?? s.rank,
-          // Arena Score V2
-          arena_score: s.arena_score != null ? parseFloat(s.arena_score) : null,
-          return_score: s.return_score != null ? parseFloat(s.return_score) : null,
-          drawdown_score: s.drawdown_score != null ? parseFloat(s.drawdown_score) : null,
-          stability_score: s.stability_score != null ? parseFloat(s.stability_score) : null,
-          // Extended metrics (V3)
-          volatility_pct: s.volatility_pct != null ? parseFloat(s.volatility_pct) : null,
-          avg_holding_hours: s.avg_holding_hours != null ? parseFloat(s.avg_holding_hours) : null,
-          profit_factor: s.profit_factor != null ? parseFloat(s.profit_factor) : null,
-        }
+  for (const [periodKey, windowKey] of Object.entries(windowMap)) {
+    const periodData = unifiedDetail.periods[periodKey as '7D' | '30D' | '90D']
+    if (!periodData) continue
 
-        // V3 Advanced metrics extension
-        const advancedMetrics = {
-          sortino_ratio: s.sortino_ratio ? parseFloat(s.sortino_ratio) : null,
-          calmar_ratio: s.calmar_ratio ? parseFloat(s.calmar_ratio) : null,
-          profit_factor: s.profit_factor ? parseFloat(s.profit_factor) : null,
-          recovery_factor: s.recovery_factor ? parseFloat(s.recovery_factor) : null,
-          max_consecutive_wins: s.max_consecutive_wins ?? null,
-          max_consecutive_losses: s.max_consecutive_losses ?? null,
-          avg_holding_hours: s.avg_holding_hours ? parseFloat(s.avg_holding_hours) : null,
-          volatility_pct: s.volatility_pct ? parseFloat(s.volatility_pct) : null,
-          downside_volatility_pct: s.downside_volatility_pct ? parseFloat(s.downside_volatility_pct) : null,
-        }
+    const sourceType = (t.marketType as string) || SOURCE_TYPE_MAP[platform] || market_type
 
-        // Market correlation
-        const marketCorrelation = {
-          beta_btc: s.beta_btc ? parseFloat(s.beta_btc) : null,
-          beta_eth: s.beta_eth ? parseFloat(s.beta_eth) : null,
-          alpha: s.alpha ? parseFloat(s.alpha) : null,
-          market_condition_performance: s.market_condition_tags || { bull: null, bear: null, sideways: null },
-        }
+    const metrics: SnapshotMetrics = {
+      roi: periodData.roi ?? null,
+      pnl: periodData.pnl ?? null,
+      win_rate: periodData.winRate ?? null,
+      max_drawdown: periodData.maxDrawdown ?? null,
+      sharpe_ratio: periodData.sharpeRatio ?? null,
+      sortino_ratio: periodData.sortinoRatio ?? null,
+      trades_count: periodData.tradesCount ?? null,
+      followers: periodData.followers ?? null,
+      copiers: periodData.copiers ?? null,
+      aum: null,
+      platform_rank: periodData.rank ?? null,
+      arena_score: periodData.arenaScore ?? null,
+      return_score: periodData.returnScore ?? null,
+      drawdown_score: periodData.drawdownScore ?? null,
+      stability_score: periodData.stabilityScore ?? null,
+      volatility_pct: null,
+      avg_holding_hours: periodData.avgHoldingHours ?? null,
+      profit_factor: periodData.profitFactor ?? null,
+    }
 
-        // Trader classification
-        const classification = {
-          trading_style: s.trading_style || null,
-          asset_preference: s.asset_preference || [],
-          style_confidence: s.style_confidence ? parseFloat(s.style_confidence) : null,
-        }
+    const advancedMetrics = {
+      sortino_ratio: periodData.sortinoRatio ?? null,
+      calmar_ratio: periodData.calmarRatio ?? null,
+      profit_factor: periodData.profitFactor ?? null,
+      recovery_factor: null,
+      max_consecutive_wins: null,
+      max_consecutive_losses: null,
+      avg_holding_hours: periodData.avgHoldingHours ?? null,
+      volatility_pct: null,
+      downside_volatility_pct: null,
+    }
 
-        // Arena Score V3
-        const arenaScoreV3 = s.arena_score_v3 ? {
-          return_score: s.return_score ? parseFloat(s.return_score) : 0,
-          pnl_score: s.pnl_score ? parseFloat(s.pnl_score) : 0,
-          drawdown_score: s.drawdown_score ? parseFloat(s.drawdown_score) : 0,
-          stability_score: s.stability_score ? parseFloat(s.stability_score) : 0,
-          alpha_score: s.alpha_score ? parseFloat(s.alpha_score) : 0,
-          risk_adjusted_score: s.risk_adjusted_score_v3 ? parseFloat(s.risk_adjusted_score_v3) : 0,
-          consistency_score: s.consistency_score ? parseFloat(s.consistency_score) : 0,
-          total_score: parseFloat(s.arena_score_v3),
-        } : null
+    const marketCorrelation = {
+      beta_btc: null,
+      beta_eth: null,
+      alpha: null,
+      market_condition_performance: { bull: null, bear: null, sideways: null },
+    }
 
-        const qualityFlags: QualityFlags = s.quality_flags || {
-          missing_fields: [],
-          non_standard_fields: {},
-          window_native: true,
-          notes: [],
-        }
+    const classification = {
+      trading_style: periodData.tradingStyle ?? null,
+      asset_preference: [] as string[],
+      style_confidence: null,
+    }
 
-        snapshotsMap[w] = {
-          platform: s.source as LeaderboardPlatform,
-          market_type: s.market_type as MarketType,
-          trader_key: s.source_trader_id,
-          window: w,
-          as_of_ts: s.as_of_ts || s.captured_at,
-          metrics,
-          quality_flags: qualityFlags,
-          updated_at: s.captured_at || s.created_at,
-          // V3 Extensions (attached to snapshot for per-window access)
-          advanced_metrics: advancedMetrics,
-          market_correlation: marketCorrelation,
-          classification,
-          arena_score_v3: arenaScoreV3,
-        } as TraderSnapshot & {
-          advanced_metrics: typeof advancedMetrics
-          market_correlation: typeof marketCorrelation
-          classification: typeof classification
-          arena_score_v3: typeof arenaScoreV3
-        }
-      }
+    const qualityFlags: QualityFlags = {
+      missing_fields: [],
+      non_standard_fields: {},
+      window_native: true,
+      notes: [],
+    }
+
+    snapshotsMap[windowKey] = {
+      platform: platform as LeaderboardPlatform,
+      market_type: sourceType as MarketType,
+      trader_key: trader_key,
+      window: windowKey,
+      as_of_ts: periodData.lastUpdated || new Date().toISOString(),
+      metrics,
+      quality_flags: qualityFlags,
+      updated_at: periodData.lastUpdated || new Date().toISOString(),
+      advanced_metrics: advancedMetrics,
+      market_correlation: marketCorrelation,
+      classification,
+      arena_score_v3: null,
+    } as TraderSnapshot & {
+      advanced_metrics: typeof advancedMetrics
+      market_correlation: typeof marketCorrelation
+      classification: typeof classification
+      arena_score_v3: null
     }
   }
 
