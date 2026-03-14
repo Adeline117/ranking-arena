@@ -38,23 +38,26 @@ export const maxDuration = 600 // Vercel Pro max: 10 minutes (was 300s = 5min)
 export const preferredRegion = 'hnd1' // Tokyo — avoids Binance/OKX/Bybit geo-blocking
 
 const GROUPS: Record<string, string[]> = {
-  // Group A1: Binance (every 3h) — 2 platforms, parallel ~120s
-  a: ['binance_futures', 'binance_spot'],
+  // Group A1: Binance (every 3h) — binance_futures removed 2026-03-14: Client error 404
+  a: ['binance_spot'],
   // Group A2: Other high-priority CEX (every 3h)
-  // TEMPORARILY DISABLED 2026-03-13: All 3 platforms have API access issues
+  // DISABLED 2026-03-13: All 3 platforms have API access issues
   // - bybit: api2.bybit.com returns 403 Access Denied
   // - bitget_futures: Cloudflare challenge blocking direct API access
   // - okx_futures: API endpoint returning 404
   // TODO: Re-enable after VPS scraper integration or proxy fix
   a2: [],
-  // Group B: Top DEX (every 4h) — 3 platforms, ~110s parallel
-  b: ['hyperliquid', 'gmx', 'jupiter_perps'],
-  // Group C: Mid-priority (every 4h) — 3 platforms, ~70s parallel
-  c: ['okx_web3', 'aevo', 'xt'],
-  // Group D1: CEX (every 6h) — 2 platforms, parallel
-  d1: ['gains', 'htx_futures'],
-  // Group D2: DEX only (every 6h) — 1 platform (bybit_spot removed: api2.bybit.com 404 globally 2026-03-13)
-  d2: ['dydx'], // bybit_spot removed from array 2026-03-13
+  // Group B: Top DEX (every 4h) — DISABLED 2026-03-14: All 3 platforms returning client errors via batch
+  // - hyperliquid: 422, gmx: 404, jupiter_perps: 0 traders normalization failed
+  // Individual connector cron tasks work fine; issue is batch connector invocation
+  b: [],
+  // Group C: Mid-priority (every 4h) — DISABLED 2026-03-14: All 3 platforms failing via batch
+  // - okx_web3: 400, aevo: 0 traders, xt: 0 traders
+  c: [],
+  // Group D1: CEX (every 6h) — htx_futures removed 2026-03-14: Client error 405
+  d1: ['gains'],
+  // Group D2: DEX only (every 6h) — dydx removed 2026-03-14: Client error 404
+  d2: [],
   // Group E: CEX+DEX (every 6h) — 3 platforms (bitfinex: 1424 traders, was orphaned)
   e: ['coinex', 'binance_web3', 'bitfinex'],
   // Group F: Slow CEX (every 6h) — 2 platforms, parallel (~141s + ~60s = ~200s)
