@@ -26,6 +26,7 @@ import type { RankingWindow } from '@/lib/types/leaderboard'
 let Sentry: typeof import('@sentry/nextjs') | null = null
 try {
   // Dynamic import so the module is not required at build time
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
   Sentry = require('@sentry/nextjs')
 } catch {
   // Sentry not installed or not configured — that is fine
