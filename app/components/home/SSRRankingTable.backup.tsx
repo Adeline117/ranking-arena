@@ -1,14 +1,14 @@
 /**
- * SSRRankingTable - Optimized Version
- * Performance improvements:
- * 1. Use next/image for optimized image loading (AVIF/WebP)
- * 2. Direct CDN URLs instead of /api/avatar proxy
- * 3. Priority loading for top 3 traders
- * 4. Better CLS prevention with explicit dimensions
+ * SSRRankingTable - Pure Server Component
+ * Renders the top traders as static HTML for instant LCP.
+ * No JavaScript needed to display — painted by browser immediately.
+ * The client-side RankingTable takes over after hydration.
+ * 
+ * Uses CSS classes instead of inline styles to minimize HTML size
+ * (25 rows × repeated styles = significant savings).
  */
 
 import type { InitialTrader } from '@/lib/getInitialTraders'
-import Image from 'next/image'
 
 // Score color logic (server-side, no hooks)
 function getScoreColor(score: number): string {
@@ -61,7 +61,7 @@ export default function SSRRankingTable({ traders }: Props) {
 .ssr-rank-default{color:var(--color-text-tertiary)}
 .ssr-info{display:flex;align-items:center;gap:10px;min-width:0}
 .ssr-av{width:36px;height:36px;min-width:36px;border-radius:50%;background:linear-gradient(135deg,var(--color-accent-primary-30),var(--color-pro-gold-border,#a78bfa));display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:700;color:var(--color-on-accent,#fff);overflow:hidden;position:relative}
-.ssr-av img{width:100%;height:100%;object-fit:cover;border-radius:50%}
+.ssr-av img{width:100%;height:100%;object-fit:cover;position:absolute;inset:0}
 .ssr-name{font-size:13px;font-weight:600;color:var(--color-text-primary);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .ssr-src{font-size:11px;color:var(--color-text-tertiary);text-transform:capitalize}
 .ssr-score{text-align:right;font-size:13px;font-weight:700;font-variant-numeric:tabular-nums}
@@ -87,12 +87,6 @@ export default function SSRRankingTable({ traders }: Props) {
         {traders.slice(0, 25).map((trader, idx) => {
           const rank = idx + 1
           const isTop3 = rank <= 3
-          // Use direct CDN URL if available (skip proxy for better performance)
-          const avatarUrl = trader.avatar_url?.startsWith('http') 
-            ? trader.avatar_url 
-            : trader.avatar_url 
-              ? `/api/avatar?url=${encodeURIComponent(trader.avatar_url)}` 
-              : null
 
           return (
             <a
@@ -108,16 +102,13 @@ export default function SSRRankingTable({ traders }: Props) {
               <div className="ssr-info">
                 <div className="ssr-av">
                   {getInitial(trader.handle)}
-                  {avatarUrl && (
-                    <Image
-                      src={avatarUrl}
-                      alt={trader.handle || 'Trader'}
+                  {trader.avatar_url && (
+                    <img
+                      src={`/api/avatar?url=${encodeURIComponent(trader.avatar_url)}`}
+                      alt={trader.handle || 'Trader avatar'}
                       width={36}
                       height={36}
-                      priority={isTop3}
-                      loading={isTop3 ? undefined : 'lazy'}
-                      sizes="36px"
-                      style={{ borderRadius: '50%' }}
+                      loading={rank <= 3 ? 'eager' : 'lazy'}
                     />
                   )}
                 </div>
