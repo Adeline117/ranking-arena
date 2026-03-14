@@ -1,3 +1,4 @@
+/** @deprecated Use UnifiedTrader from lib/types/unified-trader.ts */
 export type Trader = {
   id: string
   handle: string | null

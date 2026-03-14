@@ -206,7 +206,7 @@ export interface TraderSource {
   raw: Record<string, unknown> | null
 }
 
-/** Enriched trader profile (new format) */
+/** @deprecated Use UnifiedTrader from lib/types/unified-trader.ts */
 export interface TraderProfile {
   platform: LeaderboardPlatform
   market_type: MarketType
@@ -538,7 +538,7 @@ export interface RankingsQuery {
   trader_type?: 'human' | 'bot'
 }
 
-/** Single ranked trader in the response (legacy) */
+/** @deprecated Use UnifiedTrader from lib/types/unified-trader.ts */
 export interface RankedTraderRow {
   rank: number
   platform: Platform
@@ -583,7 +583,7 @@ export interface RankingEntry {
   updated_at: string
 }
 
-/** Trader detail API response */
+/** @deprecated Use TraderDetail from lib/types/unified-trader.ts */
 export interface TraderDetailResponse {
   profile: TraderProfile
   snapshots: Record<Window, TraderSnapshot | null>

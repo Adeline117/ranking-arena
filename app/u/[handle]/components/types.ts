@@ -53,6 +53,7 @@ export interface PositionHistoryEntry {
   status: string
 }
 
+/** @deprecated Use TraderDetail from lib/types/unified-trader.ts */
 export type TraderPageData = {
   profile?: TraderProfile | null
   performance?: TraderPerformance | null

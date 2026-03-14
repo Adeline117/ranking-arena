@@ -1,7 +1,13 @@
 /**
  * 交易员相关类型定义
  * 所有交易员相关的类型集中在这里，消除 any 类型
+ *
+ * @deprecated Most types here are superseded by UnifiedTrader in lib/types/unified-trader.ts.
+ * New code should import from unified-trader.ts. These types remain for backward compatibility.
  */
+
+// Re-export the canonical type so consumers can discover it here
+export { type UnifiedTrader, type TraderDetail, type TradingPeriod, type EquityPoint, type AssetWeight, type TraderPosition } from './unified-trader'
 
 // ============================================
 // 交易所和数据源
@@ -85,7 +91,7 @@ export interface TraderSourceRecord {
 /** Bot category */
 export type BotCategory = 'tg_bot' | 'ai_agent' | 'vault' | 'strategy'
 
-/** 交易员基本资料 */
+/** @deprecated Use UnifiedTrader from lib/types/unified-trader.ts */
 export interface TraderProfile {
   handle: string
   display_name?: string | null
@@ -111,7 +117,7 @@ export interface TraderProfile {
 // 交易员绩效数据
 // ============================================
 
-/** 交易员绩效数据 */
+/** @deprecated Use UnifiedTrader from lib/types/unified-trader.ts */
 export interface TraderPerformance {
   roi_7d?: number
   roi_30d?: number
@@ -199,7 +205,7 @@ export interface AdditionalStats {
   calmarRatio?: number
 }
 
-/** 交易员完整统计 */
+/** @deprecated Use UnifiedTrader from lib/types/unified-trader.ts */
 export interface TraderStats {
   expectedDividends?: {
     dividendYield: number
@@ -274,6 +280,7 @@ export interface TraderFeedItem {
 /**
  * 排行榜表格中的交易员数据
  * 用于 RankingTable 组件和 useTraderData hook
+ * @deprecated Use UnifiedTrader from lib/types/unified-trader.ts
  */
 export interface Trader {
   id: string
@@ -299,7 +306,7 @@ export interface Trader {
   is_verified?: boolean
 }
 
-/** 排行榜交易员数据（严格版本，所有字段必需） */
+/** @deprecated Use UnifiedTrader from lib/types/unified-trader.ts */
 export interface RankedTrader {
   id: string
   handle: string
