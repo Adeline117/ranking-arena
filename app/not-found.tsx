@@ -383,13 +383,13 @@ export default function NotFoundPage() {
             {t('backToHome')}
           </Link>
           
-          <Link 
-            href="/hot"
+          <Link
+            href="/rankings"
             className="action-button secondary"
-            style={{ 
-              padding: '14px 28px', 
+            style={{
+              padding: '14px 28px',
               background: 'transparent',
-              color: tokens.colors.text.primary, 
+              color: tokens.colors.text.primary,
               borderRadius: tokens.radius.lg,
               border: `1px solid ${tokens.colors.border.primary}`,
               textDecoration: 'none',
@@ -397,7 +397,7 @@ export default function NotFoundPage() {
               fontWeight: 500,
             }}
           >
-            {t('notFoundViewHot')}
+            {t('leaderboardBreadcrumb')}
           </Link>
         </div>
 
@@ -424,8 +424,8 @@ export default function NotFoundPage() {
             flexWrap: 'wrap',
           }}>
             {[
-              { href: '/groups', label: t('notFoundBrowseGroups'), icon: '◈' },
               { href: '/search', label: t('search'), icon: '⌕' },
+              { href: '/market', label: t('market'), icon: '◈' },
               { href: '/login', label: t('login'), icon: '→' },
             ].map((item) => (
               <Link
