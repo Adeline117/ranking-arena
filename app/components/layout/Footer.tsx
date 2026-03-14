@@ -3,6 +3,7 @@
 import Link from 'next/link'
 import { tokens } from '@/lib/design-tokens'
 import { useLanguage } from '../Providers/LanguageProvider'
+import { features } from '@/lib/features'
 
 interface FooterColumn {
   title: string
@@ -21,13 +22,14 @@ export default function Footer() {
         { href: '/library', label: t('footerLibrary') },
       ],
     },
-    {
+    // Only show Community section if social features are enabled
+    ...(features.social ? [{
       title: t('footerCommunity'),
       links: [
         { href: '/groups', label: t('footerGroups') },
         { href: '/hot', label: t('footerHot') },
       ],
-    },
+    }] : []),
     {
       title: t('footerLegal'),
       links: [
