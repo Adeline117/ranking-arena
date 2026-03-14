@@ -44,20 +44,7 @@ export default function BookReviews({ reviews, bookId, bookTitle, hasSession, ha
 
   return (
     <>
-      {hasSession && (
-        <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 16 }}>
-          <Link
-            href={`/community/new?category=book_review&book_id=${bookId}&book_title=${encodeURIComponent(bookTitle)}`}
-            style={{
-              fontSize: 13, fontWeight: 500, color: tokens.colors.accent.brand,
-              textDecoration: 'none', padding: '4px 12px',
-              borderRadius: tokens.radius.md, border: `1px solid ${tokens.colors.accent.brand}`,
-            }}
-          >
-            {t('bookReviewWriteReview')}
-          </Link>
-        </div>
-      )}
+      {/* Write review button hidden — social features disabled */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
         {reviews.map(r => (
           <div key={r.id} style={{

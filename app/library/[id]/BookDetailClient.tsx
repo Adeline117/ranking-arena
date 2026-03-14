@@ -563,15 +563,14 @@ export default function BookDetailClient({
                             {shortReview.length}/280
                           </span>
                           <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                            <Link
-                              href={`/community/new?category=book_review&book_id=${id}&book_title=${encodeURIComponent(book?.title || '')}`}
+                            <span
                               style={{
-                                fontSize: 13, color: tokens.colors.accent.brand,
-                                textDecoration: 'none', fontWeight: 500,
+                                fontSize: 13, color: tokens.colors.text.tertiary,
+                                fontWeight: 500, cursor: 'default',
                               }}
                             >
                               {t('bookWriteLongReview')}
-                            </Link>
+                            </span>
                             <button
                               onClick={handleSubmitReview}
                               disabled={!shortReview.trim() || reviewSubmitting}
