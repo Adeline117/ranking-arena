@@ -9,12 +9,12 @@ export async function generateMetadata({
   const query = resolved.q?.trim()
 
   const title = query
-    ? `"${query}" - 搜索结果 | Arena`
-    : '搜索交易员 | Arena'
+    ? `"${query}" - Search Results | Arena`
+    : 'Search Traders & Community | Arena'
 
   const description = query
-    ? `搜索 "${query}" 的交易员、帖子和小组结果`
-    : '搜索排行榜上的交易员、社区帖子和讨论小组'
+    ? `Search results for "${query}" — Find traders, posts, groups, and resources on Arena. Comprehensive search across 30+ exchanges and community content.`
+    : 'Search for top crypto traders, community posts, discussion groups, and trading resources on Arena. Find performance data from 30+ exchanges.'
 
   const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://www.arenafi.org'
 
@@ -30,6 +30,19 @@ export async function generateMetadata({
       url: `${baseUrl}/search`,
       siteName: 'Arena',
       type: 'website',
+      images: [{ 
+        url: `${baseUrl}/og-image.png`, 
+        width: 1200, 
+        height: 630, 
+        alt: 'Arena - Search' 
+      }],
+    },
+    twitter: {
+      card: 'summary_large_image',
+      title,
+      description: description.length > 160 ? description.substring(0, 157) + '...' : description,
+      images: [`${baseUrl}/og-image.png`],
+      creator: '@arenafi',
     },
     robots: {
       index: !query, // 有搜索词时不索引（避免大量低质量页面）

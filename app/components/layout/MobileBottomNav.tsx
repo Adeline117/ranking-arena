@@ -93,6 +93,24 @@ function MarketIcon({ active }: IconProps): React.ReactElement {
   )
 }
 
+function SearchIcon({ active }: IconProps): React.ReactElement {
+  return (
+    <NavIcon active={active}>
+      <circle cx="11" cy="11" r="8" />
+      <path d="m21 21-4.35-4.35" />
+    </NavIcon>
+  )
+}
+
+function LibraryIcon({ active }: IconProps): React.ReactElement {
+  return (
+    <NavIcon active={active}>
+      <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" />
+      <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z" />
+    </NavIcon>
+  )
+}
+
 interface NotificationBadgeProps {
   count: number
   ariaLabel: string
@@ -239,16 +257,10 @@ export default function MobileBottomNav(): React.ReactElement {
   const navItems: NavItem[] = useMemo(() => {
     const items: NavItem[] = [
       { href: '/', labelKey: 'home', Icon: HomeIcon },
-      ...(features.social
-        ? [
-            { href: '/hot', labelKey: 'hot', Icon: FireIcon },
-            { href: '/groups', labelKey: 'groups', Icon: GroupsIcon },
-          ]
-        : [
-            { href: '/rankings', labelKey: 'rankings', Icon: RankingsIcon },
-          ]),
-      { href: '/market', labelKey: 'market', Icon: MarketIcon },
-      { href: userHandle ? `/u/${encodeURIComponent(userHandle)}` : '/settings', labelKey: 'me', Icon: UserIcon },
+      { href: '/rankings', labelKey: 'rankings', Icon: RankingsIcon },
+      { href: '/search', labelKey: 'search', Icon: SearchIcon },
+      { href: '/library', labelKey: 'library', Icon: LibraryIcon },
+      { href: userHandle ? `/u/${encodeURIComponent(userHandle)}` : '/settings', labelKey: 'profile', Icon: UserIcon },
     ]
     return items
   }, [userHandle])
