@@ -1,7 +1,7 @@
 
 'use client'
 
-import { Suspense, lazy } from 'react'
+import { Suspense, lazy, useState, useEffect } from 'react'
 import { tokens } from '@/lib/design-tokens'
 import { Box } from '../base'
 import TopNav from '../layout/TopNav'
@@ -22,8 +22,15 @@ const WatchlistMarket = lazy(() => import('../sidebar/WatchlistMarket'))
 const NewsFlash = lazy(() => import('../sidebar/NewsFlash'))
 
 export default function HomePage() {
+  const [mounted, setMounted] = useState(false)
+
+  useEffect(() => {
+    setMounted(true)
+  }, [])
+
   return (
     <Box
+      suppressHydrationWarning
       style={{
         minHeight: '100vh',
         background: tokens.colors.bg.primary,
