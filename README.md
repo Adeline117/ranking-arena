@@ -2,12 +2,12 @@
 
 # Arena
 
-**Crypto trader ranking platform with real-time data from 39 exchanges.**
+**Crypto trader ranking platform with real-time data from 35+ exchanges.**
 
 [![Production](https://img.shields.io/badge/production-live-brightgreen)](https://www.arenafi.org)
 [![Next.js](https://img.shields.io/badge/Next.js-16-black)](https://nextjs.org)
 [![Traders](https://img.shields.io/badge/traders-32%2C000%2B-blue)]()
-[![Exchanges](https://img.shields.io/badge/exchanges-39-orange)]()
+[![Exchanges](https://img.shields.io/badge/exchanges-35%2B-orange)]()
 
 [Live Site](https://www.arenafi.org) · [Features](#features) · [Architecture](#architecture) · [Data Pipeline](#data-pipeline) · [Getting Started](#getting-started)
 
@@ -15,7 +15,7 @@
 
 ## Overview
 
-Arena aggregates, normalizes, and ranks 32,000+ crypto copy-trading leaders across 39 centralized and decentralized exchanges. Every trader receives an Arena Score, a composite metric combining ROI and absolute PnL, allowing apples-to-apples comparison regardless of the originating platform. The system ingests data continuously through 44 scheduled cron jobs, enriches trader profiles with equity curves, position history, and advanced statistics, and serves the results through a Next.js 16 frontend with ISR and edge caching.
+Arena aggregates, normalizes, and ranks 32,000+ crypto copy-trading leaders across 35+ centralized and decentralized exchanges. Every trader receives an Arena Score, a composite metric combining ROI and absolute PnL, allowing apples-to-apples comparison regardless of the originating platform. The system ingests data continuously through 44 scheduled cron jobs, enriches trader profiles with equity curves, position history, and advanced statistics, and serves the results through a Next.js 16 frontend with ISR and edge caching.
 
 Beyond rankings, Arena provides a 60,000+ item educational library (books, research papers, whitepapers), real-time market data via TradingView WebSocket, community features (groups, posts, comments), and a Pro membership tier.
 
@@ -96,7 +96,7 @@ Each trader profile includes:
 | Auth | Supabase Auth + Privy | Email/password + Web3 wallet login |
 | Styling | Tailwind CSS v4 | Design token system, dark/light theme |
 | Charts | TradingView + lightweight-charts | Interactive charts, WebSocket real-time data |
-| Exchange Data | Custom fetchers + CCXT | 39 exchange-specific fetcher modules with config-driven framework |
+| Exchange Data | Custom fetchers + CCXT | 35+ exchange-specific fetcher modules with config-driven framework |
 | State | Zustand + SWR | Zustand for global state, SWR for server data fetching |
 | Monitoring | PipelineLogger + Telegram alerts | Structured JSON logging, correlation IDs, anomaly detection |
 | Security | CSP, HSTS, Zod validation | Full security headers, input validation on all write routes |
@@ -134,7 +134,7 @@ Each trader profile includes:
          +-------------------+        +-----------------+
                   |
          +--------+-------------------------------------------+
-         | 39 Exchange APIs                                    |
+         | 35+ Exchange APIs                                    |
          | CEX: Binance, OKX, Bybit, Bitget, MEXC, KuCoin,   |
          |      Gate.io, HTX, CoinEx, BingX, LBank, Phemex,   |
          |      Pionex, Toobit, BTSE, Crypto.com, ...          |
@@ -161,7 +161,7 @@ The data pipeline consists of 44 Vercel cron jobs organized into several categor
 
 | Job | Schedule | Description |
 |-----|----------|-------------|
-| `batch-fetch-traders?group=a..f` | Every 2-6 hours | Fetch leaderboard data from all 39 exchanges, split into 6 batch groups to stay within Vercel function timeout limits |
+| `batch-fetch-traders?group=a..f` | Every 2-6 hours | Fetch leaderboard data from all 35+ exchanges, split into 6 batch groups to stay within Vercel function timeout limits |
 | `batch-enrich` | Every 4 hours | Enrich top traders with equity curves, position history, and stats detail for 90D period |
 | `batch-enrich?period=7D/30D` | Every 6 hours | Enrichment for shorter time windows |
 | `fetch-details?tier=hot` | Every 2 hours | Fetch detailed profiles for high-priority traders (top ranked, recently viewed) |
@@ -222,7 +222,7 @@ lib/                          # Core business logic
     platforms/                # 24 platform-specific connector modules
     registry.ts               # Connector registry and lookup
   cron/
-    fetchers/                 # 39 exchange-specific data fetcher modules
+    fetchers/                 # 35+ exchange-specific data fetcher modules
       shared.ts               # Shared utilities (fetchJson, upsertTraders, parseNum, etc.)
       enrichment.ts           # Enrichment functions (equity curve, position history, stats)
       config-driven-fetcher.ts # Config-driven fetcher framework
