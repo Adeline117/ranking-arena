@@ -389,7 +389,7 @@ export default function GroupDetailPage({ params }: { params: Promise<{ id: stri
           showToast(t('inviteInvalidOrExpired'), 'error')
         }
       } catch {
-        // Invite verification failed
+        // Intentionally swallowed: invite code verification failed, user sees invalid invite toast
       }
     }
     handleInvite()

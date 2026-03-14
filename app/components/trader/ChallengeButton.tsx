@@ -125,7 +125,7 @@ export default function ChallengeButton({
       setCopied(true)
       setTimeout(() => setCopied(false), 2000)
     } catch {
-      // fallback
+      // Intentionally swallowed: clipboard API unavailable in some browsers, no fallback needed
     }
   }
 

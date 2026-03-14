@@ -43,7 +43,7 @@ export function saveLocalHistory(history: string[]): void {
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(history.slice(0, MAX_HISTORY_ITEMS)))
   } catch {
-    // Silently fail if localStorage is full
+    // Intentionally swallowed: localStorage full or unavailable, search history is non-critical
   }
 }
 

@@ -260,7 +260,7 @@ export default function CoreCards() {
                 }
               }
             } catch {
-              // Keep whatever we have from primary
+              // Intentionally swallowed: fallback data fetch failed, keep primary source results
             }
           }
 

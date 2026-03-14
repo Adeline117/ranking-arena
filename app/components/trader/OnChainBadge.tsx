@@ -46,7 +46,7 @@ export function OnChainBadge({ traderHandle, size = 'md' }: OnChainBadgeProps) {
         // if (data) setAttestation(data)
         void supabase // suppress unused
       } catch {
-        // Non-critical — fail silently
+        // Intentionally swallowed: on-chain attestation check is optional UI enrichment
       }
     }
 

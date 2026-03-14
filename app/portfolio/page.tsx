@@ -82,7 +82,7 @@ export default function PortfolioPage() {
       const json = await res.json()
       if (json.data) setPortfolios(json.data)
     } catch {
-      // silent
+      // Intentionally swallowed: portfolio load failure is non-critical, empty state shown instead
     }
   }, [token, fetchHeaders])
 
@@ -94,7 +94,7 @@ export default function PortfolioPage() {
       const json = await res.json()
       if (json.data) setPositions(json.data)
     } catch {
-      // silent
+      // Intentionally swallowed: positions load failure is non-critical, empty state shown instead
     }
   }, [token, fetchHeaders])
 

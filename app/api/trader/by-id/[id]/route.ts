@@ -23,6 +23,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { LeaderboardService } from '@/lib/services/leaderboard';
 import type { Platform, LeaderboardPlatform } from '@/lib/types/leaderboard';
 import { LEADERBOARD_PLATFORMS } from '@/lib/types/leaderboard';
+import { checkRateLimit, RateLimitPresets } from '@/lib/api'
 import logger from '@/lib/logger'
 
 interface RouteParams {
@@ -30,6 +31,9 @@ interface RouteParams {
 }
 
 export async function GET(request: NextRequest, { params }: RouteParams) {
+  const rateLimitResponse = await checkRateLimit(request, RateLimitPresets.public)
+  if (rateLimitResponse) return rateLimitResponse
+
   try {
     const { id } = await params;
 

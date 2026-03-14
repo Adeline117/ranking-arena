@@ -1,11 +1,17 @@
 /**
  * 详细健康检查 API
  * 提供更全面的系统状态信息，用于监控和调试
- * 
- * GET /api/health/detailed
+ *
+ * GET /api/health/detailed                     - Full detailed health
+ * GET /api/health/detailed?section=connectors  - Connector status (was /api/health/connectors)
+ * GET /api/health/detailed?section=dependencies - Dependencies (was /api/health/dependencies)
+ *
+ * Merges:
+ *   - /api/health/connectors (deleted)
+ *   - /api/health/dependencies (deleted)
  */
 
-import { NextResponse } from 'next/server'
+import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { checkHealth as checkCacheHealth, getCacheStats } from '@/lib/cache'
 import { getSupportedPlatforms } from '@/lib/cron/utils'
@@ -255,7 +261,204 @@ function calculateStatus(checks: DetailedHealthResponse['checks']): DetailedHeal
   return 'healthy'
 }
 
-export async function GET() {
+// ---------- Connectors section (was /api/health/connectors) ----------
+
+const ACTIVE_PLATFORMS = [
+  'binance_futures', 'binance_spot', 'bitget_futures', 'okx_futures',
+  'htx_futures', 'mexc', 'coinex', 'bingx', 'gateio', 'xt', 'btcc',
+  'bitunix', 'bitfinex', 'toobit', 'etoro',
+  'hyperliquid', 'gmx', 'dydx', 'gains', 'jupiter_perps', 'aevo', 'drift',
+  'okx_web3', 'binance_web3', 'web3_bot',
+]
+
+async function getConnectorsSection(cronSecret: string | undefined, authHeader: string | null) {
+  // Connectors section requires CRON_SECRET auth
+  if (!cronSecret || authHeader !== `Bearer ${cronSecret}`) {
+    return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
+  }
+
+  const supabaseUrl = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL || ''
+  const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || ''
+  if (!supabaseUrl || !supabaseKey) {
+    return NextResponse.json({ error: 'Supabase not configured' }, { status: 500 })
+  }
+  const supabase = createClient(supabaseUrl, supabaseKey, { auth: { persistSession: false } })
+
+  const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString()
+
+  const [{ data: logs }, { data: freshness }] = await Promise.all([
+    supabase
+      .from('pipeline_logs')
+      .select('job_name, status, started_at, ended_at, duration_ms, records_processed, error_message')
+      .like('job_name', 'batch-fetch-traders%')
+      .gte('started_at', oneDayAgo)
+      .order('started_at', { ascending: false }),
+    supabase
+      .from('leaderboard_ranks')
+      .select('source, computed_at')
+      .eq('season_id', '90D')
+      .order('computed_at', { ascending: false })
+      .limit(5000),
+  ])
+
+  const latestByPlatform = new Map<string, string>()
+  for (const row of freshness || []) {
+    if (!latestByPlatform.has(row.source)) {
+      latestByPlatform.set(row.source, row.computed_at)
+    }
+  }
+
+  const groupStats = new Map<string, { total: number; success: number; errors: string[] }>()
+  for (const log of logs || []) {
+    const group = log.job_name
+    const stats = groupStats.get(group) || { total: 0, success: 0, errors: [] }
+    stats.total++
+    if (log.status === 'success') stats.success++
+    if (log.error_message) stats.errors.push(log.error_message.slice(0, 100))
+    groupStats.set(group, stats)
+  }
+
+  const connectors: Record<string, {
+    status: 'healthy' | 'stale' | 'critical'
+    last_update: string | null
+    staleness_hours: number | null
+  }> = {}
+
+  for (const platform of ACTIVE_PLATFORMS) {
+    const latest = latestByPlatform.get(platform)
+    const hoursAgo = latest ? (Date.now() - new Date(latest).getTime()) / (60 * 60 * 1000) : null
+    connectors[platform] = {
+      status: hoursAgo === null ? 'critical' : hoursAgo > 24 ? 'critical' : hoursAgo > 8 ? 'stale' : 'healthy',
+      last_update: latest || null,
+      staleness_hours: hoursAgo ? Math.round(hoursAgo * 10) / 10 : null,
+    }
+  }
+
+  const healthy = Object.values(connectors).filter(c => c.status === 'healthy').length
+  const stale = Object.values(connectors).filter(c => c.status === 'stale').length
+  const critical = Object.values(connectors).filter(c => c.status === 'critical').length
+
+  return NextResponse.json({
+    status: critical > 0 ? 'degraded' : 'healthy',
+    timestamp: new Date().toISOString(),
+    summary: { total: ACTIVE_PLATFORMS.length, healthy, stale, critical },
+    connectors,
+    pipeline_groups: Object.fromEntries(
+      Array.from(groupStats.entries()).map(([k, v]) => [
+        k,
+        { runs_24h: v.total, success_rate: v.total > 0 ? Math.round((v.success / v.total) * 100) : 0, recent_errors: v.errors.slice(0, 3) },
+      ])
+    ),
+  })
+}
+
+// ---------- Dependencies section (was /api/health/dependencies) ----------
+
+interface DependencyStatus {
+  status: 'up' | 'down' | 'degraded' | 'skip'
+  latencyMs: number
+  message?: string
+}
+
+async function checkWithTimeout(
+  name: string,
+  fn: () => Promise<DependencyStatus>,
+  timeoutMs = 10_000
+): Promise<[string, DependencyStatus]> {
+  try {
+    const result = await Promise.race([
+      fn(),
+      new Promise<DependencyStatus>((_, reject) =>
+        setTimeout(() => reject(new Error('timeout')), timeoutMs)
+      ),
+    ])
+    return [name, result]
+  } catch (err) {
+    return [name, { status: 'down', latencyMs: timeoutMs, message: err instanceof Error ? err.message : 'Unknown error' }]
+  }
+}
+
+async function checkSupabaseDep(): Promise<DependencyStatus> {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+  if (!url || !key) return { status: 'skip', latencyMs: 0, message: 'Not configured' }
+  const start = Date.now()
+  const res = await fetch(`${url}/rest/v1/`, { method: 'HEAD', headers: { apikey: key, Authorization: `Bearer ${key}` } })
+  return { status: res.ok ? 'up' : 'down', latencyMs: Date.now() - start, message: res.ok ? undefined : `HTTP ${res.status}` }
+}
+
+async function checkRedisDep(): Promise<DependencyStatus> {
+  const url = process.env.UPSTASH_REDIS_REST_URL
+  const token = process.env.UPSTASH_REDIS_REST_TOKEN
+  if (!url || !token) return { status: 'skip', latencyMs: 0, message: 'Not configured' }
+  const start = Date.now()
+  const res = await fetch(`${url}/ping`, { headers: { Authorization: `Bearer ${token}` } })
+  const body = await res.json().catch(() => null)
+  const pong = body?.result === 'PONG'
+  return { status: pong ? 'up' : 'down', latencyMs: Date.now() - start, message: pong ? undefined : `Response: ${JSON.stringify(body)}` }
+}
+
+async function checkUrl(url: string): Promise<DependencyStatus> {
+  const start = Date.now()
+  const res = await fetch(url, { method: 'HEAD', signal: AbortSignal.timeout(8000) })
+  return { status: res.ok || res.status === 403 ? 'up' : 'degraded', latencyMs: Date.now() - start, message: res.ok ? undefined : `HTTP ${res.status}` }
+}
+
+const EXCHANGE_ENDPOINTS: Record<string, string> = {
+  binance: 'https://fapi.binance.com/fapi/v1/ping',
+  bybit: 'https://api.bybit.com/v5/market/time',
+  okx: 'https://www.okx.com/api/v5/public/time',
+  bitget: 'https://api.bitget.com/api/v2/public/time',
+  hyperliquid: 'https://api.hyperliquid.xyz/info',
+  mexc: 'https://api.mexc.com/api/v3/ping',
+  kucoin: 'https://api.kucoin.com/api/v1/timestamp',
+  gateio: 'https://api.gateio.ws/api/v4/spot/currencies/BTC',
+  htx: 'https://api.huobi.pro/v1/common/timestamp',
+  coinex: 'https://api.coinex.com/v2/ping',
+}
+
+async function getDependenciesSection() {
+  const checks = await Promise.all([
+    checkWithTimeout('supabase', checkSupabaseDep),
+    checkWithTimeout('redis', checkRedisDep),
+    checkWithTimeout('tradingview_cdn', () => checkUrl('https://s3.tradingview.com/tv.js')),
+    ...Object.entries(EXCHANGE_ENDPOINTS).map(([name, url]) =>
+      checkWithTimeout(name, () => checkUrl(url))
+    ),
+  ])
+
+  const dependencies: Record<string, DependencyStatus> = {}
+  for (const [name, status] of checks) {
+    dependencies[name] = status
+  }
+
+  const statuses = Object.values(dependencies)
+  const coreDown = dependencies.supabase?.status === 'down'
+  const anyDown = statuses.some((s) => s.status === 'down')
+
+  const status = coreDown ? 'unhealthy' : anyDown ? 'degraded' : 'healthy'
+
+  return NextResponse.json(
+    { status, timestamp: new Date().toISOString(), dependencies },
+    { status: status === 'unhealthy' ? 503 : 200, headers: { 'Cache-Control': 'no-store, no-cache, must-revalidate' } }
+  )
+}
+
+// ---------- Main GET handler ----------
+
+export async function GET(request: NextRequest) {
+  const section = request.nextUrl.searchParams.get('section')
+
+  // Route to specific section
+  if (section === 'connectors') {
+    const authHeader = request.headers.get('authorization')
+    return getConnectorsSection(process.env.CRON_SECRET, authHeader)
+  }
+  if (section === 'dependencies') {
+    return getDependenciesSection()
+  }
+
+  // Default: full detailed health check
   try {
     // 并行执行检查
     const [{ database, cronRuns }, cacheStatus] = await Promise.all([

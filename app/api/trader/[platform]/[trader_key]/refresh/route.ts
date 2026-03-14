@@ -10,6 +10,7 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { getSupabaseAdmin } from '@/lib/supabase/server'
+import { checkRateLimit, RateLimitPresets } from '@/lib/api'
 import type {
   JobType,
   RefreshResponse,
@@ -31,6 +32,10 @@ export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ platform: string; trader_key: string }> }
 ) {
+  // Rate limit: prevent abuse of refresh endpoint (writes to DB + triggers exchange API calls)
+  const rateLimitResponse = await checkRateLimit(request, RateLimitPresets.write)
+  if (rateLimitResponse) return rateLimitResponse
+
   const { platform, trader_key } = await params
 
   // Validate platform

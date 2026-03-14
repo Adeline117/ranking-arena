@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getCorsOrigin } from '@/lib/utils/cors'
+import { checkRateLimit, RateLimitPresets } from '@/lib/api'
 
 /**
  * Proxy for PDF/EPUB files to handle CORS and CSP restrictions.
@@ -20,6 +21,10 @@ function isAllowedUrl(url: string): boolean {
 }
 
 export async function GET(request: NextRequest) {
+  // Rate limit: prevent bandwidth abuse via proxy
+  const rateLimitResponse = await checkRateLimit(request, RateLimitPresets.public)
+  if (rateLimitResponse) return rateLimitResponse
+
   const url = request.nextUrl.searchParams.get('url')
   if (!url || !isAllowedUrl(url)) {
     return NextResponse.json({ error: 'Invalid URL' }, { status: 400 })

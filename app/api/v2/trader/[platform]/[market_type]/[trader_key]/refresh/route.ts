@@ -16,6 +16,7 @@ import { createClient } from '@supabase/supabase-js'
 import type { LeaderboardPlatform, MarketType, Window, RefreshResponse } from '@/lib/types/leaderboard'
 import { LEADERBOARD_PLATFORMS } from '@/lib/types/leaderboard'
 import { createRefreshJob } from '@/lib/jobs/processor'
+import { checkRateLimit, RateLimitPresets } from '@/lib/api'
 import { logger } from '@/lib/logger'
 
 export const dynamic = 'force-dynamic'
@@ -29,6 +30,10 @@ interface RouteParams {
 }
 
 export async function POST(request: NextRequest, { params }: RouteParams) {
+  // Rate limit: prevent abuse of refresh endpoint (writes to DB + triggers exchange API calls)
+  const rateLimitResponse = await checkRateLimit(request, RateLimitPresets.write)
+  if (rateLimitResponse) return rateLimitResponse
+
   try {
   const { platform, market_type, trader_key } = await params
 

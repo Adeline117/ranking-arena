@@ -103,12 +103,10 @@ export default function FollowListModal({
 
     setLoading(true)
     try {
-      const endpoint = type === 'followers'
-        ? `/api/users/${encodeURIComponent(handle)}/followers`
-        : `/api/users/${encodeURIComponent(handle)}/following`
+      const endpoint = `/api/users/${encodeURIComponent(handle)}/follow?list=${type}`
 
       const url = currentUserId
-        ? `${endpoint}?requesterId=${currentUserId}`
+        ? `${endpoint}&requesterId=${currentUserId}`
         : endpoint
 
       const response = await fetch(url, {

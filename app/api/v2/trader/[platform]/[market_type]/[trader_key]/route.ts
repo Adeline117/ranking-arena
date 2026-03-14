@@ -15,6 +15,7 @@
 
 import { NextRequest } from 'next/server'
 import { getSupabaseAdmin } from '@/lib/supabase/server'
+import { checkRateLimit, RateLimitPresets } from '@/lib/api'
 import type {
   Window,
   LeaderboardPlatform,
@@ -43,6 +44,9 @@ interface RouteParams {
 }
 
 export async function GET(request: NextRequest, { params }: RouteParams) {
+  const rateLimitResponse = await checkRateLimit(request, RateLimitPresets.public)
+  if (rateLimitResponse) return rateLimitResponse
+
   try {
   const { platform, market_type, trader_key } = await params
 

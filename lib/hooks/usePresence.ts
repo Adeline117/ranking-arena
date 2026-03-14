@@ -104,7 +104,7 @@ export function usePresence(currentUserId: string | null, watchUserIds: string[]
           body: JSON.stringify({ action: 'heartbeat' }),
         })
       } catch {
-        // Silent fail
+        // Intentionally swallowed: presence heartbeat is best-effort, missed heartbeats auto-recover
       }
     }, 300000)
 
@@ -142,10 +142,10 @@ export function usePresence(currentUserId: string | null, watchUserIds: string[]
           })
         }
       } catch {
-        // Silent fail
+        // Intentionally swallowed: last_seen fetch is non-critical, presence defaults to offline
       }
     }
-    
+
     fetchLastSeen()
   // eslint-disable-next-line react-hooks/exhaustive-deps -- join produces stable string key
   }, [watchUserIds.join(',')])

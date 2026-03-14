@@ -24,6 +24,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { JobRunner } from '@/lib/services/job-runner';
 import type { Platform, LeaderboardPlatform, RefreshResponse } from '@/lib/types/leaderboard';
 import { LEADERBOARD_PLATFORMS } from '@/lib/types/leaderboard';
+import { checkRateLimit, RateLimitPresets } from '@/lib/api'
 import logger from '@/lib/logger'
 
 interface RouteParams {
@@ -31,6 +32,10 @@ interface RouteParams {
 }
 
 export async function POST(request: NextRequest, { params }: RouteParams) {
+  // Rate limit: prevent abuse of refresh endpoint (writes to DB + triggers exchange API calls)
+  const rateLimitResponse = await checkRateLimit(request, RateLimitPresets.write)
+  if (rateLimitResponse) return rateLimitResponse
+
   try {
     const { id } = await params;
 

@@ -57,7 +57,7 @@ export async function GET(request: NextRequest) {
           const msg = { type: event, data, timestamp: Date.now() }
           controller.enqueue(encoder.encode(`data: ${JSON.stringify(msg)}\n\n`))
         } catch {
-          // 客户端已断开
+          // Intentionally swallowed: client disconnected, enqueue fails when stream is closed
         }
       })
 
@@ -66,7 +66,7 @@ export async function GET(request: NextRequest) {
         try {
           controller.enqueue(encoder.encode(': keepalive\n\n'))
         } catch {
-          // ignore
+          // Intentionally swallowed: keepalive write fails when client disconnects, cleanup handled by cancel()
         }
       }, 30000)
     },

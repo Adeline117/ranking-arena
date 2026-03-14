@@ -165,7 +165,7 @@ export function useRealtimeMarket(options: UseRealtimeMarketOptions = {}) {
         setActiveMode('sse')
         sseFailCountRef.current = 0
       } catch {
-        // skip malformed data
+        // Intentionally swallowed: malformed SSE JSON data, skip and wait for next event
       }
     }
 

@@ -192,7 +192,7 @@ export default function NotificationsPage() {
       })
       setNotifications((prev) => prev.map((n) => ({ ...n, read: true })))
     } catch {
-      // ignore
+      // Intentionally swallowed: mark-all-read is best-effort, UI already updated optimistically
     }
   }
 
