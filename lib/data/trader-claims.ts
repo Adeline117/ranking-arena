@@ -12,6 +12,7 @@ import { logger } from '@/lib/logger'
 export type VerificationMethod = 'api_key' | 'signature' | 'video' | 'social'
 export type ClaimStatus = 'pending' | 'reviewing' | 'verified' | 'rejected'
 
+/** @deprecated Use UnifiedTrader from '@/lib/types/unified-trader' for application code */
 export interface TraderClaim {
   id: string
   user_id: string
@@ -28,6 +29,7 @@ export interface TraderClaim {
   updated_at: string
 }
 
+/** @deprecated Use UnifiedTrader from '@/lib/types/unified-trader' for application code */
 export interface VerifiedTrader {
   id: string
   user_id: string
@@ -56,6 +58,7 @@ export interface CreateClaimInput {
   verification_data?: Record<string, unknown>
 }
 
+/** @deprecated Use UnifiedTrader from '@/lib/types/unified-trader' for application code */
 export interface UpdateVerifiedTraderInput {
   display_name?: string
   bio?: string

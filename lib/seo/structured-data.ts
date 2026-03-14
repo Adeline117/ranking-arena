@@ -189,6 +189,7 @@ export function generateOrganizationSchema(): OrganizationSchema {
 // 交易员 Schema
 // ============================================
 
+/** @deprecated Use UnifiedTrader from '@/lib/types/unified-trader' for application code */
 export interface TraderSchemaInput {
   handle: string
   id: string

@@ -16,9 +16,11 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient, SupabaseClient } from '@supabase/supabase-js'
 import { logger } from '@/lib/logger'
-import { INLINE_FETCHERS } from '@/lib/cron/fetchers'
 import { sleep } from '@/lib/cron/fetchers/shared'
 import { PipelineLogger } from '@/lib/services/pipeline-logger'
+import { connectorRegistry, initializeConnectors } from '@/lib/connectors/registry'
+import { runConnectorBatch } from '@/lib/connectors/connector-db-adapter'
+import { SOURCE_TO_CONNECTOR_MAP } from '@/lib/constants/exchanges'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 300

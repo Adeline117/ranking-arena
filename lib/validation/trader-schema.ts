@@ -120,6 +120,7 @@ export const TraderSnapshotSchema = z.object({
   avatar_url: z.string().url({ message: 'Invalid avatar URL' }).optional(),
 })
 
+/** @deprecated Use UnifiedTrader from '@/lib/types/unified-trader' for application code */
 export type TraderSnapshot = z.infer<typeof TraderSnapshotSchema>
 
 /**

@@ -39,6 +39,7 @@ const PLATFORM_LABELS: Record<string, string> = {
   coinex: 'CoinEx',
 }
 
+/** @deprecated UI-specific. Will be replaced by UnifiedTrader adapter. */
 export interface WrappedTraderData {
   handle: string
   displayName: string

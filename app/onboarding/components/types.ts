@@ -11,6 +11,7 @@ export interface OnboardingTheme {
   brandGradient: string
 }
 
+/** @deprecated UI-specific. Will be replaced by UnifiedTrader adapter. */
 export type Trader = {
   source: string
   source_trader_id: string

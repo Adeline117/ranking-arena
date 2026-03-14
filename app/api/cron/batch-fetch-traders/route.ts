@@ -25,13 +25,12 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { PipelineLogger } from '@/lib/services/pipeline-logger'
-import { getInlineFetcher } from '@/lib/cron/fetchers'
 import { createSupabaseAdmin } from '@/lib/cron/utils'
 import { recordFetchResult } from '@/lib/utils/pipeline-monitor'
 import { logger } from '@/lib/logger'
 import { runConnectorBatch } from '@/lib/connectors/connector-db-adapter'
 import { connectorRegistry, initializeConnectors } from '@/lib/connectors/registry'
-import { SOURCE_TYPE_MAP } from '@/lib/constants/exchanges'
+import { SOURCE_TO_CONNECTOR_MAP } from '@/lib/constants/exchanges'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 600 // Vercel Pro max: 10 minutes (was 300s = 5min)
@@ -82,7 +81,7 @@ interface BatchResult {
   durationMs: number
   totalSaved?: number
   error?: string
-  via?: 'connector' | 'inline'
+  via?: 'connector'
 }
 
 /**
@@ -94,41 +93,7 @@ interface BatchResult {
  * DEAD_BLOCKED_PLATFORMS are skipped by cron groups (not in any group).
  */
 
-/**
- * Map source names (used in cron groups) to connector registry keys.
- * Source names like 'htx_futures' map to connector platform 'htx' + marketType 'futures'.
- * Most DEX sources map to marketType 'perp', CEX to 'futures' or 'spot'.
- */
-const SOURCE_TO_CONNECTOR: Record<string, { platform: string; marketType: string }> = {
-  binance_futures: { platform: 'binance', marketType: 'futures' },
-  binance_spot: { platform: 'binance_spot', marketType: 'spot' },
-  binance_web3: { platform: 'binance_web3', marketType: 'web3' },
-  bitget_futures: { platform: 'bitget', marketType: 'futures' },
-  bitget_spot: { platform: 'bitget_spot', marketType: 'spot' },
-  okx_futures: { platform: 'okx', marketType: 'futures' },
-  okx_web3: { platform: 'okx_web3', marketType: 'web3' },
-  htx_futures: { platform: 'htx', marketType: 'futures' },
-  mexc: { platform: 'mexc', marketType: 'futures' },
-  coinex: { platform: 'coinex', marketType: 'futures' },
-  bingx: { platform: 'bingx', marketType: 'futures' },
-  gateio: { platform: 'gateio', marketType: 'futures' },
-  xt: { platform: 'xt', marketType: 'futures' },
-  blofin: { platform: 'blofin', marketType: 'futures' },
-  btcc: { platform: 'btcc', marketType: 'futures' },
-  bitunix: { platform: 'bitunix', marketType: 'futures' },
-  bitfinex: { platform: 'bitfinex', marketType: 'futures' },
-  toobit: { platform: 'toobit', marketType: 'futures' },
-  etoro: { platform: 'etoro', marketType: 'spot' },
-  bybit: { platform: 'bybit', marketType: 'futures' },
-  hyperliquid: { platform: 'hyperliquid', marketType: 'perp' },
-  gmx: { platform: 'gmx', marketType: 'perp' },
-  dydx: { platform: 'dydx', marketType: 'perp' },
-  gains: { platform: 'gains', marketType: 'perp' },
-  jupiter_perps: { platform: 'jupiter_perps', marketType: 'perp' },
-  aevo: { platform: 'aevo', marketType: 'perp' },
-  drift: { platform: 'drift', marketType: 'perp' },
-  web3_bot: { platform: 'web3_bot', marketType: 'web3' },
-}
+// SOURCE_TO_CONNECTOR_MAP imported from @/lib/constants/exchanges
 
 /** Initialized flag — connectors only need to be registered once per cold start */
 let connectorsInitialized = false
@@ -175,12 +140,11 @@ export async function GET(request: NextRequest) {
     }
   }
 
-  // Run a single platform: Connector first, Inline Fetcher fallback
+  // Run a single platform via Connector
   async function runPlatform(platform: string): Promise<BatchResult> {
     const start = Date.now()
 
-    // Try Connector path first
-    const mapping = SOURCE_TO_CONNECTOR[platform]
+    const mapping = SOURCE_TO_CONNECTOR_MAP[platform]
     const connector = (mapping && connectorsInitialized)
       ? connectorRegistry.get(
           mapping.platform as import('@/lib/types/leaderboard').LeaderboardPlatform,
@@ -189,14 +153,13 @@ export async function GET(request: NextRequest) {
       : null
 
     if (!connector) {
-      // No connector registered → fall back to inline fetcher
-      if (mapping) {
-        logger.warn(`[batch-fetch-traders-${group}] No connector for ${platform}:${mapping.marketType}, falling back to inline`)
-      }
-      return runPlatformInline(platform, start)
+      const errMsg = mapping
+        ? `No connector registered for ${platform}:${mapping.marketType}`
+        : `No SOURCE_TO_CONNECTOR mapping for ${platform}`
+      logger.error(`[batch-fetch-traders-${group}] ${errMsg}`)
+      return { platform, status: 'error', durationMs: Date.now() - start, error: errMsg, via: 'connector' }
     }
 
-    // --- Connector path ---
     try {
       const result = await Promise.race([
         runConnectorBatch(connector, { supabase, windows: ['7d', '30d', '90d'], limit: 500, sourceOverride: platform }),
@@ -239,41 +202,6 @@ export async function GET(request: NextRequest) {
 
       return { platform, status: 'error', durationMs: Date.now() - start, error: errMsg, via: 'connector' }
     }
-  }
-
-  // Inline Fetcher path (extracted for reuse and connector fallback)
-  async function runPlatformInline(platform: string, start: number): Promise<BatchResult> {
-    const fetcher = getInlineFetcher(platform)
-    if (!fetcher) {
-      return { platform, status: 'error', durationMs: Date.now() - start, error: `No fetcher for ${platform}`, via: 'inline' }
-    }
-
-    const result = await Promise.race([
-      fetcher(supabase, ['7D', '30D', '90D']),
-      new Promise<never>((_, reject) =>
-        setTimeout(() => reject(new Error(`Platform ${platform} timed out after ${PLATFORM_TIMEOUT_MS / 1000}s`)), PLATFORM_TIMEOUT_MS)
-      ),
-    ])
-    const hasErrors = Object.values(result.periods).some((p) => p.error)
-    const totalSaved = Object.values(result.periods).reduce((sum, p) => sum + (p.saved || 0), 0)
-
-    await recordFetchResult(supabase, result.source, {
-      success: !hasErrors,
-      durationMs: result.duration,
-      recordCount: totalSaved,
-      error: hasErrors
-        ? Object.entries(result.periods).filter(([, p]) => p.error).map(([k, p]) => `${k}: ${p.error}`).join('; ')
-        : undefined,
-      metadata: { periods: result.periods, batchGroup: group, via: 'inline' },
-    })
-
-    logger.info(`[batch-fetch-traders-${group}] ${platform} (inline): saved=${totalSaved} duration=${Date.now() - start}ms`)
-
-    if (hasErrors && totalSaved === 0) {
-      const errDetail = Object.entries(result.periods).filter(([, p]) => p.error).map(([k, p]) => `${k}: ${p.error}`).join('; ')
-      return { platform, status: 'error', durationMs: Date.now() - start, totalSaved, error: errDetail, via: 'inline' }
-    }
-    return { platform, status: 'success', durationMs: Date.now() - start, totalSaved, via: 'inline' }
   }
 
   // All platforms run in parallel — each platform uses a different fetcher module

@@ -9,9 +9,12 @@
 export const TRADER_SOURCES = ['binance', 'bybit', 'bitget', 'okx', 'kucoin', 'gate', 'mexc', 'coinex'] as const
 export const TRADER_SOURCES_WITH_WEB3 = ['binance_web3', ...TRADER_SOURCES] as const
 
+/** @deprecated Use UnifiedTrader from '@/lib/types/unified-trader' for application code */
 export type TraderSource = typeof TRADER_SOURCES[number]
+/** @deprecated Use UnifiedTrader from '@/lib/types/unified-trader' for application code */
 export type TraderSourceWithWeb3 = typeof TRADER_SOURCES_WITH_WEB3[number]
 
+/** @deprecated Use UnifiedTrader from '@/lib/types/unified-trader' for application code */
 export interface TraderSourceRecord {
   source_trader_id: string
   handle: string | null
@@ -120,6 +123,7 @@ export interface PortfolioItem {
   priceChangePct?: number
 }
 
+/** @deprecated Use UnifiedTrader from '@/lib/types/unified-trader' for application code */
 export interface PositionHistoryItem {
   symbol: string
   direction: 'long' | 'short'
@@ -130,6 +134,7 @@ export interface PositionHistoryItem {
   closeTime: string
 }
 
+/** @deprecated Use UnifiedTrader from '@/lib/types/unified-trader' for application code */
 export interface TraderFeedItem {
   id: string
   type: 'post' | 'group_post' | 'repost'

@@ -29,6 +29,7 @@ export type Period = '7D' | '30D' | '90D'
  */
 export type ScoreConfidence = 'full' | 'partial' | 'minimal'
 
+/** @deprecated Use UnifiedTrader from '@/lib/types/unified-trader' for application code */
 export interface TraderScoreInput {
   roi: number          // ROI（百分比，如 25% = 25）
   pnl: number          // 已实现盈亏（USD）
@@ -517,7 +518,7 @@ export type {
   DataCompleteness,
 } from '@/lib/scoring/arena-score-v3'
 
-// Legacy V3 types for backward compatibility with cron job
+/** @deprecated Use UnifiedTrader from '@/lib/types/unified-trader' for application code */
 export interface TraderScoreInputV3 extends TraderScoreInput {
   alpha: number | null
   sortinoRatio: number | null

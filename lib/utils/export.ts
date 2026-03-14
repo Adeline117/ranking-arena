@@ -52,6 +52,7 @@ function downloadBlob(content: string, filename: string, mimeType: string): void
 
 // ── Data formatters ────────────────────────────────────────
 
+/** @deprecated Use UnifiedTrader from '@/lib/types/unified-trader' for application code */
 export interface TraderExportRow {
   rank: number
   handle: string

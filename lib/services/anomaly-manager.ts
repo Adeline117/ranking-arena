@@ -20,6 +20,7 @@ import { logger } from '@/lib/logger'
 // Types
 // ============================================
 
+/** @deprecated Use UnifiedTrader from '@/lib/types/unified-trader' for application code */
 export interface TraderData {
   id: string
   platform: string

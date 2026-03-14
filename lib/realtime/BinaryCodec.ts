@@ -28,6 +28,7 @@ export enum ConnectionStatusCode {
   DISCONNECTED = 4,
 }
 
+/** @deprecated Use UnifiedTrader from '@/lib/types/unified-trader' for application code */
 export interface TraderUpdateBinary {
   traderId: string
   source: string

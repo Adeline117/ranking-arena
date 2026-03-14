@@ -12,6 +12,7 @@ export interface AnomalyResult {
   suggestion?: string
 }
 
+/** @deprecated Use UnifiedTrader from '@/lib/types/unified-trader' for application code */
 export interface TraderDataForAnomaly {
   roi?: number | null
   pnl?: number | null

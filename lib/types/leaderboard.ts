@@ -182,7 +182,7 @@ export const PLATFORM_CATEGORY: Record<GranularPlatform, TradingCategory> = {
 // Trader Identity (trader_sources + trader_profiles)
 // ============================================
 
-/** Unique identity for a trader on a specific platform (legacy format) */
+/** @deprecated Use UnifiedTrader from '@/lib/types/unified-trader' for application code */
 export interface TraderIdentity {
   platform: Platform | GranularPlatform
   trader_key: string
@@ -193,7 +193,7 @@ export interface TraderIdentity {
   last_seen: string
 }
 
-/** How a trader was discovered on a platform (new format) */
+/** @deprecated Use UnifiedTrader from '@/lib/types/unified-trader' for application code */
 export interface TraderSource {
   platform: LeaderboardPlatform
   market_type: MarketType
@@ -224,7 +224,7 @@ export interface TraderProfile {
   provenance: DataProvenance
 }
 
-/** Enriched profile data (legacy format) */
+/** @deprecated Use UnifiedTrader from '@/lib/types/unified-trader' for application code */
 export interface TraderProfileEnriched {
   platform: Platform | GranularPlatform
   trader_key: string
@@ -318,7 +318,7 @@ export interface SnapshotMetricsLegacy {
   score_confidence?: 'full' | 'partial' | 'minimal' | null
 }
 
-/** A complete trader snapshot for a given window (new format) */
+/** @deprecated Use UnifiedTrader from '@/lib/types/unified-trader' for application code */
 export interface TraderSnapshot {
   platform: LeaderboardPlatform
   market_type: MarketType
@@ -330,7 +330,7 @@ export interface TraderSnapshot {
   updated_at: string
 }
 
-/** Legacy TraderSnapshot with id field */
+/** @deprecated Use UnifiedTrader from '@/lib/types/unified-trader' for application code */
 export interface TraderSnapshotLegacy {
   id: string
   platform: Platform | GranularPlatform
@@ -365,7 +365,7 @@ export interface TimeseriesPoint {
   value: number
 }
 
-/** Timeseries record (new format) */
+/** @deprecated Use UnifiedTrader from '@/lib/types/unified-trader' for application code */
 export interface TraderTimeseries {
   platform: LeaderboardPlatform
   market_type: MarketType
@@ -376,7 +376,7 @@ export interface TraderTimeseries {
   updated_at: string
 }
 
-/** Legacy Timeseries record with id */
+/** @deprecated Use UnifiedTrader from '@/lib/types/unified-trader' for application code */
 export interface TraderTimeseriesLegacy {
   id: string
   platform: Platform | GranularPlatform

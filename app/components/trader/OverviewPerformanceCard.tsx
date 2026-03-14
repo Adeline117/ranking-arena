@@ -10,7 +10,7 @@ import { MetricBadgesGrid } from './performance/MetricBadgesGrid'
 import { ScoreBreakdownSection } from './performance/ScoreBreakdownSection'
 import type { Period } from './performance/PeriodSelector'
 
-// 扩展 TraderPerformance 类型
+/** @deprecated UI-specific. Will be replaced by UnifiedTrader adapter. */
 export interface ExtendedPerformance extends TraderPerformance {
   arena_score_7d?: number
   arena_score_30d?: number

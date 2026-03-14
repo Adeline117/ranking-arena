@@ -19,6 +19,7 @@ const logger = createLogger('hot-score')
 // Types
 // ---------------------------------------------------------------------------
 
+/** @deprecated Use UnifiedTrader from '@/lib/types/unified-trader' for application code */
 export interface HotTrader {
   source: string
   source_trader_id: string

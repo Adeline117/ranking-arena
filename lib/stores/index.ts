@@ -42,6 +42,7 @@ const safeStorage: StateStorage = {
 
 const MAX_COMPARE_TRADERS = 5
 
+/** @deprecated UI-specific. Will be replaced by UnifiedTrader adapter. */
 export interface CompareTrader {
   id: string
   handle: string

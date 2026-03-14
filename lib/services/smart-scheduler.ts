@@ -24,6 +24,7 @@ export interface ScheduleConfig {
   description: string
 }
 
+/** @deprecated Use UnifiedTrader from '@/lib/types/unified-trader' for application code */
 export interface TraderActivity {
   traderId: string
   platform: string

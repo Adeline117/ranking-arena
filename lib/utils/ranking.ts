@@ -3,6 +3,7 @@
  * 提供风险调整后的排名计算
  */
 
+/** @deprecated Use UnifiedTrader from '@/lib/types/unified-trader' for application code */
 export interface TraderRankingData {
   id: string
   roi: number
@@ -13,6 +14,7 @@ export interface TraderRankingData {
   source: string
 }
 
+/** @deprecated Use UnifiedTrader from '@/lib/types/unified-trader' for application code */
 export interface RankedTrader extends TraderRankingData {
   rank: number
   risk_adjusted_score: number
