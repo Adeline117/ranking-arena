@@ -185,6 +185,7 @@ export class JobProcessor {
   // Job Type Handlers
   // ============================================
 
+  /** @deprecated Writes to trader_sources directly. Not migratable to unified (write operation). */
   private async handleDiscover(job: RefreshJob, connector: PlatformConnector): Promise<void> {
     const window = (job.window || '30d') as Window
     const result = await connector.discoverLeaderboard(window, 200)
@@ -217,6 +218,7 @@ export class JobProcessor {
     jobLogger.info(`[Discover] ${job.platform}/${job.market_type}: found ${result.traders.length} traders`)
   }
 
+  /** @deprecated Writes to trader_snapshots directly. Not migratable to unified (write operation). */
   private async handleSnapshotRefresh(job: RefreshJob, connector: PlatformConnector): Promise<void> {
     if (!job.trader_key) throw new Error('SNAPSHOT_REFRESH requires trader_key')
     if (!job.window) throw new Error('SNAPSHOT_REFRESH requires window')
@@ -529,6 +531,8 @@ export async function createRefreshJob(params: {
 
 /**
  * Create a batch of preheat jobs for top N traders on a platform.
+ * @deprecated Reads trader_sources for source_trader_id list. Uses scheduling-specific
+ *             columns (is_active) not available in unified layer.
  */
 export async function createPreheatJobs(
   platform: LeaderboardPlatform,

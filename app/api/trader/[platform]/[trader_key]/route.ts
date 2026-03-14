@@ -173,19 +173,20 @@ export async function GET(
 
   // --- Fallback to legacy tables when V2 tables are empty ---
 
-  // Fallback: profile from trader_sources
+  // Fallback: profile from leaderboard_ranks (unified data layer)
   if (!profileResult.data) {
-    const { data: legacySource } = await supabase
-      .from('trader_sources')
-      .select('source_trader_id, handle, avatar_url, profile_url')
+    const { data: lrProfile } = await supabase
+      .from('leaderboard_ranks')
+      .select('handle, avatar_url')
       .eq('source', platform)
       .eq('source_trader_id', trader_key)
+      .eq('season_id', '90D')
       .limit(1)
       .maybeSingle()
 
-    if (legacySource) {
-      profile.display_name = legacySource.handle || null
-      profile.avatar_url = legacySource.avatar_url || null
+    if (lrProfile) {
+      profile.display_name = lrProfile.handle || null
+      profile.avatar_url = lrProfile.avatar_url || null
     }
   }
 

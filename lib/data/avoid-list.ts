@@ -85,16 +85,20 @@ export async function getAvoidList(
 
   if (!data || data.length === 0) return []
 
-  // 获取交易员信息 - only fetch matching traders instead of entire table
+  // 获取交易员信息（从 leaderboard_ranks 查询，统一数据层）
   const traderIds = data.map(d => d.trader_id)
-  const { data: sources } = await supabase
-    .from('trader_sources')
+  const { data: lrRows } = await supabase
+    .from('leaderboard_ranks')
     .select('source_trader_id, source, handle')
     .in('source_trader_id', traderIds)
+    .eq('season_id', '90D')
 
   const handleMap = new Map<string, string>()
-  sources?.forEach(s => {
-    handleMap.set(`${s.source_trader_id}:${s.source}`, s.handle || s.source_trader_id)
+  lrRows?.forEach(r => {
+    const key = `${r.source_trader_id}:${r.source}`
+    if (!handleMap.has(key)) {
+      handleMap.set(key, r.handle || r.source_trader_id)
+    }
   })
 
   return data.map(d => ({

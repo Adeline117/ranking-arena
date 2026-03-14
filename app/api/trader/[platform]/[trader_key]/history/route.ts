@@ -69,6 +69,9 @@ export async function GET(
     }
     
     // 获取历史快照数据
+    // NOTE: This reads historical time-series from trader_snapshots (captured_at over time).
+    // This is NOT a "current state" lookup — it needs the full history, so it cannot use
+    // the unified data layer (which only returns latest snapshots). Kept as direct query.
     const { data: snapshots, error } = await supabase
       .from('trader_snapshots')
       .select('captured_at, roi, pnl, rank, arena_score, win_rate, max_drawdown')
