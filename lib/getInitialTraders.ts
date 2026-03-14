@@ -119,7 +119,7 @@ async function fetchLeaderboardFromDBInner(
         .or('is_outlier.is.null,is_outlier.eq.false') // Filter outliers (same as API)
         .gt('arena_score', 10) // Filter low-quality entries
         .order('rank', { ascending: true })
-        .limit(limit * 2)
+        .limit(2000) // Fetch large pool for platform diversity (top ranks dominated by a few DEX platforms)
         .abortSignal(signal!), // Cancel if build timeout
 
       supabase
@@ -147,7 +147,7 @@ async function fetchLeaderboardFromDBInner(
       if (seen.has(key)) return false
       seen.add(key)
       return true
-    }).slice(0, limit * 2)
+    }).slice(0, 2000)
 
     // Build trader objects directly from leaderboard_ranks
     // No need to recalculate arena_score — it's pre-computed and already validated
