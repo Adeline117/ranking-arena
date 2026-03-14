@@ -4,9 +4,9 @@ import Link from 'next/link'
 const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://www.arenafi.org'
 
 export const metadata: Metadata = {
-  title: 'Arena Score Methodology — How We Rank Crypto Traders | Arena',
+  title: 'Arena Score Methodology — How We Rank Traders',
   description:
-    'Learn how Arena collects performance data from 30+ exchanges and calculates the Arena Score to rank crypto traders. Understand our methodology for evaluating ROI, win rate, risk metrics, and overall trader quality.',
+    'Learn how Arena calculates trader rankings from 30+ exchanges. Our methodology evaluates ROI, win rate, risk metrics, and trader quality to compute Arena Score.',
   alternates: {
     canonical: `${baseUrl}/methodology`,
   },

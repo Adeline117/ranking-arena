@@ -4,8 +4,8 @@ import { redirect } from 'next/navigation'
 const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://www.arenafi.org'
 
 export const metadata: Metadata = {
-  title: 'Top Crypto Trader Rankings — Arena | ROI, Win Rate & Arena Score',
-  description: 'Discover the top crypto traders ranked by ROI, win rate, max drawdown, and Arena Score across all platforms. Real-time performance data from 30+ exchanges including Binance, Bitget, and Bybit.',
+  title: 'Top Crypto Traders — Arena | ROI & Arena Score',
+  description: 'Top crypto traders ranked by ROI, win rate, and Arena Score across 30+ exchanges. Real-time data from Binance, Bitget, and Bybit. Updated every 3 hours.',
   alternates: {
     canonical: `${baseUrl}/rankings/traders`,
   },
