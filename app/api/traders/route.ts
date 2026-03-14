@@ -73,7 +73,16 @@ export const GET = withPublic(
       { ttl: 60, lockTtl: 10 }
     )
 
-    const response = NextResponse.json(cachedData)
+    // Apply profanity filter after cache (ensures all cached + fresh data is filtered)
+    const sanitizedData = {
+      ...cachedData,
+      traders: cachedData.traders?.map((t: any) => ({
+        ...t,
+        handle: sanitizeDisplayName(t.handle)
+      })) || []
+    }
+    
+    const response = NextResponse.json(sanitizedData)
     response.headers.set('Cache-Control', 'public, s-maxage=60, stale-while-revalidate=300')
     return response
   },
