@@ -117,6 +117,7 @@ class ConsentManager {
         necessary: true, // 始终确保必要 Cookie 启用
       }
     } catch {
+      // Intentionally swallowed: corrupted consent JSON in localStorage, reset to defaults
       return { ...DEFAULT_CONSENT }
     }
   }

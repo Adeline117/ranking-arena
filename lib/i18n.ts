@@ -1,5 +1,8 @@
 // Internationalization - split by language for code splitting
 // en is loaded synchronously (default), others loaded on-demand
+// TODO: Consider splitting en.ts (~4400 lines) into domain-specific chunks
+// (e.g., en/rankings.ts, en/trader.ts, en/library.ts) and lazy-loading
+// non-critical chunks to reduce initial bundle size.
 import en from './i18n/en'
 
 export type Language = 'en' | 'zh' | 'ja' | 'ko'

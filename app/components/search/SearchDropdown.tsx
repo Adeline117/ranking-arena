@@ -130,7 +130,7 @@ export default function SearchDropdown({ open, query, onClose }: SearchDropdownP
   const loadTrendingSearches = useCallback(async () => {
     if (!open) return
     try {
-      const response = await fetch('/api/search/trending')
+      const response = await fetch('/api/search?type=trending')
       if (response.ok) {
         const result = await response.json()
         const data = result.data || result

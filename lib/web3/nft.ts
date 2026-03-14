@@ -83,6 +83,7 @@ export async function getNFTBalance(walletAddress: string): Promise<number> {
     })
     return Number(result)
   } catch {
+    // Intentionally swallowed: contract call failed (wrong network, contract not deployed), assume no NFT
     return 0
   }
 }
@@ -103,6 +104,7 @@ export async function getTokenExpiry(tokenId: bigint): Promise<Date | null> {
     })
     return new Date(Number(result) * 1000)
   } catch {
+    // Intentionally swallowed: contract call failed, token may not exist or contract not deployed
     return null
   }
 }

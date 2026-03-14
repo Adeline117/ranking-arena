@@ -19,7 +19,7 @@ if (typeof globalThis.process !== 'undefined' && typeof globalThis.process.versi
     const { AsyncLocalStorage } = require('node:async_hooks')
     correlationStore = new AsyncLocalStorage()
   } catch {
-    // Edge Runtime or restricted environment — no AsyncLocalStorage
+    // Intentionally swallowed: AsyncLocalStorage unavailable in Edge Runtime, correlation IDs disabled
   }
 }
 

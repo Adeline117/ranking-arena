@@ -96,7 +96,7 @@ export function useMarketFeed(options: UseMarketFeedOptions = {}): MarketFeedSta
           })
         }
       } catch {
-        // 忽略解析错误
+        // Intentionally swallowed: malformed SSE JSON event, skip and wait for next tick
       }
     }
 

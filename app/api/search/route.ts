@@ -1,6 +1,16 @@
 /**
  * 统一搜索 API
  * 聚合搜索交易员、帖子、资料库、用户，按类别返回结果
+ *
+ * GET /api/search?q=xxx             - Unified search
+ * GET /api/search?type=trending     - Trending searches (was /api/search/trending)
+ * GET /api/search?type=hot          - Hot searches (was /api/search/hot)
+ *
+ * Merges:
+ *   - /api/search/trending (deleted)
+ *   - /api/search/hot (deleted)
+ *   - /api/search/advanced (deleted, orphaned)
+ *   - /api/search/recommend (deleted, orphaned)
  */
 
 import { withPublic } from '@/lib/api/middleware'
@@ -35,9 +45,207 @@ export interface UnifiedSearchResponse {
   total: number
 }
 
+// ---------- Trending searches (was /api/search/trending) ----------
+
+interface TrendingSearchItem {
+  query: string
+  searchCount: number
+  rank: number
+  category?: 'trader' | 'token' | 'general'
+}
+
+interface TrendingSearchResponse {
+  trending: TrendingSearchItem[]
+  fallback: string[]
+  lastUpdated: string
+}
+
+async function handleTrendingSearch(supabase: Parameters<Parameters<typeof withPublic>[0]>[0]['supabase']) {
+  const cacheKey = 'search:trending:queries'
+
+  try {
+    const cached = await cacheGet<TrendingSearchResponse>(cacheKey)
+    if (cached) {
+      return success(cached)
+    }
+  } catch {
+    // cache miss
+  }
+
+  const sevenDaysAgo = new Date()
+  sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7)
+
+  const { data: analyticsData, error } = await supabase
+    .from('search_analytics')
+    .select('query, result_count, created_at')
+    .gte('created_at', sevenDaysAgo.toISOString())
+    .gte('result_count', 1)
+    .limit(1000)
+
+  let trending: TrendingSearchItem[] = []
+
+  if (!error && analyticsData?.length) {
+    const queryStats = new Map<string, { count: number; totalResults: number }>()
+
+    analyticsData.forEach(({ query, result_count }: { query: string; result_count: number }) => {
+      if (!query || query.length < 2) return
+      const normalizedQuery = query.toLowerCase().trim()
+      if (normalizedQuery.length < 2) return
+      const current = queryStats.get(normalizedQuery) || { count: 0, totalResults: 0 }
+      current.count += 1
+      current.totalResults += result_count || 0
+      queryStats.set(normalizedQuery, current)
+    })
+
+    const sortedQueries = Array.from(queryStats.entries())
+      .filter(([, stats]) => stats.count >= 3)
+      .sort(([, a], [, b]) => {
+        const scoreA = a.count * 2 + (a.totalResults / a.count) * 0.1
+        const scoreB = b.count * 2 + (b.totalResults / b.count) * 0.1
+        return scoreB - scoreA
+      })
+      .slice(0, 20)
+
+    trending = sortedQueries.map(([q, stats], index) => {
+      let category: TrendingSearchItem['category'] = 'general'
+      if (/^[A-Z]{2,6}$/.test(q.toUpperCase())) {
+        category = 'token'
+      } else if (q.includes('@') || /binance|bybit|okx|bitget|mexc/i.test(q)) {
+        category = 'trader'
+      }
+      return { query: q, searchCount: stats.count, rank: index + 1, category }
+    })
+  }
+
+  const fallbackQueries = [
+    'BTC', 'ETH', 'SOL', 'PEPE', 'WIF',
+    'Binance', 'Bybit', 'OKX', 'Bitget',
+    'Futures', 'Spot', 'Options', 'NFT', 'DeFi',
+  ]
+
+  const result: TrendingSearchResponse = {
+    trending: trending.length >= 5 ? trending : [],
+    fallback: fallbackQueries,
+    lastUpdated: new Date().toISOString(),
+  }
+
+  try {
+    await cacheSet(cacheKey, result, { ttl: 3600 })
+  } catch {
+    // non-critical
+  }
+
+  return success(result, 200, {
+    'Cache-Control': 'public, s-maxage=1800, stale-while-revalidate=3600',
+  })
+}
+
+// ---------- Hot searches (was /api/search/hot) ----------
+
+interface HotSearchItem {
+  keyword: string
+  count: number
+  trend: 'up' | 'down' | 'stable'
+}
+
+function extractKeyword(title: string): string | null {
+  if (!title || title.length < 2) return null
+
+  const symbolMatch = title.match(/\$([A-Z]{2,10})/i)
+  if (symbolMatch) return symbolMatch[1].toUpperCase()
+
+  const hashMatch = title.match(/#(\S{2,20})/)
+  if (hashMatch) return hashMatch[1]
+
+  const cleaned = title
+    .replace(/[【】\[\]()（）「」《》]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+
+  const words = cleaned.split(/\s+/).filter(w => w.length >= 2)
+  if (words.length === 0) return null
+
+  let result = ''
+  for (const word of words) {
+    if ((result + ' ' + word).trim().length > 12) break
+    result = (result + ' ' + word).trim()
+  }
+
+  return result || null
+}
+
+async function handleHotSearch(supabase: Parameters<Parameters<typeof withPublic>[0]>[0]['supabase']) {
+  const CACHE_KEY = 'search:hot:v1'
+
+  const cached = await cacheGet<HotSearchItem[]>(CACHE_KEY)
+  if (cached) {
+    return success({ hotSearches: cached }, 200, {
+      'Cache-Control': 'public, s-maxage=300, stale-while-revalidate=600',
+    })
+  }
+
+  const hotSearches: HotSearchItem[] = []
+
+  if (features.social) {
+    const { data: hotPosts } = await supabase
+      .from('posts')
+      .select('title, hot_score, view_count, like_count, comment_count')
+      .not('title', 'is', null)
+      .order('hot_score', { ascending: false, nullsFirst: false })
+      .limit(20)
+
+    const seenKeywords = new Set<string>()
+
+    if (hotPosts && hotPosts.length > 0) {
+      for (const post of hotPosts) {
+        if (hotSearches.length >= 5) break
+        if (!post.title) continue
+        const keyword = extractKeyword(post.title)
+        if (!keyword || seenKeywords.has(keyword.toLowerCase())) continue
+        seenKeywords.add(keyword.toLowerCase())
+        const score = post.hot_score ||
+          (post.view_count || 0) * 0.1 +
+          (post.like_count || 0) * 2 +
+          (post.comment_count || 0) * 3
+        hotSearches.push({
+          keyword,
+          count: Math.round(score),
+          trend: score > 50 ? 'up' : score > 20 ? 'stable' : 'down',
+        })
+      }
+    }
+  }
+
+  if (hotSearches.length === 0) {
+    hotSearches.push(
+      { keyword: 'BTC', count: 1000, trend: 'up' },
+      { keyword: 'ETH', count: 800, trend: 'up' },
+      { keyword: 'SOL', count: 500, trend: 'stable' },
+    )
+  }
+
+  await cacheSet(CACHE_KEY, hotSearches, { ttl: 300 })
+
+  return success({ hotSearches }, 200, {
+    'Cache-Control': 'public, s-maxage=300, stale-while-revalidate=600',
+  })
+}
+
+// ---------- Main unified search ----------
+
 export const GET = withPublic(
   async ({ supabase, request }) => {
     const searchParams = request.nextUrl.searchParams
+    const searchType = searchParams.get('type')
+
+    // Route to sub-handlers for special types
+    if (searchType === 'trending') {
+      return handleTrendingSearch(supabase)
+    }
+    if (searchType === 'hot') {
+      return handleHotSearch(supabase)
+    }
+
     const query = searchParams.get('q')?.trim()
     const limitPerCategory = Math.min(
       parseInt(searchParams.get('limit') || '5'),

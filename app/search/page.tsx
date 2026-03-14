@@ -81,7 +81,7 @@ function SearchContent() {
     // 加载热门搜索数据
     const loadTrendingSearches = async () => {
       try {
-        const response = await fetch('/api/search/trending')
+        const response = await fetch('/api/search?type=trending')
         if (response.ok) {
           const result = await response.json()
           const data = result.data || result
