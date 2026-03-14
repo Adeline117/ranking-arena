@@ -26,7 +26,7 @@ import { BybitConnector } from './_deprecated/bybit'
 import { BitgetFuturesConnector } from './_deprecated/bitget-futures'
 import { OKXConnector } from './_deprecated/okx'
 import { MEXCConnector } from './_deprecated/mexc'
-import { KuCoinConnector } from './_deprecated/kucoin'
+// import { KuCoinConnector } from './_deprecated/kucoin' // DEAD
 import { HyperliquidConnector } from './_deprecated/hyperliquid'
 import { CoinExConnector } from './_deprecated/coinex'
 import { BitgetSpotConnector } from './_deprecated/bitget-spot'
@@ -126,8 +126,8 @@ export async function initializeConnectors(): Promise<void> {
   const { MexcFuturesConnector } = await import('./platforms/mexc-futures')
   const { CoinexFuturesConnector } = await import('./platforms/coinex-futures')
   const { OkxFuturesConnector } = await import('./platforms/okx-futures')
-  const { KucoinFuturesConnector } = await import('./platforms/kucoin-futures')
-  const { BitmartFuturesConnector } = await import('./platforms/bitmart-futures')
+  // const { KucoinFuturesConnector } = await import('./platforms/kucoin-futures') // DEAD
+  // const { BitmartFuturesConnector } = await import('./platforms/bitmart-futures') // DEAD
   const { PhemexFuturesConnector } = await import('./platforms/phemex-futures')
   const { HtxFuturesConnector } = await import('./platforms/htx-futures')
   const { WeexFuturesConnector } = await import('./platforms/weex-futures')
@@ -169,8 +169,8 @@ export async function initializeConnectors(): Promise<void> {
   connectorRegistry.register(new MexcFuturesConnector())
   connectorRegistry.register(new CoinexFuturesConnector())
   connectorRegistry.register(new OkxFuturesConnector({ proxyUrl }))
-  connectorRegistry.register(new KucoinFuturesConnector())
-  connectorRegistry.register(new BitmartFuturesConnector({ proxyUrl }))
+  // connectorRegistry.register(new KucoinFuturesConnector()) // DEAD: APIs 404 since 2026-03
+  // connectorRegistry.register(new BitmartFuturesConnector({ proxyUrl })) // DEAD
   connectorRegistry.register(new PhemexFuturesConnector())
   connectorRegistry.register(new HtxFuturesConnector({ proxyUrl }))
   connectorRegistry.register(new WeexFuturesConnector({ proxyUrl }))
@@ -221,7 +221,7 @@ const IMPLEMENTED_PLATFORMS: GranularPlatform[] = [
   'bitget_spot',
   'okx',
   'mexc',
-  'kucoin',
+  // 'kucoin', — DEAD: APIs 404 since 2026-03
   'coinex',
   'hyperliquid',
   // Pending implementation:
@@ -271,7 +271,7 @@ function createLegacyConnector(platform: GranularPlatform): AnyConnector | null 
     case 'mexc':
       return new MEXCConnector()
     case 'kucoin':
-      return new KuCoinConnector()
+      return null // DEAD: APIs 404 since 2026-03
     case 'hyperliquid':
       return new HyperliquidConnector()
     case 'coinex':
