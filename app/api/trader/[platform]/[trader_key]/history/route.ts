@@ -1,8 +1,8 @@
 /**
  * 交易员历史数据 API
- * 
+ *
  * 获取交易员的 ROI/PnL 历史趋势数据
- * 使用 trader_snapshots 表的历史记录
+ * 使用 trader_snapshots_v2 表的历史记录
  */
 
 import { NextRequest, NextResponse } from 'next/server'
@@ -68,17 +68,14 @@ export async function GET(
       '90D': new Date(now.getTime() - 90 * 24 * 60 * 60 * 1000),
     }
     
-    // 获取历史快照数据
-    // NOTE: This reads historical time-series from trader_snapshots (captured_at over time).
-    // This is NOT a "current state" lookup — it needs the full history, so it cannot use
-    // the unified data layer (which only returns latest snapshots). Kept as direct query.
+    // 获取历史快照数据 from trader_snapshots_v2
     const { data: snapshots, error } = await supabase
-      .from('trader_snapshots')
-      .select('captured_at, roi, pnl, rank, arena_score, win_rate, max_drawdown')
-      .eq('source', platform)
-      .eq('source_trader_id', traderId)
-      .gte('captured_at', periods['90D'].toISOString())
-      .order('captured_at', { ascending: true })
+      .from('trader_snapshots_v2')
+      .select('created_at, roi_pct, pnl_usd, rank, arena_score, win_rate, max_drawdown')
+      .eq('platform', platform)
+      .eq('trader_key', traderId)
+      .gte('created_at', periods['90D'].toISOString())
+      .order('created_at', { ascending: true })
     
     if (error) {
       logger.error('Failed to fetch trader history:', error)
@@ -100,17 +97,17 @@ export async function GET(
       const dailySnapshots = new Map<string, typeof snapshots[0]>()
       
       for (const snapshot of snapshots) {
-        const date = new Date(snapshot.captured_at).toISOString().split('T')[0]
+        const date = new Date(snapshot.created_at).toISOString().split('T')[0]
         dailySnapshots.set(date, snapshot)
       }
-      
+
       // 转换为数组并排序
       const sortedDailyData = Array.from(dailySnapshots.entries())
         .sort(([a], [b]) => a.localeCompare(b))
         .map(([date, snapshot]) => ({
           date,
-          roi: snapshot.roi !== null ? Number(snapshot.roi) : 0,
-          pnl: snapshot.pnl !== null ? Number(snapshot.pnl) : null,
+          roi: snapshot.roi_pct !== null ? Number(snapshot.roi_pct) : 0,
+          pnl: snapshot.pnl_usd !== null ? Number(snapshot.pnl_usd) : null,
           rank: snapshot.rank,
           arenaScore: snapshot.arena_score !== null ? Number(snapshot.arena_score) : null,
           winRate: snapshot.win_rate !== null ? Number(snapshot.win_rate) : null,

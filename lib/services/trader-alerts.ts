@@ -395,88 +395,115 @@ export async function runTraderAlertDetection(
 
   const traderIds = [...traderFollowersMap.keys()]
 
-  // 2. 获取最近两次 snapshot
-  // 取最近 14 天的 snapshots（确保有两次以上数据）
-  const twoWeeksAgo = new Date()
-  twoWeeksAgo.setDate(twoWeeksAgo.getDate() - 14)
-
-  const { data: snapshots, error: snapshotError } = await supabase
-    .from('trader_snapshots')
-    .select('source_trader_id, source, roi, roi_7d, roi_30d, arena_score, rank, captured_at')
+  // 2. Get current state from leaderboard_ranks (has roi per season, arena_score, rank, handle)
+  const { data: currentRanks, error: ranksError } = await supabase
+    .from('leaderboard_ranks')
+    .select('source_trader_id, source, handle, roi, arena_score, rank, season_id')
     .in('source_trader_id', traderIds)
-    .gte('captured_at', twoWeeksAgo.toISOString())
-    .order('captured_at', { ascending: false })
-    .limit(10000)
+    .in('season_id', ['7D', '30D', '90D'])
 
-  if (snapshotError) {
-    logger.error('[TraderAlerts] 获取快照失败:', snapshotError)
+  if (ranksError) {
+    logger.error('[TraderAlerts] 获取 leaderboard_ranks 失败:', ranksError)
     return { tradersChecked: 0, alertsDetected: 0, notificationsSaved: 0, errors: 1 }
   }
 
-  // 获取交易员 handle（从 leaderboard_ranks 查询，统一数据层）
-  const { data: lrRows } = await supabase
-    .from('leaderboard_ranks')
-    .select('source_trader_id, handle')
-    .in('source_trader_id', traderIds)
-    .eq('season_id', '90D')
-
-  const handleMap = new Map<string, string>()
-  if (lrRows) {
-    for (const r of lrRows) {
-      if (!handleMap.has(r.source_trader_id)) {
-        handleMap.set(r.source_trader_id, r.handle || r.source_trader_id)
+  // Build current state map: traderId -> { 7D, 30D, 90D data }
+  interface CurrentState {
+    source: string
+    handle: string
+    roi7d: number | null
+    roi30d: number | null
+    arenaScore: number | null
+    rank: number | null
+  }
+  const currentStateMap = new Map<string, CurrentState>()
+  if (currentRanks) {
+    for (const r of currentRanks) {
+      const existing = currentStateMap.get(r.source_trader_id) || {
+        source: r.source,
+        handle: r.handle || r.source_trader_id,
+        roi7d: null, roi30d: null, arenaScore: null, rank: null,
       }
+      existing.source = r.source
+      if (r.handle) existing.handle = r.handle
+      if (r.season_id === '7D') existing.roi7d = r.roi
+      if (r.season_id === '30D') existing.roi30d = r.roi
+      if (r.season_id === '90D') {
+        existing.arenaScore = r.arena_score
+        existing.rank = r.rank
+      }
+      currentStateMap.set(r.source_trader_id, existing)
     }
   }
 
-  // 3. 按交易员分组，取最近两次
-  interface SnapshotRow {
-    source_trader_id: string
-    source: string
-    roi: number | null
-    roi_7d: number | null
-    roi_30d: number | null
-    arena_score: number | null
-    rank: number | null
-    captured_at: string
+  // 3. Get previous snapshots from trader_snapshots_v2 for comparison
+  const twoWeeksAgo = new Date()
+  twoWeeksAgo.setDate(twoWeeksAgo.getDate() - 14)
+
+  const { data: prevSnapshots, error: snapshotError } = await supabase
+    .from('trader_snapshots_v2')
+    .select('trader_key, platform, roi_pct, arena_score, rank, window, created_at')
+    .in('trader_key', traderIds)
+    .gte('created_at', twoWeeksAgo.toISOString())
+    .order('created_at', { ascending: false })
+    .limit(10000)
+
+  if (snapshotError) {
+    logger.error('[TraderAlerts] 获取 trader_snapshots_v2 失败:', snapshotError)
+    return { tradersChecked: 0, alertsDetected: 0, notificationsSaved: 0, errors: 1 }
   }
 
-  const snapshotsByTrader = new Map<string, SnapshotRow[]>()
-  if (snapshots) {
-    for (const snap of snapshots as SnapshotRow[]) {
-      const key = snap.source_trader_id
-      const existing = snapshotsByTrader.get(key) || []
-      existing.push(snap)
-      snapshotsByTrader.set(key, existing)
+  // Build previous state: for each trader, get second-most-recent entry per window
+  interface PrevState {
+    roi7d: number | null
+    roi30d: number | null
+    arenaScore: number | null
+    rank: number | null
+  }
+  const prevStateMap = new Map<string, PrevState>()
+  // Track seen counts per trader+window to skip the first (current) and take second (previous)
+  const seenCounts = new Map<string, number>()
+  if (prevSnapshots) {
+    for (const snap of prevSnapshots) {
+      const countKey = `${snap.trader_key}:${snap.window}`
+      const count = (seenCounts.get(countKey) || 0) + 1
+      seenCounts.set(countKey, count)
+      // Skip the latest (count=1), use the second entry (count=2)
+      if (count !== 2) continue
+
+      const existing = prevStateMap.get(snap.trader_key) || {
+        roi7d: null, roi30d: null, arenaScore: null, rank: null,
+      }
+      if (snap.window === '7D') existing.roi7d = snap.roi_pct
+      if (snap.window === '30D') existing.roi30d = snap.roi_pct
+      if (snap.window === '90D') {
+        existing.arenaScore = snap.arena_score
+        existing.rank = snap.rank
+      }
+      prevStateMap.set(snap.trader_key, existing)
     }
   }
 
   // 4. 对比检测
   const allAlerts: DetectedAlert[] = []
 
-  for (const [traderId, traderSnapshots] of snapshotsByTrader) {
-    if (traderSnapshots.length < 2) continue
-
-    // 按时间排序（最新在前）
-    traderSnapshots.sort(
-      (a, b) => new Date(b.captured_at).getTime() - new Date(a.captured_at).getTime()
-    )
-
-    const latest = traderSnapshots[0]
-    const previous = traderSnapshots[1]
+  for (const traderId of traderIds) {
+    const current = currentStateMap.get(traderId)
+    const prev = prevStateMap.get(traderId)
+    if (!current || !prev) continue
 
     const comparison: SnapshotComparison = {
       sourceTraderid: traderId,
-      source: latest.source,
-      handle: handleMap.get(traderId) || traderId,
-      currentRoi7d: latest.roi_7d,
-      currentRoi30d: latest.roi_30d,
-      currentArenaScore: latest.arena_score,
-      currentRank: latest.rank,
-      prevRoi7d: previous.roi_7d,
-      prevRoi30d: previous.roi_30d,
-      prevArenaScore: previous.arena_score,
-      prevRank: previous.rank,
+      source: current.source,
+      handle: current.handle,
+      currentRoi7d: current.roi7d,
+      currentRoi30d: current.roi30d,
+      currentArenaScore: current.arenaScore,
+      currentRank: current.rank,
+      prevRoi7d: prev.roi7d,
+      prevRoi30d: prev.roi30d,
+      prevArenaScore: prev.arenaScore,
+      prevRank: prev.rank,
     }
 
     const userIds = traderFollowersMap.get(traderId) || []
