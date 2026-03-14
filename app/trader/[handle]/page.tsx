@@ -2,11 +2,9 @@ import type { Metadata } from 'next'
 import { redirect, notFound } from 'next/navigation'
 import { getSupabaseAdmin } from '@/lib/supabase/server'
 import { JsonLd } from '@/app/components/Providers/JsonLd'
-import { EXCHANGE_CONFIG } from '@/lib/constants/exchanges'
+import { EXCHANGE_CONFIG, type SourceType, type TraderSource, ALL_SOURCES } from '@/lib/constants/exchanges'
 import TraderProfileClient, { type UnregisteredTraderData } from './TraderProfileClient'
-import { findTraderSource, TRADER_SOURCES, type SourceType } from '@/app/api/traders/[handle]/trader-queries'
-import type { TraderSource } from '@/app/api/traders/[handle]/trader-types'
-import { getTraderDetails, getTraderDetailsFromSnapshots } from '@/app/api/traders/[handle]/trader-transforms'
+import { resolveTrader, getTraderDetail, toTraderPageData } from '@/lib/data/unified'
 
 // Derive display names from central config
 const EXCHANGE_DISPLAY: Record<string, string> = Object.fromEntries(
@@ -335,10 +333,12 @@ export default async function TraderPage({ params, searchParams }: { params: Pro
     // keep original if decode fails
   }
 
-  // 并行查询注册用户和未注册交易员数据，避免瀑布式加载
-  const [userHandle, traderData] = await Promise.all([
+  const sb = getSupabaseAdmin()
+
+  // 并行查询注册用户和解析交易员身份
+  const [userHandle, resolved] = await Promise.all([
     findUserProfileByTraderHandle(decodedHandle),
-    fetchUnregisteredTrader(decodedHandle, platform),
+    resolveTrader(sb, { handle: decodedHandle, platform }),
   ])
 
   // 1. 优先跳转到注册用户页面
@@ -346,78 +346,77 @@ export default async function TraderPage({ params, searchParams }: { params: Pro
     redirect(`/u/${encodeURIComponent(userHandle)}`)
   }
 
-  // 2. 展示未注册交易员数据
-  if (traderData) {
-    // Redirect raw address URLs to human-readable handle URLs (better SEO, Cloudflare caching)
-    if (traderData.handle && traderData.handle !== decodedHandle) {
-      const platformParam = traderData.source ? `?platform=${traderData.source}` : ''
-      redirect(`/trader/${encodeURIComponent(traderData.handle)}${platformParam}`)
-    }
-    // Fetch full trader data INLINE (no HTTP call — avoids Cloudflare 524 timeout)
-    let serverTraderData = null
-    try {
-      const sb = getSupabaseAdmin()
-      // Find trader source
-      let found: { source: TraderSource; sourceType: SourceType } | null = null
-      if (traderData.source && TRADER_SOURCES.includes(traderData.source as SourceType)) {
-        const { data: byId } = await sb
-          .from('trader_sources')
-          .select('source_trader_id, handle, profile_url, avatar_url, market_type')
-          .eq('source', traderData.source)
-          .eq('source_trader_id', traderData.source_trader_id)
-          .limit(1)
-          .maybeSingle()
-        if (byId) {
-          found = { source: byId as TraderSource, sourceType: traderData.source as SourceType }
-        }
-      }
-      if (!found) {
-        found = await findTraderSource(sb, traderData.source_trader_id || traderData.handle)
-      }
-      if (found) {
-        try {
-          serverTraderData = await getTraderDetails(sb, found.source, found.sourceType)
-        } catch {
-          serverTraderData = await getTraderDetailsFromSnapshots(sb, found.source.source_trader_id, found.sourceType)
-        }
-      }
-    } catch {
-      // Inline fetch failed — client will retry via SWR
-    }
-
-    // JSON-LD structured data for this trader
-    const exchange = EXCHANGE_DISPLAY[traderData.source || ''] || traderData.source || 'Crypto Exchange'
-    const roi = traderData.roi ?? null
-    const score = traderData.arena_score ?? null
-    const rank = traderData.rank ?? null
-    const jsonLd = {
-      '@context': 'https://schema.org',
-      '@type': 'Person',
-      name: traderData.handle,
-      url: `https://www.arenafi.org/trader/${encodeURIComponent(traderData.handle)}`,
-      ...(traderData.avatar_url ? { image: traderData.avatar_url } : {}),
-      description: [
-        `${exchange} crypto trader`,
-        roi != null ? `${roi >= 0 ? '+' : ''}${roi.toFixed(1)}% ROI` : null,
-        score != null ? `Arena Score ${score.toFixed(0)}` : null,
-        rank != null ? `Ranked #${rank} on Arena` : null,
-      ].filter(Boolean).join('. '),
-      memberOf: {
-        '@type': 'Organization',
-        name: exchange,
-      },
-      sameAs: [`https://www.arenafi.org/trader/${encodeURIComponent(traderData.handle)}`],
-    }
-
-    return (
-      <>
-        <JsonLd data={jsonLd} />
-        {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
-        <TraderProfileClient data={traderData} serverTraderData={serverTraderData as any} />
-      </>
-    )
+  // 2. 如果未找到交易员
+  if (!resolved) {
+    notFound()
   }
 
-  // 3. Not found
-  notFound()
+  // Redirect raw address URLs to human-readable handle URLs (better SEO)
+  if (resolved.handle && resolved.handle !== decodedHandle) {
+    const platformParam = `?platform=${resolved.platform}`
+    redirect(`/trader/${encodeURIComponent(resolved.handle)}${platformParam}`)
+  }
+
+  // 3. 获取完整交易员数据（通过统一数据层 — 自动处理 v1/v2/leaderboard fallback）
+  let serverTraderData = null
+  try {
+    const detail = await getTraderDetail(sb, {
+      platform: resolved.platform,
+      traderKey: resolved.traderKey,
+    })
+    if (detail) {
+      serverTraderData = toTraderPageData(detail)
+    }
+  } catch {
+    // Inline fetch failed — client will retry via SWR
+  }
+
+  // Build UnregisteredTraderData for initial render
+  const traderData: UnregisteredTraderData = {
+    handle: resolved.handle || decodedHandle,
+    avatar_url: resolved.avatarUrl,
+    source: resolved.platform,
+    source_trader_id: resolved.traderKey,
+    // Pull basic scores from serverTraderData if available
+    ...(serverTraderData?.performance ? {
+      arena_score: (serverTraderData.performance as Record<string, unknown>).arena_score as number | null,
+      roi: (serverTraderData.performance as Record<string, unknown>).roi_90d as number | null,
+      pnl: (serverTraderData.performance as Record<string, unknown>).pnl as number | null,
+      win_rate: (serverTraderData.performance as Record<string, unknown>).win_rate as number | null,
+      max_drawdown: (serverTraderData.performance as Record<string, unknown>).max_drawdown as number | null,
+      rank: (serverTraderData.performance as Record<string, unknown>).rank as number | null,
+      profitability_score: (serverTraderData.performance as Record<string, unknown>).profitability_score as number | null,
+      risk_control_score: (serverTraderData.performance as Record<string, unknown>).risk_control_score as number | null,
+      execution_score: (serverTraderData.performance as Record<string, unknown>).execution_score as number | null,
+    } : {}),
+  }
+
+  // JSON-LD structured data
+  const exchange = EXCHANGE_DISPLAY[resolved.platform] || resolved.platform || 'Crypto Exchange'
+  const roi = traderData.roi ?? null
+  const score = traderData.arena_score ?? null
+  const rank = traderData.rank ?? null
+  const jsonLd = {
+    '@context': 'https://schema.org',
+    '@type': 'Person',
+    name: traderData.handle,
+    url: `https://www.arenafi.org/trader/${encodeURIComponent(traderData.handle)}`,
+    ...(traderData.avatar_url ? { image: traderData.avatar_url } : {}),
+    description: [
+      `${exchange} crypto trader`,
+      roi != null ? `${roi >= 0 ? '+' : ''}${roi.toFixed(1)}% ROI` : null,
+      score != null ? `Arena Score ${score.toFixed(0)}` : null,
+      rank != null ? `Ranked #${rank} on Arena` : null,
+    ].filter(Boolean).join('. '),
+    memberOf: { '@type': 'Organization', name: exchange },
+    sameAs: [`https://www.arenafi.org/trader/${encodeURIComponent(traderData.handle)}`],
+  }
+
+  return (
+    <>
+      <JsonLd data={jsonLd} />
+      {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
+      <TraderProfileClient data={traderData} serverTraderData={serverTraderData as any} />
+    </>
+  )
 }
