@@ -86,27 +86,26 @@ export const GET = withAdminAuth(
       .select('id', { count: 'exact', head: true })
       .eq('status', 'pending')
 
-    // Scraper health summary
+    // Scraper health summary — use leaderboard_ranks computed_at for freshness
     const scraperHealth = { fresh: 0, stale: 0, critical: 0 }
     try {
-      const { data: sources } = await supabase
-        .from('trader_sources')
-        .select('source, updated_at')
-        .not('updated_at', 'is', null)
+      const { data: lrFreshness } = await supabase
+        .from('leaderboard_ranks')
+        .select('source, computed_at')
+        .eq('season_id', '90D')
 
-      if (sources) {
+      if (lrFreshness) {
         const nowMs = Date.now()
         const grouped = new Map<string, Date>()
-        for (const s of sources) {
+        for (const s of lrFreshness) {
           const existing = grouped.get(s.source)
-          const updated = new Date(s.updated_at)
+          const updated = new Date(s.computed_at)
           if (!existing || updated > existing) {
             grouped.set(s.source, updated)
           }
         }
         for (const [, lastUpdate] of grouped) {
           const ageHours = (nowMs - lastUpdate.getTime()) / (1000 * 60 * 60)
-          // Unified freshness SLA: fresh < 12h, stale 12-24h, critical > 24h
           if (ageHours < 12) scraperHealth.fresh++
           else if (ageHours < 24) scraperHealth.stale++
           else scraperHealth.critical++
@@ -116,15 +115,17 @@ export const GET = withAdminAuth(
       logger.warn('Error computing scraper health', { error: e })
     }
 
-    // Trader statistics
+    // Trader statistics — use leaderboard_ranks for active trader count
     const { count: totalTraders } = await supabase
-      .from('trader_sources')
-      .select('id', { count: 'exact', head: true })
+      .from('leaderboard_ranks')
+      .select('source_trader_id', { count: 'exact', head: true })
+      .eq('season_id', '90D')
 
     // Traders per platform
     const { data: tradersByPlatformRaw } = await supabase
-      .from('trader_sources')
+      .from('leaderboard_ranks')
       .select('source')
+      .eq('season_id', '90D')
 
     const tradersByPlatform: Record<string, number> = {}
     for (const row of tradersByPlatformRaw || []) {
@@ -133,9 +134,9 @@ export const GET = withAdminAuth(
 
     // Snapshots in last 24h
     const { count: snapshots24h } = await supabase
-      .from('trader_snapshots')
+      .from('trader_snapshots_v2')
       .select('id', { count: 'exact', head: true })
-      .gte('captured_at', yesterday.toISOString())
+      .gte('created_at', yesterday.toISOString())
 
     // Library items
     const { count: totalLibraryItems } = await supabase

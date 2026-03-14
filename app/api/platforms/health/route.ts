@@ -40,17 +40,17 @@ export async function GET() {
       }
     }
 
-    // Also check trader_snapshots for platforms not in leaderboard
+    // Also check trader_snapshots_v2 for platforms not in leaderboard
     const { data: snapFreshness } = await supabase
-      .from('trader_snapshots')
-      .select('source, captured_at')
-      .order('captured_at', { ascending: false })
+      .from('trader_snapshots_v2')
+      .select('platform, created_at')
+      .order('created_at', { ascending: false })
       .limit(100);
 
     for (const row of snapFreshness || []) {
-      const key = row.source;
+      const key = row.platform;
       if (key && !latestByPlatform.has(key)) {
-        latestByPlatform.set(key, row.captured_at);
+        latestByPlatform.set(key, row.created_at);
       }
     }
 
