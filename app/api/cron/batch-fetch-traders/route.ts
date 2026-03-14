@@ -58,8 +58,8 @@ const GROUPS: Record<string, string[]> = {
   d1: ['gains'],
   // Group D2: DEX only (every 6h) — dydx removed 2026-03-14: Client error 404
   d2: [],
-  // Group E: CEX+DEX (every 6h) — 3 platforms (bitfinex: 1424 traders, was orphaned)
-  e: ['coinex', 'binance_web3', 'bitfinex'],
+  // Group E: CEX+DEX (every 6h) — coinex/binance_web3 removed 2026-03-14: connector errors
+  e: ['bitfinex'],
   // Group F: Slow CEX (every 6h) — 2 platforms, parallel (~141s + ~60s = ~200s)
   f: ['mexc', 'bingx'],
   // Group H: Fast CEX (every 6h) — 2 platforms, parallel (~25s each)
