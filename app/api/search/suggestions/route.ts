@@ -10,6 +10,8 @@ import { withPublic } from '@/lib/api/middleware'
 import { success } from '@/lib/api/response'
 import { get as cacheGet, set as cacheSet } from '@/lib/cache'
 import { fireAndForget } from '@/lib/utils/logger'
+import { searchTraders } from '@/lib/data/unified'
+import { EXCHANGE_CONFIG } from '@/lib/constants/exchanges'
 
 export const dynamic = 'force-dynamic'
 
@@ -45,81 +47,30 @@ export const GET = withPublic(
       // Cache miss or error, continue with DB query
     }
 
-    // 限制查询长度并转义 PostgREST 特殊字符，防止注入
-    const sanitizedQuery = query
-      .slice(0, 100)
-      .replace(/[\\%_]/g, c => `\\${c}`)  // 转义 LIKE 通配符
-      .replace(/[.,()]/g, '')  // 移除 PostgREST 过滤语法字符
-
-    if (!sanitizedQuery) {
-      return success({ suggestions: [] })
-    }
-
     const suggestions: SearchSuggestion[] = []
 
-    // 搜索交易员（从 trader_sources 表）
-    const { data: traders } = await supabase
-      .from('trader_sources')
-      .select('source_trader_id, handle, source')
-      .or(`handle.ilike.%${sanitizedQuery}%,source_trader_id.ilike.%${sanitizedQuery}%`)
-      .limit(limit)
+    // 搜索交易员 — 使用 unified data layer（内部已处理排名和去重）
+    try {
+      const unifiedTraders = await searchTraders(supabase, { query, limit })
 
-    if (traders?.length) {
-      // 获取最新快照数据（ROI + Arena Score）- 使用 trader_snapshots 表
-      const traderKeys = traders.map(t => t.source_trader_id)
-      const { data: snapshots } = await supabase
-        .from('trader_snapshots')
-        .select('source_trader_id, source, roi, arena_score, season_id')
-        .in('source_trader_id', traderKeys)
-        .eq('season_id', '90D')
-        .order('captured_at', { ascending: false })
-        .limit(traderKeys.length * 2)
-
-      // 构建 ROI 和 Arena Score 映射
-      const roiMap = new Map<string, number>()
-      const scoreMap = new Map<string, number>()
-      snapshots?.forEach(s => {
-        const key = `${s.source}:${s.source_trader_id}`
-        if (!roiMap.has(key) && s.roi != null) {
-          roiMap.set(key, typeof s.roi === 'string' ? parseFloat(s.roi) : s.roi)
-        }
-        if (!scoreMap.has(key) && s.arena_score != null) {
-          scoreMap.set(key, typeof s.arena_score === 'string' ? parseFloat(s.arena_score) : s.arena_score)
-        }
-      })
-
-      const sourceLabels: Record<string, string> = {
-        'binance_futures': 'Binance',
-        'binance_spot': 'Binance',
-        'binance_web3': 'Binance',
-        'bybit': 'Bybit',
-        'bitget_futures': 'Bitget',
-        'bitget_spot': 'Bitget',
-        'mexc': 'MEXC',
-        'coinex': 'CoinEx',
-        'okx_web3': 'OKX',
-        'kucoin': 'KuCoin',
-        'gmx': 'GMX',
-      }
-
-      traders.forEach(trader => {
-        const key = `${trader.source}:${trader.source_trader_id}`
-        const roi = roiMap.get(key)
-        const arenaScore = scoreMap.get(key)
-        const exchangeName = sourceLabels[trader.source] || trader.source
+      for (const t of unifiedTraders) {
+        const exchangeName = EXCHANGE_CONFIG[t.platform as keyof typeof EXCHANGE_CONFIG]?.name || t.platform
+        const roi = t.roi
 
         suggestions.push({
           type: 'trader',
-          value: trader.handle || trader.source_trader_id,
-          label: `@${trader.handle || trader.source_trader_id}`,
-          subLabel: roi !== undefined
+          value: t.handle || t.traderKey,
+          label: `@${t.handle || t.traderKey}`,
+          subLabel: roi != null
             ? `${exchangeName} · ROI ${roi >= 0 ? '+' : ''}${roi.toFixed(1)}%`
             : exchangeName,
-          source: trader.source,
-          roi,
-          arenaScore,
+          source: t.platform,
+          roi: roi ?? undefined,
+          arenaScore: t.arenaScore ?? undefined,
         })
-      })
+      }
+    } catch {
+      // Trader search failure is non-critical
     }
 
     // 添加交易对建议（常见的）
