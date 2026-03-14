@@ -167,31 +167,117 @@ async function findUserProfileByTraderHandle(traderHandle: string): Promise<stri
 }
 
 // Fetch unregistered trader data from trader_sources + leaderboard_ranks
-async function fetchUnregisteredTrader(handle: string): Promise<UnregisteredTraderData | null> {
+async function fetchUnregisteredTrader(handle: string, platform?: string): Promise<UnregisteredTraderData | null> {
   try {
     const supabase = getSupabaseAdmin()
-    
+
     // Find trader_sources by handle (case-insensitive)
-    let { data: traderSource } = await supabase
+    let traderSourceQuery = supabase
       .from('trader_sources')
       .select('handle, avatar_url, source, source_trader_id')
       .ilike('handle', handle)
       .limit(1)
-      .maybeSingle()
-    
+    if (platform) traderSourceQuery = traderSourceQuery.eq('source', platform)
+    let { data: traderSource } = await traderSourceQuery.maybeSingle()
+
     if (!traderSource) {
       // Fallback: try matching by source_trader_id (full address)
-      const { data: fallbackSource } = await supabase
+      let fallbackQuery = supabase
         .from('trader_sources')
         .select('handle, avatar_url, source, source_trader_id')
         .eq('source_trader_id', handle)
         .limit(1)
-        .maybeSingle()
-      
-      if (!fallbackSource) return null
-      traderSource = fallbackSource
+      if (platform) fallbackQuery = fallbackQuery.eq('source', platform)
+      const { data: fallbackSource } = await fallbackQuery.maybeSingle()
+
+      if (fallbackSource) {
+        traderSource = fallbackSource
+      }
     }
-    
+
+    // Fallback: if trader_sources has no entry but platform is known,
+    // try leaderboard_ranks directly (handles platforms like etoro/bitunix/drift
+    // that may not have trader_sources entries)
+    if (!traderSource && platform) {
+      const { data: directRank } = await supabase
+        .from('leaderboard_ranks')
+        .select('source_trader_id, rank, arena_score, roi, pnl, win_rate, max_drawdown, sharpe_ratio, sortino_ratio, profit_factor, calmar_ratio, trading_style, avg_holding_hours, profitability_score, risk_control_score, execution_score, avatar_url')
+        .eq('source', platform)
+        .eq('source_trader_id', handle)
+        .order('arena_score', { ascending: false })
+        .limit(1)
+        .maybeSingle()
+
+      if (directRank) {
+        // Also check trader_profiles_v2 for avatar/display info
+        const { data: profile } = await supabase
+          .from('trader_profiles_v2')
+          .select('display_name, avatar_url')
+          .eq('platform', platform)
+          .eq('trader_key', handle)
+          .limit(1)
+          .maybeSingle()
+
+        return {
+          handle: profile?.display_name || handle,
+          avatar_url: directRank.avatar_url || profile?.avatar_url || null,
+          source: platform,
+          source_trader_id: handle,
+          rank: directRank.rank,
+          arena_score: directRank.arena_score,
+          roi: directRank.roi,
+          pnl: directRank.pnl,
+          win_rate: directRank.win_rate,
+          max_drawdown: directRank.max_drawdown,
+          sharpe_ratio: directRank.sharpe_ratio,
+          sortino_ratio: directRank.sortino_ratio,
+          profit_factor: directRank.profit_factor,
+          calmar_ratio: directRank.calmar_ratio,
+          trading_style: directRank.trading_style,
+          avg_holding_hours: directRank.avg_holding_hours,
+          profitability_score: directRank.profitability_score,
+          risk_control_score: directRank.risk_control_score,
+          execution_score: directRank.execution_score,
+        }
+      }
+
+      // Last resort: check trader_snapshots_v2 directly
+      const { data: v2Snap } = await supabase
+        .from('trader_snapshots_v2')
+        .select('trader_key, roi_pct, pnl_usd, win_rate, max_drawdown, arena_score')
+        .eq('platform', platform)
+        .eq('trader_key', handle)
+        .order('captured_at', { ascending: false })
+        .limit(1)
+        .maybeSingle()
+
+      if (v2Snap) {
+        const { data: profile } = await supabase
+          .from('trader_profiles_v2')
+          .select('display_name, avatar_url')
+          .eq('platform', platform)
+          .eq('trader_key', handle)
+          .limit(1)
+          .maybeSingle()
+
+        return {
+          handle: profile?.display_name || handle,
+          avatar_url: profile?.avatar_url || null,
+          source: platform,
+          source_trader_id: handle,
+          roi: v2Snap.roi_pct,
+          pnl: v2Snap.pnl_usd,
+          win_rate: v2Snap.win_rate,
+          max_drawdown: v2Snap.max_drawdown,
+          arena_score: v2Snap.arena_score,
+        }
+      }
+
+      return null
+    }
+
+    if (!traderSource) return null
+
     // Get leaderboard_ranks data
     const { data: rankData } = await supabase
       .from('leaderboard_ranks')
@@ -199,7 +285,7 @@ async function fetchUnregisteredTrader(handle: string): Promise<UnregisteredTrad
       .eq('source', traderSource.source)
       .eq('source_trader_id', traderSource.source_trader_id)
       .maybeSingle()
-    
+
     // Fallback to trader_snapshots if leaderboard_ranks has no data
     let snapshotData: Record<string, unknown> | null = null
     if (!rankData) {
@@ -211,7 +297,7 @@ async function fetchUnregisteredTrader(handle: string): Promise<UnregisteredTrad
         .order('captured_at', { ascending: false })
         .limit(1)
         .maybeSingle()
-      
+
       if (snapshot) {
         snapshotData = {
           roi: snapshot.roi,
@@ -225,7 +311,7 @@ async function fetchUnregisteredTrader(handle: string): Promise<UnregisteredTrad
         }
       }
     }
-    
+
     return {
       handle: traderSource.handle || handle,
       avatar_url: traderSource.avatar_url,
@@ -238,8 +324,9 @@ async function fetchUnregisteredTrader(handle: string): Promise<UnregisteredTrad
   }
 }
 
-export default async function TraderPage({ params }: { params: Promise<{ handle: string }> }) {
+export default async function TraderPage({ params, searchParams }: { params: Promise<{ handle: string }>; searchParams: Promise<{ platform?: string }> }) {
   const { handle } = await params
+  const { platform } = await searchParams
 
   let decodedHandle = handle
   try {
@@ -251,7 +338,7 @@ export default async function TraderPage({ params }: { params: Promise<{ handle:
   // 并行查询注册用户和未注册交易员数据，避免瀑布式加载
   const [userHandle, traderData] = await Promise.all([
     findUserProfileByTraderHandle(decodedHandle),
-    fetchUnregisteredTrader(decodedHandle),
+    fetchUnregisteredTrader(decodedHandle, platform),
   ])
 
   // 1. 优先跳转到注册用户页面
