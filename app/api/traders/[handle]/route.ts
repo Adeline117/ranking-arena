@@ -20,9 +20,6 @@ import { createClient } from '@supabase/supabase-js'
 import { z } from 'zod'
 import { getServerCache, setServerCache, CacheTTL } from '@/lib/utils/server-cache'
 import { createLogger } from '@/lib/utils/logger'
-import { TRADER_SOURCES, type SourceType, findTraderSource, findTraderFromSnapshots } from './trader-queries'
-import type { TraderSource } from './trader-types'
-import { getTraderDetails, getTraderDetailsFromSnapshots } from './trader-transforms'
 import { resolveTrader, getTraderDetail, toTraderPageData } from '@/lib/data/unified'
 import { ApiError } from '@/lib/api/errors'
 import { success as apiSuccess, handleError, withCache } from '@/lib/api/response'
@@ -73,10 +70,10 @@ export async function GET(
     const cacheKey = `${CACHE_PREFIX}${decodedHandle.toLowerCase()}${sourceParam ? `:${sourceParam}` : ''}`
 
     // 检查缓存
-    const cached = getServerCache<ReturnType<typeof getTraderDetails>>(cacheKey)
+    const cached = getServerCache<Record<string, unknown>>(cacheKey)
     if (cached) {
       const cachedData = await cached
-      return apiSuccess({ ...cachedData as Record<string, unknown>, cached: true })
+      return apiSuccess({ ...cachedData, cached: true })
     }
 
     const supabase = createClient(supabaseUrl, supabaseKey)
