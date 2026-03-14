@@ -48,6 +48,8 @@ export async function fetchBinanceEquityCurve(
   timeRange: 'WEEKLY' | 'MONTHLY' | 'QUARTERLY' = 'QUARTERLY'
 ): Promise<EquityCurvePoint[]> {
   try {
+    // EMERGENCY FIX (2026-03-14): Reduce timeout from 15s → 8s to prevent accumulation
+    // binance_spot was hanging 45-76min repeatedly due to slow/hung API calls
     const data = await fetchWithProxyFallback<BinancePerformanceResponse>(
       `${BINANCE_API}/lead-portfolio/query-performance`,
       {
@@ -58,7 +60,7 @@ export async function fetchBinanceEquityCurve(
           Referer: 'https://www.binance.com/en/copy-trading',
         },
         body: { portfolioId: traderId, timeRange },
-        timeoutMs: 15000,
+        timeoutMs: 8000,  // Was 15000
       }
     )
 
@@ -83,6 +85,7 @@ export async function fetchBinancePositionHistory(
   pageSize = 50
 ): Promise<PositionHistoryItem[]> {
   try {
+    // EMERGENCY FIX (2026-03-14): Reduce timeout 15s → 8s
     const data = await fetchWithProxyFallback<BinancePositionResponse>(
       `${BINANCE_API}/lead-portfolio/query-position-history`,
       {
@@ -93,7 +96,7 @@ export async function fetchBinancePositionHistory(
           Referer: 'https://www.binance.com/en/copy-trading',
         },
         body: { portfolioId: traderId, pageNumber: 1, pageSize },
-        timeoutMs: 15000,
+        timeoutMs: 8000,  // Was 15000
       }
     )
 
@@ -148,6 +151,7 @@ export async function fetchBinanceStatsDetail(
   traderId: string
 ): Promise<StatsDetail | null> {
   try {
+    // EMERGENCY FIX (2026-03-14): Reduce timeout 15s → 8s
     const data = await fetchWithProxyFallback<BinanceTraderStatsResponse>(
       `${BINANCE_API}/lead-portfolio/query-lead-base-info`,
       {
@@ -158,7 +162,7 @@ export async function fetchBinanceStatsDetail(
           Referer: 'https://www.binance.com/en/copy-trading',
         },
         body: { portfolioId: traderId },
-        timeoutMs: 15000,
+        timeoutMs: 8000,  // Was 15000
       }
     )
 
