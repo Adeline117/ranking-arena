@@ -247,7 +247,7 @@ async function fetchUnregisteredTrader(handle: string, platform?: string): Promi
         .select('trader_key, roi_pct, pnl_usd, win_rate, max_drawdown, arena_score')
         .eq('platform', platform)
         .eq('trader_key', handle)
-        .order('captured_at', { ascending: false })
+        .order('created_at', { ascending: false })
         .limit(1)
         .maybeSingle()
 
