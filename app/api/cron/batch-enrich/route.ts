@@ -26,9 +26,7 @@ export const maxDuration = 600 // Vercel Pro max: 10 minutes (was 300s)
 // CEX platforms: slightly reduced to balance load
 const PLATFORM_LIMITS: Record<string, { limit90: number; limit30: number; limit7: number }> = {
   binance_futures: { limit90: 150, limit30: 120, limit7: 80 }, // Reduced from 200/150/100
-  // binance_spot: COMPLETELY DISABLED (2026-03-14 Round 6) - repeatedly hangs 45-76min despite all timeout fixes
-  //   Root cause: enrichment-runner.ts has hardcoded 120s per-trader timeout, ignored batch-enrich 30s limit
-  //   Until per-trader timeout is configurable, binance_spot enrichment is too unreliable
+  // binance_spot: PERMANENTLY REMOVED (2026-03-14) - repeatedly hangs 45-76min, blocks entire pipeline
   // bybit/bybit_spot removed: api2.bybit.com endpoints return 404 globally (2026-03-10)
   okx_futures: { limit90: 60, limit30: 60, limit7: 50 }, // Reduced from 80/80/60
   bitget_futures: { limit90: 50, limit30: 50, limit7: 40 }, // Reduced from 60/60/50
