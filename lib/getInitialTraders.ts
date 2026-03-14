@@ -13,6 +13,7 @@ import {
 } from '@/lib/utils/arena-score'
 import { SOURCE_TYPE_MAP, PRIORITY_SOURCES } from '@/lib/constants/exchanges'
 import { logger } from '@/lib/logger'
+import { sanitizeDisplayName } from '@/lib/utils/profanity'
 
 // Minimal trader type for initial render
 export interface InitialTrader {
@@ -159,7 +160,8 @@ async function fetchLeaderboardFromDBInner(
       }
 
       // Handle: prefer database value, fallback to trader ID
-      const displayHandle = (rank.handle && rank.handle.trim()) || rank.source_trader_id
+      const rawHandle = (rank.handle && rank.handle.trim()) || rank.source_trader_id
+      const displayHandle = sanitizeDisplayName(rawHandle)
 
       return {
         id: rank.source_trader_id,
