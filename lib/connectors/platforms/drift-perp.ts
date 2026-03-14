@@ -34,7 +34,7 @@ interface DriftTraderEntry {
 }
 
 interface DriftResponse {
-  data?: DriftTraderEntry[]
+  data?: { leaderboard: DriftTraderEntry[] } | DriftTraderEntry[]
   result?: DriftTraderEntry[]
 }
 
@@ -83,8 +83,10 @@ export class DriftPerpConnector extends BaseConnector {
         }
 
         const data = await this.request<DriftResponse>(url)
-        const list = data?.data || data?.result || []
-        if (!list.length) break
+        // Drift API returns { success, data: { leaderboard: [...] } }
+        const rawData = data?.data
+        const list = (rawData && !Array.isArray(rawData) && 'leaderboard' in rawData ? rawData.leaderboard : rawData) || data?.result || []
+        if (!Array.isArray(list) || !list.length) break
 
         for (const entry of list) {
           allTraders.push({
