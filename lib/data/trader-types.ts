@@ -1,5 +1,8 @@
 /**
  * Type definitions for trader data adapter.
+ *
+ * @deprecated Most types here are superseded by UnifiedTrader in lib/types/unified-trader.ts.
+ * New code should import from unified-trader.ts. These types remain for backward compatibility.
  */
 
 // 支持的交易所数据源
@@ -16,6 +19,7 @@ export interface TraderSourceRecord {
   source: string
 }
 
+/** @deprecated Use UnifiedTrader from lib/types/unified-trader.ts */
 export interface TraderProfile {
   handle: string
   display_name?: string | null
@@ -35,6 +39,7 @@ export interface TraderProfile {
   showFollowing?: boolean
 }
 
+/** @deprecated Use UnifiedTrader from lib/types/unified-trader.ts */
 export interface TraderPerformance {
   roi_7d?: number
   roi_30d?: number
@@ -68,6 +73,7 @@ export interface TraderPerformance {
   score_penalty?: number | null
 }
 
+/** @deprecated Use UnifiedTrader from lib/types/unified-trader.ts */
 export interface TraderStats {
   expectedDividends?: {
     dividendYield: number
@@ -102,6 +108,7 @@ export interface TraderStats {
   yearlyPerformance?: Array<{ year: number; value: number }>
 }
 
+/** @deprecated Use TraderPosition from lib/types/unified-trader.ts */
 export interface PortfolioItem {
   market: string
   direction: 'long' | 'short'

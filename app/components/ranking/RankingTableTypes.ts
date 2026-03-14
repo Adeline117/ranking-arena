@@ -42,6 +42,7 @@ export function getStoredColumns(): ColumnKey[] {
   return DEFAULT_VISIBLE_COLUMNS
 }
 
+/** @deprecated Use UnifiedTrader from lib/types/unified-trader.ts */
 export interface Trader {
   id: string
   handle: string | null
