@@ -76,7 +76,7 @@ export type RiskLevel = 1 | 2 | 3 | 4 | 5
 // 交易员数据源记录
 // ============================================
 
-/** 交易员数据源记录 */
+/** @deprecated Use UnifiedTrader from '@/lib/types/unified-trader' for application code */
 export interface TraderSourceRecord {
   source_trader_id: string
   handle: string | null
@@ -257,7 +257,7 @@ export interface PositionHistoryItem {
 /** 动态类型 */
 export type FeedItemType = 'post' | 'group_post' | 'repost'
 
-/** 交易员动态 */
+/** @deprecated Use UnifiedTrader from '@/lib/types/unified-trader' for application code */
 export interface TraderFeedItem {
   id: string
   type: FeedItemType
@@ -385,7 +385,7 @@ export interface RankingQueryParams {
 // 相似交易员
 // ============================================
 
-/** 交易员向量（用于相似度计算） */
+/** @deprecated Use UnifiedTrader from '@/lib/types/unified-trader' for application code */
 export interface TraderVector {
   roi: number
   winRate: number
@@ -395,7 +395,7 @@ export interface TraderVector {
   volatility: number
 }
 
-/** 相似交易员结果 */
+/** @deprecated Use UnifiedTrader from '@/lib/types/unified-trader' for application code */
 export interface SimilarTrader extends TraderProfile {
   /** 相似度得分 (0-1) */
   similarityScore: number
@@ -428,7 +428,7 @@ export interface RiskMetrics {
 // Advanced Metrics (V3)
 // ============================================
 
-/** 高级交易指标 */
+/** @deprecated Use UnifiedTrader from '@/lib/types/unified-trader' for application code */
 export interface TraderAdvancedMetrics {
   /** Sortino Ratio - 下行风险调整收益 */
   sortino_ratio: number | null
@@ -453,7 +453,7 @@ export interface TraderAdvancedMetrics {
 /** 市场条件类型 */
 export type MarketCondition = 'bull' | 'bear' | 'sideways'
 
-/** 市场相关性指标 */
+/** @deprecated Use UnifiedTrader from '@/lib/types/unified-trader' for application code */
 export interface TraderMarketCorrelation {
   /** BTC Beta - 与BTC的相关系数 */
   beta_btc: number | null
@@ -465,7 +465,7 @@ export interface TraderMarketCorrelation {
   market_condition_performance: Record<MarketCondition, number | null>
 }
 
-/** 交易员分类信息 */
+/** @deprecated Use UnifiedTrader from '@/lib/types/unified-trader' for application code */
 export interface TraderClassification {
   /** 交易风格 */
   trading_style: TradingStyle | null
@@ -475,7 +475,7 @@ export interface TraderClassification {
   style_confidence: number | null
 }
 
-/** 实时持仓数据 */
+/** @deprecated Use UnifiedTrader from '@/lib/types/unified-trader' for application code */
 export interface TraderPositionLive {
   id: string
   platform: string
@@ -530,7 +530,7 @@ export interface ArenaScoreV3Components {
   total_score: number
 }
 
-/** 扩展的交易员详情响应 */
+/** @deprecated Use TraderDetail from '@/lib/types/unified-trader' for application code */
 export interface TraderDetailResponseV2 {
   profile: TraderProfile
   performance: TraderPerformance
@@ -554,7 +554,7 @@ export interface TraderDetailResponseV2 {
 // API 响应类型
 // ============================================
 
-/** 交易员列表响应 */
+/** @deprecated Use UnifiedTrader from '@/lib/types/unified-trader' for application code */
 export interface TradersListResponse {
   traders: RankedTrader[]
   timeRange: TimeRange
@@ -562,7 +562,7 @@ export interface TradersListResponse {
   rankingMode?: 'simple' | 'risk_adjusted' | 'arena_score'
 }
 
-/** 交易员详情响应 */
+/** @deprecated Use TraderDetail from '@/lib/types/unified-trader' for application code */
 export interface TraderDetailResponse {
   profile: TraderProfile
   performance: TraderPerformance
@@ -579,6 +579,7 @@ export interface TraderDetailResponse {
  * 用于 trader API 调用时需要明确分页的场景
  *
  * 注：通用分页参数请使用 lib/types/index.ts 中的 PaginationParams
+ * @deprecated Use UnifiedTrader from '@/lib/types/unified-trader' for application code
  */
 export interface TraderPaginationParams {
   limit: number

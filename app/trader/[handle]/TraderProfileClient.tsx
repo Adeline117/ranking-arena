@@ -40,6 +40,7 @@ const PortfolioTable = dynamic(() => import('@/app/components/trader/PortfolioTa
 })
 const SwipeableView = dynamic(() => import('@/app/components/ui/SwipeableView'), { ssr: false })
 
+/** @deprecated UI-specific. Will be replaced by UnifiedTrader adapter. */
 export interface UnregisteredTraderData {
   handle: string
   avatar_url?: string | null

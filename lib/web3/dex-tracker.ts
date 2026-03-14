@@ -5,6 +5,7 @@
 
 // ── Types ──
 
+/** @deprecated Use UnifiedTrader from '@/lib/types/unified-trader' for application code */
 export interface DexTrader {
   address: string
   totalVolumeUSD: number

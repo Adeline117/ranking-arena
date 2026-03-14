@@ -2,6 +2,7 @@
  * Type definitions for the trader detail API.
  */
 
+/** @deprecated Use UnifiedTrader from '@/lib/types/unified-trader' for application code */
 export interface TraderSource {
   source_trader_id: string
   handle: string | null

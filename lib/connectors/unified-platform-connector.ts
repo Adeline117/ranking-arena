@@ -10,12 +10,13 @@
  *   await runner.execute({ window: '90d' })
  */
 
-import { createSupabaseAdmin } from '@/lib/cron/utils'
-import { getInlineFetcher } from '@/lib/cron/fetchers'
 import { runEnrichment } from '@/lib/cron/enrichment-runner'
 import type { RankingWindow } from '@/lib/types/leaderboard'
 import { dataLogger } from '@/lib/utils/logger'
 import type { ExecuteResult } from './connector-runner'
+import { connectorRegistry, initializeConnectors } from './registry'
+import { runConnectorBatch } from './connector-db-adapter'
+import { createSupabaseAdmin } from '@/lib/cron/utils'
 
 export interface UnifiedConnectorConfig {
   /** Platform identifier */
@@ -61,38 +62,50 @@ export class UnifiedPlatformConnector {
   }
   
   /**
-   * Execute full fetch + enrich pipeline
+   * Execute full fetch + enrich pipeline via ConnectorRegistry
    */
   async execute(params?: { window?: RankingWindow }): Promise<ExecuteResult> {
     const startTime = Date.now()
     const errors: string[] = []
     let recordsProcessed = 0
-    
+
     try {
-      // Step 1: Fetch traders (leaderboard)
       const supabase = createSupabaseAdmin()
       if (!supabase) {
         throw new Error('Supabase not configured')
       }
-      
-      const fetcher = getInlineFetcher(this.config.platform)
-      if (!fetcher) {
-        throw new Error(`No fetcher found for platform: ${this.config.platform}`)
+
+      // Initialize connectors if needed
+      await initializeConnectors()
+
+      // Look up the connector from the registry
+      // Platform names like 'binance_futures' need to be mapped
+      const platform = this.config.platform as import('@/lib/types/leaderboard').LeaderboardPlatform
+      const marketType = (PLATFORM_CONNECTORS[this.config.platform]?.platform !== this.config.platform
+        ? undefined
+        : undefined) as import('@/lib/types/leaderboard').MarketType | undefined
+
+      // Try to find connector - try platform name directly
+      const connector = connectorRegistry.get(platform, marketType || 'futures' as import('@/lib/types/leaderboard').MarketType)
+      if (!connector) {
+        throw new Error(`No connector registered for platform: ${this.config.platform}`)
       }
-      
+
       // Determine which periods to fetch
-      const periodsToFetch = params?.window 
+      const periodsToFetch = params?.window
         ? [params.window]
         : this.config.periods
-      
-      // Map window format: 7d → 7D
-      const periodsMapped = periodsToFetch.map(p => p.toUpperCase().replace('D', 'D') as '7D' | '30D' | '90D')
-      
-      dataLogger.info(`[UnifiedConnector] ${this.config.platform}: fetching ${periodsMapped.join(', ')}`)
-      
-      // Fetch traders
-      const fetchResult = await fetcher(supabase, periodsMapped)
-      
+
+      dataLogger.info(`[UnifiedConnector] ${this.config.platform}: fetching ${periodsToFetch.join(', ')} via ConnectorRegistry`)
+
+      // Fetch traders via connector
+      const fetchResult = await runConnectorBatch(connector, {
+        supabase,
+        windows: periodsToFetch,
+        limit: 500,
+        sourceOverride: this.config.platform,
+      })
+
       // Collect errors
       for (const [period, result] of Object.entries(fetchResult.periods)) {
         if (result.error) {
@@ -100,11 +113,12 @@ export class UnifiedPlatformConnector {
         }
         recordsProcessed += result.saved || 0
       }
-      
+
       // Step 2: Enrichment (optional)
+      const periodsMapped = periodsToFetch.map(p => p.toUpperCase().replace('D', 'D') as '7D' | '30D' | '90D')
       if (this.config.enableEnrichment && recordsProcessed > 0) {
         dataLogger.info(`[UnifiedConnector] ${this.config.platform}: enriching top ${this.config.enrichmentLimit} traders`)
-        
+
         for (const period of periodsMapped) {
           try {
             const enrichResult = await runEnrichment({
@@ -112,7 +126,7 @@ export class UnifiedPlatformConnector {
               period,
               limit: this.config.enrichmentLimit,
             })
-            
+
             if (!enrichResult.ok) {
               errors.push(`Enrichment ${period}: ${enrichResult.summary.failed} failed`)
             }
@@ -122,18 +136,18 @@ export class UnifiedPlatformConnector {
           }
         }
       }
-      
+
       return {
         success: errors.length === 0,
         recordsProcessed,
         errors,
         durationMs: Date.now() - startTime,
       }
-      
+
     } catch (err) {
       const errMsg = err instanceof Error ? err.message : String(err)
       dataLogger.error(`[UnifiedConnector] ${this.config.platform} failed:`, err)
-      
+
       return {
         success: false,
         recordsProcessed,

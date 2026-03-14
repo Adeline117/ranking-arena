@@ -7,13 +7,16 @@
  */
 
 import { NextResponse } from 'next/server'
-import { getInlineFetcher, getSupportedInlinePlatforms } from '@/lib/cron/fetchers'
+import { getSupportedInlinePlatforms } from '@/lib/cron/fetchers'
 import {
   createSupabaseAdmin,
   getSupabaseEnv,
 } from '@/lib/cron/utils'
 import { logger } from '@/lib/logger'
 import { recordFetchResult } from '@/lib/utils/pipeline-monitor'
+import { connectorRegistry, initializeConnectors } from '@/lib/connectors/registry'
+import { runConnectorBatch } from '@/lib/connectors/connector-db-adapter'
+import { SOURCE_TO_CONNECTOR_MAP } from '@/lib/constants/exchanges'
 
 export const runtime = 'nodejs'
 export const preferredRegion = 'hnd1' // Tokyo — avoids Binance/OKX US geo-blocking
@@ -32,6 +35,7 @@ function isVercelCronAuthorized(request: Request): boolean {
 
 export async function GET(request: Request, { params }: Params) {
   const { platform } = await params
+  const startTime = Date.now()
 
   try {
     // 1) Auth
@@ -39,16 +43,7 @@ export async function GET(request: Request, { params }: Params) {
       return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
     }
 
-    // 2) Find inline fetcher
-    const fetcher = getInlineFetcher(platform)
-    if (!fetcher) {
-      return NextResponse.json(
-        { error: `未知平台: ${platform}`, supported: getSupportedInlinePlatforms() },
-        { status: 400 }
-      )
-    }
-
-    // 3) Verify env
+    // 2) Verify env
     const { url, serviceKey } = getSupabaseEnv()
     if (!url || !serviceKey) {
       return NextResponse.json(
@@ -57,13 +52,36 @@ export async function GET(request: Request, { params }: Params) {
       )
     }
 
-    // 4) Execute inline fetcher
     const supabase = createSupabaseAdmin()
     if (!supabase) {
       return NextResponse.json({ error: 'Failed to create Supabase client' }, { status: 500 })
     }
 
-    const result = await fetcher(supabase, ['7D', '30D', '90D'])
+    // 3) Initialize and find connector
+    await initializeConnectors()
+
+    const mapping = SOURCE_TO_CONNECTOR_MAP[platform]
+    const connector = mapping
+      ? connectorRegistry.get(
+          mapping.platform as import('@/lib/types/leaderboard').LeaderboardPlatform,
+          mapping.marketType as import('@/lib/types/leaderboard').MarketType
+        )
+      : null
+
+    if (!connector) {
+      return NextResponse.json(
+        { error: `No connector for platform: ${platform}`, supported: getSupportedInlinePlatforms() },
+        { status: 400 }
+      )
+    }
+
+    // 4) Execute via ConnectorRegistry
+    const result = await runConnectorBatch(connector, {
+      supabase,
+      windows: ['7d', '30d', '90d'],
+      limit: 500,
+      sourceOverride: platform,
+    })
 
     // 5) Record pipeline metrics
     const hasErrors = Object.values(result.periods).some((p) => p.error)
@@ -97,7 +115,7 @@ export async function GET(request: Request, { params }: Params) {
       if (supabase) {
         await recordFetchResult(supabase, platform, {
           success: false,
-          durationMs: 0,
+          durationMs: Date.now() - startTime,
           recordCount: 0,
           error: msg,
         })

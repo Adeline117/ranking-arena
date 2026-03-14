@@ -145,6 +145,7 @@ export interface FollowChangePayload {
   userId: string
 }
 
+/** @deprecated Use UnifiedTrader from '@/lib/types/unified-trader' for application code */
 export interface TraderDataPayload {
   timeRange: '7D' | '30D' | '90D' | 'COMPOSITE'
   traders: unknown[]

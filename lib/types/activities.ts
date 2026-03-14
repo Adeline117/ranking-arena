@@ -10,6 +10,7 @@ export type ActivityType =
   | 'entered_top10'
   | 'large_profit'
 
+/** @deprecated Use UnifiedTrader from '@/lib/types/unified-trader' for application code */
 export interface TraderActivity {
   id: string
   source: string

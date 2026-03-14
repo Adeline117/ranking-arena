@@ -198,6 +198,7 @@ export async function fetchWithFallback<T = unknown>(
 // Types
 // ============================================
 
+/** @deprecated Write-path type for data pipeline. Use UnifiedTrader from '@/lib/types/unified-trader' for reads. */
 export interface TraderData {
   source: string
   source_trader_id: string

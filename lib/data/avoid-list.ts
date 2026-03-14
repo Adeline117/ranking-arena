@@ -34,6 +34,7 @@ export interface AvoidVote {
   author_avatar_url?: string
 }
 
+/** @deprecated Use UnifiedTrader from '@/lib/types/unified-trader' for application code */
 export interface TraderAvoidScore {
   trader_id: string
   source: string

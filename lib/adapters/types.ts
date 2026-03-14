@@ -3,6 +3,7 @@
  * Unified interface for fetching trader data from different exchanges
  */
 
+/** @deprecated Use UnifiedTrader from '@/lib/types/unified-trader' for application code */
 export interface TraderData {
   // Identity
   platform: string
@@ -55,6 +56,7 @@ export interface LeaderboardResponse {
   nextCursor?: string
 }
 
+/** @deprecated Use UnifiedTrader from '@/lib/types/unified-trader' for application code */
 export interface TraderDetailQuery {
   platform: string
   traderId: string

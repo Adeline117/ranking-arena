@@ -8,6 +8,7 @@ import { round1, round2, moneyMul } from '@/lib/utils/currency'
 // 类型定义
 // ============================================
 
+/** @deprecated Use UnifiedTrader from '@/lib/types/unified-trader' for application code */
 export interface TraderForPortfolio {
   trader_id: string
   source: string
@@ -20,6 +21,7 @@ export interface TraderForPortfolio {
   source_type: 'futures' | 'spot' | 'web3'
 }
 
+/** @deprecated Use UnifiedTrader from '@/lib/types/unified-trader' for application code */
 export interface PortfolioTrader {
   trader_id: string
   source: string

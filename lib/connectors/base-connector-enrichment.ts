@@ -4,6 +4,7 @@
  * Unified interface for all exchange APIs
  */
 
+/** @deprecated Write-path type for data pipeline. Use UnifiedTrader from '@/lib/types/unified-trader' for reads. */
 export interface TraderData {
   source_trader_id: string
   handle?: string

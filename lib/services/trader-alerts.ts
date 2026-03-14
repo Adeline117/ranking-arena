@@ -16,6 +16,7 @@ import { logger } from '@/lib/logger'
 // 类型定义
 // ============================================
 
+/** @deprecated Use UnifiedTrader from '@/lib/types/unified-trader' for application code */
 export interface TraderAlertThresholds {
   roi7dChange: number   // 7D ROI 变化阈值（绝对值百分比），默认 20
   roi30dChange: number  // 30D ROI 变化阈值（绝对值百分比），默认 50

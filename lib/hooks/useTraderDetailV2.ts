@@ -22,6 +22,7 @@ const fetcher = async (url: string): Promise<TraderDetailResponse> => {
   return res.json()
 }
 
+/** @deprecated Use UnifiedTrader from '@/lib/types/unified-trader' for application code */
 export interface UseTraderDetailV2Options {
   platform: Platform
   traderKey: string
@@ -29,6 +30,7 @@ export interface UseTraderDetailV2Options {
   refreshInterval?: number
 }
 
+/** @deprecated Use UnifiedTrader from '@/lib/types/unified-trader' for application code */
 export interface UseTraderDetailV2Result {
   data: TraderDetailResponse | undefined
   error: Error | undefined

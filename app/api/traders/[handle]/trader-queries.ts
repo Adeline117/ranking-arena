@@ -8,6 +8,7 @@ import type { TraderSource } from './trader-types'
 
 // 支持的交易所 source 列表
 export const TRADER_SOURCES = ALL_SOURCES
+/** @deprecated Use UnifiedTrader from '@/lib/types/unified-trader' for application code */
 export type SourceType = TraderSourceType
 
 // Legacy source name mapping: some tables (equity_curve, position_history, etc.)

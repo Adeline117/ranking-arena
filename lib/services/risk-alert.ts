@@ -46,6 +46,7 @@ export interface AlertConfig {
   updatedAt: Date
 }
 
+/** @deprecated Use UnifiedTrader from '@/lib/types/unified-trader' for application code */
 export interface TraderSnapshot {
   source: string
   sourceTraderid: string

@@ -257,8 +257,11 @@ export type Exchange = z.infer<typeof ExchangeSchema>
 export type TimeRange = z.infer<typeof TimeRangeSchema>
 export type SortOrder = z.infer<typeof SortOrderSchema>
 
+/** @deprecated Use UnifiedTrader from '@/lib/types/unified-trader' for application code */
 export type TraderProfile = z.infer<typeof TraderProfileSchema>
+/** @deprecated Use UnifiedTrader from '@/lib/types/unified-trader' for application code */
 export type TraderPerformance = z.infer<typeof TraderPerformanceSchema>
+/** @deprecated Use UnifiedTrader from '@/lib/types/unified-trader' for application code */
 export type RankedTrader = z.infer<typeof RankedTraderSchema>
 
 export type Post = z.infer<typeof PostSchema>

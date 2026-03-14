@@ -54,6 +54,7 @@ export type SeriesType = typeof SERIES_TYPES[number]
 // Database Row Types (snake_case, matches DB)
 // ============================================
 
+/** @deprecated DB row type. Use UnifiedTrader from '@/lib/types/unified-trader' for application code. */
 export interface TraderSourceRow {
   id: string
   platform: Platform
@@ -66,6 +67,7 @@ export interface TraderSourceRow {
   is_active: boolean
 }
 
+/** @deprecated DB row type. Use UnifiedTrader from '@/lib/types/unified-trader' for application code. */
 export interface TraderProfileRow {
   id: string
   platform: Platform
@@ -125,6 +127,7 @@ export interface QualityFlags {
   data_completeness: number  // 0-1
 }
 
+/** @deprecated DB row type. Use UnifiedTrader from '@/lib/types/unified-trader' for application code. */
 export interface TraderSnapshotV2Row {
   id: string
   platform: Platform
@@ -223,6 +226,7 @@ export interface RankingsResponse {
   stale_sources?: string[]
 }
 
+/** @deprecated DB row type. Use UnifiedTrader from '@/lib/types/unified-trader' for application code. */
 export interface RankedTraderV2 {
   platform: Platform
   trader_key: string
@@ -234,6 +238,7 @@ export interface RankedTraderV2 {
   updated_at: string
 }
 
+/** @deprecated DB row type. Use TraderDetail from '@/lib/types/unified-trader' for application code. */
 export interface TraderDetailResponse {
   profile: TraderProfileRow
   snapshots: Record<SnapshotWindow, SnapshotMetrics | null>
@@ -266,6 +271,7 @@ export interface RefreshResponse {
 // Connector Interface Types
 // ============================================
 
+/** @deprecated DB row type. Use UnifiedTrader from '@/lib/types/unified-trader' for application code. */
 export interface ConnectorTraderProfile {
   trader_key: string
   display_name: string | null

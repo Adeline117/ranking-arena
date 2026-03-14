@@ -19,6 +19,7 @@ export type SourceType = 'futures' | 'spot' | 'web3'
  * Union of every known source identifier stored in the database.
  * Keep in sync with import scripts and the `source` column.
  */
+/** @deprecated Use UnifiedTrader from '@/lib/types/unified-trader' for application code */
 export type TraderSource =
   // CEX futures
   | 'binance_futures'
@@ -358,3 +359,43 @@ export const SOURCE_TRUST_WEIGHT: Record<string, number> = Object.fromEntries(
 export const SOURCE_ROI_TYPE: Record<string, RoiType> = Object.fromEntries(
   Object.entries(EXCHANGE_CONFIG).map(([k, v]) => [k, v.roiType])
 )
+
+// ---------------------------------------------------------------------------
+// SOURCE_TO_CONNECTOR_MAP – maps source names to ConnectorRegistry keys
+// ---------------------------------------------------------------------------
+
+/**
+ * Maps source names (used in DB and cron groups) to ConnectorRegistry lookup keys.
+ * Source names like 'htx_futures' map to connector platform 'htx' + marketType 'futures'.
+ * Used by batch-fetch-traders and fetch-traders/[platform] routes.
+ */
+export const SOURCE_TO_CONNECTOR_MAP: Record<string, { platform: string; marketType: string }> = {
+  binance_futures: { platform: 'binance', marketType: 'futures' },
+  binance_spot: { platform: 'binance_spot', marketType: 'spot' },
+  binance_web3: { platform: 'binance_web3', marketType: 'web3' },
+  bitget_futures: { platform: 'bitget', marketType: 'futures' },
+  bitget_spot: { platform: 'bitget_spot', marketType: 'spot' },
+  okx_futures: { platform: 'okx', marketType: 'futures' },
+  okx_web3: { platform: 'okx_web3', marketType: 'web3' },
+  htx_futures: { platform: 'htx', marketType: 'futures' },
+  mexc: { platform: 'mexc', marketType: 'futures' },
+  coinex: { platform: 'coinex', marketType: 'futures' },
+  bingx: { platform: 'bingx', marketType: 'futures' },
+  gateio: { platform: 'gateio', marketType: 'futures' },
+  xt: { platform: 'xt', marketType: 'futures' },
+  blofin: { platform: 'blofin', marketType: 'futures' },
+  btcc: { platform: 'btcc', marketType: 'futures' },
+  bitunix: { platform: 'bitunix', marketType: 'futures' },
+  bitfinex: { platform: 'bitfinex', marketType: 'futures' },
+  toobit: { platform: 'toobit', marketType: 'futures' },
+  etoro: { platform: 'etoro', marketType: 'spot' },
+  bybit: { platform: 'bybit', marketType: 'futures' },
+  hyperliquid: { platform: 'hyperliquid', marketType: 'perp' },
+  gmx: { platform: 'gmx', marketType: 'perp' },
+  dydx: { platform: 'dydx', marketType: 'perp' },
+  gains: { platform: 'gains', marketType: 'perp' },
+  jupiter_perps: { platform: 'jupiter_perps', marketType: 'perp' },
+  aevo: { platform: 'aevo', marketType: 'perp' },
+  drift: { platform: 'drift', marketType: 'perp' },
+  web3_bot: { platform: 'web3_bot', marketType: 'web3' },
+}
