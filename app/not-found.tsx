@@ -183,18 +183,53 @@ export default function NotFoundPage() {
   }
 
   return (
-    <div style={{ 
-      minHeight: '100vh',
-      display: 'flex',
-      flexDirection: 'column',
-      alignItems: 'center',
-      justifyContent: 'center',
-      padding: 24,
-      color: tokens.colors.text.primary,
-      fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
-      position: 'relative',
-      overflow: 'hidden',
-    }}>
+    <>
+      {/* Simple header for navigation */}
+      <header style={{
+        position: 'fixed',
+        top: 0,
+        left: 0,
+        right: 0,
+        height: 60,
+        background: tokens.glass.bg.primary,
+        backdropFilter: tokens.glass.blur.lg,
+        borderBottom: `1px solid ${tokens.colors.border.primary}`,
+        zIndex: 1000,
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        padding: '0 20px',
+      }}>
+        <Link href="/" style={{ textDecoration: 'none', display: 'flex', alignItems: 'center', gap: 8 }}>
+          <span style={{ fontSize: 24, fontWeight: 800, color: tokens.colors.accent.brand }}>Arena</span>
+        </Link>
+        <Link href="/search" style={{ 
+          padding: '8px 16px', 
+          background: tokens.colors.bg.secondary,
+          borderRadius: tokens.radius.md,
+          textDecoration: 'none',
+          color: tokens.colors.text.secondary,
+          fontSize: 14,
+          fontWeight: 500,
+        }}>
+          {t('search')}
+        </Link>
+      </header>
+      
+      <div style={{ 
+        minHeight: '100vh',
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        justifyContent: 'center',
+        padding: 24,
+        paddingTop: 84, // Account for fixed header
+        paddingBottom: 100, // Account for mobile bottom nav
+        color: tokens.colors.text.primary,
+        fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
+        position: 'relative',
+        overflow: 'hidden',
+      }}>
       {/* Animated background */}
       <div className="not-found-bg" />
       

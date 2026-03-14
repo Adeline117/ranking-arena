@@ -23,7 +23,12 @@ export default function HomeSubNav() {
         display: 'flex',
         gap: tokens.spacing[1],
         marginTop: 4,
+        overflowX: 'auto',
+        WebkitOverflowScrolling: 'touch',
+        scrollbarWidth: 'none',
+        msOverflowStyle: 'none',
       }}
+      className="home-subnav-scroll"
     >
       {TAB_KEYS.map((tab) => {
         const isActive = tab.href === '/' ? pathname === '/' : pathname.startsWith(tab.href)
