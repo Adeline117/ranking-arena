@@ -5,10 +5,16 @@
 ### 1. React Hydration Error (#418) - 中优先级
 **问题**: `Minified React error #418` - HTML/text mismatch between SSR and client
 **位置**: HomePage组件
-**修复**: 
-- 在HomePage根组件添加`suppressHydrationWarning`
-- 添加`mounted`状态追踪客户端hydration
-**Commit**: cd1ade43 - "fix: add suppressHydrationWarning to HomePage to resolve React #418"
+**根本原因**: HomePage是'use client'组件，但Next.js仍会预渲染它。客户端状态（localStorage, Date）导致hydration不匹配
+**修复方案**: 
+1. ~~第一次尝试：添加suppressHydrationWarning（cd1ade43）~~ - 不够彻底
+2. **最终方案：使用dynamic import禁用HomePage SSR** ✅
+   - 完全避免服务端渲染HomePage
+   - SSRRankingTable仍提供instant LCP
+   - HomePage在客户端hydrate，无冲突
+**Commits**: 
+- cd1ade43 - "fix: add suppressHydrationWarning to HomePage"
+- d449d1b1 - "fix: disable HomePage SSR to prevent hydration mismatches" ✅
 
 ### 2. API调用失败 - 中优先级
 **问题**: `/api/market` 和 `/api/flash-news` 返回失败
