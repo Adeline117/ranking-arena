@@ -6,7 +6,7 @@ import Image from 'next/image'
 import { tokens } from '@/lib/design-tokens'
 import { Box, Text } from '../base'
 import { getAvatarGradient, getAvatarInitial } from '@/lib/utils/avatar'
-import { formatDisplayName } from '@/app/components/ranking/utils'
+import { formatDisplayName, formatROI } from '@/app/components/ranking/utils'
 import type { TraderProfile } from '@/lib/data/trader'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 
@@ -227,7 +227,7 @@ function SimilarTradersInner({ traders }: SimilarTradersProps) {
                         letterSpacing: '-0.02em',
                       }}
                     >
-                      {trader.roi_90d >= 0 ? '+' : ''}{trader.roi_90d.toFixed(2)}%
+                      {formatROI(trader.roi_90d)}
                     </Text>
                   )}
                   {trader.arena_score != null && (

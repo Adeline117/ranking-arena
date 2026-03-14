@@ -19,6 +19,7 @@
 import { useCallback } from 'react'
 import { tokens } from '@/lib/design-tokens'
 import { usePeriodStore } from '@/lib/stores/periodStore'
+import { getLanguage, t } from '@/lib/i18n'
 
 interface ShareOnXButtonProps {
   handle: string
@@ -40,7 +41,11 @@ const PLATFORM_LABELS: Record<string, string> = {
 function formatRoiShort(roi: number): string {
   const sign = roi >= 0 ? '+' : '-'
   const abs = Math.abs(roi)
-  if (abs >= 1000) return `${sign}${(abs / 1000).toFixed(1)}K%`
+  const lang = getLanguage()
+  if (abs >= 1000) {
+    const suffix = lang === 'zh' ? t('numberFormatThousand') : t('numberFormatThousand')
+    return `${sign}${(abs / 1000).toFixed(1)}${suffix}%`
+  }
   return `${sign}${abs.toFixed(1)}%`
 }
 

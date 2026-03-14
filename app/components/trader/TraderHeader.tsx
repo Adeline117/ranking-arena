@@ -11,6 +11,7 @@ import CopyTradeButton from './CopyTradeButton'
 import { getAvatarGradient, getAvatarInitial } from '@/lib/utils/avatar'
 import { EXCHANGE_NAMES, EXCHANGE_CONFIG } from '@/lib/constants/exchanges'
 import { formatDisplayName } from '@/app/components/ranking/utils'
+import { getLanguage, t } from '@/lib/i18n'
 import { ProBadgeOverlay } from '../ui/ProBadge'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import { useToast } from '@/app/components/ui/Toast'
@@ -120,8 +121,15 @@ function getTradingStyleTags(
 }
 
 function formatAum(aum: number): string {
-  if (aum >= 1_000_000) return `$${(aum / 1_000_000).toFixed(1)}M`
-  if (aum >= 1_000) return `$${(aum / 1_000).toFixed(0)}K`
+  const lang = getLanguage()
+  if (aum >= 1_000_000) {
+    const suffix = lang === 'zh' ? t('numberFormatMillion') : t('numberFormatMillion')
+    return `$${(aum / 1_000_000).toFixed(1)}${suffix}`
+  }
+  if (aum >= 1_000) {
+    const suffix = lang === 'zh' ? t('numberFormatThousand') : t('numberFormatThousand')
+    return `$${(aum / 1_000).toFixed(0)}${suffix}`
+  }
   return `$${aum.toFixed(0)}`
 }
 
