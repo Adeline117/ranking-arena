@@ -49,8 +49,8 @@ export async function generateMetadata({ params }: { params: Promise<{ handle: s
 
       const title = `${name} (${exchange}) | Crypto Trader Rankings — Arena`
       const description = parts.length
-        ? `${name} is a ${exchange} trader with ${parts.join(', ')}. Track their performance history on Arena.`
-        : `${name} is a ${exchange} crypto trader. View performance analytics and rankings on Arena.`
+        ? `${name} is a ${exchange} trader with ${parts.join(', ')}. Track their performance history, detailed analytics, and ranking movements on Arena among 32,000+ crypto traders.`
+        : `${name} is a ${exchange} crypto trader. View comprehensive performance analytics, trading history, risk metrics, and rankings on Arena among 32,000+ crypto traders from 30+ exchanges.`
 
       const ogParams = new URLSearchParams({ handle: decoded })
       if (roi != null) ogParams.set('roi', roi.toFixed(2))
@@ -70,7 +70,13 @@ export async function generateMetadata({ params }: { params: Promise<{ handle: s
           type: 'profile',
           images: [{ url: ogImageUrl, width: 1200, height: 630, alt: `${name} trading performance card` }],
         },
-        twitter: { card: 'summary_large_image', title, description, images: [ogImageUrl] },
+        twitter: { 
+          card: 'summary_large_image', 
+          title, 
+          description: description.length > 160 ? description.substring(0, 157) + '...' : description, 
+          images: [ogImageUrl],
+          creator: '@arenafi',
+        },
         alternates: { canonical: `${BASE}/trader/${encodeURIComponent(decoded)}` },
       }
     }
@@ -79,17 +85,23 @@ export async function generateMetadata({ params }: { params: Promise<{ handle: s
   // Fallback — no DB data
   const fallbackOgImage = `${BASE}/api/og/trader?handle=${encodeURIComponent(decoded)}`
   return {
-    title: `${decoded} | Crypto Trader — Arena`,
-    description: `View ${decoded}'s crypto trading performance, PnL, and rank on Arena among 32,000+ traders.`,
+    title: `${decoded} | Crypto Trader Performance & Rankings — Arena`,
+    description: `View ${decoded}'s comprehensive crypto trading performance, PnL, ROI, win rate, and rank on Arena among 32,000+ traders from 30+ exchanges. Real-time analytics and historical data.`,
     openGraph: {
       title: `${decoded} | Crypto Trader — Arena`,
-      description: `View ${decoded}'s crypto trading performance on Arena.`,
+      description: `View ${decoded}'s crypto trading performance, analytics, and rank on Arena among 32,000+ traders from 30+ exchanges.`,
       url: `${BASE}/trader/${encodeURIComponent(decoded)}`,
       siteName: 'Arena',
       type: 'profile',
       images: [{ url: fallbackOgImage, width: 1200, height: 630 }],
     },
-    twitter: { card: 'summary_large_image', title: `${decoded} | Crypto Trader — Arena`, images: [fallbackOgImage] },
+    twitter: { 
+      card: 'summary_large_image', 
+      title: `${decoded} | Crypto Trader — Arena`, 
+      description: `View ${decoded}'s trading performance and rank on Arena.`,
+      images: [fallbackOgImage],
+      creator: '@arenafi',
+    },
     alternates: { canonical: `${BASE}/trader/${encodeURIComponent(decoded)}` },
   }
 }

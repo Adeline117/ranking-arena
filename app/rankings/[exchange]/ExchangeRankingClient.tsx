@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react'
 import Link from 'next/link'
 import { tokens } from '@/lib/design-tokens'
-import { getAvatarGradient, getAvatarInitial } from '@/lib/utils/avatar'
+import { getAvatarGradient, getAvatarInitial, isWalletAddress, generateBlockieSvg } from '@/lib/utils/avatar'
 import { formatROI } from '@/app/components/ranking/utils'
 import { Sparkline } from '@/app/components/ui/Sparkline'
 import { EXCHANGE_NAMES } from '@/lib/constants/exchanges'
@@ -43,11 +43,27 @@ function getDisplayName(t: TraderData): string {
   return shortKey
 }
 
-function TraderAvatarImg({ avatarUrl, traderKey: _traderKey, name, size = 32 }: { avatarUrl: string | null; traderKey: string; name: string; size?: number }) {
+function TraderAvatarImg({ avatarUrl, traderKey, name, size = 32 }: { avatarUrl: string | null; traderKey: string; name: string; size?: number }) {
   const [error, setError] = useState(false)
+  
+  // If no avatar or error loading: check if it's a wallet address → use blockie, else use initial
   if (!avatarUrl || error) {
+    if (isWalletAddress(traderKey)) {
+      // Generate Ethereum-style blockie for wallet addresses
+      return (
+        <img
+          src={generateBlockieSvg(traderKey, size)}
+          alt={name || 'Wallet avatar'}
+          width={size}
+          height={size}
+          style={{ width: '100%', height: '100%', objectFit: 'cover', imageRendering: 'pixelated' }}
+        />
+      )
+    }
+    // For non-wallet IDs, use single letter initial
     return <span style={{ color: tokens.colors.white, fontSize: size * 0.375, fontWeight: 700 }}>{getAvatarInitial(name)}</span>
   }
+  
   // Use plain <img> to avoid next/image hostname validation crashes
   // Trader avatars come from many CDNs that can't all be whitelisted
   return (
