@@ -126,8 +126,8 @@ export async function GET(request: NextRequest) {
   //      CEX: 30s (single) / 20s (multi) - enough for 1-2 API calls
   //      Onchain: 60s (single) / 40s (multi) - GraphQL/RPC needs slightly more time
   const ONCHAIN_PLATFORMS = new Set(['gmx', 'dydx', 'jupiter_perps', 'hyperliquid', 'drift', 'aevo', 'gains'])
-  const ENRICH_TIMEOUT_MS = periodsToRun.length > 1 ? 20_000 : 30_000  // Was 60s/120s
-  const ONCHAIN_TIMEOUT_MS = periodsToRun.length > 1 ? 40_000 : 60_000  // Was 90s/180s
+  const ENRICH_TIMEOUT_MS = periodsToRun.length > 1 ? 60_000 : 90_000  // 60s/90s
+  const ONCHAIN_TIMEOUT_MS = periodsToRun.length > 1 ? 120_000 : 180_000  // 120s/180s
 
   const functionStart = Date.now()
   // Budget per period: divide 570s (leaving 30s buffer from 600s total) by number of periods
