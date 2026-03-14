@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react'
 import { tokens } from '@/lib/design-tokens'
 import { t as i18nT } from '@/lib/i18n'
 import { NULL_DISPLAY } from '@/lib/utils/format'
-import { Box, Text } from '../../../base'
+import { Box, Text } from '@/app/components/base'
 import type { TraderStats } from '@/lib/data/trader'
 import { PositionHistorySection } from './PositionHistorySection'
 

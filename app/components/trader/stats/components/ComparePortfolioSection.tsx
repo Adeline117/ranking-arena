@@ -2,8 +2,8 @@
 
 import { useState, useEffect, useRef, useMemo } from 'react'
 import { tokens } from '@/lib/design-tokens'
-import { Box, Text } from '../../../base'
-import { useLanguage } from '../../../Providers/LanguageProvider'
+import { Box, Text } from '@/app/components/base'
+import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import { t as i18nT } from '@/lib/i18n'
 import type { LineData, Time } from 'lightweight-charts'
 

@@ -2,9 +2,9 @@
 
 import { useState, useEffect } from 'react'
 import { tokens } from '@/lib/design-tokens'
-import { Box, Text } from '../../../base'
+import { Box, Text } from '@/app/components/base'
 import CryptoIcon from '@/app/components/common/CryptoIcon'
-import { useLanguage } from '../../../Providers/LanguageProvider'
+import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 
 interface AssetBreakdownData {
   '90D': Array<{ symbol: string; weightPct: number }>
