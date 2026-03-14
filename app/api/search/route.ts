@@ -7,8 +7,9 @@ import { withPublic } from '@/lib/api/middleware'
 import { success } from '@/lib/api/response'
 import { get as cacheGet, set as cacheSet } from '@/lib/cache'
 import { fireAndForget } from '@/lib/utils/logger'
-import { DEAD_BLOCKED_PLATFORMS } from '@/lib/constants/exchanges'
 import { features } from '@/lib/features'
+import { searchTraders as unifiedSearchTraders } from '@/lib/data/unified'
+import { EXCHANGE_CONFIG } from '@/lib/constants/exchanges'
 
 export const dynamic = 'force-dynamic'
 
@@ -76,7 +77,7 @@ export const GET = withPublic(
     }
 
     // 并行查询所有表 — 每个独立容错，不因一个失败影响整体
-     
+
     const safeQuery = async <T>(promise: PromiseLike<{ data: T[] | null; error: unknown }>): Promise<T[]> => {
       try {
         const { data, error } = await promise
@@ -87,21 +88,14 @@ export const GET = withPublic(
       }
     }
 
-    // Fetch more traders to allow relevance ranking, then trim to limit
-    const traderFetchLimit = Math.max(limitPerCategory * 4, 20)
+    interface PostRow { id: string; title: string | null; author_handle: string | null; created_at: string; view_count: number | null }
+    interface LibraryRow { id: string; title: string; author: string | null; slug: string | null; category: string | null }
+    interface UserRow { id: string; handle: string | null; display_name: string | null; avatar_url: string | null; bio: string | null }
+    interface GroupRow { id: string; name: string; member_count: number | null; description: string | null }
 
-    // Filter out dead/blocked platforms from trader search
-    const deadSet = new Set(DEAD_BLOCKED_PLATFORMS as string[])
-
-    const [tradersData, postsData, libraryData, usersData, groupsData] = await Promise.all([
-      safeQuery(supabase
-        .from('trader_sources')
-        .select('source_trader_id, handle, source, is_bot')
-        .or(
-          `handle.ilike.%${sanitizedQuery}%,source_trader_id.ilike.%${sanitizedQuery}%`
-        )
-        .limit(traderFetchLimit))
-        .then(results => results.filter(t => !deadSet.has(t.source))),
+    const [unifiedTraders, postsData, libraryData, usersData, groupsData] = await Promise.all([
+      // Use unified data layer for trader search (handles ranking, dead platform filtering internally)
+      unifiedSearchTraders(supabase, { query: sanitizedQuery, limit: limitPerCategory }).catch(() => []),
 
       // Skip social content queries when social feature is disabled
       features.social
@@ -140,98 +134,20 @@ export const GET = withPublic(
         : Promise.resolve([]),
     ])
 
-    const sourceLabels: Record<string, string> = {
-      binance_futures: 'Binance',
-      binance_spot: 'Binance',
-      binance_web3: 'Binance',
-      bybit: 'Bybit',
-      bitget_futures: 'Bitget',
-      bitget_spot: 'Bitget',
-      mexc: 'MEXC',
-      coinex: 'CoinEx',
-      okx_web3: 'OKX',
-      kucoin: 'KuCoin',
-      gmx: 'GMX',
-    }
+    // Map unified traders to UnifiedSearchResult format
+    const traders: UnifiedSearchResult[] = unifiedTraders.map((t) => {
+      const exchangeName = EXCHANGE_CONFIG[t.platform as keyof typeof EXCHANGE_CONFIG]?.name || t.platform
+      const isBot = t.traderType === 'bot' || t.platform === 'web3_bot'
+      return {
+        id: `${t.platform}:${t.traderKey}`,
+        type: 'trader' as const,
+        title: `@${t.handle || t.traderKey}`,
+        subtitle: exchangeName,
+        href: `/trader/${encodeURIComponent(t.traderKey)}?platform=${t.platform}`,
+        meta: isBot ? { is_bot: true } : undefined,
+      }
+    })
 
-     
-    interface TraderSourceRow { source_trader_id: string; handle: string | null; source: string; is_bot?: boolean }
-    interface PostRow { id: string; title: string | null; author_handle: string | null; created_at: string; view_count: number | null }
-    interface LibraryRow { id: string; title: string; author: string | null; slug: string | null; category: string | null }
-    interface UserRow { id: string; handle: string | null; display_name: string | null; avatar_url: string | null; bio: string | null }
-    interface GroupRow { id: string; name: string; member_count: number | null; description: string | null }
-
-    // Enrich traders with display_name and arena_score for ranking
-    const tradersTyped = tradersData as TraderSourceRow[]
-    const traderIds = tradersTyped.map(t => t.source_trader_id)
-
-    // Fetch display names and arena scores in parallel
-    const [lrRows, scoreRows] = await Promise.all([
-      // Display names for traders without handles
-      (async () => {
-        const missing = tradersTyped.filter(t => !t.handle).map(t => t.source_trader_id)
-        if (missing.length === 0) return []
-        const { data } = await supabase
-          .from('leaderboard_ranks')
-          .select('source_trader_id, display_name')
-          .in('source_trader_id', missing)
-          .not('display_name', 'is', null)
-          .limit(missing.length)
-        return data || []
-      })(),
-      // Arena scores for relevance ranking
-      (async () => {
-        if (traderIds.length === 0) return []
-        const { data } = await supabase
-          .from('trader_snapshots')
-          .select('source_trader_id, source, arena_score')
-          .in('source_trader_id', traderIds)
-          .eq('season_id', '90D')
-          .not('arena_score', 'is', null)
-          .order('arena_score', { ascending: false })
-          .limit(traderIds.length)
-        return data || []
-      })(),
-    ])
-
-    const lrNameMap = new Map<string, string>()
-    for (const lr of lrRows) {
-      if (lr.display_name) lrNameMap.set(lr.source_trader_id, lr.display_name)
-    }
-
-    // Build score map (source:trader_id → arena_score)
-    const scoreMap = new Map<string, number>()
-    for (const row of scoreRows) {
-      const key = `${row.source}:${row.source_trader_id}`
-      if (!scoreMap.has(key)) scoreMap.set(key, row.arena_score)
-    }
-
-    // Rank traders: exact handle match first, then by arena_score
-    const queryLower = sanitizedQuery.toLowerCase()
-    const rankedTraders = tradersTyped
-      .map((t) => {
-        const name = t.handle || lrNameMap.get(t.source_trader_id) || t.source_trader_id
-        const key = `${t.source}:${t.source_trader_id}`
-        const score = scoreMap.get(key) ?? 0
-        const handleLower = (t.handle || '').toLowerCase()
-        // Exact match gets massive boost, starts-with gets medium boost
-        const exactBonus = handleLower === queryLower ? 10000 : 0
-        const prefixBonus = handleLower.startsWith(queryLower) ? 1000 : 0
-        return { t, name, relevance: exactBonus + prefixBonus + score }
-      })
-      .sort((a, b) => b.relevance - a.relevance)
-      .slice(0, limitPerCategory)
-
-    const traders: UnifiedSearchResult[] = rankedTraders.map(({ t, name }) => ({
-      id: `${t.source}:${t.source_trader_id}`,
-      type: 'trader' as const,
-      title: `@${name}`,
-      subtitle: sourceLabels[t.source] || t.source,
-      href: `/trader/${encodeURIComponent(t.source_trader_id)}?platform=${t.source}`,
-      meta: (t.is_bot || t.source === 'web3_bot') ? { is_bot: true } : undefined,
-    }))
-
-     
     const posts: UnifiedSearchResult[] = (postsData as PostRow[]).map((p) => ({
       id: p.id,
       type: 'post' as const,
@@ -241,7 +157,6 @@ export const GET = withPublic(
       meta: { view_count: p.view_count },
     }))
 
-     
     const library: UnifiedSearchResult[] = (libraryData as LibraryRow[]).map(
       (l) => ({
         id: l.id,
@@ -252,7 +167,6 @@ export const GET = withPublic(
       })
     )
 
-     
     const users: UnifiedSearchResult[] = (usersData as UserRow[]).map((u) => ({
       id: u.id,
       type: 'user' as const,

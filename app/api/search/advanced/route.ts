@@ -27,6 +27,8 @@ import { checkRateLimit, RateLimitPresets } from '@/lib/utils/rate-limit'
 import { createLogger } from '@/lib/utils/logger'
 import { escapeLikePattern } from '@/lib/sanitize'
 import { features } from '@/lib/features'
+import { searchTraders as unifiedSearchTraders } from '@/lib/data/unified'
+import { EXCHANGE_CONFIG } from '@/lib/constants/exchanges'
 
 const logger = createLogger('search-advanced')
 
@@ -47,9 +49,9 @@ function getSupabaseClient() {
 }
 
 /**
- * Search traders with filters
+ * Search traders using unified data layer, then apply advanced filters
  */
-async function searchTraders(
+async function searchTradersAdvanced(
   supabase: ReturnType<typeof getSupabaseClient>,
   query: string,
   filters: {
@@ -62,109 +64,67 @@ async function searchTraders(
   limit: number
 ) {
   try {
-    // Step 1: Search trader_sources for matching traders (this table has handle, source, avatar_url etc.)
-    const q = query ? escapeLikePattern(query) : ''
+    // Fetch more results to allow post-filtering
+    const fetchLimit = limit * 3
+    const traders = await unifiedSearchTraders(supabase, {
+      query,
+      limit: fetchLimit,
+      platform: filters.exchange,
+    })
 
-    let sourceQuery = supabase
-      .from('trader_sources')
-      .select('source_trader_id, handle, source, avatar_url')
-
-    if (q) {
-      sourceQuery = sourceQuery.or(`handle.ilike.%${q}%,source_trader_id.ilike.%${q}%`)
-    }
-
-    if (filters.exchange) {
-      sourceQuery = sourceQuery.eq('source', filters.exchange)
-    }
-
-    sourceQuery = sourceQuery.limit(limit * 2) // fetch extra to allow filtering
-
-    const { data: sourceData, error: sourceError } = await sourceQuery
-
-    if (sourceError) {
-      logger.error('Trader search error', { error: sourceError })
-      return []
-    }
-
-    if (!sourceData || sourceData.length === 0) return []
-
-    // Step 2: Get performance metrics from trader_snapshots for these traders
-    const traderIds = [...new Set(sourceData.map(s => s.source_trader_id))]
-    const sources = [...new Set(sourceData.map(s => s.source))]
-
-    let snapshotQuery = supabase
-      .from('trader_snapshots')
-      .select('source, source_trader_id, roi, pnl, win_rate, followers, max_drawdown, captured_at, arena_score')
-      .in('source', sources)
-      .in('source_trader_id', traderIds)
-      .eq('season_id', '90D')
-      .not('arena_score', 'is', null)
+    // Apply additional filters that unified searchTraders doesn't handle
+    let filtered = traders
 
     if (filters.minRoi !== undefined) {
-      snapshotQuery = snapshotQuery.gte('roi', filters.minRoi / 100) // DB stores as decimal
+      filtered = filtered.filter(t => t.roi != null && t.roi >= filters.minRoi!)
     }
     if (filters.maxRoi !== undefined) {
-      snapshotQuery = snapshotQuery.lte('roi', filters.maxRoi / 100)
+      filtered = filtered.filter(t => t.roi != null && t.roi <= filters.maxRoi!)
     }
-
-    const { data: snapshotData } = await snapshotQuery
-
-    // Build snapshot lookup map
-    const snapshotMap = new Map<string, (typeof snapshotData extends (infer T)[] | null ? T : never)>()
-    if (snapshotData) {
-      for (const snap of snapshotData) {
-        const key = `${snap.source}:${snap.source_trader_id}`
-        if (!snapshotMap.has(key)) snapshotMap.set(key, snap)
-      }
+    if (filters.minFollowers !== undefined) {
+      filtered = filtered.filter(t => t.followers != null && t.followers >= filters.minFollowers!)
     }
-
-    // Step 3: Merge and return
-    const results = sourceData
-      .map(trader => {
-        const key = `${trader.source}:${trader.source_trader_id}`
-        const snap = snapshotMap.get(key)
-        const roi = snap?.roi != null ? parseFloat(String(snap.roi)) * 100 : null
-        const pnl = snap?.pnl != null ? parseFloat(String(snap.pnl)) : null
-
-        return {
-          type: 'trader' as const,
-          id: trader.source_trader_id,
-          platform: trader.source,
-          title: trader.handle || trader.source_trader_id,
-          subtitle: `${trader.source} • ROI: ${roi != null ? roi.toFixed(2) : 'N/A'}%`,
-          roi,
-          pnl,
-          winRate: snap?.win_rate != null ? parseFloat(String(snap.win_rate)) : null,
-          followers: snap?.followers ?? null,
-          aum: null,
-          maxDrawdown: snap?.max_drawdown != null ? parseFloat(String(snap.max_drawdown)) : null,
-          isVerified: false,
-          updatedAt: snap?.captured_at ?? null,
-          url: `/trader/${trader.handle || trader.source_trader_id}`,
-          avatarUrl: trader.avatar_url,
-          arenaScore: snap?.arena_score != null ? parseFloat(String(snap.arena_score)) : null,
-        }
-      })
 
     // Sort results
     switch (filters.sortBy) {
       case 'roi':
-        results.sort((a, b) => (b.roi ?? -Infinity) - (a.roi ?? -Infinity))
+        filtered.sort((a, b) => (b.roi ?? -Infinity) - (a.roi ?? -Infinity))
         break
       case 'pnl':
-        results.sort((a, b) => (b.pnl ?? -Infinity) - (a.pnl ?? -Infinity))
+        filtered.sort((a, b) => (b.pnl ?? -Infinity) - (a.pnl ?? -Infinity))
         break
       case 'followers':
-        results.sort((a, b) => (b.followers ?? 0) - (a.followers ?? 0))
+        filtered.sort((a, b) => (b.followers ?? 0) - (a.followers ?? 0))
         break
       default:
-        // Relevance: sort by arena score
-        results.sort((a, b) => (b.arenaScore ?? -Infinity) - (a.arenaScore ?? -Infinity))
+        // Relevance: already sorted by unified searchTraders (exact > prefix > arena_score)
+        break
     }
 
-    return results.slice(0, limit)
+    // Map to response format
+    return filtered.slice(0, limit).map(t => {
+      const exchangeName = EXCHANGE_CONFIG[t.platform as keyof typeof EXCHANGE_CONFIG]?.name || t.platform
+      return {
+        type: 'trader' as const,
+        id: t.traderKey,
+        platform: t.platform,
+        title: t.handle || t.traderKey,
+        subtitle: `${exchangeName} • ROI: ${t.roi != null ? t.roi.toFixed(2) : 'N/A'}%`,
+        roi: t.roi,
+        pnl: t.pnl,
+        winRate: t.winRate,
+        followers: t.followers,
+        aum: null,
+        maxDrawdown: t.maxDrawdown,
+        isVerified: false,
+        updatedAt: t.lastUpdated,
+        url: `/trader/${t.handle || t.traderKey}`,
+        avatarUrl: t.avatarUrl,
+        arenaScore: t.arenaScore,
+      }
+    })
   } catch (error: unknown) {
-    logger.error('searchTraders exception', { error })
+    logger.error('searchTradersAdvanced exception', { error })
     return []
   }
 }
@@ -365,7 +325,7 @@ export async function GET(req: NextRequest) {
 
     // Search based on type
     if (type === 'all' || type === 'traders') {
-      results.results.traders = await searchTraders(supabase, query, filters, limit)
+      results.results.traders = await searchTradersAdvanced(supabase, query, filters, limit)
     }
 
     // Skip social content (posts, users) when social feature is disabled
