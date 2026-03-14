@@ -2,7 +2,7 @@ import type { Metadata } from 'next'
 import { redirect, notFound } from 'next/navigation'
 import { getSupabaseAdmin } from '@/lib/supabase/server'
 import { JsonLd } from '@/app/components/Providers/JsonLd'
-import { EXCHANGE_CONFIG, type SourceType, type TraderSource, ALL_SOURCES } from '@/lib/constants/exchanges'
+import { EXCHANGE_CONFIG } from '@/lib/constants/exchanges'
 import TraderProfileClient, { type UnregisteredTraderData } from './TraderProfileClient'
 import { resolveTrader, getTraderDetail, toTraderPageData } from '@/lib/data/unified'
 
@@ -18,23 +18,22 @@ export async function generateMetadata({ params }: { params: Promise<{ handle: s
 
   try {
     const supabase = getSupabaseAdmin()
-    const { data: ts } = await supabase
-      .from('trader_sources')
-      .select('handle, source, source_trader_id, avatar_url')
-      .ilike('handle', decoded)
-      .limit(1)
-      .maybeSingle()
 
-    if (ts) {
+    // Use unified resolveTrader instead of direct trader_sources query
+    const resolved = await resolveTrader(supabase, { handle: decoded })
+
+    if (resolved) {
+      // Fetch leaderboard data for OG meta
       const { data: lr } = await supabase
         .from('leaderboard_ranks')
         .select('rank, arena_score, roi, pnl')
-        .eq('source', ts.source)
-        .eq('source_trader_id', ts.source_trader_id)
+        .eq('source', resolved.platform)
+        .eq('source_trader_id', resolved.traderKey)
+        .eq('season_id', '90D')
         .maybeSingle()
 
-      const name = ts.handle || decoded
-      const exchange = EXCHANGE_DISPLAY[ts.source] || ts.source || 'Crypto'
+      const name = resolved.handle || decoded
+      const exchange = EXCHANGE_DISPLAY[resolved.platform] || resolved.platform || 'Crypto'
       const roi = lr?.roi
       const score = lr?.arena_score
       const rank = lr?.rank
@@ -54,7 +53,7 @@ export async function generateMetadata({ params }: { params: Promise<{ handle: s
       if (roi != null) ogParams.set('roi', roi.toFixed(2))
       if (score != null) ogParams.set('score', score.toFixed(0))
       if (rank != null) ogParams.set('rank', String(rank))
-      if (ts.source) ogParams.set('source', ts.source)
+      if (resolved.platform) ogParams.set('source', resolved.platform)
       const ogImageUrl = `${BASE}/api/og/trader?${ogParams.toString()}`
 
       return {
@@ -68,10 +67,10 @@ export async function generateMetadata({ params }: { params: Promise<{ handle: s
           type: 'profile',
           images: [{ url: ogImageUrl, width: 1200, height: 630, alt: `${name} trading performance card` }],
         },
-        twitter: { 
-          card: 'summary_large_image', 
-          title, 
-          description: description.length > 160 ? description.substring(0, 157) + '...' : description, 
+        twitter: {
+          card: 'summary_large_image',
+          title,
+          description: description.length > 160 ? description.substring(0, 157) + '...' : description,
           images: [ogImageUrl],
           creator: '@arenafi',
         },
@@ -93,9 +92,9 @@ export async function generateMetadata({ params }: { params: Promise<{ handle: s
       type: 'profile',
       images: [{ url: fallbackOgImage, width: 1200, height: 630 }],
     },
-    twitter: { 
-      card: 'summary_large_image', 
-      title: `${decoded} | Crypto Trader — Arena`, 
+    twitter: {
+      card: 'summary_large_image',
+      title: `${decoded} | Crypto Trader — Arena`,
       description: `View ${decoded}'s trading performance and rank on Arena.`,
       images: [fallbackOgImage],
       creator: '@arenafi',
@@ -161,164 +160,6 @@ async function findUserProfileByTraderHandle(traderHandle: string): Promise<stri
     } catch {
       return null
     }
-  }
-}
-
-// Fetch unregistered trader data from trader_sources + leaderboard_ranks
-async function fetchUnregisteredTrader(handle: string, platform?: string): Promise<UnregisteredTraderData | null> {
-  try {
-    const supabase = getSupabaseAdmin()
-
-    // Find trader_sources by handle (case-insensitive)
-    let traderSourceQuery = supabase
-      .from('trader_sources')
-      .select('handle, avatar_url, source, source_trader_id')
-      .ilike('handle', handle)
-      .limit(1)
-    if (platform) traderSourceQuery = traderSourceQuery.eq('source', platform)
-    let { data: traderSource } = await traderSourceQuery.maybeSingle()
-
-    if (!traderSource) {
-      // Fallback: try matching by source_trader_id (full address)
-      let fallbackQuery = supabase
-        .from('trader_sources')
-        .select('handle, avatar_url, source, source_trader_id')
-        .eq('source_trader_id', handle)
-        .limit(1)
-      if (platform) fallbackQuery = fallbackQuery.eq('source', platform)
-      const { data: fallbackSource } = await fallbackQuery.maybeSingle()
-
-      if (fallbackSource) {
-        traderSource = fallbackSource
-      }
-    }
-
-    // Fallback: if trader_sources has no entry but platform is known,
-    // try leaderboard_ranks directly (handles platforms like etoro/bitunix/drift
-    // that may not have trader_sources entries)
-    if (!traderSource && platform) {
-      const { data: directRank } = await supabase
-        .from('leaderboard_ranks')
-        .select('source_trader_id, rank, arena_score, roi, pnl, win_rate, max_drawdown, sharpe_ratio, sortino_ratio, profit_factor, calmar_ratio, trading_style, avg_holding_hours, profitability_score, risk_control_score, execution_score, avatar_url')
-        .eq('source', platform)
-        .eq('source_trader_id', handle)
-        .order('arena_score', { ascending: false })
-        .limit(1)
-        .maybeSingle()
-
-      if (directRank) {
-        // Also check trader_profiles_v2 for avatar/display info
-        const { data: profile } = await supabase
-          .from('trader_profiles_v2')
-          .select('display_name, avatar_url')
-          .eq('platform', platform)
-          .eq('trader_key', handle)
-          .limit(1)
-          .maybeSingle()
-
-        return {
-          handle: handle, // Keep URL handle to prevent redirect (display_name differs from source_trader_id)
-          avatar_url: directRank.avatar_url || profile?.avatar_url || null,
-          source: platform,
-          source_trader_id: handle,
-          rank: directRank.rank,
-          arena_score: directRank.arena_score,
-          roi: directRank.roi,
-          pnl: directRank.pnl,
-          win_rate: directRank.win_rate,
-          max_drawdown: directRank.max_drawdown,
-          sharpe_ratio: directRank.sharpe_ratio,
-          sortino_ratio: directRank.sortino_ratio,
-          profit_factor: directRank.profit_factor,
-          calmar_ratio: directRank.calmar_ratio,
-          trading_style: directRank.trading_style,
-          avg_holding_hours: directRank.avg_holding_hours,
-          profitability_score: directRank.profitability_score,
-          risk_control_score: directRank.risk_control_score,
-          execution_score: directRank.execution_score,
-        }
-      }
-
-      // Last resort: check trader_snapshots_v2 directly
-      const { data: v2Snap } = await supabase
-        .from('trader_snapshots_v2')
-        .select('trader_key, roi_pct, pnl_usd, win_rate, max_drawdown, arena_score')
-        .eq('platform', platform)
-        .eq('trader_key', handle)
-        .order('created_at', { ascending: false })
-        .limit(1)
-        .maybeSingle()
-
-      if (v2Snap) {
-        const { data: profile } = await supabase
-          .from('trader_profiles_v2')
-          .select('display_name, avatar_url')
-          .eq('platform', platform)
-          .eq('trader_key', handle)
-          .limit(1)
-          .maybeSingle()
-
-        return {
-          handle: handle, // Keep URL handle to prevent redirect
-          avatar_url: profile?.avatar_url || null,
-          source: platform,
-          source_trader_id: handle,
-          roi: v2Snap.roi_pct,
-          pnl: v2Snap.pnl_usd,
-          win_rate: v2Snap.win_rate,
-          max_drawdown: v2Snap.max_drawdown,
-          arena_score: v2Snap.arena_score,
-        }
-      }
-
-      return null
-    }
-
-    if (!traderSource) return null
-
-    // Get leaderboard_ranks data
-    const { data: rankData } = await supabase
-      .from('leaderboard_ranks')
-      .select('rank, arena_score, roi, pnl, win_rate, max_drawdown, sharpe_ratio, sortino_ratio, profit_factor, calmar_ratio, trading_style, avg_holding_hours, profitability_score, risk_control_score, execution_score')
-      .eq('source', traderSource.source)
-      .eq('source_trader_id', traderSource.source_trader_id)
-      .maybeSingle()
-
-    // Fallback to trader_snapshots if leaderboard_ranks has no data
-    let snapshotData: Record<string, unknown> | null = null
-    if (!rankData) {
-      const { data: snapshot } = await supabase
-        .from('trader_snapshots')
-        .select('roi, pnl, win_rate, max_drawdown, trades_count, followers, arena_score, profitability_score, risk_control_score, execution_score')
-        .eq('source', traderSource.source)
-        .eq('source_trader_id', traderSource.source_trader_id)
-        .order('captured_at', { ascending: false })
-        .limit(1)
-        .maybeSingle()
-
-      if (snapshot) {
-        snapshotData = {
-          roi: snapshot.roi,
-          pnl: snapshot.pnl,
-          win_rate: snapshot.win_rate != null ? (snapshot.win_rate <= 1 ? snapshot.win_rate * 100 : snapshot.win_rate) : null,
-          max_drawdown: snapshot.max_drawdown,
-          arena_score: snapshot.arena_score,
-          profitability_score: snapshot.profitability_score,
-          risk_control_score: snapshot.risk_control_score,
-          execution_score: snapshot.execution_score,
-        }
-      }
-    }
-
-    return {
-      handle: traderSource.handle || handle,
-      avatar_url: traderSource.avatar_url,
-      source: traderSource.source,
-      source_trader_id: traderSource.source_trader_id,
-      ...(rankData || snapshotData || {}),
-    }
-  } catch {
-    return null
   }
 }
 

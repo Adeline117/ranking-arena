@@ -1,4 +1,8 @@
 /**
+ * @deprecated Use `lib/data/unified.ts` instead. This file contains legacy trader query
+ * functions that directly query trader_snapshots v1. They are still used internally by
+ * trader-transforms.ts but should not be used in new code.
+ *
  * Trader query functions - specific database queries for trader data.
  * Extracted from trader.ts to reduce file size.
  */

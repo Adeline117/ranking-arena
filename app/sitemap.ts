@@ -19,25 +19,35 @@ const MAX_OTHER_URLS = 500
 async function getAllTraders(): Promise<Array<{ handle: string; updated_at: string }>> {
   try {
     const supabase = getSupabaseAdmin()
-    
-    // 从 trader_sources 获取所有有 handle 的交易员（按来源权重排序，优先热门平台）
+
+    // Use leaderboard_ranks (the unified data source) for sitemap generation
+    // This covers all traders including those without trader_sources entries
     const { data, error } = await supabase
-      .from('trader_sources')
-      .select('handle, source_trader_id')
+      .from('leaderboard_ranks')
+      .select('handle, source_trader_id, computed_at')
+      .eq('season_id', '90D')
       .not('handle', 'is', null)
       .limit(MAX_TRADER_URLS)
-    
+
     if (error) {
       dataLogger.error('sitemap 获取交易员失败:', error)
       return []
     }
-    
-    const lastMod = new Date().toISOString()
-    
-    return (data || []).map(t => ({
-      handle: t.handle || t.source_trader_id,
-      updated_at: lastMod,
-    }))
+
+    // Deduplicate by handle
+    const seen = new Set<string>()
+    const results: Array<{ handle: string; updated_at: string }> = []
+    for (const t of data || []) {
+      const h = t.handle || t.source_trader_id
+      if (!h || seen.has(h)) continue
+      seen.add(h)
+      results.push({
+        handle: h,
+        updated_at: t.computed_at || new Date().toISOString(),
+      })
+    }
+
+    return results
   } catch (error) {
     dataLogger.error('sitemap getAllTraders error:', error)
     return []
