@@ -4,6 +4,7 @@ import { tokens } from '@/lib/design-tokens'
 import { Box, Text } from '../../base'
 import { useLanguage } from '../../Providers/LanguageProvider'
 import { Sparkline } from '@/app/components/ui/Sparkline'
+import { formatPnL as formatPnLUtil, formatROI as formatROIUtil } from '../../ranking/utils'
 
 export interface HeroMetricsProps {
   roi: number | undefined
@@ -18,14 +19,7 @@ export function HeroMetrics({ roi, pnl, sparklineData, isVisible }: HeroMetricsP
 
   const formatPnl = (value: number | undefined) => {
     if (value === undefined) return '—'
-    const absValue = Math.abs(value)
-    const sign = value >= 0 ? '+' : '-'
-    if (absValue >= 1000000) {
-      return `${sign}$${(absValue / 1000000).toFixed(2)}M`
-    } else if (absValue >= 1000) {
-      return `${sign}$${absValue.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`
-    }
-    return `${sign}$${absValue.toFixed(2)}`
+    return formatPnLUtil(value)
   }
 
   return (
@@ -71,7 +65,7 @@ export function HeroMetrics({ roi, pnl, sparklineData, isVisible }: HeroMetricsP
               transition: 'all 0.6s cubic-bezier(0.4, 0, 0.2, 1) 0.1s',
             }}
           >
-            {roi !== undefined ? `${roi >= 0 ? '+' : ''}${roi.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}%` : '—'}
+            {roi !== undefined ? formatROIUtil(roi) : '—'}
           </Text>
           {(sparklineData.length > 2 || roi !== undefined) && (
             <Sparkline
