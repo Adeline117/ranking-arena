@@ -10,10 +10,10 @@ export async function generateMetadata({ params }: { params: Promise<{ handle: s
   const { handle } = await params
   const decoded = decodeURIComponent(handle)
   return {
-    title: `@${decoded} — Arena`,
+    title: `@${decoded}`,
     description: `View @${decoded}'s profile, trading stats, and activity on Arena.`,
     openGraph: {
-      title: `@${decoded} — Arena`,
+      title: `@${decoded}`,
       description: `View @${decoded}'s profile, trading stats, and activity on Arena.`,
       url: `https://www.arenafi.org/u/${encodeURIComponent(decoded)}`,
       siteName: 'Arena',

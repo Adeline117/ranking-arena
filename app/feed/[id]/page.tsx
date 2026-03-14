@@ -59,10 +59,10 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
   const activity = await fetchActivity(id)
 
   if (!activity) {
-    return { title: 'Activity Not Found — Arena' }
+    return { title: 'Activity Not Found' }
   }
 
-  const title = `${activity.handle ?? 'Trader'} — Arena Activity`
+  const title = `${activity.handle ?? 'Trader'} Activity`
   const description = activity.activity_text
 
   return {
