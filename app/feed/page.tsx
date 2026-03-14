@@ -20,11 +20,11 @@ export const revalidate = 60 // ISR: 1 minute
 const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://www.arenafi.org'
 
 export const metadata: Metadata = {
-  title: 'Trader Activity Feed — Arena',
+  title: 'Trader Activity Feed',
   description: 'Live auto-generated feed of trader milestones: rank surges, ROI breakthroughs, win streaks, and large profits.',
   alternates: { canonical: `${baseUrl}/feed` },
   openGraph: {
-    title: 'Trader Activity Feed — Arena',
+    title: 'Trader Activity Feed',
     description: 'Live auto-generated feed of trader milestones: rank surges, ROI breakthroughs, win streaks, and large profits.',
     url: `${baseUrl}/feed`,
     siteName: 'Arena',

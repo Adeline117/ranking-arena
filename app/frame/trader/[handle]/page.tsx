@@ -50,7 +50,7 @@ export async function generateMetadata({ params, searchParams }: Props): Promise
   const rank = trader?.rank ? `#${trader.rank}` : ''
   const roi = trader?.roi ? `${parseFloat(trader.roi) >= 0 ? '+' : ''}${parseFloat(trader.roi).toFixed(2)}%` : ''
 
-  const title = `${name} — Arena Score ${score} ${rank}`
+  const title = `${name} Score ${score} ${rank}`
   const description = roi ? `${roi} ROI | Ranked on Arena` : `Trader ranking on Arena`
 
   // Build OG image URL

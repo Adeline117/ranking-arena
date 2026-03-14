@@ -106,7 +106,7 @@ export async function generateMetadata({ params, searchParams }: Props): Promise
   const topStr = topPct != null && topPct <= 25 ? `Top ${topPct}% trader` : null
   const parts = [rankStr, roiStr, topStr].filter(Boolean)
 
-  const title = `${name} — Arena Rank Card`
+  const title = `${name} Rank Card`
   const description = parts.length
     ? `${parts.join(' | ')} on ${data?.platformLabel ?? 'Arena'}`
     : `${name}'s trading performance card on Arena`

@@ -7,10 +7,10 @@ import { logger } from '@/lib/logger'
 import ErrorBoundary from '@/app/components/utils/ErrorBoundary'
 
 export const metadata: Metadata = {
-  title: 'Trading Resources — Arena',
+  title: 'Trading Resources',
   description: 'Curated trading resources, guides, and tools for crypto traders.',
   openGraph: {
-    title: 'Trading Resources — Arena',
+    title: 'Trading Resources',
     description: 'Curated trading resources, guides, and tools for crypto traders.',
     url: 'https://www.arenafi.org/rankings/resources',
     siteName: 'Arena',
