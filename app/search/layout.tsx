@@ -10,11 +10,11 @@ export async function generateMetadata({
 
   const title = query
     ? `"${query}" - Search Results | Arena`
-    : 'Search Traders & Community | Arena'
+    : 'Search Traders & Resources | Arena'
 
   const description = query
-    ? `Search results for "${query}" — Find traders, posts, groups, and resources on Arena. Comprehensive search across 30+ exchanges and community content.`
-    : 'Search for top crypto traders, community posts, discussion groups, and trading resources on Arena. Find performance data from 30+ exchanges.'
+    ? `Search results for "${query}" — Find traders and resources on Arena. Comprehensive search across 30+ exchanges.`
+    : 'Search for top crypto traders and trading resources on Arena. Find performance data from 30+ exchanges.'
 
   const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://www.arenafi.org'
 
