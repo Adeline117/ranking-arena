@@ -487,7 +487,7 @@ export default function FavoritesPage() {
               description={t('noSubscribedFoldersDesc')}
               action={
                 <Link
-                  href="/hot"
+                  href="/rankings"
                   style={{
                     display: 'inline-flex',
                     alignItems: 'center',
