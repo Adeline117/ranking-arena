@@ -12,7 +12,7 @@ import type {
   AssetWeight,
   TraderPosition,
 } from './types'
-import { SOURCE_TYPE_MAP } from '@/lib/constants/exchanges'
+import { SOURCE_TYPE_MAP, DEAD_BLOCKED_PLATFORMS } from '@/lib/constants/exchanges'
 import { logger } from '@/lib/logger'
 import {
   mapLeaderboardRow,
@@ -506,8 +506,13 @@ export async function searchTraders(supabase: SupabaseClient, params: {
     return []
   }
 
+  // Filter out DEAD/blocked platforms
+  const deadSet = new Set(DEAD_BLOCKED_PLATFORMS as string[])
+  const filteredSources = sourcesData.filter(t => !deadSet.has(t.source))
+  if (filteredSources.length === 0) return []
+
   // Fetch arena scores from leaderboard_ranks for ranking
-  const traderIds = sourcesData.map(t => t.source_trader_id)
+  const traderIds = filteredSources.map(t => t.source_trader_id)
   const { data: scoreRows } = await supabase
     .from('leaderboard_ranks')
     .select('source, source_trader_id, arena_score, roi, pnl, win_rate, max_drawdown, followers, rank, season_id')
@@ -525,7 +530,7 @@ export async function searchTraders(supabase: SupabaseClient, params: {
 
   // Rank by relevance: exact match > prefix match > arena_score
   const queryLower = sanitizedQuery.toLowerCase()
-  const ranked = sourcesData
+  const ranked = filteredSources
     .map((t) => {
       const key = `${t.source}:${t.source_trader_id}`
       const scoreRow = scoreMap.get(key)
