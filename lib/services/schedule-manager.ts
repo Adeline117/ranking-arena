@@ -113,6 +113,8 @@ export class ScheduleManager {
 
   /**
    * Fetch traders with activity data for classification
+   * @deprecated Uses trader_sources directly for scheduling-specific columns (activity_tier, next_refresh_at, etc.)
+   *             that are not available in the unified data layer. Kept as-is for infrastructure.
    */
   private async fetchTradersWithActivity(platforms?: string[]): Promise<TraderWithSchedule[]> {
     let query = this.supabase
@@ -186,6 +188,7 @@ export class ScheduleManager {
 
   /**
    * Update trader schedules in database
+   * @deprecated Writes scheduling-specific columns to trader_sources. Not migratable to unified (read-only).
    */
   async updateSchedules(schedules: ScheduledJob[]): Promise<void> {
     const startTime = Date.now()
@@ -237,6 +240,7 @@ export class ScheduleManager {
 
   /**
    * Get traders that need refreshing now
+   * @deprecated Uses trader_sources for scheduling-specific columns. Not migratable to unified (read-only).
    */
   async getTradersToRefresh(options: GetTradersOptions = {}): Promise<TraderWithSchedule[]> {
     const {
@@ -308,6 +312,7 @@ export class ScheduleManager {
 
   /**
    * Mark traders as refreshed (update last_refreshed_at and calculate next_refresh_at)
+   * @deprecated Writes scheduling-specific columns to trader_sources. Not migratable to unified (read-only).
    */
   async markRefreshed(traderIds: string[], timestamp?: Date): Promise<void> {
     const refreshTime = timestamp || new Date()
@@ -356,6 +361,7 @@ export class ScheduleManager {
 
   /**
    * Get tier statistics
+   * @deprecated Uses trader_sources for scheduling-specific column (activity_tier). Not in unified layer.
    */
   async getTierStats(): Promise<TierStats> {
     try {
@@ -395,6 +401,7 @@ export class ScheduleManager {
 
   /**
    * Get overdue traders (past their next_refresh_at)
+   * @deprecated Uses trader_sources for scheduling-specific columns. Not migratable to unified (read-only).
    */
   async getOverdueTraders(platform?: string): Promise<TraderWithSchedule[]> {
     try {

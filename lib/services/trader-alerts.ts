@@ -413,16 +413,19 @@ export async function runTraderAlertDetection(
     return { tradersChecked: 0, alertsDetected: 0, notificationsSaved: 0, errors: 1 }
   }
 
-  // 获取交易员 handle
-  const { data: sources } = await supabase
-    .from('trader_sources')
+  // 获取交易员 handle（从 leaderboard_ranks 查询，统一数据层）
+  const { data: lrRows } = await supabase
+    .from('leaderboard_ranks')
     .select('source_trader_id, handle')
     .in('source_trader_id', traderIds)
+    .eq('season_id', '90D')
 
   const handleMap = new Map<string, string>()
-  if (sources) {
-    for (const s of sources) {
-      handleMap.set(s.source_trader_id, s.handle || s.source_trader_id)
+  if (lrRows) {
+    for (const r of lrRows) {
+      if (!handleMap.has(r.source_trader_id)) {
+        handleMap.set(r.source_trader_id, r.handle || r.source_trader_id)
+      }
     }
   }
 

@@ -24,6 +24,7 @@ import { resolveExchangeUid, isCexVerifiable } from '@/lib/validators/exchange-u
 import { encrypt } from '@/lib/crypto/encryption'
 import { logger } from '@/lib/logger'
 import { checkRateLimit, RateLimitPresets } from '@/lib/utils/rate-limit'
+import { resolveTrader } from '@/lib/data/unified'
 
 export async function POST(req: NextRequest) {
   const rateLimitResp = await checkRateLimit(req, RateLimitPresets.sensitive)
@@ -68,29 +69,17 @@ export async function POST(req: NextRequest) {
       )
     }
 
-    // 2. Look up trader's source_trader_id from Arena DB
+    // 2. Look up trader's source_trader_id from Arena DB (unified data layer)
     const supabase = getSupabaseAdmin()
 
-    // Try multiple lookup strategies: by source_trader_id directly, or by handle
-    const { data: trader } = await supabase
-      .from('trader_snapshots_v2')
-      .select('trader_key, platform')
-      .or(`trader_key.eq.${traderId},trader_key.eq.${traderId}`)
-      .eq('platform', source)
-      .limit(1)
-      .maybeSingle()
+    const resolved = await resolveTrader(supabase, {
+      handle: traderId,
+      platform: source,
+    })
 
-    // Also check trader_sources table
-    const { data: traderSource } = await supabase
-      .from('trader_sources')
-      .select('source_trader_id, source')
-      .eq('source_trader_id', traderId)
-      .eq('source', source)
-      .maybeSingle()
+    const traderKey = resolved?.traderKey || traderId
 
-    const traderKey = trader?.trader_key || traderSource?.source_trader_id || traderId
-
-    if (!traderKey) {
+    if (!resolved) {
       return NextResponse.json(
         { error: 'Trader not found in Arena database', verified: false },
         { status: 404 }

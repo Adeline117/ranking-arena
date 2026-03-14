@@ -90,6 +90,8 @@ export async function schedulePreheat(topN: number = 500): Promise<number> {
 
 /**
  * Schedule long-tail refresh for active traders not in top N.
+ * @deprecated Reads trader_sources for scheduling-specific columns (is_active, last_seen_at).
+ *             Not migratable to unified layer (scheduling infrastructure).
  */
 export async function scheduleLongTailRefresh(
   platform: LeaderboardPlatform,

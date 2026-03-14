@@ -24,6 +24,7 @@ import {
 } from '@/lib/api'
 import { isSolanaPlatform, isDexWalletPlatform } from '@/lib/validators/exchange-uid-resolver'
 import { logger } from '@/lib/logger'
+import { resolveTrader } from '@/lib/data/unified'
 
 /** Maximum age of a signature message (5 minutes) */
 const MAX_MESSAGE_AGE_MS = 5 * 60 * 1000
@@ -166,28 +167,18 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Verify wallet_address matches the trader's source_trader_id
+    // Verify wallet_address matches the trader's source_trader_id (unified data layer)
     const supabase = getSupabaseAdmin()
 
     const traderKeyToCheck = trader_key || parsed.traderKey
 
-    // Look up in trader_snapshots_v2
-    const { data: snapshot } = await supabase
-      .from('trader_snapshots_v2')
-      .select('trader_key, platform')
-      .eq('platform', platform)
-      .limit(1)
-      .maybeSingle()
+    // Look up trader via unified resolveTrader()
+    const resolved = await resolveTrader(supabase, {
+      handle: traderKeyToCheck,
+      platform,
+    })
 
-    // Also check trader_sources
-    const { data: traderSource } = await supabase
-      .from('trader_sources')
-      .select('source_trader_id')
-      .eq('source', platform)
-      .eq('source_trader_id', traderKeyToCheck)
-      .maybeSingle()
-
-    const knownTraderKey = snapshot?.trader_key || traderSource?.source_trader_id || traderKeyToCheck
+    const knownTraderKey = resolved?.traderKey || traderKeyToCheck
 
     // Compare wallet address with trader key (case-insensitive for EVM addresses)
     const walletNorm = wallet_address.toLowerCase()
