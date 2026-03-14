@@ -149,7 +149,7 @@ export default function RootLayout({
     <html lang="zh-CN" dir="ltr" data-theme="dark" translate="no" className={inter.variable} suppressHydrationWarning>
       <head>
         {/* Sync html lang attribute from localStorage before paint (prevents wrong lang for screen readers) */}
-        <script dangerouslySetInnerHTML={{ __html: `try{var l=localStorage.getItem('language');if(l&&l!=='zh')document.documentElement.lang=l==='en'?'en':l==='ja'?'ja':l==='ko'?'ko':'zh-CN'}catch(e){}` }} />
+        <script dangerouslySetInnerHTML={{ __html: `try{var l=localStorage.getItem('language');if(l&&l!=='zh')document.documentElement.lang=l==='en'?'en':l==='ja'?'ja':l==='ko'?'ko':'zh-CN'}catch(e){/* localStorage unavailable */}` }} />
         {/* Inline critical CSS for faster initial render */}
         <style dangerouslySetInnerHTML={{ __html: getCriticalCss() }} />
 

@@ -115,7 +115,7 @@ function handleSSE(request: NextRequest, origin: string | null): Response {
         try {
           controller.close()
         } catch {
-          // already closed
+          // Intentionally swallowed: stream controller already closed by client disconnect
         }
       })
     },

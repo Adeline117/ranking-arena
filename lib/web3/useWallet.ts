@@ -98,6 +98,7 @@ export function useWallet(): WalletState {
       setHasNFT(false)
       return true
     } catch {
+      // Intentionally swallowed: wallet unlink API call failed, return false to indicate failure
       return false
     }
   }, [])

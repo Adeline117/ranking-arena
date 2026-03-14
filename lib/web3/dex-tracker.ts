@@ -166,6 +166,7 @@ export async function fetchPancakeSwapTopTraders(
         addrMap.set(addr, prev)
       }
     } catch {
+      // Intentionally swallowed: subgraph pagination limit reached or API error, return collected data
       break
     }
   }

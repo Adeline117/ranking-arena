@@ -88,6 +88,7 @@ async function fetchTickers(exchangeId: string): Promise<Record<string, Ticker>>
     tickerCache.set(exchangeId, entry)
     return tickers
   } catch {
+    // Intentionally swallowed: exchange ticker fetch failed, fall back to cached data
     return cached?.data ?? {}
   }
 }
