@@ -39,23 +39,27 @@ export async function POST(request: NextRequest) {
     for (const [key, userIds] of allWatched) {
       const [source, sourceId] = key.split(':')
 
+      // Get current rank from leaderboard_ranks
       const { data: current } = await supabase
         .from('leaderboard_ranks')
         .select('rank, arena_score')
         .eq('source', source)
         .eq('source_trader_id', sourceId)
+        .eq('season_id', '90D')
         .maybeSingle()
 
       if (!current?.rank) continue
 
+      // Get previous rank from daily snapshot aggregation
       const yesterday = new Date(Date.now() - 86400000).toISOString().split('T')[0]
       const { data: prev } = await supabase
-        .from('trader_snapshots')
+        .from('trader_snapshots_v2')
         .select('rank')
-        .eq('source', source)
-        .eq('source_trader_id', sourceId)
-        .gte('captured_at', `${yesterday}T00:00:00Z`)
-        .order('captured_at', { ascending: false })
+        .eq('platform', source)
+        .eq('trader_key', sourceId)
+        .eq('window', '90D')
+        .gte('created_at', `${yesterday}T00:00:00Z`)
+        .order('created_at', { ascending: false })
         .limit(1)
         .maybeSingle()
 

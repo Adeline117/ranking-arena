@@ -13,6 +13,7 @@ import {
   checkRateLimit,
   RateLimitPresets,
 } from '@/lib/api'
+import { getLeaderboard } from '@/lib/data/unified'
 import {
   generatePortfolioSuggestion,
   generateAllPortfolioSuggestions,
@@ -71,62 +72,37 @@ export async function GET(request: NextRequest) {
       )
     }
 
-    // 获取交易员数据
-    const { data: tradersData, error: tradersError } = await supabase
-      .from('trader_snapshots')
-      .select('source_trader_id, source, roi, max_drawdown, win_rate, followers')
-      .eq('season_id', '90D')
-      .gte('roi', 10)  // 只选择正收益的交易员
-      .order('roi', { ascending: false })
-      .limit(200)
+    // 获取交易员数据 via unified getLeaderboard
+    const { traders: leaderboardTraders } = await getLeaderboard(supabase, {
+      period: '90D',
+      limit: 200,
+      sortBy: 'roi',
+      excludeOutliers: true,
+    })
 
-    if (tradersError) {
-      logger.error('[Portfolio] 获取交易员数据Failed:', tradersError)
-      return handleError(tradersError, 'portfolio suggestions')
-    }
+    // Filter to positive ROI traders only
+    const filteredTraders = leaderboardTraders.filter(t => (t.roi ?? 0) >= 10)
 
-    if (!tradersData || tradersData.length < 10) {
+    if (filteredTraders.length < 10) {
       return success({
         suggestions: [],
         message: 'Insufficient trader data to generate portfolio suggestions',
       })
     }
 
-    // 获取 handle 信息
-    const traderIds = tradersData.map(t => t.source_trader_id)
-    const { data: sources } = await supabase
-      .from('trader_sources')
-      .select('source_trader_id, handle, source')
-      .in('source_trader_id', traderIds)
-
-    const handleMap = new Map<string, string>()
-    sources?.forEach(s => {
-      handleMap.set(`${s.source_trader_id}:${s.source}`, s.handle || s.source_trader_id)
-    })
-
-    // 计算 Arena Score（简化版）
-    const traders: TraderForPortfolio[] = tradersData.map(t => {
-      const key = `${t.source_trader_id}:${t.source}`
-      // 简化的 Arena Score 计算
-      const roi = t.roi || 0
-      const drawdown = Math.abs(t.max_drawdown || 0)
-      const winRate = t.win_rate || 50
-      
-      const roiScore = Math.min(roi / 2, 85)  // 最高 85
-      const drawdownScore = Math.max(0, 8 - drawdown / 5)
-      const stabilityScore = Math.max(0, (winRate - 45) / 3.5)
-      
+    // Map unified traders to TraderForPortfolio format
+    const traders: TraderForPortfolio[] = filteredTraders.map(t => {
       return {
-        trader_id: t.source_trader_id,
-        source: t.source,
-        handle: handleMap.get(key) || t.source_trader_id,
-        roi,
-        max_drawdown: t.max_drawdown,
-        win_rate: t.win_rate,
-        arena_score: Math.round(roiScore + drawdownScore + stabilityScore),
+        trader_id: t.traderKey,
+        source: t.platform,
+        handle: t.handle || t.traderKey,
+        roi: t.roi ?? 0,
+        max_drawdown: t.maxDrawdown,
+        win_rate: t.winRate,
+        arena_score: t.arenaScore != null ? Math.round(t.arenaScore) : 0,
         followers: t.followers || 0,
-        source_type: t.source.includes('spot') ? 'spot' as const : 
-                     t.source.includes('web3') ? 'web3' as const : 'futures' as const,
+        source_type: t.platform.includes('spot') ? 'spot' as const :
+                     t.platform.includes('web3') ? 'web3' as const : 'futures' as const,
       }
     })
 

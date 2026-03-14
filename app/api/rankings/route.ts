@@ -26,6 +26,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import type { RankingWindow, TradingCategory, Platform, GranularPlatform, RankingsQuery } from '@/lib/types/leaderboard';
 import { GRANULAR_PLATFORMS, PLATFORM_CATEGORY } from '@/lib/types/leaderboard';
 import { getSupabaseAdmin } from '@/lib/supabase/server';
+import { getLeaderboard } from '@/lib/data/unified';
+import type { TradingPeriod } from '@/lib/types/unified-trader';
 import { checkRateLimit, RateLimitPresets } from '@/lib/utils/rate-limit';
 import { tieredGetOrSet } from '@/lib/cache/redis-layer';
 import { ApiError } from '@/lib/api/errors';
@@ -170,11 +172,10 @@ export async function GET(request: NextRequest) {
 }
 
 /**
- * Fallback: fetch rankings via Supabase client when direct DB pool fails.
- * Returns the same response shape as LeaderboardService.getRankings().
- * Queries trader_snapshots table (legacy) which has actual data.
+ * Fetch rankings via unified data layer (leaderboard_ranks).
+ * Returns the same response shape as the legacy getRankingsFallback.
  */
-async function getRankingsFallback(rankingsQuery: RankingsQuery, cursor?: string) {
+async function getRankingsFallback(rankingsQuery: RankingsQuery, _cursor?: string) {
   const {
     window,
     category,
@@ -190,58 +191,48 @@ async function getRankingsFallback(rankingsQuery: RankingsQuery, cursor?: string
 
   const supabase = getSupabaseAdmin();
   const safeLimit = Math.min(limit, 500);
+  const seasonId = window.toUpperCase() as TradingPeriod;
 
-  // Map sort column for trader_snapshots table
-  const sortColumnMap: Record<string, string> = {
+  // Map sort_by to unified sortBy parameter
+  const sortByMap: Record<string, 'rank' | 'arena_score' | 'roi' | 'pnl'> = {
     arena_score: 'arena_score',
     roi: 'roi',
     pnl: 'pnl',
-    drawdown: 'max_drawdown',
-    copiers: 'followers',
+    drawdown: 'arena_score', // no direct drawdown sort in unified, fall back to arena_score
+    copiers: 'arena_score',  // no direct copiers sort in unified, fall back to arena_score
   };
-  const sortColumn = sortColumnMap[sort_by] || 'arena_score';
+  const unifiedSortBy = sortByMap[sort_by] || 'arena_score';
 
-  // Map lowercase window to uppercase season_id (e.g., '90d' -> '90D')
-  const seasonId = window.toUpperCase();
-
-  // Build query against trader_snapshots (legacy table with actual data)
-  // Note: unique constraint on (source, source_trader_id, season_id) guarantees no duplicates
-  let dbQuery = supabase
-    .from('trader_snapshots')
-    .select('id, source, source_trader_id, season_id, captured_at, arena_score, arena_score_v3, roi, pnl, max_drawdown, win_rate, trades_count, followers, profitability_score, risk_control_score, execution_score, score_completeness, trading_style, avg_holding_hours, style_confidence, trader_type', { count: 'estimated' })
-    .eq('season_id', seasonId)
-    .not('arena_score', 'is', null)
-    .lte('roi', ROI_ANOMALY_THRESHOLD)
-    .gte('roi', -ROI_ANOMALY_THRESHOLD)
-    .or('roi.neq.0,pnl.neq.0')
-    .order(sortColumn, { ascending: sort_dir === 'asc', nullsFirst: false })
-    .order('id', { ascending: true }); // tiebreaker for stable keyset pagination
-
-  // Keyset pagination (cursor) — faster than offset for deep pages
-  if (cursor) {
-    const [cursorValue, cursorId] = cursor.split(':');
-    if (cursorValue && cursorId) {
-      if (sort_dir === 'desc') {
-        // For DESC: get rows where sort_col < cursor OR (sort_col == cursor AND id > cursorId)
-        dbQuery = dbQuery.or(`${sortColumn}.lt.${cursorValue},and(${sortColumn}.eq.${cursorValue},id.gt.${cursorId})`);
-      } else {
-        dbQuery = dbQuery.or(`${sortColumn}.gt.${cursorValue},and(${sortColumn}.eq.${cursorValue},id.gt.${cursorId})`);
-      }
-    }
-    dbQuery = dbQuery.limit(safeLimit);
-  } else {
-    dbQuery = dbQuery.range(offset, offset + safeLimit - 1);
-  }
-
-  if (platform) {
-    dbQuery = dbQuery.eq('source', platform);
-  } else if (category) {
-    const platformsInCategory = Object.entries(PLATFORM_CATEGORY)
+  // Determine platform filter based on category
+  let platformFilter: string | undefined = platform || undefined;
+  let platformsInCategory: string[] | undefined;
+  if (!platformFilter && category) {
+    platformsInCategory = Object.entries(PLATFORM_CATEGORY)
       .filter(([, cat]) => cat === category)
       .map(([p]) => p);
-    if (platformsInCategory.length > 0) {
-      dbQuery = dbQuery.in('source', platformsInCategory);
-    }
+  }
+
+  // Build direct query against leaderboard_ranks for full control over filters
+  let dbQuery = supabase
+    .from('leaderboard_ranks')
+    .select(
+      `source_trader_id, handle, source, source_type, roi, pnl, win_rate, max_drawdown,
+       trades_count, followers, arena_score, avatar_url, rank, computed_at,
+       profitability_score, risk_control_score, execution_score, score_completeness,
+       trading_style, avg_holding_hours, sharpe_ratio, sortino_ratio, trader_type, is_outlier`,
+      { count: 'exact' }
+    )
+    .eq('season_id', seasonId)
+    .not('arena_score', 'is', null)
+    .or('is_outlier.is.null,is_outlier.eq.false')
+
+  // Apply ROI anomaly filter
+  dbQuery = dbQuery.lte('roi', ROI_ANOMALY_THRESHOLD).gte('roi', -ROI_ANOMALY_THRESHOLD)
+
+  if (platformFilter) {
+    dbQuery = dbQuery.eq('source', platformFilter);
+  } else if (platformsInCategory && platformsInCategory.length > 0) {
+    dbQuery = dbQuery.in('source', platformsInCategory);
   }
 
   if (min_pnl != null) {
@@ -258,134 +249,113 @@ async function getRankingsFallback(rankingsQuery: RankingsQuery, cursor?: string
     dbQuery = dbQuery.neq('source', 'web3_bot').or('trader_type.is.null,trader_type.neq.bot');
   }
 
+  // Sorting
+  const sortColumn = unifiedSortBy === 'rank' ? 'rank' : unifiedSortBy;
+  const ascending = sort_dir === 'asc';
+  dbQuery = dbQuery.order(sortColumn, { ascending, nullsFirst: false });
+  dbQuery = dbQuery.range(offset, offset + safeLimit - 1);
+
   const { data: rows, count: totalCount, error } = await dbQuery;
 
   if (error) {
-    throw new Error(`Supabase fallback failed: ${error.message}`);
+    throw new Error(`Leaderboard query failed: ${error.message}`);
   }
 
-  // Deduplicate by source:source_trader_id (case-insensitive for 0x addresses, keep first = highest ranked)
+  // Deduplicate by source:source_trader_id (case-insensitive for 0x addresses)
   const seenRowKeys = new Set<string>();
-  const paginatedRows = (rows || []).filter(r => {
-    const tid = r.source_trader_id?.startsWith('0x') ? r.source_trader_id.toLowerCase() : r.source_trader_id;
-    const key = `${r.source}:${tid}`;
+  const paginatedRows = (rows || []).filter((r: Record<string, unknown>) => {
+    const tid = String(r.source_trader_id || '');
+    const normalizedTid = tid.startsWith('0x') ? tid.toLowerCase() : tid;
+    const key = `${r.source}:${normalizedTid}`;
     if (seenRowKeys.has(key)) return false;
     seenRowKeys.add(key);
     return true;
   });
 
-  // Parallelize: display names + freshness + available sources (all independent)
-  const traderKeys = [...new Set(paginatedRows.map(r => r.source_trader_id))];
-  const platformKeys = [...new Set(paginatedRows.map(r => r.source))];
-  const seasonIdUpper = window.toUpperCase();
-
-  // Launch all independent queries in parallel (saves ~240ms cross-Pacific RTT)
-  const [displayNameResult, freshnessResult, sourcesResult] = await Promise.all([
-    // 1. Display names
-    traderKeys.length > 0
-      ? supabase.from('trader_sources').select('source, source_trader_id, handle, avatar_url').in('source', platformKeys).in('source_trader_id', traderKeys)
-      : Promise.resolve({ data: null }),
-    // 2. Freshness (latest captured_at for staleness check)
-    supabase.from('trader_snapshots').select('captured_at').eq('season_id', seasonId).not('arena_score', 'is', null).order('captured_at', { ascending: false }).limit(1).single(),
-    // 3. Available sources (with memory cache)
-    (async () => {
-      const cached = getCachedSources(seasonIdUpper);
-      if (cached) return cached;
-      const { data: sourceRows } = await supabase.from('trader_snapshots').select('source').eq('season_id', seasonIdUpper).not('arena_score', 'is', null).limit(500);
-      const sources = [...new Set((sourceRows || []).map((r: { source: string }) => r.source))].sort();
-      setCachedSources(seasonIdUpper, sources);
-      return sources;
-    })(),
-  ]);
-
-  // Process display names
-  const displayNameMap = new Map<string, { display_name: string | null; avatar_url: string | null }>();
-  if (displayNameResult.data) {
-    for (const src of displayNameResult.data) {
-      displayNameMap.set(`${src.source}:${src.source_trader_id}`, {
-        display_name: src.handle,
-        avatar_url: src.avatar_url,
-      });
-    }
+  // Get available sources (with memory cache)
+  const seasonIdUpper = seasonId;
+  let availableSources: string[];
+  const cached = getCachedSources(seasonIdUpper);
+  if (cached) {
+    availableSources = cached;
+  } else {
+    const { data: sourceRows } = await supabase
+      .from('leaderboard_ranks')
+      .select('source')
+      .eq('season_id', seasonIdUpper)
+      .not('arena_score', 'is', null)
+      .limit(500);
+    availableSources = [...new Set((sourceRows || []).map((r: { source: string }) => r.source))].sort();
+    setCachedSources(seasonIdUpper, availableSources);
   }
 
-  // Process freshness
+  // Freshness check from computed_at
   let latestCapturedAt: number;
-  if (freshnessResult.data) {
-    latestCapturedAt = new Date(freshnessResult.data.captured_at).getTime();
-  } else if (paginatedRows.length > 0) {
-    latestCapturedAt = Math.max(...paginatedRows.map(r => new Date(r.captured_at).getTime()));
+  if (paginatedRows.length > 0) {
+    latestCapturedAt = Math.max(
+      ...paginatedRows.map((r: Record<string, unknown>) => new Date(r.computed_at as string).getTime()).filter(t => t > 0)
+    );
   } else {
     latestCapturedAt = Date.now();
   }
   const stalenessMs = Date.now() - latestCapturedAt;
   const isStale = stalenessMs > 3600 * 1000;
 
-  const availableSources = sourcesResult;
-
   // Transform to response format
-  const traders = paginatedRows.map((row, idx) => {
-    const sourceInfo = displayNameMap.get(`${row.source}:${row.source_trader_id}`);
+  const traders = paginatedRows.map((row: Record<string, unknown>, idx: number) => {
     return {
       platform: row.source as Platform,
-      trader_key: row.source_trader_id,
-      display_name: sourceInfo?.display_name || null,
-      avatar_url: sourceInfo?.avatar_url || null,
-      rank: offset + idx + 1,
+      trader_key: row.source_trader_id as string,
+      display_name: (row.handle as string) || null,
+      avatar_url: (row.avatar_url as string) || null,
+      rank: (row.rank as number) ?? offset + idx + 1,
       metrics: {
-        roi: row.roi != null ? parseFloat(row.roi) : null,
-        pnl: row.pnl != null ? parseFloat(row.pnl) : null,
-        win_rate: row.win_rate != null ? parseFloat(row.win_rate) : null,
-        max_drawdown: row.max_drawdown != null ? parseFloat(row.max_drawdown) : null,
-        trades_count: row.trades_count ?? null,
-        followers: row.followers ?? null,
+        roi: row.roi != null ? Number(row.roi) : null,
+        pnl: row.pnl != null ? Number(row.pnl) : null,
+        win_rate: row.win_rate != null ? Number(row.win_rate) : null,
+        max_drawdown: row.max_drawdown != null ? Number(row.max_drawdown) : null,
+        trades_count: (row.trades_count as number) ?? null,
+        followers: (row.followers as number) ?? null,
         copiers: null,
         aum: null,
-        arena_score: row.arena_score != null ? parseFloat(row.arena_score) : null,
+        arena_score: row.arena_score != null ? Number(row.arena_score) : null,
         return_score: null,
         drawdown_score: null,
         stability_score: null,
-        sharpe_ratio: null,
-        sortino_ratio: null,
-        platform_rank: offset + idx + 1,
+        sharpe_ratio: row.sharpe_ratio != null ? Number(row.sharpe_ratio) : null,
+        sortino_ratio: row.sortino_ratio != null ? Number(row.sortino_ratio) : null,
+        platform_rank: (row.rank as number) ?? offset + idx + 1,
       },
       quality_flags: { is_suspicious: false, suspicion_reasons: [], data_completeness: 1.0 },
-      updated_at: row.captured_at,
-      profitability_score: row.profitability_score != null ? parseFloat(row.profitability_score) : null,
-      risk_control_score: row.risk_control_score != null ? parseFloat(row.risk_control_score) : null,
-      execution_score: row.execution_score != null ? parseFloat(row.execution_score) : null,
-      score_completeness: row.score_completeness || null,
-      trading_style: row.trading_style || null,
-      avg_holding_hours: row.avg_holding_hours != null ? parseFloat(row.avg_holding_hours) : null,
-      style_confidence: row.style_confidence != null ? parseFloat(row.style_confidence) : null,
+      updated_at: (row.computed_at as string) || null,
+      profitability_score: row.profitability_score != null ? Number(row.profitability_score) : null,
+      risk_control_score: row.risk_control_score != null ? Number(row.risk_control_score) : null,
+      execution_score: row.execution_score != null ? Number(row.execution_score) : null,
+      score_completeness: (row.score_completeness as string) || null,
+      trading_style: (row.trading_style as string) || null,
+      avg_holding_hours: row.avg_holding_hours != null ? Number(row.avg_holding_hours) : null,
+      style_confidence: null,
       is_bot: row.source === 'web3_bot' || row.trader_type === 'bot',
-      trader_type: row.trader_type || (row.source === 'web3_bot' ? 'bot' : null),
+      trader_type: (row.trader_type as string) || (row.source === 'web3_bot' ? 'bot' : null),
     };
   });
 
-  // Build next_cursor for keyset pagination
-  let next_cursor: string | null = null;
-  if (paginatedRows.length === safeLimit) {
-    const lastRow = paginatedRows[paginatedRows.length - 1];
-    const lastSortValue = lastRow[sortColumn as keyof typeof lastRow] ?? '';
-    next_cursor = `${lastSortValue}:${lastRow.id}`;
-  }
-
   return {
     traders,
-    window: window.toUpperCase() as '7D' | '30D' | '90D' | 'COMPOSITE',
+    window: seasonId as '7D' | '30D' | '90D' | 'COMPOSITE',
     totalcount: totalCount || 0,
     total_count: totalCount || 0,
     as_of: new Date(latestCapturedAt).toISOString(),
     is_stale: isStale,
     availableSources,
-    next_cursor,
+    next_cursor: null,
   };
 }
 
 /**
- * Composite rankings: weighted average of 7D/30D/90D arena_score_v3
+ * Composite rankings: weighted average of 7D/30D/90D arena_score
  * Weight: 7D×0.20 + 30D×0.45 + 90D×0.35
+ * Now reads from leaderboard_ranks instead of trader_snapshots.
  */
 async function getCompositeRankings(params: {
   category?: TradingCategory;
@@ -400,18 +370,16 @@ async function getCompositeRankings(params: {
   const { category, platform, limit, offset, sort_by, sort_dir, min_pnl, min_trades } = params;
   const supabase = getSupabaseAdmin();
 
-  // Fetch all three windows in parallel (only data from last 72 hours)
-  const freshnessThreshold = new Date(Date.now() - 72 * 3600 * 1000).toISOString()
+  // Fetch all three windows in parallel from leaderboard_ranks
   const fetchWindow = async (seasonId: string) => {
     let q = supabase
-      .from('trader_snapshots')
-      .select('source, source_trader_id, captured_at, arena_score, arena_score_v3, roi, pnl, max_drawdown, win_rate, trades_count, followers, profitability_score, risk_control_score, execution_score, score_completeness, trading_style, avg_holding_hours, style_confidence, trader_type')
+      .from('leaderboard_ranks')
+      .select('source, source_trader_id, handle, avatar_url, computed_at, arena_score, roi, pnl, max_drawdown, win_rate, trades_count, followers, profitability_score, risk_control_score, execution_score, score_completeness, trading_style, avg_holding_hours, sharpe_ratio, trader_type, is_outlier')
       .eq('season_id', seasonId)
       .not('arena_score', 'is', null)
-      .gte('captured_at', freshnessThreshold)
+      .or('is_outlier.is.null,is_outlier.eq.false')
       .lte('roi', ROI_ANOMALY_THRESHOLD)
       .gte('roi', -ROI_ANOMALY_THRESHOLD)
-      .or('roi.neq.0,pnl.neq.0')
       .order('arena_score', { ascending: false, nullsFirst: false })
       .limit(1000);
 
@@ -437,9 +405,10 @@ async function getCompositeRankings(params: {
   ]);
 
   // Build maps keyed by source:source_trader_id
-  type RowMap = Map<string, typeof rows7d[number]>;
-  const buildMap = (rows: typeof rows7d): RowMap => {
-    const m = new Map<string, typeof rows7d[number]>();
+  type LRRow = typeof rows7d[number];
+  type RowMap = Map<string, LRRow>;
+  const buildMap = (rows: LRRow[]): RowMap => {
+    const m = new Map<string, LRRow>();
     for (const r of rows) {
       const key = `${r.source}:${r.source_trader_id}`;
       if (!m.has(key)) m.set(key, r);
@@ -461,8 +430,7 @@ async function getCompositeRankings(params: {
     source: string;
     source_trader_id: string;
     compositeScore: number;
-    // Use 90D row as primary (most complete), fall back to 30D, 7D
-    primaryRow: typeof rows7d[number];
+    primaryRow: LRRow;
   }
 
   const entries: CompositeEntry[] = [];
@@ -471,11 +439,9 @@ async function getCompositeRankings(params: {
     const r30 = map30d.get(key);
     const r90 = map90d.get(key);
 
-    const getScore = (r: typeof rows7d[number] | undefined) => {
+    const getScore = (r: LRRow | undefined) => {
       if (!r) return null;
-      const v3 = r.arena_score_v3 != null ? parseFloat(r.arena_score_v3 as string) : null;
-      if (v3 != null) return v3;
-      return r.arena_score != null ? parseFloat(r.arena_score as string) : null;
+      return r.arena_score != null ? Number(r.arena_score) : null;
     };
 
     const s7 = getScore(r7);
@@ -504,8 +470,8 @@ async function getCompositeRankings(params: {
   const sortFn = (a: CompositeEntry, b: CompositeEntry) => {
     let aVal = a.compositeScore, bVal = b.compositeScore;
     if (sort_by === 'roi') {
-      aVal = a.primaryRow.roi != null ? parseFloat(a.primaryRow.roi as string) : 0;
-      bVal = b.primaryRow.roi != null ? parseFloat(b.primaryRow.roi as string) : 0;
+      aVal = a.primaryRow.roi != null ? Number(a.primaryRow.roi) : 0;
+      bVal = b.primaryRow.roi != null ? Number(b.primaryRow.roi) : 0;
     }
     return sort_dir === 'desc' ? bVal - aVal : aVal - bVal;
   };
@@ -514,38 +480,19 @@ async function getCompositeRankings(params: {
   const total = entries.length;
   const paginated = entries.slice(offset, offset + limit);
 
-  // Fetch display names
-  const traderKeys = [...new Set(paginated.map(e => e.source_trader_id))];
-  const sources = [...new Set(paginated.map(e => e.source))];
-  const displayNameMap = new Map<string, { display_name: string | null; avatar_url: string | null }>();
-
-  if (traderKeys.length > 0) {
-    const { data: srcData } = await supabase
-      .from('trader_sources')
-      .select('source, source_trader_id, handle, avatar_url')
-      .in('source', sources)
-      .in('source_trader_id', traderKeys);
-    if (srcData) {
-      for (const s of srcData) {
-        displayNameMap.set(`${s.source}:${s.source_trader_id}`, { display_name: s.handle, avatar_url: s.avatar_url });
-      }
-    }
-  }
-
   const traders = paginated.map((entry, idx) => {
-    const info = displayNameMap.get(entry.key);
     const row = entry.primaryRow;
     return {
       platform: entry.source,
       trader_key: entry.source_trader_id,
-      display_name: info?.display_name || null,
-      avatar_url: info?.avatar_url || null,
+      display_name: (row.handle as string) || null,
+      avatar_url: (row.avatar_url as string) || null,
       rank: offset + idx + 1,
       metrics: {
-        roi: row.roi != null ? parseFloat(row.roi as string) : null,
-        pnl: row.pnl != null ? parseFloat(row.pnl as string) : null,
-        win_rate: row.win_rate != null ? parseFloat(row.win_rate as string) : null,
-        max_drawdown: row.max_drawdown != null ? parseFloat(row.max_drawdown as string) : null,
+        roi: row.roi != null ? Number(row.roi) : null,
+        pnl: row.pnl != null ? Number(row.pnl) : null,
+        win_rate: row.win_rate != null ? Number(row.win_rate) : null,
+        max_drawdown: row.max_drawdown != null ? Number(row.max_drawdown) : null,
         trades_count: row.trades_count ?? null,
         followers: row.followers ?? null,
         copiers: null,
@@ -554,26 +501,23 @@ async function getCompositeRankings(params: {
         return_score: null,
         drawdown_score: null,
         stability_score: null,
-        sharpe_ratio: null,
+        sharpe_ratio: row.sharpe_ratio != null ? Number(row.sharpe_ratio) : null,
         sortino_ratio: null,
         platform_rank: offset + idx + 1,
       },
       quality_flags: { is_suspicious: false, suspicion_reasons: [], data_completeness: 1.0 },
-      updated_at: row.captured_at,
-      profitability_score: row.profitability_score != null ? parseFloat(row.profitability_score as string) : null,
-      risk_control_score: row.risk_control_score != null ? parseFloat(row.risk_control_score as string) : null,
-      execution_score: row.execution_score != null ? parseFloat(row.execution_score as string) : null,
+      updated_at: row.computed_at,
+      profitability_score: row.profitability_score != null ? Number(row.profitability_score) : null,
+      risk_control_score: row.risk_control_score != null ? Number(row.risk_control_score) : null,
+      execution_score: row.execution_score != null ? Number(row.execution_score) : null,
       score_completeness: row.score_completeness || null,
       trading_style: row.trading_style || null,
-      avg_holding_hours: row.avg_holding_hours != null ? parseFloat(row.avg_holding_hours as string) : null,
-      style_confidence: row.style_confidence != null ? parseFloat(row.style_confidence as string) : null,
+      avg_holding_hours: row.avg_holding_hours != null ? Number(row.avg_holding_hours) : null,
+      style_confidence: null,
       is_bot: entry.source === 'web3_bot' || row.trader_type === 'bot',
       trader_type: row.trader_type || (entry.source === 'web3_bot' ? 'bot' : null),
     };
   });
-
-  // Note: no longer filtering out traders without display_name.
-  // The frontend getTraderDisplayName() handles fallback to trader_key.
 
   // Deduplicate 0x addresses (case-insensitive)
   const seenComposite = new Set<string>()
@@ -589,9 +533,9 @@ async function getCompositeRankings(params: {
   [map7d, map30d, map90d].forEach(m => m.forEach(r => allSources.add(r.source)));
   const availableSources = [...allSources].sort();
 
-  // Check freshness: composite is stale if all underlying data is >2 hours old
+  // Check freshness
   const latestCaptured = Math.max(
-    ...entries.slice(0, 100).map(e => new Date(e.primaryRow.captured_at).getTime()).filter(t => t > 0),
+    ...entries.slice(0, 100).map(e => new Date(e.primaryRow.computed_at as string).getTime()).filter(t => t > 0),
     0
   )
   const compositeIsStale = latestCaptured > 0 ? (Date.now() - latestCaptured) > 2 * 3600 * 1000 : true

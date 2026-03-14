@@ -30,13 +30,45 @@ async function fetchTrader(handle: string) {
 
   const supabase = createClient(url, key, { auth: { persistSession: false } })
 
-  // Try trader_sources first
-  const { data: source } = await supabase
+  // Resolve trader via resolveTrader logic (inline for edge runtime compatibility)
+  // Try by handle first, then by source_trader_id
+  let source: { handle: string | null; display_name?: string | null; avatar_url: string | null; source: string; source_trader_id: string } | null = null
+
+  const { data: byHandle } = await supabase
     .from('trader_sources')
-    .select('handle, display_name, avatar_url, source, source_trader_id')
+    .select('handle, avatar_url, source, source_trader_id')
     .ilike('handle', handle)
     .limit(1)
     .maybeSingle()
+
+  if (byHandle) {
+    source = byHandle
+  } else {
+    // Fallback: try by source_trader_id
+    const { data: byId } = await supabase
+      .from('trader_sources')
+      .select('handle, avatar_url, source, source_trader_id')
+      .eq('source_trader_id', decodeURIComponent(handle))
+      .limit(1)
+      .maybeSingle()
+
+    if (byId) {
+      source = byId
+    } else {
+      // Fallback: try leaderboard_ranks
+      const { data: byLr } = await supabase
+        .from('leaderboard_ranks')
+        .select('handle, avatar_url, source, source_trader_id')
+        .eq('source_trader_id', decodeURIComponent(handle))
+        .eq('season_id', '90D')
+        .limit(1)
+        .maybeSingle()
+
+      if (byLr) {
+        source = byLr
+      }
+    }
+  }
 
   if (!source) return null
 
@@ -46,6 +78,7 @@ async function fetchTrader(handle: string) {
     .select('roi, pnl, win_rate, max_drawdown, arena_score, rank')
     .eq('source', source.source)
     .eq('source_trader_id', source.source_trader_id)
+    .eq('season_id', '90D')
     .maybeSingle()
 
   return { ...source, platform: source.source, ...(rankData || {}) }

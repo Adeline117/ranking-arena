@@ -5,17 +5,12 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@supabase/supabase-js'
+import { getSupabaseAdmin } from '@/lib/supabase/server'
+import { resolveTrader } from '@/lib/data/unified'
 import { getServerCache, setServerCache, CacheTTL } from '@/lib/utils/server-cache'
 import logger from '@/lib/logger'
 
 export const revalidate = 60 // 1分钟缓存，持仓数据需要更频繁更新
-
-const SUPABASE_URL = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL || ''
-const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || ''
-
-const TRADER_SOURCES = ['binance', 'binance_web3', 'bybit', 'bitget', 'okx', 'kucoin', 'gate', 'mexc', 'coinex'] as const
-type SourceType = typeof TRADER_SOURCES[number]
 
 export interface LivePosition {
   id: string
@@ -45,33 +40,6 @@ interface PortfolioRow {
   updated_at: string
 }
 
-interface _TraderSourceResult {
-  source_trader_id: string
-}
-
-// 查找交易员来源 - 使用单个查询替代 N+1 循环
- 
-async function findTraderSource(
-  supabase: ReturnType<typeof createClient<any>>,
-  handle: string
-): Promise<{ traderId: string; source: SourceType } | null> {
-  const decodedHandle = decodeURIComponent(handle)
-
-  // 单个查询同时匹配 handle 或 source_trader_id
-  const { data: results } = await supabase
-    .from('trader_sources')
-    .select('source_trader_id, source')
-    .or(`handle.eq.${decodedHandle},source_trader_id.eq.${decodedHandle}`)
-    .in('source', TRADER_SOURCES)
-    .limit(1) as { data: Array<{ source_trader_id: string; source: SourceType }> | null }
-
-  if (results && results.length > 0) {
-    return { traderId: results[0].source_trader_id, source: results[0].source }
-  }
-
-  return null
-}
-
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ handle: string }> }
@@ -83,13 +51,9 @@ export async function GET(
       return NextResponse.json({ error: 'Handle is required' }, { status: 400 })
     }
 
-    if (!SUPABASE_URL || !SUPABASE_KEY) {
-      return NextResponse.json({ error: 'Missing Supabase config' }, { status: 500 })
-    }
-
     const decodedHandle = decodeURIComponent(handle)
     const cacheKey = `positions:${decodedHandle.toLowerCase()}`
-    
+
     // 检查缓存（短TTL）
     const cached = getServerCache<{ positions: LivePosition[]; totalPnl: number; totalPnlPct: number }>(cacheKey)
     if (cached) {
@@ -98,14 +62,16 @@ export async function GET(
       return cachedResponse
     }
 
-    const supabase = createClient(SUPABASE_URL, SUPABASE_KEY)
-    
-    // 查找交易员
-    const found = await findTraderSource(supabase, handle)
-    
-    if (!found) {
+    const supabase = getSupabaseAdmin()
+
+    // 查找交易员 via unified resolveTrader
+    const resolved = await resolveTrader(supabase, { handle })
+
+    if (!resolved) {
       return NextResponse.json({ error: 'Trader not found' }, { status: 404 })
     }
+
+    const found = { traderId: resolved.traderKey, source: resolved.platform }
 
     // 获取当前持仓
     const { data: portfolio, error } = await supabase
