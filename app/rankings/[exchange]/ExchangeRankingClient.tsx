@@ -439,7 +439,7 @@ export default function ExchangeRankingClient({
       )}
 
       {viewMode === 'card' ? (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: tokens.spacing[3] }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: tokens.spacing[3], paddingBottom: '100px' }}>
           {pagedTraders.map((t, i) => {
             const originalRank = rankMap.get(t) || 0
             return (
