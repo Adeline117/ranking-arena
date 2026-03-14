@@ -342,17 +342,25 @@ export const GET = withPublic(
         : Promise.resolve([]),
     ])
 
-    // Map unified traders to UnifiedSearchResult format
+    // Map unified traders to UnifiedSearchResult format (include ROI/Score for display)
     const traders: UnifiedSearchResult[] = unifiedTraders.map((t) => {
       const exchangeName = EXCHANGE_CONFIG[t.platform as keyof typeof EXCHANGE_CONFIG]?.name || t.platform
       const isBot = t.traderType === 'bot' || t.platform === 'web3_bot'
+      // Build subtitle with ROI if available
+      const roiStr = t.roi != null ? `${t.roi >= 0 ? '+' : ''}${t.roi >= 1000 ? `${(t.roi / 1000).toFixed(1)}K` : t.roi.toFixed(1)}%` : null
+      const subtitle = [exchangeName, roiStr, t.arenaScore != null ? `Score ${Math.round(t.arenaScore)}` : null].filter(Boolean).join(' · ')
       return {
         id: `${t.platform}:${t.traderKey}`,
         type: 'trader' as const,
         title: `@${t.handle || t.traderKey}`,
-        subtitle: exchangeName,
-        href: `/trader/${encodeURIComponent(t.traderKey)}?platform=${t.platform}`,
-        meta: isBot ? { is_bot: true } : undefined,
+        subtitle,
+        href: `/trader/${encodeURIComponent(t.handle || t.traderKey)}?platform=${t.platform}`,
+        meta: {
+          ...(isBot ? { is_bot: true } : {}),
+          ...(t.roi != null ? { roi: t.roi } : {}),
+          ...(t.arenaScore != null ? { arena_score: t.arenaScore } : {}),
+          ...(t.avatarUrl ? { avatar_url: t.avatarUrl } : {}),
+        },
       }
     })
 
