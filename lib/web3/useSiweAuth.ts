@@ -106,7 +106,7 @@ export function useSiweAuth(): UseSiweAuthReturn {
             await supabase.auth.signOut()
           }
         } catch {
-          // non-critical
+          // Intentionally swallowed: auto sign-out on wallet disconnect is best-effort
         }
       })()
       return

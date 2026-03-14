@@ -65,7 +65,8 @@ const GROUPS: Record<string, string[]> = {
   // Group H: Fast CEX (every 6h) — DISABLED 2026-03-14: gateio 403, btcc normalization failed
   h: [],
   // Group G1: DEX (every 6h) — re-enabled: drift response parsing fixed
-  g1: ['drift', 'bitunix'],
+  // bitunix removed 2026-03-14: All traders failing validation since 2026-03-14 01:08
+  g1: ['drift'],
   // Group G2: DEX+CEX (every 6h) — bitget_spot removed 2026-03-14: normalization failed
   // paradex removed: API now requires JWT auth since 2026-03
   // kwenta removed: Copin API stopped serving Kwenta data (2026-03-11)
