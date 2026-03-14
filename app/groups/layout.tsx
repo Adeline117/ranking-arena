@@ -9,7 +9,7 @@ export const metadata: Metadata = {
     canonical: `${baseUrl}/groups`,
   },
   openGraph: {
-    title: 'Groups | Arena',
+    title: 'Groups',
     description: 'Join trading discussion groups on Arena.',
     url: `${baseUrl}/groups`,
     siteName: 'Arena',
@@ -18,7 +18,7 @@ export const metadata: Metadata = {
   },
   twitter: {
     card: 'summary_large_image',
-    title: 'Groups | Arena',
+    title: 'Groups',
     description: 'Join trading discussion groups on Arena.',
     images: [`${baseUrl}/og-image.png`],
     creator: '@arenafi',

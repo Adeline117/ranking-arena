@@ -10,7 +10,7 @@ export const metadata: Metadata = {
     canonical: `${baseUrl}/market`,
   },
   openGraph: {
-    title: 'Market Overview | Arena',
+    title: 'Market Overview',
     description: 'Real-time crypto market sentiment, sector performance, and spot prices.',
     url: `${baseUrl}/market`,
     siteName: 'Arena',
@@ -19,7 +19,7 @@ export const metadata: Metadata = {
   },
   twitter: {
     card: 'summary_large_image',
-    title: 'Market Overview | Arena',
+    title: 'Market Overview',
     description: 'Real-time crypto market sentiment, sector performance, and spot prices.',
     images: [`${baseUrl}/og-image.png`],
   },

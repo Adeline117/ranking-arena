@@ -28,10 +28,10 @@ export async function generateMetadata({ params }: { params: Promise<{ id: strin
     const data = await getPostMeta(id)
 
     if (!data) {
-      return { title: 'Post Not Found | Arena' }
+      return { title: 'Post Not Found' }
     }
 
-    const title = `${data.title} - @${data.author_handle} | Arena`
+    const title = `${data.title} - @${data.author_handle}`
     const description = data.content?.slice(0, 160) || data.title
 
     return {
@@ -55,7 +55,7 @@ export async function generateMetadata({ params }: { params: Promise<{ id: strin
       },
     }
   } catch {
-    return { title: 'Post | Arena' }
+    return { title: 'Post' }
   }
 }
 

@@ -32,7 +32,7 @@ export async function generateMetadata({ params }: { params: Promise<{ id: strin
           description,
           alternates: { canonical: `${baseUrl}/bot/${id}` },
           openGraph: {
-            title: `${title} | Arena`,
+            title: `${title}`,
             description,
             url: `${baseUrl}/bot/${id}`,
             siteName: 'Arena',
@@ -40,7 +40,7 @@ export async function generateMetadata({ params }: { params: Promise<{ id: strin
           },
           twitter: {
             card: 'summary',
-            title: `${title} | Arena`,
+            title: `${title}`,
             description,
           },
         }

@@ -1,10 +1,10 @@
 import type { Metadata } from 'next'
 
 export const metadata: Metadata = {
-  title: 'Claim Your Crypto Trader Profile | Arena',
+  title: 'Claim Your Crypto Trader Profile',
   description: 'Verify your identity and take ownership of your trader profile on Arena. Get a verified badge, edit your bio, and stand out on the leaderboard.',
   openGraph: {
-    title: 'Claim Your Crypto Trader Profile | Arena',
+    title: 'Claim Your Crypto Trader Profile',
     description: 'Verify your identity and take ownership of your trader profile on Arena. Get a verified badge and customize your profile.',
     url: 'https://www.arenafi.org/claim',
     siteName: 'Arena',
@@ -20,7 +20,7 @@ export const metadata: Metadata = {
   },
   twitter: {
     card: 'summary_large_image',
-    title: 'Claim Your Crypto Trader Profile | Arena',
+    title: 'Claim Your Crypto Trader Profile',
     description: 'Verify your identity and take ownership of your trader profile on Arena.',
   },
   alternates: {

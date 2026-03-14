@@ -28,7 +28,7 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
 
   if (!snapshot) {
     return {
-      title: 'Snapshot Not Found | Arena',
+      title: 'Snapshot Not Found',
     }
   }
 
@@ -42,7 +42,7 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
   const description = `Top ${snapshot.total_traders} traders. #1: ${snapshot.top_trader_handle} with ${snapshot.top_trader_roi >= 0 ? '+' : ''}${snapshot.top_trader_roi?.toFixed(1)}% ROI. Captured on ${new Date(snapshot.data_captured_at).toLocaleDateString()}.`
 
   return {
-    title: `${title} | Arena`,
+    title: `${title}`,
     description,
     openGraph: {
       title,
