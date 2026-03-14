@@ -24,6 +24,7 @@ import {
 } from '@/lib/constants/exchanges'
 import { createLogger } from '@/lib/utils/logger'
 import { PipelineLogger } from '@/lib/services/pipeline-logger'
+import { sanitizeDisplayName } from '@/lib/utils/profanity'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 300
@@ -418,7 +419,8 @@ async function computeSeason(
     // Only use handle if it's a real nickname, not a numeric UID
     const rawHandle = info.handle?.trim() || null
     const isNumericUid = rawHandle && /^\d{7,}$/.test(rawHandle)
-    const displayHandle = (rawHandle && !isNumericUid) ? rawHandle : null
+    // Apply profanity filter before storing in database
+    const displayHandle = (rawHandle && !isNumericUid) ? sanitizeDisplayName(rawHandle) : null
 
     return {
       source: t.source,
