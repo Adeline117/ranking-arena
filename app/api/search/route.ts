@@ -271,14 +271,16 @@ export const GET = withPublic(
       // Intentionally swallowed: Redis cache miss or unavailable, fall through to DB query
     }
 
+    // Sanitize: strip HTML tags, escape SQL wildcards
     const sanitizedQuery = query
       .slice(0, 100)
+      .replace(/<[^>]*>/g, '') // Strip HTML tags (XSS prevention)
       .replace(/[\\%_]/g, (c) => `\\${c}`)
       .replace(/[.,()]/g, '')
 
     if (!sanitizedQuery) {
       return success({
-        query,
+        query: query.replace(/</g, '&lt;').replace(/>/g, '&gt;'),
         results: { traders: [], posts: [], library: [], users: [], groups: [] },
         total: 0,
       } satisfies UnifiedSearchResponse)
@@ -401,8 +403,10 @@ export const GET = withPublic(
       meta: { member_count: g.member_count },
     }))
 
+    // Return sanitized query in response (prevent reflected XSS)
+    const escapedQuery = query.replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
     const result: UnifiedSearchResponse = {
-      query,
+      query: escapedQuery,
       results: { traders, posts, library, users, groups },
       total: traders.length + posts.length + library.length + users.length + groups.length,
     }
