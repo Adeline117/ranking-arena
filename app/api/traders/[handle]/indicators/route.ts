@@ -1,7 +1,7 @@
 /**
  * 交易员技术指标 API
- * 
- * 从 trader_snapshots 表获取历史 ROI 数据，计算技术分析指标
+ *
+ * 从 trader_snapshots_v2 表获取历史 ROI 数据，计算技术分析指标
  */
 
 import { NextRequest, NextResponse } from 'next/server'
@@ -16,8 +16,8 @@ const logger = createLogger('trader-indicators-api')
 export const revalidate = 300 // 5分钟
 
 interface SnapshotRow {
-  roi: number | null
-  captured_at: string
+  roi_pct: number | null
+  created_at: string
 }
 
 export async function GET(
@@ -46,14 +46,14 @@ export async function GET(
       return NextResponse.json({ error: 'Trader not found' }, { status: 404 })
     }
 
-    // 获取历史快照数据（按时间升序）
+    // 获取历史快照数据（按时间升序）from trader_snapshots_v2
     const { data: snapshots, error } = await supabase
-      .from('trader_snapshots')
-      .select('roi, captured_at')
-      .eq('source_trader_id', resolved.traderKey)
-      .eq('source', resolved.platform)
-      .not('roi', 'is', null)
-      .order('captured_at', { ascending: true })
+      .from('trader_snapshots_v2')
+      .select('roi_pct, created_at')
+      .eq('trader_key', resolved.traderKey)
+      .eq('platform', resolved.platform)
+      .not('roi_pct', 'is', null)
+      .order('created_at', { ascending: true })
       .limit(1000) as { data: SnapshotRow[] | null; error: { message: string } | null }
 
     if (error) {
@@ -64,8 +64,8 @@ export async function GET(
       return NextResponse.json({ error: 'No snapshot data available' }, { status: 404 })
     }
 
-    const timestamps = snapshots.map(s => s.captured_at)
-    const roiValues = snapshots.map(s => s.roi!)
+    const timestamps = snapshots.map(s => s.created_at)
+    const roiValues = snapshots.map(s => s.roi_pct!)
 
     const results = computeIndicators(timestamps, roiValues)
 

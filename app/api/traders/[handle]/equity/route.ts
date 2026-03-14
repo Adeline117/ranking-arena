@@ -1,7 +1,7 @@
 /**
  * 获取交易员资金曲线数据 API
- * 
- * 从 trader_snapshots 表聚合历史 ROI 数据，构建资金曲线
+ *
+ * 从 trader_snapshots_v2 表聚合历史 ROI 数据，构建资金曲线
  */
 
 import { NextRequest, NextResponse } from 'next/server'
@@ -30,8 +30,8 @@ interface DrawdownDataPoint {
 interface SnapshotRow {
   roi: number | null
   pnl: number | null
-  captured_at: string
-  season_id: string | null
+  captured_at: string // mapped from created_at
+  season_id: string | null // mapped from window
 }
 
 // 生成资金曲线数据
@@ -142,25 +142,31 @@ export async function GET(
 
     const found = { traderId: resolved.traderKey, source: resolved.platform }
 
-    // 获取历史快照数据（最近90天）
+    // 获取历史快照数据（最近90天）from trader_snapshots_v2
     const ninetyDaysAgo = new Date()
     ninetyDaysAgo.setDate(ninetyDaysAgo.getDate() - 90)
-    
-    const { data: snapshots, error } = await supabase
-      .from('trader_snapshots')
-      .select('roi, pnl, captured_at, season_id')
-      .eq('source', found.source)
-      .eq('source_trader_id', found.traderId)
-      .gte('captured_at', ninetyDaysAgo.toISOString())
-      .order('captured_at', { ascending: true })
+
+    const { data: v2Snapshots, error } = await supabase
+      .from('trader_snapshots_v2')
+      .select('roi_pct, pnl_usd, created_at, window')
+      .eq('platform', found.source)
+      .eq('trader_key', found.traderId)
+      .gte('created_at', ninetyDaysAgo.toISOString())
+      .order('created_at', { ascending: true })
       .limit(1000)
-    
+
     if (error) {
       logger.error('[Equity API] Error:', error)
       return NextResponse.json({ error: 'Failed to fetch data' }, { status: 500 })
     }
 
-    const snapshotData = (snapshots || []) as SnapshotRow[]
+    // Map v2 fields to SnapshotRow shape used by chart generators
+    const snapshotData: SnapshotRow[] = (v2Snapshots || []).map(s => ({
+      roi: s.roi_pct,
+      pnl: s.pnl_usd,
+      captured_at: s.created_at,
+      season_id: s.window,
+    }))
     
     // 生成各类图表数据
     const equity = generateEquityCurve(snapshotData)

@@ -190,29 +190,27 @@ export async function GET(
     }
   }
 
-  // Fallback: snapshots from trader_snapshots (old table)
+  // Fallback: snapshots from leaderboard_ranks (unified data layer)
   const hasAnyV2Snapshot = Object.values(snapshots).some(s => s !== null)
   if (!hasAnyV2Snapshot) {
     const windows: SnapshotWindow[] = ['7D', '30D', '90D']
-    const legacySnapshotQueries = windows.map(w =>
+    const lrSnapshotQueries = windows.map(w =>
       supabase
-        .from('trader_snapshots')
-        .select('roi, pnl, win_rate, max_drawdown, trades_count, followers, arena_score, captured_at')
+        .from('leaderboard_ranks')
+        .select('roi, pnl, win_rate, max_drawdown, trades_count, followers, arena_score, rank, computed_at')
         .eq('source', platform)
         .eq('source_trader_id', trader_key)
         .eq('season_id', w)
-        .order('captured_at', { ascending: false })
-        .limit(1)
         .maybeSingle()
     )
-    const legacyResults = await Promise.all(legacySnapshotQueries)
+    const lrResults = await Promise.all(lrSnapshotQueries)
     for (let i = 0; i < windows.length; i++) {
-      const snap = legacyResults[i].data
+      const snap = lrResults[i].data
       if (snap) {
         // Normalize win_rate: if <= 1, treat as decimal and multiply by 100
         const winRate = snap.win_rate != null ? (snap.win_rate <= 1 ? snap.win_rate * 100 : snap.win_rate) : null
         snapshots[windows[i]] = {
-          roi: snap.roi ?? 0, // v1 table stores ROI as percentage (50 = 50%)
+          roi: snap.roi ?? 0,
           pnl: snap.pnl ?? 0,
           win_rate: winRate,
           max_drawdown: snap.max_drawdown ?? null,
@@ -223,7 +221,7 @@ export async function GET(
           return_score: null,
           drawdown_score: null,
           stability_score: null,
-          rank: null,
+          rank: snap.rank ?? null,
         } as SnapshotMetrics
       }
     }

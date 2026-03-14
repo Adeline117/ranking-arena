@@ -2,7 +2,7 @@
  * GET /api/rankings
  *
  * Returns ranked traders for a given window, with optional platform/category filters.
- * Reads from pre-populated trader_snapshots_v2 table only.
+ * Reads from leaderboard_ranks (pre-computed by compute-leaderboard cron).
  *
  * Query params:
  *   window: '7d' | '30d' | '90d' (required)
