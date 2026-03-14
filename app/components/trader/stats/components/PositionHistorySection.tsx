@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import { tokens } from '@/lib/design-tokens'
-import { Box, Text } from '../../../base'
+import { Box, Text } from '@/app/components/base'
 import CryptoIcon from '@/app/components/common/CryptoIcon'
 
 interface PositionHistoryItem {

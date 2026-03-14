@@ -3,8 +3,8 @@
 import { useState, useEffect, useRef } from 'react'
 import dynamic from 'next/dynamic'
 import { tokens } from '@/lib/design-tokens'
-import { Box, Text } from '../../../base'
-import { useLanguage } from '../../../Providers/LanguageProvider'
+import { Box, Text } from '@/app/components/base'
+import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 
 const ChartFullscreen = dynamic(() => import('../../../ui/ChartFullscreen'), { ssr: false })
 
