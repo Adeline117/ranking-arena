@@ -4449,6 +4449,11 @@ verifiedTraderTelegram: 'Telegram',
 verifiedTraderDiscord: 'Discord',
 verifiedTraderWebsite: '个人网站',
 
+// Number formatting
+numberFormatThousand: '千',
+numberFormatMillion: '百万',
+numberFormatBillion: '亿',
+
 } as const
 
 export default zh
