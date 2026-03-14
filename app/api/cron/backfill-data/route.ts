@@ -171,24 +171,36 @@ async function backfillSnapshots(
     errors: [],
   }
 
-  // Check if we have a fetcher for this platform
-  const fetcherKey = platform.replace('_', '-')
-  const fetcher = INLINE_FETCHERS[fetcherKey] || INLINE_FETCHERS[platform]
+  // Find connector for this platform
+  const mapping = SOURCE_TO_CONNECTOR_MAP[platform]
+  if (!mapping) {
+    result.errors.push(`No connector mapping for ${platform}`)
+    return result
+  }
 
-  if (!fetcher) {
-    // No inline fetcher available, try to trigger the cron job instead
-    result.errors.push(`No inline fetcher available for ${platform}`)
+  const connector = connectorRegistry.get(
+    mapping.platform as import('@/lib/types/leaderboard').LeaderboardPlatform,
+    mapping.marketType as import('@/lib/types/leaderboard').MarketType
+  )
+
+  if (!connector) {
+    result.errors.push(`No connector registered for ${platform}`)
     return result
   }
 
   try {
-    // Call the platform fetcher for this period only
-    const fetchResult = await fetcher(supabase, [period])
+    const fetchResult = await runConnectorBatch(connector, {
+      supabase,
+      windows: [period.toLowerCase() as 'all' | '7d' | '30d' | '90d'],
+      limit: 500,
+      sourceOverride: platform,
+    })
 
-    if (fetchResult.periods[period]) {
-      result.success = fetchResult.periods[period].saved || 0
-      if (fetchResult.periods[period].error) {
-        result.errors.push(fetchResult.periods[period].error)
+    const periodResult = fetchResult.periods[period] || fetchResult.periods[period.toLowerCase()]
+    if (periodResult) {
+      result.success = periodResult.saved || 0
+      if (periodResult.error) {
+        result.errors.push(periodResult.error)
       }
     }
   } catch (err) {
@@ -254,6 +266,9 @@ export async function GET(req: NextRequest) {
   if (!supabase) {
     return NextResponse.json({ error: 'Supabase not configured' }, { status: 500 })
   }
+
+  // Initialize connectors for backfill
+  await initializeConnectors()
 
   const platformParam = req.nextUrl.searchParams.get('platform')
   const periodParam = req.nextUrl.searchParams.get('period')

@@ -119,7 +119,7 @@ export async function findTraderSource(
   return null
 }
 
-// 从 trader_snapshots 直接查找交易员（当 trader_sources 没有数据时的回退方案）
+// 从 leaderboard_ranks 查找交易员（当 trader_sources 没有数据时的回退方案）
 export async function findTraderFromSnapshots(
   supabase: SupabaseClient,
   handle: string
@@ -127,9 +127,10 @@ export async function findTraderFromSnapshots(
   const decodedHandle = decodeURIComponent(handle)
 
   const { data } = await supabase
-    .from('trader_snapshots')
+    .from('leaderboard_ranks')
     .select('source, source_trader_id')
     .eq('source_trader_id', decodedHandle)
+    .eq('season_id', '90D')
     .in('source', TRADER_SOURCES as unknown as string[])
     .limit(1)
     .maybeSingle()
