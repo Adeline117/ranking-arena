@@ -44,7 +44,7 @@ export async function generateMetadata({ params }: { params: Promise<{ handle: s
         rank != null ? `#${rank} ranked` : null,
       ].filter(Boolean)
 
-      const title = `${name} (${exchange}) | Crypto Trader Rankings — Arena`
+      const title = `${name} (${exchange}) | Crypto Trader Rankings`
       const description = parts.length
         ? `${name} is a ${exchange} trader with ${parts.join(', ')}. Track their performance history, detailed analytics, and ranking movements on Arena among 32,000+ crypto traders.`
         : `${name} is a ${exchange} crypto trader. View comprehensive performance analytics, trading history, risk metrics, and rankings on Arena among 32,000+ crypto traders from 30+ exchanges.`
@@ -82,7 +82,7 @@ export async function generateMetadata({ params }: { params: Promise<{ handle: s
   // Fallback — no DB data
   const fallbackOgImage = `${BASE}/api/og/trader?handle=${encodeURIComponent(decoded)}`
   return {
-    title: `${decoded} | Crypto Trader Performance & Rankings — Arena`,
+    title: `${decoded} | Crypto Trader Rankings`,
     description: `View ${decoded}'s comprehensive crypto trading performance, PnL, ROI, win rate, and rank on Arena among 32,000+ traders from 30+ exchanges. Real-time analytics and historical data.`,
     openGraph: {
       title: `${decoded} | Crypto Trader — Arena`,
