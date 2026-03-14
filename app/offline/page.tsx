@@ -35,7 +35,7 @@ export default function OfflinePage() {
           }
         }
       } catch {
-        // Silently fail - cached data is best-effort
+        // Intentionally swallowed: offline page cached data is best-effort, empty state is acceptable
       }
     }
     loadCachedData()

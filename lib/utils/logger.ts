@@ -646,7 +646,7 @@ export async function addBreadcrumb(message: string, level: 'info' | 'warning' |
       sentry.addBreadcrumb({ message, level, data, timestamp: Date.now() / 1000 })
     }
   } catch {
-    // Breadcrumbs are non-critical, silently ignore failures
+    // Intentionally swallowed: breadcrumb recording is non-critical, avoid infinite error loop in logger
   }
 }
 

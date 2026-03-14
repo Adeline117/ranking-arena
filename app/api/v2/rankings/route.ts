@@ -27,6 +27,7 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { getSupabaseAdmin } from '@/lib/supabase/server'
+import { checkRateLimit, RateLimitPresets } from '@/lib/api'
 import type { Window, LeaderboardPlatform, RankingEntry, RankingsResponse } from '@/lib/types/leaderboard'
 import { VALID_TRADING_STYLES, TRADING_STYLE_LEGACY_MAP, type TradingStyle } from '@/lib/types/trader'
 import { LEADERBOARD_PLATFORMS, WINDOWS } from '@/lib/types/leaderboard'
@@ -37,6 +38,9 @@ export const dynamic = 'force-dynamic'
 export const revalidate = 60  // ISR: revalidate every 60 seconds
 
 export async function GET(request: NextRequest) {
+  const rateLimitResponse = await checkRateLimit(request, RateLimitPresets.public)
+  if (rateLimitResponse) return rateLimitResponse
+
   try {
   const { searchParams } = new URL(request.url)
 

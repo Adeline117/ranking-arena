@@ -18,6 +18,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { z } from 'zod'
+import { checkRateLimit, RateLimitPresets } from '@/lib/api'
 import { getServerCache, setServerCache, CacheTTL } from '@/lib/utils/server-cache'
 import { createLogger } from '@/lib/utils/logger'
 import { resolveTrader, getTraderDetail, toTraderPageData } from '@/lib/data/unified'
@@ -46,6 +47,9 @@ export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ handle: string }> }
 ) {
+  const rateLimitResponse = await checkRateLimit(request, RateLimitPresets.public)
+  if (rateLimitResponse) return rateLimitResponse
+
   const startTime = Date.now()
 
   try {

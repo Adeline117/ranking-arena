@@ -7,6 +7,7 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { getSupabaseAdmin } from '@/lib/supabase/server'
+import { checkRateLimit, RateLimitPresets } from '@/lib/api'
 import { getCachedTraderHistory, cacheTraderHistory } from '@/lib/cache/redis-layer'
 import logger from '@/lib/logger'
 
@@ -36,6 +37,9 @@ export async function GET(
   request: NextRequest,
   { params }: RouteParams
 ) {
+  const rateLimitResponse = await checkRateLimit(request, RateLimitPresets.public)
+  if (rateLimitResponse) return rateLimitResponse
+
   const { platform, trader_key: traderId } = await params
   const { searchParams } = new URL(request.url)
   const requestedPeriod = searchParams.get('period') as TimePeriod | null

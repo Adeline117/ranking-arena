@@ -30,7 +30,7 @@ function saveScrollMap(map: Record<string, number>) {
     }
     sessionStorage.setItem(STORAGE_KEY, JSON.stringify(map))
   } catch {
-    // sessionStorage full or unavailable
+    // Intentionally swallowed: sessionStorage full or unavailable (private browsing), scroll position is optional
   }
 }
 

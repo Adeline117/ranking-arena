@@ -42,7 +42,13 @@ export function getStoredColumns(): ColumnKey[] {
   return DEFAULT_VISIBLE_COLUMNS
 }
 
-/** @deprecated Use UnifiedTrader from lib/types/unified-trader.ts */
+/**
+ * UI-specific Trader interface for ranking table components.
+ * Uses snake_case field names to match the database/API response shape
+ * that ranking components consume directly.
+ *
+ * For server-side data access, use UnifiedTrader from lib/data/trader/types.
+ */
 export interface Trader {
   id: string
   handle: string | null
@@ -77,7 +83,12 @@ export interface Trader {
   execution_score?: number | null
   score_completeness?: 'full' | 'partial' | 'minimal' | null
   avg_holding_hours?: number | null
+  sharpe_ratio?: number | null
+  trader_type?: 'human' | 'bot' | null
+  /** Whether this trader is a bot */
+  is_bot?: boolean
+  /** Bot category */
+  bot_category?: string | null
+  /** Whether this trader is verified (claimed profile) */
+  is_verified?: boolean
 }
-
-// Debounce hook (used in RankingTable)
-export { }

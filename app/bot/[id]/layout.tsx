@@ -47,7 +47,7 @@ export async function generateMetadata({ params }: { params: Promise<{ id: strin
       }
     }
   } catch {
-    // Metadata fetch failed; fall through to default metadata below
+    // Intentionally swallowed: bot metadata fetch failed, default metadata used below
   }
 
   return {

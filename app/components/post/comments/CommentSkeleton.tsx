@@ -1,5 +1,3 @@
-'use client'
-
 import { tokens } from '@/lib/design-tokens'
 
 function SkeletonBlock({ width, height }: { width: string; height: number }): React.ReactNode {

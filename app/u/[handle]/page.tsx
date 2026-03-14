@@ -118,7 +118,7 @@ async function fetchUserProfile(handle: string): Promise<UserProfileData | null>
           traderHandle = traderRow.handle
         }
       } catch {
-        // ignore
+        // Intentionally swallowed: claimed trader handle lookup is optional enrichment
       }
     }
   } catch (err) {

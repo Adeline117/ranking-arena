@@ -48,7 +48,7 @@ export function useCapacitorSplash() {
       const { SplashScreen } = await import('@capacitor/splash-screen')
       await SplashScreen.hide({ fadeOutDuration: 300 })
     } catch {
-      // Plugin not available
+      // Intentionally swallowed: Capacitor plugin not available on this platform
     }
   }, [])
 
@@ -90,7 +90,7 @@ export function useCapacitorKeyboard() {
         })
         hideListener = hide
       } catch {
-        // Plugin not available
+        // Intentionally swallowed: Capacitor plugin not available on this platform
       }
     }
 
@@ -108,7 +108,7 @@ export function useCapacitorKeyboard() {
       const { Keyboard } = await import('@capacitor/keyboard')
       await Keyboard.hide()
     } catch {
-      // Ignore
+      // Intentionally swallowed: Capacitor plugin unavailable in web browser context
     }
   }, [])
 
@@ -133,7 +133,7 @@ export function useCapacitorStatusBar() {
       }
       await StatusBar.setStyle({ style: styleMap[style] })
     } catch {
-      // Plugin not available
+      // Intentionally swallowed: Capacitor plugin not available on this platform
     }
   }, [])
 
@@ -143,7 +143,7 @@ export function useCapacitorStatusBar() {
       const { StatusBar } = await import('@capacitor/status-bar')
       await StatusBar.setBackgroundColor({ color })
     } catch {
-      // Plugin not available
+      // Intentionally swallowed: Capacitor plugin not available on this platform
     }
   }, [])
 
@@ -249,7 +249,7 @@ export function useCapacitorAppLifecycle(options?: {
           urlListener = listener
         }
       } catch {
-        // Plugin not available
+        // Intentionally swallowed: Capacitor plugin not available on this platform
       }
     }
 
@@ -283,7 +283,7 @@ export function useCapacitorHaptics() {
       }
       await Haptics.impact({ style: styleMap[style] })
     } catch {
-      // Plugin not available
+      // Intentionally swallowed: Capacitor plugin not available on this platform
     }
   }, [])
 
@@ -299,7 +299,7 @@ export function useCapacitorHaptics() {
       }
       await Haptics.notification({ type: typeMap[type] })
     } catch {
-      // Plugin not available
+      // Intentionally swallowed: Capacitor plugin not available on this platform
     }
   }, [])
 
@@ -310,7 +310,7 @@ export function useCapacitorHaptics() {
       const { Haptics } = await import('@capacitor/haptics')
       await Haptics.selectionChanged()
     } catch {
-      // Plugin not available
+      // Intentionally swallowed: Capacitor plugin not available on this platform
     }
   }, [])
 
@@ -321,7 +321,7 @@ export function useCapacitorHaptics() {
       const { Haptics } = await import('@capacitor/haptics')
       await Haptics.vibrate({ duration })
     } catch {
-      // Plugin not available
+      // Intentionally swallowed: Capacitor plugin not available on this platform
     }
   }, [])
 
@@ -368,7 +368,7 @@ export function useCapacitorLocalNotifications() {
         }],
       })
     } catch {
-      // Plugin not available
+      // Intentionally swallowed: Capacitor plugin not available on this platform
     }
   }, [])
 
@@ -379,7 +379,7 @@ export function useCapacitorLocalNotifications() {
       const { LocalNotifications } = await import('@capacitor/local-notifications')
       await LocalNotifications.cancel({ notifications: ids.map(id => ({ id })) })
     } catch {
-      // Plugin not available
+      // Intentionally swallowed: Capacitor plugin not available on this platform
     }
   }, [])
 
@@ -482,7 +482,7 @@ export function useCapacitorBiometric() {
           setBiometryType(typeMap[result.biometryType] || 'fingerprint')
         }
       } catch {
-        // Plugin not available
+        // Intentionally swallowed: Capacitor plugin not available on this platform
       }
     }
 
@@ -549,7 +549,7 @@ export function useCapacitorBiometric() {
       const { NativeBiometric } = await import('capacitor-native-biometric')
       await NativeBiometric.deleteCredentials({ server })
     } catch {
-      // Ignore
+      // Intentionally swallowed: Capacitor plugin unavailable in web browser context
     }
   }, [])
 
@@ -650,7 +650,7 @@ export function useCapacitorPushNotifications(options?: {
         })
         listeners.push(actionListener)
       } catch {
-        // Plugin not available
+        // Intentionally swallowed: Capacitor plugin not available on this platform
       }
     }
 

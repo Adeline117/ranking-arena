@@ -27,7 +27,7 @@ export async function generateMetadata({
       groupDescription = group.description || `${group.name} - ${group.member_count || 0} 位成员`
     }
   } catch {
-    // 静默失败，使用默认元数据
+    // Intentionally swallowed: metadata generation failure is non-critical, default metadata used
   }
 
   const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://www.arenafi.org'

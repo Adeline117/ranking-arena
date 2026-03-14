@@ -180,7 +180,7 @@ export function PostDetailActions({
               showToast(t('linkCopied'), 'success')
             }
           } catch {
-            // user cancelled or clipboard failed
+            // Intentionally swallowed: user cancelled share dialog or clipboard API unavailable
           }
         }}
         active={false}

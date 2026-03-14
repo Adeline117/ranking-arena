@@ -55,7 +55,7 @@ export default function CapacitorProvider({ children }: { children: React.ReactN
           router.push(path)
         }
       } catch {
-        // Invalid URL, ignore
+        // Intentionally swallowed: invalid deep link URL, not an arena:// scheme
       }
     },
     onForeground: () => {
@@ -92,7 +92,7 @@ export default function CapacitorProvider({ children }: { children: React.ReactN
         )
         clickListener = listener
       } catch {
-        // Plugin not available
+        // Intentionally swallowed: Capacitor plugin not available on this platform
       }
     }
 
@@ -133,7 +133,7 @@ export default function CapacitorProvider({ children }: { children: React.ReactN
           await StatusBar.setBackgroundColor({ color: theme === 'light' ? 'var(--color-on-accent)' : 'var(--color-bg-primary)' })
         }
       } catch {
-        // Plugin not available
+        // Intentionally swallowed: Capacitor plugin not available on this platform
       }
     }
 

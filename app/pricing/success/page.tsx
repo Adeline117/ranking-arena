@@ -105,7 +105,7 @@ function PaymentSuccessContent() {
           if (data.subscription?.tier === 'pro') return true
         }
       } catch {
-        // API 失败，继续尝试直接查询
+        // Intentionally swallowed: subscription API check failed, falling back to direct Supabase query
       }
 
       // 降级：直接查 subscriptions 表（需要有效 JWT 才能通过 RLS）

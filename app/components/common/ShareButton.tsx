@@ -79,7 +79,7 @@ export default function ShareButton({ data, size = 'sm', variant = 'ghost', show
     try {
       await navigator.share({ text, url: data.url })
     } catch {
-      // user cancelled
+      // Intentionally swallowed: user cancelled share dialog or Web Share API unavailable
     }
   }, [text, data.url])
 

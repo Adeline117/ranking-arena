@@ -55,7 +55,7 @@ export async function invalidateFollowingCache(userId: string): Promise<void> {
   try {
     await tieredDel(followingCacheKey(userId))
   } catch {
-    // best-effort
+    // Intentionally swallowed: cache invalidation is best-effort, stale following data is acceptable
   }
 }
 

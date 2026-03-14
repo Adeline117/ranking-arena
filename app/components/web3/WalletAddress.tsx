@@ -31,7 +31,7 @@ export function WalletAddress({ address, chainId = CHAIN_IDS.BASE, showCopy = tr
       setCopied(true)
       setTimeout(() => setCopied(false), 2000)
     } catch {
-      // Clipboard API not available
+      // Intentionally swallowed: Clipboard API not available in this browser context
     }
   }, [address])
 

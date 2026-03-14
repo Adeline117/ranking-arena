@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getSupabaseAdmin } from '@/lib/supabase/server'
+import { checkRateLimit, RateLimitPresets } from '@/lib/api'
 import { resolveTrader } from '@/lib/data/unified'
 import { calculateBadges, type EarnedBadge } from '@/lib/badges'
 import { tieredGet, tieredSet } from '@/lib/cache/redis-layer'
@@ -13,6 +14,8 @@ export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ handle: string }> }
 ) {
+  const rateLimitResponse = await checkRateLimit(request, RateLimitPresets.public)
+  if (rateLimitResponse) return rateLimitResponse
   const { handle } = await params
 
   if (!handle) {

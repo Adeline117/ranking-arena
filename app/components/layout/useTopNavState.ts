@@ -221,7 +221,7 @@ export function useTopNavState() {
             localStorage.removeItem('arena_search_history')
             localStorage.setItem('arena_search_history', JSON.stringify([trimmedQuery]))
           } catch {
-            // If still failing (e.g., private mode), silently fail
+            // Intentionally swallowed: localStorage unavailable (private mode), search history is optional
           }
         }
       }

@@ -171,7 +171,7 @@ export default async function TraderPage({ params, searchParams }: { params: Pro
   try {
     decodedHandle = decodeURIComponent(handle)
   } catch {
-    // keep original if decode fails
+    // Intentionally swallowed: malformed URI encoding, use raw handle string as-is
   }
 
   const sb = getSupabaseAdmin()

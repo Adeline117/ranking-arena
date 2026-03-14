@@ -1,5 +1,3 @@
-'use client'
-
 import { tokens } from '@/lib/design-tokens'
 import { Box } from '../base'
 
