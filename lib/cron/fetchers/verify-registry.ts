@@ -487,18 +487,16 @@ const VERIFY_REGISTRY: Record<string, VerifyFn> = {
   // CEX — Discontinued
   // =============================================
 
-  // Weex — try direct, may need VPS proxy
+  // WEEX — DISABLED 2026-03-14: API returning HTTP 521 (server down)
   weex: () =>
-    verifyEndpointWithProxy(
-      'weex',
-      'https://www.weex.com/api/v1/copy-trade/public/trader/rank?page=1&size=1&sort=roi',
-      {
-        headers: {
-          Referer: 'https://www.weex.com/copy-trade',
-          Origin: 'https://www.weex.com',
-        },
-      },
-    ),
+    Promise.resolve({
+      platform: 'weex',
+      healthy: false,
+      latencyMs: 0,
+      failureReason: 'endpoint_gone' as FailureReason,
+      details: 'API returning HTTP 521 (server down since 2026-03-14)',
+      checkedAt: new Date().toISOString(),
+    }),
 
   // =============================================
   // DEX — Working

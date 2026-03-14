@@ -148,15 +148,16 @@ export const PLATFORM_CONFIGS = {
     },
   },
 
-  kucoin: {
-    source: 'kucoin',
-    name: 'KuCoin',
-    type: 'puppeteer',
-    marketType: 'futures',
-    targetCount: 300,
-    url: 'https://www.kucoin.com/copy-trading',
-    apiPatterns: ['copyTrade', 'trader', 'rank'],
-  },
+  // DEPRECATED 2026-03: KuCoin API 已停用
+  // kucoin: {
+  //   source: 'kucoin',
+  //   name: 'KuCoin',
+  //   type: 'puppeteer',
+  //   marketType: 'futures',
+  //   targetCount: 300,
+  //   url: 'https://www.kucoin.com/copy-trading',
+  //   apiPatterns: ['copyTrade', 'trader', 'rank'],
+  // },
 
   // ============== CEX 现货 ==============
   binance_spot: {

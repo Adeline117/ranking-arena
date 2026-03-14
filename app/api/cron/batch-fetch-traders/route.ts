@@ -60,18 +60,17 @@ const GROUPS: Record<string, string[]> = {
   d2: [],
   // Group E: CEX+DEX (every 6h) — coinex/binance_web3 removed 2026-03-14: connector errors
   e: ['bitfinex'],
-  // Group F: Slow CEX (every 6h) — 2 platforms, parallel (~141s + ~60s = ~200s)
-  f: ['mexc', 'bingx'],
-  // Group H: Fast CEX (every 6h) — 2 platforms, parallel (~25s each)
-  h: ['gateio', 'btcc'],
-  // Group G1: DEX (every 6h) — 2 platforms, parallel
-  g1: ['drift', 'bitunix'],
-  // Group G2: DEX+CEX (every 6h) — 3 platforms
+  // Group F: Slow CEX (every 6h) — DISABLED 2026-03-14: mexc 404, bingx normalization failed
+  f: [],
+  // Group H: Fast CEX (every 6h) — DISABLED 2026-03-14: gateio 403, btcc normalization failed
+  h: [],
+  // Group G1: DEX (every 6h) — DISABLED 2026-03-14: drift/bitunix normalization failed
+  g1: [],
+  // Group G2: DEX+CEX (every 6h) — bitget_spot removed 2026-03-14: normalization failed
   // paradex removed: API now requires JWT auth since 2026-03
   // kwenta removed: Copin API stopped serving Kwenta data (2026-03-11)
   // blofin removed: openapi.blofin.com requires auth, VPS scraper endpoint missing (2026-03-11)
-  // bitget_spot restored 2026-03-13: Connector with VPS scraper + direct API fallback
-  g2: ['web3_bot', 'toobit', 'bitget_spot'],
+  g2: ['web3_bot', 'toobit'],
   // Group I: Social trading (every 6h) — large dataset (2000 traders × 3 periods)
   i: ['etoro'],
 }
