@@ -66,7 +66,7 @@ export async function generateMetadata({ params }: { params: Promise<{ id: strin
   }
   
   return {
-    title: 'Post | Arena',
+    title: 'Post',
     description: 'View post details',
     alternates: {
       canonical: canonicalUrl,

@@ -21,7 +21,7 @@ export const metadata: Metadata = {
     'Arena Score',
   ],
   openGraph: {
-    title: 'Trader Rankings | Arena',
+    title: 'Trader Rankings',
     description:
       'Real-time crypto trader leaderboard across 22+ exchanges. Compare ROI, win rate, drawdown and Arena Score.',
     url: `${baseUrl}/rankings`,
@@ -31,7 +31,7 @@ export const metadata: Metadata = {
   },
   twitter: {
     card: 'summary_large_image',
-    title: 'Trader Rankings | Arena',
+    title: 'Trader Rankings',
     description:
       'Real-time crypto trader leaderboard across 22+ exchanges.',
     images: [`${baseUrl}/og-image.png`],

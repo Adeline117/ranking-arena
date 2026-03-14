@@ -26,7 +26,7 @@ export async function generateMetadata({ params }: { params: Promise<{ id: strin
         const title = book.author ? `${book.title} - ${book.author}` : book.title
         const description = book.description
           ? book.description.substring(0, 160)
-          : `${book.title}${book.author ? ` -- ${book.author}` : ''} | Arena 交易书库`
+          : `${book.title}${book.author ? ` -- ${book.author}` : ''} 交易书库`
         const canonicalUrl = `${baseUrl}/library/${id}`
 
         return {
@@ -36,7 +36,7 @@ export async function generateMetadata({ params }: { params: Promise<{ id: strin
             canonical: canonicalUrl,
           },
           openGraph: {
-            title: `${title} | Arena`,
+            title: `${title}`,
             description,
             type: 'book',
             url: canonicalUrl,
@@ -47,7 +47,7 @@ export async function generateMetadata({ params }: { params: Promise<{ id: strin
           },
           twitter: {
             card: 'summary',
-            title: `${title} | Arena`,
+            title: `${title}`,
             description,
             images: book.cover_url ? [book.cover_url] : undefined,
           },

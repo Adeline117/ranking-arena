@@ -50,7 +50,7 @@ export async function generateMetadata({
   // Validate exchange — return 404 metadata for unknown exchanges
   if (!EXCHANGE_NAMES[exchange]) {
     return {
-      title: 'Exchange Not Found | Arena',
+      title: 'Exchange Not Found',
       description: 'The requested exchange ranking page does not exist.',
     }
   }
@@ -60,7 +60,7 @@ export async function generateMetadata({
   const labels = TYPE_LABELS[sourceType] || TYPE_LABELS.futures
   const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://www.arenafi.org'
 
-  const title = `${displayName} ${labels.en} Trader Rankings | Arena`
+  const title = `${displayName} ${labels.en} Trader Rankings`
   const description = `Top ${displayName} ${labels.en.toLowerCase()} traders ranked by Arena Score. Compare ROI, win rate, max drawdown, and PnL across 90-day windows. Updated every 3 hours.`
 
   return {

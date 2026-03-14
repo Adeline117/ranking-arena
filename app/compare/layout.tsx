@@ -16,7 +16,7 @@ export async function generateMetadata(
     ? `${baseUrl}/api/og/compare?ids=${idList.join(',')}`
     : `${baseUrl}/og-image.png`
 
-  const title = 'Compare Traders | Arena'
+  const title = 'Compare Traders'
   const description = idList.length > 0
     ? `Comparing ${idList.length} traders side-by-side on Arena`
     : 'Compare traders side-by-side across exchanges.'
