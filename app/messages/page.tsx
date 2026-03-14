@@ -4,7 +4,7 @@ import { features } from '@/lib/features'
 import type { Metadata } from 'next'
 
 export const metadata: Metadata = {
-  title: 'Messages | Arena',
+  title: 'Messages',
   description: 'Your private messages on Arena.',
 }
 

@@ -1,10 +1,10 @@
 import type { Metadata } from 'next'
 
 export const metadata: Metadata = {
-  title: 'Login — Arena',
+  title: 'Login',
   description: 'Sign in to Arena - access crypto trader rankings, follow top traders, and join the community.',
   openGraph: {
-    title: 'Login — Arena',
+    title: 'Login',
     description: 'Sign in to Arena - access crypto trader rankings, follow top traders, and join the community.',
     url: 'https://www.arenafi.org/login',
     siteName: 'Arena',

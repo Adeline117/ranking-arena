@@ -85,7 +85,7 @@ export async function generateMetadata({ params }: { params: Promise<{ handle: s
     title: `${decoded} | Crypto Trader Rankings`,
     description: `View ${decoded}'s comprehensive crypto trading performance, PnL, ROI, win rate, and rank on Arena among 32,000+ traders from 30+ exchanges. Real-time analytics and historical data.`,
     openGraph: {
-      title: `${decoded} | Crypto Trader — Arena`,
+      title: `${decoded} | Crypto Trader`,
       description: `View ${decoded}'s crypto trading performance, analytics, and rank on Arena among 32,000+ traders from 30+ exchanges.`,
       url: `${BASE}/trader/${encodeURIComponent(decoded)}`,
       siteName: 'Arena',
@@ -94,7 +94,7 @@ export async function generateMetadata({ params }: { params: Promise<{ handle: s
     },
     twitter: {
       card: 'summary_large_image',
-      title: `${decoded} | Crypto Trader — Arena`,
+      title: `${decoded} | Crypto Trader`,
       description: `View ${decoded}'s trading performance and rank on Arena.`,
       images: [fallbackOgImage],
       creator: '@arenafi',
