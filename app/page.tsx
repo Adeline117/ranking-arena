@@ -1,9 +1,15 @@
 import type { Metadata } from 'next'
 import { Suspense } from 'react'
-import { HomePage } from './components/home'
+import dynamic from 'next/dynamic'
 import { getInitialTraders } from '@/lib/getInitialTraders'
 import SSRRankingTable from './components/home/SSRRankingTable'
 import { JsonLd } from './components/Providers/JsonLd'
+
+// Prevent HomePage SSR to avoid hydration mismatches with client-side state (localStorage, Date, etc.)
+const HomePage = dynamic(() => import('./components/home').then(m => ({ default: m.HomePage })), {
+  ssr: false,
+  loading: () => null
+})
 
 const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://www.arenafi.org'
 
