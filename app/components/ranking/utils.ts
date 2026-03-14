@@ -1,5 +1,6 @@
 import { SOURCE_TYPE_MAP, EXCHANGE_NAMES } from '@/lib/constants/exchanges'
 import { tokens } from '@/lib/design-tokens'
+import { getLanguage, t } from '@/lib/i18n'
 
 /**
  * 格式化 PnL 显示
@@ -8,10 +9,14 @@ export function formatPnL(pnl: number): string {
   if (!isFinite(pnl) || isNaN(pnl)) return '$0'
   const absPnL = Math.abs(pnl)
   const sign = pnl >= 0 ? '+' : '-'
+  const lang = getLanguage()
+  
   if (absPnL >= 1000000) {
-    return `${sign}$${(absPnL / 1000000).toFixed(2)}M`
+    const suffix = lang === 'zh' ? t('numberFormatMillion') : t('numberFormatMillion')
+    return `${sign}$${(absPnL / 1000000).toFixed(2)}${suffix}`
   } else if (absPnL >= 1000) {
-    return `${sign}$${(absPnL / 1000).toFixed(1)}K`
+    const suffix = lang === 'zh' ? t('numberFormatThousand') : t('numberFormatThousand')
+    return `${sign}$${(absPnL / 1000).toFixed(1)}${suffix}`
   } else {
     return `${sign}$${absPnL.toFixed(2)}`
   }
@@ -23,8 +28,11 @@ export function formatPnL(pnl: number): string {
 export function formatROI(roi: number): string {
   if (!isFinite(roi) || isNaN(roi)) return '+0.00%'
   const absRoi = Math.abs(roi)
+  const lang = getLanguage()
+  
   if (absRoi >= 10000) {
-    return `${roi >= 0 ? '+' : ''}${(roi / 1000).toFixed(1)}K%`
+    const suffix = lang === 'zh' ? t('numberFormatThousand') : t('numberFormatThousand')
+    return `${roi >= 0 ? '+' : ''}${(roi / 1000).toFixed(1)}${suffix}%`
   } else if (absRoi >= 1000) {
     return `${roi >= 0 ? '+' : ''}${roi.toFixed(0)}%`
   } else if (absRoi >= 100) {

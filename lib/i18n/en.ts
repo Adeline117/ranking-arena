@@ -4442,6 +4442,11 @@ verifiedTraderTelegram: 'Telegram',
 verifiedTraderDiscord: 'Discord',
 verifiedTraderWebsite: 'Website',
 
+// Number formatting
+numberFormatThousand: 'K',
+numberFormatMillion: 'M',
+numberFormatBillion: 'B',
+
 } as const
 
 export default en
