@@ -108,7 +108,7 @@ async function checkDatabaseAndCron(): Promise<{
 
     // 1. 测试数据库连接
     const { error: dbError } = await supabase
-      .from('trader_snapshots')
+      .from('leaderboard_ranks')
       .select('count')
       .limit(1)
 

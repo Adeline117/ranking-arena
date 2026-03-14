@@ -37,18 +37,19 @@ export async function GET(request: NextRequest) {
     .gte('started_at', oneDayAgo)
     .order('started_at', { ascending: false })
 
-  // Get data freshness per platform
+  // Get data freshness per platform from leaderboard_ranks (precomputed, more accurate)
   const { data: freshness } = await supabase
-    .from('trader_snapshots')
-    .select('source, captured_at')
-    .order('captured_at', { ascending: false })
+    .from('leaderboard_ranks')
+    .select('source, computed_at')
+    .eq('season_id', '90D')
+    .order('computed_at', { ascending: false })
     .limit(5000)
 
   // Build per-platform freshness
   const latestByPlatform = new Map<string, string>()
   for (const row of freshness || []) {
     if (!latestByPlatform.has(row.source)) {
-      latestByPlatform.set(row.source, row.captured_at)
+      latestByPlatform.set(row.source, row.computed_at)
     }
   }
 
