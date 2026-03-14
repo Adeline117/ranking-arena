@@ -21,7 +21,14 @@ const HotDiscussions = lazy(() => import('../sidebar/HotDiscussions'))
 const WatchlistMarket = lazy(() => import('../sidebar/WatchlistMarket'))
 const NewsFlash = lazy(() => import('../sidebar/NewsFlash'))
 
-export default function HomePage() {
+import type { InitialTrader } from '@/lib/getInitialTraders'
+
+interface HomePageProps {
+  initialTraders?: InitialTrader[]
+  initialLastUpdated?: string | null
+}
+
+export default function HomePage({ initialTraders, initialLastUpdated }: HomePageProps) {
   const [mounted, setMounted] = useState(false)
 
   useEffect(() => {
@@ -107,7 +114,7 @@ export default function HomePage() {
                 <div className="skeleton" style={{ height: 400, borderRadius: tokens.radius.lg }} />
               </Box>
             }>
-                <HomePageClient />
+                <HomePageClient initialTraders={initialTraders} initialLastUpdated={initialLastUpdated} />
             </Suspense>
           </SectionErrorBoundary>
         </ThreeColumnLayout>
