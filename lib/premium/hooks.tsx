@@ -257,7 +257,7 @@ export function PremiumProvider({ children, initialSubscription }: PremiumProvid
         }
       }
     } catch {
-      // NFT check is non-critical — fail silently
+      // Intentionally swallowed: NFT-based premium check is optional, Stripe subscription is primary
     }
   }, [subscription])
 

@@ -266,13 +266,13 @@ function createTVClient(): TradingViewClientWrapper {
           try {
             chart.delete()
           } catch {
-            // ignore
+            // Intentionally swallowed: chart.delete() may fail if already disposed
           }
         }
         wrapper.charts.clear()
         client.end()
       } catch {
-        // ignore
+        // Intentionally swallowed: destroy cleanup errors are non-critical, resources will be GC'd
       }
       wrapper.connected = false
     }

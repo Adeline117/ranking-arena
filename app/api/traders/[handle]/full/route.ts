@@ -15,6 +15,7 @@
 
 import { NextRequest } from 'next/server'
 import { getSupabaseAdmin } from '@/lib/supabase/server'
+import { checkRateLimit, RateLimitPresets } from '@/lib/api'
 import { resolveTrader, getTraderDetail, toTraderPageData } from '@/lib/data/unified'
 import logger from '@/lib/logger'
 import { getOrSetWithLock } from '@/lib/cache'
@@ -27,6 +28,9 @@ export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ handle: string }> }
 ) {
+  const rateLimitResponse = await checkRateLimit(request, RateLimitPresets.public)
+  if (rateLimitResponse) return rateLimitResponse
+
   try {
     const { handle } = await params
 
