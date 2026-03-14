@@ -68,7 +68,7 @@ const webSiteJsonLd = {
 }
 
 export default async function Page() {
-  const { traders: initialTraders } = await getInitialTraders('90D', 25)
+  const { traders: initialTraders, lastUpdated } = await getInitialTraders('90D', 25)
 
   // Preload top 3 trader avatars — use direct CDN URLs (avoids /api/avatar proxy roundtrip)
   const top3Avatars = initialTraders
@@ -90,7 +90,7 @@ export default async function Page() {
       </div>
 
       <Suspense fallback={null}>
-        <HomePage />
+        <HomePage initialTraders={initialTraders} initialLastUpdated={lastUpdated} />
       </Suspense>
     </>
   )

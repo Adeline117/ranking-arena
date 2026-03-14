@@ -8,16 +8,38 @@ import PullToRefresh from '../ui/PullToRefresh'
 import { useTraderData, useAuth } from './hooks'
 import { useLanguage } from '../Providers/LanguageProvider'
 import type { TimeRange } from './hooks/useTraderData'
+import type { InitialTrader } from '@/lib/getInitialTraders'
+import type { Trader } from '../ranking/RankingTable'
+
+interface HomePageClientProps {
+  initialTraders?: InitialTrader[]
+  initialLastUpdated?: string | null
+}
 
 /**
  * 首页客户端组件
  * 处理交互状态和数据同步
  * 数据通过客户端fetch获取，SSR排行榜由SSRRankingTable提供
  */
-export default function HomePageClient() {
+export default function HomePageClient({ initialTraders, initialLastUpdated }: HomePageClientProps) {
   const { isLoggedIn } = useAuth()
   const { t } = useLanguage()
   const router = useRouter()
+
+  // Convert InitialTrader[] to Trader[] for compatibility
+  const convertedInitialTraders: Trader[] | undefined = initialTraders?.map(t => ({
+    id: t.id,
+    handle: t.handle,
+    roi: t.roi,
+    pnl: t.pnl,
+    win_rate: t.win_rate,
+    max_drawdown: t.max_drawdown,
+    followers: t.followers,
+    source: t.source,
+    avatar_url: t.avatar_url,
+    arena_score: t.arena_score,
+    score_confidence: t.score_confidence,
+  }))
 
   // 交易者数据管理 - 传入服务端预获取的数据
   const {
@@ -32,7 +54,10 @@ export default function HomePageClient() {
     deferredFetchFailed,
     retryDeferredFetch,
     isChangingTimeRange,
-  } = useTraderData()
+  } = useTraderData({
+    initialTraders: convertedInitialTraders,
+    initialLastUpdated,
+  })
 
   // Sync time range with URL on initial load (avoid useSearchParams to keep page static/ISR)
   useEffect(() => {
