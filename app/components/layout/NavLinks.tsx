@@ -3,6 +3,7 @@
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { tokens } from '@/lib/design-tokens'
+import { features } from '@/lib/features'
 import { Box } from '../base'
 import { useLanguage } from '../Providers/LanguageProvider'
 import { usePostStore } from '@/lib/stores/postStore'
@@ -16,8 +17,10 @@ export default function NavLinks() {
     { href: '/market', labelKey: 'market' as const, tooltip: language === 'zh' ? '市场数据总览' : 'Market overview' },
     { href: '/flash-news', labelKey: 'flashNews' as const, tooltip: language === 'zh' ? '快讯资讯' : 'Flash news' },
     { href: '/library', labelKey: 'library' as const, tooltip: language === 'zh' ? '学习资料库' : 'Learning library' },
-    { href: '/groups', labelKey: 'groups' as const, tooltip: language === 'zh' ? '加入讨论小组' : 'Join discussion groups' },
-    { href: '/hot', labelKey: 'hot' as const, tooltip: language === 'zh' ? '全站热门帖子' : 'Trending posts' },
+    ...(features.social ? [
+      { href: '/groups', labelKey: 'groups' as const, tooltip: language === 'zh' ? '加入讨论小组' : 'Join discussion groups' },
+      { href: '/hot', labelKey: 'hot' as const, tooltip: language === 'zh' ? '全站热门帖子' : 'Trending posts' },
+    ] : []),
   ]
 
   return (

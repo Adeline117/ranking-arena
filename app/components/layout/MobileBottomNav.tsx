@@ -4,6 +4,7 @@ import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { useEffect, useState, useCallback, useMemo, useRef } from 'react'
 import { tokens } from '@/lib/design-tokens'
+import { features } from '@/lib/features'
 import { useLanguage } from '../Providers/LanguageProvider'
 import { supabase } from '@/lib/supabase/client'
 import { useCapacitorHaptics } from '@/lib/hooks/useCapacitor'
@@ -254,13 +255,16 @@ export default function MobileBottomNav(): React.ReactElement {
   }, [impact])
 
   const navItems: NavItem[] = useMemo(() => {
-    return [
+    const items: NavItem[] = [
       { href: '/', labelKey: 'home', Icon: HomeIcon },
-      { href: '/hot', labelKey: 'hot', Icon: FireIcon },
-      { href: '/groups', labelKey: 'groups', Icon: GroupsIcon },
-      { href: '/market', labelKey: 'market', Icon: MarketIcon },
-      { href: userHandle ? `/u/${encodeURIComponent(userHandle)}` : '/settings', labelKey: 'me', Icon: UserIcon },
     ]
+    if (features.social) {
+      items.push({ href: '/hot', labelKey: 'hot', Icon: FireIcon })
+      items.push({ href: '/groups', labelKey: 'groups', Icon: GroupsIcon })
+    }
+    items.push({ href: '/market', labelKey: 'market', Icon: MarketIcon })
+    items.push({ href: userHandle ? `/u/${encodeURIComponent(userHandle)}` : '/settings', labelKey: 'me', Icon: UserIcon })
+    return items
   }, [userHandle])
 
   // Hide nav on auth / onboarding pages
