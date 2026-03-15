@@ -166,15 +166,18 @@ export async function initializeConnectors(): Promise<void> {
   connectorRegistry.register(new BybitFuturesConnector({ proxyUrl }))
   connectorRegistry.register(new BitgetFuturesConnector({ proxyUrl }))
   connectorRegistry.register(new MexcFuturesConnector({ proxyUrl }))
-  connectorRegistry.register(new CoinexFuturesConnector({ proxyUrl }))
-  connectorRegistry.register(new OkxFuturesConnector({ proxyUrl }))
+  // CoinEx: public API works without proxy
+  connectorRegistry.register(new CoinexFuturesConnector())
+  // OKX: v5 API works WITHOUT proxy from Vercel hnd1. Proxy causes 404 (proxy routes to wrong endpoint)
+  connectorRegistry.register(new OkxFuturesConnector())
   // connectorRegistry.register(new KucoinFuturesConnector()) // DEAD: APIs 404 since 2026-03
   // connectorRegistry.register(new BitmartFuturesConnector({ proxyUrl })) // DEAD
   connectorRegistry.register(new PhemexFuturesConnector())
   connectorRegistry.register(new HtxFuturesConnector({ proxyUrl }))
   connectorRegistry.register(new WeexFuturesConnector({ proxyUrl }))
   connectorRegistry.register(new BingxFuturesConnector({ proxyUrl }))
-  connectorRegistry.register(new GateioFuturesConnector({ proxyUrl }))
+  // Gate.io: gate.com API works without proxy (gate.io redirects to gate.com)
+  connectorRegistry.register(new GateioFuturesConnector())
   connectorRegistry.register(new XtFuturesConnector())
   connectorRegistry.register(new LbankFuturesConnector())
   connectorRegistry.register(new BlofinFuturesConnector())

@@ -91,6 +91,7 @@ export class BtccFuturesConnector extends BaseConnector {
               pageSize,
               sortType: 4,
               nickName: '',
+              flag: 'en-US',
             }),
           }
         )
