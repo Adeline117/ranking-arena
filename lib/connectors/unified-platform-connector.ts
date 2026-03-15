@@ -170,7 +170,7 @@ export class UnifiedPlatformConnector {
 export const PLATFORM_CONNECTORS: Record<string, UnifiedConnectorConfig> = {
   // Group A: High-priority CEX (every 3h) - Fast platforms keep enrichment
   binance_futures: { platform: 'binance_futures', enrichmentLimit: 200, timeoutMs: 420000 },
-  binance_spot: { platform: 'binance_spot', enrichmentLimit: 100, timeoutMs: 300000 },
+  // binance_spot: REMOVED 2026-03-14 - repeatedly hangs 45-76min
   bybit: { platform: 'bybit', enrichmentLimit: 150, timeoutMs: 360000 },
   bitget_futures: { platform: 'bitget_futures', enrichmentLimit: 60, timeoutMs: 300000, enableEnrichment: false },
   okx_futures: { platform: 'okx_futures', enrichmentLimit: 80, timeoutMs: 300000, enableEnrichment: false },

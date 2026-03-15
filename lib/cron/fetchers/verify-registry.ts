@@ -187,33 +187,7 @@ const VERIFY_REGISTRY: Record<string, VerifyFn> = {
       }
     ),
 
-  binance_spot: () =>
-    verifyEndpoint(
-      'binance_spot',
-      'https://www.binance.com/bapi/futures/v1/friendly/future/spot-copy-trade/common/home-page-list',
-      {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Origin: 'https://www.binance.com',
-          Referer: 'https://www.binance.com/en/copy-trading/spot',
-        },
-        body: {
-          pageNumber: 1,
-          pageSize: 1,
-          timeRange: '90D',
-          dataType: 'ROI',
-          order: 'DESC',
-          portfolioType: 'ALL',
-          favoriteOnly: false,
-          hideFull: false,
-        },
-        validateResponse: (d: ApiResponse) => {
-          const list = d?.data?.list || d?.data?.data
-          return Array.isArray(list) && list.length > 0
-        },
-      }
-    ),
+  // binance_spot: REMOVED 2026-03-14 - repeatedly hangs 45-76min, blocks entire pipeline
 
   binance_web3: () =>
     verifyEndpoint(

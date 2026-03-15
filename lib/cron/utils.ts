@@ -54,11 +54,7 @@ export const PLATFORM_SCRIPTS: Record<string, Array<{ name: string; script: stri
     { name: 'binance_futures_30d', script: 'scripts/import/import_binance_futures_api.mjs', args: ['30D'] },
     { name: 'binance_futures_90d', script: 'scripts/import/import_binance_futures_api.mjs', args: ['90D'] },
   ],
-  binance_spot: [
-    { name: 'binance_spot_7d', script: 'scripts/import/import_binance_spot.mjs', args: ['7D'] },
-    { name: 'binance_spot_30d', script: 'scripts/import/import_binance_spot.mjs', args: ['30D'] },
-    { name: 'binance_spot_90d', script: 'scripts/import/import_binance_spot.mjs', args: ['90D'] },
-  ],
+  // binance_spot: PERMANENTLY REMOVED (2026-03-14) - repeatedly hangs 45-76min, blocks entire pipeline
   binance_web3: [
     { name: 'binance_web3_7d', script: 'scripts/import/import_binance_web3.mjs', args: ['7D'] },
     { name: 'binance_web3_30d', script: 'scripts/import/import_binance_web3.mjs', args: ['30D'] },

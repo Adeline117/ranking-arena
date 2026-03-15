@@ -680,7 +680,7 @@ export const PLATFORM_FORMAT: Record<string, PlatformFormatConfig> = {
 
   // CEX platforms returning percentage ROI
   binance_futures:  { roiFormat: 'percentage', winRateFormat: 'decimal' },
-  binance_spot:     { roiFormat: 'percentage', winRateFormat: 'decimal' },
+  // binance_spot: REMOVED 2026-03-14
   bybit:            { roiFormat: 'percentage', winRateFormat: 'percentage' },
   bybit_spot:       { roiFormat: 'percentage', winRateFormat: 'percentage' },
   okx_futures:      { roiFormat: 'percentage', winRateFormat: 'percentage' },

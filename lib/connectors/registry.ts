@@ -215,7 +215,7 @@ export async function initializeConnectors(): Promise<void> {
  */
 const IMPLEMENTED_PLATFORMS: GranularPlatform[] = [
   'binance_futures',
-  'binance_spot',
+  // 'binance_spot', — PERMANENTLY REMOVED (2026-03-14): repeatedly hangs 45-76min, blocks entire pipeline
   'bybit',
   'bitget_futures',
   'bitget_spot',
@@ -258,8 +258,7 @@ function createLegacyConnector(platform: GranularPlatform): AnyConnector | null 
   switch (platform) {
     case 'binance_futures':
       return new BinanceFuturesConnector()
-    case 'binance_spot':
-      return new BinanceSpotConnector()
+    // binance_spot: PERMANENTLY REMOVED (2026-03-14) - repeatedly hangs 45-76min, blocks entire pipeline
     case 'bybit':
       return new BybitConnector()
     case 'bitget_futures':

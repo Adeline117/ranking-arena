@@ -32,7 +32,7 @@ export interface PlatformCronConfig {
 export const PLATFORM_CRON_CONFIGS: PlatformCronConfig[] = [
   // 高优先级 - 每小时
   { platform: 'binance_futures', schedule: '0 * * * *', endpoint: '/api/cron/binance-futures', enabled: true, priority: 'high' },
-  { platform: 'binance_spot', schedule: '5 * * * *', endpoint: '/api/cron/binance-spot', enabled: true, priority: 'high' },
+  // binance_spot: PERMANENTLY REMOVED (2026-03-14) - repeatedly hangs 45-76min, blocks entire pipeline
   { platform: 'okx_futures', schedule: '10 * * * *', endpoint: '/api/cron/okx-futures', enabled: true, priority: 'high' },
   { platform: 'bybit', schedule: '15 * * * *', endpoint: '/api/cron/bybit', enabled: true, priority: 'high' },
   

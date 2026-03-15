@@ -19,7 +19,7 @@ export const maxDuration = 120
 
 const ALL_PLATFORMS = [
   'binance_futures',
-  'binance_spot',
+  // 'binance_spot', — REMOVED 2026-03-14: repeatedly hangs 45-76min
   'bybit',
   'bybit_spot',
   'okx_futures',

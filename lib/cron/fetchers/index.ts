@@ -15,7 +15,7 @@
  * Used by check-data-freshness and daily-digest for monitoring coverage.
  */
 const ACTIVE_PLATFORMS = [
-  'okx_futures', 'htx_futures', 'binance_futures', 'binance_spot',
+  'okx_futures', 'htx_futures', 'binance_futures', // binance_spot REMOVED 2026-03-14
   'binance_web3', 'okx_web3', 'bitget_futures', 'xt', 'bingx',
   'gateio', 'mexc', 'coinex', 'phemex', 'bybit', 'blofin',
   'bitfinex', 'toobit', 'drift', 'bitunix', 'btcc', 'web3_bot',

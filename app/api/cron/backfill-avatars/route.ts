@@ -345,7 +345,7 @@ async function fetchBitgetBulk(): Promise<Map<string, string>> {
 // Map platform to fetcher
 const INDIVIDUAL_FETCHERS: Record<string, (id: string) => Promise<string | null>> = {
   binance_futures: fetchBinanceFuturesAvatar,
-  binance_spot: fetchBinanceSpotAvatar,
+  // binance_spot: REMOVED 2026-03-14
   bybit: fetchBybitAvatar,
   bitget_futures: fetchBitgetAvatar,
   bitget_spot: fetchBitgetAvatar,
@@ -369,7 +369,7 @@ const BULK_FETCHERS: Record<string, () => Promise<Map<string, string>>> = {
   htx: fetchHTXBulk,
   okx_futures: fetchOKXBulk,
   binance_futures: fetchBinanceBulk,
-  binance_spot: fetchBinanceBulk,
+  // binance_spot: REMOVED 2026-03-14
   bybit: fetchBybitBulk,
   bitget_futures: fetchBitgetBulk,
   bitget_spot: fetchBitgetBulk,
