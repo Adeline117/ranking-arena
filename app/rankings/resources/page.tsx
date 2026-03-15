@@ -26,13 +26,13 @@ async function fetchLibraryItems(): Promise<{ items: LibraryItem[]; total: numbe
     const supabase = getSupabaseAdmin()
     const { data, count } = await supabase
       .from('library_items')
-      .select('*', { count: 'exact' })
+      .select('id, title, title_en, title_zh, author, category, cover_url, rating, rating_count, view_count, language, epub_url, pdf_url, file_key, content_url, created_at', { count: 'exact' })
       // Only show items that have at least one readable file source
       .or('epub_url.not.is.null,pdf_url.not.is.null,file_key.not.is.null,content_url.not.is.null')
       .order('created_at', { ascending: false })
       .range(0, 23)
 
-    return { items: data || [], total: count || 0 }
+    return { items: (data || []) as LibraryItem[], total: count || 0 }
   } catch (e) {
     logger.error('[Resources] Failed to prefetch:', e)
     return { items: [], total: 0 }
@@ -45,7 +45,7 @@ async function fetchFeatured(): Promise<LibraryItem[]> {
     const supabase = getSupabaseAdmin()
     const { data } = await supabase
       .from('library_items')
-      .select('*')
+      .select('id, title, title_en, title_zh, author, category, cover_url, rating, rating_count, view_count, language, epub_url, pdf_url, file_key, content_url, created_at')
       .not('cover_url', 'is', null)
       .eq('category', 'book')
       // Only show items that have at least one readable file source
@@ -54,7 +54,7 @@ async function fetchFeatured(): Promise<LibraryItem[]> {
       .order('created_at', { ascending: false })
       .limit(6)
 
-    return (data || []).filter((i: LibraryItem) => i.cover_url)
+    return ((data || []) as LibraryItem[]).filter((i) => i.cover_url)
   } catch {
     return []
   }
