@@ -158,54 +158,55 @@ export async function initializeConnectors(): Promise<void> {
   const { BinanceWeb3Connector } = await import('./platforms/binance-web3')
   const { BinanceSpotConnector: BinanceSpotConnectorNew } = await import('./platforms/binance-spot')
 
-  // Proxy URL for geo-blocked exchanges (Binance, OKX, BingX, HTX, dYdX, etc.)
-  // CF Worker is US-based = also geo-blocked. Use VPS SG proxy instead.
+  // Smart routing: determine proxy URL per-platform from route-config.
+  // Platforms whose first route is not 'direct' get the VPS proxy URL.
+  const { requiresProxy } = await import('./route-config')
   const proxyUrl = process.env.VPS_PROXY_SG || process.env.VPS_PROXY_URL || undefined
 
-  // CEX Connectors — all use VPS proxy for geo-blocked API access
-  connectorRegistry.register(new BinanceFuturesConnector({ proxyUrl }))
-  connectorRegistry.register(new BybitFuturesConnector({ proxyUrl }))
-  connectorRegistry.register(new BitgetFuturesConnector({ proxyUrl }))
-  connectorRegistry.register(new MexcFuturesConnector({ proxyUrl }))
-  // CoinEx: blocked from Vercel hnd1, needs VPS proxy
-  connectorRegistry.register(new CoinexFuturesConnector({ proxyUrl }))
-  // OKX: v5 API blocked from Vercel hnd1, needs VPS proxy
-  connectorRegistry.register(new OkxFuturesConnector({ proxyUrl }))
-  // connectorRegistry.register(new KucoinFuturesConnector()) // DEAD: APIs 404 since 2026-03
-  // connectorRegistry.register(new BitmartFuturesConnector({ proxyUrl })) // DEAD
-  connectorRegistry.register(new PhemexFuturesConnector())
-  connectorRegistry.register(new HtxFuturesConnector({ proxyUrl }))
-  connectorRegistry.register(new WeexFuturesConnector({ proxyUrl }))
-  connectorRegistry.register(new BingxFuturesConnector({ proxyUrl }))
-  // Gate.io: blocked from Vercel hnd1, needs VPS proxy
-  connectorRegistry.register(new GateioFuturesConnector({ proxyUrl }))
-  connectorRegistry.register(new XtFuturesConnector())
-  connectorRegistry.register(new LbankFuturesConnector())
-  connectorRegistry.register(new BlofinFuturesConnector())
+  // Helper: pass proxyUrl only if the platform requires it (geo-blocked / WAF)
+  const proxyFor = (platform: string) => requiresProxy(platform) ? { proxyUrl } : {}
+
+  // CEX Connectors
+  connectorRegistry.register(new BinanceFuturesConnector(proxyFor('binance_futures')))
+  connectorRegistry.register(new BybitFuturesConnector(proxyFor('bybit')))
+  connectorRegistry.register(new BitgetFuturesConnector(proxyFor('bitget_futures')))
+  connectorRegistry.register(new MexcFuturesConnector(proxyFor('mexc')))
+  connectorRegistry.register(new CoinexFuturesConnector(proxyFor('coinex')))
+  connectorRegistry.register(new OkxFuturesConnector(proxyFor('okx_futures')))
+  // connectorRegistry.register(new KucoinFuturesConnector()) // DEAD
+  // connectorRegistry.register(new BitmartFuturesConnector()) // DEAD
+  connectorRegistry.register(new PhemexFuturesConnector(proxyFor('phemex')))
+  connectorRegistry.register(new HtxFuturesConnector(proxyFor('htx_futures')))
+  connectorRegistry.register(new WeexFuturesConnector(proxyFor('weex')))
+  connectorRegistry.register(new BingxFuturesConnector(proxyFor('bingx')))
+  connectorRegistry.register(new GateioFuturesConnector(proxyFor('gateio')))
+  connectorRegistry.register(new XtFuturesConnector(proxyFor('xt')))
+  connectorRegistry.register(new LbankFuturesConnector(proxyFor('lbank')))
+  connectorRegistry.register(new BlofinFuturesConnector(proxyFor('blofin')))
 
   // New CEX Connectors
-  connectorRegistry.register(new BtccFuturesConnector({ proxyUrl }))
-  connectorRegistry.register(new BitunixFuturesConnector())
-  connectorRegistry.register(new BitfinexFuturesConnector())
-  connectorRegistry.register(new ToobitFuturesConnector())
-  connectorRegistry.register(new EtoroSpotConnector())
-  connectorRegistry.register(new BitgetSpotConnectorNew())
-  connectorRegistry.register(new BinanceSpotConnectorNew({ proxyUrl }))
+  connectorRegistry.register(new BtccFuturesConnector(proxyFor('btcc')))
+  connectorRegistry.register(new BitunixFuturesConnector(proxyFor('bitunix')))
+  connectorRegistry.register(new BitfinexFuturesConnector(proxyFor('bitfinex')))
+  connectorRegistry.register(new ToobitFuturesConnector(proxyFor('toobit')))
+  connectorRegistry.register(new EtoroSpotConnector(proxyFor('etoro')))
+  connectorRegistry.register(new BitgetSpotConnectorNew(proxyFor('bitget_spot')))
+  connectorRegistry.register(new BinanceSpotConnectorNew(proxyFor('binance_futures')))
 
   // DEX Connectors
-  connectorRegistry.register(new HyperliquidPerpConnector())
-  connectorRegistry.register(new DydxPerpConnector({ proxyUrl }))
-  connectorRegistry.register(new GmxPerpConnector())
-  connectorRegistry.register(new GainsPerpConnector())
-  connectorRegistry.register(new KwentaPerpConnector())
+  connectorRegistry.register(new HyperliquidPerpConnector(proxyFor('hyperliquid')))
+  connectorRegistry.register(new DydxPerpConnector(proxyFor('dydx')))
+  connectorRegistry.register(new GmxPerpConnector(proxyFor('gmx')))
+  connectorRegistry.register(new GainsPerpConnector(proxyFor('gains')))
+  connectorRegistry.register(new KwentaPerpConnector(proxyFor('kwenta')))
   connectorRegistry.register(new MuxPerpConnector())
-  connectorRegistry.register(new AevoPerpConnector())
-  connectorRegistry.register(new JupiterPerpsPerpConnector())
-  connectorRegistry.register(new DriftPerpConnector())
+  connectorRegistry.register(new AevoPerpConnector(proxyFor('aevo')))
+  connectorRegistry.register(new JupiterPerpsPerpConnector(proxyFor('jupiter_perps')))
+  connectorRegistry.register(new DriftPerpConnector(proxyFor('drift')))
 
   // Web3 Connectors
-  connectorRegistry.register(new OkxWeb3Connector())
-  connectorRegistry.register(new BinanceWeb3Connector())
+  connectorRegistry.register(new OkxWeb3Connector(proxyFor('okx_web3')))
+  connectorRegistry.register(new BinanceWeb3Connector(proxyFor('binance_web3')))
   connectorRegistry.register(new Web3BotConnector())
 }
 

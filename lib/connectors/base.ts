@@ -465,6 +465,122 @@ export abstract class BaseConnector implements PlatformConnector {
   }
 
   // ============================================
+  // Smart Routing
+  // ============================================
+
+  /**
+   * Fetch a URL using the smart route configuration for this platform.
+   * Tries routes in priority order with automatic failover.
+   *
+   * Unlike `request()` which uses a single proxyUrl from config,
+   * this method consults PLATFORM_ROUTES for ordered fallback routes.
+   *
+   * @param url - Target API URL
+   * @param options - Fetch options (method, headers, body)
+   * @param timeoutMs - Per-route timeout (default: 15s)
+   * @returns Parsed JSON response
+   * @throws Error if all routes fail
+   */
+  protected async fetchWithSmartRoute<T>(
+    url: string,
+    options?: { method?: string; headers?: Record<string, string>; body?: unknown },
+    timeoutMs = 15000
+  ): Promise<T> {
+    const routeModule = await import('./route-config')
+    const config = routeModule.getRouteConfig(this.platform)
+    const errors: string[] = []
+
+    for (const route of config.routes) {
+      try {
+        const result = await this.executeRoute<T>(route, url, options, timeoutMs)
+        if (result !== null) {
+          return result
+        }
+        errors.push(`${route}: null response`)
+      } catch (e) {
+        errors.push(`${route}: ${toError(e).message.substring(0, 80)}`)
+      }
+    }
+
+    throw new ConnectorError(
+      `All routes failed for ${url}: ${errors.join(' | ')}`,
+      this.platform,
+      this.marketType
+    )
+  }
+
+  /**
+   * Execute a single route attempt.
+   */
+  private async executeRoute<T>(
+    route: string,
+    url: string,
+    options?: { method?: string; headers?: Record<string, string>; body?: unknown },
+    timeoutMs = 15000
+  ): Promise<T | null> {
+    const { resolveRouteUrl, resolveRouteKey } = await import('./route-config')
+    const method = options?.method || 'GET'
+
+    if (route === 'direct') {
+      const controller = new AbortController()
+      const timeout = setTimeout(() => controller.abort(), timeoutMs)
+      try {
+        const res = await fetch(url, {
+          method,
+          headers: {
+            'User-Agent': this.config.userAgent,
+            Accept: 'application/json',
+            ...options?.headers,
+          },
+          body: options?.body ? (typeof options.body === 'string' ? options.body : JSON.stringify(options.body)) : undefined,
+          signal: controller.signal,
+        })
+        clearTimeout(timeout)
+        if (!res.ok) throw new Error(`HTTP ${res.status}`)
+        return await res.json() as T
+      } finally {
+        clearTimeout(timeout)
+      }
+    }
+
+    // Proxy routes: vps_sg, vps_jp, scraper_sg, mac_mini
+    const proxyUrl = resolveRouteUrl(route as any)
+    const proxyKey = resolveRouteKey(route as any)
+    if (!proxyUrl) return null // Route not configured
+
+    // For scraper routes, use named endpoints if available
+    if (route === 'scraper_sg') {
+      // Scraper endpoints are on the same host as the proxy
+      // But we still use /proxy for generic forwarding
+      // Named endpoints like /bybit/leaderboard are handled by connectors directly
+    }
+
+    const proxyBody: Record<string, unknown> = {
+      url,
+      method,
+      headers: {
+        'User-Agent': this.config.userAgent,
+        Accept: 'application/json',
+        ...options?.headers,
+      },
+    }
+    if (options?.body) proxyBody.body = options.body
+
+    const res = await fetch(`${proxyUrl}/proxy`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Proxy-Key': proxyKey,
+      },
+      body: JSON.stringify(proxyBody),
+      signal: AbortSignal.timeout(timeoutMs),
+    })
+
+    if (!res.ok) throw new Error(`Proxy ${route} returned ${res.status}`)
+    return await res.json() as T
+  }
+
+  // ============================================
   // Quality Flag Helpers
   // ============================================
 
