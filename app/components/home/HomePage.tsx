@@ -8,7 +8,7 @@ import TopNav from '../layout/TopNav'
 // MobileBottomNav is rendered in root layout.tsx -- do not duplicate here
 import ThreeColumnLayout from '../layout/ThreeColumnLayout'
 const Footer = lazy(() => import('../layout/Footer'))
-// HomeSubNav removed from homepage — resources/institutions/tools accessible via TopNav or direct URL
+import HomeSubNav from './HomeSubNav'
 import FoundingMemberBanner from './FoundingMemberBanner'
 const ExchangePartners = lazy(() => import('./ExchangePartners'))
 const GuestSignupPrompt = lazy(() => import('./GuestSignupPrompt'))
@@ -74,7 +74,8 @@ export default function HomePage({ initialTraders, initialLastUpdated }: HomePag
       >
         <h1 className="sr-only">Arena</h1>
         <Suspense fallback={null}><HomeHero /></Suspense>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 8 }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+          <HomeSubNav />
           <FoundingMemberBanner />
         </div>
         <Suspense fallback={null}><ExchangePartners /></Suspense>
