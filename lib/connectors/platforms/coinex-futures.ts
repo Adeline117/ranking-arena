@@ -48,11 +48,11 @@ export class CoinexFuturesConnector extends BaseConnector {
 
     while (currentPage <= maxPages) {
       const _rawLb = await this.request<Record<string, unknown>>(
-        `https://www.coinex.com/res/copy-trading/traders?page=${currentPage}&limit=${limit}&sort_by=roi&period=${window}`,
+        `https://www.coinex.com/res/copy-trading/public/traders?page=${currentPage}&limit=${limit}&sort_by=roi&period=${window}`,
         { method: 'GET' }
       )
       const data = warnValidate(CoinexFuturesLeaderboardResponseSchema, _rawLb, 'coinex-futures/leaderboard')
-      const list = data?.data?.items || []
+      const list = data?.data?.items || data?.data?.data || []
       if (!Array.isArray(list) || list.length === 0) break
 
       const traders: TraderSource[] = list.map((item: Record<string, unknown>) => ({

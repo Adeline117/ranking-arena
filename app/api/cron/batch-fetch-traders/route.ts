@@ -48,16 +48,17 @@ const GROUPS: Record<string, string[]> = {
   // gmx: DEAD — REST API + subgraph both returning 404 since 2026-03-14
   b: ['hyperliquid'],
   // Group C: Mid-priority (every 4h)
-  // DISABLED 2026-03-15: okx_web3 (400), aevo (0 traders) all failing
-  c: [],
+  // okx_futures: FIXED 2026-03-15 (switched to v5 copytrading API)
+  // okx_web3/aevo: still broken
+  c: ['okx_futures'],
   // Group D1: CEX (every 6h)
   // DISABLED 2026-03-15: htx_futures (405); gains kept for now
   d1: ['gains'],
   // Group D2: DEX only (every 6h)
   d2: ['dydx'],
   // Group E: CEX+DEX (every 6h)
-  // DISABLED 2026-03-15: coinex (404), binance_web3 (0 traders); bitfinex kept
-  e: ['bitfinex'],
+  // coinex: FIXED 2026-03-15 (URL /traders → /public/traders)
+  e: ['bitfinex', 'coinex'],
   // Group F: CEX (every 6h)
   f: ['mexc', 'bingx'],
   // Group H: CEX (every 6h)

@@ -15,6 +15,8 @@ import type {
 } from '../../types/leaderboard'
 
 const WINDOW_MAP: Record<Window, string> = { '7d': '7', '30d': '30', '90d': '90' }
+// Mapping for v5 copytrading API
+const V5_WINDOW_MAP: Record<Window, string> = { '7d': '7d', '30d': '30d', '90d': '90d' }
 
 export class OkxFuturesConnector extends BaseConnector {
   readonly platform = 'okx' as const
@@ -32,19 +34,32 @@ export class OkxFuturesConnector extends BaseConnector {
   }
 
   async discoverLeaderboard(window: Window, limit = 20, offset = 0): Promise<DiscoverResult> {
-    const pageNo = Math.floor(offset / limit) + 1
-    const _rawLb = await this.request<Record<string, unknown>>(
-      `https://www.okx.com/priapi/v5/ecotrade/public/trader-list?sortType=profitRatio&dataRange=${WINDOW_MAP[window]}&pageNo=${pageNo}&pageSize=${limit}`,
-      { method: 'GET' }
-    )
+    const page = Math.floor(offset / limit) + 1
+
+    // Primary: v5 copytrading public API (priapi removed ~2026-03-14)
+    let _rawLb: Record<string, unknown>
+    try {
+      _rawLb = await this.request<Record<string, unknown>>(
+        `https://www.okx.com/api/v5/copytrading/public-lead-traders?instType=SWAP&sortType=pnl&dataRange=${V5_WINDOW_MAP[window]}&page=${page}&limit=${limit}`,
+        { method: 'GET' }
+      )
+    } catch {
+      // Fallback: old priapi endpoint
+      _rawLb = await this.request<Record<string, unknown>>(
+        `https://www.okx.com/priapi/v5/ecotrade/public/trader-list?sortType=profitRatio&dataRange=${WINDOW_MAP[window]}&pageNo=${page}&pageSize=${limit}`,
+        { method: 'GET' }
+      )
+    }
     const data = warnValidate(OkxFuturesLeaderboardResponseSchema, _rawLb, 'okx-futures/leaderboard')
-    const list = data?.data?.ranks || []
+    // v5 response: data[0].ranks  OR  data.ranks
+    const dataArr = Array.isArray(data?.data) ? data.data[0] : data?.data
+    const list = dataArr?.ranks || []
 
     const traders: TraderSource[] = (Array.isArray(list) ? list : []).map((item: Record<string, unknown>) => ({
       platform: 'okx' as const, market_type: 'futures' as const,
-      trader_key: String(item.uniqueName || ''),
+      trader_key: String(item.uniqueCode || item.uniqueName || ''),
       display_name: (item.nickName as string) || null,
-      profile_url: `https://www.okx.com/copy-trading/account/${item.uniqueName}`,
+      profile_url: `https://www.okx.com/copy-trading/account/${item.uniqueCode || item.uniqueName}`,
       discovered_at: new Date().toISOString(), last_seen_at: new Date().toISOString(),
       is_active: true, raw: item as Record<string, unknown>,
     }))
