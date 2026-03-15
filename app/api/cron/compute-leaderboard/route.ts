@@ -245,44 +245,10 @@ async function computeSeason(
 
   const allSnapshots: TraderRow[] = []
 
-  // Fetch snapshots for all sources in parallel (batched)
-  const batchSize = 10
-  for (let i = 0; i < ALL_SOURCES.length; i += batchSize) {
-    const batch = ALL_SOURCES.slice(i, i + batchSize)
-    const results = await Promise.all(
-      batch.map(async (source) => {
-        const rows: TraderRow[] = []
-        let page = 0
-        const pageSize = 1000
-        const maxPages = 10 // Safety cap: max 10K rows per source to prevent runaway queries
-
-        while (page < maxPages) {
-          const { data, error } = await supabase
-            .from('trader_snapshots')
-            .select('source, source_trader_id, roi, pnl, win_rate, max_drawdown, trades_count, followers, arena_score, captured_at, full_confidence_at, profitability_score, risk_control_score, execution_score, score_completeness, trading_style, avg_holding_hours, style_confidence, sharpe_ratio, trader_type')
-            .eq('source', source)
-            .eq('season_id', season)
-            .gte('captured_at', freshnessISOBySource(source))
-            .order('captured_at', { ascending: false })
-            .range(page * pageSize, (page + 1) * pageSize - 1)
-
-          if (error || !data?.length) break
-          rows.push(...(data as TraderRow[]))
-          if (data.length < pageSize) break
-          page++
-        }
-        if (page >= maxPages) {
-          logger.warn(`${source}/${season}: hit ${maxPages}-page cap (${rows.length} rows), some data may be truncated`)
-        }
-        return rows
-      })
-    )
-    results.forEach(rows => allSnapshots.push(...rows))
-  }
-
-  // Also fetch from trader_snapshots_v2 (some connectors write v2 only)
+  // Fetch v2 FIRST so it gets dedup priority (v2 is newer, more reliable)
   // Column mapping: platform→source, trader_key→source_trader_id, window→season_id,
   //                  roi_pct→roi, pnl_usd→pnl, created_at→captured_at
+  const batchSize = 10
   const v2Window = season // V2 uses same format as v1: '7D', '30D', '90D'
   for (let i = 0; i < ALL_SOURCES.length; i += batchSize) {
     const batch = ALL_SOURCES.slice(i, i + batchSize)
@@ -330,7 +296,41 @@ async function computeSeason(
     )
     results.forEach(rows => allSnapshots.push(...rows))
   }
-  logger.info(`[${season}] Fetched ${allSnapshots.length} total snapshots (v1 + v2)`)
+
+  // Then fetch v1 snapshots (legacy fallback — dedup keeps v2 entry if both exist)
+  for (let i = 0; i < ALL_SOURCES.length; i += batchSize) {
+    const batch = ALL_SOURCES.slice(i, i + batchSize)
+    const results = await Promise.all(
+      batch.map(async (source) => {
+        const rows: TraderRow[] = []
+        let page = 0
+        const pageSize = 1000
+        const maxPages = 10 // Safety cap: max 10K rows per source to prevent runaway queries
+
+        while (page < maxPages) {
+          const { data, error } = await supabase
+            .from('trader_snapshots')
+            .select('source, source_trader_id, roi, pnl, win_rate, max_drawdown, trades_count, followers, arena_score, captured_at, full_confidence_at, profitability_score, risk_control_score, execution_score, score_completeness, trading_style, avg_holding_hours, style_confidence, sharpe_ratio, trader_type')
+            .eq('source', source)
+            .eq('season_id', season)
+            .gte('captured_at', freshnessISOBySource(source))
+            .order('captured_at', { ascending: false })
+            .range(page * pageSize, (page + 1) * pageSize - 1)
+
+          if (error || !data?.length) break
+          rows.push(...(data as TraderRow[]))
+          if (data.length < pageSize) break
+          page++
+        }
+        if (page >= maxPages) {
+          logger.warn(`${source}/${season}: hit ${maxPages}-page cap (${rows.length} rows), some data may be truncated`)
+        }
+        return rows
+      })
+    )
+    results.forEach(rows => allSnapshots.push(...rows))
+  }
+  logger.info(`[${season}] Fetched ${allSnapshots.length} total snapshots (v2 + v1)`)
 
   // Dedupe: keep latest per source+source_trader_id
   // Normalize 0x addresses to lowercase to prevent case-sensitive duplicates
