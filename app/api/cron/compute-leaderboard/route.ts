@@ -64,8 +64,8 @@ function getFreshnessHours(source: string): number {
   const sourceType = SOURCE_TYPE_MAP[source]
   return sourceType === 'web3' ? DATA_FRESHNESS_HOURS_DEX : DATA_FRESHNESS_HOURS_CEX
 }
-const MIN_TRADES_COUNT = 3
-const DEGRADATION_THRESHOLD = 0.70 // 70% - raised because VPS cron re-imports checksum 0x addresses, inflating old counts with duplicates
+const MIN_TRADES_COUNT = 1 // Allow all traders with at least 1 trade (DEX traders may have 1-2 high-quality trades)
+const DEGRADATION_THRESHOLD = 0.50 // 50% — 70% was too aggressive, normal daily variance = 30-40%
 
 // P1-3: ROI anomaly thresholds per period
 const ROI_ANOMALY_THRESHOLDS: Record<Period, number> = {
@@ -354,9 +354,10 @@ async function computeSeason(
 
   const roiThreshold = ROI_ANOMALY_THRESHOLDS[season]
   const uniqueTraders = Array.from(traderMap.values())
-    .filter(t => Math.abs(t.roi ?? 0) <= roiThreshold)
-    .filter(t => (t.roi ?? 0) > -90) // 过滤已爆仓交易员（ROI < -90%），无参考价值
-    .filter(t => t.trades_count == null || t.trades_count >= MIN_TRADES_COUNT) // P1-2: minimum trades (skip check if null)
+    .filter(t => t.roi != null) // Must have ROI data — null ROI traders shouldn't be ranked
+    .filter(t => Math.abs(t.roi!) <= roiThreshold)
+    .filter(t => t.roi! > -90) // 过滤已爆仓交易员（ROI < -90%），无参考价值
+    .filter(t => t.trades_count == null || t.trades_count >= MIN_TRADES_COUNT)
 
   if (!uniqueTraders.length) return 0
 
@@ -446,7 +447,7 @@ async function computeSeason(
 
     const scoreResult = calculateArenaScore(
       {
-        roi: t.roi ?? 0,
+        roi: t.roi!, // guaranteed non-null by filter above
         pnl: t.pnl ?? 0,
         maxDrawdown: t.max_drawdown,
         winRate: normalizedWinRate,
