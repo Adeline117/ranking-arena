@@ -242,6 +242,12 @@ export abstract class BaseConnector implements PlatformConnector {
         let response: Response
         if (this.config.proxyUrl) {
           // VPS proxy: POST with JSON body containing the target request
+          // Parse body string back to object to avoid double-JSON-encoding
+          let proxyBody: unknown = null
+          if (options?.body) {
+            try { proxyBody = typeof options.body === 'string' ? JSON.parse(options.body) : options.body }
+            catch { proxyBody = options.body }
+          }
           response = await fetch(this.config.proxyUrl, {
             method: 'POST',
             signal: controller.signal,
@@ -258,7 +264,7 @@ export abstract class BaseConnector implements PlatformConnector {
                 ...this.config.headers,
                 ...options?.headers,
               },
-              body: options?.body,
+              body: proxyBody,
             }),
           })
         } else {
