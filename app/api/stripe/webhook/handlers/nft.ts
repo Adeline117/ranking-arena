@@ -28,7 +28,8 @@ export async function mintNFTForUser(userId: string, plan: string) {
       return
     }
 
-    const mintPlan = plan === 'yearly' ? 'yearly' : 'monthly'
+    // Lifetime plans use 'yearly' duration for NFT (renewed indefinitely via webhook)
+    const mintPlan: 'monthly' | 'yearly' = plan === 'monthly' ? 'monthly' : 'yearly'
     const result = await mintMembershipNFT(profile.wallet_address, mintPlan)
 
     if (result.success) {
