@@ -494,50 +494,50 @@ export async function getTraderFeed(handle: string): Promise<TraderFeedItem[]> {
   try {
     const decodedHandle = decodeURIComponent(handle)
 
-    const [postsResult, userProfileResult] = await Promise.all([
-      supabase
-        .from('posts')
-        .select('id, title, content, created_at, group_id, like_count, is_pinned, groups(name)')
-        .or(`author_handle.eq.${handle},author_handle.eq.${decodedHandle}`)
-        .order('created_at', { ascending: false })
-        .limit(20),
-      supabase
-        .from('user_profiles')
-        .select('id')
-        .or(`handle.eq.${handle},handle.eq.${decodedHandle}`)
-        .limit(1)
-        .maybeSingle(),
-    ])
+    // Launch posts, user profile, and reposts queries in parallel
+    // We need the user profile ID for reposts, so we launch profile + posts together,
+    // then immediately chain the reposts query off the profile result
+    const postsPromise = supabase
+      .from('posts')
+      .select('id, title, content, created_at, group_id, like_count, is_pinned, groups(name)')
+      .or(`author_handle.eq.${handle},author_handle.eq.${decodedHandle}`)
+      .order('created_at', { ascending: false })
+      .limit(20)
 
-    const posts = postsResult.data || []
-    const userProfile = userProfileResult.data
-
-    let repostsData: unknown[] = []
-
-    if (userProfile?.id) {
-      const { data } = await supabase
-        .from('reposts')
-        .select(`
-          id,
-          comment,
-          created_at,
-          post_id,
-          posts (
+    const repostsPromise = supabase
+      .from('user_profiles')
+      .select('id')
+      .or(`handle.eq.${handle},handle.eq.${decodedHandle}`)
+      .limit(1)
+      .maybeSingle()
+      .then(async (userProfileResult) => {
+        const userProfile = userProfileResult.data
+        if (!userProfile?.id) return [] as unknown[]
+        const { data } = await supabase
+          .from('reposts')
+          .select(`
             id,
-            title,
-            content,
-            author_handle,
-            group_id,
-            like_count,
-            groups (name)
-          )
-        `)
-        .eq('user_id', userProfile.id)
-        .order('created_at', { ascending: false })
-        .limit(20)
+            comment,
+            created_at,
+            post_id,
+            posts (
+              id,
+              title,
+              content,
+              author_handle,
+              group_id,
+              like_count,
+              groups (name)
+            )
+          `)
+          .eq('user_id', userProfile.id)
+          .order('created_at', { ascending: false })
+          .limit(20)
+        return (data || []) as unknown[]
+      })
 
-      if (data) repostsData = data
-    }
+    const [postsResult, repostsData] = await Promise.all([postsPromise, repostsPromise])
+    const posts = postsResult.data || []
 
     const feedItems: TraderFeedItem[] = posts.map((post) => {
       const p = post as Record<string, unknown>

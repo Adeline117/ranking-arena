@@ -124,7 +124,7 @@ export const TraderRow = memo(function TraderRow({
   const removeTrader = useComparisonStore(s => s.removeTrader)
   const canAddMore = useComparisonStore(s => s.selectedTraders.length < 5)
 
-  // Prefetch trader detail on hover with 150ms debounce to prevent
+  // Prefetch trader detail on hover with 300ms debounce to prevent
   // firing 20-50 requests during rapid scroll over rows
   const hoverTimerRef = useRef<ReturnType<typeof setTimeout>>(null)
   useEffect(() => () => { if (hoverTimerRef.current) clearTimeout(hoverTimerRef.current) }, [])
@@ -133,7 +133,7 @@ export const TraderRow = memo(function TraderRow({
     hoverTimerRef.current = setTimeout(() => {
       const detailUrl = `/api/traders/${encodeURIComponent(traderHandle)}`
       mutate(detailUrl, rawFetcher<{ success: boolean; data: unknown }>(detailUrl).then(r => r && typeof r === 'object' && 'data' in r ? r.data : r), { revalidate: false })
-    }, 150)
+    }, 300)
   }, [traderHandle])
   const handleMouseLeave = useCallback(() => {
     if (hoverTimerRef.current) clearTimeout(hoverTimerRef.current)
