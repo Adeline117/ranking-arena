@@ -373,7 +373,7 @@ export abstract class BaseConnector implements PlatformConnector {
     params: Record<string, string | number> = {},
     timeoutMs = 120000
   ): Promise<T | null> {
-    const vpsHost = process.env.VPS_PROXY_URL || process.env.VPS_SCRAPER_HOST;
+    const vpsHost = process.env.VPS_PROXY_SG || process.env.VPS_PROXY_URL || process.env.VPS_SCRAPER_HOST;
     const vpsKey = process.env.VPS_PROXY_KEY;
 
     if (!vpsHost || !vpsKey) {
@@ -384,15 +384,20 @@ export abstract class BaseConnector implements PlatformConnector {
       const queryString = new URLSearchParams(
         Object.entries(params).map(([k, v]) => [k, String(v)])
       ).toString();
-      const url = `${vpsHost}${endpoint}${queryString ? `?${queryString}` : ''}`;
 
-      const response = await fetch(url, {
-        method: 'GET',
+      // VPS now runs a /proxy endpoint that forwards requests to the target URL.
+      // Old-style named endpoints (/bybit/leaderboard) are no longer supported.
+      // We need to construct the target URL and POST it to /proxy.
+      const targetUrl = `${endpoint}${queryString ? `?${queryString}` : ''}`;
+
+      const response = await fetch(`${vpsHost}/proxy`, {
+        method: 'POST',
         headers: {
           'X-Proxy-Key': vpsKey,
-          'User-Agent': this.config.userAgent,
+          'Content-Type': 'application/json',
           'Accept': 'application/json',
         },
+        body: JSON.stringify({ url: targetUrl, method: 'GET' }),
         signal: AbortSignal.timeout(timeoutMs),
       });
 
@@ -405,6 +410,56 @@ export abstract class BaseConnector implements PlatformConnector {
       return data;
     } catch (error) {
       console.warn(`[VPS] ${this.platform} failed:`, toError(error).message);
+      return null;
+    }
+  }
+
+  /**
+   * Forward an arbitrary request through the VPS proxy.
+   * Unlike fetchViaVPS which constructs a URL from endpoint+params,
+   * this accepts a full URL and optional method/body/headers.
+   */
+  protected async proxyViaVPS<T = unknown>(
+    targetUrl: string,
+    options: { method?: string; body?: unknown; headers?: Record<string, string> } = {},
+    timeoutMs = 120000
+  ): Promise<T | null> {
+    const vpsHost = process.env.VPS_PROXY_SG || process.env.VPS_PROXY_URL || process.env.VPS_SCRAPER_HOST;
+    const vpsKey = process.env.VPS_PROXY_KEY;
+
+    if (!vpsHost || !vpsKey) return null;
+
+    try {
+      const proxyBody: Record<string, unknown> = {
+        url: targetUrl,
+        method: options.method || 'GET',
+      };
+      if (options.body) {
+        proxyBody.body = typeof options.body === 'string' ? options.body : JSON.stringify(options.body);
+      }
+      if (options.headers) {
+        proxyBody.headers = options.headers;
+      }
+
+      const response = await fetch(`${vpsHost}/proxy`, {
+        method: 'POST',
+        headers: {
+          'X-Proxy-Key': vpsKey,
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+        },
+        body: JSON.stringify(proxyBody),
+        signal: AbortSignal.timeout(timeoutMs),
+      });
+
+      if (!response.ok) {
+        console.warn(`[VPS-proxy] ${this.platform} returned ${response.status}`);
+        return null;
+      }
+
+      return await response.json() as T;
+    } catch (error) {
+      console.warn(`[VPS-proxy] ${this.platform} failed:`, toError(error).message);
       return null;
     }
   }

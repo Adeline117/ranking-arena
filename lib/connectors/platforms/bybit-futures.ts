@@ -60,13 +60,10 @@ export class BybitFuturesConnector extends BaseConnector {
         { method: 'GET' }
       )
     } catch {
-      // Fallback: VPS scraper (Singapore VPS at 45.76.152.169:3456)
-      const vpsData = await this.fetchViaVPS<Record<string, unknown>>('/bybit/leaderboard', {
-        timeRange,
-        page: String(page),
-        pageSize: String(limit),
-      })
-      if (!vpsData) throw new Error('Both direct API and VPS scraper failed for bybit')
+      // Fallback: VPS proxy (forward full URL through VPS)
+      const directUrl = `https://api2.bybit.com/fapi/beehive/public/v1/common/dynamic-leader-list?timeRange=${timeRange}&dataType=DATA_ROI&page=${page}&pageSize=${limit}`
+      const vpsData = await this.proxyViaVPS<Record<string, unknown>>(directUrl)
+      if (!vpsData) throw new Error('Both direct API and VPS proxy failed for bybit')
       _rawLb = vpsData
     }
     const data = warnValidate(BybitFuturesLeaderboardResponseSchema, _rawLb, 'bybit-futures/leaderboard')
