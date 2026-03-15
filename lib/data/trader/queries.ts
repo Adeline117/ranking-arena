@@ -601,12 +601,12 @@ export async function resolveTrader(supabase: SupabaseClient, params: {
   const decodedHandle = decodeURIComponent(params.handle)
   const platformFilter = params.platform
 
-  // 1. Try trader_sources by handle
+  // Steps 1+2 combined: Try trader_sources by handle OR source_trader_id (single query)
   {
     let query = supabase
       .from('trader_sources')
       .select('source, source_trader_id, handle, avatar_url')
-      .eq('handle', decodedHandle)
+      .or(`handle.eq.${decodedHandle},source_trader_id.eq.${decodedHandle}`)
 
     if (platformFilter) {
       query = query.eq('source', platformFilter)
@@ -623,69 +623,44 @@ export async function resolveTrader(supabase: SupabaseClient, params: {
     }
   }
 
-  // 2. Try trader_sources by source_trader_id
+  // Steps 3+4 in parallel: leaderboard_ranks + trader_profiles_v2
   {
-    let query = supabase
-      .from('trader_sources')
-      .select('source, source_trader_id, handle, avatar_url')
-      .eq('source_trader_id', decodedHandle)
-
-    if (platformFilter) {
-      query = query.eq('source', platformFilter)
-    }
-
-    const { data } = await query.limit(1).maybeSingle()
-    if (data) {
-      return {
-        platform: data.source,
-        traderKey: data.source_trader_id,
-        handle: data.handle || null,
-        avatarUrl: data.avatar_url || null,
-      }
-    }
-  }
-
-  // 3. Try leaderboard_ranks by source_trader_id (covers traders not in trader_sources)
-  {
-    let query = supabase
+    let lbQuery = supabase
       .from('leaderboard_ranks')
       .select('source, source_trader_id, handle, avatar_url')
       .eq('source_trader_id', decodedHandle)
       .eq('season_id', '90D')
 
-    if (platformFilter) {
-      query = query.eq('source', platformFilter)
-    }
-
-    const { data } = await query.limit(1).maybeSingle()
-    if (data) {
-      return {
-        platform: data.source,
-        traderKey: data.source_trader_id,
-        handle: data.handle || null,
-        avatarUrl: data.avatar_url || null,
-      }
-    }
-  }
-
-  // 4. Try trader_profiles_v2 by trader_key
-  {
-    let query = supabase
+    let profileQuery = supabase
       .from('trader_profiles_v2')
       .select('platform, trader_key, display_name, avatar_url')
       .eq('trader_key', decodedHandle)
 
     if (platformFilter) {
-      query = query.eq('platform', platformFilter)
+      lbQuery = lbQuery.eq('source', platformFilter)
+      profileQuery = profileQuery.eq('platform', platformFilter)
     }
 
-    const { data } = await query.limit(1).maybeSingle()
-    if (data) {
+    const [lbResult, profileResult] = await Promise.all([
+      lbQuery.limit(1).maybeSingle(),
+      profileQuery.limit(1).maybeSingle(),
+    ])
+
+    if (lbResult.data) {
       return {
-        platform: data.platform,
-        traderKey: data.trader_key,
-        handle: data.display_name || null,
-        avatarUrl: data.avatar_url || null,
+        platform: lbResult.data.source,
+        traderKey: lbResult.data.source_trader_id,
+        handle: lbResult.data.handle || null,
+        avatarUrl: lbResult.data.avatar_url || null,
+      }
+    }
+
+    if (profileResult.data) {
+      return {
+        platform: profileResult.data.platform,
+        traderKey: profileResult.data.trader_key,
+        handle: profileResult.data.display_name || null,
+        avatarUrl: profileResult.data.avatar_url || null,
       }
     }
   }

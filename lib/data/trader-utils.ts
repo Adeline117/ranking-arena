@@ -168,6 +168,7 @@ export async function findTradersAcrossSources(
 
 /**
  * 获取交易员的 Arena 粉丝数（批量版本）
+ * Uses RPC count_trader_followers for GROUP BY count (1 row per trader, not 1 row per follow)
  */
 export async function getTraderArenaFollowersCountBatch(
   client: SupabaseClient,
@@ -177,18 +178,13 @@ export async function getTraderArenaFollowersCountBatch(
   if (traderIds.length === 0) return result
 
   try {
-    // Single grouped query instead of N individual COUNT queries.
-    // Uses a raw SELECT with GROUP BY to get all counts in one round-trip.
     const { data, error } = await client
-      .from('trader_follows')
-      .select('trader_id')
-      .in('trader_id', traderIds)
+      .rpc('count_trader_followers', { trader_ids: traderIds })
 
     if (error || !data) return result
 
-    // Count occurrences in JS (Supabase JS client doesn't support GROUP BY directly)
-    for (const row of data as { trader_id: string }[]) {
-      result.set(row.trader_id, (result.get(row.trader_id) || 0) + 1)
+    for (const row of data as { trader_id: string; cnt: number }[]) {
+      result.set(row.trader_id, row.cnt)
     }
 
     return result

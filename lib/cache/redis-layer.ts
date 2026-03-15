@@ -388,11 +388,13 @@ export async function warmupCache<T>(
   const redis = await initRedis()
   const memoryCache = getMemoryCache()
   
+  const now = Date.now()
+  const pipelineOps: Array<{ key: string; value: CacheEntry<T>; ttl: number }> = []
+
   for (const entry of entries) {
     const tier = entry.tier || 'warm'
     const config = CACHE_TIERS[tier]
-    const now = Date.now()
-    
+
     const cacheEntry: CacheEntry<T> = {
       data: entry.data,
       tier,
@@ -400,21 +402,26 @@ export async function warmupCache<T>(
       expiresAt: now + config.redisTtlSeconds * 1000,
       hitCount: 0,
     }
-    
+
     // 写入内存
     memoryCache.set(entry.key, cacheEntry, config.memoryTtlSeconds)
-    
-    // 写入 Redis
-    if (redis) {
-      try {
-        await redis.set(entry.key, cacheEntry, { ex: config.redisTtlSeconds })
-        successCount++
-      } catch (error) {
-        dataLogger.warn('[RedisLayer] 预热写入失败:', { key: entry.key, error })
+    pipelineOps.push({ key: entry.key, value: cacheEntry, ttl: config.redisTtlSeconds })
+  }
+
+  // 批量写入 Redis（单次网络往返）
+  if (redis && pipelineOps.length > 0) {
+    try {
+      const pipeline = redis.pipeline()
+      for (const op of pipelineOps) {
+        pipeline.set(op.key, op.value, { ex: op.ttl })
       }
-    } else {
-      successCount++ // 内存写入成功也算
+      const results = await pipeline.exec()
+      successCount = results.filter(r => r !== null && r !== undefined).length
+    } catch (error) {
+      dataLogger.warn('[RedisLayer] 批量预热写入失败:', { error, count: pipelineOps.length })
     }
+  } else {
+    successCount = entries.length // 内存写入成功也算
   }
   
   dataLogger.info(`[RedisLayer] 缓存预热完成: ${successCount}/${entries.length}`)

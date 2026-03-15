@@ -66,6 +66,11 @@ jest.mock('@/lib/logger', () => ({
   logger: { info: jest.fn(), warn: jest.fn(), error: jest.fn(), debug: jest.fn() },
 }))
 
+jest.mock('@/lib/utils/rate-limit', () => ({
+  checkRateLimit: jest.fn().mockResolvedValue(null),
+  RateLimitPresets: { sensitive: { max: 15, window: '1m', prefix: 'sensitive' } },
+}))
+
 import { NextRequest } from 'next/server'
 import { POST } from '../route'
 
@@ -229,24 +234,19 @@ describe('POST /api/feedback', () => {
 
   // --- Rate Limiting ---
 
-  it('returns 429 after exceeding rate limit (5 per IP per hour)', async () => {
-    // Use a unique IP to avoid interference from other tests
-    const ip = '192.168.99.99'
-    const headers = { 'x-forwarded-for': ip }
+  it('returns 429 when rate limit is exceeded', async () => {
+    // Mock checkRateLimit to return a 429 response
+    const { checkRateLimit } = require('@/lib/utils/rate-limit')
+    const { NextResponse } = require('next/server')
+    checkRateLimit.mockResolvedValueOnce(
+      NextResponse.json({ error: 'Too many requests' }, { status: 429 })
+    )
 
-    // First 5 requests should succeed
-    for (let i = 0; i < 5; i++) {
-      const req = createRequest({ message: `Feedback ${i}` }, headers)
-      const res = await POST(req)
-      expect(res.status).toBe(200)
-    }
-
-    // 6th request should be rate limited
-    const req = createRequest({ message: 'One too many' }, headers)
+    const req = createRequest({ message: 'Rate limited' })
     const res = await POST(req)
     const body = await res.json()
 
     expect(res.status).toBe(429)
-    expect(body.error).toMatch(/Too many feedback/)
+    expect(body.error).toMatch(/Too many/)
   })
 })

@@ -65,7 +65,7 @@ function getFreshnessHours(source: string): number {
   return sourceType === 'web3' ? DATA_FRESHNESS_HOURS_DEX : DATA_FRESHNESS_HOURS_CEX
 }
 const MIN_TRADES_COUNT = 1 // Allow all traders with at least 1 trade (DEX traders may have 1-2 high-quality trades)
-const DEGRADATION_THRESHOLD = 0.50 // 50% — 70% was too aggressive, normal daily variance = 30-40%
+const DEGRADATION_THRESHOLD = 0.90 // 90% — only block catastrophic drops; normal pipeline recovery causes 50-70% drops
 
 // P1-3: ROI anomaly thresholds per period
 const ROI_ANOMALY_THRESHOLDS: Record<Period, number> = {

@@ -1,23 +1,15 @@
 'use client'
 
 import { useEffect, useRef } from 'react'
-import {
-  createChart,
-  type IChartApi,
-  type ISeriesApi,
-  type DeepPartial,
-  type ChartOptions,
-  type LineData,
-  type CandlestickData,
-  type Time,
-  type SeriesType,
-  ColorType,
-  CrosshairMode,
-  LineStyle,
-  CandlestickSeries,
-  LineSeries,
-  AreaSeries,
-  HistogramSeries,
+import type {
+  IChartApi,
+  ISeriesApi,
+  DeepPartial,
+  ChartOptions,
+  LineData,
+  CandlestickData,
+  Time,
+  SeriesType,
 } from 'lightweight-charts'
 
 // ============================================
@@ -123,163 +115,176 @@ export default function TradingViewChart({
   useEffect(() => {
     if (!containerRef.current || !data || data.length === 0) return
 
-    // Canvas API doesn't support CSS variables — resolve them to actual values
-    const resolveCssVar = (val: string): string => {
-      if (!val.startsWith('var(')) return val
-      const name = val.slice(4, -1).split(',')[0].trim()
-      return getComputedStyle(document.documentElement).getPropertyValue(name).trim() || '#888'
-    }
-    const c = Object.fromEntries(
-      Object.entries(colors).map(([k, v]) => [k, resolveCssVar(v)])
-    ) as typeof colors
+    let cancelled = false
 
-    const chart = createChart(containerRef.current, {
-      width: containerRef.current.clientWidth,
-      height,
-      layout: {
-        background: { type: ColorType.Solid, color: c.bg },
-        textColor: c.text,
-        fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
-      },
-      grid: {
-        vertLines: { color: c.grid },
-        horzLines: { color: c.grid },
-      },
-      crosshair: {
-        mode: CrosshairMode.Normal,
-        vertLine: { color: c.crosshair, style: LineStyle.Dashed, width: 1, labelBackgroundColor: c.crosshair },
-        horzLine: { color: c.crosshair, style: LineStyle.Dashed, width: 1, labelBackgroundColor: c.crosshair },
-      },
-      rightPriceScale: {
-        borderColor: c.border,
-        scaleMargins: { top: 0.1, bottom: showVolume ? 0.25 : 0.1 },
-      },
-      timeScale: {
-        borderColor: c.border,
-        timeVisible: true,
-        secondsVisible: false,
-      },
-      ...chartOptions,
-    })
+    // Dynamic import: ~300KB loaded only when chart renders
+    import('lightweight-charts').then((lc) => {
+      if (cancelled || !containerRef.current) return
 
-    chartRef.current = chart
+      // Canvas API doesn't support CSS variables — resolve them to actual values
+      const resolveCssVar = (val: string): string => {
+        if (!val.startsWith('var(')) return val
+        const name = val.slice(4, -1).split(',')[0].trim()
+        return getComputedStyle(document.documentElement).getPropertyValue(name).trim() || '#888'
+      }
+      const c = Object.fromEntries(
+        Object.entries(colors).map(([k, v]) => [k, resolveCssVar(v)])
+      ) as typeof colors
 
-    // Create series
-    if (type === 'candlestick') {
-      const series = chart.addSeries(CandlestickSeries, {
-        upColor: c.upColor,
-        downColor: c.downColor,
-        borderUpColor: c.upColor,
-        borderDownColor: c.downColor,
-        wickUpColor: c.upColor,
-        wickDownColor: c.downColor,
+      const chart = lc.createChart(containerRef.current!, {
+        width: containerRef.current!.clientWidth,
+        height,
+        layout: {
+          background: { type: lc.ColorType.Solid, color: c.bg },
+          textColor: c.text,
+          fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
+        },
+        grid: {
+          vertLines: { color: c.grid },
+          horzLines: { color: c.grid },
+        },
+        crosshair: {
+          mode: lc.CrosshairMode.Normal,
+          vertLine: { color: c.crosshair, style: lc.LineStyle.Dashed, width: 1, labelBackgroundColor: c.crosshair },
+          horzLine: { color: c.crosshair, style: lc.LineStyle.Dashed, width: 1, labelBackgroundColor: c.crosshair },
+        },
+        rightPriceScale: {
+          borderColor: c.border,
+          scaleMargins: { top: 0.1, bottom: showVolume ? 0.25 : 0.1 },
+        },
+        timeScale: {
+          borderColor: c.border,
+          timeVisible: true,
+          secondsVisible: false,
+        },
+        ...chartOptions,
       })
-      series.setData(data as CandlestickData<Time>[])
-      seriesRef.current = series
 
-      if (showVolume) {
-        const volumeSeries = chart.addSeries(HistogramSeries, {
-          priceFormat: { type: 'volume' },
-          priceScaleId: 'volume',
+      chartRef.current = chart
+
+      // Create series
+      if (type === 'candlestick') {
+        const series = chart.addSeries(lc.CandlestickSeries, {
+          upColor: c.upColor,
+          downColor: c.downColor,
+          borderUpColor: c.upColor,
+          borderDownColor: c.downColor,
+          wickUpColor: c.upColor,
+          wickDownColor: c.downColor,
         })
-        volumeSeries.priceScale().applyOptions({
-          scaleMargins: { top: 0.8, bottom: 0 },
+        series.setData(data as CandlestickData<Time>[])
+        seriesRef.current = series
+
+        if (showVolume) {
+          const volumeSeries = chart.addSeries(lc.HistogramSeries, {
+            priceFormat: { type: 'volume' },
+            priceScaleId: 'volume',
+          })
+          volumeSeries.priceScale().applyOptions({
+            scaleMargins: { top: 0.8, bottom: 0 },
+          })
+          const volumeData = (data as OHLCVDataPoint[])
+            .filter(d => d.volume !== undefined)
+            .map(d => ({
+              time: d.time,
+              value: d.volume!,
+              color: d.close >= d.open ? c.volumeUp : c.volumeDown,
+            }))
+          volumeSeries.setData(volumeData)
+          volumeRef.current = volumeSeries
+        }
+      } else if (type === 'area') {
+        const series = chart.addSeries(lc.AreaSeries, {
+          lineColor: color || c.lineColor,
+          topColor: topColor || c.areaTop,
+          bottomColor: bottomColor || c.areaBottom,
+          lineWidth: 2,
         })
-        const volumeData = (data as OHLCVDataPoint[])
-          .filter(d => d.volume !== undefined)
-          .map(d => ({
-            time: d.time,
-            value: d.volume!,
-            color: d.close >= d.open ? c.volumeUp : c.volumeDown,
-          }))
-        volumeSeries.setData(volumeData)
-        volumeRef.current = volumeSeries
+        series.setData(data as LineData<Time>[])
+        seriesRef.current = series
+      } else {
+        const series = chart.addSeries(lc.LineSeries, {
+          color: color || c.lineColor,
+          lineWidth: 2,
+          crosshairMarkerVisible: true,
+          crosshairMarkerRadius: 4,
+        })
+        series.setData(data as LineData<Time>[])
+        seriesRef.current = series
       }
-    } else if (type === 'area') {
-      const series = chart.addSeries(AreaSeries, {
-        lineColor: color || c.lineColor,
-        topColor: topColor || c.areaTop,
-        bottomColor: bottomColor || c.areaBottom,
-        lineWidth: 2,
+
+      // Tooltip
+      const tooltip = document.createElement('div')
+      tooltip.style.cssText = `
+        position: absolute; display: none; padding: 8px 12px; z-index: 10;
+        background: ${theme === 'dark' ? 'var(--glass-bg-primary)' : 'var(--glass-bg-heavy)'};
+        border: 1px solid ${c.border}; border-radius: 6px;
+        color: ${theme === 'dark' ? 'var(--color-border-primary)' : 'var(--color-text-primary)'}; font-size: 12px;
+        pointer-events: none; font-family: monospace; line-height: 1.6;
+        backdrop-filter: blur(8px); box-shadow: 0 4px 12px var(--color-overlay-medium);
+      `
+      containerRef.current!.appendChild(tooltip)
+      tooltipRef.current = tooltip
+
+      chart.subscribeCrosshairMove((param) => {
+        if (!param.time || !param.seriesData || param.seriesData.size === 0) {
+          tooltip.style.display = 'none'
+          return
+        }
+
+        const mainData = param.seriesData.get(seriesRef.current!)
+        if (!mainData) { tooltip.style.display = 'none'; return }
+
+        let html = ''
+        if (type === 'candlestick' && 'open' in mainData) {
+          const d = mainData as CandlestickData
+          const volData = volumeRef.current ? param.seriesData.get(volumeRef.current) : null
+          html = `
+            <div style="margin-bottom:4px;color:${c.text}">${String(param.time)}</div>
+            <div>${labels.open}: <b>${d.open.toFixed(2)}</b></div>
+            <div>${labels.high}: <b>${d.high.toFixed(2)}</b></div>
+            <div>${labels.low}: <b>${d.low.toFixed(2)}</b></div>
+            <div>${labels.close}: <b style="color:${d.close >= d.open ? c.upColor : c.downColor}">${d.close.toFixed(2)}</b></div>
+            ${volData && 'value' in volData ? `<div>${labels.volume}: <b>${(volData as LineData).value.toLocaleString()}</b></div>` : ''}
+          `
+        } else if ('value' in mainData) {
+          const d = mainData as LineData
+          html = `
+            <div style="margin-bottom:4px;color:${c.text}">${String(param.time)}</div>
+            <div>${labels.value}: <b>${d.value.toFixed(2)}</b></div>
+          `
+        }
+
+        tooltip.innerHTML = html
+        tooltip.style.display = 'block'
+
+        const container = containerRef.current!
+        const toolW = tooltip.offsetWidth
+        const x = (param.point?.x ?? 0)
+        tooltip.style.left = `${x + toolW + 20 > container.clientWidth ? x - toolW - 10 : x + 10}px`
+        tooltip.style.top = `${Math.max(0, (param.point?.y ?? 0) - 60)}px`
       })
-      series.setData(data as LineData<Time>[])
-      seriesRef.current = series
-    } else {
-      const series = chart.addSeries(LineSeries, {
-        color: color || c.lineColor,
-        lineWidth: 2,
-        crosshairMarkerVisible: true,
-        crosshairMarkerRadius: 4,
+
+      chart.timeScale().fitContent()
+
+      // Resize observer
+      const ro = new ResizeObserver(() => {
+        if (containerRef.current) {
+          chart.applyOptions({ width: containerRef.current.clientWidth })
+        }
       })
-      series.setData(data as LineData<Time>[])
-      seriesRef.current = series
-    }
+      ro.observe(containerRef.current!)
 
-    // Tooltip
-    const tooltip = document.createElement('div')
-    tooltip.style.cssText = `
-      position: absolute; display: none; padding: 8px 12px; z-index: 10;
-      background: ${theme === 'dark' ? 'var(--glass-bg-primary)' : 'var(--glass-bg-heavy)'};
-      border: 1px solid ${c.border}; border-radius: 6px;
-      color: ${theme === 'dark' ? 'var(--color-border-primary)' : 'var(--color-text-primary)'}; font-size: 12px;
-      pointer-events: none; font-family: monospace; line-height: 1.6;
-      backdrop-filter: blur(8px); box-shadow: 0 4px 12px var(--color-overlay-medium);
-    `
-    containerRef.current.appendChild(tooltip)
-    tooltipRef.current = tooltip
-
-    chart.subscribeCrosshairMove((param) => {
-      if (!param.time || !param.seriesData || param.seriesData.size === 0) {
-        tooltip.style.display = 'none'
-        return
-      }
-
-      const mainData = param.seriesData.get(seriesRef.current!)
-      if (!mainData) { tooltip.style.display = 'none'; return }
-
-      let html = ''
-      if (type === 'candlestick' && 'open' in mainData) {
-        const d = mainData as CandlestickData
-        const volData = volumeRef.current ? param.seriesData.get(volumeRef.current) : null
-        html = `
-          <div style="margin-bottom:4px;color:${c.text}">${String(param.time)}</div>
-          <div>${labels.open}: <b>${d.open.toFixed(2)}</b></div>
-          <div>${labels.high}: <b>${d.high.toFixed(2)}</b></div>
-          <div>${labels.low}: <b>${d.low.toFixed(2)}</b></div>
-          <div>${labels.close}: <b style="color:${d.close >= d.open ? c.upColor : c.downColor}">${d.close.toFixed(2)}</b></div>
-          ${volData && 'value' in volData ? `<div>${labels.volume}: <b>${(volData as LineData).value.toLocaleString()}</b></div>` : ''}
-        `
-      } else if ('value' in mainData) {
-        const d = mainData as LineData
-        html = `
-          <div style="margin-bottom:4px;color:${c.text}">${String(param.time)}</div>
-          <div>${labels.value}: <b>${d.value.toFixed(2)}</b></div>
-        `
-      }
-
-      tooltip.innerHTML = html
-      tooltip.style.display = 'block'
-
-      const container = containerRef.current!
-      const toolW = tooltip.offsetWidth
-      const x = (param.point?.x ?? 0)
-      tooltip.style.left = `${x + toolW + 20 > container.clientWidth ? x - toolW - 10 : x + 10}px`
-      tooltip.style.top = `${Math.max(0, (param.point?.y ?? 0) - 60)}px`
+      // Store cleanup for the returned destructor
+      chartRef.current = chart
+      ;(containerRef.current as HTMLDivElement & { _ro?: ResizeObserver })._ro = ro
     })
-
-    chart.timeScale().fitContent()
-
-    // Resize observer
-    const ro = new ResizeObserver(() => {
-      if (containerRef.current) {
-        chart.applyOptions({ width: containerRef.current.clientWidth })
-      }
-    })
-    ro.observe(containerRef.current)
 
     return () => {
-      ro.disconnect()
-      chart.remove()
+      cancelled = true
+      const container = containerRef.current as HTMLDivElement & { _ro?: ResizeObserver } | null
+      container?._ro?.disconnect()
+      chartRef.current?.remove()
       tooltipRef.current?.remove()
       chartRef.current = null
       seriesRef.current = null

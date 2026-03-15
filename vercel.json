@@ -10,7 +10,7 @@
     },
     {
       "path": "/api/cron/daily-digest",
-      "schedule": "0 0 * * *"
+      "schedule": "2 0 * * *"
     },
     {
       "path": "/api/cron/flash-news-fetch",
@@ -42,7 +42,7 @@
     },
     {
       "path": "/api/cron/cleanup-stuck-logs",
-      "schedule": "0 * * * *"
+      "schedule": "7 * * * *"
     },
     {
       "path": "/api/cron/batch-discover",
@@ -54,7 +54,7 @@
     },
     {
       "path": "/api/cron/subscription-expiry",
-      "schedule": "0 0 * * *"
+      "schedule": "4 0 * * *"
     },
     {
       "path": "/api/cron/fetch-market-data?type=prices",
@@ -96,10 +96,6 @@
     {
       "path": "/api/cron/batch-fetch-traders?group=d1",
       "schedule": "20 */6 * * *"
-    },
-    {
-      "path": "/api/cron/batch-fetch-traders?group=d2",
-      "schedule": "28 */6 * * *"
     },
     {
       "path": "/api/cron/batch-fetch-traders?group=f",
@@ -147,7 +143,7 @@
     },
     {
       "path": "/api/cron/check-trader-alerts",
-      "schedule": "0 */6 * * *"
+      "schedule": "6 */6 * * *"
     },
     {
       "path": "/api/cron/check-data-gaps",

@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useRef, useState, useCallback } from 'react'
-import { motion, AnimatePresence } from 'framer-motion'
+import { m, LazyMotion, domAnimation, AnimatePresence } from 'framer-motion'
 import Image from 'next/image'
 import { tokens } from '@/lib/design-tokens'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
@@ -200,10 +200,11 @@ export default function TokenSidePanel({ token, onClose }: {
   const md = coinDetail?.market_data
 
   return (
+    <LazyMotion features={domAnimation}>
     <AnimatePresence>
       {token && (
         <>
-          <motion.div
+          <m.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
@@ -226,7 +227,7 @@ export default function TokenSidePanel({ token, onClose }: {
             zIndex: 201,
             pointerEvents: 'none',
           }}>
-          <motion.div
+          <m.div
             ref={panelRef}
             initial={{ opacity: 0, scale: 0.95 }}
             animate={{ opacity: 1, scale: 1 }}
@@ -521,10 +522,11 @@ export default function TokenSidePanel({ token, onClose }: {
                 {t('noDataComingSoon')}
               </div>
             </div>
-          </motion.div>
+          </m.div>
           </div>
         </>
       )}
     </AnimatePresence>
+    </LazyMotion>
   )
 }

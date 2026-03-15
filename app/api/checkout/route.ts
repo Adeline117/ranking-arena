@@ -137,7 +137,7 @@ export async function POST(request: NextRequest) {
     logger.error('[Checkout] Error:', error)
     
     const message = error instanceof Error ? error.message : 'Internal server error'
-    
+
     // 特殊处理 Stripe 未配置的情况
     if (message.includes('STRIPE_SECRET_KEY')) {
       return NextResponse.json(
@@ -145,9 +145,9 @@ export async function POST(request: NextRequest) {
         { status: 503 }
       )
     }
-    
+
     return NextResponse.json(
-      { error: message },
+      { error: 'An error occurred during checkout. Please try again.' },
       { status: 500 }
     )
   }
