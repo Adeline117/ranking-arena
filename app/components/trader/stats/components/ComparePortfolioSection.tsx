@@ -326,13 +326,13 @@ function CompareRow({ name, pct, color }: { name: string; pct?: number; color: s
         size="sm"
         weight="black"
         style={{
-          color: pct !== undefined
+          color: pct != null
             ? (pct >= 0 ? tokens.colors.accent.success : tokens.colors.accent.error)
             : tokens.colors.text.tertiary,
           fontFamily: tokens.typography.fontFamily.mono.join(', '),
         }}
       >
-        {pct !== undefined ? `${pct >= 0 ? '+' : ''}${pct.toFixed(2)}%` : i18nT('notAvailable')}
+        {pct != null ? `${pct >= 0 ? '+' : ''}${pct.toFixed(2)}%` : i18nT('notAvailable')}
       </Text>
     </Box>
   )
