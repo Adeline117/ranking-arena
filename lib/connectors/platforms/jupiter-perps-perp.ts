@@ -35,7 +35,8 @@ const MARKETS = [
 
 interface JupiterTraderEntry {
   owner: string
-  totalPnlUsd: number    // Raw units (÷1e6 for USD)
+  totalPnlUsd: number | string  // Raw units (÷1e6 for USD), may be string from API
+  totalVolumeUsd?: number | string
   totalVolume?: number
   totalTrades?: number
 }
@@ -94,16 +95,22 @@ export class JupiterPerpsPerpConnector extends BaseConnector {
       for (const mint of MARKETS) {
         try {
           const url = `https://perps-api.jup.ag/v1/top-traders?marketMint=${mint}&year=${year}&week=${week}`
-          const data = await this.request<JupiterTraderEntry[]>(url)
+          const rawData = await this.request<Record<string, unknown> | JupiterTraderEntry[]>(url)
 
-          if (!Array.isArray(data)) continue
+          // API returns { topTradersByPnl: [...] } or direct array
+          const data: JupiterTraderEntry[] = Array.isArray(rawData)
+            ? rawData
+            : Array.isArray((rawData as Record<string, unknown>)?.topTradersByPnl)
+              ? (rawData as Record<string, unknown>).topTradersByPnl as JupiterTraderEntry[]
+              : []
+          if (data.length === 0) continue
 
           for (const entry of data) {
             if (!entry.owner) continue
             const existing = traderMap.get(entry.owner) || { pnl: 0, volume: 0, wins: 0, losses: 0, trades: 0 }
-            const weekPnl = (entry.totalPnlUsd || 0) / 1e6
+            const weekPnl = Number(entry.totalPnlUsd || 0) / 1e6
             existing.pnl += weekPnl
-            existing.volume += (entry.totalVolume || 0) / 1e6
+            existing.volume += Number(entry.totalVolumeUsd || entry.totalVolume || 0) / 1e6
             existing.trades += entry.totalTrades || 0
             // Count profitable market-weeks as wins
             if (weekPnl > 0) existing.wins++
