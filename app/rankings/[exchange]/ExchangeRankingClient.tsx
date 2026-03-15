@@ -10,6 +10,7 @@ import { EXCHANGE_NAMES } from '@/lib/constants/exchanges'
 import { useRealtimeRankings } from '@/lib/hooks/useRealtimeRankings'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import { NULL_DISPLAY } from '@/lib/utils/format'
+import { getScoreColor } from '@/lib/utils/score-colors'
 import { formatTimeAgo, type Locale } from '@/lib/utils/date'
 import ShareLeaderboardButton from './ShareLeaderboardButton'
 
@@ -204,7 +205,7 @@ const TraderCardItem = React.memo(function TraderCardItem({ trader, rank }: { tr
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: tokens.spacing[2] }}>
           <StatBlock label={t('rankingWinRate')} value={trader.win_rate != null ? `${trader.win_rate.toFixed(2)}%` : NULL_DISPLAY} color={trader.win_rate != null ? (trader.win_rate >= 50 ? tokens.colors.accent.success : tokens.colors.accent.error) : undefined} />
           <StatBlock label={t('rankingMdd')} value={trader.max_drawdown != null ? `-${Math.abs(trader.max_drawdown).toFixed(2)}%` : NULL_DISPLAY} color={trader.max_drawdown != null ? tokens.colors.accent.error + 'cc' : undefined} />
-          <StatBlock label={t('rankingArenaScore')} value={trader.arena_score != null ? trader.arena_score.toFixed(0) : NULL_DISPLAY} color={trader.arena_score ? tokens.colors.accent.brand : undefined} />
+          <StatBlock label={t('rankingArenaScore')} value={trader.arena_score != null ? trader.arena_score.toFixed(0) : NULL_DISPLAY} color={trader.arena_score != null ? getScoreColor(trader.arena_score) : undefined} />
         </div>
       </div>
     </Link>
@@ -579,7 +580,7 @@ export default function ExchangeRankingClient({
                 </div>
                 <div style={{ textAlign: 'right' }}>
                   {t.arena_score != null ? (
-                    <span style={{ fontSize: 13, fontWeight: 700, color: tokens.colors.accent.brand }}>
+                    <span style={{ fontSize: 13, fontWeight: 700, color: getScoreColor(t.arena_score) }}>
                       {t.arena_score.toFixed(0)}
                     </span>
                   ) : (
