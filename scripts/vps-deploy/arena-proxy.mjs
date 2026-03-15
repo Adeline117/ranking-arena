@@ -5,6 +5,8 @@ const PROXY_KEY = process.env.PROXY_KEY || 'arena-proxy-sg-2026'
 
 // All exchange hosts that Arena connectors need to reach
 const ALLOWED_HOSTS = new Set([
+  // Local scraper (Playwright on port 3457)
+  'localhost:3457', '127.0.0.1:3457', '45.76.152.169:3457',
   // Binance
   'www.binance.com', 'web3.binance.com', 'api.binance.com', 'fapi.binance.com',
   // Bybit

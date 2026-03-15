@@ -387,23 +387,49 @@ export abstract class BaseConnector implements PlatformConnector {
       ).toString();
 
       // Named endpoints (e.g., /toobit/leaderboard) are served by the Playwright scraper.
-      // The scraper runs on port 3457, proxy on 3456.
-      // Derive scraper URL from proxy URL by replacing port, with env var override.
+      // Scraper: port 3457, Proxy: port 3456.
+      // Strategy: try scraper directly first, then route through proxy to scraper.
       const rawScraperSg = (process.env.VPS_SCRAPER_SG || '').replace(/\\n$/, '').trim()
       const scraperHost = rawScraperSg || vpsHost.replace(':3456', ':3457');
-      const endpointUrl = `${scraperHost}${endpoint}${queryString ? `?${queryString}` : ''}`;
+      const scraperUrl = `${scraperHost}${endpoint}${queryString ? `?${queryString}` : ''}`;
 
-      const response = await fetch(endpointUrl, {
-        method: 'GET',
-        headers: {
-          'X-Proxy-Key': vpsKey,
-          'Accept': 'application/json',
-        },
-        signal: AbortSignal.timeout(timeoutMs),
-      });
+      // Strategy 1: Direct to scraper port 3457
+      let response: Response | null = null;
+      try {
+        response = await fetch(scraperUrl, {
+          method: 'GET',
+          headers: { 'X-Proxy-Key': vpsKey, 'Accept': 'application/json' },
+          signal: AbortSignal.timeout(Math.min(timeoutMs, 30000)),
+        });
+      } catch {
+        // Port 3457 might be firewalled from Vercel — try routing through proxy
+      }
 
-      if (!response.ok) {
-        console.warn(`[VPS] ${this.platform} returned ${response.status}`);
+      // Strategy 2: Route through proxy (3456) → scraper (localhost:3457)
+      if (!response || !response.ok) {
+        try {
+          const proxyHost = vpsHost; // port 3456
+          const localScraperUrl = `http://localhost:3457${endpoint}${queryString ? `?${queryString}` : ''}`;
+          response = await fetch(proxyHost, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'X-Proxy-Key': vpsKey,
+            },
+            body: JSON.stringify({
+              url: localScraperUrl,
+              method: 'GET',
+              headers: { 'X-Proxy-Key': vpsKey },
+            }),
+            signal: AbortSignal.timeout(timeoutMs),
+          });
+        } catch {
+          // Both strategies failed
+        }
+      }
+
+      if (!response || !response.ok) {
+        console.warn(`[VPS] ${this.platform} scraper failed (status: ${response?.status || 'no response'})`);
         return null;
       }
 
