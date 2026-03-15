@@ -75,10 +75,21 @@ export class GateioFuturesConnector extends BaseConnector {
     for (let page = 1; page <= maxPages; page++) {
       try {
         const url = `https://www.gate.com/apiw/v2/copy/leader/list?page=${page}&page_size=${pageSize}&order_by=profit_rate&cycle=${cycle}`
-        const data = await this.request<Record<string, unknown>>(url, {
-          method: 'GET',
-          headers: this.getHeaders(),
-        })
+        let data: Record<string, unknown>
+        try {
+          data = await this.request<Record<string, unknown>>(url, {
+            method: 'GET',
+            headers: this.getHeaders(),
+          })
+        } catch {
+          // Fallback: VPS scraper
+          const vpsData = await this.fetchViaVPS<Record<string, unknown>>('/gateio/leaderboard', {
+            cycle,
+            page: String(page),
+          })
+          if (!vpsData) throw new Error('Both direct API and VPS scraper failed for gateio')
+          data = vpsData
+        }
 
         // Handle multiple response formats
         const list: Array<Record<string, unknown>> = (
