@@ -1278,6 +1278,7 @@ const ko = {
     roiTooltip: 'ROI: 투자 수익률 ({range})',
     winRateTooltip: '승률: 승리 비율',
     mddTooltip: 'MDD: 최대 낙폭',
+    pnlTooltip: 'PnL: 손익',
     filter: '필터',
     columnSettingsTitle: '열 설정',
     resetToDefault: '기본값으로 초기화',
@@ -3911,6 +3912,7 @@ const ko = {
     // Trader rank context
     traderRankOf: '{platform}에서 {total}명 중 #{rank}위',
     traderRankTop: '상위 {pct}%',
+    rankedOnExchange: '{exchange}에서 #{rank}위',
 
     // Footer links
     footerMethodology: '평가 방법',

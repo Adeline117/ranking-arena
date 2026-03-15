@@ -1281,6 +1281,7 @@ const zh = {
     roiTooltip: 'ROI: 投资回报率 ({range})',
     winRateTooltip: 'Win%: 胜率',
     mddTooltip: 'MDD: 最大回撤',
+    pnlTooltip: 'PnL: 盈亏金额',
     filter: '筛选',
     columnSettingsTitle: '列设置',
     resetToDefault: '恢复默认',
@@ -3931,6 +3932,7 @@ dataStaleWarning: '数据可能有延迟',
 // Trader rank context
 traderRankOf: '在 {platform} 排名第 {rank} / 共 {total} 人',
 traderRankTop: '前 {pct}%',
+rankedOnExchange: '在 {exchange} 排名第 #{rank}',
 
 // Footer links
 footerMethodology: '评分方法',

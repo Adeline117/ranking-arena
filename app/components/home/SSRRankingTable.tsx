@@ -20,9 +20,12 @@ function getScoreColor(score: number): string {
 }
 
 function formatROI(roi: number): string {
-  if (roi >= 1000) return `+${(roi / 1000).toFixed(2)}K%`
-  if (roi >= 0) return `+${roi.toFixed(2)}%`
-  return `${roi.toFixed(2)}%`
+  const absRoi = Math.abs(roi)
+  const sign = roi >= 0 ? '+' : ''
+  if (absRoi >= 10000) return `${sign}${(roi / 1000).toFixed(1)}K%`
+  if (absRoi >= 1000) return `${sign}${roi.toFixed(0)}%`
+  if (absRoi >= 100) return `${sign}${roi.toFixed(1)}%`
+  return `${sign}${roi.toFixed(2)}%`
 }
 
 function formatPnL(pnl: number): string {

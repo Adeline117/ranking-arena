@@ -1280,6 +1280,7 @@ const en = {
     roiTooltip: 'ROI: Return on Investment ({range})',
     winRateTooltip: 'Win%: Win Rate',
     mddTooltip: 'MDD: Max Drawdown',
+    pnlTooltip: 'PnL: Profit & Loss',
     filter: 'Filter',
     columnSettingsTitle: 'Column Settings',
     resetToDefault: 'Reset to Default',
@@ -3924,6 +3925,7 @@ dataStaleWarning: 'Data may be delayed',
 // Trader rank context
 traderRankOf: 'Ranked #{rank} of {total} on {platform}',
 traderRankTop: 'Top {pct}%',
+rankedOnExchange: 'Ranked #{rank} on {exchange}',
 
 // Footer links
 footerMethodology: 'Methodology',
