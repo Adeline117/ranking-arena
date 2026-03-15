@@ -62,7 +62,7 @@ function HotContent() {
     <Box style={{ minHeight: '100vh', background: 'var(--color-bg-primary)', color: 'var(--color-text-primary)' }}>
       <TopNav email={email} />
 
-      <PullToRefreshWrapper onRefresh={() => window.location.reload()}>
+      <PullToRefreshWrapper onRefresh={async () => { window.location.reload() }}>
       <Box as="main" py={6} style={{ maxWidth: 1400, margin: '0 auto' }}>
         <ThreeColumnLayout
           leftSidebar={<Suspense fallback={<div className="skeleton" style={{ height: 300, borderRadius: tokens.radius.lg }} />}><TopTraders /></Suspense>}
