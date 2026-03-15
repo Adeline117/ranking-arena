@@ -9,7 +9,7 @@ import { NextResponse } from 'next/server'
 
 export const features = {
   /** Social features: groups, posts, comments, feed, messaging, user follows */
-  social: process.env.NEXT_PUBLIC_FEATURE_SOCIAL === 'true',
+  social: process.env.NEXT_PUBLIC_FEATURE_SOCIAL !== 'false',
 }
 
 /**
