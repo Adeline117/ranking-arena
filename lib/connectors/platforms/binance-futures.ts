@@ -195,10 +195,12 @@ export class BinanceFuturesConnector extends BaseConnector {
   // ============================================
 
   protected override mapWindowToPlatform(window: Window): string {
+    // New /friendly/ copy-trade API uses uppercase window format (7D, 30D, 90D)
+    // Old leaderboard API used WEEKLY/MONTHLY/QUARTERLY
     const mapping: Record<Window, string> = {
-      '7d': 'WEEKLY',
-      '30d': 'MONTHLY',
-      '90d': 'QUARTERLY',
+      '7d': '7D',
+      '30d': '30D',
+      '90d': '90D',
     }
     return mapping[window]
   }
