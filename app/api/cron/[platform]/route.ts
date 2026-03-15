@@ -54,7 +54,10 @@ export async function POST(
   request: NextRequest,
   { params }: { params: { platform: string } }
 ) {
-  const platform = params.platform
+  // FIX: Edge Runtime bug - params.platform is undefined
+  // Extract platform from URL pathname instead
+  const pathname = request.nextUrl.pathname
+  const platform = pathname.split('/').pop() || params.platform
   const startTime = Date.now()
 
   try {
