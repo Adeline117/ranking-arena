@@ -143,7 +143,7 @@ export const DEAD_BLOCKED_PLATFORMS: TraderSource[] = [
   'whitebit' as TraderSource, // No copy-trading feature or API — confirmed 2026-03-13
   'bitmart',      // CF 403 on API, Playwright found zero API calls — confirmed dead 2026-03-13
   'btse' as TraderSource, // SPA page 200 but zero API calls intercepted — no real data 2026-03-13
-  'dydx',          // indexer.dydx.trade /v4/leaderboard/pnl returns 404 globally since ~2026-03
+  // 'dydx' — RECOVERED: Heroku + Copin API fallback, 3339 traders in leaderboard_ranks (2026-03-15)
 
   // ═══════════════════════════════════════════════════════════════
   // MAC MINI ONLY — geo-blocked from VPS, needs residential IP
