@@ -153,8 +153,8 @@ export class BtccFuturesConnector extends BaseConnector {
       roi: e.rateProfit ?? null,
       pnl: e.totalNetProfit ?? null,
       win_rate: e.winRate ?? null,
-      // MDD in basis points → percentage
-      max_drawdown: e.maxBackRate != null ? e.maxBackRate / 100 : null,
+      // MDD in basis points → percentage, clamped to 0-100
+      max_drawdown: e.maxBackRate != null ? Math.min(Math.abs(e.maxBackRate / 100), 100) : null,
       followers: e.followNum ?? null,
       trades_count: e.orderNum ?? null,
       platform_rank: null,
