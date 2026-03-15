@@ -60,8 +60,8 @@ export class BybitFuturesConnector extends BaseConnector {
         { method: 'GET' }
       )
     } catch {
-      // Fallback: VPS scraper (Cloudflare Worker proxy)
-      const vpsData = await this.fetchViaVPS<Record<string, unknown>>('/bybit/copy-trading', {
+      // Fallback: VPS scraper (Singapore VPS at 45.76.152.169:3456)
+      const vpsData = await this.fetchViaVPS<Record<string, unknown>>('/bybit/leaderboard', {
         timeRange,
         page: String(page),
         pageSize: String(limit),
