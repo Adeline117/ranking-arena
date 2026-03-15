@@ -1658,10 +1658,11 @@
    ============================================ */
 
 @media (max-width: 767px) {
-  /* 1. Trader detail: action buttons — smaller on mobile, scrollable */
+  /* 1. Trader detail: action buttons — smaller on mobile, scrollable, 44px touch target */
   .profile-header-actions button {
     font-size: 11px !important;
     padding: 5px 8px !important;
+    min-height: 36px;
     white-space: nowrap;
     flex-shrink: 0;
   }
