@@ -246,33 +246,30 @@ export class BinanceFuturesConnector extends BaseConnector {
         useAiRecommended: false,
       }
 
-      try {
-        response = await this.request<Record<string, unknown>>(
-          `${this.BASE_URL}/v1/friendly/future/copy-trade/home-page/query-list`,
-          {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'Origin': 'https://www.binance.com',
-              'Referer': 'https://www.binance.com/en/copy-trading',
-            },
-            body: JSON.stringify(requestBody),
-          }
-        )
-      } catch {
-        // Direct request fails (geo-blocked/WAF) — try VPS proxy
-        response = await this.proxyViaVPS<Record<string, unknown>>(
-          `${this.BASE_URL}/v1/friendly/future/copy-trade/home-page/query-list`,
-          {
-            method: 'POST',
-            body: requestBody,
-            headers: {
-              'Content-Type': 'application/json',
-              'Origin': 'https://www.binance.com',
-              'Referer': 'https://www.binance.com/en/copy-trading',
-            },
-          }
-        )
+      const apiUrl = `${this.BASE_URL}/v1/friendly/future/copy-trade/home-page/query-list`
+      const apiHeaders = {
+        'Content-Type': 'application/json',
+        'Origin': 'https://www.binance.com',
+        'Referer': 'https://www.binance.com/en/copy-trading',
+      }
+
+      // Always try VPS proxy first — Binance is geo-blocked from Vercel hnd1
+      // Direct request returns 200 with geo-block message, not a HTTP error
+      response = await this.proxyViaVPS<Record<string, unknown>>(
+        apiUrl,
+        { method: 'POST', body: requestBody, headers: apiHeaders }
+      )
+
+      // Fallback: try direct (works from non-restricted IPs like Mac Mini)
+      if (!response || (response as Record<string, unknown>).code === 0) {
+        try {
+          response = await this.request<Record<string, unknown>>(
+            apiUrl,
+            { method: 'POST', headers: apiHeaders, body: JSON.stringify(requestBody) }
+          )
+        } catch {
+          // Both failed
+        }
       }
 
       if (!response) break
