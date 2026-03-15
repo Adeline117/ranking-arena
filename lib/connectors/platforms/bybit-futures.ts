@@ -51,10 +51,24 @@ export class BybitFuturesConnector extends BaseConnector {
     const timeRange = WINDOW_MAP[window]
     const page = Math.floor(offset / limit) + 1
 
-    const _rawLb = await this.request<Record<string, unknown>>(
-      `https://api2.bybit.com/fapi/beehive/public/v1/common/dynamic-leader-list?timeRange=${timeRange}&dataType=DATA_ROI&page=${page}&pageSize=${limit}`,
-      { method: 'GET' }
-    )
+    // Primary: direct API (blocked from most datacenter IPs)
+    // Fallback: VPS Playwright scraper at port 3456
+    let _rawLb: Record<string, unknown>
+    try {
+      _rawLb = await this.request<Record<string, unknown>>(
+        `https://api2.bybit.com/fapi/beehive/public/v1/common/dynamic-leader-list?timeRange=${timeRange}&dataType=DATA_ROI&page=${page}&pageSize=${limit}`,
+        { method: 'GET' }
+      )
+    } catch {
+      // Fallback: VPS scraper
+      const vpsData = await this.fetchViaVPS<Record<string, unknown>>('/bybit/leaderboard', {
+        timeRange,
+        page: String(page),
+        pageSize: String(limit),
+      })
+      if (!vpsData) throw new Error('Both direct API and VPS scraper failed for bybit')
+      _rawLb = vpsData
+    }
     const data = warnValidate(BybitFuturesLeaderboardResponseSchema, _rawLb, 'bybit-futures/leaderboard')
 
     // Support both old API format (result.data) and VPS scraper format (result.leaderDetails)
