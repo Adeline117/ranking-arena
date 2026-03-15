@@ -86,18 +86,24 @@ export class BinanceSpotConnector extends BaseConnector {
       }
 
       let response: Record<string, unknown> | null = null
+      const apiUrl = `${this.BASE_URL}/v1/friendly/future/spot-copy-trade/common/home-page-list`
 
-      try {
-        response = await this.request<Record<string, unknown>>(
-          `${this.BASE_URL}/v1/friendly/future/spot-copy-trade/common/home-page-list`,
-          { method: 'POST', headers: this.HEADERS, body: JSON.stringify(requestBody) }
-        )
-      } catch {
-        // Direct fails (geo-blocked/WAF) — VPS proxy
-        response = await this.proxyViaVPS<Record<string, unknown>>(
-          `${this.BASE_URL}/v1/friendly/future/spot-copy-trade/common/home-page-list`,
-          { method: 'POST', body: requestBody, headers: this.HEADERS }
-        )
+      // Always try VPS proxy first — Binance is geo-blocked from Vercel hnd1
+      response = await this.proxyViaVPS<Record<string, unknown>>(
+        apiUrl,
+        { method: 'POST', body: requestBody, headers: this.HEADERS }
+      )
+
+      // Fallback: try direct (works from non-restricted IPs like Mac Mini)
+      if (!response || (response as Record<string, unknown>).code === 0) {
+        try {
+          response = await this.request<Record<string, unknown>>(
+            apiUrl,
+            { method: 'POST', headers: this.HEADERS, body: JSON.stringify(requestBody) }
+          )
+        } catch {
+          // Both failed
+        }
       }
 
       if (!response) break
