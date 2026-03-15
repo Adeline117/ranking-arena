@@ -36,20 +36,11 @@ export class OkxFuturesConnector extends BaseConnector {
   async discoverLeaderboard(window: Window, limit = 20, offset = 0): Promise<DiscoverResult> {
     const page = Math.floor(offset / limit) + 1
 
-    // Primary: v5 copytrading public API (priapi removed ~2026-03-14)
-    let _rawLb: Record<string, unknown>
-    try {
-      _rawLb = await this.request<Record<string, unknown>>(
-        `https://www.okx.com/api/v5/copytrading/public-lead-traders?instType=SWAP&sortType=pnl&dataRange=${V5_WINDOW_MAP[window]}&page=${page}&limit=${limit}`,
-        { method: 'GET' }
-      )
-    } catch {
-      // Fallback: old priapi endpoint
-      _rawLb = await this.request<Record<string, unknown>>(
-        `https://www.okx.com/priapi/v5/ecotrade/public/trader-list?sortType=profitRatio&dataRange=${WINDOW_MAP[window]}&pageNo=${page}&pageSize=${limit}`,
-        { method: 'GET' }
-      )
-    }
+    // v5 copytrading public API (priapi removed 2026-03-14)
+    const _rawLb = await this.request<Record<string, unknown>>(
+      `https://www.okx.com/api/v5/copytrading/public-lead-traders?instType=SWAP&sortType=pnl&dataRange=${V5_WINDOW_MAP[window]}&page=${page}&limit=${limit}`,
+      { method: 'GET' }
+    )
     const data = warnValidate(OkxFuturesLeaderboardResponseSchema, _rawLb, 'okx-futures/leaderboard')
     // v5 response: data[0].ranks  OR  data.ranks
     const dataArr = Array.isArray(data?.data) ? data.data[0] : data?.data
