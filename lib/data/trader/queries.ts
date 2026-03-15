@@ -140,8 +140,8 @@ export async function getLeaderboard(supabase: SupabaseClient, params: {
  *
  * Data resolution uses a fallback chain:
  * 1. leaderboard_ranks (precomputed, has all periods)
- * 2. trader_snapshots v1 (legacy, per-period rows)
- * 3. trader_snapshots_v2 (Connector path, per-period rows)
+ * 2. trader_snapshots_v2 (Connector path, newer, more reliable)
+ * 3. trader_snapshots v1 (legacy fallback)
  *
  * Enrichment data (equity curve, asset breakdown, positions, stats) comes from
  * dedicated tables that use v1 naming (source + source_trader_id).
@@ -197,7 +197,7 @@ export async function getTraderDetail(supabase: SupabaseClient, params: {
   const v1Rows = (v1Result || []) as Record<string, unknown>[]
   const v2Rows = (v2Result || []) as Record<string, unknown>[]
 
-  // Build per-period data using fallback chain: LR -> v1 -> v2
+  // Build per-period data using fallback chain: LR -> v2 -> v1
   const periods: Record<TradingPeriod, Partial<UnifiedTrader> | null> = {
     '7D': null,
     '30D': null,
@@ -213,21 +213,21 @@ export async function getTraderDetail(supabase: SupabaseClient, params: {
       continue
     }
 
-    // Fallback: trader_snapshots v1
-    const v1Row = v1Rows.find(r =>
-      normalizePeriod(r.season_id as string) === p
-    )
-    if (v1Row) {
-      periods[p] = mapV1Snapshot(v1Row, p)
-      continue
-    }
-
-    // Fallback: trader_snapshots_v2
+    // Fallback: trader_snapshots_v2 (newer, more reliable)
     const v2Row = v2Rows.find(r =>
       normalizePeriod(r.window as string) === p
     )
     if (v2Row) {
       periods[p] = mapV2Snapshot(v2Row, p)
+      continue
+    }
+
+    // Fallback: trader_snapshots v1 (legacy)
+    const v1Row = v1Rows.find(r =>
+      normalizePeriod(r.season_id as string) === p
+    )
+    if (v1Row) {
+      periods[p] = mapV1Snapshot(v1Row, p)
     }
   }
 
