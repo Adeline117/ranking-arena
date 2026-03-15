@@ -447,7 +447,7 @@ export default function ExchangeRankingClient({
               <line x1="12" y1="17" x2="12.01" y2="17" />
             </svg>
           )}
-          <span>
+          <span suppressHydrationWarning>
             {isStale ? `${t('dataStaleWarning')} · ` : ''}
             {t('lastUpdated')} {lastUpdatedText}
           </span>
