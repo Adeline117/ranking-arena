@@ -38,7 +38,7 @@ export const preferredRegion = 'hnd1' // Tokyo — avoids Binance/OKX/Bybit geo-
 
 const GROUPS: Record<string, string[]> = {
   // Group A1: Binance (every 3h) — binance_futures removed 2026-03-14: Client error 404
-  a: ['binance_spot'],
+  a: [],  // ✅ binance_spot已永久移除（2026-03-14）
   // Group A2: Other high-priority CEX (every 3h)
   // DISABLED 2026-03-13: All 3 platforms have API access issues
   // - bybit: api2.bybit.com returns 403 Access Denied
