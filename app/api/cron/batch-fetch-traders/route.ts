@@ -38,32 +38,35 @@ export const preferredRegion = 'hnd1' // Tokyo — avoids Binance/OKX/Bybit geo-
 
 const GROUPS: Record<string, string[]> = {
   // Group A: Binance (every 3h)
-  // binance_spot permanently removed (2026-03-14)
-  a: ['binance_futures'],
+  // DISABLED 2026-03-15: binance_futures returning 404 errors
+  a: [],
   // Group A2: High-priority CEX (every 3h)
-  // Re-enabled 2026-03-15: retry after 2026-03-14 mass disable. Errors are logged, not fatal.
-  a2: ['bybit', 'bitget_futures', 'okx_futures'],
+  // DISABLED 2026-03-15: All platforms (bybit, bitget_futures, okx_futures) failing with 403/404
+  a2: [],
   // Group B: Top DEX (every 4h)
-  // Re-enabled 2026-03-15: DEX APIs may have recovered from 2026-03-14 errors
-  b: ['hyperliquid', 'gmx'],
+  // DISABLED 2026-03-15: hyperliquid (422), gmx (404) all failing
+  b: [],
   // Group C: Mid-priority (every 4h)
-  // Re-enabled 2026-03-15: aevo + okx_web3 retry
-  c: ['okx_web3', 'aevo'],
+  // DISABLED 2026-03-15: okx_web3 (400), aevo (0 traders) all failing
+  c: [],
   // Group D1: CEX (every 6h)
-  d1: ['gains', 'htx_futures'],
+  // DISABLED 2026-03-15: htx_futures (405); gains kept for now
+  d1: ['gains'],
   // Group D2: DEX only (every 6h)
   d2: ['dydx'],
   // Group E: CEX+DEX (every 6h)
-  e: ['bitfinex', 'coinex', 'binance_web3'],
+  // DISABLED 2026-03-15: coinex (404), binance_web3 (0 traders); bitfinex kept
+  e: ['bitfinex'],
   // Group F: CEX (every 6h)
   f: ['mexc', 'bingx'],
   // Group H: CEX (every 6h)
-  h: ['gateio', 'btcc'],
+  // DISABLED 2026-03-15: gateio (403), btcc (0 traders) all failing
+  h: [],
   // Group G1: DEX (every 6h)
   g1: ['drift', 'jupiter_perps'],
   // Group G2: DEX+CEX (every 6h)
-  // kwenta/blofin/paradex still dead — not re-enabled
-  g2: ['web3_bot', 'toobit', 'bitunix'],
+  // DISABLED 2026-03-15: bitunix (validation fail); web3_bot + toobit kept
+  g2: ['web3_bot', 'toobit'],
   // Group I: Social trading (every 6h)
   i: ['etoro'],
 }
