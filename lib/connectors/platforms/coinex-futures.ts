@@ -47,10 +47,21 @@ export class CoinexFuturesConnector extends BaseConnector {
     const maxPages = 10 // Safety limit
 
     while (currentPage <= maxPages) {
-      const _rawLb = await this.request<Record<string, unknown>>(
-        `https://www.coinex.com/res/copy-trading/public/traders?page=${currentPage}&limit=${limit}&sort_by=roi&period=${window}`,
-        { method: 'GET' }
-      )
+      let _rawLb: Record<string, unknown>
+      try {
+        _rawLb = await this.request<Record<string, unknown>>(
+          `https://www.coinex.com/res/copy-trading/public/traders?page=${currentPage}&limit=${limit}&sort_by=roi&period=${window}`,
+          { method: 'GET' }
+        )
+      } catch {
+        // Fallback: VPS scraper
+        const vpsData = await this.fetchViaVPS<Record<string, unknown>>('/coinex/leaderboard', {
+          page: String(currentPage),
+          limit: String(limit),
+        })
+        if (!vpsData) throw new Error('Both direct API and VPS scraper failed for coinex')
+        _rawLb = vpsData
+      }
       const data = warnValidate(CoinexFuturesLeaderboardResponseSchema, _rawLb, 'coinex-futures/leaderboard')
       const list = data?.data?.items || data?.data?.data || []
       if (!Array.isArray(list) || list.length === 0) break

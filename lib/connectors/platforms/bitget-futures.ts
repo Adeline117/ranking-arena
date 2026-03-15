@@ -57,10 +57,21 @@ export class BitgetFuturesConnector extends BaseConnector {
     let totalAvailable: number | null = null
 
     while (currentPage <= maxPages) {
-      const _rawLb = await this.request<Record<string, unknown>>(
-        `https://www.bitget.com/v1/trigger/trace/public/currentTrader/list?pageNo=${currentPage}&pageSize=${limit}&sortType=2&timeRange=${timeRange}`,
-        { method: 'GET' }
-      )
+      let _rawLb: Record<string, unknown>
+      try {
+        _rawLb = await this.request<Record<string, unknown>>(
+          `https://www.bitget.com/v1/trigger/trace/public/currentTrader/list?pageNo=${currentPage}&pageSize=${limit}&sortType=2&timeRange=${timeRange}`,
+          { method: 'GET' }
+        )
+      } catch {
+        // Fallback: VPS scraper
+        const vpsData = await this.fetchViaVPS<Record<string, unknown>>('/bitget/leaderboard', {
+          timeRange: String(timeRange),
+          page: String(currentPage),
+        })
+        if (!vpsData) throw new Error('Both direct API and VPS scraper failed for bitget')
+        _rawLb = vpsData
+      }
       const data = warnValidate(BitgetFuturesLeaderboardResponseSchema, _rawLb, 'bitget-futures/leaderboard')
       if (totalAvailable === null && data?.data?.total) totalAvailable = Number(data.data.total)
 

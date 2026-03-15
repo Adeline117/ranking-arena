@@ -33,10 +33,21 @@ export class MexcFuturesConnector extends BaseConnector {
 
   async discoverLeaderboard(window: Window, limit = 20, offset = 0): Promise<DiscoverResult> {
     const page = Math.floor(offset / limit) + 1
-    const _rawLb = await this.request<Record<string, unknown>>(
-      `https://futures.mexc.com/api/v1/private/account/assets/copy-trading/trader/list?page=${page}&pageSize=${limit}&sortField=yield&sortType=DESC&timeType=${WINDOW_MAP[window]}`,
-      { method: 'GET' }
-    )
+    let _rawLb: Record<string, unknown>
+    try {
+      _rawLb = await this.request<Record<string, unknown>>(
+        `https://futures.mexc.com/api/v1/private/account/assets/copy-trading/trader/list?page=${page}&pageSize=${limit}&sortField=yield&sortType=DESC&timeType=${WINDOW_MAP[window]}`,
+        { method: 'GET' }
+      )
+    } catch {
+      // Fallback: VPS scraper
+      const vpsData = await this.fetchViaVPS<Record<string, unknown>>('/mexc/leaderboard', {
+        page: String(page),
+        pageSize: String(limit),
+      })
+      if (!vpsData) throw new Error('Both direct API and VPS scraper failed for mexc')
+      _rawLb = vpsData
+    }
     const data = warnValidate(MexcFuturesLeaderboardResponseSchema, _rawLb, 'mexc-futures/leaderboard')
     const list = data?.data?.list || []
 
