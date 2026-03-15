@@ -7,7 +7,6 @@ import { tokens } from '@/lib/design-tokens'
 import { useLanguage } from '../Providers/LanguageProvider'
 import { supabase } from '@/lib/supabase/client'
 import { useCapacitorHaptics } from '@/lib/hooks/useCapacitor'
-import { features } from '@/lib/features'
 
 interface IconProps {
   active: boolean
@@ -255,14 +254,13 @@ export default function MobileBottomNav(): React.ReactElement {
   }, [impact])
 
   const navItems: NavItem[] = useMemo(() => {
-    const items: NavItem[] = [
+    return [
       { href: '/', labelKey: 'home', Icon: HomeIcon },
-      { href: '/rankings', labelKey: 'rankings', Icon: RankingsIcon },
-      { href: '/search', labelKey: 'search', Icon: SearchIcon },
-      { href: '/library', labelKey: 'library', Icon: LibraryIcon },
-      { href: userHandle ? `/u/${encodeURIComponent(userHandle)}` : '/settings', labelKey: 'profile', Icon: UserIcon },
+      { href: '/hot', labelKey: 'hot', Icon: FireIcon },
+      { href: '/groups', labelKey: 'groups', Icon: GroupsIcon },
+      { href: '/market', labelKey: 'market', Icon: MarketIcon },
+      { href: userHandle ? `/u/${encodeURIComponent(userHandle)}` : '/settings', labelKey: 'me', Icon: UserIcon },
     ]
-    return items
   }, [userHandle])
 
   // Hide nav on auth / onboarding pages

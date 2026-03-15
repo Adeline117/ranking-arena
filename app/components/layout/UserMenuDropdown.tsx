@@ -8,7 +8,6 @@ import { tokens } from '@/lib/design-tokens'
 import { Box } from '../base'
 import { UserIcon, NotificationIcon } from '../ui/icons'
 import { useLanguage } from '../Providers/LanguageProvider'
-import { features } from '@/lib/features'
 
 const AccountSwitcher = dynamic(() => import('../ui/AccountSwitcher'), { ssr: false })
 
@@ -180,7 +179,6 @@ export default function UserMenuDropdown({
             <span>{t('userCenter') || '用户中心'}</span>
           </Link>
           {/* 持仓和多链资产已移到个人主页 tabs */}
-          {features.social && (
           <Link
             href="/inbox"
             role="menuitem"
@@ -215,7 +213,6 @@ export default function UserMenuDropdown({
             </Box>
             <span>{t('inbox')}</span>
           </Link>
-          )}
           {/* 升级Pro已合并到用户中心 */}
           <Link
             href="/settings"

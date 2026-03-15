@@ -21,7 +21,13 @@ export default function Footer() {
         { href: '/library', label: t('footerLibrary') },
       ],
     },
-    // Community section temporarily removed (social features disabled)
+    {
+      title: t('footerCommunity'),
+      links: [
+        { href: '/groups', label: t('footerGroups') },
+        { href: '/hot', label: t('footerHot') },
+      ],
+    },
     {
       title: t('footerLegal'),
       links: [
