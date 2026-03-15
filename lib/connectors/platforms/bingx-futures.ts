@@ -218,7 +218,7 @@ export class BingxFuturesConnector extends BaseConnector {
     return {
       trader_key: raw.uniqueId ?? raw.uid ?? raw.traderId ?? null,
       display_name: raw.traderName ?? raw.nickname ?? raw.nickName ?? raw.displayName ?? null,
-      avatar_url: null,
+      avatar_url: raw.headUrl ?? raw.avatarUrl ?? raw.avatar ?? null,
       roi,
       pnl: this.num(raw.pnl ?? raw.totalPnl ?? raw.totalEarnings ?? raw.profit),
       win_rate: winRate,
