@@ -23,6 +23,7 @@ import {
   getTradingStyleTags, formatAum, getActiveDays, formatActiveDays,
   Badge, StatItem, ActionButton,
 } from './TraderHeaderHelpers'
+import { getScoreColor, getScoreColorHex } from '@/lib/utils/score-colors'
 
 // Lazy-load rarely-used components
 const ClaimTraderButton = dynamic(() => import('./ClaimTraderButton'), { ssr: false })
@@ -52,6 +53,8 @@ interface TraderHeaderProps {
   roi90d?: number
   maxDrawdown?: number
   winRate?: number
+  /** Arena Score for display in header */
+  arenaScore?: number | null
   /** Leaderboard rank for the Share on X wrapped card */
   rank?: number | null
   /** Pre-fetched current user ID to avoid duplicate auth calls */
@@ -97,6 +100,7 @@ export default function TraderHeader({
   roi90d,
   maxDrawdown,
   winRate,
+  arenaScore,
   rank,
   currentUserId: externalUserId,
   isVerifiedTrader = false,
@@ -380,6 +384,22 @@ export default function TraderHeader({
               </Badge>
             )}
 
+            {/* Arena Score badge with color grading */}
+            {arenaScore != null && arenaScore > 0 && (
+              <Badge
+                color={getScoreColorHex(arenaScore)}
+                style={{ padding: '3px 10px' }}
+                title={`Arena Score: ${arenaScore.toFixed(1)}`}
+              >
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke={getScoreColor(arenaScore)} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ marginRight: 3 }}>
+                  <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
+                </svg>
+                <Text size="xs" weight="black" style={{ color: getScoreColor(arenaScore), fontFamily: tokens.typography.fontFamily.mono.join(', '), letterSpacing: '-0.02em' }}>
+                  {arenaScore.toFixed(0)}
+                </Text>
+              </Badge>
+            )}
+
             {isBot && (
               <Badge color="#a78bfa" style={{ padding: '3px 10px' }} title={t('botTooltip')}>
                 <span style={{ fontSize: 12, marginRight: 3 }}>{'⚡'}</span>
@@ -396,7 +416,25 @@ export default function TraderHeader({
 
 
           </Box>
-          
+
+          {/* Ranked #X on Exchange subtitle */}
+          {rank != null && rank > 0 && source && EXCHANGE_NAMES[source.toLowerCase()] && (
+            <Text
+              size="xs"
+              style={{
+                color: tokens.colors.text.secondary,
+                marginTop: 2,
+                marginBottom: 2,
+                fontWeight: 500,
+                letterSpacing: '0.2px',
+              }}
+            >
+              {t('rankedOnExchange')
+                .replace('{rank}', rank.toLocaleString())
+                .replace('{exchange}', EXCHANGE_NAMES[source.toLowerCase()] || source)}
+            </Text>
+          )}
+
           {/* Stats row — hide followers/following when both are 0 */}
           <Box style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[2], flexWrap: 'wrap', marginTop: tokens.spacing[1] }}>
             {(followerCount > 0 || following > 0) && (
