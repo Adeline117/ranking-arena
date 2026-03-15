@@ -7,7 +7,7 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { createHash } from 'crypto'
-import { getSupabaseAdmin, checkRateLimit, RateLimitPresets } from '@/lib/api'
+import { getSupabaseAdmin, checkRateLimit, RateLimitPresets, requireAuth } from '@/lib/api'
 import { createLogger } from '@/lib/utils/logger'
 
 const logger = createLogger('translate')
@@ -168,6 +168,13 @@ function detectSourceLang(text: string): 'zh' | 'en' {
 }
 
 export async function POST(request: NextRequest) {
+  // 认证：必须登录才能使用翻译（防止匿名消耗 OpenAI credits）
+  try {
+    await requireAuth(request)
+  } catch {
+    return NextResponse.json({ error: 'Authentication required' }, { status: 401 })
+  }
+
   // 限流：使用敏感操作级别（15/分钟），防止滥用 OpenAI 额度
   const rateLimitResponse = await checkRateLimit(request, RateLimitPresets.sensitive)
   if (rateLimitResponse) return rateLimitResponse

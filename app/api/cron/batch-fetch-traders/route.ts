@@ -19,7 +19,7 @@
  *   group=i  → etoro (every 6h)
  *
  * Dead/blocked platforms:
- *   binance_futures, binance_spot, dydx (APIs dead 2026-03-15),
+ *   dydx (indexer API 404 since 2026-03), aevo (no fetch group),
  *   kucoin, lbank, weex, mux, synthetix, bitmart,
  *   whitebit, btse, cryptocom, pionex, vertex, okx_spot, paradex
  */
@@ -44,12 +44,10 @@ const GROUPS: Record<string, string[]> = {
   a2: ['bybit', 'bitget_futures', 'okx_futures'],
   // Group B: Top DEX (every 4h) + GMX (switched to subgraph 2026-03-15)
   b: ['hyperliquid', 'gmx'],
-  // Group C: Mid-priority (every 4h)
-  c: ['okx_futures'],
+  // Group C: Mid-priority (every 4h) — okx_futures moved to a2, bitunix re-enabled
+  c: ['bitunix'],
   // Group D1: CEX (every 6h) — VPS proxy enabled
   d1: ['gains', 'htx_futures'],
-  // Group D2: EMPTY — dydx DEAD (indexer API 404 globally since ~2026-03)
-  d2: [],
   // Group E: CEX+DEX (every 6h) — coinex URL fixed + VPS proxy
   e: ['bitfinex', 'coinex', 'binance_web3'],
   // Group F: CEX (every 6h) — VPS proxy enabled

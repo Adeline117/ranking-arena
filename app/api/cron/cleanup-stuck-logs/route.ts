@@ -10,6 +10,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getSupabaseAdmin } from '@/lib/supabase/server'
 import { logger } from '@/lib/logger'
+import { PipelineLogger } from '@/lib/services/pipeline-logger'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 60
@@ -28,6 +29,7 @@ export async function GET(request: NextRequest) {
   }
 
   const startTime = Date.now()
+  const plog = await PipelineLogger.start('cleanup-stuck-logs')
 
   try {
     const supabase = getSupabaseAdmin()
@@ -46,11 +48,11 @@ export async function GET(request: NextRequest) {
       logger.error('[cleanup-stuck-logs] Failed to fetch stuck logs', {}, fetchError)
       return NextResponse.json({
         error: 'Failed to fetch stuck logs',
-        details: fetchError.message
       }, { status: 500 })
     }
 
     if (!stuckLogs || stuckLogs.length === 0) {
+      await plog.success(0, { message: 'No stuck logs found' })
       return NextResponse.json({
         ok: true,
         cleaned: 0,
@@ -79,13 +81,13 @@ export async function GET(request: NextRequest) {
       logger.error('[cleanup-stuck-logs] Failed to update stuck logs', {}, updateError)
       return NextResponse.json({
         error: 'Failed to update stuck logs',
-        details: updateError.message,
         found: stuckLogs.length,
       }, { status: 500 })
     }
 
     const cleaned = count || 0
     logger.warn(`[cleanup-stuck-logs] Successfully marked ${cleaned} stuck logs as timeout`)
+    await plog.success(cleaned, { jobs: stuckLogs.map(l => l.job_name) })
 
     return NextResponse.json({
       ok: true,
@@ -98,6 +100,7 @@ export async function GET(request: NextRequest) {
       durationMs: Date.now() - startTime,
     })
   } catch (error) {
+    await plog.error(error instanceof Error ? error : new Error(String(error)))
     logger.error('[cleanup-stuck-logs] Unexpected error', {}, error)
     return NextResponse.json({
       error: 'Internal server error',

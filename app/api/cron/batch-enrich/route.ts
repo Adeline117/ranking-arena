@@ -39,8 +39,8 @@ const PLATFORM_LIMITS: Record<string, { limit90: number; limit30: number; limit7
   gateio: { limit90: 30, limit30: 30, limit7: 20 }, // 30D: 35→30 (match 90D), 7D: 25→20
   mexc: { limit90: 30, limit30: 30, limit7: 20 }, // 30D: 35→30 (match 90D), 7D: 25→20
   drift: { limit90: 30, limit30: 25, limit7: 15 }, // Increased: public API, fast
-  dydx: { limit90: 30, limit30: 25, limit7: 15 }, // Increased: public API
-  aevo: { limit90: 30, limit30: 25, limit7: 15 }, // Increased: public API
+  // dydx: REMOVED — dead since 2026-03, indexer API 404 globally
+  // aevo: REMOVED — no fetch group, enriching stale data is wasted work
   gains: { limit90: 30, limit30: 25, limit7: 15 }, // Increased: public API, computes MDD
   // kwenta removed: Copin API stopped serving Kwenta data (2026-03-11)
   jupiter_perps: { limit90: 20, limit30: 20, limit7: 10 }, // 30D: 25→20 (match 90D), 7D: 15→10
@@ -56,13 +56,13 @@ const HIGH_PRIORITY = ['binance_futures', 'okx_futures', 'bitget_futures', 'hype
 // bybit_spot removed: api2.bybit.com endpoints return 404 globally (2026-03-10)
 // kwenta removed: Copin API stopped serving Kwenta data (2026-03-11)
 // binance_spot moved to end: repeatedly hangs 45-76min, process last to avoid blocking (2026-03-14)
-const MEDIUM_PRIORITY = ['htx_futures', 'gateio', 'mexc', 'drift', 'aevo', 'gains']
+const MEDIUM_PRIORITY = ['htx_futures', 'gateio', 'mexc', 'drift', 'gains']
 
 // Low priority - platforms that frequently timeout or hang
 // Moved here to prevent blocking high/medium priority platforms
 // dydx: consistent 360s timeout
 // binance_spot: COMPLETELY DISABLED (2026-03-14 Round 6) - see PLATFORM_LIMITS comment
-const LOW_PRIORITY = ['dydx']
+const LOW_PRIORITY: string[] = []
 
 // Lower priority (enriched only with all=true)
 const LOWER_PRIORITY: string[] = []

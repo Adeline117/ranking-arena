@@ -91,7 +91,7 @@ export async function GET(request: NextRequest) {
     if (error) {
       logger.dbError('fetch-manipulation-alerts', error, { status, severity, alertType })
       return NextResponse.json(
-        { error: 'Failed to fetch alerts', details: error.message },
+        { error: 'Failed to fetch alerts' },
         { status: 500 }
       )
     }
@@ -105,7 +105,7 @@ export async function GET(request: NextRequest) {
   } catch (error) {
     logger.apiError('/api/admin/manipulation/alerts', error, {})
     return NextResponse.json(
-      { error: 'Internal server error', details: error instanceof Error ? error.message : 'Unknown' },
+      { error: 'Internal server error' },
       { status: 500 }
     )
   }
@@ -183,7 +183,7 @@ export async function POST(request: NextRequest) {
     if (insertError) {
       logger.dbError('insert-manipulation-alert', insertError, { alert })
       return NextResponse.json(
-        { error: 'Failed to create alert', details: insertError.message },
+        { error: 'Failed to create alert' },
         { status: 500 }
       )
     }
@@ -244,7 +244,7 @@ export async function POST(request: NextRequest) {
   } catch (error) {
     logger.apiError('/api/admin/manipulation/alerts', error, {})
     return NextResponse.json(
-      { error: 'Internal server error', details: error instanceof Error ? error.message : 'Unknown' },
+      { error: 'Internal server error' },
       { status: 500 }
     )
   }

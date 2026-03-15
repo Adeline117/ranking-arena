@@ -19,6 +19,7 @@ import { detectMarketCondition, detectVolatilityRegime, calculateTrendStrength }
 import { logger } from '@/lib/logger'
 import { fireAndForget } from '@/lib/utils/logger'
 import { recordFetchResult } from '@/lib/utils/pipeline-monitor'
+import { PipelineLogger } from '@/lib/services/pipeline-logger'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 60
@@ -36,6 +37,7 @@ export async function POST(request: NextRequest) {
   const { searchParams } = new URL(request.url)
   const type = searchParams.get('type') || 'all'
   const startTime = Date.now()
+  const plog = await PipelineLogger.start('fetch-market-data', { type })
 
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
   const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!
@@ -153,8 +155,10 @@ export async function POST(request: NextRequest) {
       'Record market data fetch metrics'
     )
 
+    await plog.success(Object.keys(results.prices || {}).length, { type, results })
     return NextResponse.json({ success: true, type, results })
   } catch (err) {
+    await plog.error(err instanceof Error ? err : new Error(String(err)))
     logger.apiError('/api/cron/fetch-market-data', err, {})
 
     // Record error metric

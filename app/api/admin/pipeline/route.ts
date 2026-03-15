@@ -13,16 +13,25 @@ import { ApiError } from '@/lib/api/errors'
 
 export const dynamic = 'force-dynamic'
 
+function safeCompare(a: string, b: string): boolean {
+  const { timingSafeEqual } = require('crypto')
+  const bufA = Buffer.from(a)
+  const bufB = Buffer.from(b)
+  if (bufA.length !== bufB.length) return false
+  return timingSafeEqual(bufA, bufB)
+}
+
 function isAuthorized(request: NextRequest): boolean {
-  // Bearer token auth (for cron / internal calls)
-  const authHeader = request.headers.get('authorization')
   const cronSecret = process.env.CRON_SECRET
   if (!cronSecret) return false
-  if (authHeader === `Bearer ${cronSecret}`) return true
+
+  // Bearer token auth (for cron / internal calls)
+  const authHeader = request.headers.get('authorization')
+  if (authHeader && safeCompare(authHeader, `Bearer ${cronSecret}`)) return true
 
   // Admin token auth
   const adminToken = request.headers.get('x-admin-token')
-  if (adminToken === cronSecret) return true
+  if (adminToken && safeCompare(adminToken, cronSecret)) return true
 
   return false
 }

@@ -83,6 +83,18 @@ jest.mock('@/lib/logger', () => ({
   logger: { info: jest.fn(), warn: jest.fn(), error: jest.fn(), debug: jest.fn() },
 }))
 
+jest.mock('@/lib/services/pipeline-logger', () => ({
+  PipelineLogger: {
+    start: jest.fn(() =>
+      Promise.resolve({
+        success: jest.fn(),
+        error: jest.fn(),
+        timeout: jest.fn(),
+      })
+    ),
+  },
+}))
+
 import { NextRequest } from 'next/server'
 import { POST } from '../route'
 

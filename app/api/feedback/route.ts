@@ -1,45 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getSupabaseAdmin } from '@/lib/supabase/server'
 import { logger } from '@/lib/logger'
-
-// In-memory rate limit: max 5 feedback per IP per hour
-const rateLimitMap = new Map<string, number[]>()
-const RATE_LIMIT_WINDOW = 60 * 60 * 1000 // 1 hour
-const RATE_LIMIT_MAX = 5
-
-function checkRateLimit(ip: string): boolean {
-  const now = Date.now()
-  const timestamps = rateLimitMap.get(ip) || []
-  const recent = timestamps.filter(t => now - t < RATE_LIMIT_WINDOW)
-  if (recent.length >= RATE_LIMIT_MAX) return false
-  recent.push(now)
-  rateLimitMap.set(ip, recent)
-  return true
-}
-
-// Clean up stale entries every 10 minutes
-setInterval(() => {
-  const now = Date.now()
-  for (const [ip, timestamps] of rateLimitMap) {
-    const recent = timestamps.filter(t => now - t < RATE_LIMIT_WINDOW)
-    if (recent.length === 0) rateLimitMap.delete(ip)
-    else rateLimitMap.set(ip, recent)
-  }
-}, 10 * 60 * 1000)
+import { checkRateLimit, RateLimitPresets } from '@/lib/utils/rate-limit'
 
 export async function POST(request: NextRequest) {
-  try {
-    // Rate limit by IP
-    const ip = request.headers.get('x-forwarded-for')?.split(',')[0]?.trim()
-      || request.headers.get('x-real-ip')
-      || 'unknown'
-    if (!checkRateLimit(ip)) {
-      return NextResponse.json(
-        { error: 'Too many feedback submissions. Please try again later.' },
-        { status: 429 }
-      )
-    }
+  // Rate limit via Upstash Redis (works across Vercel serverless instances)
+  const rateLimitResp = await checkRateLimit(request, RateLimitPresets.sensitive)
+  if (rateLimitResp) return rateLimitResp
 
+  try {
     const body = await request.json()
     const { message, page_url, user_agent, screenshot } = body
 
@@ -65,7 +34,8 @@ export async function POST(request: NextRequest) {
       message: message.trim(),
       page_url: page_url || null,
       user_agent: user_agent || null,
-      screenshot_url: screenshot ? screenshot.slice(0, 500000) : null,
+      // Limit screenshot to 50KB (was 500KB) to prevent DB abuse
+      screenshot_url: screenshot ? screenshot.slice(0, 50000) : null,
     })
 
     if (error) {

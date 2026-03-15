@@ -45,9 +45,11 @@ export async function POST(request: NextRequest) {
     const internalKey = request.headers.get('x-internal-key')
     const isInternal = internalKey === process.env.INTERNAL_API_KEY
 
+    let authenticatedUserId: string | null = null
     if (!isInternal) {
       // 非内部调用需要用户认证
-      await requireAuth(request)
+      const user = await requireAuth(request)
+      authenticatedUserId = user.id
     }
 
     const body = await request.json()
@@ -68,6 +70,13 @@ export async function POST(request: NextRequest) {
     }
     if (!message || typeof message !== 'string') {
       return NextResponse.json({ error: 'Missing message' }, { status: 400 })
+    }
+
+    // 非内部调用：actor_id 必须是当前认证用户（防止伪造通知）
+    if (authenticatedUserId) {
+      if (actor_id && actor_id !== authenticatedUserId) {
+        return NextResponse.json({ error: 'actor_id must match authenticated user' }, { status: 403 })
+      }
     }
 
     // 防止给自己发通知

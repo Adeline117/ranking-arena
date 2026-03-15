@@ -7,6 +7,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { getTraderByHandle, getTraderPerformance, getTraderStats, getTraderPortfolio } from '@/lib/data/trader'
 import logger from '@/lib/logger'
+import { checkRateLimit, RateLimitPresets } from '@/lib/utils/rate-limit'
 
 function getSupabase() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL
@@ -21,6 +22,9 @@ export async function GET(
   request: NextRequest,
   context: { params: Promise<{ handle: string }> }
 ) {
+  const rateLimitResp = await checkRateLimit(request, RateLimitPresets.read)
+  if (rateLimitResp) return rateLimitResp
+
   try {
     // 解析 params
     const params = await Promise.resolve(context.params)

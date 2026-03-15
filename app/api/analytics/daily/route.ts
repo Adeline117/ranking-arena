@@ -1,12 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getSupabaseAdmin } from '@/lib/supabase/server'
 import { logger } from '@/lib/logger'
+import { PipelineLogger } from '@/lib/services/pipeline-logger'
 
 export async function POST(request: NextRequest) {
   const authHeader = request.headers.get('authorization')
   if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
+
+  const plog = await PipelineLogger.start('analytics-daily')
 
   try {
     const supabase = getSupabaseAdmin()
@@ -51,8 +54,10 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'DB error' }, { status: 500 })
     }
 
+    await plog.success(1, row)
     return NextResponse.json({ ok: true, data: row })
   } catch (err) {
+    await plog.error(err instanceof Error ? err : new Error(String(err)))
     logger.error('[Analytics Daily] Error:', err)
     return NextResponse.json({ error: 'Internal error' }, { status: 500 })
   }

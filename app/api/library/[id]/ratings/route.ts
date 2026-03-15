@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getSupabaseAdmin } from '@/lib/admin/auth'
+import { checkRateLimit, RateLimitPresets } from '@/lib/utils/rate-limit'
 
 // Bayesian average: weighted_score = (v/(v+m)) * R + (m/(v+m)) * C
 // m = minimum votes threshold
@@ -18,6 +19,9 @@ function getAccountWeight(createdAt: string, postCount: number): number {
 }
 
 export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const rateLimitResp = await checkRateLimit(req, RateLimitPresets.read)
+  if (rateLimitResp) return rateLimitResp
+
   try {
     const { id } = await params
     const supabase = getSupabaseAdmin()
@@ -119,6 +123,6 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
       distribution,
     })
   } catch (e: unknown) {
-    return NextResponse.json({ error: (e instanceof Error ? e.message : String(e)) }, { status: 500 })
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
 }

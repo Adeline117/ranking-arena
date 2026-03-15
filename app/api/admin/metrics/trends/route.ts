@@ -11,13 +11,21 @@ export const dynamic = 'force-dynamic'
 
 const logger = createLogger('admin-metrics-trends')
 
+function safeCompare(a: string, b: string): boolean {
+  const { timingSafeEqual } = require('crypto')
+  const bufA = Buffer.from(a)
+  const bufB = Buffer.from(b)
+  if (bufA.length !== bufB.length) return false
+  return timingSafeEqual(bufA, bufB)
+}
+
 function isAuthorized(request: NextRequest): boolean {
-  const authHeader = request.headers.get('authorization')
   const cronSecret = process.env.CRON_SECRET
   if (!cronSecret) return false
-  if (authHeader === `Bearer ${cronSecret}`) return true
+  const authHeader = request.headers.get('authorization')
+  if (authHeader && safeCompare(authHeader, `Bearer ${cronSecret}`)) return true
   const adminToken = request.headers.get('x-admin-token')
-  if (adminToken === cronSecret) return true
+  if (adminToken && safeCompare(adminToken, cronSecret)) return true
   return false
 }
 
@@ -136,6 +144,6 @@ export async function GET(request: NextRequest) {
   } catch (error) {
     const msg = error instanceof Error ? error.message : String(error)
     logger.error('Failed to fetch metrics trends', { error: msg })
-    return NextResponse.json({ ok: false, error: msg }, { status: 500 })
+    return NextResponse.json({ ok: false, error: 'Internal server error' }, { status: 500 })
   }
 }

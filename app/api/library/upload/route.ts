@@ -35,10 +35,17 @@ export async function POST(req: NextRequest) {
       )
     }
 
-    // Simple auth: require service role key in Authorization header
+    // Auth: require dedicated admin secret (never expose service role key in headers)
     const authHeader = req.headers.get('authorization')
-    const expectedKey = process.env.SUPABASE_SERVICE_ROLE_KEY
-    if (!authHeader || !expectedKey || authHeader !== `Bearer ${expectedKey}`) {
+    const expectedKey = process.env.ADMIN_SECRET || process.env.CRON_SECRET
+    if (!authHeader || !expectedKey) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+    // Use constant-time comparison to prevent timing attacks
+    const { timingSafeEqual } = await import('crypto')
+    const a = Buffer.from(authHeader)
+    const b = Buffer.from(`Bearer ${expectedKey}`)
+    if (a.length !== b.length || !timingSafeEqual(a, b)) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
