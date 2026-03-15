@@ -19,9 +19,12 @@
  *   group=i  → etoro (every 6h)
  *
  * Dead/blocked platforms:
- *   dydx (indexer API 404 since 2026-03), aevo (no fetch group),
- *   kucoin, lbank, weex, mux, synthetix, bitmart,
+ *   kucoin, weex, mux, synthetix, bitmart,
  *   whitebit, btse, cryptocom, pionex, vertex, okx_spot, paradex
+ * Mac Mini only (crontab feeds data directly):
+ *   phemex (CloudFront blocks VPS), lbank (browser crashes on VPS), blofin (API needs auth)
+ * Restored 2026-03-15:
+ *   dydx (via Copin API), gmx (via Subsquid), htx (via futures.htx.com)
  */
 
 import { NextRequest, NextResponse } from 'next/server'
@@ -55,12 +58,13 @@ const GROUPS: Record<string, string[]> = {
   // Group H: CEX (every 6h) — VPS proxy enabled 2026-03-15
   h: ['gateio', 'btcc'],
   // Group G1: DEX (every 6h)
-  g1: ['drift', 'jupiter_perps'],
+  g1: ['drift', 'jupiter_perps', 'aevo'],
   // Group G2: DEX+CEX (every 6h)
-  // DISABLED 2026-03-15: bitunix (validation fail); web3_bot + toobit kept
   g2: ['web3_bot', 'toobit'],
-  // Group I: Social trading (every 6h)
-  i: ['etoro'],
+  // Group I: Social trading + restored platforms (every 6h)
+  // dYdX restored via Copin API (2026-03-15)
+  // blofin/phemex: Mac Mini feeds data, connector as backup
+  i: ['etoro', 'dydx'],
 }
 
 interface BatchResult {
