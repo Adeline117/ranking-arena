@@ -223,40 +223,22 @@ export class BinanceFuturesConnector extends BaseConnector {
   ): Promise<DiscoverResult> {
     const periodType = this.mapWindowToPlatform(window)
 
-    // Try v1/searchLeaderboard (verified working via VPS proxy)
-    // v3/getLeaderboardRank returns 404 since ~2026-03-14
-    let _rawLb: BinanceLeaderboardResponse
-    try {
-      _rawLb = await this.request<BinanceLeaderboardResponse>(
-        `${this.BASE_URL}/v1/public/future/leaderboard/searchLeaderboard`,
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            isShared: true,
-            isTrader: true,
-            periodType,
-            statisticsType: 'ROI',
-          }),
-        }
-      )
-    } catch {
-      // Fallback: copy-trade leader portfolio list
-      _rawLb = await this.request<BinanceLeaderboardResponse>(
-        `${this.BASE_URL}/v2/public/future/leaderboard/getLeaderboardRank`,
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            isShared: true,
-            isTrader: true,
-            periodType,
-            statisticsType: 'ROI',
-            tradeType: 'PERPETUAL',
-          }),
-        }
-      )
-    }
+    // Primary: copy-trade ranking API (verified working from deprecated fetcher)
+    // leaderboard APIs (v1/v2/v3) all return 404 since ~2026-03-14
+    const _rawLb = await this.request<BinanceLeaderboardResponse>(
+      `${this.BASE_URL}/v1/public/future/copy-trade/lead-portfolio/ranking`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          pageNumber: 1,
+          pageSize: limit,
+          timeRange: periodType,
+          dataType: 'ROI',
+          favoriteOnly: false,
+        }),
+      }
+    )
     const response = warnValidate(BinanceFuturesLeaderboardResponseSchema, _rawLb, 'binance-futures/leaderboard')
 
     if (!response.success || !response.data?.list) {
