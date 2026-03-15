@@ -18,7 +18,7 @@ import { createLogger } from '@/lib/utils/logger'
 const logger = createLogger('batch-enrich')
 
 export const dynamic = 'force-dynamic'
-export const maxDuration = 600 // Vercel Pro max: 10 minutes (was 300s)
+export const maxDuration = 900 // Vercel Pro max: 15 minutes
 
 // Platform configs with limits per period
 // EMERGENCY REDUCTION (2026-03-13 Round 2): batch-enrich STILL hitting 600s timeout
@@ -110,8 +110,8 @@ export async function GET(request: NextRequest) {
   const results: BatchResult[] = []
   const plog = await PipelineLogger.start(`batch-enrich-${periodParam}`, { period: periodParam, enrichAll, platforms })
 
-  // Safety timeout: ensure plog gets called before Vercel kills the function at 600s
-  const SAFETY_TIMEOUT_MS = 580_000 // Was 280s for 300s limit, now 580s for 600s limit
+  // Safety timeout: ensure plog gets called before Vercel kills the function at 900s
+  const SAFETY_TIMEOUT_MS = 880_000 // 880s for 900s limit (20s buffer)
   const safetyTimer = setTimeout(async () => {
     try {
       await plog.error(new Error('Safety timeout: function approaching 600s limit'), { results })
@@ -130,14 +130,14 @@ export async function GET(request: NextRequest) {
   const ONCHAIN_TIMEOUT_MS = periodsToRun.length > 1 ? 120_000 : 180_000  // 120s/180s
 
   const functionStart = Date.now()
-  // Budget per period: divide 570s (leaving 30s buffer from 600s total) by number of periods
-  const PER_PERIOD_BUDGET_MS = Math.floor(570_000 / periodsToRun.length)
+  // Budget per period: divide 870s (leaving 30s buffer from 900s total) by number of periods
+  const PER_PERIOD_BUDGET_MS = Math.floor(870_000 / periodsToRun.length)
 
   // Run each period sequentially (when period=all, this runs 90D → 30D → 7D)
   for (const period of periodsToRun) {
     // Bail early if we're running low on time (leave 50s for cleanup/logging)
     const elapsed = Date.now() - functionStart
-    if (elapsed > 550_000) {
+    if (elapsed > 850_000) {
       results.push({ platform: '*', period, status: 'error', durationMs: 0, error: `Skipped: ${Math.round(elapsed / 1000)}s elapsed, <50s remaining` })
       continue
     }
