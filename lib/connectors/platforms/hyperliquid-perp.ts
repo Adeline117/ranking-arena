@@ -40,23 +40,33 @@ export class HyperliquidPerpConnector extends BaseConnector {
   }
 
   async discoverLeaderboard(window: Window, limit = 100, _offset = 0): Promise<DiscoverResult> {
-    const timeWindow = window === '7d' ? 'day' : window === '30d' ? 'month' : 'allTime'
-
-    const _rawLb = await this.request<Record<string, unknown>>(
-      'https://api.hyperliquid.xyz/info',
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ type: 'leaderboard', timeWindow }),
-      }
-    )
+    // Primary: stats-data endpoint (GET, always works)
+    // Fallback: info POST endpoint (broke ~2026-03-14, returns 422)
+    let _rawLb: Record<string, unknown>
+    try {
+      _rawLb = await this.request<Record<string, unknown>>(
+        'https://stats-data.hyperliquid.xyz/Mainnet/leaderboard',
+        { method: 'GET' }
+      )
+    } catch {
+      // Fallback to POST info endpoint
+      const timeWindow = window === '7d' ? 'day' : window === '30d' ? 'month' : 'allTime'
+      _rawLb = await this.request<Record<string, unknown>>(
+        'https://api.hyperliquid.xyz/info',
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ type: 'leaderboard', timeWindow }),
+        }
+      )
+    }
     const data = warnValidate(HyperliquidLeaderboardResponseSchema, _rawLb, 'hyperliquid-perp/leaderboard')
     const leaderboard = data?.leaderboardRows || data || []
 
     // For 90d with allTime, we take top entries (platform doesn't have 90d natively, uses allTime)
     const entries = Array.isArray(leaderboard) ? leaderboard.slice(0, limit) : []
 
-    // Map window to windowPerformances key
+    // Map window to windowPerformances key — stats-data returns 'day'/'week'/'month'/'allTime'
     const windowKey = window === '7d' ? 'week' : window === '30d' ? 'month' : 'allTime'
 
     const traders: TraderSource[] = entries.map((item: Record<string, unknown>) => {
