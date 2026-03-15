@@ -18,7 +18,7 @@ import { createLogger } from '@/lib/utils/logger'
 const logger = createLogger('batch-enrich')
 
 export const dynamic = 'force-dynamic'
-export const maxDuration = 900 // Vercel Pro max: 15 minutes
+export const maxDuration = 800 // Vercel Pro max
 
 // Platform configs with limits per period
 // EMERGENCY REDUCTION (2026-03-13 Round 2): batch-enrich STILL hitting 600s timeout
