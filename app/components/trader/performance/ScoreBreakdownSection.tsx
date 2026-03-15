@@ -40,7 +40,7 @@ export function ScoreBreakdownSection({
 }: ScoreBreakdownSectionProps) {
   const { t } = useLanguage()
 
-  const hasScores = periodArenaScore !== undefined || periodReturnScore !== undefined || periodDrawdownScore !== undefined || periodStabilityScore !== undefined || arenaScoreV3 !== undefined || performance.profitability_score !== undefined
+  const hasScores = periodArenaScore != null || periodReturnScore != null || periodDrawdownScore != null || periodStabilityScore != null || arenaScoreV3 != null || performance.profitability_score != null
 
   if (!hasScores) return null
 
