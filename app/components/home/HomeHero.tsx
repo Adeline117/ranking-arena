@@ -3,17 +3,34 @@
 import { useState, useEffect } from 'react'
 import { tokens } from '@/lib/design-tokens'
 import { useLanguage } from '../Providers/LanguageProvider'
+import { supabase } from '@/lib/supabase/client'
 
 const HERO_SEEN_KEY = 'arena_hero_seen'
+
+function formatCount(n: number): string {
+  if (n >= 1000) return `${Math.floor(n / 1000)}K+`
+  return `${n}+`
+}
 
 export default function HomeHero() {
   const { language } = useLanguage()
   const [show, setShow] = useState(false)
+  const [traderCount, setTraderCount] = useState('—')
+  const [exchangeCount, setExchangeCount] = useState('—')
 
   useEffect(() => {
     if (!sessionStorage.getItem(HERO_SEEN_KEY)) {
       setShow(true)
     }
+    supabase.from('trader_sources').select('*', { count: 'exact', head: true })
+      .then(({ count }) => { if (count) setTraderCount(formatCount(count)) })
+    supabase.from('trader_sources').select('source')
+      .then(({ data }) => {
+        if (data) {
+          const platforms = new Set(data.map((r: { source: string }) => r.source.split('_')[0]))
+          setExchangeCount(`${platforms.size}+`)
+        }
+      })
   }, [])
 
   if (!show) return null
@@ -80,8 +97,8 @@ export default function HomeHero() {
         lineHeight: tokens.typography.lineHeight.normal,
       }}>
         {language === 'zh'
-          ? '跨 30+ 交易所追踪 32,000+ 交易员表现，用 Arena Score 找到最优秀的交易员'
-          : 'Track 32,000+ traders across 30+ exchanges. Find top performers with Arena Score.'}
+          ? `跨 ${exchangeCount} 交易所追踪 ${traderCount} 交易员表现，用 Arena Score 找到最优秀的交易员`
+          : `Track ${traderCount} traders across ${exchangeCount} exchanges. Find top performers with Arena Score.`}
       </p>
 
       <div style={{
@@ -91,8 +108,8 @@ export default function HomeHero() {
         flexWrap: 'wrap',
       }}>
         {[
-          { value: '32K+', label: language === 'zh' ? '交易员' : 'Traders' },
-          { value: '30+', label: language === 'zh' ? '交易所' : 'Exchanges' },
+          { value: traderCount, label: language === 'zh' ? '交易员' : 'Traders' },
+          { value: exchangeCount, label: language === 'zh' ? '交易所' : 'Exchanges' },
           { value: '24/7', label: language === 'zh' ? '实时更新' : 'Live Data' },
         ].map((stat) => (
           <div key={stat.label} style={{ textAlign: 'center' }}>

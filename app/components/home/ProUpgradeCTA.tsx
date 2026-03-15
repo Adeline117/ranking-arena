@@ -34,7 +34,7 @@ export default function ProUpgradeCTA({
       </svg>
       <Box style={{ flex: 1, minWidth: 0 }}>
         <Text size="md" weight="bold" style={{ color: 'var(--color-text-primary)', marginBottom: 4 }}>
-          {t('upgradeProViewAll').replace('{count}', '32,000+')}
+          {t('upgradeProViewAll')}
         </Text>
         <Text size="sm" style={{ color: 'var(--color-text-tertiary)', lineHeight: 1.5 }}>
           {language === 'zh'
