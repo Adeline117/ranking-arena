@@ -19,6 +19,7 @@ import { sendScraperAlert } from '@/lib/alerts/send-alert'
 import { captureMessage } from '@/lib/utils/logger'
 import { logger } from '@/lib/logger'
 import { PipelineLogger } from '@/lib/services/pipeline-logger'
+import { evaluateAndAlert } from '@/lib/services/pipeline-self-heal'
 
 export const runtime = 'nodejs'
 export const preferredRegion = 'sfo1'
@@ -329,6 +330,23 @@ export async function GET(req: Request) {
       } catch (error: unknown) {
         logger.error('Failed to send freshness alert', {}, error instanceof Error ? error : new Error(String(error)))
       }
+    }
+
+    // ── Self-heal evaluation (Redis-backed consecutive failure tracking) ──
+    try {
+      const platformStatuses = report.platforms.map(p => ({
+        platform: p.platform,
+        ageHours: p.ageHours,
+        recordCount: p.recordCount,
+      }))
+      const selfHealAlerts = await evaluateAndAlert(platformStatuses)
+      if (selfHealAlerts.length > 0) {
+        logger.warn(`[DataFreshness] Self-heal triggered alerts for ${selfHealAlerts.length} platforms`, {
+          platforms: selfHealAlerts.map(a => a.platform),
+        })
+      }
+    } catch (shErr) {
+      logger.error('[DataFreshness] Self-heal evaluation error:', shErr)
     }
 
     // Always log as success — this is a monitoring job, detecting staleness is expected behavior.
