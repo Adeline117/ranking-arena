@@ -20,6 +20,7 @@ import TraderTabs from '@/app/components/trader/TraderTabs'
 import OverviewPerformanceCard, { type ExtendedPerformance } from '@/app/components/trader/OverviewPerformanceCard'
 import { RankingSkeleton } from '@/app/components/ui/Skeleton'
 import { formatDisplayName, formatROI } from '@/app/components/ranking/utils'
+import { getAvatarGradient } from '@/lib/utils/avatar'
 import { JsonLd } from '@/app/components/Providers/JsonLd'
 import {
   generateTraderProfilePageSchema,
@@ -250,7 +251,7 @@ export default function TraderProfileClient({ data, serverTraderData }: TraderPr
 
         {/* Sticky mini header for mobile */}
         <div className={`trader-sticky-mini-header${showMiniHeader ? ' visible' : ''}`}>
-          <div className="mini-avatar" style={{ background: 'var(--color-bg-tertiary)', display: 'grid', placeItems: 'center', fontSize: 12, fontWeight: 700, color: 'var(--color-text-primary)' }}>
+          <div className="mini-avatar" style={{ background: data.avatar_url ? 'var(--color-bg-tertiary)' : getAvatarGradient(data.source_trader_id), display: 'grid', placeItems: 'center', fontSize: 12, fontWeight: 700, color: '#fff' }}>
             {data.avatar_url ? (
               <Image src={`/api/avatar?url=${encodeURIComponent(data.avatar_url)}`} alt={displayName} width={28} height={28} style={{ width: '100%', height: '100%', objectFit: 'cover' }} unoptimized />
             ) : (
@@ -280,6 +281,7 @@ export default function TraderProfileClient({ data, serverTraderData }: TraderPr
           roi90d={traderPerformance?.roi_90d ?? (data.roi != null ? data.roi : undefined)}
           maxDrawdown={traderPerformance?.max_drawdown ?? data.max_drawdown ?? undefined}
           winRate={traderPerformance?.win_rate ?? data.win_rate ?? undefined}
+          arenaScore={(traderPerformance as ExtendedPerformance | null)?.arena_score_90d ?? data.arena_score ?? null}
           rank={data.rank ?? null}
           currentUserId={currentUserId}
           isVerifiedTrader={isVerifiedTrader}
