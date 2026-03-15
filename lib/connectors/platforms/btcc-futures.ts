@@ -106,7 +106,7 @@ export class BtccFuturesConnector extends BaseConnector {
           allTraders.push({
             platform: this.platform,
             market_type: this.marketType,
-            trader_key: entry.traderId,
+            trader_key: String(entry.traderId),
             display_name: entry.nickName || null,
             profile_url: null,
             discovered_at: new Date().toISOString(),
@@ -147,7 +147,7 @@ export class BtccFuturesConnector extends BaseConnector {
   normalize(raw: unknown): Record<string, unknown> {
     const e = raw as BtccTraderEntry
     return {
-      trader_key: e.traderId,
+      trader_key: String(e.traderId),
       display_name: e.nickName || null,
       avatar_url: e.avatarPic || null,
       roi: e.rateProfit ?? null,
