@@ -263,7 +263,12 @@ export class BinanceFuturesConnector extends BaseConnector {
       )
 
       // Fallback: try direct (works from non-restricted IPs like Mac Mini)
-      if (!response || (response as Record<string, unknown>).code === 0) {
+      // Binance success: code = "000000" (string)
+      // Binance geo-block: code = 0 (number)
+      const hasValidData = response && 
+        (response.code === "000000" || (response.data as Record<string, unknown> | null)?.list)
+      
+      if (!hasValidData) {
         try {
           response = await this.request<Record<string, unknown>>(
             apiUrl,
