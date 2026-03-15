@@ -31,25 +31,36 @@ export class WeexFuturesConnector extends BaseConnector {
   }
 
   async discoverLeaderboard(window: Window, limit = 20, offset = 0): Promise<DiscoverResult> {
-    if (window === '90d') {
-      return { traders: [], total_available: 0, window, fetched_at: new Date().toISOString() }
-    }
-    const page = Math.floor(offset / limit) + 1
-    const _rawLb = await this.request<Record<string, unknown>>(
-      `https://www.weex.com/api/v1/copy-trade/public/trader/rank?page=${page}&size=${limit}&sort=roi&period=${window}`,
-      { method: 'GET' }
-    )
-    const data = warnValidate(WeexFuturesLeaderboardResponseSchema, _rawLb, 'weex-futures/leaderboard')
-    const list = data?.data?.list || []
+    // WEEX API (weex.com/api/) returns 521 since ~2026-03.
+    // Real API is on janapw.com with dynamic auth headers (x-sig, sidecar, vs).
+    // Strategy 1: VPS Playwright scraper with waitForResponse to capture the browser call.
+    const allTraders: TraderSource[] = []
 
-    const traders: TraderSource[] = (Array.isArray(list) ? list : []).map((item: Record<string, unknown>) => ({
-      platform: 'weex' as const, market_type: 'futures' as const,
-      trader_key: String(item.uid || ''), display_name: (item.nickname as string) || null,
-      profile_url: `https://www.weex.com/copy-trading/trader/${item.uid}`,
-      discovered_at: new Date().toISOString(), last_seen_at: new Date().toISOString(),
-      is_active: true, raw: item as Record<string, unknown>,
-    }))
-    return { traders, total_available: null, window, fetched_at: new Date().toISOString() }
+    try {
+      const vpsData = await this.fetchViaVPS<{ traders?: Array<Record<string, unknown>>; total?: number }>(
+        '/weex/leaderboard-v2',
+        { pageSize: String(limit) },
+        90000
+      )
+      if (vpsData?.traders?.length) {
+        for (const item of vpsData.traders) {
+          const uid = String(item.traderUserId || '')
+          if (!uid) continue
+          allTraders.push({
+            platform: 'weex' as const, market_type: 'futures' as const,
+            trader_key: uid,
+            display_name: (item.traderNickName as string) || null,
+            profile_url: `https://www.weex.com/copy-trading/trader/${uid}`,
+            discovered_at: new Date().toISOString(), last_seen_at: new Date().toISOString(),
+            is_active: true, raw: item,
+          })
+        }
+      }
+    } catch {
+      // VPS scraper failed — WEEX is unavailable
+    }
+
+    return { traders: allTraders.slice(0, limit), total_available: allTraders.length, window, fetched_at: new Date().toISOString() }
   }
 
   async fetchTraderProfile(traderKey: string): Promise<ProfileResult | null> {
