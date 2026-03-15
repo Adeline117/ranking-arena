@@ -76,10 +76,7 @@
       "path": "/api/cron/fetch-open-interest",
       "schedule": "5 */2 * * *"
     },
-    {
-      "path": "/api/cron/batch-fetch-traders?group=a",
-      "schedule": "45 */3 * * *"
-    },
+
     {
       "path": "/api/cron/batch-fetch-traders?group=d1",
       "schedule": "20 */6 * * *"
