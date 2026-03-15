@@ -38,8 +38,8 @@ export const maxDuration = 600 // Vercel Pro max: 10 minutes (was 300s = 5min)
 export const preferredRegion = 'hnd1' // Tokyo — avoids Binance/OKX/Bybit geo-blocking
 
 const GROUPS: Record<string, string[]> = {
-  // Group A: EMPTY — binance_futures DEAD (all APIs 404 since 2026-03-15)
-  a: [],
+  // Group A: Binance (every 3h) — new /friendly/ API via VPS proxy (2026-03-15)
+  a: ['binance_futures'],
   // Group A2: High-priority CEX (every 3h) — VPS proxy enabled 2026-03-15
   a2: ['bybit', 'bitget_futures', 'okx_futures'],
   // Group B: Top DEX (every 4h) + GMX (switched to subgraph 2026-03-15)
