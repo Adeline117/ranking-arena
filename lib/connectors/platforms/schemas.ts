@@ -351,18 +351,21 @@ export const HtxFuturesDetailResponseSchema = z.object({
 export const CoinexFuturesLeaderboardResponseSchema = z.object({
   code: optInt,
   data: z.object({
-    items: z.array(z.object({
+    // API returns data.data (array), NOT data.items
+    data: z.array(z.object({
       trader_id: optStr,
       nickname: optStr,
       avatar: optStr,
-      roi: optNum,
-      profit: optNum,
-      win_rate: optNum,
-      max_drawdown: optNum,
-      followers: optInt,
-      copiers: optInt,
+      profit_rate: optNum,     // ROI as decimal (0.03 = 3%)
+      profit_amount: optNum,   // PnL in USD
+      winning_rate: optNum,    // Win rate as decimal (0.92 = 92%)
+      mdd: optNum,             // Max drawdown as decimal
+      cur_follower_num: optInt,
+      trade_count: optInt,
+      aum: optNum,
     }).passthrough()).optional().default([]),
-    total: optInt,
+    has_next: z.boolean().optional(),
+    count: optInt,
   }).passthrough().optional().nullable(),
 }).passthrough()
 
