@@ -65,8 +65,9 @@ export class GateioFuturesConnector extends BaseConnector {
    * Pagination: 50/page, up to 500 traders.
    */
   async discoverLeaderboard(window: Window, limit = 100, _offset = 0): Promise<DiscoverResult> {
-    const cycleMap: Record<Window, string> = { '7d': 'week', '30d': 'month', '90d': 'quarter' }
-    const cycle = cycleMap[window]
+    // Gate.io only supports cycle=month currently (week/quarter return "system error" since ~2026-03)
+    // Use month for all windows — better than no data
+    const cycle = 'month'
     const pageSize = 50
     const maxPages = Math.ceil(Math.min(limit, 500) / pageSize)
     const allTraders: TraderSource[] = []
