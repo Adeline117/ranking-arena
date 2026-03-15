@@ -25,9 +25,9 @@ import type {
 } from '../../types/leaderboard'
 
 const WINDOW_MAP: Record<Window, string> = {
-  '7d': 'WEEKLY',
-  '30d': 'MONTHLY',
-  '90d': 'QUARTERLY',
+  '7d': '7D',
+  '30d': '30D',
+  '90d': '90D',
 }
 
 export class BinanceSpotConnector extends BaseConnector {
