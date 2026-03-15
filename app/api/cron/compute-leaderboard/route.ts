@@ -280,6 +280,58 @@ async function computeSeason(
     results.forEach(rows => allSnapshots.push(...rows))
   }
 
+  // Also fetch from trader_snapshots_v2 (some connectors write v2 only)
+  // Column mapping: platform→source, trader_key→source_trader_id, window→season_id,
+  //                  roi_pct→roi, pnl_usd→pnl, created_at→captured_at
+  const v2Window = season // V2 uses same format as v1: '7D', '30D', '90D'
+  for (let i = 0; i < ALL_SOURCES.length; i += batchSize) {
+    const batch = ALL_SOURCES.slice(i, i + batchSize)
+    const results = await Promise.all(
+      batch.map(async (source) => {
+        const rows: TraderRow[] = []
+        const freshnessISO = freshnessISOBySource(source)
+        const { data, error } = await supabase
+          .from('trader_snapshots_v2')
+          .select('platform, trader_key, roi_pct, pnl_usd, win_rate, max_drawdown, trades_count, followers, arena_score, created_at, sharpe_ratio')
+          .eq('platform', source)
+          .eq('window', v2Window)
+          .gte('created_at', freshnessISO)
+          .order('created_at', { ascending: false })
+          .limit(5000)
+
+        if (error || !data?.length) return rows
+
+        for (const d of data) {
+          rows.push({
+            source: d.platform as string,
+            source_trader_id: d.trader_key as string,
+            roi: d.roi_pct as number,
+            pnl: d.pnl_usd as number,
+            win_rate: d.win_rate as number | null,
+            max_drawdown: d.max_drawdown as number | null,
+            trades_count: d.trades_count as number | null,
+            followers: d.followers as number | null,
+            arena_score: d.arena_score as number | null,
+            captured_at: d.created_at as string,
+            full_confidence_at: null,
+            profitability_score: null,
+            risk_control_score: null,
+            execution_score: null,
+            score_completeness: null,
+            trading_style: null,
+            avg_holding_hours: null,
+            style_confidence: null,
+            sharpe_ratio: d.sharpe_ratio as number | null,
+            trader_type: null,
+          })
+        }
+        return rows
+      })
+    )
+    results.forEach(rows => allSnapshots.push(...rows))
+  }
+  logger.info(`[${season}] Fetched ${allSnapshots.length} total snapshots (v1 + v2)`)
+
   // Dedupe: keep latest per source+source_trader_id
   // Normalize 0x addresses to lowercase to prevent case-sensitive duplicates
   const traderMap = new Map<string, TraderRow>()
