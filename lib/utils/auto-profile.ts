@@ -86,7 +86,7 @@ function formatPnlZh(pnl: number): string {
   const abs = Math.abs(pnl)
   const sign = pnl >= 0 ? '+' : '-'
   if (abs >= 1_000_000) return `${sign}$${(abs / 1_000_000).toFixed(1)}M`
-  if (abs >= 10_000) return `${sign}$${(abs / 10_000).toFixed(1)}万`
+  
   if (abs >= 1_000) return `${sign}$${(abs / 1_000).toFixed(0)}K`
   return `${sign}$${abs.toFixed(0)}`
 }

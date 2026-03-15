@@ -1,6 +1,6 @@
 import { tokens } from '@/lib/design-tokens'
 import { Box, Text, Button } from '../base'
-import { getLanguage, t } from '@/lib/i18n'
+import { t } from '@/lib/i18n'
 
 // ─── Source / Category Helpers ────────────────────────────────────────────────
 
@@ -68,15 +68,8 @@ export function getTradingStyleTags(
 // ─── Formatting Helpers ───────────────────────────────────────────────────────
 
 export function formatAum(aum: number): string {
-  const lang = getLanguage()
-  if (aum >= 1_000_000) {
-    const suffix = lang === 'zh' ? t('numberFormatMillion') : t('numberFormatMillion')
-    return `$${(aum / 1_000_000).toFixed(1)}${suffix}`
-  }
-  if (aum >= 1_000) {
-    const suffix = lang === 'zh' ? t('numberFormatThousand') : t('numberFormatThousand')
-    return `$${(aum / 1_000).toFixed(0)}${suffix}`
-  }
+  if (aum >= 1_000_000) return `$${(aum / 1_000_000).toFixed(1)}M`
+  if (aum >= 1_000) return `$${(aum / 1_000).toFixed(0)}K`
   return `$${aum.toFixed(0)}`
 }
 

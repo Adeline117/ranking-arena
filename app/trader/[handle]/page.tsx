@@ -46,8 +46,8 @@ export async function generateMetadata({ params }: { params: Promise<{ handle: s
 
       const title = `${name} (${exchange}) | Crypto Trader Rankings`
       const description = parts.length
-        ? `${name} is a ${exchange} trader with ${parts.join(', ')}. Track their performance history, detailed analytics, and ranking movements on Arena among 32,000+ crypto traders.`
-        : `${name} is a ${exchange} crypto trader. View comprehensive performance analytics, trading history, risk metrics, and rankings on Arena among 32,000+ crypto traders from 30+ exchanges.`
+        ? `${name} is a ${exchange} trader with ${parts.join(', ')}. Track their performance history, detailed analytics, and ranking movements on Arena among thousands of crypto traders.`
+        : `${name} is a ${exchange} crypto trader. View comprehensive performance analytics, trading history, risk metrics, and rankings on Arena among thousands of crypto traders across 30+ exchanges.`
 
       const ogParams = new URLSearchParams({ handle: decoded })
       if (roi != null) ogParams.set('roi', roi.toFixed(2))
@@ -83,10 +83,10 @@ export async function generateMetadata({ params }: { params: Promise<{ handle: s
   const fallbackOgImage = `${BASE}/api/og/trader?handle=${encodeURIComponent(decoded)}`
   return {
     title: `${decoded} | Crypto Trader Rankings`,
-    description: `View ${decoded}'s comprehensive crypto trading performance, PnL, ROI, win rate, and rank on Arena among 32,000+ traders from 30+ exchanges. Real-time analytics and historical data.`,
+    description: `View ${decoded}'s comprehensive crypto trading performance, PnL, ROI, win rate, and rank on Arena among 32,000+ traders across 30+ exchanges. Real-time analytics and historical data.`,
     openGraph: {
       title: `${decoded} | Crypto Trader`,
-      description: `View ${decoded}'s crypto trading performance, analytics, and rank on Arena among 32,000+ traders from 30+ exchanges.`,
+      description: `View ${decoded}'s crypto trading performance, analytics, and rank on Arena among 32,000+ traders across 30+ exchanges.`,
       url: `${BASE}/trader/${encodeURIComponent(decoded)}`,
       siteName: 'Arena',
       type: 'profile',
