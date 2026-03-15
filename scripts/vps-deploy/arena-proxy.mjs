@@ -18,7 +18,7 @@ const ALLOWED_HOSTS = new Set([
   // CoinEx
   'www.coinex.com', 'api.coinex.com',
   // HTX (Huobi)
-  'www.htx.com', 'api.htx.com', 'api.huobi.pro',
+  'www.htx.com', 'api.htx.com', 'api.huobi.pro', 'futures.htx.com',
   // BingX
   'bingx.com', 'www.bingx.com', 'api-app.qq-os.com',
   // BloFin
