@@ -373,7 +373,8 @@ export abstract class BaseConnector implements PlatformConnector {
     params: Record<string, string | number> = {},
     timeoutMs = 120000
   ): Promise<T | null> {
-    const vpsHost = process.env.VPS_PROXY_SG || process.env.VPS_PROXY_URL || process.env.VPS_SCRAPER_HOST;
+    // Use scraper port (3457) for named endpoints, proxy port (3456) as fallback
+    const vpsHost = process.env.VPS_SCRAPER_SG || process.env.VPS_PROXY_SG || process.env.VPS_PROXY_URL || process.env.VPS_SCRAPER_HOST;
     const vpsKey = process.env.VPS_PROXY_KEY;
 
     if (!vpsHost || !vpsKey) {

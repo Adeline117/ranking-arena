@@ -106,12 +106,16 @@ export function isDead(platform: string): boolean {
 
 /**
  * Environment variable mapping for each route type.
+ *
+ * VPS SG has TWO services:
+ * - Port 3456: HTTP proxy (systemd arena-proxy, POST /proxy with target URL)
+ * - Port 3457: Playwright scraper (PM2 arena-scraper, named endpoints like /bybit/leaderboard)
  */
 export const ROUTE_ENV_MAP: Record<RouteType, { urlEnv: string; fallbackEnv?: string; keyEnv: string }> = {
   direct:     { urlEnv: '', keyEnv: '' },
   vps_sg:     { urlEnv: 'VPS_PROXY_SG', fallbackEnv: 'VPS_PROXY_URL', keyEnv: 'VPS_PROXY_KEY' },
   vps_jp:     { urlEnv: 'VPS_PROXY_JP', keyEnv: 'VPS_PROXY_KEY' },
-  scraper_sg: { urlEnv: 'VPS_PROXY_SG', fallbackEnv: 'VPS_SCRAPER_HOST', keyEnv: 'VPS_PROXY_KEY' },
+  scraper_sg: { urlEnv: 'VPS_SCRAPER_SG', fallbackEnv: 'VPS_SCRAPER_HOST', keyEnv: 'VPS_PROXY_KEY' },
   mac_mini:   { urlEnv: 'MAC_MINI_URL', keyEnv: 'VPS_PROXY_KEY' },
 }
 
