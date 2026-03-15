@@ -157,17 +157,16 @@ export async function initializeConnectors(): Promise<void> {
   const { OkxWeb3Connector } = await import('./platforms/okx-web3')
   const { BinanceWeb3Connector } = await import('./platforms/binance-web3')
 
-  // Proxy URL for geo-blocked exchanges (Binance, OKX, BingX, HTX, BitMart, dYdX)
-  // DISABLED 2026-03-13: CF Worker proxy geo-blocked by Binance/OKX ("Service unavailable from a restricted location")
-  // Using direct requests from Vercel Tokyo (hnd1) region instead
-  const proxyUrl = undefined // process.env.CLOUDFLARE_PROXY_URL || process.env.CF_WORKER_PROXY_URL
+  // Proxy URL for geo-blocked exchanges (Binance, OKX, BingX, HTX, dYdX, etc.)
+  // CF Worker is US-based = also geo-blocked. Use VPS SG proxy instead.
+  const proxyUrl = process.env.VPS_PROXY_SG || process.env.VPS_PROXY_URL || undefined
 
-  // CEX Connectors (proxy disabled for Binance/OKX/Bitget - direct requests from Vercel Tokyo)
+  // CEX Connectors — all use VPS proxy for geo-blocked API access
   connectorRegistry.register(new BinanceFuturesConnector({ proxyUrl }))
-  connectorRegistry.register(new BybitFuturesConnector())
-  connectorRegistry.register(new BitgetFuturesConnector())
-  connectorRegistry.register(new MexcFuturesConnector())
-  connectorRegistry.register(new CoinexFuturesConnector())
+  connectorRegistry.register(new BybitFuturesConnector({ proxyUrl }))
+  connectorRegistry.register(new BitgetFuturesConnector({ proxyUrl }))
+  connectorRegistry.register(new MexcFuturesConnector({ proxyUrl }))
+  connectorRegistry.register(new CoinexFuturesConnector({ proxyUrl }))
   connectorRegistry.register(new OkxFuturesConnector({ proxyUrl }))
   // connectorRegistry.register(new KucoinFuturesConnector()) // DEAD: APIs 404 since 2026-03
   // connectorRegistry.register(new BitmartFuturesConnector({ proxyUrl })) // DEAD

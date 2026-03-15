@@ -37,12 +37,10 @@ export const maxDuration = 600 // Vercel Pro max: 10 minutes (was 300s = 5min)
 export const preferredRegion = 'hnd1' // Tokyo — avoids Binance/OKX/Bybit geo-blocking
 
 const GROUPS: Record<string, string[]> = {
-  // Group A: Binance (every 3h)
-  // DISABLED 2026-03-15: binance_futures returning 404 errors
-  a: [],
-  // Group A2: High-priority CEX (every 3h)
-  // DISABLED 2026-03-15: All platforms (bybit, bitget_futures, okx_futures) failing with 403/404
-  a2: [],
+  // Group A: Binance (every 3h) — VPS proxy enabled 2026-03-15
+  a: ['binance_futures'],
+  // Group A2: High-priority CEX (every 3h) — VPS proxy enabled 2026-03-15
+  a2: ['bybit', 'bitget_futures', 'okx_futures'],
   // Group B: Top DEX (every 4h)
   // hyperliquid: FIXED 2026-03-15 (switched to stats-data endpoint)
   // gmx: DEAD — REST API + subgraph both returning 404 since 2026-03-14
@@ -51,19 +49,16 @@ const GROUPS: Record<string, string[]> = {
   // okx_futures: FIXED 2026-03-15 (switched to v5 copytrading API)
   // okx_web3/aevo: still broken
   c: ['okx_futures'],
-  // Group D1: CEX (every 6h)
-  // DISABLED 2026-03-15: htx_futures (405); gains kept for now
-  d1: ['gains'],
+  // Group D1: CEX (every 6h) — VPS proxy enabled
+  d1: ['gains', 'htx_futures'],
   // Group D2: DEX only (every 6h)
   d2: ['dydx'],
-  // Group E: CEX+DEX (every 6h)
-  // coinex: FIXED 2026-03-15 (URL /traders → /public/traders)
-  e: ['bitfinex', 'coinex'],
-  // Group F: CEX (every 6h)
+  // Group E: CEX+DEX (every 6h) — coinex URL fixed + VPS proxy
+  e: ['bitfinex', 'coinex', 'binance_web3'],
+  // Group F: CEX (every 6h) — VPS proxy enabled
   f: ['mexc', 'bingx'],
-  // Group H: CEX (every 6h)
-  // DISABLED 2026-03-15: gateio (403), btcc (0 traders) all failing
-  h: [],
+  // Group H: CEX (every 6h) — VPS proxy enabled 2026-03-15
+  h: ['gateio', 'btcc'],
   // Group G1: DEX (every 6h)
   g1: ['drift', 'jupiter_perps'],
   // Group G2: DEX+CEX (every 6h)
