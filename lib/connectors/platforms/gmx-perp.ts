@@ -43,7 +43,8 @@ export class GmxPerpConnector extends BaseConnector {
   }
 
   private getSubgraphUrl(): string {
-    return 'https://subgraph.satsuma-prod.com/gmx/synthetics-arbitrum-stats/api'
+    // Satsuma DNS dead since ~2026-03-15, switched to Subsquid
+    return 'https://gmx.squids.live/gmx-synthetics-arbitrum:prod/api/graphql'
   }
 
   private getPeriodPrefix(window: Window): string {
@@ -53,18 +54,17 @@ export class GmxPerpConnector extends BaseConnector {
   }
 
   async discoverLeaderboard(window: Window, limit = 100, _offset = 0): Promise<DiscoverResult> {
-    // REST API removed ~2026-03-15, switched to subgraph
-    const period = this.getPeriodPrefix(window)
+    // Satsuma subgraph DNS dead since ~2026-03-15, switched to Subsquid (gmx.squids.live)
+    // Subsquid uses accountStats with limit/orderBy instead of periodAccountStats with first/where
     const query = `{
-      periodAccountStats(
-        first: ${limit}
-        orderBy: realizedPnl
-        orderDirection: desc
-        where: { period: "${period}" }
+      accountStats(
+        limit: ${limit}
+        orderBy: realizedPnl_DESC
       ) {
         id
-        account
         realizedPnl
+        volume
+        netCapital
         maxCapital
         wins
         losses
@@ -82,7 +82,8 @@ export class GmxPerpConnector extends BaseConnector {
     )
 
     const data = warnValidate(GmxSubgraphResponseSchema, _rawLb, 'gmx-perp/leaderboard')
-    const rankings = data?.data?.periodAccountStats || []
+    // Subsquid returns data.accountStats instead of data.periodAccountStats
+    const rankings = (data?.data?.accountStats || data?.data?.periodAccountStats || []) as Record<string, unknown>[]
 
     const traders: TraderSource[] = (Array.isArray(rankings) ? rankings : []).slice(0, limit).map((item: Record<string, unknown>) => {
       const address = String(item.account || item.id || '').toLowerCase()
