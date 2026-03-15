@@ -600,6 +600,7 @@ export async function getSimilarTraders(handle: string, limit: number = 6): Prom
       .from('trader_snapshots')
       .select('captured_at, roi')
       .eq('source', source.source)
+      .eq('source_trader_id', source.source_trader_id)
       .eq('season_id', '90D')
       .order('captured_at', { ascending: false })
       .limit(1)
@@ -607,17 +608,8 @@ export async function getSimilarTraders(handle: string, limit: number = 6): Prom
 
     if (!latestSnapshot) return []
 
-    const { data: currentRoiData } = await supabase
-      .from('trader_snapshots')
-      .select('roi')
-      .eq('source', source.source)
-      .eq('source_trader_id', source.source_trader_id)
-      .eq('season_id', '90D')
-      .order('captured_at', { ascending: false })
-      .limit(1)
-      .maybeSingle()
-
-    const currentRoi = currentRoiData?.roi ?? 0
+    // Use roi from latestSnapshot directly — no need for a second query
+    const currentRoi = latestSnapshot.roi ?? 0
     const roiRange = Math.max(Math.abs(currentRoi) * 0.3, 20)
     const minRoi = currentRoi - roiRange
     const maxRoi = currentRoi + roiRange

@@ -126,14 +126,14 @@ const worker = {
       : DEFAULT_ALLOWED_ORIGINS;
 
     // Determine CORS origin for this request — never use wildcard
-    if (origin && allowedOrigins.some(o => origin === o || origin.endsWith(o))) {
+    if (origin && allowedOrigins.some(o => origin === o || (origin.endsWith(o) && (o.startsWith('.') || origin.length === o.length || origin[origin.length - o.length - 1] === '.')))) {
       _requestOrigin = origin;
     } else {
       // Server-to-server or unrecognized origin — use first allowed origin
       _requestOrigin = allowedOrigins[0] || 'https://www.arenafi.org';
     }
 
-    if (!allowedOrigins.some(o => origin === o || origin.endsWith(o)) && origin !== '') {
+    if (!allowedOrigins.some(o => origin === o || (origin.endsWith(o) && (o.startsWith('.') || origin.length === o.length || origin[origin.length - o.length - 1] === '.'))) && origin !== '') {
       // 也允许没有 Origin 的请求（服务器到服务器）
       const proxySecret = request.headers.get('X-Proxy-Secret');
       if (env.PROXY_SECRET && proxySecret !== env.PROXY_SECRET) {
@@ -286,7 +286,7 @@ function handleCORS(request: Request, env: Env): Response {
   const allowedOrigins = env.ALLOWED_ORIGINS
     ? env.ALLOWED_ORIGINS.split(',').map(o => o.trim())
     : DEFAULT_ALLOWED_ORIGINS;
-  const safeOrigin = (origin && allowedOrigins.some(o => origin === o || origin.endsWith(o)))
+  const safeOrigin = (origin && allowedOrigins.some(o => origin === o || (origin.endsWith(o) && (o.startsWith('.') || origin.length === o.length || origin[origin.length - o.length - 1] === '.'))))
     ? origin
     : allowedOrigins[0] || '';
   return new Response(null, {

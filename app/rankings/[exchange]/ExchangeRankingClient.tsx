@@ -79,7 +79,7 @@ function TraderAvatarImg({ avatarUrl, traderKey, name, size = 32 }: { avatarUrl:
   )
 }
 
-function RankBadge({ rank }: { rank: number }) {
+const RankBadge = React.memo(function RankBadge({ rank }: { rank: number }) {
   if (rank > 3) {
     return (
       <span
@@ -120,10 +120,10 @@ function RankBadge({ rank }: { rank: number }) {
       {rank}
     </span>
   )
-}
+})
 
 // Mobile card component
-function TraderCardItem({ trader, rank }: { trader: TraderData; rank: number }) {
+const TraderCardItem = React.memo(function TraderCardItem({ trader, rank }: { trader: TraderData; rank: number }) {
   const { t } = useLanguage()
   const name = getDisplayName(trader)
   const roiColor = trader.roi >= 0 ? tokens.colors.accent.success : tokens.colors.accent.error
@@ -195,18 +195,18 @@ function TraderCardItem({ trader, rank }: { trader: TraderData; rank: number }) 
       </div>
     </Link>
   )
-}
+})
 
-function StatBlock({ label, value, color }: { label: string; value: string; color?: string }) {
+const StatBlock = React.memo(function StatBlock({ label, value, color }: { label: string; value: string; color?: string }) {
   return (
     <div style={{ textAlign: 'center', padding: '6px 0', borderRadius: tokens.radius.md, background: 'var(--overlay-hover)' }}>
       <div style={{ fontSize: 10, color: tokens.colors.text.tertiary, marginBottom: 2 }}>{label}</div>
       <div style={{ fontSize: 13, fontWeight: 700, color: color || tokens.colors.text.primary }}>{value}</div>
     </div>
   )
-}
+})
 
-function SortArrow({ active, dir }: { active: boolean; dir: SortDir }) {
+const SortArrow = React.memo(function SortArrow({ active, dir }: { active: boolean; dir: SortDir }) {
   return (
     <span
       style={{
@@ -231,9 +231,9 @@ function SortArrow({ active, dir }: { active: boolean; dir: SortDir }) {
       </svg>
     </span>
   )
-}
+})
 
-function SortHeader({
+const SortHeader = React.memo(function SortHeader({
   label,
   sortKey,
   currentKey,
@@ -272,7 +272,7 @@ function SortHeader({
       <SortArrow active={active} dir={currentDir} />
     </button>
   )
-}
+})
 
 export default function ExchangeRankingClient({
   traders: initialTraders,
