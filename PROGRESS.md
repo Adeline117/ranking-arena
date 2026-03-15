@@ -3,8 +3,44 @@
 > Auto-read by Claude Code at session start. Keep concise — archive completed items weekly.
 
 ## Current Sprint Focus
-- Mobile comprehensive plan implemented on `feature/mobile-comprehensive`
 - All P0-P3 tasks complete. Backlog 5/6 done (only multi-language remains).
+- Team audit completed 2026-03-15: 28+ fixes across security, performance, pipeline.
+
+## Recently Completed (2026-03-15) — Comprehensive Team Audit
+5-agent parallel audit (pipeline, performance, security, frontend UX, operations).
+
+**Security (10 fixes):**
+1. Translate API: require auth to prevent anonymous OpenAI credit abuse
+2. Library upload: replace SERVICE_ROLE_KEY bearer with ADMIN_SECRET + timingSafeEqual
+3. Admin endpoints: crypto.timingSafeEqual for all secret comparisons
+4. notifications/send: restrict actor_id to authenticated user
+5. Library ratings + users/full: add Upstash rate limiting
+6. Feedback: replace broken in-memory rate limit with Upstash, screenshot 500K→50K
+7. 6 API routes: remove error.message leak to clients (checkout, manipulation alerts, ratings, metrics, cleanup-stuck-logs)
+8. Export rankings: remove silent fallback to anon key
+9. ExchangeConnection: explicit columns (never send API keys to client)
+10. Cloudflare Worker CORS: fix origin.endsWith vulnerability
+
+**Performance (7 fixes):**
+1. resolveTrader: 4 sequential queries → OR query + Promise.all (200-400ms saved)
+2. followerCountBatch: use RPC instead of fetching all rows (thousands of rows → 6 rows)
+3. TradingViewChart: dynamic import lightweight-charts (~300KB bundle saved)
+4. warmupCache: Redis pipeline batch writes (50 sequential → 1 round-trip)
+5. TokenSidePanel: LazyMotion (~84KB saved)
+6. Resources page: explicit columns instead of select('*') on 60K table
+7. ExchangeRankingClient: React.memo on inner components
+
+**Pipeline (7 fixes):**
+1. Remove okx_futures duplicate (was in both group a2 and c)
+2. Remove empty group d2 from vercel.json
+3. Remove dead dydx/aevo from enrichment (wasted cycles)
+4. Re-enable bitunix in group c (3600+ traders)
+5. Add PipelineLogger to 4 unmonitored crons
+6. Stagger midnight thundering herd (10 jobs at :00 → spread to :00-:07)
+7. Fix stale dead comment in batch-fetch-traders
+
+**Code Quality:** React.memo, prefetch throttle, parallel queries, DEGRADATION.md update
+**Tests:** 4 test suites updated, all pass. Zero TypeScript errors.
 
 ## Recently Completed (2026-03-10) — Mobile Comprehensive Plan
 Branch: `feature/mobile-comprehensive`

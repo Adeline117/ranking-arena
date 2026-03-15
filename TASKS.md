@@ -66,6 +66,11 @@ _No critical issues currently_
 ## Completed This Sprint
 _Move items here when done, then archive weekly_
 
+- [x] **Team Audit 2026-03-15** — 28 fixes across security, performance, pipeline
+  - Security: translate auth, library upload ADMIN_SECRET, timingSafeEqual, notification spoofing, rate limits, error leak removal
+  - Performance: resolveTrader 4→2 queries, follower RPC, TradingViewChart dynamic import (-300KB), warmupCache pipeline, LazyMotion (-84KB)
+  - Pipeline: remove dead enrichments (dydx/aevo), stagger midnight crons, add PipelineLogger to 4 crons, re-enable bitunix
+  - React.memo on ExchangeRankingClient, CORS fix, DEGRADATION.md update, prefetch throttle
 - [x] PipelineLogger integrated into 13 cron jobs (was 2)
 - [x] Dependencies health API (`/api/health/dependencies`)
 - [x] E2E smoke test + visual regression test
