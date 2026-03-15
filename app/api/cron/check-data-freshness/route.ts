@@ -39,7 +39,7 @@ const PLATFORM_THRESHOLD_OVERRIDES: Record<string, { stale: number; critical: nu
 // 平台显示名称映射
 const PLATFORM_NAMES: Record<string, string> = {
   binance_futures: 'Binance 合约',
-  binance_spot: 'Binance 现货',
+  // binance_spot: REMOVED 2026-03-14
   binance_web3: 'Binance Web3',
   bybit: 'Bybit',
   bitget_futures: 'Bitget 合约',

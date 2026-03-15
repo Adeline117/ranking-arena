@@ -158,15 +158,7 @@ export const ENRICHMENT_PLATFORM_CONFIGS: Record<string, EnrichmentConfig> = {
     fetchPositionHistory: fetchBinancePositionHistory,
     concurrency: 5, delayMs: 1000,
   },
-  binance_spot: {
-    platform: 'binance_spot',
-    fetchEquityCurve: async (traderId, days) => {
-      const timeRangeMap: Record<number, 'WEEKLY' | 'MONTHLY' | 'QUARTERLY'> = { 7: 'WEEKLY', 30: 'MONTHLY', 90: 'QUARTERLY' }
-      return fetchBinanceEquityCurve(traderId, timeRangeMap[days] || 'QUARTERLY')
-    },
-    fetchStatsDetail: fetchBinanceStatsDetail,
-    concurrency: 4, delayMs: 1200,
-  },
+  // binance_spot: PERMANENTLY REMOVED (2026-03-14) - repeatedly hangs 45-76min, blocks entire pipeline
   // bybit/bybit_spot: enrichment disabled — api2.bybit.com endpoints return 404 globally (2026-03-10)
   okx_futures: {
     platform: 'okx_futures',

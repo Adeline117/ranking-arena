@@ -27,7 +27,7 @@ export const maxDuration = 300
 
 const ALL_PLATFORMS = [
   // CEX futures
-  'binance_futures', 'binance_spot', 'bybit', 'bitget_futures',
+  'binance_futures', /* 'binance_spot' REMOVED 2026-03-14 */ 'bybit', 'bitget_futures',
   'okx_futures', 'mexc', 'coinex', 'htx_futures', 'bingx',
   'gateio', 'xt', 'bitmart', 'btcc', 'bitunix', 'bitfinex',
   // CEX spot

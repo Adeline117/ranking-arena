@@ -8,7 +8,7 @@
  * POST /api/cron/fetch-traders/[platform]
  * 
  * 支持的平台:
- * - binance_futures, binance_spot, binance_web3
+ * - binance_futures, binance_web3 (binance_spot REMOVED 2026-03-14)
  * - bybit
  * - bitget_futures, bitget_spot
  * - mexc, coinex

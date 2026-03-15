@@ -5,7 +5,7 @@
  * avoiding Cloudflare timeouts and Vercel deployment protection issues.
  *
  * Query params:
- *   group=a  → binance_futures, binance_spot (every 3h)
+ *   group=a  → binance_futures (every 3h) — binance_spot REMOVED 2026-03-14
  *   group=a2 → bitget_futures, okx_futures (every 3h)
  *   group=b  → hyperliquid, gmx, jupiter_perps (every 4h)
  *   group=c  → okx_web3, aevo, xt (every 4h)
