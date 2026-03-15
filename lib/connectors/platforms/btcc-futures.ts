@@ -39,6 +39,7 @@ interface BtccTraderEntry {
 
 interface BtccResponse {
   code: number
+  rows?: BtccTraderEntry[]
   data?: {
     rows?: BtccTraderEntry[]
     list?: BtccTraderEntry[]
@@ -97,7 +98,8 @@ export class BtccFuturesConnector extends BaseConnector {
         )
 
         // Handle multiple response formats
-        const list = data?.data?.rows || data?.data?.list || data?.data?.records || []
+        // Handle both formats: top-level { rows } and nested { data: { rows } }
+        const list = data?.rows || data?.data?.rows || data?.data?.list || data?.data?.records || []
         if (!list.length) break
 
         for (const entry of list) {
