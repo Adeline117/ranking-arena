@@ -86,6 +86,29 @@ const ALLOWED_HOSTS = [
   // BitMart copy trading (geo-restricted, needs US/EU IP)
   'www.bitmart.com',
   'api-cloud.bitmart.com',
+  // Phemex copy trading (CloudFront blocks all VPS IPs, CF Worker may bypass)
+  'api.phemex.com',
+  'www.phemex.com',
+  // eToro rankings
+  'www.etoro.com',
+  // HTX futures ranking
+  'futures.htx.com',
+  // Toobit copy trading
+  'www.toobit.com',
+  // XT copy trading
+  'www.xt.com',
+  'sapi.xt.com',
+  'fapi.xt.com',
+  // Bitfinex rankings
+  'api-pub.bitfinex.com',
+  // Jupiter Perps
+  'perps-api.jup.ag',
+  // Aevo
+  'api.aevo.xyz',
+  // Copin (dYdX fallback)
+  'api.copin.io',
+  // Subsquid (GMX)
+  'gmx.squids.live',
 ];
 
 const worker = {
