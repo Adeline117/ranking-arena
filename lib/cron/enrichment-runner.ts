@@ -308,6 +308,8 @@ export const NO_ENRICHMENT_PLATFORMS = new Set([
   'bybit', 'bybit_spot',
   // No enrichment API available
   'bitfinex', 'coinex', 'xt', 'bitmart', 'btcc', 'bitunix', 'paradex', 'okx_spot', 'etoro', 'toobit',
+  // EMERGENCY DISABLE (2026-03-15): Hangs indefinitely, timeout mechanism failed
+  'bitget_futures', 'binance_spot',
 ])
 
 export async function runEnrichment(params: {
