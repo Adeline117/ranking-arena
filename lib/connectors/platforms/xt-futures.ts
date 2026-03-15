@@ -26,6 +26,8 @@ import type {
 
 interface XTLeaderboardEntry {
   uid?: string
+  accountId?: string
+  leaderUid?: string
   nickname?: string
   avatar?: string
   roi?: number
@@ -63,35 +65,43 @@ export class XtFuturesConnector extends BaseConnector {
   }
 
   async discoverLeaderboard(window: Window, limit = 100, _offset = 0): Promise<DiscoverResult> {
-    const periodMap: Record<Window, string> = { '7d': '7', '30d': '30', '90d': '90' }
-    const period = periodMap[window] || '30'
+    // XT.com API (/sapi/v1/copy-trading) returns 404 since ~2026-03.
+    // Real API is /fapi/user/v1/public/copy-trade/elite-leader-list-v2 (Cloudflare-protected).
+    // Strategy 1: VPS Playwright scraper (page.evaluate fetches the API with browser context)
+    const allTraders: TraderSource[] = []
 
     try {
-      // Attempt to use XT internal API endpoint (may not work without Puppeteer)
-      const _rawLb = await this.request<{ data?: { list?: XTLeaderboardEntry[] } }>(
-        `https://www.xt.com/sapi/v1/copy-trading/leader/list?page=1&pageSize=${limit}&period=${period}&sortBy=roi`,
-        { method: 'GET', headers: this.getHeaders() }
+      const vpsData = await this.fetchViaVPS<{ traders?: Array<{ sotType?: string; items?: XTLeaderboardEntry[] }> }>(
+        '/xt/leaderboard',
+        { pageSize: String(limit) },
+        90000
       )
-      const data = warnValidate(XtFuturesLeaderboardResponseSchema, _rawLb, 'xt-futures/leaderboard')
-
-      const list = data?.data?.list || []
-      const traders: TraderSource[] = list.map((item) => ({
-        platform: 'xt',
-        market_type: 'futures' as const,
-        trader_key: String(item.uid || ''),
-        display_name: item.nickname || null,
-        profile_url: `https://www.xt.com/en/copy-trading/trader/${item.uid}`,
-        discovered_at: new Date().toISOString(),
-        last_seen_at: new Date().toISOString(),
-        is_active: true,
-        raw: item as Record<string, unknown>,
-      }))
-
-      return { traders, total_available: traders.length, window, fetched_at: new Date().toISOString() }
+      // Response: { traders: [{ sotType: "INCOME_RATE", items: [...] }, ...] }
+      if (vpsData?.traders) {
+        for (const group of vpsData.traders) {
+          const items = group?.items || []
+          for (const item of items) {
+            const uid = String(item.accountId || item.uid || item.leaderUid || '')
+            if (!uid) continue
+            allTraders.push({
+              platform: 'xt',
+              market_type: 'futures' as const,
+              trader_key: uid,
+              display_name: (item as Record<string, unknown>).nickName as string || item.nickname || null,
+              profile_url: `https://www.xt.com/en/copy-trading/trader/${uid}`,
+              discovered_at: new Date().toISOString(),
+              last_seen_at: new Date().toISOString(),
+              is_active: true,
+              raw: item as Record<string, unknown>,
+            })
+          }
+        }
+      }
     } catch {
-      // XT.com likely requires Puppeteer scraping
-      return { traders: [], total_available: 0, window, fetched_at: new Date().toISOString() }
+      // VPS scraper failed
     }
+
+    return { traders: allTraders.slice(0, limit), total_available: allTraders.length, window, fetched_at: new Date().toISOString() }
   }
 
   async fetchTraderProfile(traderKey: string): Promise<ProfileResult | null> {
