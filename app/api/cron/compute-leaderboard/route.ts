@@ -509,9 +509,12 @@ async function computeSeason(
     return a.source_trader_id.localeCompare(b.source_trader_id)
   })
 
-  // Pre-upsert degradation check: abort if count drops >70% from previous
-  if (previousCount && previousCount > 0 && scored.length < previousCount * (1 - DEGRADATION_THRESHOLD)) {
-    logger.error(`${season}: computed ${scored.length} vs previous ${previousCount} (>${DEGRADATION_THRESHOLD * 100}% drop). SKIPPING upsert to preserve data.`)
+  // Pre-upsert degradation check: abort if count drops >50% from previous
+  // Exception: if previousCount is inflated from historical accumulation (>10K stale rows),
+  // use a minimum floor of 1000 to allow pipeline recovery after prolonged fetcher failures
+  const effectivePrevious = previousCount && previousCount > 10000 ? Math.max(previousCount * (1 - DEGRADATION_THRESHOLD), 1000) : (previousCount ?? 0) * (1 - DEGRADATION_THRESHOLD)
+  if (previousCount && previousCount > 0 && scored.length < effectivePrevious) {
+    logger.error(`${season}: computed ${scored.length} vs previous ${previousCount} (threshold ${Math.round(effectivePrevious)}). SKIPPING upsert to preserve data.`)
     return -1 // Signal degradation — caller handles alerting
   }
 
