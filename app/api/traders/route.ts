@@ -230,18 +230,24 @@ async function fetchFromLeaderboard(
     : traders.length === limit
 
   // Available sources (for UI filter) — cached in-memory with 5-min TTL
-  // Avoids scanning 2000+ rows on every request
   const sourceCacheEntry = availableSourcesCache.get(timeRange)
   let availableSources: string[]
   if (sourceCacheEntry && Date.now() - sourceCacheEntry.ts < SOURCES_TTL) {
     availableSources = sourceCacheEntry.sources
   } else {
+    // Extract distinct sources from the full query data (already fetched above)
+    // Plus a lightweight supplementary query for sources not in the current page
+    const allSourceSet = new Set<string>()
+    for (const r of (data || [])) allSourceSet.add((r as { source: string }).source)
+    // Supplementary: get any remaining sources via a separate scan
+    // Use a larger limit to capture all platforms (source column only = very lightweight)
     const { data: sourceRows } = await supabase
       .from('leaderboard_ranks')
       .select('source')
       .eq('season_id', timeRange)
-      .limit(2000)
-    const allSourceSet = new Set<string>()
+      .gt('arena_score', 10)
+      .order('rank', { ascending: true })
+      .limit(15000)
     for (const r of (sourceRows || [])) allSourceSet.add((r as { source: string }).source)
     availableSources = [...allSourceSet].sort()
     availableSourcesCache.set(timeRange, { sources: availableSources, ts: Date.now() })
