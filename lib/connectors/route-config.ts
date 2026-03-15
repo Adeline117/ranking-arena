@@ -71,12 +71,12 @@ export const PLATFORM_ROUTES: Record<string, RouteConfig> = {
   lbank:           { routes: ['mac_mini'],                     notes: 'Browser crashes on VPS, only Mac Mini works' },
   phemex:          { routes: ['mac_mini'],                     notes: 'CloudFront blocks all cloud IPs. Mac Mini only.' },
 
-  // ─── NEEDS INVESTIGATION ─────────────────────────────────────
-  htx_futures:     { routes: ['vps_sg', 'direct'],             notes: 'API 404 everywhere — endpoint may have moved' },
+  // ─── FIXED (2026-03-15) ───────────────────────────────────────
+  htx_futures:     { routes: ['direct', 'vps_sg'],             notes: 'Switched to futures.htx.com ranking API (GET)' },
   xt:              { routes: ['direct', 'vps_sg'],             notes: 'API 404 — endpoint may have moved' },
 
   // ─── DEX (special handling) ──────────────────────────────────
-  dydx:            { routes: ['direct', 'vps_sg'],             notes: 'Uses Heroku proxy + Copin fallback, not indexer directly' },
+  dydx:            { routes: ['direct'],                        notes: 'Uses Copin leaderboard API (indexer 404 since 2026-03)' },
 
   // ─── DEAD ────────────────────────────────────────────────────
   weex:            { routes: [],                               notes: 'DEAD: 521 from all routes' },

@@ -28,17 +28,17 @@ export class HtxFuturesConnector extends BaseConnector {
   }
 
   async discoverLeaderboard(window: Window, limit = 20, offset = 0): Promise<DiscoverResult> {
+    // /bapi/ endpoint returns 405 since ~2026-03. Use futures.htx.com ranking API instead.
+    // This is the same endpoint used by enrichment-htx.ts and confirmed working.
     const page = Math.floor(offset / limit) + 1
+    const pageSize = Math.min(limit, 50) // API max 50 per page
     const _rawLb = await this.request<Record<string, unknown>>(
-      `https://www.htx.com/bapi/copy-trade/v1/public/trader/list`,
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ page, pageSize: limit, sortBy: 'roi', period: window }),
-      }
+      `https://futures.htx.com/-/x/hbg/v1/futures/copytrading/rank?rankType=1&pageNo=${page}&pageSize=${pageSize}`,
+      { method: 'GET' }
     )
     const data = warnValidate(HtxFuturesLeaderboardResponseSchema, _rawLb, 'htx-futures/leaderboard')
-    const list = data?.data?.list || []
+    // New endpoint returns { code: 200, data: { itemList: [...], totalPage, totalNum } }
+    const list = data?.data?.itemList || data?.data?.list || []
 
     const traders: TraderSource[] = (Array.isArray(list) ? list : []).map((item: Record<string, unknown>) => ({
       platform: 'htx' as const, market_type: 'futures' as const,

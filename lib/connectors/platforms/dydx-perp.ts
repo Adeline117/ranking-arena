@@ -97,25 +97,52 @@ export class DydxPerpConnector extends BaseConnector {
   }
 
   async discoverLeaderboard(window: Window, limit = 100, _offset = 0): Promise<DiscoverResult> {
-    const period = WINDOW_MAP[window]
-    const url = this.buildUrl('/v4/leaderboard/pnl', { period, limit: String(limit) })
-    const _rawLb = await this.request<Record<string, unknown>>(url, { method: 'GET' })
-    const data = warnValidate(DydxLeaderboardResponseSchema, _rawLb, 'dydx-perp/leaderboard')
-    const rankings = data?.pnlRanking || []
+    // dYdX indexer /v4/leaderboard/pnl returns 404 globally since ~2026-03.
+    // Use Copin API as primary data source for trader discovery.
+    const statisticType = window === '7d' ? 'WEEK' : 'MONTH'
+    const queryDate = Date.now()
+    const copinUrl = `https://api.copin.io/leaderboards/page?protocol=DYDX&statisticType=${statisticType}&queryDate=${queryDate}&limit=${limit}&offset=0&sort_by=ranking&sort_type=asc`
 
-    const traders: TraderSource[] = (Array.isArray(rankings) ? rankings : []).map((item: Record<string, unknown>) => {
-      const address = String(item.address || '')
-      return {
-        platform: 'dydx' as const, market_type: 'perp' as const,
-        trader_key: address,
-        display_name: null,  // dYdX has no display names
-        profile_url: `https://trade.dydx.exchange/portfolio/${address}`,
-        discovered_at: new Date().toISOString(), last_seen_at: new Date().toISOString(),
-        is_active: true, raw: item as Record<string, unknown>,
+    let traders: TraderSource[] = []
+
+    try {
+      const copinData = await this.request<Record<string, unknown>>(copinUrl, { method: 'GET' })
+      const copinList = (copinData?.data || []) as Record<string, unknown>[]
+
+      traders = copinList.map((item: Record<string, unknown>) => {
+        const address = String(item.account || '')
+        return {
+          platform: 'dydx' as const, market_type: 'perp' as const,
+          trader_key: address,
+          display_name: null,
+          profile_url: `https://trade.dydx.exchange/portfolio/${address}`,
+          discovered_at: new Date().toISOString(), last_seen_at: new Date().toISOString(),
+          is_active: true, raw: item as Record<string, unknown>,
+        }
+      })
+    } catch (copinErr) {
+      // Fallback: try original indexer API (in case it comes back)
+      try {
+        const period = WINDOW_MAP[window]
+        const url = this.buildUrl('/v4/leaderboard/pnl', { period, limit: String(limit) })
+        const _rawLb = await this.request<Record<string, unknown>>(url, { method: 'GET' })
+        const data = warnValidate(DydxLeaderboardResponseSchema, _rawLb, 'dydx-perp/leaderboard')
+        const rankings = data?.pnlRanking || []
+        traders = (Array.isArray(rankings) ? rankings : []).map((item: Record<string, unknown>) => ({
+          platform: 'dydx' as const, market_type: 'perp' as const,
+          trader_key: String(item.address || ''),
+          display_name: null,
+          profile_url: `https://trade.dydx.exchange/portfolio/${item.address}`,
+          discovered_at: new Date().toISOString(), last_seen_at: new Date().toISOString(),
+          is_active: true, raw: item as Record<string, unknown>,
+        }))
+      } catch {
+        // Both Copin and indexer failed
+        throw copinErr
       }
-    })
+    }
 
-    return { traders, total_available: rankings.length, window, fetched_at: new Date().toISOString() }
+    return { traders, total_available: traders.length, window, fetched_at: new Date().toISOString() }
   }
 
   async fetchTraderProfile(traderKey: string): Promise<ProfileResult | null> {
