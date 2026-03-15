@@ -50,29 +50,29 @@ export function MetricBadgesGrid({
     >
       <MetricBadge
         label={t('sharpe')}
-        value={sharpeRatio !== undefined && sharpeRatio < 9000 ? sharpeRatio.toFixed(2) : '—'}
-        highlight={sharpeRatio !== undefined && sharpeRatio > 1 && sharpeRatio < 9000}
-        tooltip={sharpeRatio === undefined ? t('sharpeNotAvailable') : sharpeRatio >= 9000 ? t('sharpeNotAvailable') : undefined}
+        value={sharpeRatio != null && sharpeRatio < 9000 ? sharpeRatio.toFixed(2) : '—'}
+        highlight={sharpeRatio != null && sharpeRatio > 1 && sharpeRatio < 9000}
+        tooltip={sharpeRatio == null ? t('sharpeNotAvailable') : sharpeRatio >= 9000 ? t('sharpeNotAvailable') : undefined}
       />
       <MetricBadge
         label={t('maxDrawdownShort')}
-        value={maxDrawdown !== undefined && Math.abs(maxDrawdown) <= 100 ? (Math.abs(maxDrawdown) < 0.05 ? '< 0.1%' : `${Math.abs(maxDrawdown).toFixed(1)}%`) : '—'}
+        value={maxDrawdown != null && Math.abs(maxDrawdown) <= 100 ? (Math.abs(maxDrawdown) < 0.05 ? '< 0.1%' : `${Math.abs(maxDrawdown).toFixed(1)}%`) : '—'}
         negative
-        tooltip={maxDrawdown === undefined ? t('drawdownNotAvailable') : maxDrawdown !== undefined && Math.abs(maxDrawdown) > 100 ? t('drawdownNotAvailable') : undefined}
+        tooltip={maxDrawdown == null ? t('drawdownNotAvailable') : Math.abs(maxDrawdown) > 100 ? t('drawdownNotAvailable') : undefined}
       />
       <MetricBadge
         label={t('winRateShort')}
-        value={winRate !== undefined ? `${winRate.toFixed(1)}%` : '—'}
-        highlight={winRate !== undefined && winRate > 60}
-        tooltip={winRate === undefined ? t('winRateNotAvailable') : undefined}
+        value={winRate != null ? `${winRate.toFixed(1)}%` : '—'}
+        highlight={winRate != null && winRate > 60}
+        tooltip={winRate == null ? t('winRateNotAvailable') : undefined}
       />
       <MetricBadge
         label={t('winningPositions')}
-        value={winningPositions !== undefined && totalPositions !== undefined ? `${winningPositions}/${totalPositions}` : '—'}
-        tooltip={winningPositions === undefined ? t('positionStatsNotAvailable') : undefined}
+        value={winningPositions != null && totalPositions != null ? `${winningPositions}/${totalPositions}` : '—'}
+        tooltip={winningPositions == null ? t('positionStatsNotAvailable') : undefined}
       />
       {/* V3 Advanced Metrics */}
-      {sortinoRatio !== undefined && (
+      {sortinoRatio != null && (
         <MetricBadge
           label="Sortino"
           value={sortinoRatio.toFixed(2)}
@@ -80,7 +80,7 @@ export function MetricBadgesGrid({
           tooltip={t('sortinoTooltip') || 'Risk-adjusted return using downside volatility'}
         />
       )}
-      {calmarRatio !== undefined && (
+      {calmarRatio != null && (
         <MetricBadge
           label="Calmar"
           value={calmarRatio.toFixed(2)}
@@ -88,7 +88,7 @@ export function MetricBadgesGrid({
           tooltip={t('calmarTooltip') || 'Annualized return / max drawdown'}
         />
       )}
-      {alpha !== undefined && (
+      {alpha != null && (
         <MetricBadge
           label="Alpha"
           value={`${alpha >= 0 ? '+' : ''}${alpha.toFixed(2)}%`}
@@ -103,13 +103,13 @@ export function MetricBadgesGrid({
           value={String(tradesCount)}
         />
       )}
-      {avgHoldingTimeHours !== undefined && (
+      {avgHoldingTimeHours != null && (
         <MetricBadge
           label={t('avgHoldingTime') || 'Avg Hold'}
           value={avgHoldingTimeHours < 1 ? `${Math.round(avgHoldingTimeHours * 60)}m` : `${Math.round(avgHoldingTimeHours)}h`}
         />
       )}
-      {copiersPnl !== undefined && (
+      {copiersPnl != null && (
         <MetricBadge
           label={t('copiersPnl') || 'Copiers PnL'}
           value={`${copiersPnl >= 0 ? '+' : ''}$${Math.abs(copiersPnl).toLocaleString('en-US', { maximumFractionDigits: 0 })}`}
