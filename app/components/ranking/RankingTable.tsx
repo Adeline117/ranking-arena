@@ -326,6 +326,7 @@ function RankingTableInner(props: {
         ${!visibleColumns.includes('winrate') ? '.ranking-table-grid-custom .col-winrate { display: none !important; }' : ''}
         ${!visibleColumns.includes('mdd') ? '.ranking-table-grid-custom .col-mdd { display: none !important; }' : ''}
         ${!visibleColumns.includes('roi') ? '.ranking-table-grid-custom .roi-cell { display: none !important; }' : ''}
+        ${!visibleColumns.includes('pnl') ? '.ranking-table-grid-custom .col-pnl { display: none !important; }' : ''}
         ${!visibleColumns.includes('sortino') ? '.ranking-table-grid-custom .col-sortino { display: none !important; }' : ''}
         ${!visibleColumns.includes('alpha') ? '.ranking-table-grid-custom .col-alpha { display: none !important; }' : ''}
         ${!visibleColumns.includes('style') ? '.ranking-table-grid-custom .col-style { display: none !important; }' : ''}
@@ -421,6 +422,9 @@ function RankingTableInner(props: {
         </Box>
         <Box className={`roi-cell sort-header sort-header-end${sortColumn === 'roi' ? ' sort-header-active' : ''} ${justSortedColumn === 'roi' ? 'just-sorted' : ''}`} as="button" onClick={() => handleSort('roi')} title={t('roiTooltip').replace('{range}', timeRange)} aria-sort={sortColumn === 'roi' ? (sortDir === 'asc' ? 'ascending' : 'descending') : 'none'} data-sortable>
           {t('roi')} ({timeRange}) <SortIndicator active={sortColumn === 'roi'} dir={sortDir} />
+        </Box>
+        <Box className={`col-pnl sort-header sort-header-end${sortColumn === 'pnl' ? ' sort-header-active' : ''} ${justSortedColumn === 'pnl' ? 'just-sorted' : ''}`} as="button" onClick={() => handleSort('pnl')} title={t('pnlTooltip') || 'Profit & Loss'} aria-sort={sortColumn === 'pnl' ? (sortDir === 'asc' ? 'ascending' : 'descending') : 'none'} data-sortable>
+          {t('pnl')} <SortIndicator active={sortColumn === 'pnl'} dir={sortDir} />
         </Box>
         <Box className={`col-winrate sort-header sort-header-end${sortColumn === 'winrate' ? ' sort-header-active' : ''} ${justSortedColumn === 'winrate' ? 'just-sorted' : ''}`} as="button" onClick={() => handleSort('winrate')} title={t('winRateTooltip')} aria-sort={sortColumn === 'winrate' ? (sortDir === 'asc' ? 'ascending' : 'descending') : 'none'} data-sortable>
           {t('winRateShort')} <SortIndicator active={sortColumn === 'winrate'} dir={sortDir} />

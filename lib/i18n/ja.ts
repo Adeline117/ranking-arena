@@ -1204,6 +1204,7 @@ const ja = {
     roiTooltip: 'ROI：投資収益率（{range}）',
     winRateTooltip: '勝率：勝率',
     mddTooltip: 'MDD：最大ドローダウン',
+    pnlTooltip: 'PnL：損益',
     filter: 'フィルター',
     columnSettingsTitle: 'カラム設定',
     resetToDefault: 'デフォルトに戻す',
@@ -3664,6 +3665,7 @@ const ja = {
     // Trader rank context
     traderRankOf: '{platform} で {total} 人中 #{rank} 位',
     traderRankTop: '上位 {pct}%',
+    rankedOnExchange: '{exchange} で #{rank} 位',
 
     // Footer links
     footerMethodology: '評価方法',

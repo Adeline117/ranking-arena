@@ -8,6 +8,7 @@ import AdvancedFilterPanel from './AdvancedFilterPanel'
 import FilterStatusMessages from './FilterStatusMessages'
 import ProUpgradeCTA from './ProUpgradeCTA'
 import RankingFooter from './RankingFooter'
+import TimeRangeSelector from './TimeRangeSelector'
 import { useRankingFilters, FREE_LEADERBOARD_LIMIT } from './useRankingFilters'
 
 interface RankingSectionProps {
@@ -88,6 +89,15 @@ export default function RankingSection({
         contain: 'layout style',
       }}
     >
+      {/* Time range selector (7D / 30D / 90D) */}
+      <Box style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', marginBottom: 8 }}>
+        <TimeRangeSelector
+          activeRange={activeTimeRange}
+          onChange={onTimeRangeChange}
+          disabled={loading}
+        />
+      </Box>
+
       <AdvancedFilterPanel
         showAdvancedFilter={showAdvancedFilter}
         showMobileFilter={showMobileFilter}
