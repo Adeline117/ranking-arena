@@ -222,51 +222,88 @@ export class BinanceFuturesConnector extends BaseConnector {
     offset: number = 0
   ): Promise<DiscoverResult> {
     const periodType = this.mapWindowToPlatform(window)
+    const pageSize = Math.min(limit, 20) // Binance returns max 20 per page
+    const maxPages = Math.ceil(Math.min(limit, 500) / pageSize)
+    const allTraders: TraderSource[] = []
 
-    // Primary: copy-trade ranking API (verified working from deprecated fetcher)
-    // leaderboard APIs (v1/v2/v3) all return 404 since ~2026-03-14
-    const _rawLb = await this.request<BinanceLeaderboardResponse>(
-      `${this.BASE_URL}/v1/public/future/copy-trade/lead-portfolio/ranking`,
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          pageNumber: 1,
-          pageSize: limit,
-          timeRange: periodType,
-          dataType: 'ROI',
-          favoriteOnly: false,
-        }),
-      }
-    )
-    const response = warnValidate(BinanceFuturesLeaderboardResponseSchema, _rawLb, 'binance-futures/leaderboard')
+    for (let page = Math.floor(offset / pageSize) + 1; page <= maxPages + Math.floor(offset / pageSize); page++) {
+      // New API endpoint (2026-03-15): /friendly/ path with home-page/query-list
+      // Old endpoints (/public/future/copy-trade/lead-portfolio/ranking) return 404
+      // This endpoint requires VPS proxy (geo-blocked + WAF protected)
+      let response: Record<string, unknown> | null = null
 
-    if (!response.success || !response.data?.list) {
-      return {
-        traders: [],
-        total_available: 0,
-        window,
-        fetched_at: new Date().toISOString(),
+      const requestBody = {
+        pageNumber: page,
+        pageSize,
+        timeRange: periodType,
+        dataType: 'ROI',
+        favoriteOnly: false,
+        hideFull: false,
+        nickname: '',
+        order: 'DESC',
+        userAsset: 0,
+        portfolioType: 'ALL',
+        useAiRecommended: false,
       }
+
+      try {
+        response = await this.request<Record<string, unknown>>(
+          `${this.BASE_URL}/v1/friendly/future/copy-trade/home-page/query-list`,
+          {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Origin': 'https://www.binance.com',
+              'Referer': 'https://www.binance.com/en/copy-trading',
+            },
+            body: JSON.stringify(requestBody),
+          }
+        )
+      } catch {
+        // Direct request fails (geo-blocked/WAF) — try VPS proxy
+        response = await this.proxyViaVPS<Record<string, unknown>>(
+          `${this.BASE_URL}/v1/friendly/future/copy-trade/home-page/query-list`,
+          {
+            method: 'POST',
+            body: requestBody,
+            headers: {
+              'Content-Type': 'application/json',
+              'Origin': 'https://www.binance.com',
+              'Referer': 'https://www.binance.com/en/copy-trading',
+            },
+          }
+        )
+      }
+
+      if (!response) break
+
+      // New response format: { code: "000000", data: { total, list: [...] } }
+      const data = response.data as Record<string, unknown> | null
+      const list = (data?.list || []) as Record<string, unknown>[]
+      if (!list.length) break
+
+      for (const entry of list) {
+        allTraders.push({
+          platform: this.platform,
+          market_type: this.marketType,
+          trader_key: String(entry.leadPortfolioId || entry.encryptedUid || ''),
+          display_name: (entry.nickname as string) ?? (entry.nickName as string) ?? null,
+          profile_url: `https://www.binance.com/en/copy-trading/lead-details?portfolioId=${entry.leadPortfolioId}`,
+          discovered_at: new Date().toISOString(),
+          last_seen_at: new Date().toISOString(),
+          is_active: true,
+          raw: entry,
+        })
+      }
+
+      if (list.length < pageSize) break
+      if (allTraders.length >= limit) break
+      await new Promise(r => setTimeout(r, 500))
     }
 
-    const traders: TraderSource[] = response.data.list
-      .slice(offset, offset + limit)
-      .map(entry => ({
-        platform: this.platform,
-        market_type: this.marketType,
-        trader_key: entry.encryptedUid,
-        display_name: entry.nickName ?? null,
-        profile_url: `https://www.binance.com/en/futures-activity/leaderboard/user?encryptedUid=${entry.encryptedUid}`,
-        discovered_at: new Date().toISOString(),
-        last_seen_at: new Date().toISOString(),
-        is_active: true,
-        raw: entry as unknown as Record<string, unknown>,
-      }))
-
     return {
-      traders,
-      total_available: response.data.list.length,
+      traders: allTraders.slice(0, limit),
+      total_available: allTraders.length,
       window,
       fetched_at: new Date().toISOString(),
     }
@@ -523,22 +560,41 @@ export class BinanceFuturesConnector extends BaseConnector {
    * win_rate, max_drawdown, trades_count require copy-trade detail API
    * and are filled by enrichment — set to null here.
    */
+  /**
+   * Normalize raw Binance leaderboard entry.
+   * New API (2026-03-15) returns: leadPortfolioId, nickname, avatarUrl,
+   * roi, pnl, mdd, winRate, sharpRatio, aum, currentCopyCount, chartItems.
+   * Old API returned: encryptedUid, nickName, value (ROI decimal), pnl, followerCount.
+   */
   normalize(raw: unknown): Record<string, unknown> {
-    const entry = raw as BinanceTraderEntry
+    const entry = raw as Record<string, unknown>
+
+    // New API: roi is already percentage (6980.41 = 6980.41%)
+    // Old API: value was decimal (0.5 = 50%)
+    let roi: number | null = null
+    if (entry.roi != null) {
+      roi = Number(entry.roi)
+    } else if (entry.value != null) {
+      roi = Number(entry.value) * 100
+    }
+
+    const winRate = entry.winRate != null ? Number(entry.winRate) : null
+    const mdd = entry.mdd != null ? Math.abs(Number(entry.mdd)) : null
+
     return {
-      trader_key: entry.encryptedUid,
-      display_name: entry.nickName ?? null,
-      avatar_url: entry.userPhotoUrl ?? null,
-      roi: entry.value != null ? entry.value * 100 : null,
-      pnl: entry.pnl ?? null,
-      win_rate: null,        // Requires copy-trade detail API (enrichment)
-      max_drawdown: null,    // Requires copy-trade detail API (enrichment)
-      trades_count: null,    // Requires copy-trade detail API (enrichment)
-      followers: entry.followerCount ?? null,
-      copiers: entry.copyCount ?? null,
-      aum: null,
-      sharpe_ratio: null,
-      platform_rank: entry.rank ?? null,
+      trader_key: entry.leadPortfolioId ?? entry.encryptedUid ?? null,
+      display_name: entry.nickname ?? entry.nickName ?? null,
+      avatar_url: entry.avatarUrl ?? entry.userPhotoUrl ?? null,
+      roi,
+      pnl: entry.pnl != null ? Number(entry.pnl) : null,
+      win_rate: winRate,
+      max_drawdown: mdd,
+      trades_count: null,
+      followers: entry.currentCopyCount != null ? Number(entry.currentCopyCount) : (entry.followerCount != null ? Number(entry.followerCount) : null),
+      copiers: entry.currentCopyCount != null ? Number(entry.currentCopyCount) : (entry.copyCount != null ? Number(entry.copyCount) : null),
+      aum: entry.aum != null ? Number(entry.aum) : null,
+      sharpe_ratio: entry.sharpRatio != null ? Number(entry.sharpRatio) : null,
+      platform_rank: entry.rank != null ? Number(entry.rank) : null,
     }
   }
 

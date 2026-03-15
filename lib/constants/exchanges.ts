@@ -143,8 +143,6 @@ export const DEAD_BLOCKED_PLATFORMS: TraderSource[] = [
   'whitebit' as TraderSource, // No copy-trading feature or API — confirmed 2026-03-13
   'bitmart',      // CF 403 on API, Playwright found zero API calls — confirmed dead 2026-03-13
   'btse' as TraderSource, // SPA page 200 but zero API calls intercepted — no real data 2026-03-13
-  'binance_futures', // ALL bapi/futures leaderboard+copy-trade APIs return 404 since ~2026-03-15
-  'binance_spot',    // Same as binance_futures — Binance killed all leaderboard APIs
   'dydx',          // indexer.dydx.trade /v4/leaderboard/pnl returns 404 globally since ~2026-03
 
   // ═══════════════════════════════════════════════════════════════
