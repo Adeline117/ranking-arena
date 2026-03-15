@@ -212,7 +212,7 @@ async function fetchFromLeaderboard(
   // Platform diversity: when viewing overall (no exchange filter), cap per-platform
   // to prevent a single high-PnL platform from monopolizing the ranking
   if (!exchangeFilter && sortBy === 'arena_score' && !cursor) {
-    const MAX_PER_PLATFORM = Math.max(5, Math.ceil(limit * 0.3))
+    const MAX_PER_PLATFORM = Math.min(Math.max(5, Math.ceil(limit * 0.3)), 50)
     const platformCounts = new Map<string, number>()
     dedupedTraders = dedupedTraders.filter((t: { source: string }) => {
       const count = platformCounts.get(t.source) || 0
