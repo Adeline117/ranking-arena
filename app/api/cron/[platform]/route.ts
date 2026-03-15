@@ -60,11 +60,6 @@ export async function POST(
   const platform = pathname.split('/').filter(Boolean).pop() || params.platform
   const startTime = Date.now()
 
-  // Debug logging
-  console.log('[DEBUG] pathname:', pathname)
-  console.log('[DEBUG] params.platform:', params.platform)
-  console.log('[DEBUG] extracted platform:', platform)
-
   try {
     // 1. 验证请求来源
     const signature = request.headers.get('upstash-signature')
