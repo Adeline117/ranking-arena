@@ -82,12 +82,9 @@ export class GateioFuturesConnector extends BaseConnector {
             headers: this.getHeaders(),
           })
         } catch {
-          // Fallback: VPS scraper
-          const vpsData = await this.fetchViaVPS<Record<string, unknown>>('/gateio/leaderboard', {
-            cycle,
-            page: String(page),
-          })
-          if (!vpsData) throw new Error('Both direct API and VPS scraper failed for gateio')
+          // Fallback: VPS proxy (forward full URL through VPS)
+          const vpsData = await this.proxyViaVPS<Record<string, unknown>>(url)
+          if (!vpsData) throw new Error('Both direct API and VPS proxy failed for gateio')
           data = vpsData
         }
 

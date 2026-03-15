@@ -34,28 +34,41 @@ export class OkxFuturesConnector extends BaseConnector {
   }
 
   async discoverLeaderboard(window: Window, limit = 20, offset = 0): Promise<DiscoverResult> {
-    const page = Math.floor(offset / limit) + 1
-
     // v5 copytrading public API (priapi removed 2026-03-14)
-    const _rawLb = await this.request<Record<string, unknown>>(
-      `https://www.okx.com/api/v5/copytrading/public-lead-traders?instType=SWAP&sortType=pnl&dataRange=${V5_WINDOW_MAP[window]}&page=${page}&limit=${limit}`,
-      { method: 'GET' }
-    )
-    const data = warnValidate(OkxFuturesLeaderboardResponseSchema, _rawLb, 'okx-futures/leaderboard')
-    // v5 response: data[0].ranks  OR  data.ranks
-    const dataArr = Array.isArray(data?.data) ? data.data[0] : data?.data
-    const list = dataArr?.ranks || []
+    // Auto-paginate: OKX returns max 20 per page
+    const pageSize = Math.min(limit, 20)
+    const maxPages = Math.ceil(Math.min(limit, 200) / pageSize)
+    const allTraders: TraderSource[] = []
 
-    const traders: TraderSource[] = (Array.isArray(list) ? list : []).map((item: Record<string, unknown>) => ({
-      platform: 'okx' as const, market_type: 'futures' as const,
-      trader_key: String(item.uniqueCode || item.uniqueName || ''),
-      display_name: (item.nickName as string) || null,
-      profile_url: `https://www.okx.com/copy-trading/account/${item.uniqueCode || item.uniqueName}`,
-      discovered_at: new Date().toISOString(), last_seen_at: new Date().toISOString(),
-      is_active: true, raw: item as Record<string, unknown>,
-    }))
+    for (let page = Math.floor(offset / pageSize) + 1; page <= maxPages + Math.floor(offset / pageSize); page++) {
+      const _rawLb = await this.request<Record<string, unknown>>(
+        `https://www.okx.com/api/v5/copytrading/public-lead-traders?instType=SWAP&sortType=pnl&dataRange=${V5_WINDOW_MAP[window]}&pageNo=${page}&limit=${pageSize}`,
+        { method: 'GET' }
+      )
+      const data = warnValidate(OkxFuturesLeaderboardResponseSchema, _rawLb, 'okx-futures/leaderboard')
 
-    return { traders, total_available: null, window, fetched_at: new Date().toISOString() }
+      // v5 response: { code: "0", data: [{ ranks: [...], totalPage, dataVer }] }
+      const dataArr = Array.isArray(data?.data) ? data.data[0] : data?.data
+      const list = dataArr?.ranks || []
+      if (!Array.isArray(list) || list.length === 0) break
+
+      for (const item of list as Record<string, unknown>[]) {
+        allTraders.push({
+          platform: 'okx' as const, market_type: 'futures' as const,
+          trader_key: String(item.uniqueCode || item.uniqueName || ''),
+          display_name: (item.nickName as string) || null,
+          profile_url: `https://www.okx.com/copy-trading/account/${item.uniqueCode || item.uniqueName}`,
+          discovered_at: new Date().toISOString(), last_seen_at: new Date().toISOString(),
+          is_active: true, raw: item as Record<string, unknown>,
+        })
+      }
+
+      if (list.length < pageSize) break
+      if (allTraders.length >= limit) break
+      await new Promise(r => setTimeout(r, 300))
+    }
+
+    return { traders: allTraders.slice(0, limit), total_available: allTraders.length, window, fetched_at: new Date().toISOString() }
   }
 
   async fetchTraderProfile(traderKey: string): Promise<ProfileResult | null> {
@@ -141,17 +154,17 @@ export class OkxFuturesConnector extends BaseConnector {
   normalize(raw: Record<string, unknown>): Record<string, unknown> {
     const winRatio = this.num(raw.winRatio)
     return {
-      trader_key: raw.uniqueName ?? raw.uniqueCode ?? null,
+      trader_key: raw.uniqueCode ?? raw.uniqueName ?? null,
       display_name: raw.nickName ?? null,
       avatar_url: raw.portLink ?? null,
-      roi: this.decimalToPercent(raw.profitRatio),
-      pnl: this.num(raw.profit ?? raw.pnl),
-      win_rate: winRatio != null ? winRatio * 100 : null,
+      roi: this.decimalToPercent(raw.pnlRatio ?? raw.profitRatio),
+      pnl: this.num(raw.pnl ?? raw.profit),
+      win_rate: winRatio != null ? (winRatio <= 1 ? winRatio * 100 : winRatio) : null,
       max_drawdown: raw._computed_mdd != null ? Number(raw._computed_mdd) : null,
       trades_count: null,
-      followers: this.num(raw.copyTraderNum),
-      copiers: null,
-      aum: null,
+      followers: this.num(raw.accCopyTraderNum ?? raw.copyTraderNum),
+      copiers: this.num(raw.copyTraderNum),
+      aum: this.num(raw.aum),
       sharpe_ratio: raw.sharpeRatio != null ? Number(raw.sharpeRatio) : null,
       platform_rank: null,
     }

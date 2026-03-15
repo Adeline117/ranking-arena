@@ -40,12 +40,10 @@ export class MexcFuturesConnector extends BaseConnector {
         { method: 'GET' }
       )
     } catch {
-      // Fallback: VPS scraper
-      const vpsData = await this.fetchViaVPS<Record<string, unknown>>('/mexc/leaderboard', {
-        page: String(page),
-        pageSize: String(limit),
-      })
-      if (!vpsData) throw new Error('Both direct API and VPS scraper failed for mexc')
+      // Fallback: VPS proxy (forward full URL through VPS)
+      const directUrl = `https://futures.mexc.com/api/v1/private/account/assets/copy-trading/trader/list?page=${page}&pageSize=${limit}&sortField=yield&sortType=DESC&timeType=${WINDOW_MAP[window]}`
+      const vpsData = await this.proxyViaVPS<Record<string, unknown>>(directUrl)
+      if (!vpsData) throw new Error('Both direct API and VPS proxy failed for mexc')
       _rawLb = vpsData
     }
     const data = warnValidate(MexcFuturesLeaderboardResponseSchema, _rawLb, 'mexc-futures/leaderboard')

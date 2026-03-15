@@ -5,20 +5,21 @@
  * avoiding Cloudflare timeouts and Vercel deployment protection issues.
  *
  * Query params:
- *   group=a  → binance_futures (every 3h) — binance_spot REMOVED 2026-03-14
- *   group=a2 → bitget_futures, okx_futures (every 3h)
- *   group=b  → hyperliquid, gmx, jupiter_perps (every 4h)
- *   group=c  → okx_web3, aevo, xt (every 4h)
+ *   group=a  → EMPTY (binance_futures DEAD since 2026-03-15)
+ *   group=a2 → bybit, bitget_futures, okx_futures (every 3h)
+ *   group=b  → hyperliquid, gmx (every 4h)
+ *   group=c  → okx_futures (every 4h)
  *   group=d1 → gains, htx_futures (every 6h)
- *   group=d2 → dydx (every 6h)
- *   group=e  → coinex, binance_web3 (every 6h)
+ *   group=d2 → EMPTY (dydx DEAD since 2026-03)
+ *   group=e  → bitfinex, coinex, binance_web3 (every 6h)
  *   group=f  → mexc, bingx (every 6h)
  *   group=h  → gateio, btcc (every 6h)
- *   group=g1 → drift, bitunix (every 6h)
- *   group=g2 → web3_bot, toobit, bitget_spot (every 6h)
+ *   group=g1 → drift, jupiter_perps (every 6h)
+ *   group=g2 → web3_bot, toobit (every 6h)
  *   group=i  → etoro (every 6h)
  *
- * Dead/blocked platforms (fetcher files deleted 2026-03-10):
+ * Dead/blocked platforms:
+ *   binance_futures, binance_spot, dydx (APIs dead 2026-03-15),
  *   kucoin, lbank, weex, mux, synthetix, bitmart,
  *   whitebit, btse, cryptocom, pionex, vertex, okx_spot, paradex
  */
@@ -37,22 +38,18 @@ export const maxDuration = 600 // Vercel Pro max: 10 minutes (was 300s = 5min)
 export const preferredRegion = 'hnd1' // Tokyo — avoids Binance/OKX/Bybit geo-blocking
 
 const GROUPS: Record<string, string[]> = {
-  // Group A: Binance (every 3h) — VPS proxy enabled 2026-03-15
-  a: ['binance_futures'],
+  // Group A: EMPTY — binance_futures DEAD (all APIs 404 since 2026-03-15)
+  a: [],
   // Group A2: High-priority CEX (every 3h) — VPS proxy enabled 2026-03-15
   a2: ['bybit', 'bitget_futures', 'okx_futures'],
-  // Group B: Top DEX (every 4h)
-  // hyperliquid: FIXED 2026-03-15 (switched to stats-data endpoint)
-  // gmx: DEAD — REST API + subgraph both returning 404 since 2026-03-14
-  b: ['hyperliquid'],
+  // Group B: Top DEX (every 4h) + GMX (switched to subgraph 2026-03-15)
+  b: ['hyperliquid', 'gmx'],
   // Group C: Mid-priority (every 4h)
-  // okx_futures: FIXED 2026-03-15 (switched to v5 copytrading API)
-  // okx_web3/aevo: still broken
   c: ['okx_futures'],
   // Group D1: CEX (every 6h) — VPS proxy enabled
   d1: ['gains', 'htx_futures'],
-  // Group D2: DEX only (every 6h)
-  d2: ['dydx'],
+  // Group D2: EMPTY — dydx DEAD (indexer API 404 globally since ~2026-03)
+  d2: [],
   // Group E: CEX+DEX (every 6h) — coinex URL fixed + VPS proxy
   e: ['bitfinex', 'coinex', 'binance_web3'],
   // Group F: CEX (every 6h) — VPS proxy enabled

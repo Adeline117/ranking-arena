@@ -43,25 +43,53 @@ export class GmxPerpConnector extends BaseConnector {
   }
 
   private getSubgraphUrl(): string {
-    // Use REST API endpoint as primary (more reliable than subgraph for high-volume)
-    return 'https://arbitrum-api.gmxinfra.io'
+    return 'https://subgraph.satsuma-prod.com/gmx/synthetics-arbitrum-stats/api'
+  }
+
+  private getPeriodPrefix(window: Window): string {
+    // GMX subgraph periods: "1d:TIMESTAMP", "1w:TIMESTAMP", "total"
+    // For leaderboard, use "total" (all-time) since subgraph doesn't have native 7d/30d/90d periods
+    return 'total'
   }
 
   async discoverLeaderboard(window: Window, limit = 100, _offset = 0): Promise<DiscoverResult> {
-    // Use the REST leaderboard endpoint
-    const _rawLb = await this.request<Record<string, unknown>>(
-      `${this.getSubgraphUrl()}/leaderboard/pnl?period=${window}&limit=${limit}`,
-      { method: 'GET' }
-    )
-    const data = warnValidate(GmxLeaderboardResponseSchema, _rawLb, 'gmx-perp/leaderboard')
-    const rankings = Array.isArray(data) ? data : (data?.accounts || [])
+    // REST API removed ~2026-03-15, switched to subgraph
+    const period = this.getPeriodPrefix(window)
+    const query = `{
+      periodAccountStats(
+        first: ${limit}
+        orderBy: realizedPnl
+        orderDirection: desc
+        where: { period: "${period}" }
+      ) {
+        id
+        account
+        realizedPnl
+        maxCapital
+        wins
+        losses
+        closedCount
+      }
+    }`
 
-    const traders: TraderSource[] = rankings.slice(0, limit).map((item: Record<string, unknown>) => {
+    const _rawLb = await this.request<Record<string, unknown>>(
+      this.getSubgraphUrl(),
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ query }),
+      }
+    )
+
+    const data = warnValidate(GmxSubgraphResponseSchema, _rawLb, 'gmx-perp/leaderboard')
+    const rankings = data?.data?.periodAccountStats || []
+
+    const traders: TraderSource[] = (Array.isArray(rankings) ? rankings : []).slice(0, limit).map((item: Record<string, unknown>) => {
       const address = String(item.account || item.id || '').toLowerCase()
       return {
         platform: 'gmx' as const, market_type: 'perp' as const,
         trader_key: address,
-        display_name: null,  // On-chain = no display name
+        display_name: null,
         profile_url: `https://app.gmx.io/#/leaderboard?account=${address}`,
         discovered_at: new Date().toISOString(), last_seen_at: new Date().toISOString(),
         is_active: true, raw: item as Record<string, unknown>,
@@ -85,17 +113,27 @@ export class GmxPerpConnector extends BaseConnector {
     return { profile, fetched_at: new Date().toISOString() }
   }
 
-  async fetchTraderSnapshot(traderKey: string, window: Window): Promise<SnapshotResult | null> {
+  async fetchTraderSnapshot(traderKey: string, _window: Window): Promise<SnapshotResult | null> {
+    // Fetch trader stats from subgraph
+    const query = `{
+      periodAccountStats(
+        first: 1
+        where: { account: "${traderKey.toLowerCase()}", period: "total" }
+      ) {
+        account realizedPnl maxCapital wins losses closedCount
+      }
+    }`
     const _rawSnap = await this.request<Record<string, unknown>>(
-      `${this.getSubgraphUrl()}/leaderboard/pnl?period=${window}&limit=1000`,
-      { method: 'GET' }
+      this.getSubgraphUrl(),
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ query }),
+      }
     )
-    const data = warnValidate(GmxLeaderboardResponseSchema, _rawSnap, 'gmx-perp/snapshot')
-    const rankings = Array.isArray(data) ? data : (data?.accounts || [])
-
-    const entry = rankings.find((r: Record<string, unknown>) =>
-      String(r.account || r.id || '').toLowerCase() === traderKey.toLowerCase()
-    )
+    const data = warnValidate(GmxSubgraphResponseSchema, _rawSnap, 'gmx-perp/snapshot')
+    const rankings = data?.data?.periodAccountStats || []
+    const entry = Array.isArray(rankings) ? rankings[0] as Record<string, unknown> | undefined : undefined
 
     if (!entry) {
       return {
