@@ -197,7 +197,7 @@ function PositionHistoryCard({ position, t }: { position: PositionHistoryItem; t
               fontFamily: tokens.typography.fontFamily.mono.join(', '),
             }}
           >
-            {isProfit ? '+' : ''}{position.pnlUsd.toFixed(2)} USDT
+            {isProfit ? '+' : ''}{(position.pnlUsd ?? 0).toFixed(2)} USDT
           </Text>
         </Box>
       </Box>

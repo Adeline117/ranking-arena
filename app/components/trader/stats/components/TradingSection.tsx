@@ -137,8 +137,8 @@ export function TradingSection({
             />
             <MiniKpi
               label={t('maxDrawdown')}
-              value={additionalStats?.maxDrawdown !== undefined && Math.abs(additionalStats.maxDrawdown) <= 100 ? (Math.abs(additionalStats.maxDrawdown) < 0.005 ? '< 0.01%' : `-${Math.abs(additionalStats.maxDrawdown).toFixed(2)}%`) : NULL_DISPLAY}
-              highlight={additionalStats?.maxDrawdown !== undefined && Math.abs(additionalStats.maxDrawdown) <= 100}
+              value={additionalStats?.maxDrawdown != null && Math.abs(additionalStats.maxDrawdown) <= 100 ? (Math.abs(additionalStats.maxDrawdown) < 0.005 ? '< 0.01%' : `-${Math.abs(additionalStats.maxDrawdown).toFixed(2)}%`) : NULL_DISPLAY}
+              highlight={additionalStats?.maxDrawdown != null && Math.abs(additionalStats.maxDrawdown) <= 100}
               isNegative
             />
             <MiniKpi

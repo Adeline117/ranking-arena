@@ -186,7 +186,7 @@ export default function PositionHistoryView({
                           fontFamily: tokens.typography.fontFamily.mono.join(', '),
                         }}
                       >
-                        {item.pnlPct >= 0 ? '+' : ''}{item.pnlPct.toFixed(2)}%
+                        {(item.pnlPct ?? 0) >= 0 ? '+' : ''}{(item.pnlPct ?? 0).toFixed(2)}%
                       </Text>
                     </td>
                     <td style={{ padding: tokens.spacing[4], textAlign: 'right' }}>
