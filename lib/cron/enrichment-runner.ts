@@ -308,9 +308,21 @@ export const NO_ENRICHMENT_PLATFORMS = new Set([
   'bybit', 'bybit_spot',
   // No enrichment API available
   'bitfinex', 'coinex', 'xt', 'bitmart', 'btcc', 'bitunix', 'paradex', 'okx_spot', 'etoro', 'toobit',
-  // EMERGENCY DISABLE (2026-03-15): Hangs indefinitely, timeout mechanism failed
-  'bitget_futures', 'binance_spot',
+  // binance_spot: PERMANENTLY REMOVED (2026-03-14) - repeatedly hangs 45-76min
+  'binance_spot',
+  // bitget_futures: re-enabled (2026-03-15) - per-platform timeout now isolates hangs
 ])
+
+// Per-platform timeout: prevents any single platform from burning the entire batch budget
+// CEX platforms get 45s, onchain platforms get 90s (GraphQL/RPC calls are slower)
+const PLATFORM_TIMEOUT_MS: Record<string, number> = {}
+const DEFAULT_PLATFORM_TIMEOUT_MS = 45_000
+const ONCHAIN_PLATFORM_TIMEOUT_MS = 90_000
+const ONCHAIN_SET = new Set(['gmx', 'dydx', 'jupiter_perps', 'hyperliquid', 'drift', 'aevo', 'gains', 'kwenta'])
+
+function getPlatformTimeout(platform: string): number {
+  return PLATFORM_TIMEOUT_MS[platform] ?? (ONCHAIN_SET.has(platform) ? ONCHAIN_PLATFORM_TIMEOUT_MS : DEFAULT_PLATFORM_TIMEOUT_MS)
+}
 
 export async function runEnrichment(params: {
   platform: string
@@ -354,6 +366,14 @@ export async function runEnrichment(params: {
 
     results[platformKey] = { enriched: 0, failed: 0, errors: [] }
 
+    // Per-platform timeout: isolate each platform so one hanging platform
+    // doesn't burn the entire batch's time budget
+    const platformTimeoutMs = getPlatformTimeout(platformKey)
+    const platformStart = Date.now()
+
+    try {
+      await Promise.race([
+        (async () => {
     const { data: traders, error: fetchError } = await supabase
       .from('trader_snapshots')
       .select('source_trader_id')
@@ -364,23 +384,32 @@ export async function runEnrichment(params: {
 
     if (fetchError || !traders) {
       results[platformKey].errors.push(`Failed to fetch traders: ${fetchError?.message}`)
-      continue
+      return
     }
 
-    logger.warn(`[enrich] Processing ${traders.length} ${platformKey} traders for ${period}`)
+    logger.warn(`[enrich] Processing ${traders.length} ${platformKey} traders for ${period} (timeout: ${platformTimeoutMs / 1000}s)`)
 
     for (let i = 0; i < traders.length; i += config.concurrency) {
+      // Check per-platform time budget before each batch
+      const platformElapsed = Date.now() - platformStart
+      if (platformElapsed > platformTimeoutMs - 5000) {
+        const remaining = traders.length - i
+        logger.warn(`[enrich] ${platformKey} approaching timeout (${Math.round(platformElapsed / 1000)}s), skipping ${remaining} remaining traders`)
+        results[platformKey].errors.push(`Timeout: ${remaining} traders skipped after ${Math.round(platformElapsed / 1000)}s`)
+        break
+      }
+
       const batch = traders.slice(i, i + config.concurrency)
 
       const batchResults = await Promise.allSettled(
         batch.map(async (trader) => {
           const traderId = trader.source_trader_id
-          // EMERGENCY FIX (2026-03-13): Add per-trader timeout to prevent slow traders from blocking batch
-          // 2min timeout for Jupiter/DEX platforms with slow on-chain calls, prevents hung requests
+          // Per-trader timeout: 30s for CEX, 60s for onchain
+          const traderTimeoutMs = ONCHAIN_SET.has(platformKey) ? 60_000 : 30_000
           const traderTimeout = new Promise<void>((_, reject) =>
-            setTimeout(() => reject(new Error(`Trader ${traderId} timed out after 2min`)), 120_000)
+            setTimeout(() => reject(new Error(`Trader ${traderId} timed out after ${traderTimeoutMs / 1000}s`)), traderTimeoutMs)
           )
-          
+
           try {
             await Promise.race([
               (async () => {
@@ -490,7 +519,7 @@ export async function runEnrichment(params: {
       // Process allSettled results
       const successful = batchResults.filter(r => r.status === 'fulfilled')
       const failed = batchResults.filter(r => r.status === 'rejected')
-      
+
       if (failed.length > 0) {
         logger.warn(`[enrich] Batch ${platformKey}: ${successful.length} success, ${failed.length} failed`)
         failed.forEach((result, idx) => {
@@ -502,6 +531,17 @@ export async function runEnrichment(params: {
       if (i + config.concurrency < traders.length) {
         await sleep(config.delayMs)
       }
+    }
+        })(),
+        new Promise<void>((_, reject) =>
+          setTimeout(() => reject(new Error(`Platform ${platformKey} timed out after ${platformTimeoutMs / 1000}s`)), platformTimeoutMs)
+        ),
+      ])
+    } catch (err) {
+      const errMsg = err instanceof Error ? err.message : String(err)
+      logger.error(`[enrich] Platform ${platformKey} failed/timed out: ${errMsg}`)
+      results[platformKey].errors.push(errMsg)
+      // Continue to next platform - don't let one platform block others
     }
   }
 
