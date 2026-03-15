@@ -322,27 +322,12 @@ export async function runEnrichment(params: {
   const startTime = Date.now()
   const plog = await PipelineLogger.start(`enrich-${platformParam}`)
 
-  // EMERGENCY FIX (2026-03-15): Global 10-minute timeout to prevent hung enrichment tasks
-  // Prevents bitget_futures from hanging 45-76min like binance_spot did
-  const GLOBAL_TIMEOUT_MS = 10 * 60 * 1000 // 10 minutes
-  const globalTimeout = new Promise<EnrichmentResult>((_, reject) =>
-    setTimeout(() => {
-      const err = new Error(`Enrichment ${platformParam} timed out after ${GLOBAL_TIMEOUT_MS / 1000}s`)
-      plog.timeout({ reason: 'global timeout', duration_sec: Math.floor((Date.now() - startTime) / 1000) })
-      reject(err)
-    }, GLOBAL_TIMEOUT_MS)
-  )
-
-  // Wrap the entire enrichment execution in a race with global timeout
-  return Promise.race([
-    globalTimeout,
-    (async () => {
-      // Early exit for platforms that don't support enrichment
-      if (NO_ENRICHMENT_PLATFORMS.has(platformParam)) {
-        logger.info(`[enrich] Skipping ${platformParam} - enrichment not supported`)
-        await plog.success(0, { reason: 'platform does not support enrichment' })
-        return { ok: true, duration: 0, period, summary: { total: 0, enriched: 0, failed: 0 }, results: {} }
-      }
+  // Early exit for platforms that don't support enrichment
+  if (NO_ENRICHMENT_PLATFORMS.has(platformParam)) {
+    logger.info(`[enrich] Skipping ${platformParam} - enrichment not supported`)
+    await plog.success(0, { reason: 'platform does not support enrichment' })
+    return { ok: true, duration: 0, period, summary: { total: 0, enriched: 0, failed: 0 }, results: {} }
+  }
 
   const supabaseUrl = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL || ''
   const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || ''
@@ -547,13 +532,11 @@ export async function runEnrichment(params: {
     )
   }
 
-      if (totalFailed === 0) {
-        await plog.success(totalEnriched, { period, duration })
-      } else {
-        await plog.error(new Error(`${totalFailed}/${totalEnriched + totalFailed} enrichments failed`), { period, duration, totalEnriched, totalFailed })
-      }
+  if (totalFailed === 0) {
+    await plog.success(totalEnriched, { period, duration })
+  } else {
+    await plog.error(new Error(`${totalFailed}/${totalEnriched + totalFailed} enrichments failed`), { period, duration, totalEnriched, totalFailed })
+  }
 
-      return { ok: totalFailed === 0, duration, period, summary: { total, enriched: totalEnriched, failed: totalFailed }, results }
-    })()
-  ])
+  return { ok: totalFailed === 0, duration, period, summary: { total, enriched: totalEnriched, failed: totalFailed }, results }
 }
