@@ -425,6 +425,8 @@ export default function NotFoundPage() {
           }}>
             {[
               { href: '/search', label: t('search'), icon: '⌕' },
+              { href: '/hot', label: t('hot'), icon: '🔥' },
+              { href: '/groups', label: t('groups'), icon: '👥' },
               { href: '/market', label: t('market'), icon: '◈' },
               { href: '/login', label: t('login'), icon: '→' },
             ].map((item) => (

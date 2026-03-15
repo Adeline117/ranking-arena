@@ -9,7 +9,6 @@ import ThemeToggle from '../ui/ThemeToggle'
 import LanguageSwitcher from '../ui/LanguageToggle'
 import { useLanguage } from '../Providers/LanguageProvider'
 import { Box } from '../base'
-import { features } from '@/lib/features'
 import NavLinks from './NavLinks'
 import NavSearchBar from './NavSearchBar'
 import MobileSearchButton from './MobileSearchButton'
@@ -173,9 +172,7 @@ export default function TopNav({ email = null }: { email?: string | null }) {
             )
           ) : myId ? (
             <>
-              {features.social && (
-                <NotificationButton totalUnread={totalUnread} />
-              )}
+              <NotificationButton totalUnread={totalUnread} />
               <UserMenuDropdown
                 myId={myId}
                 myHandle={myHandle}

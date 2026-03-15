@@ -6,7 +6,6 @@ import { tokens } from '@/lib/design-tokens'
 import { Box } from '../base'
 import { useLanguage } from '../Providers/LanguageProvider'
 import { usePostStore } from '@/lib/stores/postStore'
-import { features } from '@/lib/features'
 
 export default function NavLinks() {
   const { t, language } = useLanguage()
@@ -19,10 +18,7 @@ export default function NavLinks() {
     { href: '/library', labelKey: 'library' as const, tooltip: language === 'zh' ? '学习资料库' : 'Learning library' },
     { href: '/groups', labelKey: 'groups' as const, tooltip: language === 'zh' ? '加入讨论小组' : 'Join discussion groups' },
     { href: '/hot', labelKey: 'hot' as const, tooltip: language === 'zh' ? '全站热门帖子' : 'Trending posts' },
-  ].filter(item => {
-    if (['/groups', '/hot'].includes(item.href)) return features.social
-    return true
-  })
+  ]
 
   return (
     <Box as="nav" aria-label={t('mainNavigation')} className="hide-mobile" style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[1] }}>
