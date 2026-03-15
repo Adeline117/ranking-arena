@@ -238,22 +238,41 @@ export abstract class BaseConnector implements PlatformConnector {
         const controller = new AbortController()
         const timeout = setTimeout(() => controller.abort(), this.config.timeout)
 
-        // Proxy support: rewrite URL through CF Worker if proxyUrl is configured
-        let fetchUrl = url
+        // Proxy support: route through VPS proxy for geo-blocked APIs
+        let response: Response
         if (this.config.proxyUrl) {
-          fetchUrl = `${this.config.proxyUrl}/proxy?url=${encodeURIComponent(url)}`
+          // VPS proxy: POST with JSON body containing the target request
+          response = await fetch(this.config.proxyUrl, {
+            method: 'POST',
+            signal: controller.signal,
+            headers: {
+              'Content-Type': 'application/json',
+              'X-Proxy-Key': process.env.VPS_PROXY_KEY || '',
+            },
+            body: JSON.stringify({
+              url,
+              method: options?.method || 'GET',
+              headers: {
+                'User-Agent': this.config.userAgent,
+                Accept: 'application/json',
+                ...this.config.headers,
+                ...options?.headers,
+              },
+              body: options?.body,
+            }),
+          })
+        } else {
+          response = await fetch(url, {
+            ...options,
+            signal: controller.signal,
+            headers: {
+              'User-Agent': this.config.userAgent,
+              Accept: 'application/json',
+              ...this.config.headers,
+              ...options?.headers,
+            },
+          })
         }
-
-        const response = await fetch(fetchUrl, {
-          ...options,
-          signal: controller.signal,
-          headers: {
-            'User-Agent': this.config.userAgent,
-            Accept: 'application/json',
-            ...this.config.headers,
-            ...options?.headers,
-          },
-        })
 
         clearTimeout(timeout)
 
