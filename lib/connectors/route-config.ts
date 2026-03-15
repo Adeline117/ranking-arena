@@ -73,13 +73,13 @@ export const PLATFORM_ROUTES: Record<string, RouteConfig> = {
 
   // ─── FIXED (2026-03-15) ───────────────────────────────────────
   htx_futures:     { routes: ['direct', 'vps_sg'],             notes: 'Switched to futures.htx.com ranking API (GET)' },
-  xt:              { routes: ['direct', 'vps_sg'],             notes: 'API 404 — endpoint may have moved' },
+  xt:              { routes: ['scraper_sg'],                    notes: 'API 404 but /fapi/user/v1 works via Playwright page.evaluate' },
 
   // ─── DEX (special handling) ──────────────────────────────────
   dydx:            { routes: ['direct'],                        notes: 'Uses Copin leaderboard API (indexer 404 since 2026-03)' },
 
-  // ─── DEAD ────────────────────────────────────────────────────
-  weex:            { routes: [],                               notes: 'DEAD: 521 from all routes' },
+  // ─── RESTORED via VPS Scraper ──────────────────────────────
+  weex:            { routes: ['scraper_sg'],                   notes: 'API on janapw.com needs dynamic auth headers. Scraper waitForResponse.' },
 }
 
 /**
