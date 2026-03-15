@@ -387,9 +387,10 @@ export abstract class BaseConnector implements PlatformConnector {
       ).toString();
 
       // Named endpoints (e.g., /toobit/leaderboard) are served by the Playwright scraper.
-      // The scraper runs on a different port from the HTTP proxy.
-      // Use VPS_SCRAPER_SG for named endpoints, VPS_PROXY_SG for generic proxy.
-      const scraperHost = process.env.VPS_SCRAPER_SG || vpsHost;
+      // The scraper runs on port 3457, proxy on 3456.
+      // Derive scraper URL from proxy URL by replacing port, with env var override.
+      const rawScraperSg = (process.env.VPS_SCRAPER_SG || '').replace(/\\n$/, '').trim()
+      const scraperHost = rawScraperSg || vpsHost.replace(':3456', ':3457');
       const endpointUrl = `${scraperHost}${endpoint}${queryString ? `?${queryString}` : ''}`;
 
       const response = await fetch(endpointUrl, {
