@@ -37,41 +37,34 @@ export const maxDuration = 600 // Vercel Pro max: 10 minutes (was 300s = 5min)
 export const preferredRegion = 'hnd1' // Tokyo — avoids Binance/OKX/Bybit geo-blocking
 
 const GROUPS: Record<string, string[]> = {
-  // Group A1: Binance (every 3h) — binance_futures removed 2026-03-14: Client error 404
-  a: [],  // ✅ binance_spot已永久移除（2026-03-14）
-  // Group A2: Other high-priority CEX (every 3h)
-  // DISABLED 2026-03-13: All 3 platforms have API access issues
-  // - bybit: api2.bybit.com returns 403 Access Denied
-  // - bitget_futures: Cloudflare challenge blocking direct API access
-  // - okx_futures: API endpoint returning 404
-  // TODO: Re-enable after VPS scraper integration or proxy fix
-  a2: [],
-  // Group B: Top DEX (every 4h) — DISABLED 2026-03-14: All 3 platforms returning client errors via batch
-  // - hyperliquid: 422, gmx: 404, jupiter_perps: 0 traders normalization failed
-  // Individual connector cron tasks work fine; issue is batch connector invocation
-  b: [],
-  // Group C: Mid-priority (every 4h) — DISABLED 2026-03-14: All 3 platforms failing via batch
-  // - okx_web3: 400, aevo: 0 traders, xt: 0 traders
-  c: [],
-  // Group D1: CEX (every 6h) — htx_futures removed 2026-03-14: Client error 405
-  d1: ['gains'],
-  // Group D2: DEX only (every 6h) — dydx removed 2026-03-14: Client error 404
-  d2: [],
-  // Group E: CEX+DEX (every 6h) — coinex/binance_web3 removed 2026-03-14: connector errors
-  e: ['bitfinex'],
-  // Group F: Slow CEX (every 6h) — DISABLED 2026-03-14: mexc 404, bingx normalization failed
-  f: [],
-  // Group H: Fast CEX (every 6h) — DISABLED 2026-03-14: gateio 403, btcc normalization failed
-  h: [],
-  // Group G1: DEX (every 6h) — re-enabled: drift response parsing fixed
-  // bitunix removed 2026-03-14: All traders failing validation since 2026-03-14 01:08
-  g1: ['drift'],
-  // Group G2: DEX+CEX (every 6h) — bitget_spot removed 2026-03-14: normalization failed
-  // paradex removed: API now requires JWT auth since 2026-03
-  // kwenta removed: Copin API stopped serving Kwenta data (2026-03-11)
-  // blofin removed: openapi.blofin.com requires auth, VPS scraper endpoint missing (2026-03-11)
-  g2: ['web3_bot', 'toobit'],
-  // Group I: Social trading (every 6h) — large dataset (2000 traders × 3 periods)
+  // Group A: Binance (every 3h)
+  // binance_spot permanently removed (2026-03-14)
+  a: ['binance_futures'],
+  // Group A2: High-priority CEX (every 3h)
+  // Re-enabled 2026-03-15: retry after 2026-03-14 mass disable. Errors are logged, not fatal.
+  a2: ['bybit', 'bitget_futures', 'okx_futures'],
+  // Group B: Top DEX (every 4h)
+  // Re-enabled 2026-03-15: DEX APIs may have recovered from 2026-03-14 errors
+  b: ['hyperliquid', 'gmx'],
+  // Group C: Mid-priority (every 4h)
+  // Re-enabled 2026-03-15: aevo + okx_web3 retry
+  c: ['okx_web3', 'aevo'],
+  // Group D1: CEX (every 6h)
+  d1: ['gains', 'htx_futures'],
+  // Group D2: DEX only (every 6h)
+  d2: ['dydx'],
+  // Group E: CEX+DEX (every 6h)
+  e: ['bitfinex', 'coinex', 'binance_web3'],
+  // Group F: CEX (every 6h)
+  f: ['mexc', 'bingx'],
+  // Group H: CEX (every 6h)
+  h: ['gateio', 'btcc'],
+  // Group G1: DEX (every 6h)
+  g1: ['drift', 'jupiter_perps'],
+  // Group G2: DEX+CEX (every 6h)
+  // kwenta/blofin/paradex still dead — not re-enabled
+  g2: ['web3_bot', 'toobit', 'bitunix'],
+  // Group I: Social trading (every 6h)
   i: ['etoro'],
 }
 
