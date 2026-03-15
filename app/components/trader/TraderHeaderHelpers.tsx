@@ -52,13 +52,13 @@ export function getTradingStyleTags(
     tags.push({ label: t(CATEGORY_I18N_KEYS[category]), color: CATEGORY_COLORS[category] })
   }
 
-  if (maxDrawdown !== undefined && Math.abs(maxDrawdown) < 10) {
+  if (maxDrawdown != null && Math.abs(maxDrawdown) < 10) {
     tags.push({ label: t('tagLowDrawdown'), color: tokens.colors.accent.success })
   }
-  if (winRate !== undefined && winRate > 70) {
+  if (winRate != null && winRate > 70) {
     tags.push({ label: t('tagHighWinRate'), color: tokens.colors.accent.success })
   }
-  if (roi90d !== undefined && roi90d > 100) {
+  if (roi90d != null && roi90d > 100) {
     tags.push({ label: t('tagHighReturns'), color: tokens.colors.accent.error })
   }
 
