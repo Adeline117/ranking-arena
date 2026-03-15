@@ -5,7 +5,7 @@
  * avoiding Cloudflare timeouts and Vercel deployment protection issues.
  *
  * Query params:
- *   group=a  → EMPTY (binance_futures DEAD since 2026-03-15)
+ *   group=a  → binance_futures, binance_spot (every 3h)
  *   group=a2 → bybit, bitget_futures, okx_futures (every 3h)
  *   group=b  → hyperliquid, gmx (every 4h)
  *   group=c  → okx_futures (every 4h)
@@ -39,7 +39,7 @@ export const preferredRegion = 'hnd1' // Tokyo — avoids Binance/OKX/Bybit geo-
 
 const GROUPS: Record<string, string[]> = {
   // Group A: Binance (every 3h) — new /friendly/ API via VPS proxy (2026-03-15)
-  a: ['binance_futures'],
+  a: ['binance_futures', 'binance_spot'],
   // Group A2: High-priority CEX (every 3h) — VPS proxy enabled 2026-03-15
   a2: ['bybit', 'bitget_futures', 'okx_futures'],
   // Group B: Top DEX (every 4h) + GMX (switched to subgraph 2026-03-15)

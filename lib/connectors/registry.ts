@@ -156,6 +156,7 @@ export async function initializeConnectors(): Promise<void> {
   const { Web3BotConnector } = await import('./platforms/web3-bot')
   const { OkxWeb3Connector } = await import('./platforms/okx-web3')
   const { BinanceWeb3Connector } = await import('./platforms/binance-web3')
+  const { BinanceSpotConnector: BinanceSpotConnectorNew } = await import('./platforms/binance-spot')
 
   // Proxy URL for geo-blocked exchanges (Binance, OKX, BingX, HTX, dYdX, etc.)
   // CF Worker is US-based = also geo-blocked. Use VPS SG proxy instead.
@@ -189,6 +190,7 @@ export async function initializeConnectors(): Promise<void> {
   connectorRegistry.register(new ToobitFuturesConnector())
   connectorRegistry.register(new EtoroSpotConnector())
   connectorRegistry.register(new BitgetSpotConnectorNew())
+  connectorRegistry.register(new BinanceSpotConnectorNew({ proxyUrl }))
 
   // DEX Connectors
   connectorRegistry.register(new HyperliquidPerpConnector())
