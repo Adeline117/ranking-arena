@@ -44,8 +44,9 @@ const GROUPS: Record<string, string[]> = {
   // DISABLED 2026-03-15: All platforms (bybit, bitget_futures, okx_futures) failing with 403/404
   a2: [],
   // Group B: Top DEX (every 4h)
-  // DISABLED 2026-03-15: hyperliquid (422), gmx (404) all failing
-  b: [],
+  // hyperliquid: FIXED 2026-03-15 (switched to stats-data endpoint)
+  // gmx: DEAD — REST API + subgraph both returning 404 since 2026-03-14
+  b: ['hyperliquid'],
   // Group C: Mid-priority (every 4h)
   // DISABLED 2026-03-15: okx_web3 (400), aevo (0 traders) all failing
   c: [],
