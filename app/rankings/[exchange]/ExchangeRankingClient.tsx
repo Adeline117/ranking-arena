@@ -137,13 +137,27 @@ const TraderCardItem = React.memo(function TraderCardItem({ trader, rank }: { tr
         style={{
           padding: tokens.spacing[4],
           borderRadius: tokens.radius.lg,
-          background: 'var(--overlay-hover)',
-          border: '1px solid var(--glass-border-light)',
+          background: rank === 1
+            ? 'linear-gradient(145deg, rgba(255,215,0,0.12) 0%, var(--overlay-hover) 60%)'
+            : rank === 2
+            ? 'linear-gradient(145deg, rgba(192,192,192,0.10) 0%, var(--overlay-hover) 60%)'
+            : rank === 3
+            ? 'linear-gradient(145deg, rgba(205,127,50,0.10) 0%, var(--overlay-hover) 60%)'
+            : 'var(--overlay-hover)',
+          border: rank === 1
+            ? '1px solid rgba(255,215,0,0.25)'
+            : rank === 2
+            ? '1px solid rgba(192,192,192,0.20)'
+            : rank === 3
+            ? '1px solid rgba(205,127,50,0.20)'
+            : '1px solid var(--glass-border-light)',
           display: 'flex',
           flexDirection: 'column',
           gap: tokens.spacing[3],
           transition: `transform ${tokens.transition.fast}, box-shadow ${tokens.transition.fast}`,
-          boxShadow: tokens.shadow.sm,
+          boxShadow: rank <= 3
+            ? `${tokens.shadow.sm}, 0 0 12px ${rank === 1 ? 'rgba(255,215,0,0.15)' : rank === 2 ? 'rgba(192,192,192,0.12)' : 'rgba(205,127,50,0.12)'}`
+            : tokens.shadow.sm,
         }}
       >
         {/* Top: rank + avatar + name + ROI */}
@@ -513,8 +527,15 @@ export default function ExchangeRankingClient({
                   padding: '10px 16px',
                   alignItems: 'center',
                   textDecoration: 'none',
-                  borderBottom: '1px solid var(--overlay-hover)',
+                  borderBottom: originalRank <= 3 ? undefined : '1px solid var(--overlay-hover)',
                   transition: 'background 0.15s',
+                  ...(originalRank === 1
+                    ? { background: 'linear-gradient(135deg, rgba(255,215,0,0.10) 0%, rgba(255,215,0,0.03) 40%, transparent 80%)', boxShadow: 'inset 3px 0 0 #FFD700', borderRadius: 10, margin: '2px 4px' }
+                    : originalRank === 2
+                    ? { background: 'linear-gradient(135deg, rgba(192,192,192,0.08) 0%, rgba(192,192,192,0.02) 40%, transparent 80%)', boxShadow: 'inset 3px 0 0 #C0C0C0', borderRadius: 10, margin: '2px 4px' }
+                    : originalRank === 3
+                    ? { background: 'linear-gradient(135deg, rgba(205,127,50,0.08) 0%, rgba(205,127,50,0.02) 40%, transparent 80%)', boxShadow: 'inset 3px 0 0 #CD7F32', borderRadius: 10, margin: '2px 4px' }
+                    : {}),
                 }}
               >
                 <div><RankBadge rank={originalRank} /></div>

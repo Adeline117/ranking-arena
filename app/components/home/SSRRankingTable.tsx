@@ -59,9 +59,10 @@ export default function SSRRankingTable({ traders }: Props) {
 .ssr-hdr{display:grid;grid-template-columns:40px 1fr 60px 80px 60px 60px;padding:10px 16px;font-size:10px;font-weight:700;color:var(--color-text-quaternary,var(--color-text-tertiary));border-bottom:1px solid var(--color-border-primary);gap:8px;text-transform:uppercase;letter-spacing:0.05em;position:sticky;top:0;z-index:10;background:var(--color-bg-secondary);backdrop-filter:blur(12px)}
 .ssr-row{display:grid;grid-template-columns:40px 1fr 60px 80px 60px 60px;padding:10px 16px;gap:8px;align-items:center;text-decoration:none;color:inherit;border-bottom:1px solid var(--color-border-primary);min-height:52px;transition:background 0.18s ease,transform 0.18s ease}
 .ssr-row:hover{background:var(--color-bg-hover,#252232);transform:translateY(-1px)}
-.ssr-row-top{background:var(--color-accent-primary-06,rgba(139,92,246,0.06))}
-.ssr-rank{font-size:13px;font-weight:800;text-align:center}
+.ssr-row-gold{background:linear-gradient(135deg,rgba(255,215,0,0.10) 0%,rgba(255,215,0,0.03) 40%,transparent 80%);box-shadow:inset 3px 0 0 var(--color-rank-gold,#FFD700)}.ssr-row-silver{background:linear-gradient(135deg,rgba(192,192,192,0.08) 0%,rgba(192,192,192,0.02) 40%,transparent 80%);box-shadow:inset 3px 0 0 var(--color-rank-silver,#C0C0C0)}.ssr-row-bronze{background:linear-gradient(135deg,rgba(205,127,50,0.08) 0%,rgba(205,127,50,0.02) 40%,transparent 80%);box-shadow:inset 3px 0 0 var(--color-rank-bronze,#CD7F32)}
+.ssr-rank{font-size:13px;font-weight:800;text-align:center;display:flex;align-items:center;justify-content:center}
 .ssr-rank-default{color:var(--color-text-tertiary)}
+.ssr-rank-circle{width:28px;height:28px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;color:var(--color-bg-primary,#0B0A10)}
 .ssr-info{display:flex;align-items:center;gap:10px;min-width:0}
 .ssr-av{width:36px;height:36px;min-width:36px;border-radius:50%;background:linear-gradient(135deg,var(--color-accent-primary-30),var(--color-pro-gold-border,#a78bfa));display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:700;color:var(--color-on-accent,#fff);overflow:hidden;position:relative}
 .ssr-av img{width:100%;height:100%;object-fit:cover;border-radius:50%}
@@ -101,11 +102,23 @@ export default function SSRRankingTable({ traders }: Props) {
             <a
               key={`${trader.source}-${trader.id}`}
               href={`/trader/${encodeURIComponent(trader.id)}?platform=${trader.source}`}
-              className={`ssr-row${isTop3 ? ' ssr-row-top' : ''}`}
+              className={`ssr-row${rank === 1 ? ' ssr-row-gold' : rank === 2 ? ' ssr-row-silver' : rank === 3 ? ' ssr-row-bronze' : ''}`}
             >
-              <span className={`ssr-rank${isTop3 ? '' : ' ssr-rank-default'}`}
-                style={isTop3 ? { color: RANK_COLORS[rank - 1] } : undefined}>
-                {rank}
+              <span className={`ssr-rank${isTop3 ? '' : ' ssr-rank-default'}`}>
+                {isTop3 ? (
+                  <span
+                    className="ssr-rank-circle"
+                    style={{
+                      background: rank === 1
+                        ? 'linear-gradient(135deg, #FFD700, #FFA500)'
+                        : rank === 2
+                        ? 'linear-gradient(135deg, #C0C0C0, #A0A0A0)'
+                        : 'linear-gradient(135deg, #CD7F32, #A0522D)',
+                    }}
+                  >
+                    {rank}
+                  </span>
+                ) : rank}
               </span>
 
               <div className="ssr-info">
