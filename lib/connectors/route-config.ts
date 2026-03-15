@@ -66,10 +66,10 @@ export const PLATFORM_ROUTES: Record<string, RouteConfig> = {
   gateio:          { routes: ['direct', 'scraper_sg'],         notes: 'Direct works from Mac, Vercel may get WAF-blocked.' },
 
   // ─── BROWSER_ONLY (no public JSON API) ───────────────────────
-  toobit:          { routes: ['scraper_sg'],                   notes: 'Returns HTML, needs Playwright' },
-  blofin:          { routes: ['scraper_sg', 'direct'],         notes: 'openapi returns 401, scraper intercepts browser API' },
-  lbank:           { routes: ['mac_mini'],                     notes: 'Browser crashes on VPS, only Mac Mini works' },
-  phemex:          { routes: ['mac_mini'],                     notes: 'CloudFront blocks all cloud IPs. Mac Mini only.' },
+  toobit:          { routes: ['scraper_sg'],                   notes: 'VPS scraper works (65 traders). Direct returns HTML.' },
+  blofin:          { routes: ['scraper_sg'],                   notes: 'openapi 401 (needs API key). Scraper handler added but needs tuning.' },
+  lbank:           { routes: ['mac_mini'],                     notes: 'VPS scraper fails (no data). Mac Mini only.' },
+  phemex:          { routes: ['mac_mini'],                     notes: 'CloudFront geo-blocks SG VPS. Mac Mini only.' },
 
   // ─── FIXED (2026-03-15) ───────────────────────────────────────
   htx_futures:     { routes: ['direct', 'vps_sg'],             notes: 'Switched to futures.htx.com ranking API (GET)' },

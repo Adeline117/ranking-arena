@@ -386,19 +386,18 @@ export abstract class BaseConnector implements PlatformConnector {
         Object.entries(params).map(([k, v]) => [k, String(v)])
       ).toString();
 
-      // VPS now runs a /proxy endpoint that forwards requests to the target URL.
-      // Old-style named endpoints (/bybit/leaderboard) are no longer supported.
-      // We need to construct the target URL and POST it to /proxy.
-      const targetUrl = `${endpoint}${queryString ? `?${queryString}` : ''}`;
+      // Named endpoints (e.g., /toobit/leaderboard) are served by the Playwright scraper.
+      // The scraper runs on a different port from the HTTP proxy.
+      // Use VPS_SCRAPER_SG for named endpoints, VPS_PROXY_SG for generic proxy.
+      const scraperHost = process.env.VPS_SCRAPER_SG || vpsHost;
+      const endpointUrl = `${scraperHost}${endpoint}${queryString ? `?${queryString}` : ''}`;
 
-      const response = await fetch(`${vpsHost}/proxy`, {
-        method: 'POST',
+      const response = await fetch(endpointUrl, {
+        method: 'GET',
         headers: {
           'X-Proxy-Key': vpsKey,
-          'Content-Type': 'application/json',
           'Accept': 'application/json',
         },
-        body: JSON.stringify({ url: targetUrl, method: 'GET' }),
         signal: AbortSignal.timeout(timeoutMs),
       });
 
