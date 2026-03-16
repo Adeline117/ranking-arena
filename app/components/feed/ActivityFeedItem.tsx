@@ -115,7 +115,7 @@ export default function ActivityFeedItem({ activity, showShareHint = true }: Act
       <div style={{ flexShrink: 0 }}>
         {activity.avatar_url ? (
           <Image
-            src={activity.avatar_url}
+            src={`/api/avatar?url=${encodeURIComponent(activity.avatar_url)}`}
             alt={activity.handle ?? 'Trader'}
             width={32}
             height={32}

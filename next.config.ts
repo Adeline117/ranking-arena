@@ -107,6 +107,14 @@ const nextConfig: NextConfig = {
       },
       {
         protocol: 'https',
+        hostname: 'api.dicebear.com',
+      },
+      {
+        protocol: 'https',
+        hostname: 'robohash.org',
+      },
+      {
+        protocol: 'https',
         hostname: 'gavatar.staticimgs.com',
       },
       {
