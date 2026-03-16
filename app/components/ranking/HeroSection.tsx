@@ -89,7 +89,7 @@ function TopTraderCard({ trader, rank }: { trader: Trader; rank: number }) {
             fontSize: 12, fontWeight: 700,
             color: tokens.colors.text.primary,
             overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-            maxWidth: 100,
+            maxWidth: 140,
           }}>
             {displayName}
           </span>
@@ -111,16 +111,26 @@ export default function HeroSection({ traders }: { traders: Trader[] }) {
   const top3 = traders.slice(0, 3)
 
   return (
-    <div className="hero-top3-grid" style={{
-      display: 'grid',
-      gridTemplateColumns: 'repeat(3, 1fr)',
-      gap: 8,
-      marginBottom: 8,
-    }}>
-      {top3.map((trader, i) => (
-        <TopTraderCard key={trader.id} trader={trader} rank={i + 1} />
-      ))}
-    </div>
+    <>
+      <style>{`
+        .hero-top3-grid {
+          display: grid;
+          grid-template-columns: repeat(3, 1fr);
+          gap: 8px;
+          margin-bottom: 8px;
+        }
+        @media (max-width: 639px) {
+          .hero-top3-grid {
+            grid-template-columns: 1fr;
+          }
+        }
+      `}</style>
+      <div className="hero-top3-grid">
+        {top3.map((trader, i) => (
+          <TopTraderCard key={trader.id} trader={trader} rank={i + 1} />
+        ))}
+      </div>
+    </>
   )
 }
 

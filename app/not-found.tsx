@@ -160,6 +160,28 @@ const injectStyles = () => {
       background: var(--color-accent-primary-10) !important;
       border-color: var(--color-accent-primary-30) !important;
     }
+
+    .suggestion-card:focus-visible {
+      outline: 2px solid var(--color-accent-primary);
+      outline-offset: 2px;
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      .glow-orb,
+      .number-404,
+      .floating-element,
+      .content-section,
+      .action-button,
+      .action-button.primary:hover,
+      .decorative-line,
+      .orbit-particle {
+        animation: none !important;
+        transition: none !important;
+      }
+      .content-section {
+        opacity: 1 !important;
+      }
+    }
   `
   document.head.appendChild(style)
 }
@@ -258,8 +280,8 @@ export default function NotFoundPage() {
         }}
       />
       
-      {/* Floating geometric elements */}
-      {[...Array(6)].map((_, i) => (
+      {/* Floating geometric elements (reduced from 6 to 2 for LCP) */}
+      {[0, 3].map((i) => (
         <div
           key={i}
           className="floating-element"
@@ -286,21 +308,6 @@ export default function NotFoundPage() {
       }}>
         {/* 404 Number with orbit effect */}
         <div style={{ position: 'relative', marginBottom: 32 }}>
-          {/* Orbiting particles */}
-          <div className="orbit-container">
-            {[...Array(3)].map((_, i) => (
-              <div
-                key={i}
-                className="orbit-particle"
-                style={{
-                  background: `rgba(139, 111, 168, ${0.4 + i * 0.2})`,
-                  animationDuration: `${8 + i * 4}s`,
-                  animationDelay: `${i * -2}s`,
-                }}
-              />
-            ))}
-          </div>
-          
           {/* 404 text */}
           <div 
             className="number-404"

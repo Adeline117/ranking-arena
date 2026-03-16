@@ -104,26 +104,22 @@ export default function ThreeColumnLayout({
                 <path d="M6 9l6 6 6-6" />
               </svg>
             </button>
-            <div 
+            <div
               style={{
-                overflow: 'hidden',
-                transition: 'max-height 0.3s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.2s ease',
-                maxHeight: widgetsExpanded ? '2000px' : '0px',
-                opacity: widgetsExpanded ? 1 : 0,
+                display: widgetsExpanded ? 'block' : 'none',
+                animation: widgetsExpanded ? 'fadeIn 0.2s ease' : undefined,
               }}
             >
-              {widgetsExpanded && (
-                <div style={{ 
-                  marginTop: tokens.spacing[3], 
-                  display: 'flex', 
-                  flexDirection: 'column', 
-                  gap: tokens.spacing[4],
-                  paddingBottom: tokens.spacing[2],
-                }}>
-                  {leftSidebar}
-                  {rightSidebar}
-                </div>
-              )}
+              <div style={{
+                marginTop: tokens.spacing[3],
+                display: 'flex',
+                flexDirection: 'column',
+                gap: tokens.spacing[4],
+                paddingBottom: tokens.spacing[2],
+              }}>
+                {leftSidebar}
+                {rightSidebar}
+              </div>
             </div>
           </div>
         )}

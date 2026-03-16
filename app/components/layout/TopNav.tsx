@@ -57,6 +57,7 @@ export default function TopNav({ email = null }: { email?: string | null }) {
         background: tokens.glass.bg.primary,
         borderBottom: `1px solid var(--color-border-primary)`,
         height: 56,
+        paddingTop: 'env(safe-area-inset-top, 0px)',
         backdropFilter: tokens.glass.blur.lg,
         WebkitBackdropFilter: tokens.glass.blur.lg,
         boxShadow: 'var(--shadow-card), var(--shadow-border-glow), var(--shadow-inset-subtle)',

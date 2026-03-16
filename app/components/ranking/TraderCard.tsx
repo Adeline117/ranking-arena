@@ -220,7 +220,7 @@ export const TraderCard = memo(function TraderCard({
           />
           <MetricStat
             label="MDD"
-            value={trader.max_drawdown != null ? (Math.abs(trader.max_drawdown) < 0.5 ? '< 1%' : `-${Math.abs(trader.max_drawdown).toFixed(0)}%`) : undefined}
+            value={trader.max_drawdown != null ? (Math.abs(trader.max_drawdown) < 0.05 ? '< 0.1%' : `-${Math.abs(trader.max_drawdown).toFixed(1)}%`) : undefined}
             color={trader.max_drawdown != null ? TRADER_ACCENT_ERROR : undefined}
             nullTooltip={trader.max_drawdown == null ? (getPlatformNote(trader.source || source || '') || `Not available for ${EXCHANGE_NAMES[trader.source || source || ''] || (trader.source || source || '').replace('_', ' ')}`) : undefined}
           />
