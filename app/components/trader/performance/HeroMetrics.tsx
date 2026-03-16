@@ -61,8 +61,8 @@ export function HeroMetrics({ roi, pnl, sparklineData, isVisible }: HeroMetricsP
               letterSpacing: '-0.03em',
               lineHeight: 1.2,
               opacity: isVisible ? 1 : 0,
-              transform: isVisible ? 'translateY(0)' : 'translateY(10px)',
-              transition: 'all 0.6s cubic-bezier(0.4, 0, 0.2, 1) 0.1s',
+              transform: isVisible ? 'translateY(0)' : 'translateY(4px)',
+              transition: 'opacity 0.5s cubic-bezier(0.4, 0, 0.2, 1) 0.1s, transform 0.5s cubic-bezier(0.4, 0, 0.2, 1) 0.1s',
             }}
           >
             {roi != null ? formatROIUtil(roi) : '—'}
@@ -105,8 +105,8 @@ export function HeroMetrics({ roi, pnl, sparklineData, isVisible }: HeroMetricsP
             letterSpacing: '-0.03em',
             lineHeight: 1.2,
             opacity: isVisible ? 1 : 0,
-            transform: isVisible ? 'translateY(0)' : 'translateY(10px)',
-            transition: 'all 0.6s cubic-bezier(0.4, 0, 0.2, 1) 0.2s',
+            transform: isVisible ? 'translateY(0)' : 'translateY(4px)',
+            transition: 'opacity 0.5s cubic-bezier(0.4, 0, 0.2, 1) 0.2s, transform 0.5s cubic-bezier(0.4, 0, 0.2, 1) 0.2s',
           }}
         >
           {formatPnl(pnl)}

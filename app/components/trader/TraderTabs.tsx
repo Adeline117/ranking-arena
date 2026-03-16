@@ -76,10 +76,11 @@ export default function TraderTabs({ activeTab, onTabChange, isPro = false, onPr
           bottom: 0,
           left: indicator.left,
           width: indicator.width,
-          height: 2,
+          height: 3,
           background: `linear-gradient(90deg, ${tokens.colors.accent.primary}, ${tokens.colors.accent.brand})`,
-          borderRadius: 1,
+          borderRadius: 1.5,
           transition: 'left 0.3s cubic-bezier(0.4, 0, 0.2, 1), width 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+          boxShadow: `0 0 6px var(--color-accent-primary-30, ${tokens.colors.accent.primary}30)`,
           zIndex: 1,
         }}
       />
