@@ -644,7 +644,7 @@ async function computeSeason(
       followers: t.followers ?? 0,
       trades_count: t.trades_count,
       handle: displayHandle,
-      avatar_url: info.avatar_url,
+      avatar_url: info.avatar_url || `https://api.dicebear.com/7.x/identicon/svg?seed=${encodeURIComponent(t.source + '_' + t.source_trader_id)}`,
       profitability_score: t.profitability_score,
       risk_control_score: t.risk_control_score,
       execution_score: t.execution_score,

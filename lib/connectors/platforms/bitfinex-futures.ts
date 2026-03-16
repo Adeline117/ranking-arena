@@ -176,7 +176,7 @@ export class BitfinexFuturesConnector extends BaseConnector {
       sharpe_ratio: null,
       aum: null,
       copiers: null,
-      avatar_url: null,
+      avatar_url: e.username ? `https://api.dicebear.com/7.x/identicon/svg?seed=${encodeURIComponent(String(e.username))}` : null,
     }
   }
 }
