@@ -55,12 +55,12 @@ export function AvatarLink({ handle, avatarUrl, isPro, showProBadge = true, isOf
         >
           {avatarUrl ? (
             <Image
-              src={avatarUrl}
+              src={avatarUrl.startsWith('data:') ? avatarUrl : `/api/avatar?url=${encodeURIComponent(avatarUrl)}`}
               alt={handle}
               width={28}
               height={28}
               style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-              unoptimized={avatarUrl?.startsWith('data:')}
+              unoptimized
             />
           ) : (
             (handle?.[0] || 'U').toUpperCase()

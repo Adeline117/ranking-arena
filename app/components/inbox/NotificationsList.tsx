@@ -330,7 +330,7 @@ export default function NotificationsList() {
                     }}
                   >
                     {notif.actor_avatar_url ? (
-                      <Image src={notif.actor_avatar_url} alt={`${notif.actor_handle || 'User'} avatar`} width={32} height={32} sizes="32px" loading="lazy" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                      <Image src={`/api/avatar?url=${encodeURIComponent(notif.actor_avatar_url)}`} alt={`${notif.actor_handle || 'User'} avatar`} width={32} height={32} sizes="32px" loading="lazy" unoptimized style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                     ) : (
                       getIcon(notif.type)
                     )}

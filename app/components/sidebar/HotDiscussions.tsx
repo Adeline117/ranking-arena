@@ -301,10 +301,11 @@ export default function HotDiscussions({ limit = 8 }: { limit?: number }) {
                 }}>
                   {post.author_avatar_url ? (
                     <Image
-                      src={post.author_avatar_url}
+                      src={`/api/avatar?url=${encodeURIComponent(post.author_avatar_url)}`}
                       alt={post.author_handle || ''}
                       width={18}
                       height={18}
+                      unoptimized
                       style={{ borderRadius: '50%', objectFit: 'cover', flexShrink: 0 }}
                       onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none' }}
                     />
