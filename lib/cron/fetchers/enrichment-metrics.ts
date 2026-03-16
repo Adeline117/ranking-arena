@@ -67,7 +67,7 @@ export function calculateMaxDrawdown(curve: EquityCurvePoint[]): number | null {
     }
   }
 
-  return maxDD > 0 && maxDD < 200 ? maxDD : null
+  return maxDD > 0 ? Math.min(maxDD, 100) : null
 }
 
 /**

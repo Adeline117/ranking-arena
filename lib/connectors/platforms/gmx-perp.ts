@@ -264,12 +264,13 @@ export class GmxPerpConnector extends BaseConnector {
     // MDD approximation from netCapital vs maxCapital
     // netCapital = current capital after all PnL; maxCapital = peak capital deployed
     // If netCapital < maxCapital, the difference is the drawdown from peak
+    // netCapital can be negative (losses > initial capital), so clamp to 0-100%
     let maxDrawdown: number | null = null
     if (maxCapital != null && maxCapital > 0 && netCapital != null) {
-      const drawdown = ((maxCapital - netCapital) / maxCapital) * 100
-      // Only report if positive and reasonable (capped at 100%)
-      if (drawdown > 0.01 && drawdown <= 100) {
-        maxDrawdown = Math.round(drawdown * 100) / 100
+      const drawdown = ((maxCapital - Math.min(netCapital, maxCapital)) / maxCapital) * 100
+      // Clamp to 0-100% range (MDD cannot logically exceed 100%)
+      if (drawdown > 0.01) {
+        maxDrawdown = Math.round(Math.min(drawdown, 100) * 100) / 100
       }
     }
 

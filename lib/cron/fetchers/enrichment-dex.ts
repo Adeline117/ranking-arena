@@ -41,17 +41,21 @@ export function computeStatsFromPositions(positions: PositionHistoryItem[]): Par
   const largestLoss = losses.length > 0 ? Math.min(...losses.map((p) => p.pnlUsd ?? 0)) : null
 
   // Max drawdown from cumulative PnL
+  // Track peak equity and compute drawdown as percentage from peak
   let cumPnl = 0
   let peak = 0
   let maxDD = 0
   for (const pnl of allPnls) {
     cumPnl += pnl
     if (cumPnl > peak) peak = cumPnl
+    // Only compute DD% when peak is positive (can't compute % drawdown from 0 or negative peak)
     if (peak > 0) {
       const dd = ((peak - cumPnl) / peak) * 100
       if (dd > maxDD) maxDD = dd
     }
   }
+  // Clamp MDD to 100% (can't lose more than 100% of peak equity)
+  maxDD = Math.min(maxDD, 100)
 
   return {
     totalTrades,
@@ -62,7 +66,7 @@ export function computeStatsFromPositions(positions: PositionHistoryItem[]): Par
     avgLoss: avgLoss != null ? Math.round(avgLoss * 100) / 100 : null,
     largestWin: largestWin != null ? Math.round(largestWin * 100) / 100 : null,
     largestLoss: largestLoss != null ? Math.round(largestLoss * 100) / 100 : null,
-    maxDrawdown: maxDD > 0 && maxDD < 200 ? Math.round(maxDD * 100) / 100 : null,
+    maxDrawdown: maxDD > 0 ? Math.round(Math.min(maxDD, 100) * 100) / 100 : null,
   }
 }
 
