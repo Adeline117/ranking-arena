@@ -457,17 +457,15 @@ function TraderContent({ handle, serverData }: { handle: string; serverData: Tra
                     delay={0}
                   />
                 )}
-                <TraderFeed
-                  items={feed.filter((f) => f.type !== 'group_post')}
-                  title={t('activities')}
-                  isRegistered={profile.isRegistered}
-                  traderId={profile.id}
-                  traderHandle={profile.handle}
-                  source={profile.source}
-                />
-                {/* Auto-generated trader activity timeline */}
-                {profile.handle && (
-                  <TraderActivityTimeline handle={profile.handle} source={profile.source} />
+                {feed.filter((f) => f.type !== 'group_post').length > 0 && (
+                  <TraderFeed
+                    items={feed.filter((f) => f.type !== 'group_post')}
+                    title={t('activities')}
+                    isRegistered={profile.isRegistered}
+                    traderId={profile.id}
+                    traderHandle={profile.handle}
+                    source={profile.source}
+                  />
                 )}
               </Box>
 
@@ -488,7 +486,7 @@ function TraderContent({ handle, serverData }: { handle: string; serverData: Tra
                       stats={stats}
                       traderHandle={profile.handle}
                       assetBreakdown={assetBreakdown}
-                      equityCurve={equityCurve}
+                      equityCurve={undefined}
                       positionHistory={extendedPositionHistory}
                       isPro={canViewFull}
                       onUnlock={() => router.push('/pricing')}
