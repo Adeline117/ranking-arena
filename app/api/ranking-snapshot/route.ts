@@ -8,6 +8,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getSupabaseAdmin } from '@/lib/supabase/server'
 import { randomBytes } from 'crypto'
+import { createLogger } from '@/lib/utils/logger'
+
+const logger = createLogger('ranking-snapshot')
 
 export async function POST(request: NextRequest) {
   try {
@@ -41,7 +44,7 @@ export async function POST(request: NextRequest) {
       .single()
 
     if (snapshotError || !snapshot) {
-      console.error('[ranking-snapshot] insert error:', snapshotError?.message)
+      logger.error('Snapshot insert failed', { error: snapshotError?.message })
       return NextResponse.json({ error: 'Failed to create snapshot' }, { status: 500 })
     }
 
@@ -64,8 +67,8 @@ export async function POST(request: NextRequest) {
       .insert(traderRows)
 
     if (tradersError) {
-      console.error('[ranking-snapshot] traders insert error:', tradersError.message)
-      // Snapshot was created, just warn
+      logger.error('Traders insert failed', { error: tradersError.message, snapshotId: snapshot.id })
+      return NextResponse.json({ error: 'Failed to insert snapshot traders' }, { status: 500 })
     }
 
     return NextResponse.json({
@@ -74,7 +77,7 @@ export async function POST(request: NextRequest) {
       expiresAt,
     })
   } catch (error) {
-    console.error('[ranking-snapshot] error:', error instanceof Error ? error.message : String(error))
+    logger.error('Unhandled error', { error: error instanceof Error ? error.message : String(error) })
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
 }
