@@ -177,6 +177,7 @@ const ko = {
     unclaimedBadge: '미인증',
     claimThisProfile: '이 프로필 인증하기',
     claimYourProfile: '본인이신가요? 프로필을 인증하세요',
+    claimYourProfileShort: '본인의 계정인가요? 인증하여 프로필을 커스터마이즈하세요.',
     claimYourProfileDesc: '거래소 계정을 인증하여 프로필 맞춤 설정, 성과 뱃지, 커뮤니티와의 거래 기록 공유를 활성화하세요.',
     loginToClaim: '로그인하여 인증하기',
     jumpToExchange: '거래소로 이동',
