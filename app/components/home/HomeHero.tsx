@@ -22,10 +22,9 @@ export default function HomeHero() {
     if (!sessionStorage.getItem(HERO_SEEN_KEY)) {
       setShow(true)
     }
-    supabase.from('trader_sources').select('*', { count: 'exact', head: true })
-      .then(({ count }) => { if (count) setTraderCount(formatCount(count)) })
-    supabase.from('trader_sources').select('source')
-      .then(({ data }) => {
+    supabase.from('trader_sources').select('source', { count: 'exact' })
+      .then(({ data, count }) => {
+        if (count) setTraderCount(formatCount(count))
         if (data) {
           const platforms = new Set(data.map((r: { source: string }) => r.source.split('_')[0]))
           setExchangeCount(`${platforms.size}+`)
@@ -118,6 +117,11 @@ export default function HomeHero() {
               fontWeight: tokens.typography.fontWeight.black,
               color: 'var(--color-accent-primary)',
               fontVariantNumeric: 'tabular-nums',
+              ...(stat.value === '—' ? {
+                animation: 'hero-pulse 1.5s ease-in-out infinite',
+                borderRadius: 4,
+                minWidth: 40,
+              } : {}),
             }}>
               {stat.value}
             </div>
@@ -133,6 +137,7 @@ export default function HomeHero() {
           </div>
         ))}
       </div>
+      <style>{`@keyframes hero-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.3; } }`}</style>
     </div>
   )
 }
