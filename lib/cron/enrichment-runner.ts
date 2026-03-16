@@ -55,6 +55,7 @@ import {
   fetchBtccStatsDetail,
   fetchEtoroEquityCurve,
   fetchEtoroStatsDetail,
+  fetchEtoroPortfolio,
   fetchCoinexEquityCurve,
   fetchCoinexStatsDetail,
   fetchWalletAUM,
@@ -70,6 +71,7 @@ import {
   type StatsDetail,
   type EquityCurvePoint,
   type PositionHistoryItem,
+  type PortfolioPosition,
 } from '@/lib/cron/fetchers/enrichment'
 import { sleep } from '@/lib/cron/fetchers/shared'
 import { captureMessage } from '@/lib/utils/logger'
@@ -148,7 +150,7 @@ interface EnrichmentConfig {
   fetchEquityCurve?: (traderId: string, days: number) => Promise<Array<{ date: string; roi: number; pnl: number | null }>>
   fetchStatsDetail?: (traderId: string) => Promise<StatsDetail | null>
   fetchPositionHistory?: (traderId: string) => Promise<PositionHistoryItem[]>
-  fetchCurrentPositions?: (traderId: string) => Promise<PositionHistoryItem[]>
+  fetchCurrentPositions?: (traderId: string) => Promise<(PortfolioPosition | PositionHistoryItem)[]>
   concurrency: number
   delayMs: number
 }
@@ -301,6 +303,7 @@ export const ENRICHMENT_PLATFORM_CONFIGS: Record<string, EnrichmentConfig> = {
     platform: 'etoro',
     fetchEquityCurve: fetchEtoroEquityCurve,
     fetchStatsDetail: fetchEtoroStatsDetail,
+    fetchCurrentPositions: fetchEtoroPortfolio,
     concurrency: 2, delayMs: 2000,
   },
   coinex: {
@@ -475,7 +478,13 @@ export async function runEnrichment(params: {
               if (currentPos.length > 0) {
                 await withRetry(
                   () => upsertPortfolio(supabase, platformKey, traderId,
-                    currentPos.map((p) => ({ symbol: p.symbol, direction: p.direction, investedPct: null, entryPrice: p.entryPrice, pnl: p.pnlUsd }))),
+                    currentPos.map((p) => ({
+                      symbol: p.symbol,
+                      direction: p.direction,
+                      investedPct: 'investedPct' in p ? p.investedPct : null,
+                      entryPrice: p.entryPrice,
+                      pnl: 'pnl' in p ? p.pnl : ('pnlUsd' in p ? (p as PositionHistoryItem).pnlUsd : null),
+                    }))),
                   `${platformKey}:${traderId} save current positions`
                 )
               }
