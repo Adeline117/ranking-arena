@@ -81,7 +81,7 @@ export default function ExchangePartners() {
         zIndex: 1, pointerEvents: 'none',
       }} />
 
-      <div style={{
+      <div className="exchange-scroll-track" style={{
         display: 'flex',
         alignItems: 'center',
         gap: 20,
@@ -150,6 +150,9 @@ export default function ExchangePartners() {
         }
         @media (prefers-reduced-motion: reduce) {
           * { animation-duration: 0s !important; }
+        }
+        .exchange-scroll-track:hover {
+          animation-play-state: paused !important;
         }
         .exchange-item:hover {
           background: var(--color-bg-hover) !important;

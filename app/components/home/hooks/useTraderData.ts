@@ -286,9 +286,11 @@ export function useTraderData(options: UseTraderDataOptions = {}) {
   // 初次加载和时间段切换时加载数据
   // Skip initial fetch if we have server-provided data for 90D
   // Performance: Defer full data fetch until after LCP using requestIdleCallback
+  const isInitialMount = useRef(true)
   useEffect(() => {
-    // If we have initial data and we're on 90D, defer full fetch to avoid blocking LCP
-    if (hasInitialData && activeTimeRange === '90D') {
+    // If we have initial data and we're on 90D on INITIAL mount, defer full fetch
+    if (hasInitialData && activeTimeRange === '90D' && isInitialMount.current) {
+      isInitialMount.current = false
       // Use initial data immediately - don't block for full fetch
       setLoading(false)
 
@@ -322,6 +324,7 @@ export function useTraderData(options: UseTraderDataOptions = {}) {
         return () => clearTimeout(timerId)
       }
     }
+    isInitialMount.current = false
 
     // If cache already has this time range, use it
     if (tradersCache.current.has(activeTimeRange)) {
