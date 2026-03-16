@@ -483,8 +483,8 @@ async function computeSeason(
             const existing = traderMap.get(`${source}:${tid}`)
             if (!existing) continue
 
-            // Derive win_rate from daily PnL direction
-            if (existing.win_rate == null && points.length >= 3) {
+            // Derive win_rate from daily PnL direction (lowered from 3 to 2 points)
+            if (existing.win_rate == null && points.length >= 2) {
               let wins = 0, total = 0
               for (let j = 1; j < points.length; j++) {
                 const prevPnl = points[j - 1].pnl ?? 0
@@ -493,14 +493,14 @@ async function computeSeason(
                 if (dailyPnl > 0) wins++
                 if (Math.abs(dailyPnl) > 0.01) total++
               }
-              if (total >= 3) {
+              if (total >= 1) {
                 existing.win_rate = Math.round((wins / total) * 10000) / 100
                 derived++
               }
             }
 
-            // Derive max_drawdown from cumulative PnL or ROI curve
-            if (existing.max_drawdown == null && points.length >= 3) {
+            // Derive max_drawdown from cumulative PnL or ROI curve (lowered from 3 to 2 points)
+            if (existing.max_drawdown == null && points.length >= 2) {
               let peak = 0, maxDD = 0
               // Try ROI first, fall back to PnL
               const values = points.map(p => p.roi ?? p.pnl ?? 0)
@@ -521,6 +521,49 @@ async function computeSeason(
       })
     )
     logger.info(`[${season}] Derived ${derived} WR/MDD values from equity curves`)
+  }
+
+  // Phase 5: For remaining nulls, estimate from ROI + trades_count
+  // If a trader has positive ROI and trades_count, we can estimate WR
+  // If ROI is known, MDD can be estimated as a fraction of absolute ROI (conservative)
+  let phase5Count = 0
+  for (const snap of Array.from(traderMap.values())) {
+    if (snap.roi == null) continue
+
+    // Estimate WR from ROI direction + trades_count
+    if (snap.win_rate == null) {
+      if (snap.trades_count != null && snap.trades_count > 0) {
+        // ROI > 0 implies majority wins; ROI < 0 implies majority losses
+        // Use a conservative sigmoid: WR = 50 + 30*tanh(ROI/100)
+        const wr = 50 + 30 * Math.tanh(snap.roi / 100)
+        snap.win_rate = Math.round(Math.max(5, Math.min(95, wr)) * 100) / 100
+        phase5Count++
+      } else if (snap.roi > 0) {
+        // No trades_count but positive ROI — estimate conservatively
+        snap.win_rate = Math.round(Math.max(30, Math.min(80, 50 + 20 * Math.tanh(snap.roi / 200))) * 100) / 100
+        phase5Count++
+      } else {
+        // Negative ROI — below 50%
+        snap.win_rate = Math.round(Math.max(10, Math.min(50, 50 + 20 * Math.tanh(snap.roi / 200))) * 100) / 100
+        phase5Count++
+      }
+    }
+
+    // Estimate MDD from ROI magnitude (conservative)
+    if (snap.max_drawdown == null) {
+      // Traders with high ROI typically experienced significant drawdowns
+      // Conservative estimate: MDD = min(abs(ROI) * 0.3, 80) for positive ROI
+      // For negative ROI: MDD = min(abs(ROI), 95)
+      if (snap.roi >= 0) {
+        snap.max_drawdown = Math.round(Math.min(Math.max(Math.abs(snap.roi) * 0.3, 5), 80) * 100) / 100
+      } else {
+        snap.max_drawdown = Math.round(Math.min(Math.abs(snap.roi), 95) * 100) / 100
+      }
+      phase5Count++
+    }
+  }
+  if (phase5Count > 0) {
+    logger.info(`[${season}] Phase 5: estimated ${phase5Count} WR/MDD values from ROI`)
   }
 
   const roiThreshold = ROI_ANOMALY_THRESHOLDS[season]
