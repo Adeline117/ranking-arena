@@ -956,26 +956,26 @@ select:focus-visible {
   }
 }
 
-/* Tablet: profile header stacks vertically */
+/* Tablet: profile header compact layout */
 @media (max-width: 768px) {
   .profile-header {
     flex-direction: column !important;
-    align-items: center !important;
-    text-align: center;
-    padding: 20px 16px !important;
+    align-items: stretch !important;
+    padding: 12px !important;
+    gap: 8px !important;
   }
   .profile-header-info {
-    flex-direction: column !important;
+    flex-direction: row !important;
     align-items: center !important;
   }
   .profile-header-avatar {
-    width: 64px !important;
-    height: 64px !important;
+    width: 40px !important;
+    height: 40px !important;
   }
   .profile-header-actions.action-buttons {
     width: 100% !important;
     justify-content: center !important;
-    gap: 8px !important;
+    gap: 6px !important;
   }
   .profile-header-actions.action-buttons > * {
     flex: 0 1 auto;
@@ -1031,10 +1031,10 @@ select:focus-visible {
   .badge-overflow-toggle {
     display: inline-flex !important;
   }
-  /* Mobile avatar: 56px */
+  /* Mobile avatar: 40px */
   .profile-header-avatar {
-    width: 56px !important;
-    height: 56px !important;
+    width: 40px !important;
+    height: 40px !important;
   }
   /* Action buttons: hide secondary group, show more toggle */
   .action-secondary-group {
@@ -1067,11 +1067,11 @@ select:focus-visible {
     padding: 12px 8px 100px !important;
   }
   .profile-header {
-    padding: 16px 12px !important;
+    padding: 10px !important;
   }
   .profile-header-avatar {
-    width: 56px !important;
-    height: 56px !important;
+    width: 36px !important;
+    height: 36px !important;
   }
   .book-detail-cover {
     width: 160px !important;
@@ -2383,8 +2383,8 @@ input[type="search"]::-webkit-search-cancel-button:hover {
 
   /* Smaller avatar on very small screens */
   .profile-header-avatar {
-    width: 48px !important;
-    height: 48px !important;
+    width: 32px !important;
+    height: 32px !important;
   }
 
   /* View toggle group: compact */
