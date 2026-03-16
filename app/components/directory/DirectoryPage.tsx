@@ -24,6 +24,7 @@ export interface DirectoryItem {
   avg_rating: number | null
   rating_count: number
   tags: string[] | null
+  sort_priority: number | null
 }
 
 export interface CategoryFilter {
@@ -91,7 +92,7 @@ function sanitizeSearch(input: string): string {
 
 // ─── Select columns ─────────────────────────────────────────────────────────
 
-const BASE_COLUMNS = 'id, name, name_zh, category, logo_url, website, description, description_zh, avg_rating, rating_count, tags'
+const BASE_COLUMNS = 'id, name, name_zh, category, logo_url, website, description, description_zh, avg_rating, rating_count, tags, sort_priority'
 
 // ─── Component ───────────────────────────────────────────────────────────────
 
@@ -219,7 +220,9 @@ export default function DirectoryPage({ config }: { config: DirectoryPageConfig 
             }
 
             const { data } = await query
+              .order('sort_priority', { ascending: true, nullsFirst: true })
               .order('avg_rating', { ascending: false, nullsFirst: false })
+              .order('name', { ascending: true })
               .limit(10)
             return (data || []) as unknown as DirectoryItem[]
           }),
