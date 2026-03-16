@@ -110,6 +110,12 @@ export async function GET(request: Request) {
       // Google
       'googleusercontent.com',
       'google.com',
+      // Avatar generators (for seed/community avatars)
+      'dicebear.com',
+      'pravatar.cc',
+      'robohash.org',
+      'randomuser.me',
+      'ui-avatars.com',
     ]
     
     const urlObj = new URL(decodedUrl)
