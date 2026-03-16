@@ -13,7 +13,7 @@ import { useToast } from '@/app/components/ui/Toast'
 import TopNav from '@/app/components/layout/TopNav'
 import Breadcrumb from '@/app/components/ui/Breadcrumb'
 import TraderHeader from '@/app/components/trader/TraderHeader'
-import TraderTabs from '@/app/components/trader/TraderTabs'
+import TraderTabs, { type TabKey } from '@/app/components/trader/TraderTabs'
 import OverviewPerformanceCard, { type ExtendedPerformance } from '@/app/components/trader/OverviewPerformanceCard'
 // Phase 3A: Lazy-load heavy tab components (StatsPage imports lightweight-charts ~300KB)
 import { RankingSkeleton } from '@/app/components/ui/Skeleton'
@@ -59,8 +59,6 @@ import {
   generateBreadcrumbSchema,
   combineSchemas,
 } from '@/lib/seo'
-
-type TabKey = 'overview' | 'stats' | 'portfolio' | 'posts'
 
 interface AssetBreakdownData {
   '90D': Array<{ symbol: string; weightPct: number }>
