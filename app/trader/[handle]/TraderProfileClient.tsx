@@ -80,6 +80,12 @@ export interface UnregisteredTraderData {
 }
 
 type TraderTabKey = 'overview' | 'stats' | 'portfolio' | 'posts'
+
+/** Platforms that fundamentally do not provide position history data */
+const NO_PORTFOLIO_PLATFORMS = new Set([
+  'htx_futures', 'gateio', 'mexc', 'btcc', 'etoro', 'coinex',
+  'lbank', 'bingx', 'toobit', 'xt', 'weex', 'phemex', 'blofin', 'bitfinex',
+])
 type TraderPageData = import('@/app/u/[handle]/components/types').TraderPageData
 
 // Unwrap the API envelope { success, data } to get the raw TraderPageData
@@ -160,11 +166,14 @@ export default function TraderProfileClient({ data, serverTraderData, claimedUse
     return () => obs.disconnect()
   }, [])
 
-  // Tabs — conditionally include 'posts' for claimed traders
-  const tabKeys: TraderTabKey[] = useMemo(
-    () => claimedUser ? ['overview', 'stats', 'portfolio', 'posts'] : ['overview', 'stats', 'portfolio'],
-    [claimedUser]
-  )
+  // Tabs — conditionally include 'posts' for claimed traders, hide 'portfolio' for platforms without position data
+  const hidePortfolio = NO_PORTFOLIO_PLATFORMS.has(data.source?.toLowerCase() || '')
+  const tabKeys: TraderTabKey[] = useMemo(() => {
+    const keys: TraderTabKey[] = ['overview', 'stats']
+    if (!hidePortfolio) keys.push('portfolio')
+    if (claimedUser) keys.push('posts')
+    return keys
+  }, [claimedUser, hidePortfolio])
   const urlTab = searchParams.get('tab')
   const [activeTab, setActiveTab] = useState<TraderTabKey>(
     urlTab && tabKeys.includes(urlTab as TraderTabKey) ? urlTab as TraderTabKey : 'overview'
@@ -326,6 +335,7 @@ export default function TraderProfileClient({ data, serverTraderData, claimedUse
           isPro={isPro}
           onProRequired={() => router.push('/pricing')}
           extraTabs={claimedUser ? ['posts'] : undefined}
+          hideTabs={hidePortfolio ? ['portfolio'] : undefined}
         />
 
         {/* Tab Content — swipeable on mobile */}
@@ -509,7 +519,8 @@ export default function TraderProfileClient({ data, serverTraderData, claimedUse
             )}
           </Box>
 
-          {/* Portfolio Tab */}
+          {/* Portfolio Tab (hidden for platforms without position data) */}
+          {!hidePortfolio && (
           <Box style={{ minHeight: 200 }}>
             {traderPortfolio.length === 0 && traderPositionHistory.length === 0 ? (
               <Box style={{
@@ -549,6 +560,7 @@ export default function TraderProfileClient({ data, serverTraderData, claimedUse
               />
             )}
           </Box>
+          )}
 
           {/* Posts Tab (only for claimed traders) */}
           {claimedUser && (
