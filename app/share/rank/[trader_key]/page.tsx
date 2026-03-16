@@ -15,6 +15,8 @@ import { resolveTrader as resolveTraderUnified } from '@/lib/data/unified'
 import WrappedCardClient from '@/app/wrapped/[handle]/WrappedCardClient'
 import type { WrappedTraderData } from '@/app/wrapped/[handle]/page'
 
+export const revalidate = 300
+
 const BASE_URL = process.env.NEXT_PUBLIC_APP_URL || process.env.NEXT_PUBLIC_SITE_URL || 'https://www.arenafi.org'
 
 const PLATFORM_LABELS: Record<string, string> = {

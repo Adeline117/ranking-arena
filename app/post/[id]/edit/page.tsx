@@ -274,7 +274,7 @@ export default function EditPostPage() {
       try {
         const { data: post, error } = await supabase
           .from('posts')
-          .select('*')
+          .select('id, title, content, author_handle, author_id, image_url, images, image_urls, link_url, link_title, link_description, link_image, poll_options, poll_votes, poll_end_at, group_id, tags, visibility, created_at, updated_at')
           .eq('id', postId)
           .single()
 
