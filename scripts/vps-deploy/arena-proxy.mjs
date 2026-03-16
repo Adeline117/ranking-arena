@@ -10,7 +10,7 @@ const ALLOWED_HOSTS = new Set([
   // Binance
   'www.binance.com', 'web3.binance.com', 'api.binance.com', 'fapi.binance.com',
   // Bybit
-  'www.bybit.com', 'api.bybit.com', 'api2.bybit.com', 'www.bybitglobal.com',
+  'www.bybit.com', 'api.bybit.com', 'api2.bybit.com', 'www.bybitglobal.com', 'api2.bybitglobal.com',
   // Bitget
   'www.bitget.com', 'api.bitget.com',
   // OKX
