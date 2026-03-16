@@ -8,7 +8,7 @@ import { tokens } from '@/lib/design-tokens'
 import { supabase } from '@/lib/supabase/client'
 import { Box, Text } from '../base'
 import CopyTradeButton from './CopyTradeButton'
-import { getAvatarGradient, getAvatarInitial } from '@/lib/utils/avatar'
+import { getAvatarGradient, getAvatarInitial, isWalletAddress, generateBlockieSvg } from '@/lib/utils/avatar'
 import { EXCHANGE_NAMES, EXCHANGE_CONFIG } from '@/lib/constants/exchanges'
 import { formatDisplayName } from '@/app/components/ranking/utils'
 import { ProBadgeOverlay } from '../ui/ProBadge'
@@ -268,6 +268,20 @@ export default function TraderHeader({
                   transition: 'all 0.4s ease',
                 }}
                 onError={() => setAvatarError(true)}
+              />
+            ) : isWalletAddress(traderId) ? (
+              /* eslint-disable-next-line @next/next/no-img-element */
+              <img
+                src={generateBlockieSvg(traderId, 144)}
+                alt={handle}
+                width={72}
+                height={72}
+                style={{
+                  width: '100%',
+                  height: '100%',
+                  objectFit: 'cover',
+                  imageRendering: 'pixelated',
+                }}
               />
             ) : (
               <Text

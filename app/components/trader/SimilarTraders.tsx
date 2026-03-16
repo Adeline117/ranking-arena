@@ -5,7 +5,7 @@ import Link from 'next/link'
 import Image from 'next/image'
 import { tokens } from '@/lib/design-tokens'
 import { Box, Text } from '../base'
-import { getAvatarGradient, getAvatarInitial } from '@/lib/utils/avatar'
+import { getAvatarGradient, getAvatarInitial, isWalletAddress, generateBlockieSvg } from '@/lib/utils/avatar'
 import { formatDisplayName, formatROI } from '@/app/components/ranking/utils'
 import type { TraderProfile } from '@/lib/data/trader'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
@@ -79,11 +79,20 @@ const AnimatedAvatar = memo(function AnimatedAvatar({
           onError={() => setImageError(true)}
         />
       )}
-      {showFallback && (
-        <Text 
-          size="sm" 
-          weight="black" 
-          style={{ 
+      {showFallback && isWalletAddress(traderId) ? (
+        /* eslint-disable-next-line @next/next/no-img-element */
+        <img
+          src={generateBlockieSvg(traderId, size * 2)}
+          alt={handle}
+          width={size}
+          height={size}
+          style={{ width: '100%', height: '100%', objectFit: 'cover', position: 'absolute', inset: 0, zIndex: 1, imageRendering: 'pixelated' }}
+        />
+      ) : showFallback ? (
+        <Text
+          size="sm"
+          weight="black"
+          style={{
             color: tokens.colors.white,
             textShadow: 'var(--text-shadow-md)',
             fontSize: `${Math.round(size * 0.4)}px`,
@@ -94,7 +103,7 @@ const AnimatedAvatar = memo(function AnimatedAvatar({
         >
           {getAvatarInitial(handle)}
         </Text>
-      )}
+      ) : null}
     </Box>
   )
 })
