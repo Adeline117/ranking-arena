@@ -5,18 +5,20 @@ import { tokens } from '@/lib/design-tokens'
 import { useLanguage } from '../Providers/LanguageProvider'
 import { Box, Text } from '../base'
 
-type TabKey = 'overview' | 'stats' | 'portfolio'
+type TabKey = 'overview' | 'stats' | 'portfolio' | 'posts'
 
 interface TraderTabsProps {
   activeTab: TabKey
   onTabChange: (tab: TabKey) => void
   isPro?: boolean
   onProRequired?: () => void
+  /** Extra tab keys to show beyond the default 3 */
+  extraTabs?: TabKey[]
 }
 
 const useIsomorphicLayoutEffect = typeof window !== 'undefined' ? useLayoutEffect : useEffect
 
-export default function TraderTabs({ activeTab, onTabChange, isPro = false, onProRequired: _onProRequired }: TraderTabsProps) {
+export default function TraderTabs({ activeTab, onTabChange, isPro = false, onProRequired: _onProRequired, extraTabs }: TraderTabsProps) {
   const { t } = useLanguage()
   const containerRef = useRef<HTMLDivElement>(null)
   const tabRefs = useRef<Map<TabKey, HTMLButtonElement>>(new Map())
@@ -26,6 +28,7 @@ export default function TraderTabs({ activeTab, onTabChange, isPro = false, onPr
     { key: 'overview', label: t('overview') },
     { key: 'stats', label: t('stats') },
     { key: 'portfolio', label: t('portfolio') },
+    ...(extraTabs?.includes('posts') ? [{ key: 'posts' as TabKey, label: t('posts') }] : []),
   ]
 
   const updateIndicator = useCallback(() => {
