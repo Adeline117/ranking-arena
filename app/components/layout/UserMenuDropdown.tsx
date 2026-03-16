@@ -1,5 +1,6 @@
 'use client'
 
+import { useState } from 'react'
 import Link from 'next/link'
 import Image from 'next/image'
 import { useRouter } from 'next/navigation'
@@ -48,6 +49,7 @@ export default function UserMenuDropdown({
   totalUnread,
 }: UserMenuDropdownProps) {
   const { t } = useLanguage()
+  const [avatarError, setAvatarError] = useState(false)
   const router = useRouter()
   // myId is used to confirm the user is logged in (required by parent)
   void myId
@@ -86,10 +88,10 @@ export default function UserMenuDropdown({
           }
         }}
       >
-        {myAvatarUrl ? (
+        {myAvatarUrl && !avatarError ? (
           <Image
             src={myAvatarUrl}
-            alt={t('avatar')}
+            alt=""
             width={36}
             height={36}
             sizes="36px"
@@ -101,6 +103,7 @@ export default function UserMenuDropdown({
               objectFit: 'cover',
             }}
             unoptimized={myAvatarUrl?.startsWith('data:')}
+            onError={() => setAvatarError(true)}
           />
         ) : (
           <Box
