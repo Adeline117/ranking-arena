@@ -302,7 +302,7 @@ export default function DirectoryPage({ config }: { config: DirectoryPageConfig 
         query = query.order('name', { ascending: true })
       }
 
-      query = query.limit(200)
+      query = query.limit(1000)
 
       const { data, error: queryError } = await query
       if (queryError) throw queryError
