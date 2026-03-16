@@ -4291,6 +4291,8 @@ instSortName: 'Name A-Z',
 
 // Institutions page - no ratings
 instNoRatingsYet: 'No ratings yet',
+loginToRate: 'Log in to rate',
+ratingSubmitted: 'Rating submitted!',
 
 // Directory shared
 directorySortName: 'Name A-Z',

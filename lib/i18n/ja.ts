@@ -3959,6 +3959,8 @@ const ja = {
     instSortReviews: '最多レビュー',
 
     instNoRatingsYet: '評価がまだありません',
+    loginToRate: 'ログインして評価',
+    ratingSubmitted: '評価しました！',
 
     audioReaderTitle: 'オーディオリーダー',
     epubAudioModeLabel: 'オーディオ',
