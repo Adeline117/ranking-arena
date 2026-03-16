@@ -403,40 +403,20 @@ export default function TraderProfileClient({ data, serverTraderData, claimedUse
                     currentData={{}}
                     onSaved={() => window.location.reload()}
                   />
-                ) : !isVerifiedTrader && (
-                  <Box
-                    style={{
-                      padding: `${tokens.spacing[4]} ${tokens.spacing[5]}`,
-                      background: tokens.colors.bg.secondary,
-                      borderRadius: tokens.radius.lg,
-                      border: '1px solid var(--color-accent-primary-20)',
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: tokens.spacing[4],
-                    }}
-                  >
-                    <Box style={{
-                      width: 36, height: 36,
-                      borderRadius: tokens.radius.full,
-                      background: 'var(--color-accent-primary-10)',
-                      display: 'grid', placeItems: 'center',
-                      flexShrink: 0,
-                    }}>
-                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--color-brand-accent, currentColor)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-                        <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
-                        <circle cx="12" cy="7" r="4" />
-                        <line x1="12" y1="11" x2="12" y2="17" />
-                        <line x1="9" y1="14" x2="15" y2="14" />
-                      </svg>
-                    </Box>
-                    <Box style={{ flex: 1, minWidth: 0 }}>
-                      <Text size="sm" weight="bold" style={{ color: 'var(--color-text-primary)' }}>
-                        {t('claimYourProfile')}
-                      </Text>
-                      <Text size="xs" color="tertiary" style={{ lineHeight: 1.5, marginTop: 2 }}>
-                        {t('claimYourProfileDesc')}
-                      </Text>
-                    </Box>
+                ) : !isVerifiedTrader && !claimedUser && (
+                  <div style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 12,
+                    padding: '10px 16px',
+                    background: 'var(--color-bg-secondary)',
+                    borderRadius: 8,
+                    border: '1px solid var(--color-border-primary)',
+                    fontSize: 13,
+                  }}>
+                    <span style={{ color: 'var(--color-text-secondary)', flex: 1 }}>
+                      {t('claimYourProfileShort')}
+                    </span>
                     {currentUserId ? (
                       <ClaimTraderButton
                         traderId={traderProfile?.id || data.source_trader_id}
@@ -448,21 +428,20 @@ export default function TraderProfileClient({ data, serverTraderData, claimedUse
                       <a
                         href={`/login?returnUrl=${encodeURIComponent(`/trader/${encodeURIComponent(data.handle)}`)}`}
                         style={{
-                          padding: `${tokens.spacing[2]} ${tokens.spacing[4]}`,
-                          borderRadius: tokens.radius.md,
-                          background: 'linear-gradient(135deg, var(--color-brand) 0%, var(--color-brand-deep) 100%)',
-                          color: tokens.colors.white,
+                          padding: '6px 16px',
+                          borderRadius: 6,
+                          background: 'var(--color-brand)',
+                          color: 'white',
                           fontWeight: 600,
-                          fontSize: tokens.typography.fontSize.xs,
+                          fontSize: 12,
                           textDecoration: 'none',
                           whiteSpace: 'nowrap',
-                          flexShrink: 0,
                         }}
                       >
                         {t('loginToClaim')}
                       </a>
                     )}
-                  </Box>
+                  </div>
                 )}
               </Box>
 

@@ -177,6 +177,7 @@ const zh = {
     unclaimedBadge: '未认领',
     claimThisProfile: '认领此主页',
     claimYourProfile: '这是你吗？认领你的主页',
+    claimYourProfileShort: '这是你的交易账号吗？认领后可以自定义 profile。',
     claimYourProfileDesc: '验证你的交易所账户，解锁主页定制、成绩徽章，并与社区分享你的交易记录。',
     loginToClaim: '登录后认领',
     jumpToExchange: '跳转至交易所跟单',

@@ -171,6 +171,7 @@ const ja = {
     unclaimedBadge: '未申請',
     claimThisProfile: 'このプロフィールを申請する',
     claimYourProfile: 'あなたですか？プロフィールを申請しましょう',
+    claimYourProfileShort: 'あなたのアカウントですか？申請してプロフィールをカスタマイズしましょう。',
     claimYourProfileDesc: '取引所アカウントを認証して、プロフィールのカスタマイズ、パフォーマンスバッジ、コミュニティへの取引記録の共有をロック解除しましょう。',
     loginToClaim: 'ログインして申請',
     jumpToExchange: '取引所へ移動',

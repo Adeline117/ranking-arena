@@ -177,6 +177,7 @@ const en = {
     unclaimedBadge: 'Unclaimed',
     claimThisProfile: 'Claim this profile',
     claimYourProfile: 'Is this you? Claim your profile',
+    claimYourProfileShort: 'Is this your account? Claim to customize your profile.',
     claimYourProfileDesc: 'Verify your exchange account to unlock profile customization, performance badges, and share your trading record with the community.',
     loginToClaim: 'Log in to Claim',
     jumpToExchange: 'Go to Exchange',
