@@ -158,13 +158,14 @@ export async function fetchGainsOnchainPositionHistory(
           }
         }
 
+        const closeTimeISO = new Date(timestamp).toISOString()
         return {
           symbol: 'GAINS', // Can't easily determine pair from event data
           direction: 'long' as const, // Default — can't easily determine from event
           positionType: 'perpetual',
           marginMode: 'cross',
-          openTime: null,
-          closeTime: new Date(timestamp).toISOString(),
+          openTime: closeTimeISO, // Use close time as open time — actual open unknown from event data, needed for unique constraint
+          closeTime: closeTimeISO,
           entryPrice: null,
           exitPrice: null,
           maxPositionSize: null,
@@ -375,13 +376,14 @@ function parseKwentaEvents(events: BlockscoutLogEntry[], limit: number): Positio
         ? pnl + (accruedFunding ?? 0) - totalFees
         : null
 
+      const closeTimeISO = new Date(timestamp).toISOString()
       return {
         symbol: `${symbol}USDC`,
         direction: (sizeDelta > 0 ? 'long' : 'short') as 'long' | 'short',
         positionType: 'perpetual',
         marginMode: 'cross',
-        openTime: null,
-        closeTime: new Date(timestamp).toISOString(),
+        openTime: closeTimeISO, // Use close time — actual open unknown from event data, needed for unique constraint
+        closeTime: closeTimeISO,
         entryPrice: null,
         exitPrice: fillPrice,
         maxPositionSize: null,
