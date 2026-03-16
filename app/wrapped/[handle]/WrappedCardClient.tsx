@@ -74,7 +74,7 @@ export default function WrappedCardClient({ data, ogImageUrl }: Props) {
   const roiColor = roiValid && roi >= 0 ? C.success : C.error
   const roiStr = roiValid ? formatRoi(roi) : '--'
   const topPct = rank && total ? getTopPercent(rank, total) : ''
-  const rankDisplay = rank ? (rank <= 9999 ? `#${rank}` : `#${Math.round(rank / 1000)}K`) : '--'
+  const rankDisplay = rank ? (rank <= 9999 ? `${rank}` : `${Math.round(rank / 1000)}K`) : '--'
   const totalDisplay = total ? `${total.toLocaleString()}+` : '32,000+'
   const windowLabel = formatWindow(data.window)
 

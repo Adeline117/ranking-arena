@@ -3925,7 +3925,7 @@ dataStaleWarning: 'Data may be delayed',
 // Trader rank context
 traderRankOf: 'Ranked #{rank} of {total} on {platform}',
 traderRankTop: 'Top {pct}%',
-rankedOnExchange: 'Ranked #{rank} on {exchange}',
+rankedOnExchange: 'Ranked {rank} on {exchange}',
 
 // Footer links
 footerMethodology: 'Methodology',

@@ -115,7 +115,7 @@ export async function GET(request: NextRequest) {
   const windowLabel = formatWindow(windowParam)
   const platformColor = PLATFORM_COLORS[platform] || C.purpleLight
 
-  const rankDisplay = rankValid ? (rank <= 9999 ? '#' + rank : '#' + (rank / 1000).toFixed(0) + 'K') : '--'
+  const rankDisplay = rankValid ? (rank <= 9999 ? String(rank) : (rank / 1000).toFixed(0) + 'K') : '--'
   const totalDisplay = total > 0 ? total.toLocaleString() + '+' : '68,000+'
 
   return new ImageResponse(

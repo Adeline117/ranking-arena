@@ -402,7 +402,7 @@ export default function TokenSidePanel({ token, onClose }: {
               }}>
                 {t('fundamentalData')}
               </div>
-              <StatRow label={t('marketRank')} value={`#${token.rank}`} />
+              <StatRow label={t('marketRank')} value={`${token.rank}`} />
               <StatRow label={t('tokenMarketCap')} value={formatNum(token.marketCap)} />
               <StatRow label={t('tokenVolume24h')} value={formatNum(token.volume24h)} />
               <StatRow label={t('tokenHigh24h')} value={formatPrice(token.high24h)} />

@@ -88,7 +88,7 @@ export default function ShareOnXButton({
 
     const lines: string[] = []
     if (rank) {
-      lines.push(`Ranked #${rank} on Arena${platformLabel ? ` (${platformLabel})` : ''}`)
+      lines.push(`Ranked ${rank} on Arena${platformLabel ? ` (${platformLabel})` : ''}`)
     } else {
       lines.push(`${name} on Arena${platformLabel ? ` | ${platformLabel}` : ''}`)
     }

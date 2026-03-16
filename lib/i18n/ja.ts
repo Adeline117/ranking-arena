@@ -3665,7 +3665,7 @@ const ja = {
     // Trader rank context
     traderRankOf: '{platform} で {total} 人中 #{rank} 位',
     traderRankTop: '上位 {pct}%',
-    rankedOnExchange: '{exchange} で #{rank} 位',
+    rankedOnExchange: '{exchange} で {rank} 位',
 
     // Footer links
     footerMethodology: '評価方法',

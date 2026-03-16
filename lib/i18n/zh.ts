@@ -3932,7 +3932,7 @@ dataStaleWarning: '数据可能有延迟',
 // Trader rank context
 traderRankOf: '在 {platform} 排名第 {rank} / 共 {total} 人',
 traderRankTop: '前 {pct}%',
-rankedOnExchange: '在 {exchange} 排名第 #{rank}',
+rankedOnExchange: '在 {exchange} 排名第 {rank}',
 
 // Footer links
 footerMethodology: '评分方法',

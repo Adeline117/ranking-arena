@@ -73,7 +73,7 @@ function TopTraderCard({ trader, rank }: { trader: Trader; rank: number }) {
       >
         {/* Rank + Avatar row */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-          <span style={{ fontSize: 12, fontWeight: 800, color: medalColor }}>#{rank}</span>
+          <span style={{ fontSize: 12, fontWeight: 800, color: medalColor }}>{rank}</span>
           <TraderAvatar
             traderId={trader.id}
             displayName={displayName}

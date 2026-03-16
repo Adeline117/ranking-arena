@@ -41,7 +41,7 @@ export async function generateMetadata({ params }: { params: Promise<{ handle: s
       const parts = [
         roi != null ? `${roi >= 0 ? '+' : ''}${roi.toFixed(1)}% ROI` : null,
         score != null ? `Arena Score ${score.toFixed(0)}` : null,
-        rank != null ? `#${rank} ranked` : null,
+        rank != null ? `Ranked ${rank}` : null,
       ].filter(Boolean)
 
       const title = `${name} (${exchange}) | Crypto Trader Rankings`
@@ -247,7 +247,7 @@ export default async function TraderPage({ params, searchParams }: { params: Pro
       `${exchange} crypto trader`,
       roi != null ? `${roi >= 0 ? '+' : ''}${roi.toFixed(1)}% ROI` : null,
       score != null ? `Arena Score ${score.toFixed(0)}` : null,
-      rank != null ? `Ranked #${rank} on Arena` : null,
+      rank != null ? `Ranked ${rank} on Arena` : null,
     ].filter(Boolean).join('. '),
     memberOf: { '@type': 'Organization', name: exchange },
     sameAs: [`https://www.arenafi.org/trader/${encodeURIComponent(traderData.handle)}`],

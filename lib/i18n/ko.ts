@@ -3912,7 +3912,7 @@ const ko = {
     // Trader rank context
     traderRankOf: '{platform}에서 {total}명 중 #{rank}위',
     traderRankTop: '상위 {pct}%',
-    rankedOnExchange: '{exchange}에서 #{rank}위',
+    rankedOnExchange: '{exchange}에서 {rank}위',
 
     // Footer links
     footerMethodology: '평가 방법',
