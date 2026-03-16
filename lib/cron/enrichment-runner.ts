@@ -29,6 +29,7 @@ import {
   fetchMexcEquityCurve,
   fetchMexcStatsDetail,
   fetchDriftPositionHistory,
+  fetchDriftPositionHistoryFromS3,
   fetchDriftEquityCurve,
   fetchDriftStatsDetail,
   fetchDydxEquityCurve,
@@ -222,7 +223,13 @@ export const ENRICHMENT_PLATFORM_CONFIGS: Record<string, EnrichmentConfig> = {
     platform: 'drift',
     fetchEquityCurve: fetchDriftEquityCurve,
     fetchStatsDetail: fetchDriftStatsDetail,
-    fetchPositionHistory: fetchDriftPositionHistory,
+    fetchPositionHistory: async (traderId: string) => {
+      // Primary: S3 historical trade data (richer, covers 90 days)
+      const s3Positions = await fetchDriftPositionHistoryFromS3(traderId, 90)
+      if (s3Positions.length > 0) return s3Positions
+      // Fallback: data.api.drift.trade fills endpoint
+      return fetchDriftPositionHistory(traderId)
+    },
     concurrency: 2, delayMs: 1000,
   },
   dydx: {
