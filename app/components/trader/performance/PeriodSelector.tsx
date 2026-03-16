@@ -9,6 +9,12 @@ import { usePeriodStore } from '@/lib/stores/periodStore'
 export type Period = '7D' | '30D' | '90D'
 
 // Data source period mapping notes
+// Platforms that return cumulative (all-time) ROI instead of period-specific
+export const CUMULATIVE_ROI_PLATFORMS = new Set([
+  'binance_futures', 'binance_spot', 'bybit', 'bitget_futures',
+  'dydx', 'gmx', 'btcc',
+])
+
 export const DATA_SOURCE_NOTES: Record<string, { titleKey: string; periods: Record<string, string> }> = {
   weex: {
     titleKey: 'weexDataNote',
@@ -58,6 +64,32 @@ export function PeriodSelector({ period, onPeriodChange, source, lastUpdated }: 
 
       {/* Period Selector */}
       <Box style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[2] }}>
+        {/* Cumulative ROI note for platforms that don't support period-specific ROI */}
+        {source && CUMULATIVE_ROI_PLATFORMS.has(source.toLowerCase()) && period !== '7D' && (
+          <Box
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 4,
+              padding: '4px 8px',
+              background: 'color-mix(in srgb, var(--color-text-tertiary) 8%, transparent)',
+              borderRadius: tokens.radius.md,
+            }}
+            title={language === 'zh'
+              ? '该平台 API 返回的是累计 ROI，30D 和 90D 可能相同'
+              : 'This exchange API returns cumulative ROI. 30D and 90D values may be identical.'}
+          >
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="var(--color-text-tertiary)" strokeWidth="2">
+              <circle cx="12" cy="12" r="10" />
+              <line x1="12" y1="16" x2="12" y2="12" />
+              <line x1="12" y1="8" x2="12.01" y2="8" />
+            </svg>
+            <Text size="xs" style={{ color: 'var(--color-text-tertiary)', fontWeight: 500 }}>
+              {language === 'zh' ? '累计 ROI' : 'Cumulative'}
+            </Text>
+          </Box>
+        )}
+
         {/* 数据来源提示 */}
         {source && DATA_SOURCE_NOTES[source.toLowerCase()] && (
           <Box
