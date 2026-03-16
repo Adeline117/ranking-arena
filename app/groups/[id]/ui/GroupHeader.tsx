@@ -1,6 +1,7 @@
 'use client'
 
 import Link from 'next/link'
+import { useLoginModal } from '@/lib/hooks/useLoginModal'
 import { tokens } from '@/lib/design-tokens'
 import { Box, Text, Button } from '@/app/components/base'
 
@@ -311,11 +312,9 @@ export default function GroupHeader({
                 </Button>
               )
             ) : (
-              <Link href="/login" style={{ textDecoration: 'none' }}>
-                <Button variant="primary" size="sm">
-                  {language === 'zh' ? '登录后加入' : 'Login to join'}
-                </Button>
-              </Link>
+              <Button variant="primary" size="sm" onClick={() => useLoginModal.getState().openLoginModal()}>
+                {language === 'zh' ? '登录后加入' : 'Login to join'}
+              </Button>
             )}
           </Box>
         </Box>

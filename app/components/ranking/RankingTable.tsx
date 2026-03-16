@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useRef, memo, useCallback, useTransition, useMemo } from 'react'
 import Link from 'next/link'
+import { useLoginModal } from '@/lib/hooks/useLoginModal'
 import { tokens } from '@/lib/design-tokens'
 import { RankingSkeleton } from '../ui/Skeleton'
 import { Box, Text } from '../base'
@@ -611,7 +612,7 @@ function RankingTableInner(props: {
           </Box>
           {/* Registration CTA after first page for non-logged-in users */}
           {!props.loggedIn && currentPage === 1 && sortedTraders.length > itemsPerPage && (
-            <Link href="/login" style={{ textDecoration: 'none' }}>
+            <button onClick={() => useLoginModal.getState().openLoginModal()} style={{ border: 'none', cursor: 'pointer', background: 'none', width: '100%', padding: 0 }}>
               <Box style={{
                 margin: `${tokens.spacing[2]} ${tokens.spacing[4]}`,
                 padding: `${tokens.spacing[4]} ${tokens.spacing[5]}`,
@@ -635,7 +636,7 @@ function RankingTableInner(props: {
                     : `Showing top ${itemsPerPage} of ${sortedTraders.length} traders`}
                 </Text>
               </Box>
-            </Link>
+            </button>
           )}
           <Pagination currentPage={currentPage} totalPages={totalPages} onPageChange={handlePaginationChange} />
         </>

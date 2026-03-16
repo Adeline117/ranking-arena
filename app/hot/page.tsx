@@ -4,6 +4,7 @@ import { features } from '@/lib/features'
 import { notFound } from 'next/navigation'
 import { Suspense, lazy } from 'react'
 import Link from 'next/link'
+import { useLoginModal } from '@/lib/hooks/useLoginModal'
 import { tokens } from '@/lib/design-tokens'
 import TopNav from '@/app/components/layout/TopNav'
 import ThreeColumnLayout from '@/app/components/layout/ThreeColumnLayout'
@@ -216,21 +217,22 @@ function HotContent() {
                             <Text size="sm" color="secondary">
                               {t('loginToViewFullHotList')}
                             </Text>
-                            <Link
-                              href="/login"
+                            <button
+                              onClick={() => useLoginModal.getState().openLoginModal()}
                               style={{
                                 display: 'inline-block',
                                 padding: '6px 16px',
                                 background: tokens.gradient.primary,
                                 color: tokens.colors.white,
                                 borderRadius: tokens.radius.sm,
-                                textDecoration: 'none',
+                                border: 'none',
+                                cursor: 'pointer',
                                 fontWeight: 700,
                                 fontSize: '12px',
                               }}
                             >
                               {t('loginNow')}
-                            </Link>
+                            </button>
                           </Box>
                         </>
                       )}

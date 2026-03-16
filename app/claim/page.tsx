@@ -13,6 +13,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
+import { useLoginModal } from '@/lib/hooks/useLoginModal'
 import { tokens } from '@/lib/design-tokens'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import { supabase } from '@/lib/supabase/client'
@@ -838,12 +839,17 @@ export default function ClaimPage() {
                 <Text style={{ marginBottom: tokens.spacing[3] }}>
                   {t('pleaseLoginFirst')}
                 </Text>
-                <Link href="/login" style={{
+                <button onClick={() => useLoginModal.getState().openLoginModal()} style={{
                   color: tokens.colors.accent.primary,
+                  background: 'none',
+                  border: 'none',
+                  cursor: 'pointer',
                   textDecoration: 'underline',
+                  fontSize: 'inherit',
+                  fontFamily: 'inherit',
                 }}>
                   {t('loginToClaim')}
-                </Link>
+                </button>
               </Box>
             ) : isDex(selectedTrader.source) ? (
               <DexVerifyForm trader={selectedTrader} onSuccess={handleClaimSuccess} />

@@ -190,7 +190,7 @@ export default function UserFollowButton({
   if (!currentUserId) {
     return (
       <button
-        onClick={() => router.push('/login')}
+        onClick={() => useLoginModal.getState().openLoginModal()}
         style={{
           ...sizeStyles[size],
           width: fullWidth ? '100%' : 'auto',
