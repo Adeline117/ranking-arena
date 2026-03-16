@@ -70,12 +70,15 @@ export class BingxFuturesConnector extends BaseConnector {
     const period = periodMap[window] || '30'
 
     try {
-      // Try VPS proxy first (forward full URL through VPS)
-      const directUrl = `https://bingx.com/api/uc/v1/public/copyTrade/traders?page=1&pageSize=${limit}&period=${period}&sortBy=roi&sortOrder=desc`
-      let _rawLb = await this.proxyViaVPS<{ data?: { list?: BingXLeaderboardEntry[] } }>(directUrl);
+      // Try VPS Playwright scraper first (BingX has WAF, proxy forwarding won't work)
+      let _rawLb = await this.fetchViaVPS<{ data?: { list?: BingXLeaderboardEntry[] } }>('/bingx/leaderboard', {
+        period,
+        pageSize: String(limit),
+      });
 
       // Fallback to direct BingX API if VPS failed
       if (!_rawLb) {
+        const directUrl = `https://bingx.com/api/uc/v1/public/copyTrade/traders?page=1&pageSize=${limit}&period=${period}&sortBy=roi&sortOrder=desc`
         _rawLb = await this.request<{ data?: { list?: BingXLeaderboardEntry[] } }>(
           directUrl,
           { method: 'GET', headers: this.getHeaders() }
