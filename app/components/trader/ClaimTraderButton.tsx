@@ -38,6 +38,8 @@ export default function ClaimTraderButton({ traderId, handle, userId, source = '
   const [loading, setLoading] = useState(false)
   const [claimed, setClaimed] = useState(false)
   const [claimStatus, setClaimStatus] = useState<string | null>(null)
+  const [hasVerifiedAccounts, setHasVerifiedAccounts] = useState(false)
+  const [thisTraderLinked, setThisTraderLinked] = useState(false)
 
   useEffect(() => {
     let alive = true
@@ -54,7 +56,18 @@ export default function ClaimTraderButton({ traderId, handle, userId, source = '
         if (res.ok) {
           const data = await res.json()
           if (alive) {
-            if (data.is_verified) {
+            const linked = data.linked_traders || data.data?.linked_traders || []
+            const linkedCount = linked.length
+            setHasVerifiedAccounts(linkedCount > 0 || data.is_verified)
+
+            // Check if this specific trader is already linked
+            const isLinked = linked.some(
+              (lt: { trader_id: string; source: string }) =>
+                lt.trader_id === traderId && lt.source === source
+            )
+            setThisTraderLinked(isLinked)
+
+            if (isLinked) {
               setClaimStatus('verified')
             } else if (data.claim?.status) {
               setClaimStatus(data.claim.status)
@@ -74,7 +87,7 @@ export default function ClaimTraderButton({ traderId, handle, userId, source = '
 
     checkClaimStatus()
     return () => { alive = false }
-  }, [userId, source])
+  }, [userId, source, traderId])
 
   const handleClaim = async () => {
     // For DEX platforms, redirect to the claim page with wallet flow
@@ -83,10 +96,14 @@ export default function ClaimTraderButton({ traderId, handle, userId, source = '
       return
     }
 
-    const confirmed = await showConfirm(
-      t('confirmClaim'),
-      `${t('confirmClaimDesc').replace('{handle}', handle)}\n${t('verifyOwnership')}`
-    )
+    const confirmTitle = hasVerifiedAccounts
+      ? (t('confirmLink') || 'Link Account')
+      : t('confirmClaim')
+    const confirmDesc = hasVerifiedAccounts
+      ? (t('confirmLinkDesc') || `Link ${handle} to your profile?`).replace('{handle}', handle)
+      : `${t('confirmClaimDesc').replace('{handle}', handle)}\n${t('verifyOwnership')}`
+
+    const confirmed = await showConfirm(confirmTitle, confirmDesc)
     if (!confirmed) return
 
     // Check session
@@ -100,7 +117,7 @@ export default function ClaimTraderButton({ traderId, handle, userId, source = '
     router.push(`/claim?trader=${encodeURIComponent(traderId)}&source=${encodeURIComponent(source)}&handle=${encodeURIComponent(handle)}&step=verify`)
   }
 
-  if (claimed || claimStatus === 'verified') {
+  if (thisTraderLinked || claimed || claimStatus === 'verified') {
     return (
       <Button variant="ghost" size="sm" disabled>
         {t('claimSubmitted')}
@@ -116,6 +133,11 @@ export default function ClaimTraderButton({ traderId, handle, userId, source = '
     )
   }
 
+  // If user already has verified accounts, show "Link to Profile" instead of "Claim"
+  const buttonLabel = hasVerifiedAccounts
+    ? (t('linkToProfile') || 'Link to Profile')
+    : t('claimTrader')
+
   return (
     <Button
       variant="primary"
@@ -123,7 +145,7 @@ export default function ClaimTraderButton({ traderId, handle, userId, source = '
       onClick={handleClaim}
       disabled={loading}
     >
-      {loading ? t('claiming') : t('claimTrader')}
+      {loading ? t('claiming') : buttonLabel}
     </Button>
   )
 }

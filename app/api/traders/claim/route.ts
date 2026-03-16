@@ -1,7 +1,7 @@
 /**
  * Trader Claim API
- * GET /api/traders/claim - Get user's claim status
- * POST /api/traders/claim - Submit claim with verification
+ * GET /api/traders/claim - Get user's claim status (includes all linked traders)
+ * POST /api/traders/claim - Submit claim with verification (supports multi-account)
  *
  * After verification passes (API key UID match or wallet signature),
  * the claim is auto-approved without manual review.
@@ -29,7 +29,7 @@ import { logger } from '@/lib/logger'
 
 /**
  * GET /api/traders/claim
- * Get user's claim status
+ * Get user's claim status, including all linked traders
  */
 export async function GET(request: NextRequest) {
   const rateLimitResponse = await checkRateLimit(request, RateLimitPresets.read)
@@ -39,15 +39,24 @@ export async function GET(request: NextRequest) {
     const user = await requireAuth(request)
     const supabase = getSupabaseAdmin()
 
-    const [claim, verified] = await Promise.all([
+    const [claim, verified, linkedResult] = await Promise.all([
       getUserClaim(supabase, user.id),
       getUserVerifiedTrader(supabase, user.id),
+      supabase
+        .from('user_linked_traders')
+        .select('*')
+        .eq('user_id', user.id)
+        .order('display_order', { ascending: true }),
     ])
+
+    const linkedTraders = linkedResult.data || []
 
     return success({
       claim,
       verified_trader: verified,
       is_verified: !!verified,
+      linked_traders: linkedTraders,
+      linked_count: linkedTraders.length,
     })
   } catch (error: unknown) {
     return handleError(error, 'trader claim GET')
@@ -94,11 +103,12 @@ export async function POST(request: NextRequest) {
       return handleError(new Error('This trader account has been claimed or is under review'), 'trader claim POST')
     }
 
-    // Check if user already has a verified trader
-    const existingVerified = await getUserVerifiedTrader(supabase, user.id)
-    if (existingVerified) {
-      return handleError(new Error('You have already claimed a trader account'), 'trader claim POST')
-    }
+    // Check how many linked traders the user already has (for is_primary logic)
+    const { data: existingLinks } = await supabase
+      .from('user_linked_traders')
+      .select('id')
+      .eq('user_id', user.id)
+    const isFirstClaim = !existingLinks || existingLinks.length === 0
 
     // For API key verification, validate that verify-ownership was called and UID matches
     if (verification_method === 'api_key') {
@@ -212,13 +222,34 @@ export async function POST(request: NextRequest) {
       logger.error('[trader-claim] Failed to create verified_traders record', verifiedError)
     }
 
+    // Create user_linked_traders record
+    const { error: linkError } = await supabase
+      .from('user_linked_traders')
+      .upsert({
+        user_id: user.id,
+        trader_id,
+        source,
+        is_primary: isFirstClaim,
+        display_order: isFirstClaim ? 0 : (existingLinks?.length ?? 0),
+        verified_at: now,
+        verification_method,
+      }, {
+        onConflict: 'user_id, trader_id, source',
+      })
+
+    if (linkError) {
+      logger.error('[trader-claim] Failed to create user_linked_traders record', linkError)
+    }
+
     // Update user_profiles
+    const newCount = (existingLinks?.length ?? 0) + 1
     await supabase
       .from('user_profiles')
       .update({
         is_verified_trader: true,
-        verified_trader_id: trader_id,
-        verified_trader_source: source,
+        verified_trader_id: isFirstClaim ? trader_id : undefined,
+        verified_trader_source: isFirstClaim ? source : undefined,
+        linked_trader_count: newCount,
       })
       .eq('id', user.id)
 
