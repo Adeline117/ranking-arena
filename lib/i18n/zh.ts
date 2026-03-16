@@ -2302,6 +2302,8 @@ const zh = {
     loadFailedRetryMsg: '加载失败，请稍后重试',
     noPerformanceData: '暂无绩效数据',
     noStatsData: '暂无统计数据',
+    noPortfolioData: '暂无持仓数据',
+    viewOnExchange: '前往 {exchange} 查看持仓',
     leaderboardBreadcrumb: '排行榜',
     chartDataAccumulatesDaily: '数据每天积累。首次交易后24小时内即可看到资金曲线图。',
     arenaScoreHeaderTooltip: 'Arena 综合绩效评分（0–100）',

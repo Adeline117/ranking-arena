@@ -2299,6 +2299,8 @@ const ko = {
     loadFailedRetryMsg: '로드 실패, 다시 시도해 주세요',
     noPerformanceData: '성과 데이터가 없습니다',
     noStatsData: '통계 데이터가 없습니다',
+    noPortfolioData: '포트폴리오 데이터가 없습니다',
+    viewOnExchange: '{exchange}에서 포지션 보기',
     leaderboardBreadcrumb: '리더보드',
     chartDataAccumulatesDaily: '데이터가 매일 누적됩니다. 첫 거래 후 24시간 내에 첫 번째 차트가 표시됩니다.',
     arenaScoreHeaderTooltip: 'Arena의 종합 성과 점수 (0–100)',

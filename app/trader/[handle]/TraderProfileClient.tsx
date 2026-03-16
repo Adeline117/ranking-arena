@@ -495,12 +495,43 @@ export default function TraderProfileClient({ data, serverTraderData }: TraderPr
 
           {/* Portfolio Tab */}
           <Box style={{ minHeight: 200 }}>
-            <PortfolioTable
-              items={traderPortfolio}
-              history={traderPositionHistory}
-              isPro={isPro}
-              onUnlock={() => router.push('/pricing')}
-            />
+            {traderPortfolio.length === 0 && traderPositionHistory.length === 0 ? (
+              <Box style={{
+                padding: tokens.spacing[10],
+                textAlign: 'center',
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                gap: tokens.spacing[3],
+              }}>
+                <Box style={{
+                  width: 48, height: 48,
+                  borderRadius: tokens.radius.full,
+                  background: `${tokens.colors.text.tertiary}10`,
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                }}>
+                  <svg width={24} height={24} viewBox="0 0 24 24" fill="none" stroke={tokens.colors.text.tertiary} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" style={{ opacity: 0.5 }}>
+                    <path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z" />
+                    <polyline points="13 2 13 9 20 9" />
+                  </svg>
+                </Box>
+                <Text size="base" color="secondary" style={{ fontWeight: tokens.typography.fontWeight.medium }}>
+                  {t('noPortfolioData')}
+                </Text>
+                {data.source && EXCHANGE_NAMES[data.source.toLowerCase()] && (
+                  <Text size="sm" color="tertiary">
+                    {t('viewOnExchange').replace('{exchange}', EXCHANGE_NAMES[data.source.toLowerCase()])}
+                  </Text>
+                )}
+              </Box>
+            ) : (
+              <PortfolioTable
+                items={traderPortfolio}
+                history={traderPositionHistory}
+                isPro={isPro}
+                onUnlock={() => router.push('/pricing')}
+              />
+            )}
           </Box>
         </SwipeableView>
 

@@ -2166,6 +2166,8 @@ const ja = {
     loadFailedRetryMsg: '読み込みに失敗しました。もう一度お試しください',
     noPerformanceData: 'パフォーマンスデータがありません',
     noStatsData: '統計データがありません',
+    noPortfolioData: 'ポートフォリオデータがありません',
+    viewOnExchange: '{exchange}でポジションを確認',
     leaderboardBreadcrumb: 'リーダーボード',
     chartDataAccumulatesDaily: 'データは毎日蓄積されます。最初のチャートは初回取引から24時間以内に表示されます。',
     arenaScoreHeaderTooltip: 'Arenaの総合パフォーマンススコア（0-100）',
