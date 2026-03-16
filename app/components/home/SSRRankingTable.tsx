@@ -9,6 +9,7 @@
 
 import type { InitialTrader } from '@/lib/getInitialTraders'
 import Image from 'next/image'
+import { isWalletAddress, generateBlockieSvg } from '@/lib/utils/avatar'
 
 // Score color logic (server-side, no hooks)
 function getScoreColor(score: number): string {
@@ -124,7 +125,7 @@ export default function SSRRankingTable({ traders }: Props) {
               <div className="ssr-info">
                 <div className="ssr-av">
                   {getInitial(trader.handle)}
-                  {avatarUrl && (
+                  {avatarUrl ? (
                     <Image
                       src={avatarUrl}
                       alt={trader.handle || 'Trader'}
@@ -135,7 +136,16 @@ export default function SSRRankingTable({ traders }: Props) {
                       sizes="36px"
                       style={{ borderRadius: '50%' }}
                     />
-                  )}
+                  ) : isWalletAddress(trader.id) ? (
+                    /* eslint-disable-next-line @next/next/no-img-element */
+                    <img
+                      src={generateBlockieSvg(trader.id, 72)}
+                      alt={trader.handle || 'Trader'}
+                      width={36}
+                      height={36}
+                      style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: '50%', position: 'absolute', inset: 0, imageRendering: 'pixelated' }}
+                    />
+                  ) : null}
                 </div>
                 <div style={{ minWidth: 0 }}>
                   <div className="ssr-name">{trader.handle}</div>

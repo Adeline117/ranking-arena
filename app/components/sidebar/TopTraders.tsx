@@ -7,6 +7,7 @@ import { getScoreColor } from '@/lib/utils/score-colors'
 import { tokens, RANK_COLORS_ARRAY } from '@/lib/design-tokens'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import SidebarCard from './SidebarCard'
+import { isWalletAddress, generateBlockieSvg } from '@/lib/utils/avatar'
 
 type Trader = {
   source: string
@@ -27,7 +28,7 @@ const _PLATFORM_LABELS: Record<string, string> = {
 }
 
  
-function TraderAvatar({ name, avatarUrl, size = 36 }: { name: string; avatarUrl: string | null; size?: number }) {
+function TraderAvatar({ name, avatarUrl, traderId, size = 36 }: { name: string; avatarUrl: string | null; traderId?: string; size?: number }) {
   const [imgError, setImgError] = useState(false)
   const initial = (name || '?').charAt(0).toUpperCase()
 
@@ -47,6 +48,26 @@ function TraderAvatar({ name, avatarUrl, size = 36 }: { name: string; avatarUrl:
           height: size,
         }}
         onError={() => setImgError(true)}
+      />
+    )
+  }
+
+  // Blockie fallback for DEX wallet addresses
+  if (traderId && isWalletAddress(traderId)) {
+    return (
+      <img
+        src={generateBlockieSvg(traderId, size * 2)}
+        alt={name}
+        width={size}
+        height={size}
+        style={{
+          borderRadius: tokens.radius.full,
+          objectFit: 'cover',
+          minWidth: size,
+          width: size,
+          height: size,
+          imageRendering: 'pixelated',
+        }}
       />
     )
   }
@@ -163,7 +184,7 @@ export default function TopTraders() {
                 </span>
 
                 {/* Avatar */}
-                <TraderAvatar name={displayName} avatarUrl={trader.avatar_url} size={32} />
+                <TraderAvatar name={displayName} avatarUrl={trader.avatar_url} traderId={trader.source_trader_id} size={32} />
 
                 {/* Name only (no platform) */}
                 <div style={{ flex: 1, minWidth: 0 }}>

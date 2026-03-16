@@ -4,7 +4,7 @@ import React, { useState, useRef } from 'react'
 import Link from 'next/link'
 import { tokens } from '@/lib/design-tokens'
 import { Box, Text } from '../base'
-import { getAvatarGradient, getAvatarInitial, getTraderAvatarUrl } from '@/lib/utils/avatar'
+import { getAvatarGradient, getAvatarInitial, getTraderAvatarUrl, isWalletAddress, generateBlockieSvg } from '@/lib/utils/avatar'
 import { useLanguage } from '../Providers/LanguageProvider'
 import RadarChart from './RadarChart'
 import EquityCurveOverlay, { CHART_COLORS } from './EquityCurveOverlay'
@@ -289,6 +289,14 @@ export default function TraderComparison({ traders, onRemove, showRemoveButton =
                           loading="lazy"
                           style={{ width: '100%', height: '100%', objectFit: 'cover' }}
                           onError={(e) => { (e.target as HTMLImageElement).style.display = 'none' }}
+                        />
+                      ) : isWalletAddress(trader.id) ? (
+                        <img
+                          src={generateBlockieSvg(trader.id, 112)}
+                          alt={trader.handle || trader.id}
+                          width={56}
+                          height={56}
+                          style={{ width: '100%', height: '100%', objectFit: 'cover', imageRendering: 'pixelated' }}
                         />
                       ) : (
                         <Text size="lg" weight="black" style={{ color: tokens.colors.white }}>
