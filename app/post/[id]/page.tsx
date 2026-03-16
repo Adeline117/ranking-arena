@@ -66,9 +66,9 @@ export default async function PostDetailPage({ params }: { params: Promise<{ id:
 
   const { id } = await params
 
-  // Validate id is a valid number and check existence
-  const numId = Number(id)
-  if (!Number.isFinite(numId) || numId < 1) {
+  // Validate id format (UUID or numeric)
+  const isValidId = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id) || /^\d+$/.test(id)
+  if (!isValidId) {
     notFound()
   }
 
