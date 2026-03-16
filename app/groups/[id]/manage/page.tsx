@@ -149,7 +149,7 @@ export default function GroupManagePage({ params }: { params: Promise<{ id: stri
     const load = async () => {
       setLoading(true)
       try {
-        const { data: groupData } = await supabase.from('groups').select('*').eq('id', groupId).single()
+        const { data: groupData } = await supabase.from('groups').select('id, name, name_en, description, description_en, avatar_url, rules_json, role_names, owner_id, member_count, is_pro, is_premium_only, settings, created_by, created_at').eq('id', groupId).single()
         if (groupData) {
           setGroup(groupData as Group); setEditName(groupData.name || ''); setEditNameEn(groupData.name_en || '')
           setEditDescription(groupData.description || ''); setEditDescriptionEn(groupData.description_en || '')

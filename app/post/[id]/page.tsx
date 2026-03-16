@@ -5,6 +5,8 @@ import { features } from '@/lib/features'
 import { getSupabaseAdmin } from '@/lib/supabase/server'
 import PostDetailClient from './PostDetailClient'
 
+export const revalidate = 60
+
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL || 'https://www.arenafi.org'
 
 const getPostMeta = cache(async (id: string) => {

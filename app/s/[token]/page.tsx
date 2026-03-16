@@ -10,6 +10,8 @@ import { notFound } from 'next/navigation'
 import { getSupabaseAdmin } from '@/lib/supabase/server'
 import SnapshotViewerClient from './SnapshotViewerClient'
 
+export const revalidate = 300
+
 interface PageProps {
   params: Promise<{ token: string }>
 }

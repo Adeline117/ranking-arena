@@ -12,6 +12,8 @@ import { getSupabaseAdmin } from '@/lib/supabase/server'
 import { resolveTrader } from '@/lib/data/unified'
 import WrappedCardClient from './WrappedCardClient'
 
+export const revalidate = 300
+
 const BASE_URL = process.env.NEXT_PUBLIC_APP_URL || process.env.NEXT_PUBLIC_SITE_URL || 'https://www.arenafi.org'
 
 // Platform display label map

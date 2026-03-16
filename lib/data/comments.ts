@@ -130,6 +130,8 @@ export async function getPostComments(
     .select('id, post_id, user_id, content, parent_id, like_count, dislike_count, created_at, updated_at')
     .eq('post_id', postId)
     .is('parent_id', null)
+    .order('like_count', { ascending: false, nullsFirst: false })
+    .limit(500)
 
   if (error) throw error
   if (!allTopComments || allTopComments.length === 0) return []

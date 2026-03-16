@@ -13,6 +13,8 @@ const pool = new Pool({
   max: 3,
 })
 
+export const revalidate = 300
+
 const BASE_URL = process.env.NEXT_PUBLIC_SITE_URL || 'https://www.arenafi.org'
 
 interface Props {
