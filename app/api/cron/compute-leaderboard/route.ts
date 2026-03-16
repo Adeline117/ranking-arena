@@ -182,6 +182,15 @@ export async function GET(request: NextRequest) {
       logger.warn('arena_score sync to v2 failed (non-critical):', syncErr)
     }
 
+    // Post-compute: derive WR/MDD from historical snapshots for traders missing them
+    let wrMddDerived = 0
+    try {
+      wrMddDerived = await deriveWinRateMDD(supabase)
+      if (wrMddDerived > 0) logger.info(`Derived WR/MDD for ${wrMddDerived} traders`)
+    } catch (e) {
+      logger.warn('WR/MDD derivation failed (non-critical):', e)
+    }
+
     const totalRanked = Object.values(stats.seasons).reduce((a, b) => a + b, 0)
     if (warnings.length > 0) {
       await plog.error(new Error(warnings.join('; ')), { stats, rolledBack })
@@ -196,6 +205,7 @@ export async function GET(request: NextRequest) {
       previous_counts: previousCounts,
       warnings: warnings.length > 0 ? warnings : undefined,
       rolled_back: rolledBack.length > 0 ? rolledBack : undefined,
+      wr_mdd_derived: wrMddDerived,
     })
   } catch (error: unknown) {
     logger.error('Failed to compute leaderboard', error)
@@ -728,4 +738,82 @@ async function computeSeason(
   const actualUpserted = scored.length - upsertErrors
   logger.info(`${season}: ranked ${scored.length} traders (${upsertErrors} upsert errors)`)
   return actualUpserted
+}
+
+/**
+ * Derive WR and MDD from historical ROI snapshots for traders missing these metrics.
+ * Runs after leaderboard computation to fill gaps in platforms that don't provide WR/MDD natively.
+ * WR = percentage of days where ROI increased (from v2 snapshots)
+ * MDD = maximum peak-to-trough decline in equity curve
+ */
+async function deriveWinRateMDD(supabase: ReturnType<typeof getSupabaseAdmin>): Promise<number> {
+  const { data: missing } = await supabase.from('leaderboard_ranks')
+    .select('source, source_trader_id, win_rate, max_drawdown, season_id')
+    .or('win_rate.is.null,max_drawdown.is.null')
+    .limit(2000) // Process up to 2000 per run to stay within timeout
+
+  if (!missing?.length) return 0
+
+  // Group by trader (source + source_trader_id)
+  const traderMap = new Map<string, typeof missing>()
+  for (const row of missing) {
+    const key = `${row.source}:${row.source_trader_id}`
+    if (!traderMap.has(key)) traderMap.set(key, [])
+    traderMap.get(key)!.push(row)
+  }
+
+  let derived = 0
+  const BATCH = 20
+  const entries = [...traderMap.entries()]
+
+  for (let i = 0; i < entries.length; i += BATCH) {
+    const batch = entries.slice(i, i + BATCH)
+    await Promise.all(batch.map(async ([compositeKey, rows]) => {
+      const [platform, traderId] = [rows[0].source, rows[0].source_trader_id]
+
+      // Get historical snapshots from v2
+      const { data: snaps } = await supabase.from('trader_snapshots_v2')
+        .select('roi_pct, created_at')
+        .eq('platform', platform).eq('trader_key', traderId)
+        .not('roi_pct', 'is', null)
+        .order('created_at', { ascending: true }).limit(100)
+
+      const snapshots = (snaps || []) as Array<{ roi_pct: number; created_at: string }>
+      if (snapshots.length < 2) return
+
+      // Deduplicate by day, keep latest per day
+      const daily = new Map<string, number>()
+      for (const snap of snapshots) {
+        const day = snap.created_at?.slice(0, 10)
+        if (day) daily.set(day, snap.roi_pct)
+      }
+      const rois = [...daily.entries()].sort((a, b) => a[0].localeCompare(b[0])).map(e => e[1])
+      if (rois.length < 2) return
+
+      // Win Rate: days where ROI increased
+      let wins = 0, days = 0
+      for (let j = 1; j < rois.length; j++) { if (rois[j] > rois[j - 1]) wins++; days++ }
+      const wr = days > 0 ? parseFloat(((wins / days) * 100).toFixed(2)) : null
+
+      // MDD from equity curve
+      const eq = rois.map(r => 1 + r / 100)
+      let peak = eq[0], maxDD = 0
+      for (const e of eq) { if (e > peak) peak = e; const dd = peak > 0 ? (peak - e) / peak : 0; if (dd > maxDD) maxDD = dd }
+      const mdd = parseFloat((maxDD * 100).toFixed(2))
+
+      // Update all season rows for this trader
+      for (const row of rows) {
+        const upd: Record<string, number> = {}
+        if (row.win_rate == null && wr != null) upd.win_rate = wr
+        if (row.max_drawdown == null && mdd > 0) upd.max_drawdown = Math.min(mdd, 100)
+        if (Object.keys(upd).length > 0) {
+          await supabase.from('leaderboard_ranks').update(upd)
+            .eq('source', platform).eq('source_trader_id', traderId).eq('season_id', row.season_id)
+          derived++
+        }
+      }
+    }))
+  }
+
+  return derived
 }
