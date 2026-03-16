@@ -64,12 +64,12 @@ export class GateioFuturesConnector extends BaseConnector {
    * Gate.io profit_rate is a RATIO (9.54 = 954%), converted in normalize().
    * Pagination: 50/page, up to 500 traders.
    */
-  async discoverLeaderboard(window: Window, limit = 100, _offset = 0): Promise<DiscoverResult> {
+  async discoverLeaderboard(window: Window, limit = 750, _offset = 0): Promise<DiscoverResult> {
     // Gate.io only supports cycle=month currently (week/quarter return "system error" since ~2026-03)
     // Use month for all windows — better than no data
     const cycle = 'month'
     const pageSize = 50
-    const maxPages = Math.ceil(Math.min(limit, 500) / pageSize)
+    const maxPages = Math.ceil(Math.min(limit, 1500) / pageSize)
     const allTraders: TraderSource[] = []
 
     for (let page = 1; page <= maxPages; page++) {

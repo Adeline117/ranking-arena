@@ -260,13 +260,16 @@ async function computeSeason(
   //                  roi_pct→roi, pnl_usd→pnl, created_at→captured_at
   const batchSize = 10
   const v2Window = season // V2 uses same format as v1: '7D', '30D', '90D'
+  // Minimum trader threshold: if a platform has fewer than this many traders
+  // in the requested window, fall back to 30D data (most platforms fetch 30D)
+  const FALLBACK_THRESHOLD = 50
   for (let i = 0; i < ALL_SOURCES.length; i += batchSize) {
     const batch = ALL_SOURCES.slice(i, i + batchSize)
     const results = await Promise.all(
       batch.map(async (source) => {
         const rows: TraderRow[] = []
         const freshnessISO = freshnessISOBySource(source)
-        const { data, error } = await supabase
+        let { data, error } = await supabase
           .from('trader_snapshots_v2')
           .select('platform, trader_key, roi_pct, pnl_usd, win_rate, max_drawdown, trades_count, followers, arena_score, created_at, sharpe_ratio')
           .eq('platform', source)
@@ -274,6 +277,23 @@ async function computeSeason(
           .gte('created_at', freshnessISO)
           .order('created_at', { ascending: false })
           .limit(5000)
+
+        // Fallback: if this window has too few traders, use 30D data
+        // (many platforms only fetch one window; 30D is the most common)
+        if ((!data || data.length < FALLBACK_THRESHOLD) && v2Window !== '30D') {
+          const fallback = await supabase
+            .from('trader_snapshots_v2')
+            .select('platform, trader_key, roi_pct, pnl_usd, win_rate, max_drawdown, trades_count, followers, arena_score, created_at, sharpe_ratio')
+            .eq('platform', source)
+            .eq('window', '30D')
+            .gte('created_at', freshnessISO)
+            .order('created_at', { ascending: false })
+            .limit(5000)
+          if (!fallback.error && fallback.data && fallback.data.length > (data?.length || 0)) {
+            data = fallback.data
+            error = fallback.error
+          }
+        }
 
         if (error || !data?.length) return rows
 
