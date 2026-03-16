@@ -1,22 +1,14 @@
 /**
- * Auto-generate natural social posts using KOL style training data
+ * Auto-generate natural social posts using KOL style training data + user personas
  *
  * Usage: npx tsx scripts/social-seed/generate-posts.ts [count]
  *
- * Reads real market data + leaderboard data, then generates posts
- * in the style of 100+ crypto KOLs (stored in kol-style-training.json).
- *
- * Time distribution:
- *   - Posts spread across past 7 days, 3-5 per day
- *   - Chinese posts: UTC 10:00-16:00 (Beijing evening 18:00-00:00)
- *   - English posts: UTC 14:00-06:00 (US hours)
- *   - Weekend posts slightly fewer
- *   - Market volatility (24h change > 5%) -> more posts that day
- *
- * Comments:
- *   - 30%+ reference post content specifically
- *   - Some disagree, some ask follow-up questions
- *   - Commenters always differ from post author
+ * Features:
+ *   - Persona-driven: each user only posts about their persona's topics
+ *   - Reply chains: ~30% of posts get a reply from a contrasting persona
+ *   - Prediction polls: prediction_ask posts get poll_enabled + seed votes
+ *   - Time distribution across past 7 days with language-aware hours
+ *   - Comments: 30%+ reference post content specifically
  */
 
 import { createClient } from '@supabase/supabase-js'
@@ -27,10 +19,23 @@ const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
 const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY!
 const supabase = createClient(supabaseUrl, supabaseKey)
 
-// Load training data
+// Load training data and personas
 const trainingData = JSON.parse(
   readFileSync(join(__dirname, 'kol-style-training.json'), 'utf-8')
 )
+const personas: Persona[] = JSON.parse(
+  readFileSync(join(__dirname, 'seed-user-personas.json'), 'utf-8')
+)
+
+interface Persona {
+  handle: string
+  persona: string
+  language: 'en' | 'zh' | 'both'
+  topics: string[]
+  never_talks_about: string[]
+  tone: string
+  preferred_post_types: string[]
+}
 
 const pick = <T>(arr: T[]): T => arr[Math.floor(Math.random() * arr.length)]
 const randInt = (min: number, max: number) => min + Math.floor(Math.random() * (max - min + 1))
@@ -71,6 +76,12 @@ interface AggregateStats {
   lowestWRWithHighScore: number
 }
 
+interface UserRecord {
+  id: string
+  handle: string
+  avatar_url: string | null
+}
+
 async function getAggregateStats(): Promise<AggregateStats> {
   const [
     { count: total },
@@ -85,7 +96,6 @@ async function getAggregateStats(): Promise<AggregateStats> {
   const profitPct = Math.round(((profitable || 0) / totalTraders) * 100)
   const topPct = Math.round(((score80 || 0) / totalTraders) * 100)
 
-  // Get lowest win rate with high score
   const { data: lowWR } = await supabase
     .from('leaderboard_ranks')
     .select('win_rate')
@@ -94,7 +104,6 @@ async function getAggregateStats(): Promise<AggregateStats> {
     .limit(1)
     .maybeSingle()
 
-  // Count distinct platforms
   const { data: platforms } = await supabase
     .from('leaderboard_ranks')
     .select('source')
@@ -141,7 +150,6 @@ async function getLeaderboardData(): Promise<TraderData[]> {
     .limit(30)
 
   if (!data?.length) {
-    // fallback: try without season filter
     const { data: d2 } = await supabase
       .from('leaderboard_ranks')
       .select('handle, source, arena_score, roi, win_rate')
@@ -157,7 +165,7 @@ function mapTrader(t: Record<string, unknown>): TraderData {
   return {
     name: String(t.handle || 'unknown'),
     platform: String(t.source || 'unknown'),
-    roi: Math.round(roi > 10 ? roi : roi * 100), // handle both ratio and pct
+    roi: Math.round(roi > 10 ? roi : roi * 100),
     winRate: Math.round(Number(t.win_rate ?? 0)),
     score: Math.round(Number(t.arena_score ?? 0)),
   }
@@ -168,11 +176,68 @@ function formatPrice(price: number): string {
   return String(Math.round(price))
 }
 
+// --- Persona helpers ---
+
+function getPersona(handle: string): Persona | undefined {
+  return personas.find(p => p.handle === handle)
+}
+
+/** Pick a template category that matches the persona's preferred_post_types */
+function pickCategoryForPersona(persona: Persona): string {
+  const templates = trainingData.post_templates
+  const available = Object.keys(templates).filter(
+    cat => persona.preferred_post_types.includes(cat)
+  )
+  if (available.length === 0) return pick(Object.keys(templates))
+  return pick(available)
+}
+
+/** Filter templates to match persona language */
+function filterTemplatesByLanguage(templates: string[], persona: Persona): string[] {
+  if (persona.language === 'both') return templates
+  return templates.filter(t => {
+    const hasChinese = /[\u4e00-\u9fff]/.test(t)
+    if (persona.language === 'zh') return hasChinese
+    return !hasChinese
+  })
+}
+
+/** Find a contrasting persona for reply chains */
+function findContrastingPersona(original: Persona, allPersonas: Persona[]): Persona | undefined {
+  // Define contrasting pairs
+  const contrastMap: Record<string, string[]> = {
+    btconly: ['defichad', 'shanzhai', '0xalt'],
+    defichad: ['btconly', 'diamondh', 'cexwatcher'],
+    'quant_dev': ['suoha', 'levup', 'ta_ren'],
+    levup: ['quant_dev', 'yangsheng', 'readntrade'],
+    'alpha_sr': ['diamondh', 'shanzhai', 'btconly'],
+    diamondh: ['levup', 'boduan', 'alpha_sr'],
+    cexwatcher: ['defichad', '0xalt'],
+    'onchain_k': ['cexwatcher', 'ta_ren'],
+    botrunner: ['ta_ren', 'tradersz', 'jiucai_og'],
+    whale88: ['dushu_t', 'shanzhai'],
+    jiucai_og: ['whale88', 'quant_dev'],
+    suoha: ['yangsheng', 'readntrade', 'quant_dev'],
+    baocang: ['diamondh', 'yangsheng'],
+    macro_t: ['ta_ren', 'shanzhai'],
+    ta_ren: ['macro_t', 'botrunner'],
+    shanzhai: ['btconly', 'alpha_sr'],
+  }
+  const preferred = contrastMap[original.handle] || []
+  const candidates = allPersonas.filter(
+    p => p.handle !== original.handle && preferred.includes(p.handle)
+  )
+  if (candidates.length > 0) return pick(candidates)
+  // Fallback: any different persona
+  const others = allPersonas.filter(p => p.handle !== original.handle)
+  return others.length > 0 ? pick(others) : undefined
+}
+
 // --- Time distribution ---
 
 interface DaySlot {
-  date: Date // day start (UTC 0:00)
-  dayOfWeek: number // 0=Sun..6=Sat
+  date: Date
+  dayOfWeek: number
   isWeekend: boolean
   postCount: number
 }
@@ -189,11 +254,9 @@ function buildDaySlots(totalPosts: number, isVolatile: boolean): DaySlot[] {
     slots.push({ date, dayOfWeek, isWeekend, postCount: 0 })
   }
 
-  // Distribute posts: weekday=base, weekend=0.6*base, volatile day gets 1.5x
   const baseWeight = 1
   const weights = slots.map(s => {
     let w = s.isWeekend ? baseWeight * 0.6 : baseWeight
-    // today (d=0) gets volatility bonus
     if (s.date.toDateString() === now.toDateString() && isVolatile) w *= 1.5
     return w
   })
@@ -205,7 +268,6 @@ function buildDaySlots(totalPosts: number, isVolatile: boolean): DaySlot[] {
     slots[i].postCount = Math.min(share, remaining)
     remaining -= slots[i].postCount
   }
-  // distribute remainder
   while (remaining > 0) {
     const idx = randInt(0, slots.length - 1)
     slots[idx].postCount++
@@ -216,26 +278,20 @@ function buildDaySlots(totalPosts: number, isVolatile: boolean): DaySlot[] {
 }
 
 function randomTimeForDay(day: Date, lang: 'zh' | 'en'): Date {
-  // Chinese posts: UTC 10:00-16:00 (Beijing 18:00-00:00)
-  // English posts: UTC 14:00-06:00 (US daytime/evening)
   const ts = new Date(day)
   if (lang === 'zh') {
-    const hour = 10 + Math.random() * 6 // 10-16 UTC
+    const hour = 10 + Math.random() * 6
     ts.setUTCHours(Math.floor(hour), randInt(0, 59), randInt(0, 59))
   } else {
-    // US hours: 14:00-23:59 or 00:00-06:00
     const roll = Math.random()
     if (roll < 0.7) {
-      // 14-24 UTC (US morning-evening)
       const hour = 14 + Math.random() * 10
       ts.setUTCHours(Math.floor(hour), randInt(0, 59), randInt(0, 59))
     } else {
-      // 0-6 UTC (US late night)
       const hour = Math.random() * 6
       ts.setUTCHours(Math.floor(hour), randInt(0, 59), randInt(0, 59))
     }
   }
-  // Don't generate future timestamps
   if (ts.getTime() > Date.now()) {
     ts.setTime(Date.now() - randInt(60, 3600) * 1000)
   }
@@ -244,24 +300,51 @@ function randomTimeForDay(day: Date, lang: 'zh' | 'en'): Date {
 
 // --- Post generation ---
 
-function generatePost(market: MarketData, traders: TraderData[], stats: AggregateStats): { content: string; lang: 'en' | 'zh' } {
+function generatePost(
+  market: MarketData,
+  traders: TraderData[],
+  stats: AggregateStats,
+  persona: Persona
+): { content: string; lang: 'en' | 'zh'; category: string } {
   const templates = trainingData.post_templates
-  const category = pick(Object.keys(templates)) as string
-  const template = pick((templates as Record<string, string[]>)[category]) as string
+  const category = pickCategoryForPersona(persona)
+  const categoryTemplates = (templates as Record<string, string[]>)[category]
+
+  // Filter templates by persona language
+  let filtered = filterTemplatesByLanguage(categoryTemplates, persona)
+  if (filtered.length === 0) filtered = categoryTemplates // fallback
+
+  const template = pick(filtered)
   const trader = traders.length ? pick(traders) : { name: 'unknown', platform: 'binance', roi: 42, winRate: 55, score: 70 }
-  // Pick a second trader for versus posts
   const trader2 = traders.length > 1 ? pick(traders.filter(t => t.platform !== trader.platform)) : trader
-  const coin = pick(['$BTC', '$ETH', '$SOL'])
+
+  // For BTC maxi persona, always use BTC
+  let coin: string
+  if (persona.topics.includes('btc') && !persona.topics.includes('altcoins') && !persona.topics.includes('defi')) {
+    coin = '$BTC'
+  } else if (persona.topics.includes('defi') || persona.topics.includes('on_chain')) {
+    coin = pick(['$ETH', '$SOL'])
+  } else {
+    coin = pick(['$BTC', '$ETH', '$SOL'])
+  }
+
   const coinPrice = coin === '$BTC' ? market.btcPrice : coin === '$ETH' ? market.ethPrice : market.solPrice
   const coin24h = coin === '$BTC' ? market.btc24h : coin === '$ETH' ? market.eth24h : market.sol24h
   const direction = coin24h > 0 ? '涨' : '跌'
-  const platform = trader.platform !== 'unknown' ? trader.platform : pick(['binance', 'hyperliquid', 'okx', 'bybit', 'bitget', 'gmx', 'drift'])
 
-  // Determine language
+  // For DeFi persona, prefer DEX platforms
+  let platform: string
+  if (persona.topics.includes('defi') || persona.topics.includes('dex')) {
+    platform = pick(['hyperliquid', 'gmx', 'drift', 'vertex', 'dydx'])
+  } else if (persona.topics.includes('exchange_comparison')) {
+    platform = trader.platform !== 'unknown' ? trader.platform : pick(['binance', 'bybit', 'okx', 'bitget'])
+  } else {
+    platform = trader.platform !== 'unknown' ? trader.platform : pick(['binance', 'hyperliquid', 'okx', 'bybit', 'bitget', 'gmx', 'drift'])
+  }
+
   const isZh = /[\u4e00-\u9fff]/.test(template)
   const lang = isZh ? 'zh' as const : 'en' as const
 
-  // Fill template with real data
   const pnlStr = trader.roi > 100 ? String(Math.round(trader.roi * 100)) : String(randInt(500, 50000))
   const scoreComment = pick(['not bad', 'pain', 'improving', '还行', '太菜了', '有进步'])
   let content = template
@@ -297,7 +380,146 @@ function generatePost(market: MarketData, traders: TraderData[], stats: Aggregat
     .replace(/\{platform\}/g, platform)
     .replace(/\{feature\}/g, pick(['claim', 'watchlist', 'compare', 'filter']))
 
-  return { content, lang }
+  return { content, lang, category }
+}
+
+// --- Reply generation ---
+
+function generateReply(
+  originalContent: string,
+  originalPersona: Persona,
+  replyPersona: Persona,
+  market: MarketData,
+  traders: TraderData[]
+): string {
+  const isZh = replyPersona.language === 'zh'
+  const oc = originalContent.toLowerCase()
+
+  // BTC maxi replying to DeFi degen
+  if (replyPersona.topics.includes('btc') && !replyPersona.topics.includes('defi')) {
+    if (oc.includes('defi') || oc.includes('gmx') || oc.includes('hyperliquid') || oc.includes('dex') || oc.includes('eth') || oc.includes('sol')) {
+      return pick([
+        'all of this goes to zero eventually. btc is the only exit',
+        'imagine trading alts when btc exists',
+        'dex roi means nothing if the chain rugs',
+        'number go up technology is btc. everything else is noise',
+        'cool now price it in btc',
+      ])
+    }
+  }
+
+  // DeFi degen replying to BTC maxi
+  if (replyPersona.topics.includes('defi') && oc.includes('btc')) {
+    return pick([
+      'btc maxis still not understanding composability in 2026',
+      'cant yield farm btc tho',
+      'imagine not using on-chain perps',
+      'btc is a boomer rock. the real alpha is on-chain',
+      'wake me up when btc has smart contracts',
+    ])
+  }
+
+  // Risk manager replying to leverage degen
+  if (replyPersona.topics.includes('risk') || replyPersona.topics.includes('sharpe')) {
+    if (oc.includes('leverage') || oc.includes('liquidat') || oc.includes('rekt') || oc.includes('爆仓') || oc.includes('梭哈')) {
+      return pick([
+        'this is why position sizing exists',
+        'what was your risk/reward on that',
+        'kelly criterion would have saved you here',
+        'max drawdown on that strategy must be insane',
+        'sharpe ratio of yolo is technically undefined',
+      ])
+    }
+  }
+
+  // Skeptic replying to bullish posts
+  if (replyPersona.topics.includes('contrarian') || replyPersona.topics.includes('skepticism')) {
+    return pick([
+      'everyone is bullish. you know what that means',
+      'this is exactly what people said before the last crash',
+      'inverse this for alpha',
+      'funding rate disagrees with you',
+      'reminder that 80% of traders lose money',
+    ])
+  }
+
+  // Chinese degen replying to another degen about rekt
+  if (isZh && (oc.includes('爆仓') || oc.includes('rekt') || oc.includes('亏'))) {
+    return pick([
+      '兄弟 我也是',
+      '别说了 一样的',
+      '抱团取暖',
+      '这波我也中招了',
+      '别急 下次还会亏的',
+    ])
+  }
+
+  // Yangsheng replying to stressed traders
+  if (replyPersona.handle === 'yangsheng') {
+    return pick([
+      '先喝杯茶 别急',
+      '身体最重要 钱没了可以再赚',
+      '建议少看盘 多运动',
+      '熬夜看盘伤身体',
+      '炒币要佛系',
+    ])
+  }
+
+  // Newbie replying with questions
+  if (replyPersona.topics.includes('learning') || replyPersona.topics.includes('questions')) {
+    if (isZh) {
+      return pick([
+        '大佬 这个怎么操作的',
+        '小白问一下 这个在哪里看',
+        '刚入场 能解释一下吗',
+        '这个score是怎么算的',
+      ])
+    }
+    return pick([
+      'wait how do you check this',
+      'noob question but what platform is this on',
+      'can someone explain arena score to me',
+      'is this normal or am i reading it wrong',
+    ])
+  }
+
+  // Bot runner replying about manual trading
+  if (replyPersona.handle === 'botrunner') {
+    return pick([
+      'this is why you automate',
+      'a bot would have handled this better',
+      'humans are the weakest link in trading',
+      'my bot doesnt sleep, doesnt panic, doesnt fomo',
+    ])
+  }
+
+  // Exchange reviewer comparing
+  if (replyPersona.handle === 'cexwatcher') {
+    return pick([
+      'how does this compare to other platforms',
+      'interesting, the fees on that platform are rough though',
+      'have you tried the same strategy on bybit',
+      'the leaderboard on that exchange is way less transparent',
+    ])
+  }
+
+  // Generic contrasting reply
+  if (isZh) {
+    return pick([
+      '不太同意',
+      '我觉得反了',
+      '想法不一样 但尊重',
+      '再观察观察',
+      '有一定道理 但也不一定',
+    ])
+  }
+  return pick([
+    'interesting take but i see it differently',
+    'disagree but respect the conviction',
+    'not sure about this one',
+    'gonna need more data on that',
+    'could go either way honestly',
+  ])
 }
 
 // --- Comment generation ---
@@ -305,31 +527,25 @@ function generatePost(market: MarketData, traders: TraderData[], stats: Aggregat
 type CommentType = 'generic' | 'content_ref' | 'disagree' | 'question'
 
 function generateComment(postContent: string, postLang: 'en' | 'zh', traders: TraderData[]): string {
-  // Decide comment type with weighted distribution
-  // 30%+ content-referencing, 15% disagree, 15% question, 40% generic
   const types: CommentType[] = ['generic', 'content_ref', 'disagree', 'question']
   const weights = [40, 30, 15, 15]
   const ctype = weightedPick(types, weights)
 
-  const c = postContent.toLowerCase()
-  const isZh = /[\u4e00-\u9fff]/.test(postContent)
-
   switch (ctype) {
     case 'content_ref':
-      return generateContentRefComment(postContent, isZh, traders)
+      return generateContentRefComment(postContent, /[\u4e00-\u9fff]/.test(postContent), traders)
     case 'disagree':
-      return generateDisagreeComment(postContent, isZh)
+      return generateDisagreeComment(postContent, /[\u4e00-\u9fff]/.test(postContent))
     case 'question':
-      return generateQuestionComment(postContent, isZh)
+      return generateQuestionComment(postContent, /[\u4e00-\u9fff]/.test(postContent))
     default:
-      return generateGenericComment(postContent, isZh)
+      return generateGenericComment(postContent, /[\u4e00-\u9fff]/.test(postContent))
   }
 }
 
 function generateContentRefComment(post: string, isZh: boolean, traders: TraderData[]): string {
   const c = post.toLowerCase()
 
-  // Extract specific references from the post
   const coinMatch = c.match(/\$?(btc|eth|sol)/i)
   const roiMatch = post.match(/(\d+)%?\s*(roi|收益)/i) || post.match(/(roi|收益)\s*(\d+)/i)
   const platformMatch = c.match(/(binance|bybit|okx|bitget|hyperliquid|gmx|drift|mexc)/i)
@@ -372,18 +588,8 @@ function generateContentRefComment(post: string, isZh: boolean, traders: TraderD
   }
 
   if (roiMatch) {
-    if (isZh) {
-      return pick([
-        '这个roi真的假的',
-        '收益太猛了',
-        '怎么做到的 求带',
-      ])
-    }
-    return pick([
-      'that roi is insane',
-      'how tho',
-      'need that kind of returns',
-    ])
+    if (isZh) return pick(['这个roi真的假的', '收益太猛了', '怎么做到的 求带'])
+    return pick(['that roi is insane', 'how tho', 'need that kind of returns'])
   }
 
   if (priceMatch) {
@@ -401,37 +607,21 @@ function generateContentRefComment(post: string, isZh: boolean, traders: TraderD
     ])
   }
 
-  // Fallback: reference the general vibe
-  if (isZh) {
-    return pick(['说的有道理', '确实是这样', '我也这么觉得', '说到点子上了'])
-  }
+  if (isZh) return pick(['说的有道理', '确实是这样', '我也这么觉得', '说到点子上了'])
   return pick(['this is the take', 'nailed it', 'exactly what i was thinking', 'solid point'])
 }
 
 function generateDisagreeComment(post: string, isZh: boolean): string {
   if (isZh) {
     return pick([
-      '不一定吧',
-      '我觉得反了',
-      '别太乐观了',
-      'risky imo',
-      '这个逻辑有问题',
-      '再看看吧 别急',
-      '不太同意',
-      '小心被套',
-      '上次也这么说 结果呢',
+      '不一定吧', '我觉得反了', '别太乐观了', 'risky imo',
+      '这个逻辑有问题', '再看看吧 别急', '不太同意', '小心被套', '上次也这么说 结果呢',
     ])
   }
   return pick([
-    'idk about that',
-    'risky imo',
-    'disagree but ok',
-    'careful with that',
-    'not so sure about this one',
-    'could go either way tbh',
-    'last time people said this...',
-    'hope you have a stop loss',
-    'gonna age badly imo',
+    'idk about that', 'risky imo', 'disagree but ok', 'careful with that',
+    'not so sure about this one', 'could go either way tbh', 'last time people said this...',
+    'hope you have a stop loss', 'gonna age badly imo',
   ])
 }
 
@@ -441,28 +631,13 @@ function generateQuestionComment(post: string, isZh: boolean): string {
   const platformMatch = c.match(/(binance|bybit|okx|bitget|hyperliquid|gmx|drift|mexc)/i)
 
   if (isZh) {
-    const qs = [
-      '哪个交易所的',
-      '什么时候进的',
-      '仓位多大',
-      '止损在哪',
-      '能说说逻辑吗',
-      '链接有吗',
-    ]
+    const qs = ['哪个交易所的', '什么时候进的', '仓位多大', '止损在哪', '能说说逻辑吗', '链接有吗']
     if (platformMatch) qs.push(`${platformMatch[1]}怎么看排行榜`)
     if (coinMatch) qs.push(`${coinMatch[1].toUpperCase()}目标价多少`)
     return pick(qs)
   }
 
-  const qs = [
-    'which trader?',
-    'link?',
-    'what exchange?',
-    'entry price?',
-    'whats your target',
-    'how long you holding',
-    'what timeframe',
-  ]
+  const qs = ['which trader?', 'link?', 'what exchange?', 'entry price?', 'whats your target', 'how long you holding', 'what timeframe']
   if (platformMatch) qs.push(`how do you find traders on ${platformMatch[1]}?`)
   if (coinMatch) qs.push(`what's your ${coinMatch[1].toUpperCase()} target?`)
   return pick(qs)
@@ -482,7 +657,6 @@ function generateGenericComment(post: string, isZh: boolean): string {
   if (c.includes('?') || c.includes('吗') || c.includes('how')) {
     pool.push(...templates.question_response)
   }
-  // Always add general
   if (isZh) {
     pool.push(...templates.agreement, ...templates.surprise, ...templates.humor)
   } else {
@@ -496,7 +670,7 @@ function generateGenericComment(post: string, isZh: boolean): string {
 
 async function main() {
   const count = parseInt(process.argv[2] || '10')
-  console.log(`Generating ${count} posts...`)
+  console.log(`Generating ${count} posts with persona system...`)
 
   const [market, traders, stats] = await Promise.all([getMarketData(), getLeaderboardData(), getAggregateStats()])
   console.log(`Market: BTC $${market.btcPrice} (${market.btc24h}%) ETH $${market.ethPrice} (${market.eth24h}%) SOL $${market.solPrice} (${market.sol24h}%)`)
@@ -517,8 +691,23 @@ async function main() {
     return
   }
   console.log(`Seed users: ${users.length}`)
+  console.log(`Personas loaded: ${personas.length}`)
 
-  // Build time slots across 7 days
+  // Build handle -> user map
+  const userByHandle = new Map<string, UserRecord>()
+  for (const u of users) {
+    userByHandle.set(u.handle, u)
+  }
+
+  // Only use users that have a persona defined
+  const usersWithPersonas = users.filter(u => getPersona(u.handle))
+  const usersWithoutPersonas = users.filter(u => !getPersona(u.handle))
+  if (usersWithoutPersonas.length > 0) {
+    console.log(`  Users without persona (will be used less): ${usersWithoutPersonas.map(u => u.handle).join(', ')}`)
+  }
+  console.log(`  Users with persona: ${usersWithPersonas.length}`)
+
+  // Build time slots
   const daySlots = buildDaySlots(count, market.isVolatile)
   console.log(`\nDay distribution:`)
   daySlots.forEach(s => {
@@ -527,13 +716,30 @@ async function main() {
   })
 
   let postsAdded = 0
+  let repliesAdded = 0
   let commentsAdded = 0
+  let pollsAdded = 0
+
+  // Track posts per user to ensure diversity
+  const postsPerUser = new Map<string, number>()
 
   for (const slot of daySlots) {
     for (let p = 0; p < slot.postCount; p++) {
-      const { content, lang } = generatePost(market, traders, stats)
-      const user = pick(users)
+      // Pick user with persona, preferring users who have posted less
+      const user = pickLeastPosted(usersWithPersonas, postsPerUser)
+      const persona = getPersona(user.handle)!
+
+      const { content, lang, category } = generatePost(market, traders, stats, persona)
       const ts = randomTimeForDay(slot.date, lang)
+
+      // Prediction polls: set poll data for prediction_ask posts
+      const isPrediction = category === 'prediction_ask'
+      const pollData = isPrediction ? {
+        poll_enabled: true,
+        poll_bull: randInt(10, 35),
+        poll_bear: randInt(8, 30),
+        poll_wait: randInt(3, 15),
+      } : {}
 
       const { error } = await supabase.from('posts').insert({
         author_id: user.id,
@@ -545,6 +751,7 @@ async function main() {
         hot_score: randInt(15, 55),
         like_count: randInt(1, 20),
         created_at: ts.toISOString(),
+        ...pollData,
       })
 
       if (error) {
@@ -552,6 +759,8 @@ async function main() {
         continue
       }
       postsAdded++
+      postsPerUser.set(user.handle, (postsPerUser.get(user.handle) || 0) + 1)
+      if (isPrediction) pollsAdded++
 
       // Get the post id
       const { data: newPost } = await supabase
@@ -564,16 +773,49 @@ async function main() {
 
       if (!newPost) continue
 
-      // Add 2-4 comments (from different users)
+      const timeStr = ts.toISOString().replace('T', ' ').slice(0, 16)
+      const pollTag = isPrediction ? ' [POLL]' : ''
+      console.log(`  [${timeStr}] @${user.handle} (${lang}, ${category}${pollTag}): ${content.slice(0, 60)}...`)
+
+      // --- Reply chain: ~30% chance ---
+      if (Math.random() < 0.3 && usersWithPersonas.length > 1) {
+        const contrastPersona = findContrastingPersona(persona, personas)
+        if (contrastPersona) {
+          const replyUser = userByHandle.get(contrastPersona.handle)
+          if (replyUser && replyUser.id !== user.id) {
+            const replyContent = generateReply(content, persona, contrastPersona, market, traders)
+            const replyOffsetMs = randInt(1, 6) * 3600000 + randInt(0, 3600) * 1000
+            const replyTs = new Date(Math.min(ts.getTime() + replyOffsetMs, Date.now()))
+
+            // Insert reply as a post with original_post_id (quote/reply)
+            const { error: replyErr } = await supabase.from('posts').insert({
+              author_id: replyUser.id,
+              author_handle: replyUser.handle,
+              author_avatar_url: replyUser.avatar_url,
+              title: '',
+              content: replyContent,
+              status: 'active',
+              hot_score: randInt(10, 40),
+              like_count: randInt(1, 12),
+              original_post_id: newPost.id,
+              created_at: replyTs.toISOString(),
+            })
+
+            if (!replyErr) {
+              repliesAdded++
+              console.log(`    ↳ @${replyUser.handle} replied: ${replyContent.slice(0, 50)}...`)
+            }
+          }
+        }
+      }
+
+      // --- Comments ---
       const numComments = randInt(2, 4)
       const otherUsers = users.filter(u => u.id !== user.id)
       if (otherUsers.length === 0) continue
 
-      // Track which users already commented on this post
       const usedCommenters = new Set<string>()
-
       for (let j = 0; j < numComments; j++) {
-        // Pick a commenter not yet used on this post
         const available = otherUsers.filter(u => !usedCommenters.has(u.id))
         if (available.length === 0) break
         const commenter = pick(available)
@@ -601,13 +843,23 @@ async function main() {
         .select('*', { count: 'exact', head: true })
         .eq('post_id', newPost.id)
       await supabase.from('posts').update({ comment_count: cmtCount || 0 }).eq('id', newPost.id)
-
-      const timeStr = ts.toISOString().replace('T', ' ').slice(0, 16)
-      console.log(`  [${timeStr}] @${user.handle} (${lang}): ${content.slice(0, 60)}...`)
     }
   }
 
-  console.log(`\nDone: ${postsAdded} posts, ${commentsAdded} comments added`)
+  console.log(`\nDone: ${postsAdded} posts, ${repliesAdded} reply chains, ${commentsAdded} comments, ${pollsAdded} polls`)
+  console.log(`\nPosts per user:`)
+  const sorted = [...postsPerUser.entries()].sort((a, b) => b[1] - a[1])
+  for (const [handle, count] of sorted) {
+    const p = getPersona(handle)
+    console.log(`  @${handle} (${p?.language || '??'}): ${count} posts — ${p?.persona.slice(0, 50) || 'no persona'}`)
+  }
+}
+
+/** Pick user who has posted least, for diversity */
+function pickLeastPosted(users: UserRecord[], counts: Map<string, number>): UserRecord {
+  const minCount = Math.min(...users.map(u => counts.get(u.handle) || 0))
+  const leastPosted = users.filter(u => (counts.get(u.handle) || 0) === minCount)
+  return pick(leastPosted)
 }
 
 main().catch(console.error)
