@@ -38,6 +38,8 @@ interface CopinTraderStats {
   totalLose: number
   totalLiquidation?: number
   totalFee?: number
+  maxDrawdown?: number
+  maxDrawdownPnl?: number
 }
 
 interface CopinLeaderboardResponse {
@@ -92,6 +94,13 @@ async function buildCopinStatsDetail(
     ? Math.round((totalWin / totalTrades) * 1000) / 10
     : null
 
+  // Copin may provide maxDrawdown (as negative percentage or absolute value)
+  let maxDrawdown: number | null = null
+  if (copinStats.maxDrawdown != null && copinStats.maxDrawdown !== 0) {
+    maxDrawdown = Math.min(Math.abs(copinStats.maxDrawdown), 100)
+    maxDrawdown = Math.round(maxDrawdown * 100) / 100
+  }
+
   return {
     totalTrades: totalTrades > 0 ? totalTrades : null,
     profitableTradesPct,
@@ -101,7 +110,7 @@ async function buildCopinStatsDetail(
     largestWin: null,
     largestLoss: null,
     sharpeRatio: null,
-    maxDrawdown: null,
+    maxDrawdown,
     currentDrawdown: null,
     volatility: null,
     copiersCount: null,

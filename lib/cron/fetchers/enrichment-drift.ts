@@ -98,7 +98,19 @@ export async function fetchDriftPositionHistory(
 }
 
 /**
- * Build Drift equity curve from fill history.
+ * Drift snapshots API response item.
+ * The snapshots/trading endpoint returns daily snapshots with cumulative PnL.
+ */
+interface DriftSnapshot {
+  epochTs?: number
+  cumulativeRealizedPnl?: number
+  cumulativePerpPnl?: number
+  allTimeTotalPnl?: number
+}
+
+/**
+ * Fetch Drift equity curve from snapshots API (preferred — gives daily PnL curve).
+ * Fallback: build from fill history.
  */
 export async function fetchDriftEquityCurve(
   authority: string,
@@ -111,6 +123,46 @@ export async function fetchDriftEquityCurve(
 
   const mainWork = async (): Promise<EquityCurvePoint[]> => {
     try {
+      // Strategy 1: Use snapshots/trading API for accurate daily equity curve
+      try {
+        const snapUrl = `${DATA_API}/authority/${authority}/snapshots/trading?days=${days}`
+        const snapshots = await fetchJson<DriftSnapshot[]>(snapUrl, { timeoutMs: 15000 })
+
+        if (Array.isArray(snapshots) && snapshots.length >= 2) {
+          const points: EquityCurvePoint[] = snapshots
+            .filter((s) => s.epochTs != null)
+            .map((s) => {
+              const pnl = s.cumulativeRealizedPnl ?? s.allTimeTotalPnl ?? s.cumulativePerpPnl ?? 0
+              // Drift values are in USDC base units (divide by 1e6)
+              const pnlUsd = Math.abs(pnl) > 1e10 ? pnl / 1e6 : pnl
+              return {
+                date: new Date((s.epochTs ?? 0) * 1000).toISOString().split('T')[0],
+                roi: 0,
+                pnl: pnlUsd,
+              }
+            })
+            .sort((a, b) => a.date.localeCompare(b.date))
+
+          // Deduplicate by date (keep last per day)
+          const dateMap = new Map<string, EquityCurvePoint>()
+          for (const p of points) dateMap.set(p.date, p)
+          const deduped = [...dateMap.values()].sort((a, b) => a.date.localeCompare(b.date))
+
+          if (deduped.length >= 2) {
+            // Compute ROI relative to first point
+            const basePnl = deduped[0].pnl ?? 0
+            const estimatedCapital = Math.abs(basePnl) > 0 ? Math.abs(basePnl) * 5 : 10000
+            for (const p of deduped) {
+              p.roi = (((p.pnl ?? 0) - basePnl) / estimatedCapital) * 100
+            }
+            return deduped
+          }
+        }
+      } catch (err) {
+        logger.warn(`[drift] Snapshots API failed for ${authority}, falling back to fills: ${err instanceof Error ? err.message : String(err)}`)
+      }
+
+      // Strategy 2: Fallback to building from fill history
       const positions = await fetchDriftPositionHistory(authority, 500)
       if (positions.length === 0) return []
       return buildEquityCurveFromPositions(positions, days)
