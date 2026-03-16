@@ -116,7 +116,7 @@ export const PostListItem = memo(function PostListItem({
             {language === 'zh' ? (p.group_name || t('group')) : (p.group_name_en || p.group_name || t('group'))}
           </Link>
         ) : null}
-        <AvatarLink handle={p.author_handle} avatarUrl={p.author_avatar_url} isPro={p.author_is_pro} showProBadge={p.author_show_pro_badge} />
+        <AvatarLink handle={p.author_handle} avatarUrl={p.author_avatar_url} isPro={p.author_is_pro} showProBadge={p.author_show_pro_badge} isOfficial={p.author_handle === 'arena_bot'} />
       </div>
 
       {/* Title + Tags */}

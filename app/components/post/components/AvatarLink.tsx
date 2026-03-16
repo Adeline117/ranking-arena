@@ -11,9 +11,10 @@ interface AvatarLinkProps {
   avatarUrl?: string | null
   isPro?: boolean
   showProBadge?: boolean
+  isOfficial?: boolean
 }
 
-export function AvatarLink({ handle, avatarUrl, isPro, showProBadge = true }: AvatarLinkProps) {
+export function AvatarLink({ handle, avatarUrl, isPro, showProBadge = true, isOfficial }: AvatarLinkProps) {
   const { t } = useLanguage()
   if (!handle) return null
 
@@ -67,8 +68,23 @@ export function AvatarLink({ handle, avatarUrl, isPro, showProBadge = true }: Av
         </span>
         {shouldShowBadge && <ProBadgeOverlay position="bottom-right" />}
       </span>
-      <span style={{ fontWeight: 700, fontSize: 12, color: tokens.colors.text.secondary, letterSpacing: '-0.01em', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0 }}>
+      <span style={{ fontWeight: 700, fontSize: 12, color: tokens.colors.text.secondary, letterSpacing: '-0.01em', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0, display: 'inline-flex', alignItems: 'center', gap: 4 }}>
         {handle}
+        {isOfficial && (
+          <span style={{
+            fontSize: 9,
+            fontWeight: 800,
+            color: tokens.colors.accent.brand,
+            background: `color-mix(in srgb, ${tokens.colors.accent.brand} 12%, transparent)`,
+            padding: '1px 5px',
+            borderRadius: 4,
+            letterSpacing: 0.5,
+            textTransform: 'uppercase' as const,
+            flexShrink: 0,
+          }}>
+            Official
+          </span>
+        )}
       </span>
     </Link>
   )
