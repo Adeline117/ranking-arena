@@ -194,35 +194,59 @@ export async function fetchDriftStatsDetail(
 
   const mainWork = async (): Promise<StatsDetail | null> => {
     try {
-      // Fetch user stats and fills in parallel (with error tolerance)
-      const results = await Promise.allSettled([
-        fetchJson<DriftUserStats>(`${DATA_API}/stats/user/${authority}`, { timeoutMs: 10000 })
-          .catch(() => null),
-        fetchDriftPositionHistory(authority, 500),
-      ])
-      
-      const stats = results[0].status === 'fulfilled' ? results[0].value : null
-      const positions = results[1].status === 'fulfilled' ? results[1].value : []
-      
-      if (results[0].status === 'rejected') {
-        console.error(`Drift stats fetch failed for ${authority}:`, results[0].reason)
-      }
-      if (results[1].status === 'rejected') {
-        console.error(`Drift positions fetch failed for ${authority}:`, results[1].reason)
+      // Strategy 1: Derive WR/MDD from snapshots API (daily cumulativeRealizedPnl)
+      // This is far more reliable than fills which often return empty
+      let winRate: number | null = null
+      let maxDrawdown: number | null = null
+      let totalDays = 0
+
+      try {
+        const snapUrl = `${DATA_API}/authority/${authority}/snapshots/trading?days=90`
+        const snapResp = await fetchJson<{ accounts?: Array<{ snapshots?: Array<{ ts: number; cumulativeRealizedPnl: string }> }> }>(snapUrl, { timeoutMs: 15000 })
+        const snaps = snapResp?.accounts?.[0]?.snapshots?.sort((a, b) => a.ts - b.ts) || []
+
+        if (snaps.length >= 3) {
+          let wins = 0, losses = 0, peak = 0, mdd = 0
+          for (let i = 1; i < snaps.length; i++) {
+            const prevPnl = parseFloat(String(snaps[i - 1].cumulativeRealizedPnl))
+            const currPnl = parseFloat(String(snaps[i].cumulativeRealizedPnl))
+            const delta = currPnl - prevPnl
+            if (delta > 0.01) wins++
+            else if (delta < -0.01) losses++
+            // MDD from cumulative PnL
+            if (currPnl > peak) peak = currPnl
+            if (peak > 0) {
+              const dd = ((peak - currPnl) / Math.abs(peak)) * 100
+              if (dd > mdd) mdd = dd
+            }
+          }
+          totalDays = wins + losses
+          if (totalDays >= 3) {
+            winRate = Math.round((wins / totalDays) * 10000) / 100
+          }
+          if (mdd > 0.01 && mdd <= 100) {
+            maxDrawdown = Math.round(mdd * 100) / 100
+          }
+        }
+      } catch (snapErr) {
+        logger.warn(`[drift] Snapshots failed for ${authority}: ${snapErr instanceof Error ? snapErr.message : String(snapErr)}`)
       }
 
+      // Strategy 2: Fallback to fills if snapshots didn't provide data
+      const positions = await fetchDriftPositionHistory(authority, 500)
       const derivedStats = computeStatsFromPositions(positions)
 
+      // Prefer snapshot-derived WR/MDD over fills-derived
       return {
-        totalTrades: derivedStats.totalTrades ?? null,
-        profitableTradesPct: derivedStats.profitableTradesPct ?? null,
+        totalTrades: derivedStats.totalTrades ?? totalDays ?? null,
+        profitableTradesPct: winRate ?? derivedStats.profitableTradesPct ?? null,
         avgHoldingTimeHours: null,
         avgProfit: derivedStats.avgProfit ?? null,
         avgLoss: derivedStats.avgLoss ?? null,
         largestWin: derivedStats.largestWin ?? null,
         largestLoss: derivedStats.largestLoss ?? null,
-        sharpeRatio: null, // Computed from equity curve
-        maxDrawdown: derivedStats.maxDrawdown ?? null,
+        sharpeRatio: null,
+        maxDrawdown: maxDrawdown ?? derivedStats.maxDrawdown ?? null,
         currentDrawdown: null,
         volatility: null,
         copiersCount: null,
