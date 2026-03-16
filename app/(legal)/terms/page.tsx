@@ -170,9 +170,9 @@ export default function TermsOfServicePage() {
           </ul>
           <p style={{ marginTop: 12 }}>
             Users may delete their own accounts at any time through account settings or
-            by contacting{' '}
-            <a href="mailto:support@arenafi.org" style={{ color: 'var(--color-accent-primary)' }}>
-              support@arenafi.org
+            by messaging{' '}
+            <a href="/u/adelinewen1107" style={{ color: 'var(--color-accent-primary)' }}>
+              @adelinewen1107
             </a>.
           </p>
         </div>
@@ -232,9 +232,9 @@ export default function TermsOfServicePage() {
         <h2 style={h2Style}>10. Contact</h2>
         <div style={bodyStyle}>
           <p>
-            For questions about these Terms, contact us at{' '}
-            <a href="mailto:support@arenafi.org" style={{ color: 'var(--color-accent-primary)' }}>
-              support@arenafi.org
+            For questions about these Terms, send a message to{' '}
+            <a href="/u/adelinewen1107" style={{ color: 'var(--color-accent-primary)' }}>
+              @adelinewen1107
             </a>
           </p>
         </div>
@@ -266,7 +266,7 @@ export default function TermsOfServicePage() {
         <div style={bodyStyle}>
           <ul style={listStyle}>
             <li style={liStyle}>Arena 不对基于本平台信息的任何交易损失或结果负责</li>
-            <li style={liStyle}>所有数据均按"原样"提供，不对准确性、完整性或时效性作任何保证</li>
+            <li style={liStyle}>所有数据均按&ldquo;原样&rdquo;提供，不对准确性、完整性或时效性作任何保证</li>
             <li style={liStyle}>交易所数据可能存在延迟、不完整或超出我们控制范围的错误</li>
             <li style={liStyle}>过往表现不保证未来收益。排名仅反映历史数据</li>
             <li style={liStyle}>加密货币交易涉及重大亏损风险，不适合所有投资者</li>
@@ -313,8 +313,8 @@ export default function TermsOfServicePage() {
           </ul>
           <p style={{ marginTop: 12 }}>
             用户可随时通过账户设置或联系{' '}
-            <a href="mailto:support@arenafi.org" style={{ color: 'var(--color-accent-primary)' }}>
-              support@arenafi.org
+            <a href="/u/adelinewen1107" style={{ color: 'var(--color-accent-primary)' }}>
+              @adelinewen1107
             </a>{' '}
             删除自己的账户。
           </p>
@@ -364,9 +364,9 @@ export default function TermsOfServicePage() {
         <h2 style={h2Style}>10. 联系方式</h2>
         <div style={bodyStyle}>
           <p>
-            如对本条款有任何疑问，请联系我们：{' '}
-            <a href="mailto:support@arenafi.org" style={{ color: 'var(--color-accent-primary)' }}>
-              support@arenafi.org
+            如对本条款有任何疑问，请私信联系：{' '}
+            <a href="/u/adelinewen1107" style={{ color: 'var(--color-accent-primary)' }}>
+              @adelinewen1107
             </a>
           </p>
         </div>

@@ -155,9 +155,9 @@ export default function PrivacyPolicyPage() {
           </ul>
           <div style={calloutStyle}>
             <p style={{ margin: 0 }}>
-              To exercise any of these rights, contact us at{' '}
-              <a href="mailto:support@arenafi.org" style={{ color: 'var(--color-accent-primary)' }}>
-                support@arenafi.org
+              To exercise any of these rights, send a message to{' '}
+              <a href="/u/adelinewen1107" style={{ color: 'var(--color-accent-primary)' }}>
+                @adelinewen1107
               </a>
             </p>
           </div>
@@ -204,9 +204,9 @@ export default function PrivacyPolicyPage() {
         <h2 style={h2Style}>10. Contact</h2>
         <div style={bodyStyle}>
           <p>
-            For questions or concerns about this Privacy Policy, please contact us at{' '}
-            <a href="mailto:support@arenafi.org" style={{ color: 'var(--color-accent-primary)' }}>
-              support@arenafi.org
+            For questions or concerns about this Privacy Policy, please send a message to{' '}
+            <a href="/u/adelinewen1107" style={{ color: 'var(--color-accent-primary)' }}>
+              @adelinewen1107
             </a>
           </p>
         </div>
@@ -223,7 +223,7 @@ export default function PrivacyPolicyPage() {
         <h2 style={h2Style}>1. 概述</h2>
         <div style={bodyStyle}>
           <p>
-            Arena（以下简称"我们"）运营网站 <strong>arenafi.org</strong> 及相关服务。本隐私政策说明我们收集哪些个人信息、如何使用这些信息，以及您对这些信息享有的权利。
+            Arena（以下简称&ldquo;我们&rdquo;）运营网站 <strong>arenafi.org</strong> 及相关服务。本隐私政策说明我们收集哪些个人信息、如何使用这些信息，以及您对这些信息享有的权利。
           </p>
         </div>
       </section>
@@ -300,9 +300,9 @@ export default function PrivacyPolicyPage() {
           </ul>
           <div style={calloutStyle}>
             <p style={{ margin: 0 }}>
-              如需行使上述任何权利，请联系我们：{' '}
-              <a href="mailto:support@arenafi.org" style={{ color: 'var(--color-accent-primary)' }}>
-                support@arenafi.org
+              如需行使上述任何权利，请私信联系：{' '}
+              <a href="/u/adelinewen1107" style={{ color: 'var(--color-accent-primary)' }}>
+                @adelinewen1107
               </a>
             </p>
           </div>
@@ -340,9 +340,9 @@ export default function PrivacyPolicyPage() {
         <h2 style={h2Style}>10. 联系方式</h2>
         <div style={bodyStyle}>
           <p>
-            如对本隐私政策有任何疑问或顾虑，请联系我们：{' '}
-            <a href="mailto:support@arenafi.org" style={{ color: 'var(--color-accent-primary)' }}>
-              support@arenafi.org
+            如对本隐私政策有任何疑问或顾虑，请私信联系：{' '}
+            <a href="/u/adelinewen1107" style={{ color: 'var(--color-accent-primary)' }}>
+              @adelinewen1107
             </a>
           </p>
         </div>
