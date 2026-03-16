@@ -64,12 +64,12 @@ export class BinanceSpotConnector extends BaseConnector {
 
   async discoverLeaderboard(
     window: Window,
-    limit: number = 100,
+    limit: number = 500,
     offset: number = 0
   ): Promise<DiscoverResult> {
     const periodType = WINDOW_MAP[window]
     const pageSize = Math.min(limit, 20)
-    const maxPages = Math.ceil(Math.min(limit, 500) / pageSize)
+    const maxPages = Math.ceil(Math.min(limit, 1500) / pageSize)
     const allTraders: TraderSource[] = []
 
     for (let page = Math.floor(offset / pageSize) + 1; page <= maxPages + Math.floor(offset / pageSize); page++) {
