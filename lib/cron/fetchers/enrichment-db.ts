@@ -253,18 +253,27 @@ export async function upsertPortfolio(
     captured_at: capturedAt,
   }))
 
-  // Use batch upsert instead of DELETE+INSERT
+  // DELETE old rows then INSERT new snapshot (unique constraint includes captured_at,
+  // so upsert with a new timestamp never matches — must replace instead)
+  const { error: delError } = await supabase
+    .from('trader_portfolio')
+    .delete()
+    .eq('source', source)
+    .eq('source_trader_id', traderId)
+
+  if (delError) {
+    console.error(`Portfolio delete failed for ${source}/${traderId}:`, delError)
+    return { saved: 0, error: delError.message }
+  }
+
   const BATCH_SIZE = 25
   let saved = 0
   for (let i = 0; i < records.length; i += BATCH_SIZE) {
     const batch = records.slice(i, i + BATCH_SIZE)
     const { error } = await supabase
       .from('trader_portfolio')
-      .upsert(batch, { 
-        onConflict: 'source,source_trader_id,symbol',
-        ignoreDuplicates: false 
-      })
-    
+      .insert(batch)
+
     if (error) {
       console.error(`Batch ${i} failed:`, error)
       return { saved, error: error.message }
