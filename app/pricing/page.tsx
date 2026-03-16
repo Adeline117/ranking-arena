@@ -5,9 +5,29 @@ import PricingPageClient from './PricingPageClient'
 
 const logger = createLogger('pricing-page')
 
+const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://www.arenafi.org'
+
 export const metadata: Metadata = {
   title: 'Pricing',
   description: 'Arena Pro membership plans - unlock advanced trading analytics, alerts, and exclusive features.',
+  alternates: {
+    canonical: `${baseUrl}/pricing`,
+  },
+  openGraph: {
+    title: 'Pricing — Arena Pro',
+    description: 'Unlock advanced trading analytics, alerts, and exclusive features with Arena Pro membership.',
+    url: `${baseUrl}/pricing`,
+    siteName: 'Arena',
+    type: 'website',
+    images: [{ url: `${baseUrl}/og-image.png`, width: 1200, height: 630, alt: 'Arena Pro Pricing' }],
+  },
+  twitter: {
+    card: 'summary_large_image',
+    title: 'Pricing — Arena Pro',
+    description: 'Unlock advanced trading analytics, alerts, and exclusive features with Arena Pro membership.',
+    images: [`${baseUrl}/og-image.png`],
+    creator: '@arenafi',
+  },
 }
 
 export const dynamic = 'force-dynamic'
