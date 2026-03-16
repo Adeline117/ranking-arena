@@ -49,6 +49,10 @@ const StatsPage = dynamic(() => import('@/app/components/trader/stats/StatsPage'
 const PortfolioTable = dynamic(() => import('@/app/components/trader/PortfolioTable'), {
   loading: () => <RankingSkeleton />,
 })
+const PostFeed = dynamic(() => import('@/app/components/post/PostFeed'), {
+  ssr: false,
+  loading: () => <RankingSkeleton />,
+})
 const SwipeableView = dynamic(() => import('@/app/components/ui/SwipeableView'), { ssr: false })
 
 /** @deprecated UI-specific. Will be replaced by UnifiedTrader adapter. */
@@ -74,8 +78,7 @@ export interface UnregisteredTraderData {
   execution_score?: number | null
 }
 
-type TraderTabKey = 'overview' | 'stats' | 'portfolio'
-const TAB_KEYS: TraderTabKey[] = ['overview', 'stats', 'portfolio']
+type TraderTabKey = 'overview' | 'stats' | 'portfolio' | 'posts'
 type TraderPageData = import('@/app/u/[handle]/components/types').TraderPageData
 
 // Unwrap the API envelope { success, data } to get the raw TraderPageData
@@ -156,10 +159,14 @@ export default function TraderProfileClient({ data, serverTraderData, claimedUse
     return () => obs.disconnect()
   }, [])
 
-  // Tabs
+  // Tabs — conditionally include 'posts' for claimed traders
+  const tabKeys: TraderTabKey[] = useMemo(
+    () => claimedUser ? ['overview', 'stats', 'portfolio', 'posts'] : ['overview', 'stats', 'portfolio'],
+    [claimedUser]
+  )
   const urlTab = searchParams.get('tab')
   const [activeTab, setActiveTab] = useState<TraderTabKey>(
-    urlTab && ['overview', 'stats', 'portfolio'].includes(urlTab) ? urlTab as TraderTabKey : 'overview'
+    urlTab && tabKeys.includes(urlTab as TraderTabKey) ? urlTab as TraderTabKey : 'overview'
   )
 
   const handleTabChange = useCallback((tab: TraderTabKey) => {
@@ -315,12 +322,13 @@ export default function TraderProfileClient({ data, serverTraderData, claimedUse
           onTabChange={handleTabChange}
           isPro={isPro}
           onProRequired={() => router.push('/pricing')}
+          extraTabs={claimedUser ? ['posts'] : undefined}
         />
 
         {/* Tab Content — swipeable on mobile */}
         <SwipeableView
-          activeIndex={TAB_KEYS.indexOf(activeTab)}
-          onIndexChange={(i) => handleTabChange(TAB_KEYS[i])}
+          activeIndex={tabKeys.indexOf(activeTab)}
+          onIndexChange={(i) => handleTabChange(tabKeys[i])}
         >
           {/* Overview Tab */}
           <Box style={{ minHeight: 200 }}>
@@ -521,6 +529,24 @@ export default function TraderProfileClient({ data, serverTraderData, claimedUse
               />
             )}
           </Box>
+
+          {/* Posts Tab (only for claimed traders) */}
+          {claimedUser && (
+            <Box style={{ minHeight: 200 }}>
+              {activeTab === 'posts' && (
+                <Box bg="secondary" p={4} radius="lg" border="primary" style={{ maxWidth: 900 }}>
+                  <Box style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: tokens.spacing[4] }}>
+                    <Text size="lg" weight="black">{t('posts')}</Text>
+                  </Box>
+                  <PostFeed
+                    authorHandle={claimedUser.handle}
+                    variant="compact"
+                    showSortButtons
+                  />
+                </Box>
+              )}
+            </Box>
+          )}
         </SwipeableView>
 
         <style>{`
