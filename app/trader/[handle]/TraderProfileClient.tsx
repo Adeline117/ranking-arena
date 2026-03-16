@@ -83,7 +83,7 @@ type TraderTabKey = 'overview' | 'stats' | 'portfolio' | 'posts'
 
 /** Platforms that fundamentally do not provide position history data */
 const NO_PORTFOLIO_PLATFORMS = new Set([
-  'htx_futures', 'gateio', 'mexc', 'btcc', 'etoro', 'coinex',
+  'htx_futures', 'mexc', 'btcc', 'etoro', 'coinex',
   'lbank', 'bingx', 'toobit', 'xt', 'weex', 'phemex', 'blofin', 'bitfinex',
 ])
 type TraderPageData = import('@/app/u/[handle]/components/types').TraderPageData
