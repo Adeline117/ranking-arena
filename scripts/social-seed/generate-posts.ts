@@ -62,6 +62,54 @@ interface TraderData {
   score: number
 }
 
+interface AggregateStats {
+  totalTraders: number
+  profitPct: number
+  topPct: number
+  avgWinRate: number
+  platformCount: number
+  lowestWRWithHighScore: number
+}
+
+async function getAggregateStats(): Promise<AggregateStats> {
+  const [
+    { count: total },
+    { count: profitable },
+    { count: score80 },
+  ] = await Promise.all([
+    supabase.from('leaderboard_ranks').select('*', { count: 'exact', head: true }),
+    supabase.from('leaderboard_ranks').select('*', { count: 'exact', head: true }).gt('pnl', 0),
+    supabase.from('leaderboard_ranks').select('*', { count: 'exact', head: true }).gte('arena_score', 80),
+  ])
+  const totalTraders = total || 39000
+  const profitPct = Math.round(((profitable || 0) / totalTraders) * 100)
+  const topPct = Math.round(((score80 || 0) / totalTraders) * 100)
+
+  // Get lowest win rate with high score
+  const { data: lowWR } = await supabase
+    .from('leaderboard_ranks')
+    .select('win_rate')
+    .gte('arena_score', 90)
+    .order('win_rate', { ascending: true })
+    .limit(1)
+    .maybeSingle()
+
+  // Count distinct platforms
+  const { data: platforms } = await supabase
+    .from('leaderboard_ranks')
+    .select('source')
+  const uniquePlatforms = new Set((platforms || []).map(p => p.source))
+
+  return {
+    totalTraders,
+    profitPct,
+    topPct,
+    avgWinRate: randInt(38, 52),
+    platformCount: uniquePlatforms.size || 27,
+    lowestWRWithHighScore: Math.round(Number(lowWR?.win_rate || 18)),
+  }
+}
+
 async function getMarketData(): Promise<MarketData> {
   try {
     const res = await fetch(
@@ -196,11 +244,13 @@ function randomTimeForDay(day: Date, lang: 'zh' | 'en'): Date {
 
 // --- Post generation ---
 
-function generatePost(market: MarketData, traders: TraderData[]): { content: string; lang: 'en' | 'zh' } {
+function generatePost(market: MarketData, traders: TraderData[], stats: AggregateStats): { content: string; lang: 'en' | 'zh' } {
   const templates = trainingData.post_templates
   const category = pick(Object.keys(templates)) as string
   const template = pick((templates as Record<string, string[]>)[category]) as string
   const trader = traders.length ? pick(traders) : { name: 'unknown', platform: 'binance', roi: 42, winRate: 55, score: 70 }
+  // Pick a second trader for versus posts
+  const trader2 = traders.length > 1 ? pick(traders.filter(t => t.platform !== trader.platform)) : trader
   const coin = pick(['$BTC', '$ETH', '$SOL'])
   const coinPrice = coin === '$BTC' ? market.btcPrice : coin === '$ETH' ? market.ethPrice : market.solPrice
   const coin24h = coin === '$BTC' ? market.btc24h : coin === '$ETH' ? market.eth24h : market.sol24h
@@ -212,6 +262,8 @@ function generatePost(market: MarketData, traders: TraderData[]): { content: str
   const lang = isZh ? 'zh' as const : 'en' as const
 
   // Fill template with real data
+  const pnlStr = trader.roi > 100 ? String(Math.round(trader.roi * 100)) : String(randInt(500, 50000))
+  const scoreComment = pick(['not bad', 'pain', 'improving', '还行', '太菜了', '有进步'])
   let content = template
     .replace(/\{price\}/g, formatPrice(coinPrice))
     .replace(/\{coin\}/g, coin)
@@ -224,6 +276,24 @@ function generatePost(market: MarketData, traders: TraderData[]): { content: str
     .replace(/\{period\}/g, pick(['7', '30', '90']))
     .replace(/\{roi\}/g, String(trader.roi))
     .replace(/\{wr\}/g, String(trader.winRate || randInt(30, 70)))
+    .replace(/\{traderName\}/g, trader.name)
+    .replace(/\{pnl\}/g, pnlStr)
+    .replace(/\{score\}/g, String(trader.score))
+    .replace(/\{totalTraders\}/g, String(stats.totalTraders))
+    .replace(/\{profitPct\}/g, String(stats.profitPct))
+    .replace(/\{lossPct\}/g, String(100 - stats.profitPct))
+    .replace(/\{topPct\}/g, String(stats.topPct))
+    .replace(/\{avgWR\}/g, String(stats.avgWinRate))
+    .replace(/\{platformCount\}/g, String(stats.platformCount))
+    .replace(/\{lowWR\}/g, String(stats.lowestWRWithHighScore))
+    .replace(/\{platform1\}/g, trader.platform)
+    .replace(/\{platform2\}/g, trader2.platform)
+    .replace(/\{roi1\}/g, String(trader.roi))
+    .replace(/\{roi2\}/g, String(trader2.roi))
+    .replace(/\{rank\}/g, String(randInt(3, 25)))
+    .replace(/\{score1\}/g, String(randInt(25, 50)))
+    .replace(/\{score2\}/g, String(randInt(30, 55)))
+    .replace(/\{scoreComment\}/g, scoreComment)
     .replace(/\{platform\}/g, platform)
     .replace(/\{feature\}/g, pick(['claim', 'watchlist', 'compare', 'filter']))
 
@@ -428,10 +498,10 @@ async function main() {
   const count = parseInt(process.argv[2] || '10')
   console.log(`Generating ${count} posts...`)
 
-  const [market, traders] = await Promise.all([getMarketData(), getLeaderboardData()])
+  const [market, traders, stats] = await Promise.all([getMarketData(), getLeaderboardData(), getAggregateStats()])
   console.log(`Market: BTC $${market.btcPrice} (${market.btc24h}%) ETH $${market.ethPrice} (${market.eth24h}%) SOL $${market.solPrice} (${market.sol24h}%)`)
   console.log(`Volatile: ${market.isVolatile}`)
-  console.log(`Traders: ${traders.length} loaded from leaderboard`)
+  console.log(`Traders: ${traders.length} loaded | Total: ${stats.totalTraders} | Profitable: ${stats.profitPct}% | Score 80+: ${stats.topPct}%`)
   if (traders.length > 0) {
     console.log(`  Top 3: ${traders.slice(0, 3).map(t => `${t.name} (${t.platform}, ${t.roi}% ROI, score ${t.score})`).join(', ')}`)
   }
@@ -461,7 +531,7 @@ async function main() {
 
   for (const slot of daySlots) {
     for (let p = 0; p < slot.postCount; p++) {
-      const { content, lang } = generatePost(market, traders)
+      const { content, lang } = generatePost(market, traders, stats)
       const user = pick(users)
       const ts = randomTimeForDay(slot.date, lang)
 

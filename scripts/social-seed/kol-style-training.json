@@ -1,6 +1,6 @@
 {
-  "version": "1.0",
-  "description": "Crypto KOL style training data for Arena social seed content generation",
+  "version": "2.0",
+  "description": "Crypto KOL style training data v2 — 12 post types, 100+ KOL profiles, context-aware comments",
   "collected_from": "100+ KOL profiles via web scraping + manual research (2026-03-16)",
   "style_rules": {
     "bio": {
@@ -862,6 +862,44 @@
       "空头要遭殃",
       "funding rate太高了",
       "等方向"
+    ],
+    "trader_spotlight": [
+      "{traderName}在{platform}上{period}天roi {roi}% 胜率才{wr}% 但pnl有${pnl} 这种人就是赢一把顶十把",
+      "this {platform} trader has {wr}% win rate and still made ${pnl}. conviction trading at its finest",
+      "看到一个gmx上的地址 胜率不到20%但score 99+ 翻了下交易记录 每次赢的单子都是10倍以上",
+      "so {traderName} on {platform} just has a {wr}% win rate but score of {score}. sometimes you only need to be right once",
+      "arena上有个trader连续{period}天每天都在交易 roi还是正的 纯靠纪律",
+      "{traderName} pnl ${pnl} in {period} days on {platform}. and i cant even make $100 lol"
+    ],
+    "fun_stats": [
+      "arena上{totalTraders}个trader里只有{profitPct}%在赚钱 你是那{profitPct}%还是另外的{lossPct}%",
+      "only {topPct}% of all traders have arena score above 80. basically pro level",
+      "刚算了一下 arena排名前100的平均胜率是{avgWR}% 没你想的那么高",
+      "across {platformCount} exchanges and {totalTraders} traders the average roi is negative. most people lose money",
+      "{platform}上roi最高的trader是{roi}% 这个数看着离谱但链上数据全透明",
+      "fun fact: arena上胜率最低但score最高的trader胜率只有{lowWR}%"
+    ],
+    "versus": [
+      "{platform1} top 10 avg roi: {roi1}% vs {platform2} top 10: {roi2}%. dex traders built different",
+      "{platform1}和{platform2}排行榜风格完全不一样 一个稳一个猛",
+      "cex vs dex: cex胜率高但roi低 dex roi高但回撤也大"
+    ],
+    "hot_take": [
+      "unpopular opinion: win rate doesnt matter. top traders on arena prove it",
+      "热知识: 大部分排行榜前列的trader胜率都不到50%",
+      "everyone talks about roi but pnl is what matters. 1000% roi on $100 is nothing",
+      "controversial but leverage isnt the problem. sizing is",
+      "win rate高的策略不一定好 看看arena前十的胜率就知道了"
+    ],
+    "weekly_review": [
+      "本周排行榜变动最大的是{platform} 有好几个新面孔",
+      "weekly check: my arena score went from {score1} to {score2}. {scoreComment}",
+      "this weeks biggest mover jumped from outside top 100 to #{rank} on {platform}"
+    ],
+    "prediction_ask": [
+      "{coin} 下周看涨还是看跌",
+      "next week: {coin} up or down? been wrong 3 times in a row so inverse me",
+      "大家觉得{coin}能到{target}吗 我觉得难但市场总打脸"
     ]
   },
   "comment_templates": {
