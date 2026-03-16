@@ -69,8 +69,8 @@ function AuthCallbackContent() {
               .eq('id', session.user.id)
               .maybeSingle()
 
-            if (profile && !profile.avatar_url) {
-              // Profile exists but no avatar — sync from OAuth
+            if (profile && (!profile.avatar_url || profile.avatar_url.length < 5)) {
+              // Profile exists but no avatar (or invalid) — sync from OAuth
               await supabase
                 .from('user_profiles')
                 .update({ avatar_url: oauthAvatar })

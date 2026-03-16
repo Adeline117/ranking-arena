@@ -9,6 +9,7 @@ import { tokens } from '@/lib/design-tokens'
 import { Box } from '../base'
 import { UserIcon, NotificationIcon } from '../ui/icons'
 import { useLanguage } from '../Providers/LanguageProvider'
+import { getAvatarGradient, getAvatarInitial } from '@/lib/utils/avatar'
 
 const AccountSwitcher = dynamic(() => import('../ui/AccountSwitcher'), { ssr: false })
 
@@ -112,15 +113,16 @@ export default function UserMenuDropdown({
               height: 36,
               borderRadius: tokens.radius.full,
               border: `1px solid var(--color-border-primary)`,
-              background: 'var(--color-bg-secondary)',
+              background: getAvatarGradient(myId || 'user'),
               display: 'grid',
               placeItems: 'center',
               fontWeight: tokens.typography.fontWeight.black,
-              color: 'var(--color-text-primary)',
+              color: tokens.colors.white,
               fontSize: tokens.typography.fontSize.sm,
+              textShadow: 'var(--text-shadow-sm)',
             }}
           >
-            {(myHandle?.[0] ?? email?.[0] ?? 'U').toUpperCase()}
+            {getAvatarInitial(myHandle || email)}
           </Box>
         )}
       </Box>

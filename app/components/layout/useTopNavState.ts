@@ -86,6 +86,18 @@ export function useTopNavState() {
         }
         if (userProfile?.avatar_url) {
           setMyAvatarUrl(userProfile.avatar_url)
+        } else {
+          // Fallback: try to get avatar from OAuth metadata (Google, GitHub, etc.)
+          const meta = data.session.user.user_metadata
+          const oauthAvatar = meta?.avatar_url || meta?.picture || null
+          if (oauthAvatar) {
+            setMyAvatarUrl(oauthAvatar)
+            // Also persist to user_profiles for future loads
+            supabase.from('user_profiles')
+              .update({ avatar_url: oauthAvatar })
+              .eq('id', userId)
+              .then(() => { /* best-effort sync */ })
+          }
         }
 
         if (!notificationsResult.error && typeof notificationsResult.count === 'number') {
