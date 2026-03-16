@@ -168,7 +168,7 @@ export const DEAD_BLOCKED_PLATFORMS: TraderSource[] = [
   // STRUCTURAL — API limitation, not a bug
   // ═══════════════════════════════════════════════════════════════
   'okx_spot',     // OKX API only supports instType=SWAP — no spot leaderboard possible
-  'bitget_spot',  // Bitget Spot Copy API 404 — awaiting confirmation
+  // 'bitget_spot' — RECOVERED: 55 traders in leaderboard from old data
 ]
 
 // ---------------------------------------------------------------------------
