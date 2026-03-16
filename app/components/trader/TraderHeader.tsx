@@ -495,22 +495,6 @@ export default function TraderHeader({
             })()}
           </Box>
 
-          {/* "Updated X ago" timestamp */}
-          {lastUpdated && (
-            <Text
-              size="xs"
-              style={{
-                color: tokens.colors.text.tertiary,
-                fontSize: 11,
-                marginBottom: 2,
-                opacity: 0.8,
-              }}
-              title={new Date(lastUpdated).toLocaleString()}
-            >
-              {t('updated') || 'Updated'} {getRelativeTime(lastUpdated)}
-            </Text>
-          )}
-
           {/* Ranked #X on Exchange subtitle */}
           {rank != null && rank > 0 && source && EXCHANGE_NAMES[source.toLowerCase()] && (
             <Text
@@ -526,6 +510,22 @@ export default function TraderHeader({
               {t('rankedOnExchange')
                 .replace('{rank}', rank.toLocaleString())
                 .replace('{exchange}', EXCHANGE_NAMES[source.toLowerCase()] || source)}
+            </Text>
+          )}
+
+          {/* "Updated X ago" — small gray text below rank */}
+          {lastUpdated && (
+            <Text
+              size="xs"
+              style={{
+                color: tokens.colors.text.tertiary,
+                fontSize: 10,
+                marginTop: 2,
+                opacity: 0.6,
+              }}
+              title={new Date(lastUpdated).toLocaleString()}
+            >
+              {t('updated') || 'Updated'} {getRelativeTime(lastUpdated)}
             </Text>
           )}
 
@@ -681,7 +681,7 @@ export default function TraderHeader({
               period: '90D',
             }}
             size="sm"
-            variant="icon"
+            variant="ghost"
             showLabel={false}
           />
         </Box>
