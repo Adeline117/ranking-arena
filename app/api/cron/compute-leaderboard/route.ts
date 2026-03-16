@@ -377,15 +377,25 @@ async function computeSeason(
       Array.from(enrichBySource.entries()).map(async ([source, traderIds]) => {
         for (let i = 0; i < traderIds.length; i += 500) {
           const chunk = traderIds.slice(i, i + 500)
+          // Query ALL periods — enrichment writes to various periods (7D/30D/90D)
+          // We'll prefer 90D, fall back to 30D, then 7D
           const { data: statsRows } = await supabase
             .from('trader_stats_detail')
-            .select('source_trader_id, profitable_trades_pct, max_drawdown, sharpe_ratio, winning_positions, total_positions')
+            .select('source_trader_id, profitable_trades_pct, max_drawdown, sharpe_ratio, winning_positions, total_positions, period')
             .eq('source', source)
             .in('source_trader_id', chunk)
-            .eq('period', season)
+            .order('captured_at', { ascending: false })
           if (!statsRows) continue
+          // Dedup: keep the best row per trader (prefer matching season, then most recent)
+          const bestPerTrader = new Map<string, typeof statsRows[0]>()
           for (const sr of statsRows) {
             const tid = sr.source_trader_id.startsWith('0x') ? sr.source_trader_id.toLowerCase() : sr.source_trader_id
+            const existing = bestPerTrader.get(tid)
+            if (!existing || (sr.period === season && existing.period !== season)) {
+              bestPerTrader.set(tid, sr)
+            }
+          }
+          for (const [tid, sr] of bestPerTrader) {
             const existing = traderMap.get(`${source}:${tid}`)
             if (!existing) continue
             if (sr.profitable_trades_pct != null && existing.win_rate == null) {
