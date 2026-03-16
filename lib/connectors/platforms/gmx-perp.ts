@@ -119,7 +119,7 @@ export class GmxPerpConnector extends BaseConnector {
     const query = `{
       accountStats(
         limit: 1
-        where: { id_eq: "${traderKey.toLowerCase()}" }
+        where: { id_containsInsensitive: "${traderKey.toLowerCase()}" }
       ) {
         id realizedPnl maxCapital wins losses closedCount
       }
@@ -193,7 +193,7 @@ export class GmxPerpConnector extends BaseConnector {
       const query = `{
         periodAccountStats(
           limit: 90
-          where: { account_eq: "${traderKey.toLowerCase()}", period_startsWith: "1d:" }
+          where: { account_containsInsensitive: "${traderKey.toLowerCase()}", period_startsWith: "1d:" }
           orderBy: period_ASC
         ) {
           period

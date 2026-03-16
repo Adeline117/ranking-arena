@@ -237,7 +237,7 @@ export async function fetchGmxPositionHistory(
       tradeActions(
         limit: ${limit},
         where: {
-          account_eq: "${address}"
+          account_containsInsensitive: "${address}"
           orderType_in: [2, 4, 7]
         },
         orderBy: timestamp_DESC
