@@ -48,10 +48,7 @@
       "path": "/api/cron/batch-discover",
       "schedule": "56 */6 * * *"
     },
-    {
-      "path": "/api/scrape/proxy?period=all",
-      "schedule": "0 6,18 * * *"
-    },
+
     {
       "path": "/api/cron/subscription-expiry",
       "schedule": "4 0 * * *"
