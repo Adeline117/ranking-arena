@@ -9,12 +9,23 @@ import ErrorBoundary from '@/app/components/utils/ErrorBoundary'
 export const metadata: Metadata = {
   title: 'Trading Resources',
   description: 'Curated trading resources, guides, and tools for crypto traders.',
+  alternates: {
+    canonical: 'https://www.arenafi.org/rankings/resources',
+  },
   openGraph: {
     title: 'Trading Resources',
     description: 'Curated trading resources, guides, and tools for crypto traders.',
     url: 'https://www.arenafi.org/rankings/resources',
     siteName: 'Arena',
     type: 'website',
+    images: [{ url: 'https://www.arenafi.org/og-image.png', width: 1200, height: 630, alt: 'Arena Trading Resources' }],
+  },
+  twitter: {
+    card: 'summary_large_image',
+    title: 'Trading Resources',
+    description: 'Curated trading resources, guides, and tools for crypto traders.',
+    images: ['https://www.arenafi.org/og-image.png'],
+    creator: '@arenafi',
   },
 }
 
