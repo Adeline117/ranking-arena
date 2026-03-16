@@ -26,6 +26,7 @@ import {
   fetchHtxStatsDetail,
   fetchGateioEquityCurve,
   fetchGateioStatsDetail,
+  fetchGateioCurrentPositions,
   fetchMexcEquityCurve,
   fetchMexcStatsDetail,
   fetchDriftPositionHistory,
@@ -211,6 +212,7 @@ export const ENRICHMENT_PLATFORM_CONFIGS: Record<string, EnrichmentConfig> = {
     platform: 'gateio',
     fetchEquityCurve: fetchGateioEquityCurve,
     fetchStatsDetail: fetchGateioStatsDetail,
+    fetchCurrentPositions: fetchGateioCurrentPositions,
     concurrency: 2, delayMs: 2000,
   },
   mexc: {

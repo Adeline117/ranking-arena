@@ -9,7 +9,7 @@
  * - Leader detail: www.gate.com/apiw/v2/copy/leader/detail?leader_id={id}
  */
 
-import type { EquityCurvePoint, StatsDetail } from './enrichment-types'
+import type { EquityCurvePoint, StatsDetail, PortfolioPosition } from './enrichment-types'
 import { fetchJson, sleep } from './shared'
 import { logger } from '@/lib/logger'
 
@@ -80,6 +80,34 @@ export async function fetchGateioStatsDetail(
     aum: aum && aum > 0 ? aum : null,
     winningPositions: detail.win_order_num ?? null,
     totalPositions: detail.total_order_num ?? null,
+  }
+}
+
+/**
+ * Fetch current open positions for a Gate.io trader.
+ * Public API, no auth needed.
+ */
+export async function fetchGateioCurrentPositions(
+  traderId: string
+): Promise<PortfolioPosition[]> {
+  try {
+    const url = `https://www.gate.io/apiw/v2/copy/leader/position?leader_id=${traderId}`
+    const resp = await fetch(url, { signal: AbortSignal.timeout(8000) })
+    if (!resp.ok) return []
+    const json = await resp.json()
+    const positions = json?.data || []
+    if (!Array.isArray(positions) || positions.length === 0) return []
+
+    return positions.map((p: any) => ({
+      symbol: p.market || 'UNKNOWN',
+      direction: (p.side || 'long').toLowerCase() === 'short' ? 'short' as const : 'long' as const,
+      investedPct: null,
+      entryPrice: p.entry_price ? Number(p.entry_price) : null,
+      pnl: p.unrealised_pnl ? Number(p.unrealised_pnl) : null,
+    }))
+  } catch (err) {
+    logger.warn(`[gateio] Current positions failed for ${traderId}: ${err instanceof Error ? err.message : String(err)}`)
+    return []
   }
 }
 

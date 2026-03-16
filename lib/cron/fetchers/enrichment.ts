@@ -67,6 +67,7 @@ export {
 export {
   fetchGateioEquityCurve,
   fetchGateioStatsDetail,
+  fetchGateioCurrentPositions,
 } from './enrichment-gateio'
 
 // MEXC
