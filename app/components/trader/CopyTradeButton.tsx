@@ -35,7 +35,7 @@ const CloseIcon = ({ size = 20 }: { size?: number }) => (
  * 根据交易所来源生成跟单链接
  * v2.0: 仅保留 4 个核心交易所
  */
-function getCopyTradeUrl(source: string | undefined, traderId: string): string | null {
+function getCopyTradeUrl(source: string | undefined, traderId: string, traderHandle?: string): string | null {
   if (!source) return null
 
   const urlMap: Record<string, string> = {
@@ -57,6 +57,8 @@ function getCopyTradeUrl(source: string | undefined, traderId: string): string |
     htx_futures: `https://futures.htx.com/en-us/copytrading/futures/detail/${traderId}`,
     // Weex
     weex: `https://www.weex.com/zh-CN/copy-trading/trader/${traderId}`,
+    // eToro — uses handle (UserName) not numeric ID
+    etoro: `https://www.etoro.com/people/${traderHandle || traderId}/portfolio`,
   }
 
   return urlMap[source.toLowerCase()] || null
@@ -121,6 +123,8 @@ function getExchangeName(source: string | undefined): string {
     htx_futures: 'HTX',
     // Weex
     weex: 'Weex',
+    // eToro
+    etoro: 'eToro',
   }
 
   return nameMap[source.toLowerCase()] || getDexPlatformName(source) || source
@@ -146,7 +150,7 @@ export default function CopyTradeButton({
   const [showWarning, setShowWarning] = useState(false)
   const [acknowledged, setAcknowledged] = useState(false)
 
-  const copyTradeUrl = getCopyTradeUrl(source, traderId)
+  const copyTradeUrl = getCopyTradeUrl(source, traderId, traderHandle)
   const dexUrl = getDexTradingUrl(source, traderId)
   const dexName = getDexPlatformName(source)
   const exchangeName = getExchangeName(source)
