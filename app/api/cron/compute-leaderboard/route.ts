@@ -375,16 +375,16 @@ async function computeSeason(
     }
     await Promise.all(
       Array.from(enrichBySource.entries()).map(async ([source, traderIds]) => {
-        for (let i = 0; i < traderIds.length; i += 500) {
-          const chunk = traderIds.slice(i, i + 500)
-          // Query ALL periods — enrichment writes to various periods (7D/30D/90D)
-          // We'll prefer 90D, fall back to 30D, then 7D
+        for (let i = 0; i < traderIds.length; i += 100) {
+          const chunk = traderIds.slice(i, i + 100)
+          // Small chunks (100 traders) × ~10 period rows each = ~1000 rows max
           const { data: statsRows } = await supabase
             .from('trader_stats_detail')
             .select('source_trader_id, profitable_trades_pct, max_drawdown, sharpe_ratio, winning_positions, total_positions, period')
             .eq('source', source)
             .in('source_trader_id', chunk)
             .order('captured_at', { ascending: false })
+            .limit(2000)
           if (!statsRows) continue
           // Dedup: keep the best row per trader (prefer matching season, then most recent)
           const bestPerTrader = new Map<string, typeof statsRows[0]>()
