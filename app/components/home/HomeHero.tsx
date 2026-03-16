@@ -22,11 +22,17 @@ export default function HomeHero() {
     if (!sessionStorage.getItem(HERO_SEEN_KEY)) {
       setShow(true)
     }
-    supabase.from('trader_sources').select('source', { count: 'exact' })
-      .then(({ data, count }) => {
-        if (count) setTraderCount(formatCount(count))
+    // Get trader count (head:true avoids fetching rows)
+    supabase.from('trader_sources').select('*', { count: 'exact', head: true })
+      .then(({ count }) => { if (count) setTraderCount(formatCount(count)) })
+
+    // Get exchange count from distinct sources (need all rows to deduplicate)
+    supabase.from('trader_sources').select('source').limit(60000)
+      .then(({ data }) => {
         if (data) {
-          const platforms = new Set(data.map((r: { source: string }) => r.source.split('_')[0]))
+          const platforms = new Set(data.map((r: { source: string }) =>
+            r.source.replace(/_(futures|spot|web3|perps|network)$/, '')
+          ))
           setExchangeCount(`${platforms.size}+`)
         }
       })
