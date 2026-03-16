@@ -144,7 +144,8 @@ export async function writeDiscoverResult(
       total: result.traders.length,
       saved: 0,
       skipped,
-      error: `All ${result.traders.length} traders failed normalization`,
+      // Only report as error if there were traders to normalize (avoids false positive on empty API response)
+      error: result.traders.length > 0 ? `All ${result.traders.length} traders failed normalization` : undefined,
     }
   }
 
