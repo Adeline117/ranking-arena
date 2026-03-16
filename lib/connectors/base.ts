@@ -408,7 +408,8 @@ export abstract class BaseConnector implements PlatformConnector {
       // Strategy 2: Route through proxy (3456) → scraper (localhost:3457)
       if (!response || !response.ok) {
         try {
-          const proxyHost = vpsHost; // port 3456
+          // proxyHost MUST be port 3456 (proxy), NOT 3457 (scraper)
+          const proxyHost = (process.env.VPS_PROXY_SG || process.env.VPS_PROXY_URL || vpsHost).replace(':3457', ':3456');
           const localScraperUrl = `http://localhost:3457${endpoint}${queryString ? `?${queryString}` : ''}`;
           response = await fetch(proxyHost, {
             method: 'POST',
