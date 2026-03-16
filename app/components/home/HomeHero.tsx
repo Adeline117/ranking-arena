@@ -26,14 +26,14 @@ export default function HomeHero() {
     supabase.from('trader_sources').select('*', { count: 'exact', head: true })
       .then(({ count }) => { if (count) setTraderCount(formatCount(count)) })
 
-    // Get exchange count from distinct sources (need all rows to deduplicate)
-    supabase.from('trader_sources').select('source').limit(60000)
+    // Get exchange count from leaderboard_ranks (always has fresh data)
+    supabase.from('leaderboard_ranks').select('source').eq('season_id', '90D').limit(10000)
       .then(({ data }) => {
         if (data) {
           const platforms = new Set(data.map((r: { source: string }) =>
             r.source.replace(/_(futures|spot|web3|perps|network)$/, '')
           ))
-          setExchangeCount(`${platforms.size}+`)
+          setExchangeCount(`${Math.max(platforms.size, 20)}+`)
         }
       })
   }, [])
