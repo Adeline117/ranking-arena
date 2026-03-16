@@ -155,6 +155,24 @@ export default function DesktopSidebar() {
                   e.currentTarget.style.transform = 'translateX(0px)'
                 }
               }}
+              onFocus={(e) => {
+                if (!active) {
+                  e.currentTarget.style.background = 'var(--color-bg-secondary)'
+                  e.currentTarget.style.color = 'var(--color-text-primary)'
+                  e.currentTarget.style.transform = 'translateX(4px)'
+                }
+                e.currentTarget.style.outline = '2px solid var(--color-accent-primary)'
+                e.currentTarget.style.outlineOffset = '2px'
+                e.currentTarget.style.borderRadius = '4px'
+              }}
+              onBlur={(e) => {
+                if (!active) {
+                  e.currentTarget.style.background = 'transparent'
+                  e.currentTarget.style.color = 'var(--color-text-secondary)'
+                  e.currentTarget.style.transform = 'translateX(0px)'
+                }
+                e.currentTarget.style.outline = 'none'
+              }}
             >
               {active && (
                 <span

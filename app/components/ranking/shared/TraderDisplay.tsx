@@ -177,7 +177,7 @@ export function ScoreConfidenceIndicator({ trader }: { trader: Trader }) {
       title={title}
       style={{
         position: 'absolute', top: -2, right: -2,
-        width: 6, height: 6, borderRadius: '50%',
+        width: 8, height: 8, borderRadius: '50%',
         background,
         border: '1px solid var(--color-border-primary)',
         zIndex: 2,

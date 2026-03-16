@@ -345,6 +345,14 @@ function NavItemLink({ item, active, onClick, t }: NavItemLinkProps): React.Reac
         minWidth: 60,
         minHeight: tokens.touchTarget.comfortable,
         background: active ? 'var(--color-accent-primary-12)' : 'transparent',
+        outline: 'none',
+      }}
+      onFocus={(e) => {
+        e.currentTarget.style.outline = '2px solid var(--color-accent-primary)'
+        e.currentTarget.style.outlineOffset = '2px'
+      }}
+      onBlur={(e) => {
+        e.currentTarget.style.outline = 'none'
       }}
     >
       {active && <ActiveIndicator />}
@@ -373,7 +381,7 @@ function NavItemLink({ item, active, onClick, t }: NavItemLinkProps): React.Reac
       <span
         style={{
           fontSize: 12,
-          fontWeight: active ? 700 : 500,
+          fontWeight: active ? 800 : 600,
           letterSpacing: '0.3px',
           transition: `all ${tokens.transition.fast}`,
         }}

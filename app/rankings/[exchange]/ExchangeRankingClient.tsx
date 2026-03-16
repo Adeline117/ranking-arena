@@ -31,6 +31,7 @@ interface TraderData {
 }
 
 type ViewMode = 'table' | 'card'
+type CardSortKey = 'rank' | 'roi' | 'pnl' | 'arena_score' | 'win_rate'
 type SortKey = 'rank' | 'roi' | 'win_rate' | 'max_drawdown' | 'arena_score'
 type SortDir = 'asc' | 'desc'
 
@@ -301,6 +302,7 @@ export default function ExchangeRankingClient({
   const [viewMode, setViewMode] = useState<ViewMode>('table')
   const [sortKey, setSortKey] = useState<SortKey>('rank')
   const [sortDir, setSortDir] = useState<SortDir>('asc')
+  const [cardSortKey, setCardSortKey] = useState<CardSortKey>('rank')
   const PAGE_SIZE = 50
   const [page, setPage] = useState(1)
 
@@ -368,11 +370,21 @@ export default function ExchangeRankingClient({
     })
   }, [traders, sortKey, sortDir])
 
-  // Reset page when sort changes
-  useEffect(() => { setPage(1) }, [sortKey, sortDir])
+  const cardSortedTraders = React.useMemo(() => {
+    if (cardSortKey === 'rank') return traders
+    return [...traders].sort((a, b) => {
+      const av = a[cardSortKey] ?? -Infinity
+      const bv = b[cardSortKey] ?? -Infinity
+      return (bv as number) - (av as number)
+    })
+  }, [traders, cardSortKey])
 
-  const totalPages = Math.ceil(sortedTraders.length / PAGE_SIZE)
-  const pagedTraders = sortedTraders.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE)
+  // Reset page when sort changes
+  useEffect(() => { setPage(1) }, [sortKey, sortDir, cardSortKey])
+
+  const activeTraders = viewMode === 'card' ? cardSortedTraders : sortedTraders
+  const totalPages = Math.ceil(activeTraders.length / PAGE_SIZE)
+  const pagedTraders = activeTraders.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE)
 
   // Auto-detect mobile
   useEffect(() => {
@@ -479,34 +491,85 @@ export default function ExchangeRankingClient({
       )}
 
       {viewMode === 'card' ? (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: tokens.spacing[3], paddingBottom: '100px' }}>
-          {pagedTraders.map((t, i) => {
-            const originalRank = rankMap.get(t) || 0
-            return (
-              <TraderCardItem key={`${t.platform}:${t.trader_key}:${i}`} trader={t} rank={originalRank} />
-            )
-          })}
+        <div>
+          {/* Card sort dropdown */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: tokens.spacing[3] }}>
+            <span style={{ fontSize: 12, color: tokens.colors.text.tertiary }}>{zh ? '排序' : 'Sort by'}:</span>
+            <select
+              value={cardSortKey}
+              onChange={e => setCardSortKey(e.target.value as CardSortKey)}
+              style={{
+                padding: '4px 8px',
+                borderRadius: tokens.radius.md,
+                border: '1px solid var(--glass-border-light)',
+                background: 'var(--overlay-hover)',
+                color: tokens.colors.text.primary,
+                fontSize: 12,
+                fontWeight: 600,
+                cursor: 'pointer',
+              }}
+            >
+              <option value="rank">{t('rankingRank')}</option>
+              <option value="roi">ROI</option>
+              <option value="pnl">PnL</option>
+              <option value="arena_score">{t('rankingScore')}</option>
+              <option value="win_rate">{t('rankingWinRate')}</option>
+            </select>
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: tokens.spacing[3], paddingBottom: tokens.spacing[4] }}>
+            {pagedTraders.map((t, i) => {
+              const originalRank = rankMap.get(t) || 0
+              return (
+                <TraderCardItem key={`${t.platform}:${t.trader_key}:${i}`} trader={t} rank={originalRank} />
+              )
+            })}
+          </div>
+          {/* Showing X of Y indicator */}
+          <div style={{ textAlign: 'center', padding: `${tokens.spacing[3]} 0`, fontSize: 12, color: tokens.colors.text.tertiary }}>
+            {zh
+              ? `${Math.min(page * PAGE_SIZE, activeTraders.length)} / ${activeTraders.length} 位交易员`
+              : `Showing ${Math.min(page * PAGE_SIZE, activeTraders.length)} of ${activeTraders.length} traders`}
+          </div>
         </div>
       ) : (
+        <>
+        <style>{`
+          .exchange-table-grid {
+            grid-template-columns: 40px minmax(180px, 0.35fr) 90px 80px 80px 80px 90px;
+          }
+          @media (max-width: 900px) {
+            .exchange-table-grid {
+              grid-template-columns: 36px minmax(140px, 1fr) 80px 70px 70px 70px 80px;
+            }
+          }
+          .exchange-row:hover {
+            background: var(--overlay-hover) !important;
+          }
+        `}</style>
         <div
           style={{
             borderRadius: tokens.radius.lg,
-            overflow: 'hidden',
+            overflow: 'visible',
             background: 'var(--overlay-hover)',
             border: '1px solid var(--glass-border-light)',
           }}
         >
           {/* Header */}
           <div
+            className="exchange-table-grid"
             style={{
               display: 'grid',
-              gridTemplateColumns: '40px minmax(180px, 0.35fr) 90px 80px 80px 80px 90px',
               gap: 8,
               padding: '12px 16px',
               fontSize: 12,
               fontWeight: 600,
               color: tokens.colors.text.secondary,
               borderBottom: '1px solid var(--glass-border-light)',
+              position: 'sticky',
+              top: 56,
+              zIndex: 10,
+              background: 'var(--color-bg-primary)',
+              borderRadius: `${tokens.radius.lg} ${tokens.radius.lg} 0 0`,
             }}
           >
             <SortHeader label={t('rankingRank')} sortKey="rank" currentKey={sortKey} currentDir={sortDir} onSort={handleSort} align="left" />
@@ -530,9 +593,9 @@ export default function ExchangeRankingClient({
               <Link
                 key={`${t.platform}:${t.trader_key}:${i}`}
                 href={`/trader/${encodeURIComponent(t.trader_key)}?platform=${t.platform}`}
+                className="exchange-table-grid exchange-row"
                 style={{
                   display: 'grid',
-                  gridTemplateColumns: '40px minmax(180px, 0.35fr) 90px 80px 80px 80px 90px',
                   gap: 8,
                   padding: '10px 16px',
                   alignItems: 'center',
@@ -587,9 +650,15 @@ export default function ExchangeRankingClient({
                 <div style={{ textAlign: 'right', fontSize: 13, fontWeight: 600, color: t.max_drawdown != null ? tokens.colors.accent.error + 'cc' : tokens.colors.text.tertiary }}>
                   {t.max_drawdown != null ? `-${Math.abs(t.max_drawdown).toFixed(2)}%` : NULL_DISPLAY}
                 </div>
-                <div style={{ textAlign: 'right' }}>
+                <div style={{ textAlign: 'right', display: 'flex', justifyContent: 'flex-end' }}>
                   {t.arena_score != null ? (
-                    <span style={{ fontSize: 13, fontWeight: 700, color: getScoreColor(t.arena_score) }}>
+                    <span style={{
+                      width: 32, height: 32, borderRadius: '50%',
+                      border: `2px solid ${getScoreColor(t.arena_score)}`,
+                      background: `color-mix(in srgb, ${getScoreColor(t.arena_score)} 10%, transparent)`,
+                      display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                      fontSize: 12, fontWeight: 800, color: getScoreColor(t.arena_score),
+                    }}>
                       {t.arena_score.toFixed(0)}
                     </span>
                   ) : (
@@ -600,6 +669,7 @@ export default function ExchangeRankingClient({
             )
           })}
         </div>
+        </>
       )}
 
       {/* Pagination */}
