@@ -18,6 +18,8 @@ import Breadcrumb from '@/app/components/ui/Breadcrumb'
 import TraderHeader from '@/app/components/trader/TraderHeader'
 import TraderTabs from '@/app/components/trader/TraderTabs'
 import OverviewPerformanceCard, { type ExtendedPerformance } from '@/app/components/trader/OverviewPerformanceCard'
+import dynamic from 'next/dynamic'
+const AdvancedMetricsCard = dynamic(() => import('@/app/components/trader/AdvancedMetricsCard'), { ssr: false })
 import { RankingSkeleton } from '@/app/components/ui/Skeleton'
 import { formatDisplayName, formatROI } from '@/app/components/ranking/utils'
 import { getAvatarGradient } from '@/lib/utils/avatar'
@@ -381,6 +383,23 @@ export default function TraderProfileClient({ data, serverTraderData, claimedUse
                   />
                 )}
 
+                {/* Advanced Metrics (Sortino, Calmar, Profit Factor) */}
+                {(data.sortino_ratio != null || data.calmar_ratio != null || data.profit_factor != null) && (
+                  <AdvancedMetricsCard
+                    metrics={{
+                      sortino_ratio: data.sortino_ratio ?? null,
+                      calmar_ratio: data.calmar_ratio ?? null,
+                      profit_factor: data.profit_factor ?? null,
+                      recovery_factor: null,
+                      max_consecutive_wins: null,
+                      max_consecutive_losses: null,
+                      avg_holding_hours: data.avg_holding_hours ?? null,
+                      volatility_pct: null,
+                      downside_volatility_pct: null,
+                    }}
+                  />
+                )}
+
                 {/* Trading Style Radar */}
                 {(data.profitability_score || data.risk_control_score || data.execution_score) && (
                   <Box
@@ -471,7 +490,7 @@ export default function TraderProfileClient({ data, serverTraderData, claimedUse
                 stats={traderStats}
                 traderHandle={traderProfile?.handle || data.handle}
                 assetBreakdown={traderAssetBreakdown}
-                equityCurve={traderEquityCurve}
+                equityCurve={undefined}
                 positionHistory={traderPositionHistory}
                 isPro={isPro}
                 onUnlock={() => router.push('/pricing')}
