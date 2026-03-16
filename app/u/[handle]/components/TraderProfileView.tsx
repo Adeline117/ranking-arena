@@ -62,7 +62,7 @@ export default function TraderProfileView({
   const _traderFeed = traderData?.feed ?? []
   const _traderSimilar = traderData?.similarTraders ?? []
 
-  type TraderTabKey = 'overview' | 'stats' | 'portfolio'
+  type TraderTabKey = 'overview' | 'stats' | 'portfolio' | 'posts'
   const traderActiveTab = (activeTab === 'overview' || activeTab === 'stats' || activeTab === 'portfolio')
     ? activeTab as TraderTabKey
     : 'overview'
