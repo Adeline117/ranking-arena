@@ -60,10 +60,14 @@ export class BybitFuturesConnector extends BaseConnector {
         { method: 'GET' }
       )
     } catch {
-      // Fallback: VPS proxy (forward full URL through VPS)
-      const directUrl = `https://api2.bybit.com/fapi/beehive/public/v1/common/dynamic-leader-list?timeRange=${timeRange}&dataType=DATA_ROI&page=${page}&pageSize=${limit}`
-      const vpsData = await this.proxyViaVPS<Record<string, unknown>>(directUrl)
-      if (!vpsData) throw new Error('Both direct API and VPS proxy failed for bybit')
+      // Fallback: VPS Playwright scraper (renders full page, bypasses WAF)
+      // NOT proxyViaVPS which just forwards HTTP and gets 403
+      const vpsData = await this.fetchViaVPS<Record<string, unknown>>('/bybit/leaderboard', {
+        timeRange,
+        page: String(page),
+        pageSize: String(limit),
+      })
+      if (!vpsData) throw new Error('Both direct API and VPS scraper failed for bybit')
       _rawLb = vpsData
     }
     const data = warnValidate(BybitFuturesLeaderboardResponseSchema, _rawLb, 'bybit-futures/leaderboard')
