@@ -1,5 +1,13 @@
 /**
  * Binance enrichment: equity curve, position history, stats detail
+ *
+ * API paths discovered 2026-03-15 via Playwright interception:
+ * - Performance: GET /v1/public/.../performance?portfolioId=...&timeRange=90D
+ * - Chart data:  GET /v1/public/.../chart-data?dataType=ROI&portfolioId=...&timeRange=90D
+ * - Detail:      GET /v1/friendly/.../detail?portfolioId=...
+ * - Positions:   GET /v1/friendly/.../positions?portfolioId=...
+ *
+ * All are GET requests (not POST). Geo-blocked — uses VPS proxy fallback.
  */
 
 import type { SupabaseClient } from '@supabase/supabase-js'
@@ -10,69 +18,32 @@ import { upsertEquityCurve, upsertPositionHistory } from './enrichment-db'
 import { withRetry } from '@/lib/utils/circuit-breaker'
 import { type Result, Ok, Err } from '@/lib/types'
 
-const BINANCE_API = 'https://www.binance.com/bapi/futures/v2/friendly/future/copy-trade'
-
-interface BinancePerformanceResponse {
-  code?: string
-  data?: {
-    dailyPnls?: Array<{
-      date: string
-      pnl: string | number
-      roi: string | number
-    }>
-  }
-}
-
-interface BinancePositionResponse {
-  code?: string
-  data?: {
-    list?: Array<{
-      symbol?: string
-      direction?: string
-      positionSide?: string
-      entryPrice?: string | number
-      closePrice?: string | number
-      openTime?: number
-      closeTime?: number
-      maxPositionQty?: string | number
-      closedQty?: string | number
-      pnl?: string | number
-      roi?: string | number
-      marginType?: string
-    }>
-  }
-}
+const BINANCE_PUBLIC = 'https://www.binance.com/bapi/futures/v1/public/future/copy-trade'
+const BINANCE_FRIENDLY = 'https://www.binance.com/bapi/futures/v1/friendly/future/copy-trade'
 
 export async function fetchBinanceEquityCurve(
   traderId: string,
   timeRange: string = '90D'
 ): Promise<EquityCurvePoint[]> {
   try {
-    // EMERGENCY FIX (2026-03-14): Reduce timeout from 15s → 8s to prevent accumulation
-    // binance_spot was hanging 45-76min repeatedly due to slow/hung API calls
-    const data = await fetchWithProxyFallback<BinancePerformanceResponse>(
-      `${BINANCE_API}/lead-portfolio/query-performance`,
-      {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Origin: 'https://www.binance.com',
-          Referer: 'https://www.binance.com/en/copy-trading',
-        },
-        body: { portfolioId: traderId, timeRange },
-        timeoutMs: 8000,  // Was 15000
-      }
+    // GET chart-data endpoint returns daily ROI values
+    const data = await fetchWithProxyFallback<Record<string, unknown>>(
+      `${BINANCE_PUBLIC}/lead-portfolio/chart-data?dataType=ROI&portfolioId=${traderId}&timeRange=${timeRange}`,
+      { method: 'GET', timeoutMs: 10000 }
     )
 
-    if (!data?.data?.dailyPnls) {
+    // Response: { code: "000000", data: [{ value, dataType, dateTime }] }
+    const points = Array.isArray(data?.data) ? data.data as Array<{ value: number; dateTime: number }> : []
+
+    if (points.length === 0) {
       logger.warn(`[enrichment] Binance equity curve empty for ${traderId}`)
       return []
     }
 
-    return data.data.dailyPnls.map((d) => ({
-      date: d.date,
-      roi: Number(d.roi) * 100, // Convert decimal to percentage
-      pnl: d.pnl != null ? Number(d.pnl) : null,
+    return points.map(p => ({
+      date: new Date(p.dateTime).toISOString().slice(0, 10),
+      roi: p.value, // Already percentage
+      pnl: null,    // Chart data only has ROI, not PnL
     }))
   } catch (err) {
     logger.warn(`[enrichment] Binance equity curve failed for ${traderId}: ${err}`)
@@ -82,68 +53,53 @@ export async function fetchBinanceEquityCurve(
 
 export async function fetchBinancePositionHistory(
   traderId: string,
-  pageSize = 50
+  _pageSize = 50
 ): Promise<PositionHistoryItem[]> {
   try {
-    // EMERGENCY FIX (2026-03-14): Reduce timeout 15s → 8s
-    const data = await fetchWithProxyFallback<BinancePositionResponse>(
-      `${BINANCE_API}/lead-portfolio/query-position-history`,
-      {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Origin: 'https://www.binance.com',
-          Referer: 'https://www.binance.com/en/copy-trading',
-        },
-        body: { portfolioId: traderId, pageNumber: 1, pageSize },
-        timeoutMs: 8000,  // Was 15000
-      }
+    // GET positions endpoint
+    const data = await fetchWithProxyFallback<Record<string, unknown>>(
+      `${BINANCE_FRIENDLY}/lead-data/positions?portfolioId=${traderId}`,
+      { method: 'GET', timeoutMs: 10000 }
     )
 
-    if (!data?.data?.list) {
-      logger.warn(`[enrichment] Binance position history empty for ${traderId}`)
-      return []
-    }
+    const list = Array.isArray(data?.data) ? data.data as Array<Record<string, unknown>> :
+      (data?.data as Record<string, unknown>)?.list as Array<Record<string, unknown>> || []
 
-    return data.data.list.map((p) => ({
-      symbol: p.symbol || '',
-      direction: (p.positionSide || p.direction || '').toLowerCase().includes('short')
-        ? 'short'
-        : 'long',
+    if (!list.length) return []
+
+    return list.map((p) => ({
+      symbol: String(p.symbol || ''),
+      direction: String(p.positionSide || p.direction || '').toLowerCase().includes('short') ? 'short' : 'long',
       positionType: 'perpetual',
-      marginMode: p.marginType?.toLowerCase() || 'cross',
-      openTime: p.openTime ? new Date(p.openTime).toISOString() : null,
-      closeTime: p.closeTime ? new Date(p.closeTime).toISOString() : null,
+      marginMode: String(p.marginType || 'cross').toLowerCase(),
+      openTime: p.openTime ? new Date(Number(p.openTime)).toISOString() : null,
+      closeTime: p.closeTime ? new Date(Number(p.closeTime)).toISOString() : null,
       entryPrice: p.entryPrice != null ? Number(p.entryPrice) : null,
       exitPrice: p.closePrice != null ? Number(p.closePrice) : null,
       maxPositionSize: p.maxPositionQty != null ? Number(p.maxPositionQty) : null,
       closedSize: p.closedQty != null ? Number(p.closedQty) : null,
       pnlUsd: p.pnl != null ? Number(p.pnl) : null,
       pnlPct: p.roi != null ? Number(p.roi) * 100 : null,
-      status: 'closed',
+      status: 'open', // positions endpoint returns current open positions
     }))
   } catch (err) {
-    logger.warn(`[enrichment] Binance position history failed for ${traderId}: ${err}`)
+    logger.warn(`[enrichment] Binance positions failed for ${traderId}: ${err}`)
     return []
   }
 }
 
-interface BinanceTraderStatsResponse {
+interface BinancePerformanceResponse {
   code?: string
   data?: {
-    portfolioId?: string
+    timeRange?: string
     roi?: number
     pnl?: number
-    winRate?: number
-    maxDrawdown?: number
     mdd?: number
-    followerCount?: number
-    currentCopyCount?: number
-    tradeCount?: number
     copierPnl?: number
-    aum?: number
-    leadingDays?: number
-    avgHoldingTime?: number
+    winRate?: number
+    winOrders?: number
+    totalOrder?: number
+    sharpRatio?: number | null
   }
 }
 
@@ -151,79 +107,52 @@ export async function fetchBinanceStatsDetail(
   traderId: string
 ): Promise<StatsDetail | null> {
   try {
-    // EMERGENCY FIX (2026-03-14): Reduce timeout 15s → 8s
-    const data = await fetchWithProxyFallback<BinanceTraderStatsResponse>(
-      `${BINANCE_API}/lead-portfolio/query-lead-base-info`,
-      {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Origin: 'https://www.binance.com',
-          Referer: 'https://www.binance.com/en/copy-trading',
-        },
-        body: { portfolioId: traderId },
-        timeoutMs: 8000,  // Was 15000
-      }
+    // GET performance endpoint (has winRate, mdd, tradeCount, copierPnl)
+    const perfData = await fetchWithProxyFallback<BinancePerformanceResponse>(
+      `${BINANCE_PUBLIC}/lead-portfolio/performance?portfolioId=${traderId}&timeRange=90D`,
+      { method: 'GET', timeoutMs: 10000 }
     )
 
-    if (!data?.data) return null
+    if (!perfData?.data) return null
+    const d = perfData.data
 
-    const d = data.data
-    const positions = await fetchBinancePositionHistory(traderId, 100)
-
-    let winningPositions = 0
-    let totalProfit = 0
-    let totalLoss = 0
-    let profitCount = 0
-    let lossCount = 0
-    let largestWin = 0
-    let largestLoss = 0
-    let totalHoldingTime = 0
-    let holdingTimeCount = 0
-
-    for (const pos of positions) {
-      if (pos.pnlUsd != null) {
-        if (pos.pnlUsd > 0) {
-          winningPositions++
-          totalProfit += pos.pnlUsd
-          profitCount++
-          if (pos.pnlUsd > largestWin) largestWin = pos.pnlUsd
-        } else if (pos.pnlUsd < 0) {
-          totalLoss += Math.abs(pos.pnlUsd)
-          lossCount++
-          if (Math.abs(pos.pnlUsd) > largestLoss) largestLoss = Math.abs(pos.pnlUsd)
-        }
+    // Also fetch detail for AUM and follower count
+    let aum: number | null = null
+    let copiersCount: number | null = null
+    try {
+      const detailData = await fetchWithProxyFallback<Record<string, unknown>>(
+        `${BINANCE_FRIENDLY}/lead-portfolio/detail?portfolioId=${traderId}`,
+        { method: 'GET', timeoutMs: 8000 }
+      )
+      const dd = detailData?.data as Record<string, unknown> | null
+      if (dd) {
+        aum = dd.aum != null ? Number(dd.aum) : null
+        copiersCount = dd.currentCopyCount != null ? Number(dd.currentCopyCount) : null
       }
-      if (pos.openTime && pos.closeTime) {
-        const open = new Date(pos.openTime).getTime()
-        const close = new Date(pos.closeTime).getTime()
-        const hours = (close - open) / (1000 * 60 * 60)
-        if (hours > 0 && hours < 720) {
-          totalHoldingTime += hours
-          holdingTimeCount++
-        }
-      }
+    } catch {
+      // Detail failed, continue with performance data only
     }
 
+    const totalTrades = d.totalOrder ?? 0
+    const winOrders = d.winOrders ?? 0
+
     return {
-      totalTrades: d.tradeCount ?? positions.length,
-      profitableTradesPct: d.winRate != null
-        ? (d.winRate <= 1 ? d.winRate * 100 : d.winRate)
-        : (positions.length > 0 ? (winningPositions / positions.length) * 100 : null),
-      avgHoldingTimeHours: holdingTimeCount > 0 ? totalHoldingTime / holdingTimeCount : (d.avgHoldingTime ?? null),
-      avgProfit: profitCount > 0 ? totalProfit / profitCount : null,
-      avgLoss: lossCount > 0 ? totalLoss / lossCount : null,
-      largestWin: largestWin > 0 ? largestWin : null,
-      largestLoss: largestLoss > 0 ? largestLoss : null,
-      sharpeRatio: null,
-      maxDrawdown: d.maxDrawdown ?? d.mdd ?? null,
+      totalTrades,
+      profitableTradesPct: d.winRate != null ? d.winRate : (totalTrades > 0 ? (winOrders / totalTrades) * 100 : null),
+      avgHoldingTimeHours: null,
+      avgProfit: null,
+      avgLoss: null,
+      largestWin: null,
+      largestLoss: null,
+      sharpeRatio: d.sharpRatio ?? null,
+      maxDrawdown: d.mdd ?? null,
       currentDrawdown: null,
       volatility: null,
-      copiersCount: d.followerCount ?? d.currentCopyCount ?? null,
+      copiersCount,
       copiersPnl: d.copierPnl ?? null,
-      aum: d.aum ?? null,
-      winningPositions,
-      totalPositions: positions.length,
+      aum,
+      winningPositions: winOrders,
+      totalPositions: totalTrades,
     }
   } catch (err) {
     logger.warn(`[enrichment] Binance stats detail failed for ${traderId}: ${err}`)
@@ -313,14 +242,12 @@ export async function enrichBinanceTraders(
         }
       } else {
         failed++
-        const errorMsg = settledResult.reason instanceof Error 
-          ? settledResult.reason.message 
+        const errorMsg = settledResult.reason instanceof Error
+          ? settledResult.reason.message
           : String(settledResult.reason)
         if (errors.length < 10) errors.push(errorMsg)
       }
     }
-    
-    logger.info(`Binance batch: ${success} success, ${failed} failed so far`)
 
     if (i + concurrency < traderIds.length) {
       await sleep(delayMs)
