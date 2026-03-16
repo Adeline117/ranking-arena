@@ -681,7 +681,7 @@ export default function TraderHeader({
               period: '90D',
             }}
             size="sm"
-            variant="ghost"
+            variant="icon"
             showLabel={false}
           />
         </Box>
@@ -743,18 +743,6 @@ export default function TraderHeader({
               platform={source}
               rank={rank}
               roi={roi90d}
-            />
-            <ShareButton
-              data={{
-                type: 'trader',
-                url: typeof window !== 'undefined' ? window.location.href : `https://www.arenafi.org/trader/${encodeURIComponent(handle)}`,
-                traderName: displayNameProp || formatDisplayName(handle, source),
-                roi: roi90d,
-                period: '90D',
-              }}
-              size="sm"
-              variant="ghost"
-              showLabel={false}
             />
           </Box>
         )}
