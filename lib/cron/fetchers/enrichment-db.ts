@@ -242,7 +242,23 @@ export async function upsertPortfolio(
 
   const capturedAt = new Date().toISOString()
 
-  const records = positions.map((pos) => ({
+  // Deduplicate by symbol: the unique constraint is (source, source_trader_id, symbol, captured_at)
+  // so multiple positions on the same symbol would collide. Merge by keeping the first and summing PnL.
+  const bySymbol = new Map<string, PortfolioPosition>()
+  for (const pos of positions) {
+    const key = pos.symbol
+    if (!bySymbol.has(key)) {
+      bySymbol.set(key, { ...pos })
+    } else {
+      const existing = bySymbol.get(key)!
+      // Sum PnL for duplicate symbols
+      if (existing.pnl != null && pos.pnl != null) {
+        existing.pnl = existing.pnl + pos.pnl
+      }
+    }
+  }
+
+  const records = Array.from(bySymbol.values()).map((pos) => ({
     source,
     source_trader_id: traderId,
     symbol: pos.symbol,
