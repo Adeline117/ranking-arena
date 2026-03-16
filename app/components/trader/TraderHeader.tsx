@@ -434,24 +434,19 @@ export default function TraderHeader({
                 )
               }
 
-              if (source && EXCHANGE_CONFIG[source.toLowerCase() as keyof typeof EXCHANGE_CONFIG]?.roiType && EXCHANGE_CONFIG[source.toLowerCase() as keyof typeof EXCHANGE_CONFIG].roiType !== 'mixed') {
-                allBadges.push(
-                  <Badge key="roiType" color={tokens.colors.text.tertiary}>
-                    <Text size="xs" weight="bold" style={{ color: tokens.colors.text.tertiary, letterSpacing: '0.3px', textTransform: 'uppercase', fontSize: tokens.typography.fontSize.xs }}>
-                      {EXCHANGE_CONFIG[source.toLowerCase() as keyof typeof EXCHANGE_CONFIG].roiType === 'realized' ? 'ROI: Realized' : 'ROI: Unrealized'}
-                    </Text>
-                  </Badge>
-                )
-              }
-
+              // Source category badge (Futures/Spot/On-chain) — skip if exchange name already contains the category
               if (sourceLabel) {
-                allBadges.push(
-                  <Badge key="sourceLabel" color={tokens.colors.text.secondary}>
-                    <Text size="xs" weight="bold" style={{ color: tokens.colors.text.secondary, textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-                      {sourceLabel}
-                    </Text>
-                  </Badge>
-                )
+                const exchangeName = source ? (EXCHANGE_NAMES[source.toLowerCase()] || '') : ''
+                const isDuplicate = exchangeName.toLowerCase().includes(sourceLabel.toLowerCase())
+                if (!isDuplicate) {
+                  allBadges.push(
+                    <Badge key="sourceLabel" color={tokens.colors.text.secondary}>
+                      <Text size="xs" weight="bold" style={{ color: tokens.colors.text.secondary, textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                        {sourceLabel}
+                      </Text>
+                    </Badge>
+                  )
+                }
               }
 
               if (getSourceCategory(source) === 'web3') {
