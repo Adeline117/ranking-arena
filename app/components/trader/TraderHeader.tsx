@@ -387,14 +387,6 @@ export default function TraderHeader({
                     </svg>
                   </Box>
                 )
-              } else {
-                allBadges.push(
-                  <Badge key="unclaimed" color={tokens.colors.text.tertiary} style={{ padding: '1px 6px', opacity: 0.6 }}>
-                    <Text style={{ fontSize: 10, fontWeight: 500, color: tokens.colors.text.tertiary, letterSpacing: '0.2px' }}>
-                      {t('unclaimedBadge')}
-                    </Text>
-                  </Badge>
-                )
               }
 
               if (arenaScore != null && arenaScore > 0) {
