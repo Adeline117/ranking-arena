@@ -24,9 +24,9 @@ export default function ProUpgradeCTA({
         display: 'flex',
         alignItems: 'center',
         gap: tokens.spacing[5],
-        background: 'linear-gradient(135deg, var(--color-bg-secondary) 0%, var(--color-pro-glow, rgba(167,139,250,0.08)) 100%)',
+        background: 'linear-gradient(135deg, var(--color-bg-secondary) 0%, var(--color-pro-glow, rgba(167,139,250,0.15)) 100%)',
         borderRadius: tokens.radius.xl,
-        border: '1px solid var(--color-pro-gradient-start, #a78bfa)',
+        border: '1px solid var(--color-pro-border, rgba(167,139,250,0.3))',
       }}
     >
       <svg width={32} height={32} viewBox="0 0 24 24" fill="var(--color-pro-gradient-start, #a78bfa)" style={{ flexShrink: 0 }}>

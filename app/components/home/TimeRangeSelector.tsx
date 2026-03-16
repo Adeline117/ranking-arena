@@ -27,6 +27,7 @@ export default function TimeRangeSelector({
   const { t, language } = useLanguage()
   const containerRef = useRef<HTMLDivElement>(null)
   const [indicatorStyle, setIndicatorStyle] = useState<{ left: number; width: number } | null>(null)
+  const hasInitialized = useRef(false)
 
   const getLabel = (range: TimeRange): string => {
     switch (range) {
@@ -56,6 +57,7 @@ export default function TimeRangeSelector({
       left: btn.offsetLeft,
       width: btn.offsetWidth,
     })
+    hasInitialized.current = true
   }, [activeRange])
 
   return (
@@ -86,7 +88,7 @@ export default function TimeRangeSelector({
             border: `1px solid var(--color-accent-primary-40, ${tokens.colors.accent.primary}60)`,
             borderRadius: tokens.radius.md,
             boxShadow: '0 1px 3px var(--color-overlay-subtle)',
-            transition: 'left 0.3s cubic-bezier(0.22, 1, 0.36, 1), width 0.3s cubic-bezier(0.22, 1, 0.36, 1)',
+            transition: hasInitialized.current ? 'left 0.3s cubic-bezier(0.22, 1, 0.36, 1), width 0.3s cubic-bezier(0.22, 1, 0.36, 1)' : 'none',
             pointerEvents: 'none',
             zIndex: 0,
           }}

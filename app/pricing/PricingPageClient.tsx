@@ -365,12 +365,14 @@ export default function PricingPageClient({ lifetimeCount = 0 }: PricingPageClie
           <div style={{
             borderRadius: tokens.radius.lg,
             border: `1px solid ${tokens.colors.border.primary}`,
-            overflow: 'hidden',
+            overflowX: 'auto',
+            WebkitOverflowScrolling: 'touch',
           }}>
             {/* Header */}
             <div style={{
               display: 'grid',
               gridTemplateColumns: '1fr 80px 80px',
+              minWidth: 360,
               padding: `${tokens.spacing[3]} ${tokens.spacing[5]}`,
               background: tokens.colors.bg.tertiary,
               fontWeight: 700,
@@ -398,6 +400,7 @@ export default function PricingPageClient({ lifetimeCount = 0 }: PricingPageClie
               <div key={i} style={{
                 display: 'grid',
                 gridTemplateColumns: '1fr 80px 80px',
+                minWidth: 360,
                 padding: `${tokens.spacing[3]} ${tokens.spacing[5]}`,
                 borderTop: `1px solid ${tokens.colors.border.primary}`,
                 fontSize: 14,

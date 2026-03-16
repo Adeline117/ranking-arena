@@ -452,6 +452,7 @@ export default function SearchDropdown({ open, query, onClose }: SearchDropdownP
                     width={28} height={28}
                     style={{ width: 28, height: 28, borderRadius: tokens.radius.full, objectFit: 'cover', flexShrink: 0 }}
                     unoptimized={result.avatar.startsWith('data:')}
+                    {...(globalIndex < 5 ? { priority: true } : { loading: 'lazy' as const })}
                   />
                 ) : (
                   <Box style={{

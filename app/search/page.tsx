@@ -105,17 +105,7 @@ function SearchContent() {
     loadTrendingSearches()
   }, [])
 
-  // Save successful searches to history
-  useEffect(() => {
-    if (query.trim() && !loading && !searchError) {
-      const total = libraryResults.length + groupResults.length + postResults.length + traderResults.length
-      if (total > 0) {
-        saveSearchHistory(query.trim())
-        setSearchHistory(getSearchHistory())
-      }
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- intentional: save history only when loading transitions, other deps (query, results) are read from current closure
-  }, [loading])
+  // Search history is saved in the success callback of doSearch below
 
   const highlightText = useCallback((text: string, q: string): React.ReactNode => {
     if (!text || !q.trim()) return text
@@ -127,12 +117,12 @@ function SearchContent() {
     while (idx !== -1) {
       if (idx > last) parts.push(text.slice(last, idx))
       parts.push(
-        <span key={`hl-${idx}`} style={{
+        <mark key={`hl-${idx}`} style={{
           backgroundColor: 'var(--color-accent-primary-25, var(--color-accent-primary-20))',
           color: 'inherit', borderRadius: 2, padding: '0 2px', fontWeight: 600,
         }}>
           {text.slice(idx, idx + lq.length)}
-        </span>
+        </mark>
       )
       last = idx + lq.length
       idx = lower.indexOf(lq, last)
@@ -215,6 +205,13 @@ function SearchContent() {
             subtitle: g.meta?.member_count ? `${(g.meta.member_count as number).toLocaleString()} ${t('members')}` : undefined,
             meta: g.subtitle ? (g.subtitle.slice(0, 60)) : undefined,
           })))
+
+          // Save to history only after results are received
+          const totalReceived = data.results.library.length + data.results.posts.length + data.results.traders.length + groupsResults.length
+          if (totalReceived > 0) {
+            saveSearchHistory(query.trim())
+            setSearchHistory(getSearchHistory())
+          }
         } else {
           setLibraryResults([])
           setPostResults([])
