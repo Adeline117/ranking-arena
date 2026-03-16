@@ -18,7 +18,6 @@ import Breadcrumb from '@/app/components/ui/Breadcrumb'
 import TraderHeader from '@/app/components/trader/TraderHeader'
 import TraderTabs from '@/app/components/trader/TraderTabs'
 import OverviewPerformanceCard, { type ExtendedPerformance } from '@/app/components/trader/OverviewPerformanceCard'
-import dynamic from 'next/dynamic'
 const AdvancedMetricsCard = dynamic(() => import('@/app/components/trader/AdvancedMetricsCard'), { ssr: false })
 import { RankingSkeleton } from '@/app/components/ui/Skeleton'
 import { formatDisplayName, formatROI } from '@/app/components/ranking/utils'
