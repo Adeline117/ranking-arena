@@ -5,16 +5,22 @@
  * - /fills/{authority} — trade fills for position history
  * - /stats/user/{authority} — user stats
  *
+ * Also supports S3 historical trade data:
+ * - drift-historical-data-v2.s3.eu-west-1.amazonaws.com
+ *
  * Computes equity curve + trading stats from fills data.
  * No auth required. Rate limiting: conservative 500ms delays.
  */
 
+import { gunzipSync } from 'node:zlib'
 import type { EquityCurvePoint, PositionHistoryItem, StatsDetail } from './enrichment-types'
 import { computeStatsFromPositions, buildEquityCurveFromPositions } from './enrichment-dex'
 import { fetchJson } from './shared'
 import { logger } from '@/lib/logger'
 
 const DATA_API = 'https://data.api.drift.trade'
+const S3_BASE = 'https://drift-historical-data-v2.s3.eu-west-1.amazonaws.com'
+const DRIFT_PROGRAM = 'dRiftyHA39MWEi3m9aunc5MzRF1JYuBsbn6VPcn33UH'
 
 interface DriftFill {
   marketIndex?: number
@@ -93,6 +99,259 @@ export async function fetchDriftPositionHistory(
       })
   } catch (err) {
     logger.warn(`[drift] Position history failed for ${authority}: ${err instanceof Error ? err.message : String(err)}`)
+    return []
+  }
+}
+
+// ============================================
+// S3 Historical Trade Data
+// ============================================
+
+interface S3TradeRecord {
+  ts: string
+  action: string
+  taker: string
+  maker: string
+  takerOrderDirection: string
+  marketIndex: string
+  marketType: string
+  baseAssetAmountFilled: string
+  quoteAssetAmountFilled: string
+  takerFee: string
+  makerRebate: string
+  oraclePrice: string
+}
+
+/**
+ * Generate date strings (YYYYMMDD) for the last N days.
+ */
+function getDateRange(days: number): Array<{ year: string; yearMonthDay: string }> {
+  const dates: Array<{ year: string; yearMonthDay: string }> = []
+  const now = Date.now()
+  for (let i = 0; i < days; i++) {
+    const d = new Date(now - i * 86400000)
+    const year = d.getUTCFullYear().toString()
+    const month = String(d.getUTCMonth() + 1).padStart(2, '0')
+    const day = String(d.getUTCDate()).padStart(2, '0')
+    dates.push({ year, yearMonthDay: `${year}${month}${day}` })
+  }
+  return dates
+}
+
+/**
+ * Parse CSV text into objects using the header row.
+ */
+function parseCsv(text: string): S3TradeRecord[] {
+  const lines = text.split('\n').filter((l) => l.trim().length > 0)
+  if (lines.length < 2) return []
+
+  const headers = lines[0].split(',').map((h) => h.trim())
+  const records: S3TradeRecord[] = []
+
+  for (let i = 1; i < lines.length; i++) {
+    const values = lines[i].split(',')
+    if (values.length < headers.length) continue
+    const record: Record<string, string> = {}
+    for (let j = 0; j < headers.length; j++) {
+      record[headers[j]] = (values[j] || '').trim()
+    }
+    records.push(record as unknown as S3TradeRecord)
+  }
+  return records
+}
+
+/**
+ * Fetch and decompress a single day's trade records from Drift S3.
+ * Returns empty array on 404/missing (not all users have S3 data).
+ */
+async function fetchS3DayTrades(authority: string, year: string, yearMonthDay: string): Promise<S3TradeRecord[]> {
+  const url = `${S3_BASE}/program/${DRIFT_PROGRAM}/user/${authority}/tradeRecords/${year}/${yearMonthDay}`
+  try {
+    const res = await fetch(url, {
+      signal: AbortSignal.timeout(10_000),
+      headers: { 'Accept-Encoding': 'gzip' },
+    })
+
+    if (res.status === 404 || res.status === 403) return []
+    if (!res.ok) return []
+
+    const buf = Buffer.from(await res.arrayBuffer())
+    let text: string
+    try {
+      // S3 data is gzip-compressed CSV
+      text = gunzipSync(buf).toString('utf-8')
+    } catch {
+      // Not gzipped — try as plain text
+      text = buf.toString('utf-8')
+    }
+
+    return parseCsv(text)
+  } catch (err) {
+    // Network errors, timeouts — return empty gracefully
+    logger.warn(`[drift-s3] Failed to fetch ${yearMonthDay} for ${authority}: ${err instanceof Error ? err.message : String(err)}`)
+    return []
+  }
+}
+
+/**
+ * Group consecutive same-direction fills on the same market into positions.
+ * A position closes when direction changes or market changes.
+ */
+function groupFillsIntoPositions(trades: S3TradeRecord[], authority: string): PositionHistoryItem[] {
+  // Filter to fills where this authority is the taker
+  const fills = trades
+    .filter((t) => t.action === 'fill' && t.taker?.toLowerCase() === authority.toLowerCase())
+    .sort((a, b) => Number(a.ts) - Number(b.ts))
+
+  if (fills.length === 0) return []
+
+  const positions: PositionHistoryItem[] = []
+
+  let currentDirection: 'long' | 'short' | null = null
+  let currentMarket: string | null = null
+  let currentMarketType: string | null = null
+  let openTs: number | null = null
+  let totalBaseSize = 0
+  let totalQuoteSize = 0
+  let totalFees = 0
+  let entryPrice: number | null = null
+  let fillCount = 0
+
+  function flushPosition() {
+    if (currentDirection == null || currentMarket == null || fillCount === 0) return
+
+    const marketIdx = parseInt(currentMarket, 10)
+    const symbol = DRIFT_MARKETS[marketIdx] || `PERP-${currentMarket}`
+    const avgExitPrice = totalBaseSize > 0 ? totalQuoteSize / totalBaseSize : null
+
+    positions.push({
+      symbol,
+      direction: currentDirection,
+      positionType: currentMarketType === 'spot' ? 'spot' : 'perpetual',
+      marginMode: 'cross',
+      openTime: openTs ? new Date(openTs * 1000).toISOString() : null,
+      closeTime: null, // Set by last fill below
+      entryPrice: entryPrice,
+      exitPrice: avgExitPrice,
+      maxPositionSize: totalQuoteSize > 0 ? totalQuoteSize : null,
+      closedSize: totalBaseSize > 0 ? totalBaseSize : null,
+      pnlUsd: null, // S3 data doesn't include realized PnL per position
+      pnlPct: null,
+      status: 'closed',
+    })
+  }
+
+  for (const fill of fills) {
+    const dir = fill.takerOrderDirection?.toLowerCase() === 'long' ? 'long' as const : 'short' as const
+    const market = fill.marketIndex
+    const marketType = fill.marketType || 'perp'
+    const baseSize = Math.abs(Number(fill.baseAssetAmountFilled) || 0) / 1e9
+    const quoteSize = Math.abs(Number(fill.quoteAssetAmountFilled) || 0) / 1e6
+    const fee = Math.abs(Number(fill.takerFee) || 0) / 1e6
+    const oracle = Number(fill.oraclePrice) || 0
+    const ts = Number(fill.ts) || 0
+
+    // If direction or market changes, close the current position
+    if (currentDirection !== dir || currentMarket !== market) {
+      flushPosition()
+      // Start new position
+      currentDirection = dir
+      currentMarket = market
+      currentMarketType = marketType
+      openTs = ts
+      totalBaseSize = 0
+      totalQuoteSize = 0
+      totalFees = 0
+      entryPrice = oracle > 0 ? oracle / 1e6 : (quoteSize > 0 && baseSize > 0 ? quoteSize / baseSize : null)
+      fillCount = 0
+    }
+
+    totalBaseSize += baseSize
+    totalQuoteSize += quoteSize
+    totalFees += fee
+    fillCount++
+  }
+
+  // Flush the last position
+  flushPosition()
+
+  // Set closeTime on all positions using the last fill timestamp
+  // (Positions are approximate groups; use last fill as close)
+  if (positions.length > 0 && fills.length > 0) {
+    // Walk through fills again to assign close times
+    let posIdx = 0
+    let prevDir: string | null = null
+    let prevMarket: string | null = null
+
+    for (const fill of fills) {
+      const dir = fill.takerOrderDirection?.toLowerCase() === 'long' ? 'long' : 'short'
+      const market = fill.marketIndex
+
+      if (prevDir !== null && (dir !== prevDir || market !== prevMarket)) {
+        // Direction/market changed — the previous position closed at the previous fill
+        posIdx++
+      }
+      prevDir = dir
+      prevMarket = market
+
+      if (posIdx < positions.length) {
+        const ts = Number(fill.ts) || 0
+        if (ts > 0) {
+          positions[posIdx].closeTime = new Date(ts * 1000).toISOString()
+        }
+      }
+    }
+  }
+
+  return positions
+}
+
+/**
+ * Fetch position history from Drift S3 public bucket.
+ *
+ * Fetches gzip-compressed CSV trade records for the last 90 days,
+ * parses them, and groups fills into PositionHistoryItem entries.
+ *
+ * Not all Drift users have S3 data (subaccounts, inactive traders).
+ * Returns empty array on 404/missing data.
+ */
+export async function fetchDriftPositionHistoryFromS3(
+  authority: string,
+  days = 90
+): Promise<PositionHistoryItem[]> {
+  try {
+    const dates = getDateRange(days)
+
+    // Fetch in parallel batches of 10 to avoid overwhelming S3
+    const allTrades: S3TradeRecord[] = []
+    const batchSize = 10
+
+    for (let i = 0; i < dates.length; i += batchSize) {
+      const batch = dates.slice(i, i + batchSize)
+      const results = await Promise.allSettled(
+        batch.map((d) => fetchS3DayTrades(authority, d.year, d.yearMonthDay))
+      )
+
+      for (const result of results) {
+        if (result.status === 'fulfilled' && result.value.length > 0) {
+          allTrades.push(...result.value)
+        }
+      }
+
+      // If first batch returns nothing, likely no S3 data exists — bail early
+      if (i === 0 && allTrades.length === 0) {
+        logger.info(`[drift-s3] No S3 trade data found for ${authority}, skipping remaining days`)
+        return []
+      }
+    }
+
+    if (allTrades.length === 0) return []
+
+    logger.info(`[drift-s3] Fetched ${allTrades.length} trades over ${days} days for ${authority}`)
+
+    return groupFillsIntoPositions(allTrades, authority)
+  } catch (err) {
+    logger.warn(`[drift-s3] Position history from S3 failed for ${authority}: ${err instanceof Error ? err.message : String(err)}`)
     return []
   }
 }

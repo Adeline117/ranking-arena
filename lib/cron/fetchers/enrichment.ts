@@ -78,6 +78,7 @@ export {
 // Drift
 export {
   fetchDriftPositionHistory,
+  fetchDriftPositionHistoryFromS3,
   fetchDriftEquityCurve,
   fetchDriftStatsDetail,
 } from './enrichment-drift'
