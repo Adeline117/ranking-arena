@@ -21,8 +21,10 @@ import {
 import {
   upsertPositionHistory,
   upsertAssetBreakdown,
+  upsertPortfolio,
   calculateAssetBreakdown,
   type PositionHistoryItem,
+  type PortfolioPosition,
 } from '@/lib/cron/fetchers/enrichment'
 
 // ─── Config ──────────────────────────────────────────────────
@@ -52,9 +54,9 @@ const supabase = createClient(supabaseUrl, supabaseKey, {
 
 // ─── Platforms with fetchPositionHistory ──────────────────────
 
-function getPlatformsWithPositionHistory(): string[] {
+function getPlatformsWithPositions(): string[] {
   return Object.entries(ENRICHMENT_PLATFORM_CONFIGS)
-    .filter(([, config]) => config.fetchPositionHistory != null)
+    .filter(([, config]) => config.fetchPositionHistory != null || config.fetchCurrentPositions != null)
     .map(([key]) => key)
 }
 
@@ -107,7 +109,7 @@ function sleep(ms: number): Promise<void> {
 // ─── Main ────────────────────────────────────────────────────
 
 async function main() {
-  const allPlatforms = getPlatformsWithPositionHistory()
+  const allPlatforms = getPlatformsWithPositions()
   const platforms = platformFlag
     ? allPlatforms.filter(p => p === platformFlag)
     : allPlatforms
@@ -115,8 +117,8 @@ async function main() {
   if (platforms.length === 0) {
     console.error(
       platformFlag
-        ? `Platform "${platformFlag}" not found or has no fetchPositionHistory. Available: ${allPlatforms.join(', ')}`
-        : 'No platforms with fetchPositionHistory found'
+        ? `Platform "${platformFlag}" not found or has no position fetcher. Available: ${allPlatforms.join(', ')}`
+        : 'No platforms with position fetchers found'
     )
     process.exit(1)
   }
@@ -133,13 +135,16 @@ async function main() {
 
   for (const platform of platforms) {
     const config = ENRICHMENT_PLATFORM_CONFIGS[platform]
-    if (!config?.fetchPositionHistory) continue
+    if (!config?.fetchPositionHistory && !config?.fetchCurrentPositions) continue
 
-    console.log(`\n--- ${platform} ---`)
+    const isPortfolioOnly = !config.fetchPositionHistory && !!config.fetchCurrentPositions
+    const modeLabel = isPortfolioOnly ? 'current positions (portfolio)' : 'position history'
+
+    console.log(`\n--- ${platform} (${modeLabel}) ---`)
 
     // Find traders missing position history
     const missingTraders = await findTradersMissingPositions(supabase, platform, traderLimit)
-    console.log(`  ${missingTraders.length} traders missing position history (out of top ${traderLimit})`)
+    console.log(`  ${missingTraders.length} traders missing ${modeLabel} (out of top ${traderLimit})`)
 
     if (missingTraders.length === 0 || dryRun) continue
 
@@ -153,6 +158,24 @@ async function main() {
       const results = await Promise.allSettled(
         batch.map(async (traderId) => {
           try {
+            // Portfolio-only mode: fetch current positions and save as portfolio
+            if (isPortfolioOnly) {
+              const currentPos = await config.fetchCurrentPositions!(traderId)
+              if (currentPos.length === 0) return { traderId, count: 0 }
+
+              await upsertPortfolio(supabase, platform, traderId,
+                currentPos.map((p) => ({
+                  symbol: p.symbol,
+                  direction: p.direction,
+                  investedPct: 'investedPct' in p ? p.investedPct : null,
+                  entryPrice: p.entryPrice,
+                  pnl: 'pnl' in p ? p.pnl : null,
+                }))
+              )
+              return { traderId, count: currentPos.length }
+            }
+
+            // Standard mode: fetch position history
             const positions = await config.fetchPositionHistory!(traderId)
             if (positions.length === 0) {
               return { traderId, count: 0 }
