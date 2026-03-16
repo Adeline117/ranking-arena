@@ -27,6 +27,9 @@ function corsOrigin(): string {
 
 // Supported exchange API allow-list
 const ALLOWED_HOSTS = [
+  // VPS Playwright scraper (relay for WAF-blocked exchanges)
+  '45.76.152.169:3457',
+  '45.76.152.169:3456',
   'www.binance.com',
   'api.binance.com',
   'fapi.binance.com',
