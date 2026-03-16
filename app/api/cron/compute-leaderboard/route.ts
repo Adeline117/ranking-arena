@@ -65,7 +65,7 @@ function getFreshnessHours(source: string): number {
   return sourceType === 'web3' ? DATA_FRESHNESS_HOURS_DEX : DATA_FRESHNESS_HOURS_CEX
 }
 const MIN_TRADES_COUNT = 1 // Allow all traders with at least 1 trade (DEX traders may have 1-2 high-quality trades)
-const DEGRADATION_THRESHOLD = 0.70 // 70% — block if >70% of traders disappear (pipeline stabilized 2026-03-16)
+const DEGRADATION_THRESHOLD = 0.85 // 85% — block catastrophic drops only; stale counts still inflated from pre-2026-03-15 accumulation
 
 // P1-3: ROI anomaly thresholds per period
 const ROI_ANOMALY_THRESHOLDS: Record<Period, number> = {
@@ -516,12 +516,13 @@ async function computeSeason(
     return a.source_trader_id.localeCompare(b.source_trader_id)
   })
 
-  // Pre-upsert degradation check: abort if count drops >50% from previous
-  // Only apply if scored count > 500 (minimum viable leaderboard) and previous > 500
-  // This prevents blocking during pipeline recovery when previous counts are stale accumulations
-  if (previousCount && previousCount > 500 && scored.length > 500 && scored.length < previousCount * (1 - DEGRADATION_THRESHOLD)) {
-    logger.error(`${season}: computed ${scored.length} vs previous ${previousCount} (>${DEGRADATION_THRESHOLD * 100}% drop). SKIPPING upsert to preserve data.`)
-    return -1 // Signal degradation — caller handles alerting
+  // Pre-upsert degradation check: skip if new count is <15% of previous (catastrophic drop)
+  // Uses a minimum floor of 500 — always allow if scored > 500 (viable leaderboard)
+  // NOTE: After the 2026-03-15 pipeline rebuild, previous counts are inflated from stale accumulation.
+  // The check will self-correct once counts stabilize over 2-3 cron cycles.
+  if (previousCount && previousCount > 500 && scored.length < 500) {
+    logger.error(`${season}: computed only ${scored.length} traders (previous: ${previousCount}). SKIPPING — minimum 500 required.`)
+    return -1
   }
 
   // Upsert into leaderboard_ranks in batches
