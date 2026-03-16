@@ -58,6 +58,40 @@ function AuthCallbackContent() {
       }
 
       if (session) {
+        // Sync OAuth avatar to user_profiles if not already set
+        try {
+          const meta = session.user.user_metadata
+          const oauthAvatar = meta?.avatar_url || meta?.picture || null
+          if (oauthAvatar) {
+            const { data: profile } = await supabase
+              .from('user_profiles')
+              .select('id, avatar_url, handle')
+              .eq('id', session.user.id)
+              .maybeSingle()
+
+            if (profile && !profile.avatar_url) {
+              // Profile exists but no avatar — sync from OAuth
+              await supabase
+                .from('user_profiles')
+                .update({ avatar_url: oauthAvatar })
+                .eq('id', session.user.id)
+            } else if (!profile) {
+              // No profile yet — create one with avatar
+              const emailHandle = session.user.email?.split('@')[0] || session.user.id.slice(0, 8)
+              await supabase
+                .from('user_profiles')
+                .upsert({
+                  id: session.user.id,
+                  email: session.user.email || '',
+                  handle: emailHandle,
+                  avatar_url: oauthAvatar,
+                }, { onConflict: 'id' })
+            }
+          }
+        } catch (err) {
+          logger.warn('Failed to sync OAuth avatar:', err)
+        }
+
         await saveToStore(session)
         // Check if this is a new user (created within the last 30 seconds)
         const createdAt = new Date(session.user.created_at).getTime()
