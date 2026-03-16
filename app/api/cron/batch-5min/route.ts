@@ -40,7 +40,7 @@ export async function GET(request: NextRequest) {
   const plog = await PipelineLogger.start('batch-5min')
 
   // Run all sub-jobs in parallel — they are independent, no HTTP needed
-  // Wrap with 250s timeout to ensure plog gets closed within 300s maxDuration
+  // Wrap with 280s timeout to ensure plog gets closed within 300s maxDuration
   let results: InlineJobResult[]
   try {
     results = await Promise.race([
@@ -50,7 +50,7 @@ export async function GET(request: NextRequest) {
         syncTradersInline(),
       ]),
       new Promise<never>((_, reject) =>
-        setTimeout(() => reject(new Error('batch-5min timed out after 250s')), 250_000)
+        setTimeout(() => reject(new Error('batch-5min timed out after 280s')), 280_000)
       ),
     ])
   } catch (err) {
