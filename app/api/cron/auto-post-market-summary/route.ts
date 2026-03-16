@@ -96,6 +96,7 @@ export async function GET(request: NextRequest) {
         content,
         author_id: SYSTEM_USER_ID,
         author_handle: SYSTEM_HANDLE,
+        author_avatar_url: 'https://www.arenafi.org/logo-symbol.png',
         poll_enabled: false,
         hot_score: 50, // Give system posts a baseline hot score
       })
@@ -129,8 +130,9 @@ async function ensureSystemUser(supabase: AnySupabase) {
         id: SYSTEM_USER_ID,
         handle: SYSTEM_HANDLE,
         display_name: SYSTEM_DISPLAY_NAME,
-        avatar_url: null,
+        avatar_url: 'https://www.arenafi.org/logo-symbol.png',
         bio: 'Automated market analysis by Arena',
+        role: 'official',
       }, { onConflict: 'id' })
 
     if (error) {
@@ -175,7 +177,7 @@ async function fetchTopPerformers(supabase: AnySupabase): Promise<TopTrader[]> {
   const { data } = await supabase
     .from('leaderboard_ranks')
     .select('display_name, handle, source, source_trader_id, arena_score, roi_pct')
-    .eq('season', '7D')
+    .eq('season_id', '7D')
     .order('arena_score', { ascending: false })
     .limit(3)
 
@@ -194,7 +196,7 @@ async function fetchTrendingTraders(supabase: AnySupabase): Promise<TopTrader[]>
   const { data } = await supabase
     .from('leaderboard_ranks')
     .select('display_name, handle, source, source_trader_id, arena_score, roi_pct')
-    .eq('season', '30D')
+    .eq('season_id', '30D')
     .order('arena_score', { ascending: false })
     .range(3, 5) // offset to get different traders from top performers
 
