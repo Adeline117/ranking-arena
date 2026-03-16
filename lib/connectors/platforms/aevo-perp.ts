@@ -26,12 +26,22 @@ import type {
 
 interface AevoLeaderboardEntry {
   username: string
-  pnl: string           // String number
-  totalVolume: string    // String number
+  pnl: number | string   // Numeric or string
+  options_volume?: number | string
+  perp_volume?: number | string
+  totalVolume?: string   // Legacy field
   ranking: number
 }
 
 interface AevoResponse {
+  // New format (2026+): nested under 'leaderboard' key
+  leaderboard?: {
+    daily?: AevoLeaderboardEntry[]
+    weekly?: AevoLeaderboardEntry[]
+    monthly?: AevoLeaderboardEntry[]
+    all_time?: AevoLeaderboardEntry[]
+  }
+  // Legacy format: top-level keys
   weekly?: AevoLeaderboardEntry[]
   monthly?: AevoLeaderboardEntry[]
   all_time?: AevoLeaderboardEntry[]
@@ -57,8 +67,8 @@ export class AevoPerpConnector extends BaseConnector {
     ],
   }
 
-  private mapWindowToKey(window: Window): keyof AevoResponse {
-    const m: Record<Window, keyof AevoResponse> = {
+  private mapWindowToKey(window: Window): 'weekly' | 'monthly' | 'all_time' {
+    const m: Record<Window, 'weekly' | 'monthly' | 'all_time'> = {
       '7d': 'weekly',
       '30d': 'monthly',
       '90d': 'all_time',
@@ -76,9 +86,10 @@ export class AevoPerpConnector extends BaseConnector {
     )
 
     const key = this.mapWindowToKey(window)
-    const entries = data?.[key] || []
+    // Support both new format (nested under 'leaderboard') and legacy (top-level)
+    const entries = data?.leaderboard?.[key] || data?.[key] || []
 
-    const traders: TraderSource[] = entries.slice(0, limit).map(entry => ({
+    const traders: TraderSource[] = entries.slice(0, limit).map((entry: AevoLeaderboardEntry) => ({
       platform: this.platform,
       market_type: this.marketType,
       trader_key: (entry.username || '').toLowerCase(),
@@ -118,7 +129,10 @@ export class AevoPerpConnector extends BaseConnector {
   normalize(raw: unknown): Record<string, unknown> {
     const e = raw as AevoLeaderboardEntry
     const pnl = safeNumber(e.pnl)
-    const volume = safeNumber(e.totalVolume)
+    // Support new format (options_volume + perp_volume) and legacy (totalVolume)
+    const optVol = safeNumber(e.options_volume) ?? 0
+    const perpVol = safeNumber(e.perp_volume) ?? 0
+    const volume = (optVol + perpVol) || safeNumber(e.totalVolume)
 
     // Estimate ROI: pnl / (volume / 10) × 100, assumes 10x avg leverage
     // Low-volume traders (estimatedCapital <= 100) get null ROI — not fake data

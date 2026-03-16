@@ -271,6 +271,7 @@ export class GainsPerpConnector extends BaseConnector {
   normalize(raw: Record<string, unknown>): Record<string, unknown> {
     const pnl = this.num(raw.total_pnl_usd ?? raw.total_pnl ?? raw.pnl)
     const wins = this.num(raw.count_win) ?? 0
+    const losses = this.num(raw.count_loss) ?? 0
     const total = this.num(raw.count ?? raw.totalTrades) ?? 0
     const winRate = total > 0 ? (wins / total) * 100 : null
     // Estimate ROI: pnl / (avgPositionSize × totalTrades)
@@ -280,6 +281,24 @@ export class GainsPerpConnector extends BaseConnector {
       roi = Math.max(-100, Math.min(10000, (pnl / (avgPos * total)) * 100))
     }
 
+    // MDD approximation from avg_loss, count_loss, avg_win, count_win
+    // Estimated peak equity = total winnings = avg_win * count_win
+    // Estimated max drawdown = total losses / (total winnings + total losses) * 100
+    const avgWin = this.num(raw.avg_win)
+    const avgLoss = this.num(raw.avg_loss)
+    let maxDrawdown: number | null = null
+    if (avgLoss != null && losses > 0 && avgWin != null && wins > 0) {
+      const totalLosses = Math.abs(avgLoss) * losses
+      const totalWins = avgWin * wins
+      const peakEquity = totalWins + totalLosses // gross capital at risk
+      if (peakEquity > 0) {
+        const mdd = (totalLosses / peakEquity) * 100
+        if (mdd > 0.01 && mdd <= 100) {
+          maxDrawdown = Math.round(mdd * 100) / 100
+        }
+      }
+    }
+
     return {
       trader_key: String(raw.address ?? raw.trader ?? '').toLowerCase(),
       display_name: null,
@@ -287,7 +306,7 @@ export class GainsPerpConnector extends BaseConnector {
       roi,
       pnl,
       win_rate: winRate,
-      max_drawdown: null,
+      max_drawdown: maxDrawdown,
       trades_count: total > 0 ? total : null,
       followers: null,
       copiers: null,

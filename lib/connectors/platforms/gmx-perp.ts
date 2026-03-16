@@ -34,7 +34,7 @@ export class GmxPerpConnector extends BaseConnector {
     platform: 'gmx',
     market_types: ['perp'],
     native_windows: ['7d', '30d', '90d'],
-    available_fields: ['pnl', 'win_rate', 'trades_count'],
+    available_fields: ['pnl', 'win_rate', 'trades_count', 'max_drawdown'],
     has_timeseries: true,
     has_profiles: false,
     scraping_difficulty: 1,
@@ -239,14 +239,16 @@ export class GmxPerpConnector extends BaseConnector {
   /**
    * Normalize raw GMX leaderboard entry.
    * Raw fields: account/id, realizedPnl (BigInt scale 1e30 or USD),
-   * maxCapital, wins, losses, closedCount.
+   * maxCapital, netCapital, wins, losses, closedCount.
    * ROI computed as realizedPnl / maxCapital × 100.
    * win_rate computed as wins / (wins + losses) × 100.
+   * max_drawdown approximated as (maxCapital - netCapital) / maxCapital × 100.
    * Note: max_capital mapped to aum (closest semantic match).
    */
   normalize(raw: Record<string, unknown>): Record<string, unknown> {
     const pnl = this.fromGmxDecimals(raw.realizedPnl)
     const maxCapital = this.fromGmxDecimals(raw.maxCapital)
+    const netCapital = this.fromGmxDecimals(raw.netCapital)
     // ROI = realizedPnl / maxCapital × 100
     let roi: number | null = null
     if (pnl != null && maxCapital != null && maxCapital > 100) {
@@ -259,6 +261,18 @@ export class GmxPerpConnector extends BaseConnector {
     const winRate = totalTrades > 0 ? (wins / totalTrades) * 100 : null
     const tradesCount = safeNumber(raw.closedCount) ?? (totalTrades > 0 ? totalTrades : null)
 
+    // MDD approximation from netCapital vs maxCapital
+    // netCapital = current capital after all PnL; maxCapital = peak capital deployed
+    // If netCapital < maxCapital, the difference is the drawdown from peak
+    let maxDrawdown: number | null = null
+    if (maxCapital != null && maxCapital > 0 && netCapital != null) {
+      const drawdown = ((maxCapital - netCapital) / maxCapital) * 100
+      // Only report if positive and reasonable (capped at 100%)
+      if (drawdown > 0.01 && drawdown <= 100) {
+        maxDrawdown = Math.round(drawdown * 100) / 100
+      }
+    }
+
     return {
       trader_key: String(raw.account || raw.id || '').toLowerCase(),
       display_name: null,
@@ -266,7 +280,7 @@ export class GmxPerpConnector extends BaseConnector {
       roi,
       pnl,
       win_rate: winRate,
-      max_drawdown: null,    // Requires equity reconstruction (enrichment)
+      max_drawdown: maxDrawdown,
       trades_count: tradesCount,
       followers: null,
       copiers: null,
