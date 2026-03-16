@@ -286,10 +286,10 @@ export async function refreshHotScoresInline(): Promise<InlineJobResult> {
     }
 
     // Step 4: Direct update fallback
-    const cutoff = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString()
+    const cutoff = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString() // 30 days (was 7)
     const { data: posts, error: fetchErr } = await supabase
       .from('posts')
-      .select('id, like_count, comment_count, repost_count, view_count, created_at')
+      .select('id, like_count, comment_count, repost_count, view_count, created_at, poll_id')
       .gte('created_at', cutoff)
 
     if (fetchErr || !posts) {
@@ -298,9 +298,32 @@ export async function refreshHotScoresInline(): Promise<InlineJobResult> {
 
     // Calculate scores and prepare batch upsert
     const now = new Date().toISOString()
+
+    // Fetch poll vote counts for posts with polls
+    const pollPostIds = posts.filter(p => (p as Record<string, unknown>).poll_id).map(p => p.id)
+    const pollVotes = new Map<string, number>()
+    if (pollPostIds.length > 0) {
+      const { data: polls } = await supabase
+        .from('polls')
+        .select('post_id, options')
+        .in('post_id', pollPostIds.slice(0, 200))
+      for (const poll of (polls || [])) {
+        let total = 0
+        const opts = (poll.options || []) as Array<{ votes?: number }>
+        opts.forEach(o => { total += o.votes || 0 })
+        pollVotes.set(poll.post_id, total)
+      }
+    }
+
     const updates = posts.map(post => {
       const ageHours = (Date.now() - new Date(post.created_at).getTime()) / 3_600_000
-      const score = ((post.like_count ?? 0) * 3 + (post.comment_count ?? 0) * 5 + (post.repost_count ?? 0) * 2 + (post.view_count ?? 0) * 0.1) / Math.pow(ageHours + 2, 1.5)
+      const pv = pollVotes.get(post.id) || 0
+      const engagement = (post.like_count ?? 0) * 3 + (post.comment_count ?? 0) * 5 + (post.repost_count ?? 0) * 2 + (post.view_count ?? 0) * 0.1 + pv * 0.5
+      // Freshness boost: new posts get a baseline score
+      const freshness = ageHours < 2 ? 10 : ageHours < 6 ? 5 : ageHours < 12 ? 2 : 0
+      // Quality multiplier: poll posts get 1.5x
+      const quality = pv > 0 ? 1.5 : 1.0
+      const score = (engagement / Math.pow(ageHours + 2, 1.5) + freshness) * quality
       return {
         id: post.id,
         hot_score: Math.round(score * 100) / 100,
