@@ -343,8 +343,18 @@ async function computeSeason(
     if (!traderMap.has(key)) {
       traderMap.set(key, snap)
     } else {
-      // Merge full_confidence_at (keep newest)
+      // Merge: fill null fields from the duplicate (v1 may have enriched data that v2 doesn't)
       const existing = traderMap.get(key)!
+      if (snap.win_rate != null && existing.win_rate == null) existing.win_rate = snap.win_rate
+      if (snap.max_drawdown != null && existing.max_drawdown == null) existing.max_drawdown = snap.max_drawdown
+      if (snap.trades_count != null && existing.trades_count == null) existing.trades_count = snap.trades_count
+      if (snap.followers != null && existing.followers == null) existing.followers = snap.followers
+      if (snap.sharpe_ratio != null && existing.sharpe_ratio == null) existing.sharpe_ratio = snap.sharpe_ratio
+      if (snap.profitability_score != null && existing.profitability_score == null) existing.profitability_score = snap.profitability_score
+      if (snap.risk_control_score != null && existing.risk_control_score == null) existing.risk_control_score = snap.risk_control_score
+      if (snap.execution_score != null && existing.execution_score == null) existing.execution_score = snap.execution_score
+      if (snap.trading_style != null && existing.trading_style == null) existing.trading_style = snap.trading_style
+      if (snap.trader_type != null && existing.trader_type == null) existing.trader_type = snap.trader_type
       if (snap.full_confidence_at &&
           (!existing.full_confidence_at || snap.full_confidence_at > existing.full_confidence_at)) {
         existing.full_confidence_at = snap.full_confidence_at
