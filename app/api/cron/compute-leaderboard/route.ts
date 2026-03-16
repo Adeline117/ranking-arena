@@ -395,38 +395,45 @@ async function computeSeason(
     })
   )
 
-  // Fallback: fill missing avatars from trader_profiles_v2
-  const missingAvatarKeys = Array.from(handleMap.entries())
-    .filter(([, v]) => !v.avatar_url)
-    .map(([k]) => k)
-
-  if (missingAvatarKeys.length > 0) {
-    const missingBySource = new Map<string, string[]>()
-    for (const key of missingAvatarKeys) {
-      const [source, ...rest] = key.split(':')
-      const traderId = rest.join(':')
-      const ids = missingBySource.get(source) || []
-      ids.push(traderId)
-      missingBySource.set(source, ids)
+  // Fallback: fill missing handle/avatar from trader_profiles_v2.
+  // This covers (a) traders in handleMap but without avatar, AND
+  // (b) traders not in trader_sources at all (e.g., eToro, new platforms).
+  const tradersNeedingProfile = new Map<string, string[]>()
+  for (const t of uniqueTraders) {
+    const key = `${t.source}:${t.source_trader_id}`
+    const existing = handleMap.get(key)
+    if (!existing || !existing.avatar_url || !existing.handle) {
+      const ids = tradersNeedingProfile.get(t.source) || []
+      ids.push(t.source_trader_id)
+      tradersNeedingProfile.set(t.source, ids)
     }
+  }
+
+  if (tradersNeedingProfile.size > 0) {
 
     await Promise.all(
-      Array.from(missingBySource.entries()).map(async ([source, traderIds]) => {
+      Array.from(tradersNeedingProfile.entries()).map(async ([source, traderIds]) => {
         for (let i = 0; i < traderIds.length; i += 500) {
           const chunk = traderIds.slice(i, i + 500)
           const { data } = await supabase
             .from('trader_profiles_v2')
-            .select('trader_key, avatar_url')
+            .select('trader_key, display_name, avatar_url')
             .eq('platform', source)
             .in('trader_key', chunk)
-            .not('avatar_url', 'is', null)
 
-          data?.forEach((p: { trader_key: string; avatar_url: string | null }) => {
-            if (p.avatar_url) {
-              const existing = handleMap.get(`${source}:${p.trader_key}`)
-              if (existing) {
-                existing.avatar_url = p.avatar_url
-              }
+          data?.forEach((p: { trader_key: string; display_name: string | null; avatar_url: string | null }) => {
+            const key = `${source}:${p.trader_key}`
+            const existing = handleMap.get(key)
+            if (existing) {
+              // Fill in missing fields from profile
+              if (!existing.avatar_url && p.avatar_url) existing.avatar_url = p.avatar_url
+              if (!existing.handle && p.display_name) existing.handle = p.display_name
+            } else {
+              // Trader not in trader_sources at all — create entry from profile
+              handleMap.set(key, {
+                handle: p.display_name || null,
+                avatar_url: p.avatar_url || null,
+              })
             }
           })
         }
