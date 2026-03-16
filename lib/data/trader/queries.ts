@@ -642,17 +642,19 @@ export async function resolveTrader(supabase: SupabaseClient, params: {
   }
 
   // Steps 3+4 in parallel: leaderboard_ranks + trader_profiles_v2
+  // Search by BOTH source_trader_id AND handle/display_name to support platforms
+  // where the URL uses the handle but the DB key is a numeric ID (e.g., eToro).
   {
     let lbQuery = supabase
       .from('leaderboard_ranks')
       .select('source, source_trader_id, handle, avatar_url')
-      .eq('source_trader_id', decodedHandle)
+      .or(`source_trader_id.eq.${decodedHandle},handle.eq.${decodedHandle}`)
       .eq('season_id', '90D')
 
     let profileQuery = supabase
       .from('trader_profiles_v2')
       .select('platform, trader_key, display_name, avatar_url')
-      .eq('trader_key', decodedHandle)
+      .or(`trader_key.eq.${decodedHandle},display_name.eq.${decodedHandle}`)
 
     if (platformFilter) {
       lbQuery = lbQuery.eq('source', platformFilter)
