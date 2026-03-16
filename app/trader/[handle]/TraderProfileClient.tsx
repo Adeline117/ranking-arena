@@ -313,6 +313,8 @@ export default function TraderProfileClient({ data, serverTraderData, claimedUse
           isVerifiedTrader={isVerifiedTrader}
           isBot={data.source === 'web3_bot'}
           lastUpdated={traderData?.trackedSince}
+          claimedBio={claimedUser?.bio}
+          claimedAvatarUrl={claimedUser?.avatar_url}
         />
         </div>
 
