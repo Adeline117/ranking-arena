@@ -7,6 +7,7 @@ import { useApiMutation } from '@/lib/hooks/useApiMutation'
 import { apiRequest } from '@/lib/api/client'
 import { supabase } from '@/lib/supabase/client'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
+import { useLoginModal } from '@/lib/hooks/useLoginModal'
 import { tokens } from '@/lib/design-tokens'
 
 type MessageButtonProps = {
@@ -75,10 +76,11 @@ export default function MessageButton({
     }
   )
 
+  const { openLoginModal } = useLoginModal()
+
   const handleClick = async () => {
     if (!currentUserId) {
-      showToast(t('pleaseLogin'), 'warning')
-      router.push('/login')
+      openLoginModal(t('pleaseLogin'))
       return
     }
 

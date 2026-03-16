@@ -209,9 +209,14 @@ export function useAuthSession(): AuthSessionReturn {
         options.showToast('请先登录', 'warning')
       }
       if (options?.redirectToLogin !== false && typeof window !== 'undefined') {
-        // Store current URL for redirect back after login
-        const returnUrl = window.location.pathname + window.location.search
-        window.location.href = `/login?returnUrl=${encodeURIComponent(returnUrl)}`
+        // Open login modal instead of redirecting to /login page
+        import('@/lib/hooks/useLoginModal').then(({ useLoginModal }) => {
+          useLoginModal.getState().openLoginModal()
+        }).catch(() => {
+          // Fallback to redirect if module unavailable
+          const returnUrl = window.location.pathname + window.location.search
+          window.location.href = `/login?returnUrl=${encodeURIComponent(returnUrl)}`
+        })
       }
       return null
     }
