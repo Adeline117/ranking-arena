@@ -8,6 +8,7 @@ import { useAuthSession } from '@/lib/hooks/useAuthSession'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import PostCard from '@/app/components/post/components/PostCard'
 import type { PostWithUserState } from '@/lib/types'
+import { useLoginModal } from '@/lib/hooks/useLoginModal'
 import { logger } from '@/lib/logger'
 
 /** Score posts by freshness (10h half-life) + engagement */
@@ -82,13 +83,13 @@ export default function FollowingFeed() {
         <p style={{ fontSize: 16, marginBottom: 12 }}>
           {t('followingFeedLoginPrompt')}
         </p>
-        <a href="/login" style={{
+        <button onClick={() => useLoginModal.getState().openLoginModal()} style={{
           display: 'inline-block', padding: '8px 24px', borderRadius: tokens.radius.md,
           background: tokens.colors.accent.brand, color: tokens.colors.white,
-          textDecoration: 'none', fontWeight: 600, fontSize: 14,
+          border: 'none', cursor: 'pointer', fontWeight: 600, fontSize: 14,
         }}>
           {t('followingFeedLoginButton')}
-        </a>
+        </button>
       </div>
     )
   }

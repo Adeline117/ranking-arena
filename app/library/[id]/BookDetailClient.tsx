@@ -2,6 +2,7 @@
 
 import { useState, useCallback, useRef, useEffect } from 'react'
 import Link from 'next/link'
+import { useLoginModal } from '@/lib/hooks/useLoginModal'
 import TopNav from '@/app/components/layout/TopNav'
 import Breadcrumb from '@/app/components/ui/Breadcrumb'
 import MobileBottomNav from '@/app/components/layout/MobileBottomNav'
@@ -391,13 +392,13 @@ export default function BookDetailClient({
                     {t('bookStartReading')}
                   </Link>
                 ) : !session ? (
-                  <Link
-                    href="/login"
+                  <button
+                    onClick={() => useLoginModal.getState().openLoginModal()}
                     style={{
                       padding: '10px 24px', borderRadius: tokens.radius.lg,
                       fontSize: tokens.typography.fontSize.base, fontWeight: tokens.typography.fontWeight.semibold,
                       background: tokens.gradient.primary, color: 'var(--foreground)',
-                      textDecoration: 'none',
+                      border: 'none', cursor: 'pointer',
                       display: 'inline-flex', alignItems: 'center', gap: 8,
                       transition: `all ${tokens.transition.fast}`,
                       boxShadow: tokens.shadow.glow,
@@ -408,7 +409,7 @@ export default function BookDetailClient({
                       <path d="M7 11V7a5 5 0 0 1 10 0v4" />
                     </svg>
                     {t('bookLoginToRead')}
-                  </Link>
+                  </button>
                 ) : (
                   <Link
                     href="/pricing"

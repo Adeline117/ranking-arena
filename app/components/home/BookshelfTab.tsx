@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import Link from 'next/link'
+import { useLoginModal } from '@/lib/hooks/useLoginModal'
 import { tokens } from '@/lib/design-tokens'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import StarRating from '@/app/components/ui/StarRating'
@@ -93,13 +94,13 @@ export default function BookshelfTab() {
         <p style={{ fontSize: 16, marginBottom: 12 }}>
           {t('bookshelfLoginPrompt')}
         </p>
-        <a href="/login" style={{
+        <button onClick={() => useLoginModal.getState().openLoginModal()} style={{
           display: 'inline-block', padding: '8px 24px', borderRadius: tokens.radius.md,
           background: tokens.colors.accent.brand, color: tokens.colors.white,
-          textDecoration: 'none', fontWeight: 600, fontSize: 14,
+          border: 'none', cursor: 'pointer', fontWeight: 600, fontSize: 14,
         }}>
           {t('bookshelfLogin')}
-        </a>
+        </button>
       </div>
     )
   }
