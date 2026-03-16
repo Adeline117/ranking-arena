@@ -180,6 +180,10 @@
     {
       "path": "/api/cron/generate-profiles?limit=500",
       "schedule": "55 */6 * * *"
+    },
+    {
+      "path": "/api/cron/auto-post-market-summary",
+      "schedule": "0 10 * * *"
     }
   ],
   "headers": [
