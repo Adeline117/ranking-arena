@@ -169,11 +169,9 @@ async function getAllGroups(): Promise<Array<{ id: string; updated_at: string }>
 }
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
-  // Skip DB queries during build — sitemap regenerates via ISR
-  if (process.env.NEXT_PHASE === 'phase-production-build') return []
-
   const now = new Date().toISOString()
-  
+  const isBuild = process.env.NEXT_PHASE === 'phase-production-build'
+
   // Exchange ranking pages (generated from EXCHANGE_CONFIG)
   const { EXCHANGE_CONFIG, DEAD_BLOCKED_PLATFORMS } = await import('@/lib/constants/exchanges')
   const deadSet = new Set(DEAD_BLOCKED_PLATFORMS)
@@ -286,6 +284,18 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       priority: 0.5,
     },
     {
+      url: `${BASE_URL}/feed`,
+      lastModified: now,
+      changeFrequency: "hourly",
+      priority: 0.7,
+    },
+    {
+      url: `${BASE_URL}/claim`,
+      lastModified: now,
+      changeFrequency: "monthly",
+      priority: 0.6,
+    },
+    {
       url: `${BASE_URL}/login`,
       lastModified: now,
       changeFrequency: "monthly",
@@ -317,6 +327,11 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     },
   ]
   
+  // Skip DB queries during build — dynamic pages populate via ISR at runtime
+  if (isBuild) {
+    return [...staticPages, ...exchangePages]
+  }
+
   // 并行获取动态数据
   const [traders, posts, groups, libraryItems, userProfiles] = await Promise.all([
     getAllTraders(),

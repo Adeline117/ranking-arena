@@ -29,6 +29,14 @@ export const metadata: Metadata = {
     url: `${baseUrl}/feed`,
     siteName: 'Arena',
     type: 'website',
+    images: [{ url: `${baseUrl}/og-image.png`, width: 1200, height: 630, alt: 'Arena Trader Activity Feed' }],
+  },
+  twitter: {
+    card: 'summary_large_image',
+    title: 'Trader Activity Feed',
+    description: 'Live auto-generated feed of trader milestones: rank surges, ROI breakthroughs, win streaks, and large profits.',
+    images: [`${baseUrl}/og-image.png`],
+    creator: '@arenafi',
   },
 }
 
