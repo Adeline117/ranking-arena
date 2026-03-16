@@ -45,7 +45,7 @@ interface BinancePositionResponse {
 
 export async function fetchBinanceEquityCurve(
   traderId: string,
-  timeRange: 'WEEKLY' | 'MONTHLY' | 'QUARTERLY' = 'QUARTERLY'
+  timeRange: string = '90D'
 ): Promise<EquityCurvePoint[]> {
   try {
     // EMERGENCY FIX (2026-03-14): Reduce timeout from 15s → 8s to prevent accumulation
@@ -240,7 +240,7 @@ async function enrichSingleTrader(
   try {
     if (collectEquityCurve) {
       const curve = await withRetry(
-        () => fetchBinanceEquityCurve(traderId, 'QUARTERLY'),
+        () => fetchBinanceEquityCurve(traderId, '90D'),
         { maxRetries: 2, initialDelay: 2000, isRetryable: (e) => {
           const msg = e instanceof Error ? e.message : ''
           return msg.includes('timeout') || msg.includes('429') || msg.includes('ECONNRESET')

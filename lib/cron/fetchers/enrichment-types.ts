@@ -21,11 +21,17 @@ export async function fetchWithProxyFallback<T>(
 ): Promise<T> {
   // Try direct first
   try {
-    return await fetchJson<T>(url, opts)
+    const directResult = await fetchJson<T>(url, opts)
+    // Detect Binance geo-block (returns 200 with {code:0, msg:"Service unavailable from a restricted location"})
+    const asAny = directResult as Record<string, unknown>
+    if (asAny?.code === 0 && typeof asAny?.msg === 'string' && asAny.msg.includes('restricted location')) {
+      throw new Error('Binance geo-blocked (200 with restricted location message)')
+    }
+    return directResult
   } catch (err) {
     const msg = err instanceof Error ? err.message : ''
-    // If geo-blocked (451), WAF blocked (403), or timeout, try proxies
-    const isBlocked = msg.includes('451') || msg.includes('403') || msg.includes('Access Denied') || msg.includes('timeout') || msg.includes('ETIMEDOUT') || msg.includes('ECONNREFUSED')
+    // If geo-blocked (451), WAF blocked (403), timeout, or Binance 200-geoblock, try proxies
+    const isBlocked = msg.includes('451') || msg.includes('403') || msg.includes('Access Denied') || msg.includes('timeout') || msg.includes('ETIMEDOUT') || msg.includes('ECONNREFUSED') || msg.includes('geo-blocked') || msg.includes('restricted location')
     if (!isBlocked) throw err
 
     // Strategy 2: CF Worker proxy

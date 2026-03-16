@@ -157,8 +157,9 @@ export const ENRICHMENT_PLATFORM_CONFIGS: Record<string, EnrichmentConfig> = {
   binance_futures: {
     platform: 'binance_futures',
     fetchEquityCurve: async (traderId, days) => {
-      const timeRangeMap: Record<number, 'WEEKLY' | 'MONTHLY' | 'QUARTERLY'> = { 7: 'WEEKLY', 30: 'MONTHLY', 90: 'QUARTERLY' }
-      return fetchBinanceEquityCurve(traderId, timeRangeMap[days] || 'QUARTERLY')
+      // New Binance /friendly/ API uses 7D/30D/90D format (not WEEKLY/MONTHLY/QUARTERLY)
+      const timeRangeMap: Record<number, string> = { 7: '7D', 30: '30D', 90: '90D' }
+      return fetchBinanceEquityCurve(traderId, timeRangeMap[days] || '90D')
     },
     fetchStatsDetail: fetchBinanceStatsDetail,
     fetchPositionHistory: fetchBinancePositionHistory,
