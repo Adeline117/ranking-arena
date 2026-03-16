@@ -33,11 +33,11 @@ export class OkxFuturesConnector extends BaseConnector {
     notes: ['priapi endpoints, CF protected'],
   }
 
-  async discoverLeaderboard(window: Window, limit = 20, offset = 0): Promise<DiscoverResult> {
+  async discoverLeaderboard(window: Window, limit = 500, offset = 0): Promise<DiscoverResult> {
     // v5 copytrading public API (priapi removed 2026-03-14)
     // Auto-paginate: OKX returns max 20 per page
     const pageSize = Math.min(limit, 20)
-    const maxPages = Math.ceil(Math.min(limit, 200) / pageSize)
+    const maxPages = Math.ceil(Math.min(limit, 500) / pageSize)
     const allTraders: TraderSource[] = []
 
     for (let page = Math.floor(offset / pageSize) + 1; page <= maxPages + Math.floor(offset / pageSize); page++) {

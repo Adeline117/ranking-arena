@@ -27,27 +27,39 @@ export class HtxFuturesConnector extends BaseConnector {
     notes: ['Frequent API/DOM changes', 'CF protected', 'All 3 windows supported'],
   }
 
-  async discoverLeaderboard(window: Window, limit = 20, offset = 0): Promise<DiscoverResult> {
+  async discoverLeaderboard(window: Window, limit = 500, offset = 0): Promise<DiscoverResult> {
     // /bapi/ endpoint returns 405 since ~2026-03. Use futures.htx.com ranking API instead.
     // This is the same endpoint used by enrichment-htx.ts and confirmed working.
-    const page = Math.floor(offset / limit) + 1
     const pageSize = Math.min(limit, 50) // API max 50 per page
-    const _rawLb = await this.request<Record<string, unknown>>(
-      `https://futures.htx.com/-/x/hbg/v1/futures/copytrading/rank?rankType=1&pageNo=${page}&pageSize=${pageSize}`,
-      { method: 'GET' }
-    )
-    const data = warnValidate(HtxFuturesLeaderboardResponseSchema, _rawLb, 'htx-futures/leaderboard')
-    // New endpoint returns { code: 200, data: { itemList: [...], totalPage, totalNum } }
-    const list = data?.data?.itemList || data?.data?.list || []
+    const maxPages = Math.ceil(Math.min(limit, 500) / pageSize) // Up to 10 pages
+    const allTraders: TraderSource[] = []
 
-    const traders: TraderSource[] = (Array.isArray(list) ? list : []).map((item: Record<string, unknown>) => ({
-      platform: 'htx' as const, market_type: 'futures' as const,
-      trader_key: String(item.uid || ''), display_name: (item.nickName as string) || null,
-      profile_url: `https://www.htx.com/copy-trading/trader/${item.uid}`,
-      discovered_at: new Date().toISOString(), last_seen_at: new Date().toISOString(),
-      is_active: true, raw: item as Record<string, unknown>,
-    }))
-    return { traders, total_available: null, window, fetched_at: new Date().toISOString() }
+    for (let page = Math.floor(offset / pageSize) + 1; page <= maxPages + Math.floor(offset / pageSize); page++) {
+      const _rawLb = await this.request<Record<string, unknown>>(
+        `https://futures.htx.com/-/x/hbg/v1/futures/copytrading/rank?rankType=1&pageNo=${page}&pageSize=${pageSize}`,
+        { method: 'GET' }
+      )
+      const data = warnValidate(HtxFuturesLeaderboardResponseSchema, _rawLb, 'htx-futures/leaderboard')
+      // New endpoint returns { code: 200, data: { itemList: [...], totalPage, totalNum } }
+      const list = data?.data?.itemList || data?.data?.list || []
+      const items = Array.isArray(list) ? list : []
+
+      for (const item of items) {
+        allTraders.push({
+          platform: 'htx' as const, market_type: 'futures' as const,
+          trader_key: String((item as Record<string, unknown>).uid || ''),
+          display_name: ((item as Record<string, unknown>).nickName as string) || null,
+          profile_url: `https://www.htx.com/copy-trading/trader/${(item as Record<string, unknown>).uid}`,
+          discovered_at: new Date().toISOString(), last_seen_at: new Date().toISOString(),
+          is_active: true, raw: item as Record<string, unknown>,
+        })
+      }
+
+      if (items.length < pageSize) break // No more pages
+      if (allTraders.length >= limit) break
+    }
+
+    return { traders: allTraders.slice(0, limit), total_available: null, window, fetched_at: new Date().toISOString() }
   }
 
   async fetchTraderProfile(traderKey: string): Promise<ProfileResult | null> {
@@ -115,7 +127,7 @@ export class HtxFuturesConnector extends BaseConnector {
     return {
       trader_key: raw.uid ?? raw.userSign ?? null,
       display_name: safeStr(raw.nickName),
-      avatar_url: safeStr(raw.avatar),
+      avatar_url: safeStr(raw.avatar) || safeStr(raw.imgUrl) || null,
       roi: safeNumber(raw.roi ?? raw.profitRate90 ?? raw.totalProfitRate),
       pnl: safeNumber(raw.pnl ?? raw.profit90 ?? raw.cumulativePnl ?? raw.copyProfit ?? raw.profit),
       win_rate: winRate,

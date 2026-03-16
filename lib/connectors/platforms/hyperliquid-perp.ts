@@ -39,7 +39,7 @@ export class HyperliquidPerpConnector extends BaseConnector {
     notes: ['Public REST API', 'No CF', 'trader_key = 0x address', 'No followers/copiers/win_rate natively'],
   }
 
-  async discoverLeaderboard(window: Window, limit = 100, _offset = 0): Promise<DiscoverResult> {
+  async discoverLeaderboard(window: Window, limit = 500, _offset = 0): Promise<DiscoverResult> {
     // Primary: stats-data endpoint (GET, always works)
     // Fallback: info POST endpoint (broke ~2026-03-14, returns 422)
     let _rawLb: Record<string, unknown>
@@ -71,8 +71,20 @@ export class HyperliquidPerpConnector extends BaseConnector {
 
     const traders: TraderSource[] = entries.map((item: Record<string, unknown>) => {
       const address = String(item.ethAddress || item.user || '')
-      // Extract ROI/PnL from windowPerformances for the requested window
-      const perf = (item.windowPerformances as Record<string, Record<string, unknown>> | undefined)?.[windowKey]
+      // Extract ROI/PnL from windowPerformances for the requested window.
+      // windowPerformances can be either:
+      //   - An array of tuples: [["day", {pnl, roi, vlm}], ["week", ...], ...]  (stats-data endpoint)
+      //   - An object: { day: {pnl, roi, vlm}, week: ..., ... }                 (info endpoint)
+      let perf: Record<string, unknown> | undefined
+      const wp = item.windowPerformances
+      if (Array.isArray(wp)) {
+        // Array of [key, value] tuples
+        const entry = wp.find((pair: unknown) => Array.isArray(pair) && pair[0] === windowKey)
+        perf = entry ? (entry as [string, Record<string, unknown>])[1] : undefined
+      } else if (wp && typeof wp === 'object') {
+        // Object keyed by window name
+        perf = (wp as Record<string, Record<string, unknown>>)[windowKey]
+      }
       const rawRoi = perf?.roi != null ? Number(perf.roi) : null
       const rawPnl = perf?.pnl != null ? Number(perf.pnl) : null
       const roi = rawRoi != null ? rawRoi * 100 : null // decimal → percentage
