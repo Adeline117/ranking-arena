@@ -1,0 +1,914 @@
+{
+  "version": "1.0",
+  "description": "Crypto KOL style training data for Arena social seed content generation",
+  "collected_from": "100+ KOL profiles via web scraping + manual research (2026-03-16)",
+  "style_rules": {
+    "bio": {
+      "length": "1-10 words max",
+      "tone": "self-deprecating, ironic, minimal",
+      "examples_en": [
+        "full time larp",
+        "I trade, I drink your milkshake",
+        "STEM PhD dropout / crypto-trading dog",
+        "losing money professionally",
+        "contrarian. usually wrong",
+        "macro > ta",
+        "onchain",
+        "leverage addict in recovery",
+        "6 monitors still losing",
+        "bots > humans",
+        "not a KOL",
+        "reviewing exchanges",
+        "watching wallets",
+        "ex-nft now perps",
+        "narrative engineer"
+      ],
+      "examples_zh": [
+        "我说的都是错的",
+        "又菜又爱玩",
+        "做过三轮 还是不会",
+        "终于学会止损了",
+        "偶尔梭哈 经常后悔",
+        "记录爆仓",
+        "写代码的",
+        "上班摸鱼看盘",
+        "高抛低吸 说起来容易",
+        "炒币养生",
+        "边学边亏",
+        "挖百倍币的",
+        "K线"
+      ]
+    },
+    "post": {
+      "length": "5-80 words, most under 40",
+      "formatting": "no capitalization, minimal punctuation, no emoji lists, no numbered lists",
+      "currency_style": "use $ prefix: $BTC $ETH $SOL",
+      "number_style": "approximate: '73k' not '73,626.00', '差不多200%' not '+200.00%'",
+      "tone": "talking to self, not teaching others. casual, sometimes incomplete sentences",
+      "language_mix": "natural zh/en mixing, e.g. '刚看了下arena排名' mixing platform name in Chinese sentence",
+      "never": [
+        "numbered lists",
+        "bullet points",
+        "heavy emoji",
+        "Thread 🧵",
+        "marketing copy",
+        "calls to action",
+        "hashtags (except occasional $TOKEN)"
+      ],
+      "ultra_short_ok": [
+        "来了",
+        "开盘还行",
+        "rip",
+        "不追 等回调",
+        "patient",
+        "F"
+      ]
+    },
+    "comment": {
+      "length": "1-15 words, most under 5",
+      "tone": "reactive, not analytical",
+      "examples_en": [
+        "lol",
+        "fr",
+        "same",
+        "this",
+        "ngl",
+        "oof",
+        "bruh",
+        "wild",
+        "no way",
+        "honestly",
+        "yep",
+        "rip",
+        "F"
+      ],
+      "examples_zh": [
+        "6",
+        "草",
+        "绷",
+        "服了",
+        "离谱",
+        "啊这",
+        "笑死",
+        "不是吧",
+        "太猛了",
+        "哈哈哈",
+        "确实",
+        "来了",
+        "真的假的"
+      ],
+      "context_aware": {
+        "price_up": [
+          "来了",
+          "hodl",
+          "told you",
+          "weekly close关键",
+          "不敢空了"
+        ],
+        "price_down": [
+          "rip",
+          "F",
+          "pain",
+          "做空的赚了",
+          "该加仓了"
+        ],
+        "loss_post": [
+          "been there",
+          "F",
+          "做空就是送钱",
+          "别空了兄弟",
+          "rip bro"
+        ],
+        "gain_post": [
+          "nice",
+          "大佬",
+          "teach me",
+          "怎么做到的"
+        ],
+        "question": [
+          "i think so",
+          "not sure",
+          "同问",
+          "试了 挺快的",
+          "我也想知道"
+        ],
+        "analysis": [
+          "有道理",
+          "disagree but ok",
+          "interesting take",
+          "不一定"
+        ]
+      }
+    }
+  },
+  "kol_profiles": [
+    {
+      "handle": "Pentosh1",
+      "followers": "533K",
+      "lang": "en",
+      "bio": "full time larp",
+      "style": "raw emotional, life advice mixed with trading, short tweets",
+      "sample_tweets": [
+        "todays high, is tomorrow's low until you buy",
+        "One thing I will say, in the next couple months if you make life changing money Take it out",
+        "I know there are a lot of emotions right now and this flush is in the top 3 all time"
+      ]
+    },
+    {
+      "handle": "hexiecs",
+      "followers": "87K",
+      "lang": "zh",
+      "bio": "narrative engineer",
+      "style": "short narrative observations, mixing Chinese and English"
+    },
+    {
+      "handle": "11dizhu",
+      "followers": "87K",
+      "lang": "zh",
+      "bio": "我说的都是错的；关注我不能让你发财",
+      "style": "accounting style, simple numbers, self-deprecating",
+      "sample_tweets": [
+        "一年多过去了，30万利息是70660元",
+        "清明节到今天，通过2期lanuchpool，本金30万，已经帮妈妈赚了7069元"
+      ]
+    },
+    {
+      "handle": "thecryptoskanda",
+      "followers": "100K+",
+      "lang": "zh",
+      "bio": "韋馱 Cooking",
+      "style": "casual analysis, slang heavy",
+      "sample_tweets": [
+        "来了 这是crypto的SPAC时刻",
+        "开盘还行，但是链上价差也太大了",
+        "你别管最后会不会像SPAC一样的结局，拿住多单，享受过程"
+      ]
+    },
+    {
+      "handle": "0xNing0x",
+      "followers": "150K+",
+      "lang": "zh",
+      "bio": "NingNing",
+      "style": "longer analytical posts but conversational Chinese",
+      "sample_tweets": [
+        "后坎昆升级时代冉冉升起的新叙事",
+        "链抽象正在从叙事实例化为真正可用产品",
+        "为什么下周一全美100%会发生银行大挤兑"
+      ]
+    },
+    {
+      "handle": "CryptoMichNL",
+      "followers": "585K",
+      "lang": "en",
+      "bio": "CIO & Founder MNFund",
+      "style": "professional but accessible analysis"
+    },
+    {
+      "handle": "scottmelker",
+      "followers": "824K",
+      "lang": "en",
+      "bio": "The Wolf Of All Streets",
+      "style": "media host, hot takes, bitcoin focused"
+    },
+    {
+      "handle": "HsakaTrades",
+      "followers": "300K+",
+      "lang": "en",
+      "bio": "I trade, I drink your milkshake",
+      "style": "humorous one-liners about trading"
+    },
+    {
+      "handle": "TheCryptoDog",
+      "followers": "742K",
+      "lang": "en",
+      "bio": "STEM PhD dropout / crypto-trading dog",
+      "style": "market commentary and chart analysis, self-deprecating"
+    },
+    {
+      "handle": "cobie",
+      "followers": "670K",
+      "lang": "en",
+      "bio": "(three project links, no text)",
+      "style": "minimal, sarcastic, contrarian"
+    },
+    {
+      "handle": "CryptoDonAlt",
+      "followers": "391K",
+      "lang": "en",
+      "bio": "",
+      "style": "market education, bitcoin analysis, direct"
+    },
+    {
+      "handle": "CryptoKaleo",
+      "followers": "478K",
+      "lang": "en",
+      "bio": "",
+      "style": "options trading, momentum, chart-heavy"
+    },
+    {
+      "handle": "AltcoinGordon",
+      "followers": "420K",
+      "lang": "en",
+      "bio": "",
+      "style": "altcoin analysis, technical charts"
+    },
+    {
+      "handle": "inversebrah",
+      "followers": "200K+",
+      "lang": "en",
+      "bio": "",
+      "style": "meme-heavy, absurdist humor about market"
+    },
+    {
+      "handle": "SmartContracter",
+      "followers": "200K+",
+      "lang": "en",
+      "bio": "",
+      "style": "trading setups, concise"
+    },
+    {
+      "handle": "blknoiz06",
+      "followers": "300K+",
+      "lang": "en",
+      "bio": "",
+      "style": "defi alpha, on-chain analysis"
+    },
+    {
+      "handle": "DefiIgnas",
+      "followers": "400K+",
+      "lang": "en",
+      "bio": "",
+      "style": "defi research, protocol analysis"
+    },
+    {
+      "handle": "milesdeutscher",
+      "followers": "500K+",
+      "lang": "en",
+      "bio": "",
+      "style": "crypto education, beginner friendly"
+    },
+    {
+      "handle": "lookonchain",
+      "followers": "500K+",
+      "lang": "en",
+      "bio": "",
+      "style": "on-chain data, whale tracking"
+    },
+    {
+      "handle": "whale_alert",
+      "followers": "2M+",
+      "lang": "en",
+      "bio": "",
+      "style": "automated whale transaction alerts"
+    },
+    {
+      "handle": "Anbessa100",
+      "followers": "31K",
+      "lang": "en",
+      "bio": "Stoic goated lion. No paid services. I never DM you.",
+      "style": "stoic, very short, no-BS"
+    },
+    {
+      "handle": "PeterLBrandt",
+      "followers": "632K",
+      "lang": "en",
+      "bio": "",
+      "style": "classical charting, old school trader wisdom"
+    },
+    {
+      "handle": "RaoulGMI",
+      "followers": "924K",
+      "lang": "en",
+      "bio": "",
+      "style": "macro, liquidity cycles, institutional perspective"
+    },
+    {
+      "handle": "100trillionUSD",
+      "followers": "1.8M",
+      "lang": "en",
+      "bio": "",
+      "style": "bitcoin stock-to-flow, quantitative"
+    },
+    {
+      "handle": "CryptoHayes",
+      "followers": "786K",
+      "lang": "en",
+      "bio": "Arthur Hayes, Co-Founder of BitMEX & CIO",
+      "style": "macro essays, geopolitical crypto takes"
+    },
+    {
+      "handle": "aidashutiaozi",
+      "followers": "135K",
+      "lang": "zh",
+      "bio": "",
+      "style": "幽默 Web3 updates airdrops"
+    },
+    {
+      "handle": "hebi555",
+      "followers": "376K",
+      "lang": "zh",
+      "bio": "",
+      "style": "直接犀利 Web3/blockchain/NFT/DeFi"
+    },
+    {
+      "handle": "Phyrex_Ni",
+      "followers": "332K",
+      "lang": "zh",
+      "bio": "",
+      "style": "数据驱动分析 宏观+链上指标"
+    },
+    {
+      "handle": "KuiGas",
+      "followers": "96K",
+      "lang": "zh",
+      "bio": "",
+      "style": "链上交互教程 空投策略"
+    },
+    {
+      "handle": "jason_chen998",
+      "followers": "90K",
+      "lang": "zh",
+      "bio": "",
+      "style": "深入浅出项目分析"
+    },
+    {
+      "handle": "0x0xFeng",
+      "followers": "65K",
+      "lang": "zh",
+      "bio": "",
+      "style": "Solana生态 空投 幽默"
+    },
+    {
+      "handle": "BTW0205",
+      "followers": "324K",
+      "lang": "zh",
+      "bio": "BITWU.ETH",
+      "style": "跨界 crypto+AI+Web3"
+    },
+    {
+      "handle": "Paris13Jeanne",
+      "followers": "109K",
+      "lang": "zh",
+      "bio": "K线教主",
+      "style": "8年交易 分析+生活"
+    },
+    {
+      "handle": "DoctorMbitcoin",
+      "followers": "88K",
+      "lang": "zh",
+      "bio": "Bitcoin女博士",
+      "style": "自嘲幽默 BTC趋势"
+    },
+    {
+      "handle": "kiki520_eth",
+      "followers": "69K",
+      "lang": "zh",
+      "bio": "庞教主",
+      "style": "Hyperliquid中文区 研究分析"
+    },
+    {
+      "handle": "VitalikButerin",
+      "followers": "5.8M",
+      "lang": "en",
+      "bio": "",
+      "style": "protocol design, scaling, philosophical"
+    },
+    {
+      "handle": "cz_binance",
+      "followers": "10.7M",
+      "lang": "en",
+      "bio": "",
+      "style": "exchange updates, industry insight"
+    },
+    {
+      "handle": "APompliano",
+      "followers": "1.8M",
+      "lang": "en",
+      "bio": "",
+      "style": "pro-bitcoin, daily newsletter"
+    },
+    {
+      "handle": "saylor",
+      "followers": "4.8M",
+      "lang": "en",
+      "bio": "",
+      "style": "corporate btc treasury, conviction posts"
+    },
+    {
+      "handle": "brian_armstrong",
+      "followers": "1.7M",
+      "lang": "en",
+      "bio": "",
+      "style": "crypto adoption, regulation"
+    },
+    {
+      "handle": "ErikVoorhees",
+      "followers": "673K",
+      "lang": "en",
+      "bio": "",
+      "style": "bitcoin, ethereum, defi philosophy"
+    },
+    {
+      "handle": "danheld",
+      "followers": "844K",
+      "lang": "en",
+      "bio": "",
+      "style": "bitcoin education, adoption frameworks"
+    },
+    {
+      "handle": "WClementeIII",
+      "followers": "797K",
+      "lang": "en",
+      "bio": "",
+      "style": "on-chain analysis, blockware"
+    },
+    {
+      "handle": "PeterMcCormack",
+      "followers": "601K",
+      "lang": "en",
+      "bio": "",
+      "style": "what bitcoin did podcast, conversational"
+    },
+    {
+      "handle": "cburniske",
+      "followers": "222K",
+      "lang": "en",
+      "bio": "",
+      "style": "web3 networks, asset classification"
+    },
+    {
+      "handle": "LynAldenContact",
+      "followers": "402K",
+      "lang": "en",
+      "bio": "",
+      "style": "macro analysis, traditional finance bridge"
+    },
+    {
+      "handle": "DocumentingBTC",
+      "followers": "743K",
+      "lang": "en",
+      "bio": "",
+      "style": "bitcoin evolution chronicle, historical"
+    },
+    {
+      "handle": "nic__carter",
+      "followers": "318K",
+      "lang": "en",
+      "bio": "",
+      "style": "data-driven bitcoin advocacy"
+    },
+    {
+      "handle": "BarrySilbert",
+      "followers": "745K",
+      "lang": "en",
+      "bio": "",
+      "style": "institutional adoption"
+    },
+    {
+      "handle": "zackvoell",
+      "followers": "49K",
+      "lang": "en",
+      "bio": "",
+      "style": "price action, on-chain data"
+    },
+    {
+      "handle": "CryptoWendyO",
+      "followers": "273K",
+      "lang": "en",
+      "bio": "",
+      "style": "daily TA, altcoin analysis"
+    },
+    {
+      "handle": "IamNomad",
+      "followers": "200K+",
+      "lang": "en",
+      "bio": "",
+      "style": "degen trades, meme coins"
+    },
+    {
+      "handle": "CryptoGodJohn",
+      "followers": "500K+",
+      "lang": "en",
+      "bio": "",
+      "style": "alpha calls, new projects"
+    },
+    {
+      "handle": "MustStopMurad",
+      "followers": "300K+",
+      "lang": "en",
+      "bio": "",
+      "style": "meme coin supercycle thesis"
+    },
+    {
+      "handle": "EmberCN",
+      "followers": "200K+",
+      "lang": "zh",
+      "bio": "",
+      "style": "on-chain whale tracking, bilingual"
+    },
+    {
+      "handle": "WhalePanda",
+      "followers": "300K+",
+      "lang": "en",
+      "bio": "",
+      "style": "bitcoin maxi, sarcastic"
+    },
+    {
+      "handle": "GiganticRebirth",
+      "followers": "100K+",
+      "lang": "en",
+      "bio": "",
+      "style": "contrarian macro"
+    },
+    {
+      "handle": "ColdBloodShill",
+      "followers": "200K+",
+      "lang": "en",
+      "bio": "",
+      "style": "trading setups, alpha"
+    },
+    {
+      "handle": "tier10k",
+      "followers": "100K+",
+      "lang": "en",
+      "bio": "",
+      "style": "market data, concise"
+    },
+    {
+      "handle": "ThinkingUSD",
+      "followers": "100K+",
+      "lang": "en",
+      "bio": "",
+      "style": "macro trading"
+    },
+    {
+      "handle": "AltcoinSherpa",
+      "followers": "200K+",
+      "lang": "en",
+      "bio": "",
+      "style": "altcoin analysis, practical"
+    },
+    {
+      "handle": "CredibleCrypto",
+      "followers": "350K+",
+      "lang": "en",
+      "bio": "",
+      "style": "elliott wave, bitcoin TA"
+    },
+    {
+      "handle": "TedTalksMacro",
+      "followers": "150K+",
+      "lang": "en",
+      "bio": "",
+      "style": "macro, fed policy"
+    },
+    {
+      "handle": "DaanCrypto",
+      "followers": "200K+",
+      "lang": "en",
+      "bio": "",
+      "style": "trading setups, dutch"
+    },
+    {
+      "handle": "KobeissiLetter",
+      "followers": "500K+",
+      "lang": "en",
+      "bio": "",
+      "style": "macro data drops, clean formatting"
+    },
+    {
+      "handle": "girlgone_crypto",
+      "followers": "199K",
+      "lang": "en",
+      "bio": "",
+      "style": "approachable crypto explainers"
+    },
+    {
+      "handle": "CryptoCapo_",
+      "followers": "300K+",
+      "lang": "en",
+      "bio": "",
+      "style": "bold calls, controversial"
+    },
+    {
+      "handle": "lightcrypto",
+      "followers": "200K+",
+      "lang": "en",
+      "bio": "",
+      "style": "market structure"
+    },
+    {
+      "handle": "0xSunNFT",
+      "followers": "150K+",
+      "lang": "zh",
+      "bio": "",
+      "style": "链上狙击手 盈利记录公开"
+    },
+    {
+      "handle": "WuBlockchain",
+      "followers": "200K+",
+      "lang": "zh",
+      "bio": "",
+      "style": "crypto news, industry reporting"
+    },
+    {
+      "handle": "MirrorAce69",
+      "followers": "50K+",
+      "lang": "zh",
+      "bio": "",
+      "style": "alpha hunting, meme coins"
+    },
+    {
+      "handle": "aantonop",
+      "followers": "724K",
+      "lang": "en",
+      "bio": "",
+      "style": "bitcoin fundamentals education"
+    },
+    {
+      "handle": "novogratz",
+      "followers": "491K",
+      "lang": "en",
+      "bio": "",
+      "style": "institutional finance bridge"
+    },
+    {
+      "handle": "IvanOnTech",
+      "followers": "493K",
+      "lang": "en",
+      "bio": "",
+      "style": "tutorials, educational"
+    },
+    {
+      "handle": "elliotrades",
+      "followers": "847K",
+      "lang": "en",
+      "bio": "",
+      "style": "market updates, trading commentary"
+    },
+    {
+      "handle": "maxkeiser",
+      "followers": "666K",
+      "lang": "en",
+      "bio": "",
+      "style": "early bitcoin proponent, provocative"
+    },
+    {
+      "handle": "SatoshiLite",
+      "followers": "1M",
+      "lang": "en",
+      "bio": "",
+      "style": "litecoin founder, market insights"
+    },
+    {
+      "handle": "balajis",
+      "followers": "1.2M",
+      "lang": "en",
+      "bio": "",
+      "style": "blockchain reshaping governance"
+    },
+    {
+      "handle": "jackmallers",
+      "followers": "528K",
+      "lang": "en",
+      "bio": "",
+      "style": "strike wallet, bitcoin payments"
+    },
+    {
+      "handle": "waleswoosh",
+      "followers": "172K",
+      "lang": "en",
+      "bio": "",
+      "style": "crypto content, community focused"
+    },
+    {
+      "handle": "cryptojack",
+      "followers": "485K",
+      "lang": "en",
+      "bio": "",
+      "style": "trading signals, independent"
+    },
+    {
+      "handle": "Excellion",
+      "followers": "362K",
+      "lang": "en",
+      "bio": "",
+      "style": "blockstream, bitcoin infrastructure"
+    },
+    {
+      "handle": "CamiRusso",
+      "followers": "79K",
+      "lang": "en",
+      "bio": "",
+      "style": "defi news, ethereum culture"
+    },
+    {
+      "handle": "laurashin",
+      "followers": "206K",
+      "lang": "en",
+      "bio": "",
+      "style": "unchained podcast, interviews"
+    },
+    {
+      "handle": "GoingParabolic",
+      "followers": "191K",
+      "lang": "en",
+      "bio": "",
+      "style": "bitcoin milestones"
+    },
+    {
+      "handle": "Coin_Bureau",
+      "followers": "800K+",
+      "lang": "en",
+      "bio": "",
+      "style": "educational, reviews"
+    },
+    {
+      "handle": "frxresearch",
+      "followers": "24K",
+      "lang": "en",
+      "bio": "",
+      "style": "market commentary daily signals"
+    },
+    {
+      "handle": "mdudas",
+      "followers": "110K",
+      "lang": "en",
+      "bio": "",
+      "style": "NFTs DeFi Web3 macro"
+    },
+    {
+      "handle": "lopp",
+      "followers": "394K",
+      "lang": "en",
+      "bio": "",
+      "style": "security, bitcoin societal impact"
+    },
+    {
+      "handle": "woonomic",
+      "followers": "1M",
+      "lang": "en",
+      "bio": "",
+      "style": "on-chain analysis, fundamentals"
+    },
+    {
+      "handle": "adam3us",
+      "followers": "463K",
+      "lang": "en",
+      "bio": "",
+      "style": "technical insights, bitcoin adoption"
+    },
+    {
+      "handle": "Arthur_0x",
+      "followers": "132K",
+      "lang": "en",
+      "bio": "",
+      "style": "defi projects, token tracking"
+    },
+    {
+      "handle": "TuurDemeester",
+      "followers": "230K",
+      "lang": "en",
+      "bio": "",
+      "style": "monetary history, bitcoin analysis"
+    },
+    {
+      "handle": "hasufl",
+      "followers": "158K",
+      "lang": "en",
+      "bio": "",
+      "style": "crypto incentives, bitcoin security"
+    }
+  ],
+  "post_templates": {
+    "market_reaction": [
+      "$BTC {price} {direction}了 {comment}",
+      "{coin} {price} today and people still saying {coin} is dead. ok",
+      "开盘还行",
+      "{coin} looking strong here. {target} soon?",
+      "以前说btc到{price}做梦 现在{price}觉得也就那样"
+    ],
+    "personal_trade": [
+      "今天+{amount}u 靠{coin}拉盘 仓位不大",
+      "short {coin} at {entry} closed at {exit} lost {amount}u",
+      "刚看了眼funding rate 多空比已经严重失衡了",
+      "my arena score went up but my portfolio went down. cool"
+    ],
+    "leaderboard_discussion": [
+      "看了下arena排名第一的人 {period}天roi {roi} 胜率{wr} 说明人家就是靠几把大的赢的",
+      "{platform} leaderboard changed a lot this week",
+      "found a trader on {platform} with {wr}% win rate over {period}d. how",
+      "每次觉得自己行了就去看排行榜前十 然后清醒"
+    ],
+    "casual_life": [
+      "上班看了一小时k线 老板走过来的时候刚好切到excel",
+      "今天不看盘了 出去走走",
+      "不追 等回调",
+      "patient"
+    ],
+    "question": [
+      "有人知道{platform}那个{roi}% roi怎么做到的吗",
+      "claim profile的流程是什么 有人试过吗",
+      "有人用过arena的{feature}功能吗",
+      "{coin}这波是真突破还是假突破"
+    ],
+    "ultra_short": [
+      "来了",
+      "开盘还行",
+      "rip",
+      "F",
+      "不追",
+      "patient",
+      "空头要遭殃",
+      "funding rate太高了",
+      "等方向"
+    ]
+  },
+  "comment_templates": {
+    "agreement": [
+      "6",
+      "确实",
+      "fr",
+      "this",
+      "same",
+      "yep",
+      "有道理"
+    ],
+    "surprise": [
+      "草",
+      "no way",
+      "wild",
+      "真的假的",
+      "绷",
+      "离谱",
+      "bruh"
+    ],
+    "humor": [
+      "笑死",
+      "lol",
+      "哈哈哈",
+      "不是吧",
+      "oof"
+    ],
+    "empathy": [
+      "been there",
+      "F",
+      "rip",
+      "pain",
+      "服了"
+    ],
+    "price_comment": [
+      "来了",
+      "hodl",
+      "不敢空",
+      "该加仓了",
+      "等回调"
+    ],
+    "question_response": [
+      "试了 挺快的",
+      "同问",
+      "我也想知道",
+      "not sure"
+    ]
+  }
+}
