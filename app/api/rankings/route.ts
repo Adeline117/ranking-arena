@@ -8,7 +8,7 @@
  *   window: '7d' | '30d' | '90d' (required)
  *   category: 'futures' | 'spot' | 'onchain' (optional)
  *   platform: Platform string (optional, overrides category)
- *   limit: number (default 100, max 500)
+ *   limit: number (default 100, max 2000)
  *   offset: number (default 0) — legacy, prefer cursor
  *   cursor: string (optional, format: "score:id" for keyset pagination)
  *   sort_by: 'arena_score' | 'roi' | 'pnl' | 'drawdown' | 'copiers'
@@ -91,7 +91,7 @@ export async function GET(request: NextRequest) {
 
     const sortDir = (searchParams.get('sort_dir') || 'desc') as 'asc' | 'desc';
 
-    const limit = Math.min(parseInt(searchParams.get('limit') || '100', 10) || 100, 500);
+    const limit = Math.min(parseInt(searchParams.get('limit') || '100', 10) || 100, 2000);
     const offset = parseInt(searchParams.get('offset') || '0', 10) || 0;
     const cursor = searchParams.get('cursor') || undefined; // format: "score:id" for keyset pagination
     const minPnl = searchParams.get('min_pnl') ? Number(searchParams.get('min_pnl')) : undefined;
@@ -190,7 +190,7 @@ async function getRankingsFallback(rankingsQuery: RankingsQuery, _cursor?: strin
   } = rankingsQuery;
 
   const supabase = getSupabaseAdmin();
-  const safeLimit = Math.min(limit, 500);
+  const safeLimit = Math.min(limit, 2000);
   const seasonId = window.toUpperCase() as TradingPeriod;
 
   // Map sort_by to unified sortBy parameter
@@ -381,7 +381,7 @@ async function getCompositeRankings(params: {
       .lte('roi', ROI_ANOMALY_THRESHOLD)
       .gte('roi', -ROI_ANOMALY_THRESHOLD)
       .order('arena_score', { ascending: false, nullsFirst: false })
-      .limit(1000);
+      .limit(3000);
 
     if (platform) q = q.eq('source', platform);
     else if (category) {
