@@ -9,6 +9,8 @@ import {
   getAvatarInitial,
   getUserAvatarUrl,
   getTraderAvatarUrl,
+  isWalletAddress,
+  generateBlockieSvg,
   type AvatarProps
 } from '@/lib/utils/avatar'
 
@@ -18,7 +20,13 @@ function resolveAvatarUrl(
   userId: string,
   name?: string | null
 ): string | null {
-  if (isTrader) return getTraderAvatarUrl(avatarUrl) ?? null
+  if (isTrader) {
+    const resolved = getTraderAvatarUrl(avatarUrl)
+    if (resolved) return resolved
+    // For on-chain traders (0x.../Solana addresses), generate blockie avatar
+    if (isWalletAddress(userId)) return generateBlockieSvg(userId, 128)
+    return null
+  }
   if (avatarUrl?.trim()) return avatarUrl
   if (avatarUrl === null) return null
   return getUserAvatarUrl(userId, null, name ?? null) ?? null
