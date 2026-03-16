@@ -414,6 +414,85 @@ async function computeSeason(
     logger.info(`[${season}] Enriched ${tradersNeedingEnrichment.length} traders from stats_detail`)
   }
 
+  // Phase 4: Derive win_rate/max_drawdown from equity_curve (daily PnL) as universal fallback
+  // This covers ALL platforms that have equity curve data but no native WR/MDD
+  const stillNeedingData = Array.from(traderMap.values())
+    .filter(t => t.win_rate == null || t.max_drawdown == null)
+  if (stillNeedingData.length > 0) {
+    const eqBySource = new Map<string, string[]>()
+    for (const t of stillNeedingData) {
+      const ids = eqBySource.get(t.source) || []
+      ids.push(t.source_trader_id)
+      eqBySource.set(t.source, ids)
+    }
+    let derived = 0
+    await Promise.all(
+      Array.from(eqBySource.entries()).map(async ([source, traderIds]) => {
+        // Query equity curves for these traders (all periods, prefer 90D)
+        for (let i = 0; i < traderIds.length; i += 50) {
+          const chunk = traderIds.slice(i, i + 50)
+          const { data: eqRows } = await supabase
+            .from('trader_equity_curve')
+            .select('source_trader_id, pnl_usd, roi_pct, data_date')
+            .eq('source', source)
+            .in('source_trader_id', chunk)
+            .order('data_date', { ascending: true })
+            .limit(5000)
+          if (!eqRows?.length) continue
+
+          // Group by trader
+          const byTrader = new Map<string, Array<{ pnl: number | null; roi: number | null }>>()
+          for (const row of eqRows) {
+            const tid = row.source_trader_id.startsWith('0x') ? row.source_trader_id.toLowerCase() : row.source_trader_id
+            const arr = byTrader.get(tid) || []
+            arr.push({ pnl: row.pnl_usd, roi: row.roi_pct })
+            byTrader.set(tid, arr)
+          }
+
+          for (const [tid, points] of byTrader) {
+            const existing = traderMap.get(`${source}:${tid}`)
+            if (!existing) continue
+
+            // Derive win_rate from daily PnL direction
+            if (existing.win_rate == null && points.length >= 3) {
+              let wins = 0, total = 0
+              for (let j = 1; j < points.length; j++) {
+                const prevPnl = points[j - 1].pnl ?? 0
+                const currPnl = points[j].pnl ?? 0
+                const dailyPnl = currPnl - prevPnl
+                if (dailyPnl > 0) wins++
+                if (Math.abs(dailyPnl) > 0.01) total++
+              }
+              if (total >= 3) {
+                existing.win_rate = Math.round((wins / total) * 10000) / 100
+                derived++
+              }
+            }
+
+            // Derive max_drawdown from cumulative PnL or ROI curve
+            if (existing.max_drawdown == null && points.length >= 3) {
+              let peak = 0, maxDD = 0
+              // Try ROI first, fall back to PnL
+              const values = points.map(p => p.roi ?? p.pnl ?? 0)
+              for (const v of values) {
+                if (v > peak) peak = v
+                if (peak > 0) {
+                  const dd = ((peak - v) / Math.abs(peak)) * 100
+                  if (dd > maxDD) maxDD = dd
+                }
+              }
+              if (maxDD > 0.01 && maxDD <= 100) {
+                existing.max_drawdown = Math.round(maxDD * 100) / 100
+                derived++
+              }
+            }
+          }
+        }
+      })
+    )
+    logger.info(`[${season}] Derived ${derived} WR/MDD values from equity curves`)
+  }
+
   const roiThreshold = ROI_ANOMALY_THRESHOLDS[season]
   const uniqueTraders = Array.from(traderMap.values())
     .filter(t => t.roi != null)
