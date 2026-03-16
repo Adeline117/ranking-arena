@@ -126,8 +126,8 @@ async function fetchFromLeaderboard(
   // Filter out outlier data (ROI > 5000% etc.)
   query = query.or('is_outlier.is.null,is_outlier.eq.false')
 
-  // Filter out low-quality entries (incomplete score data renders as empty rows)
-  query = query.gt('arena_score', 10)
+  // Filter out very low-quality entries (incomplete score data renders as empty rows)
+  query = query.gt('arena_score', 1)
 
   // Cursor-based: filter by rank
   if (cursor != null) {
@@ -151,13 +151,12 @@ async function fetchFromLeaderboard(
     query = query.order(sortColumn, { ascending, nullsFirst: false })
   }
 
-  // Pagination — over-fetch when diversity filtering will be applied (no exchange filter)
-  const diversityOverfetch = (!exchangeFilter && sortBy === 'arena_score' && !cursor) ? 3 : 1
+  // Pagination
   if (useLegacyPaging) {
     const startIdx = page * limit
-    query = query.range(startIdx, startIdx + limit * diversityOverfetch - 1)
+    query = query.range(startIdx, startIdx + limit - 1)
   } else {
-    query = query.limit(limit * diversityOverfetch)
+    query = query.limit(limit)
   }
 
   const { data, error, count } = await query
@@ -209,10 +208,10 @@ async function fetchFromLeaderboard(
     return true
   })
 
-  // Platform diversity: when viewing overall (no exchange filter), cap per-platform
-  // to prevent a single high-PnL platform from monopolizing the ranking
-  if (!exchangeFilter && sortBy === 'arena_score' && !cursor) {
-    const MAX_PER_PLATFORM = Math.min(Math.max(5, Math.ceil(limit * 0.3)), 50)
+  // Platform diversity: when viewing overall (no exchange filter) with small limits,
+  // cap per-platform to prevent a single platform from monopolizing the first page
+  if (!exchangeFilter && sortBy === 'arena_score' && !cursor && limit <= 100) {
+    const MAX_PER_PLATFORM = Math.max(5, Math.ceil(limit * 0.4))
     const platformCounts = new Map<string, number>()
     dedupedTraders = dedupedTraders.filter((t: { source: string }) => {
       const count = platformCounts.get(t.source) || 0
@@ -245,7 +244,7 @@ async function fetchFromLeaderboard(
       .from('leaderboard_ranks')
       .select('source')
       .eq('season_id', timeRange)
-      .gt('arena_score', 10)
+      .gt('arena_score', 1)
       .order('rank', { ascending: true })
       .limit(15000)
     for (const r of (sourceRows || [])) allSourceSet.add((r as { source: string }).source)
