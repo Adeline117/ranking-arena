@@ -1020,6 +1020,47 @@ select:focus-visible {
   }
 }
 
+/* Mobile: badge overflow — hide excess badges, show +N toggle */
+@media (max-width: 640px) {
+  .trader-name-badges-row .badge-overflow-item:not(.badge-overflow-expanded) {
+    display: none !important;
+  }
+  .trader-name-badges-row.badges-expanded .badge-overflow-item {
+    display: inline-flex !important;
+  }
+  .badge-overflow-toggle {
+    display: inline-flex !important;
+  }
+  /* Mobile avatar: 56px */
+  .profile-header-avatar {
+    width: 56px !important;
+    height: 56px !important;
+  }
+  /* Action buttons: hide secondary group, show more toggle */
+  .action-secondary-group {
+    display: none !important;
+  }
+  .action-more-toggle {
+    display: flex !important;
+  }
+  .action-more-dropdown {
+    display: flex !important;
+  }
+}
+
+/* Desktop: hide more menu toggle and dropdown */
+@media (min-width: 641px) {
+  .action-more-toggle {
+    display: none !important;
+  }
+  .action-more-dropdown {
+    display: none !important;
+  }
+  .badge-overflow-toggle {
+    display: none !important;
+  }
+}
+
 /* Small mobile: tighter spacing */
 @media (max-width: 480px) {
   .page-container {

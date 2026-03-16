@@ -28,6 +28,15 @@ export function MetricBadge({
         ? tokens.colors.accent.error
         : tokens.colors.text.primary
 
+  // Sentiment-based background tint
+  const bgColor = isNA
+    ? tokens.colors.bg.tertiary
+    : highlight
+      ? `color-mix(in srgb, ${tokens.colors.accent.success} 6%, ${tokens.colors.bg.tertiary})`
+      : negative
+        ? `color-mix(in srgb, ${tokens.colors.accent.error} 6%, ${tokens.colors.bg.tertiary})`
+        : tokens.colors.bg.tertiary
+
   return (
     <Box
       style={{
@@ -35,11 +44,11 @@ export function MetricBadge({
         alignItems: 'baseline',
         gap: 6,
         padding: `5px 12px`,
-        background: tokens.colors.bg.tertiary,
+        background: bgColor,
         borderRadius: tokens.radius.full,
         border: `1px solid ${highlight ? tokens.colors.accent.success + '30' : negative ? tokens.colors.accent.error + '20' : tokens.colors.border.primary}`,
         cursor: tooltip ? 'help' : undefined,
-        transition: 'border-color 0.2s ease',
+        transition: 'border-color 0.2s ease, background 0.2s ease',
       }}
       title={tooltip}
     >

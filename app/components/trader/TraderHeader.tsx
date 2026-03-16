@@ -63,6 +63,8 @@ interface TraderHeaderProps {
   isVerifiedTrader?: boolean
   /** Whether this trader is a bot/AI agent */
   isBot?: boolean
+  /** Last data update timestamp (ISO string) for "Updated X ago" display */
+  lastUpdated?: string | null
 }
 
 // Helpers extracted to ./TraderHeaderHelpers.tsx
@@ -105,16 +107,31 @@ export default function TraderHeader({
   currentUserId: externalUserId,
   isVerifiedTrader = false,
   isBot = false,
+  lastUpdated,
 }: TraderHeaderProps): React.ReactElement {
   const [userId, setUserId] = useState<string | null>(externalUserId ?? null)
   const [mounted, setMounted] = useState(false)
   const [avatarHovered, setAvatarHovered] = useState(false)
   const [avatarError, setAvatarError] = useState(false)
   const [followerCount, setFollowerCount] = useState(followers)
+  const [badgesExpanded, setBadgesExpanded] = useState(false)
+  const [moreMenuOpen, setMoreMenuOpen] = useState(false)
   const router = useRouter()
   const [handleCopied, setHandleCopied] = useState(false)
   const { t } = useLanguage()
   const { showToast: _showToast } = useToast()
+
+  // Relative time formatting for "Updated X ago"
+  const getRelativeTime = (iso: string): string => {
+    const diff = Date.now() - new Date(iso).getTime()
+    const mins = Math.floor(diff / 60000)
+    if (mins < 1) return t('justNow') || 'just now'
+    if (mins < 60) return `${mins}m ago`
+    const hours = Math.floor(mins / 60)
+    if (hours < 24) return `${hours}h ago`
+    const days = Math.floor(hours / 24)
+    return `${days}d ago`
+  }
 
   const copyHandle = useCallback(() => {
     navigator.clipboard.writeText(handle).then(() => {
@@ -242,7 +259,7 @@ export default function TraderHeader({
                 alt={handle}
                 width={72}
                 height={72}
-                sizes="72px"
+                sizes="(max-width: 640px) 56px, 72px"
                 priority
                 style={{
                   width: '100%',
@@ -324,98 +341,167 @@ export default function TraderHeader({
               )}
             </button>
 
-            {uid && (
-              <Badge color={tokens.colors.accent.primary} style={{ padding: `3px ${tokens.spacing[2]}` }} title={t('userNumber')}>
-                <Text size="xs" weight="bold" style={{ color: tokens.colors.accent.primary, fontFamily: 'monospace', letterSpacing: '0.5px' }}>
-                  #{uid.toString().padStart(6, '0')}
-                </Text>
-              </Badge>
-            )}
+            {/* Badges container — collapses on mobile with +N more */}
+            {(() => {
+              const allBadges: React.ReactNode[] = []
 
-            {source && EXCHANGE_NAMES[source.toLowerCase()] && (
-              <Badge color={tokens.colors.accent.primary}>
-                <Text size="xs" weight="bold" style={{ color: tokens.colors.accent.primary, letterSpacing: '0.3px' }}>
-                  {EXCHANGE_NAMES[source.toLowerCase()]}
-                </Text>
-              </Badge>
-            )}
+              // Priority 1: Verified/Score/Bot/Exchange (always visible on mobile)
+              if (isVerifiedTrader) {
+                allBadges.push(<VerifiedBadge key="verified" size="md" variant="prominent" />)
+              } else if (isRegistered) {
+                allBadges.push(
+                  <Box
+                    key="registered"
+                    style={{
+                      display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                      width: 22, height: 22,
+                      background: `linear-gradient(135deg, ${tokens.colors.accent.success}, ${tokens.colors.accent.success})`,
+                      borderRadius: tokens.radius.full,
+                      boxShadow: `0 2px 8px ${tokens.colors.accent.success}40`,
+                    }}
+                    title={t('verifiedUser')}
+                  >
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                      <polyline points="20 6 9 17 4 12" />
+                    </svg>
+                  </Box>
+                )
+              } else {
+                allBadges.push(
+                  <Badge key="unclaimed" color={tokens.colors.text.tertiary} style={{ padding: '1px 6px', opacity: 0.6 }}>
+                    <Text style={{ fontSize: 10, fontWeight: 500, color: tokens.colors.text.tertiary, letterSpacing: '0.2px' }}>
+                      {t('unclaimedBadge')}
+                    </Text>
+                  </Badge>
+                )
+              }
 
-            {source && EXCHANGE_CONFIG[source.toLowerCase() as keyof typeof EXCHANGE_CONFIG]?.roiType && EXCHANGE_CONFIG[source.toLowerCase() as keyof typeof EXCHANGE_CONFIG].roiType !== 'mixed' && (
-              <Badge color={tokens.colors.text.tertiary}>
-                <Text size="xs" weight="bold" style={{ color: tokens.colors.text.tertiary, letterSpacing: '0.3px', textTransform: 'uppercase', fontSize: tokens.typography.fontSize.xs }}>
-                  {EXCHANGE_CONFIG[source.toLowerCase() as keyof typeof EXCHANGE_CONFIG].roiType === 'realized' ? 'ROI: Realized' : 'ROI: Unrealized'}
-                </Text>
-              </Badge>
-            )}
+              if (arenaScore != null && arenaScore > 0) {
+                allBadges.push(
+                  <Badge key="score" color={getScoreColorHex(arenaScore)} style={{ padding: '3px 10px' }} title={`Arena Score: ${arenaScore.toFixed(1)}`}>
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke={getScoreColor(arenaScore)} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ marginRight: 3 }}>
+                      <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
+                    </svg>
+                    <Text size="xs" weight="black" style={{ color: getScoreColor(arenaScore), fontFamily: tokens.typography.fontFamily.mono.join(', '), letterSpacing: '-0.02em' }}>
+                      {arenaScore.toFixed(0)}
+                    </Text>
+                  </Badge>
+                )
+              }
 
-            {sourceLabel && (
-              <Badge color={tokens.colors.text.secondary}>
-                <Text size="xs" weight="bold" style={{ color: tokens.colors.text.secondary, textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-                  {sourceLabel}
-                </Text>
-              </Badge>
-            )}
+              if (isBot) {
+                allBadges.push(
+                  <Badge key="bot" color="#a78bfa" style={{ padding: '3px 10px' }} title={t('botTooltip')}>
+                    <span style={{ fontSize: 12, marginRight: 3 }}>{'⚡'}</span>
+                    <Text size="xs" weight="bold" style={{ color: '#a78bfa', letterSpacing: '0.3px' }}>
+                      {t('botLabel')}
+                    </Text>
+                  </Badge>
+                )
+              }
 
-            {isVerifiedTrader ? (
-              <VerifiedBadge size="md" variant="prominent" />
-            ) : isRegistered ? (
-              <Box
-                style={{
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  width: 22,
-                  height: 22,
-                  background: `linear-gradient(135deg, ${tokens.colors.accent.success}, ${tokens.colors.accent.success})`,
-                  borderRadius: tokens.radius.full,
-                  boxShadow: `0 2px 8px ${tokens.colors.accent.success}40`,
-                }}
-                title={t('verifiedUser')}
-              >
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
-                  <polyline points="20 6 9 17 4 12" />
-                </svg>
-              </Box>
-            ) : (
-              <Badge color={tokens.colors.text.tertiary} style={{ padding: '1px 6px', opacity: 0.6 }}>
-                <Text style={{ fontSize: 10, fontWeight: 500, color: tokens.colors.text.tertiary, letterSpacing: '0.2px' }}>
-                  {t('unclaimedBadge')}
-                </Text>
-              </Badge>
-            )}
+              if (source && EXCHANGE_NAMES[source.toLowerCase()]) {
+                allBadges.push(
+                  <Badge key="exchange" color={tokens.colors.accent.primary}>
+                    <Text size="xs" weight="bold" style={{ color: tokens.colors.accent.primary, letterSpacing: '0.3px' }}>
+                      {EXCHANGE_NAMES[source.toLowerCase()]}
+                    </Text>
+                  </Badge>
+                )
+              }
 
-            {/* Arena Score badge with color grading */}
-            {arenaScore != null && arenaScore > 0 && (
-              <Badge
-                color={getScoreColorHex(arenaScore)}
-                style={{ padding: '3px 10px' }}
-                title={`Arena Score: ${arenaScore.toFixed(1)}`}
-              >
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke={getScoreColor(arenaScore)} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ marginRight: 3 }}>
-                  <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
-                </svg>
-                <Text size="xs" weight="black" style={{ color: getScoreColor(arenaScore), fontFamily: tokens.typography.fontFamily.mono.join(', '), letterSpacing: '-0.02em' }}>
-                  {arenaScore.toFixed(0)}
-                </Text>
-              </Badge>
-            )}
+              // Priority 2: Secondary badges (hidden on mobile unless expanded)
+              if (uid) {
+                allBadges.push(
+                  <Badge key="uid" color={tokens.colors.accent.primary} style={{ padding: `3px ${tokens.spacing[2]}` }} title={t('userNumber')}>
+                    <Text size="xs" weight="bold" style={{ color: tokens.colors.accent.primary, fontFamily: 'monospace', letterSpacing: '0.5px' }}>
+                      #{uid.toString().padStart(6, '0')}
+                    </Text>
+                  </Badge>
+                )
+              }
 
-            {isBot && (
-              <Badge color="#a78bfa" style={{ padding: '3px 10px' }} title={t('botTooltip')}>
-                <span style={{ fontSize: 12, marginRight: 3 }}>{'⚡'}</span>
-                <Text size="xs" weight="bold" style={{ color: '#a78bfa', letterSpacing: '0.3px' }}>
-                  {t('botLabel')}
-                </Text>
-              </Badge>
-            )}
+              if (source && EXCHANGE_CONFIG[source.toLowerCase() as keyof typeof EXCHANGE_CONFIG]?.roiType && EXCHANGE_CONFIG[source.toLowerCase() as keyof typeof EXCHANGE_CONFIG].roiType !== 'mixed') {
+                allBadges.push(
+                  <Badge key="roiType" color={tokens.colors.text.tertiary}>
+                    <Text size="xs" weight="bold" style={{ color: tokens.colors.text.tertiary, letterSpacing: '0.3px', textTransform: 'uppercase', fontSize: tokens.typography.fontSize.xs }}>
+                      {EXCHANGE_CONFIG[source.toLowerCase() as keyof typeof EXCHANGE_CONFIG].roiType === 'realized' ? 'ROI: Realized' : 'ROI: Unrealized'}
+                    </Text>
+                  </Badge>
+                )
+              }
 
-            {getSourceCategory(source) === 'web3' && <Web3VerifiedBadge size="md" />}
-            <OnChainBadge traderHandle={handle} size="sm" />
+              if (sourceLabel) {
+                allBadges.push(
+                  <Badge key="sourceLabel" color={tokens.colors.text.secondary}>
+                    <Text size="xs" weight="bold" style={{ color: tokens.colors.text.secondary, textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                      {sourceLabel}
+                    </Text>
+                  </Badge>
+                )
+              }
 
-            <BadgeDisplay traderHandle={handle} size="sm" maxDisplay={3} />
+              if (getSourceCategory(source) === 'web3') {
+                allBadges.push(<Web3VerifiedBadge key="web3" size="md" />)
+              }
+              allBadges.push(<OnChainBadge key="onchain" traderHandle={handle} size="sm" />)
+              allBadges.push(<BadgeDisplay key="badges" traderHandle={handle} size="sm" maxDisplay={3} />)
 
+              const MOBILE_VISIBLE_COUNT = 4
+              const overflowCount = allBadges.length - MOBILE_VISIBLE_COUNT
 
+              return (
+                <>
+                  {allBadges.map((badge, i) => (
+                    <Box
+                      key={i}
+                      className={i >= MOBILE_VISIBLE_COUNT ? 'badge-overflow-item' : undefined}
+                      style={i >= MOBILE_VISIBLE_COUNT && !badgesExpanded ? { display: 'inline-flex' } : { display: 'inline-flex' }}
+                    >
+                      {badge}
+                    </Box>
+                  ))}
+                  {overflowCount > 0 && (
+                    <button
+                      className="badge-overflow-toggle"
+                      onClick={() => setBadgesExpanded(!badgesExpanded)}
+                      style={{
+                        background: `${tokens.colors.bg.tertiary}`,
+                        border: `1px solid ${tokens.colors.border.primary}`,
+                        borderRadius: tokens.radius.full,
+                        padding: '3px 10px',
+                        cursor: 'pointer',
+                        fontSize: 11,
+                        fontWeight: 600,
+                        color: tokens.colors.text.secondary,
+                        display: 'none', // shown via CSS on mobile
+                        alignItems: 'center',
+                        transition: 'background 0.2s ease',
+                      }}
+                    >
+                      {badgesExpanded ? t('showLess') || 'Less' : `+${overflowCount}`}
+                    </button>
+                  )}
+                </>
+              )
+            })()}
           </Box>
+
+          {/* "Updated X ago" timestamp */}
+          {lastUpdated && (
+            <Text
+              size="xs"
+              style={{
+                color: tokens.colors.text.tertiary,
+                fontSize: 11,
+                marginBottom: 2,
+                opacity: 0.8,
+              }}
+              title={new Date(lastUpdated).toLocaleString()}
+            >
+              {t('updated') || 'Updated'} {getRelativeTime(lastUpdated)}
+            </Text>
+          )}
 
           {/* Ranked #X on Exchange subtitle */}
           {rank != null && rank > 0 && source && EXCHANGE_NAMES[source.toLowerCase()] && (
@@ -513,7 +599,7 @@ export default function TraderHeader({
         </Box>
       </Box>
 
-      {/* Action buttons - all in one row */}
+      {/* Action buttons - primary visible, secondary in more menu on mobile */}
       <Box
         className="profile-header-actions action-buttons"
         style={{
@@ -541,6 +627,7 @@ export default function TraderHeader({
           </ActionButton>
         )}
 
+        {/* Primary actions: Follow + Copy Trade (always visible) */}
         {!isOwnProfile && userId && (
           isRegistered ? (
             <UserFollowButton
@@ -563,37 +650,117 @@ export default function TraderHeader({
           <CopyTradeSection isPro={isPro} traderId={traderId} source={source} handle={handle} router={router} t={t} />
         )}
 
-        {!isOwnProfile && !isRegistered && userId && (
-          <ClaimTraderButton traderId={traderId} handle={handle} userId={userId} source={source} />
-        )}
+        {/* Secondary actions: visible on desktop, hidden in more menu on mobile */}
+        <Box className="action-secondary-group" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          {!isOwnProfile && !isRegistered && userId && (
+            <ClaimTraderButton traderId={traderId} handle={handle} userId={userId} source={source} />
+          )}
 
-        {/* PK challenge button — allows initiating a head-to-head comparison */}
-        <ChallengeButton
-          handle={handle}
-          source={source}
-          displayName={displayNameProp || formatDisplayName(handle, source)}
-        />
+          <ChallengeButton
+            handle={handle}
+            source={source}
+            displayName={displayNameProp || formatDisplayName(handle, source)}
+          />
 
-        <ShareOnXButton
-          handle={handle}
-          displayName={displayNameProp || formatDisplayName(handle, source)}
-          platform={source}
-          rank={rank}
-          roi={roi90d}
-        />
+          <ShareOnXButton
+            handle={handle}
+            displayName={displayNameProp || formatDisplayName(handle, source)}
+            platform={source}
+            rank={rank}
+            roi={roi90d}
+          />
 
-        <ShareButton
-          data={{
-            type: 'trader',
-            url: typeof window !== 'undefined' ? window.location.href : `https://www.arenafi.org/trader/${encodeURIComponent(handle)}`,
-            traderName: displayNameProp || formatDisplayName(handle, source),
-            roi: roi90d,
-            period: '90D',
+          <ShareButton
+            data={{
+              type: 'trader',
+              url: typeof window !== 'undefined' ? window.location.href : `https://www.arenafi.org/trader/${encodeURIComponent(handle)}`,
+              traderName: displayNameProp || formatDisplayName(handle, source),
+              roi: roi90d,
+              period: '90D',
+            }}
+            size="sm"
+            variant="ghost"
+            showLabel={false}
+          />
+        </Box>
+
+        {/* More menu toggle (mobile only) */}
+        <button
+          className="action-more-toggle"
+          onClick={() => setMoreMenuOpen(!moreMenuOpen)}
+          style={{
+            background: tokens.colors.bg.tertiary,
+            border: `1px solid ${tokens.colors.border.primary}`,
+            borderRadius: tokens.radius.lg,
+            padding: '8px 10px',
+            cursor: 'pointer',
+            color: tokens.colors.text.secondary,
+            display: 'none', // shown via CSS on mobile
+            alignItems: 'center',
+            justifyContent: 'center',
+            minWidth: 36,
+            minHeight: 36,
           }}
-          size="sm"
-          variant="ghost"
-          showLabel={false}
-        />
+          aria-label={t('moreActions') || 'More actions'}
+        >
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+            <circle cx="12" cy="5" r="2" />
+            <circle cx="12" cy="12" r="2" />
+            <circle cx="12" cy="19" r="2" />
+          </svg>
+        </button>
+
+        {/* More menu dropdown (mobile) */}
+        {moreMenuOpen && (
+          <Box
+            className="action-more-dropdown"
+            style={{
+              position: 'absolute',
+              top: '100%',
+              right: 0,
+              marginTop: 4,
+              background: tokens.colors.bg.secondary,
+              border: `1px solid ${tokens.colors.border.primary}`,
+              borderRadius: tokens.radius.lg,
+              boxShadow: '0 8px 24px var(--color-overlay-light)',
+              padding: tokens.spacing[2],
+              display: 'none', // shown via CSS on mobile
+              flexDirection: 'column',
+              gap: 4,
+              minWidth: 180,
+              zIndex: 50,
+            }}
+            onClick={() => setMoreMenuOpen(false)}
+          >
+            {!isOwnProfile && !isRegistered && userId && (
+              <ClaimTraderButton traderId={traderId} handle={handle} userId={userId} source={source} />
+            )}
+            <ChallengeButton
+              handle={handle}
+              source={source}
+              displayName={displayNameProp || formatDisplayName(handle, source)}
+            />
+            <ShareOnXButton
+              handle={handle}
+              displayName={displayNameProp || formatDisplayName(handle, source)}
+              platform={source}
+              rank={rank}
+              roi={roi90d}
+            />
+            <ShareButton
+              data={{
+                type: 'trader',
+                url: typeof window !== 'undefined' ? window.location.href : `https://www.arenafi.org/trader/${encodeURIComponent(handle)}`,
+                traderName: displayNameProp || formatDisplayName(handle, source),
+                roi: roi90d,
+                period: '90D',
+              }}
+              size="sm"
+              variant="ghost"
+              showLabel={false}
+            />
+          </Box>
+        )}
       </Box>
 
     </Box>

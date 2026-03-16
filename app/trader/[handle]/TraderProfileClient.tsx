@@ -28,7 +28,17 @@ import {
   combineSchemas,
 } from '@/lib/seo'
 
-const EquityCurveSection = dynamic(() => import('@/app/components/trader/stats/components/EquityCurveSection').then(m => ({ default: m.EquityCurveSection })), { ssr: false })
+const EquityCurveSection = dynamic(() => import('@/app/components/trader/stats/components/EquityCurveSection').then(m => ({ default: m.EquityCurveSection })), {
+  ssr: false,
+  loading: () => (
+    <div style={{ minHeight: 200, borderRadius: 16, background: 'var(--color-bg-secondary, #1a1a2e)', border: '1px solid var(--color-border-primary, #2a2a3e)', overflow: 'hidden' }}>
+      <div style={{ padding: '16px 20px' }}>
+        <div style={{ width: 120, height: 14, borderRadius: 4, background: 'var(--color-bg-tertiary, #252540)', animation: 'pulse 1.5s ease-in-out infinite' }} />
+      </div>
+      <div style={{ height: 160, margin: '0 20px 16px', borderRadius: 8, background: 'var(--color-bg-tertiary, #252540)', animation: 'pulse 1.5s ease-in-out infinite', animationDelay: '0.2s' }} />
+    </div>
+  ),
+})
 const TradingStyleRadar = dynamic(() => import('@/app/components/trader/TradingStyleRadar'), { ssr: false })
 const SimilarTraders = dynamic(() => import('@/app/components/trader/SimilarTraders'))
 const ClaimTraderButton = dynamic(() => import('@/app/components/trader/ClaimTraderButton'), { ssr: false })
@@ -286,6 +296,7 @@ export default function TraderProfileClient({ data, serverTraderData }: TraderPr
           currentUserId={currentUserId}
           isVerifiedTrader={isVerifiedTrader}
           isBot={data.source === 'web3_bot'}
+          lastUpdated={traderData?.trackedSince}
         />
         </div>
 
