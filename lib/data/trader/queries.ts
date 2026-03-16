@@ -612,7 +612,25 @@ export async function resolveTrader(supabase: SupabaseClient, params: {
       query = query.eq('source', platformFilter)
     }
 
-    const { data } = await query.limit(1).maybeSingle()
+    // Multiple trader_sources may share the same handle (e.g., 鎏渊).
+    // Pick the one with the highest arena_score in leaderboard to avoid resolving to a no-data entry.
+    const { data: candidates } = await query.limit(10)
+    let data = candidates?.[0] ?? null
+    if (candidates && candidates.length > 1) {
+      // Check which candidate has leaderboard data
+      const ids = candidates.map((c: { source_trader_id: string }) => c.source_trader_id)
+      const { data: lbCheck } = await supabase
+        .from('leaderboard_ranks')
+        .select('source_trader_id, arena_score')
+        .in('source_trader_id', ids)
+        .eq('season_id', '90D')
+        .not('arena_score', 'is', null)
+        .order('arena_score', { ascending: false })
+        .limit(1)
+      if (lbCheck?.[0]) {
+        data = candidates.find((c: { source_trader_id: string }) => c.source_trader_id === lbCheck[0].source_trader_id) || data
+      }
+    }
     if (data) {
       return {
         platform: data.source,
