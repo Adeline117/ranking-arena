@@ -183,13 +183,34 @@ export async function getUserVerifiedTrader(
     .from('verified_traders')
     .select(VERIFIED_TRADER_FIELDS)
     .eq('user_id', userId)
-    .maybeSingle()
+    .order('created_at', { ascending: true })
+    .limit(1)
 
   if (error) {
     throw error
   }
 
-  return data
+  return data?.[0] ?? null
+}
+
+/**
+ * Get all verified traders for a user (multi-account support)
+ */
+export async function getUserVerifiedTraders(
+  supabase: SupabaseClient,
+  userId: string
+): Promise<VerifiedTrader[]> {
+  const { data, error } = await supabase
+    .from('verified_traders')
+    .select(VERIFIED_TRADER_FIELDS)
+    .eq('user_id', userId)
+    .order('created_at', { ascending: true })
+
+  if (error) {
+    throw error
+  }
+
+  return data || []
 }
 
 /**

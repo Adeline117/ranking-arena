@@ -713,6 +713,95 @@ function DexVerifyForm({
 // Main Page Component
 // ============================================
 
+interface LinkedTrader {
+  id: string
+  trader_id: string
+  source: string
+  label: string | null
+  is_primary: boolean
+  display_order: number
+  verified_at: string
+  verification_method: string
+  stats?: {
+    arena_score?: number
+    roi?: number
+    pnl?: number
+    rank?: number
+    handle?: string
+    avatar_url?: string
+  } | null
+}
+
+function LinkedAccountsSidebar({
+  linkedTraders,
+  onRefresh,
+}: {
+  linkedTraders: LinkedTrader[]
+  onRefresh: () => void
+}) {
+  const { t } = useLanguage()
+
+  if (linkedTraders.length === 0) return null
+
+  return (
+    <Box style={{
+      padding: tokens.spacing[4],
+      backgroundColor: tokens.colors.bg.secondary,
+      borderRadius: tokens.radius.lg,
+      border: `1px solid ${tokens.colors.border.primary}`,
+      marginBottom: tokens.spacing[5],
+      maxWidth: '600px',
+      margin: `0 auto ${tokens.spacing[5]}`,
+    }}>
+      <Text style={{
+        fontWeight: 700,
+        fontSize: tokens.typography.fontSize.md,
+        marginBottom: tokens.spacing[3],
+        color: tokens.colors.text.primary,
+      }}>
+        {t('linkedAccounts') || 'Linked Accounts'} ({linkedTraders.length})
+      </Text>
+      {linkedTraders.map((lt) => (
+        <Box key={lt.id} style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: tokens.spacing[3],
+          padding: `${tokens.spacing[2]} 0`,
+          borderBottom: `1px solid ${tokens.colors.border.primary}`,
+        }}>
+          {lt.stats?.avatar_url && (
+            <img
+              src={lt.stats.avatar_url}
+              alt=""
+              style={{ width: 28, height: 28, borderRadius: '50%' }}
+            />
+          )}
+          <Box style={{ flex: 1 }}>
+            <Text style={{ fontWeight: 600, fontSize: tokens.typography.fontSize.sm }}>
+              {lt.stats?.handle || lt.trader_id}
+              {lt.is_primary && (
+                <span style={{
+                  marginLeft: tokens.spacing[2],
+                  fontSize: tokens.typography.fontSize.xs,
+                  color: tokens.colors.accent.primary,
+                  fontWeight: 500,
+                }}>
+                  Primary
+                </span>
+              )}
+            </Text>
+            <Text style={{ fontSize: tokens.typography.fontSize.xs, color: tokens.colors.text.tertiary }}>
+              {lt.source}
+              {lt.label ? ` - ${lt.label}` : ''}
+              {lt.stats?.arena_score ? ` | Score: ${lt.stats.arena_score.toFixed(1)}` : ''}
+            </Text>
+          </Box>
+        </Box>
+      ))}
+    </Box>
+  )
+}
+
 export default function ClaimPage() {
   const { t } = useLanguage()
   const router = useRouter()
@@ -722,6 +811,25 @@ export default function ClaimPage() {
   const [user, setUser] = useState<any>(null)
   const [selectedTrader, setSelectedTrader] = useState<SearchResult | null>(null)
   const [step, setStep] = useState<'search' | 'verify' | 'done'>('search')
+  const [linkedTraders, setLinkedTraders] = useState<LinkedTrader[]>([])
+
+  // Fetch linked traders for the user
+  const fetchLinkedTraders = useCallback(async () => {
+    try {
+      const { data: { session } } = await supabase.auth.getSession()
+      if (!session) return
+
+      const res = await fetch('/api/traders/linked', {
+        headers: { Authorization: `Bearer ${session.access_token}` },
+      })
+      if (res.ok) {
+        const data = await res.json()
+        setLinkedTraders(data.linked_traders || data.data?.linked_traders || [])
+      }
+    } catch {
+      // Silent fail
+    }
+  }, [])
 
   // Check URL params for direct link
   useEffect(() => {
@@ -742,12 +850,15 @@ export default function ClaimPage() {
     }
   }, [searchParams])
 
-  // Check auth
+  // Check auth + fetch linked traders
   useEffect(() => {
     supabase.auth.getUser().then(({ data }) => {
       setUser(data.user)
+      if (data.user) {
+        fetchLinkedTraders()
+      }
     }).catch(() => {})
-  }, [])
+  }, [fetchLinkedTraders])
 
   const handleTraderSelect = (result: SearchResult) => {
     if (!user) {
@@ -760,6 +871,7 @@ export default function ClaimPage() {
 
   const handleClaimSuccess = () => {
     setStep('done')
+    fetchLinkedTraders()
     setTimeout(() => {
       if (selectedTrader) {
         router.push(`/trader/${encodeURIComponent(selectedTrader.handle)}?source=${encodeURIComponent(selectedTrader.source)}`)
@@ -784,9 +896,40 @@ export default function ClaimPage() {
         {/* Step: Search / Verify / Done */}
         {step === 'search' && (
           <>
+            {linkedTraders.length > 0 && (
+              <>
+                <LinkedAccountsSidebar
+                  linkedTraders={linkedTraders}
+                  onRefresh={fetchLinkedTraders}
+                />
+                <Box style={{
+                  textAlign: 'center',
+                  marginBottom: tokens.spacing[5],
+                }}>
+                  <Text style={{
+                    fontSize: tokens.typography.fontSize.lg,
+                    fontWeight: 700,
+                    color: tokens.colors.text.primary,
+                  }}>
+                    {t('linkAdditionalAccount') || 'Link Additional Account'}
+                  </Text>
+                  <Text style={{
+                    fontSize: tokens.typography.fontSize.sm,
+                    color: tokens.colors.text.secondary,
+                    marginTop: tokens.spacing[1],
+                  }}>
+                    {t('linkAdditionalAccountDesc') || 'Search for another trader account to link to your profile.'}
+                  </Text>
+                </Box>
+              </>
+            )}
             <SearchSection onSelect={handleTraderSelect} />
-            <BenefitsSection />
-            <StatsSection />
+            {linkedTraders.length === 0 && (
+              <>
+                <BenefitsSection />
+                <StatsSection />
+              </>
+            )}
             <FaqSection />
           </>
         )}
@@ -885,9 +1028,15 @@ export default function ClaimPage() {
             }}>
               {t('claimVerifiedAutoApproved')}
             </h2>
-            <Text style={{ color: tokens.colors.text.secondary }}>
+            <Text style={{ color: tokens.colors.text.secondary, marginBottom: tokens.spacing[4] }}>
               Redirecting to your profile...
             </Text>
+            {linkedTraders.length > 0 && (
+              <LinkedAccountsSidebar
+                linkedTraders={linkedTraders}
+                onRefresh={fetchLinkedTraders}
+              />
+            )}
           </Box>
         )}
       </Box>
