@@ -64,6 +64,10 @@ interface TraderHeaderProps {
   isBot?: boolean
   /** Last data update timestamp (ISO string) for "Updated X ago" display */
   lastUpdated?: string | null
+  /** Bio from claimed user profile */
+  claimedBio?: string | null
+  /** Avatar URL from claimed user profile (preferred over exchange avatar) */
+  claimedAvatarUrl?: string | null
 }
 
 // Helpers extracted to ./TraderHeaderHelpers.tsx
@@ -107,6 +111,8 @@ export default function TraderHeader({
   isVerifiedTrader = false,
   isBot = false,
   lastUpdated,
+  claimedBio,
+  claimedAvatarUrl,
 }: TraderHeaderProps): React.ReactElement {
   const [userId, setUserId] = useState<string | null>(externalUserId ?? null)
   const [mounted, setMounted] = useState(false)
@@ -154,6 +160,8 @@ export default function TraderHeader({
     }).catch(() => { /* Intentionally swallowed: auth check non-critical for trader header */ }) // eslint-disable-line no-restricted-syntax -- intentional fire-and-forget
   }, [externalUserId])
 
+  // Prefer claimed user avatar over exchange avatar
+  const effectiveAvatarUrl = claimedAvatarUrl || avatarUrl
   const sourceLabelKey = source ? SOURCE_CONFIG[source.toLowerCase()] : null
   const sourceLabel = sourceLabelKey ? t(sourceLabelKey) : null
   const hasCover = Boolean(coverUrl)
@@ -236,7 +244,7 @@ export default function TraderHeader({
               width: 72,
               height: 72,
               borderRadius: tokens.radius.full,
-              background: avatarUrl ? tokens.colors.bg.secondary : getAvatarGradient(traderId),
+              background: effectiveAvatarUrl ? tokens.colors.bg.secondary : getAvatarGradient(traderId),
               border: `3px solid ${avatarHovered ? tokens.colors.accent.primary : tokens.colors.border.primary}`,
               display: 'grid',
               placeItems: 'center',
@@ -252,9 +260,9 @@ export default function TraderHeader({
               cursor: 'pointer',
             }}
           >
-            {avatarUrl && !avatarError ? (
+            {effectiveAvatarUrl && !avatarError ? (
               <Image
-                src={`/api/avatar?url=${encodeURIComponent(avatarUrl)}`}
+                src={`/api/avatar?url=${encodeURIComponent(effectiveAvatarUrl)}`}
                 alt={handle}
                 width={72}
                 height={72}
@@ -526,6 +534,13 @@ export default function TraderHeader({
               title={new Date(lastUpdated).toLocaleString()}
             >
               {t('updated') || 'Updated'} {getRelativeTime(lastUpdated)}
+            </Text>
+          )}
+
+          {/* Claimed user bio */}
+          {isVerifiedTrader && claimedBio && (
+            <Text size="sm" color="secondary" style={{ marginTop: 4, maxWidth: 500, lineHeight: 1.5 }}>
+              {claimedBio}
             </Text>
           )}
 
