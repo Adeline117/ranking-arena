@@ -64,10 +64,11 @@ export class BitgetFuturesConnector extends BaseConnector {
           { method: 'GET' }
         )
       } catch {
-        // Fallback: VPS proxy (forward full URL through VPS)
-        const directUrl = `https://www.bitget.com/v1/trigger/trace/public/currentTrader/list?pageNo=${currentPage}&pageSize=${limit}&sortType=2&timeRange=${timeRange}`
-        const vpsData = await this.proxyViaVPS<Record<string, unknown>>(directUrl)
-        if (!vpsData) throw new Error('Both direct API and VPS proxy failed for bitget')
+        // Fallback: VPS Playwright scraper (bypasses Cloudflare WAF)
+        const vpsData = await this.fetchViaVPS<Record<string, unknown>>('/bitget/leaderboard', {
+          timeRange, page: String(currentPage), pageSize: String(limit),
+        })
+        if (!vpsData) throw new Error('Both direct API and VPS scraper failed for bitget')
         _rawLb = vpsData
       }
       const data = warnValidate(BitgetFuturesLeaderboardResponseSchema, _rawLb, 'bitget-futures/leaderboard')
