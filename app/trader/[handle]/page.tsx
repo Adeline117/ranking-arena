@@ -183,14 +183,14 @@ export default async function TraderPage({ params, searchParams }: { params: Pro
   ])
 
   // 1. If claimed, fetch the user profile to pass to the client component
-  let claimedUserProfile = null
+  let claimedUserProfile: { id: string; handle: string; bio?: string | null; avatar_url?: string | null; cover_url?: string | null } | null = null
   if (userHandle) {
     const { data: userProfile } = await sb
       .from('user_profiles')
       .select('id, handle, bio, avatar_url, cover_url')
       .eq('handle', userHandle)
       .maybeSingle()
-    claimedUserProfile = userProfile
+    claimedUserProfile = userProfile as typeof claimedUserProfile
   }
 
   // 2. 如果未找到交易员
