@@ -1,5 +1,6 @@
 'use client'
 
+import Link from 'next/link'
 import { tokens } from '@/lib/design-tokens'
 import TopNav from '@/app/components/layout/TopNav'
 import Footer from '@/app/components/layout/Footer'
@@ -162,6 +163,51 @@ export default function AboutPage() {
           </Box>
         </Section>
 
+        {/* Statistics */}
+        <Section title={t('aboutStatsTitle')}>
+          <Box
+            style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))',
+              gap: tokens.spacing[4],
+            }}
+          >
+            {[
+              { value: t('aboutStatTraders'), label: t('aboutStatTradersLabel') },
+              { value: t('aboutStatExchanges'), label: t('aboutStatExchangesLabel') },
+              { value: t('aboutStatResources'), label: t('aboutStatResourcesLabel') },
+              { value: t('aboutStatInstitutions'), label: t('aboutStatInstitutionsLabel') },
+            ].map((stat, i) => (
+              <Box
+                key={i}
+                style={{
+                  padding: tokens.spacing[5],
+                  background: 'var(--color-bg-secondary)',
+                  borderRadius: tokens.radius.lg,
+                  border: '1px solid var(--color-border-primary)',
+                  textAlign: 'center',
+                }}
+              >
+                <Text
+                  size="2xl"
+                  weight="black"
+                  style={{
+                    background: 'linear-gradient(135deg, var(--color-pro-gradient-start), var(--color-pro-gradient-end))',
+                    WebkitBackgroundClip: 'text',
+                    WebkitTextFillColor: 'transparent',
+                    marginBottom: tokens.spacing[1],
+                  }}
+                >
+                  {stat.value}
+                </Text>
+                <Text size="xs" color="secondary">
+                  {stat.label}
+                </Text>
+              </Box>
+            ))}
+          </Box>
+        </Section>
+
         {/* Vision */}
         <Section title={t('aboutVisionTitle')}>
           <Box
@@ -175,6 +221,32 @@ export default function AboutPage() {
             <Text size="sm" color="secondary" style={{ lineHeight: 1.8, fontStyle: 'italic' }}>
               {t('aboutVisionDesc')}
             </Text>
+          </Box>
+        </Section>
+
+        {/* Contact */}
+        <Section title={t('aboutContactTitle')}>
+          <Box
+            style={{
+              padding: tokens.spacing[5],
+              background: 'var(--color-bg-secondary)',
+              borderRadius: tokens.radius.lg,
+              border: '1px solid var(--color-border-primary)',
+            }}
+          >
+            <Text size="sm" color="secondary" style={{ lineHeight: 1.8, marginBottom: tokens.spacing[3] }}>
+              {t('aboutContactDesc')}
+            </Text>
+            <Link
+              href="/u/adelinewen1107"
+              style={{
+                color: 'var(--color-pro-gradient-start)',
+                fontWeight: 600,
+                textDecoration: 'none',
+              }}
+            >
+              {t('aboutContactLink')} →
+            </Link>
           </Box>
         </Section>
       </Box>
