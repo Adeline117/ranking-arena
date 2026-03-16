@@ -96,7 +96,19 @@ const nextConfig: NextConfig = {
         protocol: 'https',
         hostname: 'books.google.com',
       },
-      // covers.openlibrary.org removed to stay under 50 remotePatterns limit
+      // User avatars (seed data + placeholder services)
+      {
+        protocol: 'https',
+        hostname: 'i.pravatar.cc',
+      },
+      {
+        protocol: 'https',
+        hostname: 'randomuser.me',
+      },
+      {
+        protocol: 'https',
+        hostname: 'gavatar.staticimgs.com',
+      },
       {
         protocol: 'https',
         hostname: '**.googleusercontent.com',
