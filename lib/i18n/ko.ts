@@ -4270,6 +4270,8 @@ const ko = {
 
     // Institutions page - no ratings
     instNoRatingsYet: '아직 평점이 없습니다',
+    loginToRate: '로그인 후 평가',
+    ratingSubmitted: '평점이 제출되었습니다!',
 
     // Library i18n migration - remaining isZh patterns
     audioReaderTitle: '오디오 리더',

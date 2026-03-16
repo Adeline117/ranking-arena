@@ -704,6 +704,7 @@ export default function DirectoryPage({ config }: { config: DirectoryPageConfig 
                 noRatingsKey={config.i18n.noRatingsYet}
                 accentVar={accentVar}
                 accentMutedVar={accentMutedVar}
+                itemType={config.table === 'institutions' ? 'institution' : 'tool'}
               />
             ))}
           </div>

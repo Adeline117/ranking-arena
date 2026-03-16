@@ -1,9 +1,10 @@
 'use client'
 
-import React, { useState, memo } from 'react'
+import React, { useState, useCallback, memo } from 'react'
 import { tokens } from '@/lib/design-tokens'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import StarRating from '@/app/components/ui/StarRating'
+import { supabase } from '@/lib/supabase/client'
 import type { DirectoryItem } from './DirectoryPage'
 
 function InitialAvatar({ name, accentVar }: { name: string; accentVar: string }) {
@@ -21,7 +22,7 @@ function InitialAvatar({ name, accentVar }: { name: string; accentVar: string })
 }
 
 export const DirectoryCard = memo(function DirectoryCard({
-  item, language, categoryLabelMap, pricingLabelKeys, noRatingsKey, accentVar, accentMutedVar,
+  item, language, categoryLabelMap, pricingLabelKeys, noRatingsKey, accentVar, accentMutedVar, itemType,
 }: {
   item: DirectoryItem
   language: string
@@ -30,6 +31,8 @@ export const DirectoryCard = memo(function DirectoryCard({
   noRatingsKey?: string
   accentVar: string
   accentMutedVar: string
+  /** 'institution' or 'tool' — used for rating API calls */
+  itemType?: 'institution' | 'tool'
 }) {
   const { t } = useLanguage()
   const name = language === 'zh' ? (item.name_zh || item.name) : item.name
@@ -37,6 +40,63 @@ export const DirectoryCard = memo(function DirectoryCard({
   const href = item.website || item.github_url || '#'
   const hasLink = !!(item.website || item.github_url)
   const [logoError, setLogoError] = useState(false)
+
+  // Rating state
+  const [optimisticRating, setOptimisticRating] = useState<number | null>(null)
+  const [optimisticCount, setOptimisticCount] = useState<number | null>(null)
+  const [ratingStatus, setRatingStatus] = useState<'idle' | 'submitting' | 'success' | 'login-required'>('idle')
+
+  const displayAvg = optimisticRating ?? item.avg_rating
+  const displayCount = optimisticCount ?? item.rating_count
+
+  const handleRate = useCallback(async (rating: number) => {
+    if (!itemType) return
+
+    // Check auth
+    const { data: { session } } = await supabase.auth.getSession()
+    if (!session) {
+      setRatingStatus('login-required')
+      setTimeout(() => setRatingStatus('idle'), 2500)
+      return
+    }
+
+    // Optimistic update
+    const prevAvg = item.avg_rating ?? 0
+    const prevCount = item.rating_count ?? 0
+    const newCount = prevCount + 1
+    const newAvg = (prevAvg * prevCount + rating) / newCount
+    setOptimisticRating(Math.round(newAvg * 100) / 100)
+    setOptimisticCount(newCount)
+    setRatingStatus('submitting')
+
+    try {
+      const res = await fetch(`/api/directory/${item.id}/ratings`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${session.access_token}`,
+        },
+        body: JSON.stringify({ rating, item_type: itemType }),
+      })
+
+      if (res.ok) {
+        const data = await res.json()
+        setOptimisticRating(data.avg_rating)
+        setOptimisticCount(data.rating_count)
+        setRatingStatus('success')
+        setTimeout(() => setRatingStatus('idle'), 2000)
+      } else {
+        // Revert
+        setOptimisticRating(null)
+        setOptimisticCount(null)
+        setRatingStatus('idle')
+      }
+    } catch {
+      setOptimisticRating(null)
+      setOptimisticCount(null)
+      setRatingStatus('idle')
+    }
+  }, [item.id, item.avg_rating, item.rating_count, itemType])
 
   const pricingLabel = pricingLabelKeys && item.pricing
     ? (pricingLabelKeys[item.pricing] ? t(pricingLabelKeys[item.pricing]) : item.pricing)
@@ -140,20 +200,73 @@ export const DirectoryCard = memo(function DirectoryCard({
         </div>
       )}
 
-      {item.avg_rating != null && item.avg_rating > 0 ? (
-        <div style={{
-          display: 'flex', alignItems: 'center', gap: 8,
-          padding: '6px 10px', borderRadius: tokens.radius.lg,
-          background: accentMutedVar, border: `1px solid ${accentVar}`,
-          width: 'fit-content',
-        }}>
-          <StarRating rating={item.avg_rating} ratingCount={item.rating_count} size={14} readonly />
-        </div>
-      ) : noRatingsKey ? (
-        <span style={{ fontSize: 12, color: 'var(--color-text-tertiary)', fontStyle: 'italic' }}>
-          {t(noRatingsKey)}
-        </span>
-      ) : null}
+      {/* Interactive rating area */}
+      <div
+        onClick={(e) => { e.preventDefault(); e.stopPropagation() }}
+        style={{ position: 'relative' }}
+      >
+        {displayAvg != null && displayAvg > 0 ? (
+          <div style={{
+            display: 'flex', alignItems: 'center', gap: 8,
+            padding: '6px 10px', borderRadius: tokens.radius.lg,
+            background: accentMutedVar, border: `1px solid ${accentVar}`,
+            width: 'fit-content',
+          }}>
+            <StarRating
+              rating={displayAvg}
+              ratingCount={displayCount}
+              size={14}
+              readonly={!itemType}
+              onRate={itemType ? handleRate : undefined}
+            />
+          </div>
+        ) : itemType ? (
+          <div style={{
+            display: 'flex', alignItems: 'center', gap: 8,
+            padding: '6px 10px', borderRadius: tokens.radius.lg,
+            background: accentMutedVar, border: `1px solid ${accentVar}`,
+            width: 'fit-content',
+          }}>
+            <StarRating
+              rating={0}
+              ratingCount={0}
+              size={14}
+              readonly={false}
+              onRate={handleRate}
+            />
+          </div>
+        ) : noRatingsKey ? (
+          <span style={{ fontSize: 12, color: 'var(--color-text-tertiary)', fontStyle: 'italic' }}>
+            {t(noRatingsKey)}
+          </span>
+        ) : null}
+
+        {/* Status toast */}
+        {ratingStatus === 'login-required' && (
+          <span style={{
+            position: 'absolute', bottom: '100%', left: 0, marginBottom: 4,
+            fontSize: 11, color: 'var(--color-accent-warning, #FFB800)',
+            background: 'var(--color-bg-secondary)', padding: '4px 8px',
+            borderRadius: tokens.radius.md, whiteSpace: 'nowrap',
+            border: '1px solid var(--color-border-primary)',
+            boxShadow: '0 2px 8px rgba(0,0,0,0.15)',
+          }}>
+            {t('loginToRate')}
+          </span>
+        )}
+        {ratingStatus === 'success' && (
+          <span style={{
+            position: 'absolute', bottom: '100%', left: 0, marginBottom: 4,
+            fontSize: 11, color: 'var(--color-accent-success)',
+            background: 'var(--color-bg-secondary)', padding: '4px 8px',
+            borderRadius: tokens.radius.md, whiteSpace: 'nowrap',
+            border: '1px solid var(--color-border-primary)',
+            boxShadow: '0 2px 8px rgba(0,0,0,0.15)',
+          }}>
+            {t('ratingSubmitted')}
+          </span>
+        )}
+      </div>
     </a>
   )
 })

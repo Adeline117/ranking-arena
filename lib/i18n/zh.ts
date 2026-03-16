@@ -4298,6 +4298,8 @@ instSortName: '名称 A-Z',
 
 // Institutions page - no ratings (机构页-暂无评分)
 instNoRatingsYet: '暂无评分',
+loginToRate: '登录后评分',
+ratingSubmitted: '评分成功！',
 
 // Directory shared (目录页共享)
 directorySortName: '名称 A-Z',
