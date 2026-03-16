@@ -54,10 +54,11 @@ export class CoinexFuturesConnector extends BaseConnector {
           { method: 'GET' }
         )
       } catch {
-        // Fallback: VPS proxy (forward full URL through VPS)
-        const directUrl = `https://www.coinex.com/res/copy-trading/public/traders?page=${currentPage}&limit=${limit}&sort_by=roi&period=${window}`
-        const vpsData = await this.proxyViaVPS<Record<string, unknown>>(directUrl)
-        if (!vpsData) throw new Error('Both direct API and VPS proxy failed for coinex')
+        // Fallback: VPS Playwright scraper (CoinEx has geo-blocking)
+        const vpsData = await this.fetchViaVPS<Record<string, unknown>>('/coinex/leaderboard', {
+          period: window, page: String(currentPage), limit: String(limit),
+        })
+        if (!vpsData) throw new Error('Both direct API and VPS scraper failed for coinex')
         _rawLb = vpsData
       }
       const data = warnValidate(CoinexFuturesLeaderboardResponseSchema, _rawLb, 'coinex-futures/leaderboard')
