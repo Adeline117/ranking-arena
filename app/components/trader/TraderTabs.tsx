@@ -5,7 +5,7 @@ import { tokens } from '@/lib/design-tokens'
 import { useLanguage } from '../Providers/LanguageProvider'
 import { Box, Text } from '../base'
 
-type TabKey = 'overview' | 'stats' | 'portfolio' | 'posts'
+export type TabKey = 'overview' | 'stats' | 'portfolio' | 'posts'
 
 interface TraderTabsProps {
   activeTab: TabKey
