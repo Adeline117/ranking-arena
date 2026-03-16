@@ -147,7 +147,7 @@ export const SUBSCRIPTION_PLANS: SubscriptionPlan[] = [
     id: 'pro',
     name: 'Pro',
     description: '不再错过异动，保护你的跟单收益',  // v2.0: 强调核心价值
-    price: { monthly: 9.99, yearly: 99, currency: 'USD' },
+    price: { monthly: 4.99, yearly: 29.99, currency: 'USD' },
     features: [],
     limits: {
       apiCallsPerDay: 1000,
