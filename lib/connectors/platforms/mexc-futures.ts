@@ -31,38 +31,50 @@ export class MexcFuturesConnector extends BaseConnector {
     notes: ['CF protected', 'No timeseries endpoint available'],
   }
 
-  async discoverLeaderboard(window: Window, limit = 20, offset = 0): Promise<DiscoverResult> {
-    const page = Math.floor(offset / limit) + 1
-    let _rawLb: Record<string, unknown>
-    try {
-      _rawLb = await this.request<Record<string, unknown>>(
-        `https://futures.mexc.com/api/v1/private/account/assets/copy-trading/trader/list?page=${page}&pageSize=${limit}&sortField=yield&sortType=DESC&timeType=${WINDOW_MAP[window]}`,
-        { method: 'GET' }
-      )
-    } catch {
-      // Fallback: VPS Playwright scraper (bypasses WAF)
-      const vpsData = await this.fetchViaVPS<Record<string, unknown>>('/mexc/leaderboard', {
-        page: String(page), pageSize: String(limit),
-      })
-      if (!vpsData) throw new Error('Both direct API and VPS scraper failed for mexc')
-      _rawLb = vpsData
+  async discoverLeaderboard(window: Window, limit = 500, offset = 0): Promise<DiscoverResult> {
+    const pageSize = 50 // MEXC API max per page
+    const maxPages = Math.ceil(Math.min(limit, 500) / pageSize)
+    const allTraders: TraderSource[] = []
+    let totalAvailable: number | null = null
+
+    for (let page = Math.floor(offset / pageSize) + 1; page <= maxPages + Math.floor(offset / pageSize); page++) {
+      let _rawLb: Record<string, unknown>
+      try {
+        _rawLb = await this.request<Record<string, unknown>>(
+          `https://futures.mexc.com/api/v1/private/account/assets/copy-trading/trader/list?page=${page}&pageSize=${pageSize}&sortField=yield&sortType=DESC&timeType=${WINDOW_MAP[window]}`,
+          { method: 'GET' }
+        )
+      } catch {
+        // Fallback: VPS Playwright scraper (bypasses WAF)
+        const vpsData = await this.fetchViaVPS<Record<string, unknown>>('/mexc/leaderboard', {
+          page: String(page), pageSize: String(pageSize),
+        })
+        if (!vpsData) throw new Error('Both direct API and VPS scraper failed for mexc')
+        _rawLb = vpsData
+      }
+      const data = warnValidate(MexcFuturesLeaderboardResponseSchema, _rawLb, 'mexc-futures/leaderboard')
+      const list = data?.data?.list || []
+      if (data?.data?.total) totalAvailable = Number(data.data.total)
+
+      for (const item of list) {
+        allTraders.push({
+          platform: 'mexc' as const,
+          market_type: 'futures' as const,
+          trader_key: String((item as Record<string, unknown>).uid || ''),
+          display_name: ((item as Record<string, unknown>).nickname as string) || null,
+          profile_url: `https://futures.mexc.com/copy-trading/trader/${(item as Record<string, unknown>).uid}`,
+          discovered_at: new Date().toISOString(),
+          last_seen_at: new Date().toISOString(),
+          is_active: true,
+          raw: item as Record<string, unknown>,
+        })
+      }
+
+      if ((list as unknown[]).length < pageSize) break
+      if (allTraders.length >= limit) break
     }
-    const data = warnValidate(MexcFuturesLeaderboardResponseSchema, _rawLb, 'mexc-futures/leaderboard')
-    const list = data?.data?.list || []
 
-    const traders: TraderSource[] = list.map((item: Record<string, unknown>) => ({
-      platform: 'mexc' as const,
-      market_type: 'futures' as const,
-      trader_key: String(item.uid || ''),
-      display_name: (item.nickname as string) || null,
-      profile_url: `https://futures.mexc.com/copy-trading/trader/${item.uid}`,
-      discovered_at: new Date().toISOString(),
-      last_seen_at: new Date().toISOString(),
-      is_active: true,
-      raw: item as Record<string, unknown>,
-    }))
-
-    return { traders, total_available: data?.data?.total || null, window, fetched_at: new Date().toISOString() }
+    return { traders: allTraders.slice(0, limit), total_available: totalAvailable, window, fetched_at: new Date().toISOString() }
   }
 
   async fetchTraderProfile(traderKey: string): Promise<ProfileResult | null> {
