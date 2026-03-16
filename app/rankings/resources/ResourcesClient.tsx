@@ -301,7 +301,7 @@ export default function ResourcesClient({
 
         {/* Category tabs + Sort + Language filter */}
         <div style={{ display: 'flex', gap: 8, marginBottom: 24, flexWrap: 'wrap', alignItems: 'center' }}>
-          {CATEGORY_KEYS.map(catKey => {
+          {CATEGORY_KEYS.filter(catKey => catKey === 'all' || (categoryCounts[catKey] ?? 0) > 0).map(catKey => {
             const active = category === catKey
             const count = categoryCounts[catKey]
             const label = t(CATEGORY_I18N[catKey])
