@@ -362,9 +362,51 @@ async function computeSeason(
     }
   }
 
+  // Phase 3: Fill missing win_rate/max_drawdown from trader_stats_detail (enrichment table)
+  // This catches data from enrichment runs that wrote to stats_detail but not back to snapshots
+  const tradersNeedingEnrichment = Array.from(traderMap.values())
+    .filter(t => t.win_rate == null || t.max_drawdown == null)
+  if (tradersNeedingEnrichment.length > 0) {
+    const enrichBySource = new Map<string, string[]>()
+    for (const t of tradersNeedingEnrichment) {
+      const ids = enrichBySource.get(t.source) || []
+      ids.push(t.source_trader_id)
+      enrichBySource.set(t.source, ids)
+    }
+    await Promise.all(
+      Array.from(enrichBySource.entries()).map(async ([source, traderIds]) => {
+        for (let i = 0; i < traderIds.length; i += 500) {
+          const chunk = traderIds.slice(i, i + 500)
+          const { data: statsRows } = await supabase
+            .from('trader_stats_detail')
+            .select('source_trader_id, profitable_trades_pct, max_drawdown, sharpe_ratio, winning_positions, total_positions')
+            .eq('source', source)
+            .in('source_trader_id', chunk)
+            .eq('period', season)
+          if (!statsRows) continue
+          for (const sr of statsRows) {
+            const tid = sr.source_trader_id.startsWith('0x') ? sr.source_trader_id.toLowerCase() : sr.source_trader_id
+            const existing = traderMap.get(`${source}:${tid}`)
+            if (!existing) continue
+            if (sr.profitable_trades_pct != null && existing.win_rate == null) {
+              existing.win_rate = sr.profitable_trades_pct
+            }
+            if (sr.max_drawdown != null && existing.max_drawdown == null) {
+              existing.max_drawdown = sr.max_drawdown
+            }
+            if (sr.sharpe_ratio != null && existing.sharpe_ratio == null) {
+              existing.sharpe_ratio = sr.sharpe_ratio
+            }
+          }
+        }
+      })
+    )
+    logger.info(`[${season}] Enriched ${tradersNeedingEnrichment.length} traders from stats_detail`)
+  }
+
   const roiThreshold = ROI_ANOMALY_THRESHOLDS[season]
   const uniqueTraders = Array.from(traderMap.values())
-    .filter(t => t.roi != null) // Must have ROI data — null ROI traders shouldn't be ranked
+    .filter(t => t.roi != null)
     .filter(t => Math.abs(t.roi!) <= roiThreshold)
     .filter(t => t.roi! > -90) // 过滤已爆仓交易员（ROI < -90%），无参考价值
     .filter(t => t.trades_count == null || t.trades_count >= MIN_TRADES_COUNT)
