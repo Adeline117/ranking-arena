@@ -39,7 +39,18 @@ interface PricingPageClientProps {
 export default function PricingPageClient({ lifetimeCount = 0 }: PricingPageClientProps) {
   const { email } = useAuthSession()
   const { t, language: locale } = useLanguage()
-  const [billing, setBilling] = useState<'monthly' | 'yearly'>('yearly')
+  const [billing, setBillingRaw] = useState<'monthly' | 'yearly'>(() => {
+    // Persist billing selection across React re-mounts caused by Suspense/streaming
+    if (typeof window !== 'undefined') {
+      const saved = sessionStorage.getItem('pricing-billing')
+      if (saved === 'monthly' || saved === 'yearly') return saved
+    }
+    return 'yearly'
+  })
+  const setBilling = (b: 'monthly' | 'yearly') => {
+    sessionStorage.setItem('pricing-billing', b)
+    setBillingRaw(b)
+  }
 
   const features = [
     resolved(t('featureCategoryRanking'), 'featureCategoryRanking', 'Category Rankings'),
