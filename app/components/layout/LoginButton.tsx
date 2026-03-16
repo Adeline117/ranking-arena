@@ -1,15 +1,16 @@
 'use client'
 
-import Link from 'next/link'
 import { tokens } from '@/lib/design-tokens'
 import { useLanguage } from '../Providers/LanguageProvider'
+import { useLoginModal } from '@/lib/hooks/useLoginModal'
 
 export default function LoginButton() {
   const { t } = useLanguage()
+  const { openLoginModal } = useLoginModal()
 
   return (
-    <Link
-      href="/login"
+    <button
+      onClick={() => openLoginModal()}
       aria-label={t('login')}
       tabIndex={0}
       className="btn-press touch-target top-nav-login-link"
@@ -28,9 +29,10 @@ export default function LoginButton() {
         height: 44,
         border: 'none',
         boxShadow: `0 4px 12px var(--color-accent-primary-40)`,
+        cursor: 'pointer',
       }}
     >
       {t('login')}
-    </Link>
+    </button>
   )
 }

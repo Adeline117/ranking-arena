@@ -7,6 +7,7 @@ import { ButtonSpinner } from './LoadingSpinner'
 import { tokens } from '@/lib/design-tokens'
 import { useAuthSession } from '@/lib/hooks/useAuthSession'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
+import { useLoginModal } from '@/lib/hooks/useLoginModal'
 import { logger } from '@/lib/logger'
 
 type UserFollowButtonProps = {
@@ -89,10 +90,11 @@ export default function UserFollowButton({
     }
   }, [currentUserId, targetUserId, getAuthHeadersAsync])
 
+  const { openLoginModal } = useLoginModal()
+
   const handleToggle = useCallback(async () => {
     if (!currentUserId) {
-      showToast(t('pleaseLogin'), 'warning')
-      router.push('/login')
+      openLoginModal(t('pleaseLogin'))
       return
     }
 

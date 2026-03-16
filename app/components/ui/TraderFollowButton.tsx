@@ -9,6 +9,7 @@ import { useFollowSync, type FollowChangePayload } from '@/lib/hooks/useBroadcas
 import { useAuthSession } from '@/lib/hooks/useAuthSession'
 import { getCsrfHeaders } from '@/lib/api/client'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
+import { useLoginModal } from '@/lib/hooks/useLoginModal'
 import { logger } from '@/lib/logger'
 
 type TraderFollowButtonProps = {
@@ -289,11 +290,11 @@ export default function TraderFollowButton({ traderId, userId, initialFollowing 
     return (
       <button
         onClick={() => {
-          // UF8: Save pending follow action before redirecting to login
+          // UF8: Save pending follow action for after login
           if (typeof window !== 'undefined') {
             sessionStorage.setItem('pendingFollow', JSON.stringify({ traderId, action: 'follow' }))
           }
-          router.push('/login?redirect=' + encodeURIComponent(typeof window !== 'undefined' ? window.location.pathname : '/'))
+          useLoginModal.getState().openLoginModal()
         }}
         style={{
           padding: `${tokens.spacing[2]} ${tokens.spacing[4]}`,

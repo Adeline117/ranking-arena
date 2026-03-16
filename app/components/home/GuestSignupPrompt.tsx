@@ -1,10 +1,10 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
-import Link from 'next/link'
 import { tokens } from '@/lib/design-tokens'
 import { useLanguage } from '../Providers/LanguageProvider'
 import { useAuthSession } from '@/lib/hooks/useAuthSession'
+import { useLoginModal } from '@/lib/hooks/useLoginModal'
 
 /**
  * Full-screen signup prompt for guest users.
@@ -90,8 +90,8 @@ export default function GuestSignupPrompt() {
       }}>
         {t('guestSignupSubtitle')}
       </span>
-      <Link
-        href="/login"
+      <button
+        onClick={() => useLoginModal.getState().openLoginModal()}
         style={{
           padding: '8px 20px',
           borderRadius: tokens.radius.md,
@@ -99,12 +99,13 @@ export default function GuestSignupPrompt() {
           color: tokens.colors.white,
           fontSize: 13,
           fontWeight: 700,
-          textDecoration: 'none',
+          border: 'none',
+          cursor: 'pointer',
           whiteSpace: 'nowrap',
         }}
       >
         {t('guestSignupButton')}
-      </Link>
+      </button>
       <button
         onClick={handleDismiss}
         style={{

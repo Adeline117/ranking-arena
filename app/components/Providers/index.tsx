@@ -10,7 +10,9 @@ import { ErrorBoundary } from '../utils/ErrorBoundary'
 import { SWRConfigProvider } from '@/lib/hooks/SWRConfig'
 import { initializeErrorInterceptors } from '@/lib/middleware/error-interceptor'
 import dynamic from 'next/dynamic'
+import { useLoginModal } from '@/lib/hooks/useLoginModal'
 const PrivyClientProvider = dynamic(() => import('./PrivyClientProvider'))
+const LoginModal = dynamic(() => import('../auth/LoginModal'), { ssr: false })
 
 // Web3Provider is NO LONGER loaded at root level.
 // It's lazy-loaded only when wallet features are needed.
@@ -30,6 +32,12 @@ function ErrorInterceptorInitializer({ children }: { children: ReactNode }) {
   return <>{children}</>
 }
 
+function GlobalLoginModal() {
+  const { isOpen, message, closeLoginModal } = useLoginModal()
+  if (!isOpen) return null
+  return <LoginModal open={isOpen} onClose={closeLoginModal} message={message} />
+}
+
 export default function Providers({ children }: { children: ReactNode }) {
   // 初始化 CSRF Token
   useEffect(() => {
@@ -46,6 +54,7 @@ export default function Providers({ children }: { children: ReactNode }) {
                 <ErrorInterceptorInitializer>
                   <DialogProvider>
                     {children}
+                    <GlobalLoginModal />
                   </DialogProvider>
                 </ErrorInterceptorInitializer>
               </ToastProvider>
