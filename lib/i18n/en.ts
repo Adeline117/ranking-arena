@@ -2301,6 +2301,8 @@ const en = {
     loadFailedRetryMsg: 'Failed to load, please try again',
     noPerformanceData: 'No performance data available',
     noStatsData: 'No statistics available',
+    noPortfolioData: 'No portfolio data available',
+    viewOnExchange: 'View positions on {exchange}',
     leaderboardBreadcrumb: 'Leaderboard',
     chartDataAccumulatesDaily: 'Data accumulates daily. Check back soon — your first chart will appear within 24 hours of first trade.',
     arenaScoreHeaderTooltip: "Arena's composite performance score (0–100)",
