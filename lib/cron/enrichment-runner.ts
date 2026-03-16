@@ -51,6 +51,12 @@ import {
   fetchKwentaOnchainEquityCurve,
   fetchKwentaOnchainStatsDetail,
   fetchKwentaOnchainPositionHistory,
+  fetchBtccEquityCurve,
+  fetchBtccStatsDetail,
+  fetchEtoroEquityCurve,
+  fetchEtoroStatsDetail,
+  fetchCoinexEquityCurve,
+  fetchCoinexStatsDetail,
   fetchWalletAUM,
   fetchWalletPortfolio,
   isDexPlatform,
@@ -284,6 +290,24 @@ export const ENRICHMENT_PLATFORM_CONFIGS: Record<string, EnrichmentConfig> = {
     fetchPositionHistory: fetchJupiterPositionHistory,
     concurrency: 3, delayMs: 300,
   },
+  btcc: {
+    platform: 'btcc',
+    fetchEquityCurve: fetchBtccEquityCurve,
+    fetchStatsDetail: fetchBtccStatsDetail,
+    concurrency: 2, delayMs: 1500,
+  },
+  etoro: {
+    platform: 'etoro',
+    fetchEquityCurve: fetchEtoroEquityCurve,
+    fetchStatsDetail: fetchEtoroStatsDetail,
+    concurrency: 2, delayMs: 2000,
+  },
+  coinex: {
+    platform: 'coinex',
+    fetchEquityCurve: fetchCoinexEquityCurve,
+    fetchStatsDetail: fetchCoinexStatsDetail,
+    concurrency: 2, delayMs: 2000,
+  },
 }
 
 export interface EnrichmentResult {
@@ -307,7 +331,7 @@ export const NO_ENRICHMENT_PLATFORMS = new Set([
   // API removed/unavailable (2026-03-10)
   'bybit', 'bybit_spot',
   // No enrichment API available
-  'bitfinex', 'coinex', 'xt', 'bitmart', 'btcc', 'bitunix', 'paradex', 'okx_spot', 'etoro', 'toobit',
+  'bitfinex', 'xt', 'bitmart', 'bitunix', 'paradex', 'okx_spot', 'toobit',
   // binance_spot: PERMANENTLY REMOVED (2026-03-14) - repeatedly hangs 45-76min
   'binance_spot',
   // bitget_futures: re-enabled (2026-03-15) - per-platform timeout now isolates hangs

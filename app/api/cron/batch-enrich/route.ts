@@ -44,6 +44,9 @@ const PLATFORM_LIMITS: Record<string, { limit90: number; limit30: number; limit7
   gains: { limit90: 30, limit30: 25, limit7: 15 }, // Increased: public API, computes MDD
   // kwenta removed: Copin API stopped serving Kwenta data (2026-03-11)
   jupiter_perps: { limit90: 20, limit30: 20, limit7: 10 }, // 30D: 25→20 (match 90D), 7D: 15→10
+  btcc: { limit90: 20, limit30: 15, limit7: 10 }, // New: ranking-based enrichment, conservative
+  etoro: { limit90: 20, limit30: 15, limit7: 10 }, // New: gain history + portfolio API
+  coinex: { limit90: 15, limit30: 10, limit7: 5 }, // New: ranking-based, geo-blocked, conservative
 }
 
 // High priority platforms (always enriched)
@@ -56,7 +59,7 @@ const HIGH_PRIORITY = ['binance_futures', 'okx_futures', 'bitget_futures', 'hype
 // bybit_spot removed: api2.bybit.com endpoints return 404 globally (2026-03-10)
 // kwenta removed: Copin API stopped serving Kwenta data (2026-03-11)
 // binance_spot moved to end: repeatedly hangs 45-76min, process last to avoid blocking (2026-03-14)
-const MEDIUM_PRIORITY = ['htx_futures', 'gateio', 'mexc', 'drift', 'gains']
+const MEDIUM_PRIORITY = ['htx_futures', 'gateio', 'mexc', 'drift', 'gains', 'btcc', 'etoro', 'coinex']
 
 // Low priority - platforms that frequently timeout or hang
 // Moved here to prevent blocking high/medium priority platforms

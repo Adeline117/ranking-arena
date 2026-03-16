@@ -146,6 +146,25 @@ export {
   isDexPlatform,
 } from './enrichment-wallet'
 
+// BTCC
+export {
+  fetchBtccEquityCurve,
+  fetchBtccStatsDetail,
+} from './enrichment-btcc'
+
+// eToro
+export {
+  fetchEtoroEquityCurve,
+  fetchEtoroStatsDetail,
+  fetchEtoroPortfolio,
+} from './enrichment-etoro'
+
+// CoinEx
+export {
+  fetchCoinexEquityCurve,
+  fetchCoinexStatsDetail,
+} from './enrichment-coinex'
+
 // Derived metrics
 export {
   calculateVolatility,
