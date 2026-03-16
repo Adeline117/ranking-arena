@@ -243,20 +243,33 @@ export class DydxPerpConnector extends BaseConnector {
   }
 
   normalize(raw: Record<string, unknown>): Record<string, unknown> {
+    // Supports both indexer format (address, pnl) and Copin format (account, totalPnl, totalWin, etc.)
+    const totalWin = Number(raw.totalWin) || 0
+    const totalLose = Number(raw.totalLose) || 0
+    const totalTrade = Number(raw.totalTrade) || (totalWin + totalLose)
+    const winRate = totalTrade > 0 ? (totalWin / totalTrade) * 100 : null
+
+    const pnl = Number(raw.totalPnl ?? raw.totalRealisedPnl ?? raw.pnl) || null
+    const volume = Number(raw.totalVolume) || null
+    // Estimate ROI from PnL/Volume with assumed leverage
+    const roi = pnl != null && volume != null && volume > 0
+      ? (pnl / (volume / 5)) * 100  // Assume ~5x average leverage
+      : null
+
     return {
-      trader_key: raw.address ?? null,
+      trader_key: String(raw.account || raw.address || ''),
       display_name: null,
       avatar_url: null,
-      roi: null,
-      pnl: raw.pnl != null ? Number(raw.pnl) || null : null,
-      win_rate: null,
-      max_drawdown: null,
-      trades_count: null,
+      roi,
+      pnl,
+      win_rate: winRate,
+      max_drawdown: null, // Copin doesn't provide MDD
+      trades_count: totalTrade > 0 ? totalTrade : null,
       followers: null,
       copiers: null,
       aum: null,
       sharpe_ratio: null,
-      platform_rank: raw.rank != null ? Number(raw.rank) : null,
+      platform_rank: raw.ranking != null ? Number(raw.ranking) : (raw.rank != null ? Number(raw.rank) : null),
     }
   }
 }
