@@ -213,7 +213,6 @@ export const PRIORITY_SOURCES: TraderSource[] = [
   'jupiter_perps',
   'aevo',
   'drift',
-  'kwenta',
   'web3_bot',
   // Spot
   'binance_spot',
@@ -258,7 +257,6 @@ export const SOURCES_WITH_DATA: TraderSource[] = [
   'jupiter_perps',
   'binance_web3',
   'drift',
-  'kwenta',
   'web3_bot',
 ]
 
@@ -355,6 +353,15 @@ export const SOURCE_RELIABILITY: Record<string, number> = Object.fromEntries(
 export const SOURCE_TRUST_WEIGHT: Record<string, number> = Object.fromEntries(
   Object.entries(EXCHANGE_CONFIG).map(([k, v]) => [k, v.trustWeight])
 )
+
+// ---------------------------------------------------------------------------
+// Safety: ensure SOURCES_WITH_DATA never contains dead/blocked platforms
+// ---------------------------------------------------------------------------
+const _deadSet = new Set<string>(DEAD_BLOCKED_PLATFORMS)
+// Mutate in-place to keep the same array reference
+for (let i = SOURCES_WITH_DATA.length - 1; i >= 0; i--) {
+  if (_deadSet.has(SOURCES_WITH_DATA[i])) SOURCES_WITH_DATA.splice(i, 1)
+}
 
 /** ROI type per source – derived from EXCHANGE_CONFIG */
 export const SOURCE_ROI_TYPE: Record<string, RoiType> = Object.fromEntries(
