@@ -232,8 +232,10 @@ export function useHotPageData() {
   }, [t])
 
   const visibleHot = useMemo(() => {
-    return loggedIn ? hotPosts : hotPosts.slice(0, 10)
-  }, [loggedIn, hotPosts])
+    // Show all posts for everyone — non-logged users get full feed
+    // Login prompt shown via CTA banner, not content gating
+    return hotPosts
+  }, [hotPosts])
 
   // Load comments (initial)
   const loadComments = useCallback(async (postId: string) => {

@@ -80,9 +80,11 @@ function HotContent() {
         >
           <Box as="section" style={{ minWidth: 0 }}>
             <Card title={t('hotList')}>
-              <Text size="xs" color="tertiary" style={{ marginBottom: tokens.spacing[2], fontSize: '11px' }}>
-                {loggedIn ? t('loggedInShowAllHot') : t('notLoggedInShowLimitedHot')}
-              </Text>
+              {!loggedIn && (
+                <Text size="xs" color="tertiary" style={{ marginBottom: tokens.spacing[2], fontSize: '11px' }}>
+                  {t('loginToInteract')}
+                </Text>
+              )}
 
               {/* Tabbed Sections */}
               <Box style={{ display: 'flex', gap: '8px', marginBottom: tokens.spacing[3], flexWrap: 'wrap' }}>
@@ -163,8 +165,8 @@ function HotContent() {
                         )
                       })}
 
-                      {/* Blurred preview cards for anonymous users */}
-                      {!loggedIn && hotPosts.length > visibleHot.length && (
+                      {/* Login CTA for anonymous users (after all posts) */}
+                      {false && !loggedIn && hotPosts.length > visibleHot.length && (
                         <>
                           {hotPosts.slice(visibleHot.length, visibleHot.length + 3).map((p, idx) => {
                             const rank = visibleHot.length + idx + 1
