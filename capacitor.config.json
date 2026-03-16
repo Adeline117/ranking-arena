@@ -21,7 +21,8 @@
     "contentInset": "automatic",
     "backgroundColor": "#0B0A10",
     "preferredContentMode": "mobile",
-    "allowsLinkPreview": true
+    "allowsLinkPreview": true,
+    "allowsBackForwardNavigationGestures": true
   },
   "plugins": {
     "SplashScreen": {
