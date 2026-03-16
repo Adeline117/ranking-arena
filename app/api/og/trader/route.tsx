@@ -165,7 +165,7 @@ export async function GET(request: NextRequest) {
                 </span>
                 <span style={{ fontSize: 16, color: colors.sub }}>
                   {platform.replace('_', ' ').toUpperCase()}
-                  {rank != null ? ` | #${rank}` : ''}
+                  {rank != null ? ` | ${rank}` : ''}
                 </span>
               </div>
             </div>

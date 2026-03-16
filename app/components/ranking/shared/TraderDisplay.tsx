@@ -80,7 +80,7 @@ export function RankDisplay({ rank, rankChange, isNew, glowClass }: {
         </Box>
       ) : (
         <Text size="sm" weight="bold" style={{ fontSize: '14px', color: TRADER_TEXT_TERTIARY }}>
-          #{rank}
+          {rank}
         </Text>
       )}
       <RankChangeIndicator rankChange={rankChange} isNew={isNew} />

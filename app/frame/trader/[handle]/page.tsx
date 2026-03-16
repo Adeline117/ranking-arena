@@ -47,7 +47,7 @@ export async function generateMetadata({ params, searchParams }: Props): Promise
 
   const name = trader?.handle || decodedHandle
   const score = trader?.arena_score ? parseFloat(trader.arena_score).toFixed(1) : '–'
-  const rank = trader?.rank ? `#${trader.rank}` : ''
+  const rank = trader?.rank ? `${trader.rank}` : ''
   const roi = trader?.roi ? `${parseFloat(trader.roi) >= 0 ? '+' : ''}${parseFloat(trader.roi).toFixed(2)}%` : ''
 
   const title = `${name} Score ${score} ${rank}`

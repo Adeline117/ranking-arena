@@ -102,7 +102,7 @@ export async function generateMetadata({ params, searchParams }: Props): Promise
   const topPct = rank && data?.total ? Math.ceil((rank / data.total) * 100) : null
 
   const roiStr = roi != null ? `${roi >= 0 ? '+' : ''}${roi.toFixed(1)}% ROI` : null
-  const rankStr = rank != null ? `Ranked #${rank}` : null
+  const rankStr = rank != null ? `Ranked ${rank}` : null
   const topStr = topPct != null && topPct <= 25 ? `Top ${topPct}% trader` : null
   const parts = [rankStr, roiStr, topStr].filter(Boolean)
 
