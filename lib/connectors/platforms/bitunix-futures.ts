@@ -90,9 +90,7 @@ export class BitunixFuturesConnector extends BaseConnector {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
-              statisticType: statType,
-              oderType: 'ROI',
-              page,
+              pageNo: page,
               pageSize,
             }),
           }

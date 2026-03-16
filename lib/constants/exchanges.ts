@@ -399,4 +399,8 @@ export const SOURCE_TO_CONNECTOR_MAP: Record<string, { platform: string; marketT
   aevo: { platform: 'aevo', marketType: 'perp' },
   drift: { platform: 'drift', marketType: 'perp' },
   web3_bot: { platform: 'web3_bot', marketType: 'web3' },
+  weex: { platform: 'weex', marketType: 'futures' },
+  phemex: { platform: 'phemex', marketType: 'futures' },
+  lbank: { platform: 'lbank', marketType: 'futures' },
+  kwenta: { platform: 'kwenta', marketType: 'perp' },
 }
