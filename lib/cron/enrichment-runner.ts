@@ -398,11 +398,15 @@ export async function runEnrichment(params: {
     try {
       await Promise.race([
         (async () => {
+    // Read from leaderboard_ranks (canonical, has latest trader keys)
+    // Previously read from trader_snapshots v1, which has stale keys
+    // (e.g., Binance migrated from encryptedUid to leadPortfolioId)
     const { data: traders, error: fetchError } = await supabase
-      .from('trader_snapshots')
+      .from('leaderboard_ranks')
       .select('source_trader_id')
       .eq('source', platformKey)
       .eq('season_id', period)
+      .not('arena_score', 'is', null)
       .order('arena_score', { ascending: false })
       .range(offset, offset + limit - 1)
 
@@ -489,12 +493,21 @@ export async function runEnrichment(params: {
                 if (stats.maxDrawdown != null) snapshotUpdate.max_drawdown = stats.maxDrawdown
                 if (stats.totalTrades != null) snapshotUpdate.trades_count = stats.totalTrades
                 if (Object.keys(snapshotUpdate).length > 0) {
-                  await supabase
-                    .from('trader_snapshots')
-                    .update(snapshotUpdate)
-                    .eq('source', platformKey)
-                    .eq('source_trader_id', traderId)
-                    .eq('season_id', period)
+                  // Write to both v1 and v2 snapshots
+                  await Promise.all([
+                    supabase
+                      .from('trader_snapshots')
+                      .update(snapshotUpdate)
+                      .eq('source', platformKey)
+                      .eq('source_trader_id', traderId)
+                      .eq('season_id', period),
+                    supabase
+                      .from('trader_snapshots_v2')
+                      .update(snapshotUpdate)
+                      .eq('platform', platformKey)
+                      .eq('trader_key', traderId)
+                      .eq('window', period),
+                  ])
                 }
               }
             }
