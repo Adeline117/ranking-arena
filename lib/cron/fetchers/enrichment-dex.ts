@@ -203,8 +203,30 @@ export async function fetchHyperliquidPositionHistory(
 // GMX Position History (from GraphQL)
 // ============================================
 
-const GMX_SUBSQUID_URL = 'https://gmx.squids.live/gmx-synthetics-arbitrum:prod/api/graphql'
+const GMX_SUBSQUID_URL = 'https://gmx.squids.live/gmx-synthetics-arbitrum/graphql'
 const GMX_VALUE_SCALE = 1e30
+
+// Common GMX v2 market address → symbol mapping (Arbitrum)
+const GMX_MARKET_SYMBOLS: Record<string, string> = {
+  '0x70d95587d40a2caf56bd97485ab3eec10bee6336': 'ETH/USD',
+  '0x47c031236e19d024b42f8ae6780e44a573170703': 'BTC/USD',
+  '0x09400d9db990d5ed3f35d7be61dfaeb900af03c9': 'SOL/USD',
+  '0xd9535bb5f58a1a75032416f2dfe7880c30575a41': 'LINK/USD',
+  '0xc7abb2c5f3bf3ceb389df0dcec5db73a5d3b1a5b': 'ARB/USD',
+  '0x0ccb4faa6f1f1b30911619f1184082ab4e25813c': 'DOGE/USD',
+  '0x2b477989a149b3d85faa5e5b264dbec7927b8a04': 'AVAX/USD',
+  '0x7f1fa204bb700853d36994da19f830b6ad18455c': 'AAVE/USD',
+  '0xb7e69de3a8c77d4a101a89dc24d80c6f042d2b60': 'UNI/USD',
+  '0x63dc80ee90f26363b3fcd609f750bb2b95484e7a': 'ATOM/USD',
+  '0xc25de3fcab3098d8e7e4de3cdccb8f2f88c04dae': 'NEAR/USD',
+  '0xb686bbfdbfc1b8f1d3eca83a2ed7d0a5c4309979': 'OP/USD',
+}
+
+function resolveGmxMarketSymbol(marketAddress?: string): string {
+  if (!marketAddress) return 'GMX'
+  const symbol = GMX_MARKET_SYMBOLS[marketAddress.toLowerCase()]
+  return symbol || marketAddress.slice(0, 10)
+}
 
 export async function fetchGmxPositionHistory(
   address: string,
@@ -268,7 +290,7 @@ export async function fetchGmxPositionHistory(
       const price = a.executionPrice ? Number(BigInt(a.executionPrice)) / 1e24 : null
 
       return {
-        symbol: a.marketAddress?.slice(0, 10) || 'GMX',
+        symbol: resolveGmxMarketSymbol(a.marketAddress),
         direction: a.isLong ? 'long' as const : 'short' as const,
         positionType: 'perpetual',
         marginMode: 'cross',

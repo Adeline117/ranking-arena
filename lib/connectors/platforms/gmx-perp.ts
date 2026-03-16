@@ -43,8 +43,8 @@ export class GmxPerpConnector extends BaseConnector {
   }
 
   private getSubgraphUrl(): string {
-    // Satsuma DNS dead since ~2026-03-15, switched to Subsquid
-    return 'https://gmx.squids.live/gmx-synthetics-arbitrum:prod/api/graphql'
+    // Satsuma DNS dead since ~2026-03-15, switched to Squids
+    return 'https://gmx.squids.live/gmx-synthetics-arbitrum/graphql'
   }
 
   private getPeriodPrefix(window: Window): string {
@@ -115,13 +115,13 @@ export class GmxPerpConnector extends BaseConnector {
   }
 
   async fetchTraderSnapshot(traderKey: string, _window: Window): Promise<SnapshotResult | null> {
-    // Fetch trader stats from subgraph
+    // Fetch trader stats from Squids subgraph
     const query = `{
-      periodAccountStats(
-        first: 1
-        where: { account: "${traderKey.toLowerCase()}", period: "total" }
+      accountStats(
+        limit: 1
+        where: { id_eq: "${traderKey.toLowerCase()}" }
       ) {
-        account realizedPnl maxCapital wins losses closedCount
+        id realizedPnl maxCapital wins losses closedCount
       }
     }`
     const _rawSnap = await this.request<Record<string, unknown>>(
@@ -133,7 +133,7 @@ export class GmxPerpConnector extends BaseConnector {
       }
     )
     const data = warnValidate(GmxSubgraphResponseSchema, _rawSnap, 'gmx-perp/snapshot')
-    const rankings = data?.data?.periodAccountStats || []
+    const rankings = data?.data?.accountStats || data?.data?.periodAccountStats || []
     const entry = Array.isArray(rankings) ? rankings[0] as Record<string, unknown> | undefined : undefined
 
     if (!entry) {
@@ -188,14 +188,13 @@ export class GmxPerpConnector extends BaseConnector {
     // This is a simplified version using the REST API
     const series: TraderTimeseries[] = []
 
-    // Try to get daily stats from subgraph
+    // Try to get daily stats from Squids subgraph
     try {
       const query = `{
         periodAccountStats(
-          where: { account: "${traderKey.toLowerCase()}", period_starts_with: "1d:" }
-          orderBy: period
-          orderDirection: asc
-          first: 90
+          limit: 90
+          where: { account_eq: "${traderKey.toLowerCase()}", period_startsWith: "1d:" }
+          orderBy: period_ASC
         ) {
           period
           realizedPnl
@@ -204,7 +203,7 @@ export class GmxPerpConnector extends BaseConnector {
       }`
 
       const _rawSubgraph = await this.request<Record<string, unknown>>(
-        'https://subgraph.satsuma-prod.com/gmx/synthetics-arbitrum-stats/api',
+        this.getSubgraphUrl(),
         {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
