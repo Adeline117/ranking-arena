@@ -24,7 +24,7 @@ import type {
 } from '../../types/leaderboard'
 
 interface BitunixTraderEntry {
-  uid: string
+  uid: string | number
   nickname: string
   header: string | null
   roi: string | number   // Decimal string (0.05 = 5%)
@@ -105,7 +105,7 @@ export class BitunixFuturesConnector extends BaseConnector {
           allTraders.push({
             platform: this.platform,
             market_type: this.marketType,
-            trader_key: entry.uid,
+            trader_key: String(entry.uid),
             display_name: entry.nickname || null,
             profile_url: null,
             discovered_at: new Date().toISOString(),
@@ -145,26 +145,32 @@ export class BitunixFuturesConnector extends BaseConnector {
 
   normalize(raw: unknown): Record<string, unknown> {
     const e = raw as BitunixTraderEntry
-    // Parse string numbers and convert decimals → percentages
+    // Parse string numbers
     const toNum = (v: string | number | null | undefined): number | null => {
       if (v == null) return null
       const n = typeof v === 'string' ? parseFloat(v) : v
       return isNaN(n) ? null : n
     }
-    const toPct = (v: string | number | null | undefined): number | null => {
-      const n = toNum(v)
-      if (n == null) return null
-      return Math.abs(n) <= 1 ? n * 100 : n
-    }
+
+    // Bitunix API always returns ratio format: roi=8.53 means 853%, winRate=0.78 means 78%
+    // Always multiply by 100 to convert to percentage
+    const roiRaw = toNum(e.roi)
+    const roi = roiRaw != null ? roiRaw * 100 : null
+
+    const winRateRaw = toNum(e.winRate)
+    const winRate = winRateRaw != null ? winRateRaw * 100 : null
+
+    const mddRaw = toNum(e.mdd)
+    const mdd = mddRaw != null ? Math.abs(mddRaw * 100) : null
 
     return {
-      trader_key: e.uid,
+      trader_key: String(e.uid),
       display_name: e.nickname || null,
       avatar_url: e.header || null,
-      roi: toPct(e.roi),
+      roi,
       pnl: toNum(e.pl),
-      win_rate: toPct(e.winRate),
-      max_drawdown: e.mdd != null ? Math.abs(toPct(e.mdd) ?? 0) : null,
+      win_rate: winRate,
+      max_drawdown: mdd,
       followers: e.currentFollow ?? null,
       platform_rank: null,
       trades_count: null,
