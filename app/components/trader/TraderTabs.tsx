@@ -14,20 +14,23 @@ interface TraderTabsProps {
   onProRequired?: () => void
   /** Extra tab keys to show beyond the default 3 */
   extraTabs?: TabKey[]
+  /** Tab keys to hide from the default set */
+  hideTabs?: TabKey[]
 }
 
 const useIsomorphicLayoutEffect = typeof window !== 'undefined' ? useLayoutEffect : useEffect
 
-export default function TraderTabs({ activeTab, onTabChange, isPro = false, onProRequired: _onProRequired, extraTabs }: TraderTabsProps) {
+export default function TraderTabs({ activeTab, onTabChange, isPro = false, onProRequired: _onProRequired, extraTabs, hideTabs }: TraderTabsProps) {
   const { t } = useLanguage()
   const containerRef = useRef<HTMLDivElement>(null)
   const tabRefs = useRef<Map<TabKey, HTMLButtonElement>>(new Map())
   const [indicator, setIndicator] = useState({ left: 0, width: 0 })
 
+  const hideSet = hideTabs ? new Set(hideTabs) : null
   const tabs: Array<{ key: TabKey; label: string }> = [
     { key: 'overview', label: t('overview') },
     { key: 'stats', label: t('stats') },
-    { key: 'portfolio', label: t('portfolio') },
+    ...(!hideSet?.has('portfolio') ? [{ key: 'portfolio' as TabKey, label: t('portfolio') }] : []),
     ...(extraTabs?.includes('posts') ? [{ key: 'posts' as TabKey, label: t('posts') }] : []),
   ]
 
