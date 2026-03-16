@@ -12,6 +12,7 @@ import { usePremium } from '@/lib/premium/hooks'
 import StarRating from '@/app/components/ui/StarRating'
 import BookCover from '../BookCover'
 import ShareButton from '@/app/components/common/ShareButton'
+import { useToast } from '@/app/components/ui/Toast'
 import AddToCollectionButton from '@/app/components/features/AddToCollectionButton'
 import { logger } from '@/lib/logger'
 import BookRatingOverview from './components/BookRatingOverview'
@@ -97,6 +98,7 @@ export default function BookDetailClient({
   canonicalUrl,
 }: BookDetailClientProps) {
   const { language, t } = useLanguage()
+  const { showToast } = useToast()
   const isZhLocale = language === 'zh'  // kept for locale-dependent title selection
   const id = book.id
 
@@ -163,7 +165,7 @@ export default function BookDetailClient({
   const [statusLoading, setStatusLoading] = useState(false)
   const handleStatus = async (status: 'want_to_read' | 'reading' | 'read') => {
     if (!session) {
-      alert(t('bookPleaseLogin'))
+      showToast(t('bookPleaseLogin'), 'warning')
       return
     }
     if (statusLoading) return
