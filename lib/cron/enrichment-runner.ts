@@ -327,15 +327,16 @@ export interface EnrichmentResult {
 export const NO_ENRICHMENT_PLATFORMS = new Set([
   // Wallet-based platforms (no equity curve API)
   'binance_web3', 'okx_web3', 'web3_bot',
-  // CF-protected (enrichment not feasible)
-  'bingx',
-  // API removed/unavailable (2026-03-10)
-  'bybit', 'bybit_spot',
-  // No enrichment API available
-  'bitfinex', 'xt', 'bitmart', 'bitunix', 'paradex', 'okx_spot', 'toobit',
-  // binance_spot: PERMANENTLY REMOVED (2026-03-14) - repeatedly hangs 45-76min
-  'binance_spot',
-  // bitget_futures: re-enabled (2026-03-15) - per-platform timeout now isolates hangs
+  // API removed/unavailable
+  'bybit', 'bybit_spot',  // Akamai WAF blocks all
+  'bitmart', 'paradex', 'okx_spot',  // Dead
+  // No enrichment API / CF protected
+  'xt', 'toobit', 'bingx',
+  // kucoin, weex: dead platforms, no enrichment possible
+  'kucoin', 'weex',
+  // NOTE: binance_spot re-enabled (2026-03-16) — new GET API + per-platform timeout
+  // NOTE: bitfinex re-enabled — uses Copin fallback
+  // NOTE: bitunix re-enabled — enrichment via connector detail API
 ])
 
 // Per-platform timeout: prevents any single platform from burning the entire batch budget
