@@ -284,26 +284,13 @@ const nextConfig: NextConfig = {
         protocol: 'https',
         hostname: '**.bitfinex.com',
       },
-      // BTSE
-      {
-        protocol: 'https',
-        hostname: '**.btse.com',
-      },
-      // dYdX
-      {
-        protocol: 'https',
-        hostname: '**.dydx.exchange',
-      },
+      // BTSE + dYdX: routed through /api/avatar proxy (dead platforms)
       // Jupiter
       {
         protocol: 'https',
         hostname: '**.jup.ag',
       },
-      // WhiteBit
-      {
-        protocol: 'https',
-        hostname: '**.whitebit.com',
-      },
+      // WhiteBit: routed through /api/avatar proxy (dead platform)
       // Toobit
       {
         protocol: 'https',
