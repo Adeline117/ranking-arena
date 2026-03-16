@@ -220,6 +220,18 @@ export default function LoginPage() {
         const { data: existingProfile } = await supabase.from('user_profiles').select('handle').eq('id', userId).maybeSingle()
         if (!existingProfile || !existingProfile.handle) updateData.handle = finalHandle
       }
+      // Sync OAuth avatar if available and not already set
+      try {
+        const { data: { user } } = await supabase.auth.getUser()
+        const meta = user?.user_metadata
+        const oauthAvatar = meta?.avatar_url || meta?.picture || null
+        if (oauthAvatar) {
+          const { data: existing } = await supabase.from('user_profiles').select('avatar_url').eq('id', userId).maybeSingle()
+          if (!existing?.avatar_url) {
+            updateData.avatar_url = oauthAvatar
+          }
+        }
+      } catch { /* avatar sync is best-effort */ }
       // Capture UTM parameters for attribution
       const utmSource = searchParams.get('utm_source')
       const utmMedium = searchParams.get('utm_medium')

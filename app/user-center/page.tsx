@@ -6,6 +6,7 @@ import TopNav from '@/app/components/layout/TopNav'
 // MobileBottomNav is rendered by root layout — do not duplicate here
 import LevelBadge from '@/app/components/user/LevelBadge'
 import { EXP_ACTIONS, getLevelInfo, type LevelInfo } from '@/lib/utils/user-level'
+import Image from 'next/image'
 import { tokens } from '@/lib/design-tokens'
 import { supabase } from '@/lib/supabase/client'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
@@ -81,6 +82,7 @@ function UserCenterPage() {
   const [loading, setLoading] = useState(true)
   const [userId, setUserId] = useState<string | null>(null)
   const [userHandle, setUserHandle] = useState<string | null>(null)
+  const [userAvatarUrl, setUserAvatarUrl] = useState<string | null>(null)
   const [email, setEmail] = useState<string | null>(null)
 
   useEffect(() => {
@@ -112,7 +114,7 @@ function UserCenterPage() {
         const [profileResult, expResult] = await Promise.all([
           supabase
             .from('user_profiles')
-            .select('handle')
+            .select('handle, avatar_url')
             .eq('id', user.id)
             .maybeSingle(),
           fetch('/api/user/exp'),
@@ -120,6 +122,7 @@ function UserCenterPage() {
 
         if (profileResult.data) {
           setUserHandle(profileResult.data.handle)
+          setUserAvatarUrl(profileResult.data.avatar_url || null)
         }
 
         if (expResult.ok) {
@@ -201,8 +204,20 @@ function UserCenterPage() {
               background: tokens.glass.bg.light, backdropFilter: tokens.glass.blur.xs,
               WebkitBackdropFilter: tokens.glass.blur.xs, border: tokens.glass.border.light,
               color: tokens.colors.text.tertiary, flexShrink: 0,
+              overflow: 'hidden',
             }}>
-              {(userHandle || 'U').charAt(0).toUpperCase()}
+              {userAvatarUrl ? (
+                <Image
+                  src={userAvatarUrl}
+                  alt={userHandle || 'User'}
+                  width={56}
+                  height={56}
+                  style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                  onError={(e) => { (e.target as HTMLImageElement).style.display = 'none' }}
+                />
+              ) : (
+                (userHandle || 'U').charAt(0).toUpperCase()
+              )}
             </Box>
 
             <Box style={{ flex: 1, minWidth: 0 }}>
