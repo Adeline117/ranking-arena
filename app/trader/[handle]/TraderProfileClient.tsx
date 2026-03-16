@@ -89,12 +89,21 @@ async function traderFetcher(url: string): Promise<TraderPageData> {
   return raw as unknown as TraderPageData
 }
 
+interface ClaimedUserProfile {
+  id: string
+  handle: string
+  bio?: string | null
+  avatar_url?: string | null
+  cover_url?: string | null
+}
+
 interface TraderProfileClientProps {
   data: UnregisteredTraderData
   serverTraderData?: TraderPageData | null
+  claimedUser?: ClaimedUserProfile | null
 }
 
-export default function TraderProfileClient({ data, serverTraderData }: TraderProfileClientProps) {
+export default function TraderProfileClient({ data, serverTraderData, claimedUser }: TraderProfileClientProps) {
   const router = useRouter()
   const searchParams = useSearchParams()
   const pathname = usePathname()

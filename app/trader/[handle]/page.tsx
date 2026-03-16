@@ -182,9 +182,15 @@ export default async function TraderPage({ params, searchParams }: { params: Pro
     resolveTrader(sb, { handle: decodedHandle, platform }),
   ])
 
-  // 1. 优先跳转到注册用户页面
+  // 1. If claimed, fetch the user profile to pass to the client component
+  let claimedUserProfile = null
   if (userHandle) {
-    redirect(`/u/${encodeURIComponent(userHandle)}`)
+    const { data: userProfile } = await sb
+      .from('user_profiles')
+      .select('id, handle, bio, avatar_url, cover_url')
+      .eq('handle', userHandle)
+      .maybeSingle()
+    claimedUserProfile = userProfile
   }
 
   // 2. 如果未找到交易员
@@ -257,7 +263,7 @@ export default async function TraderPage({ params, searchParams }: { params: Pro
     <>
       <JsonLd data={jsonLd} />
       {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
-      <TraderProfileClient data={traderData} serverTraderData={serverTraderData as any} />
+      <TraderProfileClient data={traderData} serverTraderData={serverTraderData as any} claimedUser={claimedUserProfile} />
     </>
   )
 }
