@@ -119,23 +119,27 @@ const PLATFORMS = {
       return []
     },
     normalize: (raw) => {
-      const rawRoi = num(raw.roi ?? raw.roiRate ?? raw.returnRate ?? raw.pnlRatio)
+      // BingX multi-rank nests trader data under traderInfoVo
+      const info = raw.traderInfoVo || {}
+      const rawRoi = num(raw.cumulativePnlRate7Days ?? raw.roi ?? raw.roiRate ?? raw.returnRate)
       const roi = rawRoi != null ? (Math.abs(rawRoi) <= 1 ? rawRoi * 100 : rawRoi) : null
       const rawWr = num(raw.winRate)
       const winRate = rawWr != null ? (rawWr <= 1 ? rawWr * 100 : rawWr) : null
       const rawMdd = num(raw.maxDrawdown)
       const maxDrawdown = rawMdd != null ? Math.abs(rawMdd <= 1 ? rawMdd * 100 : rawMdd) : null
       return {
-        trader_key: String(raw.uniqueId ?? raw.uid ?? raw.traderId ?? ''),
-        display_name: raw.traderName ?? raw.nickname ?? raw.nickName ?? null,
+        trader_key: String(info.trader || info.apiIdentity || raw.uniqueId || raw.uid || ''),
+        display_name: info.traderName || raw.traderName || raw.nickname || null,
         roi,
-        pnl: num(raw.pnl ?? raw.totalPnl ?? raw.totalEarnings ?? raw.profit),
+        pnl: num(raw.totalEarnings ?? raw.pnl ?? raw.totalPnl ?? raw.profit),
         win_rate: winRate,
         max_drawdown: maxDrawdown,
         sharpe_ratio: null,
         followers: num(raw.followerNum ?? raw.followers ?? raw.followerCount),
       }
     },
+  },
+}
   },
 }
 
