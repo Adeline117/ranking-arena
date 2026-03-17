@@ -7,6 +7,7 @@
  * the claim is auto-approved without manual review.
  */
 
+import crypto from 'crypto'
 import { NextRequest } from 'next/server'
 import {
   getSupabaseAdmin,
@@ -126,6 +127,7 @@ export async function POST(request: NextRequest) {
         .from('user_exchange_connections')
         .select('verified_uid')
         .eq('user_id', user.id)
+        .eq('exchange', source)
         .eq('is_active', true)
         .maybeSingle()
 
@@ -185,6 +187,16 @@ export async function POST(request: NextRequest) {
     // Verification passed - auto-approve the claim
     const now = new Date().toISOString()
 
+    // Hash sensitive UIDs before storing in verification_data
+    let sanitizedVerificationData = body.verification_data || {}
+    if (verification_method === 'api_key' && sanitizedVerificationData.verified_uid) {
+      const uidHash = crypto.createHash('sha256')
+        .update(String(sanitizedVerificationData.verified_uid))
+        .digest('hex')
+        .slice(0, 16)
+      sanitizedVerificationData = { uid_hash: uidHash }
+    }
+
     // Create claim record as 'verified' (auto-approved)
     const { data: claim, error: claimError } = await supabase
       .from('trader_claims')
@@ -193,7 +205,7 @@ export async function POST(request: NextRequest) {
         trader_id,
         source,
         verification_method,
-        verification_data: body.verification_data || {},
+        verification_data: sanitizedVerificationData,
         status: 'verified',
         verified_at: now,
       })

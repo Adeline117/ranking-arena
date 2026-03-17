@@ -250,6 +250,9 @@ async function computeSeason(
     avg_holding_hours: number | null
     style_confidence: number | null
     sharpe_ratio: number | null
+    sortino_ratio: number | null
+    profit_factor: number | null
+    calmar_ratio: number | null
     trader_type: string | null
   }
 
@@ -318,6 +321,9 @@ async function computeSeason(
             avg_holding_hours: null,
             style_confidence: null,
             sharpe_ratio: d.sharpe_ratio as number | null,
+            sortino_ratio: null,
+            profit_factor: null,
+            calmar_ratio: null,
             trader_type: null,
           })
         }
@@ -721,11 +727,6 @@ async function computeSeason(
       profit_factor: t.profit_factor ?? null,
       calmar_ratio: t.calmar_ratio ?? null,
       trader_type: detectTraderType(t.source, t.source_trader_id, t.trades_count, t.trader_type),
-      // Score sub-components (for Score Breakdown display)
-      profitability_score: Math.round(scoreResult.returnScore * 100) / 100,
-      risk_control_score: Math.round(scoreResult.drawdownScore * 100) / 100,
-      execution_score: Math.round(scoreResult.stabilityScore * 100) / 100,
-      score_completeness: Math.round(scoreResult.pnlScore * 100) / 100,
     }
   })
 

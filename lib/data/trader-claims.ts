@@ -242,45 +242,6 @@ export async function getPendingClaims(
 // ============================================
 
 /**
- * 创建认领申请
- */
-export async function createClaim(
-  supabase: SupabaseClient,
-  userId: string,
-  input: CreateClaimInput
-): Promise<TraderClaim> {
-  // 检查用户是否已有认领
-  const existingClaim = await getUserClaim(supabase, userId)
-  if (existingClaim && ['pending', 'reviewing', 'verified'].includes(existingClaim.status)) {
-    throw new Error('您已有一个进行中的认领申请')
-  }
-
-  // 检查交易员是否已被认领
-  const isClaimed = await isTraderClaimed(supabase, input.trader_id, input.source)
-  if (isClaimed) {
-    throw new Error('该交易员账号已被认领')
-  }
-
-  const { data, error } = await supabase
-    .from('trader_claims')
-    .insert({
-      user_id: userId,
-      trader_id: input.trader_id,
-      source: input.source,
-      verification_method: input.verification_method,
-      verification_data: input.verification_data || {},
-    })
-    .select()
-    .single()
-
-  if (error) {
-    throw error
-  }
-
-  return data
-}
-
-/**
  * 审核认领申请（管理员）
  */
 export async function reviewClaim(

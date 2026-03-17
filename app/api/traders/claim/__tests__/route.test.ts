@@ -3,7 +3,6 @@
  */
 
 import {
-  createClaim,
   isTraderClaimed,
   getUserClaim,
   getUserVerifiedTrader,
@@ -35,7 +34,6 @@ describe('/api/traders/claim', () => {
     })
 
     it('should export all required functions', () => {
-      expect(typeof createClaim).toBe('function')
       expect(typeof isTraderClaimed).toBe('function')
       expect(typeof getUserClaim).toBe('function')
       expect(typeof getUserVerifiedTrader).toBe('function')
