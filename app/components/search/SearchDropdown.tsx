@@ -19,6 +19,7 @@ import type { UnifiedSearchResponse, UnifiedSearchResult } from '@/app/api/searc
 import { logger } from '@/lib/logger'
 import { SearchHistory, TrendingSearches, HotPosts } from './SearchSuggestions'
 import { features } from '@/lib/features'
+import { EXCHANGE_CONFIG } from '@/lib/constants/exchanges'
 
 interface TrendingSearchItem {
   query: string
@@ -371,8 +372,12 @@ export default function SearchDropdown({ open, query, onClose }: SearchDropdownP
     setSearchHistory([])
   }
 
-  const handleResultClick = () => {
+  const handleResultClick = (resultId?: string, resultType?: string) => {
     if (query.trim()) saveToHistory(query)
+    if (resultId && query.trim()) {
+      fetch(`/api/search?type=click&q=${encodeURIComponent(query.trim())}&id=${encodeURIComponent(resultId)}&rtype=${resultType || ''}`)
+        .catch(() => {}) // Intentional: click tracking is non-critical
+    }
     onClose()
   }
 
@@ -428,7 +433,7 @@ export default function SearchDropdown({ open, query, onClose }: SearchDropdownP
               key={`${result.type}-${result.id}`}
               href={result.href}
               style={{ textDecoration: 'none' }}
-              onClick={handleResultClick}
+              onClick={() => handleResultClick(result.id, result.type)}
             >
               <Box
                 style={{
@@ -553,15 +558,52 @@ export default function SearchDropdown({ open, query, onClose }: SearchDropdownP
           ) : searchData && searchData.total === 0 ? (
             <Box style={{ padding: tokens.spacing[4], textAlign: 'center' }}>
               <Text size="sm" color="tertiary">{t('noRelatedResults')}</Text>
+              {searchData.suggestions && searchData.suggestions.length > 0 && (
+                <Box style={{ marginTop: tokens.spacing[3] }}>
+                  <Text size="xs" color="tertiary">{t('searchDidYouMean')}</Text>
+                  <Box style={{ display: 'flex', flexWrap: 'wrap', gap: tokens.spacing[2], justifyContent: 'center', marginTop: tokens.spacing[2] }}>
+                    {searchData.suggestions.map((suggestion) => (
+                      <Link key={suggestion} href={`/search?q=${encodeURIComponent(suggestion)}`} style={{ textDecoration: 'none' }} onClick={onClose}>
+                        <Box style={{
+                          padding: `${tokens.spacing[1]} ${tokens.spacing[3]}`, borderRadius: tokens.radius.md,
+                          background: 'var(--color-accent-primary-12)', border: '1px solid var(--color-accent-primary-25)',
+                          cursor: 'pointer', transition: 'all 0.1s',
+                        }}>
+                          <Text size="xs" style={{ color: tokens.colors.accent.primary, fontWeight: 600 }}>{suggestion}</Text>
+                        </Box>
+                      </Link>
+                    ))}
+                  </Box>
+                </Box>
+              )}
             </Box>
           ) : searchData ? (
             <>
+              {searchData.matchedExchange && (
+                <Box style={{ padding: `${tokens.spacing[2]} ${tokens.spacing[4]}`, borderBottom: `1px solid ${tokens.colors.border.primary}`, display: 'flex', alignItems: 'center', gap: tokens.spacing[2] }}>
+                  <Text size="xs" color="tertiary">
+                    {t('searchShowingTopTraders')} <span style={{ fontWeight: 700, color: tokens.colors.text.secondary }}>
+                      {EXCHANGE_CONFIG[searchData.matchedExchange as keyof typeof EXCHANGE_CONFIG]?.name || searchData.matchedExchange}
+                    </span>
+                  </Text>
+                </Box>
+              )}
               {renderCategoryResults('traders', searchData.results.traders)}
               {features.social && renderCategoryResults('posts', searchData.results.posts)}
               {renderCategoryResults('library', searchData.results.library)}
               {features.social && renderCategoryResults('users', searchData.results.users)}
               {features.social && renderCategoryResults('groups', searchData.results.groups || [])}
-              <Link href={`/search?q=${encodeURIComponent(query)}`} style={{ textDecoration: 'none' }} onClick={handleResultClick}>
+              {searchData.suggestions && searchData.suggestions.length > 0 && (
+                <Box style={{ padding: `${tokens.spacing[2]} ${tokens.spacing[4]}`, borderBottom: `1px solid ${tokens.colors.border.primary}`, display: 'flex', alignItems: 'center', gap: tokens.spacing[2], flexWrap: 'wrap' }}>
+                  <Text size="xs" color="tertiary">{t('searchDidYouMean')}</Text>
+                  {searchData.suggestions.map((suggestion) => (
+                    <Link key={suggestion} href={`/search?q=${encodeURIComponent(suggestion)}`} style={{ textDecoration: 'none' }} onClick={onClose}>
+                      <Text size="xs" style={{ color: tokens.colors.accent.primary, fontWeight: 600 }}>{suggestion}</Text>
+                    </Link>
+                  ))}
+                </Box>
+              )}
+              <Link href={`/search?q=${encodeURIComponent(query)}`} style={{ textDecoration: 'none' }} onClick={() => handleResultClick()}>
                 <Box
                   style={{ padding: `${tokens.spacing[3]} ${tokens.spacing[4]}`, textAlign: 'center', cursor: 'pointer' }}
                   onMouseEnter={e => { e.currentTarget.style.background = tokens.colors.bg.tertiary }}
