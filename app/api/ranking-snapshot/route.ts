@@ -12,6 +12,13 @@ import { createLogger } from '@/lib/utils/logger'
 
 const logger = createLogger('ranking-snapshot')
 
+export async function GET() {
+  return NextResponse.json(
+    { error: 'Use POST to create a ranking snapshot. Required body: { traders: [...], exchange?, timeRange? }' },
+    { status: 400 }
+  )
+}
+
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()

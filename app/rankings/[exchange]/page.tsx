@@ -1,7 +1,7 @@
 import { Metadata } from 'next'
 import { notFound } from 'next/navigation'
 import { getSupabaseAdmin } from '@/lib/supabase/server'
-import { EXCHANGE_NAMES, SOURCE_TYPE_MAP, EXCHANGE_CONFIG, DEAD_BLOCKED_PLATFORMS } from '@/lib/constants/exchanges'
+import { EXCHANGE_NAMES, SOURCE_TYPE_MAP, EXCHANGE_CONFIG, DEAD_BLOCKED_PLATFORMS, resolveExchangeSlug } from '@/lib/constants/exchanges'
 import type { TraderSource } from '@/lib/constants/exchanges'
 import { tokens } from '@/lib/design-tokens'
 import MobileBottomNav from '@/app/components/layout/MobileBottomNav'
@@ -34,8 +34,9 @@ export async function generateMetadata({
 }: {
   params: Promise<{ exchange: string }>
 }): Promise<Metadata> {
-  const { exchange } = await params
-  
+  const rawExchange = (await params).exchange
+  const exchange = resolveExchangeSlug(rawExchange)
+
   // Validate exchange — return 404 metadata for unknown exchanges
   if (!EXCHANGE_NAMES[exchange]) {
     return {
@@ -176,7 +177,8 @@ export default async function ExchangeRankingPage({
 }: {
   params: Promise<{ exchange: string }>
 }) {
-  const { exchange } = await params
+  const rawExchange = (await params).exchange
+  const exchange = resolveExchangeSlug(rawExchange)
 
   // Validate exchange slug — return 404 for unknown exchanges
   if (!EXCHANGE_NAMES[exchange]) {

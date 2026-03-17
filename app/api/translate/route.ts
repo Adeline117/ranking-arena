@@ -167,6 +167,13 @@ function detectSourceLang(text: string): 'zh' | 'en' {
   return chineseChars / totalChars > 0.1 ? 'zh' : 'en'
 }
 
+export async function GET() {
+  return NextResponse.json(
+    { error: 'Use POST to translate. Body: { text, targetLang: "zh"|"en" } or { items: [...], targetLang }' },
+    { status: 400 }
+  )
+}
+
 export async function POST(request: NextRequest) {
   // 认证：必须登录才能使用翻译（防止匿名消耗 OpenAI credits）
   try {

@@ -339,6 +339,26 @@ export const EXCHANGE_NAMES: Record<string, string> = Object.fromEntries(
   Object.entries(EXCHANGE_CONFIG).map(([k, v]) => [k, v.name])
 )
 
+// ---------------------------------------------------------------------------
+// EXCHANGE_SLUG_ALIASES – friendly URL slugs that map to canonical source keys
+// e.g. /rankings/binance → /rankings/binance_futures
+// ---------------------------------------------------------------------------
+
+export const EXCHANGE_SLUG_ALIASES: Record<string, string> = {
+  binance: 'binance_futures',
+  okx: 'okx_futures',
+  bitget: 'bitget_futures',
+  htx: 'htx_futures',
+  gate: 'gateio',
+  'gate.io': 'gateio',
+  jupiter: 'jupiter_perps',
+}
+
+/** Resolve a URL slug to the canonical exchange source key */
+export function resolveExchangeSlug(slug: string): string {
+  return EXCHANGE_SLUG_ALIASES[slug] || slug
+}
+
 // Populate SOURCE_TYPE_MAP from EXCHANGE_CONFIG
 for (const [key, config] of Object.entries(EXCHANGE_CONFIG)) {
   SOURCE_TYPE_MAP[key] = config.sourceType

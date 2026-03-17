@@ -90,7 +90,8 @@ test.describe('Smoke Test — Core User Flow', () => {
 
     // Step 2: Rankings visible
     const rankingResult = await runStep(page, 'Rankings Visible', async () => {
-      const rankingSection = page.locator('.home-ranking-section')
+      // Try both class-based and semantic selectors for the ranking section
+      const rankingSection = page.locator('.home-ranking-section, section:has(a[href*="/trader/"]), [data-testid="ranking-section"]').first()
       await expect(rankingSection).toBeVisible({ timeout: 30_000 })
       // Verify at least one trader link exists
       const traderLinks = page.locator('a[href*="/trader/"]')
