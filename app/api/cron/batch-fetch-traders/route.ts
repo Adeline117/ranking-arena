@@ -35,6 +35,12 @@ import { logger } from '@/lib/logger'
 import { runConnectorBatch } from '@/lib/connectors/connector-db-adapter'
 import { connectorRegistry, initializeConnectors } from '@/lib/connectors/registry'
 import { SOURCE_TO_CONNECTOR_MAP } from '@/lib/constants/exchanges'
+import * as cache from '@/lib/cache'
+import { sendAlert } from '@/lib/alerts/send-alert'
+
+const DEAD_COUNTER_PREFIX = 'dead:consecutive:'
+const DEAD_COUNTER_TTL = 7 * 24 * 60 * 60 // 7 days in seconds
+const DEAD_THRESHOLD = 10 // consecutive failures before alerting
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 800 // Vercel Pro max: 10 minutes (was 300s = 5min)
@@ -184,9 +190,20 @@ export async function GET(request: NextRequest) {
       logger.info(`[batch-fetch-traders-${group}] ${platform} (connector): saved=${totalSaved} duration=${Date.now() - start}ms`)
 
       if (hasErrors && totalSaved === 0) {
+        // Track consecutive failure for dead platform detection
+        const deadKey = `${DEAD_COUNTER_PREFIX}${platform}`
+        const count = await cache.incr(deadKey) ?? 0
+        if (count === 1) await cache.set(deadKey, count, { ttl: DEAD_COUNTER_TTL, skipMemory: true })
+        if (count >= DEAD_THRESHOLD) {
+          sendAlert({ title: `Dead platform detected: ${platform}`, message: `${platform} has failed ${count} consecutive times. Consider adding to DEAD_BLOCKED_PLATFORMS.`, level: 'critical', details: { platform, consecutiveFailures: count, group } }).catch(() => {})
+        }
         const errDetail = Object.entries(result.periods).filter(([, p]) => p.error).map(([k, p]) => `${k}: ${p.error}`).join('; ')
         return { platform, status: 'error', durationMs: Date.now() - start, totalSaved, error: errDetail, via: 'connector' }
       }
+
+      // Success: reset dead platform counter
+      cache.del(`${DEAD_COUNTER_PREFIX}${platform}`).catch(() => {})
+
       return { platform, status: 'success', durationMs: Date.now() - start, totalSaved, via: 'connector' }
     } catch (err) {
       const errMsg = err instanceof Error ? err.message : String(err)
@@ -198,6 +215,14 @@ export async function GET(request: NextRequest) {
         })
       } catch (metricErr) {
         logger.warn(`[batch-fetch-traders-${group}] Failed to record metric for ${platform}`, { error: metricErr instanceof Error ? metricErr.message : String(metricErr) })
+      }
+
+      // Track consecutive failure for dead platform detection
+      const deadKey = `${DEAD_COUNTER_PREFIX}${platform}`
+      const count = await cache.incr(deadKey) ?? 0
+      if (count === 1) await cache.set(deadKey, count, { ttl: DEAD_COUNTER_TTL, skipMemory: true })
+      if (count >= DEAD_THRESHOLD) {
+        sendAlert({ title: `Dead platform detected: ${platform}`, message: `${platform} has failed ${count} consecutive times. Consider adding to DEAD_BLOCKED_PLATFORMS.\nLast error: ${errMsg.substring(0, 200)}`, level: 'critical', details: { platform, consecutiveFailures: count, group } }).catch(() => {})
       }
 
       return { platform, status: 'error', durationMs: Date.now() - start, error: errMsg, via: 'connector' }

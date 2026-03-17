@@ -14,6 +14,7 @@
 
 import { logger } from '@/lib/logger'
 import { getSupabaseAdmin } from '@/lib/supabase/server'
+import { sendAlert } from '@/lib/alerts/send-alert'
 
 function getClient() {
   return getSupabaseAdmin()
@@ -43,6 +44,13 @@ export class PipelineLogger {
     if (error || !data) {
       // If logging fails, return a no-op handle so jobs still run
       logger.warn(`[PipelineLogger] Failed to start log for ${jobName}: ${error?.message}`)
+      // Alert so we know pipeline logging is broken (fire-and-forget)
+      sendAlert({
+        title: `PipelineLogger 启动失败: ${jobName}`,
+        message: `无法插入 pipeline_logs: ${error?.message || 'unknown error'}\n任务仍会运行，但不会被记录。`,
+        level: 'warning',
+        details: { jobName, error: error?.message || 'no data returned' },
+      }).catch(() => {})
       return createNoOpHandle()
     }
 

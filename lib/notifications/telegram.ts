@@ -32,13 +32,24 @@ export interface TelegramAlertOptions {
 // 24-hour Dedup via Redis
 // ============================================
 
-const DEDUP_TTL_SECONDS = 24 * 60 * 60 // 24 hours
+// Severity-based dedup windows
+const DEDUP_TTL_BY_LEVEL: Record<AlertLevel, number> = {
+  critical: 1 * 60 * 60,   // 1 hour  — don't miss repeated critical errors
+  warning: 6 * 60 * 60,    // 6 hours
+  info: 24 * 60 * 60,      // 24 hours (info is logged only, kept for completeness)
+  report: 0,                // no dedup — always send
+}
+
+const DEDUP_TTL_SECONDS = 24 * 60 * 60 // 24 hours (legacy default)
 
 /**
  * Check if this alert was already sent within the dedup window.
  * Uses Upstash Redis if available, falls back to in-memory Map.
  */
-async function isDeduplicated(key: string): Promise<boolean> {
+async function isDeduplicated(key: string, ttlSeconds: number = DEDUP_TTL_SECONDS): Promise<boolean> {
+  // No dedup if TTL is 0 (e.g., report level)
+  if (ttlSeconds <= 0) return false
+
   try {
     const { Redis } = await import('@upstash/redis')
     const url = process.env.UPSTASH_REDIS_REST_URL
@@ -47,7 +58,7 @@ async function isDeduplicated(key: string): Promise<boolean> {
       const redis = new Redis({ url, token })
       const existing = await redis.get<number>(`alert:dedup:${key}`)
       if (existing) return true
-      await redis.set(`alert:dedup:${key}`, Date.now(), { ex: DEDUP_TTL_SECONDS })
+      await redis.set(`alert:dedup:${key}`, Date.now(), { ex: ttlSeconds })
       return false
     }
   } catch {
@@ -55,7 +66,7 @@ async function isDeduplicated(key: string): Promise<boolean> {
   }
 
   // In-memory fallback (won't survive Vercel cold starts, but better than nothing)
-  return isRateLimitedInMemory(key)
+  return isRateLimitedInMemory(key, ttlSeconds * 1000)
 }
 
 /**
@@ -80,9 +91,9 @@ async function clearDedup(key: string): Promise<void> {
 const inMemoryMap = new Map<string, number>()
 const IN_MEMORY_TTL = 60 * 60 * 1000 // 1 hour (shorter than Redis, since it's unreliable across cold starts)
 
-function isRateLimitedInMemory(key: string): boolean {
+function isRateLimitedInMemory(key: string, ttlMs: number = IN_MEMORY_TTL): boolean {
   const last = inMemoryMap.get(key) || 0
-  if (Date.now() - last < IN_MEMORY_TTL) return true
+  if (Date.now() - last < ttlMs) return true
   inMemoryMap.set(key, Date.now())
   // Cleanup old entries
   for (const [k, t] of inMemoryMap) {
@@ -146,12 +157,13 @@ export async function sendTelegramAlert(opts: TelegramAlertOptions): Promise<boo
     return false
   }
 
-  // 24-hour dedup for CRITICAL (REPORT bypasses dedup)
-  if (opts.level === 'critical') {
+  // Severity-based dedup: critical=1h, report=no dedup
+  const dedupTtl = DEDUP_TTL_BY_LEVEL[opts.level]
+  if (dedupTtl > 0) {
     const dedupKey = `${opts.source}:${opts.title}`
-    const deduped = await isDeduplicated(dedupKey)
+    const deduped = await isDeduplicated(dedupKey, dedupTtl)
     if (deduped) {
-      logger.info(`[Telegram] 24h 去重跳过: ${dedupKey}`)
+      logger.info(`[Telegram] ${dedupTtl / 3600}h 去重跳过: ${dedupKey}`)
       return false
     }
   }

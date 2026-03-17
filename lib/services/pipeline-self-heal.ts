@@ -32,7 +32,7 @@ const LAST_COUNT_TTL = 48 * 60 * 60 // 48h
 const ROUTE_FAILURE_TTL = 24 * 60 * 60 // 24h
 const ROUTE_PREFERRED_TTL = 6 * 60 * 60 // 6h
 
-const CONSECUTIVE_FAILURE_ALERT_THRESHOLD = 3
+const CONSECUTIVE_FAILURE_ALERT_THRESHOLD = 2
 const DATA_DROP_ALERT_THRESHOLD = 0.3 // alert if < 30% of historical average
 const STALE_ALERT_HOURS = 12
 

@@ -244,10 +244,19 @@ export const TraderDataSchema = z.object({
   avatar_url: z.string().nullable().optional(),
 })
 
+/** Tracks which tables succeeded/failed during a write batch */
+export interface WriteConsistency {
+  trader_sources: 'ok' | 'failed'
+  trader_profiles_v2: 'ok' | 'failed'
+  trader_snapshots: 'ok' | 'failed'
+  trader_snapshots_v2: 'ok' | 'failed'
+}
+
 export interface FetchResult {
   source: string
   periods: Record<string, { total: number; saved: number; error?: string }>
   duration: number
+  write_consistency?: WriteConsistency
 }
 
 export type PlatformFetcher = (
@@ -328,7 +337,7 @@ export function calculateArenaScore(
 export async function upsertTraders(
   supabase: SupabaseClient,
   traders: TraderData[]
-): Promise<{ saved: number; error?: string }> {
+): Promise<{ saved: number; error?: string; write_consistency?: WriteConsistency }> {
   if (traders.length === 0) return { saved: 0 }
 
   // Validate all records with Zod before DB writes
@@ -359,128 +368,176 @@ export async function upsertTraders(
 
   let saved = 0
 
+  // Track write consistency across all batches
+  const consistency: WriteConsistency = {
+    trader_sources: 'ok',
+    trader_profiles_v2: 'ok',
+    trader_snapshots: 'ok',
+    trader_snapshots_v2: 'ok',
+  }
+
   for (let i = 0; i < validated.length; i += BATCH) {
     const batch = validated.slice(i, i + BATCH)
 
-    // Upsert trader_sources (handle + avatar_url for leaderboard display)
-    const sources = batch.map((t) => ({
-      source: t.source,
-      source_trader_id: t.source_trader_id,
-      handle: t.handle || null,
-      avatar_url: t.avatar_url || null,
-      profile_url: t.profile_url || null,
-      is_active: true,
-      updated_at: new Date().toISOString(),
-    }))
+    // --- 1. trader_sources ---
+    try {
+      const sources = batch.map((t) => ({
+        source: t.source,
+        source_trader_id: t.source_trader_id,
+        handle: t.handle || null,
+        avatar_url: t.avatar_url || null,
+        profile_url: t.profile_url || null,
+        is_active: true,
+        updated_at: new Date().toISOString(),
+      }))
 
-    const { error: srcErr } = await supabase
-      .from('trader_sources')
-      .upsert(sources, { onConflict: 'source,source_trader_id', ignoreDuplicates: false })
+      const { error: srcErr } = await supabase
+        .from('trader_sources')
+        .upsert(sources, { onConflict: 'source,source_trader_id', ignoreDuplicates: false })
 
-    if (srcErr) dataLogger.warn(`[upsert] trader_sources error: ${srcErr.message}`)
+      if (srcErr) {
+        consistency.trader_sources = 'failed'
+        dataLogger.warn(`[upsert] trader_sources error: ${srcErr.message}`)
+      }
+    } catch (err) {
+      consistency.trader_sources = 'failed'
+      dataLogger.error(`[upsert] trader_sources exception: ${err instanceof Error ? err.message : String(err)}`)
+    }
 
-    // Upsert trader_profiles_v2
-    const profiles = batch.map((t) => ({
-      platform: t.source,
-      market_type: getMarketType(t.source),
-      trader_key: t.source_trader_id,
-      display_name: t.handle || null,
-      avatar_url: t.avatar_url || null,
-      // bio, bio_source, tags intentionally omitted — managed by generate-profiles cron
-      profile_url: t.profile_url || null,
-      followers: t.followers ?? null,
-      copiers: 0,
-      aum: t.aum || null,
-      provenance: {
-        source_url: t.profile_url || null,
-        created_by: 'fetcher',
-        created_at: new Date().toISOString(),
-      },
-      updated_at: new Date().toISOString(),
-      last_enriched_at: null,
-    }))
+    // --- 2. trader_profiles_v2 ---
+    try {
+      const profiles = batch.map((t) => ({
+        platform: t.source,
+        market_type: getMarketType(t.source),
+        trader_key: t.source_trader_id,
+        display_name: t.handle || null,
+        avatar_url: t.avatar_url || null,
+        // bio, bio_source, tags intentionally omitted — managed by generate-profiles cron
+        profile_url: t.profile_url || null,
+        followers: t.followers ?? null,
+        copiers: 0,
+        aum: t.aum || null,
+        provenance: {
+          source_url: t.profile_url || null,
+          created_by: 'fetcher',
+          created_at: new Date().toISOString(),
+        },
+        updated_at: new Date().toISOString(),
+        last_enriched_at: null,
+      }))
 
-    const { error: profileErr } = await supabase
-      .from('trader_profiles_v2')
-      .upsert(profiles, { onConflict: 'platform,market_type,trader_key' })
+      const { error: profileErr } = await supabase
+        .from('trader_profiles_v2')
+        .upsert(profiles, { onConflict: 'platform,market_type,trader_key' })
 
-    if (profileErr) dataLogger.warn(`[upsert] trader_profiles_v2 error: ${profileErr.message}`)
+      if (profileErr) {
+        consistency.trader_profiles_v2 = 'failed'
+        dataLogger.warn(`[upsert] trader_profiles_v2 error: ${profileErr.message}`)
+      }
+    } catch (err) {
+      consistency.trader_profiles_v2 = 'failed'
+      dataLogger.error(`[upsert] trader_profiles_v2 exception: ${err instanceof Error ? err.message : String(err)}`)
+    }
 
-    // Upsert trader_snapshots (v1) — the primary table read by frontend/leaderboard
-    const snapshotsV1 = batch.map((t) => ({
-      source: t.source,
-      source_trader_id: t.source_trader_id,
-      season_id: t.season_id,
-      rank: t.rank ?? null,
-      roi: t.roi ?? null,
-      pnl: t.pnl ?? null,
-      followers: t.followers ?? null,
-      win_rate: t.win_rate ?? null,
-      max_drawdown: t.max_drawdown ?? null,
-      trades_count: t.trades_count ?? null,
-      arena_score: t.arena_score ?? null,
-      captured_at: t.captured_at || new Date().toISOString(),
-    }))
-
-    const { error: v1Err } = await supabase
-      .from('trader_snapshots')
-      .upsert(snapshotsV1, { onConflict: 'source,source_trader_id,season_id', ignoreDuplicates: false })
-
-    if (v1Err) dataLogger.warn(`[upsert] trader_snapshots (v1) error: ${v1Err.message}`)
-
-    // Upsert trader_snapshots_v2
-    const snapshots = batch.map((t) => ({
-      platform: t.source,
-      market_type: getMarketType(t.source),
-      trader_key: t.source_trader_id,
-      window: t.season_id?.toUpperCase() || t.season_id, // Normalize to uppercase (7d → 7D)
-      as_of_ts: t.captured_at,
-      // Flat columns — read by leaderboard, scoring, and frontend
-      // Cap extreme ROI values (>100,000% is likely a normalization bug)
-      roi_pct: t.roi != null && Math.abs(t.roi) > 100000 ? null : (t.roi ?? null),
-      pnl_usd: t.pnl ?? null,
-      win_rate: t.win_rate ?? null,
-      max_drawdown: t.max_drawdown ?? null,
-      arena_score: t.arena_score ?? (t.roi != null ? 0 : null), // 0 for computed-but-low scores, NULL only if no ROI
-      sharpe_ratio: t.sharpe_ratio ?? null,
-      trades_count: t.trades_count ?? null,
-      followers: t.followers ?? null,
-      copiers: null,
-      // JSONB metrics — full data for detail views and future use
-      metrics: {
+    // --- 3. trader_snapshots (v1) ---
+    try {
+      const snapshotsV1 = batch.map((t) => ({
+        source: t.source,
+        source_trader_id: t.source_trader_id,
+        season_id: t.season_id,
+        rank: t.rank ?? null,
         roi: t.roi ?? null,
         pnl: t.pnl ?? null,
+        followers: t.followers ?? null,
         win_rate: t.win_rate ?? null,
         max_drawdown: t.max_drawdown ?? null,
         trades_count: t.trades_count ?? null,
+        arena_score: t.arena_score ?? null,
+        captured_at: t.captured_at || new Date().toISOString(),
+      }))
+
+      const { error: v1Err } = await supabase
+        .from('trader_snapshots')
+        .upsert(snapshotsV1, { onConflict: 'source,source_trader_id,season_id', ignoreDuplicates: false })
+
+      if (v1Err) {
+        consistency.trader_snapshots = 'failed'
+        dataLogger.warn(`[upsert] trader_snapshots (v1) error: ${v1Err.message}`)
+      }
+    } catch (err) {
+      consistency.trader_snapshots = 'failed'
+      dataLogger.error(`[upsert] trader_snapshots (v1) exception: ${err instanceof Error ? err.message : String(err)}`)
+    }
+
+    // --- 4. trader_snapshots_v2 ---
+    try {
+      const snapshots = batch.map((t) => ({
+        platform: t.source,
+        market_type: getMarketType(t.source),
+        trader_key: t.source_trader_id,
+        window: t.season_id?.toUpperCase() || t.season_id, // Normalize to uppercase (7d → 7D)
+        as_of_ts: t.captured_at,
+        // Flat columns — read by leaderboard, scoring, and frontend
+        // Cap extreme ROI values (>100,000% is likely a normalization bug)
+        roi_pct: t.roi != null && Math.abs(t.roi) > 100000 ? null : (t.roi ?? null),
+        pnl_usd: t.pnl ?? null,
+        win_rate: t.win_rate ?? null,
+        max_drawdown: t.max_drawdown ?? null,
+        arena_score: t.arena_score ?? (t.roi != null ? 0 : null), // 0 for computed-but-low scores, NULL only if no ROI
+        sharpe_ratio: t.sharpe_ratio ?? null,
+        trades_count: t.trades_count ?? null,
         followers: t.followers ?? null,
         copiers: null,
-        sharpe_ratio: t.sharpe_ratio ?? null,
-        arena_score: t.arena_score ?? null,
-        aum: t.aum || null,
-      },
-      quality_flags: {
-        is_suspicious: false,
-        suspicion_reasons: [],
-        data_completeness: 0.9,
-      },
-      updated_at: new Date().toISOString(),
-    }))
+        // JSONB metrics — full data for detail views and future use
+        metrics: {
+          roi: t.roi ?? null,
+          pnl: t.pnl ?? null,
+          win_rate: t.win_rate ?? null,
+          max_drawdown: t.max_drawdown ?? null,
+          trades_count: t.trades_count ?? null,
+          followers: t.followers ?? null,
+          copiers: null,
+          sharpe_ratio: t.sharpe_ratio ?? null,
+          arena_score: t.arena_score ?? null,
+          aum: t.aum || null,
+        },
+        quality_flags: {
+          is_suspicious: false,
+          suspicion_reasons: [],
+          data_completeness: 0.9,
+        },
+        updated_at: new Date().toISOString(),
+      }))
 
-    // Upsert snapshots — update metrics on conflict so re-runs refresh data
-    const { error: snapErr } = await supabase
-      .from('trader_snapshots_v2')
-      .upsert(snapshots, { onConflict: 'platform,market_type,trader_key,window' })
+      // Upsert snapshots — update metrics on conflict so re-runs refresh data
+      const { error: snapErr } = await supabase
+        .from('trader_snapshots_v2')
+        .upsert(snapshots, { onConflict: 'platform,market_type,trader_key,window' })
 
-    if (snapErr) {
-      dataLogger.error(`[upsert] trader_snapshots_v2 error: ${snapErr.message}`)
-      // Continue processing remaining batches — don't abort v1 writes for v2 failures
+      if (snapErr) {
+        consistency.trader_snapshots_v2 = 'failed'
+        dataLogger.error(`[upsert] trader_snapshots_v2 error: ${snapErr.message}`)
+      }
+    } catch (err) {
+      consistency.trader_snapshots_v2 = 'failed'
+      dataLogger.error(`[upsert] trader_snapshots_v2 exception: ${err instanceof Error ? err.message : String(err)}`)
     }
 
     saved += batch.length
   }
 
-  return { saved }
+  // Log structured warning if any table had partial failures
+  const failedTables = Object.entries(consistency)
+    .filter(([, status]) => status === 'failed')
+    .map(([table]) => table)
+  if (failedTables.length > 0) {
+    dataLogger.warn(
+      `[upsert] Partial write failure for ${validated[0]?.source}: ` +
+      `failed=[${failedTables.join(',')}], succeeded=[${Object.entries(consistency).filter(([, s]) => s === 'ok').map(([t]) => t).join(',')}]`
+    )
+  }
+
+  return { saved, write_consistency: consistency }
 }
 
 // ============================================
