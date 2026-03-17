@@ -3784,6 +3784,8 @@ searchLibrarySection: '书库',
 searchGroupsSection: '小组',
 searchTradersSection: '交易员',
 searchGroupMembers: '成员',
+searchDidYouMean: '你是否要找:',
+searchShowingTopTraders: '显示顶级交易员来自',
 searchFailedToast: '搜索失败',
 
 // Book detail - language labels

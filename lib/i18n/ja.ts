@@ -3545,6 +3545,8 @@ const ja = {
     searchGroupsSection: 'グループ',
     searchTradersSection: 'トレーダー',
     searchGroupMembers: 'メンバー',
+    searchDidYouMean: 'もしかして:',
+    searchShowingTopTraders: 'トップトレーダーを表示中:',
 
     bookLanguageChinese: '中国語',
     bookLanguageEnglish: '英語',
