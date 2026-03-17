@@ -108,7 +108,7 @@ export default function MobileProfileMenu() {
                 style={{ width: '100%', height: '100%', objectFit: 'cover' }}
               />
             ) : (
-              <span style={{ color: '#fff', fontSize: 20, fontWeight: 700 }}>
+              <span style={{ color: tokens.colors.white, fontSize: 20, fontWeight: 700 }}>
                 {(user?.displayName || user?.handle || user?.email || '?').charAt(0).toUpperCase()}
               </span>
             )}
