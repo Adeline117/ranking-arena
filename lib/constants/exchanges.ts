@@ -380,11 +380,11 @@ export const SOURCE_ROI_TYPE: Record<string, RoiType> = Object.fromEntries(
 export const SOURCE_TO_CONNECTOR_MAP: Record<string, { platform: string; marketType: string }> = {
   binance_futures: { platform: 'binance_futures', marketType: 'futures' },
   binance_spot: { platform: 'binance_spot', marketType: 'spot' },
-  binance_web3: { platform: 'binance_web3', marketType: 'spot' },
+  binance_web3: { platform: 'binance_web3', marketType: 'web3' },
   bitget_futures: { platform: 'bitget_futures', marketType: 'futures' },
   bitget_spot: { platform: 'bitget_spot', marketType: 'spot' },
   okx_futures: { platform: 'okx_futures', marketType: 'futures' },
-  okx_web3: { platform: 'okx_web3', marketType: 'spot' },
+  okx_web3: { platform: 'okx_web3', marketType: 'web3' },
   htx_futures: { platform: 'htx_futures', marketType: 'futures' },
   mexc: { platform: 'mexc', marketType: 'futures' },
   coinex: { platform: 'coinex', marketType: 'futures' },
