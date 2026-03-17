@@ -694,7 +694,7 @@ const zh = {
     disconnect: '断开连接',
     backToHome: '返回首页',
     exchangeNotFound: '交易所未找到',
-    exchangeNotFoundDesc: '该交易所排行榜页面不存在。',
+    exchangeNotFoundDesc: '该交易所排行榜页面不存在，请在排行榜中浏览其他交易所。',
     userNotRegistered: '该用户尚未在平台注册',
     loadUserDataFailed: '加载用户数据失败',
     failedToLoad: '加载失败',
@@ -2697,7 +2697,7 @@ const zh = {
 
     // 子 not-found 页面
     traderNotFoundTitle: '交易员不存在',
-    traderNotFoundDesc: '该交易员不存在或资料已被移除。',
+    traderNotFoundDesc: '该交易员不存在或资料已被移除，请搜索其他交易员或浏览排行榜。',
     userNotFoundTitle: '用户不存在',
     userNotFoundDesc: '该用户不存在或已注销账号。',
     postNotFoundTitle: '帖子不存在',
@@ -3711,7 +3711,7 @@ postDetail: '帖子详情',
 linkedAt: '关联于',
 noFollowers: '暂无关注者',
 noMessagesHint: '暂无消息',
-noAlertsDesc: '暂无提醒配置',
+noAlertsDesc: '在排行榜关注交易员，当他们的表现发生变化时会收到提醒',
 
 // 错误提示
 invalidResponse: '无效响应',

@@ -14,6 +14,25 @@ import {
   type AvatarProps
 } from '@/lib/utils/avatar'
 
+// Domains in next.config remotePatterns — serve directly, skip /api/avatar proxy
+const DIRECT_DOMAINS = new Set([
+  'api.dicebear.com', 'robohash.org', 'i.pravatar.cc', 'randomuser.me',
+  'gavatar.staticimgs.com', 'static.okx.com', 'etoro-cdn.etorostatic.com',
+  'public.bscdnweb.com', 's1.bycsi.com', 'a.static-global.com',
+  'static.phemex.com', 'www.arenafi.org', 'cdn.arenafi.org',
+])
+
+function needsProxy(url: string): boolean {
+  if (!url || url.startsWith('data:') || url.startsWith('/')) return false
+  try {
+    const hostname = new URL(url).hostname
+    if (DIRECT_DOMAINS.has(hostname)) return false
+    if (hostname.endsWith('.supabase.co')) return false
+    if (hostname.endsWith('.googleusercontent.com')) return false
+  } catch { return true }
+  return true
+}
+
 function resolveAvatarUrl(
   isTrader: boolean,
   avatarUrl: string | null | undefined,
@@ -94,7 +113,7 @@ export default function Avatar({
             </Box>
           )}
           <Image
-            src={finalAvatarUrl.startsWith('data:') || finalAvatarUrl.startsWith('/') ? finalAvatarUrl : `/api/avatar?url=${encodeURIComponent(finalAvatarUrl)}`}
+            src={needsProxy(finalAvatarUrl) ? `/api/avatar?url=${encodeURIComponent(finalAvatarUrl)}` : finalAvatarUrl}
             alt={name || userId || 'Avatar'}
             width={size}
             height={size}
