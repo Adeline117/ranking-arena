@@ -72,7 +72,7 @@ export default function ExportButton({ onExport, hidePDF, size = 'sm' }: ExportB
           background: tokens.colors.bg.secondary,
           color: tokens.colors.text.secondary,
           border: `1px solid ${tokens.colors.border.primary}`,
-          borderRadius: '6px',
+          borderRadius: tokens.radius.md,
           cursor: 'pointer',
           transition: 'all 0.15s',
         }}
@@ -89,7 +89,7 @@ export default function ExportButton({ onExport, hidePDF, size = 'sm' }: ExportB
           border: `1px solid ${tokens.colors.border.primary}`,
           borderRadius: tokens.radius.md,
           padding: '4px',
-          zIndex: 100,
+          zIndex: tokens.zIndex.dropdown,
           minWidth: '140px',
           boxShadow: 'var(--shadow-md-dark)',
         }}>

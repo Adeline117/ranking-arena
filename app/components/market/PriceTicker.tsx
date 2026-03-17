@@ -72,7 +72,7 @@ export default function PriceTicker() {
       <div style={{
         position: 'sticky',
         top: 0,
-        zIndex: 100,
+        zIndex: tokens.zIndex.dropdown,
         height: 48,
         display: 'flex',
         alignItems: 'center',
@@ -94,7 +94,7 @@ export default function PriceTicker() {
       <div style={{
         position: 'sticky',
         top: 0,
-        zIndex: 100,
+        zIndex: tokens.zIndex.dropdown,
         height: 48,
         display: 'flex',
         alignItems: 'center',
@@ -119,7 +119,7 @@ export default function PriceTicker() {
       style={{
         position: 'sticky',
         top: 0,
-        zIndex: 100,
+        zIndex: tokens.zIndex.dropdown,
         overflow: 'hidden',
         height: 48,
         display: 'flex',
