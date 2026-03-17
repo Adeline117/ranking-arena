@@ -1124,6 +1124,8 @@ const zh = {
     addToCompare: '添加到对比',
     removeFromCompare: '从对比中移除',
     inCompare: '已在对比中',
+    rankTrendTooltip: 'Arena Score 趋势 (30天)',
+    scoreTrend30d: '分数趋势 (30天)',
     viewComparison: '查看对比',
     proFeatureOnly: 'Pro 功能 - 升级以解锁交易员对比',
     // Phase 3 - Portfolio Suggestions
