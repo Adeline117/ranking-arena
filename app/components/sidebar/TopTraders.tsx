@@ -154,7 +154,7 @@ export default function TopTraders() {
               ? `${trader.roi >= 0 ? '+' : ''}${trader.roi >= 1000 ? `${(trader.roi / 1000).toFixed(1)}K` : trader.roi.toFixed(1)}%`
               : null
             return (
-              <Link prefetch={false}
+              <Link prefetch={true}
                 key={`${trader.source}-${trader.source_trader_id}`}
                 href={`/trader/${encodeURIComponent(trader.source_trader_id)}?platform=${trader.source}`}
                 style={{

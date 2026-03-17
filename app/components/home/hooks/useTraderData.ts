@@ -326,13 +326,14 @@ export function useTraderData(options: UseTraderDataOptions = {}) {
     }
     isInitialMount.current = false
 
-    // If cache already has this time range, use it
+    // If cache already has this time range, use it instantly (no loading flash)
     if (tradersCache.current.has(activeTimeRange)) {
       const cached = tradersCache.current.get(activeTimeRange)!
       setCurrentTraders(cached.traders)
       setLastUpdated(cached.lastUpdated)
       setAvailableSources(cached.availableSources || [])
       setLoading(false)
+      setIsChangingTimeRange(false)
       return
     }
     loadCurrentData()
@@ -344,6 +345,28 @@ export function useTraderData(options: UseTraderDataOptions = {}) {
       localStorage.setItem(TIME_RANGE_STORAGE_KEY, activeTimeRange)
     }
   }, [activeTimeRange])
+
+  // Prefetch other time ranges in idle time for instant period switching
+  const prefetchedRef = useRef(false)
+  useEffect(() => {
+    if (prefetchedRef.current || loading || currentTraders.length === 0) return
+    prefetchedRef.current = true
+    const otherRanges: TimeRange[] = (['90D', '30D', '7D'] as TimeRange[]).filter(r => r !== activeTimeRange)
+    const prefetch = () => {
+      for (const range of otherRanges) {
+        if (!tradersCache.current.has(range)) {
+          loadTimeRange(range, false).catch(() => {})
+        }
+      }
+    }
+    if ('requestIdleCallback' in window) {
+      const id = requestIdleCallback(prefetch, { timeout: 8000 })
+      return () => cancelIdleCallback(id)
+    } else {
+      const id = setTimeout(prefetch, 4000)
+      return () => clearTimeout(id)
+    }
+  }, [loading, currentTraders.length, activeTimeRange, loadTimeRange])
   
   // Feature 4: Smarter auto-refresh with Page Visibility API
   useEffect(() => {
