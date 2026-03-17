@@ -470,9 +470,12 @@ export async function getTraderDetail(supabase: SupabaseClient, params: {
 }
 
 /**
- * Search traders by name/handle.
+ * Search traders by name/handle with fuzzy matching.
  * Used by: search bar, /search
  * Source: trader_sources + leaderboard_ranks for score-based ranking
+ *
+ * Strategy: Try RPC fuzzy search first (pg_trgm similarity), fall back to ILIKE.
+ * Fuzzy search catches typos like "binane" -> "binance", "hyperliqu" -> "hyperliquid"
  */
 export async function searchTraders(supabase: SupabaseClient, params: {
   query: string
@@ -490,20 +493,38 @@ export async function searchTraders(supabase: SupabaseClient, params: {
 
   if (!sanitizedQuery) return []
 
-  // Search trader_sources by handle or source_trader_id
-  let sourcesQuery = supabase
-    .from('trader_sources')
-    .select('source_trader_id, handle, source, avatar_url')
-    .or(`handle.ilike.%${sanitizedQuery}%,source_trader_id.ilike.%${sanitizedQuery}%`)
+  // --- Try fuzzy RPC search first (handles typos via pg_trgm) ---
+  let sourcesData: Array<{ source_trader_id: string; handle: string | null; source: string; avatar_url: string | null; relevance_score?: number }> | null = null
+  let usedFuzzy = false
 
-  if (platform) {
-    sourcesQuery = sourcesQuery.eq('source', platform)
+  try {
+    const { data: fuzzyData, error: fuzzyErr } = await supabase.rpc('search_traders_fuzzy', {
+      search_query: sanitizedQuery,
+      result_limit: limit * 4,
+      platform_filter: platform || null,
+    })
+    if (!fuzzyErr && fuzzyData && fuzzyData.length > 0) {
+      sourcesData = fuzzyData
+      usedFuzzy = true
+    }
+  } catch {
+    // RPC not available (migration not applied), fall through to ILIKE
   }
 
-  const { data: sourcesData, error: sourcesErr } = await sourcesQuery.limit(limit * 4)
+  // --- Fallback: ILIKE search ---
+  if (!sourcesData) {
+    let sourcesQuery = supabase
+      .from('trader_sources')
+      .select('source_trader_id, handle, source, avatar_url')
+      .or(`handle.ilike.%${sanitizedQuery}%,source_trader_id.ilike.%${sanitizedQuery}%`)
 
-  if (sourcesErr || !sourcesData || sourcesData.length === 0) {
-    return []
+    if (platform) {
+      sourcesQuery = sourcesQuery.eq('source', platform)
+    }
+
+    const { data, error } = await sourcesQuery.limit(limit * 4)
+    if (error || !data || data.length === 0) return []
+    sourcesData = data
   }
 
   // Filter out DEAD/blocked platforms
@@ -528,17 +549,25 @@ export async function searchTraders(supabase: SupabaseClient, params: {
     if (!scoreMap.has(key)) scoreMap.set(key, row)
   }
 
-  // Rank by relevance: exact match > prefix match > arena_score
+  // Rank by relevance: exact match > prefix match > contains > fuzzy + arena_score
   const queryLower = sanitizedQuery.toLowerCase()
   const ranked = filteredSources
     .map((t) => {
       const key = `${t.source}:${t.source_trader_id}`
       const scoreRow = scoreMap.get(key)
       const handleLower = (t.handle || '').toLowerCase()
-      const exactBonus = handleLower === queryLower ? 10000 : 0
-      const prefixBonus = handleLower.startsWith(queryLower) ? 1000 : 0
+      const idLower = t.source_trader_id.toLowerCase()
+
+      // Multi-tier relevance scoring
+      let relevance = 0
+      if (handleLower === queryLower || idLower === queryLower) relevance += 10000
+      if (handleLower.startsWith(queryLower) || idLower.startsWith(queryLower)) relevance += 1000
+      if (handleLower.includes(queryLower) || idLower.includes(queryLower)) relevance += 100
+      if (usedFuzzy && t.relevance_score != null) relevance += t.relevance_score
       const arenaScore = scoreRow ? Number(scoreRow.arena_score) : 0
-      return { source: t, scoreRow, relevance: exactBonus + prefixBonus + arenaScore }
+      relevance += arenaScore * 0.1
+
+      return { source: t, scoreRow, relevance }
     })
     .sort((a, b) => b.relevance - a.relevance)
     .slice(0, limit)
@@ -582,6 +611,27 @@ export async function searchTraders(supabase: SupabaseClient, params: {
       lastUpdated: null,
     }
   })
+}
+
+/**
+ * Get "did you mean" suggestions for a search query with few/no results.
+ * Uses pg_trgm similarity to find closest matching trader handles.
+ */
+export async function getSearchSuggestions(supabase: SupabaseClient, query: string): Promise<string[]> {
+  if (!query || query.length < 2) return []
+
+  try {
+    const { data, error } = await supabase.rpc('search_did_you_mean', {
+      search_query: query,
+      suggestion_limit: 3,
+    })
+    if (error || !data) return []
+    return (data as Array<{ suggested_query: string; similarity_score: number }>)
+      .filter(d => d.similarity_score > 0.2)
+      .map(d => d.suggested_query)
+  } catch {
+    return []
+  }
 }
 
 /**
