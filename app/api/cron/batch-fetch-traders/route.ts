@@ -37,7 +37,7 @@ import { connectorRegistry, initializeConnectors } from '@/lib/connectors/regist
 import { SOURCE_TO_CONNECTOR_MAP } from '@/lib/constants/exchanges'
 
 export const dynamic = 'force-dynamic'
-export const maxDuration = 600 // Vercel Pro max: 10 minutes (was 300s = 5min)
+export const maxDuration = 800 // Vercel Pro max: 10 minutes (was 300s = 5min)
 export const preferredRegion = 'hnd1' // Tokyo — avoids Binance/OKX/Bybit geo-blocking
 
 const GROUPS: Record<string, string[]> = {
@@ -123,12 +123,12 @@ export async function GET(request: NextRequest) {
   // Safety timeout: ensure plog gets called before Vercel kills the function at 600s
   const safetyTimer = setTimeout(async () => {
     try {
-      await plog.error(new Error('Safety timeout: function approaching 600s limit'))
+      await plog.error(new Error('Safety timeout: function approaching 800s limit'))
     } catch { /* best effort */ }
-  }, 580_000) // Was 280s, now 580s for 600s maxDuration
+  }, 780_000) // Was 280s, now 580s for 800s maxDuration
 
-  // Per-platform timeout: configurable, default 420s leaves 180s buffer for logging/cleanup within 600s limit
-  const PLATFORM_TIMEOUT_MS = parseInt(process.env.PLATFORM_FETCH_TIMEOUT_MS || '420000', 10)
+  // Per-platform timeout: configurable, default 700s for scraper groups buffer for logging/cleanup within 800s limit
+  const PLATFORM_TIMEOUT_MS = parseInt(process.env.PLATFORM_FETCH_TIMEOUT_MS || '700000', 10)
 
   // Initialize all connectors (once per cold start)
   if (!connectorsInitialized) {
