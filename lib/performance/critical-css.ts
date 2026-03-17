@@ -228,6 +228,8 @@ export function getResourceHints(): Array<{ rel: string; href: string; crossOrig
     { rel: 'dns-prefetch', href: 'https://bin.bnbstatic.com' },
     { rel: 'dns-prefetch', href: 'https://static.bitget.com' },
     { rel: 'dns-prefetch', href: 'https://www.okx.com' },
+    // DiceBear -- fallback avatar generation
+    { rel: 'dns-prefetch', href: 'https://api.dicebear.com' },
     // CoinGecko -- market data API
     { rel: 'dns-prefetch', href: 'https://api.coingecko.com' },
     // Sentry -- error reporting (also in layout.tsx head)

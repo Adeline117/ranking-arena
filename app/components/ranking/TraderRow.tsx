@@ -133,7 +133,7 @@ export const TraderRow = memo(function TraderRow({
     hoverTimerRef.current = setTimeout(() => {
       const detailUrl = `/api/traders/${encodeURIComponent(traderHandle)}`
       mutate(detailUrl, rawFetcher<{ success: boolean; data: unknown }>(detailUrl).then(r => r && typeof r === 'object' && 'data' in r ? r.data : r), { revalidate: false })
-    }, 300)
+    }, 100)
   }, [traderHandle])
   const handleMouseLeave = useCallback(() => {
     if (hoverTimerRef.current) clearTimeout(hoverTimerRef.current)
