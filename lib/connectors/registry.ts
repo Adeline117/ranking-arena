@@ -18,6 +18,7 @@ import type { PlatformConnector } from './types'
  
 type AnyConnector = any
 import { TokenBucketRateLimiter } from './rate-limiter'
+import { RedisRateLimiter } from './redis-rate-limiter'
 
 // Legacy connector imports removed — _deprecated directory was deleted.
 // Legacy getConnector() now returns null for all platforms.
@@ -32,7 +33,7 @@ type RegistryKey = `${LeaderboardPlatform}:${MarketType}`
 /** Registered connector entry */
 interface ConnectorEntry {
   connector: PlatformConnector
-  rateLimiter: TokenBucketRateLimiter
+  rateLimiter: RedisRateLimiter
 }
 
 class ConnectorRegistry {
@@ -44,7 +45,8 @@ class ConnectorRegistry {
   register(connector: PlatformConnector): void {
     const key: RegistryKey = `${connector.platform}:${connector.marketType}`
 
-    const rateLimiter = new TokenBucketRateLimiter({
+    const rateLimiter = new RedisRateLimiter({
+      platform: key,
       rpm: connector.capabilities.rate_limit.rpm,
       concurrency: connector.capabilities.rate_limit.concurrency,
     })
@@ -78,7 +80,7 @@ class ConnectorRegistry {
   /**
    * Get the rate limiter for a platform/market combination.
    */
-  getRateLimiter(platform: LeaderboardPlatform, marketType: MarketType): TokenBucketRateLimiter | null {
+  getRateLimiter(platform: LeaderboardPlatform, marketType: MarketType): RedisRateLimiter | null {
     const key: RegistryKey = `${platform}:${marketType}`
     return this.connectors.get(key)?.rateLimiter || null
   }
