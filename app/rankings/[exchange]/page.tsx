@@ -1,6 +1,6 @@
 import { Metadata } from 'next'
 import { notFound } from 'next/navigation'
-import { createClient } from '@supabase/supabase-js'
+import { getSupabaseAdmin } from '@/lib/supabase/server'
 import { EXCHANGE_NAMES, SOURCE_TYPE_MAP, EXCHANGE_CONFIG, DEAD_BLOCKED_PLATFORMS } from '@/lib/constants/exchanges'
 import type { TraderSource } from '@/lib/constants/exchanges'
 import { tokens } from '@/lib/design-tokens'
@@ -10,17 +10,6 @@ import ExchangeRankingClient from './ExchangeRankingClient'
 import { logger } from '@/lib/logger'
 
 export const revalidate = 3600 // ISR: 1 hour
-
-let _supabaseInstance: import('@supabase/supabase-js').SupabaseClient | null = null
-
-function getSupabase() {
-  if (_supabaseInstance) return _supabaseInstance
-  const url = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL || ''
-  const key = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || ''
-  if (!url || !key) return null
-  _supabaseInstance = createClient(url, key, { auth: { persistSession: false } })
-  return _supabaseInstance
-}
 
 // Pre-render pages for active exchanges at build time
 const deadSet = new Set(DEAD_BLOCKED_PLATFORMS)
@@ -121,11 +110,7 @@ interface TraderData {
 }
 
 async function fetchExchangeTraders(exchange: string): Promise<TraderData[]> {
-  const supabase = getSupabase()
-  if (!supabase) {
-    logger.error(`[ExchangeRanking] No Supabase client for ${exchange} — env vars missing`)
-    return []
-  }
+  const supabase = getSupabaseAdmin()
 
   try {
     // Use leaderboard_ranks (the primary ranking table) instead of trader_snapshots_v2
