@@ -188,7 +188,7 @@ export default function GroupPostList(props: GroupPostListProps) {
           {sortedPosts.length === 0 ? (
             <EmptyPostsState groupId={groupId} language={language} isMember={isMember} />
           ) : (
-            <Box style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[4] }}>
+            <Box style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[2] }}>
               {sortedPosts.map((post) => (
                 <PostListItem
                   key={post.id}
