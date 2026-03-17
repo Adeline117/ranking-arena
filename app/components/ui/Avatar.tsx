@@ -23,17 +23,6 @@ const DIRECT_DOMAINS = new Set([
   'static.phemex.com', 'www.arenafi.org', 'cdn.arenafi.org',
 ])
 
-function needsProxy(url: string): boolean {
-  if (!url || url.startsWith('data:') || url.startsWith('/')) return false
-  try {
-    const hostname = new URL(url).hostname
-    if (DIRECT_DOMAINS.has(hostname)) return false
-    if (hostname.endsWith('.supabase.co')) return false
-    if (hostname.endsWith('.googleusercontent.com')) return false
-  } catch { return true }
-  return true
-}
-
 function resolveAvatarUrl(
   isTrader: boolean,
   avatarUrl: string | null | undefined,
