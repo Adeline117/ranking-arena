@@ -227,7 +227,7 @@ export function RepostModal({
                 display: 'grid',
                 gridTemplateColumns: 'repeat(8, 1fr)',
                 gap: 2,
-                zIndex: 100,
+                zIndex: tokens.zIndex.dropdown,
                 boxShadow: tokens.shadow.lg,
                 width: 280,
               }}>
