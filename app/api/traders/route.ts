@@ -126,8 +126,8 @@ async function fetchFromLeaderboard(
   // Filter out outlier data (ROI > 5000% etc.)
   query = query.or('is_outlier.is.null,is_outlier.eq.false')
 
-  // Filter out very low-quality entries (incomplete score data renders as empty rows)
-  query = query.gt('arena_score', 1)
+  // Include all scored traders (score > 0 means valid ROI data)
+  query = query.gt('arena_score', 0)
 
   // Cursor-based: filter by rank
   if (cursor != null) {
@@ -244,7 +244,7 @@ async function fetchFromLeaderboard(
       .from('leaderboard_ranks')
       .select('source')
       .eq('season_id', timeRange)
-      .gt('arena_score', 1)
+      .gt('arena_score', 0)
       .order('rank', { ascending: true })
       .limit(15000)
     for (const r of (sourceRows || [])) allSourceSet.add((r as { source: string }).source)
