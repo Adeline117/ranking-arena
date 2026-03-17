@@ -178,7 +178,7 @@ async function backfillSnapshots(
     return result
   }
 
-  const connector = connectorRegistry.get(
+  const connector = await connectorRegistry.getOrInit(
     mapping.platform as import('@/lib/types/leaderboard').LeaderboardPlatform,
     mapping.marketType as import('@/lib/types/leaderboard').MarketType
   )

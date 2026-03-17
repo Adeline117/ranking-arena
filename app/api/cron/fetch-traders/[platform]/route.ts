@@ -62,7 +62,7 @@ export async function GET(request: Request, { params }: Params) {
 
     const mapping = SOURCE_TO_CONNECTOR_MAP[platform]
     const connector = mapping
-      ? connectorRegistry.get(
+      ? await connectorRegistry.getOrInit(
           mapping.platform as import('@/lib/types/leaderboard').LeaderboardPlatform,
           mapping.marketType as import('@/lib/types/leaderboard').MarketType
         )
