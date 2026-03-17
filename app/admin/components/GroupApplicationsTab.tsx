@@ -81,12 +81,12 @@ export default function GroupApplicationsTab({ accessToken }: GroupApplicationsT
                 >
                   {app.avatar_url ? (
                     <Image
-                      src={app.avatar_url}
+                      src={app.avatar_url.startsWith('data:') ? app.avatar_url : '/api/avatar?url=' + encodeURIComponent(app.avatar_url)}
                       alt={app.name}
                       width={60}
                       height={60}
                       style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-                      unoptimized={app.avatar_url?.startsWith('data:')}
+                      unoptimized
                     />
                   ) : (
                     <Text size="xl" weight="bold" color="tertiary">

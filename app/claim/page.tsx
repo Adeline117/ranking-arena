@@ -233,7 +233,7 @@ function SearchSection({ onSelect }: { onSelect: (result: SearchResult) => void 
             >
               {r.avatar_url && (
                 <img
-                  src={r.avatar_url}
+                  src={r.avatar_url.startsWith('data:') ? r.avatar_url : '/api/avatar?url=' + encodeURIComponent(r.avatar_url)}
                   alt=""
                   style={{ width: 32, height: 32, borderRadius: '50%' }}
                 />
@@ -771,7 +771,7 @@ function LinkedAccountsSidebar({
         }}>
           {lt.stats?.avatar_url && (
             <img
-              src={lt.stats.avatar_url}
+              src={lt.stats.avatar_url.startsWith('data:') ? lt.stats.avatar_url : '/api/avatar?url=' + encodeURIComponent(lt.stats.avatar_url)}
               alt=""
               style={{ width: 28, height: 28, borderRadius: '50%' }}
             />
@@ -950,7 +950,7 @@ export default function ClaimPage() {
             }}>
               {selectedTrader.avatar_url && (
                 <img
-                  src={selectedTrader.avatar_url}
+                  src={selectedTrader.avatar_url.startsWith('data:') ? selectedTrader.avatar_url : '/api/avatar?url=' + encodeURIComponent(selectedTrader.avatar_url)}
                   alt=""
                   style={{ width: 40, height: 40, borderRadius: '50%' }}
                 />

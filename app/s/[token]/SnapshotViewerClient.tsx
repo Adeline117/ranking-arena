@@ -438,7 +438,7 @@ export default function SnapshotViewerClient({ snapshot, traders }: SnapshotView
                     </span>
                     {trader.avatarUrl && (
                       <img
-                        src={trader.avatarUrl}
+                        src={trader.avatarUrl.startsWith('data:') ? trader.avatarUrl : '/api/avatar?url=' + encodeURIComponent(trader.avatarUrl)}
                         alt={`${trader.handle || 'Trader'} avatar`}
                         width={36}
                         height={36}
