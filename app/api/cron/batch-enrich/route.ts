@@ -128,7 +128,7 @@ export async function GET(request: NextRequest) {
   // FIX: Aggressive timeout reduction for ALL platforms to prevent cascade hangs
   //      CEX: 30s (single) / 20s (multi) - enough for 1-2 API calls
   //      Onchain: 60s (single) / 40s (multi) - GraphQL/RPC needs slightly more time
-  const ONCHAIN_PLATFORMS = new Set(['gmx', 'dydx', 'jupiter_perps', 'hyperliquid', 'drift', 'aevo', 'gains'])
+  const ONCHAIN_PLATFORMS = new Set(['gmx', 'jupiter_perps', 'hyperliquid', 'drift', 'aevo', 'gains'])
   const ENRICH_TIMEOUT_MS = periodsToRun.length > 1 ? 60_000 : 90_000  // 60s/90s
   const ONCHAIN_TIMEOUT_MS = periodsToRun.length > 1 ? 120_000 : 180_000  // 120s/180s
 
