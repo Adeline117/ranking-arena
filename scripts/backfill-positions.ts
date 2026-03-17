@@ -84,15 +84,20 @@ async function findTradersMissingPositions(
 
   const traderIds = topTraders.map((t: { source_trader_id: string }) => t.source_trader_id)
 
-  // Check which ones have position history
+  // Check which ones have position data
+  // Portfolio-only platforms store data in trader_portfolio, not position_history
+  const config = ENRICHMENT_PLATFORM_CONFIGS[platform]
+  const isPortfolioOnly = !config?.fetchPositionHistory && !!config?.fetchCurrentPositions
+  const tableName = isPortfolioOnly ? 'trader_portfolio' : 'trader_position_history'
+
   const { data: withPositions, error: posError } = await supabase
-    .from('trader_position_history')
+    .from(tableName)
     .select('source_trader_id')
     .eq('source', platform)
     .in('source_trader_id', traderIds)
 
   if (posError) {
-    console.log(`  Error checking position history: ${posError.message}`)
+    console.log(`  Error checking ${tableName}: ${posError.message}`)
     return traderIds // assume all missing
   }
 
