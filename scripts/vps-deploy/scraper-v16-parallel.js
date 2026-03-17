@@ -224,315 +224,461 @@ async function executeRequest(slot, item) {
 // ---------------------------------------------------------------------------
 
 /**
- * Setup API response interception on a page.
- * Returns a function that returns all captured responses matching the filter.
+ * Setup API response interception on a page (v15 pattern).
+ * Returns array of captured { url, data, size } objects.
  */
-function setupInterception(page, urlFilter) {
+function setupInterception(page, matchFn) {
   const captured = []
-
   page.on('response', async (response) => {
-    const url = response.url()
-    if (urlFilter(url)) {
-      try {
-        const text = await response.text()
-        try {
-          captured.push(JSON.parse(text))
-        } catch {
-          // Not JSON, skip
-        }
-      } catch {
-        // Response body consumed or network error
+    try {
+      const url = response.url()
+      if (url.match(/\.(js|css|png|jpg|svg|woff|ico|gif|webp)(\?|$)/)) return
+      const ct = response.headers()['content-type'] || ''
+      if (!ct.includes('json') || response.status() !== 200) return
+      if (!matchFn(url)) return
+      const text = await response.text()
+      if (text.length > 100) {
+        captured.push({ url, data: JSON.parse(text), size: text.length })
       }
-    }
+    } catch { /* consumed or network error */ }
   })
-
-  return () => captured
+  return captured
 }
 
 /**
- * Try fetching JSON directly from page context (bypasses WAF).
+ * Wait for Cloudflare challenge to complete.
  */
-async function safeFetchJson(page, url, options = {}) {
+async function waitForCF(page, timeoutMs = 20000) {
   try {
-    return await page.evaluate(
-      async ({ url, options }) => {
-        const res = await fetch(url, {
-          headers: { Accept: 'application/json', ...options.headers },
-          ...options,
-        })
-        if (!res.ok) return null
-        return await res.json()
-      },
-      { url, options }
-    )
-  } catch {
-    return null
-  }
+    await page.waitForFunction(() => {
+      return !document.title.includes('Just a moment') && !document.querySelector('#challenge-running')
+    }, { timeout: timeoutMs })
+  } catch { /* timeout — proceed anyway */ }
+  await page.waitForTimeout(2000)
 }
 
 const HANDLERS = {
-  // ─── Bybit ────────────────────────────────────────────────────────
+  // ─── Bybit (v15 port: page.evaluate with POST) ─────────────────
   'bybit/leaderboard': async (page, params) => {
-    const duration = params.dataDuration || 'DATA_DURATION_THIRTY_DAY'
+    const duration = params.dataDuration || params.duration || 'DATA_DURATION_THIRTY_DAY'
     const pageSize = parseInt(params.pageSize || '50', 10)
 
-    const getCaptured = setupInterception(page, (url) =>
+    const captured = setupInterception(page, (url) =>
       url.includes('leaderboard') && (url.includes('rank') || url.includes('leader'))
     )
 
     await page.goto('https://www.bybitglobal.com/en/copy-trading/leaderboard', {
-      waitUntil: 'domcontentloaded',
-      timeout: 30000,
+      waitUntil: 'domcontentloaded', timeout: 30000,
     })
     await page.waitForTimeout(3000)
 
-    // Try direct API fetch from page context
-    const apiData = await safeFetchJson(
-      page,
-      `https://api2.bybitglobal.com/fapi/beehive/public/v1/common/dynamic-leader-list`,
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          dataDuration: duration,
-          pageNo: '1',
-          pageSize: String(pageSize),
-          sortField: 'ROI',
-          sortType: 'DESC',
-        }),
-      }
-    )
+    // Direct API via page.evaluate (inherits session)
+    const apiData = await page.evaluate(async (opts) => {
+      try {
+        const r = await fetch('https://api2.bybitglobal.com/fapi/beehive/public/v1/common/dynamic-leader-list', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            dataDuration: opts.duration,
+            pageNo: '1',
+            pageSize: String(opts.pageSize),
+            sortField: 'ROI',
+            sortType: 'DESC',
+          }),
+        })
+        if (!r.ok) return null
+        const text = await r.text()
+        if (!text.startsWith('{')) return null
+        return JSON.parse(text)
+      } catch { return null }
+    }, { duration, pageSize }).catch(() => null)
 
-    if (apiData && (apiData.result?.data?.length > 0 || apiData.result?.leaderDetails?.length > 0)) {
+    if (apiData?.result?.data?.length > 0 || apiData?.result?.leaderDetails?.length > 0) {
       return apiData
     }
 
-    // Fallback to intercepted responses
     await page.waitForTimeout(5000)
-    const captured = getCaptured()
-    return captured.length > 0 ? captured[0] : { error: 'No API response captured' }
+    if (captured.length > 0) return captured[0].data
+    return { error: 'No API response captured' }
   },
 
   'bybit/leaderboard-batch': async (page, params) => {
     const durations = (params.durations || 'DATA_DURATION_THIRTY_DAY').split(',')
     const pageSize = parseInt(params.pageSize || '50', 10)
-    const results = {}
 
-    // Navigate once, then fetch all periods from page context
     await page.goto('https://www.bybitglobal.com/en/copy-trading/leaderboard', {
-      waitUntil: 'domcontentloaded',
-      timeout: 30000,
+      waitUntil: 'domcontentloaded', timeout: 30000,
     })
     await page.waitForTimeout(3000)
 
-    for (const duration of durations) {
-      const apiData = await safeFetchJson(
-        page,
-        'https://api2.bybitglobal.com/fapi/beehive/public/v1/common/dynamic-leader-list',
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            dataDuration: duration.trim(),
-            pageNo: '1',
-            pageSize: String(pageSize),
-            sortField: 'ROI',
-            sortType: 'DESC',
-          }),
-        }
-      )
-      results[duration.trim()] = apiData || { error: 'fetch failed' }
-      // Small delay between period fetches
-      await page.waitForTimeout(500)
-    }
+    const results = await page.evaluate(async (opts) => {
+      const out = {}
+      for (const dur of opts.durations) {
+        try {
+          const r = await fetch('https://api2.bybitglobal.com/fapi/beehive/public/v1/common/dynamic-leader-list', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ dataDuration: dur.trim(), pageNo: '1', pageSize: String(opts.pageSize), sortField: 'ROI', sortType: 'DESC' }),
+          })
+          if (!r.ok) { out[dur.trim()] = { error: 'HTTP ' + r.status }; continue }
+          const text = await r.text()
+          out[dur.trim()] = text.startsWith('{') ? JSON.parse(text) : { error: 'not JSON' }
+        } catch (e) { out[dur.trim()] = { error: e.message } }
+        await new Promise(r => setTimeout(r, 500))
+      }
+      return out
+    }, { durations, pageSize }).catch(() => ({}))
 
     return results
   },
 
-  // ─── Bitget ────────────────────────────────────────────────────────
+  // ─── Bitget (v15 port: POST with JSON body via page.evaluate) ───
   'bitget/leaderboard': async (page, params) => {
+    const pageNo = parseInt(params.pageNo || '1', 10)
+    const pageSize = parseInt(params.pageSize || '50', 10)
     const period = params.period || 'THIRTY_DAYS'
-    const pageSize = parseInt(params.pageSize || '100', 10)
 
-    const getCaptured = setupInterception(page, (url) =>
+    const captured = setupInterception(page, (url) =>
       url.includes('trace') && (url.includes('traderList') || url.includes('trader'))
     )
 
-    await page.goto('https://www.bitget.com/copy-trading', {
-      waitUntil: 'domcontentloaded',
-      timeout: 30000,
+    await page.goto('https://www.bitget.com/copy-trading/futures', {
+      waitUntil: 'domcontentloaded', timeout: 30000,
     })
-    await page.waitForTimeout(3000)
+    await waitForCF(page)
 
-    // Direct API fetch
-    const apiData = await safeFetchJson(
-      page,
-      `https://www.bitget.com/v1/trigger/trace/public/traderList?languageType=1&pageSize=${pageSize}&pageNo=1&periodType=${period}&sortBy=ROI&sortType=DESC`
-    )
+    // POST API from page context (inherits CF cookie)
+    const data = await page.evaluate(async (opts) => {
+      try {
+        const r = await fetch('https://www.bitget.com/v1/trigger/trace/public/traderList', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'locale': 'en-US' },
+          body: JSON.stringify({ pageNo: opts.pageNo, pageSize: opts.pageSize, sortType: 'ROI', period: opts.period }),
+        })
+        if (!r.ok) return { code: 'HTTP_' + r.status, data: null }
+        const text = await r.text()
+        if (!text.startsWith('{')) return { code: 'NOT_JSON', data: null }
+        return JSON.parse(text)
+      } catch (e) { return { code: 'FETCH_ERROR', data: null, error: e.message } }
+    }, { pageNo, pageSize, period }).catch(() => null)
 
-    if (apiData?.data?.traderList?.length > 0) return apiData
+    if (data?.code === '00000' && (data?.data?.rows?.length > 0 || data?.data?.traderList?.length > 0)) {
+      return data
+    }
 
     await page.waitForTimeout(5000)
-    const captured = getCaptured()
-    return captured.length > 0 ? captured[0] : { error: 'No API response captured' }
+    if (captured.length > 0) return captured[0].data
+    return { error: 'No API response captured' }
   },
 
-  // ─── Gate.io ────────────────────────────────────────────────────────
+  // ─── Gate.io (v15 port: page.evaluate with credentials) ─────────
   'gateio/leaderboard': async (page, params) => {
-    const pageSize = parseInt(params.pageSize || '50', 10)
+    const cycle = params.cycle || 'month'
+    const pageNum = parseInt(params.page || '1', 10)
 
-    const getCaptured = setupInterception(page, (url) =>
+    const captured = setupInterception(page, (url) =>
       url.includes('apiw') && url.includes('copy') && url.includes('leader')
     )
 
     await page.goto('https://www.gate.com/copy-trading', {
-      waitUntil: 'domcontentloaded',
-      timeout: 30000,
+      waitUntil: 'domcontentloaded', timeout: 30000,
     })
     await page.waitForTimeout(3000)
 
-    // Direct API
-    const apiData = await safeFetchJson(
-      page,
-      `https://www.gate.com/apiw/v2/copy/leader/list?page=1&limit=${pageSize}&sort_by=profit_rate&sort_type=desc`
-    )
+    const data = await page.evaluate(async (opts) => {
+      try {
+        const r = await fetch(`https://www.gate.com/apiw/v2/copy/leader/list?page=${opts.pageNum}&page_size=50&order_by=profit_rate&cycle=${opts.cycle}`, {
+          credentials: 'include',
+        })
+        if (!r.ok) return null
+        const text = await r.text()
+        if (!text.startsWith('{')) return null
+        return JSON.parse(text)
+      } catch { return null }
+    }, { cycle, pageNum }).catch(() => null)
 
-    if (apiData?.data?.list?.length > 0) return apiData
+    if (data?.list?.length > 0 || data?.data?.list?.length > 0) return data
 
     await page.waitForTimeout(5000)
-    const captured = getCaptured()
-    return captured.length > 0 ? captured[0] : { error: 'No API response captured' }
+    if (captured.length > 0) return captured[0].data
+    return { error: 'No API response captured' }
   },
 
-  // ─── MEXC ────────────────────────────────────────────────────────
+  // ─── MEXC (v15 port: multi-endpoint fallback via page.evaluate) ──
   'mexc/leaderboard': async (page, params) => {
-    const periodType = params.periodType || '2'
+    const periodType = parseInt(params.periodType || '2', 10)
+    const pageSize = parseInt(params.pageSize || '50', 10)
 
-    const getCaptured = setupInterception(page, (url) =>
-      url.includes('copy') && (url.includes('rank') || url.includes('trader'))
+    const captured = setupInterception(page, (url) =>
+      url.includes('copyFutures') || url.includes('copy-trade') || url.includes('copyTrade')
     )
 
     await page.goto('https://www.mexc.com/futures/copyTrade/home', {
-      waitUntil: 'domcontentloaded',
-      timeout: 30000,
+      waitUntil: 'domcontentloaded', timeout: 45000,
     })
     await page.waitForTimeout(5000)
 
-    // Direct API
-    const apiData = await safeFetchJson(
-      page,
-      `https://futures.mexc.com/api/v1/copyFutures/api/v1/traders/top?pageNo=1&pageSize=50&periodType=${periodType}`
-    )
+    const data = await page.evaluate(async (opts) => {
+      async function safeFetch(url, fetchOpts) {
+        try {
+          const r = await fetch(url, { credentials: 'include', ...fetchOpts })
+          if (!r.ok) return null
+          const text = await r.text()
+          if (!text.startsWith('{') && !text.startsWith('[')) return null
+          return JSON.parse(text)
+        } catch { return null }
+      }
+      const r1 = await safeFetch(`/api/platform/futures/copyFutures/api/v1/traders/top?limit=${opts.pageSize}`)
+      if (r1?.data?.comprehensives?.length > 0) return r1
+      const r2 = await safeFetch(`/api/platform/futures/copyFutures/api/v1/ai/recommend/traders?limit=${opts.pageSize}`)
+      if (Array.isArray(r2?.data) && r2.data.length > 0) return r2
+      const r3 = await safeFetch('/api/platform/copy-trade/rank/list', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ pageNum: 1, pageSize: opts.pageSize, periodType: opts.periodType, sortField: 'ROI' }),
+      })
+      if (r3?.data) return r3
+      return { error: 'All MEXC endpoints failed' }
+    }, { periodType, pageSize }).catch(() => null)
 
-    if (apiData?.data) return apiData
+    if (data && !data.error) return data
 
     await page.waitForTimeout(3000)
-    const captured = getCaptured()
-    return captured.length > 0 ? captured[0] : { error: 'No API response captured' }
+    if (captured.length > 0) {
+      captured.sort((a, b) => b.size - a.size)
+      return captured[0].data
+    }
+    return data || { error: 'No API response captured' }
   },
 
-  // ─── CoinEx ────────────────────────────────────────────────────────
+  // ─── CoinEx (v15 port: intercept + page.evaluate fallback) ──────
   'coinex/leaderboard': async (page, params) => {
-    const getCaptured = setupInterception(page, (url) =>
-      url.includes('copy') && (url.includes('rank') || url.includes('trader'))
+    const period = params.period || '30d'
+    const pageSize = parseInt(params.pageSize || '50', 10)
+
+    const captured = setupInterception(page, (url) =>
+      url.includes('copy-trading') || url.includes('copy-trade')
     )
 
     await page.goto('https://www.coinex.com/en/copy-trading/futures', {
-      waitUntil: 'domcontentloaded',
-      timeout: 30000,
+      waitUntil: 'domcontentloaded', timeout: 45000,
     })
-    await page.waitForTimeout(5000)
+    await page.waitForTimeout(8000)
+    await page.evaluate(() => window.scrollTo(0, 500)).catch(() => {})
+    await page.waitForTimeout(3000)
 
-    const captured = getCaptured()
-    return captured.length > 0 ? captured[0] : { error: 'No API response captured' }
+    // Check intercepted responses first
+    const traderResponses = captured.filter(c => {
+      const d = c.data
+      if (!d?.data) return false
+      const items = d.data.data || d.data.items || d.data.list || (Array.isArray(d.data) ? d.data : [])
+      return items.length > 0 && (items[0].trader_id || items[0].traderId || items[0].nickname)
+    })
+    if (traderResponses.length > 0) {
+      traderResponses.sort((a, b) => b.size - a.size)
+      return traderResponses[0].data
+    }
+
+    // Fallback: page.evaluate with credentials
+    const data = await page.evaluate(async (opts) => {
+      async function safeFetch(url) {
+        try {
+          const r = await fetch(url, { credentials: 'include' })
+          if (!r.ok) return null
+          const text = await r.text()
+          if (!text.startsWith('{') && !text.startsWith('[')) return null
+          return JSON.parse(text)
+        } catch { return null }
+      }
+      const trMap = { '7d': 'DAY7', '30d': 'DAY30', '90d': 'DAY90' }
+      const tr = trMap[opts.period] || 'DAY30'
+      const eps = [
+        `/res/copy-trading/public/traders?data_type=profit_rate&time_range=${tr}&hide_full=0&page=1&limit=${opts.pageSize}`,
+        `/res/copy-trade/rank?period=${opts.period}&page=1&limit=${opts.pageSize}&sort=roi`,
+      ]
+      for (const ep of eps) {
+        const json = await safeFetch(ep)
+        const items = json?.data?.data || json?.data?.items || (Array.isArray(json?.data) ? json.data : [])
+        if (items.length > 0) return json
+      }
+      return { error: 'All CoinEx endpoints failed' }
+    }, { period, pageSize }).catch(() => null)
+
+    return data || { error: 'No API response captured' }
   },
 
-  // ─── BingX ────────────────────────────────────────────────────────
+  // ─── BingX (v15 port: scroll + waitForResponse) ─────────────────
   'bingx/leaderboard': async (page, params) => {
-    const timeType = params.timeType || '2'
-
-    const getCaptured = setupInterception(page, (url) =>
+    const captured = setupInterception(page, (url) =>
       url.includes('multi-rank') || (url.includes('copy') && url.includes('rank'))
     )
 
     await page.goto('https://bingx.com/en/CopyTrading/leaderBoard', {
-      waitUntil: 'domcontentloaded',
-      timeout: 30000,
+      waitUntil: 'domcontentloaded', timeout: 30000,
     })
-
-    // Scroll early to trigger SPA API calls
     await page.evaluate(() => window.scrollBy(0, 500))
     await page.waitForTimeout(2000)
 
-    // Wait for multi-rank response
     try {
       await page.waitForResponse(
         (response) => response.url().includes('multi-rank'),
         { timeout: 15000 }
       )
-    } catch {
-      // Timeout waiting for response — check captured
-    }
+    } catch { /* timeout */ }
 
     await page.waitForTimeout(2000)
-    const captured = getCaptured()
-    return captured.length > 0 ? captured[0] : { error: 'No API response captured' }
+    if (captured.length > 0) return captured[0].data
+    return { error: 'No API response captured' }
   },
 
-  // ─── BloFin ────────────────────────────────────────────────────────
+  // ─── BloFin (page.evaluate with direct API) ─────────────────────
   'blofin/leaderboard': async (page, params) => {
     const pageSize = parseInt(params.pageSize || '50', 10)
 
-    // BloFin has a public API, try direct fetch first
-    const getCaptured = setupInterception(page, (url) =>
+    const captured = setupInterception(page, (url) =>
       url.includes('copy') && (url.includes('trader') || url.includes('rank'))
     )
 
     await page.goto('https://www.blofin.com/copy-trading', {
-      waitUntil: 'domcontentloaded',
-      timeout: 30000,
+      waitUntil: 'domcontentloaded', timeout: 30000,
     })
     await page.waitForTimeout(3000)
 
-    // Try direct API from page context
-    const apiData = await safeFetchJson(
-      page,
-      `https://openapi.blofin.com/api/v1/copy-trading/public/current-traders?pageSize=${pageSize}&pageNo=1&sortBy=pnl&sortType=desc`
-    )
+    const data = await page.evaluate(async (opts) => {
+      try {
+        const r = await fetch(`https://openapi.blofin.com/api/v1/copy-trading/public/current-traders?pageSize=${opts.pageSize}&pageNo=1&sortBy=pnl&sortType=desc`)
+        if (!r.ok) return null
+        return await r.json()
+      } catch { return null }
+    }, { pageSize }).catch(() => null)
 
-    if (apiData?.data?.length > 0) return apiData
+    if (data?.data?.length > 0) return data
 
     await page.waitForTimeout(5000)
-    const captured = getCaptured()
-    return captured.length > 0 ? captured[0] : { error: 'No API response captured' }
+    if (captured.length > 0) return captured[0].data
+    return { error: 'No API response captured' }
   },
 
-  // ─── Bitunix ────────────────────────────────────────────────────────
+  // ─── Bitunix (page.evaluate) ────────────────────────────────────
   'bitunix/leaderboard': async (page, params) => {
     const pageSize = parseInt(params.pageSize || '50', 10)
 
-    const getCaptured = setupInterception(page, (url) =>
+    const captured = setupInterception(page, (url) =>
       url.includes('copy') && (url.includes('trader') || url.includes('rank') || url.includes('leader'))
     )
 
     await page.goto('https://www.bitunix.com/copy-trading', {
-      waitUntil: 'domcontentloaded',
-      timeout: 30000,
+      waitUntil: 'domcontentloaded', timeout: 30000,
     })
     await page.waitForTimeout(3000)
-
-    // Scroll to trigger lazy-loaded content
     await page.evaluate(() => window.scrollBy(0, 500))
     await page.waitForTimeout(3000)
 
-    // Try direct API from page context
-    if (getCaptured().length === 0) {
-      const apiData = await safeFetchJson(page, `/api/v1/copy-trade/traders?page=1&pageSize=${pageSize}&sortType=2`)
-      if (apiData) return apiData
+    if (captured.length === 0) {
+      const data = await page.evaluate(async (opts) => {
+        try {
+          const r = await fetch(`/api/v1/copy-trade/traders?page=1&pageSize=${opts.pageSize}&sortType=2`, { credentials: 'include' })
+          if (!r.ok) return null
+          const text = await r.text()
+          if (!text.startsWith('{')) return null
+          return JSON.parse(text)
+        } catch { return null }
+      }, { pageSize }).catch(() => null)
+      if (data) return data
     }
 
-    const captured = getCaptured()
-    return captured.length > 0 ? captured[0] : { error: 'No API response captured' }
+    if (captured.length > 0) return captured[0].data
+    return { error: 'No API response captured' }
+  },
+
+  // ─── Toobit (v15 port: intercept identity-type-leaders) ─────────
+  'toobit/leaderboard': async (page, params) => {
+    const dataType = parseInt(params.period || params.dataType || '2', 10)
+    const pageSize = parseInt(params.pageSize || '50', 10)
+
+    const captured = setupInterception(page, (url) =>
+      url.includes('identity-type-leaders') || (url.includes('copy') && url.includes('trader'))
+    )
+
+    await page.goto('https://www.toobit.com/en-US/copy-trading', {
+      waitUntil: 'domcontentloaded', timeout: 30000,
+    })
+    await page.waitForTimeout(5000)
+    await page.evaluate(() => window.scrollTo(0, 500)).catch(() => {})
+    await page.waitForTimeout(3000)
+
+    if (captured.length > 0) {
+      captured.sort((a, b) => b.size - a.size)
+      return captured[0].data
+    }
+
+    const data = await page.evaluate(async (opts) => {
+      try {
+        const r = await fetch(`/v1/copy-trading/identity-type-leaders?dataType=${opts.dataType}&pageSize=${opts.pageSize}&pageNo=1`, { credentials: 'include' })
+        if (!r.ok) return null
+        const text = await r.text()
+        if (!text.startsWith('{')) return null
+        return JSON.parse(text)
+      } catch { return null }
+    }, { dataType, pageSize }).catch(() => null)
+
+    return data || { error: 'No API response captured' }
+  },
+
+  // ─── XT (v15 port: page.evaluate for /fapi/user/v1) ─────────────
+  'xt/leaderboard': async (page, params) => {
+    const pageSize = parseInt(params.pageSize || '500', 10)
+
+    const captured = setupInterception(page, (url) =>
+      url.includes('fapi') && (url.includes('user') || url.includes('rank') || url.includes('leader'))
+    )
+
+    await page.goto('https://www.xt.com/en/futures/copy-trading', {
+      waitUntil: 'domcontentloaded', timeout: 30000,
+    })
+    await page.waitForTimeout(5000)
+    await page.evaluate(() => window.scrollTo(0, 500)).catch(() => {})
+    await page.waitForTimeout(3000)
+
+    if (captured.length > 0) {
+      captured.sort((a, b) => b.size - a.size)
+      return captured[0].data
+    }
+
+    const data = await page.evaluate(async (opts) => {
+      try {
+        const r = await fetch(`/fapi/user/v1/public/trader/list?page=1&size=${opts.pageSize}&sortField=yield&sortType=1`, { credentials: 'include' })
+        if (!r.ok) return null
+        const text = await r.text()
+        if (!text.startsWith('{')) return null
+        return JSON.parse(text)
+      } catch { return null }
+    }, { pageSize }).catch(() => null)
+
+    return data || { error: 'No API response captured' }
+  },
+
+  // ─── Weex (v15 port: intercept copy-trade APIs) ──────────────────
+  'weex/leaderboard': async (page, params) => {
+    const captured = setupInterception(page, (url) =>
+      url.includes('copy') && (url.includes('rank') || url.includes('trader'))
+    )
+
+    await page.goto('https://www.weex.com/en/copy-trading', {
+      waitUntil: 'domcontentloaded', timeout: 30000,
+    })
+    await page.waitForTimeout(8000)
+    await page.evaluate(() => window.scrollTo(0, 500)).catch(() => {})
+    await page.waitForTimeout(3000)
+
+    if (captured.length > 0) {
+      captured.sort((a, b) => b.size - a.size)
+      return captured[0].data
+    }
+    return { error: 'No API response captured' }
+  },
+
+  'weex/leaderboard-v2': async (page, params) => {
+    return HANDLERS['weex/leaderboard'](page, params)
   },
 }
 
