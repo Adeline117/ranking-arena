@@ -201,7 +201,7 @@ export default function LoginModal({ open, onClose, message }: LoginModalProps) 
               onClick={handleGoogle}
               disabled={loading}
               style={{
-                width: '100%', padding: '12px 16px', borderRadius: 10,
+                width: '100%', padding: '12px 16px', borderRadius: tokens.radius.lg,
                 border: '1px solid var(--glass-border-medium)',
                 background: 'var(--glass-bg-light)',
                 color: 'var(--color-text-primary)',
@@ -224,7 +224,7 @@ export default function LoginModal({ open, onClose, message }: LoginModalProps) 
             <button
               onClick={() => setStep('email-otp')}
               style={{
-                width: '100%', padding: '12px 16px', borderRadius: 10,
+                width: '100%', padding: '12px 16px', borderRadius: tokens.radius.lg,
                 border: '1px solid var(--glass-border-light)',
                 background: 'transparent',
                 color: 'var(--color-text-secondary)',
@@ -285,7 +285,7 @@ export default function LoginModal({ open, onClose, message }: LoginModalProps) 
               onKeyDown={(e) => e.key === 'Enter' && handleSendOTP()}
               placeholder="you@email.com"
               style={{
-                width: '100%', padding: '12px 14px', borderRadius: 10,
+                width: '100%', padding: '12px 14px', borderRadius: tokens.radius.lg,
                 background: 'var(--glass-bg-light)',
                 border: '1px solid var(--glass-border-medium)',
                 color: 'var(--color-text-primary)', fontSize: 14,
@@ -297,7 +297,7 @@ export default function LoginModal({ open, onClose, message }: LoginModalProps) 
               onClick={handleSendOTP}
               disabled={loading || !email.trim()}
               style={{
-                width: '100%', padding: '12px 16px', borderRadius: 10,
+                width: '100%', padding: '12px 16px', borderRadius: tokens.radius.lg,
                 background: tokens.gradient.primary,
                 border: 'none', color: '#fff',
                 fontWeight: 700, fontSize: 14, cursor: 'pointer',
@@ -349,7 +349,7 @@ export default function LoginModal({ open, onClose, message }: LoginModalProps) 
               placeholder="000000"
               maxLength={6}
               style={{
-                width: '100%', padding: '12px 14px', borderRadius: 10,
+                width: '100%', padding: '12px 14px', borderRadius: tokens.radius.lg,
                 background: 'var(--glass-bg-light)',
                 border: '1px solid var(--glass-border-medium)',
                 color: 'var(--color-text-primary)', fontSize: 20,
@@ -362,7 +362,7 @@ export default function LoginModal({ open, onClose, message }: LoginModalProps) 
               onClick={handleVerifyOTP}
               disabled={loading || otp.length < 6}
               style={{
-                width: '100%', padding: '12px 16px', borderRadius: 10,
+                width: '100%', padding: '12px 16px', borderRadius: tokens.radius.lg,
                 background: tokens.gradient.primary,
                 border: 'none', color: '#fff',
                 fontWeight: 700, fontSize: 14, cursor: 'pointer',

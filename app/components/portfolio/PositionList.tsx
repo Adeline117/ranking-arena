@@ -2,6 +2,7 @@
 
 import React, { useState, useMemo } from 'react'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
+import { tokens } from '@/lib/design-tokens'
 
 interface Position {
   id: string
@@ -188,7 +189,7 @@ const styles: Record<string, React.CSSProperties> = {
   },
   tableWrap: {
     overflowX: 'auto',
-    borderRadius: '12px',
+    borderRadius: tokens.radius.lg,
     border: '1px solid var(--color-border-primary)',
     backgroundColor: 'var(--color-bg-secondary)',
   },
@@ -230,7 +231,7 @@ const styles: Record<string, React.CSSProperties> = {
     justifyContent: 'center',
     padding: '48px 16px',
     backgroundColor: 'var(--color-bg-secondary)',
-    borderRadius: '12px',
+    borderRadius: tokens.radius.lg,
     border: '1px solid var(--color-border-primary)',
   },
   emptyText: {
@@ -239,7 +240,7 @@ const styles: Record<string, React.CSSProperties> = {
   },
   skeleton: {
     height: '48px',
-    borderRadius: '8px',
+    borderRadius: tokens.radius.md,
     backgroundColor: 'var(--color-bg-tertiary)',
   },
   // Mobile cards - shown via CSS media query override
@@ -250,7 +251,7 @@ const styles: Record<string, React.CSSProperties> = {
   },
   mobileCard: {
     padding: '12px 16px',
-    borderRadius: '12px',
+    borderRadius: tokens.radius.lg,
     backgroundColor: 'var(--color-bg-secondary)',
     border: '1px solid var(--color-border-primary)',
     display: 'flex',
