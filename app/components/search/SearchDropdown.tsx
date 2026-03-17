@@ -447,11 +447,11 @@ export default function SearchDropdown({ open, query, onClose }: SearchDropdownP
               >
                 {result.avatar ? (
                   <Image
-                    src={result.avatar}
+                    src={result.avatar.startsWith('data:') ? result.avatar : `/api/avatar?url=${encodeURIComponent(result.avatar)}`}
                     alt={result.title || 'Avatar'}
                     width={28} height={28}
+                    unoptimized
                     style={{ width: 28, height: 28, borderRadius: tokens.radius.full, objectFit: 'cover', flexShrink: 0 }}
-                    unoptimized={result.avatar.startsWith('data:')}
                     {...(globalIndex < 5 ? { priority: true } : { loading: 'lazy' as const })}
                   />
                 ) : (

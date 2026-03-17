@@ -35,7 +35,7 @@ function TraderAvatar({ name, avatarUrl, traderId, size = 36 }: { name: string; 
   if (avatarUrl && !imgError) {
     return (
       <img
-        src={avatarUrl}
+        src={`/api/avatar?url=${encodeURIComponent(avatarUrl)}`}
         alt={name}
         width={size}
         height={size}

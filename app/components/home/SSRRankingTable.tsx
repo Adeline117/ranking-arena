@@ -92,12 +92,10 @@ export default function SSRRankingTable({ traders }: Props) {
         {traders.slice(0, 25).map((trader, idx) => {
           const rank = idx + 1
           const isTop3 = rank <= 3
-          // Use direct CDN URL if available (skip proxy for better performance)
-          const avatarUrl = trader.avatar_url?.startsWith('http') 
-            ? trader.avatar_url 
-            : trader.avatar_url 
-              ? `/api/avatar?url=${encodeURIComponent(trader.avatar_url)}` 
-              : null
+          // Always route through avatar proxy for consistent rendering
+          const avatarUrl = trader.avatar_url
+            ? `/api/avatar?url=${encodeURIComponent(trader.avatar_url)}`
+            : null
 
           return (
             <a

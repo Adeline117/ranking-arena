@@ -27,10 +27,11 @@ function GroupAvatar({ name, avatarUrl, size = 36 }: { name: string; avatarUrl: 
   if (avatarUrl && !imgError) {
     return (
       <Image
-        src={avatarUrl}
+        src={`/api/avatar?url=${encodeURIComponent(avatarUrl)}`}
         alt={name}
         width={size}
         height={size}
+        unoptimized
         style={{
           borderRadius: tokens.radius.full,
           objectFit: 'cover',
