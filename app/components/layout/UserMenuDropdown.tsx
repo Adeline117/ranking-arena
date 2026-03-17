@@ -91,11 +91,12 @@ export default function UserMenuDropdown({
       >
         {myAvatarUrl && !avatarError ? (
           <Image
-            src={myAvatarUrl}
+            src={myAvatarUrl.startsWith('data:') ? myAvatarUrl : `/api/avatar?url=${encodeURIComponent(myAvatarUrl)}`}
             alt=""
             width={36}
             height={36}
             sizes="36px"
+            unoptimized
             style={{
               width: 36,
               height: 36,
@@ -103,7 +104,6 @@ export default function UserMenuDropdown({
               border: `1px solid var(--color-border-primary)`,
               objectFit: 'cover',
             }}
-            unoptimized={myAvatarUrl?.startsWith('data:')}
             onError={() => setAvatarError(true)}
           />
         ) : (
