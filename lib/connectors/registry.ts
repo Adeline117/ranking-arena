@@ -249,8 +249,8 @@ export async function initializeConnectors(): Promise<void> {
   lazy('drift:perp', () => import('./platforms/drift-perp'), 'DriftPerpConnector', 'drift')
 
   // Web3 Connectors
-  lazy('okx_web3:spot', () => import('./platforms/okx-web3'), 'OkxWeb3Connector', 'okx_web3')
-  lazy('binance_web3:spot', () => import('./platforms/binance-web3'), 'BinanceWeb3Connector', 'binance_web3')
+  lazy('okx_web3:web3', () => import('./platforms/okx-web3'), 'OkxWeb3Connector', 'okx_web3')
+  lazy('binance_web3:web3', () => import('./platforms/binance-web3'), 'BinanceWeb3Connector', 'binance_web3')
   connectorRegistry.registerLazy('web3_bot:spot' as RegistryKey, async () => {
     const { Web3BotConnector } = await import('./platforms/web3-bot')
     return new Web3BotConnector()
