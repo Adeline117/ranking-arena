@@ -27,6 +27,19 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
   }
 
+  // TEMPORARILY DISABLED 2026-03-16: Intermittent 50% failure rate
+  // GraphQL API having issues - was successful earlier but now failing
+  // Re-enable after investigating GraphQL endpoint stability
+  const plog = await PipelineLogger.start('enrich-gmx-all')
+  await plog.success(0, { reason: 'temporarily disabled due to intermittent failures', failureRate: '~50%' })
+  return NextResponse.json({
+    ok: true,
+    platform: 'gmx',
+    disabled: true,
+    reason: 'Temporarily disabled - intermittent 50% failure rate',
+  })
+
+  /* DISABLED CODE - RE-ENABLE AFTER FIXING
   const plog = await PipelineLogger.start('enrich-gmx-all')
 
   interface PeriodResult {
@@ -106,4 +119,5 @@ export async function GET(request: NextRequest) {
     failed,
     results,
   })
+  */
 }
