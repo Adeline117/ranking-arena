@@ -73,8 +73,8 @@ export class OkxWeb3Connector extends BaseConnector {
     const allTraders: TraderSource[] = []
     const days = window === '7d' ? 7 : window === '30d' ? 30 : 90
 
-    // Try MARGIN first, then SWAP
-    for (const instType of ['MARGIN', 'SWAP']) {
+    // MARGIN instType removed (returns 51000 error since ~2026-03)
+    for (const instType of ['SWAP']) {
       const maxPages = 50
       for (let page = 1; page <= maxPages; page++) {
         try {
