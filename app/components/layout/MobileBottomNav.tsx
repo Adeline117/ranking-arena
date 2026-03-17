@@ -256,7 +256,7 @@ export default function MobileBottomNav(): React.ReactElement {
 
   const navItems: NavItem[] = useMemo(() => {
     const items: NavItem[] = [
-      { href: '/', labelKey: 'home', Icon: HomeIcon },
+      { href: '/', labelKey: 'rankings', Icon: RankingsIcon },
     ]
     if (features.social) {
       items.push({ href: '/hot', labelKey: 'hot', Icon: FireIcon })
