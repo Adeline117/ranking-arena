@@ -43,8 +43,12 @@ export const preferredRegion = 'hnd1' // Tokyo — avoids Binance/OKX/Bybit geo-
 const GROUPS: Record<string, string[]> = {
   // Group A: Binance (every 3h) — new /friendly/ API via VPS proxy (2026-03-15)
   a: ['binance_futures', 'binance_spot'],
-  // Group A2: High-priority CEX (every 3h) — VPS proxy enabled 2026-03-15
-  a2: ['bybit', 'bitget_futures', 'okx_futures'],
+  // Group A2: OKX only (every 3h) — direct API works
+  a2: ['okx_futures'],
+  // Group A3: Bybit (every 3h) — VPS scraper, needs own group (Playwright slow)
+  a3: ['bybit'],
+  // Group A4: Bitget (every 3h) — VPS scraper, needs own group
+  a4: ['bitget_futures'],
   // Group B: Top DEX (every 4h) + GMX (switched to subgraph 2026-03-15)
   b: ['hyperliquid', 'gmx'],
   // Group C: Mid-priority (every 4h) — okx_futures moved to a2, bitunix re-enabled
@@ -53,8 +57,10 @@ const GROUPS: Record<string, string[]> = {
   d1: ['gains', 'htx_futures'],
   // Group E: CEX+DEX (every 6h) — coinex URL fixed + VPS proxy
   e: ['bitfinex', 'coinex', 'binance_web3'],
-  // Group F: CEX (every 6h) — VPS proxy enabled
-  f: ['mexc', 'bingx'],
+  // Group F: MEXC only (every 6h) — VPS scraper, slow
+  f: ['mexc'],
+  // Group F2: BingX (every 6h) — VPS scraper
+  f2: ['bingx'],
   // Group H: CEX (every 6h) — VPS proxy enabled 2026-03-15
   h: ['gateio', 'btcc'],
   // Group G1: DEX (every 6h)

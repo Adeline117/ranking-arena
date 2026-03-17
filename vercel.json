@@ -83,6 +83,14 @@
       "schedule": "10 */3 * * *"
     },
     {
+      "path": "/api/cron/batch-fetch-traders?group=a3",
+      "schedule": "20 */3 * * *"
+    },
+    {
+      "path": "/api/cron/batch-fetch-traders?group=a4",
+      "schedule": "30 */3 * * *"
+    },
+    {
       "path": "/api/cron/batch-fetch-traders?group=b",
       "schedule": "0 */4 * * *"
     },
@@ -97,6 +105,10 @@
     {
       "path": "/api/cron/batch-fetch-traders?group=f",
       "schedule": "44 */6 * * *"
+    },
+    {
+      "path": "/api/cron/batch-fetch-traders?group=f2",
+      "schedule": "54 */6 * * *"
     },
     {
       "path": "/api/cron/batch-fetch-traders?group=h",
