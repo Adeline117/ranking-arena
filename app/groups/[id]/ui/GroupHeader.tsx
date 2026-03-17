@@ -91,7 +91,7 @@ export default function GroupHeader({
         >
           {group.avatar_url ? (
             <img
-              src={group.avatar_url}
+              src={`/api/avatar?url=${encodeURIComponent(group.avatar_url)}`}
               alt={group.name}
               width={72}
               height={72}
@@ -179,7 +179,7 @@ export default function GroupHeader({
                           >
                             {m.avatar_url ? (
                               <img
-                                src={m.avatar_url}
+                                src={`/api/avatar?url=${encodeURIComponent(m.avatar_url)}`}
                                 alt=""
                                 width={20}
                                 height={20}

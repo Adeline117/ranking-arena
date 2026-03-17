@@ -186,7 +186,7 @@ export default async function ActivitySharePage({ params }: PageProps) {
           >
             {activity.avatar_url ? (
               <Image
-                src={activity.avatar_url}
+                src={`/api/avatar?url=${encodeURIComponent(activity.avatar_url)}`}
                 alt={activity.handle ?? 'Trader'}
                 width={48}
                 height={48}

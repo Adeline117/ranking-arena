@@ -340,7 +340,7 @@ export function getTraderAvatarUrl(avatarUrl: string | null | undefined): string
     return null
   }
 
-  // 其他有效图片URL直接返回
-  return avatarUrl
+  // 其他有效图片URL也走代理（确保 DiceBear、pravatar 等外部 URL 正常渲染）
+  return `/api/avatar?url=${encodeURIComponent(avatarUrl)}`
 }
 

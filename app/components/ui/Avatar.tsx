@@ -94,12 +94,12 @@ export default function Avatar({
             </Box>
           )}
           <Image
-            src={finalAvatarUrl}
+            src={finalAvatarUrl.startsWith('data:') || finalAvatarUrl.startsWith('/') ? finalAvatarUrl : `/api/avatar?url=${encodeURIComponent(finalAvatarUrl)}`}
             alt={name || userId || 'Avatar'}
             width={size}
             height={size}
             sizes={`${size}px`}
-            unoptimized={finalAvatarUrl.includes('bgstatic.com') || finalAvatarUrl.includes('static-global.com') || finalAvatarUrl.endsWith('.svg') || finalAvatarUrl.startsWith('http://')}
+            unoptimized
             style={{
               width: '100%',
               height: '100%',

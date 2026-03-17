@@ -778,7 +778,7 @@ function RelatedGroupsSidebar({ groups, loading, language }: {
               >
                 {relGroup.avatar_url ? (
                   <img
-                    src={relGroup.avatar_url}
+                    src={`/api/avatar?url=${encodeURIComponent(relGroup.avatar_url)}`}
                     alt={relGroup.name}
                     width={40}
                     height={40}
