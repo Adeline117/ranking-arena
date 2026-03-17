@@ -90,8 +90,8 @@ export interface TraderProfileRow {
 }
 
 export interface SnapshotMetrics {
-  roi: number
-  pnl: number
+  roi: number | null
+  pnl: number | null
   win_rate: number | null
   max_drawdown: number | null
   trades_count: number | null

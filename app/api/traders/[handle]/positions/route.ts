@@ -109,8 +109,9 @@ export async function GET(
     
     // 计算总盈亏
     const totalPnl = positions.reduce((sum, p) => sum + p.pnl, 0)
-    const totalPnlPct = positions.length > 0
-      ? positions.reduce((sum, p) => sum + p.pnlPct * p.size, 0) / positions.reduce((sum, p) => sum + p.size, 0)
+    const totalSize = positions.reduce((sum, p) => sum + p.size, 0)
+    const totalPnlPct = positions.length > 0 && totalSize > 0
+      ? positions.reduce((sum, p) => sum + p.pnlPct * p.size, 0) / totalSize
       : 0
 
     const result = { positions, totalPnl, totalPnlPct }

@@ -284,7 +284,7 @@ async function getRankingsFallback(rankingsQuery: RankingsQuery, _cursor?: strin
       .select('source')
       .eq('season_id', seasonIdUpper)
       .not('arena_score', 'is', null)
-      .limit(500);
+      .limit(200);
     availableSources = [...new Set((sourceRows || []).map((r: { source: string }) => r.source))].sort();
     setCachedSources(seasonIdUpper, availableSources);
   }

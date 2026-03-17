@@ -43,7 +43,9 @@ export async function POST(request: NextRequest) {
     // 1. 普通用户 Bearer token（用于用户触发的通知如关注、点赞）
     // 2. 内部 service key（用于系统通知、cron 等）
     const internalKey = request.headers.get('x-internal-key')
-    const isInternal = internalKey === process.env.INTERNAL_API_KEY
+    const configuredKey = process.env.INTERNAL_API_KEY
+    // Require INTERNAL_API_KEY to be set and non-empty to prevent undefined === undefined bypass
+    const isInternal = !!(configuredKey && internalKey && internalKey === configuredKey)
 
     let authenticatedUserId: string | null = null
     if (!isInternal) {

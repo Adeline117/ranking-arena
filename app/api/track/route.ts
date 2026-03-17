@@ -56,9 +56,9 @@ export async function POST(request: NextRequest) {
       logger.warn('Failed to insert interaction', { error: insertError.message })
     }
 
-    // Increment impression_count on the post
+    // Increment impression_count on the post (best-effort, non-critical)
+    // Uses read-then-write pattern — acceptable for approximate impression tracking
     if (type === 'impression') {
-      // Read current count and increment (simple approach for low volume)
       const { data: post } = await supabase
         .from('posts')
         .select('impression_count')

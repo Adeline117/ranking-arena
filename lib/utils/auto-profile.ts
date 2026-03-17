@@ -206,8 +206,8 @@ export function generateAutoBio(input: AutoProfileInput): { en: string; zh: stri
   const perfParts_zh: string[] = []
 
   // ROI
-  perfParts_en.push(`${snapshot_window} ROI ${formatRoi(snapshot.roi)}`)
-  perfParts_zh.push(`${snapshot_window} ROI ${formatRoi(snapshot.roi)}`)
+  perfParts_en.push(`${snapshot_window} ROI ${formatRoi(snapshot.roi ?? 0)}`)
+  perfParts_zh.push(`${snapshot_window} ROI ${formatRoi(snapshot.roi ?? 0)}`)
 
   // PnL
   if (snapshot.pnl != null && Math.abs(snapshot.pnl) >= 10) {
@@ -299,7 +299,7 @@ export function generateAutoTags(input: AutoProfileInput): string[] {
   }
 
   // Profitable
-  if (snapshot.roi > 100) {
+  if ((snapshot.roi ?? 0) > 100) {
     tags.push('high-roi')
   }
 

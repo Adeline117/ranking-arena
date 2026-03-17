@@ -12,6 +12,9 @@ import { createLogger } from '@/lib/utils/logger'
 
 const logger = createLogger('ranking-snapshot')
 
+// Simple in-memory rate limiter for snapshot creation
+const snapshotRateLimit = new Map<string, number[]>()
+
 export async function GET() {
   return NextResponse.json(
     { error: 'Use POST to create a ranking snapshot. Required body: { traders: [...], exchange?, timeRange? }' },
@@ -20,12 +23,31 @@ export async function GET() {
 }
 
 export async function POST(request: NextRequest) {
+  // Rate limit to prevent abuse (no auth required for sharing, but limit writes)
+  const ip = request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || 'unknown'
+  const rateLimitKey = `snapshot:${ip}`
+  const now = Date.now()
+  const windowMs = 60_000
+  const maxRequests = 5
+  if (!snapshotRateLimit.has(rateLimitKey)) snapshotRateLimit.set(rateLimitKey, [])
+  const timestamps = snapshotRateLimit.get(rateLimitKey)!.filter(t => now - t < windowMs)
+  if (timestamps.length >= maxRequests) {
+    return NextResponse.json({ error: 'Too many snapshot requests. Try again later.' }, { status: 429 })
+  }
+  timestamps.push(now)
+  snapshotRateLimit.set(rateLimitKey, timestamps)
+
   try {
     const body = await request.json()
     const { exchange, timeRange, traders, topTraderHandle, topTraderRoi } = body
 
     if (!traders || !Array.isArray(traders) || traders.length === 0) {
       return NextResponse.json({ error: 'traders array required' }, { status: 400 })
+    }
+
+    // Validate input size to prevent abuse
+    if (traders.length > 100) {
+      return NextResponse.json({ error: 'Maximum 100 traders per snapshot' }, { status: 400 })
     }
 
     const supabase = getSupabaseAdmin()

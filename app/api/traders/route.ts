@@ -73,17 +73,8 @@ export const GET = withPublic(
       { ttl: 60, lockTtl: 10 }
     )
 
-    // Apply profanity filter after cache (ensures all cached + fresh data is filtered)
-    // This runs on every request, applying sanitization to both cached and fresh data
-    const sanitizedData = {
-      ...cachedData,
-      traders: cachedData.traders?.map((t: any) => ({
-        ...t,
-        handle: sanitizeDisplayName(t.handle)
-      })) || []
-    }
-    
-    const response = NextResponse.json(sanitizedData)
+    // Data is already sanitized before caching (in the fetcher below)
+    const response = NextResponse.json(cachedData)
     response.headers.set('Cache-Control', 'public, s-maxage=60, stale-while-revalidate=300')
     return response
   },
@@ -238,15 +229,13 @@ async function fetchFromLeaderboard(
     // Plus a lightweight supplementary query for sources not in the current page
     const allSourceSet = new Set<string>()
     for (const r of (data || [])) allSourceSet.add((r as { source: string }).source)
-    // Supplementary: get any remaining sources via a separate scan
-    // Use a larger limit to capture all platforms (source column only = very lightweight)
+    // Supplementary: get distinct sources via lightweight query
     const { data: sourceRows } = await supabase
       .from('leaderboard_ranks')
       .select('source')
       .eq('season_id', timeRange)
       .gt('arena_score', 0)
-      .order('rank', { ascending: true })
-      .limit(15000)
+      .limit(500)
     for (const r of (sourceRows || [])) allSourceSet.add((r as { source: string }).source)
     availableSources = [...allSourceSet].sort()
     availableSourcesCache.set(timeRange, { sources: availableSources, ts: Date.now() })
