@@ -127,7 +127,7 @@ export default function AddToCollectionButton({ itemType, itemId, compact }: Add
           border: `1px solid ${tokens.colors.border.primary}`,
           borderRadius: tokens.radius.lg,
           boxShadow: tokens.shadow.lg,
-          zIndex: 100,
+          zIndex: tokens.zIndex.dropdown,
           overflow: 'hidden',
         }}>
           <Box style={{ padding: `${tokens.spacing[3]} ${tokens.spacing[4]}`, borderBottom: `1px solid ${tokens.colors.border.primary}` }}>

@@ -96,7 +96,7 @@ function ExportRankingButton({ traders, source, timeRange }: ExportRankingButton
         <div style={{
           position: 'absolute', top: '100%', right: 0, marginTop: 4,
           background: tokens.colors.bg.secondary, border: `1px solid ${tokens.colors.border.primary}`,
-          borderRadius: tokens.radius.md, overflow: 'hidden', zIndex: 100, minWidth: 160,
+          borderRadius: tokens.radius.md, overflow: 'hidden', zIndex: tokens.zIndex.dropdown, minWidth: 160,
           boxShadow: tokens.shadow.md,
         }}>
           <div style={{ padding: '6px 12px', fontSize: 12, color: tokens.colors.text.tertiary, fontWeight: 600 }}>CSV</div>
