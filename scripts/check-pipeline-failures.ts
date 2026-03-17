@@ -36,12 +36,17 @@ async function checkFailures() {
 
   // 统计各group的状态
   const allGroups = ['a', 'a2', 'b', 'c', 'd1', 'd2', 'e', 'f', 'g1', 'g2', 'h', 'i']
+  const emptyGroups = ['d2'] // Intentionally empty groups (dydx DEAD since 2026-03)
   
   console.log('=== 所有Groups状态 ===\n')
   for (const group of allGroups) {
     const logs = byGroup[group] || []
     if (logs.length === 0) {
-      console.log(`❌ Group ${group}: 无运行记录（过去24h）`)
+      if (emptyGroups.includes(group)) {
+        console.log(`⚪ Group ${group}: 已废弃/空组 (intentionally empty)`)
+      } else {
+        console.log(`❌ Group ${group}: 无运行记录（过去24h）`)
+      }
       continue
     }
 
@@ -78,15 +83,17 @@ async function checkFailures() {
     console.log('')
   }
 
-  // 统计失败的groups
+  // 统计失败的groups (排除空组)
   console.log('\n=== 失败Groups汇总 ===\n')
   const failedGroups = allGroups.filter(g => {
+    if (emptyGroups.includes(g)) return false // Skip intentionally empty groups
     const logs = byGroup[g]
     if (!logs || logs.length === 0) return true
     return logs[0].status === 'error'
   })
   
-  console.log(`失败Groups (${failedGroups.length}/${allGroups.length}): ${failedGroups.join(', ')}`)
+  const activeGroups = allGroups.filter(g => !emptyGroups.includes(g))
+  console.log(`失败Groups (${failedGroups.length}/${activeGroups.length}): ${failedGroups.join(', ')}`)
 }
 
 checkFailures().catch(console.error)
