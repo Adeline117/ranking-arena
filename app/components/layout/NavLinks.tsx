@@ -27,7 +27,7 @@ export default function NavLinks() {
     <Box as="nav" aria-label={t('mainNavigation')} className="hide-mobile" style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[1] }}>
       {items.map((item) => {
         const label = t(item.labelKey)
-        const isActive = item.href === '/' ? (pathname === '/' || pathname.startsWith('/rankings')) : pathname.startsWith(item.href)
+        const isActive = item.href === '/rankings' ? (pathname === '/' || pathname.startsWith('/rankings')) : pathname.startsWith(item.href)
         return (
           <Link
             key={item.href}
@@ -44,11 +44,11 @@ export default function NavLinks() {
             style={{
               padding: `${tokens.spacing[2]} ${tokens.spacing[3]}`,
               borderRadius: tokens.radius.md,
-              color: isActive ? 'var(--color-text-primary)' : 'var(--color-text-secondary)',
+              color: isActive ? 'var(--color-brand)' : 'var(--color-text-secondary)',
               textDecoration: 'none',
               fontWeight: isActive ? 800 : 600,
               fontSize: tokens.typography.fontSize.sm,
-              background: isActive ? 'var(--color-bg-secondary)' : 'transparent',
+              background: isActive ? 'var(--color-accent-primary-12)' : 'transparent',
               minHeight: 44,
               display: 'inline-flex',
               alignItems: 'center',
