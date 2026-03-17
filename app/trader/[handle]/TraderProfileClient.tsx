@@ -55,6 +55,8 @@ const PostFeed = dynamic(() => import('@/app/components/post/PostFeed'), {
   loading: () => <RankingSkeleton />,
 })
 const SwipeableView = dynamic(() => import('@/app/components/ui/SwipeableView'), { ssr: false })
+const LinkedAccountTabs = dynamic(() => import('@/app/components/trader/LinkedAccountTabs'), { ssr: false })
+const AggregatedStats = dynamic(() => import('@/app/components/trader/AggregatedStats'), { ssr: false })
 
 /** @deprecated UI-specific. Will be replaced by UnifiedTrader adapter. */
 export interface UnregisteredTraderData {
@@ -124,6 +126,31 @@ export default function TraderProfileClient({ data, serverTraderData, claimedUse
   const [isVerifiedTrader, setIsVerifiedTrader] = useState(false)
   const [isOwner, setIsOwner] = useState(false)
 
+  // Multi-account linked traders state
+  interface LinkedAccountData {
+    id: string
+    platform: string
+    traderKey: string
+    handle: string | null
+    label: string | null
+    isPrimary: boolean
+    roi: number | null
+    pnl: number | null
+    arenaScore: number | null
+    winRate: number | null
+    maxDrawdown: number | null
+    rank: number | null
+  }
+  interface AggregatedData {
+    combinedPnl: number
+    bestRoi: { value: number; platform: string; traderKey: string } | null
+    weightedScore: number
+  }
+  const [linkedAccounts, setLinkedAccounts] = useState<LinkedAccountData[]>([])
+  const [aggregatedData, setAggregatedData] = useState<AggregatedData | null>(null)
+  const [activeAccount, setActiveAccount] = useState<string>('all')
+  const hasMultipleAccounts = linkedAccounts.length >= 2
+
   useEffect(() => {
     supabase.auth.getUser().then(({ data: userData }) => {
       setCurrentUserId(userData.user?.id ?? null)
@@ -148,6 +175,23 @@ export default function TraderProfileClient({ data, serverTraderData, claimedUse
       })
       .catch(() => {})
   }, [data.source_trader_id, data.source, currentUserId])
+
+  // Fetch linked accounts for multi-account view
+  useEffect(() => {
+    const platform = data.source
+    const traderKey = data.source_trader_id
+    if (!platform || !traderKey) return
+
+    fetch(`/api/traders/aggregate?platform=${encodeURIComponent(platform)}&trader_key=${encodeURIComponent(traderKey)}`)
+      .then(res => res.ok ? res.json() : null)
+      .then(result => {
+        if (result?.data?.totalAccounts >= 2) {
+          setLinkedAccounts(result.data.accounts)
+          setAggregatedData(result.data.aggregated)
+        }
+      })
+      .catch(() => {})
+  }, [data.source, data.source_trader_id])
 
   const displayName = formatDisplayName(data.handle, data.source)
   const _exchangeName = EXCHANGE_NAMES[data.source] || data.source
@@ -178,6 +222,18 @@ export default function TraderProfileClient({ data, serverTraderData, claimedUse
   const [activeTab, setActiveTab] = useState<TraderTabKey>(
     urlTab && tabKeys.includes(urlTab as TraderTabKey) ? urlTab as TraderTabKey : 'overview'
   )
+
+  const handleAccountChange = useCallback((account: string) => {
+    setActiveAccount(account)
+    const params = new URLSearchParams(searchParams.toString())
+    if (account === 'all') {
+      params.delete('account')
+    } else {
+      params.set('account', account)
+    }
+    const qs = params.toString()
+    router.replace(`${pathname}${qs ? `?${qs}` : ''}`, { scroll: false })
+  }, [searchParams, pathname, router])
 
   const handleTabChange = useCallback((tab: TraderTabKey) => {
     setActiveTab(tab)
@@ -317,7 +373,9 @@ export default function TraderProfileClient({ data, serverTraderData, claimedUse
           roi90d={traderPerformance?.roi_90d ?? (data.roi != null ? data.roi : undefined)}
           maxDrawdown={traderPerformance?.max_drawdown ?? data.max_drawdown ?? undefined}
           winRate={traderPerformance?.win_rate ?? data.win_rate ?? undefined}
-          arenaScore={(traderPerformance as ExtendedPerformance | null)?.arena_score_90d ?? data.arena_score ?? null}
+          arenaScore={hasMultipleAccounts && activeAccount === 'all' && aggregatedData
+            ? aggregatedData.weightedScore
+            : (traderPerformance as ExtendedPerformance | null)?.arena_score_90d ?? data.arena_score ?? null}
           rank={data.rank ?? null}
           currentUserId={currentUserId}
           isVerifiedTrader={isVerifiedTrader}
@@ -325,8 +383,19 @@ export default function TraderProfileClient({ data, serverTraderData, claimedUse
           lastUpdated={traderData?.trackedSince}
           claimedBio={claimedUser?.bio}
           claimedAvatarUrl={claimedUser?.avatar_url}
+          linkedAccountCount={hasMultipleAccounts ? linkedAccounts.length : undefined}
+          linkedPlatforms={hasMultipleAccounts ? linkedAccounts.map(a => a.platform) : undefined}
         />
         </div>
+
+        {/* Multi-account tabs (only shown when user has 2+ linked accounts) */}
+        {hasMultipleAccounts && (
+          <LinkedAccountTabs
+            accounts={linkedAccounts}
+            activeAccount={activeAccount}
+            onAccountChange={handleAccountChange}
+          />
+        )}
 
         {/* Tabs */}
         <TraderTabs
@@ -355,6 +424,24 @@ export default function TraderProfileClient({ data, serverTraderData, claimedUse
               }}
             >
               <Box className="stagger-enter" style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[6] }}>
+                {/* Aggregated stats card (only when "All" tab is active and user has 2+ accounts) */}
+                {hasMultipleAccounts && activeAccount === 'all' && aggregatedData && (
+                  <AggregatedStats
+                    combinedPnl={aggregatedData.combinedPnl}
+                    bestRoi={aggregatedData.bestRoi}
+                    weightedScore={aggregatedData.weightedScore}
+                    accounts={linkedAccounts.map(a => ({
+                      platform: a.platform,
+                      traderKey: a.traderKey,
+                      handle: a.handle,
+                      label: a.label,
+                      roi: a.roi,
+                      pnl: a.pnl,
+                      arenaScore: a.arenaScore,
+                    }))}
+                  />
+                )}
+
                 {traderPerformance ? (
                   <OverviewPerformanceCard
                     performance={traderPerformance as ExtendedPerformance}

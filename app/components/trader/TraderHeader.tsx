@@ -14,6 +14,7 @@ import { formatDisplayName } from '@/app/components/ranking/utils'
 import { ProBadgeOverlay } from '../ui/ProBadge'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import { useToast } from '@/app/components/ui/Toast'
+import ExchangeLogo from '../ui/ExchangeLogo'
 import TraderFollowButton from '../ui/TraderFollowButton'
 import UserFollowButton from '../ui/UserFollowButton'
 import ShareButton from '../common/ShareButton'
@@ -68,6 +69,10 @@ interface TraderHeaderProps {
   claimedBio?: string | null
   /** Avatar URL from claimed user profile (preferred over exchange avatar) */
   claimedAvatarUrl?: string | null
+  /** Number of linked accounts (for multi-account users) */
+  linkedAccountCount?: number
+  /** Platforms of linked accounts (for showing exchange badges) */
+  linkedPlatforms?: string[]
 }
 
 // Helpers extracted to ./TraderHeaderHelpers.tsx
@@ -113,6 +118,8 @@ export default function TraderHeader({
   lastUpdated,
   claimedBio,
   claimedAvatarUrl,
+  linkedAccountCount,
+  linkedPlatforms,
 }: TraderHeaderProps): React.ReactElement {
   const [userId, setUserId] = useState<string | null>(externalUserId ?? null)
   const [mounted, setMounted] = useState(false)
@@ -175,6 +182,9 @@ export default function TraderHeader({
 
   // Build subtitle parts for the second line
   const subtitleParts: string[] = []
+  if (linkedAccountCount && linkedAccountCount >= 2) {
+    subtitleParts.push(`${linkedAccountCount} verified accounts`)
+  }
   if (followerCount > 0) subtitleParts.push(`${followerCount.toLocaleString()} ${t('arenaFollowers') || 'followers'}`)
   if (copiers !== undefined && copiers > 0) subtitleParts.push(`${copiers.toLocaleString()} ${t('copiers')}`)
   if (aum !== undefined && aum > 0) subtitleParts.push(`AUM ${formatAum(aum)}`)
@@ -365,6 +375,35 @@ export default function TraderHeader({
             )}
 
             {getSourceCategory(source) === 'web3' && <Web3VerifiedBadge key="web3" size="sm" />}
+
+            {/* Linked exchange badges for multi-account users */}
+            {linkedPlatforms && linkedPlatforms.length >= 2 && (
+              <Box
+                key="linked-exchanges"
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 2,
+                  marginLeft: 4,
+                  padding: '2px 6px',
+                  background: `${tokens.colors.accent.primary}10`,
+                  borderRadius: tokens.radius.full,
+                  border: `1px solid ${tokens.colors.accent.primary}25`,
+                }}
+                title={`${linkedPlatforms.length} linked accounts`}
+              >
+                {[...new Set(linkedPlatforms)].slice(0, 5).map((p) => (
+                  <Box key={p} style={{ width: 14, height: 14, borderRadius: '50%', overflow: 'hidden', flexShrink: 0 }}>
+                    <ExchangeLogo exchange={p} size={14} />
+                  </Box>
+                ))}
+                {[...new Set(linkedPlatforms)].length > 5 && (
+                  <Text size="xs" style={{ color: tokens.colors.text.tertiary, fontSize: 9 }}>
+                    +{[...new Set(linkedPlatforms)].length - 5}
+                  </Text>
+                )}
+              </Box>
+            )}
           </Box>
 
           {/* Line 2: Subtitle — followers, copiers, rank, updated */}
