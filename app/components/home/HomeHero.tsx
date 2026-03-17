@@ -1,11 +1,11 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import Link from 'next/link'
 import { tokens } from '@/lib/design-tokens'
 import { useLanguage } from '../Providers/LanguageProvider'
 import { supabase } from '@/lib/supabase/client'
-
-const HERO_SEEN_KEY = 'arena_hero_seen'
+import { t } from '@/lib/i18n'
 
 function formatCount(n: number): string {
   if (n >= 1000) return `${Math.floor(n / 1000)}K+`
@@ -13,20 +13,14 @@ function formatCount(n: number): string {
 }
 
 export default function HomeHero() {
-  const { language } = useLanguage()
-  const [show, setShow] = useState(false)
-  const [traderCount, setTraderCount] = useState('—')
-  const [exchangeCount, setExchangeCount] = useState('—')
+  useLanguage() // subscribe to language changes for re-render
+  const [traderCount, setTraderCount] = useState('34K+')
+  const [exchangeCount, setExchangeCount] = useState('27+')
 
   useEffect(() => {
-    if (!sessionStorage.getItem(HERO_SEEN_KEY)) {
-      setShow(true)
-    }
-    // Get trader count (head:true avoids fetching rows)
     supabase.from('trader_sources').select('*', { count: 'exact', head: true })
       .then(({ count }) => { if (count) setTraderCount(formatCount(count)) })
 
-    // Get exchange count from leaderboard_ranks (always has fresh data)
     supabase.from('leaderboard_ranks').select('source').eq('season_id', '90D').limit(10000)
       .then(({ data }) => {
         if (data) {
@@ -38,112 +32,132 @@ export default function HomeHero() {
       })
   }, [])
 
-  if (!show) return null
-
-  const dismiss = () => {
-    setShow(false)
-    sessionStorage.setItem(HERO_SEEN_KEY, '1')
-  }
+  const subtitle = t('heroSubtitle' as Parameters<typeof t>[0])
+    .replace('{exchanges}', exchangeCount.replace('+', ''))
+    .replace('{traders}', traderCount)
 
   return (
-    <div
+    <section
       style={{
-        padding: `${tokens.spacing[8]} ${tokens.spacing[6]}`,
-        marginBottom: tokens.spacing[4],
-        background: `linear-gradient(135deg, var(--color-accent-primary-08) 0%, transparent 50%, var(--color-accent-primary-08) 100%)`,
+        padding: `${tokens.spacing[6]} ${tokens.spacing[6]} ${tokens.spacing[5]}`,
+        marginBottom: tokens.spacing[3],
+        background: 'linear-gradient(135deg, var(--color-accent-primary-08) 0%, transparent 60%, var(--color-accent-primary-05, rgba(139,111,168,0.05)) 100%)',
         borderRadius: tokens.radius.xl,
         border: '1px solid var(--color-border-primary)',
         position: 'relative',
-        textAlign: 'center',
+        overflow: 'hidden',
+        maxHeight: 200,
       }}
     >
-      <button
-        onClick={dismiss}
+      {/* Subtle decorative gradient orb */}
+      <div
+        aria-hidden="true"
         style={{
           position: 'absolute',
-          top: 12,
-          right: 12,
-          background: 'none',
-          border: 'none',
-          color: 'var(--color-text-tertiary)',
-          cursor: 'pointer',
-          fontSize: 18,
-          lineHeight: 1,
-          padding: 4,
-          minWidth: 44,
-          minHeight: 44,
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
+          top: -60,
+          right: -40,
+          width: 200,
+          height: 200,
+          borderRadius: '50%',
+          background: 'radial-gradient(circle, rgba(139,111,168,0.12) 0%, transparent 70%)',
+          pointerEvents: 'none',
         }}
-        aria-label="Dismiss"
-      >
-        ×
-      </button>
-
-      <h2 style={{
-        fontSize: tokens.typography.fontSize['2xl'],
-        fontWeight: tokens.typography.fontWeight.black,
-        color: 'var(--color-text-primary)',
-        marginBottom: tokens.spacing[2],
-        lineHeight: tokens.typography.lineHeight.tight,
-      }}>
-        {language === 'zh'
-          ? '发现全球顶尖加密交易员'
-          : 'Discover the World\'s Top Crypto Traders'}
-      </h2>
-
-      <p style={{
-        fontSize: tokens.typography.fontSize.base,
-        color: 'var(--color-text-secondary)',
-        marginBottom: tokens.spacing[5],
-        maxWidth: 560,
-        margin: `0 auto ${tokens.spacing[5]}`,
-        lineHeight: tokens.typography.lineHeight.normal,
-      }}>
-        {language === 'zh'
-          ? `跨 ${exchangeCount} 交易所追踪 ${traderCount} 交易员表现，用 Arena Score 找到最优秀的交易员`
-          : `Track ${traderCount} traders across ${exchangeCount} exchanges. Find top performers with Arena Score.`}
-      </p>
+      />
 
       <div style={{
         display: 'flex',
-        justifyContent: 'center',
-        gap: 'clamp(16px, 4vw, 32px)',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        gap: tokens.spacing[6],
         flexWrap: 'wrap',
+        position: 'relative',
+        zIndex: 1,
       }}>
-        {[
-          { value: traderCount, label: language === 'zh' ? '交易员' : 'Traders' },
-          { value: exchangeCount, label: language === 'zh' ? '交易所' : 'Exchanges' },
-          { value: '24/7', label: language === 'zh' ? '实时更新' : 'Live Data' },
-        ].map((stat) => (
-          <div key={stat.label} style={{ textAlign: 'center' }}>
-            <div style={{
-              fontSize: tokens.typography.fontSize.xl,
-              fontWeight: tokens.typography.fontWeight.black,
-              color: 'var(--color-accent-primary)',
-              fontVariantNumeric: 'tabular-nums',
-              ...(stat.value === '—' ? {
-                animation: 'hero-pulse 1.5s ease-in-out infinite',
-                borderRadius: 4,
-                minWidth: 40,
-              } : {}),
-            }}>
-              {stat.value}
+        {/* Left: Headline + subtitle */}
+        <div style={{ flex: '1 1 400px', minWidth: 0 }}>
+          <h2 style={{
+            fontSize: 'clamp(18px, 2.5vw, 24px)',
+            fontWeight: tokens.typography.fontWeight.black,
+            color: 'var(--color-text-primary)',
+            marginBottom: tokens.spacing[1],
+            lineHeight: tokens.typography.lineHeight.tight,
+          }}>
+            {t('heroHeadline' as Parameters<typeof t>[0])}
+          </h2>
+
+          <p style={{
+            fontSize: tokens.typography.fontSize.sm,
+            color: 'var(--color-text-secondary)',
+            lineHeight: tokens.typography.lineHeight.normal,
+            margin: 0,
+            maxWidth: 480,
+          }}>
+            {subtitle}
+          </p>
+        </div>
+
+        {/* Right: Stats row */}
+        <div style={{
+          display: 'flex',
+          gap: 'clamp(16px, 3vw, 32px)',
+          flexShrink: 0,
+        }}>
+          {[
+            { value: traderCount, label: t('heroStatTraders' as Parameters<typeof t>[0]) },
+            { value: exchangeCount, label: t('heroStatExchanges' as Parameters<typeof t>[0]) },
+            { value: '30m', label: t('heroStatUpdated' as Parameters<typeof t>[0]) },
+          ].map((stat) => (
+            <div key={stat.label} style={{ textAlign: 'center' }}>
+              <div style={{
+                fontSize: tokens.typography.fontSize.xl,
+                fontWeight: tokens.typography.fontWeight.bold,
+                color: 'var(--color-accent-primary)',
+                fontVariantNumeric: 'tabular-nums',
+                lineHeight: 1.2,
+              }}>
+                {stat.value}
+              </div>
+              <div style={{
+                fontSize: tokens.typography.fontSize.xs,
+                color: 'var(--color-text-tertiary)',
+                textTransform: 'uppercase',
+                letterSpacing: '0.05em',
+                fontWeight: 500,
+                whiteSpace: 'nowrap',
+              }}>
+                {stat.label}
+              </div>
             </div>
-            <div style={{
-              fontSize: tokens.typography.fontSize.xs,
-              color: 'var(--color-text-tertiary)',
-              textTransform: 'uppercase',
-              letterSpacing: '0.05em',
-              fontWeight: 600,
-            }}>
-              {stat.label}
-            </div>
-          </div>
-        ))}
+          ))}
+        </div>
       </div>
-      <style>{`@keyframes hero-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.3; } }`}</style>
-    </div>
+
+      {/* Pro CTA badge */}
+      <Link
+        href="/pricing"
+        style={{
+          display: 'inline-flex',
+          alignItems: 'center',
+          gap: 6,
+          marginTop: tokens.spacing[3],
+          padding: '4px 12px',
+          fontSize: tokens.typography.fontSize.xs,
+          color: 'var(--color-pro-gradient-start, #a78bfa)',
+          background: 'var(--color-pro-glow, rgba(167,139,250,0.1))',
+          border: '1px solid var(--color-pro-border, rgba(167,139,250,0.25))',
+          borderRadius: tokens.radius.full,
+          textDecoration: 'none',
+          transition: tokens.transition.fast,
+          position: 'relative',
+          zIndex: 1,
+          fontWeight: 500,
+        }}
+      >
+        <svg width={12} height={12} viewBox="0 0 24 24" fill="currentColor" style={{ flexShrink: 0 }}>
+          <path d="M12 2L15.09 8.26L22 9.27L17 14.14L18.18 21.02L12 17.77L5.82 21.02L7 14.14L2 9.27L8.91 8.26L12 2Z" />
+        </svg>
+        {t('heroProBadge' as Parameters<typeof t>[0])}
+      </Link>
+    </section>
   )
 }
