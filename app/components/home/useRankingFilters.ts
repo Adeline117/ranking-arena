@@ -22,8 +22,8 @@ const LS_KEY_PRESET = 'ranking-preset'
 const LS_KEY_EXCHANGE = 'ranking-exchange'
 const LS_KEY_FILTER_CONFIG = 'ranking-filter-config'
 
-// Free users: limit to top 100 traders
-export const FREE_LEADERBOARD_LIMIT = 100
+// Free users: show up to 1000 traders (beta — showcase platform depth)
+export const FREE_LEADERBOARD_LIMIT = 1000
 
 // Helper to get stored preferences
 function getStoredPreferences() {
