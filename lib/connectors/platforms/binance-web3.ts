@@ -93,11 +93,12 @@ export class BinanceWeb3Connector extends BaseConnector {
             data = await this.request<BinanceWeb3Response>(url, { headers })
           } catch { /* direct may be geo-blocked with empty 200 */ }
           // Binance returns 200 with empty body for geo-blocked requests — fallback to VPS
-          if (!data?.data?.list?.length) {
+          if (!data?.data?.list?.length && !(data?.data as Record<string, unknown>)?.data) {
             data = await this.proxyViaVPS<BinanceWeb3Response>(url, { headers }) || data
           }
 
-          const list = data?.data?.list || []
+          // API returns both { data: { list: [...] } } and { data: { data: [...] } } formats
+          const list = data?.data?.list || (data?.data as Record<string, unknown>)?.data as BinanceWeb3Entry[] || []
           if (!list.length) break
 
           for (const entry of list) {
