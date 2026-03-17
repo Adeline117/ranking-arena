@@ -212,6 +212,7 @@ export default function HotDiscussions({ limit = 8 }: { limit?: number }) {
               <Link
                 key={post.id}
                 href={`/post/${post.id}`}
+                prefetch={true}
                 style={{
                   display: 'flex',
                   flexDirection: 'column',

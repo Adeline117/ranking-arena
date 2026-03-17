@@ -19,17 +19,8 @@ import type { PlatformConnector } from './types'
 type AnyConnector = any
 import { TokenBucketRateLimiter } from './rate-limiter'
 
-// Legacy connector imports (deprecated — kept for run-worker backward compat)
-import { BinanceFuturesConnector } from './_deprecated/binance-futures'
-import { BinanceSpotConnector } from './_deprecated/binance-spot'
-import { BybitConnector } from './_deprecated/bybit'
-import { BitgetFuturesConnector } from './_deprecated/bitget-futures'
-import { OKXConnector } from './_deprecated/okx'
-import { MEXCConnector } from './_deprecated/mexc'
-// import { KuCoinConnector } from './_deprecated/kucoin' // DEAD
-import { HyperliquidConnector } from './_deprecated/hyperliquid'
-import { CoinExConnector } from './_deprecated/coinex'
-import { BitgetSpotConnector } from './_deprecated/bitget-spot'
+// Legacy connector imports removed — _deprecated directory was deleted.
+// Legacy getConnector() now returns null for all platforms.
 
 // ============================================
 // New ConnectorRegistry (multi-exchange)
@@ -259,30 +250,9 @@ export function getConnector(platform: GranularPlatform): AnyConnector | null {
   return connector
 }
 
-function createLegacyConnector(platform: GranularPlatform): AnyConnector | null {
-  switch (platform) {
-    case 'binance_futures':
-      return new BinanceFuturesConnector()
-    // binance_spot: PERMANENTLY REMOVED (2026-03-14) - repeatedly hangs 45-76min, blocks entire pipeline
-    case 'bybit':
-      return new BybitConnector()
-    case 'bitget_futures':
-      return new BitgetFuturesConnector()
-    case 'bitget_spot':
-      return new BitgetSpotConnector()
-    case 'okx':
-      return new OKXConnector()
-    case 'mexc':
-      return new MEXCConnector()
-    case 'kucoin':
-      return null // DEAD: APIs 404 since 2026-03
-    case 'hyperliquid':
-      return new HyperliquidConnector()
-    case 'coinex':
-      return new CoinExConnector()
-    default:
-      return null
-  }
+function createLegacyConnector(_platform: GranularPlatform): AnyConnector | null {
+  // All legacy connectors removed — use connectorRegistry (new-style) instead.
+  return null
 }
 
 /** Get list of platforms with implemented legacy connectors */
