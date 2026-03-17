@@ -116,6 +116,21 @@ export async function GET(request: NextRequest) {
 }
 
 async function ensureSystemUser(supabase: AnySupabase) {
+  // Must exist in auth.users first (user_activities trigger has FK to auth.users)
+  const { data: authUser } = await supabase.auth.admin.getUserById(SYSTEM_USER_ID)
+  if (!authUser?.user) {
+    const { error: authErr } = await supabase.auth.admin.createUser({
+      id: SYSTEM_USER_ID,
+      email: 'arena-bot@arenafi.org',
+      email_confirm: true,
+      user_metadata: { handle: SYSTEM_HANDLE, display_name: SYSTEM_DISPLAY_NAME },
+    } as Parameters<typeof supabase.auth.admin.createUser>[0])
+    if (authErr && !authErr.message.includes('already')) {
+      console.warn('Could not create system auth user:', authErr.message)
+    }
+  }
+
+  // Then ensure user_profiles entry
   const { data: existing } = await supabase
     .from('user_profiles')
     .select('id')
@@ -123,7 +138,6 @@ async function ensureSystemUser(supabase: AnySupabase) {
     .maybeSingle()
 
   if (!existing) {
-    // Create system user profile
     const { error } = await supabase
       .from('user_profiles')
       .upsert({
@@ -136,8 +150,6 @@ async function ensureSystemUser(supabase: AnySupabase) {
       }, { onConflict: 'id' })
 
     if (error) {
-      // Non-fatal: user_profiles may have auth constraints
-      // The post can still be created with author_handle fallback
       console.warn('Could not create system user profile:', error.message)
     }
   }

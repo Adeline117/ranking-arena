@@ -82,20 +82,25 @@ export class BtccFuturesConnector extends BaseConnector {
 
     for (let page = 1; page <= maxPages; page++) {
       try {
-        const data = await this.request<BtccResponse>(
-          'https://www.btcc.com/documentary/trader/page',
-          {
+        const url = 'https://www.btcc.com/documentary/trader/page'
+        const reqBody = { pageNum: page, pageSize, sortType: 4, nickName: '', flag: 'en-US' }
+        let data: BtccResponse
+        try {
+          data = await this.request<BtccResponse>(url, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              pageNum: page,
-              pageSize,
-              sortType: 4,
-              nickName: '',
-              flag: 'en-US',
-            }),
-          }
-        )
+            body: JSON.stringify(reqBody),
+          })
+        } catch {
+          // Direct API may be WAF-blocked from Vercel — fallback to VPS proxy
+          const vpsData = await this.proxyViaVPS<BtccResponse>(url, {
+            method: 'POST',
+            body: reqBody,
+            headers: { 'Content-Type': 'application/json' },
+          })
+          if (!vpsData) throw new Error('Both direct API and VPS proxy failed for btcc')
+          data = vpsData
+        }
 
         // Handle multiple response formats
         // Handle both formats: top-level { rows } and nested { data: { rows } }
