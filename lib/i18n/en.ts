@@ -2754,9 +2754,14 @@ const en = {
     faqNoResults: 'No matching questions found. Try different keywords.',
 
     // Hero section
-    heroSubtitle: 'Arena ranks everything in crypto',
+    heroHeadline: "Track the World's Best Crypto Traders",
+    heroSubtitle: 'Real-time rankings across {exchanges} exchanges. {traders} traders ranked by Arena Score.',
     heroCTABrowse: 'Browse Rankings',
     heroCTASignUp: 'Sign Up Free',
+    heroStatTraders: 'Traders',
+    heroStatExchanges: 'Exchanges',
+    heroStatUpdated: 'Updated Every 30min',
+    heroProBadge: 'Go Pro — Unlock All Traders & Advanced Filters',
 
     // Rankings search
     rankingsSearchPlaceholder: 'Search traders by name...',
