@@ -55,8 +55,14 @@ const DEX_PLATFORMS = [
   'jupiter_perps', 'drift',
 ]
 
+const SOLANA_PLATFORMS = ['jupiter_perps', 'drift']
+
 function isDex(source: string): boolean {
   return DEX_PLATFORMS.some(p => source.toLowerCase() === p)
+}
+
+function isSolanaDex(source: string): boolean {
+  return SOLANA_PLATFORMS.some(p => source.toLowerCase() === p)
 }
 
 // ============================================
@@ -270,7 +276,7 @@ function StatsSection() {
           fontWeight: 800,
           color: tokens.colors.accent.primary,
         }}>
-          30K+
+          34K+
         </Text>
         <Text style={{ color: tokens.colors.text.secondary, fontSize: tokens.typography.fontSize.sm }}>
           {t('claimPageTotalTraders')}
@@ -451,6 +457,18 @@ function CexVerifyForm({
         {t('claimApiKeyVerifyDesc')}
       </p>
 
+      <Box style={{
+        padding: tokens.spacing[3],
+        backgroundColor: tokens.colors.accent.primary + '15',
+        border: `1px solid ${tokens.colors.accent.primary}40`,
+        borderRadius: tokens.radius.md,
+        marginBottom: tokens.spacing[4],
+      }}>
+        <Text style={{ fontSize: tokens.typography.fontSize.xs, color: tokens.colors.text.secondary, lineHeight: 1.5, fontWeight: 600 }}>
+          {t('claimReadOnlyWarning')}
+        </Text>
+      </Box>
+
       <Box style={{ marginBottom: tokens.spacing[3] }}>
         <label style={{ display: 'block', marginBottom: tokens.spacing[1], fontWeight: 500, fontSize: tokens.typography.fontSize.sm }}>
           API Key
@@ -558,6 +576,8 @@ function DexVerifyForm({
   const { showToast } = useToast()
   const [loading, setLoading] = useState(false)
 
+  const isSolana = isSolanaDex(trader.source)
+
   const handleWalletVerify = async () => {
     setLoading(true)
     try {
@@ -567,34 +587,56 @@ function DexVerifyForm({
         return
       }
 
-      // Request wallet signature via window.ethereum or Privy
-      if (!window.ethereum) {
-        showToast(t('claimWalletConnectFirst'), 'warning')
-        return
-      }
-
-      const accounts = await window.ethereum.request({ method: 'eth_requestAccounts' }) as string[]
-      const walletAddress = accounts[0]
-
-      if (!walletAddress) {
-        showToast(t('claimWalletConnectFirst'), 'warning')
-        return
-      }
-
-      // Check wallet matches trader
-      if (walletAddress.toLowerCase() !== trader.source_trader_id.toLowerCase()) {
-        showToast(t('claimWalletMismatch'), 'error')
-        return
-      }
-
+      let walletAddress: string
+      let signature: string
       const timestamp = Date.now()
       const message = `I am claiming trader profile ${trader.source_trader_id} on Arena. Timestamp: ${timestamp}`
 
-      // Sign message
-      const signature = await window.ethereum.request({
-        method: 'personal_sign',
-        params: [message, walletAddress],
-      }) as string
+      if (isSolana) {
+        // Solana wallet signing (Phantom, Solflare, etc.)
+        const solanaProvider = (window as any).phantom?.solana || (window as any).solana
+        if (!solanaProvider?.isPhantom && !solanaProvider?.signMessage) {
+          showToast(t('claimSolanaWalletRequired'), 'warning')
+          return
+        }
+
+        const resp = await solanaProvider.connect()
+        walletAddress = resp.publicKey.toString()
+
+        if (walletAddress.toLowerCase() !== trader.source_trader_id.toLowerCase()) {
+          showToast(t('claimWalletMismatch'), 'error')
+          return
+        }
+
+        const encodedMessage = new TextEncoder().encode(message)
+        const signedMessage = await solanaProvider.signMessage(encodedMessage, 'utf8')
+        // Convert Uint8Array signature to base64 for transmission
+        signature = Buffer.from(signedMessage.signature).toString('base64')
+      } else {
+        // EVM wallet signing
+        if (!window.ethereum) {
+          showToast(t('claimWalletConnectFirst'), 'warning')
+          return
+        }
+
+        const accounts = await window.ethereum.request({ method: 'eth_requestAccounts' }) as string[]
+        walletAddress = accounts[0]
+
+        if (!walletAddress) {
+          showToast(t('claimWalletConnectFirst'), 'warning')
+          return
+        }
+
+        if (walletAddress.toLowerCase() !== trader.source_trader_id.toLowerCase()) {
+          showToast(t('claimWalletMismatch'), 'error')
+          return
+        }
+
+        signature = await window.ethereum.request({
+          method: 'personal_sign',
+          params: [message, walletAddress],
+        }) as string
+      }
 
       // Verify on server
       const verifyRes = await fetch('/api/traders/claim/verify-wallet', {
@@ -602,6 +644,7 @@ function DexVerifyForm({
         headers: {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${session.access_token}`,
+          ...getCsrfHeaders(),
         },
         body: JSON.stringify({
           wallet_address: walletAddress,
@@ -972,7 +1015,7 @@ export default function ClaimPage() {
                   fontSize: tokens.typography.fontSize.sm,
                 }}
               >
-                Change
+                {t('change')}
               </button>
             </Box>
 
@@ -1029,7 +1072,7 @@ export default function ClaimPage() {
               {t('claimVerifiedAutoApproved')}
             </h2>
             <Text style={{ color: tokens.colors.text.secondary, marginBottom: tokens.spacing[4] }}>
-              Redirecting to your profile...
+              {t('redirectingToProfile')}
             </Text>
             {linkedTraders.length > 0 && (
               <LinkedAccountsSidebar

@@ -98,7 +98,7 @@ export async function POST(req: NextRequest) {
       is_active: true,
       last_sync_status: 'pending',
       updated_at: new Date().toISOString(),
-      ...(encryptedPassphrase ? { access_token_encrypted: encryptedPassphrase } : {}),
+      ...(encryptedPassphrase ? { passphrase_encrypted: encryptedPassphrase } : {}),
     }
 
     if (existing) {
