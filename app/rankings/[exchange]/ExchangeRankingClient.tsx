@@ -12,7 +12,8 @@ import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import { NULL_DISPLAY } from '@/lib/utils/format'
 import { getScoreColor } from '@/lib/utils/score-colors'
 import { formatTimeAgo, type Locale } from '@/lib/utils/date'
-import ShareLeaderboardButton from './ShareLeaderboardButton'
+import dynamic from 'next/dynamic'
+const ShareLeaderboardButton = dynamic(() => import('./ShareLeaderboardButton'), { ssr: false })
 
 interface TraderData {
   trader_key: string
