@@ -33,6 +33,7 @@ const OnChainBadge = dynamic(() => import('./OnChainBadge').then(m => ({ default
 const Web3VerifiedBadge = dynamic(() => import('./Web3VerifiedBadge').then(m => ({ default: m.Web3VerifiedBadge })), { ssr: false })
 const BadgeDisplay = dynamic(() => import('./BadgeDisplay').then(m => ({ default: m.BadgeDisplay })), { ssr: false })
 const VerifiedBadge = dynamic(() => import('./VerifiedBadge'), { ssr: false })
+const RankTrendSparkline = dynamic(() => import('./RankTrendSparkline'), { ssr: false })
 
 interface TraderHeaderProps {
   handle: string
@@ -66,6 +67,10 @@ interface TraderHeaderProps {
   isBot?: boolean
   /** Last data update timestamp (ISO string) for "Updated X ago" display */
   lastUpdated?: string | null
+  /** Platform for rank trend API */
+  platform?: string
+  /** Trader key for rank trend API */
+  traderKey?: string
   /** Bio from claimed user profile */
   claimedBio?: string | null
   /** Avatar URL from claimed user profile (preferred over exchange avatar) */
@@ -121,6 +126,8 @@ export default function TraderHeader({
   claimedAvatarUrl,
   linkedAccountCount,
   linkedPlatforms,
+  platform,
+  traderKey,
 }: TraderHeaderProps): React.ReactElement {
   const [userId, setUserId] = useState<string | null>(externalUserId ?? null)
   const [mounted, setMounted] = useState(false)
@@ -376,6 +383,11 @@ export default function TraderHeader({
             )}
 
             {getSourceCategory(source) === 'web3' && <Web3VerifiedBadge key="web3" size="sm" />}
+
+            {/* Arena Score 30D trend sparkline */}
+            {platform && traderKey && (
+              <RankTrendSparkline platform={platform} traderKey={traderKey} width={100} height={28} />
+            )}
 
             {/* Linked exchange badges for multi-account users */}
             {linkedPlatforms && linkedPlatforms.length >= 2 && (

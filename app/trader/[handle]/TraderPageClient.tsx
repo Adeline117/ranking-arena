@@ -303,6 +303,8 @@ function TraderContent({ handle, serverData }: { handle: string; serverData: Tra
           currentUserId={currentUserId}
           isBot={profile.source === 'web3_bot' || !!(profile as unknown as { is_bot?: boolean }).is_bot}
           lastUpdated={traderData?.trackedSince}
+          platform={profile.source}
+          traderKey={profile.trader_key || profile.handle || handle}
         />
 
         {/* Alert Config (Pro only) */}
