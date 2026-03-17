@@ -49,7 +49,7 @@ export async function GET(req: Request) {
     const { data: traders, error: queryError } = await supabase
       .from('leaderboard_ranks')
       .select('source_trader_id')
-      .eq('platform', 'binance_futures')
+      .eq('source', 'binance_futures')
       .eq('season_id', '90D')
       .order('arena_score', { ascending: false })
       .limit(50)
