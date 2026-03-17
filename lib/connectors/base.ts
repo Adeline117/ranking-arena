@@ -399,7 +399,7 @@ export abstract class BaseConnector implements PlatformConnector {
         response = await fetch(scraperUrl, {
           method: 'GET',
           headers: { 'X-Proxy-Key': vpsKey, 'Accept': 'application/json' },
-          signal: AbortSignal.timeout(Math.min(timeoutMs, 30000)),
+          signal: AbortSignal.timeout(timeoutMs), // Allow full timeout for scraper (was capped at 30s)
         });
       } catch {
         // Port 3457 might be firewalled from Vercel — try routing through proxy
