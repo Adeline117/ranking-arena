@@ -3854,6 +3854,7 @@ const ko = {
     footerAbout: '소개',
     footerRankings: '순위',
     footerMarket: '시장',
+    footerPricing: '요금제',
     footerLibrary: '라이브러리',
     footerGroups: '그룹',
     footerHot: '인기',
@@ -4500,6 +4501,11 @@ const ko = {
     verifiedTraderTelegram: 'Telegram',
     verifiedTraderDiscord: 'Discord',
     verifiedTraderWebsite: '웹사이트',
+
+    // Number formatting
+    numberFormatThousand: '천',
+    numberFormatMillion: '백만',
+    numberFormatBillion: '십억',
 
 } as const
 
