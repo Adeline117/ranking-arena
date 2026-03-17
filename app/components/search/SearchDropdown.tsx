@@ -78,6 +78,7 @@ const CATEGORY_CONFIG = {
   posts: { icon: 'P', labelZh: '帖子', labelEn: 'Posts', color: 'var(--color-score-profitability)' },
   library: { icon: 'L', labelZh: '资料库', labelEn: 'Library', color: 'var(--color-score-great)' },
   users: { icon: 'U', labelZh: '用户', labelEn: 'Users', color: 'var(--color-score-average)' },
+  groups: { icon: 'G', labelZh: '小组', labelEn: 'Groups', color: 'var(--color-score-average)' },
 } as const
 
 type CategoryKey = keyof typeof CATEGORY_CONFIG
@@ -113,6 +114,7 @@ export default function SearchDropdown({ open, query, onClose }: SearchDropdownP
         ...(features.social ? searchData.results.posts : []),
         ...searchData.results.library,
         ...(features.social ? searchData.results.users : []),
+        ...(features.social ? (searchData.results.groups || []) : []),
       ]
     : [], [searchData])
 
@@ -297,7 +299,7 @@ export default function SearchDropdown({ open, query, onClose }: SearchDropdownP
       } finally {
         if (!controller.signal.aborted) setSearching(false)
       }
-    }, 200)
+    }, 300)
 
     return () => {
       clearTimeout(searchTimer)
@@ -381,7 +383,7 @@ export default function SearchDropdown({ open, query, onClose }: SearchDropdownP
     if (!searchData) return 0
     // Order must match flatResults and rendered order; skip social categories when disabled
     const order: CategoryKey[] = features.social
-      ? ['traders', 'posts', 'library', 'users']
+      ? ['traders', 'posts', 'library', 'users', 'groups']
       : ['traders', 'library']
     let offset = 0
     for (const key of order) {
@@ -558,6 +560,7 @@ export default function SearchDropdown({ open, query, onClose }: SearchDropdownP
               {features.social && renderCategoryResults('posts', searchData.results.posts)}
               {renderCategoryResults('library', searchData.results.library)}
               {features.social && renderCategoryResults('users', searchData.results.users)}
+              {features.social && renderCategoryResults('groups', searchData.results.groups || [])}
               <Link href={`/search?q=${encodeURIComponent(query)}`} style={{ textDecoration: 'none' }} onClick={handleResultClick}>
                 <Box
                   style={{ padding: `${tokens.spacing[3]} ${tokens.spacing[4]}`, textAlign: 'center', cursor: 'pointer' }}
