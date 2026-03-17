@@ -23,7 +23,7 @@ export default function MediaPreview({ preview, onClose, t }: MediaPreviewProps)
       onClick={onClose}
       style={{
         position: 'fixed', inset: 0, background: 'var(--color-backdrop-heavy)',
-        zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer',
+        zIndex: tokens.zIndex.max, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer',
       }}
     >
       <button onClick={onClose} aria-label="Close preview" style={{

@@ -373,7 +373,7 @@ export function ArenaScoreCircle({
         border: `1px solid ${tokens.colors.border.primary}`,
         borderRadius: tokens.radius.md,
         boxShadow: tokens.shadow.lg,
-        zIndex: 10001,
+        zIndex: tokens.zIndex.tooltip,
         whiteSpace: 'nowrap',
         fontSize: tokens.typography.fontSize.xs,
         lineHeight: 1.9,

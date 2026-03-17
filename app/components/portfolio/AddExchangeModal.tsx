@@ -154,7 +154,7 @@ const styles: Record<string, React.CSSProperties> = {
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
-    zIndex: 1000,
+    zIndex: tokens.zIndex.modal,
     padding: '16px',
   },
   modal: {

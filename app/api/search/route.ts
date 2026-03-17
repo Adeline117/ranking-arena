@@ -357,11 +357,12 @@ export const GET = withPublic(
         title: `@${t.handle || t.traderKey}`,
         subtitle,
         href: `/trader/${encodeURIComponent(t.handle || t.traderKey)}?platform=${t.platform}`,
+        avatar: t.avatarUrl || null,
         meta: {
           ...(isBot ? { is_bot: true } : {}),
           ...(t.roi != null ? { roi: t.roi } : {}),
           ...(t.arenaScore != null ? { arena_score: t.arenaScore } : {}),
-          ...(t.avatarUrl ? { avatar_url: t.avatarUrl } : {}),
+          platform: t.platform,
         },
       }
     })
