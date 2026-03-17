@@ -49,7 +49,7 @@ export default function LinkedAccountTabs({
     alignItems: 'center',
     gap: 6,
     padding: '8px 14px',
-    borderRadius: 8,
+    borderRadius: tokens.radius.md,
     border: `1px solid ${isActive ? tokens.colors.accent.primary + '60' : tokens.colors.border.primary}`,
     background: isActive
       ? `${tokens.colors.accent.primary}15`

@@ -13,7 +13,7 @@ const styles = {
     padding: '24px',
     maxWidth: '1200px',
     margin: '0 auto',
-    fontFamily: '-apple-system, BlinkMacSystemFont, sans-serif',
+    fontFamily: tokens.typography.fontFamily.sans.join(', '),
   } as React.CSSProperties,
   header: {
     display: 'flex',
@@ -28,7 +28,7 @@ const styles = {
   } as React.CSSProperties,
   overallBadge: (health: number) => ({
     padding: '6px 16px',
-    borderRadius: '20px',
+    borderRadius: tokens.radius.full,
     fontSize: '14px',
     fontWeight: 600,
     color: 'var(--color-on-accent)',
@@ -60,7 +60,7 @@ const styles = {
   dot: (status: string) => ({
     width: '10px',
     height: '10px',
-    borderRadius: '50%',
+    borderRadius: tokens.radius.full,
     backgroundColor: status === 'healthy' ? 'var(--color-accent-success)' : status === 'degraded' ? 'var(--color-accent-warning)' : 'var(--color-accent-error)',
     display: 'inline-block',
   }) as React.CSSProperties,
@@ -95,7 +95,7 @@ const styles = {
   } as React.CSSProperties,
   refreshBtn: {
     padding: '6px 14px',
-    borderRadius: '6px',
+    borderRadius: tokens.radius.md,
     border: '1px solid var(--color-border-secondary)',
     backgroundColor: 'transparent',
     color: 'var(--color-text-tertiary)',
@@ -114,7 +114,7 @@ const styles = {
   } as React.CSSProperties,
   tab: (active: boolean) => ({
     padding: '6px 14px',
-    borderRadius: '6px',
+    borderRadius: tokens.radius.md,
     border: 'none',
     backgroundColor: active ? 'var(--color-bg-tertiary)' : 'transparent',
     color: active ? 'var(--color-text-primary)' : 'var(--color-text-tertiary)',

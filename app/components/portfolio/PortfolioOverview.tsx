@@ -2,6 +2,7 @@
 
 import React from 'react'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
+import { tokens } from '@/lib/design-tokens'
 
 interface SnapshotData {
   total_equity: number
@@ -110,7 +111,7 @@ const styles: Record<string, React.CSSProperties> = {
     flexDirection: 'column',
     gap: '4px',
     padding: '16px',
-    borderRadius: '12px',
+    borderRadius: tokens.radius.lg,
     backgroundColor: 'var(--color-bg-secondary)',
     border: '1px solid var(--color-border-primary)',
   },
@@ -128,7 +129,7 @@ const styles: Record<string, React.CSSProperties> = {
     flexDirection: 'column',
     gap: '8px',
     padding: '16px',
-    borderRadius: '12px',
+    borderRadius: tokens.radius.lg,
     backgroundColor: 'var(--color-bg-secondary)',
     border: '1px solid var(--color-border-primary)',
   },
@@ -142,7 +143,7 @@ const styles: Record<string, React.CSSProperties> = {
   },
   skeleton: {
     height: '200px',
-    borderRadius: '12px',
+    borderRadius: tokens.radius.lg,
     backgroundColor: 'var(--color-bg-tertiary)',
     animation: 'pulse 1.5s ease-in-out infinite',
   },
