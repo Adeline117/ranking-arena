@@ -84,7 +84,7 @@ const TradeRow = memo(function TradeRow({ trade, index }: { trade: NormalizedTra
       <span style={{
         display: 'inline-block',
         padding: '1px 5px',
-        borderRadius: 3,
+        borderRadius: tokens.radius.sm,
         background: exchBg,
         color: exchColor,
         fontWeight: 700,
@@ -221,7 +221,7 @@ export default function LiveTradesFeed() {
               color: tokens.colors.text.tertiary,
               fontWeight: 500,
               padding: '1px 6px',
-              borderRadius: 3,
+              borderRadius: tokens.radius.sm,
               background: tokens.colors.bg.tertiary,
             }}>
               {filteredTrades.length}{t('tradeCountSuffix')}
@@ -241,7 +241,7 @@ export default function LiveTradesFeed() {
                   padding: '1px 6px',
                   fontSize: 9,
                   fontWeight: 600,
-                  borderRadius: 3,
+                  borderRadius: tokens.radius.sm,
                   border: 'none',
                   cursor: 'pointer',
                   background: active ? EXCHANGE_BG[ex] : 'transparent',
@@ -341,7 +341,7 @@ export default function LiveTradesFeed() {
           color: tokens.colors.accent.warning,
           fontWeight: 600,
           padding: '2px 6px',
-          borderRadius: 3,
+          borderRadius: tokens.radius.sm,
           background: 'var(--color-orange-subtle)',
         }}>
           {t('tradePaused')}
