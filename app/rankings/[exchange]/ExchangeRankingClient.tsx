@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react'
 import Link from 'next/link'
 import { tokens } from '@/lib/design-tokens'
+import { avatarSrc } from '@/lib/utils/avatar-proxy'
 import { getAvatarGradient, getAvatarInitial, isWalletAddress, generateBlockieSvg } from '@/lib/utils/avatar'
 import { formatROI } from '@/app/components/ranking/utils'
 import { Sparkline } from '@/app/components/ui/Sparkline'
@@ -71,7 +72,7 @@ function TraderAvatarImg({ avatarUrl, traderKey, name, size = 32 }: { avatarUrl:
   // Trader avatars come from many CDNs that can't all be whitelisted
   return (
     <img
-      src={`/api/avatar?url=${encodeURIComponent(avatarUrl)}`}
+      src={avatarSrc(avatarUrl)}
       alt={name || 'Trader avatar'}
       width={size}
       height={size}
@@ -304,9 +305,6 @@ export default function ExchangeRankingClient({
   const [sortKey, setSortKey] = useState<SortKey>('rank')
   const [sortDir, setSortDir] = useState<SortDir>('asc')
   const [cardSortKey, setCardSortKey] = useState<CardSortKey>('rank')
-  const PAGE_SIZE = 50
-  const [page, setPage] = useState(1)
-
   // Live-updating traders state (starts from server props, updates via Realtime)
   const [traders, setTraders] = useState(initialTraders)
   useEffect(() => { setTraders(initialTraders) }, [initialTraders])
@@ -380,12 +378,7 @@ export default function ExchangeRankingClient({
     })
   }, [traders, cardSortKey])
 
-  // Reset page when sort changes
-  useEffect(() => { setPage(1) }, [sortKey, sortDir, cardSortKey])
-
   const activeTraders = viewMode === 'card' ? cardSortedTraders : sortedTraders
-  const totalPages = Math.ceil(activeTraders.length / PAGE_SIZE)
-  const pagedTraders = activeTraders.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE)
 
   // Auto-detect mobile
   useEffect(() => {
@@ -518,18 +511,18 @@ export default function ExchangeRankingClient({
             </select>
           </div>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: tokens.spacing[3], paddingBottom: tokens.spacing[4] }}>
-            {pagedTraders.map((t, i) => {
+            {activeTraders.map((t, i) => {
               const originalRank = rankMap.get(t) || 0
               return (
                 <TraderCardItem key={`${t.platform}:${t.trader_key}:${i}`} trader={t} rank={originalRank} />
               )
             })}
           </div>
-          {/* Showing X of Y indicator */}
+          {/* Total count */}
           <div style={{ textAlign: 'center', padding: `${tokens.spacing[3]} 0`, fontSize: 12, color: tokens.colors.text.tertiary }}>
             {zh
-              ? `${Math.min(page * PAGE_SIZE, activeTraders.length)} / ${activeTraders.length} 位交易员`
-              : `Showing ${Math.min(page * PAGE_SIZE, activeTraders.length)} of ${activeTraders.length} traders`}
+              ? `共 ${activeTraders.length} 位交易员`
+              : `${activeTraders.length} traders`}
           </div>
         </div>
       ) : (
@@ -582,7 +575,7 @@ export default function ExchangeRankingClient({
             <SortHeader label={t('rankingScore')} sortKey="arena_score" currentKey={sortKey} currentDir={sortDir} onSort={handleSort} />
           </div>
           {/* Rows */}
-          {pagedTraders.map((t, i) => {
+          {activeTraders.map((t, i) => {
             const name = getDisplayName(t)
             const roiColor = t.roi >= 0 ? tokens.colors.accent.success : tokens.colors.accent.error
             const wrColor = t.win_rate != null
@@ -673,50 +666,7 @@ export default function ExchangeRankingClient({
         </>
       )}
 
-      {/* Pagination */}
-      {totalPages > 1 && (
-        <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 12, marginTop: tokens.spacing[6] }}>
-          <button
-            disabled={page <= 1}
-            onClick={() => setPage(p => Math.max(1, p - 1))}
-            style={{
-              padding: '8px 16px',
-              minHeight: 44,
-              borderRadius: tokens.radius.md,
-              border: 'none',
-              fontSize: 13,
-              fontWeight: 600,
-              background: page <= 1 ? 'var(--glass-border-light)' : tokens.colors.accent.brand + '25',
-              color: page <= 1 ? tokens.colors.text.tertiary : tokens.colors.accent.brand,
-              cursor: page <= 1 ? 'not-allowed' : 'pointer',
-              opacity: page <= 1 ? 0.5 : 1,
-            }}
-          >
-            {t('rankingPrev')}
-          </button>
-          <span style={{ fontSize: 13, color: tokens.colors.text.secondary }}>
-            {page} / {totalPages}
-          </span>
-          <button
-            disabled={page >= totalPages}
-            onClick={() => setPage(p => Math.min(totalPages, p + 1))}
-            style={{
-              padding: '8px 16px',
-              minHeight: 44,
-              borderRadius: tokens.radius.md,
-              border: 'none',
-              fontSize: 13,
-              fontWeight: 600,
-              background: page >= totalPages ? 'var(--glass-border-light)' : tokens.colors.accent.brand + '25',
-              color: page >= totalPages ? tokens.colors.text.tertiary : tokens.colors.accent.brand,
-              cursor: page >= totalPages ? 'not-allowed' : 'pointer',
-              opacity: page >= totalPages ? 0.5 : 1,
-            }}
-          >
-            {t('rankingNext')}
-          </button>
-        </div>
-      )}
+
     </div>
   )
 }
