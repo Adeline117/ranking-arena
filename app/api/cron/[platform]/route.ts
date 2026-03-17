@@ -18,6 +18,30 @@ const logger = createLogger('CronRoute')
 export const runtime = 'edge'
 export const maxDuration = 30 // 30 seconds max
 
+// GET handler for health-check endpoint
+export async function GET(
+  request: NextRequest,
+  { params }: { params: { platform: string } }
+) {
+  const pathname = request.nextUrl.pathname
+  const platform = pathname.split('/').filter(Boolean).pop() || params.platform
+
+  // Special handling for health-check endpoint
+  if (platform === 'health-check') {
+    return NextResponse.json({
+      status: 'ok',
+      timestamp: new Date().toISOString(),
+      service: 'ranking-arena',
+    }, { status: 200 })
+  }
+
+  // For other platforms, GET is not supported
+  return NextResponse.json({
+    error: `GET method not supported for platform: ${platform}`,
+    message: 'Use POST method for platform data refresh',
+  }, { status: 405 })
+}
+
 // 平台抓取函数映射
 const PLATFORM_FETCHERS: Record<string, () => Promise<PlatformData[]>> = {
   'hyperliquid': fetchHyperliquid,
