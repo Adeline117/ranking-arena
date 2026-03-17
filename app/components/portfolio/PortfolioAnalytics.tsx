@@ -92,7 +92,7 @@ export default function PortfolioAnalytics({ positions, snapshots }: PortfolioAn
       {/* Long/Short Distribution Bar */}
       <div style={{
         padding: 16,
-        borderRadius: 12,
+        borderRadius: tokens.radius.lg,
         backgroundColor: 'var(--color-bg-secondary)',
         border: '1px solid var(--color-border-primary)',
       }}>
@@ -135,7 +135,7 @@ export default function PortfolioAnalytics({ positions, snapshots }: PortfolioAn
       {stats.byExchange.length > 1 && (
         <div style={{
           padding: 16,
-          borderRadius: 12,
+          borderRadius: tokens.radius.lg,
           backgroundColor: 'var(--color-bg-secondary)',
           border: '1px solid var(--color-border-primary)',
         }}>
@@ -166,7 +166,7 @@ export default function PortfolioAnalytics({ positions, snapshots }: PortfolioAn
       {snapshots.length > 1 && (
         <div style={{
           padding: 16,
-          borderRadius: 12,
+          borderRadius: tokens.radius.lg,
           backgroundColor: 'var(--color-bg-secondary)',
           border: '1px solid var(--color-border-primary)',
         }}>
@@ -197,7 +197,7 @@ function StatCard({ label, value, sublabel, color }: {
       flexDirection: 'column',
       gap: 4,
       padding: 14,
-      borderRadius: 12,
+      borderRadius: tokens.radius.lg,
       backgroundColor: 'var(--color-bg-secondary)',
       border: '1px solid var(--color-border-primary)',
     }}>
