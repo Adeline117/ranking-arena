@@ -368,9 +368,9 @@ export default function TraderHeader({
             )}
 
             {isBot && (
-              <Badge key="bot" color="#a78bfa" style={{ padding: '2px 8px', flexShrink: 0 }} title={t('botTooltip')}>
+              <Badge key="bot" color="var(--color-brand)" style={{ padding: '2px 8px', flexShrink: 0 }} title={t('botTooltip')}>
                 <span style={{ fontSize: 11, marginRight: 2 }}>{'⚡'}</span>
-                <Text size="xs" weight="bold" style={{ color: '#a78bfa' }}>{t('botLabel')}</Text>
+                <Text size="xs" weight="bold" style={{ color: 'var(--color-brand)' }}>{t('botLabel')}</Text>
               </Badge>
             )}
 
