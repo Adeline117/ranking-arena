@@ -233,7 +233,7 @@ function useScrollVisibility(): boolean {
 }
 
 function isActivePath(href: string, pathname: string): boolean {
-  if (href === '/') return pathname === '/' || pathname.startsWith('/rankings')
+  if (href === '/') return pathname === '/'
   if (href.startsWith('/u/') || href === '/settings') {
     return pathname.startsWith('/u/') || pathname === '/settings'
   }
@@ -256,7 +256,7 @@ export default function MobileBottomNav(): React.ReactElement {
 
   const navItems: NavItem[] = useMemo(() => {
     const items: NavItem[] = [
-      { href: '/', labelKey: 'rankings', Icon: RankingsIcon },
+      { href: '/', labelKey: 'home', Icon: HomeIcon },
     ]
     if (features.social) {
       items.push({ href: '/hot', labelKey: 'hot', Icon: FireIcon })
