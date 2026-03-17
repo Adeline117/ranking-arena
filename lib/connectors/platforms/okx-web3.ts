@@ -40,7 +40,9 @@ interface OkxLeadTrader {
 
 interface OkxResponse {
   code: string
-  data?: OkxLeadTrader[]
+  // New format: data[0].ranks[...], old format: data[...]
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  data?: any[]
   msg?: string
 }
 
@@ -81,9 +83,12 @@ export class OkxWeb3Connector extends BaseConnector {
           const url = `https://www.okx.com/api/v5/copytrading/public-lead-traders?instType=${instType}&page=${page}`
           const data = await this.request<OkxResponse>(url)
 
-          if (data?.code !== '0' || !data.data?.length) break
+          if (data?.code !== '0') break
+          // OKX API wraps traders in data[0].ranks[] (changed ~2026-03)
+          const traders: OkxLeadTrader[] = data.data?.[0]?.ranks ?? data.data ?? []
+          if (!traders.length) break
 
-          for (const entry of data.data) {
+          for (const entry of traders) {
             if (seen.has(entry.uniqueCode)) continue
             seen.add(entry.uniqueCode)
 
@@ -109,7 +114,7 @@ export class OkxWeb3Connector extends BaseConnector {
             })
           }
 
-          if (data.data.length < 10) break
+          if (traders.length < 10) break
           if (allTraders.length >= limit) break
         } catch (err) {
           if (page === 1 && allTraders.length === 0) throw err
