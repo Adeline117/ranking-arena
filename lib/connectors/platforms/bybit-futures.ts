@@ -63,8 +63,8 @@ export class BybitFuturesConnector extends BaseConnector {
       // Fallback: VPS Playwright scraper (renders full page, bypasses WAF)
       // NOT proxyViaVPS which just forwards HTTP and gets 403
       const vpsData = await this.fetchViaVPS<Record<string, unknown>>('/bybit/leaderboard', {
-        timeRange,
-        page: String(page),
+        dataDuration: timeRange,
+        pageNo: String(page),
         pageSize: String(limit),
       })
       if (!vpsData) throw new Error('Both direct API and VPS scraper failed for bybit')
