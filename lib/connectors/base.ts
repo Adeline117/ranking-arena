@@ -27,9 +27,13 @@ import type {
 } from '../types/leaderboard'
 import { exchangeLogger } from '../utils/logger'
 import { PLATFORM_RATE_LIMITS } from '../types/leaderboard'
+import * as cache from '../cache'
 import type { PlatformConnector, ConnectorConfig, RateLimiter } from './types'
 import { ConnectorError, DEFAULT_CONNECTOR_CONFIG } from './types'
 export { ConnectorError, DEFAULT_CONNECTOR_CONFIG }
+
+// Scraper result cache TTL (30 minutes)
+const SCRAPER_CACHE_TTL = 30 * 60
 
 // ============================================
 // Circuit Breaker (standalone, for legacy usage)
@@ -357,6 +361,42 @@ export abstract class BaseConnector implements PlatformConnector {
       }
     }
 
+    // Auto-fallback: if error looks like geo-block (403/451) or WAF (HTML instead of JSON),
+    // try VPS routes before giving up — but only if we weren't already using a proxy
+    if (!this.config.proxyUrl && lastError) {
+      const isGeoBlock = lastError instanceof ConnectorError &&
+        (lastError.statusCode === 403 || lastError.statusCode === 451)
+      const isWAF = lastError instanceof ConnectorError &&
+        lastError.message.includes('WAF')
+
+      if (isGeoBlock || isWAF) {
+        exchangeLogger.info(
+          `[${this.platform}] Direct request failed with ${isGeoBlock ? 'geo-block' : 'WAF'}, trying VPS fallback for ${url}`
+        )
+
+        // Try 1: proxyViaVPS (forwards the full URL through VPS proxy)
+        try {
+          const vpsResult = await this.proxyViaVPS<T>(url, {
+            method: options?.method,
+            body: options?.body ? (typeof options.body === 'string' ? JSON.parse(options.body) : options.body) : undefined,
+            headers: options?.headers as Record<string, string> | undefined,
+          })
+          if (vpsResult !== null) return vpsResult
+        } catch {
+          // VPS proxy failed, continue to throw original error
+        }
+
+        // Try 2: fetchViaVPS with endpoint derived from URL path
+        try {
+          const urlObj = new URL(url)
+          const vpsResult = await this.fetchViaVPS<T>(urlObj.pathname)
+          if (vpsResult !== null) return vpsResult
+        } catch {
+          // VPS scraper also failed
+        }
+      }
+    }
+
     throw lastError || new ConnectorError('Max retries exceeded', this.platform, this.marketType)
   }
 
@@ -379,6 +419,22 @@ export abstract class BaseConnector implements PlatformConnector {
 
     if (!vpsHost || !vpsKey) {
       return null; // VPS not configured, return null to allow fallback
+    }
+
+    // Check scraper result cache to avoid hammering the serial queue
+    const paramsHash = Object.entries(params)
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([k, v]) => `${k}=${v}`)
+      .join('&')
+    const cacheKey = `scraper:cache:${this.platform}:${endpoint}:${paramsHash}`
+    try {
+      const cached = await cache.get<T>(cacheKey)
+      if (cached !== null) {
+        exchangeLogger.info(`[VPS] ${this.platform} cache hit for ${endpoint}`)
+        return cached
+      }
+    } catch {
+      // Cache read failed, proceed to scraper
     }
 
     try {
@@ -435,6 +491,10 @@ export abstract class BaseConnector implements PlatformConnector {
       }
 
       const data = await response.json() as T;
+
+      // Cache successful scraper result for 30 min
+      cache.set(cacheKey, data, { ttl: SCRAPER_CACHE_TTL }).catch(() => {})
+
       return data;
     } catch (error) {
       console.warn(`[VPS] ${this.platform} failed:`, toError(error).message);

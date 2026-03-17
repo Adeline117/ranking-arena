@@ -11,6 +11,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getSupabaseAdmin } from '@/lib/supabase/server'
 import { logger } from '@/lib/logger'
 import { PipelineLogger } from '@/lib/services/pipeline-logger'
+import { sendAlert } from '@/lib/alerts/send-alert'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 60
@@ -88,6 +89,25 @@ export async function GET(request: NextRequest) {
     const cleaned = count || 0
     logger.warn(`[cleanup-stuck-logs] Successfully marked ${cleaned} stuck logs as timeout`)
     await plog.success(cleaned, { jobs: stuckLogs.map(l => l.job_name) })
+
+    // Send Telegram alert listing stuck job names
+    const jobDetails = stuckLogs
+      .map(l => {
+        const stuckMin = Math.round(
+          (Date.now() - new Date(l.started_at).getTime()) / 60000
+        )
+        return `  ${l.job_name}: stuck ${stuckMin}min`
+      })
+      .join('\n')
+    await sendAlert({
+      title: `卡住任务清理: ${cleaned} 个任务超时`,
+      message: `以下任务运行超过30分钟，已标记为 timeout:\n${jobDetails}`,
+      level: 'warning',
+      details: {
+        cleaned,
+        jobs: stuckLogs.map(l => l.job_name).join(', '),
+      },
+    })
 
     return NextResponse.json({
       ok: true,

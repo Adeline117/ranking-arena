@@ -18,12 +18,18 @@ import type { DiscoverResult } from '@/lib/types/leaderboard'
 import {
   type TraderData,
   type FetchResult,
+  type WriteConsistency,
   upsertTraders,
   calculateArenaScore,
   getSupabaseClient,
 } from '@/lib/cron/fetchers/shared'
 import { dataLogger } from '@/lib/utils/logger'
 import { SOURCE_TYPE_MAP } from '@/lib/constants/exchanges'
+import {
+  ENRICHMENT_PLATFORM_CONFIGS,
+  NO_ENRICHMENT_PLATFORMS,
+  runEnrichment,
+} from '@/lib/cron/enrichment-runner'
 
 // ---------------------------------------------------------------------------
 // Types
@@ -52,6 +58,7 @@ export interface AdapterResult {
   skipped: number
   error?: string
   dryRunData?: TraderData[]
+  writeConsistency?: WriteConsistency
 }
 
 // ---------------------------------------------------------------------------
@@ -175,7 +182,7 @@ export async function writeDiscoverResult(
   }
 
   // Write to DB via shared upsertTraders()
-  const { saved, error } = await upsertTraders(supabase, traderDataArray)
+  const { saved, error, write_consistency } = await upsertTraders(supabase, traderDataArray)
 
   return {
     source: platform,
@@ -184,6 +191,7 @@ export async function writeDiscoverResult(
     saved,
     skipped,
     error,
+    writeConsistency: write_consistency,
   }
 }
 
@@ -196,6 +204,12 @@ export interface BatchRunOptions extends AdapterOptions {
   windows?: string[]
   /** Max traders per window (default: 500) */
   limit?: number
+  /**
+   * If true, fire-and-forget enrichment for top 10 traders (90D window only)
+   * after the main fetch+save completes. Only runs if the platform has enrichment support.
+   * Default: false
+   */
+  inlineEnrich?: boolean
 }
 
 /**
@@ -208,13 +222,23 @@ export async function runConnectorBatch(
   connector: PlatformConnector,
   options: BatchRunOptions = {}
 ): Promise<FetchResult> {
-  const { windows = ['7d', '30d', '90d'], limit = 500, sourceOverride } = options
+  const { windows = ['7d', '30d', '90d'], limit = 500, sourceOverride, inlineEnrich = false } = options
   const startTime = Date.now()
   const platform = sourceOverride || connector.platform
   const periods: FetchResult['periods'] = {}
 
+  // Aggregate write consistency across all windows
+  const aggregatedConsistency: WriteConsistency = {
+    trader_sources: 'ok',
+    trader_profiles_v2: 'ok',
+    trader_snapshots: 'ok',
+    trader_snapshots_v2: 'ok',
+  }
+
   // Get Supabase client once for all windows
   const supabase = options.supabase || getSupabaseClient()
+
+  let anySaved = false
 
   for (const window of windows) {
     const windowUpper = window.toUpperCase()
@@ -236,6 +260,17 @@ export async function runConnectorBatch(
         saved: writeResult.saved,
         error: writeResult.error,
       }
+
+      if (writeResult.saved > 0) anySaved = true
+
+      // Merge write consistency: any failure taints the aggregate
+      if (writeResult.writeConsistency) {
+        for (const key of Object.keys(aggregatedConsistency) as (keyof WriteConsistency)[]) {
+          if (writeResult.writeConsistency[key] === 'failed') {
+            aggregatedConsistency[key] = 'failed'
+          }
+        }
+      }
     } catch (err) {
       const errMsg = err instanceof Error ? err.message : String(err)
       dataLogger.error(`[${platform}] Failed to fetch ${windowUpper}: ${errMsg}`)
@@ -243,10 +278,26 @@ export async function runConnectorBatch(
     }
   }
 
+  // Fire-and-forget inline enrichment for top 10 traders (90D only)
+  if (inlineEnrich && anySaved) {
+    const hasEnrichmentSupport =
+      platform in ENRICHMENT_PLATFORM_CONFIGS && !NO_ENRICHMENT_PLATFORMS.has(platform)
+
+    if (hasEnrichmentSupport) {
+      // Do not await — fire and forget so it never blocks the main result
+      runEnrichment({ platform, period: '90D', limit: 10 }).catch((err) => {
+        dataLogger.warn(
+          `[adapter] Inline enrichment failed for ${platform}: ${err instanceof Error ? err.message : String(err)}`
+        )
+      })
+    }
+  }
+
   return {
     source: platform,
     periods,
     duration: Date.now() - startTime,
+    write_consistency: aggregatedConsistency,
   }
 }
 
