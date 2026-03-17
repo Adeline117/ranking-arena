@@ -84,12 +84,18 @@ export class BinanceWeb3Connector extends BaseConnector {
       for (let page = 1; page <= maxPages; page++) {
         try {
           const url = `https://web3.binance.com/bapi/defi/v1/public/wallet-direct/market/leaderboard/query?chainId=${chain.id}&period=${period}&tag=ALL&pageNo=${page}&pageSize=25`
-          const data = await this.request<BinanceWeb3Response>(url, {
-            headers: {
-              'Origin': 'https://web3.binance.com',
-              'Referer': 'https://web3.binance.com/en/wallet-direct',
-            },
-          })
+          const headers = {
+            'Origin': 'https://web3.binance.com',
+            'Referer': 'https://web3.binance.com/en/wallet-direct',
+          }
+          let data: BinanceWeb3Response | null = null
+          try {
+            data = await this.request<BinanceWeb3Response>(url, { headers })
+          } catch { /* direct may be geo-blocked with empty 200 */ }
+          // Binance returns 200 with empty body for geo-blocked requests — fallback to VPS
+          if (!data?.data?.list?.length) {
+            data = await this.proxyViaVPS<BinanceWeb3Response>(url, { headers }) || data
+          }
 
           const list = data?.data?.list || []
           if (!list.length) break
