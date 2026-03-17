@@ -3,7 +3,6 @@
 import { features } from '@/lib/features'
 import { notFound } from 'next/navigation'
 import { Suspense, lazy } from 'react'
-import Link from 'next/link'
 import { useLoginModal } from '@/lib/hooks/useLoginModal'
 import { tokens } from '@/lib/design-tokens'
 import TopNav from '@/app/components/layout/TopNav'
@@ -14,11 +13,11 @@ const NewsFlash = lazy(() => import('@/app/components/sidebar/NewsFlash'))
 import Card from '@/app/components/ui/Card'
 import { Box, Text } from '@/app/components/base'
 import { RankingSkeleton } from '@/app/components/ui/Skeleton'
-import FloatingActionButton from '@/app/components/layout/FloatingActionButton'
+const FloatingActionButton = lazy(() => import('@/app/components/layout/FloatingActionButton'))
 import PullToRefreshWrapper from '@/app/components/ui/PullToRefreshWrapper'
 import { PostCard } from './components/PostCard'
-import { PostDetailModal } from './components/PostDetailModal'
-import { HotGroupsList } from './components/HotGroupsList'
+const PostDetailModal = lazy(() => import('./components/PostDetailModal').then(m => ({ default: m.PostDetailModal })))
+const HotGroupsList = lazy(() => import('./components/HotGroupsList').then(m => ({ default: m.HotGroupsList })))
 import { useHotPageData } from './useHotPageData'
 
 function HotContent() {
@@ -243,14 +242,16 @@ function HotContent() {
                 </>
               )}
 
-              {/* Tab Content: Hot Groups */}
+              {/* Tab Content: Hot Groups -- lazy loaded */}
               {activeHotTab === 'groups' && (
-                <HotGroupsList
-                  groups={groups}
-                  loading={loadingGroups}
-                  localizedName={localizedName}
-                  t={t}
-                />
+                <Suspense fallback={<Box style={{ padding: tokens.spacing[4], textAlign: 'center' }}><Text color="tertiary">{t('loading')}</Text></Box>}>
+                  <HotGroupsList
+                    groups={groups}
+                    loading={loadingGroups}
+                    localizedName={localizedName}
+                    t={t}
+                  />
+                </Suspense>
               )}
             </Card>
           </Box>
@@ -258,8 +259,9 @@ function HotContent() {
         </ThreeColumnLayout>
       </Box>
 
-      {/* Post detail modal */}
+      {/* Post detail modal -- lazy loaded */}
       {openPost && (
+        <Suspense fallback={null}>
         <PostDetailModal
           post={openPost}
           comments={comments}
@@ -281,8 +283,9 @@ function HotContent() {
           localizedName={localizedName}
           t={t}
         />
+        </Suspense>
       )}
-      <FloatingActionButton />
+      <Suspense fallback={null}><FloatingActionButton /></Suspense>
       </PullToRefreshWrapper>
     </Box>
   )
