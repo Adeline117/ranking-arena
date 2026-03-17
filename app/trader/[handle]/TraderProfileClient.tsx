@@ -87,8 +87,8 @@ type TraderTabKey = 'overview' | 'stats' | 'portfolio' | 'posts'
 const NO_PORTFOLIO_PLATFORMS = new Set([
   'htx_futures', 'mexc', 'btcc', 'coinex',
   'lbank', 'bingx', 'toobit', 'xt', 'weex', 'phemex', 'blofin', 'bitfinex',
-  'binance_spot', 'binance_web3', 'okx_web3', 'bybit_spot', 'bitunix',
-  'aevo', 'dydx', 'bitget_futures', 'kucoin', 'web3_bot', 'kwenta',
+  'binance_spot', 'binance_web3', 'okx_web3', 'bybit_spot',
+  'aevo', 'bitget_futures', 'kucoin', 'web3_bot', 'kwenta',
 ])
 type TraderPageData = import('@/app/u/[handle]/components/types').TraderPageData
 
