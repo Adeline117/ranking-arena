@@ -12,6 +12,7 @@ export { BaseConnector, BaseConnectorLegacy, CircuitOpenError } from './base'
 
 // Rate limiters
 export { TokenBucketRateLimiter, DelayRateLimiter, createRateLimiter } from './rate-limiter'
+export { RedisRateLimiter, createRedisRateLimiter } from './redis-rate-limiter'
 
 // Types and errors
 export type { PlatformConnector, ConnectorConfig, RateLimiter as RateLimiterType, CircuitState, CircuitBreaker } from './types'
