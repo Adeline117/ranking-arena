@@ -11,7 +11,7 @@
  *   group=c  → okx_futures (every 4h)
  *   group=d1 → gains, htx_futures (every 6h)
  *   group=d2 → EMPTY (dydx DEAD since 2026-03)
- *   group=e  → bitfinex, coinex, binance_web3 (every 6h)
+ *   group=e  → bitfinex, coinex, binance_web3, okx_web3 (every 6h)
  *   group=f  → mexc, bingx (every 6h)
  *   group=h  → gateio, btcc (every 6h)
  *   group=g1 → drift, jupiter_perps (every 6h)
@@ -46,8 +46,7 @@ const GROUPS: Record<string, string[]> = {
   // Group A2: OKX only (every 3h) — direct API works
   a2: ['okx_futures'],
   // Group A3: Bybit (every 3h) — VPS scraper, needs own group (Playwright slow)
-  // TEMPORARILY DISABLED 2026-03-16: Timing out at 700s, needs timeout fix
-  a3: [], // ['bybit'],
+  a3: ['bybit'],
   // Group A4: Bitget (every 3h) — VPS scraper, needs own group
   a4: ['bitget_futures'],
   // Group B: Top DEX (every 4h) + GMX (switched to subgraph 2026-03-15)
@@ -57,13 +56,11 @@ const GROUPS: Record<string, string[]> = {
   // Group D1: CEX (every 6h) — VPS proxy enabled
   d1: ['gains', 'htx_futures'],
   // Group E: CEX+DEX (every 6h) — coinex URL fixed + VPS proxy
-  e: ['bitfinex', 'coinex', 'binance_web3'],
+  e: ['bitfinex', 'coinex', 'binance_web3', 'okx_web3'],
   // Group F: MEXC only (every 6h) — VPS scraper, slow
-  // TEMPORARILY DISABLED 2026-03-16: Timing out at 700s, needs timeout fix
-  f: [], // ['mexc'],
+  f: ['mexc'],
   // Group F2: BingX (every 6h) — VPS scraper
-  // TEMPORARILY DISABLED 2026-03-16: Timing out at 700s, needs timeout fix
-  f2: [], // ['bingx'],
+  f2: ['bingx'],
   // Group H: CEX (every 6h) — VPS proxy enabled 2026-03-15
   h: ['gateio', 'btcc'],
   // Group G1: DEX (every 6h)

@@ -204,8 +204,8 @@ export const ENRICHMENT_PLATFORM_CONFIGS: Record<string, EnrichmentConfig> = {
     fetchEquityCurve: fetchGmxEquityCurve,
     fetchStatsDetail: fetchGmxStatsDetail,
     fetchPositionHistory: fetchGmxPositionHistory,
-    concurrency: 15, // Increased from 2 - GraphQL endpoint is fast
-    delayMs: 200, // Reduced from 1000ms (2026-03-11)
+    concurrency: 5, // Reduced from 15 — Squids API intermittently fails at high concurrency
+    delayMs: 500, // Increased from 200ms for stability
   },
   htx_futures: {
     platform: 'htx_futures',
