@@ -216,7 +216,7 @@ export default function NotFoundPage() {
         background: tokens.glass.bg.primary,
         backdropFilter: tokens.glass.blur.lg,
         borderBottom: `1px solid ${tokens.colors.border.primary}`,
-        zIndex: 1000,
+        zIndex: tokens.zIndex.sticky,
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'space-between',
