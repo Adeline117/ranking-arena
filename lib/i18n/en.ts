@@ -3778,6 +3778,8 @@ searchLibrarySection: 'Library',
 searchGroupsSection: 'Groups',
 searchTradersSection: 'Traders',
 searchGroupMembers: 'members',
+searchDidYouMean: 'Did you mean:',
+searchShowingTopTraders: 'Showing top traders on',
 
 // Book detail - language labels
 bookLanguageChinese: 'Chinese',
