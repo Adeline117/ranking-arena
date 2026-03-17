@@ -392,8 +392,8 @@ function SearchContent() {
             {[
               { key: 'all', label: t('searchTabAll'), count: libTotal + groupTotal + postTotal + traderTotal },
               { key: 'traders', label: t('traders'), count: traderTotal },
-              ...(features.social ? [{ key: 'posts', label: t('searchTabPosts'), count: postTotal }] : []),
               { key: 'library', label: t('library'), count: libTotal },
+              ...(features.social ? [{ key: 'posts', label: t('searchTabPosts'), count: postTotal }] : []),
               ...(features.social ? [{ key: 'groups', label: t('groups'), count: groupTotal }] : []),
             ].filter(tab => tab.key === 'all' || tab.count > 0).map(tab => (
               <Link
@@ -589,25 +589,25 @@ function SearchContent() {
             gridTemplateColumns: 'repeat(auto-fill, minmax(min(380px, 100%), 1fr))',
             gap: 16, marginTop: 16,
           }}>
+            {(activeTab === 'all' || activeTab === 'traders') && renderSection(
+              t('traders'),
+              traderResults, traderTotal, 'traders',
+              'T', tokens.colors.accent.success || 'var(--color-score-great)', 'var(--color-accent-success-12)',
+            )}
             {(activeTab === 'all' || activeTab === 'library') && renderSection(
               t('library'),
               libraryResults, libTotal, 'library',
               'L', tokens.colors.accent.brand, tokens.colors.accent.brandMuted || 'var(--color-accent-primary-15)',
-            )}
-            {features.social && (activeTab === 'all' || activeTab === 'groups') && renderSection(
-              t('groups'),
-              groupResults, groupTotal, 'groups',
-              'G', tokens.colors.accent.warning || 'var(--color-score-average)', 'var(--color-orange-subtle)',
             )}
             {features.social && (activeTab === 'all' || activeTab === 'posts') && renderSection(
               t('searchPostsSection'),
               postResults, postTotal, 'posts',
               'P', tokens.colors.accent.primary, tokens.gradient.primarySubtle || 'var(--color-indigo-subtle)',
             )}
-            {(activeTab === 'all' || activeTab === 'traders') && renderSection(
-              t('traders'),
-              traderResults, traderTotal, 'traders',
-              'T', tokens.colors.accent.success || 'var(--color-score-great)', 'var(--color-accent-success-12)',
+            {features.social && (activeTab === 'all' || activeTab === 'groups') && renderSection(
+              t('groups'),
+              groupResults, groupTotal, 'groups',
+              'G', tokens.colors.accent.warning || 'var(--color-score-average)', 'var(--color-orange-subtle)',
             )}
           </div>
         )}

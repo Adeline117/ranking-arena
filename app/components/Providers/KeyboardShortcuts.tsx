@@ -21,18 +21,8 @@ export default function KeyboardShortcuts() {
         return
       }
 
-      // Cmd+K / Ctrl+K — focus search (global search shortcut)
+      // Cmd+K / Ctrl+K is handled by useTopNavState (uses React ref, avoids DOM querying)
       if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
-        e.preventDefault()
-        const searchInput = document.querySelector('input[type="search"], input[placeholder*="搜索"], .top-nav-search-input') as HTMLInputElement
-        if (searchInput) {
-          searchInput.focus()
-          searchInput.select()
-        } else {
-          // On mobile, trigger mobile search overlay
-          const mobileSearchBtn = document.querySelector('.show-mobile-flex[aria-label]') as HTMLButtonElement
-          if (mobileSearchBtn) mobileSearchBtn.click()
-        }
         return
       }
 
