@@ -538,7 +538,7 @@ export default function CommentsModal({
                     display: 'grid',
                     gridTemplateColumns: 'repeat(5, 1fr)',
                     gap: 4,
-                    zIndex: 9999,
+                    zIndex: tokens.zIndex.max,
                     boxShadow: 'var(--shadow-lg-dark)',
                     width: 'min(300px, calc(100vw - 32px))',
                     maxHeight: 280,

@@ -143,7 +143,7 @@ export default function LoginModal({ open, onClose, message }: LoginModalProps) 
       style={{
         position: 'fixed',
         inset: 0,
-        zIndex: 500,
+        zIndex: tokens.zIndex.modal,
         background: 'var(--color-backdrop-heavy, rgba(0,0,0,0.75))',
         display: 'flex',
         alignItems: 'center',
