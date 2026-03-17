@@ -328,8 +328,8 @@ export default function TraderComparison({ traders, onRemove, showRemoveButton =
               {(trader.is_bot || trader.source === 'web3_bot') && (
                 <span style={{
                   padding: '0px 5px', borderRadius: 4, fontSize: 10, fontWeight: 600,
-                  color: '#a78bfa', background: 'rgba(167, 139, 250, 0.12)',
-                  border: '1px solid rgba(167, 139, 250, 0.25)',
+                  color: 'var(--color-brand)', background: 'var(--color-brand-muted)',
+                  border: '1px solid color-mix(in srgb, var(--color-brand) 25%, transparent)',
                   lineHeight: 1.4, display: 'inline-flex', alignItems: 'center', gap: 2,
                   marginTop: 2,
                 }}>
