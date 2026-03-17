@@ -169,10 +169,10 @@ export class UnifiedPlatformConnector {
  */
 export const PLATFORM_CONNECTORS: Record<string, UnifiedConnectorConfig> = {
   // Group A: High-priority CEX (every 3h) - Fast platforms keep enrichment
-  binance_futures: { platform: 'binance_futures', enrichmentLimit: 200, timeoutMs: 420000 },
+  binance_futures: { platform: 'binance_futures', enrichmentLimit: 200, timeoutMs: 600000 }, // 10min (was 7min, too short)
   // binance_spot: REMOVED 2026-03-14 - repeatedly hangs 45-76min
-  bybit: { platform: 'bybit', enrichmentLimit: 150, timeoutMs: 360000 },
-  bitget_futures: { platform: 'bitget_futures', enrichmentLimit: 60, timeoutMs: 300000, enableEnrichment: false },
+  bybit: { platform: 'bybit', enrichmentLimit: 150, timeoutMs: 600000 }, // 10min (was 6min, too short)
+  bitget_futures: { platform: 'bitget_futures', enrichmentLimit: 60, timeoutMs: 600000, enableEnrichment: false }, // 10min (was 5min, VPS scraper slow)
   okx_futures: { platform: 'okx_futures', enrichmentLimit: 80, timeoutMs: 300000, enableEnrichment: false },
   
   // Group B: Top DEX (every 4h) - Disable enrichment to fit Cloudflare 120s timeout
@@ -193,9 +193,9 @@ export const PLATFORM_CONNECTORS: Record<string, UnifiedConnectorConfig> = {
   coinex: { platform: 'coinex', enrichmentLimit: 40, timeoutMs: 300000 },
   binance_web3: { platform: 'binance_web3', enrichmentLimit: 50, timeoutMs: 300000, enableEnrichment: false }, // Wallet-based, no equity curve
   bitfinex: { platform: 'bitfinex', enrichmentLimit: 50, timeoutMs: 300000 },
-  mexc: { platform: 'mexc', enrichmentLimit: 60, timeoutMs: 300000 },
-  bingx: { platform: 'bingx', enrichmentLimit: 40, timeoutMs: 300000, enableEnrichment: false }, // CF-protected, enrichment not supported
-  gateio: { platform: 'gateio', enrichmentLimit: 60, timeoutMs: 300000 },
+  mexc: { platform: 'mexc', enrichmentLimit: 60, timeoutMs: 600000 }, // 10min (was 5min, VPS scraper slow)
+  bingx: { platform: 'bingx', enrichmentLimit: 40, timeoutMs: 600000, enableEnrichment: false }, // CF-protected, enrichment not supported; 10min (was 5min, VPS scraper slow)
+  gateio: { platform: 'gateio', enrichmentLimit: 60, timeoutMs: 600000 }, // 10min (was 5min, VPS scraper slow)
   btcc: { platform: 'btcc', enrichmentLimit: 30, timeoutMs: 300000 },
   drift: { platform: 'drift', enrichmentLimit: 150, timeoutMs: 600000, enableEnrichment: false },
   bitunix: { platform: 'bitunix', enrichmentLimit: 50, timeoutMs: 300000 },
