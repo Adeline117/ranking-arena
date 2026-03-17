@@ -140,43 +140,18 @@ export const CACHE_KEY_PATTERNS = {
 } as const
 
 // ============================================
-// Redis 客户端管理
+// Redis 客户端管理 (shared with index.ts)
 // ============================================
 
-type UpstashRedisType = InstanceType<typeof import('@upstash/redis')['Redis']>
+import { getSharedRedis, isRedisAvailable } from './redis-client'
 
-let redisClient: UpstashRedisType | null = null
-let redisInitialized = false
-let redisAvailable = false
+async function initRedis() {
+  return getSharedRedis()
+}
 
-async function initRedis(): Promise<UpstashRedisType | null> {
-  if (typeof window !== 'undefined') return null
-  
-  if (redisInitialized) return redisAvailable ? redisClient : null
-  redisInitialized = true
-  
-  const url = process.env.UPSTASH_REDIS_REST_URL
-  const token = process.env.UPSTASH_REDIS_REST_TOKEN
-  
-  if (!url || !token) {
-    dataLogger.warn('[RedisLayer] Upstash 环境变量未配置')
-    return null
-  }
-  
-  try {
-    const { Redis } = await import('@upstash/redis')
-    redisClient = new Redis({ url, token })
-    
-    // 测试连接
-    await redisClient.ping()
-    redisAvailable = true
-    dataLogger.info('[RedisLayer] Redis 连接成功')
-    return redisClient
-  } catch (error) {
-    dataLogger.error('[RedisLayer] Redis 初始化失败:', error)
-    redisAvailable = false
-    return null
-  }
+// Alias for stats
+function getRedisAvailable(): boolean {
+  return isRedisAvailable()
 }
 
 // ============================================
@@ -193,7 +168,7 @@ export function getLayerStats(): LayerStats {
   return {
     ...layerStats,
     memory: { ...layerStats.memory, size: memoryCache.getStats().size },
-    redis: { ...layerStats.redis, available: redisAvailable },
+    redis: { ...layerStats.redis, available: getRedisAvailable() },
   }
 }
 
@@ -273,22 +248,22 @@ export async function tieredSet<T>(
   // L1: 写入内存缓存
   memoryCache.set(key, entry, config.memoryTtlSeconds)
   
-  // L2: 写入 Redis
+  // L2: 写入 Redis (single pipeline when tags present)
   const redis = await initRedis()
   if (redis) {
     try {
-      await redis.set(key, entry, { ex: config.redisTtlSeconds })
-      
-      // 记录标签
       if (tags && tags.length > 0) {
         const pipeline = redis.pipeline()
+        pipeline.set(key, entry, { ex: config.redisTtlSeconds })
         for (const tag of tags) {
           pipeline.sadd(`tag:${tag}`, key)
           pipeline.expire(`tag:${tag}`, config.redisTtlSeconds * 2)
         }
         await pipeline.exec()
+      } else {
+        await redis.set(key, entry, { ex: config.redisTtlSeconds })
       }
-      
+
       return true
     } catch (error) {
       dataLogger.warn('[RedisLayer] Redis 写入失败:', { key, error })
@@ -352,6 +327,9 @@ export async function tieredDelByTag(tag: string): Promise<number> {
 
 /**
  * 获取或设置缓存（带 stale-while-revalidate）
+ *
+ * When the primary cache misses but stale data exists in the extended
+ * memory bucket, serves stale data immediately and refreshes in background.
  */
 export async function tieredGetOrSet<T>(
   key: string,
@@ -361,20 +339,102 @@ export async function tieredGetOrSet<T>(
 ): Promise<T> {
   // 尝试获取缓存
   const { data } = await tieredGet<T>(key, tier)
-  
+
   if (data !== null) {
     return data
   }
-  
+
+  // Check stale-while-revalidate bucket in memory
+  const config = CACHE_TIERS[tier]
+  if (config.staleWhileRevalidate > 0) {
+    const memoryCache = getMemoryCache()
+    const staleEntry = memoryCache.get<CacheEntry<T>>(`swr:${key}`)
+    if (staleEntry?.data !== undefined) {
+      // Serve stale, refresh in background
+      fetcher().then(fresh => {
+        tieredSet(key, fresh, tier, tags).catch(() => {})
+      }).catch(() => {})
+      return staleEntry.data
+    }
+  }
+
   // 缓存未命中，获取新数据
   const freshData = await fetcher()
-  
-  // 异步写入缓存
+
+  // 异步写入缓存+ SWR bucket
   tieredSet(key, freshData, tier, tags).catch((err) => {
     dataLogger.warn('[RedisLayer] 缓存写入失败:', { key, error: err })
   })
-  
+
+  // Store in SWR bucket with extended TTL
+  if (config.staleWhileRevalidate > 0) {
+    const memoryCache = getMemoryCache()
+    const swrEntry: CacheEntry<T> = {
+      data: freshData,
+      tier,
+      cachedAt: Date.now(),
+      expiresAt: Date.now() + (config.redisTtlSeconds + config.staleWhileRevalidate) * 1000,
+      hitCount: 0,
+    }
+    memoryCache.set(`swr:${key}`, swrEntry, config.redisTtlSeconds + config.staleWhileRevalidate)
+  }
+
   return freshData
+}
+
+/**
+ * Batch get from tiered cache — checks memory first, then MGET for Redis misses.
+ * Returns results in the same order as keys. Null for misses.
+ */
+export async function tieredMget<T>(
+  keys: string[],
+  tier: CacheTier = 'warm'
+): Promise<(T | null)[]> {
+  if (keys.length === 0) return []
+
+  const memoryCache = getMemoryCache()
+  const config = CACHE_TIERS[tier]
+  const results: (T | null)[] = new Array(keys.length).fill(null)
+
+  // 1. Check memory cache
+  const missIndices: number[] = []
+  for (let i = 0; i < keys.length; i++) {
+    const memoryData = memoryCache.get<CacheEntry<T>>(keys[i])
+    if (memoryData?.data !== undefined) {
+      results[i] = memoryData.data
+      layerStats.memory.hits++
+    } else {
+      layerStats.memory.misses++
+      missIndices.push(i)
+    }
+  }
+
+  // 2. Batch-fetch misses from Redis
+  if (missIndices.length > 0) {
+    const redis = await initRedis()
+    if (redis) {
+      try {
+        const missKeys = missIndices.map(i => keys[i])
+        const redisResults = await redis.mget<(CacheEntry<T> | null)[]>(...missKeys)
+        for (let j = 0; j < missIndices.length; j++) {
+          const entry = redisResults[j]
+          const idx = missIndices[j]
+          if (entry?.data !== undefined) {
+            results[idx] = entry.data
+            layerStats.redis.hits++
+            // Backfill memory
+            memoryCache.set(keys[idx], entry, config.memoryTtlSeconds)
+          } else {
+            layerStats.redis.misses++
+          }
+        }
+      } catch (error) {
+        dataLogger.warn('[RedisLayer] MGET failed:', { error, count: missIndices.length })
+      }
+    }
+  }
+
+  return results
 }
 
 /**
@@ -540,12 +600,11 @@ export async function checkCacheHealth(): Promise<{
       redisLatency = Date.now() - start
     } catch {
       // Intentionally swallowed: Redis ping failed, mark as unavailable for health check
-      redisAvailable = false
     }
   }
-  
+
   return {
-    redis: { available: redisAvailable, latencyMs: redisLatency },
+    redis: { available: getRedisAvailable(), latencyMs: redisLatency },
     memory: memoryCache.getStats(),
     stats: getLayerStats(),
   }

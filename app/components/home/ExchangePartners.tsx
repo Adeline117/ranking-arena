@@ -114,6 +114,7 @@ export default function ExchangePartners() {
             <Link
               key={`${ex.key}-${i}`}
               href={`/rankings/${source}`}
+              prefetch={true}
               className="exchange-item"
               style={sharedStyle}
             >

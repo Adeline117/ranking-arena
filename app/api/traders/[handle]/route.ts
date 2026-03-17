@@ -31,7 +31,7 @@ const handleSchema = z.string().min(1).max(255)
 const logger = createLogger('trader-api')
 
 // Next.js 缓存配置
-export const revalidate = 60 // 1分钟，与 Cache-Control s-maxage 一致
+export const revalidate = 300 // 5分钟，与 Cache-Control s-maxage 一致
 
 function getSupabaseUrl() {
   return process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL || ''
@@ -109,7 +109,7 @@ export async function GET(
 
     const duration = Date.now() - startTime
     const response = apiSuccess({ ...data as Record<string, unknown>, cached: false, fetchTime: duration })
-    return withCache(response, { maxAge: 60, staleWhileRevalidate: 300 })
+    return withCache(response, { maxAge: 300, staleWhileRevalidate: 600 })
 
   } catch (error: unknown) {
     const errorMessage = error instanceof Error ? error.message : 'Unknown error'

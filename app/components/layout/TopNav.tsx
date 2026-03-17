@@ -1,5 +1,6 @@
 'use client'
 
+import { useEffect } from 'react'
 import Link from 'next/link'
 import Image from 'next/image'
 import { useRouter } from 'next/navigation'
@@ -45,6 +46,13 @@ export default function TopNav({ email = null }: { email?: string | null }) {
     searchRef,
     handleSearch,
   } = useTopNavState()
+
+  // Prefetch common navigation targets for instant transitions
+  useEffect(() => {
+    router.prefetch('/rankings')
+    router.prefetch('/market')
+    router.prefetch('/pricing')
+  }, [router])
 
   return (
     <Box

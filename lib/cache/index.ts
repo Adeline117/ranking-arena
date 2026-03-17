@@ -8,12 +8,7 @@
 
 import { dataLogger } from '@/lib/utils/logger'
 import { getMemoryCache } from './memory-fallback'
-
-// 检测是否在客户端环境
-const isClient = typeof window !== 'undefined'
-
-// Upstash Redis 类型
-type UpstashRedisType = InstanceType<typeof import('@upstash/redis')['Redis']>
+import { getSharedRedis, recordRedisError, isRedisAvailable, pingRedis } from './redis-client'
 
 // ============================================
 // 类型定义
@@ -38,105 +33,17 @@ interface CacheStats {
 }
 
 // ============================================
-// Redis 客户端状态
+// Redis 客户端 (shared singleton)
 // ============================================
 
-let redisClient: UpstashRedisType | null = null
-let isInitialized = false
-let redisHealthy = true
-let lastHealthCheck = 0
-const HEALTH_CHECK_INTERVAL = 30000 // 30 秒健康检查间隔
-const MAX_CONSECUTIVE_ERRORS = 3
-let consecutiveErrors = 0
-
-async function getRedis(): Promise<UpstashRedisType | null> {
-  // 客户端环境直接返回 null，使用内存缓存
-  if (isClient) {
-    return null
-  }
-
-  if (isInitialized && redisClient) {
-    if (!redisHealthy) {
-      const now = Date.now()
-      if (now - lastHealthCheck > HEALTH_CHECK_INTERVAL) {
-        lastHealthCheck = now
-        checkRedisHealth().catch((err) => {
-          dataLogger.debug('Background health check failed:', err)
-        })
-      }
-    }
-    return redisHealthy ? redisClient : null
-  }
-
-  if (isInitialized && !redisClient) {
-    return null
-  }
-
-  isInitialized = true
-
-  const url = process.env.UPSTASH_REDIS_REST_URL
-  const token = process.env.UPSTASH_REDIS_REST_TOKEN
-
-  if (!url || !token) {
-    dataLogger.warn('Upstash Redis 环境变量未配置，使用内存缓存')
-    redisHealthy = false
-    return null
-  }
-
-  try {
-    // 动态导入 Upstash Redis（仅服务端）
-    const { Redis } = await import('@upstash/redis')
-    
-    redisClient = new Redis({
-      url,
-      token,
-    })
-
-    dataLogger.info('Upstash Redis 缓存连接成功')
-    return redisClient
-  } catch (error) {
-    dataLogger.error('Upstash Redis 初始化失败:', error)
-    redisHealthy = false
-    return null
-  }
+async function getRedis() {
+  return getSharedRedis()
 }
 
-/**
- * 检查 Redis 健康状态
- */
-async function checkRedisHealth(): Promise<boolean> {
-  if (!redisClient) return false
-
-  try {
-    await redisClient.ping()
-    if (!redisHealthy) {
-      dataLogger.info('Upstash Redis 连接已恢复')
-    }
-    redisHealthy = true
-    consecutiveErrors = 0
-    return true
-  } catch (error) {
-    redisHealthy = false
-    dataLogger.warn('Upstash Redis 健康检查失败:', error)
-    return false
-  }
-}
-
-/**
- * 处理 Redis 错误，决定是否启用回退
- */
 function handleRedisError(error: unknown): void {
-  consecutiveErrors++
+  recordRedisError(error)
   stats.errors++
   stats.lastError = String(error)
-
-  if (consecutiveErrors >= MAX_CONSECUTIVE_ERRORS) {
-    if (redisHealthy) {
-      dataLogger.warn(`Upstash Redis 连续 ${consecutiveErrors} 次错误，切换到内存缓存`)
-      redisHealthy = false
-      lastHealthCheck = Date.now()
-    }
-  }
 }
 
 // ============================================
@@ -154,8 +61,8 @@ const stats: CacheStats = {
 export function getCacheStats(): CacheStats {
   return {
     ...stats,
-    redisAvailable: redisHealthy,
-    memoryFallbackActive: !redisHealthy,
+    redisAvailable: isRedisAvailable(),
+    memoryFallbackActive: !isRedisAvailable(),
   }
 }
 
@@ -172,33 +79,33 @@ export function resetCacheStats(): void {
 
 /**
  * 从缓存获取数据
- * 优先使用 Redis，失败时回退到内存缓存
+ * L1 内存 → L2 Redis，命中 Redis 后回填内存
  */
 export async function get<T>(key: string): Promise<T | null> {
-  const redis = await getRedis()
   const memoryCache = getMemoryCache()
 
-  // 1. 尝试从 Redis 获取
+  // L1: 内存缓存（零延迟，无网络往返）
+  const memoryData = memoryCache.get<T>(key)
+  if (memoryData !== null) {
+    stats.hits++
+    return memoryData
+  }
+
+  // L2: Redis
+  const redis = await getRedis()
   if (redis) {
     try {
       const data = await redis.get<T>(key)
       if (data !== null) {
         stats.hits++
-        // 同时更新内存缓存（加速后续访问）
+        // 回填内存缓存（加速后续访问）
         memoryCache.set(key, data, 60)
         return data
       }
     } catch (error) {
       handleRedisError(error)
-      dataLogger.error('Upstash Redis 读取失败，尝试内存缓存:', { key, error })
+      dataLogger.error('Redis read failed:', { key, error })
     }
-  }
-
-  // 2. 从内存缓存获取
-  const memoryData = memoryCache.get<T>(key)
-  if (memoryData !== null) {
-    stats.hits++
-    return memoryData
   }
 
   stats.misses++
@@ -219,19 +126,20 @@ export async function set<T>(key: string, value: T, options: CacheOptions = {}):
     memoryCache.set(key, value, ttl)
   }
 
-  // 2. 尝试写入 Redis
+  // 2. 尝试写入 Redis (single pipeline for SET + tags)
   if (redis) {
     try {
-      await redis.set(key, value, { ex: ttl })
-
-      // 如果有标签，将键添加到标签集合中
       if (tags && tags.length > 0) {
+        // Pipeline: SET + SADD + EXPIRE in one round-trip
         const pipeline = redis.pipeline()
+        pipeline.set(key, value, { ex: ttl })
         for (const tag of tags) {
           pipeline.sadd(`tag:${tag}`, key)
           pipeline.expire(`tag:${tag}`, ttl * 2)
         }
         await pipeline.exec()
+      } else {
+        await redis.set(key, value, { ex: ttl })
       }
 
       return true
@@ -343,16 +251,35 @@ export async function delByTag(tag: string): Promise<number> {
 
 /**
  * 获取或设置缓存（stale-while-revalidate 模式）
+ *
+ * When staleTtl is provided and the Redis key has expired but the memory
+ * cache still holds stale data, returns stale data immediately and
+ * refreshes in the background.
  */
 export async function getOrSet<T>(
   key: string,
   fetcher: () => Promise<T>,
-  options: CacheOptions = {}
+  options: CacheOptions & { staleTtl?: number } = {}
 ): Promise<T> {
   // 尝试从缓存获取
   const cached = await get<T>(key)
   if (cached !== null) {
     return cached
+  }
+
+  // If staleTtl is set, check memory for stale data and revalidate in background
+  if (options.staleTtl) {
+    const memoryCache = getMemoryCache()
+    // getMemoryCache().get checks expiry — use the raw map for stale check
+    const staleData = memoryCache.get<T>(`stale:${key}`)
+    if (staleData !== null) {
+      // Serve stale, refresh in background
+      fetcher().then(fresh => {
+        set(key, fresh, options).catch(() => {})
+        memoryCache.set(`stale:${key}`, fresh, (options.ttl || 120) + options.staleTtl!)
+      }).catch(() => {})
+      return staleData
+    }
   }
 
   // 缓存未命中，获取新数据
@@ -362,6 +289,12 @@ export async function getOrSet<T>(
   set(key, data, options).catch((err) => {
     dataLogger.warn('Async cache set failed:', { key, error: String(err) })
   })
+
+  // Also store in stale bucket if staleTtl is configured
+  if (options.staleTtl) {
+    const memoryCache = getMemoryCache()
+    memoryCache.set(`stale:${key}`, data, (options.ttl || 120) + options.staleTtl)
+  }
 
   return data
 }
@@ -543,38 +476,61 @@ export async function incr(key: string, delta: number = 1): Promise<number | nul
 // ============================================
 
 /**
- * 批量获取
+ * 批量获取 — checks memory first, then fetches only misses from Redis (single MGET)
  */
 export async function mget<T>(keys: string[]): Promise<(T | null)[]> {
-  const redis = await getRedis()
-  const memoryCache = getMemoryCache()
+  if (keys.length === 0) return []
 
-  if (redis) {
-    try {
-      const results = await redis.mget<(T | null)[]>(...keys)
-      return results.map((r, i) => {
-        if (r !== null) {
-          stats.hits++
-          // 同步到内存缓存
-          memoryCache.set(keys[i], r, 60)
-          return r
-        } else {
-          stats.misses++
-          return null
-        }
-      })
-    } catch (error) {
-      handleRedisError(error)
+  const memoryCache = getMemoryCache()
+  const results: (T | null)[] = new Array(keys.length).fill(null)
+
+  // 1. Check memory cache first
+  const missIndices: number[] = []
+  for (let i = 0; i < keys.length; i++) {
+    const data = memoryCache.get<T>(keys[i])
+    if (data !== null) {
+      results[i] = data
+      stats.hits++
+    } else {
+      missIndices.push(i)
     }
   }
 
-  // 从内存缓存获取
-  return keys.map(key => {
-    const data = memoryCache.get<T>(key)
-    if (data !== null) stats.hits++
-    else stats.misses++
-    return data
-  })
+  // 2. Batch-fetch only misses from Redis
+  if (missIndices.length > 0) {
+    const redis = await getRedis()
+    if (redis) {
+      try {
+        const missKeys = missIndices.map(i => keys[i])
+        const redisResults = await redis.mget<(T | null)[]>(...missKeys)
+        for (let j = 0; j < missIndices.length; j++) {
+          const val = redisResults[j]
+          const idx = missIndices[j]
+          if (val !== null) {
+            results[idx] = val
+            stats.hits++
+            // Backfill memory cache
+            memoryCache.set(keys[idx], val, 60)
+          } else {
+            stats.misses++
+          }
+        }
+      } catch (error) {
+        handleRedisError(error)
+        // Count remaining as misses
+        for (const idx of missIndices) {
+          if (results[idx] === null) stats.misses++
+        }
+      }
+    } else {
+      // No Redis — count remaining as misses
+      for (const idx of missIndices) {
+        if (results[idx] === null) stats.misses++
+      }
+    }
+  }
+
+  return results
 }
 
 /**
@@ -621,7 +577,7 @@ export async function checkHealth(): Promise<{
   memory: { size: number; maxSize: number }
 }> {
   const memoryCache = getMemoryCache()
-  const redisOk = await checkRedisHealth()
+  const redisOk = await pingRedis()
 
   return {
     redis: redisOk,
@@ -633,14 +589,13 @@ export async function checkHealth(): Promise<{
  * 强制使用内存缓存（用于测试或紧急情况）
  */
 export function forceMemoryOnly(enabled: boolean): void {
-  if (enabled) {
-    redisHealthy = false
-  } else {
-    // 尝试恢复 Redis
-    checkRedisHealth().catch((err) => {
+  if (!enabled) {
+    // Try to recover Redis
+    pingRedis().catch((err) => {
       dataLogger.debug('Redis recovery check failed:', err)
     })
   }
+  // Note: when enabled=true, recordRedisError will mark unhealthy after threshold
 }
 
 // ============================================
