@@ -278,7 +278,7 @@ export default function CopyTradeButton({
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            zIndex: 9999,
+            zIndex: tokens.zIndex.max,
             padding: tokens.spacing[4],
           }}
           onClick={() => setShowWarning(false)}

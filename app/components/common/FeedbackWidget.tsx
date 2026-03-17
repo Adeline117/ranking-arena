@@ -73,7 +73,7 @@ export default function FeedbackWidget() {
           display: 'grid',
           placeItems: 'center',
           cursor: 'pointer',
-          zIndex: 9998,
+          zIndex: tokens.zIndex.toast,
           transition: `all ${tokens.transition.base}`,
           color: 'var(--color-text-tertiary)',
         }}
@@ -95,7 +95,7 @@ export default function FeedbackWidget() {
             borderRadius: tokens.radius.xl,
             boxShadow: '0 12px 40px var(--color-overlay-dark)',
             padding: tokens.spacing[5],
-            zIndex: 9999,
+            zIndex: tokens.zIndex.max,
             display: 'flex',
             flexDirection: 'column',
             gap: tokens.spacing[3],

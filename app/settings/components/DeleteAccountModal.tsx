@@ -72,7 +72,7 @@ export function DeleteAccountModal({
         top: 0, left: 0, right: 0, bottom: 0,
         background: 'var(--color-backdrop)',
         display: 'flex', alignItems: 'center', justifyContent: 'center',
-        zIndex: 9999,
+        zIndex: tokens.zIndex.max,
         padding: tokens.spacing[4],
       }}
       onClick={onClose}

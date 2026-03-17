@@ -38,7 +38,7 @@ export default function StickerPicker({ onSelect, isOpen, onClose }: StickerPick
     border: `1px solid ${tokens.colors.border.primary}`,
     borderRadius: tokens.radius.lg,
     padding: 8,
-    zIndex: 9999,
+    zIndex: tokens.zIndex.max,
     boxShadow: 'var(--shadow-lg-dark)',
     width: 'min(300px, calc(100vw - 32px))',
     maxHeight: 320,
