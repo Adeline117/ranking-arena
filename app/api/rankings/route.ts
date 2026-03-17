@@ -381,7 +381,7 @@ async function getCompositeRankings(params: {
       .lte('roi', ROI_ANOMALY_THRESHOLD)
       .gte('roi', -ROI_ANOMALY_THRESHOLD)
       .order('arena_score', { ascending: false, nullsFirst: false })
-      .limit(3000);
+      .limit(2000);
 
     if (platform) q = q.eq('source', platform);
     else if (category) {

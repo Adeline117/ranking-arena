@@ -26,6 +26,39 @@ interface PercentileData {
 }
 
 /**
+ * Calculate percentile using COUNT queries instead of fetching all rows.
+ * Returns the percentage of traders with a lower score.
+ */
+async function calculatePercentileSQL(
+  supabase: ReturnType<typeof getSupabaseAdmin>,
+  column: string,
+  myScore: number | null,
+  categoryFilter: string,
+): Promise<number> {
+  if (myScore == null) return 50
+
+  // Count traders with score below mine
+  const { count: belowCount } = await supabase
+    .from('leaderboard_ranks')
+    .select('id', { count: 'exact', head: true })
+    .eq('season_id', '90D')
+    .ilike('source', `%${categoryFilter}%`)
+    .not(column, 'is', null)
+    .lt(column, myScore)
+
+  // Count total traders with this score
+  const { count: totalCount } = await supabase
+    .from('leaderboard_ranks')
+    .select('id', { count: 'exact', head: true })
+    .eq('season_id', '90D')
+    .ilike('source', `%${categoryFilter}%`)
+    .not(column, 'is', null)
+
+  if (!totalCount || totalCount === 0) return 50
+  return Math.round(((belowCount ?? 0) / totalCount) * 100)
+}
+
+/**
  * GET - 获取交易员在同类中的百分位排名
  */
 export async function GET(
@@ -83,22 +116,15 @@ export async function GET(
       categoryFilter = 'futures'
     }
 
-    // 获取同类交易员的分数分布 from leaderboard_ranks
-    const { data: categoryTraders, error: catError } = await supabase
+    // Get total count in category
+    const { count: totalInCategory } = await supabase
       .from('leaderboard_ranks')
-      .select('arena_score, return_score, drawdown_score, stability_score')
+      .select('id', { count: 'exact', head: true })
       .eq('season_id', '90D')
-      .or(`source.ilike.%${categoryFilter}%`)
+      .ilike('source', `%${categoryFilter}%`)
       .not('arena_score', 'is', null)
 
-    if (catError) {
-      logger.error('[percentile] 查询同类交易员Failed:', catError)
-      return error('Failed to fetch percentile data', 500)
-    }
-
-    const totalInCategory = categoryTraders?.length || 0
-
-    if (totalInCategory === 0) {
+    if (!totalInCategory || totalInCategory === 0) {
       return success({
         percentile: {
           overall: 50,
@@ -110,21 +136,19 @@ export async function GET(
       })
     }
 
-    // 计算百分位
-    const calculatePercentile = (myScore: number | null, allScores: (number | null)[]): number => {
-      if (myScore == null) return 50
-      const validScores = allScores.filter(s => s != null) as number[]
-      if (validScores.length === 0) return 50
-      
-      const countBelow = validScores.filter(s => s < myScore).length
-      return Math.round((countBelow / validScores.length) * 100)
-    }
+    // Calculate all percentiles in parallel using COUNT queries (not fetching all rows)
+    const [overall, returnPct, drawdown, stability] = await Promise.all([
+      calculatePercentileSQL(supabase, 'arena_score', traderScores.arena_score, categoryFilter),
+      calculatePercentileSQL(supabase, 'return_score', traderScores.return_score, categoryFilter),
+      calculatePercentileSQL(supabase, 'drawdown_score', traderScores.drawdown_score, categoryFilter),
+      calculatePercentileSQL(supabase, 'stability_score', traderScores.stability_score, categoryFilter),
+    ])
 
     const percentile: PercentileData = {
-      overall: calculatePercentile(traderScores.arena_score, categoryTraders.map(t => t.arena_score)),
-      return: calculatePercentile(traderScores.return_score, categoryTraders.map(t => t.return_score)),
-      drawdown: calculatePercentile(traderScores.drawdown_score, categoryTraders.map(t => t.drawdown_score)),
-      stability: calculatePercentile(traderScores.stability_score, categoryTraders.map(t => t.stability_score)),
+      overall,
+      return: returnPct,
+      drawdown,
+      stability,
       totalInCategory,
     }
 

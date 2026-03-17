@@ -220,6 +220,27 @@ function RankingTableInner(props: {
     return template
   }, [visibleColumns])
 
+  // Memoize grid CSS string to avoid injecting new style on every render
+  const gridStyleCSS = React.useMemo(() => {
+    const hiddenCols = [
+      !visibleColumns.includes('score') && '.ranking-table-grid-custom .col-score { display: none !important; }',
+      !visibleColumns.includes('winrate') && '.ranking-table-grid-custom .col-winrate { display: none !important; }',
+      !visibleColumns.includes('mdd') && '.ranking-table-grid-custom .col-mdd { display: none !important; }',
+      !visibleColumns.includes('roi') && '.ranking-table-grid-custom .roi-cell { display: none !important; }',
+      !visibleColumns.includes('pnl') && '.ranking-table-grid-custom .col-pnl { display: none !important; }',
+      !visibleColumns.includes('sortino') && '.ranking-table-grid-custom .col-sortino { display: none !important; }',
+      !visibleColumns.includes('alpha') && '.ranking-table-grid-custom .col-alpha { display: none !important; }',
+      !visibleColumns.includes('style') && '.ranking-table-grid-custom .col-style { display: none !important; }',
+    ].filter(Boolean).join('\n        ')
+    return `
+      @media (min-width: 768px) {
+        .ranking-table-grid-custom {
+          grid-template-columns: ${desktopGridTemplate} !important;
+        }
+        ${hiddenCols}
+      }
+    `
+  }, [visibleColumns, desktopGridTemplate])
 
   const handleSort = (col: 'score' | 'roi' | 'pnl' | 'winrate' | 'mdd' | 'sortino' | 'alpha') => {
     const newDir = sortColumn === col ? (sortDir === 'desc' ? 'asc' : 'desc') : 'desc'
@@ -317,22 +338,8 @@ function RankingTableInner(props: {
       avatarUrls={traders.slice(0, 10).map(t => t.avatar_url)}
       maxPreload={10}
     />
-    {/* Dynamic grid template override */}
-    <style>{`
-      @media (min-width: 768px) {
-        .ranking-table-grid-custom {
-          grid-template-columns: ${desktopGridTemplate} !important;
-        }
-        ${!visibleColumns.includes('score') ? '.ranking-table-grid-custom .col-score { display: none !important; }' : ''}
-        ${!visibleColumns.includes('winrate') ? '.ranking-table-grid-custom .col-winrate { display: none !important; }' : ''}
-        ${!visibleColumns.includes('mdd') ? '.ranking-table-grid-custom .col-mdd { display: none !important; }' : ''}
-        ${!visibleColumns.includes('roi') ? '.ranking-table-grid-custom .roi-cell { display: none !important; }' : ''}
-        ${!visibleColumns.includes('pnl') ? '.ranking-table-grid-custom .col-pnl { display: none !important; }' : ''}
-        ${!visibleColumns.includes('sortino') ? '.ranking-table-grid-custom .col-sortino { display: none !important; }' : ''}
-        ${!visibleColumns.includes('alpha') ? '.ranking-table-grid-custom .col-alpha { display: none !important; }' : ''}
-        ${!visibleColumns.includes('style') ? '.ranking-table-grid-custom .col-style { display: none !important; }' : ''}
-      }
-    `}</style>
+    {/* Dynamic grid template override — memoized to avoid style recalc on re-render */}
+    <style>{gridStyleCSS}</style>
     <Box
       className="glass-card ranking-table-container"
       p={0}
