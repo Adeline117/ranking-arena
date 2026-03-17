@@ -357,7 +357,7 @@ export default function SectorTreemap({ onSectorClick }: { onSectorClick?: (cate
             borderRadius: tokens.radius.sm,
             fontSize: 12,
             pointerEvents: 'none',
-            zIndex: 1000,
+            zIndex: tokens.zIndex.tooltip,
             whiteSpace: 'nowrap',
           }}>
             <strong>{node.name}</strong> / {node.category}<br />
