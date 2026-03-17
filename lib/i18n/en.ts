@@ -1125,6 +1125,8 @@ const en = {
     removeFromCompare: 'Remove from compare',
     inCompare: 'In Compare',
     viewComparison: 'View Comparison',
+    rankTrendTooltip: 'Arena Score trend (30D)',
+    scoreTrend30d: 'Score Trend (30D)',
     // Phase 3 - Portfolio Suggestions
     portfolioSuggestions: 'Portfolio Suggestions',
     portfolioDesc: 'AI-powered diversified trader portfolio recommendations',
