@@ -2695,7 +2695,7 @@ const ko = {
 
     // Sub not-found pages
     traderNotFoundTitle: '트레이더를 찾을 수 없습니다',
-    traderNotFoundDesc: '이 트레이더가 존재하지 않거나 프로필이 삭제되었습니다.',
+    traderNotFoundDesc: '이 트레이더가 존재하지 않거나 프로필이 삭제되었습니다. 다른 트레이더를 검색하거나 랭킹을 확인해 보세요.',
     userNotFoundTitle: '사용자를 찾을 수 없습니다',
     userNotFoundDesc: '이 사용자가 존재하지 않거나 계정이 삭제되었습니다.',
     postNotFoundTitle: '게시물을 찾을 수 없습니다',
@@ -3702,7 +3702,7 @@ const ko = {
     linkedAt: '연결됨',
     noFollowers: '아직 팔로워가 없습니다',
     noMessagesHint: '아직 메시지가 없습니다',
-    noAlertsDesc: '설정된 알림이 없습니다',
+    noAlertsDesc: '랭킹 페이지에서 트레이더를 팔로우하면 성과 변동 시 알림을 받을 수 있습니다',
 
     // Errors
     invalidResponse: '잘못된 응답',
@@ -4405,7 +4405,7 @@ const ko = {
 
     // Exchange pages
     exchangeNotFound: '거래소를 찾을 수 없습니다',
-    exchangeNotFoundDesc: '이 거래소 순위 페이지는 존재하지 않습니다.',
+    exchangeNotFoundDesc: '이 거래소 순위 페이지는 존재하지 않습니다. 랭킹 페이지에서 다른 거래소를 확인해 보세요.',
 
     // EXP actions
     expActionLogin: '일일 로그인',
