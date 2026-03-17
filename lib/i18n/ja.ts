@@ -3618,6 +3618,7 @@ const ja = {
     footerAbout: 'について',
     footerRankings: 'ランキング',
     footerMarket: 'マーケット',
+    footerPricing: '料金プラン',
     footerLibrary: 'ライブラリ',
     footerGroups: 'グループ',
     footerHot: '注目',
@@ -4212,6 +4213,11 @@ const ja = {
     verifiedTraderTelegram: 'Telegram',
     verifiedTraderDiscord: 'Discord',
     verifiedTraderWebsite: 'ウェブサイト',
+
+    // Number formatting
+    numberFormatThousand: '千',
+    numberFormatMillion: '百万',
+    numberFormatBillion: '億',
 
 } as const
 
