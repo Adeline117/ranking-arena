@@ -492,8 +492,11 @@ export abstract class BaseConnector implements PlatformConnector {
 
       const data = await response.json() as T;
 
-      // Cache successful scraper result for 30 min
-      cache.set(cacheKey, data, { ttl: SCRAPER_CACHE_TTL }).catch(() => {})
+      // Cache successful scraper result for 30 min (never cache error responses)
+      const dataObj = data as Record<string, unknown>
+      if (!dataObj?.error) {
+        cache.set(cacheKey, data, { ttl: SCRAPER_CACHE_TTL }).catch(() => {})
+      }
 
       return data;
     } catch (error) {
