@@ -3702,7 +3702,7 @@ const ko = {
     linkedAt: '연결됨',
     noFollowers: '아직 팔로워가 없습니다',
     noMessagesHint: '아직 메시지가 없습니다',
-    noAlertsDesc: '설정된 알림이 없습니다',
+    noAlertsDesc: '랭킹 페이지에서 트레이더를 팔로우하면 성과 변동 시 알림을 받을 수 있습니다',
 
     // Errors
     invalidResponse: '잘못된 응답',

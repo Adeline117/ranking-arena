@@ -3478,7 +3478,7 @@ const ja = {
     linkedAt: 'リンク日',
     noFollowers: 'フォロワーがまだいません',
     noMessagesHint: 'メッセージがまだありません',
-    noAlertsDesc: 'アラートが設定されていません',
+    noAlertsDesc: 'ランキングページでトレーダーをフォローすると、パフォーマンスが変化した時に通知を受け取れます',
 
     invalidResponse: '無効なレスポンス',
     loadConnectionsFailed: '接続の読み込みに失敗しました',

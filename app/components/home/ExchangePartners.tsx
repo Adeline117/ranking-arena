@@ -88,18 +88,6 @@ export default function ExchangePartners() {
         animation: 'exchange-scroll 35s linear infinite',
         width: 'max-content',
       }}>
-        <span style={{
-          fontSize: 11,
-          fontWeight: 700,
-          color: 'var(--color-text-tertiary)',
-          textTransform: 'uppercase',
-          letterSpacing: '0.1em',
-          flexShrink: 0,
-          paddingLeft: 8,
-          paddingRight: 4,
-        }}>
-          {language === 'zh' ? '数据来源' : 'Sources'}
-        </span>
         {doubled.map((ex, i) => {
           const source = EXCHANGE_SOURCE_MAP[ex.key] || ''
           const content = (

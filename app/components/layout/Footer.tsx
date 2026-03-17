@@ -18,6 +18,7 @@ export default function Footer() {
       links: [
         { href: '/rankings', label: t('footerRankings') },
         { href: '/market', label: t('footerMarket') },
+        { href: '/pricing', label: t('footerPricing') },
       ],
     },
     {
