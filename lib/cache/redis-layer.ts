@@ -140,43 +140,18 @@ export const CACHE_KEY_PATTERNS = {
 } as const
 
 // ============================================
-// Redis 客户端管理
+// Redis 客户端管理 (shared with index.ts)
 // ============================================
 
-type UpstashRedisType = InstanceType<typeof import('@upstash/redis')['Redis']>
+import { getSharedRedis, isRedisAvailable } from './redis-client'
 
-let redisClient: UpstashRedisType | null = null
-let redisInitialized = false
-let redisAvailable = false
+async function initRedis() {
+  return getSharedRedis()
+}
 
-async function initRedis(): Promise<UpstashRedisType | null> {
-  if (typeof window !== 'undefined') return null
-  
-  if (redisInitialized) return redisAvailable ? redisClient : null
-  redisInitialized = true
-  
-  const url = process.env.UPSTASH_REDIS_REST_URL
-  const token = process.env.UPSTASH_REDIS_REST_TOKEN
-  
-  if (!url || !token) {
-    dataLogger.warn('[RedisLayer] Upstash 环境变量未配置')
-    return null
-  }
-  
-  try {
-    const { Redis } = await import('@upstash/redis')
-    redisClient = new Redis({ url, token })
-    
-    // 测试连接
-    await redisClient.ping()
-    redisAvailable = true
-    dataLogger.info('[RedisLayer] Redis 连接成功')
-    return redisClient
-  } catch (error) {
-    dataLogger.error('[RedisLayer] Redis 初始化失败:', error)
-    redisAvailable = false
-    return null
-  }
+// Alias for stats
+function getRedisAvailable(): boolean {
+  return isRedisAvailable()
 }
 
 // ============================================
@@ -193,7 +168,7 @@ export function getLayerStats(): LayerStats {
   return {
     ...layerStats,
     memory: { ...layerStats.memory, size: memoryCache.getStats().size },
-    redis: { ...layerStats.redis, available: redisAvailable },
+    redis: { ...layerStats.redis, available: getRedisAvailable() },
   }
 }
 
@@ -378,6 +353,61 @@ export async function tieredGetOrSet<T>(
 }
 
 /**
+ * Batch get from tiered cache — checks memory first, then MGET for Redis misses.
+ * Returns results in the same order as keys. Null for misses.
+ */
+export async function tieredMget<T>(
+  keys: string[],
+  tier: CacheTier = 'warm'
+): Promise<(T | null)[]> {
+  if (keys.length === 0) return []
+
+  const memoryCache = getMemoryCache()
+  const config = CACHE_TIERS[tier]
+  const results: (T | null)[] = new Array(keys.length).fill(null)
+
+  // 1. Check memory cache
+  const missIndices: number[] = []
+  for (let i = 0; i < keys.length; i++) {
+    const memoryData = memoryCache.get<CacheEntry<T>>(keys[i])
+    if (memoryData?.data !== undefined) {
+      results[i] = memoryData.data
+      layerStats.memory.hits++
+    } else {
+      layerStats.memory.misses++
+      missIndices.push(i)
+    }
+  }
+
+  // 2. Batch-fetch misses from Redis
+  if (missIndices.length > 0) {
+    const redis = await initRedis()
+    if (redis) {
+      try {
+        const missKeys = missIndices.map(i => keys[i])
+        const redisResults = await redis.mget<(CacheEntry<T> | null)[]>(...missKeys)
+        for (let j = 0; j < missIndices.length; j++) {
+          const entry = redisResults[j]
+          const idx = missIndices[j]
+          if (entry?.data !== undefined) {
+            results[idx] = entry.data
+            layerStats.redis.hits++
+            // Backfill memory
+            memoryCache.set(keys[idx], entry, config.memoryTtlSeconds)
+          } else {
+            layerStats.redis.misses++
+          }
+        }
+      } catch (error) {
+        dataLogger.warn('[RedisLayer] MGET failed:', { error, count: missIndices.length })
+      }
+    }
+  }
+
+  return results
+}
+
+/**
  * 预热缓存（批量写入）
  */
 export async function warmupCache<T>(
@@ -540,12 +570,11 @@ export async function checkCacheHealth(): Promise<{
       redisLatency = Date.now() - start
     } catch {
       // Intentionally swallowed: Redis ping failed, mark as unavailable for health check
-      redisAvailable = false
     }
   }
-  
+
   return {
-    redis: { available: redisAvailable, latencyMs: redisLatency },
+    redis: { available: getRedisAvailable(), latencyMs: redisLatency },
     memory: memoryCache.getStats(),
     stats: getLayerStats(),
   }
