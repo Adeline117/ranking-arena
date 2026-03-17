@@ -338,7 +338,7 @@ function TraderContent({ handle, serverData }: { handle: string; serverData: Tra
                 style={{
                   position: 'fixed',
                   inset: 0,
-                  zIndex: 1000,
+                  zIndex: tokens.zIndex.modal,
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',

@@ -11,6 +11,7 @@ import {
   getTraderAvatarUrl,
   isWalletAddress,
   generateBlockieSvg,
+  needsProxy,
   type AvatarProps
 } from '@/lib/utils/avatar'
 
