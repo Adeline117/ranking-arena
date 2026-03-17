@@ -35,6 +35,7 @@ import {
   fetchDriftStatsDetail,
   fetchDydxEquityCurve,
   fetchDydxStatsDetail,
+  fetchDydxV4PositionHistory,
   fetchAevoEquityCurve,
   fetchAevoStatsDetail,
   fetchAevoPositionHistory,
@@ -60,6 +61,10 @@ import {
   fetchEtoroPortfolio,
   fetchCoinexEquityCurve,
   fetchCoinexStatsDetail,
+  fetchBitunixEquityCurve,
+  fetchBitunixStatsDetail,
+  fetchBitunixCurrentPositions,
+  fetchBitunixPositionHistory,
   fetchWalletAUM,
   fetchWalletPortfolio,
   isDexPlatform,
@@ -238,6 +243,7 @@ export const ENRICHMENT_PLATFORM_CONFIGS: Record<string, EnrichmentConfig> = {
     platform: 'dydx',
     fetchEquityCurve: fetchDydxEquityCurve,
     fetchStatsDetail: fetchDydxStatsDetail,
+    fetchPositionHistory: fetchDydxV4PositionHistory,
     concurrency: 3, delayMs: 500,
   },
   aevo: {
@@ -320,6 +326,14 @@ export const ENRICHMENT_PLATFORM_CONFIGS: Record<string, EnrichmentConfig> = {
     fetchEquityCurve: fetchCoinexEquityCurve,
     fetchStatsDetail: fetchCoinexStatsDetail,
     concurrency: 2, delayMs: 2000,
+  },
+  bitunix: {
+    platform: 'bitunix',
+    fetchEquityCurve: fetchBitunixEquityCurve,
+    fetchStatsDetail: fetchBitunixStatsDetail,
+    fetchPositionHistory: fetchBitunixPositionHistory,
+    fetchCurrentPositions: fetchBitunixCurrentPositions,
+    concurrency: 2, delayMs: 1500,
   },
 }
 

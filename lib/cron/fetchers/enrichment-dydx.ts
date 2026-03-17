@@ -5,7 +5,8 @@
  * Also fetches win_rate + trade counts from Copin API.
  */
 
-import type { EquityCurvePoint, StatsDetail } from './enrichment-types'
+import type { EquityCurvePoint, StatsDetail, PositionHistoryItem } from './enrichment-types'
+import { fetchWithProxyFallback } from './enrichment-types'
 import { fetchJson } from './shared'
 import { logger } from '@/lib/logger'
 
@@ -192,4 +193,69 @@ async function fetchCopinTraderStats(address: string): Promise<CopinTraderDetail
     // Copin API not available — not critical
   }
   return null
+}
+
+// ============================================
+// dYdX v4 Fills API — Position History
+// ============================================
+
+interface DydxFill {
+  id: string
+  side: 'BUY' | 'SELL'
+  type: string
+  market: string
+  marketType: string
+  price: string
+  size: string
+  fee: string
+  createdAt: string
+}
+
+interface DydxFillsResponse {
+  fills?: DydxFill[]
+}
+
+/**
+ * Fetch position history from dYdX v4 fills API.
+ *
+ * Endpoint: GET /v4/fills?address={dydx_address}&subaccountNumber=0&limit=100
+ * Geo-blocked — uses fetchWithProxyFallback (VPS/CF proxy).
+ *
+ * Each fill is mapped as an individual position entry (BUY=long, SELL=short).
+ */
+export async function fetchDydxV4PositionHistory(
+  address: string
+): Promise<PositionHistoryItem[]> {
+  try {
+    const url = `${INDEXER_URL}/v4/fills?address=${address}&subaccountNumber=0&limit=100`
+    const data = await fetchWithProxyFallback<DydxFillsResponse>(url, { timeoutMs: 15000 })
+
+    if (!data?.fills || data.fills.length === 0) return []
+
+    return data.fills.map((fill) => {
+      const price = parseFloat(fill.price) || null
+      const size = parseFloat(fill.size) || null
+      const fee = parseFloat(fill.fee) || 0
+      const notional = price && size ? price * size : null
+
+      return {
+        symbol: fill.market || 'UNKNOWN',
+        direction: fill.side === 'BUY' ? 'long' as const : 'short' as const,
+        positionType: fill.marketType === 'PERPETUAL' ? 'perpetual' : fill.marketType?.toLowerCase() || 'perpetual',
+        marginMode: 'cross',
+        openTime: fill.createdAt || null,
+        closeTime: null, // Fills don't have a close time — each fill is a single event
+        entryPrice: price,
+        exitPrice: null,
+        maxPositionSize: notional,
+        closedSize: size,
+        pnlUsd: fee !== 0 ? -fee : null, // Fee is the only PnL indicator per fill
+        pnlPct: null,
+        status: 'filled',
+      }
+    })
+  } catch (err) {
+    logger.warn(`[dydx] V4 fills failed for ${address}: ${err instanceof Error ? err.message : String(err)}`)
+    return []
+  }
 }

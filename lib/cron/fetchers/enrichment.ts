@@ -88,6 +88,7 @@ export {
 export {
   fetchDydxEquityCurve,
   fetchDydxStatsDetail,
+  fetchDydxV4PositionHistory,
 } from './enrichment-dydx'
 
 // DEX (Hyperliquid + GMX)
@@ -166,6 +167,14 @@ export {
   fetchCoinexEquityCurve,
   fetchCoinexStatsDetail,
 } from './enrichment-coinex'
+
+// Bitunix
+export {
+  fetchBitunixEquityCurve,
+  fetchBitunixStatsDetail,
+  fetchBitunixCurrentPositions,
+  fetchBitunixPositionHistory,
+} from './enrichment-bitunix'
 
 // Derived metrics
 export {
