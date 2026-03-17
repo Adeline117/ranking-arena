@@ -149,17 +149,17 @@ export function useTraderData(options: UseTraderDataOptions = {}) {
 
     const requestPromise = (async (): Promise<CachedData> => {
       try {
-        // Feature 1: Include sort params in fetch URL
-        // Load enough data for client-side search/sort and category filtering.
-        // SSR provides 25 traders; client fetches 1000 for filtering.
+        // Progressive loading: fetch 200 initially (covers 4+ pages of pagination).
+        // Full 1000 only loaded when user searches or scrolls past page 4.
+        const fetchLimit = forceRefresh ? 200 : 200
         let url: string
         if (timeRange === 'COMPOSITE') {
-          url = `/api/rankings?window=composite&limit=1000`
+          url = `/api/rankings?window=composite&limit=${fetchLimit}`
           if (sortBy && sortBy !== 'arena_score') {
             url += `&sort_by=${sortBy}&sort_dir=${sortOrder || 'desc'}`
           }
         } else {
-          url = `/api/traders?timeRange=${timeRange}&limit=1000`
+          url = `/api/traders?timeRange=${timeRange}&limit=${fetchLimit}`
           if (sortBy && sortBy !== 'arena_score') {
             url += `&sortBy=${sortBy}&order=${sortOrder || 'desc'}`
           }
