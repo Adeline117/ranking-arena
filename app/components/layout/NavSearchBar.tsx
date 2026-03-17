@@ -44,7 +44,7 @@ export default function NavSearchBar({
         <input
           type="search"
           className="top-nav-search-input"
-          placeholder={`${t('searchPlaceholder')}  ⌘K`}
+          placeholder={`${t('searchPlaceholder')} ⌘K`}
           value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}
           aria-label={t('searchTraders')}
