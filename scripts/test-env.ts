@@ -1,5 +1,0 @@
-console.log('VPS_PROXY_SG:', process.env.VPS_PROXY_SG)
-console.log('VPS_PROXY_URL:', process.env.VPS_PROXY_URL)
-console.log('VPS_SCRAPER_HOST:', process.env.VPS_SCRAPER_HOST)
-console.log('VPS_PROXY_KEY:', process.env.VPS_PROXY_KEY)
-console.log('All env vars:', Object.keys(process.env).filter(k => k.includes('PROXY') || k.includes('VPS')))
