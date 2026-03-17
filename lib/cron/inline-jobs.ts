@@ -286,7 +286,7 @@ export async function refreshHotScoresInline(): Promise<InlineJobResult> {
     }
 
     // Step 4: Direct update fallback
-    const cutoff = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString() // 30 days (was 7)
+    const cutoff = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString() // 7 days — keep fallback fast
     const { data: posts, error: fetchErr } = await supabase
       .from('posts')
       .select('id, like_count, comment_count, repost_count, view_count, created_at, poll_id')
