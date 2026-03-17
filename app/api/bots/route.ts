@@ -135,11 +135,16 @@ export async function GET(request: NextRequest) {
       }
     })
 
+    const asOf = rows?.[0]?.captured_at || new Date().toISOString()
+    const asOfDate = new Date(asOf)
+    const staleDays = Math.floor((Date.now() - asOfDate.getTime()) / (1000 * 60 * 60 * 24))
+
     return NextResponse.json({
       bots,
       window,
       total_count: count || 0,
-      as_of: rows?.[0]?.captured_at || new Date().toISOString(),
+      as_of: asOf,
+      ...(staleDays > 7 ? { stale: true, stale_days: staleDays } : {}),
     }, {
       headers: {
         'Cache-Control': 'public, s-maxage=120, stale-while-revalidate=600',

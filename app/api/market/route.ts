@@ -53,11 +53,23 @@ const PAIRS: Pair[] = [
 // ---- 内存缓存（按 pairs key 缓存）----
 const cacheMap = new Map<string, { ts: number; rows: MarketRow[]; source: string }>()
 
-function formatRow(symbol: string, priceNum: number, pctNum: number): MarketRow {
+function formatRow(symbol: string, priceNum: number, pctNum: number, rawPrice?: number | null): MarketRow {
   const direction: 'up' | 'down' = pctNum >= 0 ? 'up' : 'down'
+  // Use raw price for small values (SHIB, PEPE etc.) to preserve significant digits
+  const actualPrice = rawPrice != null ? rawPrice : priceNum
+  let priceStr: string
+  if (actualPrice < 0.0001) {
+    priceStr = actualPrice.toFixed(8)
+  } else if (actualPrice < 0.01) {
+    priceStr = actualPrice.toFixed(6)
+  } else if (actualPrice < 1) {
+    priceStr = actualPrice.toFixed(4)
+  } else {
+    priceStr = Number(priceNum).toLocaleString(undefined, { maximumFractionDigits: 2 })
+  }
   return {
     symbol,
-    price: Number(priceNum).toLocaleString(undefined, { maximumFractionDigits: 2 }),
+    price: priceStr,
     changePct: `${pctNum >= 0 ? '+' : ''}${pctNum.toFixed(2)}%`,
     direction,
   }
@@ -204,7 +216,7 @@ async function fetchFromCoinGeckoForPairs(pairs: Pair[]): Promise<MarketRow[]> {
       // Use symbol from known pairs, or generate from CoinGecko data
       const knownPair = pairs.find(p => p.cgId === c.id)
       const symbol = knownPair?.symbol || `${(c.symbol || c.id).toUpperCase()}-USD`
-      rows.push(formatRow(symbol, price, Number.isFinite(pct) ? pct : 0))
+      rows.push(formatRow(symbol, price, Number.isFinite(pct) ? pct : 0, c.current_price))
     }
 
     return rows
@@ -248,7 +260,7 @@ async function fetchFromCoinbaseForPairs(pairs: Pair[]): Promise<MarketRow[]> {
           return null
         }
         const pct = ((last - open) / open) * 100
-        return formatRow(p.symbol, last, pct)
+        return formatRow(p.symbol, last, pct, last)
       } catch (error: unknown) {
         if (error instanceof Error && error.name === 'AbortError') {
           return null // 超时返回null

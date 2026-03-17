@@ -78,7 +78,7 @@ export async function GET(request: NextRequest) {
     const idsParam = searchParams.get('ids')
 
     if (!idsParam) {
-      return error('Missing ids parameter', 400)
+      return error('Missing ids parameter. Usage: GET /api/compare?ids=trader1,trader2 (max 5, Pro required)', 400)
     }
 
     const traderIds = idsParam.split(',').map(id => id.trim()).filter(Boolean)
