@@ -590,19 +590,24 @@ const HANDLERS = {
     return { error: 'No API response captured' }
   },
 
-  // ─── Toobit (v15 port: intercept identity-type-leaders) ─────────
+  // ─── Toobit (v15 port: intercept + page.evaluate, CF needs 60s) ──
   'toobit/leaderboard': async (page, params) => {
     const dataType = parseInt(params.period || params.dataType || '2', 10)
     const pageSize = parseInt(params.pageSize || '50', 10)
 
     const captured = setupInterception(page, (url) =>
-      url.includes('identity-type-leaders') || (url.includes('copy') && url.includes('trader'))
+      url.includes('identity-type-leaders') || url.includes('leaderboard') ||
+      (url.includes('copy') && url.includes('trader'))
     )
 
+    // Toobit CF challenge can take 30-50s — use 60s timeout + networkidle
     await page.goto('https://www.toobit.com/en-US/copy-trading', {
-      waitUntil: 'domcontentloaded', timeout: 30000,
+      waitUntil: 'networkidle', timeout: 60000,
+    }).catch(() => {
+      // networkidle may timeout, try domcontentloaded fallback
     })
-    await page.waitForTimeout(5000)
+    await waitForCF(page, 30000)
+    await page.waitForTimeout(3000)
     await page.evaluate(() => window.scrollTo(0, 500)).catch(() => {})
     await page.waitForTimeout(3000)
 
@@ -611,17 +616,30 @@ const HANDLERS = {
       return captured[0].data
     }
 
+    // Multiple API endpoints to try
     const data = await page.evaluate(async (opts) => {
-      try {
-        const r = await fetch(`/v1/copy-trading/identity-type-leaders?dataType=${opts.dataType}&pageSize=${opts.pageSize}&pageNo=1`, { credentials: 'include' })
-        if (!r.ok) return null
-        const text = await r.text()
-        if (!text.startsWith('{')) return null
-        return JSON.parse(text)
-      } catch { return null }
+      async function safeFetch(url) {
+        try {
+          const r = await fetch(url, { credentials: 'include' })
+          if (!r.ok) return null
+          const text = await r.text()
+          if (!text.startsWith('{') && !text.startsWith('[')) return null
+          return JSON.parse(text)
+        } catch { return null }
+      }
+      const endpoints = [
+        `/v1/copy-trading/identity-type-leaders?dataType=${opts.dataType}&pageSize=${opts.pageSize}&pageNo=1`,
+        `/api/v1/copy-trade/leaderboard?period=${opts.dataType}&pageSize=${opts.pageSize}&page=1`,
+        `/copy-trading/api/leaderboard?dataType=${opts.dataType}&pageSize=${opts.pageSize}`,
+      ]
+      for (const ep of endpoints) {
+        const json = await safeFetch(ep)
+        if (json && (json.data || json.result || json.list)) return json
+      }
+      return null
     }, { dataType, pageSize }).catch(() => null)
 
-    return data || { error: 'No API response captured' }
+    return data || (captured.length > 0 ? captured[0].data : { error: 'No API response captured' })
   },
 
   // ─── XT (v15 port: page.evaluate for /fapi/user/v1) ─────────────

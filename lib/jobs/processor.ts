@@ -137,7 +137,7 @@ export class JobProcessor {
       }
 
       // Get connector
-      const connector = connectorRegistry.get(job.platform, job.market_type)
+      const connector = await connectorRegistry.getOrInit(job.platform, job.market_type)
       if (!connector) {
         await this.failJob(job, `No connector for ${job.platform}/${job.market_type}`)
         return
