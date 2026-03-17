@@ -2752,9 +2752,14 @@ const ko = {
     faqNoResults: '일치하는 질문을 찾을 수 없습니다. 다른 키워드로 시도해 보세요.',
 
     // Hero section
-    heroSubtitle: 'Arena는 암호화폐의 모든 것을 순위화합니다',
+    heroHeadline: '세계 최고의 암호화폐 트레이더를 추적하세요',
+    heroSubtitle: '{exchanges}개 이상의 거래소에서 실시간 순위. {traders}명의 트레이더를 Arena Score로 평가',
     heroCTABrowse: '순위 둘러보기',
     heroCTASignUp: '무료 가입',
+    heroStatTraders: '트레이더',
+    heroStatExchanges: '거래소',
+    heroStatUpdated: '30분마다 업데이트',
+    heroProBadge: 'Pro로 업그레이드 — 모든 트레이더와 고급 필터 잠금 해제',
 
     // Rankings search
     rankingsSearchPlaceholder: '이름으로 트레이더 검색...',
