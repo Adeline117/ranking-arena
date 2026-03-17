@@ -38,6 +38,9 @@ export async function GET(request: NextRequest) {
     }
     const supabase = createClient(supabaseUrl, supabaseKey, { auth: { persistSession: false } })
 
+    // Ensure system user exists in auth.users (user_activities trigger has FK constraint)
+    await ensureSystemUser(supabase)
+
     // Check if already posted today
     const today = new Date().toISOString().split('T')[0]
     const { data: existing } = await supabase
@@ -96,6 +99,40 @@ export async function GET(request: NextRequest) {
   } catch (err) {
     await plog.error(err instanceof Error ? err : new Error(String(err)))
     return NextResponse.json({ error: String(err) }, { status: 500 })
+  }
+}
+
+// ─── Helpers ───
+
+async function ensureSystemUser(supabase: AnySupabase) {
+  const { data: authUser } = await supabase.auth.admin.getUserById(SYSTEM_USER_ID)
+  if (!authUser?.user) {
+    const { error: authErr } = await supabase.auth.admin.createUser({
+      id: SYSTEM_USER_ID,
+      email: 'arena-bot@arenafi.org',
+      email_confirm: true,
+      user_metadata: { handle: SYSTEM_HANDLE },
+    } as Parameters<typeof supabase.auth.admin.createUser>[0])
+    if (authErr && !authErr.message.includes('already')) {
+      console.warn('Could not create system auth user:', authErr.message)
+    }
+  }
+
+  const { data: existing } = await supabase
+    .from('user_profiles')
+    .select('id')
+    .eq('id', SYSTEM_USER_ID)
+    .maybeSingle()
+
+  if (!existing) {
+    await supabase.from('user_profiles').upsert({
+      id: SYSTEM_USER_ID,
+      handle: SYSTEM_HANDLE,
+      display_name: 'Arena Bot',
+      avatar_url: 'https://www.arenafi.org/logo-symbol.png',
+      bio: 'Automated insights by Arena',
+      role: 'official',
+    }, { onConflict: 'id' })
   }
 }
 
