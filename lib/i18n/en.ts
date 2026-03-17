@@ -4503,6 +4503,27 @@ numberFormatThousand: 'K',
 numberFormatMillion: 'M',
 numberFormatBillion: 'B',
 
+// Share / Referral
+copyShareLink: 'Copy Link',
+shareOnX: 'Share on X',
+copied: 'Copied!',
+pricingProUnlockTitle: 'What Pro unlocks',
+pricingProDetailedAnalytics: 'Detailed trader analytics & score breakdowns',
+pricingProAlerts: 'Real-time trader alerts & notifications',
+pricingProApiAccess: 'API access (coming soon)',
+pricingProCsvExport: 'CSV data export',
+pricingProAdvancedFilters: 'Advanced multi-condition filters',
+pricingProTraderCompare: 'Side-by-side trader comparison',
+pricingProPriority: 'Priority support & early access to new features',
+pricingFaqPaymentQ: 'What payment methods do you accept?',
+pricingFaqPaymentA: 'We accept all major credit cards, Apple Pay, and Google Pay via Stripe.',
+pricingFaqTrialQ: 'Is there a free trial?',
+pricingFaqTrialA: 'The free tier gives you access to basic rankings and community features. Upgrade anytime to unlock Pro.',
+pricingFaqSwitchQ: 'Can I switch plans?',
+pricingFaqSwitchA: 'Yes, you can switch between monthly and yearly anytime. We will prorate the difference.',
+pricingFaqApiQ: 'Does Pro include API access?',
+pricingFaqApiA: 'API access is coming soon for Pro members. You will be the first to get access.',
+
 } as const
 
 export default en
