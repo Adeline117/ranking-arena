@@ -79,33 +79,33 @@ export function resetCacheStats(): void {
 
 /**
  * 从缓存获取数据
- * 优先使用 Redis，失败时回退到内存缓存
+ * L1 内存 → L2 Redis，命中 Redis 后回填内存
  */
 export async function get<T>(key: string): Promise<T | null> {
-  const redis = await getRedis()
   const memoryCache = getMemoryCache()
 
-  // 1. 尝试从 Redis 获取
+  // L1: 内存缓存（零延迟，无网络往返）
+  const memoryData = memoryCache.get<T>(key)
+  if (memoryData !== null) {
+    stats.hits++
+    return memoryData
+  }
+
+  // L2: Redis
+  const redis = await getRedis()
   if (redis) {
     try {
       const data = await redis.get<T>(key)
       if (data !== null) {
         stats.hits++
-        // 同时更新内存缓存（加速后续访问）
+        // 回填内存缓存（加速后续访问）
         memoryCache.set(key, data, 60)
         return data
       }
     } catch (error) {
       handleRedisError(error)
-      dataLogger.error('Upstash Redis 读取失败，尝试内存缓存:', { key, error })
+      dataLogger.error('Redis read failed:', { key, error })
     }
-  }
-
-  // 2. 从内存缓存获取
-  const memoryData = memoryCache.get<T>(key)
-  if (memoryData !== null) {
-    stats.hits++
-    return memoryData
   }
 
   stats.misses++
@@ -126,19 +126,20 @@ export async function set<T>(key: string, value: T, options: CacheOptions = {}):
     memoryCache.set(key, value, ttl)
   }
 
-  // 2. 尝试写入 Redis
+  // 2. 尝试写入 Redis (single pipeline for SET + tags)
   if (redis) {
     try {
-      await redis.set(key, value, { ex: ttl })
-
-      // 如果有标签，将键添加到标签集合中
       if (tags && tags.length > 0) {
+        // Pipeline: SET + SADD + EXPIRE in one round-trip
         const pipeline = redis.pipeline()
+        pipeline.set(key, value, { ex: ttl })
         for (const tag of tags) {
           pipeline.sadd(`tag:${tag}`, key)
           pipeline.expire(`tag:${tag}`, ttl * 2)
         }
         await pipeline.exec()
+      } else {
+        await redis.set(key, value, { ex: ttl })
       }
 
       return true
