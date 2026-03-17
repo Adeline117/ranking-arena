@@ -76,7 +76,7 @@ export async function generateMetadata({
       url: `${baseUrl}/rankings/${exchange}`,
       siteName: 'Arena',
       images: [{
-        url: `${baseUrl}/api/og?title=${encodeURIComponent(`${displayName} Rankings`)}&subtitle=${encodeURIComponent(description.slice(0, 80))}`,
+        url: `${baseUrl}/api/og/exchange?exchange=${encodeURIComponent(exchange)}`,
         width: 1200,
         height: 630,
         alt: title,
@@ -87,7 +87,7 @@ export async function generateMetadata({
       title,
       description,
       creator: '@arenafi',
-      images: [`${baseUrl}/api/og?title=${encodeURIComponent(`${displayName} Rankings`)}&subtitle=${encodeURIComponent(description.slice(0, 80))}`],
+      images: [`${baseUrl}/api/og/exchange?exchange=${encodeURIComponent(exchange)}`],
     },
     robots: { index: true, follow: true },
   }
