@@ -2587,9 +2587,14 @@ const ja = {
     faqSearchPlaceholder: 'よくある質問を検索...',
     faqNoResults: '一致する質問が見つかりません。別のキーワードをお試しください。',
 
-    heroSubtitle: 'Arenaは暗号資産のすべてをランキングします',
+    heroHeadline: '世界最高の暗号トレーダーを追跡',
+    heroSubtitle: '{exchanges}以上の取引所でリアルタイムランキング。{traders}人のトレーダーをArena Scoreで評価',
     heroCTABrowse: 'ランキングを見る',
     heroCTASignUp: '無料登録',
+    heroStatTraders: 'トレーダー',
+    heroStatExchanges: '取引所',
+    heroStatUpdated: '30分ごとに更新',
+    heroProBadge: 'Proにアップグレード — 全トレーダーと高度なフィルターを解放',
 
     rankingsSearchPlaceholder: '名前でトレーダーを検索...',
 

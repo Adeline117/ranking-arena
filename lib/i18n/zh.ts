@@ -2754,9 +2754,14 @@ const zh = {
     faqNoResults: '未找到匹配的问题，请尝试其他关键词。',
 
     // Hero section
-    heroSubtitle: 'Arena ranks everything in crypto',
+    heroHeadline: '追踪全球最优秀的加密交易员',
+    heroSubtitle: '跨 {exchanges} 家交易所实时排名，{traders} 名交易员以 Arena Score 评分',
     heroCTABrowse: '查看排行榜',
     heroCTASignUp: '免费注册',
+    heroStatTraders: '交易员',
+    heroStatExchanges: '交易所',
+    heroStatUpdated: '每 30 分钟更新',
+    heroProBadge: '升级 Pro — 解锁全部交易员和高级筛选',
 
     // Rankings search
     rankingsSearchPlaceholder: '按名称搜索交易员...',
