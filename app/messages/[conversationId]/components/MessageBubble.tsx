@@ -235,7 +235,7 @@ export default function MessageBubble({
             top: contextMenuPos.y || '50%',
             left: contextMenuPos.x || '50%',
             transform: contextMenuPos.x ? 'none' : 'translate(-50%, -50%)',
-            zIndex: 9999,
+            zIndex: tokens.zIndex.max,
             background: tokens.colors.bg.secondary,
             border: `1px solid ${tokens.colors.border.primary}`,
             borderRadius: tokens.radius.lg,

@@ -27,7 +27,7 @@ export default function NavLinks() {
     <Box as="nav" aria-label={t('mainNavigation')} className="hide-mobile" style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[1] }}>
       {items.map((item) => {
         const label = t(item.labelKey)
-        const isActive = item.href === '/' ? (pathname === '/' || pathname.startsWith('/rankings')) : pathname.startsWith(item.href)
+        const isActive = item.href === '/rankings' ? (pathname === '/' || pathname.startsWith('/rankings')) : pathname.startsWith(item.href)
         return (
           <Link
             key={item.href}

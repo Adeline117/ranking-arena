@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { useLanguage } from '../Providers/LanguageProvider'
+import { tokens } from '@/lib/design-tokens'
 
 const MESSAGES: Record<string, string> = {
   en: 'Arena is in closed beta — data is being updated and some features are under development.',
@@ -51,7 +52,7 @@ export default function BetaBanner() {
         fontWeight: 600,
         position: 'sticky',
         top: 0,
-        zIndex: 9999,
+        zIndex: tokens.zIndex.max,
       }}
     >
       🚧 {message}

@@ -37,7 +37,7 @@ function CompareFloatingBar() {
         position: 'fixed',
         bottom: 80, // Above mobile nav
         right: 16,
-        zIndex: 1000,
+        zIndex: tokens.zIndex.overlay,
         background: tokens.glass.bg.heavy,
         backdropFilter: tokens.glass.blur.lg,
         WebkitBackdropFilter: tokens.glass.blur.lg,

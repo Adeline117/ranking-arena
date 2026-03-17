@@ -38,7 +38,7 @@ export default function NetworkStatusBanner() {
         top: 0,
         left: 0,
         right: 0,
-        zIndex: 9999,
+        zIndex: tokens.zIndex.max,
         padding: '8px 16px',
         textAlign: 'center',
         fontSize: 13,

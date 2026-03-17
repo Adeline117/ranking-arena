@@ -327,7 +327,7 @@ function RankingSearchInner({ value, onChange, resultCount, language: _language 
             top: '100%',
             left: 0,
             right: 0,
-            zIndex: 9999,
+            zIndex: tokens.zIndex.max,
             background: tokens.colors.bg.primary,
             border: `1px solid ${tokens.colors.border.primary}`,
             borderTop: 'none',

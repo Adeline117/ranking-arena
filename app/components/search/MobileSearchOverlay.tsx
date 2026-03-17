@@ -195,8 +195,9 @@ export default function MobileSearchOverlay({ open, onClose }: MobileSearchOverl
                 <button
                   key={i}
                   onClick={() => {
-                    setQuery(term)
-                    inputRef.current?.focus()
+                    saveToHistory(term)
+                    router.push(`/search?q=${encodeURIComponent(term)}`)
+                    onClose()
                   }}
                   style={{
                     padding: `${tokens.spacing[2]} ${tokens.spacing[3]}`,

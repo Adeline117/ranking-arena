@@ -365,8 +365,17 @@
   transition: color 0.15s;
 }
 
+.sort-header:hover {
+  color: var(--color-text-primary);
+}
+
 .sort-header.sort-header-active {
   color: var(--color-accent-primary, #8b6fa8);
+}
+
+.sort-header.sort-header-active:hover {
+  color: var(--color-accent-primary, #8b6fa8);
+  opacity: 0.85;
 }
 
 .sort-header-center { justify-content: center; }

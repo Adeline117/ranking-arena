@@ -272,7 +272,7 @@ export function RankingFilters({
                 position: 'absolute', top: '100%', right: 0, marginTop: tokens.spacing[1],
                 padding: tokens.spacing[3],
                 background: tokens.colors.bg.primary, border: `1px solid ${tokens.colors.border.primary}`,
-                borderRadius: tokens.radius.lg, boxShadow: tokens.shadow.lg, zIndex: 9999, minWidth: 160,
+                borderRadius: tokens.radius.lg, boxShadow: tokens.shadow.lg, zIndex: tokens.zIndex.max, minWidth: 160,
               }} onClick={e => e.stopPropagation()}>
                 <Text size="sm" weight="bold" style={{ marginBottom: tokens.spacing[2] }}>
                   {t('columnSettingsTitle')}
