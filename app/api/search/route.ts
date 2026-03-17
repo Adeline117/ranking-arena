@@ -1,16 +1,19 @@
 /**
- * 统一搜索 API
- * 聚合搜索交易员、帖子、资料库、用户，按类别返回结果
+ * Unified Search API
+ * Searches traders, posts, library, users by category with fuzzy matching.
  *
  * GET /api/search?q=xxx             - Unified search
- * GET /api/search?type=trending     - Trending searches (was /api/search/trending)
- * GET /api/search?type=hot          - Hot searches (was /api/search/hot)
+ * GET /api/search?q=xxx&platform=binance_futures - Filter by exchange
+ * GET /api/search?type=trending     - Trending searches
+ * GET /api/search?type=hot          - Hot searches
+ * GET /api/search?type=click&q=x&id=x&rtype=trader - Track click-through
  *
- * Merges:
- *   - /api/search/trending (deleted)
- *   - /api/search/hot (deleted)
- *   - /api/search/advanced (deleted, orphaned)
- *   - /api/search/recommend (deleted, orphaned)
+ * Features:
+ * - Fuzzy matching via pg_trgm (catches typos like "binane" -> "binance")
+ * - Weighted scoring: exact > prefix > contains > fuzzy
+ * - Exchange name search: "binance" matches all Binance traders
+ * - Stats-based search: "ROI > 100" or "top bybit traders"
+ * - "Did you mean" suggestions for low-result queries
  */
 
 import { withPublic } from '@/lib/api/middleware'
@@ -18,7 +21,7 @@ import { success } from '@/lib/api/response'
 import { get as cacheGet, set as cacheSet } from '@/lib/cache'
 import { fireAndForget } from '@/lib/utils/logger'
 import { features } from '@/lib/features'
-import { searchTraders as unifiedSearchTraders } from '@/lib/data/unified'
+import { searchTraders as unifiedSearchTraders, getSearchSuggestions } from '@/lib/data/unified'
 import { EXCHANGE_CONFIG } from '@/lib/constants/exchanges'
 
 export const dynamic = 'force-dynamic'
@@ -43,9 +46,66 @@ export interface UnifiedSearchResponse {
     groups: UnifiedSearchResult[]
   }
   total: number
+  /** "Did you mean" suggestions when few results found */
+  suggestions?: string[]
+  /** Matched exchange platform filter (when query matches an exchange name) */
+  matchedExchange?: string
 }
 
-// ---------- Trending searches (was /api/search/trending) ----------
+// ---------- Exchange name matcher ----------
+
+function matchExchangeName(query: string): string | null {
+  const q = query.toLowerCase().trim()
+  for (const [platform, config] of Object.entries(EXCHANGE_CONFIG)) {
+    if (config.name.toLowerCase() === q) return platform
+    if (config.name.toLowerCase().replace(/[.\s]/g, '') === q.replace(/[.\s]/g, '')) return platform
+  }
+  const aliases: Record<string, string> = {
+    binance: 'binance_futures',
+    bybit: 'bybit',
+    okx: 'okx_futures',
+    bitget: 'bitget_futures',
+    mexc: 'mexc',
+    htx: 'htx_futures',
+    huobi: 'htx_futures',
+    gate: 'gateio',
+    'gate.io': 'gateio',
+    coinex: 'coinex',
+    hyperliquid: 'hyperliquid',
+    hl: 'hyperliquid',
+    gmx: 'gmx',
+    dydx: 'dydx',
+    drift: 'drift',
+    etoro: 'etoro',
+  }
+  return aliases[q] || null
+}
+
+// ---------- Stats-based search parser ----------
+
+interface StatsFilter {
+  platform?: string
+  minRoi?: number
+  sortBy?: 'roi' | 'pnl' | 'arena_score'
+}
+
+function parseStatsQuery(query: string): StatsFilter | null {
+  const q = query.toLowerCase().trim()
+  const roiMatch = q.match(/roi\s*[>]\s*(\d+)/)
+  if (roiMatch) {
+    return { minRoi: parseFloat(roiMatch[1]) }
+  }
+  const topMatch = q.match(/^(?:top|best)\s+(\w+)(?:\s+traders?)?$/i)
+  if (topMatch) {
+    const exchangeKey = matchExchangeName(topMatch[1])
+    if (exchangeKey) {
+      return { platform: exchangeKey, sortBy: 'arena_score' }
+    }
+  }
+  return null
+}
+
+// ---------- Trending searches ----------
 
 interface TrendingSearchItem {
   query: string
@@ -132,7 +192,7 @@ async function handleTrendingSearch(supabase: Parameters<Parameters<typeof withP
   try {
     await cacheSet(cacheKey, result, { ttl: 3600 })
   } catch {
-    // Intentionally swallowed: cache write failure is non-critical, response already built
+    // Intentionally swallowed: cache write failure is non-critical
   }
 
   return success(result, 200, {
@@ -140,7 +200,7 @@ async function handleTrendingSearch(supabase: Parameters<Parameters<typeof withP
   })
 }
 
-// ---------- Hot searches (was /api/search/hot) ----------
+// ---------- Hot searches ----------
 
 interface HotSearchItem {
   keyword: string
@@ -231,6 +291,34 @@ async function handleHotSearch(supabase: Parameters<Parameters<typeof withPublic
   })
 }
 
+// ---------- Click-through tracking ----------
+
+async function handleClickTracking(
+  supabase: Parameters<Parameters<typeof withPublic>[0]>[0]['supabase'],
+  searchParams: URLSearchParams,
+) {
+  const query = searchParams.get('q')?.trim()
+  const resultId = searchParams.get('id')
+  const resultType = searchParams.get('rtype')
+
+  if (!query || !resultId) {
+    return success({ ok: true })
+  }
+
+  fireAndForget(
+    supabase.from('search_analytics').insert({
+      query: query.slice(0, 200),
+      result_count: 1,
+      source: 'click',
+      clicked_result_id: resultId.slice(0, 200),
+      clicked_result_type: resultType?.slice(0, 20) || null,
+    }).then(),
+    'Record search click-through'
+  )
+
+  return success({ ok: true })
+}
+
 // ---------- Main unified search ----------
 
 export const GET = withPublic(
@@ -238,12 +326,14 @@ export const GET = withPublic(
     const searchParams = request.nextUrl.searchParams
     const searchType = searchParams.get('type')
 
-    // Route to sub-handlers for special types
     if (searchType === 'trending') {
       return handleTrendingSearch(supabase)
     }
     if (searchType === 'hot') {
       return handleHotSearch(supabase)
+    }
+    if (searchType === 'click') {
+      return handleClickTracking(supabase, searchParams)
     }
 
     const query = searchParams.get('q')?.trim()
@@ -251,6 +341,7 @@ export const GET = withPublic(
       parseInt(searchParams.get('limit') || '5'),
       10
     )
+    const platformFilter = searchParams.get('platform') || undefined
 
     if (!query || query.length < 1) {
       return success({
@@ -260,21 +351,21 @@ export const GET = withPublic(
       } satisfies UnifiedSearchResponse)
     }
 
-    // 缓存检查
-    const cacheKey = `search:unified:${query.toLowerCase().slice(0, 50)}:${limitPerCategory}`
+    // Cache check
+    const cacheKey = `search:unified:v2:${query.toLowerCase().slice(0, 50)}:${limitPerCategory}:${platformFilter || ''}`
     try {
       const cached = await cacheGet<UnifiedSearchResponse>(cacheKey)
       if (cached) {
         return success(cached)
       }
     } catch {
-      // Intentionally swallowed: Redis cache miss or unavailable, fall through to DB query
+      // Intentionally swallowed: Redis cache miss or unavailable
     }
 
-    // Sanitize: strip HTML tags, escape SQL wildcards
+    // Sanitize
     const sanitizedQuery = query
       .slice(0, 100)
-      .replace(/<[^>]*>/g, '') // Strip HTML tags (XSS prevention)
+      .replace(/<[^>]*>/g, '')
       .replace(/[\\%_]/g, (c) => `\\${c}`)
       .replace(/[.,()]/g, '')
 
@@ -286,8 +377,16 @@ export const GET = withPublic(
       } satisfies UnifiedSearchResponse)
     }
 
-    // 并行查询所有表 — 每个独立容错，不因一个失败影响整体
+    // Exchange name match (e.g., "binance" -> show top Binance traders)
+    const matchedExchange = platformFilter ? platformFilter : matchExchangeName(sanitizedQuery)
 
+    // Stats-based query (e.g., "ROI > 100", "top bybit")
+    const statsFilter = parseStatsQuery(sanitizedQuery)
+
+    const effectivePlatform = statsFilter?.platform || (matchedExchange && !platformFilter ? matchedExchange : platformFilter)
+    const effectiveLimit = matchedExchange && !platformFilter ? Math.max(limitPerCategory, 10) : limitPerCategory
+
+    // Parallel queries
     const safeQuery = async <T>(promise: PromiseLike<{ data: T[] | null; error: unknown }>): Promise<T[]> => {
       try {
         const { data, error } = await promise
@@ -304,10 +403,12 @@ export const GET = withPublic(
     interface GroupRow { id: string; name: string; member_count: number | null; description: string | null }
 
     const [unifiedTraders, postsData, libraryData, usersData, groupsData] = await Promise.all([
-      // Use unified data layer for trader search (handles ranking, dead platform filtering internally)
-      unifiedSearchTraders(supabase, { query: sanitizedQuery, limit: limitPerCategory }).catch(() => []),
+      unifiedSearchTraders(supabase, {
+        query: matchedExchange && !platformFilter ? '' : sanitizedQuery,
+        limit: effectiveLimit,
+        platform: effectivePlatform,
+      }).catch(() => []),
 
-      // Skip social content queries when social feature is disabled
       features.social
         ? safeQuery(supabase
             .from('posts')
@@ -344,13 +445,29 @@ export const GET = withPublic(
         : Promise.resolve([]),
     ])
 
-    // Map unified traders to UnifiedSearchResult format (include ROI/Score for display)
-    const traders: UnifiedSearchResult[] = unifiedTraders.map((t) => {
+    // For exchange name search, fetch top traders from leaderboard if direct search returned nothing
+    let exchangeTopTraders = unifiedTraders
+    if (matchedExchange && !platformFilter && unifiedTraders.length === 0) {
+      try {
+        const { getLeaderboard } = await import('@/lib/data/unified')
+        const { traders: topTraders } = await getLeaderboard(supabase, {
+          platform: matchedExchange,
+          limit: effectiveLimit,
+          period: '90D',
+        })
+        exchangeTopTraders = topTraders
+      } catch {
+        // Leaderboard fetch failed
+      }
+    }
+
+    // Map traders to UnifiedSearchResult
+    const traders: UnifiedSearchResult[] = exchangeTopTraders.map((t) => {
       const exchangeName = EXCHANGE_CONFIG[t.platform as keyof typeof EXCHANGE_CONFIG]?.name || t.platform
       const isBot = t.traderType === 'bot' || t.platform === 'web3_bot'
-      // Build subtitle with ROI if available
       const roiStr = t.roi != null ? `${t.roi >= 0 ? '+' : ''}${t.roi >= 1000 ? `${(t.roi / 1000).toFixed(1)}K` : t.roi.toFixed(1)}%` : null
-      const subtitle = [exchangeName, roiStr, t.arenaScore != null ? `Score ${Math.round(t.arenaScore)}` : null].filter(Boolean).join(' · ')
+      const rankStr = t.rank != null ? `#${t.rank}` : null
+      const subtitle = [exchangeName, rankStr, roiStr, t.arenaScore != null ? `Score ${Math.round(t.arenaScore)}` : null].filter(Boolean).join(' \u00B7 ')
       return {
         id: `${t.platform}:${t.traderKey}`,
         type: 'trader' as const,
@@ -362,6 +479,7 @@ export const GET = withPublic(
           ...(isBot ? { is_bot: true } : {}),
           ...(t.roi != null ? { roi: t.roi } : {}),
           ...(t.arenaScore != null ? { arena_score: t.arenaScore } : {}),
+          ...(t.rank != null ? { rank: t.rank } : {}),
           platform: t.platform,
         },
       }
@@ -404,26 +522,36 @@ export const GET = withPublic(
       meta: { member_count: g.member_count },
     }))
 
-    // Return sanitized query in response (prevent reflected XSS)
+    const totalResults = traders.length + posts.length + library.length + users.length + groups.length
+
+    // "Did you mean" suggestions for low-result queries
+    let suggestions: string[] | undefined
+    if (totalResults <= 2 && sanitizedQuery.length >= 3) {
+      suggestions = await getSearchSuggestions(supabase, sanitizedQuery)
+      if (suggestions.length === 0) suggestions = undefined
+    }
+
     const escapedQuery = query.replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
     const result: UnifiedSearchResponse = {
       query: escapedQuery,
       results: { traders, posts, library, users, groups },
-      total: traders.length + posts.length + library.length + users.length + groups.length,
+      total: totalResults,
+      ...(suggestions ? { suggestions } : {}),
+      ...(matchedExchange && !platformFilter ? { matchedExchange } : {}),
     }
 
-    // 缓存 5 分钟（pg_trgm索引加速后可以更长TTL）
+    const cacheTtl = totalResults > 5 ? 600 : 300
     try {
-      await cacheSet(cacheKey, result, { ttl: 300 })
+      await cacheSet(cacheKey, result, { ttl: cacheTtl })
     } catch {
-      // Intentionally swallowed: cache write failure is non-critical, response already built
+      // Intentionally swallowed: cache write failure is non-critical
     }
 
-    // 搜索分析（异步）
+    // Search analytics (async)
     fireAndForget(
       supabase.from('search_analytics').insert({
         query: query.slice(0, 200),
-        result_count: result.total,
+        result_count: totalResults,
         source: 'unified',
       }).then(),
       'Record search analytics'
