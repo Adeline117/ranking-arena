@@ -19,6 +19,7 @@ import TraderFollowButton from '../ui/TraderFollowButton'
 import UserFollowButton from '../ui/UserFollowButton'
 import ShareButton from '../common/ShareButton'
 import ShareOnXButton from './ShareOnXButton'
+import ShareRankCardButtons from './ShareRankCardButtons'
 import {
   SOURCE_CONFIG, getSourceCategory, CATEGORY_I18N_KEYS, CATEGORY_COLORS,
   getTradingStyleTags, formatAum, getActiveDays, formatActiveDays,
@@ -482,7 +483,17 @@ export default function TraderHeader({
           )
         )}
 
-        {/* Share icon */}
+        {/* Share rank card buttons (Copy Link + Share on X) */}
+        <ShareRankCardButtons
+          handle={handle}
+          displayName={displayNameProp || formatDisplayName(handle, source)}
+          platform={source}
+          rank={rank}
+          roi={roi90d}
+          arenaScore={arenaScore}
+        />
+
+        {/* Share dropdown (Telegram, WhatsApp, etc.) */}
         <ShareButton
           data={{
             type: 'trader',

@@ -82,9 +82,42 @@ export default function PricingPageClient({ lifetimeCount = 0 }: PricingPageClie
         <h1 style={{ fontSize: 36, fontWeight: 800, marginBottom: tokens.spacing[3], letterSpacing: '-0.02em' }}>
           {resolved(t('pricingTitle'), 'pricingTitle', 'Upgrade to Pro')}
         </h1>
-        <p style={{ fontSize: 17, color: tokens.colors.text.secondary, marginBottom: tokens.spacing[8], lineHeight: 1.5 }}>
+        <p style={{ fontSize: 17, color: tokens.colors.text.secondary, marginBottom: tokens.spacing[6], lineHeight: 1.5 }}>
           {resolved(t('pricingSubtitle'), 'pricingSubtitle', 'Unlock all premium features')}
         </p>
+
+        {/* Social proof stats */}
+        <div style={{
+          display: 'flex',
+          justifyContent: 'center',
+          gap: tokens.spacing[8],
+          flexWrap: 'wrap',
+          marginBottom: tokens.spacing[10],
+        }}>
+          {[
+            { value: '34,000+', label: locale === 'zh' ? '\u4EA4\u6613\u5458\u5DF2\u6392\u540D' : 'Traders Ranked' },
+            { value: '27+', label: locale === 'zh' ? '\u4EA4\u6613\u6240\u8986\u76D6' : 'Exchanges Tracked' },
+            { value: '30min', label: locale === 'zh' ? '\u6570\u636E\u66F4\u65B0\u9891\u7387' : 'Update Frequency' },
+          ].map((stat) => (
+            <div key={stat.label} style={{ textAlign: 'center', minWidth: 120 }}>
+              <div style={{
+                fontSize: 28,
+                fontWeight: 800,
+                background: tokens.gradient.primary,
+                WebkitBackgroundClip: 'text',
+                WebkitTextFillColor: 'transparent',
+                backgroundClip: 'text',
+                letterSpacing: '-0.02em',
+                lineHeight: 1.2,
+              }}>
+                {stat.value}
+              </div>
+              <div style={{ fontSize: 13, color: tokens.colors.text.tertiary, marginTop: 4 }}>
+                {stat.label}
+              </div>
+            </div>
+          ))}
+        </div>
 
         {/* Billing toggle */}
         <div style={{ display: 'inline-flex', gap: 4, padding: 4, borderRadius: tokens.radius.lg, background: tokens.colors.bg.secondary, marginBottom: tokens.spacing[10] }}>
@@ -403,6 +436,7 @@ export default function PricingPageClient({ lifetimeCount = 0 }: PricingPageClie
               { feature: locale === 'zh' ? '分类排行' : 'Category Rankings', free: false, pro: true },
               { feature: locale === 'zh' ? 'CSV 导出' : 'CSV Export', free: false, pro: true },
               { feature: locale === 'zh' ? '交易提醒' : 'Trader Alerts', free: false, pro: true },
+              { feature: locale === 'zh' ? 'API 访问' : 'API Access', free: false, pro: true },
               { feature: locale === 'zh' ? '社区帖子' : 'Community Posts', free: true, pro: true },
               { feature: locale === 'zh' ? '资源库' : 'Library Access', free: true, pro: true },
               { feature: locale === 'zh' ? '公共群组' : 'Public Groups', free: true, pro: true },
@@ -429,6 +463,46 @@ export default function PricingPageClient({ lifetimeCount = 0 }: PricingPageClie
           </div>
         </div>
 
+        {/* What Pro Unlocks */}
+        <div style={{ maxWidth: 720, margin: `${tokens.spacing[10]} auto 0`, textAlign: 'left' }}>
+          <h2 style={{ fontSize: 24, fontWeight: 800, marginBottom: tokens.spacing[6], textAlign: 'center' }}>
+            {resolved(t('pricingProUnlockTitle'), 'pricingProUnlockTitle', 'What Pro unlocks')}
+          </h2>
+          <div style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))',
+            gap: tokens.spacing[4],
+          }}>
+            {[
+              { text: resolved(t('pricingProDetailedAnalytics'), 'pricingProDetailedAnalytics', 'Detailed trader analytics & score breakdowns') },
+              { text: resolved(t('pricingProAlerts'), 'pricingProAlerts', 'Real-time trader alerts & notifications') },
+              { text: resolved(t('pricingProCsvExport'), 'pricingProCsvExport', 'CSV data export') },
+              { text: resolved(t('pricingProAdvancedFilters'), 'pricingProAdvancedFilters', 'Advanced multi-condition filters') },
+              { text: resolved(t('pricingProTraderCompare'), 'pricingProTraderCompare', 'Side-by-side trader comparison') },
+              { text: resolved(t('pricingProPriority'), 'pricingProPriority', 'Priority support & early access to new features') },
+              { text: resolved(t('pricingProApiAccess'), 'pricingProApiAccess', 'API access (coming soon)') },
+            ].map((item) => (
+              <div
+                key={item.text}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: tokens.spacing[3],
+                  padding: `${tokens.spacing[4]} ${tokens.spacing[5]}`,
+                  background: tokens.colors.bg.secondary,
+                  borderRadius: tokens.radius.lg,
+                  border: `1px solid ${tokens.colors.border.primary}`,
+                }}
+              >
+                <CheckIcon size={16} color={tokens.colors.accent.brand} />
+                <span style={{ fontSize: 14, color: tokens.colors.text.primary, lineHeight: 1.5 }}>
+                  {item.text}
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+
         {/* FAQ Section */}
         <div style={{ maxWidth: 720, margin: `${tokens.spacing[10]} auto`, textAlign: 'left' }}>
           <h2 style={{ fontSize: 24, fontWeight: 800, marginBottom: tokens.spacing[6], textAlign: 'center' }}>
@@ -446,6 +520,22 @@ export default function PricingPageClient({ lifetimeCount = 0 }: PricingPageClie
             {
               q: locale === 'zh' ? '终身会员是什么意思？' : 'What does Lifetime mean?',
               a: locale === 'zh' ? '一次付款，永久享有所有 Pro 功能。即使未来涨价或增加新功能，都自动包含。' : 'Pay once, access all Pro features forever. Includes all future features and price increases.',
+            },
+            {
+              q: resolved(t('pricingFaqPaymentQ'), 'pricingFaqPaymentQ', 'What payment methods do you accept?'),
+              a: resolved(t('pricingFaqPaymentA'), 'pricingFaqPaymentA', 'We accept all major credit cards, Apple Pay, and Google Pay via Stripe.'),
+            },
+            {
+              q: resolved(t('pricingFaqTrialQ'), 'pricingFaqTrialQ', 'Is there a free trial?'),
+              a: resolved(t('pricingFaqTrialA'), 'pricingFaqTrialA', 'The free tier gives you access to basic rankings and community features. Upgrade anytime to unlock Pro.'),
+            },
+            {
+              q: resolved(t('pricingFaqSwitchQ'), 'pricingFaqSwitchQ', 'Can I switch plans?'),
+              a: resolved(t('pricingFaqSwitchA'), 'pricingFaqSwitchA', 'Yes, you can switch between monthly and yearly anytime. We will prorate the difference.'),
+            },
+            {
+              q: resolved(t('pricingFaqApiQ'), 'pricingFaqApiQ', 'Does Pro include API access?'),
+              a: resolved(t('pricingFaqApiA'), 'pricingFaqApiA', 'API access is coming soon for Pro members. You will be the first to get access.'),
             },
           ].map((faq, i) => (
             <details key={i} style={{

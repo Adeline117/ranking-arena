@@ -12,8 +12,5 @@
  */
 
 export { WalletSection } from '@/app/components/settings/WalletSection'
-export { GovernanceHeader } from '@/app/components/governance/GovernanceHeader'
-export { VoteButton } from '@/app/components/governance/VoteButton'
 export { OneClickWalletButton } from '@/app/components/web3/OneClickWalletButton'
 export { Web3Boundary } from './withWeb3'
-export { ProposalList } from '@/app/components/governance/ProposalList'

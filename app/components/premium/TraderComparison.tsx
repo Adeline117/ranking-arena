@@ -74,6 +74,24 @@ function getBestIndex(values: (number | undefined | null)[], isHigherBetter = tr
   return bestIdx
 }
 
+function getWorstIndex(values: (number | undefined | null)[], isHigherBetter = true): number {
+  let worstIdx = -1
+  let worstVal = isHigherBetter ? Infinity : -Infinity
+  let validCount = 0
+  values.forEach((val, idx) => {
+    if (val != null) {
+      validCount++
+      if (isHigherBetter ? val < worstVal : val > worstVal) {
+        worstVal = val
+        worstIdx = idx
+      }
+    }
+  })
+  return validCount >= 2 ? worstIdx : -1
+}
+
+const SIGNED_METRIC_KEYS = new Set(['roi', 'roi_7d', 'roi_30d', 'pnl'])
+
 function getSourceLabels(t: (key: string) => string): Record<string, string> {
   return {
     'binance_futures': `Binance ${t('categoryFutures')}`,
@@ -154,8 +172,26 @@ export default function TraderComparison({ traders, onRemove, showRemoveButton =
     { key: 'equity', label: t('compareEquityCurve') },
   ]
 
+  const gridCols = `minmax(80px, 140px) repeat(${traders.length}, minmax(80px, 1fr))`
+  const minWidth = traders.length > 2 ? `${140 + traders.length * 120}px` : undefined
+
   return (
     <div ref={comparisonRef}>
+      {/* Mobile responsive: stack vertically on small screens */}
+      <style>{`
+        @media (max-width: 640px) {
+          .compare-mobile-stack .compare-header-grid {
+            grid-template-columns: repeat(${traders.length}, 1fr) !important;
+            min-width: unset !important;
+          }
+          .compare-mobile-stack .compare-label-col { display: none !important; }
+          .compare-mobile-stack .compare-metric-row {
+            display: flex !important; flex-wrap: wrap !important; min-width: unset !important;
+          }
+          .compare-mobile-stack .compare-metric-label { width: 100% !important; text-align: left !important; margin-bottom: 2px; }
+          .compare-mobile-stack .compare-metric-cell { flex: 1; min-width: 0; }
+        }
+      `}</style>
       {/* Tab bar + Share */}
       <Box
         style={{
