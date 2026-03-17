@@ -86,7 +86,7 @@ export default function PostListItem(props: PostListItemProps) {
       className="post-card"
       style={{
         display: 'flex',
-        borderRadius: tokens.radius.xl,
+        borderRadius: tokens.radius.lg,
         background: tokens.colors.bg.secondary,
         border: `1px solid ${tokens.colors.border.primary}`,
         overflow: 'hidden',
@@ -104,9 +104,9 @@ export default function PostListItem(props: PostListItemProps) {
         title={`${post.comment_count || 0} ${language === 'zh' ? '条评论' : 'comments'}`}
       />
 
-      <Box style={{ flex: 1, padding: `${tokens.spacing[4]} ${tokens.spacing[5]}` }}>
+      <Box style={{ flex: 1, padding: `${tokens.spacing[2]} ${tokens.spacing[3]}` }}>
         {/* Row 1: Author avatar + handle + time */}
-        <Box style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: tokens.spacing[3] }}>
+        <Box style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: tokens.spacing[2] }}>
           <Box style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[2] }}>
             {post.author_handle && !post.author_handle.startsWith('deleted_') ? (
               <Link
@@ -123,15 +123,15 @@ export default function PostListItem(props: PostListItemProps) {
                 }}
               >
                 <span style={{
-                  width: 22, height: 22, borderRadius: '50%', flexShrink: 0,
+                  width: 28, height: 28, borderRadius: '50%', flexShrink: 0,
                   background: post.author_avatar_url ? undefined : getAvatarGradient(post.author_id || post.author_handle),
                   display: 'flex', alignItems: 'center', justifyContent: 'center',
                   overflow: 'hidden', position: 'relative',
                 }}>
                   {post.author_avatar_url ? (
-                    <Image src={post.author_avatar_url} alt={post.author_handle || 'User avatar'} fill sizes="22px" style={{ objectFit: 'cover' }} />
+                    <Image src={post.author_avatar_url} alt={post.author_handle || 'User avatar'} fill sizes="28px" style={{ objectFit: 'cover' }} />
                   ) : (
-                    <span style={{ color: tokens.colors.white, fontSize: 10, fontWeight: 700 }}>
+                    <span style={{ color: tokens.colors.white, fontSize: 12, fontWeight: 700 }}>
                       {(post.author_handle || 'U').charAt(0).toUpperCase()}
                     </span>
                   )}
@@ -189,7 +189,7 @@ export default function PostListItem(props: PostListItemProps) {
         </Box>
 
         {/* Row 2: Title */}
-        <Box style={{ marginBottom: tokens.spacing[2] }}>
+        <Box style={{ marginBottom: tokens.spacing[1] }}>
           {editingPost === post.id ? (
             <input
               type="text"
@@ -270,10 +270,10 @@ export default function PostListItem(props: PostListItemProps) {
 
         {/* Actions bar */}
         <Box style={{
-          marginTop: tokens.spacing[3],
+          marginTop: tokens.spacing[2],
           display: 'flex',
-          gap: tokens.spacing[4],
-          paddingTop: tokens.spacing[3],
+          gap: tokens.spacing[3],
+          paddingTop: tokens.spacing[2],
           borderTop: `1px solid ${tokens.colors.border.primary}`,
         }}>
           <Button
