@@ -248,22 +248,22 @@ export async function tieredSet<T>(
   // L1: 写入内存缓存
   memoryCache.set(key, entry, config.memoryTtlSeconds)
   
-  // L2: 写入 Redis
+  // L2: 写入 Redis (single pipeline when tags present)
   const redis = await initRedis()
   if (redis) {
     try {
-      await redis.set(key, entry, { ex: config.redisTtlSeconds })
-      
-      // 记录标签
       if (tags && tags.length > 0) {
         const pipeline = redis.pipeline()
+        pipeline.set(key, entry, { ex: config.redisTtlSeconds })
         for (const tag of tags) {
           pipeline.sadd(`tag:${tag}`, key)
           pipeline.expire(`tag:${tag}`, config.redisTtlSeconds * 2)
         }
         await pipeline.exec()
+      } else {
+        await redis.set(key, entry, { ex: config.redisTtlSeconds })
       }
-      
+
       return true
     } catch (error) {
       dataLogger.warn('[RedisLayer] Redis 写入失败:', { key, error })
@@ -327,6 +327,9 @@ export async function tieredDelByTag(tag: string): Promise<number> {
 
 /**
  * 获取或设置缓存（带 stale-while-revalidate）
+ *
+ * When the primary cache misses but stale data exists in the extended
+ * memory bucket, serves stale data immediately and refreshes in background.
  */
 export async function tieredGetOrSet<T>(
   key: string,
@@ -336,19 +339,46 @@ export async function tieredGetOrSet<T>(
 ): Promise<T> {
   // 尝试获取缓存
   const { data } = await tieredGet<T>(key, tier)
-  
+
   if (data !== null) {
     return data
   }
-  
+
+  // Check stale-while-revalidate bucket in memory
+  const config = CACHE_TIERS[tier]
+  if (config.staleWhileRevalidate > 0) {
+    const memoryCache = getMemoryCache()
+    const staleEntry = memoryCache.get<CacheEntry<T>>(`swr:${key}`)
+    if (staleEntry?.data !== undefined) {
+      // Serve stale, refresh in background
+      fetcher().then(fresh => {
+        tieredSet(key, fresh, tier, tags).catch(() => {})
+      }).catch(() => {})
+      return staleEntry.data
+    }
+  }
+
   // 缓存未命中，获取新数据
   const freshData = await fetcher()
-  
-  // 异步写入缓存
+
+  // 异步写入缓存+ SWR bucket
   tieredSet(key, freshData, tier, tags).catch((err) => {
     dataLogger.warn('[RedisLayer] 缓存写入失败:', { key, error: err })
   })
-  
+
+  // Store in SWR bucket with extended TTL
+  if (config.staleWhileRevalidate > 0) {
+    const memoryCache = getMemoryCache()
+    const swrEntry: CacheEntry<T> = {
+      data: freshData,
+      tier,
+      cachedAt: Date.now(),
+      expiresAt: Date.now() + (config.redisTtlSeconds + config.staleWhileRevalidate) * 1000,
+      hitCount: 0,
+    }
+    memoryCache.set(`swr:${key}`, swrEntry, config.redisTtlSeconds + config.staleWhileRevalidate)
+  }
+
   return freshData
 }
 
