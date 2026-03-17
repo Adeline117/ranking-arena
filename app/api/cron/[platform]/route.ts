@@ -26,12 +26,13 @@ export async function GET(
   const pathname = request.nextUrl.pathname
   const platform = pathname.split('/').filter(Boolean).pop() || params.platform
 
-  // Special handling for health-check endpoint
+  // Special handling for health-check endpoint  
   if (platform === 'health-check') {
     return NextResponse.json({
-      status: 'ok',
+      status: 'healthy',
       timestamp: new Date().toISOString(),
       service: 'ranking-arena',
+      uptime: 'ok',
     }, { status: 200 })
   }
 
