@@ -376,7 +376,7 @@ function CompareContent() {
                     >
                       {ft.avatar_url ? (
                         <img
-                          src={ft.avatar_url}
+                          src={ft.avatar_url.startsWith('data:') ? ft.avatar_url : '/api/avatar?url=' + encodeURIComponent(ft.avatar_url)}
                           alt={ft.handle || 'Trader avatar'}
                           width={32}
                           height={32}

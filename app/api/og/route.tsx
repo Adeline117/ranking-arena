@@ -51,7 +51,7 @@ export async function GET(request: NextRequest) {
           <div style={{ display: 'flex', alignItems: 'center', gap: 20, marginBottom: 16 }}>
             {avatarUrl && (
               <img
-                src={avatarUrl}
+                src={avatarUrl.startsWith('data:') ? avatarUrl : 'https://www.arenafi.org/api/avatar?url=' + encodeURIComponent(avatarUrl)}
                 alt=""
                 width={80}
                 height={80}

@@ -54,7 +54,7 @@ export default function BookReviews({ reviews, bookId, bookTitle, hasSession, ha
             <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 12 }}>
               {r.users?.avatar_url ? (
                 <img
-                  src={r.users.avatar_url}
+                  src={r.users.avatar_url.startsWith('data:') ? r.users.avatar_url : '/api/avatar?url=' + encodeURIComponent(r.users.avatar_url)}
                   alt={`${(r.users as Record<string, unknown> | null)?.nickname || 'User'} avatar`}
                   style={{ width: 32, height: 32, borderRadius: '50%', objectFit: 'cover', flexShrink: 0 }}
                 />
