@@ -83,23 +83,18 @@ async function ensureBrowser() {
     contextPool = []
   })
 
-  // Pre-create context pool
+  // Concurrency slots (no pre-created contexts — fresh context per request)
   contextPool = []
   for (let i = 0; i < POOL_SIZE; i++) {
-    const context = await browser.newContext({
-      userAgent: DEFAULT_UA,
-      viewport: { width: 1280, height: 720 },
-      ignoreHTTPSErrors: true,
-    })
-    contextPool.push({ context, busy: false, id: i })
+    contextPool.push({ context: null, busy: false, id: i })
   }
 
-  log(`Browser launched, ${POOL_SIZE} contexts created`)
+  log(`Browser launched, ${POOL_SIZE} concurrency slots ready (fresh context per request)`)
   return browser
 }
 
 /**
- * Acquire a free context from the pool. Returns null if all busy.
+ * Acquire a free slot. Returns null if all busy.
  */
 function acquireContext() {
   for (const slot of contextPool) {
@@ -112,41 +107,14 @@ function acquireContext() {
 }
 
 function releaseContext(slot) {
-  slot.busy = true // keep true until we recycle
-  // Create a fresh context to clear cookies/state from this request
-  recycleContext(slot).catch((err) => {
-    log(`Context ${slot.id} recycle error: ${err.message}`)
-  })
-}
-
-async function recycleContext(slot) {
-  try {
-    // Close all pages in this context
-    const pages = slot.context.pages()
-    for (const page of pages) {
-      await page.close().catch(() => {})
-    }
-    // Clear cookies/storage for isolation
-    await slot.context.clearCookies().catch(() => {})
-  } catch {
-    // If clearing fails, create a fresh context
-    try {
-      await slot.context.close().catch(() => {})
-      if (browser && browser.isConnected()) {
-        slot.context = await browser.newContext({
-          userAgent: DEFAULT_UA,
-          viewport: { width: 1280, height: 720 },
-          ignoreHTTPSErrors: true,
-        })
-      }
-    } catch (err) {
-      log(`Context ${slot.id} full recycle failed: ${err.message}`)
-    }
-  } finally {
-    slot.busy = false
-    // Process next queued request
-    processQueue()
+  // Close the context (fresh one created next time)
+  if (slot.context) {
+    slot.context.close().catch(() => {})
+    slot.context = null
   }
+  slot.busy = false
+  // Process next queued request
+  processQueue()
 }
 
 // ---------------------------------------------------------------------------
@@ -194,20 +162,24 @@ function processQueue() {
 async function executeRequest(slot, item) {
   const { handler, params } = item
 
+  // Create a FRESH context per request (critical for WAF/CF cookie isolation)
+  const context = await browser.newContext({
+    userAgent: DEFAULT_UA,
+    viewport: { width: 1280, height: 720 },
+    ignoreHTTPSErrors: true,
+  })
+  slot.context = context
+
   // Per-request timeout
   const timeout = setTimeout(() => {
-    // Force-close pages to abort hung navigations
-    const pages = slot.context.pages()
-    for (const page of pages) {
-      page.close().catch(() => {})
-    }
+    context.close().catch(() => {})
   }, REQUEST_TIMEOUT_MS)
 
   try {
     const handlerFn = HANDLERS[handler]
     if (!handlerFn) throw new Error(`Unknown handler: ${handler}`)
 
-    const page = await slot.context.newPage()
+    const page = await context.newPage()
     try {
       const result = await handlerFn(page, params)
       return result
@@ -258,73 +230,49 @@ async function waitForCF(page, timeoutMs = 20000) {
 }
 
 const HANDLERS = {
-  // ─── Bybit (v15 port: page.evaluate with POST) ─────────────────
+  // ─── Bybit (v15: relative path /x-api/, same-origin fetch) ──────
   'bybit/leaderboard': async (page, params) => {
-    const duration = params.dataDuration || params.duration || 'DATA_DURATION_THIRTY_DAY'
+    const pageNo = parseInt(params.pageNo || '1', 10)
     const pageSize = parseInt(params.pageSize || '50', 10)
+    const duration = params.dataDuration || params.duration || 'DATA_DURATION_THIRTY_DAY'
 
-    const captured = setupInterception(page, (url) =>
-      url.includes('leaderboard') && (url.includes('rank') || url.includes('leader'))
-    )
-
-    await page.goto('https://www.bybitglobal.com/en/copy-trading/leaderboard', {
-      waitUntil: 'domcontentloaded', timeout: 30000,
+    await page.goto('https://www.bybitglobal.com/copyTrading/en/leaderboard-master', {
+      waitUntil: 'domcontentloaded', timeout: 45000,
     })
-    await page.waitForTimeout(3000)
+    await page.waitForTimeout(2000)
 
-    // Direct API via page.evaluate (inherits session)
-    const apiData = await page.evaluate(async (opts) => {
+    // Same-origin relative path — no CORS issues
+    const apiPath = `/x-api/fapi/beehive/public/v1/common/dynamic-leader-list?pageNo=${pageNo}&pageSize=${pageSize}&dataDuration=${duration}&sortField=LEADER_SORT_FIELD_SORT_ROI`
+    const data = await page.evaluate(async (path) => {
       try {
-        const r = await fetch('https://api2.bybitglobal.com/fapi/beehive/public/v1/common/dynamic-leader-list', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            dataDuration: opts.duration,
-            pageNo: '1',
-            pageSize: String(opts.pageSize),
-            sortField: 'ROI',
-            sortType: 'DESC',
-          }),
-        })
+        const r = await fetch(path)
         if (!r.ok) return null
-        const text = await r.text()
-        if (!text.startsWith('{')) return null
-        return JSON.parse(text)
+        return await r.json()
       } catch { return null }
-    }, { duration, pageSize }).catch(() => null)
+    }, apiPath).catch(() => null)
 
-    if (apiData?.result?.data?.length > 0 || apiData?.result?.leaderDetails?.length > 0) {
-      return apiData
-    }
-
-    await page.waitForTimeout(5000)
-    if (captured.length > 0) return captured[0].data
-    return { error: 'No API response captured' }
+    if (data?.result?.leaderDetails?.length > 0) return data
+    return data || { error: 'No API response captured' }
   },
 
   'bybit/leaderboard-batch': async (page, params) => {
-    const durations = (params.durations || 'DATA_DURATION_THIRTY_DAY').split(',')
     const pageSize = parseInt(params.pageSize || '50', 10)
+    const durations = (params.durations || 'DATA_DURATION_THIRTY_DAY').split(',')
 
-    await page.goto('https://www.bybitglobal.com/en/copy-trading/leaderboard', {
-      waitUntil: 'domcontentloaded', timeout: 30000,
+    await page.goto('https://www.bybitglobal.com/copyTrading/en/leaderboard-master', {
+      waitUntil: 'domcontentloaded', timeout: 45000,
     })
-    await page.waitForTimeout(3000)
+    await page.waitForTimeout(2000)
 
     const results = await page.evaluate(async (opts) => {
       const out = {}
       for (const dur of opts.durations) {
+        const d = dur.trim()
         try {
-          const r = await fetch('https://api2.bybitglobal.com/fapi/beehive/public/v1/common/dynamic-leader-list', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ dataDuration: dur.trim(), pageNo: '1', pageSize: String(opts.pageSize), sortField: 'ROI', sortType: 'DESC' }),
-          })
-          if (!r.ok) { out[dur.trim()] = { error: 'HTTP ' + r.status }; continue }
-          const text = await r.text()
-          out[dur.trim()] = text.startsWith('{') ? JSON.parse(text) : { error: 'not JSON' }
-        } catch (e) { out[dur.trim()] = { error: e.message } }
-        await new Promise(r => setTimeout(r, 500))
+          const path = `/x-api/fapi/beehive/public/v1/common/dynamic-leader-list?pageNo=1&pageSize=${opts.pageSize}&dataDuration=${d}&sortField=LEADER_SORT_FIELD_SORT_ROI`
+          const r = await fetch(path)
+          out[d] = r.ok ? await r.json() : { error: 'HTTP ' + r.status }
+        } catch (e) { out[d] = { error: e.message } }
       }
       return out
     }, { durations, pageSize }).catch(() => ({}))
@@ -404,7 +352,7 @@ const HANDLERS = {
     return { error: 'No API response captured' }
   },
 
-  // ─── MEXC (v15 port: multi-endpoint fallback via page.evaluate) ──
+  // ─── MEXC (v15: same-origin fetch with credentials) ──────────────
   'mexc/leaderboard': async (page, params) => {
     const periodType = parseInt(params.periodType || '2', 10)
     const pageSize = parseInt(params.pageSize || '50', 10)
@@ -418,6 +366,7 @@ const HANDLERS = {
     })
     await page.waitForTimeout(5000)
 
+    // Same-origin relative paths — bypass WAF
     const data = await page.evaluate(async (opts) => {
       async function safeFetch(url, fetchOpts) {
         try {
@@ -437,17 +386,18 @@ const HANDLERS = {
         body: JSON.stringify({ pageNum: 1, pageSize: opts.pageSize, periodType: opts.periodType, sortField: 'ROI' }),
       })
       if (r3?.data) return r3
-      return { error: 'All MEXC endpoints failed' }
+      return null
     }, { periodType, pageSize }).catch(() => null)
 
-    if (data && !data.error) return data
+    if (data) return data
 
+    // Fallback to intercepted responses
     await page.waitForTimeout(3000)
     if (captured.length > 0) {
       captured.sort((a, b) => b.size - a.size)
       return captured[0].data
     }
-    return data || { error: 'No API response captured' }
+    return { error: 'All MEXC endpoints failed' }
   },
 
   // ─── CoinEx (v15 port: intercept + page.evaluate fallback) ──────
@@ -506,28 +456,41 @@ const HANDLERS = {
     return data || { error: 'No API response captured' }
   },
 
-  // ─── BingX (v15 port: scroll + waitForResponse) ─────────────────
+  // ─── BingX (v15: scroll to trigger SPA, waitForResponse directly) ─
   'bingx/leaderboard': async (page, params) => {
-    const captured = setupInterception(page, (url) =>
-      url.includes('multi-rank') || (url.includes('copy') && url.includes('rank'))
-    )
+    // Anti-bot evasion
+    await page.addInitScript(() => {
+      Object.defineProperty(navigator, 'webdriver', { get: () => false })
+      window.chrome = { runtime: {} }
+      Object.defineProperty(navigator, 'plugins', { get: () => [1, 2, 3, 4, 5] })
+    })
 
     await page.goto('https://bingx.com/en/CopyTrading/leaderBoard', {
-      waitUntil: 'domcontentloaded', timeout: 30000,
+      waitUntil: 'domcontentloaded', timeout: 45000,
     })
-    await page.evaluate(() => window.scrollBy(0, 500))
-    await page.waitForTimeout(2000)
+    await page.waitForTimeout(3000)
+    await page.evaluate(() => window.scrollTo(0, 300)).catch(() => {})
 
+    // Wait for multi-rank response and read body directly (don't use setupInterception)
     try {
-      await page.waitForResponse(
-        (response) => response.url().includes('multi-rank'),
-        { timeout: 15000 }
+      const response = await page.waitForResponse(
+        (r) => r.url().includes('multi-rank') && r.status() === 200,
+        { timeout: 30000 }
       )
+      const text = await response.text()
+      if (text.length > 100) return JSON.parse(text)
     } catch { /* timeout */ }
 
-    await page.waitForTimeout(2000)
-    if (captured.length > 0) return captured[0].data
-    return { error: 'No API response captured' }
+    // Fallback: try same-origin fetch
+    const data = await page.evaluate(async () => {
+      try {
+        const r = await fetch('/en/CopyTrading/api/multi-rank', { credentials: 'include' })
+        if (!r.ok) return null
+        return await r.json()
+      } catch { return null }
+    }).catch(() => null)
+
+    return data || { error: 'No API response captured' }
   },
 
   // ─── BloFin (page.evaluate with direct API) ─────────────────────
@@ -590,56 +553,60 @@ const HANDLERS = {
     return { error: 'No API response captured' }
   },
 
-  // ─── Toobit (v15 port: intercept + page.evaluate, CF needs 60s) ──
-  'toobit/leaderboard': async (page, params) => {
-    const dataType = parseInt(params.period || params.dataType || '2', 10)
-    const pageSize = parseInt(params.pageSize || '50', 10)
+  // ─── Toobit (v15: direct API to bapi.toobit.com, no browser!) ────
+  'toobit/leaderboard': async (_page, params) => {
+    const period = params.period || '30'
+    const headers = {
+      'User-Agent': DEFAULT_UA,
+      'Referer': 'https://www.toobit.com/copytrading/ranking',
+      'Origin': 'https://www.toobit.com',
+      'Accept': 'application/json',
+    }
+    const allTraders = new Map()
 
-    const captured = setupInterception(page, (url) =>
-      url.includes('identity-type-leaders') || url.includes('leaderboard') ||
-      (url.includes('copy') && url.includes('trader'))
-    )
-
-    // Toobit CF challenge can take 30-50s — use 60s timeout + networkidle
-    await page.goto('https://www.toobit.com/en-US/copy-trading', {
-      waitUntil: 'networkidle', timeout: 60000,
-    }).catch(() => {
-      // networkidle may timeout, try domcontentloaded fallback
-    })
-    await waitForCF(page, 30000)
-    await page.waitForTimeout(3000)
-    await page.evaluate(() => window.scrollTo(0, 500)).catch(() => {})
-    await page.waitForTimeout(3000)
-
-    if (captured.length > 0) {
-      captured.sort((a, b) => b.size - a.size)
-      return captured[0].data
+    // Strategy 1: Ranking API — kind 0-4 (ROI, PnL, follower profit, followers, AUM)
+    for (const kind of [0, 1, 2, 3, 4]) {
+      try {
+        const url = `https://bapi.toobit.com/bapi/v1/copy-trading/ranking?page=1&dataType=${period}&kind=${kind}`
+        const r = await fetch(url, { headers, signal: AbortSignal.timeout(10000) })
+        if (!r.ok) continue
+        const text = await r.text()
+        if (!text.startsWith('{')) continue
+        const json = JSON.parse(text)
+        const list = json?.data?.list || []
+        for (const item of list) {
+          const id = item.leaderUserId
+          if (id && !allTraders.has(id)) allTraders.set(id, item)
+        }
+        log(`Toobit: kind=${kind} got ${list.length}, ${allTraders.size} total`)
+      } catch { /* skip */ }
     }
 
-    // Multiple API endpoints to try
-    const data = await page.evaluate(async (opts) => {
-      async function safeFetch(url) {
-        try {
-          const r = await fetch(url, { credentials: 'include' })
-          if (!r.ok) return null
-          const text = await r.text()
-          if (!text.startsWith('{') && !text.startsWith('[')) return null
-          return JSON.parse(text)
-        } catch { return null }
+    // Strategy 2: identity-type-leaders
+    try {
+      const url = `https://bapi.toobit.com/bapi/v1/copy-trading/identity-type-leaders?dataType=${period}`
+      const r = await fetch(url, { headers, signal: AbortSignal.timeout(10000) })
+      if (r.ok) {
+        const json = await r.json()
+        for (const key of Object.keys(json?.data || {})) {
+          const list = json.data[key]
+          if (!Array.isArray(list)) continue
+          for (const item of list) {
+            const id = item.leaderUserId
+            if (id && !allTraders.has(id)) {
+              allTraders.set(id, {
+                leaderUserId: id, name: item.nickname, avatar: item.avatar,
+                profitRatio: item.leaderAvgProfitRatio, profit: item.pnl,
+                followerProfit: item.followTotalProfit, followerTotal: item.currentFollowerCount,
+              })
+            }
+          }
+        }
       }
-      const endpoints = [
-        `/v1/copy-trading/identity-type-leaders?dataType=${opts.dataType}&pageSize=${opts.pageSize}&pageNo=1`,
-        `/api/v1/copy-trade/leaderboard?period=${opts.dataType}&pageSize=${opts.pageSize}&page=1`,
-        `/copy-trading/api/leaderboard?dataType=${opts.dataType}&pageSize=${opts.pageSize}`,
-      ]
-      for (const ep of endpoints) {
-        const json = await safeFetch(ep)
-        if (json && (json.data || json.result || json.list)) return json
-      }
-      return null
-    }, { dataType, pageSize }).catch(() => null)
+    } catch { /* skip */ }
 
-    return data || (captured.length > 0 ? captured[0].data : { error: 'No API response captured' })
+    log(`Toobit: total unique traders: ${allTraders.size}`)
+    return { code: 200, data: { list: Array.from(allTraders.values()), total: allTraders.size } }
   },
 
   // ─── XT (v15 port: page.evaluate for /fapi/user/v1) ─────────────
@@ -724,7 +691,7 @@ const server = http.createServer(async (req, res) => {
 
   // Health endpoint (no auth)
   if (pathname === '/health') {
-    const busyContexts = contextPool.filter((s) => s.busy).length
+    const busySlots = contextPool.filter((s) => s.busy).length
     const memUsage = process.memoryUsage()
 
     res.writeHead(200, { 'Content-Type': 'application/json' })
@@ -736,8 +703,8 @@ const server = http.createServer(async (req, res) => {
         startedAt,
         pool: {
           size: contextPool.length,
-          busy: busyContexts,
-          free: contextPool.length - busyContexts,
+          busy: busySlots,
+          free: contextPool.length - busySlots,
         },
         queue: requestQueue.length,
         active: activeRequests,
