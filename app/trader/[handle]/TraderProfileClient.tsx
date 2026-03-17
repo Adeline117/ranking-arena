@@ -85,7 +85,7 @@ type TraderTabKey = 'overview' | 'stats' | 'portfolio' | 'posts'
 
 /** Platforms that fundamentally do not provide position/portfolio data */
 const NO_PORTFOLIO_PLATFORMS = new Set([
-  'htx_futures', 'mexc', 'btcc', 'coinex',
+  'htx_futures', 'mexc', 'btcc', 'coinex', 'bitunix',
   'lbank', 'bingx', 'toobit', 'xt', 'weex', 'phemex', 'blofin', 'bitfinex',
   'binance_spot', 'binance_web3', 'okx_web3', 'bybit_spot',
   'aevo', 'bitget_futures', 'kucoin', 'web3_bot', 'kwenta',
