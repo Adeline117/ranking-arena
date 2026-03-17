@@ -114,12 +114,12 @@ function PriceChangeBar({ label, value }: { label: string; value: number | null 
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, padding: '4px 0' }}>
       <span style={{ color: tokens.colors.text.tertiary, width: 32, flexShrink: 0 }}>{label}</span>
-      <div style={{ flex: 1, height: 6, background: tokens.colors.bg.tertiary, borderRadius: 3, overflow: 'hidden' }}>
+      <div style={{ flex: 1, height: 6, background: tokens.colors.bg.tertiary, borderRadius: tokens.radius.sm, overflow: 'hidden' }}>
         <div style={{
           width: `${barWidth}%`,
           height: '100%',
           background: color,
-          borderRadius: 3,
+          borderRadius: tokens.radius.sm,
           transition: 'width 0.3s ease',
         }} />
       </div>
@@ -215,7 +215,7 @@ export default function TokenSidePanel({ token, onClose }: {
               position: 'fixed',
               inset: 0,
               background: 'var(--color-backdrop-light)',
-              zIndex: 200,
+              zIndex: tokens.zIndex.overlay,
             }}
           />
           <div style={{
@@ -224,7 +224,7 @@ export default function TokenSidePanel({ token, onClose }: {
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            zIndex: 201,
+            zIndex: tokens.zIndex.overlay + 1,
             pointerEvents: 'none',
           }}>
           <m.div
