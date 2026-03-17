@@ -374,7 +374,6 @@ export default function SearchDropdown({ open, query, onClose }: SearchDropdownP
 
   const handleResultClick = (resultId?: string, resultType?: string) => {
     if (query.trim()) saveToHistory(query)
-    // Track click-through (fire and forget)
     if (resultId && query.trim()) {
       fetch(`/api/search?type=click&q=${encodeURIComponent(query.trim())}&id=${encodeURIComponent(resultId)}&rtype=${resultType || ''}`)
         .catch(() => {}) // Intentional: click tracking is non-critical
@@ -559,36 +558,18 @@ export default function SearchDropdown({ open, query, onClose }: SearchDropdownP
           ) : searchData && searchData.total === 0 ? (
             <Box style={{ padding: tokens.spacing[4], textAlign: 'center' }}>
               <Text size="sm" color="tertiary">{t('noRelatedResults')}</Text>
-              {/* "Did you mean" suggestions */}
               {searchData.suggestions && searchData.suggestions.length > 0 && (
                 <Box style={{ marginTop: tokens.spacing[3] }}>
                   <Text size="xs" color="tertiary">{t('searchDidYouMean')}</Text>
                   <Box style={{ display: 'flex', flexWrap: 'wrap', gap: tokens.spacing[2], justifyContent: 'center', marginTop: tokens.spacing[2] }}>
                     {searchData.suggestions.map((suggestion) => (
-                      <Link
-                        key={suggestion}
-                        href={`/search?q=${encodeURIComponent(suggestion)}`}
-                        style={{ textDecoration: 'none' }}
-                        onClick={onClose}
-                      >
-                        <Box
-                          style={{
-                            padding: `${tokens.spacing[1]} ${tokens.spacing[3]}`,
-                            borderRadius: tokens.radius.md,
-                            background: 'var(--color-accent-primary-12)',
-                            border: '1px solid var(--color-accent-primary-25)',
-                            cursor: 'pointer', transition: 'all 0.1s',
-                          }}
-                          onMouseEnter={e => {
-                            e.currentTarget.style.borderColor = tokens.colors.accent.primary
-                          }}
-                          onMouseLeave={e => {
-                            e.currentTarget.style.borderColor = 'var(--color-accent-primary-25)'
-                          }}
-                        >
-                          <Text size="xs" style={{ color: tokens.colors.accent.primary, fontWeight: 600 }}>
-                            {suggestion}
-                          </Text>
+                      <Link key={suggestion} href={`/search?q=${encodeURIComponent(suggestion)}`} style={{ textDecoration: 'none' }} onClick={onClose}>
+                        <Box style={{
+                          padding: `${tokens.spacing[1]} ${tokens.spacing[3]}`, borderRadius: tokens.radius.md,
+                          background: 'var(--color-accent-primary-12)', border: '1px solid var(--color-accent-primary-25)',
+                          cursor: 'pointer', transition: 'all 0.1s',
+                        }}>
+                          <Text size="xs" style={{ color: tokens.colors.accent.primary, fontWeight: 600 }}>{suggestion}</Text>
                         </Box>
                       </Link>
                     ))}
@@ -598,13 +579,8 @@ export default function SearchDropdown({ open, query, onClose }: SearchDropdownP
             </Box>
           ) : searchData ? (
             <>
-              {/* Exchange match indicator */}
               {searchData.matchedExchange && (
-                <Box style={{
-                  padding: `${tokens.spacing[2]} ${tokens.spacing[4]}`,
-                  borderBottom: `1px solid ${tokens.colors.border.primary}`,
-                  display: 'flex', alignItems: 'center', gap: tokens.spacing[2],
-                }}>
+                <Box style={{ padding: `${tokens.spacing[2]} ${tokens.spacing[4]}`, borderBottom: `1px solid ${tokens.colors.border.primary}`, display: 'flex', alignItems: 'center', gap: tokens.spacing[2] }}>
                   <Text size="xs" color="tertiary">
                     {t('searchShowingTopTraders')} <span style={{ fontWeight: 700, color: tokens.colors.text.secondary }}>
                       {EXCHANGE_CONFIG[searchData.matchedExchange as keyof typeof EXCHANGE_CONFIG]?.name || searchData.matchedExchange}
@@ -617,24 +593,12 @@ export default function SearchDropdown({ open, query, onClose }: SearchDropdownP
               {renderCategoryResults('library', searchData.results.library)}
               {features.social && renderCategoryResults('users', searchData.results.users)}
               {features.social && renderCategoryResults('groups', searchData.results.groups || [])}
-              {/* "Did you mean" for low results */}
               {searchData.suggestions && searchData.suggestions.length > 0 && (
-                <Box style={{
-                  padding: `${tokens.spacing[2]} ${tokens.spacing[4]}`,
-                  borderBottom: `1px solid ${tokens.colors.border.primary}`,
-                  display: 'flex', alignItems: 'center', gap: tokens.spacing[2], flexWrap: 'wrap',
-                }}>
+                <Box style={{ padding: `${tokens.spacing[2]} ${tokens.spacing[4]}`, borderBottom: `1px solid ${tokens.colors.border.primary}`, display: 'flex', alignItems: 'center', gap: tokens.spacing[2], flexWrap: 'wrap' }}>
                   <Text size="xs" color="tertiary">{t('searchDidYouMean')}</Text>
                   {searchData.suggestions.map((suggestion) => (
-                    <Link
-                      key={suggestion}
-                      href={`/search?q=${encodeURIComponent(suggestion)}`}
-                      style={{ textDecoration: 'none' }}
-                      onClick={onClose}
-                    >
-                      <Text size="xs" style={{ color: tokens.colors.accent.primary, fontWeight: 600 }}>
-                        {suggestion}
-                      </Text>
+                    <Link key={suggestion} href={`/search?q=${encodeURIComponent(suggestion)}`} style={{ textDecoration: 'none' }} onClick={onClose}>
+                      <Text size="xs" style={{ color: tokens.colors.accent.primary, fontWeight: 600 }}>{suggestion}</Text>
                     </Link>
                   ))}
                 </Box>

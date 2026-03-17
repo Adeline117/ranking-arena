@@ -3776,6 +3776,8 @@ const ko = {
     searchGroupsSection: '그룹',
     searchTradersSection: '트레이더',
     searchGroupMembers: '멤버',
+    searchDidYouMean: '혹시 이것을 찾으셨나요:',
+    searchShowingTopTraders: '상위 트레이더 표시:',
 
     // Book detail - language labels
     bookLanguageChinese: '중국어',

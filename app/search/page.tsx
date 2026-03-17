@@ -70,6 +70,8 @@ function SearchContent() {
   const [groupTotal, setGroupTotal] = useState(0)
   const [postTotal, setPostTotal] = useState(0)
   const [traderTotal, setTraderTotal] = useState(0)
+  const [didYouMean, setDidYouMean] = useState<string[]>([])
+  const [matchedExchange, setMatchedExchange] = useState<string | null>(null)
 
   useEffect(() => {
      
@@ -205,6 +207,10 @@ function SearchContent() {
             subtitle: g.meta?.member_count ? `${(g.meta.member_count as number).toLocaleString()} ${t('members')}` : undefined,
             meta: g.subtitle ? (g.subtitle.slice(0, 60)) : undefined,
           })))
+
+          // Capture suggestions and exchange match
+          setDidYouMean(data.suggestions || [])
+          setMatchedExchange(data.matchedExchange || null)
 
           // Save to history only after results are received
           const totalReceived = data.results.library.length + data.results.posts.length + data.results.traders.length + groupsResults.length
@@ -553,7 +559,39 @@ function SearchContent() {
               description={t('searchNoResultsFor').replace('{query}', query)}
               variant="compact"
             />
-            <div style={{ maxWidth: 360, margin: '0 auto', textAlign: 'left' }}>
+            {/* "Did you mean" suggestions */}
+            {didYouMean.length > 0 && (
+              <div style={{ maxWidth: 400, margin: '16px auto 0', textAlign: 'center' }}>
+                <div style={{ fontSize: 13, color: tokens.colors.text.secondary, marginBottom: 8, fontWeight: 500 }}>
+                  {t('searchDidYouMean')}
+                </div>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, justifyContent: 'center' }}>
+                  {didYouMean.map(suggestion => (
+                    <Link
+                      key={suggestion}
+                      href={`/search?q=${encodeURIComponent(suggestion)}`}
+                      style={{
+                        padding: '8px 18px', borderRadius: 10,
+                        background: 'var(--color-accent-primary-12)',
+                        border: '1px solid var(--color-accent-primary-25)',
+                        color: tokens.colors.accent.primary,
+                        fontSize: 14, fontWeight: 600,
+                        textDecoration: 'none', transition: 'all 0.15s',
+                      }}
+                      onMouseEnter={e => {
+                        e.currentTarget.style.borderColor = tokens.colors.accent.primary
+                      }}
+                      onMouseLeave={e => {
+                        e.currentTarget.style.borderColor = 'var(--color-accent-primary-25)'
+                      }}
+                    >
+                      {suggestion}
+                    </Link>
+                  ))}
+                </div>
+              </div>
+            )}
+            <div style={{ maxWidth: 360, margin: '16px auto 0', textAlign: 'left' }}>
               <div style={{ fontSize: 12, color: tokens.colors.text.secondary, marginBottom: 10, fontWeight: 600 }}>
                 {t('searchSuggestions')}:
               </div>
