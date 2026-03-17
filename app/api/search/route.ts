@@ -524,11 +524,41 @@ export const GET = withPublic(
 
     const totalResults = traders.length + posts.length + library.length + users.length + groups.length
 
-    // "Did you mean" suggestions for low-result queries
+    // "Did you mean" suggestions — combines trader handles + hot posts + popular groups
     let suggestions: string[] | undefined
     if (totalResults <= 2 && sanitizedQuery.length >= 3) {
-      suggestions = await getSearchSuggestions(supabase, sanitizedQuery)
-      if (suggestions.length === 0) suggestions = undefined
+      const [traderSuggestions, hotPostSuggestions, groupSuggestions] = await Promise.all([
+        // Trader handle suggestions (weighted by arena_score + followers)
+        getSearchSuggestions(supabase, sanitizedQuery),
+        // Hot post titles containing similar keywords
+        features.social
+          ? supabase
+              .from('posts')
+              .select('title')
+              .not('title', 'is', null)
+              .or(`title.ilike.%${sanitizedQuery.slice(0, 20)}%`)
+              .order('hot_score', { ascending: false, nullsFirst: false })
+              .limit(2)
+              .then(({ data }) => (data || []).map((p: { title: string }) => p.title).filter(Boolean))
+          : Promise.resolve([]),
+        // Popular groups with similar names
+        features.social
+          ? supabase
+              .from('groups')
+              .select('name')
+              .ilike('name', `%${sanitizedQuery.slice(0, 20)}%`)
+              .order('member_count', { ascending: false, nullsFirst: false })
+              .limit(2)
+              .then(({ data }) => (data || []).map((g: { name: string }) => g.name).filter(Boolean))
+          : Promise.resolve([]),
+      ])
+      // Merge & dedupe: trader handles first, then hot posts, then groups
+      const allSuggestions = [...new Set([
+        ...traderSuggestions,
+        ...hotPostSuggestions,
+        ...groupSuggestions,
+      ])].slice(0, 5)
+      if (allSuggestions.length > 0) suggestions = allSuggestions
     }
 
     const escapedQuery = query.replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
