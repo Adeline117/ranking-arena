@@ -1,4 +1,4 @@
-import React, { memo, useCallback, useRef, useState, useEffect } from 'react'
+import React, { memo, useCallback, useRef, useState, useEffect, useMemo } from 'react'
 import Link from 'next/link'
 import { mutate } from 'swr'
 import { fetcher as rawFetcher } from '@/lib/hooks/useSWR'
@@ -118,11 +118,27 @@ export const TraderRow = memo(function TraderRow({
   const isAddress = traderHandle.startsWith('0x') && traderHandle.length > 20
   const sourceInfo = parseSourceInfo(trader.source || source || '')
 
-  // Compare checkbox state — use boolean selector to avoid new function references
-  const isSelected = useComparisonStore(s => s.isSelected(trader.id))
-  const addTrader = useComparisonStore(s => s.addTrader)
-  const removeTrader = useComparisonStore(s => s.removeTrader)
-  const canAddMore = useComparisonStore(s => s.selectedTraders.length < 5)
+  // Compare checkbox state — single selector with stable callback
+  const comparisonState = useComparisonStore(useCallback(s => ({
+    isSelected: s.isSelected(trader.id),
+    addTrader: s.addTrader,
+    removeTrader: s.removeTrader,
+    canAddMore: s.selectedTraders.length < 5,
+  }), [trader.id]))
+  const { isSelected, addTrader, removeTrader, canAddMore } = comparisonState
+
+  // Memoize trading style classification to avoid recomputing on every render
+  const tradingStyleInfo = useMemo(() => {
+    if (trader.trading_style && trader.trading_style !== 'unknown') {
+      return getStyleInfo(trader.trading_style as TradingStyle)
+    }
+    const computed = classifyStyle({
+      avg_holding_hours: trader.avg_holding_hours,
+      trades_count: trader.trades_count,
+      win_rate: trader.win_rate,
+    })
+    return computed !== 'unknown' ? getStyleInfo(computed) : null
+  }, [trader.trading_style, trader.avg_holding_hours, trader.trades_count, trader.win_rate])
 
   // Prefetch trader detail on hover with 300ms debounce to prevent
   // firing 20-50 requests during rapid scroll over rows
@@ -389,32 +405,20 @@ export const TraderRow = memo(function TraderRow({
                 </span>
               )}
               {/* Trading Style Chip */}
-              {(() => {
-                const style = (trader.trading_style && trader.trading_style !== 'unknown')
-                  ? getStyleInfo(trader.trading_style as TradingStyle)
-                  : (() => {
-                      const computed = classifyStyle({
-                        avg_holding_hours: trader.avg_holding_hours,
-                        trades_count: trader.trades_count,
-                        win_rate: trader.win_rate,
-                      })
-                      return computed !== 'unknown' ? getStyleInfo(computed) : null
-                    })()
-                return style ? (
-                  <span style={{
-                    padding: '1px 6px',
-                    borderRadius: tokens.radius.md,
-                    fontSize: 12,
-                    fontWeight: 600,
-                    color: style.color,
-                    background: style.bgColor,
-                    border: `1px solid ${style.borderColor}`,
-                    lineHeight: 1.4,
-                  }}>
-                    {language === 'zh' ? style.label : style.labelEn}
-                  </span>
-                ) : null
-              })()}
+              {tradingStyleInfo && (
+                <span style={{
+                  padding: '1px 6px',
+                  borderRadius: tokens.radius.md,
+                  fontSize: 12,
+                  fontWeight: 600,
+                  color: tradingStyleInfo.color,
+                  background: tradingStyleInfo.bgColor,
+                  border: `1px solid ${tradingStyleInfo.borderColor}`,
+                  lineHeight: 1.4,
+                }}>
+                  {language === 'zh' ? tradingStyleInfo.label : tradingStyleInfo.labelEn}
+                </span>
+              )}
               {trader.also_on && trader.also_on.length > 0 && (
                 <Text size="xs" style={{ fontSize: tokens.typography.fontSize.xs, color: TRADER_TEXT_TERTIARY, lineHeight: 1.2 }}>
                   also on: {trader.also_on.map(s => EXCHANGE_NAMES[s] || s.split('_')[0]).filter((v, i, a) => a.indexOf(v) === i).join(', ')}
