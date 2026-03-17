@@ -4510,6 +4510,27 @@ numberFormatThousand: '千',
 numberFormatMillion: '百万',
 numberFormatBillion: '亿',
 
+// Share / Referral
+copyShareLink: '复制链接',
+shareOnX: '分享到 X',
+copied: '已复制！',
+pricingProUnlockTitle: 'Pro 解锁内容',
+pricingProDetailedAnalytics: '详细交易员分析与评分拆解',
+pricingProAlerts: '实时交易员提醒与通知',
+pricingProApiAccess: 'API 访问（即将推出）',
+pricingProCsvExport: 'CSV 数据导出',
+pricingProAdvancedFilters: '高级多条件筛选',
+pricingProTraderCompare: '交易员并排对比',
+pricingProPriority: '优先支持与新功能抢先体验',
+pricingFaqPaymentQ: '支持哪些支付方式？',
+pricingFaqPaymentA: '我们通过 Stripe 支持所有主流信用卡、Apple Pay 和 Google Pay。',
+pricingFaqTrialQ: '有免费试用吗？',
+pricingFaqTrialA: '免费版可以访问基础排行榜和社区功能。随时升级即可解锁 Pro 全部功能。',
+pricingFaqSwitchQ: '可以切换套餐吗？',
+pricingFaqSwitchA: '可以，你可以随时在月付和年付之间切换，我们会按比例计算差额。',
+pricingFaqApiQ: 'Pro 包含 API 访问吗？',
+pricingFaqApiA: 'API 访问功能即将上线，Pro 会员将率先获得使用权。',
+
 } as const
 
 export default zh
