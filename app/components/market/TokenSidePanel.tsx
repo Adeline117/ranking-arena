@@ -446,7 +446,7 @@ export default function TokenSidePanel({ token, onClose }: {
                       {formatDate(md.ath_date.usd)}
                     </div>
                     <div style={{ fontSize: 11, color: tokens.colors.accent.error, marginTop: 2 }}>
-                      {md.ath_change_percentage.usd.toFixed(1)}%
+                      {(md.ath_change_percentage?.usd ?? 0).toFixed(1)}%
                     </div>
                   </div>
                   <div style={{

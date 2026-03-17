@@ -273,7 +273,9 @@ function SnapshotCard({ window, metrics }: { window: SnapshotWindow; metrics: Sn
     )
   }
 
-  const roiColor = metrics.roi >= 0 ? tokens.colors.accent.success : tokens.colors.accent.error
+  const roi = metrics.roi ?? 0
+  const pnl = metrics.pnl ?? 0
+  const roiColor = roi >= 0 ? tokens.colors.accent.success : tokens.colors.accent.error
 
   return (
     <div className="p-4 rounded-xl" style={{ backgroundColor: tokens.colors.bg.secondary }}>
@@ -303,13 +305,13 @@ function SnapshotCard({ window, metrics }: { window: SnapshotWindow; metrics: Sn
         <div className="flex justify-between">
           <span className="text-xs" style={{ color: tokens.colors.text.secondary }}>ROI</span>
           <span className="text-sm font-semibold" style={{ color: roiColor }}>
-            {metrics.roi >= 0 ? '+' : ''}{metrics.roi.toFixed(2)}%
+            {roi >= 0 ? '+' : ''}{roi.toFixed(2)}%
           </span>
         </div>
         <div className="flex justify-between">
           <span className="text-xs" style={{ color: tokens.colors.text.secondary }}>PnL</span>
           <span className="text-sm font-medium" style={{ color: tokens.colors.text.primary }}>
-            ${metrics.pnl.toLocaleString(undefined, { maximumFractionDigits: 0 })}
+            ${pnl.toLocaleString(undefined, { maximumFractionDigits: 0 })}
           </span>
         </div>
         {metrics.win_rate != null && (

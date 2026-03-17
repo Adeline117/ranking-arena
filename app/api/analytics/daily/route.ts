@@ -36,9 +36,8 @@ export async function POST(request: NextRequest) {
       .select('id', { count: 'exact', head: true })
       .gte('created_at', `${today}T00:00:00Z`)
 
-    const yesterday = new Date(Date.now() - 86400000).toISOString().split('T')[0]
     const row = {
-      date: yesterday,
+      date: today,
       signups: signups ?? 0,
       active_users: activeUsers ?? 0,
       new_claims: newClaims ?? 0,
