@@ -208,10 +208,11 @@ function UserCenterPage() {
             }}>
               {userAvatarUrl ? (
                 <Image
-                  src={userAvatarUrl}
+                  src={`/api/avatar?url=${encodeURIComponent(userAvatarUrl)}`}
                   alt={userHandle || 'User'}
                   width={56}
                   height={56}
+                  unoptimized
                   style={{ width: '100%', height: '100%', objectFit: 'cover' }}
                   onError={(e) => { (e.target as HTMLImageElement).style.display = 'none' }}
                 />
