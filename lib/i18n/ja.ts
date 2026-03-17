@@ -2533,7 +2533,7 @@ const ja = {
     proFeatureOnly: 'Pro機能 - アップグレードしてトレーダー比較をロック解除',
 
     traderNotFoundTitle: 'トレーダーが見つかりません',
-    traderNotFoundDesc: 'このトレーダーは存在しないか、プロフィールが削除されました。',
+    traderNotFoundDesc: 'このトレーダーは存在しないか、プロフィールが削除されました。他のトレーダーを検索するか、ランキングをご覧ください。',
     userNotFoundTitle: 'ユーザーが見つかりません',
     userNotFoundDesc: 'このユーザーは存在しないか、アカウントを削除しています。',
     postNotFoundTitle: '投稿が見つかりません',
@@ -3478,7 +3478,7 @@ const ja = {
     linkedAt: 'リンク日',
     noFollowers: 'フォロワーがまだいません',
     noMessagesHint: 'メッセージがまだありません',
-    noAlertsDesc: 'アラートが設定されていません',
+    noAlertsDesc: 'ランキングページでトレーダーをフォローすると、パフォーマンスが変化した時に通知を受け取れます',
 
     invalidResponse: '無効なレスポンス',
     loadConnectionsFailed: '接続の読み込みに失敗しました',
@@ -4084,7 +4084,7 @@ const ja = {
 
     // Exchange pages
     exchangeNotFound: '取引所が見つかりません',
-    exchangeNotFoundDesc: 'この取引所のランキングページは存在しません。',
+    exchangeNotFoundDesc: 'この取引所のランキングページは存在しません。ランキングページから他の取引所をご覧ください。',
 
     // EXP actions
     expActionLogin: 'デイリーログイン',
