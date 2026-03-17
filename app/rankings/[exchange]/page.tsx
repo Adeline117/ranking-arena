@@ -122,7 +122,7 @@ async function fetchExchangeTraders(exchange: string): Promise<TraderData[]> {
       .not('arena_score', 'is', null)
       .gt('arena_score', 0)
       .order('arena_score', { ascending: false, nullsFirst: false })
-      .limit(1000)
+      .limit(5000)
 
     if (error) {
       logger.error(`[ExchangeRanking] Error fetching ${exchange}:`, error)
