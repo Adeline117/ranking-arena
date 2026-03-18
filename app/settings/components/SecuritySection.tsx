@@ -513,7 +513,11 @@ export const SecuritySection = React.memo(function SecuritySection(props: Securi
                 <Button
                   variant="secondary"
                   size="sm"
-                  onClick={props.onRevokeAllSessions}
+                  onClick={() => {
+                    if (window.confirm(t('revokeAllSessionsConfirm') || 'Log out all other devices? This cannot be undone.')) {
+                      props.onRevokeAllSessions()
+                    }
+                  }}
                   style={{ color: tokens.colors.accent.error, borderColor: tokens.colors.accent.error + '40' }}
                 >
                   {t('logoutOtherDevicesButton')}

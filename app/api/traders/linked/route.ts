@@ -41,22 +41,23 @@ export async function GET(request: NextRequest) {
       return success({ linked_traders: [], count: 0 })
     }
 
-    // Fetch current stats from leaderboard_ranks for each linked trader
-    const statsPromises = linked.map(async (lt) => {
-      const { data: rank } = await supabase
-        .from('leaderboard_ranks')
-        .select('arena_score, roi, pnl, rank, handle, avatar_url')
-        .eq('trader_key', lt.trader_id)
-        .eq('platform', lt.source)
-        .maybeSingle()
+    // Batch fetch stats from leaderboard_ranks (avoids N+1 queries)
+    const traderKeys = linked.map(lt => lt.trader_id)
+    const { data: allRanks } = await supabase
+      .from('leaderboard_ranks')
+      .select('source_trader_id, source, arena_score, roi, pnl, rank, handle, avatar_url')
+      .in('source_trader_id', traderKeys)
+      .eq('season_id', '90D')
 
-      return {
-        ...lt,
-        stats: rank || null,
-      }
-    })
+    const rankMap = new Map<string, typeof allRanks extends (infer T)[] | null ? T : never>()
+    for (const r of allRanks || []) {
+      rankMap.set(`${r.source}:${r.source_trader_id}`, r)
+    }
 
-    const linkedWithStats = await Promise.all(statsPromises)
+    const linkedWithStats = linked.map(lt => ({
+      ...lt,
+      stats: rankMap.get(`${lt.source}:${lt.trader_id}`) || null,
+    }))
 
     return success({
       linked_traders: linkedWithStats,
@@ -93,12 +94,13 @@ export async function PATCH(request: NextRequest) {
     if (label !== undefined) updateData.label = label
     if (display_order !== undefined) updateData.display_order = display_order
 
-    // If setting as primary, unset all others first
+    // If setting as primary, unset all others first (skip the target row to avoid race)
     if (is_primary === true) {
       await supabase
         .from('user_linked_traders')
         .update({ is_primary: false, updated_at: new Date().toISOString() })
         .eq('user_id', user.id)
+        .neq('id', id)
 
       updateData.is_primary = true
     } else if (is_primary === false) {

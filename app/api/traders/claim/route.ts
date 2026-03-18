@@ -98,7 +98,7 @@ export async function POST(request: NextRequest) {
       return handleError(new Error('Missing required parameters'), 'trader claim POST')
     }
 
-    // Check if already claimed
+    // Early check if already claimed (optimization — DB unique constraint is the real guard against race conditions)
     const isClaimed = await isTraderClaimed(supabase, trader_id, source)
     if (isClaimed) {
       return handleError(new Error('This trader account has been claimed or is under review'), 'trader claim POST')

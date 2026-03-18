@@ -104,7 +104,11 @@ export default function ShareOnXButton({
 
   const handleClick = useCallback(() => {
     const url = buildXUrl()
-    window.open(url, '_blank', 'noopener,noreferrer,width=600,height=500')
+    const popup = window.open(url, '_blank', 'noopener,noreferrer,width=600,height=500')
+    if (!popup) {
+      // Fallback: navigate directly if popup blocked
+      window.location.href = url
+    }
   }, [buildXUrl])
 
   return (

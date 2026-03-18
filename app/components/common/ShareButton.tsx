@@ -110,20 +110,23 @@ export default function ShareButton({ data, size = 'sm', variant = 'ghost', show
     setOpen(false)
   }, [data.url, showToast, t])
 
-  const shareToTwitter = useCallback(() => {
-    window.open(`https://twitter.com/intent/tweet?text=${encodeURIComponent(text)}`, '_blank', 'noopener')
+  const openPopup = useCallback((url: string) => {
+    const popup = window.open(url, '_blank', 'noopener')
+    if (!popup) showToast(t('popupBlocked') || 'Popup blocked. Please allow popups for this site.', 'warning')
     setOpen(false)
-  }, [text])
+  }, [showToast, t])
+
+  const shareToTwitter = useCallback(() => {
+    openPopup(`https://twitter.com/intent/tweet?text=${encodeURIComponent(text)}`)
+  }, [text, openPopup])
 
   const shareToTelegram = useCallback(() => {
-    window.open(`https://t.me/share/url?url=${encodeURIComponent(data.url)}&text=${encodeURIComponent(text)}`, '_blank', 'noopener')
-    setOpen(false)
-  }, [text, data.url])
+    openPopup(`https://t.me/share/url?url=${encodeURIComponent(data.url)}&text=${encodeURIComponent(text)}`)
+  }, [text, data.url, openPopup])
 
   const shareToWhatsApp = useCallback(() => {
-    window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, '_blank', 'noopener')
-    setOpen(false)
-  }, [text])
+    openPopup(`https://wa.me/?text=${encodeURIComponent(text)}`)
+  }, [text, openPopup])
 
   const pad = size === 'sm' ? `${tokens.spacing[2]} ${tokens.spacing[3]}` : `${tokens.spacing[2]} ${tokens.spacing[4]}`
   const fontSize = size === 'sm' ? tokens.typography.fontSize.sm : tokens.typography.fontSize.base

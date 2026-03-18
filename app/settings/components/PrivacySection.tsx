@@ -135,7 +135,7 @@ export const PrivacySection = React.memo(function PrivacySection(props: PrivacyS
                   </Box>
                   <Box>
                     <Text size="sm" weight="medium">{blockedUser.handle || t('unknownUser')}</Text>
-                    <Text size="xs" color="tertiary">{formatTimeAgo(blockedUser.createdAt)} {t('blockedAt')}</Text>
+                    <Text size="xs" color="tertiary">{t('blockedAt')} {formatTimeAgo(blockedUser.createdAt)}</Text>
                   </Box>
                 </Box>
                 <Button
