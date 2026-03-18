@@ -302,6 +302,45 @@ export async function GET(request: NextRequest) {
         }
         logger.info(`[aggregate] Computed MDD for ${mddUpdated}/${mddUpdates.length} traders from ROI history`)
         }
+
+        // Step 4c: Compute win_rate from daily ROI series for traders that lack it
+        // Win rate = % of days with positive ROI change
+        const dailyRoiByTrader = new Map<string, number[]>()
+        for (const row of recentDaily) {
+          if (row.daily_return_pct == null) continue
+          const key = `${row.platform}:${row.trader_key}`
+          if (!dailyRoiByTrader.has(key)) dailyRoiByTrader.set(key, [])
+          dailyRoiByTrader.get(key)!.push(parseFloat(String(row.daily_return_pct)))
+        }
+
+        const wrUpdates: Array<{ source: string; source_trader_id: string; win_rate: number }> = []
+        for (const [key, returns] of dailyRoiByTrader) {
+          if (returns.length < 5) continue // need at least 5 trading days
+          const wins = returns.filter(r => r > 0).length
+          const wr = (wins / returns.length) * 100
+          const [platform, ...parts] = key.split(':')
+          wrUpdates.push({ source: platform, source_trader_id: parts.join(':'), win_rate: Math.round(wr * 10) / 10 })
+        }
+
+        if (wrUpdates.length > 0) {
+          let wrUpdated = 0
+          const WR_BATCH = 50
+          for (let i = 0; i < wrUpdates.length; i += WR_BATCH) {
+            const batch = wrUpdates.slice(i, i + WR_BATCH)
+            const results = await Promise.all(
+              batch.map(upd =>
+                supabase
+                  .from('trader_snapshots_v2')
+                  .update({ win_rate: upd.win_rate })
+                  .eq('platform', upd.source)
+                  .eq('trader_key', upd.source_trader_id)
+                  .is('win_rate', null)
+              )
+            )
+            wrUpdated += results.filter(r => !r.error).length
+          }
+          logger.info(`[aggregate] Computed win_rate for ${wrUpdated}/${wrUpdates.length} traders from daily returns`)
+        }
       }
     }
 
