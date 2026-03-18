@@ -127,7 +127,7 @@ export async function fetchViaVpsProxy<T = unknown>(
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'X-Proxy-Key': process.env.VPS_PROXY_KEY || '',
+        'X-Proxy-Key': (process.env.VPS_PROXY_KEY || '').trim(),
       },
       body: JSON.stringify({
         url: targetUrl,
@@ -626,7 +626,7 @@ export async function fetchWithVpsFallback<T = unknown>(
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'X-Proxy-Key': process.env.VPS_PROXY_KEY || '',
+        'X-Proxy-Key': (process.env.VPS_PROXY_KEY || '').trim(),
       },
       body: JSON.stringify({
         url,
