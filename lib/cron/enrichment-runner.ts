@@ -197,7 +197,13 @@ export const ENRICHMENT_PLATFORM_CONFIGS: Record<string, EnrichmentConfig> = {
     fetchCurrentPositions: fetchOkxCurrentPositions,
     concurrency: 3, delayMs: 1500,
   },
-  // bitget_futures: PERMANENTLY REMOVED (2026-03-18 EMERGENCY #7) - VPS scraper repeatedly hangs 44+ min, blocks entire pipeline
+  bitget_futures: {
+    platform: 'bitget_futures',
+    fetchEquityCurve: fetchBitgetEquityCurve,
+    fetchStatsDetail: fetchBitgetStatsDetail,
+    fetchPositionHistory: fetchBitgetPositionHistory,
+    concurrency: 2, delayMs: 2000,
+  },
   // bitget_spot: enrichment not yet configured — spot-specific enrichment endpoints TBD
   hyperliquid: {
     platform: 'hyperliquid',
@@ -406,8 +412,7 @@ export const NO_ENRICHMENT_PLATFORMS = new Set([
   'xt',
   // kucoin, weex: dead platforms, no enrichment possible
   'kucoin', 'weex',  // weex returns 521, janapw.com needs dynamic auth
-  // EMERGENCY BLOCKS (repeatedly hang/timeout, block entire pipeline)
-  'bitget_futures', 'bitget_spot',  // VPS scraper hangs 44+ min (2026-03-18 #7)
+  // bitget_spot not yet configured (no enrichment API)
   // NOTE: bitfinex re-enabled — public rankings API for stats
   // NOTE: blofin re-enabled — trader detail endpoint
   // NOTE: phemex re-enabled — public copy-trading API
@@ -419,7 +424,9 @@ export const NO_ENRICHMENT_PLATFORMS = new Set([
 
 // Per-platform timeout: prevents any single platform from burning the entire batch budget
 // CEX platforms get 45s, onchain platforms get 90s (GraphQL/RPC calls are slower)
-const PLATFORM_TIMEOUT_MS: Record<string, number> = {}
+const PLATFORM_TIMEOUT_MS: Record<string, number> = {
+  'bitget_futures': 60_000, // VPS scraper slower than direct API, give 60s (was hanging 44min due to missing per-trader timeout)
+}
 const DEFAULT_PLATFORM_TIMEOUT_MS = 45_000
 const ONCHAIN_PLATFORM_TIMEOUT_MS = 90_000
 const ONCHAIN_SET = new Set(['gmx', 'dydx', 'jupiter_perps', 'hyperliquid', 'drift', 'aevo', 'gains', 'kwenta'])

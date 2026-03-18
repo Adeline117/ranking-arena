@@ -38,9 +38,10 @@ export class MexcFuturesConnector extends BaseConnector {
     let totalAvailable: number | null = null
 
     let _rawLb: Record<string, unknown> | null = null
+    // Increase timeout to 300s (5min) - VPS Playwright scraper is slow for MEXC
     const vpsData = await this.fetchViaVPS<Record<string, unknown>>('/mexc/leaderboard', {
       periodType: String(WINDOW_MAP[window]), pageSize: String(Math.min(limit, 100)),
-    }, 120000)
+    }, 300000)
     if (vpsData) {
       _rawLb = vpsData
     } else {
