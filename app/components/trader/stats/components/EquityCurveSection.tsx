@@ -418,12 +418,12 @@ function SimpleLineChart({
     return `${sign}$${abs.toFixed(0)}`
   }
 
+  // Reset zoom when data/period changes
+  useEffect(() => { setZoomLevel(1); setZoomOffset(0) }, [data, period])
+
   if (data.length === 0) {
     return null
   }
-
-  // Reset zoom when data/period changes
-  useEffect(() => { setZoomLevel(1); setZoomOffset(0) }, [data, period])
 
   // Fill date gaps with zero entries to prevent misleading visual jumps
   const gapFilled = fillDateGaps(data)
