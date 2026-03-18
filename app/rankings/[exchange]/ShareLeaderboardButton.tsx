@@ -79,14 +79,22 @@ export default function ShareLeaderboardButton({ traders, exchange }: Props) {
             // user cancelled
           })
         } else {
-          await navigator.clipboard.writeText(url)
-          showToast(t('linkCopied'), 'success')
+          try {
+            await navigator.clipboard.writeText(url)
+            showToast(t('linkCopied'), 'success')
+          } catch {
+            showToast(t('copyFailed') || 'Copy failed', 'error')
+          }
         }
       } else {
         // Fallback: just share the current page URL
         const url = window.location.href
-        await navigator.clipboard.writeText(url)
-        showToast(t('linkCopied'), 'success')
+        try {
+          await navigator.clipboard.writeText(url)
+          showToast(t('linkCopied'), 'success')
+        } catch {
+          showToast(t('copyFailed') || 'Copy failed', 'error')
+        }
         setShareUrl(url)
       }
     } catch (_err) {
