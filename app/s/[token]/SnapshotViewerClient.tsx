@@ -192,9 +192,7 @@ export default function SnapshotViewerClient({ snapshot, traders }: SnapshotView
             {t('snapshotExpired')}
           </Text>
           <Text color="secondary" style={{ marginBottom: tokens.spacing[6] }}>
-            {language === 'zh'
-              ? '此快照已过期，无法查看。'
-              : 'This snapshot has expired and is no longer available.'}
+            {t('snapshotExpiredDesc')}
           </Text>
           <Link
             href="/"
@@ -298,7 +296,7 @@ export default function SnapshotViewerClient({ snapshot, traders }: SnapshotView
             }}
           >
             {copied ? <CheckIcon size={14} /> : <ShareIcon size={14} />}
-            {copied ? (language === 'zh' ? '已复制' : 'Copied') : t('shareSnapshot')}
+            {copied ? t('snapshotCopied') : t('shareSnapshot')}
           </button>
         </Box>
       </Box>
@@ -578,9 +576,7 @@ export default function SnapshotViewerClient({ snapshot, traders }: SnapshotView
           }}
         >
           <Text size="sm" color="tertiary" style={{ marginBottom: tokens.spacing[4] }}>
-            {language === 'zh'
-              ? '想查看实时排行榜？'
-              : 'Want to see the live leaderboard?'}
+            {t('snapshotWantLive')}
           </Text>
           <Link
             href="/"
@@ -597,7 +593,7 @@ export default function SnapshotViewerClient({ snapshot, traders }: SnapshotView
               boxShadow: tokens.shadow.md,
             }}
           >
-            {language === 'zh' ? '查看实时排行榜' : 'View Live Leaderboard'}
+            {t('snapshotViewLive')}
           </Link>
         </Box>
       </Box>

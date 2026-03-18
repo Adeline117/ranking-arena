@@ -516,7 +516,7 @@ export default function CommentsModal({
                     display: 'flex',
                     alignItems: 'center',
                   }}
-                  title={language === 'zh' ? '表情' : 'Emoji'}
+                  title={t('postEmoji')}
                 >
                   <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                     <circle cx="12" cy="12" r="10" />
@@ -595,7 +595,7 @@ export default function CommentsModal({
                   fontWeight: 700,
                   lineHeight: 1.2,
                 }}
-                title={language === 'zh' ? '@提及用户' : '@Mention'}
+                title={t('postMention')}
               >
                 @
               </button>
@@ -610,7 +610,7 @@ export default function CommentsModal({
                     input.accept = 'image/*'
                     input.onchange = () => {
                       // Future: upload and attach image
-                      showToast(language === 'zh' ? '评论图片功能即将上线' : 'Comment images coming soon', 'warning')
+                      showToast(t('commentImageComingSoon'), 'warning')
                     }
                     input.click()
                   }
@@ -627,7 +627,7 @@ export default function CommentsModal({
                   display: 'flex',
                   alignItems: 'center',
                 }}
-                title={language === 'zh' ? '图片' : 'Image'}
+                title={t('postImage')}
               >
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                   <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>

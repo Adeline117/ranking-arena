@@ -101,7 +101,7 @@ export default function PostListItem(props: PostListItemProps) {
           flexShrink: 0,
           borderRadius: '3px 0 0 3px',
         }}
-        title={`${post.comment_count || 0} ${language === 'zh' ? '条评论' : 'comments'}`}
+        title={t('postCommentsCount').replace('{count}', String(post.comment_count || 0))}
       />
 
       <Box style={{ flex: 1, padding: `${tokens.spacing[2]} ${tokens.spacing[3]}` }}>
@@ -158,7 +158,7 @@ export default function PostListItem(props: PostListItemProps) {
                 {post.author_id === userId && editingPost !== post.id && (
                   <button
                     onClick={(e) => { e.stopPropagation(); setEditingPost(post.id); setEditTitle(post.title); setEditContent(post.content || '') }}
-                    title={language === 'zh' ? '编辑' : 'Edit'}
+                    title={t('postEdit')}
                     style={{ background: 'transparent', border: 'none', cursor: 'pointer', padding: '2px 4px', fontSize: 12, color: tokens.colors.text.tertiary, borderRadius: tokens.radius.sm, transition: 'color 0.15s' }}
                   >
                     <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" /><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" /></svg>
@@ -167,7 +167,7 @@ export default function PostListItem(props: PostListItemProps) {
                 {(userRole === 'owner' || userRole === 'admin') && (
                   <button
                     onClick={(e) => { e.stopPropagation(); handlePinPost(post.id) }}
-                    title={post.is_pinned ? (language === 'zh' ? '取消置顶' : 'Unpin') : (language === 'zh' ? '置顶' : 'Pin')}
+                    title={post.is_pinned ? t('postUnpin') : t('postPin')}
                     style={{ background: 'transparent', border: 'none', cursor: 'pointer', padding: '2px 4px', fontSize: 12, color: post.is_pinned ? (tokens.colors.accent?.primary || ARENA_PURPLE) : tokens.colors.text.tertiary, borderRadius: tokens.radius.sm }}
                   >
                     <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M12 17v5" /><path d="M9 10.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24V17h14v-1.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V6a2 2 0 0 0-2-2h-2a2 2 0 0 0-2 2v4.76z" /></svg>
@@ -176,7 +176,7 @@ export default function PostListItem(props: PostListItemProps) {
                 {post.author_id === userId && (
                   <button
                     onClick={(e) => { e.stopPropagation(); handleDeletePost(post.id) }}
-                    title={language === 'zh' ? '删除' : 'Delete'}
+                    title={t('postDelete')}
                     disabled={deletingPost === post.id}
                     style={{ background: 'transparent', border: 'none', cursor: 'pointer', padding: '2px 4px', fontSize: 12, color: tokens.colors.accent.error, opacity: deletingPost === post.id ? 0.5 : 1, borderRadius: tokens.radius.sm }}
                   >
@@ -298,7 +298,7 @@ export default function PostListItem(props: PostListItemProps) {
             onClick={() => handleBookmark(post.id)}
             disabled={bookmarkLoading[post.id]}
             style={{ padding: 0, minWidth: 'auto', color: post.user_bookmarked ? 'var(--color-accent-warning)' : undefined }}
-            title={language === 'zh' ? (post.user_bookmarked ? '取消收藏' : '收藏') : (post.user_bookmarked ? 'Remove bookmark' : 'Bookmark')}
+            title={post.user_bookmarked ? t('postRemoveBookmark') : t('postBookmark')}
           >
             <span style={{ fontSize: 14 }}>{post.user_bookmarked ? '[S]' : '[+]'}</span>
             <Text size="xs" style={{ marginLeft: tokens.spacing[1], color: post.user_bookmarked ? 'var(--color-accent-warning)' : tokens.colors.text.secondary }}>
@@ -314,7 +314,7 @@ export default function PostListItem(props: PostListItemProps) {
             }}
             disabled={repostLoading[post.id] || !!post.user_reposted}
             style={{ padding: 0, minWidth: 'auto', color: post.user_reposted ? tokens.colors.accent?.primary : undefined }}
-            title={language === 'zh' ? (post.user_reposted ? '已转发' : '转发') : (post.user_reposted ? 'Reposted' : 'Repost')}
+            title={post.user_reposted ? t('reposted') : t('repost')}
           >
             <span style={{ fontSize: 14 }}>&#x2197;</span>
             <Text size="xs" style={{ marginLeft: tokens.spacing[1], color: post.user_reposted ? tokens.colors.accent?.primary : tokens.colors.text.secondary }}>

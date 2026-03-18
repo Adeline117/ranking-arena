@@ -4,6 +4,7 @@ import Link from 'next/link'
 import { useLoginModal } from '@/lib/hooks/useLoginModal'
 import { tokens } from '@/lib/design-tokens'
 import { Box, Text, Button } from '@/app/components/base'
+import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 
 type Group = {
   id: string
@@ -47,6 +48,7 @@ export default function GroupHeader({
   onShowMembers,
   memberPreviews = [],
 }: GroupHeaderProps) {
+  const { t } = useLanguage()
   return (
     <Box
       style={{
@@ -198,13 +200,13 @@ export default function GroupHeader({
                         <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" /><circle cx="9" cy="7" r="4" />
                       </svg>
                     )}
-                    {group.member_count} {language === 'zh' ? '成员' : 'members'}
+                    {group.member_count} {t('groupMembers')}
                   </span>
                 )}
 
                 {group.owner_handle && (
                   <Text size="xs" color="tertiary" style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                    {language === 'zh' ? '组长' : 'Owner'}:
+                    {t('groupOwner')}:
                     <Link
                       href={`/u/${encodeURIComponent(group.owner_handle)}`}
                       style={{
@@ -252,7 +254,7 @@ export default function GroupHeader({
                 e.currentTarget.style.background = 'transparent'
               }}
             >
-              ← {language === 'zh' ? '返回' : 'Back'}
+              ← {t('back')}
             </Link>
           </Box>
 
@@ -277,14 +279,14 @@ export default function GroupHeader({
                         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                           <path d="M12 20h9" /><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z" />
                         </svg>
-                        {language === 'zh' ? '发帖' : 'Post'}
+                        {t('groupPost')}
                       </span>
                     </Button>
                   </Link>
                   {(userRole === 'owner' || userRole === 'admin') && (
                     <Link href={`/groups/${groupId}/manage`} style={{ textDecoration: 'none' }}>
                       <Button variant="secondary" size="sm">
-                        {language === 'zh' ? '管理' : 'Manage'}
+                        {t('groupManage')}
                       </Button>
                     </Link>
                   )}
@@ -295,8 +297,8 @@ export default function GroupHeader({
                     disabled={joining}
                   >
                     {joining
-                      ? (language === 'zh' ? '退出中...' : 'Leaving...')
-                      : (language === 'zh' ? '退出小组' : 'Leave')}
+                      ? t('groupLeaving')
+                      : t('groupLeaveBtn')}
                   </Button>
                 </>
               ) : (
@@ -307,13 +309,13 @@ export default function GroupHeader({
                   disabled={joining}
                 >
                   {joining
-                    ? (language === 'zh' ? '加入中...' : 'Joining...')
-                    : (language === 'zh' ? '+ 加入小组' : '+ Join')}
+                    ? t('groupJoining')
+                    : t('groupJoinBtn')}
                 </Button>
               )
             ) : (
               <Button variant="primary" size="sm" onClick={() => useLoginModal.getState().openLoginModal()}>
-                {language === 'zh' ? '登录后加入' : 'Login to join'}
+                {t('groupLoginToJoin')}
               </Button>
             )}
           </Box>
