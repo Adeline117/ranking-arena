@@ -5,7 +5,8 @@
  * Integrates with smart-scheduler to optimize API call efficiency.
  */
 
-import { createClient, SupabaseClient } from '@supabase/supabase-js'
+import { SupabaseClient } from '@supabase/supabase-js'
+import { getSupabaseAdmin } from '../supabase/server'
 import {
   ActivityTier,
   TraderActivity,
@@ -452,16 +453,5 @@ export class ScheduleManager {
  * Create a schedule manager instance with Supabase admin client
  */
 export function createScheduleManager(): ScheduleManager {
-  const url = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL
-  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY
-
-  if (!url || !serviceKey) {
-    throw new Error('Supabase environment variables not configured')
-  }
-
-  const supabase = createClient(url, serviceKey, {
-    auth: { persistSession: false },
-  })
-
-  return new ScheduleManager(supabase)
+  return new ScheduleManager(getSupabaseAdmin())
 }

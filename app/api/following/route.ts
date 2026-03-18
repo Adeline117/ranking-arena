@@ -11,7 +11,7 @@
  */
 
 import { NextResponse } from 'next/server'
-import { createClient } from '@supabase/supabase-js'
+import { getSupabaseAdmin } from '@/lib/supabase/server'
 import { createLogger, fireAndForget } from '@/lib/utils/logger'
 import { withAuth } from '@/lib/api/middleware'
 import { tieredGet, tieredSet, tieredDel } from '@/lib/cache/redis-layer'
@@ -20,13 +20,6 @@ import { features } from '@/lib/features'
 export const dynamic = 'force-dynamic'
 
 const logger = createLogger('following-api')
-
-function getSupabaseUrl() {
-  return process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL || ''
-}
-function getSupabaseKey() {
-  return process.env.SUPABASE_SERVICE_ROLE_KEY || ''
-}
 
 function followingCacheKey(userId: string): string {
   return `following:${userId}`
@@ -62,7 +55,7 @@ export async function invalidateFollowingCache(userId: string): Promise<void> {
 type FollowingResult = { items: FollowItem[]; traderCount: number; userCount: number }
 
 async function fetchFollowingItems(userId: string): Promise<FollowingResult> {
-  const supabase = createClient(getSupabaseUrl(), getSupabaseKey())
+  const supabase = getSupabaseAdmin()
 
   // 并行获取关注的交易员和用户
   const [traderFollowsResult, userFollowsResult] = await Promise.all([
@@ -194,10 +187,6 @@ export const GET = withAuth(async ({ user: authUser, request }) => {
       requestedUserId: userId
     })
     return NextResponse.json({ error: 'Unauthorized: Cannot access other users\' following lists' }, { status: 403 })
-  }
-
-  if (!getSupabaseUrl() || !getSupabaseKey()) {
-    return NextResponse.json({ error: 'Missing Supabase config' }, { status: 500 })
   }
 
   // Try cache first (hot tier: 1min memory, 5min redis)

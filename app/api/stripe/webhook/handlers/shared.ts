@@ -1,23 +1,9 @@
-import { createClient, SupabaseClient } from '@supabase/supabase-js'
 import { createLogger } from '@/lib/utils/logger'
+import { getSupabaseAdmin } from '@/lib/supabase/server'
 
 export const logger = createLogger('stripe-webhook')
 
-// Lazy-loaded Supabase Admin client
-let _supabaseInstance: SupabaseClient | null = null
-export function getSupabase() {
-  if (!_supabaseInstance) {
-    const url = process.env.NEXT_PUBLIC_SUPABASE_URL
-    const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY
-    if (!url || !serviceKey) {
-      throw new Error('Supabase credentials not configured (NEXT_PUBLIC_SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)')
-    }
-    _supabaseInstance = createClient(url, serviceKey, {
-      auth: { persistSession: false },
-    })
-  }
-  return _supabaseInstance
-}
+export { getSupabaseAdmin as getSupabase }
 
 // Retry wrapper for database operations
 export async function withRetry<T>(

@@ -8,7 +8,7 @@
  */
 
 import { NextResponse } from 'next/server'
-import { createClient } from '@supabase/supabase-js'
+import { getSupabaseAdmin } from '@/lib/supabase/server'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'edge'
@@ -18,19 +18,8 @@ const version = process.env.npm_package_version || '0.1.0'
 // Deploy timestamp from env (set at build time), fallback to module load time
 const deployTime = process.env.NEXT_PUBLIC_DEPLOY_TIME ? parseInt(process.env.NEXT_PUBLIC_DEPLOY_TIME, 10) : startTime
 
-let supabaseInstance: ReturnType<typeof createClient> | null = null
-function getSupabase() {
-  if (supabaseInstance) return supabaseInstance
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL
-  const key = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
-  if (!url || !key) return null
-  supabaseInstance = createClient(url, key, { auth: { persistSession: false } })
-  return supabaseInstance
-}
-
 async function checkDatabase(): Promise<{ status: 'pass' | 'fail' | 'skip'; latency?: number; message?: string }> {
-  const supabase = getSupabase()
-  if (!supabase) return { status: 'skip', message: 'Not configured' }
+  const supabase = getSupabaseAdmin()
 
   const t0 = Date.now()
   try {

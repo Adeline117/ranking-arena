@@ -7,6 +7,7 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import { getSupabaseAdmin } from '@/lib/supabase/server'
 import { encrypt } from '@/lib/crypto/encryption'
 import { validateExchangeApiKey } from '@/lib/validators/api-key-validator'
 import { logger } from '@/lib/logger'
@@ -121,10 +122,7 @@ export async function POST(request: NextRequest) {
     const encryptedPassphrase = passphrase ? encrypt(passphrase) : null
 
     // Use service role client for database write
-    const supabaseService = createClient(
-      supabaseUrl,
-      process.env.SUPABASE_SERVICE_ROLE_KEY!
-    )
+    const supabaseService = getSupabaseAdmin()
 
     // Check if authorization already exists
     const { data: existing } = await supabaseService

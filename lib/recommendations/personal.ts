@@ -7,7 +7,7 @@
  * - Arena score proximity
  */
 
-import { createClient } from '@supabase/supabase-js'
+import { getSupabaseAdmin } from '@/lib/supabase/server'
 import { createLogger } from '@/lib/utils/logger'
 
 const logger = createLogger('personal-rec')
@@ -52,10 +52,7 @@ interface RankRow {
 // ---------------------------------------------------------------------------
 
 function getSupabase() {
-  return createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!,
-  )
+  return getSupabaseAdmin()
 }
 
 // ---------------------------------------------------------------------------

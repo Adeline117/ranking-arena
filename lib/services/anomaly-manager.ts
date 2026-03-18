@@ -5,8 +5,8 @@
  * @module lib/services/anomaly-manager
  */
 
-import { createClient } from '@supabase/supabase-js'
 import type { SupabaseClient } from '@supabase/supabase-js'
+import { getSupabaseAdmin } from '@/lib/supabase/server'
 import {
   detectMultiDimensional,
   detectAnomaliesForAll,
@@ -78,21 +78,8 @@ export interface GetAnomaliesOptions {
 // Supabase Client Initialization
 // ============================================
 
-let supabaseClient: SupabaseClient | null = null
-
 function getSupabaseClient(): SupabaseClient {
-  if (!supabaseClient) {
-    const supabaseUrl = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL
-    const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
-
-    if (!supabaseUrl || !supabaseKey) {
-      throw new Error('Missing Supabase credentials')
-    }
-
-    supabaseClient = createClient(supabaseUrl, supabaseKey)
-  }
-
-  return supabaseClient
+  return getSupabaseAdmin()
 }
 
 // ============================================

@@ -4,10 +4,10 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@supabase/supabase-js'
 import Stripe from 'stripe'
 import logger from '@/lib/logger'
 import { checkRateLimit, RateLimitPresets } from '@/lib/utils/rate-limit'
+import { getSupabaseAdmin } from '@/lib/supabase/server'
 import { env } from '@/lib/env'
 
 export const dynamic = 'force-dynamic'
@@ -22,19 +22,6 @@ function getStripe(): Stripe {
   })
 }
 
-function getSupabase() {
-  const url = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL
-  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY
-  
-  if (!url || !serviceKey) {
-    throw new Error('Supabase credentials not configured')
-  }
-  
-  return createClient(url, serviceKey, {
-    auth: { persistSession: false },
-  })
-}
-
 // 打赏金额选项（美分）
 const _TIP_AMOUNTS = [100, 300, 500, 1000, 2000, 5000] // $1, $3, $5, $10, $20, $50
 
@@ -43,7 +30,7 @@ export async function POST(request: NextRequest) {
   if (rateLimitResp) return rateLimitResp
 
   try {
-    const supabase = getSupabase()
+    const supabase = getSupabaseAdmin()
     
     // 验证用户
     const authHeader = request.headers.get('authorization')

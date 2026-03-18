@@ -7,9 +7,10 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server'
-import { getAuthUser } from '@/lib/supabase/server'
+import { getAuthUser, getSupabaseAdmin } from '@/lib/supabase/server'
 import { createClient } from '@supabase/supabase-js'
 import { checkRateLimit, RateLimitPresets } from '@/lib/utils/rate-limit'
+import { env } from '@/lib/env'
 import logger from '@/lib/logger'
 
 export const runtime = 'nodejs'
@@ -32,12 +33,13 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Password required' }, { status: 400 })
     }
 
-    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
-    const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!
-    const supabase = createClient(supabaseUrl, supabaseServiceKey)
+    const supabase = getSupabaseAdmin()
 
     // Verify password by attempting sign-in
-    const anonClient = createClient(supabaseUrl, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!)
+    const anonClient = createClient(
+      env.NEXT_PUBLIC_SUPABASE_URL,
+      env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+    )
     const { error: signInError } = await anonClient.auth.signInWithPassword({
       email: user.email!,
       password,

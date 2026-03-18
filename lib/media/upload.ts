@@ -2,7 +2,7 @@
  * Media upload utilities for Supabase Storage
  */
 
-import { createClient } from '@supabase/supabase-js';
+import { getSupabaseAdmin } from '@/lib/supabase/server';
 import {
   BUCKETS,
   ALLOWED_MIME_TYPES,
@@ -67,19 +67,8 @@ export function validateFile(
 // Supabase admin client (service role)
 // ---------------------------------------------------------------------------
 
-let _adminClient: ReturnType<typeof createClient> | null = null;
-
 function getAdminClient() {
-  if (_adminClient) return _adminClient;
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
-  if (!url || !key) {
-    throw new Error('Missing SUPABASE env vars for storage admin client');
-  }
-  _adminClient = createClient(url, key, {
-    auth: { persistSession: false },
-  });
-  return _adminClient;
+  return getSupabaseAdmin();
 }
 
 // ---------------------------------------------------------------------------

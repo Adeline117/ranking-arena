@@ -1,23 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@supabase/supabase-js'
+import { getSupabaseAdmin } from '@/lib/supabase/server'
 import logger from '@/lib/logger'
 import { checkRateLimit, RateLimitPresets } from '@/lib/utils/rate-limit'
 
 export const dynamic = 'force-dynamic'
-
-function getSupabase() {
-  const url = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL
-  const key = process.env.SUPABASE_SERVICE_ROLE_KEY
-  if (!url || !key) throw new Error('Missing Supabase env vars')
-  return createClient(url, key, { auth: { persistSession: false } })
-}
 
 export async function POST(req: NextRequest) {
   const rateLimitResp = await checkRateLimit(req, RateLimitPresets.write)
   if (rateLimitResp) return rateLimitResp
 
   try {
-    const supabase = getSupabase()
+    const supabase = getSupabaseAdmin()
     const authHeader = req.headers.get('authorization')
     if (!authHeader?.startsWith('Bearer ')) {
       return NextResponse.json({ error: 'Please log in first' }, { status: 401 })

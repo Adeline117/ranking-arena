@@ -4,11 +4,10 @@
  * Vercel deployment protection (401).
  */
 
-import { createClient } from '@supabase/supabase-js'
 import { getConnector } from '@/connectors'
 import { calculateArenaScore as calculateArenaScoreV1 } from '@/workers/arena-score'
 import type { Platform, MarketType, Window, LeaderboardEntry } from '@/connectors/base/types'
-import { getSupabaseAdmin } from '@/lib/api'
+import { getSupabaseAdmin } from '@/lib/supabase/server'
 import { del as cacheDelete } from '@/lib/cache'
 import { decrypt } from '@/lib/crypto/encryption'
 import { SOURCE_TYPE_MAP } from '@/lib/constants/exchanges'
@@ -17,7 +16,6 @@ import { logger } from '@/lib/logger'
 import { createLogger } from '@/lib/utils/logger'
 import { calculateArenaScore } from '@/lib/utils/arena-score'
 import type { Period } from '@/lib/utils/arena-score'
-import type { SupabaseClient } from '@supabase/supabase-js'
 import type { TraderData } from '@/lib/adapters/types'
 
 const hotScoreLogger = createLogger('refresh-hot-scores')
@@ -37,11 +35,7 @@ export async function runWorkerInline(): Promise<InlineJobResult> {
   const start = Date.now()
   const name = 'run-worker'
   try {
-    const supabaseUrl = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL || ''
-    const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || ''
-    if (!supabaseKey) return { name, status: 'error', durationMs: Date.now() - start, error: 'SUPABASE_SERVICE_ROLE_KEY not set' }
-
-    const supabase = createClient(supabaseUrl, supabaseKey)
+    const supabase = getSupabaseAdmin()
     const workerId = `vercel-${Date.now()}`
     const MAX_JOBS = 3
     const results: Array<{ job_id: string; platform: string; status: string; error?: string }> = []
@@ -194,7 +188,7 @@ export async function runWorkerInline(): Promise<InlineJobResult> {
 }
 
 async function upsertLeaderboardData(
-  supabase: ReturnType<typeof createClient<any>>,
+  supabase: ReturnType<typeof getSupabaseAdmin>,
   platform: Platform, _market_type: MarketType, window: Window,
   entries: LeaderboardEntry[], provenance: Record<string, unknown>,
 ) {
@@ -363,11 +357,7 @@ export async function syncTradersInline(): Promise<InlineJobResult> {
   const start = Date.now()
   const name = 'trader-sync'
   try {
-    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
-    const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY!
-    if (!supabaseKey) return { name, status: 'error', durationMs: Date.now() - start, error: 'SUPABASE_SERVICE_ROLE_KEY not set' }
-
-    const supabase = createClient(supabaseUrl, supabaseKey)
+    const supabase = getSupabaseAdmin()
 
     const { data: authorizations, error: authErr } = await supabase
       .from('trader_authorizations')

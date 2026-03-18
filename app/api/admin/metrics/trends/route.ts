@@ -6,7 +6,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { timingSafeEqual } from 'crypto'
 import { env } from '@/lib/env'
-import { createClient } from '@supabase/supabase-js'
+import { getSupabaseAdmin } from '@/lib/supabase/server'
 import { createLogger } from '@/lib/utils/logger'
 
 export const dynamic = 'force-dynamic'
@@ -30,13 +30,6 @@ function isAuthorized(request: NextRequest): boolean {
   return false
 }
 
-function getSupabase() {
-  const url = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL || ''
-  const key = process.env.SUPABASE_SERVICE_ROLE_KEY || ''
-  if (!url || !key) return null
-  return createClient(url, key, { auth: { persistSession: false } })
-}
-
 interface TrendPoint {
   date: string
   value: number
@@ -47,10 +40,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
   }
 
-  const supabase = getSupabase()
-  if (!supabase) {
-    return NextResponse.json({ error: 'Supabase not configured' }, { status: 500 })
-  }
+  const supabase = getSupabaseAdmin()
 
   try {
     const days = Number(request.nextUrl.searchParams.get('days') || '7')

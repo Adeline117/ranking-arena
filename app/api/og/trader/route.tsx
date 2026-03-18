@@ -9,7 +9,7 @@
 
 import { ImageResponse } from 'next/og'
 import { NextRequest } from 'next/server'
-import { createClient } from '@supabase/supabase-js'
+import { getSupabaseAdmin } from '@/lib/supabase/server'
 import logger from '@/lib/logger'
 
 export const runtime = 'edge'
@@ -71,11 +71,7 @@ function formatRoi(roi: number): string {
 }
 
 async function fetchTrader(handle: string) {
-  const url = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL || ''
-  const key = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || ''
-  if (!url || !key) return null
-
-  const supabase = createClient(url, key, { auth: { persistSession: false } })
+  const supabase = getSupabaseAdmin()
 
   let source: { handle: string | null; display_name?: string | null; avatar_url: string | null; source: string; source_trader_id: string } | null = null
 

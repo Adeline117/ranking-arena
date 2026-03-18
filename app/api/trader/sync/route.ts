@@ -7,7 +7,7 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { env } from '@/lib/env'
-import { createClient } from '@supabase/supabase-js'
+import { getSupabaseAdmin } from '@/lib/supabase/server'
 import { decrypt } from '@/lib/crypto/encryption'
 import { BybitAdapter } from '@/lib/adapters/bybit-adapter'
 import { logger } from '@/lib/logger'
@@ -15,6 +15,7 @@ import { calculateArenaScore } from '@/lib/utils/arena-score'
 import type { Period } from '@/lib/utils/arena-score'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import type { TraderData } from '@/lib/adapters/types'
+
 import { checkRateLimit, RateLimitPresets } from '@/lib/utils/rate-limit'
 
 export const dynamic = 'force-dynamic'
@@ -35,9 +36,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
-  const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!
-  const supabase = createClient(supabaseUrl, supabaseServiceKey)
+  const supabase = getSupabaseAdmin()
 
   try {
     const body: SyncRequest = await request.json()

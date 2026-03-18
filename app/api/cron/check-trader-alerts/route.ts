@@ -7,8 +7,8 @@
  */
 
 import { NextResponse } from 'next/server'
-import { createClient } from '@supabase/supabase-js'
 import logger from '@/lib/logger'
+import { getSupabaseAdmin } from '@/lib/supabase/server'
 import { PipelineLogger } from '@/lib/services/pipeline-logger'
 import { getPushNotificationService } from '@/lib/services/push-notification'
 import { sendEmail, buildTraderAlertEmail } from '@/lib/services/email'
@@ -30,20 +30,6 @@ function isAuthorized(req: Request): boolean {
   }
 
   return authHeader === `Bearer ${cronSecret}`
-}
-
-// 获取 Supabase Admin 客户端
-function getSupabaseAdmin() {
-  const url = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL
-  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY
-
-  if (!url || !serviceKey) {
-    throw new Error('Supabase environment variables not configured')
-  }
-
-  return createClient(url, serviceKey, {
-    auth: { persistSession: false },
-  })
 }
 
 interface TraderData {

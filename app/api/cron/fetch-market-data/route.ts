@@ -14,8 +14,8 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@supabase/supabase-js'
 import { detectMarketCondition, detectVolatilityRegime, calculateTrendStrength } from '@/lib/utils/market-correlation'
+import { getSupabaseAdmin } from '@/lib/supabase/server'
 import { logger } from '@/lib/logger'
 import { fireAndForget } from '@/lib/utils/logger'
 import { recordFetchResult } from '@/lib/utils/pipeline-monitor'
@@ -40,9 +40,7 @@ export async function POST(request: NextRequest) {
   const startTime = Date.now()
   const plog = await PipelineLogger.start('fetch-market-data', { type })
 
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
-  const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!
-  const supabase = createClient(supabaseUrl, supabaseServiceKey)
+  const supabase = getSupabaseAdmin()
 
   const results: Record<string, unknown> = {}
 
@@ -164,11 +162,7 @@ export async function POST(request: NextRequest) {
 
     // Record error metric
     try {
-      const sb = createClient(
-        process.env.NEXT_PUBLIC_SUPABASE_URL!,
-        process.env.SUPABASE_SERVICE_ROLE_KEY!
-      )
-      await recordFetchResult(sb, 'market_data', {
+      await recordFetchResult(getSupabaseAdmin(), 'market_data', {
         success: false,
         durationMs: 0,
         recordCount: 0,

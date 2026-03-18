@@ -8,7 +8,8 @@
  * - roi_change: ROI 大幅变动预警 - 当 ROI 变动超过阈值时触发
  */
 
-import { createClient, SupabaseClient } from '@supabase/supabase-js'
+import { SupabaseClient } from '@supabase/supabase-js'
+import { getSupabaseAdmin } from '@/lib/supabase/server'
 import { logger } from '@/lib/logger'
 
 // ============================================
@@ -175,10 +176,8 @@ export class RiskAlertService {
 
   private supabase: SupabaseClient
 
-  constructor(supabaseUrl: string, supabaseKey: string) {
-    this.supabase = createClient(supabaseUrl, supabaseKey, {
-      auth: { persistSession: false },
-    })
+  constructor() {
+    this.supabase = getSupabaseAdmin()
   }
 
   /**
@@ -490,14 +489,7 @@ let _riskAlertService: RiskAlertService | null = null
 
 export function getRiskAlertService(): RiskAlertService {
   if (!_riskAlertService) {
-    const url = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL
-    const key = process.env.SUPABASE_SERVICE_ROLE_KEY
-
-    if (!url || !key) {
-      throw new Error('Supabase 配置缺失')
-    }
-
-    _riskAlertService = new RiskAlertService(url, key)
+    _riskAlertService = new RiskAlertService()
   }
 
   return _riskAlertService

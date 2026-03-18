@@ -3,7 +3,7 @@
  * Can be called inline from batch-enrich (no HTTP needed) or from the route.
  */
 
-import { createClient } from '@supabase/supabase-js'
+import { getSupabaseAdmin } from '@/lib/supabase/server'
 import {
   fetchBinanceEquityCurve,
   fetchBinanceStatsDetail,
@@ -393,13 +393,7 @@ export async function runEnrichment(params: {
     return { ok: true, duration: 0, period, summary: { total: 0, enriched: 0, failed: 0 }, results: {} }
   }
 
-  const supabaseUrl = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL || ''
-  const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || ''
-  if (!supabaseUrl || !supabaseKey) {
-    await plog.error(new Error('Supabase env vars missing'))
-    return { ok: false, duration: 0, period, summary: { total: 0, enriched: 0, failed: 0 }, results: {} }
-  }
-  const supabase = createClient(supabaseUrl, supabaseKey, { auth: { persistSession: false } })
+  const supabase = getSupabaseAdmin()
 
   const platforms = [platformParam].filter((p) => p in ENRICHMENT_PLATFORM_CONFIGS)
   if (platforms.length === 0) {

@@ -8,7 +8,8 @@
  * - Updates platform rate limit state
  */
 
-import { createClient, SupabaseClient } from '@supabase/supabase-js'
+import { SupabaseClient } from '@supabase/supabase-js'
+import { getSupabaseAdmin } from '../supabase/server'
 import type {
   RefreshJob,
   JobType,
@@ -63,14 +64,7 @@ export class JobProcessor {
   constructor(config?: Partial<ProcessorConfig>) {
     this.config = { ...DEFAULT_CONFIG, ...config }
 
-    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
-    const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY
-
-    if (!supabaseUrl || !supabaseServiceKey) {
-      throw new Error('Missing SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY env vars')
-    }
-
-    this.supabase = createClient(supabaseUrl, supabaseServiceKey)
+    this.supabase = getSupabaseAdmin()
   }
 
   // ============================================
@@ -496,11 +490,7 @@ export async function createRefreshJob(params: {
   window?: Window
   priority?: number
 }): Promise<string | null> {
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
-  const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY
-  if (!supabaseUrl || !supabaseServiceKey) return null
-
-  const supabase: AnySupabaseClient = createClient(supabaseUrl, supabaseServiceKey)
+  const supabase: AnySupabaseClient = getSupabaseAdmin()
 
   const { data, error } = await supabase
     .from('refresh_jobs')
@@ -539,11 +529,7 @@ export async function createPreheatJobs(
   marketType: MarketType,
   topN: number = 500
 ): Promise<number> {
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
-  const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY
-  if (!supabaseUrl || !supabaseServiceKey) return 0
-
-  const supabase: AnySupabaseClient = createClient(supabaseUrl, supabaseServiceKey)
+  const supabase: AnySupabaseClient = getSupabaseAdmin()
 
   // Get top N traders by arena_score
   const { data: traders } = await supabase

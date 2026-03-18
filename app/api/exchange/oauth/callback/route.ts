@@ -1,16 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@supabase/supabase-js'
 import crypto from 'crypto'
 import { createLogger } from '@/lib/utils/logger'
-import { getAuthUser } from '@/lib/supabase/server'
+import { getAuthUser, getSupabaseAdmin } from '@/lib/supabase/server'
 import { validateCsrfToken, CSRF_COOKIE_NAME, CSRF_HEADER_NAME } from '@/lib/utils/csrf'
 import { checkRateLimit, RateLimitPresets } from '@/lib/utils/rate-limit'
 import { env } from '@/lib/env'
 
 const logger = createLogger('exchange-oauth-callback')
-
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || ''
-const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || ''
 
 // OAuth Token 交换配置（根据 Binance 官方文档）
 const TOKEN_CONFIG: Record<string, {
@@ -87,7 +83,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Missing required parameters' }, { status: 400 })
     }
 
-    const supabase = createClient(supabaseUrl, supabaseServiceKey)
+    const supabase = getSupabaseAdmin()
 
     // 验证 state 并获取 code_verifier（如果使用 PKCE）
     const { data: stateData, error: stateError } = await supabase

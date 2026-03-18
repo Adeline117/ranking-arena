@@ -5,7 +5,8 @@
  * 用于交易员变动提醒等功能
  */
 
-import { createClient, type SupabaseClient } from '@supabase/supabase-js'
+import { type SupabaseClient } from '@supabase/supabase-js'
+import { getSupabaseAdmin } from '@/lib/supabase/server'
 
 // Untyped client for tables not in generated schema
 type UntypedSupabaseClient = SupabaseClient
@@ -89,13 +90,11 @@ interface FCMMessage {
 // ============================================
 
 export class PushNotificationService {
-  private supabase: ReturnType<typeof createClient>
+  private supabase: SupabaseClient
   private fcmServerKey: string | null
 
-  constructor(supabaseUrl: string, supabaseKey: string) {
-    this.supabase = createClient(supabaseUrl, supabaseKey, {
-      auth: { persistSession: false },
-    })
+  constructor() {
+    this.supabase = getSupabaseAdmin()
     this.fcmServerKey = process.env.FCM_SERVER_KEY || null
   }
 
@@ -426,14 +425,7 @@ let _pushService: PushNotificationService | null = null
 
 export function getPushNotificationService(): PushNotificationService {
   if (!_pushService) {
-    const url = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL
-    const key = process.env.SUPABASE_SERVICE_ROLE_KEY
-
-    if (!url || !key) {
-      throw new Error('Supabase 配置缺失')
-    }
-
-    _pushService = new PushNotificationService(url, key)
+    _pushService = new PushNotificationService()
   }
 
   return _pushService

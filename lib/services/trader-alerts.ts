@@ -9,7 +9,8 @@
  * 告警存入 notifications 表（复用现有通知系统）
  */
 
-import { createClient, SupabaseClient } from '@supabase/supabase-js'
+import { SupabaseClient } from '@supabase/supabase-js'
+import { getSupabaseAdmin } from '@/lib/supabase/server'
 import { logger } from '@/lib/logger'
 
 // ============================================
@@ -357,8 +358,6 @@ export async function getFollowerUserIds(
  * 4. 写入 notifications 表
  */
 export async function runTraderAlertDetection(
-  supabaseUrl: string,
-  supabaseKey: string,
   thresholds: TraderAlertThresholds = DEFAULT_ALERT_THRESHOLDS
 ): Promise<{
   tradersChecked: number
@@ -366,9 +365,7 @@ export async function runTraderAlertDetection(
   notificationsSaved: number
   errors: number
 }> {
-  const supabase = createClient(supabaseUrl, supabaseKey, {
-    auth: { persistSession: false },
-  })
+  const supabase = getSupabaseAdmin()
 
   // 1. 获取有人关注的交易员列表（去重）
   const { data: follows, error: followsError } = await supabase

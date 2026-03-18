@@ -4,10 +4,10 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@supabase/supabase-js'
 import Stripe from 'stripe'
 import logger from '@/lib/logger'
 import { checkRateLimit, RateLimitPresets } from '@/lib/utils/rate-limit'
+import { getSupabaseAdmin } from '@/lib/supabase/server'
 import { env } from '@/lib/env'
 
 export const dynamic = 'force-dynamic'
@@ -20,20 +20,6 @@ function getStripe(): Stripe {
   }
   return new Stripe(secretKey, {
     apiVersion: '2026-02-25.clover',
-  })
-}
-
-// 获取 Supabase 服务端客户端
-function getSupabase() {
-  const url = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL
-  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY
-  
-  if (!url || !serviceKey) {
-    throw new Error('Supabase credentials not configured')
-  }
-  
-  return createClient(url, serviceKey, {
-    auth: { persistSession: false },
   })
 }
 
@@ -62,7 +48,7 @@ export async function POST(request: NextRequest) {
     }
 
     // 获取当前用户
-    const supabase = getSupabase()
+    const supabase = getSupabaseAdmin()
     const authHeader = request.headers.get('authorization')
     
     if (!authHeader?.startsWith('Bearer ')) {

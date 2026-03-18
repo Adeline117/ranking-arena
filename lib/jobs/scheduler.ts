@@ -9,10 +9,11 @@
  * Designed to be called from Vercel cron or standalone worker.
  */
 
-import { createClient, SupabaseClient } from '@supabase/supabase-js'
+import { SupabaseClient } from '@supabase/supabase-js'
+import { getSupabaseAdmin } from '../supabase/server'
 import type { LeaderboardPlatform, MarketType, Window } from '../types/leaderboard'
 
- 
+
 type AnySupabaseClient = SupabaseClient<any, any, any>
 import { createRefreshJob, createPreheatJobs } from './processor'
 import { PLATFORM_CAPABILITIES } from '../connectors/capabilities'
@@ -98,11 +99,7 @@ export async function scheduleLongTailRefresh(
   marketType: MarketType,
   batchSize: number = 100
 ): Promise<number> {
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
-  const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY
-  if (!supabaseUrl || !supabaseServiceKey) return 0
-
-  const supabase: AnySupabaseClient = createClient(supabaseUrl, supabaseServiceKey)
+  const supabase: AnySupabaseClient = getSupabaseAdmin()
 
   // Find traders that haven't been refreshed in 4+ hours
   const staleThreshold = new Date(Date.now() - 14400000).toISOString()
@@ -147,13 +144,7 @@ export async function getQueueStats(): Promise<{
   failed: number
   byPlatform: Record<string, { pending: number; running: number; failed: number }>
 }> {
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
-  const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY
-  if (!supabaseUrl || !supabaseServiceKey) {
-    return { pending: 0, running: 0, failed: 0, byPlatform: {} }
-  }
-
-  const supabase: AnySupabaseClient = createClient(supabaseUrl, supabaseServiceKey)
+  const supabase: AnySupabaseClient = getSupabaseAdmin()
 
   const { data } = await supabase
     .from('refresh_jobs')

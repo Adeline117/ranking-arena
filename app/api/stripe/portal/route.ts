@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import { getSupabaseAdmin } from '@/lib/supabase/server'
 import { createPortalSession } from '@/lib/stripe'
 import { checkRateLimit, RateLimitPresets } from '@/lib/utils/rate-limit'
 import logger from '@/lib/logger'
@@ -23,9 +24,8 @@ export async function POST(request: NextRequest) {
 
     const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
     const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
-    const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY
 
-    if (!supabaseUrl || !anonKey || !serviceKey) {
+    if (!supabaseUrl || !anonKey) {
       return NextResponse.json(
         { error: 'Server configuration error' },
         { status: 500 }
@@ -41,8 +41,7 @@ export async function POST(request: NextRequest) {
 
     if (authHeader?.startsWith('Bearer ')) {
       const token = authHeader.substring(7)
-      const supabaseAdmin = createClient(supabaseUrl, serviceKey, { auth: { persistSession: false } })
-      const { data, error } = await supabaseAdmin.auth.getUser(token)
+      const { data, error } = await getSupabaseAdmin().auth.getUser(token)
       user = data?.user
       authError = error
     } else {
@@ -71,12 +70,7 @@ export async function POST(request: NextRequest) {
     const session = { user }
 
     // 获取用户的 Stripe Customer ID
-    const supabase = createClient(
-      supabaseUrl,
-      serviceKey
-    )
-
-    const { data: profile } = await supabase
+    const { data: profile } = await getSupabaseAdmin()
       .from('user_profiles')
       .select('stripe_customer_id')
       .eq('id', session.user.id)

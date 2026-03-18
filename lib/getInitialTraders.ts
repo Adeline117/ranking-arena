@@ -5,7 +5,7 @@
  * Uses the unified data layer (lib/data/unified.ts) as the single source of truth.
  */
 
-import { createClient } from '@supabase/supabase-js'
+import { getSupabaseAdmin } from '@/lib/supabase/server'
 import type { Period } from '@/lib/utils/arena-score'
 import type { ScoreConfidence } from '@/lib/utils/arena-score'
 import type { UnifiedTrader } from '@/lib/types/unified-trader'
@@ -78,15 +78,7 @@ export async function fetchLeaderboardFromDB(
   timeRange: Period = '90D',
   limit: number = 50
 ): Promise<{ traders: InitialTrader[]; lastUpdated: string | null }> {
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
-  const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY
-
-  if (!supabaseUrl || !supabaseKey) {
-    logger.error('[getInitialTraders] Missing Supabase config:', { url: !!supabaseUrl, key: !!supabaseKey })
-    return { traders: [], lastUpdated: null }
-  }
-
-  const supabase = createClient(supabaseUrl, supabaseKey)
+  const supabase = getSupabaseAdmin()
 
   // 15s timeout -- prevents build-time static generation from hanging (Vercel kills at 60s)
   const controller = new AbortController()

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import { getSupabaseAdmin } from '@/lib/supabase/server'
 import {
   STRIPE_PRICE_IDS,
   getOrCreateStripeCustomer,
@@ -9,18 +10,6 @@ import {
 import { createLogger } from '@/lib/utils/logger'
 import { checkRateLimit, RateLimitPresets } from '@/lib/utils/rate-limit'
 import { env } from '@/lib/env'
-
-// 懒加载 Supabase Admin 客户端，避免构建时环境变量缺失
-function getSupabaseAdmin() {
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL
-  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY
-  if (!url || !serviceKey) {
-    throw new Error('Supabase credentials not configured (NEXT_PUBLIC_SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)')
-  }
-  return createClient(url, serviceKey, {
-    auth: { persistSession: false },
-  })
-}
 
 export async function POST(request: NextRequest) {
   // 敏感操作限流
@@ -39,8 +28,6 @@ export async function POST(request: NextRequest) {
     }
 
     const { plan, successUrl, cancelUrl, promotionCode } = await request.json()
-
-    const _supabaseAdmin = getSupabaseAdmin()
 
     // 优先从 Authorization header 获取 token
     const authHeader = request.headers.get('authorization')

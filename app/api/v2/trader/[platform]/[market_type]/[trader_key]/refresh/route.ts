@@ -12,7 +12,7 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@supabase/supabase-js'
+import { getSupabaseAdmin } from '@/lib/supabase/server'
 import type { LeaderboardPlatform, MarketType, Window, RefreshResponse } from '@/lib/types/leaderboard'
 import { LEADERBOARD_PLATFORMS } from '@/lib/types/leaderboard'
 import { createRefreshJob } from '@/lib/jobs/processor'
@@ -46,9 +46,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
   }
 
   // Rate limit: max 1 refresh per trader per 2 minutes
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
-  const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!
-  const supabase = createClient(supabaseUrl, supabaseServiceKey)
+  const supabase = getSupabaseAdmin()
 
   // Check for existing recent job
   const twoMinutesAgo = new Date(Date.now() - 120000).toISOString()
