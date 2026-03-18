@@ -1,16 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@supabase/supabase-js'
 import crypto from 'crypto'
 import { logger } from '@/lib/logger'
 import { createLogger } from '@/lib/utils/logger'
 import { checkRateLimit, RateLimitPresets } from '@/lib/utils/rate-limit'
 import { socialFeatureGuard } from '@/lib/features'
+import { getSupabaseAdmin } from '@/lib/supabase/server'
 
 const log = createLogger('api:group-invite')
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
-const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!
-const INVITE_SECRET = process.env.INVITE_SECRET || (supabaseServiceKey?.slice(0, 32) ?? 'default-invite-secret-for-build')
+const INVITE_SECRET = process.env.INVITE_SECRET || (process.env.SUPABASE_SERVICE_ROLE_KEY?.slice(0, 32) ?? 'default-invite-secret-for-build')
 
 type RouteContext = { params: Promise<{ id: string }> }
 
@@ -72,7 +70,7 @@ export async function GET(request: NextRequest, context: RouteContext) {
     }
 
     // Check usage limits in group_invites table
-    const supabase = createClient(supabaseUrl, supabaseServiceKey)
+    const supabase = getSupabaseAdmin()
     const tokenHash = crypto.createHash('sha256').update(token).digest('hex')
 
     const { data: invite } = await supabase
@@ -117,7 +115,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
     }
 
     const token = authHeader.slice(7)
-    const supabase = createClient(supabaseUrl, supabaseServiceKey)
+    const supabase = getSupabaseAdmin()
 
     const { data: { user }, error: authError } = await supabase.auth.getUser(token)
     if (authError || !user) {

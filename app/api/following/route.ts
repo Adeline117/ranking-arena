@@ -10,10 +10,10 @@
  * - Pagination support via limit/offset params
  */
 
-import { NextRequest, NextResponse } from 'next/server'
+import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { createLogger, fireAndForget } from '@/lib/utils/logger'
-import { getAuthUser } from '@/lib/supabase/server'
+import { withAuth } from '@/lib/api/middleware'
 import { tieredGet, tieredSet, tieredDel } from '@/lib/cache/redis-layer'
 import { features } from '@/lib/features'
 
@@ -178,71 +178,59 @@ async function fetchFollowingItems(userId: string): Promise<FollowingResult> {
   return { items, traderCount: traderFollows.length, userCount: userFollows.length }
 }
 
-export async function GET(request: NextRequest) {
-  try {
-    // SECURITY: Require authentication
-    const authUser = await getAuthUser(request)
-    if (!authUser) {
-      return NextResponse.json({ error: 'Authentication required' }, { status: 401 })
-    }
+export const GET = withAuth(async ({ user: authUser, request }) => {
+  const userId = request.nextUrl.searchParams.get('userId')
+  const limitParam = request.nextUrl.searchParams.get('limit')
+  const offsetParam = request.nextUrl.searchParams.get('offset')
 
-    const userId = request.nextUrl.searchParams.get('userId')
-    const limitParam = request.nextUrl.searchParams.get('limit')
-    const offsetParam = request.nextUrl.searchParams.get('offset')
-
-    if (!userId) {
-      return NextResponse.json({ error: 'Missing userId' }, { status: 400 })
-    }
-
-    // SECURITY: Verify that userId matches authenticated user
-    if (userId !== authUser.id) {
-      logger.warn('User attempted to access another user\'s following list', {
-        authUserId: authUser.id,
-        requestedUserId: userId
-      })
-      return NextResponse.json({ error: 'Unauthorized: Cannot access other users\' following lists' }, { status: 403 })
-    }
-
-    if (!getSupabaseUrl() || !getSupabaseKey()) {
-      return NextResponse.json({ error: 'Missing Supabase config' }, { status: 500 })
-    }
-
-    // Try cache first (hot tier: 1min memory, 5min redis)
-    const cacheKey = followingCacheKey(userId)
-    const cached = await tieredGet<FollowingResult>(cacheKey, 'hot')
-
-    let result: FollowingResult
-    if (cached.data) {
-      result = cached.data
-    } else {
-      result = await fetchFollowingItems(userId)
-      fireAndForget(tieredSet(cacheKey, result, 'hot', ['following']), 'Cache following list')
-    }
-
-    let { items, traderCount, userCount } = result
-
-    // When social features are off, filter to trader items only
-    if (!features.social) {
-      items = items.filter(item => item.type === 'trader')
-      userCount = 0
-    }
-
-    // Apply pagination if limit is provided
-    const limit = limitParam ? Math.min(Math.max(parseInt(limitParam, 10) || 50, 1), 200) : undefined
-    const offset = offsetParam ? Math.max(parseInt(offsetParam, 10) || 0, 0) : 0
-
-    const paginatedItems = limit !== undefined ? items.slice(offset, offset + limit) : items
-
-    return NextResponse.json({ 
-      items: paginatedItems,
-      count: items.length,
-      traderCount,
-      userCount,
-      ...(limit !== undefined ? { limit, offset, hasMore: offset + limit < items.length } : {})
-    })
-  } catch (error: unknown) {
-    const errorMessage = error instanceof Error ? error.message : 'Unknown error'
-    logger.error('Following API error', { error: errorMessage })
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
+  if (!userId) {
+    return NextResponse.json({ error: 'Missing userId' }, { status: 400 })
   }
-}
+
+  // SECURITY: Verify that userId matches authenticated user
+  if (userId !== authUser.id) {
+    logger.warn('User attempted to access another user\'s following list', {
+      authUserId: authUser.id,
+      requestedUserId: userId
+    })
+    return NextResponse.json({ error: 'Unauthorized: Cannot access other users\' following lists' }, { status: 403 })
+  }
+
+  if (!getSupabaseUrl() || !getSupabaseKey()) {
+    return NextResponse.json({ error: 'Missing Supabase config' }, { status: 500 })
+  }
+
+  // Try cache first (hot tier: 1min memory, 5min redis)
+  const cacheKey = followingCacheKey(userId)
+  const cached = await tieredGet<FollowingResult>(cacheKey, 'hot')
+
+  let result: FollowingResult
+  if (cached.data) {
+    result = cached.data
+  } else {
+    result = await fetchFollowingItems(userId)
+    fireAndForget(tieredSet(cacheKey, result, 'hot', ['following']), 'Cache following list')
+  }
+
+  let { items, traderCount, userCount } = result
+
+  // When social features are off, filter to trader items only
+  if (!features.social) {
+    items = items.filter(item => item.type === 'trader')
+    userCount = 0
+  }
+
+  // Apply pagination if limit is provided
+  const limit = limitParam ? Math.min(Math.max(parseInt(limitParam, 10) || 50, 1), 200) : undefined
+  const offset = offsetParam ? Math.max(parseInt(offsetParam, 10) || 0, 0) : 0
+
+  const paginatedItems = limit !== undefined ? items.slice(offset, offset + limit) : items
+
+  return NextResponse.json({
+    items: paginatedItems,
+    count: items.length,
+    traderCount,
+    userCount,
+    ...(limit !== undefined ? { limit, offset, hasMore: offset + limit < items.length } : {})
+  })
+}, { name: 'get-following', rateLimit: 'authenticated' })

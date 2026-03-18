@@ -14,8 +14,6 @@
  */
 
 import { NextRequest } from 'next/server'
-import { getSupabaseAdmin } from '@/lib/supabase/server'
-import { checkRateLimit, RateLimitPresets } from '@/lib/api'
 import type {
   Window,
   LeaderboardPlatform,
@@ -27,11 +25,11 @@ import type {
   SnapshotMetrics,
   QualityFlags,
 } from '@/lib/types/leaderboard'
-import { logger } from '@/lib/logger'
 import { ApiError } from '@/lib/api/errors'
-import { success as apiSuccess, handleError, withCache } from '@/lib/api/response'
+import { success as apiSuccess, withCache } from '@/lib/api/response'
 import { getTraderDetail } from '@/lib/data/unified'
 import { SOURCE_TYPE_MAP } from '@/lib/constants/exchanges'
+import { withPublic } from '@/lib/api/middleware'
 
 export const dynamic = 'force-dynamic'
 
@@ -44,14 +42,9 @@ interface RouteParams {
 }
 
 export async function GET(request: NextRequest, { params }: RouteParams) {
-  const rateLimitResponse = await checkRateLimit(request, RateLimitPresets.public)
-  if (rateLimitResponse) return rateLimitResponse
-
-  try {
   const { platform, market_type, trader_key } = await params
 
-  const supabase = getSupabaseAdmin()
-
+  const handler = withPublic(async ({ supabase }) => {
   // Fetch unified trader detail + timeseries + refresh jobs in parallel
   const [unifiedDetail, timeseriesResult, jobsResult] = await Promise.all([
     // 1. Unified data layer: profile + snapshots + enrichment
@@ -232,8 +225,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
 
   const apiResponse = apiSuccess(response);
   return withCache(apiResponse, { maxAge: 30, staleWhileRevalidate: 120 });
-  } catch (error) {
-    logger.error('[v2-trader-detail] Unexpected error:', error)
-    return handleError(error, 'v2-trader-detail')
-  }
+  }, { name: 'v2-trader-detail' })
+
+  return handler(request)
 }
