@@ -71,10 +71,11 @@ export class BitgetFuturesConnector extends BaseConnector {
         if (!vpsData) throw new Error('Both direct API and VPS scraper failed for bitget')
         _rawLb = vpsData
       }
-      const data = warnValidate(BitgetFuturesLeaderboardResponseSchema, _rawLb, 'bitget-futures/leaderboard')
-      if (totalAvailable === null && data?.data?.total) totalAvailable = Number(data.data.total)
+      // Parse directly — Zod defaults data.list=[] hiding scraper's data.traderList/data.rows
+      const dataObj = (_rawLb?.data ?? {}) as Record<string, unknown>
+      if (totalAvailable === null && dataObj?.total) totalAvailable = Number(dataObj.total)
 
-      const list = data?.data?.list || []
+      const list = (dataObj?.list || dataObj?.traderList || dataObj?.rows || []) as Record<string, unknown>[]
       if (!Array.isArray(list) || list.length === 0) break
 
       const traders: TraderSource[] = list.map((item: Record<string, unknown>) => ({

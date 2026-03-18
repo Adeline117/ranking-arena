@@ -85,10 +85,8 @@ export class BingxFuturesConnector extends BaseConnector {
         );
       }
 
-      const data = warnValidate(BingxFuturesLeaderboardResponseSchema, _rawLb, 'bingx-futures/leaderboard')
-
-      // BingX API: data.list, VPS scraper (multi-rank): data.global.result
-      const dataObj = data?.data as Record<string, unknown> | undefined
+      // Parse directly from raw — Zod defaults data.list=[] hiding scraper's data.global.result
+      const dataObj = (_rawLb?.data ?? {}) as Record<string, unknown>
       const globalObj = dataObj?.global as Record<string, unknown> | undefined
       const rawList = dataObj?.list || globalObj?.result || []
       const list = Array.isArray(rawList) ? rawList : []
