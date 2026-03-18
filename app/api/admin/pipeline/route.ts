@@ -6,6 +6,7 @@
  */
 
 import { NextRequest } from 'next/server'
+import { timingSafeEqual } from 'crypto'
 import { env } from '@/lib/env'
 import { createClient } from '@supabase/supabase-js'
 import { getPipelineOverview, getSourceHealth } from '@/lib/utils/pipeline-monitor'
@@ -15,7 +16,6 @@ import { ApiError } from '@/lib/api/errors'
 export const dynamic = 'force-dynamic'
 
 function safeCompare(a: string, b: string): boolean {
-  const { timingSafeEqual } = require('crypto')
   const bufA = Buffer.from(a)
   const bufB = Buffer.from(b)
   if (bufA.length !== bufB.length) return false
