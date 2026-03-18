@@ -4,6 +4,7 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server'
+import { timingSafeEqual } from 'crypto'
 import { env } from '@/lib/env'
 import { createClient } from '@supabase/supabase-js'
 import { createLogger } from '@/lib/utils/logger'
@@ -13,7 +14,6 @@ export const dynamic = 'force-dynamic'
 const logger = createLogger('admin-metrics-trends')
 
 function safeCompare(a: string, b: string): boolean {
-  const { timingSafeEqual } = require('crypto')
   const bufA = Buffer.from(a)
   const bufB = Buffer.from(b)
   if (bufA.length !== bufB.length) return false
