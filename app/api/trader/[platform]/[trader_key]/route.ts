@@ -106,7 +106,7 @@ export async function GET(
     ])
 
     // Build profile (graceful degradation if missing)
-    const profile: TraderProfileRow = profileResult.data || {
+    const profile: TraderProfileRow = (profileResult.data as TraderProfileRow) || {
       id: '',
       platform: platform as Platform,
       trader_key,
