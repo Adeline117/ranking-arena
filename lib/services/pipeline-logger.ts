@@ -55,21 +55,24 @@ export class PipelineLogger {
     }
 
     const logId = data.id
+    const startedAt = Date.now()
 
     return {
       id: logId,
       async success(recordsProcessed = 0, meta) {
+        const durationMs = Date.now() - startedAt
         await client
           .from('pipeline_logs')
           .update({
             status: 'success',
             ended_at: new Date().toISOString(),
             records_processed: recordsProcessed,
-            ...(meta ? { metadata: { ...metadata, ...meta } } : {}),
+            ...(meta ? { metadata: { ...metadata, ...meta, duration_ms: durationMs } } : { metadata: { ...metadata, duration_ms: durationMs } }),
           })
           .eq('id', logId)
       },
       async error(err, meta) {
+        const durationMs = Date.now() - startedAt
         const errorMessage = err instanceof Error ? err.message : String(err)
         await client
           .from('pipeline_logs')
@@ -77,17 +80,18 @@ export class PipelineLogger {
             status: 'error',
             ended_at: new Date().toISOString(),
             error_message: errorMessage.slice(0, 2000),
-            ...(meta ? { metadata: { ...metadata, ...meta } } : {}),
+            ...(meta ? { metadata: { ...metadata, ...meta, duration_ms: durationMs } } : { metadata: { ...metadata, duration_ms: durationMs } }),
           })
           .eq('id', logId)
       },
       async timeout(meta) {
+        const durationMs = Date.now() - startedAt
         await client
           .from('pipeline_logs')
           .update({
             status: 'timeout',
             ended_at: new Date().toISOString(),
-            ...(meta ? { metadata: { ...metadata, ...meta } } : {}),
+            ...(meta ? { metadata: { ...metadata, ...meta, duration_ms: durationMs } } : { metadata: { ...metadata, duration_ms: durationMs } }),
           })
           .eq('id', logId)
       },

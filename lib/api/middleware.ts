@@ -123,6 +123,12 @@ export function withApiMiddleware<T>(
     return runWithCorrelationId(correlationId, async () => {
     const startTime = Date.now()
 
+    // 0. Basic bot protection (blocks empty/script-like User-Agent)
+    const ua = request.headers.get('user-agent') || ''
+    if (!ua || ua.length < 8) {
+      return withCid(createErrorResponse('Forbidden', 403))
+    }
+
     // 解析 API 版本
     const versionContext = parseApiVersion(request)
 
