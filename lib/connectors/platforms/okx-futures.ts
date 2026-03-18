@@ -23,7 +23,7 @@ export class OkxFuturesConnector extends BaseConnector {
   readonly marketType = 'futures' as const
 
   constructor(config?: Partial<import('../types').ConnectorConfig>) {
-    super({ timeout: 20000, maxRetries: 1, ...config })
+    super({ timeout: 10000, maxRetries: 0, ...config }) // No retries: 5 pages × 3 windows must fit in CF 100s timeout
   }
 
   readonly capabilities: PlatformCapabilities = {
