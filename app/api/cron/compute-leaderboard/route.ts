@@ -230,6 +230,14 @@ export async function GET(request: NextRequest) {
     // Fire-and-forget: warm Redis cache with top 100 for each season
     fireAndForget(warmupLeaderboardCache(supabase), 'warmup-leaderboard-cache')
 
+    // Fire-and-forget: sync Redis sorted sets for near-real-time rankings
+    fireAndForget((async () => {
+      const { syncSortedSetFromLeaderboard } = await import('@/lib/realtime/ranking-store')
+      for (const season of SEASONS) {
+        await syncSortedSetFromLeaderboard(supabase, season)
+      }
+    })(), 'sync-redis-sorted-set')
+
     // Fire-and-forget: revalidate top exchange ranking pages so ISR picks up fresh data
     fireAndForget((async () => {
       const { revalidatePath } = await import('next/cache')
