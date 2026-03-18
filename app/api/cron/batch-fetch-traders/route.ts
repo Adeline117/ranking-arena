@@ -251,7 +251,11 @@ export async function GET(request: NextRequest) {
 
   if (failed === 0) {
     await plog.success(succeeded, { results })
+  } else if (succeeded > 0) {
+    // Partial success: some platforms failed but others worked — log as success with warning
+    await plog.success(succeeded, { results, warning: `${failed}/${results.length} platforms failed` })
   } else {
+    // Total failure: all platforms failed
     await plog.error(
       new Error(`${failed}/${results.length} platforms failed`),
       { results }
