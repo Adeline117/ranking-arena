@@ -9,6 +9,7 @@
  */
 
 import { NextResponse } from 'next/server'
+import { env } from '@/lib/env'
 import { PLATFORM_ROUTES, type RouteType } from '@/lib/connectors/route-config'
 
 export const runtime = 'nodejs'
@@ -16,7 +17,7 @@ export const maxDuration = 300
 
 export async function GET(req: Request) {
   const auth = req.headers.get('Authorization')
-  if (auth !== `Bearer ${process.env.CRON_SECRET}`) {
+  if (auth !== `Bearer ${env.CRON_SECRET}`) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 

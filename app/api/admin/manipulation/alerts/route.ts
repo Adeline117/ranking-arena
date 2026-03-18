@@ -10,6 +10,7 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server'
+import { env } from '@/lib/env'
 import { createClient } from '@supabase/supabase-js'
 import { logger } from '@/lib/logger'
 
@@ -127,7 +128,7 @@ export async function POST(request: NextRequest) {
   }
 
   // Check if it's cron secret
-  const isCronJob = process.env.CRON_SECRET && authHeader === `Bearer ${process.env.CRON_SECRET}`
+  const isCronJob = env.CRON_SECRET && authHeader === `Bearer ${env.CRON_SECRET}`
 
   // If not cron, verify admin role
   if (!isCronJob) {

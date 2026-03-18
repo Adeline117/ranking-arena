@@ -4,7 +4,7 @@ import { tokens } from '@/lib/design-tokens'
 import { Box, Text } from '../base'
 import type { Trader } from './RankingTable'
 import type { SourceInfo } from './utils'
-import { formatROI, formatDisplayName } from './utils'
+import { formatROI, formatPnL, formatDisplayName } from './utils'
 import { HighlightedName } from './RankingSearch'
 import { Sparkline } from '../ui/Sparkline'
 import {
@@ -70,7 +70,7 @@ export const TraderCard = memo(function TraderCard({
     <Link
       href={href}
       style={{ textDecoration: 'none', display: 'block' }}
-      aria-label={`#${rank} ${displayName}, ROI ${(trader.roi ?? 0) >= 0 ? '+' : ''}${(trader.roi ?? 0).toFixed(2)}%`}
+      aria-label={`#${rank} ${displayName}, ROI ${formatROI(trader.roi ?? 0)}`}
     >
       <Box
         className="ranking-row trader-card-contained glass-card glass-card-hover"
@@ -209,7 +209,7 @@ export const TraderCard = memo(function TraderCard({
           />
           <MetricStat
             label="PnL"
-            value={trader.pnl != null ? `${trader.pnl >= 0 ? '+' : ''}$${Math.abs(trader.pnl) >= 1_000_000 ? `${(trader.pnl / 1_000_000).toFixed(1)}M` : Math.abs(trader.pnl) >= 1000 ? `${(trader.pnl / 1000).toFixed(1)}K` : trader.pnl.toFixed(0)}` : '—'}
+            value={formatPnL(trader.pnl)}
             color={trader.pnl != null ? ((trader.pnl >= 0) ? tokens.colors.accent.success : TRADER_ACCENT_ERROR) : undefined}
           />
           <MetricStat

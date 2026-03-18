@@ -10,6 +10,7 @@
 import type { InitialTrader } from '@/lib/getInitialTraders'
 import Image from 'next/image'
 import { isWalletAddress, generateBlockieSvg } from '@/lib/utils/avatar'
+import { formatROI, formatPnL } from '@/lib/utils/format'
 
 // Score color logic (server-side, no hooks)
 function getScoreColor(score: number): string {
@@ -18,23 +19,6 @@ function getScoreColor(score: number): string {
   if (score >= 70) return 'ssr-score-b'
   if (score >= 50) return 'ssr-score-c'
   return 'ssr-score-d'
-}
-
-function formatROI(roi: number): string {
-  const absRoi = Math.abs(roi)
-  const sign = roi >= 0 ? '+' : ''
-  if (absRoi >= 10000) return `${sign}${(roi / 1000).toFixed(1)}K%`
-  if (absRoi >= 1000) return `${sign}${roi.toFixed(0)}%`
-  if (absRoi >= 100) return `${sign}${roi.toFixed(1)}%`
-  return `${sign}${roi.toFixed(2)}%`
-}
-
-function formatPnL(pnl: number): string {
-  const abs = Math.abs(pnl)
-  const sign = pnl >= 0 ? '+' : '-'
-  if (abs >= 1_000_000) return `${sign}$${(abs / 1_000_000).toFixed(2)}M`
-  if (abs >= 1_000) return `${sign}$${(abs / 1_000).toFixed(2)}K`
-  return `${sign}$${abs.toFixed(2)}`
 }
 
 function getInitial(name: string): string {

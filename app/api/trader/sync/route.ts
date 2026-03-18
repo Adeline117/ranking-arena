@@ -6,6 +6,7 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server'
+import { env } from '@/lib/env'
 import { createClient } from '@supabase/supabase-js'
 import { decrypt } from '@/lib/crypto/encryption'
 import { BybitAdapter } from '@/lib/adapters/bybit-adapter'
@@ -30,7 +31,7 @@ export async function POST(request: NextRequest) {
 
   // Verify cron secret or admin auth
   const authHeader = request.headers.get('authorization')
-  if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
+  if (authHeader !== `Bearer ${env.CRON_SECRET}`) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 

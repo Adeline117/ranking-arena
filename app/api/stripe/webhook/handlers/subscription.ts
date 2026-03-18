@@ -1,5 +1,6 @@
 import Stripe from 'stripe'
 import { SUBSCRIPTION_STATUS_MAP } from '@/lib/stripe'
+import { env } from '@/lib/env'
 import { leaveProOfficialGroup } from '@/app/api/pro-official-group/route'
 import { getSupabase, withRetry, logger } from './shared'
 
@@ -18,7 +19,7 @@ export async function handleSubscriptionUpdate(subscription: Stripe.Subscription
   }
 
   const priceId = subscription.items.data[0]?.price.id
-  const plan = priceId === process.env.STRIPE_PRO_YEARLY_PRICE_ID ? 'yearly'
+  const plan = priceId === env.STRIPE_PRO_YEARLY_PRICE_ID ? 'yearly'
     : priceId === process.env.STRIPE_PRO_LIFETIME_PRICE_ID ? 'lifetime'
     : 'monthly'
 

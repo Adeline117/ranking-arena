@@ -38,7 +38,7 @@ export async function GET(_req: Request) {
     // Security: Verify admin/cron secret
     const authHeader = _req.headers.get('authorization')
     const token = authHeader?.replace('Bearer ', '')
-    const cronSecret = process.env.CRON_SECRET
+    const cronSecret = env.CRON_SECRET
     const adminSecret = env.ADMIN_SECRET
     if (!token || (token !== cronSecret && token !== adminSecret)) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })

@@ -9,6 +9,7 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server'
+import { env } from '@/lib/env'
 import { PipelineLogger } from '@/lib/services/pipeline-logger'
 import { DEAD_BLOCKED_PLATFORMS, EXCHANGE_CONFIG } from '@/lib/constants/exchanges'
 import { getSupportedPlatforms } from '@/lib/cron/fetchers'
@@ -19,7 +20,7 @@ export const runtime = 'nodejs'
 
 function verifyAuth(req: NextRequest): boolean {
   const auth = req.headers.get('authorization')
-  const cronSecret = process.env.CRON_SECRET
+  const cronSecret = env.CRON_SECRET
   if (!cronSecret) return false
   return auth === `Bearer ${cronSecret}`
 }

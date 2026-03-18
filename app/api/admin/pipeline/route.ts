@@ -6,6 +6,7 @@
  */
 
 import { NextRequest } from 'next/server'
+import { env } from '@/lib/env'
 import { createClient } from '@supabase/supabase-js'
 import { getPipelineOverview, getSourceHealth } from '@/lib/utils/pipeline-monitor'
 import { success as apiSuccess, handleError } from '@/lib/api/response'
@@ -22,7 +23,7 @@ function safeCompare(a: string, b: string): boolean {
 }
 
 function isAuthorized(request: NextRequest): boolean {
-  const cronSecret = process.env.CRON_SECRET
+  const cronSecret = env.CRON_SECRET
   if (!cronSecret) return false
 
   // Bearer token auth (for cron / internal calls)

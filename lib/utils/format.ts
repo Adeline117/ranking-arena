@@ -104,6 +104,43 @@ export function formatDateLocalized(
   return date.toLocaleDateString(locale, options || defaultOptions)
 }
 
+/**
+ * Format ROI value (already a percentage, not a ratio).
+ * Handles extreme values: 10000%+ → K%, 1000%+ → 0 decimals, 100%+ → 1 decimal.
+ */
+export function formatROI(roi: number | null | undefined): string {
+  if (roi == null) return NULL_DISPLAY
+  if (!Number.isFinite(roi)) return NULL_DISPLAY
+  const sign = roi >= 0 ? '+' : ''
+  const abs = Math.abs(roi)
+  if (abs >= 10000) return `${sign}${(roi / 1000).toFixed(1)}K%`
+  if (abs >= 1000) return `${sign}${roi.toFixed(0)}%`
+  if (abs >= 100) return `${sign}${roi.toFixed(1)}%`
+  return `${sign}${roi.toFixed(2)}%`
+}
+
+/**
+ * Format PnL value in USD with auto-compact notation.
+ */
+export function formatPnL(pnl: number | null | undefined): string {
+  if (pnl == null) return NULL_DISPLAY
+  if (!Number.isFinite(pnl)) return NULL_DISPLAY
+  const sign = pnl >= 0 ? '+' : '-'
+  const abs = Math.abs(pnl)
+  if (abs >= 1e6) return `${sign}$${(abs / 1e6).toFixed(2)}M`
+  if (abs >= 1e3) return `${sign}$${(abs / 1e3).toFixed(1)}K`
+  return `${sign}$${abs.toFixed(2)}`
+}
+
+/**
+ * Format a ratio value (Sharpe, Sortino, Calmar, etc.).
+ */
+export function formatRatio(value: number | null | undefined, decimals = 2): string {
+  if (value == null) return NULL_DISPLAY
+  if (!Number.isFinite(value)) return NULL_DISPLAY
+  return value.toFixed(decimals)
+}
+
 export function truncate(text: string, maxLength: number, suffix = '...'): string {
   if (!text || text.length <= maxLength) return text || ''
   return text.slice(0, maxLength - suffix.length) + suffix

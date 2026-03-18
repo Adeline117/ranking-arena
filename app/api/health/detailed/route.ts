@@ -12,6 +12,7 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server'
+import { env } from '@/lib/env'
 import { createClient } from '@supabase/supabase-js'
 import { checkHealth as checkCacheHealth, getCacheStats } from '@/lib/cache'
 import { getSupportedPlatforms } from '@/lib/cron/utils'
@@ -452,7 +453,7 @@ export async function GET(request: NextRequest) {
   // Route to specific section
   if (section === 'connectors') {
     const authHeader = request.headers.get('authorization')
-    return getConnectorsSection(process.env.CRON_SECRET, authHeader)
+    return getConnectorsSection(env.CRON_SECRET, authHeader)
   }
   if (section === 'dependencies') {
     return getDependenciesSection()
