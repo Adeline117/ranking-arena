@@ -505,13 +505,13 @@ function RankingTableInner(props: {
           </svg>
           <Text size="md" weight="semibold" style={{ color: tokens.colors.text.secondary }}>
             {debouncedSearch.trim() || hasActiveFilters
-              ? (language === 'zh' ? '没有符合条件的交易员' : 'No traders match your criteria')
+              ? t('rankingNoMatchCriteria')
               : t('noTraderData')}
           </Text>
           {(debouncedSearch.trim() || hasActiveFilters) && (
             <>
               <Text size="sm" style={{ color: tokens.colors.text.tertiary }}>
-                {language === 'zh' ? '试试放宽筛选条件' : 'Try broadening your filters'}
+                {t('rankingBroadenFilters')}
               </Text>
               <button
                 onClick={() => {
@@ -635,12 +635,10 @@ function RankingTableInner(props: {
                 gap: tokens.spacing[1],
               }}>
                 <Text size="sm" weight="bold" style={{ color: tokens.colors.accent.primary }}>
-                  {language === 'zh' ? '免费注册，查看完整排行榜' : 'Sign up free to see the full leaderboard'}
+                  {t('rankingSignUpFree')}
                 </Text>
                 <Text size="xs" style={{ color: tokens.colors.text.tertiary }}>
-                  {language === 'zh'
-                    ? `当前显示前 ${itemsPerPage} 名，共 ${sortedTraders.length} 名交易员`
-                    : `Showing top ${itemsPerPage} of ${sortedTraders.length} traders`}
+                  {t('rankingShowingTop').replace('{count}', String(itemsPerPage)).replace('{total}', String(sortedTraders.length))}
                 </Text>
               </Box>
             </button>

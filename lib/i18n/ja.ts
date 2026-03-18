@@ -4342,6 +4342,17 @@ authVerify: '認証する',
 authVerifying: '認証中...',
 authInAppBrowserError: 'システムブラウザ（Safari/Chrome）で開いてください。リンクをコピーしました。',
 
+tradingStyleScalper: 'スキャルピング',
+tradingStyleScalperDesc: '超短期の高頻度トレード',
+tradingStyleSwing: 'スイング',
+tradingStyleSwingDesc: '中期トレード、4〜48時間保有',
+tradingStyleTrend: 'トレンド',
+tradingStyleTrendDesc: 'トレンドフォロー、数日〜数週間保有',
+tradingStylePosition: 'ポジション',
+tradingStylePositionDesc: '長期保有、2週間以上',
+tradingStyleUnknown: '不明',
+tradingStyleUnknownDesc: 'トレードスタイル未分類',
+
 } as const
 
 export default ja

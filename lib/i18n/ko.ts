@@ -4630,6 +4630,17 @@ authVerify: '인증',
 authVerifying: '인증 중...',
 authInAppBrowserError: '시스템 브라우저(Safari/Chrome)에서 열어주세요. 링크가 복사되었습니다.',
 
+tradingStyleScalper: '스캘퍼',
+tradingStyleScalperDesc: '초단기 고빈도 트레이딩',
+tradingStyleSwing: '스윙',
+tradingStyleSwingDesc: '중기 트레이드, 4-48시간 보유',
+tradingStyleTrend: '추세',
+tradingStyleTrendDesc: '추세 추종, 수일~수주 보유',
+tradingStylePosition: '포지션',
+tradingStylePositionDesc: '장기 보유, 2주 이상',
+tradingStyleUnknown: '알 수 없음',
+tradingStyleUnknownDesc: '트레이딩 스타일 미분류',
+
 } as const
 
 export default ko

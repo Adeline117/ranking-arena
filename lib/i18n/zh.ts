@@ -4627,6 +4627,17 @@ authVerify: '验证',
 authVerifying: '验证中...',
 authInAppBrowserError: '请在系统浏览器(Safari/Chrome)中打开此页面。链接已复制。',
 
+tradingStyleScalper: '超短线',
+tradingStyleScalperDesc: '高频交易，持仓时间极短',
+tradingStyleSwing: '波段',
+tradingStyleSwingDesc: '中期波段，持仓4-48小时',
+tradingStyleTrend: '趋势',
+tradingStyleTrendDesc: '趋势跟踪，持仓数天到数周',
+tradingStylePosition: '长线',
+tradingStylePositionDesc: '长线持仓，超过两周',
+tradingStyleUnknown: '未知',
+tradingStyleUnknownDesc: '交易风格尚未分类',
+
 } as const
 
 export default zh

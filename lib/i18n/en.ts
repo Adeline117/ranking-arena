@@ -4580,6 +4580,17 @@ authVerify: 'Verify',
 authVerifying: 'Verifying...',
 authInAppBrowserError: 'Please open in your system browser (Safari/Chrome). Link copied.',
 
+tradingStyleScalper: 'Scalper',
+tradingStyleScalperDesc: 'High-frequency trading with very short holding periods',
+tradingStyleSwing: 'Swing',
+tradingStyleSwingDesc: 'Medium-term trades, holding 4-48 hours',
+tradingStyleTrend: 'Trend',
+tradingStyleTrendDesc: 'Trend following with positions lasting days to weeks',
+tradingStylePosition: 'Position',
+tradingStylePositionDesc: 'Long-term holding, over 2 weeks',
+tradingStyleUnknown: 'Unknown',
+tradingStyleUnknownDesc: 'Trading style not yet classified',
+
 // i18n QA: hardcoded zh/en replacements
 signingIn: 'Signing in...',
 compositeLabel: 'Composite',
