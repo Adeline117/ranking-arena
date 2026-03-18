@@ -30,7 +30,7 @@ const PLATFORM_LIMITS: Record<string, { limit90: number; limit30: number; limit7
   // binance_spot: PERMANENTLY REMOVED (2026-03-14) - repeatedly hangs 45-76min, blocks entire pipeline
   // bybit/bybit_spot removed: api2.bybit.com endpoints return 404 globally (2026-03-10)
   okx_futures: { limit90: 60, limit30: 60, limit7: 50 }, // Reduced from 80/80/60
-  bitget_futures: { limit90: 50, limit30: 50, limit7: 40 }, // Reduced from 60/60/50
+  // bitget_futures: PERMANENTLY REMOVED (2026-03-18 EMERGENCY) - VPS scraper repeatedly hangs 44+ min (5TH STUCK), blocks entire pipeline
   // bitget_spot removed: no public API exists (all endpoints 404)
   // ONCHAIN PLATFORMS: AGGRESSIVE REDUCTION Round 4 (2026-03-13 09:00)
   // 30D/7D still timing out - matched 90D and more aggressive 7D
@@ -54,7 +54,8 @@ const PLATFORM_LIMITS: Record<string, { limit90: number; limit30: number; limit7
 // bybit removed: api2.bybit.com endpoints return 404 globally (2026-03-10)
 // gmx removed from batch: runs in dedicated job due to >360s enrichment time (2026-03-11)
 // dydx moved to end: consistently times out at 360s, blocking other platforms (2026-03-13)
-const HIGH_PRIORITY = ['binance_futures', 'okx_futures', 'bitget_futures', 'hyperliquid', 'jupiter_perps']
+// bitget_futures removed: EMERGENCY 5TH STUCK - VPS scraper repeatedly hangs 44+ min (2026-03-18)
+const HIGH_PRIORITY = ['binance_futures', 'okx_futures', 'hyperliquid', 'jupiter_perps']
 
 // Medium priority (enriched with all=true or period=90D)
 // bybit_spot removed: api2.bybit.com endpoints return 404 globally (2026-03-10)
