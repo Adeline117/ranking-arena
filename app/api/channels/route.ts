@@ -91,8 +91,8 @@ export async function POST(request: NextRequest) {
 
     const { name, memberIds, description } = await request.json()
 
-    if (!name?.trim()) {
-      return NextResponse.json({ error: 'Please enter a group name' }, { status: 400 })
+    if (!name?.trim() || name.trim().length > 100) {
+      return NextResponse.json({ error: 'Group name must be 1-100 characters' }, { status: 400 })
     }
 
     if (!memberIds || memberIds.length < 1) {

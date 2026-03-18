@@ -388,12 +388,36 @@ export async function GET(request: NextRequest) {
       logger.warn(`[aggregate] Metrics backfill failed: ${metricsErr}`)
     }
 
+    // Step 8: Run orphaned/stale data cleanup via RPC
+    let staleDataCleanup: Record<string, number> | null = null
+    try {
+      const { data: cleanupResults, error: cleanupRpcError } = await supabase
+        .rpc('cleanup_stale_data')
+
+      if (cleanupRpcError) {
+        logger.warn(`[aggregate] cleanup_stale_data RPC error: ${cleanupRpcError.message}`)
+      } else if (cleanupResults && Array.isArray(cleanupResults)) {
+        staleDataCleanup = {}
+        for (const row of cleanupResults) {
+          if (row.deleted_rows > 0) {
+            staleDataCleanup[row.table_name] = Number(row.deleted_rows)
+          }
+        }
+        const totalCleaned = Object.values(staleDataCleanup).reduce((s, n) => s + n, 0)
+        if (totalCleaned > 0) {
+          logger.info(`[aggregate] Stale data cleanup: ${JSON.stringify(staleDataCleanup)}`)
+        }
+      }
+    } catch (cleanupErr) {
+      logger.warn(`[aggregate] cleanup_stale_data failed: ${cleanupErr}`)
+    }
+
     const duration = Date.now() - startTime
 
     if (errors > 0) {
       await plog.error(new Error(`${errors} upsert errors`), { inserted, errors, date: dateStr, cleanedUp })
     } else {
-      await plog.success(inserted, { date: dateStr, cleanedUp, metricsBackfill: metricsResult })
+      await plog.success(inserted, { date: dateStr, cleanedUp, metricsBackfill: metricsResult, staleDataCleanup })
     }
 
     return NextResponse.json({
@@ -403,6 +427,7 @@ export async function GET(request: NextRequest) {
       inserted,
       errors,
       cleanedUp,
+      staleDataCleanup,
       metricsBackfill: metricsResult,
       queries: 3,
       duration: `${duration}ms`,
