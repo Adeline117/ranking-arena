@@ -18,7 +18,8 @@ import { isWalletAddress, generateBlockieSvg, getAvatarGradient } from '@/lib/ut
 const AdvancedMetricsCard = dynamic(() => import('./AdvancedMetricsCard'), { ssr: false })
 const MarketCorrelationCard = dynamic(() => import('./MarketCorrelationCard'), { ssr: false })
 import type { SnapshotWindow, SnapshotMetrics } from '@/lib/types/trading-platform'
-import type { TraderAdvancedMetrics, TraderMarketCorrelation, TradingStyle } from '@/lib/types/trader'
+import type { TraderAdvancedMetrics, TraderMarketCorrelation } from '@/lib/types/unified-trader'
+import type { TradingStyle } from '@/lib/types/trader'
 
 interface TraderPageV2Props {
   platform: string

@@ -9,7 +9,7 @@
 
 import { useEffect, useState, useCallback, useRef } from 'react'
 import { useRealtime } from './useRealtime'
-import type { TraderPositionLive } from '@/lib/types/trader'
+import type { TraderPositionLive } from '@/lib/types/unified-trader'
 import { logger } from '@/lib/logger'
 
 // ============================================

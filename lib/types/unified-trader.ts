@@ -90,6 +90,51 @@ export interface TraderPosition {
   status: string | null
 }
 
+// Advanced metrics (detail view)
+export interface TraderAdvancedMetrics {
+  sortino_ratio: number | null
+  calmar_ratio: number | null
+  profit_factor: number | null
+  recovery_factor: number | null
+  max_consecutive_wins: number | null
+  max_consecutive_losses: number | null
+  avg_holding_hours: number | null
+  volatility_pct: number | null
+  downside_volatility_pct: number | null
+}
+
+// Market condition type
+export type MarketCondition = 'bull' | 'bear' | 'sideways'
+
+// Market correlation data
+export interface TraderMarketCorrelation {
+  beta_btc: number | null
+  beta_eth: number | null
+  alpha: number | null
+  market_condition_performance: Record<MarketCondition, number | null>
+}
+
+// Live position data
+export interface TraderPositionLive {
+  id: string
+  platform: string
+  market_type: string
+  trader_key: string
+  symbol: string
+  side: 'long' | 'short'
+  entry_price: number
+  current_price: number | null
+  mark_price: number | null
+  quantity: number
+  leverage: number
+  margin: number | null
+  unrealized_pnl: number | null
+  unrealized_pnl_pct: number | null
+  liquidation_price: number | null
+  opened_at: string | null
+  updated_at: string
+}
+
 // Full trader detail (for detail page)
 export interface TraderDetail {
   trader: UnifiedTrader
