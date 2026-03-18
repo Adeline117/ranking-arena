@@ -176,6 +176,42 @@ export {
   fetchBitunixPositionHistory,
 } from './enrichment-bitunix'
 
+// Bitfinex
+export {
+  fetchBitfinexEquityCurve,
+  fetchBitfinexStatsDetail,
+} from './enrichment-bitfinex'
+
+// BloFin
+export {
+  fetchBlofinEquityCurve,
+  fetchBlofinStatsDetail,
+} from './enrichment-blofin'
+
+// Phemex
+export {
+  fetchPhemexEquityCurve,
+  fetchPhemexStatsDetail,
+} from './enrichment-phemex'
+
+// BingX
+export {
+  fetchBingxEquityCurve,
+  fetchBingxStatsDetail,
+} from './enrichment-bingx'
+
+// Toobit
+export {
+  fetchToobitEquityCurve,
+  fetchToobitStatsDetail,
+} from './enrichment-toobit'
+
+// Binance Spot
+export {
+  fetchBinanceSpotEquityCurve,
+  fetchBinanceSpotStatsDetail,
+} from './enrichment-binance-spot'
+
 // Derived metrics
 export {
   calculateVolatility,
