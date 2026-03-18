@@ -986,6 +986,9 @@ const zh = {
     currentSessionLabel: '当前会话',
     revokeSession: '撤销',
     logoutOtherDevicesButton: '登出所有其他设备',
+    revokeAllSessionsConfirm: '确定登出所有其他设备？此操作无法撤销。',
+    loadLinkedTradersFailed: '加载关联账户失败',
+    claimWalletTimeout: '钱包连接超时，请重试。',
     // 交易员账号（关联）
     myTraderAccounts: '我的交易员账号',
     myTraderAccountsDesc: '管理您在排行榜上认领的交易员身份',

@@ -986,6 +986,9 @@ const en = {
     currentSessionLabel: 'Current session',
     revokeSession: 'Revoke',
     logoutOtherDevicesButton: 'Logout Other Devices',
+    revokeAllSessionsConfirm: 'Log out all other devices? This cannot be undone.',
+    loadLinkedTradersFailed: 'Failed to load linked accounts',
+    claimWalletTimeout: 'Wallet connection timed out. Please try again.',
     // Trader accounts (linked)
     myTraderAccounts: 'My Trader Accounts',
     myTraderAccountsDesc: 'Manage your claimed trader identities on the leaderboard',

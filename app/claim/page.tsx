@@ -378,6 +378,7 @@ function CexVerifyForm({
   const needsPassphrase = platform?.requiresPassphrase ?? false
 
   const handleVerify = async () => {
+    if (loading) return // Guard against double-click race condition
     if (!apiKey.trim() || !apiSecret.trim()) {
       showToast(t('fillApiKeySecret'), 'warning')
       return
@@ -600,7 +601,10 @@ function DexVerifyForm({
           return
         }
 
-        const resp = await solanaProvider.connect()
+        const connectTimeout = new Promise<never>((_, reject) =>
+          setTimeout(() => reject(new Error('Wallet connection timed out. Please try again.')), 30000)
+        )
+        const resp = await Promise.race([solanaProvider.connect(), connectTimeout])
         walletAddress = resp.publicKey.toString()
 
         if (walletAddress.toLowerCase() !== trader.source_trader_id.toLowerCase()) {
@@ -619,7 +623,13 @@ function DexVerifyForm({
           return
         }
 
-        const accounts = await window.ethereum.request({ method: 'eth_requestAccounts' }) as string[]
+        const ethTimeout = new Promise<never>((_, reject) =>
+          setTimeout(() => reject(new Error('Wallet connection timed out. Please try again.')), 30000)
+        )
+        const accounts = await Promise.race([
+          window.ethereum.request({ method: 'eth_requestAccounts' }),
+          ethTimeout,
+        ]) as string[]
         walletAddress = accounts[0]
 
         if (!walletAddress) {
@@ -693,8 +703,12 @@ function DexVerifyForm({
       onSuccess()
     } catch (error) {
       const msg = error instanceof Error ? error.message : ''
-      if (msg.includes('User rejected') || msg.includes('user rejected')) {
-        // User cancelled wallet interaction
+      if (msg.includes('User rejected') || msg.includes('user rejected') || msg.includes('timed out')) {
+        // User cancelled wallet interaction or timeout
+        setLoading(false)
+        if (msg.includes('timed out')) {
+          showToast(t('claimWalletTimeout') || 'Wallet connection timed out', 'warning')
+        }
         return
       }
       showToast(t('claimWalletSignFailed'), 'error')

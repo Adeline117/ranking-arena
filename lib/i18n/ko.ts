@@ -984,6 +984,9 @@ const ko = {
     currentSessionLabel: '현재 세션',
     revokeSession: '해지',
     logoutOtherDevicesButton: '다른 기기 로그아웃',
+    revokeAllSessionsConfirm: '다른 모든 기기에서 로그아웃하시겠습니까? 되돌릴 수 없습니다.',
+    loadLinkedTradersFailed: '연결된 계정을 불러오는 데 실패했습니다',
+    claimWalletTimeout: '지갑 연결 시간이 초과되었습니다. 다시 시도해 주세요.',
     // Trader accounts (linked)
     myTraderAccounts: '내 트레이더 계정',
     myTraderAccountsDesc: '순위에서 인증한 트레이더 ID를 관리하세요',

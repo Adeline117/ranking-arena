@@ -143,9 +143,12 @@ export function TraderLinksSection({ userId }: { userId: string }) {
       if (res.ok) {
         const data = await res.json()
         setTraders(data.data?.linked_traders || [])
+      } else {
+        showToast(t('loadLinkedTradersFailed') || 'Failed to load linked accounts', 'error')
       }
     } catch (error) {
       logger.error('[TraderLinks] Load error:', error)
+      showToast(t('loadLinkedTradersFailed') || 'Failed to load linked accounts', 'error')
     } finally {
       setLoading(false)
     }

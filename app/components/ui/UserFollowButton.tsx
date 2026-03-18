@@ -108,6 +108,10 @@ export default function UserFollowButton({
     pendingRef.current = true
     setLoading(true)
 
+    // Optimistic update — revert on failure
+    const previousFollowing = following
+    setFollowing(!following)
+
     // Create AbortController for request cancellation
     const abortController = new AbortController()
 
@@ -155,12 +159,15 @@ export default function UserFollowButton({
         onFollowChange?.(result.following, result.mutual ?? false)
         showToast(result.following ? t('followSuccess') : t('unfollowSuccess'), 'success')
       } else if (result.tableNotFound) {
+        setFollowing(previousFollowing) // rollback
         showToast(t('followFeatureComingSoon'), 'warning')
       } else {
+        setFollowing(previousFollowing) // rollback
         const errorMsg = result.error || t('operationFailedRetry')
         showToast(errorMsg, 'error')
       }
     } catch (error) {
+      setFollowing(previousFollowing) // rollback optimistic update
       // Clear timeout on error
       if (timeoutRef.current) {
         clearTimeout(timeoutRef.current)
