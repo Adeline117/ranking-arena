@@ -63,9 +63,11 @@ interface ExchangeLinksBarProps {
   linkedAccounts?: ExchangeLink[]
   /** Active account tab: 'all' or 'platform:traderKey' */
   activeAccount?: string
+  /** Hide copy-trade links when viewing own profile */
+  isOwnProfile?: boolean
 }
 
-export default function ExchangeLinksBar({ primary, linkedAccounts, activeAccount }: ExchangeLinksBarProps) {
+export default function ExchangeLinksBar({ primary, linkedAccounts, activeAccount, isOwnProfile }: ExchangeLinksBarProps) {
   const { t } = useLanguage()
 
   // Dedupe: primary + linked, unique by platform+traderKey
@@ -151,9 +153,11 @@ export default function ExchangeLinksBar({ primary, linkedAccounts, activeAccoun
             >
               <ExchangeLogo exchange={acc.platform} size={18} />
               <Text size="sm" weight="bold" style={{ color: isActive ? tokens.colors.accent.primary : tokens.colors.text.primary, whiteSpace: 'nowrap' }}>
-                {isCopyTrade
-                  ? t('copyTradeOn').replace('{exchange}', name)
-                  : t('dexViewOn').replace('{platform}', name)}
+                {isOwnProfile
+                  ? t('dexViewOn').replace('{platform}', name)
+                  : isCopyTrade
+                    ? t('copyTradeOn').replace('{exchange}', name)
+                    : t('dexViewOn').replace('{platform}', name)}
               </Text>
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={isActive ? tokens.colors.accent.primary : tokens.colors.text.tertiary} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6" />
@@ -162,7 +166,7 @@ export default function ExchangeLinksBar({ primary, linkedAccounts, activeAccoun
               </svg>
             </a>
 
-            {referral && (
+            {referral && !isOwnProfile && (
               <a
                 href={referral.url}
                 target="_blank"

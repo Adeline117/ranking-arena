@@ -396,7 +396,8 @@ export default function TraderProfileClient({ data, serverTraderData, claimedUse
           displayName={displayName}
           traderId={traderProfile?.id || data.source_trader_id}
           avatarUrl={traderProfile?.avatar_url || data.avatar_url || undefined}
-          isRegistered={false}
+          isRegistered={!!claimedUser}
+          isOwnProfile={isOwner}
           followers={traderProfile?.followers ?? 0}
           profileUrl={traderProfile?.profile_url || data.profile_url || undefined}
           source={traderProfile?.source || data.source}
@@ -436,6 +437,7 @@ export default function TraderProfileClient({ data, serverTraderData, claimedUse
             : undefined
           }
           activeAccount={activeAccount}
+          isOwnProfile={isOwner}
         />
 
         {/* Tabs */}

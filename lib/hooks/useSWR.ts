@@ -180,7 +180,7 @@ export function useTraderList(options: UseTraderListOptions = {}) {
     {
       ...defaultConfig,
       revalidateOnFocus: false,
-      refreshInterval: 5 * 60 * 1000, // 5 分钟自动刷新
+      refreshInterval: 15 * 60 * 1000, // 15 分钟自动刷新（数据每 30 分钟由 cron 更新）
     }
   )
 }
@@ -217,7 +217,7 @@ export function useTraderDetail(handle: string | undefined) {
     {
       ...defaultConfig,
       revalidateOnFocus: false,
-      refreshInterval: 60 * 1000, // 1 分钟刷新
+      refreshInterval: 5 * 60 * 1000, // 5 分钟刷新（enrichment 每 6 小时更新）
     }
   )
 }
@@ -269,7 +269,7 @@ export function useTraderPositions(handle: string | undefined) {
     fetcher,
     {
       ...defaultConfig,
-      refreshInterval: 60 * 1000, // 优化为 1 分钟刷新，减少请求频率
+      refreshInterval: 5 * 60 * 1000, // 5 分钟刷新持仓（位置数据不需要亚分钟级刷新）
     }
   )
 }
