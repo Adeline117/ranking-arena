@@ -8,6 +8,7 @@ import TopNav from '@/app/components/layout/TopNav'
 import Breadcrumb from '@/app/components/ui/Breadcrumb'
 import TraderHeader from '@/app/components/trader/TraderHeader'
 import TraderTabs from '@/app/components/trader/TraderTabs'
+const ExchangeLinksBar = dynamic(() => import('@/app/components/trader/ExchangeLinksBar'), { ssr: false })
 import { Box, Text } from '@/app/components/base'
 import { RankingSkeleton } from '@/app/components/ui/Skeleton'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
@@ -98,11 +99,20 @@ export default function TraderProfileView({
           followers={traderProfile?.followers ?? profile.followers}
           source={traderProfile?.source}
           isPro={isPro}
+          isOwnProfile={isOwn}
           roi90d={traderPerformance?.roi_90d}
           maxDrawdown={traderPerformance?.max_drawdown}
           winRate={traderPerformance?.win_rate}
           currentUserId={currentUserId}
         />
+
+        {/* Exchange links — copy-trade / DEX view */}
+        {traderProfile?.source && traderProfile?.trader_key && (
+          <ExchangeLinksBar
+            primary={{ platform: traderProfile.source, traderKey: traderProfile.trader_key, handle: traderProfile.handle }}
+            isOwnProfile={isOwn}
+          />
+        )}
 
         {/* TraderTabs */}
         <TraderTabs

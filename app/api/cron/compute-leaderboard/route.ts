@@ -22,7 +22,7 @@ import {
   SOURCE_TYPE_MAP,
   SOURCE_TRUST_WEIGHT,
 } from '@/lib/constants/exchanges'
-import { createLogger } from '@/lib/utils/logger'
+import { createLogger, fireAndForget } from '@/lib/utils/logger'
 import { PipelineLogger } from '@/lib/services/pipeline-logger'
 import { sanitizeDisplayName } from '@/lib/utils/profanity'
 import { env } from '@/lib/env'
@@ -209,6 +209,9 @@ export async function GET(request: NextRequest) {
     } catch (e) {
       logger.warn('WR/MDD derivation failed (non-critical):', e)
     }
+
+    // Fire-and-forget: warm Redis cache with top 100 for each season
+    fireAndForget(warmupLeaderboardCache(supabase), 'warmup-leaderboard-cache')
 
     const totalRanked = Object.values(stats.seasons).reduce((a, b) => a + b, 0)
     if (warnings.length > 0) {
@@ -857,4 +860,36 @@ async function deriveWinRateMDD(supabase: ReturnType<typeof getSupabaseAdmin>): 
   }
 
   return derived
+}
+
+/**
+ * Pre-populate Redis with top 100 leaderboard rows for each season.
+ * Runs as fire-and-forget after leaderboard computation so it doesn't
+ * block the cron response. TTL = 30 min (matches cron schedule).
+ */
+async function warmupLeaderboardCache(
+  supabase: ReturnType<typeof getSupabaseAdmin>
+): Promise<void> {
+  const { tieredSet } = await import('@/lib/cache/redis-layer')
+  const TTL_SECONDS = 30 * 60 // 30 minutes
+
+  await Promise.all(
+    SEASONS.map(async (season) => {
+      const { data, error } = await supabase
+        .from('leaderboard_ranks')
+        .select('*')
+        .eq('season_id', season)
+        .order('rank', { ascending: true })
+        .limit(100)
+
+      if (error || !data?.length) {
+        logger.warn(`[warmup] Failed to fetch top 100 for ${season}:`, error)
+        return
+      }
+
+      const cacheKey = `leaderboard:${season}:all:top100`
+      await tieredSet(cacheKey, data, 'hot', ['rankings', `season:${season}`])
+      logger.info(`[warmup] Cached ${data.length} rows for ${cacheKey} (TTL ${TTL_SECONDS}s)`)
+    })
+  )
 }

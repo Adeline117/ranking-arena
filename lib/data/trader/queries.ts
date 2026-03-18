@@ -16,7 +16,6 @@ import { SOURCE_TYPE_MAP, DEAD_BLOCKED_PLATFORMS } from '@/lib/constants/exchang
 import { logger } from '@/lib/logger'
 import {
   mapLeaderboardRow,
-  mapV1Snapshot,
   mapV2Snapshot,
   normalizeWinRate,
   normalizePeriod,
@@ -153,10 +152,10 @@ export async function getTraderDetail(supabase: SupabaseClient, params: {
   const { platform, traderKey } = params
   const sourceAliases = getSourceAliases(platform)
 
-  // --- Phase 1: Fetch basic data from all three sources in parallel ---
-  const [lrResult, v1Result, v2Result] = await withTimeout(
+  // --- Phase 1: Fetch basic data from leaderboard_ranks + v2 in parallel ---
+  const [lrResult, v2Result] = await withTimeout(
     Promise.all([
-      // leaderboard_ranks: all periods
+      // leaderboard_ranks: all periods (precomputed, primary source)
       safeQuery(() =>
         supabase
           .from('leaderboard_ranks')
@@ -169,17 +168,7 @@ export async function getTraderDetail(supabase: SupabaseClient, params: {
           .eq('source_trader_id', traderKey)
           .limit(5)
       ),
-      // trader_snapshots v1: all periods
-      safeQuery(() =>
-        supabase
-          .from('trader_snapshots')
-          .select('source, source_trader_id, roi, pnl, win_rate, max_drawdown, trades_count, followers, captured_at, season_id, arena_score, profitability_score, risk_control_score, execution_score')
-          .eq('source', platform)
-          .eq('source_trader_id', traderKey)
-          .order('captured_at', { ascending: false })
-          .limit(5)
-      ),
-      // trader_snapshots_v2: all windows
+      // trader_snapshots_v2: all windows (fallback)
       safeQuery(() =>
         supabase
           .from('trader_snapshots_v2')
@@ -194,10 +183,9 @@ export async function getTraderDetail(supabase: SupabaseClient, params: {
   )
 
   const lrRows = (lrResult || []) as Record<string, unknown>[]
-  const v1Rows = (v1Result || []) as Record<string, unknown>[]
   const v2Rows = (v2Result || []) as Record<string, unknown>[]
 
-  // Build per-period data using fallback chain: LR -> v2 -> v1
+  // Build per-period data using fallback chain: LR -> v2
   const periods: Record<TradingPeriod, Partial<UnifiedTrader> | null> = {
     '7D': null,
     '30D': null,
@@ -213,21 +201,12 @@ export async function getTraderDetail(supabase: SupabaseClient, params: {
       continue
     }
 
-    // Fallback: trader_snapshots_v2 (newer, more reliable)
+    // Fallback: trader_snapshots_v2
     const v2Row = v2Rows.find(r =>
       normalizePeriod(r.window as string) === p
     )
     if (v2Row) {
       periods[p] = mapV2Snapshot(v2Row, p)
-      continue
-    }
-
-    // Fallback: trader_snapshots v1 (legacy)
-    const v1Row = v1Rows.find(r =>
-      normalizePeriod(r.season_id as string) === p
-    )
-    if (v1Row) {
-      periods[p] = mapV1Snapshot(v1Row, p)
     }
   }
 
@@ -241,13 +220,13 @@ export async function getTraderDetail(supabase: SupabaseClient, params: {
   const primaryPeriod: TradingPeriod = periods['90D'] ? '90D' : periods['30D'] ? '30D' : '7D'
   const primaryData = periods[primaryPeriod]!
 
-  // Get profile info from trader_sources for avatar, profile_url, handle
+  // Get profile info from traders table for avatar, profile_url, handle
   const sourceProfile = await safeQuery(() =>
     supabase
-      .from('trader_sources')
-      .select('source_trader_id, handle, profile_url, avatar_url, market_type')
-      .eq('source', platform)
-      .eq('source_trader_id', traderKey)
+      .from('traders')
+      .select('trader_key, handle, profile_url, avatar_url, market_type')
+      .eq('platform', platform)
+      .eq('trader_key', traderKey)
       .limit(1)
       .maybeSingle()
   ) as Record<string, unknown> | null
@@ -364,12 +343,12 @@ export async function getTraderDetail(supabase: SupabaseClient, params: {
           .in('source', sourceAliases).eq('source_trader_id', traderKey)
           .order('open_time', { ascending: false }).limit(100)
       ),
-      // Tracked since
+      // Tracked since (earliest v2 snapshot)
       safeQuery(() =>
-        supabase.from('trader_snapshots')
-          .select('captured_at')
-          .eq('source', platform).eq('source_trader_id', traderKey)
-          .order('captured_at', { ascending: true }).limit(1).maybeSingle()
+        supabase.from('trader_snapshots_v2')
+          .select('created_at')
+          .eq('platform', platform).eq('trader_key', traderKey)
+          .order('created_at', { ascending: true }).limit(1).maybeSingle()
       ),
       // Similar traders (by arena score range)
       fetchSimilarTraders(supabase, platform, traderKey, trader.arenaScore, trader.roi),
@@ -454,7 +433,7 @@ export async function getTraderDetail(supabase: SupabaseClient, params: {
   }))
 
   // Tracked since
-  const trackedSince = (trackedSinceResult as Record<string, unknown> | null)?.captured_at as string | null ?? null
+  const trackedSince = (trackedSinceResult as Record<string, unknown> | null)?.created_at as string | null ?? null
 
   return {
     trader,
@@ -511,20 +490,26 @@ export async function searchTraders(supabase: SupabaseClient, params: {
     // RPC not available (migration not applied), fall through to ILIKE
   }
 
-  // --- Fallback: ILIKE search ---
+  // --- Fallback: ILIKE search using traders table ---
   if (!sourcesData) {
     let sourcesQuery = supabase
-      .from('trader_sources')
-      .select('source_trader_id, handle, source, avatar_url')
-      .or(`handle.ilike.%${sanitizedQuery}%,source_trader_id.ilike.%${sanitizedQuery}%`)
+      .from('traders')
+      .select('trader_key, handle, platform, avatar_url')
+      .or(`handle.ilike.%${sanitizedQuery}%,trader_key.ilike.%${sanitizedQuery}%`)
 
     if (platform) {
-      sourcesQuery = sourcesQuery.eq('source', platform)
+      sourcesQuery = sourcesQuery.eq('platform', platform)
     }
 
     const { data, error } = await sourcesQuery.limit(limit * 4)
     if (error || !data || data.length === 0) return []
-    sourcesData = data
+    // Map traders columns to expected shape
+    sourcesData = data.map((d: { trader_key: string; handle: string | null; platform: string; avatar_url: string | null }) => ({
+      source_trader_id: d.trader_key,
+      handle: d.handle,
+      source: d.platform,
+      avatar_url: d.avatar_url,
+    }))
   }
 
   // Filter out DEAD/blocked platforms
@@ -651,24 +636,24 @@ export async function resolveTrader(supabase: SupabaseClient, params: {
   const decodedHandle = decodeURIComponent(params.handle)
   const platformFilter = params.platform
 
-  // Steps 1+2 combined: Try trader_sources by handle OR source_trader_id (single query)
+  // Steps 1+2 combined: Try traders table by handle OR trader_key (single query)
   {
     let query = supabase
-      .from('trader_sources')
-      .select('source, source_trader_id, handle, avatar_url')
-      .or(`handle.eq.${decodedHandle},source_trader_id.eq.${decodedHandle}`)
+      .from('traders')
+      .select('platform, trader_key, handle, avatar_url')
+      .or(`handle.eq.${decodedHandle},trader_key.eq.${decodedHandle}`)
 
     if (platformFilter) {
-      query = query.eq('source', platformFilter)
+      query = query.eq('platform', platformFilter)
     }
 
-    // Multiple trader_sources may share the same handle (e.g., 鎏渊).
+    // Multiple traders may share the same handle (e.g., 鎏渊).
     // Pick the one with the highest arena_score in leaderboard to avoid resolving to a no-data entry.
     const { data: candidates } = await query.limit(10)
     let data = candidates?.[0] ?? null
     if (candidates && candidates.length > 1) {
       // Check which candidate has leaderboard data
-      const ids = candidates.map((c: { source_trader_id: string }) => c.source_trader_id)
+      const ids = candidates.map((c: { trader_key: string }) => c.trader_key)
       const { data: lbCheck } = await supabase
         .from('leaderboard_ranks')
         .select('source_trader_id, arena_score')
@@ -678,13 +663,13 @@ export async function resolveTrader(supabase: SupabaseClient, params: {
         .order('arena_score', { ascending: false })
         .limit(1)
       if (lbCheck?.[0]) {
-        data = candidates.find((c: { source_trader_id: string }) => c.source_trader_id === lbCheck[0].source_trader_id) || data
+        data = candidates.find((c: { trader_key: string }) => c.trader_key === lbCheck[0].source_trader_id) || data
       }
     }
     if (data) {
       return {
-        platform: data.source,
-        traderKey: data.source_trader_id,
+        platform: data.platform,
+        traderKey: data.trader_key,
         handle: data.handle || null,
         avatarUrl: data.avatar_url || null,
       }

@@ -64,7 +64,7 @@ export function useBotRankings(opts: UseBotRankingsOptions = {}) {
   const { data, error, isLoading, isValidating } = useSWR<BotRankingsResponse>(
     `/api/bots?${params.toString()}`,
     fetcher,
-    { revalidateOnFocus: false, keepPreviousData: true, refreshInterval: 120000 }
+    { revalidateOnFocus: false, keepPreviousData: true, refreshInterval: 15 * 60 * 1000 }
   )
 
   return { data, error, isLoading, isValidating }

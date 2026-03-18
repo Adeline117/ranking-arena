@@ -103,34 +103,34 @@ export async function getTraderPerformance(
           return { roi_90d: 0 }
         }
 
-        // Single query for all 3 periods instead of 3 parallel queries
+        // Single query for all 3 windows from v2
         const { data: allSnapshots } = await supabase
-          .from('trader_snapshots')
-          .select('season_id, roi, pnl, win_rate, max_drawdown')
-          .eq('source', source.source)
-          .eq('source_trader_id', source.source_trader_id)
-          .in('season_id', ['7D', '30D', '90D'])
-          .order('captured_at', { ascending: false })
-          .limit(9) // 3 per season max
+          .from('trader_snapshots_v2')
+          .select('window, roi_pct, pnl_usd, win_rate, max_drawdown')
+          .eq('platform', source.source)
+          .eq('trader_key', source.source_trader_id)
+          .in('window', ['7D', '30D', '90D'])
+          .order('created_at', { ascending: false })
+          .limit(9) // 3 per window max
 
-        // Pick latest per season_id
-        const bySeason = new Map<string, (typeof allSnapshots extends (infer T)[] | null ? T : never)>()
+        // Pick latest per window
+        const byWindow = new Map<string, (typeof allSnapshots extends (infer T)[] | null ? T : never)>()
         for (const s of allSnapshots || []) {
-          if (!bySeason.has(s.season_id)) bySeason.set(s.season_id, s)
+          if (!byWindow.has(s.window)) byWindow.set(s.window, s)
         }
-        const data90d = bySeason.get('90D') || null
-        const data7d = bySeason.get('7D') || null
-        const data30d = bySeason.get('30D') || null
+        const data90d = byWindow.get('90D') || null
+        const data7d = byWindow.get('7D') || null
+        const data30d = byWindow.get('30D') || null
 
         return {
-          roi_90d: data90d?.roi ?? 0,
-          roi_7d: data7d?.roi ?? undefined,
-          roi_30d: data30d?.roi ?? undefined,
-          pnl: data90d?.pnl ?? undefined,
+          roi_90d: data90d?.roi_pct ?? 0,
+          roi_7d: data7d?.roi_pct ?? undefined,
+          roi_30d: data30d?.roi_pct ?? undefined,
+          pnl: data90d?.pnl_usd ?? undefined,
           win_rate: data90d?.win_rate ?? undefined,
           max_drawdown: data90d?.max_drawdown ?? undefined,
-          pnl_7d: data7d?.pnl ?? undefined,
-          pnl_30d: data30d?.pnl ?? undefined,
+          pnl_7d: data7d?.pnl_usd ?? undefined,
+          pnl_30d: data30d?.pnl_usd ?? undefined,
           win_rate_7d: data7d?.win_rate ?? undefined,
           win_rate_30d: data30d?.win_rate ?? undefined,
           max_drawdown_7d: data7d?.max_drawdown ?? undefined,
@@ -164,24 +164,24 @@ export async function getTraderStats(handle: string): Promise<TraderStats> {
           return { additionalStats: {} }
         }
 
-        // Phase 1: Get latest snapshot + history in parallel
+        // Phase 1: Get latest snapshot + history in parallel (using v2)
         const [latestSnapshotResult, historySnapshotsResult, monthlyResult, yearlyResult] = await Promise.all([
           supabase
-            .from('trader_snapshots')
-            .select('roi, captured_at, pnl, win_rate, max_drawdown, trades_count, holding_days')
-            .eq('source', source.source)
-            .eq('source_trader_id', source.source_trader_id)
-            .eq('season_id', '90D')
-            .order('captured_at', { ascending: false })
+            .from('trader_snapshots_v2')
+            .select('roi_pct, created_at, pnl_usd, win_rate, max_drawdown, trades_count')
+            .eq('platform', source.source)
+            .eq('trader_key', source.source_trader_id)
+            .eq('window', '90D')
+            .order('created_at', { ascending: false })
             .limit(1)
             .maybeSingle(),
           supabase
-            .from('trader_snapshots')
-            .select('roi, captured_at')
-            .eq('source', source.source)
-            .eq('source_trader_id', source.source_trader_id)
-            .eq('season_id', '90D')
-            .order('captured_at', { ascending: false })
+            .from('trader_snapshots_v2')
+            .select('roi_pct, created_at')
+            .eq('platform', source.source)
+            .eq('trader_key', source.source_trader_id)
+            .eq('window', '90D')
+            .order('created_at', { ascending: false })
             .limit(200),
           supabase
             .from('trader_monthly_performance')
@@ -214,25 +214,25 @@ export async function getTraderStats(handle: string): Promise<TraderStats> {
           symbol: string; weight_pct: number | null; trade_count: number | null
           avg_profit: number | null; avg_loss: number | null; profitable_pct: number | null
         }> = []
-        if (latestSnapshot?.captured_at) {
+        if (latestSnapshot?.created_at) {
           const { data } = await supabase
             .from('trader_frequently_traded')
             .select('symbol, weight_pct, trade_count, avg_profit, avg_loss, profitable_pct')
             .eq('source', source.source)
             .eq('source_trader_id', source.source_trader_id)
-            .eq('captured_at', latestSnapshot.captured_at)
+            .eq('captured_at', latestSnapshot.created_at)
             .order('weight_pct', { ascending: false })
             .limit(10)
           frequentlyTradedData = data || []
         }
 
         const earliestSnapshot = snapshots[snapshots.length - 1]
-        const activeSinceDate = new Date(earliestSnapshot.captured_at)
+        const activeSinceDate = new Date(earliestSnapshot.created_at)
         const activeSince = `${activeSinceDate.getMonth() + 1}/${activeSinceDate.getDate()}/${activeSinceDate.getFullYear().toString().slice(-2)}`
 
         let profitableWeeksPct: number | undefined = undefined
         if (snapshots.length > 1) {
-          const profitableWeeks = snapshots.filter(s => (s.roi ?? 0) > 0).length
+          const profitableWeeks = snapshots.filter(s => (s.roi_pct ?? 0) > 0).length
           profitableWeeksPct = (profitableWeeks / snapshots.length) * 100
         }
 
@@ -258,15 +258,15 @@ export async function getTraderStats(handle: string): Promise<TraderStats> {
         return {
           expectedDividends: undefined,
           trading: latestSnapshot ? {
-            totalTrades12M: latestSnapshot.trades_count ?? 0,
+            totalTrades12M: (latestSnapshot as Record<string, unknown>).trades_count as number ?? 0,
             avgProfit: 0,
             avgLoss: 0,
-            profitableTradesPct: latestSnapshot.win_rate ?? 0,
+            profitableTradesPct: (latestSnapshot as Record<string, unknown>).win_rate as number ?? 0,
           } : undefined,
           frequentlyTraded: frequentlyTraded.length > 0 ? frequentlyTraded : undefined,
           additionalStats: {
             tradesPerWeek: undefined,
-            avgHoldingTime: latestSnapshot?.holding_days ? `${latestSnapshot.holding_days}天` : undefined,
+            avgHoldingTime: undefined,
             activeSince,
             profitableWeeksPct,
             riskScore: undefined,
@@ -303,11 +303,11 @@ export async function getTraderFrequentlyTraded(handle: string): Promise<Array<{
     if (!source) return []
 
     const { data: latestSnapshot } = await supabase
-      .from('trader_snapshots')
-      .select('captured_at')
-      .eq('source', source.source)
-      .eq('source_trader_id', source.source_trader_id)
-      .order('captured_at', { ascending: false })
+      .from('trader_snapshots_v2')
+      .select('created_at')
+      .eq('platform', source.source)
+      .eq('trader_key', source.source_trader_id)
+      .order('created_at', { ascending: false })
       .limit(1)
       .maybeSingle()
 
@@ -318,7 +318,7 @@ export async function getTraderFrequentlyTraded(handle: string): Promise<Array<{
       .select('symbol, weight_pct, trade_count, avg_profit, avg_loss, profitable_pct')
       .eq('source', source.source)
       .eq('source_trader_id', source.source_trader_id)
-      .eq('captured_at', latestSnapshot.captured_at)
+      .eq('captured_at', latestSnapshot.created_at)
       .order('weight_pct', { ascending: false })
       .limit(10)
 
