@@ -14,6 +14,7 @@ export {
   createLogger,
   captureError,
   captureMessage,
+  fireAndForget,
   Logger,
   type LogLevel,
   type LoggerConfig,

@@ -6,8 +6,9 @@
 import { SupabaseClient } from '@supabase/supabase-js'
 import { getSupabaseAdmin } from '@/lib/supabase/server'
 import { z } from 'zod'
-import { dataLogger } from '@/lib/utils/logger'
+import { dataLogger, fireAndForget } from '@/lib/utils/logger'
 import { SOURCE_TYPE_MAP } from '@/lib/constants/exchanges'
+import { syncToClickHouse } from '@/lib/analytics/dual-write'
 
 /** Resolve market_type from SOURCE_TYPE_MAP for trader_profiles_v2 */
 function getMarketType(source: string): string {
@@ -486,6 +487,34 @@ export async function upsertTraders(
     // Count as saved if v2 snapshot write succeeded (v2 is now the primary table)
     if (consistency.trader_snapshots_v2 !== 'failed') {
       saved += batch.length
+
+      // Fire-and-forget: update live rankings sorted set for traders with arena_score
+      import('@/lib/realtime/ranking-store').then(({ updateTraderScore }) => {
+        for (const t of batch) {
+          if (t.arena_score != null && t.arena_score > 0) {
+            updateTraderScore(t.season_id, t.source, t.source_trader_id, t.arena_score).catch(() => {})
+          }
+        }
+      }).catch(() => {})
+
+      // Fire-and-forget: dual-write snapshots to ClickHouse for analytics
+      fireAndForget(
+        syncToClickHouse('trader_snapshots_history', batch.map(t => ({
+          platform: t.source,
+          trader_key: t.source_trader_id,
+          period: t.season_id,
+          roi_pct: t.roi ?? 0,
+          pnl_usd: t.pnl ?? 0,
+          arena_score: t.arena_score ?? 0,
+          win_rate: t.win_rate ?? null,
+          max_drawdown: t.max_drawdown ?? null,
+          sharpe_ratio: t.sharpe_ratio ?? null,
+          followers: t.followers ?? 0,
+          rank: t.rank ?? 0,
+          captured_at: new Date().toISOString(),
+        }))),
+        'clickhouse-snapshot-sync'
+      )
     }
   }
 
