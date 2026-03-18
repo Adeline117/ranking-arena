@@ -134,7 +134,7 @@ export default function MemberList({
               const res = await fetch(`/api/groups/${groupId}/invite`, { method: 'POST', headers: { Authorization: `Bearer ${accessToken}`, ...getCsrfHeaders() } })
               if (res.ok) {
                 const data = await res.json()
-                if (data.invite_url) { const fullUrl = `${window.location.origin}${data.invite_url}`; setInviteUrl(fullUrl); await navigator.clipboard.writeText(fullUrl); showToast(t('inviteLinkCopied'), 'success') }
+                if (data.invite_url) { const fullUrl = `${window.location.origin}${data.invite_url}`; setInviteUrl(fullUrl); try { await navigator.clipboard.writeText(fullUrl); showToast(t('inviteLinkCopied'), 'success') } catch { showToast(t('copyFailed') || 'Copy failed', 'error') } }
                 else showToast(t('generateFailed'), 'error')
               } else { const data = res.headers.get('content-type')?.includes('application/json') ? await res.json() : null; showToast(data?.error || t('generateFailed'), 'error') }
             } catch { showToast(t('networkError'), 'error') }

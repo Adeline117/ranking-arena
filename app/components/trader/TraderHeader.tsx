@@ -147,7 +147,7 @@ export default function TraderHeader({
       setHandleCopied(true)
       setTimeout(() => setHandleCopied(false), 2000)
     }).catch(() => { // eslint-disable-line no-restricted-syntax -- intentional fire-and-forget
-      // fallback
+      console.warn('[TraderHeader] clipboard.writeText failed')
     })
   }, [handle])
 

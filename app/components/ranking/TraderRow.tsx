@@ -241,9 +241,11 @@ export const TraderRow = memo(function TraderRow({
     e.stopPropagation()
     closeSwipe()
     if (typeof navigator !== 'undefined' && navigator.share) {
-      void navigator.share({ title: displayName, url: `${window.location.origin}${href}` })
+      void navigator.share({ title: displayName, url: `${window.location.origin}${href}` }).catch(() => {})
     } else if (typeof navigator !== 'undefined') {
-      void navigator.clipboard.writeText(`${window.location.origin}${href}`)
+      navigator.clipboard.writeText(`${window.location.origin}${href}`).catch(() => {
+        console.warn('[TraderRow] clipboard.writeText failed')
+      })
     }
   }, [displayName, href, closeSwipe])
 

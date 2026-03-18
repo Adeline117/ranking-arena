@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { tokens } from '@/lib/design-tokens'
 import { Box, Text } from '@/app/components/base'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
+import { useToast } from '@/app/components/ui/Toast'
 import { getAvatarGradient, getAvatarInitial } from '@/lib/utils/avatar'
 import { logger } from '@/lib/logger'
 
@@ -97,6 +98,7 @@ interface SnapshotViewerClientProps {
 
 export default function SnapshotViewerClient({ snapshot, traders }: SnapshotViewerClientProps) {
   const { t, language } = useLanguage()
+  const { showToast } = useToast()
   const [copied, setCopied] = useState(false)
 
   const shareUrl = typeof window !== 'undefined' ? window.location.href : `/s/${snapshot.shareToken}`
@@ -105,9 +107,11 @@ export default function SnapshotViewerClient({ snapshot, traders }: SnapshotView
     try {
       await navigator.clipboard.writeText(shareUrl)
       setCopied(true)
+      showToast(t('copiedToClipboard'), 'success')
       setTimeout(() => setCopied(false), 2000)
     } catch (error) {
       logger.error('Failed to copy link:', error)
+      showToast(t('copyFailed') || 'Copy failed', 'error')
     }
   }
 
