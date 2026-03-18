@@ -579,12 +579,13 @@ export async function runEnrichment(params: {
                 if (stats.totalTrades != null) snapshotUpdate.trades_count = stats.totalTrades
                 if (Object.keys(snapshotUpdate).length > 0) {
                   // Write enrichment results to v2 only (v1 writes removed 2026-03-18)
+                  // V2 columns: platform, trader_key, window
                   await supabase
                     .from('trader_snapshots_v2')
                     .update(snapshotUpdate)
-                    .eq('platform', platformKey)
-                    .eq('trader_key', traderId)
-                    .eq('window', period)
+                    .eq(V2.platform, platformKey)
+                    .eq(V2.trader_key, traderId)
+                    .eq(V2.window, period)
                 }
               }
             }
