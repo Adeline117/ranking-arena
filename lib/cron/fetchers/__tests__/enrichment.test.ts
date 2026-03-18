@@ -375,10 +375,10 @@ describe('Edge Cases', () => {
 
     // With these extreme values:
     // volatility >= 200 returns null
-    // maxDD = 3000 (from 5000 to 2000) >= 200 returns null
+    // maxDD = 3000 (from 5000 to 2000), capped at 100 by Math.min(maxDD, 100)
     expect(volatility).toBeNull() // Too high
-    expect(maxDD).toBeNull() // 3000 >= 200
-    // currentDD doesn't have the 200 limit, so should work
+    expect(maxDD).toBe(100) // 3000 capped at 100
+    // currentDD doesn't have the cap, so returns full difference
     expect(currentDD).not.toBeNull()
     expect(currentDD).toBe(3000) // 5000 - 2000
   })

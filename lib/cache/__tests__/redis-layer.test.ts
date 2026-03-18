@@ -25,6 +25,14 @@ jest.mock('@/lib/utils/logger', () => ({
   },
 }))
 
+// Mock redis-client to provide getSharedRedis and isRedisAvailable
+jest.mock('@/lib/cache/redis-client', () => ({
+  getSharedRedis: jest.fn().mockResolvedValue(null),
+  isRedisAvailable: jest.fn().mockReturnValue(false),
+  redis: null,
+  getRedis: jest.fn(),
+}))
+
 // Mock Redis - not configured (no env vars)
 const _originalEnv = process.env
 

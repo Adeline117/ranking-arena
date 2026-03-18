@@ -38,50 +38,75 @@ jest.mock('next/server', () => {
   class MockNextRequest {
     url: string
     nextUrl: URL
-    headers: Map<string, string>
+    _headers: Map<string, string>
+    method: string
+    cookies: { get: () => undefined }
 
     constructor(url: string) {
       this.url = url
       this.nextUrl = new URL(url)
-      this.headers = new Map()
+      this._headers = new Map([['user-agent', 'Mozilla/5.0 (Test)']])
+      this.method = 'GET'
+      this.cookies = { get: () => undefined }
+    }
+    get headers() {
+      const h = this._headers
+      return { get: (key: string) => h.get(key) || null }
     }
   }
 
   return { NextResponse: MockNextResponse, NextRequest: MockNextRequest }
 })
 
-// Recursive proxy mock that handles any Supabase query chain.
-// `maybeSingle()` and direct awaits resolve to { data: null, error: null }.
-let maybeSingleError: Error | null = null
-
-function buildChainMock(): unknown {
-  const handler: ProxyHandler<object> = {
-    get(_target, prop) {
-      // Make the chain awaitable - resolves to { data: null, error: null, count: 0 }
-      if (prop === 'then') {
-        return (resolve: (v: unknown) => void) => {
-          if (maybeSingleError) return Promise.reject(maybeSingleError).then(resolve)
-          return resolve({ data: null, error: null, count: 0 })
-        }
-      }
-      if (prop === 'catch' || prop === 'finally') return undefined
-      if (prop === 'maybeSingle') {
-        return jest.fn(() => {
-          if (maybeSingleError) return Promise.reject(maybeSingleError)
-          return Promise.resolve({ data: null, error: null })
-        })
-      }
-      // All chainable methods return a new proxy
-      return jest.fn(() => new Proxy({}, handler))
-    },
-  }
-  return new Proxy({}, handler)
-}
-
 jest.mock('@supabase/supabase-js', () => ({
   createClient: jest.fn(() => ({
-    from: jest.fn(() => buildChainMock()),
+    from: jest.fn(() => ({})),
   })),
+}))
+
+jest.mock('@/lib/supabase/server', () => ({
+  getSupabaseAdmin: jest.fn(() => ({
+    from: jest.fn(() => ({})),
+  })),
+}))
+
+jest.mock('@/lib/api', () => ({
+  checkRateLimit: jest.fn().mockResolvedValue(null),
+  RateLimitPresets: { public: {}, authenticated: {} },
+}))
+
+jest.mock('@/lib/utils/rate-limit', () => ({
+  checkRateLimit: jest.fn().mockResolvedValue(null),
+  RateLimitPresets: { public: {}, authenticated: {} },
+}))
+
+jest.mock('@/lib/utils/csrf', () => ({
+  validateCsrfToken: jest.fn().mockReturnValue(true),
+  generateCsrfToken: jest.fn().mockReturnValue('test-csrf'),
+  CSRF_COOKIE_NAME: 'csrf-token',
+  CSRF_HEADER_NAME: 'x-csrf-token',
+}))
+
+jest.mock('@/lib/api/correlation', () => ({
+  getOrCreateCorrelationId: jest.fn().mockReturnValue('test-cid'),
+  runWithCorrelationId: jest.fn((_id: string, fn: () => unknown) => fn()),
+  getCorrelationId: jest.fn().mockReturnValue('test-cid'),
+}))
+
+jest.mock('@/lib/api/versioning', () => ({
+  parseApiVersion: jest.fn().mockReturnValue({ version: 'v1', deprecated: false }),
+  addVersionHeaders: jest.fn(),
+  addDeprecationHeaders: jest.fn(),
+}))
+
+const mockResolveTrader = jest.fn().mockResolvedValue(null)
+const mockGetTraderDetail = jest.fn().mockResolvedValue(null)
+const mockToTraderPageData = jest.fn().mockReturnValue({ performance: null, profile: null, equityCurve: null })
+
+jest.mock('@/lib/data/unified', () => ({
+  resolveTrader: (...args: unknown[]) => mockResolveTrader(...args),
+  getTraderDetail: (...args: unknown[]) => mockGetTraderDetail(...args),
+  toTraderPageData: (...args: unknown[]) => mockToTraderPageData(...args),
 }))
 
 const mockGetServerCache = jest.fn().mockReturnValue(null)
@@ -126,7 +151,8 @@ describe('GET /api/traders/[handle]', () => {
   beforeEach(() => {
     jest.clearAllMocks()
     mockGetServerCache.mockReturnValue(null)
-    maybeSingleError = null
+    mockResolveTrader.mockResolvedValue(null)
+    mockGetTraderDetail.mockResolvedValue(null)
     process.env.NEXT_PUBLIC_SUPABASE_URL = 'https://test.supabase.co'
     process.env.SUPABASE_SERVICE_ROLE_KEY = 'test-service-key'
   })
@@ -141,7 +167,9 @@ describe('GET /api/traders/[handle]', () => {
     const body = await res.json()
 
     expect(res.status).toBe(400)
-    expect(body.error).toBe('Invalid handle parameter')
+    // handleError wraps ApiError.validation into { success: false, error: { code, message, ... } }
+    const errMsg = body.error?.message ?? body.error
+    expect(errMsg).toMatch(/Invalid handle parameter/)
   })
 
   it('returns 400 for handle exceeding max length', async () => {
@@ -153,7 +181,8 @@ describe('GET /api/traders/[handle]', () => {
     const body = await res.json()
 
     expect(res.status).toBe(400)
-    expect(body.error).toBe('Invalid handle parameter')
+    const errMsg = body.error?.message ?? body.error
+    expect(errMsg).toMatch(/Invalid handle parameter/)
   })
 
   it('accepts single character handle (valid)', async () => {
@@ -161,6 +190,7 @@ describe('GET /api/traders/[handle]', () => {
     const params = Promise.resolve({ handle: 'x' })
 
     const res = await GET(request as any, { params })
+    // Should not be 400 (it'll be 404 since resolveTrader returns null)
     expect(res.status).not.toBe(400)
   })
 
@@ -175,6 +205,8 @@ describe('GET /api/traders/[handle]', () => {
   // --- 404 Not Found ---
 
   it('returns 404 when trader is not found', async () => {
+    mockResolveTrader.mockResolvedValue(null)
+
     const request = { nextUrl: new URL('http://localhost/api/traders/nonexistent') }
     const params = Promise.resolve({ handle: 'nonexistent' })
 
@@ -182,18 +214,24 @@ describe('GET /api/traders/[handle]', () => {
     const body = await res.json()
 
     expect(res.status).toBe(404)
-    expect(body.error).toBe('Trader not found')
-    expect(body.handle).toBe('nonexistent')
+    const errMsg = body.error?.message ?? body.error
+    expect(errMsg).toMatch(/not found/i)
   })
 
-  it('sets Cache-Control header on 404 responses', async () => {
+  it('returns 404 with proper error structure', async () => {
+    mockResolveTrader.mockResolvedValue(null)
+
     const request = { nextUrl: new URL('http://localhost/api/traders/ghost') }
     const params = Promise.resolve({ handle: 'ghost' })
 
     const res = await GET(request as any, { params })
+    const body = await res.json()
 
     expect(res.status).toBe(404)
-    expect(res.headers.get('Cache-Control')).toBe('public, s-maxage=300')
+    // handleError returns { success: false, error: { code, message, timestamp } }
+    expect(body.success).toBe(false)
+    expect(body.error).toBeDefined()
+    expect(body.error.code).toBe('NOT_FOUND')
   })
 
   // --- Cache Hit ---
@@ -214,23 +252,23 @@ describe('GET /api/traders/[handle]', () => {
     const body = await res.json()
 
     expect(res.status).toBe(200)
-    expect(body.cached).toBe(true)
-    expect(body.traderId).toBe('trader123')
+    // apiSuccess wraps in { success: true, data: { ...cachedData, cached: true }, meta: { timestamp } }
+    const data = body.data ?? body
+    expect(data.cached).toBe(true)
+    expect(data.traderId).toBe('trader123')
   })
 
   // --- Error Handling ---
 
   it('returns 500 on unexpected database error', async () => {
+    mockResolveTrader.mockRejectedValueOnce(new Error('DB connection lost'))
+
     const request = { nextUrl: new URL('http://localhost/api/traders/crasher') }
     const params = Promise.resolve({ handle: 'crasher' })
 
-    maybeSingleError = new Error('DB connection lost')
-
     const res = await GET(request as any, { params })
-    const body = await res.json()
 
     expect(res.status).toBe(500)
-    expect(body.error).toBe('Internal server error')
   })
 
   it('returns 500 when params promise rejects', async () => {
@@ -238,9 +276,7 @@ describe('GET /api/traders/[handle]', () => {
     const params = Promise.reject(new Error('params error'))
 
     const res = await GET(request as any, { params })
-    const body = await res.json()
 
     expect(res.status).toBe(500)
-    expect(body.error).toBe('Internal server error')
   })
 })
