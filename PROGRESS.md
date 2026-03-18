@@ -6,7 +6,22 @@
 - Pipeline 100% healthy: 0 warnings, 0 failures, 25 active platforms all fresh.
 - Data completeness: win_rate 94.5%, max_drawdown 95.1%, sharpe_ratio 83.8%.
 - Daily snapshots: 377K rows (142 days history), sharpe computation has full depth.
-- 26 platforms with enrichment configs (added bitunix, xt, bybit VPS path).
+- 26 platforms with enrichment configs. Bitunix: 200 traders enriched (was 0).
+- Frontend audit complete: all display bugs fixed, all periods/exchanges verified.
+
+## Recently Completed (2026-03-18) — Frontend Data Display Audit + Fixes
+
+### Critical Bugs Fixed
+- **AdvancedMetrics never rendering**: bridge.ts missing sortino/calmar/profit_factor + score sub-components → added
+- **Movers API 500 error**: referenced non-existent `rank_history` table → rewritten to use leaderboard_ranks + daily_snapshots
+- **Leaderboard rank gaps**: ROI anomaly filter 5000% too aggressive (deleting top 4 traders) → raised to 50000%
+- **Bitunix 0 enrichment**: triggered enrichment, 200 traders now enriched
+
+### Audit Results (all 25 platforms × 3 periods verified)
+- **7D/30D/90D rankings**: ROI, PnL, win_rate, max_drawdown, arena_score all 100% filled
+- **Exchange-specific pages**: all 24 exchange endpoints return data, 0 stale
+- **Trader detail pages**: Hero/Scores/Radar/EquityCurve all render across all platforms
+- **Remaining known gaps**: sharpe_ratio 90%+ null in 7D/30D (needs daily history to accumulate), bitunix equity curves filling via enrichment
 
 ## Recently Completed (2026-03-18) — Per-Platform Data Quality Fixes
 
