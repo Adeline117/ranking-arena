@@ -6,11 +6,12 @@ import Link from 'next/link'
 import Image from 'next/image'
 import dynamic from 'next/dynamic'
 import useSWR from 'swr'
-import { fetcher as rawFetcher } from '@/lib/hooks/useSWR'
+import { traderFetcher } from '@/lib/hooks/traderFetcher'
 import { tokens } from '@/lib/design-tokens'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import { useSubscription } from '@/app/components/home/hooks/useSubscription'
-import { supabase } from '@/lib/supabase/client'
+import { useAuthSession } from '@/lib/hooks/useAuthSession'
+import { useLinkedAccounts } from '@/lib/hooks/useLinkedAccounts'
 import { EXCHANGE_NAMES } from '@/lib/constants/exchanges'
 import { Box, Text } from '@/app/components/base'
 import TopNav from '@/app/components/layout/TopNav'
@@ -95,16 +96,7 @@ const NO_PORTFOLIO_PLATFORMS = new Set([
 ])
 type TraderPageData = import('@/app/u/[handle]/components/types').TraderPageData
 
-// Unwrap the API envelope { success, data } to get the raw TraderPageData
-async function traderFetcher(url: string): Promise<TraderPageData> {
-  const raw = await rawFetcher<{ success: boolean; data: TraderPageData }>(url)
-  // The API wraps responses in { success, data }; unwrap for SWR consumers
-  if (raw && typeof raw === 'object' && 'data' in raw && 'success' in raw) {
-    return raw.data
-  }
-  // Fallback: if response is already unwrapped (e.g. direct shape), return as-is
-  return raw as unknown as TraderPageData
-}
+// #31: traderFetcher extracted to lib/hooks/traderFetcher.ts (shared with useUserProfile)
 
 interface ClaimedUserProfile {
   id: string
@@ -126,58 +118,23 @@ export default function TraderProfileClient({ data, serverTraderData, claimedUse
   const pathname = usePathname()
   const { t, language } = useLanguage()
   const { isPro } = useSubscription()
+  const { userId: currentUserId } = useAuthSession()
 
-  const [currentUserId, setCurrentUserId] = useState<string | null>(null)
   const [isVerifiedTrader, setIsVerifiedTrader] = useState(false)
   const [isOwner, setIsOwner] = useState(false)
 
-  // Multi-account linked traders state
-  interface LinkedAccountData {
-    id: string
-    platform: string
-    traderKey: string
-    handle: string | null
-    label: string | null
-    isPrimary: boolean
-    roi: number | null
-    pnl: number | null
-    arenaScore: number | null
-    winRate: number | null
-    maxDrawdown: number | null
-    rank: number | null
-  }
-  interface AggregatedData {
-    combinedPnl: number
-    bestRoi: { value: number; platform: string; traderKey: string } | null
-    weightedScore: number
-  }
-  const [linkedAccounts, setLinkedAccounts] = useState<LinkedAccountData[]>([])
-  const [aggregatedData, setAggregatedData] = useState<AggregatedData | null>(null)
+  // Multi-account linked traders (SWR-based)
+  const { linkedAccounts, aggregatedData, hasMultipleAccounts } = useLinkedAccounts(data.source, data.source_trader_id)
   const [activeAccount, setActiveAccount] = useState<string>('all')
-  const hasMultipleAccounts = linkedAccounts.length >= 2
 
-  useEffect(() => {
-    supabase.auth.getUser().then(({ data: userData }) => {
-      setCurrentUserId(userData.user?.id ?? null)
-    }).catch(() => { /* Intentionally swallowed: auth check non-critical for trader profile */ }) // eslint-disable-line no-restricted-syntax -- intentional fire-and-forget
-  }, [])
-
-  // Check if this trader is verified (claimed) and if current user is the owner
-  // Store claim data so we can re-check ownership when currentUserId resolves
+  // Check if this trader is verified (claimed) and if current user is the owner.
+  // Fire claim fetch immediately on mount (no dependency on currentUserId).
   const claimDataRef = useRef<{ is_verified: boolean; owner_id: string | null } | null>(null)
   useEffect(() => {
     const traderId = data.source_trader_id
     const source = data.source
     if (!traderId || !source) return
-
-    // Only fetch once — don't re-fetch when currentUserId changes
-    if (claimDataRef.current !== null) {
-      // Re-check ownership with newly resolved currentUserId
-      if (claimDataRef.current.is_verified && currentUserId && claimDataRef.current.owner_id === currentUserId) {
-        setIsOwner(true)
-      }
-      return
-    }
+    if (claimDataRef.current !== null) return // already fetched
 
     fetch(`/api/traders/claim/status?trader_id=${encodeURIComponent(traderId)}&source=${encodeURIComponent(source)}`)
       .then(res => res.ok ? res.json() : null)
@@ -186,33 +143,20 @@ export default function TraderProfileClient({ data, serverTraderData, claimedUse
           claimDataRef.current = { is_verified: result.data.is_verified, owner_id: result.data.owner_id }
           if (result.data.is_verified) {
             setIsVerifiedTrader(true)
-            if (currentUserId && result.data.owner_id === currentUserId) {
-              setIsOwner(true)
-            }
           }
         } else {
           claimDataRef.current = { is_verified: false, owner_id: null }
         }
       })
       .catch(() => {})
-  }, [data.source_trader_id, data.source, currentUserId])
+  }, [data.source_trader_id, data.source])
 
-  // Fetch linked accounts for multi-account view
+  // Re-check ownership when both claim data and currentUserId are available
   useEffect(() => {
-    const platform = data.source
-    const traderKey = data.source_trader_id
-    if (!platform || !traderKey) return
-
-    fetch(`/api/traders/aggregate?platform=${encodeURIComponent(platform)}&trader_key=${encodeURIComponent(traderKey)}`)
-      .then(res => res.ok ? res.json() : null)
-      .then(result => {
-        if (result?.data?.totalAccounts >= 2) {
-          setLinkedAccounts(result.data.accounts)
-          setAggregatedData(result.data.aggregated)
-        }
-      })
-      .catch(() => {})
-  }, [data.source, data.source_trader_id])
+    if (claimDataRef.current?.is_verified && currentUserId && claimDataRef.current.owner_id === currentUserId) {
+      setIsOwner(true)
+    }
+  }, [currentUserId])
 
   const displayName = formatDisplayName(data.handle, data.source)
   const _exchangeName = EXCHANGE_NAMES[data.source] || data.source
@@ -289,11 +233,13 @@ export default function TraderProfileClient({ data, serverTraderData, claimedUse
     traderFetcher,
     {
       revalidateOnFocus: false,
-      refreshInterval: 60_000,
+      refreshInterval: 0,
       dedupingInterval: 5000,
       errorRetryCount: 2,
       fallbackData: isPrimaryAccount ? (serverTraderData ?? undefined) : undefined,
       keepPreviousData: true,
+      // #30: Skip revalidation on mount when serverTraderData is provided (ISR freshness)
+      revalidateOnMount: isPrimaryAccount && serverTraderData ? false : undefined,
     }
   )
 
@@ -336,6 +282,9 @@ export default function TraderProfileClient({ data, serverTraderData, claimedUse
     )
   }
 
+  // #24: Stale data banner — show when SWR errored but cached/stale data is still available
+  const showStaleBanner = !!traderError && !!traderData
+
   // Structured data for SEO
   const structuredData = combineSchemas(
     generateTraderProfilePageSchema({
@@ -372,6 +321,24 @@ export default function TraderProfileClient({ data, serverTraderData, claimedUse
           { label: t('leaderboardBreadcrumb'), href: '/rankings' },
           { label: displayName },
         ]} />
+
+        {/* #24: Stale data banner */}
+        {showStaleBanner && (
+          <Box style={{
+            padding: `${tokens.spacing[2]} ${tokens.spacing[4]}`,
+            marginBottom: tokens.spacing[3],
+            background: `${tokens.colors.accent.warning}12`,
+            border: `1px solid ${tokens.colors.accent.warning}30`,
+            borderRadius: tokens.radius.md,
+            display: 'flex',
+            alignItems: 'center',
+            gap: tokens.spacing[2],
+          }}>
+            <Text size="xs" style={{ color: tokens.colors.accent.warning }}>
+              {t('dataOutdatedBanner') || 'Data may be outdated. Refresh to get the latest.'}
+            </Text>
+          </Box>
+        )}
 
         {/* Sticky mini header for mobile */}
         <div className={`trader-sticky-mini-header${showMiniHeader ? ' visible' : ''}`}>

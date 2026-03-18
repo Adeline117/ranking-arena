@@ -1,6 +1,7 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
+import useSWR from 'swr'
 // Use plain <img> for crypto icons (SVGs cause 400 on Vercel image optimizer)
 import { tokens } from '@/lib/design-tokens'
 
@@ -23,49 +24,25 @@ function getCryptoIcon(symbol: string, fallbackImage: string): string {
   return localPath || fallbackImage
 }
 
+const spotFetcher = (url: string) =>
+  fetch(url).then(r => r.json()).then((data: unknown) => {
+    if (!Array.isArray(data)) return []
+    return data.slice(0, 20).map((c: Record<string, unknown>) => ({
+      symbol: c.symbol as string,
+      price: c.price as number,
+      change24h: c.change24h as number,
+      image: c.image as string,
+    }))
+  })
+
 export default function PriceTicker() {
-  const [coins, setCoins] = useState<TickerCoin[]>([])
+  const { data: coins = [], error: swrError, isLoading: loading } = useSWR<TickerCoin[]>(
+    '/api/market/spot',
+    spotFetcher,
+    { refreshInterval: 30_000, revalidateOnFocus: true, dedupingInterval: 10_000 }
+  )
   const [imgErrors, setImgErrors] = useState<Set<string>>(new Set())
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
-
-  useEffect(() => {
-    let alive = true
-
-    const load = () => {
-      fetch('/api/market/spot')
-        .then(r => r.json())
-        .then(data => {
-          if (!alive || !Array.isArray(data)) return
-          setCoins(data.slice(0, 20).map((c: Record<string, unknown>) => ({
-            symbol: c.symbol as string,
-            price: c.price as number,
-            change24h: c.change24h as number,
-            image: c.image as string,
-          })))
-          setError(null)
-        })
-        .catch((err) => {
-          if (!alive) return
-          setError(err instanceof Error ? err.message : 'Failed to load')
-        })
-        .finally(() => { if (alive) setLoading(false) })
-    }
-
-    load()
-    const interval = setInterval(load, 30000)
-
-    const handleVisibility = () => {
-      if (document.visibilityState === 'visible') load()
-    }
-    document.addEventListener('visibilitychange', handleVisibility)
-
-    return () => {
-      alive = false
-      clearInterval(interval)
-      document.removeEventListener('visibilitychange', handleVisibility)
-    }
-  }, [])
+  const error = swrError ? (swrError instanceof Error ? swrError.message : 'Failed to load') : null
 
   if (loading) {
     return (

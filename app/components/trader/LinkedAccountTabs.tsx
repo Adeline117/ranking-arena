@@ -1,11 +1,13 @@
 'use client'
 
-import { useRef, useEffect, useState } from 'react'
+import { useRef, useEffect, useState, useCallback } from 'react'
+import { preload } from 'swr'
 import { tokens } from '@/lib/design-tokens'
 import { EXCHANGE_NAMES } from '@/lib/constants/exchanges'
 import { Box, Text } from '@/app/components/base'
 import ExchangeLogo from '@/app/components/ui/ExchangeLogo'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
+import { traderFetcher } from '@/lib/hooks/traderFetcher'
 
 export interface LinkedAccount {
   id: string
@@ -63,13 +65,35 @@ export default function LinkedAccountTabs({
     }
   }, [activeAccount, isMobileDropdown])
 
-  // Close dropdown on outside click
+  // Prefetch trader data on tab hover (desktop) for instant account switching
+  const prefetchAccount = useCallback((account: LinkedAccount) => {
+    const handle = account.handle || account.traderKey
+    const url = `/api/traders/${encodeURIComponent(handle)}?source=${encodeURIComponent(account.platform)}`
+    preload(url, traderFetcher)
+  }, [])
+
+  // #32: Close dropdown on outside mousedown (faster than click)
   useEffect(() => {
     if (!dropdownOpen) return
     const handler = () => setDropdownOpen(false)
-    document.addEventListener('click', handler)
-    return () => document.removeEventListener('click', handler)
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
   }, [dropdownOpen])
+
+  // #27: Arrow key navigation between tabs (WAI-ARIA tabs pattern)
+  const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
+    const keys = ['all', ...accounts.map(a => `${a.platform}:${a.traderKey}`)]
+    const idx = keys.indexOf(activeAccount)
+    if (e.key === 'ArrowRight' || e.key === 'ArrowDown') {
+      e.preventDefault()
+      const next = idx < keys.length - 1 ? idx + 1 : 0
+      onAccountChange(keys[next])
+    } else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') {
+      e.preventDefault()
+      const prev = idx > 0 ? idx - 1 : keys.length - 1
+      onAccountChange(keys[prev])
+    }
+  }, [accounts, activeAccount, onAccountChange])
 
   const tabStyle = (isActive: boolean): React.CSSProperties => ({
     display: 'flex',
@@ -210,6 +234,8 @@ export default function LinkedAccountTabs({
   return (
     <Box
       ref={scrollRef}
+      role="tablist"
+      onKeyDown={handleKeyDown}
       style={{
         display: 'flex',
         gap: 8,
@@ -223,6 +249,9 @@ export default function LinkedAccountTabs({
     >
       {/* All tab */}
       <button
+        role="tab"
+        tabIndex={activeAccount === 'all' ? 0 : -1}
+        aria-selected={activeAccount === 'all'}
         style={tabStyle(activeAccount === 'all')}
         onClick={() => onAccountChange('all')}
         data-active={activeAccount === 'all'}
@@ -263,8 +292,12 @@ export default function LinkedAccountTabs({
         return (
           <button
             key={key}
+            role="tab"
+            tabIndex={isActive ? 0 : -1}
+            aria-selected={isActive}
             style={tabStyle(isActive)}
             onClick={() => onAccountChange(key)}
+            onMouseEnter={() => prefetchAccount(account)}
             data-active={isActive}
           >
             <ExchangeLogo exchange={account.platform} size={16} />

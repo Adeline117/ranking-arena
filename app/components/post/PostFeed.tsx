@@ -185,7 +185,8 @@ export default function PostFeed(props: PostFeedProps = {}): React.ReactNode {
 
   useEffect(() => {
     const el = loadMoreRef.current; if (!el) return
-    const observer = new IntersectionObserver((entries) => { if (entries[0].isIntersecting && hasMore && !loadingMore && !loading) loadMorePosts() }, { threshold: 0.1, rootMargin: '100px' })
+    // #29: Increased rootMargin to 400px for earlier prefetch trigger
+    const observer = new IntersectionObserver((entries) => { if (entries[0].isIntersecting && hasMore && !loadingMore && !loading) loadMorePosts() }, { threshold: 0.1, rootMargin: '400px' })
     observer.observe(el); return () => observer.disconnect()
   }, [hasMore, loadingMore, loading, loadMorePosts])
 

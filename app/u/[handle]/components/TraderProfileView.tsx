@@ -1,8 +1,8 @@
 'use client'
 
-import { useState, useEffect, useCallback, useMemo } from 'react'
+import { useState, useCallback } from 'react'
 import Link from 'next/link'
-import { useRouter, useSearchParams, usePathname } from 'next/navigation'
+import { useRouter } from 'next/navigation'
 import dynamic from 'next/dynamic'
 import { tokens } from '@/lib/design-tokens'
 import TopNav from '@/app/components/layout/TopNav'
@@ -12,6 +12,7 @@ import TraderTabs from '@/app/components/trader/TraderTabs'
 import { Box, Text } from '@/app/components/base'
 import { RankingSkeleton } from '@/app/components/ui/Skeleton'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
+import { useLinkedAccounts } from '@/lib/hooks/useLinkedAccounts'
 import OverviewPerformanceCard, { type ExtendedPerformance } from '@/app/components/trader/OverviewPerformanceCard'
 
 import type { ServerProfile, ProfileTabKey, TraderPageData } from './types'
@@ -30,27 +31,6 @@ const ExchangeLinksBar = dynamic(() => import('@/app/components/trader/ExchangeL
 const LinkedAccountTabs = dynamic(() => import('@/app/components/trader/LinkedAccountTabs'), { ssr: false })
 const AggregatedStats = dynamic(() => import('@/app/components/trader/AggregatedStats'), { ssr: false })
 const PostFeed = dynamic(() => import('@/app/components/post/PostFeed'), { ssr: false })
-
-interface LinkedAccountData {
-  id: string
-  platform: string
-  traderKey: string
-  handle: string | null
-  label: string | null
-  isPrimary: boolean
-  roi: number | null
-  pnl: number | null
-  arenaScore: number | null
-  winRate: number | null
-  maxDrawdown: number | null
-  rank: number | null
-}
-
-interface AggregatedData {
-  combinedPnl: number
-  bestRoi: { value: number; platform: string; traderKey: string } | null
-  weightedScore: number
-}
 
 interface TraderProfileViewProps {
   email: string | null
@@ -91,24 +71,9 @@ export default function TraderProfileView({
   const isOwn = !!(currentUserId && profile.id === currentUserId)
   const canView = isPro || isOwn
 
-  // Multi-account support — fetch linked accounts
-  const [linkedAccounts, setLinkedAccounts] = useState<LinkedAccountData[]>([])
-  const [aggregatedData, setAggregatedData] = useState<AggregatedData | null>(null)
+  // Multi-account support (SWR-based)
+  const { linkedAccounts, aggregatedData, hasMultipleAccounts } = useLinkedAccounts(traderProfile?.source, traderProfile?.trader_key)
   const [activeAccount, setActiveAccount] = useState<string>('all')
-  const hasMultipleAccounts = linkedAccounts.length >= 2
-
-  useEffect(() => {
-    if (!traderProfile?.source || !traderProfile?.trader_key) return
-    fetch(`/api/traders/aggregate?platform=${encodeURIComponent(traderProfile.source)}&trader_key=${encodeURIComponent(traderProfile.trader_key)}`)
-      .then(res => res.ok ? res.json() : null)
-      .then(result => {
-        if (result?.data?.totalAccounts >= 2) {
-          setLinkedAccounts(result.data.accounts)
-          setAggregatedData(result.data.aggregated)
-        }
-      })
-      .catch(() => {})
-  }, [traderProfile?.source, traderProfile?.trader_key])
 
   // Tabs — include 'posts' for own profile or claimed user
   type TraderTabKey = 'overview' | 'stats' | 'portfolio' | 'posts'

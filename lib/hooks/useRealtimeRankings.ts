@@ -3,7 +3,7 @@
 /**
  * Near-real-time rankings hook
  *
- * Polls /api/rankings/live every 30 seconds for fresh ranking data.
+ * Polls /api/rankings/live every 120 seconds for fresh ranking data.
  * Batches UI updates over a 2-second window to avoid excessive re-renders.
  * Adds a 'ranking-pulse' CSS class on data updates for visual feedback.
  */
@@ -32,7 +32,7 @@ interface UseRealtimeRankingsOptions {
   limit?: number
   /** Whether to enable polling (default: true) */
   enabled?: boolean
-  /** Poll interval in ms (default: 30000 = 30s) */
+  /** Poll interval in ms (default: 120000 = 120s) */
   pollInterval?: number
   /** Callback when ranking data changes */
   onUpdate?: (updates: RankingUpdate[]) => void
@@ -60,7 +60,7 @@ export function useRealtimeRankings({
   period = '90D',
   limit = 50,
   enabled = true,
-  pollInterval = 30_000,
+  pollInterval = 120_000,
   onUpdate,
 }: UseRealtimeRankingsOptions): UseRealtimeRankingsReturn {
   const [isLoading, setIsLoading] = useState(false)

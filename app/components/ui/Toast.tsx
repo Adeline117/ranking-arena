@@ -7,6 +7,11 @@ import { t } from '@/lib/i18n'
 
 type ToastType = 'success' | 'error' | 'warning' | 'info'
 
+interface ToastAction {
+  label: string
+  onClick: () => void
+}
+
 interface Toast {
   id: string
   message: string
@@ -15,6 +20,7 @@ interface Toast {
   createdAt: number
   txHash?: string
   chainId?: number
+  action?: ToastAction
 }
 
 // Block explorer URLs by chain ID
@@ -33,7 +39,7 @@ function getTxExplorerUrl(txHash: string, chainId?: number): string {
 }
 
 interface ToastContextType {
-  showToast: (message: string | { message?: string; code?: string; txHash?: string; chainId?: number } | unknown, type?: ToastType, duration?: number) => void
+  showToast: (message: string | { message?: string; code?: string; txHash?: string; chainId?: number; action?: ToastAction } | unknown, type?: ToastType, duration?: number) => void
   hideToast: (id: string) => void
 }
 
@@ -96,6 +102,11 @@ function ToastItem({ toast, onClose }: { toast: Toast; onClose: () => void }) {
   const startTimeRef = useRef(Date.now())
   const exitTimerRef = useRef<NodeJS.Timeout | null>(null)
 
+  // #25: Swipe-to-dismiss touch state
+  const touchStartXRef = useRef(0)
+  const touchDeltaRef = useRef(0)
+  const toastElRef = useRef<HTMLDivElement>(null)
+
   useEffect(() => {
     const interval = setInterval(() => {
       const elapsed = Date.now() - startTimeRef.current
@@ -124,9 +135,49 @@ function ToastItem({ toast, onClose }: { toast: Toast; onClose: () => void }) {
     exitTimerRef.current = setTimeout(onClose, 200)
   }
 
+  // #25: Touch event handlers for swipe-to-dismiss
+  const handleTouchStart = (e: React.TouchEvent) => {
+    touchStartXRef.current = e.touches[0].clientX
+    touchDeltaRef.current = 0
+  }
+  const handleTouchMove = (e: React.TouchEvent) => {
+    const dx = e.touches[0].clientX - touchStartXRef.current
+    touchDeltaRef.current = dx
+    const el = toastElRef.current
+    if (el) {
+      el.style.transform = `translateX(${dx}px)`
+      el.style.opacity = String(Math.max(0, 1 - Math.abs(dx) / 200))
+      el.style.transition = 'none'
+    }
+  }
+  const handleTouchEnd = () => {
+    const el = toastElRef.current
+    if (Math.abs(touchDeltaRef.current) > 80) {
+      // Dismiss
+      if (el) {
+        el.style.transition = 'transform 0.2s ease, opacity 0.2s ease'
+        el.style.transform = `translateX(${touchDeltaRef.current > 0 ? 300 : -300}px)`
+        el.style.opacity = '0'
+      }
+      setTimeout(onClose, 200)
+    } else {
+      // Snap back
+      if (el) {
+        el.style.transition = 'transform 0.2s ease, opacity 0.2s ease'
+        el.style.transform = 'translateX(0)'
+        el.style.opacity = '1'
+      }
+    }
+    touchDeltaRef.current = 0
+  }
+
   return (
     <div
+      ref={toastElRef}
       className={isExiting ? 'toast-exit' : 'toast-enter'}
+      onTouchStart={handleTouchStart}
+      onTouchMove={handleTouchMove}
+      onTouchEnd={handleTouchEnd}
       style={{
         display: 'flex',
         flexDirection: 'column',
@@ -202,7 +253,30 @@ function ToastItem({ toast, onClose }: { toast: Toast; onClose: () => void }) {
             </a>
           )}
         </div>
-        
+
+        {/* Action Button (optional undo / custom action) */}
+        {toast.action && (
+          <button
+            onClick={() => { toast.action!.onClick(); handleClose() }}
+            className="btn-press"
+            style={{
+              background: `${config.textColor}18`,
+              border: `1px solid ${config.textColor}40`,
+              color: config.textColor,
+              cursor: 'pointer',
+              padding: `${tokens.spacing[1]} ${tokens.spacing[3]}`,
+              fontSize: tokens.typography.fontSize.xs,
+              fontWeight: tokens.typography.fontWeight.bold,
+              borderRadius: tokens.radius.md,
+              whiteSpace: 'nowrap',
+              flexShrink: 0,
+              transition: 'background 150ms ease',
+            }}
+          >
+            {toast.action.label}
+          </button>
+        )}
+
         {/* Close Button */}
         <button
           onClick={handleClose}
@@ -291,17 +365,24 @@ export function ToastProvider({ children }: { children: ReactNode }) {
       finalMessage = String(message || t('unknownError'))
     }
 
-    // Extract txHash if present
+    // Extract txHash and action if present
     let txHash: string | undefined
     let chainId: number | undefined
+    let action: ToastAction | undefined
     if (message && typeof message === 'object') {
       const msgObj = message as Record<string, unknown>
       if (typeof msgObj.txHash === 'string') txHash = msgObj.txHash
       if (typeof msgObj.chainId === 'number') chainId = msgObj.chainId
+      if (msgObj.action && typeof msgObj.action === 'object') {
+        const a = msgObj.action as Record<string, unknown>
+        if (typeof a.label === 'string' && typeof a.onClick === 'function') {
+          action = { label: a.label, onClick: a.onClick as () => void }
+        }
+      }
     }
 
     const id = `toast-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
-    const newToast: Toast = { id, message: finalMessage, type, duration, createdAt: Date.now(), txHash, chainId }
+    const newToast: Toast = { id, message: finalMessage, type, duration, createdAt: Date.now(), txHash, chainId, action }
 
     setToasts((prev) => [...prev.slice(-4), newToast]) // Keep max 5 toasts
 
