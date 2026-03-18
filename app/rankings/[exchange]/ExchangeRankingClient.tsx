@@ -488,7 +488,7 @@ export default function ExchangeRankingClient({
         <div>
           {/* Card sort dropdown */}
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: tokens.spacing[3] }}>
-            <span style={{ fontSize: 12, color: tokens.colors.text.tertiary }}>{zh ? '排序' : 'Sort by'}:</span>
+            <span style={{ fontSize: 12, color: tokens.colors.text.tertiary }}>{t('sortBy')}:</span>
             <select
               value={cardSortKey}
               onChange={e => setCardSortKey(e.target.value as CardSortKey)}
