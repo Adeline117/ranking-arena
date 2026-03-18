@@ -525,7 +525,10 @@ export async function upsertTraders(
       dataLogger.error(`[upsert] trader_snapshots_v2 exception: ${err instanceof Error ? err.message : String(err)}`)
     }
 
-    saved += batch.length
+    // Only count as saved if at least the v1 snapshot write succeeded
+    if (consistency.trader_snapshots !== 'failed') {
+      saved += batch.length
+    }
   }
 
   // Log structured warning if any table had partial failures
