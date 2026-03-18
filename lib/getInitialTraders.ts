@@ -87,8 +87,19 @@ export async function fetchLeaderboardFromDB(
   try {
     // Use unified data layer to fetch leaderboard
     // Fetch a large pool (2000) for platform diversity filtering
-    // TODO (#P7): Consider SQL-level diversity filter (DISTINCT ON or ROW_NUMBER per platform)
-    // to reduce the 2000-row fetch to ~200 rows while maintaining cross-platform mix
+    // TODO (#P7): Reduce SSR data payload — replace the 2000-row JS-side diversity filter with a
+    // SQL-level approach. Create a Supabase RPC function:
+    //   CREATE FUNCTION get_diverse_leaderboard(p_period text, p_limit int, p_per_platform int)
+    //   RETURNS SETOF leaderboard_ranks AS $$
+    //     SELECT * FROM (
+    //       SELECT *, ROW_NUMBER() OVER (PARTITION BY source ORDER BY rank ASC) AS rn
+    //       FROM leaderboard_ranks
+    //       WHERE season_id = p_period AND arena_score > 10
+    //         AND (is_outlier IS NULL OR is_outlier = false)
+    //     ) sub WHERE rn <= p_per_platform ORDER BY rank ASC LIMIT p_limit;
+    //   $$ LANGUAGE sql STABLE;
+    // Then call: supabase.rpc('get_diverse_leaderboard', { p_period: '90D', p_limit: 50, p_per_platform: 5 })
+    // This reduces the payload from ~2000 rows (~400KB) to ~50 rows (~10KB).
     const { traders: unifiedTraders } = await Promise.race([
       getLeaderboard(supabase, {
         period: timeRange as '7D' | '30D' | '90D',
