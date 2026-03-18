@@ -55,13 +55,11 @@ export class BybitFuturesConnector extends BaseConnector {
     // Fallback: VPS Playwright scraper at port 3456
     let _rawLb: Record<string, unknown>
     try {
-      exchangeLogger.warn(`[bybit] discoverLeaderboard: trying direct API for ${window}`)
       _rawLb = await this.request<Record<string, unknown>>(
         `https://api2.bybit.com/fapi/beehive/public/v1/common/dynamic-leader-list?timeRange=${timeRange}&dataType=DATA_ROI&page=${page}&pageSize=${limit}`,
         { method: 'GET' }
       )
-    } catch (directErr) {
-      exchangeLogger.warn(`[bybit] direct API failed: ${directErr instanceof Error ? directErr.message : String(directErr)}`)
+    } catch {
       // Fallback: VPS Playwright scraper (renders full page, bypasses WAF)
       // NOT proxyViaVPS which just forwards HTTP and gets 403
       const vpsData = await this.fetchViaVPS<Record<string, unknown>>('/bybit/leaderboard', {
@@ -70,7 +68,6 @@ export class BybitFuturesConnector extends BaseConnector {
         pageSize: String(limit),
       }, 600000) // 10min — scraper queue can be backed up
       if (!vpsData) throw new Error('Both direct API and VPS scraper failed for bybit')
-      exchangeLogger.warn(`[bybit] VPS scraper returned ${typeof vpsData}, keys: ${Object.keys(vpsData).join(',')}`)
       _rawLb = vpsData
     }
     // Parse directly from raw response — skip Zod which defaults result.data=[] and hides leaderDetails
