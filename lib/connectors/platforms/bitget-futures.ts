@@ -32,6 +32,13 @@ const WINDOW_MAP: Record<Window, number> = {
   '90d': 3,
 }
 
+// VPS scraper POSTs to /traderList which expects string period names
+const VPS_PERIOD_MAP: Record<Window, string> = {
+  '7d': 'SEVEN_DAYS',
+  '30d': 'THIRTY_DAYS',
+  '90d': 'NINETY_DAYS',
+}
+
 export class BitgetFuturesConnector extends BaseConnector {
   readonly platform = 'bitget' as const
   readonly marketType = 'futures' as const
@@ -61,7 +68,7 @@ export class BitgetFuturesConnector extends BaseConnector {
       // Try VPS Playwright scraper first, fall back to direct API.
       let _rawLb: Record<string, unknown>
       const vpsData = await this.fetchViaVPS<Record<string, unknown>>('/bitget/leaderboard', {
-        period: timeRange, pageNo: String(currentPage), pageSize: String(limit),
+        period: VPS_PERIOD_MAP[window], pageNo: String(currentPage), pageSize: String(limit),
       }, 120000)
       if (vpsData) {
         _rawLb = vpsData
