@@ -1064,6 +1064,8 @@ const ja = {
     removeFromCompare: '比較から削除',
     inCompare: '比較中',
     viewComparison: '比較を表示',
+    rankTrendTooltip: 'Arena Score トレンド（30日）',
+    scoreTrend30d: 'スコアトレンド（30日）',
     portfolioSuggestions: 'ポートフォリオ提案',
     portfolioDesc: 'AIによる分散型トレーダーポートフォリオの提案',
     portfolioRiskPreference: 'リスク選好',
@@ -4225,6 +4227,30 @@ const ja = {
     numberFormatThousand: '千',
     numberFormatMillion: '百万',
     numberFormatBillion: '億',
+
+    // Sharing
+    copyShareLink: 'リンクをコピー',
+    shareOnX: 'X でシェア',
+
+    // Pricing Pro features
+    pricingProUnlockTitle: 'Pro で解放される機能',
+    pricingProDetailedAnalytics: '詳細なトレーダー分析とスコア内訳',
+    pricingProAlerts: 'リアルタイムトレーダーアラートと通知',
+    pricingProApiAccess: 'API アクセス（近日公開）',
+    pricingProCsvExport: 'CSV データエクスポート',
+    pricingProAdvancedFilters: '高度なマルチ条件フィルター',
+    pricingProTraderCompare: 'トレーダー並列比較',
+    pricingProPriority: '優先サポートと新機能の先行アクセス',
+
+    // Pricing FAQ
+    pricingFaqPaymentQ: 'どのような支払い方法がありますか？',
+    pricingFaqPaymentA: 'Stripe を通じて、主要なクレジットカード、Apple Pay、Google Pay に対応しています。',
+    pricingFaqTrialQ: '無料トライアルはありますか？',
+    pricingFaqTrialA: '無料版では基本的なランキングとコミュニティ機能をご利用いただけます。いつでもアップグレードして Pro を解放できます。',
+    pricingFaqSwitchQ: 'プランの切り替えはできますか？',
+    pricingFaqSwitchA: 'はい、月額と年額はいつでも切り替えられます。差額は日割り計算されます。',
+    pricingFaqApiQ: 'Pro には API アクセスが含まれますか？',
+    pricingFaqApiA: 'API アクセスは近日公開予定です。Pro メンバーが最初にアクセスできます。',
 
 } as const
 

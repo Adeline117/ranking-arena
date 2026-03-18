@@ -1123,6 +1123,8 @@ const ko = {
     removeFromCompare: '비교에서 삭제',
     inCompare: '비교 중',
     viewComparison: '비교 보기',
+    rankTrendTooltip: 'Arena Score 트렌드 (30일)',
+    scoreTrend30d: '점수 트렌드 (30일)',
     // Phase 3 - Portfolio Suggestions
     portfolioSuggestions: '포트폴리오 제안',
     portfolioDesc: 'AI 기반 다각화된 트레이더 포트폴리오 추천',
@@ -4513,6 +4515,30 @@ const ko = {
     numberFormatThousand: '천',
     numberFormatMillion: '백만',
     numberFormatBillion: '십억',
+
+    // Sharing
+    copyShareLink: '링크 복사',
+    shareOnX: 'X에 공유',
+
+    // Pricing Pro features
+    pricingProUnlockTitle: 'Pro 잠금 해제 기능',
+    pricingProDetailedAnalytics: '상세 트레이더 분석 및 점수 분석',
+    pricingProAlerts: '실시간 트레이더 알림 및 알림',
+    pricingProApiAccess: 'API 접근 (출시 예정)',
+    pricingProCsvExport: 'CSV 데이터 내보내기',
+    pricingProAdvancedFilters: '고급 다중 조건 필터',
+    pricingProTraderCompare: '트레이더 나란히 비교',
+    pricingProPriority: '우선 지원 및 신기능 조기 이용',
+
+    // Pricing FAQ
+    pricingFaqPaymentQ: '어떤 결제 수단을 지원하나요?',
+    pricingFaqPaymentA: 'Stripe를 통해 주요 신용카드, Apple Pay, Google Pay를 지원합니다.',
+    pricingFaqTrialQ: '무료 체험이 있나요?',
+    pricingFaqTrialA: '무료 버전에서 기본 순위와 커뮤니티 기능을 이용할 수 있습니다. 언제든 업그레이드하여 Pro를 잠금 해제하세요.',
+    pricingFaqSwitchQ: '요금제 변경이 가능한가요?',
+    pricingFaqSwitchA: '네, 월간과 연간 요금제를 언제든 전환할 수 있으며 차액은 일할 계산됩니다.',
+    pricingFaqApiQ: 'Pro에 API 접근이 포함되나요?',
+    pricingFaqApiA: 'API 접근은 곧 출시됩니다. Pro 회원이 가장 먼저 이용할 수 있습니다.',
 
 } as const
 
