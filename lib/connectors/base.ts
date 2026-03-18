@@ -361,41 +361,10 @@ export abstract class BaseConnector implements PlatformConnector {
       }
     }
 
-    // Auto-fallback: if error looks like geo-block (403/451) or WAF (HTML instead of JSON),
-    // try VPS routes before giving up — but only if we weren't already using a proxy
-    if (!this.config.proxyUrl && lastError) {
-      const isGeoBlock = lastError instanceof ConnectorError &&
-        (lastError.statusCode === 403 || lastError.statusCode === 451)
-      const isWAF = lastError instanceof ConnectorError &&
-        lastError.message.includes('WAF')
-
-      if (isGeoBlock || isWAF) {
-        exchangeLogger.info(
-          `[${this.platform}] Direct request failed with ${isGeoBlock ? 'geo-block' : 'WAF'}, trying VPS fallback for ${url}`
-        )
-
-        // Try 1: proxyViaVPS (forwards the full URL through VPS proxy)
-        try {
-          const vpsResult = await this.proxyViaVPS<T>(url, {
-            method: options?.method,
-            body: options?.body ? (typeof options.body === 'string' ? JSON.parse(options.body) : options.body) : undefined,
-            headers: options?.headers as Record<string, string> | undefined,
-          })
-          if (vpsResult !== null) return vpsResult
-        } catch {
-          // VPS proxy failed, continue to throw original error
-        }
-
-        // Try 2: fetchViaVPS with endpoint derived from URL path
-        try {
-          const urlObj = new URL(url)
-          const vpsResult = await this.fetchViaVPS<T>(urlObj.pathname)
-          if (vpsResult !== null) return vpsResult
-        } catch {
-          // VPS scraper also failed
-        }
-      }
-    }
+    // NOTE: Auto-fallback via VPS removed — connectors that need VPS have explicit
+    // try/catch with fetchViaVPS() or proxyViaVPS() in their discoverLeaderboard().
+    // Smart routing in request() interfered by returning WAF HTML as "success",
+    // preventing connectors from reaching their own VPS fallback logic.
 
     throw lastError || new ConnectorError('Max retries exceeded', this.platform, this.marketType)
   }
