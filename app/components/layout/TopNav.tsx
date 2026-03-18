@@ -47,11 +47,20 @@ export default function TopNav({ email = null }: { email?: string | null }) {
     handleSearch,
   } = useTopNavState()
 
-  // Prefetch common navigation targets for instant transitions
+  // Prefetch common navigation targets — deferred to avoid blocking initial hydration
   useEffect(() => {
-    router.prefetch('/rankings')
-    router.prefetch('/market')
-    router.prefetch('/pricing')
+    const prefetch = () => {
+      router.prefetch('/rankings')
+      router.prefetch('/market')
+      router.prefetch('/pricing')
+    }
+    if ('requestIdleCallback' in window) {
+      const id = requestIdleCallback(prefetch, { timeout: 5000 })
+      return () => cancelIdleCallback(id)
+    } else {
+      const id = setTimeout(prefetch, 2000)
+      return () => clearTimeout(id)
+    }
   }, [router])
 
   return (
