@@ -103,42 +103,39 @@ export class RedisRateLimiter implements RateLimiter {
         // 1. Check circuit breaker
         const circuitState = await redis.get<CircuitValue>(this.circuitKey)
         if (circuitState === 'open') {
-          // Circuit is open — still allow acquire but caller should check isCircuitOpen()
-          // This matches the in-memory behavior where acquire() doesn't check circuit
           break
         }
 
-        // 2. Check RPM (sliding window counter)
-        const currentRpm = await redis.get<number>(this.rpmKey) ?? 0
-        if (currentRpm >= this.rpm) {
-          attempts++
-          await sleep(200)
-          continue
-        }
-
-        // 3. Check concurrency
-        const currentConcurrency = await redis.get<number>(this.concurrencyKey) ?? 0
-        if (currentConcurrency >= this.maxConcurrency) {
-          attempts++
-          await sleep(200)
-          continue
-        }
-
-        // 4. Acquire: increment both counters atomically via pipeline
+        // 2. Atomic check+acquire via pipeline (prevents TOCTOU race)
+        // INCR first, then check the result — if over limit, DECR back
         const pipeline = redis.pipeline()
         pipeline.incr(this.rpmKey)
         pipeline.expire(this.rpmKey, 60)
         pipeline.incr(this.concurrencyKey)
-        pipeline.expire(this.concurrencyKey, 30) // Safety TTL: auto-expire stuck concurrency
-        await pipeline.exec()
+        pipeline.expire(this.concurrencyKey, 30)
+        const results = await pipeline.exec()
+
+        const newRpm = (results[0] as number) ?? 0
+        const newConcurrency = (results[2] as number) ?? 0
+
+        // Check if we exceeded limits — if so, roll back and retry
+        if (newRpm > this.rpm || newConcurrency > this.maxConcurrency) {
+          // Roll back the increments
+          const rollback = redis.pipeline()
+          if (newRpm > this.rpm) rollback.decr(this.rpmKey)
+          if (newConcurrency > this.maxConcurrency) rollback.decr(this.concurrencyKey)
+          await rollback.exec()
+          attempts++
+          await sleep(200)
+          continue
+        }
+
+        // Successfully acquired
         return
       }
 
-      // If we exhausted attempts but circuit was open, still increment concurrency
-      // so release() stays balanced
+      // Timed out — force acquire so release() stays balanced
       if (attempts >= maxAttempts) {
-        // Timed out waiting for capacity — increment concurrency anyway
-        // so the caller can proceed (and release will decrement)
         const pipeline = redis.pipeline()
         pipeline.incr(this.rpmKey)
         pipeline.expire(this.rpmKey, 60)
