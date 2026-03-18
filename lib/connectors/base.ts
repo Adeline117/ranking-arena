@@ -31,6 +31,15 @@ import * as cache from '../cache'
 import type { PlatformConnector, ConnectorConfig, RateLimiter } from './types'
 import { ConnectorError, DEFAULT_CONNECTOR_CONFIG, getConnectorConfigForPlatform } from './types'
 export { ConnectorError, DEFAULT_CONNECTOR_CONFIG, getConnectorConfigForPlatform }
+import {
+  retry,
+  circuitBreaker,
+  handleAll,
+  wrap,
+  ExponentialBackoff,
+  ConsecutiveBreaker,
+  BrokenCircuitError,
+} from 'cockatiel'
 
 // Scraper result cache TTL (30 minutes)
 const SCRAPER_CACHE_TTL = 30 * 60
@@ -185,6 +194,15 @@ export abstract class BaseConnector implements PlatformConnector {
 
   protected config: ConnectorConfig
   protected rateLimiter: RateLimiter | null = null
+
+  /**
+   * Cockatiel policy for VPS requests: retry with exponential backoff + circuit breaker.
+   * Shared across all connector instances — a global VPS health signal.
+   */
+  private static vpsPolicy = wrap(
+    retry(handleAll, { maxAttempts: 2, backoff: new ExponentialBackoff({ initialDelay: 3000 }) }),
+    circuitBreaker(handleAll, { halfOpenAfter: 60_000, breaker: new ConsecutiveBreaker(5) })
+  )
 
   constructor(config?: Partial<ConnectorConfig>) {
     this.config = { ...DEFAULT_CONNECTOR_CONFIG, ...config }
@@ -431,14 +449,9 @@ export abstract class BaseConnector implements PlatformConnector {
     const proxyHost = (process.env.VPS_PROXY_SG || process.env.VPS_PROXY_URL || vpsHost).replace(':3457', ':3456');
     const localScraperUrl = `http://localhost:3457${endpoint}${queryString ? `?${queryString}` : ''}`;
 
-    // Retry up to 2 attempts (initial + 1 retry with 3s backoff)
-    for (let attempt = 0; attempt < 2; attempt++) {
-      if (attempt > 0) {
-        await new Promise(r => setTimeout(r, 3000)); // 3s backoff before retry
-        exchangeLogger.info(`[VPS] ${this.platform} retry attempt ${attempt + 1} for ${endpoint}`)
-      }
-
-      try {
+    // Use cockatiel policy: retry with exponential backoff + circuit breaker
+    try {
+      const data = await BaseConnector.vpsPolicy.execute(async () => {
         // Strategy 1: Direct to scraper port 3457
         let response: Response | null = null;
         try {
@@ -453,43 +466,42 @@ export abstract class BaseConnector implements PlatformConnector {
 
         // Strategy 2: Route through proxy (3456) → scraper (localhost:3457)
         if (!response || !response.ok) {
-          try {
-            response = await fetch(proxyHost, {
-              method: 'POST',
-              headers: {
-                'Content-Type': 'application/json',
-                'X-Proxy-Key': vpsKey,
-              },
-              body: JSON.stringify({
-                url: localScraperUrl,
-                method: 'GET',
-                headers: { 'X-Proxy-Key': vpsKey },
-              }),
-              signal: AbortSignal.timeout(timeoutMs),
-            });
-          } catch {
-            // Both strategies failed this attempt
-          }
+          response = await fetch(proxyHost, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'X-Proxy-Key': vpsKey,
+            },
+            body: JSON.stringify({
+              url: localScraperUrl,
+              method: 'GET',
+              headers: { 'X-Proxy-Key': vpsKey },
+            }),
+            signal: AbortSignal.timeout(timeoutMs),
+          });
         }
 
-        if (response?.ok) {
-          const data = await response.json() as T;
-          // Cache successful scraper result for 90 min (was 30 min — leaderboard data changes slowly)
-          const dataObj = data as Record<string, unknown>
-          if (!dataObj?.error) {
-            cache.set(cacheKey, data, { ttl: 90 * 60 }).catch(() => {})
-          }
-          return data;
+        if (!response?.ok) {
+          throw new Error(`VPS returned ${response?.status ?? 'no response'}`);
         }
-      } catch (error) {
-        if (attempt === 0) {
-          exchangeLogger.warn(`[VPS] ${this.platform} attempt 1 failed: ${toError(error).message}`)
-        }
+
+        return await response.json() as T;
+      });
+
+      // Cache successful scraper result for 90 min
+      const dataObj = data as Record<string, unknown>
+      if (!dataObj?.error) {
+        cache.set(cacheKey, data, { ttl: 90 * 60 }).catch(() => {})
       }
+      return data;
+    } catch (error) {
+      if (error instanceof BrokenCircuitError) {
+        exchangeLogger.warn(`[VPS] ${this.platform} circuit breaker open, skipping ${endpoint}`)
+      } else {
+        exchangeLogger.warn(`[VPS] ${this.platform} failed for ${endpoint}: ${toError(error).message}`)
+      }
+      return null;
     }
-
-    console.warn(`[VPS] ${this.platform} scraper failed after 2 attempts for ${endpoint}`);
-    return null;
   }
 
   /**
