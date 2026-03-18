@@ -96,8 +96,11 @@ export class ToobitFuturesConnector extends BaseConnector {
         { period: String(dataType), pageSize: '50' },
         90000
       )
-      if (vpsData?.traders?.length) {
-        for (const entry of vpsData.traders) {
+      // Scraper returns: { code: 200, data: { list: [...] } } or legacy: { traders: [...] }
+      const vpsAny = vpsData as Record<string, unknown>
+      const traderList = (vpsAny?.traders || (vpsAny?.data as Record<string, unknown>)?.list || []) as ToobitTraderEntry[]
+      if (traderList.length) {
+        for (const entry of traderList) {
           const id = this.extractId(entry)
           if (!id || seen.has(id)) continue
           seen.add(id)
