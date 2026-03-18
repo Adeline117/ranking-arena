@@ -260,6 +260,11 @@ function RankingTableInner(props: {
     startTransition(() => { setCurrentPage(1) })
   }
 
+  const hasStyleData = React.useMemo(
+    () => traders.some(t => t.trading_style && t.trading_style !== 'unknown'),
+    [traders]
+  )
+
   const sortedTraders = React.useMemo(() => {
     let data = [...traders]
     if (debouncedSearch.trim()) {
@@ -373,7 +378,7 @@ function RankingTableInner(props: {
           onResetColumns={resetColumns}
           styleFilter={styleFilter}
           onStyleFilterChange={(s) => { setStyleFilter(s); setCurrentPage(1) }}
-          hasStyleData={traders.some(t => t.trading_style && t.trading_style !== 'unknown')}
+          hasStyleData={hasStyleData}
           traderTypeFilter={traderTypeFilter}
           onTraderTypeFilterChange={(type) => { setTraderTypeFilter(type); setCurrentPage(1) }}
           traders={traders}

@@ -28,7 +28,8 @@ export default function HomeHero() {
       supabase.from('trader_sources').select('*', { count: 'exact', head: true })
         .then(({ count }) => { if (count) { setTraderCount(formatCount(count)); setTraderNum(count) } })
 
-      supabase.from('leaderboard_ranks').select('source').eq('season_id', '90D').limit(10000)
+      // Only need unique source names (~30 platforms) — limit 200 instead of 10000
+      supabase.from('leaderboard_ranks').select('source').eq('season_id', '90D').limit(200)
         .then(({ data }) => {
           if (data) {
             const platforms = new Set(data.map((r: { source: string }) =>
