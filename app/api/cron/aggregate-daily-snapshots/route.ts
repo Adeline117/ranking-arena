@@ -179,7 +179,7 @@ export async function GET(request: NextRequest) {
       // Fetch recent daily returns (last 90 days) for these traders
       const { data: recentDaily } = await supabase
         .from('trader_daily_snapshots')
-        .select('platform, trader_key, daily_return_pct')
+        .select('platform, trader_key, daily_return_pct, roi')
         .in('platform', platforms)
         .gte('date', new Date(Date.now() - 90 * 24 * 3600 * 1000).toISOString().split('T')[0])
         .order('date', { ascending: true })
@@ -250,6 +250,57 @@ export async function GET(request: NextRequest) {
             v2Updated += v2Results.filter(r => !r.error).length
           }
           logger.info(`[aggregate] Synced Sharpe ratio to v2: ${v2Updated}/${sharpeUpdates.length}`)
+        }
+
+        // Step 4b: Compute max_drawdown from ROI history for traders that lack it
+        // MDD = max((peak - current) / peak) over ROI time series
+        const roiByTrader = new Map<string, number[]>()
+      for (const row of recentDaily) {
+        if (row.roi == null) continue
+        const key = `${row.platform}:${row.trader_key}`
+        if (!roiByTrader.has(key)) roiByTrader.set(key, [])
+        roiByTrader.get(key)!.push(parseFloat(String(row.roi)))
+      }
+
+      const mddUpdates: Array<{ source: string; source_trader_id: string; max_drawdown: number }> = []
+      for (const [key, rois] of roiByTrader) {
+        if (rois.length < 3) continue // need at least 3 data points
+        // Convert ROI% to equity curve: 100 * (1 + roi/100)
+        let peak = -Infinity
+        let maxDD = 0
+        for (const roi of rois) {
+          const equity = 100 * (1 + roi / 100)
+          if (equity > peak) peak = equity
+          if (peak > 0) {
+            const dd = ((peak - equity) / peak) * 100
+            if (dd > maxDD) maxDD = dd
+          }
+        }
+        if (maxDD > 0 && maxDD <= 100) {
+          const [platform, ...parts] = key.split(':')
+          mddUpdates.push({ source: platform, source_trader_id: parts.join(':'), max_drawdown: Math.round(maxDD * 100) / 100 })
+        }
+      }
+
+      if (mddUpdates.length > 0) {
+        let mddUpdated = 0
+        const MDD_BATCH = 50
+        for (let i = 0; i < mddUpdates.length; i += MDD_BATCH) {
+          const batch = mddUpdates.slice(i, i + MDD_BATCH)
+          // Update v2 snapshots where max_drawdown is null
+          const results = await Promise.all(
+            batch.map(upd =>
+              supabase
+                .from('trader_snapshots_v2')
+                .update({ max_drawdown: upd.max_drawdown })
+                .eq('platform', upd.source)
+                .eq('trader_key', upd.source_trader_id)
+                .is('max_drawdown', null)
+            )
+          )
+          mddUpdated += results.filter(r => !r.error).length
+        }
+        logger.info(`[aggregate] Computed MDD for ${mddUpdated}/${mddUpdates.length} traders from ROI history`)
         }
       }
     }
