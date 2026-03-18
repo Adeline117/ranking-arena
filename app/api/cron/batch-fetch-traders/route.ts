@@ -6,17 +6,20 @@
  *
  * Query params:
  *   group=a  → binance_futures, binance_spot (every 3h)
- *   group=a2 → bybit, bitget_futures, okx_futures (every 3h)
+ *   group=a2 → okx_futures (every 3h, via VPS proxy)
+ *   group=a3 → bybit (every 3h, VPS scraper)
+ *   group=a4 → bitget_futures (every 3h, VPS scraper)
  *   group=b  → hyperliquid, gmx (every 4h)
- *   group=c  → okx_futures (every 4h)
+ *   group=c  → bitunix (every 4h)
  *   group=d1 → gains, htx_futures (every 6h)
- *   group=d2 → EMPTY (dydx DEAD since 2026-03)
  *   group=e  → bitfinex, coinex, binance_web3, okx_web3 (every 6h)
- *   group=f  → mexc, bingx (every 6h)
+ *   group=f  → mexc (every 6h, VPS scraper)
+ *   group=f2 → bingx (every 6h, VPS scraper)
  *   group=h  → gateio, btcc (every 6h)
- *   group=g1 → drift, jupiter_perps (every 6h)
- *   group=g2 → web3_bot, toobit (every 6h)
- *   group=i  → etoro (every 6h)
+ *   group=g1 → drift, jupiter_perps, aevo (every 6h)
+ *   group=g2 → web3_bot, toobit, xt (every 6h)
+ *   group=i  → etoro, dydx (every 6h)
+ *   group=j  → weex (every 6h)
  *
  * Dead/blocked platforms:
  *   kucoin, mux, synthetix, bitmart,

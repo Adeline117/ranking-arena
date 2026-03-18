@@ -56,7 +56,7 @@ export const PLATFORM_ROUTES: Record<string, RouteConfig> = {
 
   // ─── GEO_BLOCKED (VPS proxy required) ────────────────────────
   binance_futures: { routes: ['vps_sg', 'vps_jp'],            notes: 'Direct 451 geo-blocked. VPS SG works via /friendly/ API.' },
-  okx_futures:     { routes: ['direct', 'vps_sg', 'vps_jp'],  notes: 'Direct works from hnd1 sometimes, VPS fallback' },
+  okx_futures:     { routes: ['vps_sg', 'direct', 'vps_jp'],  notes: 'Direct geo-blocked from Vercel hnd1 since 2026-03-14. VPS SG primary.' },
 
   // ─── WAF_PROTECTED (need Playwright) ─────────────────────────
   bybit:           { routes: ['scraper_sg', 'vps_jp'],        notes: 'Akamai WAF blocks all HTTP proxy. bybitglobal.com scraper.' },

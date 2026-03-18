@@ -115,26 +115,18 @@ async function ensureSystemUser(supabase: AnySupabase) {
       user_metadata: { handle: SYSTEM_HANDLE },
     } as Parameters<typeof supabase.auth.admin.createUser>[0])
     if (authErr && !authErr.message.includes('already')) {
-      console.warn('Could not create system auth user:', authErr.message)
+      throw new Error(`Cannot create system auth user (required for user_activities FK): ${authErr.message}`)
     }
   }
 
-  const { data: existing } = await supabase
-    .from('user_profiles')
-    .select('id')
-    .eq('id', SYSTEM_USER_ID)
-    .maybeSingle()
-
-  if (!existing) {
-    await supabase.from('user_profiles').upsert({
-      id: SYSTEM_USER_ID,
-      handle: SYSTEM_HANDLE,
-      display_name: 'Arena Bot',
-      avatar_url: 'https://www.arenafi.org/logo-symbol.png',
-      bio: 'Automated insights by Arena',
-      role: 'official',
-    }, { onConflict: 'id' })
-  }
+  await supabase.from('user_profiles').upsert({
+    id: SYSTEM_USER_ID,
+    handle: SYSTEM_HANDLE,
+    display_name: 'Arena Bot',
+    avatar_url: 'https://www.arenafi.org/logo-symbol.png',
+    bio: 'Automated insights by Arena',
+    role: 'official',
+  }, { onConflict: 'id' })
 }
 
 // ─── Post Generators ───
