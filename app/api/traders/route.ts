@@ -24,9 +24,10 @@ export const runtime = 'nodejs'
 export const preferredRegion = ['iad1', 'sfo1', 'hnd1']
 export const dynamic = 'force-dynamic'
 
-// In-memory cache for available sources (shared across requests, TTL 5 min)
+// In-memory cache for available sources (shared across requests, TTL 30 min)
 const availableSourcesCache = new Map<string, { sources: string[]; ts: number }>()
 const SOURCES_TTL = 30 * 60 * 1000 // 30 min — sources change only on cron runs
+const SOURCES_CACHE_MAX = 50 // prevent unbounded growth
 
 // Select only needed columns from leaderboard_ranks (avoid SELECT *)
 const LEADERBOARD_COLUMNS = 'source_trader_id, handle, roi, pnl, win_rate, max_drawdown, trades_count, followers, source, source_type, avatar_url, arena_score, rank, profitability_score, risk_control_score, execution_score, score_completeness, trading_style, avg_holding_hours, style_confidence, computed_at, season_id, sharpe_ratio, trader_type'
@@ -236,6 +237,9 @@ async function fetchFromLeaderboard(
       .limit(500)
     for (const r of (sourceRows || [])) allSourceSet.add((r as { source: string }).source)
     availableSources = [...allSourceSet].sort()
+    if (availableSourcesCache.size >= SOURCES_CACHE_MAX) {
+      availableSourcesCache.clear()
+    }
     availableSourcesCache.set(timeRange, { sources: availableSources, ts: Date.now() })
   }
 
