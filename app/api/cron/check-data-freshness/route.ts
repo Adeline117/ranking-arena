@@ -120,12 +120,12 @@ export async function buildFreshnessReport(): Promise<FreshnessReport> {
   // 检查每个平台的数据新鲜度
   for (const platform of platforms) {
     try {
-      // 查询该平台最新的快照记录
+      // 查询该平台最新的 v2 快照记录
       const { data, error } = await supabase
-        .from('trader_snapshots')
-        .select('captured_at')
-        .eq('source', platform)
-        .order('captured_at', { ascending: false })
+        .from('trader_snapshots_v2')
+        .select('created_at')
+        .eq('platform', platform)
+        .order('created_at', { ascending: false })
         .limit(1)
         .single()
 
@@ -135,11 +135,11 @@ export async function buildFreshnessReport(): Promise<FreshnessReport> {
 
       // 获取记录数量
       const { count } = await supabase
-        .from('trader_snapshots')
+        .from('trader_snapshots_v2')
         .select('id', { count: 'exact', head: true })
-        .eq('source', platform)
+        .eq('platform', platform)
 
-      const lastUpdate = data?.captured_at || null
+      const lastUpdate = data?.created_at || null
       let ageMs: number | null = null
       let ageHours: number | null = null
       let status: 'fresh' | 'stale' | 'critical' | 'unknown' = 'unknown'

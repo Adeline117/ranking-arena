@@ -139,8 +139,7 @@ export async function getLeaderboard(supabase: SupabaseClient, params: {
  *
  * Data resolution uses a fallback chain:
  * 1. leaderboard_ranks (precomputed, has all periods)
- * 2. trader_snapshots_v2 (Connector path, newer, more reliable)
- * 3. trader_snapshots v1 (legacy fallback)
+ * 2. trader_snapshots_v2 (Connector path, fallback)
  *
  * Enrichment data (equity curve, asset breakdown, positions, stats) comes from
  * dedicated tables that use v1 naming (source + source_trader_id).

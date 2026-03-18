@@ -130,27 +130,39 @@ export async function POST(req: Request) {
     // 2. 收集需要检查的交易员 ID
     const traderIds = [...new Set(alerts.map((a: AlertConfig) => a.trader_id))]
 
-    // 3. 获取这些交易员的当前数据
-    const { data: tradersData, error: tradersError } = await supabase
-      .from('trader_sources')
-      .select('source_trader_id, source, roi, roi_7d, roi_30d, pnl, pnl_7d, pnl_30d, max_drawdown, win_rate, arena_score')
+    // 3. 获取这些交易员的当前数据 (from leaderboard_ranks, 90D period)
+    const { data: lrData, error: tradersError } = await supabase
+      .from('leaderboard_ranks')
+      .select('source_trader_id, source, roi, pnl, max_drawdown, win_rate, arena_score, season_id')
       .in('source_trader_id', traderIds)
+      .eq('season_id', '90D')
 
     if (tradersError) {
       logger.error('[TraderAlerts Cron] 获取交易员数据Failed:', tradersError)
       return NextResponse.json({ ok: false, error: tradersError.message }, { status: 500 })
     }
 
-    // 4. 获取昨天的快照数据
+    // Map leaderboard_ranks data to TraderData shape for compatibility
+    const tradersData: TraderData[] | null = lrData?.map(lr => ({
+      source_trader_id: lr.source_trader_id,
+      source: lr.source,
+      roi: lr.roi ?? 0,
+      pnl: lr.pnl ?? undefined,
+      max_drawdown: lr.max_drawdown ?? undefined,
+      win_rate: lr.win_rate ?? undefined,
+      arena_score: lr.arena_score ?? undefined,
+    })) ?? null
+
+    // 4. 获取昨天的快照数据 (from trader_daily_snapshots)
     const yesterday = new Date()
     yesterday.setDate(yesterday.getDate() - 1)
     const yesterdayStr = yesterday.toISOString().split('T')[0]
 
     const { data: snapshots, error: snapshotsError } = await supabase
-      .from('trader_snapshots')
-      .select('trader_id, source, roi_90d, pnl_90d, max_drawdown, arena_score')
-      .in('trader_id', traderIds)
-      .eq('snapshot_date', yesterdayStr)
+      .from('trader_daily_snapshots')
+      .select('trader_key, platform, roi, pnl, max_drawdown')
+      .in('trader_key', traderIds)
+      .eq('date', yesterdayStr)
       .limit(MAX_ALERTS_PER_RUN)
 
     if (snapshotsError) {
@@ -158,11 +170,27 @@ export async function POST(req: Request) {
       // 继续执行，可能是第一次运行
     }
 
+    // Also get arena_score from leaderboard_ranks for comparison (already fetched above as lrData)
+    // Build a map of arena scores from yesterday's daily snapshots + current LR data
+    const arenaScoreMap = new Map<string, number>()
+    if (lrData) {
+      for (const lr of lrData) {
+        arenaScoreMap.set(`${lr.source_trader_id}_${lr.source}`, lr.arena_score ?? 0)
+      }
+    }
+
     // 创建快照映射
     const snapshotMap = new Map<string, Snapshot>()
     if (snapshots) {
       for (const snap of snapshots) {
-        snapshotMap.set(`${snap.trader_id}_${snap.source}`, snap)
+        snapshotMap.set(`${snap.trader_key}_${snap.platform}`, {
+          trader_id: snap.trader_key,
+          source: snap.platform,
+          roi_90d: snap.roi ?? undefined,
+          pnl_90d: snap.pnl ?? undefined,
+          max_drawdown: snap.max_drawdown ?? undefined,
+          arena_score: undefined, // daily snapshots don't have arena_score
+        })
       }
     }
 
@@ -174,29 +202,24 @@ export async function POST(req: Request) {
       }
     }
 
-    // 5. 保存今天的快照
+    // 5. Save today's snapshot to trader_daily_snapshots for tomorrow's comparison
     const today = new Date().toISOString().split('T')[0]
     const snapshotsToInsert = tradersData?.map((t: TraderData) => ({
-      trader_id: t.source_trader_id,
-      source: t.source,
-      roi_7d: t.roi_7d,
-      roi_30d: t.roi_30d,
-      roi_90d: t.roi,
-      pnl_7d: t.pnl_7d,
-      pnl_30d: t.pnl_30d,
-      pnl_90d: t.pnl,
-      max_drawdown: t.max_drawdown,
-      win_rate: t.win_rate,
-      arena_score: t.arena_score,
-      snapshot_date: today,
+      platform: t.source,
+      trader_key: t.source_trader_id,
+      date: today,
+      roi: t.roi,
+      pnl: t.pnl ?? null,
+      max_drawdown: t.max_drawdown ?? null,
+      win_rate: t.win_rate ?? null,
     })) || []
 
     if (snapshotsToInsert.length > 0) {
       const { error: insertError } = await supabase
-        .from('trader_snapshots')
-        .upsert(snapshotsToInsert, { 
-          onConflict: 'trader_id,source,snapshot_date',
-          ignoreDuplicates: true 
+        .from('trader_daily_snapshots')
+        .upsert(snapshotsToInsert, {
+          onConflict: 'platform,trader_key,date',
+          ignoreDuplicates: true
         })
 
       if (insertError) {

@@ -1,7 +1,7 @@
 /**
  * @deprecated Use `lib/data/unified.ts` instead. This file contains legacy trader query
- * functions that directly query trader_snapshots v1. They are still used internally by
- * trader-transforms.ts but should not be used in new code.
+ * functions that are still used internally by trader-transforms.ts but should not be
+ * used in new code. Migrated from trader_snapshots v1 to v2 + leaderboard_ranks.
  *
  * Trader query functions - specific database queries for trader data.
  * Extracted from trader.ts to reduce file size.
@@ -596,87 +596,64 @@ export async function getSimilarTraders(handle: string, limit: number = 6): Prom
     const source = await findTraderAcrossSources(handle)
     if (!source) return []
 
-    const { data: latestSnapshot } = await supabase
-      .from('trader_snapshots')
-      .select('captured_at, roi')
+    // Get current trader's ROI from leaderboard_ranks
+    const { data: currentLR } = await supabase
+      .from('leaderboard_ranks')
+      .select('roi, source_trader_id')
       .eq('source', source.source)
       .eq('source_trader_id', source.source_trader_id)
       .eq('season_id', '90D')
-      .order('captured_at', { ascending: false })
       .limit(1)
       .maybeSingle()
 
-    if (!latestSnapshot) return []
+    if (!currentLR) return []
 
-    // Use roi from latestSnapshot directly — no need for a second query
-    const currentRoi = latestSnapshot.roi ?? 0
+    const currentRoi = currentLR.roi ?? 0
     const roiRange = Math.max(Math.abs(currentRoi) * 0.3, 20)
     const minRoi = currentRoi - roiRange
     const maxRoi = currentRoi + roiRange
 
-    let { data: snapshots } = await supabase
-      .from('trader_snapshots')
-      .select('source_trader_id, roi')
+    // Find similar traders by ROI range from leaderboard_ranks
+    let { data: similarRows } = await supabase
+      .from('leaderboard_ranks')
+      .select('source_trader_id, roi, handle, avatar_url')
       .eq('source', source.source)
       .eq('season_id', '90D')
-      .eq('captured_at', latestSnapshot.captured_at)
       .neq('source_trader_id', source.source_trader_id)
       .gte('roi', minRoi)
       .lte('roi', maxRoi)
       .limit(50)
 
-    if (!snapshots || snapshots.length === 0) {
+    if (!similarRows || similarRows.length === 0) {
       const { data: fallback } = await supabase
-        .from('trader_snapshots')
-        .select('source_trader_id, roi')
+        .from('leaderboard_ranks')
+        .select('source_trader_id, roi, handle, avatar_url')
         .eq('source', source.source)
         .eq('season_id', '90D')
-        .eq('captured_at', latestSnapshot.captured_at)
         .neq('source_trader_id', source.source_trader_id)
         .order('roi', { ascending: false })
         .limit(limit)
 
-      snapshots = fallback
+      similarRows = fallback
     }
 
-    if (!snapshots || snapshots.length === 0) return []
+    if (!similarRows || similarRows.length === 0) return []
 
-    const sortedSnapshots = snapshots
+    const sortedRows = similarRows
       .map(s => ({ ...s, diff: Math.abs((s.roi || 0) - currentRoi) }))
       .sort((a, b) => a.diff - b.diff)
       .slice(0, limit)
 
-    const traderIds = sortedSnapshots.map(s => s.source_trader_id)
+    const traderIds = sortedRows.map(s => s.source_trader_id)
+    const followersMap = await getTraderArenaFollowersCountBatch(supabase, traderIds)
 
-    const [sourcesResult, followersMap] = await Promise.all([
-      supabase
-        .from('trader_sources')
-        .select('source_trader_id, handle, profile_url')
-        .eq('source', source.source)
-        .in('source_trader_id', traderIds),
-      getTraderArenaFollowersCountBatch(supabase, traderIds),
-    ])
-
-    const handleMap = new Map<string, { handle: string; profile_url: string | null }>()
-    if (sourcesResult.data) {
-      sourcesResult.data.forEach((s: { source_trader_id: string; handle: string | null; profile_url: string | null }) => {
-        handleMap.set(s.source_trader_id, {
-          handle: s.handle || s.source_trader_id,
-          profile_url: s.profile_url,
-        })
-      })
-    }
-
-    return sortedSnapshots.map(s => {
-      const info = handleMap.get(s.source_trader_id) || { handle: s.source_trader_id, profile_url: null }
-      return {
-        handle: info.handle,
-        id: s.source_trader_id,
-        followers: followersMap.get(s.source_trader_id) || 0,
-        avatar_url: info.profile_url || undefined,
-        source: source.source,
-      }
-    })
+    return sortedRows.map(s => ({
+      handle: s.handle || s.source_trader_id,
+      id: s.source_trader_id,
+      followers: followersMap.get(s.source_trader_id) || 0,
+      avatar_url: s.avatar_url || undefined,
+      source: source.source,
+    }))
   } catch (error) {
     const logger = createLogger('trader-data')
     logger.error('Error fetching similar traders', { error, handle })
