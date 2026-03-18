@@ -1,6 +1,8 @@
 import type { Metadata } from 'next'
 import { redirect } from 'next/navigation'
 
+export const revalidate = 600 // ISR: 10 min
+
 const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://www.arenafi.org'
 
 export const metadata: Metadata = {

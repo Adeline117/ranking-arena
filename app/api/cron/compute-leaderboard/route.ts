@@ -230,6 +230,16 @@ export async function GET(request: NextRequest) {
     // Fire-and-forget: warm Redis cache with top 100 for each season
     fireAndForget(warmupLeaderboardCache(supabase), 'warmup-leaderboard-cache')
 
+    // Fire-and-forget: revalidate top exchange ranking pages so ISR picks up fresh data
+    fireAndForget((async () => {
+      const { revalidatePath } = await import('next/cache')
+      const topExchanges = ['binance_futures', 'bybit', 'hyperliquid', 'okx_futures', 'bitget_futures']
+      for (const exchange of topExchanges) {
+        revalidatePath(`/rankings/${exchange}`)
+      }
+      revalidatePath('/') // homepage
+    })(), 'revalidate-ranking-pages')
+
     const totalRanked = Object.values(stats.seasons).reduce((a, b) => a + b, 0)
     if (warnings.length > 0) {
       await plog.error(new Error(warnings.join('; ')), { stats, rolledBack })

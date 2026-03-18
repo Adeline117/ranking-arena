@@ -33,7 +33,7 @@ import { SOURCE_TYPE_MAP } from '@/lib/constants/exchanges'
 import { withPublic } from '@/lib/api/middleware'
 
 export const dynamic = 'force-dynamic'
-export const revalidate = 60  // ISR: revalidate every 60 seconds
+export const revalidate = 600  // ISR: revalidate every 10 minutes (data refreshes via cron every 30 min)
 
 export const GET = withPublic(async ({ supabase, request }) => {
   const { searchParams } = new URL(request.url)
