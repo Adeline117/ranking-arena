@@ -16,6 +16,7 @@ import { logger, fireAndForget } from '@/lib/logger'
 import { getSupabaseAdmin } from '@/lib/supabase/server'
 import { sendAlert } from '@/lib/alerts/send-alert'
 import { syncPipelineLog } from '@/lib/analytics/dual-write'
+import { pingHealthcheck } from '@/lib/utils/healthcheck'
 
 function getClient() {
   return getSupabaseAdmin()
@@ -29,8 +30,30 @@ export interface PipelineLogHandle {
 }
 
 export class PipelineLogger {
+  /** Critical cron jobs that should ping healthchecks.io dead man's switch */
+  private static readonly CRITICAL_JOBS = new Set([
+    'batch-fetch-traders', 'compute-leaderboard',
+    'aggregate-daily-snapshots', 'batch-enrich', 'check-data-freshness',
+  ])
+
+  /** Derive healthcheck slug from job name (strip group suffixes like -a, -90D) */
+  private static getHealthcheckSlug(jobName: string): string | null {
+    for (const critical of this.CRITICAL_JOBS) {
+      if (jobName === critical || jobName.startsWith(`${critical}-`)) {
+        return critical
+      }
+    }
+    return null
+  }
+
   static async start(jobName: string, metadata?: Record<string, unknown>): Promise<PipelineLogHandle> {
     const client = getClient()
+
+    // Ping healthchecks.io start signal for critical jobs
+    const hcSlug = this.getHealthcheckSlug(jobName)
+    if (hcSlug) {
+      pingHealthcheck(hcSlug, 'start').catch(() => {})
+    }
 
     const { data, error } = await client
       .from('pipeline_logs')
@@ -72,6 +95,8 @@ export class PipelineLogger {
             ...(meta ? { metadata: { ...metadata, ...meta, duration_ms: durationMs } } : { metadata: { ...metadata, duration_ms: durationMs } }),
           })
           .eq('id', logId)
+        // Ping healthchecks.io success (fire-and-forget)
+        if (hcSlug) pingHealthcheck(hcSlug, 'success').catch(() => {})
         // Dual-write to ClickHouse (fire-and-forget)
         fireAndForget(
           syncPipelineLog({
@@ -96,6 +121,8 @@ export class PipelineLogger {
             ...(meta ? { metadata: { ...metadata, ...meta, duration_ms: durationMs } } : { metadata: { ...metadata, duration_ms: durationMs } }),
           })
           .eq('id', logId)
+        // Ping healthchecks.io failure (fire-and-forget)
+        if (hcSlug) pingHealthcheck(hcSlug, 'fail').catch(() => {})
         // Dual-write to ClickHouse (fire-and-forget)
         fireAndForget(
           syncPipelineLog({
@@ -118,6 +145,8 @@ export class PipelineLogger {
             ...(meta ? { metadata: { ...metadata, ...meta, duration_ms: durationMs } } : { metadata: { ...metadata, duration_ms: durationMs } }),
           })
           .eq('id', logId)
+        // Ping healthchecks.io failure on timeout (fire-and-forget)
+        if (hcSlug) pingHealthcheck(hcSlug, 'fail').catch(() => {})
         // Dual-write to ClickHouse (fire-and-forget)
         fireAndForget(
           syncPipelineLog({
