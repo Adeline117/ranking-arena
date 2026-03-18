@@ -169,12 +169,12 @@ export async function GET(request: NextRequest) {
         const traderKeys = [...new Set(missingScores.map(r => r.trader_key))]
         const { data: ranks } = await supabase
           .from('leaderboard_ranks')
-          .select('source, trader_key, period, arena_score')
-          .in('trader_key', traderKeys.slice(0, 500))
+          .select('source, source_trader_id, season_id, arena_score')
+          .in('source_trader_id', traderKeys.slice(0, 500))
           .not('arena_score', 'is', null)
 
         if (ranks && ranks.length > 0) {
-          const scoreMap = new Map(ranks.map(r => [`${r.source}:${r.trader_key}:${r.period}`, r.arena_score]))
+          const scoreMap = new Map(ranks.map(r => [`${r.source}:${r.source_trader_id}:${r.season_id}`, r.arena_score]))
           // Batch updates instead of N+1 individual queries
           const updates: { id: string; arena_score: number }[] = []
           for (const row of missingScores) {
