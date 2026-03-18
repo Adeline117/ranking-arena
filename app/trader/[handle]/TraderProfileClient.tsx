@@ -31,6 +31,8 @@ import {
   combineSchemas,
 } from '@/lib/seo'
 
+const DailyReturnsChart = dynamic(() => import('@/app/components/trader/charts/DailyReturnsChart').then(m => ({ default: m.DailyReturnsChart })), { ssr: false })
+const DrawdownChart = dynamic(() => import('@/app/components/trader/charts/DrawdownChart').then(m => ({ default: m.DrawdownChart })), { ssr: false })
 const EquityCurveSection = dynamic(() => import('@/app/components/trader/stats/components/EquityCurveSection').then(m => ({ default: m.EquityCurveSection })), {
   ssr: false,
   loading: () => (
@@ -44,6 +46,7 @@ const EquityCurveSection = dynamic(() => import('@/app/components/trader/stats/c
 })
 const TradingStyleRadar = dynamic(() => import('@/app/components/trader/TradingStyleRadar'), { ssr: false })
 const SimilarTraders = dynamic(() => import('@/app/components/trader/SimilarTraders'), { ssr: false })
+import { RankSparkline } from '@/app/components/ranking/RankSparkline'
 const ClaimTraderButton = dynamic(() => import('@/app/components/trader/ClaimTraderButton'), { ssr: false })
 const VerifiedTraderEditor = dynamic(() => import('@/app/components/trader/VerifiedTraderEditor'), { ssr: false })
 const StatsPage = dynamic(() => import('@/app/components/trader/stats/StatsPage'), {
@@ -243,6 +246,17 @@ export default function TraderProfileClient({ data, serverTraderData, claimedUse
     }
   )
 
+  // Rank history for sparkline (7-day trajectory)
+  const rankHistoryUrl = effectivePlatform && effectiveHandle
+    ? `/api/trader/rank-history?platform=${encodeURIComponent(effectivePlatform)}&trader_key=${encodeURIComponent(data.source_trader_id)}&period=90D&days=7`
+    : null
+  const { data: rankHistoryData } = useSWR<{ history: { date: string; rank: number; arena_score: number }[] }>(
+    rankHistoryUrl,
+    traderFetcher,
+    { revalidateOnFocus: false, dedupingInterval: 60000, errorRetryCount: 1 }
+  )
+  const rankSparklineData = rankHistoryData?.history?.map(h => ({ rank: h.rank })) ?? []
+
   const traderProfile = traderData?.profile ?? null
   const traderPerformance = traderData?.performance ?? null
   const traderStats = traderData?.stats ?? null
@@ -388,6 +402,22 @@ export default function TraderProfileClient({ data, serverTraderData, claimedUse
         />
         </div>
 
+        {/* Rank sparkline — 7-day rank trajectory */}
+        {rankSparklineData.length >= 2 && (
+          <Box style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: tokens.spacing[2],
+            marginTop: tokens.spacing[2],
+            marginBottom: tokens.spacing[1],
+          }}>
+            <Text size="xs" color="tertiary">
+              {t('rankTrend') || 'Rank trend (7d)'}
+            </Text>
+            <RankSparkline data={rankSparklineData} width={80} height={24} />
+          </Box>
+        )}
+
         {/* Multi-account tabs (only shown when user has 2+ linked accounts) */}
         {hasMultipleAccounts && (
           <LinkedAccountTabs
@@ -498,6 +528,53 @@ export default function TraderProfileClient({ data, serverTraderData, claimedUse
                     delay={0}
                   />
                 )}
+
+                {/* Drawdown Chart — computed from equity curve */}
+                {traderEquityCurve?.['90D'] && traderEquityCurve['90D'].length > 2 && (
+                  <Box
+                    className="glass-card"
+                    style={{
+                      padding: tokens.spacing[5],
+                      background: tokens.colors.bg.secondary,
+                      borderRadius: tokens.radius.xl,
+                      border: `1px solid ${tokens.colors.border.primary}60`,
+                    }}
+                  >
+                    <Text size="sm" weight="bold" style={{ color: 'var(--color-text-secondary)', marginBottom: tokens.spacing[3] }}>
+                      {t('drawdownChart') || 'Drawdown'}
+                    </Text>
+                    <DrawdownChart equityCurve={traderEquityCurve['90D']} />
+                  </Box>
+                )}
+
+                {/* Daily Returns Distribution — computed from equity curve */}
+                {(() => {
+                  const curve = traderEquityCurve?.['90D']
+                  if (!curve || curve.length <= 5) return null
+                  const dailyReturns = curve.slice(1).map((point, i) => ({
+                    date: point.date,
+                    returnPct: curve[i].roi !== 0
+                      ? ((point.roi - curve[i].roi) / Math.abs(curve[i].roi)) * 100
+                      : 0,
+                  }))
+                  if (dailyReturns.length <= 5) return null
+                  return (
+                    <Box
+                      className="glass-card"
+                      style={{
+                        padding: tokens.spacing[5],
+                        background: tokens.colors.bg.secondary,
+                        borderRadius: tokens.radius.xl,
+                        border: `1px solid ${tokens.colors.border.primary}60`,
+                      }}
+                    >
+                      <Text size="sm" weight="bold" style={{ color: 'var(--color-text-secondary)', marginBottom: tokens.spacing[3] }}>
+                        {t('dailyReturnsDistribution') || 'Daily Returns Distribution'}
+                      </Text>
+                      <DailyReturnsChart data={dailyReturns} />
+                    </Box>
+                  )
+                })()}
 
                 {/* Advanced Metrics (Sortino, Calmar, Profit Factor) */}
                 {(data.sortino_ratio != null || data.calmar_ratio != null || data.profit_factor != null) && (

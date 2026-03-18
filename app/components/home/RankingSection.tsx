@@ -1,5 +1,7 @@
 'use client'
 
+import { useState, useEffect } from 'react'
+import dynamic from 'next/dynamic'
 import { Box } from '../base'
 import { RankingTable, type Trader } from '../ranking/RankingTable'
 import type { TimeRange } from './hooks/useTraderData'
@@ -10,6 +12,8 @@ import ProUpgradeCTA from './ProUpgradeCTA'
 import RankingFooter from './RankingFooter'
 import TimeRangeSelector from './TimeRangeSelector'
 import { useRankingFilters, FREE_LEADERBOARD_LIMIT } from './useRankingFilters'
+
+const LeaderboardChangelog = dynamic(() => import('../ranking/LeaderboardChangelog'), { ssr: false })
 
 interface RankingSectionProps {
   traders: Trader[]
@@ -80,6 +84,15 @@ export default function RankingSection({
     router,
   } = useRankingFilters({ traders, activeTimeRange })
 
+  // Leaderboard movers (risers/fallers)
+  const [movers, setMovers] = useState<{ risers: Array<{ platform: string; trader_key: string; rank: number; arena_score: number | null; rankChange: number; handle: string | null; avatar_url: string | null }>; fallers: Array<{ platform: string; trader_key: string; rank: number; arena_score: number | null; rankChange: number; handle: string | null; avatar_url: string | null }> }>({ risers: [], fallers: [] })
+  useEffect(() => {
+    fetch('/api/rankings/movers')
+      .then(r => r.ok ? r.json() : null)
+      .then(data => { if (data?.risers || data?.fallers) setMovers({ risers: data.risers || [], fallers: data.fallers || [] }) })
+      .catch(() => {})
+  }, [])
+
   return (
     <Box
       as="section"
@@ -144,6 +157,13 @@ export default function RankingSection({
         onPageChange={handlePageChange}
         onSearchChange={handleSearchChange}
       />
+
+      {/* Leaderboard movers — risers & fallers */}
+      {(movers.risers.length > 0 || movers.fallers.length > 0) && (
+        <Box style={{ marginTop: 16, marginBottom: 16 }}>
+          <LeaderboardChangelog risers={movers.risers} fallers={movers.fallers} />
+        </Box>
+      )}
 
       {!isPro && !loading && advancedFiltered.length > FREE_LEADERBOARD_LIMIT && (
         <ProUpgradeCTA
