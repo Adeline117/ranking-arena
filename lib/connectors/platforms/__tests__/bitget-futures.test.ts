@@ -126,8 +126,8 @@ describe('BitgetFuturesConnector', () => {
       await connector.discoverLeaderboard('30d')
 
       const url = mockFetch.mock.calls[0][0]
-      // VPS URL uses period=2 (WINDOW_MAP['30d'] = 2)
-      expect(url).toContain('period=2')
+      // VPS URL uses string period names (VPS_PERIOD_MAP['30d'] = THIRTY_DAYS)
+      expect(url).toContain('period=THIRTY_DAYS')
     })
 
     test('VPS call contains period=1 for 7d window', async () => {
@@ -137,7 +137,7 @@ describe('BitgetFuturesConnector', () => {
       await connector.discoverLeaderboard('7d')
 
       const url = mockFetch.mock.calls[0][0]
-      expect(url).toContain('period=1')
+      expect(url).toContain('period=SEVEN_DAYS')
     })
 
     test('VPS call contains period=3 for 90d window', async () => {
@@ -147,7 +147,7 @@ describe('BitgetFuturesConnector', () => {
       await connector.discoverLeaderboard('90d')
 
       const url = mockFetch.mock.calls[0][0]
-      expect(url).toContain('period=3')
+      expect(url).toContain('period=NINETY_DAYS')
     })
 
     test('throws on network error', async () => {
