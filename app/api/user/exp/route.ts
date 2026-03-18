@@ -34,9 +34,10 @@ export async function GET(request: NextRequest) {
       .single()
 
     if (!levelData) {
+      // Lazy initialization — safe with onConflict for concurrent requests
       const { data: newLevel } = await supabase
         .from('user_levels')
-        .insert({ user_id: user.id, exp: 0, level: 1 })
+        .upsert({ user_id: user.id, exp: 0, level: 1 }, { onConflict: 'user_id' })
         .select()
         .single()
       levelData = newLevel
