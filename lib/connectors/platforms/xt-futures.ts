@@ -76,9 +76,12 @@ export class XtFuturesConnector extends BaseConnector {
         { pageSize: String(limit) },
         90000
       )
-      // Response: { traders: [{ sotType: "INCOME_RATE", items: [...] }, ...] }
-      if (vpsData?.traders) {
-        for (const group of vpsData.traders) {
+      // Scraper returns: { returnCode: 0, result: [{ sotType: "INCOME_RATE", items: [...] }] }
+      // or legacy: { traders: [...] }
+      const vpsAny = vpsData as Record<string, unknown>
+      const groups = (vpsAny?.result || vpsAny?.traders || []) as Array<{ sotType?: string; items?: XTLeaderboardEntry[] }>
+      if (Array.isArray(groups)) {
+        for (const group of groups) {
           const items = group?.items || []
           for (const item of items) {
             const uid = String(item.accountId || item.uid || item.leaderUid || '')
