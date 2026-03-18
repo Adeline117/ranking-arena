@@ -35,6 +35,7 @@ interface MeiliResponse {
   query: string
   processingTimeMs: number
   estimatedTotalHits: number
+  facetDistribution?: Record<string, Record<string, number>>
 }
 
 /**
@@ -79,6 +80,7 @@ export async function searchTradersMeili(
         q: query,
         limit,
         filter: filters.join(' AND '),
+        facets: ['platform', 'trader_type', 'season_id'],
         attributesToRetrieve: ['id', 'handle', 'platform', 'platform_name', 'roi', 'pnl', 'arena_score', 'win_rate', 'rank', 'trader_type', 'avatar_url', 'season_id'],
         attributesToHighlight: ['handle'],
         highlightPreTag: '<mark>',

@@ -143,6 +143,46 @@ export const ARENA_CONFIG = {
 // ============================================
 
 /**
+ * Wilson Score Lower Bound — penalizes small sample sizes.
+ * Used instead of raw confidence multiplier tiers for more granular
+ * confidence scoring based on data completeness.
+ * Reference: https://www.evanmiller.org/how-not-to-sort-by-average-rating.html
+ *
+ * @param positiveSignals Number of available (non-null) metrics
+ * @param totalSignals Total possible metrics
+ * @param z Z-score for confidence interval (default 1.96 = 95%)
+ */
+export function wilsonLowerBound(positiveSignals: number, totalSignals: number, z: number = 1.96): number {
+  if (totalSignals === 0) return 0
+  const phat = positiveSignals / totalSignals
+  const denominator = 1 + z * z / totalSignals
+  const centre = phat + z * z / (2 * totalSignals)
+  const spread = z * Math.sqrt((phat * (1 - phat) + z * z / (4 * totalSignals)) / totalSignals)
+  return (centre - spread) / denominator
+}
+
+/**
+ * Compute Wilson-based confidence multiplier from metric availability.
+ * Replaces the hard-coded CONFIDENCE_MULTIPLIER tiers with a smooth curve.
+ *
+ * Checks 5 signals: roi, pnl, maxDrawdown, winRate, sharpeRatio.
+ * Output range: [0.3, 1.0] — never fully zeros out a score.
+ */
+export function wilsonConfidenceMultiplier(
+  roi: number | null | undefined,
+  pnl: number | null | undefined,
+  maxDrawdown: number | null | undefined,
+  winRate: number | null | undefined,
+  sharpeRatio: number | null | undefined,
+): number {
+  const signals = [roi, pnl, maxDrawdown, winRate, sharpeRatio]
+  const available = signals.filter(v => v != null).length
+  const wilson = wilsonLowerBound(available, 5, 1.96)
+  // Blend: minimum 0.3 (never fully zero out), max 1.0
+  return 0.3 + 0.7 * wilson
+}
+
+/**
  * 将值限制在 [min, max] 范围内
  */
 export function clip(value: number, min: number, max: number): number {
@@ -573,7 +613,10 @@ export function calculateArenaScoreV3Legacy(
 
   const rawTotal = returnScore + pnlScore + drawdownScore + stabilityScore +
                    alphaScore + riskAdjustedScore + consistencyScore
-  const confidenceMultiplier = ARENA_CONFIG.CONFIDENCE_MULTIPLIER[scoreConfidence]
+  // Wilson Score confidence: smooth curve based on metric availability (replaces hard-coded tiers)
+  const confidenceMultiplier = wilsonConfidenceMultiplier(
+    roi, pnl, maxDrawdown, winRate, sortinoRatio ?? calmarRatio
+  )
   const totalScore = clip(rawTotal * confidenceMultiplier, 0, 100)
 
   return {
