@@ -1,5 +1,7 @@
 'use client'
 
+// TODO (#P5): Add @tanstack/react-virtual to the table view rows when trader count > 100.
+// The virtualizer needs a scrolling container ref and estimateSize. Sticky header complicates this.
 import React, { useState, useEffect, useMemo, useCallback } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'

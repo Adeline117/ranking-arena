@@ -76,8 +76,13 @@ export function PostModal({ children, onClose }: PostModalProps) {
         padding: 16,
         zIndex: tokens.zIndex.modal,
         overflowY: 'auto',
+        animation: 'postModalOverlayIn 0.2s ease forwards',
       }}
     >
+      <style>{`
+        @keyframes postModalOverlayIn { from { opacity: 0; } to { opacity: 1; } }
+        @keyframes postModalContentIn { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
+      `}</style>
       <div
         onClick={(e) => e.stopPropagation()}
         style={{
@@ -88,6 +93,7 @@ export function PostModal({ children, onClose }: PostModalProps) {
           borderRadius: tokens.radius.xl,
           background: tokens.colors.bg.secondary,
           padding: 16,
+          animation: 'postModalContentIn 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards',
         }}
       >
         <div style={{ display: 'flex', justifyContent: 'flex-end' }}>

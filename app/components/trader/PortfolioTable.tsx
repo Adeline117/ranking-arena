@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { tokens } from '@/lib/design-tokens'
-import { Box } from '../base'
+import { Box, Text } from '../base'
 import type { PortfolioItem, PositionHistoryItem } from '@/lib/data/trader'
 import type { ExtendedPositionHistoryItem } from './portfolio-table-utils'
 import PortfolioProLock from './PortfolioProLock'
@@ -62,6 +62,34 @@ export default function PortfolioTable({ items, history = [], isPro = true, onUn
   const hasExtendedFields = history.some(item =>
     'positionType' in item || 'maxPositionSize' in item || 'pnlUsd' in item
   )
+
+  // Empty state when no current positions and no history
+  if (items.length === 0 && history.length === 0) {
+    return (
+      <Box
+        className="portfolio-table glass-card"
+        style={{
+          background: `linear-gradient(145deg, ${tokens.colors.bg.secondary}F8 0%, ${tokens.colors.bg.primary}F0 100%)`,
+          borderRadius: tokens.radius.xl,
+          border: `1px solid ${tokens.colors.border.primary}60`,
+          padding: `${tokens.spacing[8]} ${tokens.spacing[6]}`,
+          textAlign: 'center',
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          gap: tokens.spacing[3],
+        }}
+      >
+        <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" style={{ opacity: 0.3, color: tokens.colors.text.tertiary }}>
+          <path d="M21 12V7H5a2 2 0 0 1 0-4h14v4" />
+          <path d="M3 5v14a2 2 0 0 0 2 2h16v-5" />
+          <path d="M18 12a2 2 0 0 0 0 4h4v-4Z" />
+        </svg>
+        <Text size="sm" weight="bold" color="secondary">No positions</Text>
+        <Text size="xs" color="tertiary">This trader has no open positions or trade history to display.</Text>
+      </Box>
+    )
+  }
 
   return (
     <>

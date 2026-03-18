@@ -53,12 +53,17 @@ export default function InterestsStep({ theme, selectedInterests, tr, onToggleIn
           const isSelected = selectedInterests.includes(interest.id)
           return (
             <Box key={interest.id} onClick={() => onToggleInterest(interest.id)}
+              onKeyDown={(e: React.KeyboardEvent) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onToggleInterest(interest.id) } }}
+              tabIndex={0}
+              role="checkbox"
+              aria-checked={isSelected}
               className={`interest-card ${isSelected ? 'selected' : ''}`}
               style={{
                 padding: '14px 16px', borderRadius: 14,
                 border: isSelected ? `1px solid ${theme.selectedBorder}` : `1px solid ${theme.optionBorder}`,
                 background: isSelected ? theme.selectedBg : theme.optionBg,
                 display: 'flex', alignItems: 'center', gap: 10,
+                outline: 'none',
               }}>
               <span style={{ fontSize: 16, opacity: isSelected ? 1 : 0.5, transition: 'opacity 0.2s ease' }}>
                 {interest.icon}

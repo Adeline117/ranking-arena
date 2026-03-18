@@ -49,7 +49,7 @@ export default function NewPostPage() {
   const [uploading, setUploading] = useState(false)
   const [showPreview, setShowPreview] = useState(false)
   const [showStickerPicker, setShowStickerPicker] = useState(false)
-  const [draftSaved, setDraftSaved] = useState(false)
+  const [draftSavedAt, setDraftSavedAt] = useState<string | null>(null)
   const [pollEnabled, setPollEnabled] = useState(false)
   const [pollOptions, setPollOptions] = useState<PollOption[]>([
     { text: '', votes: 0 },
@@ -58,6 +58,7 @@ export default function NewPostPage() {
   const [pollDuration, setPollDuration] = useState(0)
   const [pollType, setPollType] = useState<'single' | 'multiple'>('single')
   const [draggedImageIndex, setDraggedImageIndex] = useState<number | null>(null)
+  const [titleTouched, setTitleTouched] = useState(false)
   const videoInputRef = useRef<HTMLInputElement>(null)
   const [videos, setVideos] = useState<UploadedVideo[]>([])
   const [videoUploading, setVideoUploading] = useState(false)
@@ -102,8 +103,8 @@ export default function NewPostPage() {
     const saveTimer = setTimeout(() => {
       if (title.trim() || content.trim()) {
         localStorage.setItem(draftKey, JSON.stringify({ title, content, images, pollEnabled }))
-        setDraftSaved(true)
-        setTimeout(() => setDraftSaved(false), 2000)
+        const now = new Date()
+        setDraftSavedAt(now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }))
       }
     }, 1000)
 
@@ -540,7 +541,7 @@ export default function NewPostPage() {
           <Box>
             <Box style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: tokens.spacing[2] }}>
               <Text size="sm" weight="bold">
-                {t('titleLabel')}
+                {t('titleLabel')} <span style={{ color: tokens.colors.accent.error, fontWeight: 400 }}>*</span>
               </Text>
               <Text
                 size="xs"
@@ -560,6 +561,7 @@ export default function NewPostPage() {
                   textareaRef.current?.focus()
                 }
               }}
+              onBlur={() => setTitleTouched(true)}
               maxLength={TITLE_MAX_LENGTH}
               autoFocus
               style={{
@@ -574,6 +576,11 @@ export default function NewPostPage() {
                 fontFamily: tokens.typography.fontFamily.sans.join(', '),
               }}
             />
+            {titleTouched && !title.trim() && (
+              <Text size="xs" style={{ color: tokens.colors.accent.error, marginTop: 4 }}>
+                {t('pleaseEnterTitle')}
+              </Text>
+            )}
           </Box>
 
           {/* Content editor */}
@@ -622,9 +629,9 @@ export default function NewPostPage() {
                     {t('preview')}
                   </button>
                 </Box>
-                {draftSaved && (
+                {draftSavedAt && (
                   <Text size="xs" color="tertiary" style={{ color: tokens.colors.accent.success }}>
-                    [Saved] {t('draftSaved')}
+                    {t('draftSaved')} {draftSavedAt}
                   </Text>
                 )}
               </Box>
@@ -795,7 +802,12 @@ export default function NewPostPage() {
             t={t}
           />
 
-          <Box style={{ display: 'flex', gap: tokens.spacing[3], justifyContent: 'flex-end' }}>
+          <Box style={{ display: 'flex', gap: tokens.spacing[3], justifyContent: 'flex-end', alignItems: 'center' }}>
+            {draftSavedAt && (
+              <Text size="xs" style={{ color: tokens.colors.text.tertiary, marginRight: 'auto' }}>
+                {t('draftSaved')} {draftSavedAt}
+              </Text>
+            )}
             <Button
               variant="ghost"
               size="md"

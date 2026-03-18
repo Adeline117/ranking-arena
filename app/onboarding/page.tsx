@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { Box } from '@/app/components/base'
 import { setLanguage, translations, type Language } from '@/lib/i18n'
@@ -21,41 +21,7 @@ type Step = 'welcome' | 'interests' | 'traders' | 'groups' | 'complete'
 
 const STEPS: Step[] = ['welcome', 'interests', 'traders', 'groups', 'complete']
 
-const injectStyles = () => {
-  if (typeof window === 'undefined') return
-  if (document.getElementById('onboarding-styles')) return
-  const style = document.createElement('style')
-  style.id = 'onboarding-styles'
-  style.textContent = `
-    @keyframes fadeIn { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
-    @keyframes stepEnter { from { opacity: 0; transform: translateX(30px); } to { opacity: 1; transform: translateX(0); } }
-    @keyframes celebrationBurst { 0% { transform: scale(0); opacity: 0; } 50% { transform: scale(1.15); opacity: 1; } 100% { transform: scale(1); opacity: 1; } }
-    @keyframes checkDraw { from { stroke-dashoffset: 50; } to { stroke-dashoffset: 0; } }
-    @keyframes progressPulse { 0%, 100% { transform: scale(1); box-shadow: 0 0 0 0 var(--color-accent-primary-40); } 50% { transform: scale(1.1); box-shadow: 0 0 0 8px transparent; } }
-    @keyframes spin { to { transform: rotate(360deg); } }
-    .onboarding-bg { position: fixed; inset: 0; z-index: 0; transition: background 0.5s ease; }
-    .onboarding-bg.dark { background: var(--color-bg-primary); }
-    .onboarding-bg.light { background: linear-gradient(135deg, #f5f5f7 0%, #e8e8ed 50%, #f0f0f5 100%); }
-    .onboarding-bg::before { content: ''; position: absolute; top: -50%; left: -50%; width: 200%; height: 200%; background: radial-gradient(ellipse at center, var(--color-accent-primary-08) 0%, transparent 50%); }
-    .onboarding-card { animation: fadeIn 0.6s cubic-bezier(0.16, 1, 0.3, 1) forwards; backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px); }
-    .option-card { cursor: pointer; transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1); }
-    .option-card:hover { transform: translateY(-2px); }
-    .continue-btn { transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1); }
-    .continue-btn:not(:disabled):hover { transform: translateY(-2px); box-shadow: 0 8px 30px var(--color-accent-primary-40); }
-    .continue-btn:not(:disabled):active { transform: translateY(0) scale(0.98); }
-    .step-content { animation: stepEnter 0.5s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
-    .interest-card { transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1); cursor: pointer; }
-    .interest-card:hover { transform: translateY(-2px); }
-    .progress-dot.active { animation: progressPulse 2s ease infinite; }
-    .celebration-icon { animation: celebrationBurst 0.6s cubic-bezier(0.34, 1.56, 0.64, 1) forwards; }
-    .check-animation { stroke-dasharray: 50; stroke-dashoffset: 50; animation: checkDraw 0.5s ease 0.3s forwards; }
-    .trader-row { transition: all 0.2s ease; cursor: default; }
-    .trader-row:hover { background: var(--color-notification-unread); }
-    .follow-btn { transition: all 0.2s ease; cursor: pointer; border: none; font-weight: 600; font-size: 13px; padding: 6px 16px; border-radius: 8px; }
-    .follow-btn:hover { transform: scale(1.03); }
-  `
-  document.head.appendChild(style)
-}
+// Onboarding styles moved to globals.css (#32) — no DOM injection needed
 
 export default function OnboardingPage() {
   const router = useRouter()
@@ -78,7 +44,6 @@ export default function OnboardingPage() {
   const tr = (key: string) => translations[language][key] || translations.en[key] || key
 
   useEffect(() => {
-    injectStyles()
     setMounted(true)
     const savedLang = localStorage.getItem('language') as Language | null
     const savedTheme = localStorage.getItem('theme') as Theme | null
@@ -130,9 +95,68 @@ export default function OnboardingPage() {
     setStep(nextStep)
   }
 
+  // Keyboard navigation: Enter to continue, Escape to go back
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Don't trigger when typing in inputs
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return
+
+      if (e.key === 'Enter') {
+        e.preventDefault()
+        const stepIndex = STEPS.indexOf(step)
+        if (step === 'welcome') goToStep('interests')
+        else if (step === 'interests') goToStep('traders')
+        else if (step === 'traders') goToStep('groups')
+        else if (step === 'groups' && !saving) saveAndComplete()
+        else if (step === 'complete') router.push('/rankings')
+      } else if (e.key === 'Escape') {
+        e.preventDefault()
+        if (step === 'interests') goToStep('welcome')
+        else if (step === 'traders') goToStep('interests')
+        else if (step === 'groups') goToStep('traders')
+      }
+    }
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [step, saving]) // eslint-disable-line react-hooks/exhaustive-deps -- goToStep/saveAndComplete/router are stable
+
   const toggleInterest = (id: string) => {
     setSelectedInterests(prev => prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id])
   }
+
+  // Batch follow/join: queue actions and flush in parallel after a debounce
+  const followQueueRef = useRef<Map<string, 'follow' | 'unfollow'>>(new Map())
+  const joinQueueRef = useRef<Map<string, 'join' | 'leave'>>(new Map())
+  const followFlushTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const joinFlushTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  const flushFollowQueue = useCallback(() => {
+    const queue = new Map(followQueueRef.current)
+    followQueueRef.current.clear()
+    if (queue.size === 0) return
+    const promises = Array.from(queue.entries()).map(([traderId, action]) =>
+      fetch('/api/follow', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...getCsrfHeaders() },
+        body: JSON.stringify({ traderId, action }),
+      }).catch(() => { /* swallow individual failures; UI already updated optimistically */ })
+    )
+    Promise.all(promises)
+  }, [])
+
+  const flushJoinQueue = useCallback(() => {
+    const queue = new Map(joinQueueRef.current)
+    joinQueueRef.current.clear()
+    if (queue.size === 0) return
+    const promises = Array.from(queue.entries()).map(([groupId, action]) =>
+      fetch('/api/groups/subscribe', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...getCsrfHeaders() },
+        body: JSON.stringify({ groupId, action }),
+      }).catch(() => { /* swallow individual failures; UI already updated optimistically */ })
+    )
+    Promise.all(promises)
+  }, [])
 
   const handleFollowTrader = async (traderId: string) => {
     if (!userId) {
@@ -144,13 +168,10 @@ export default function OnboardingPage() {
     const next = new Set(followedTraders)
     if (isFollowed) next.delete(traderId); else next.add(traderId)
     setFollowedTraders(next)
-    try {
-      await fetch('/api/follow', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', ...getCsrfHeaders() },
-        body: JSON.stringify({ traderId, action: isFollowed ? 'unfollow' : 'follow' }),
-      })
-    } catch { setFollowedTraders(followedTraders) }
+    // Queue the action and debounce the flush
+    followQueueRef.current.set(traderId, isFollowed ? 'unfollow' : 'follow')
+    if (followFlushTimerRef.current) clearTimeout(followFlushTimerRef.current)
+    followFlushTimerRef.current = setTimeout(flushFollowQueue, 500)
   }
 
   const handleJoinGroup = async (groupId: string) => {
@@ -159,14 +180,21 @@ export default function OnboardingPage() {
     const next = new Set(joinedGroups)
     if (isJoined) next.delete(groupId); else next.add(groupId)
     setJoinedGroups(next)
-    try {
-      await fetch('/api/groups/subscribe', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', ...getCsrfHeaders() },
-        body: JSON.stringify({ groupId, action: isJoined ? 'leave' : 'join' }),
-      })
-    } catch { setJoinedGroups(joinedGroups) }
+    // Queue the action and debounce the flush
+    joinQueueRef.current.set(groupId, isJoined ? 'leave' : 'join')
+    if (joinFlushTimerRef.current) clearTimeout(joinFlushTimerRef.current)
+    joinFlushTimerRef.current = setTimeout(flushJoinQueue, 500)
   }
+
+  // Flush any remaining queued actions on unmount
+  useEffect(() => {
+    return () => {
+      if (followFlushTimerRef.current) clearTimeout(followFlushTimerRef.current)
+      if (joinFlushTimerRef.current) clearTimeout(joinFlushTimerRef.current)
+      flushFollowQueue()
+      flushJoinQueue()
+    }
+  }, [flushFollowQueue, flushJoinQueue])
 
   const saveAndComplete = async () => {
     setSaving(true)

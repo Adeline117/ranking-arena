@@ -94,8 +94,16 @@ export default function PositionHistoryView({
             cursor: 'pointer',
             transition: `all ${tokens.transition.base}`,
             fontFamily: tokens.typography.fontFamily.sans.join(', '),
+            display: 'flex',
+            alignItems: 'center',
+            gap: 4,
           }}
         >
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+            {sortOrder === 'desc'
+              ? <path d="M12 5v14M5 12l7 7 7-7" />
+              : <path d="M12 19V5M5 12l7-7 7 7" />}
+          </svg>
           {sortOrder === 'desc' ? t('descending') : t('ascending')}
         </button>
       </Box>
@@ -128,8 +136,12 @@ export default function PositionHistoryView({
                   <th style={{ ...thStyle, textAlign: 'left' }}>{t('direction')}</th>
                   <th style={{ ...thStyle, textAlign: 'right' }}>{t('entryPrice')}</th>
                   <th style={{ ...thStyle, textAlign: 'right' }}>{t('exitPrice')}</th>
-                  <th style={{ ...thStyle, textAlign: 'right' }}>{t('pnl')}</th>
-                  <th style={{ ...thStyle, textAlign: 'right' }}>{t('closeTime')}</th>
+                  <th style={{ ...thStyle, textAlign: 'right', cursor: 'pointer', color: sortBy === 'pnl' ? tokens.colors.accent.primary : undefined }} onClick={() => { onSortByChange('pnl'); if (sortBy === 'pnl') onSortOrderToggle() }}>
+                    {t('pnl')} {sortBy === 'pnl' && (sortOrder === 'desc' ? '\u2193' : '\u2191')}
+                  </th>
+                  <th style={{ ...thStyle, textAlign: 'right', cursor: 'pointer', color: sortBy === 'closeTime' ? tokens.colors.accent.primary : undefined }} onClick={() => { onSortByChange('closeTime'); if (sortBy === 'closeTime') onSortOrderToggle() }}>
+                    {t('closeTime')} {sortBy === 'closeTime' && (sortOrder === 'desc' ? '\u2193' : '\u2191')}
+                  </th>
                 </tr>
               </thead>
               <tbody>

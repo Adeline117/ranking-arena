@@ -43,9 +43,10 @@ export default function GroupsFeedPage() {
 
     const loadMyGroups = async () => {
       try {
+        // Single joined query instead of 2 sequential queries (#36)
         const { data: memberships } = await supabase
           .from('group_members')
-          .select('group_id')
+          .select('group_id, groups:group_id(id, name, name_en, avatar_url, member_count)')
           .eq('user_id', userId)
 
         if (!memberships || memberships.length === 0) {
@@ -54,13 +55,10 @@ export default function GroupsFeedPage() {
           return
         }
 
-        const groupIds = memberships.map((m) => m.group_id)
-        const { data: groupsData } = await supabase
-          .from('groups')
-          .select('id, name, name_en, avatar_url, member_count')
-          .in('id', groupIds)
-
-        setMyGroups(groupsData || [])
+        const groupsData = memberships
+          .map((m: Record<string, unknown>) => m.groups as Group | null)
+          .filter((g): g is Group => g != null)
+        setMyGroups(groupsData)
       } catch (err) {
         logger.error('Failed to load groups:', err)
         setGroupsError(true)

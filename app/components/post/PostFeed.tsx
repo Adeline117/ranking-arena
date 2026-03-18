@@ -62,6 +62,9 @@ export default function PostFeed(props: PostFeedProps = {}): React.ReactNode {
   const { showToast } = useToast()
   const { showDangerConfirm } = useDialog()
   const [posts, setPosts] = useState<Post[]>([])
+  const postsRef = useRef<Post[]>([])
+  // Keep ref in sync for use in loadMorePosts without adding posts to its deps (#38)
+  postsRef.current = posts
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
   const [loadingMore, setLoadingMore] = useState(false)
@@ -160,7 +163,7 @@ export default function PostFeed(props: PostFeedProps = {}): React.ReactNode {
       const data = await response.json()
       if (!response.ok) throw new Error(data.error || t('loadMoreFailed'))
       const morePosts = data.data?.posts || []
-      const existingIds = new Set(posts.map(p => p.id))
+      const existingIds = new Set(postsRef.current.map(p => p.id))
       const newPosts = morePosts.filter((p: Post) => !existingIds.has(p.id))
       setPosts(prev => [...prev, ...newPosts]); setOffset(prev => prev + newPosts.length)
       setHasMore(data.data?.pagination?.has_more ?? morePosts.length >= pageSize)
@@ -171,8 +174,8 @@ export default function PostFeed(props: PostFeedProps = {}): React.ReactNode {
       if (err instanceof Error && err.name === 'AbortError') return
       logger.error('加载更多失败:', err)
     } finally { setLoadingMore(false) }
-  // eslint-disable-next-line react-hooks/exhaustive-deps -- actions/t are stable refs; only re-create when pagination state or query params change
-  }, [loadingMore, hasMore, loading, offset, pageSize, props.sortBy, sortType, props.authorHandle, props.groupId, props.groupIds, accessToken, posts])
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- actions/t are stable refs; posts read from postsRef (#38)
+  }, [loadingMore, hasMore, loading, offset, pageSize, props.sortBy, sortType, props.authorHandle, props.groupId, props.groupIds, accessToken])
 
   useEffect(() => { return () => { if (abortControllerRef.current) abortControllerRef.current.abort() } }, [])
 
@@ -320,20 +323,35 @@ export default function PostFeed(props: PostFeedProps = {}): React.ReactNode {
       )}
       <div style={props.layout === 'masonry' ? { columnGap: 12 } : undefined} className={`stagger-children${props.layout === 'masonry' ? ' post-feed-masonry' : ''} ${props.layout === 'masonry' ? `mobile-view-${mobileViewMode}` : ''}`}>
         {sortedPosts.map((p) => (
-          <PostListItem key={p.id} post={p} isMasonry={props.layout === 'masonry'} language={language}
-            currentUserId={currentUserId} translatedListPosts={translatedListPosts}
-            onOpenPost={handleOpenPost} onToggleReaction={actions.toggleReaction} onTogglePin={actions.handleTogglePin}
-            onStartEdit={actions.handleStartEdit} onDeletePost={actions.handleDeletePost}
-            removeImagesFromContent={removeImagesFromContent} t={t} />
+          <SectionErrorBoundary key={p.id}>
+            <PostListItem post={p} isMasonry={props.layout === 'masonry'} language={language}
+              currentUserId={currentUserId} translatedListPosts={translatedListPosts}
+              onOpenPost={handleOpenPost} onToggleReaction={actions.toggleReaction} onTogglePin={actions.handleTogglePin}
+              onStartEdit={actions.handleStartEdit} onDeletePost={actions.handleDeletePost}
+              removeImagesFromContent={removeImagesFromContent} t={t} />
+          </SectionErrorBoundary>
         ))}
       </div>
 
       {hasMore && (
-        <div ref={loadMoreRef} style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', padding: tokens.spacing[4], minHeight: 60 }}>
+        <div ref={loadMoreRef} style={{ padding: tokens.spacing[4], minHeight: 60 }}>
           {loadingMore && (
-            <div style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[2] }}>
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke={tokens.colors.text.tertiary} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ animation: 'spin 1s linear infinite' }}><path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" /><path d="M3 3v5h5" /></svg>
-              <span style={{ fontSize: tokens.typography.fontSize.sm, color: tokens.colors.text.tertiary }}>{t('loadingMore')}</span>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[3] }}>
+              {[1, 2].map(i => (
+                <div key={i} style={{
+                  background: tokens.colors.bg.secondary,
+                  borderRadius: tokens.radius.lg,
+                  border: `1px solid ${tokens.colors.border.primary}`,
+                  padding: tokens.spacing[4],
+                }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[2], marginBottom: tokens.spacing[3] }}>
+                    <div style={{ width: 28, height: 28, borderRadius: '50%', background: tokens.colors.bg.tertiary, animation: 'shimmer 1.5s ease-in-out infinite', backgroundImage: `linear-gradient(90deg, ${tokens.colors.bg.tertiary} 0%, var(--glass-bg-light) 50%, ${tokens.colors.bg.tertiary} 100%)`, backgroundSize: '200% 100%' }} />
+                    <div style={{ width: 100, height: 14, borderRadius: 4, background: tokens.colors.bg.tertiary, animation: 'shimmer 1.5s ease-in-out infinite', backgroundImage: `linear-gradient(90deg, ${tokens.colors.bg.tertiary} 0%, var(--glass-bg-light) 50%, ${tokens.colors.bg.tertiary} 100%)`, backgroundSize: '200% 100%' }} />
+                  </div>
+                  <div style={{ width: '70%', height: 16, borderRadius: 4, background: tokens.colors.bg.tertiary, marginBottom: tokens.spacing[2], animation: 'shimmer 1.5s ease-in-out infinite', backgroundImage: `linear-gradient(90deg, ${tokens.colors.bg.tertiary} 0%, var(--glass-bg-light) 50%, ${tokens.colors.bg.tertiary} 100%)`, backgroundSize: '200% 100%' }} />
+                  <div style={{ width: '90%', height: 12, borderRadius: 4, background: tokens.colors.bg.tertiary, animation: 'shimmer 1.5s ease-in-out infinite', backgroundImage: `linear-gradient(90deg, ${tokens.colors.bg.tertiary} 0%, var(--glass-bg-light) 50%, ${tokens.colors.bg.tertiary} 100%)`, backgroundSize: '200% 100%' }} />
+                </div>
+              ))}
             </div>
           )}
         </div>

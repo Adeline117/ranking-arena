@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback, memo } from 'react'
+import { useState, useCallback, useMemo, memo } from 'react'
 import Link from 'next/link'
 import Image from 'next/image'
 import { tokens } from '@/lib/design-tokens'
@@ -64,16 +64,18 @@ const AnimatedAvatar = memo(function AnimatedAvatar({
       onMouseLeave={handleMouseLeave}
     >
       {avatarUrl && !imageError && (
-        <Image 
-          src={avatarUrl.startsWith("/") ? avatarUrl : `/api/avatar?url=${encodeURIComponent(avatarUrl)}`} 
-          alt={handle} 
+        <Image
+          src={avatarUrl.startsWith("/") ? avatarUrl : `/api/avatar?url=${encodeURIComponent(avatarUrl)}`}
+          alt={handle}
           fill
           sizes="40px"
           loading="lazy"
-          style={{ 
+          placeholder="empty"
+          style={{
             objectFit: 'cover',
             opacity: imageLoaded ? 1 : 0,
-            transition: 'opacity 0.3s ease',
+            transition: 'opacity 0.3s ease, filter 0.3s ease',
+            filter: imageLoaded ? 'none' : 'blur(8px)',
           }}
           onLoad={() => setImageLoaded(true)}
           onError={() => setImageError(true)}
@@ -109,27 +111,24 @@ const AnimatedAvatar = memo(function AnimatedAvatar({
 })
 
 function SimilarTradersInner({ traders }: SimilarTradersProps) {
-  const [mounted, setMounted] = useState(false)
   const [hoveredIndex, setHoveredIndex] = useState<number | null>(null)
   const { t } = useLanguage()
 
-  useEffect(() => {
-    setMounted(true)
-  }, [])
-
   // Deduplicate traders by both id+source AND handle (display name)
   // Some traders have multiple source_trader_ids on the same exchange
-  const seenIds = new Set<string>()
-  const seenHandles = new Set<string>()
-  const uniqueTraders = traders.filter(t => {
-    const idKey = `${(t.id || t.handle).toLowerCase()}:${(t.source || '').toLowerCase()}`
-    const handleKey = t.handle ? t.handle.toLowerCase() : ''
-    if (seenIds.has(idKey)) return false
-    if (handleKey && seenHandles.has(handleKey)) return false
-    seenIds.add(idKey)
-    if (handleKey) seenHandles.add(handleKey)
-    return true
-  })
+  const uniqueTraders = useMemo(() => {
+    const seenIds = new Set<string>()
+    const seenHandles = new Set<string>()
+    return traders.filter(t => {
+      const idKey = `${(t.id || t.handle).toLowerCase()}:${(t.source || '').toLowerCase()}`
+      const handleKey = t.handle ? t.handle.toLowerCase() : ''
+      if (seenIds.has(idKey)) return false
+      if (handleKey && seenHandles.has(handleKey)) return false
+      seenIds.add(idKey)
+      if (handleKey) seenHandles.add(handleKey)
+      return true
+    })
+  }, [traders])
 
   if (uniqueTraders.length === 0) return null
 
@@ -144,9 +143,8 @@ function SimilarTradersInner({ traders }: SimilarTradersProps) {
         border: `1px solid ${tokens.colors.border.primary}60`,
         padding: tokens.spacing[5],
         boxShadow: `0 4px 20px var(--color-overlay-subtle)`,
-        transition: 'all 0.4s cubic-bezier(0.4, 0, 0.2, 1)',
-        opacity: mounted ? 1 : 0,
-        transform: mounted ? 'translateY(0)' : 'translateY(20px)',
+        animation: 'fadeInUp 0.5s cubic-bezier(0.4, 0, 0.2, 1) forwards',
+        opacity: 0,
       }}
     >
       <Box style={{ 
@@ -198,7 +196,6 @@ function SimilarTradersInner({ traders }: SimilarTradersProps) {
                 cursor: 'pointer',
                 transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
                 transform: hoveredIndex === index ? 'translateX(4px)' : 'translateX(0)',
-                opacity: mounted ? 1 : 0,
               }}
               onMouseEnter={() => setHoveredIndex(index)}
               onMouseLeave={() => setHoveredIndex(null)}

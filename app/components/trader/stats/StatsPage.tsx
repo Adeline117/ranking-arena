@@ -99,7 +99,7 @@ export default function StatsPage({
           animation: 'statsSkeletonPulse 1.5s ease-in-out infinite',
           animationDelay: '0.4s',
         }} />
-        <style>{`@keyframes statsSkeletonPulse { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }`}</style>
+        {/* statsSkeletonPulse keyframes moved to globals.css (#26) */}
       </Box>
     )
   }
@@ -223,13 +223,7 @@ export default function StatsPage({
         </Box>
       </Box>
 
-      <style>{`
-        .stats-two-col { grid-template-columns: 1fr 1fr; }
-        @media (max-width: 768px) {
-          .stats-two-col { grid-template-columns: 1fr !important; }
-          .trading-grid { grid-template-columns: 1fr !important; }
-        }
-      `}</style>
+      {/* stats-two-col / trading-grid responsive rules moved to globals.css (#26) */}
     </Box>
   )
 }
