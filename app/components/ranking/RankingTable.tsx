@@ -409,7 +409,7 @@ function RankingTableInner(props: {
         >
           {t('score')}
           <span
-            title={t('arenaScoreHeaderTooltip') || "Arena's composite performance score (0–100)"}
+            title={t('arenaScoreHeaderTooltip') || "Arena Score is a 0-100 composite metric combining ROI (60%) and PnL (40%), adjusted for confidence and platform trust. Higher = better risk-adjusted performance."}
             style={{
               display: 'inline-flex',
               alignItems: 'center',
@@ -427,7 +427,7 @@ function RankingTableInner(props: {
               opacity: 0.65,
               fontStyle: 'normal',
             }}
-            aria-label={t('arenaScoreHeaderTooltip') || "Arena's composite performance score (0–100)"}
+            aria-label={t('arenaScoreHeaderTooltip') || "Arena Score is a 0-100 composite metric combining ROI (60%) and PnL (40%), adjusted for confidence and platform trust. Higher = better risk-adjusted performance."}
           >
             i
           </span>
@@ -439,15 +439,27 @@ function RankingTableInner(props: {
         <Box className={`col-pnl sort-header sort-header-end${sortColumn === 'pnl' ? ' sort-header-active' : ''} ${justSortedColumn === 'pnl' ? 'just-sorted' : ''}`} as="button" onClick={() => handleSort('pnl')} title={t('pnlTooltip') || 'Profit & Loss'} role="columnheader" aria-label={`${t('pnl')} — click to sort`} aria-sort={sortColumn === 'pnl' ? (sortDir === 'asc' ? 'ascending' : 'descending') : 'none'} data-sortable>
           {t('pnl')} <SortIndicator active={sortColumn === 'pnl'} dir={sortDir} />
         </Box>
-        <Box className={`col-winrate sort-header sort-header-end${sortColumn === 'winrate' ? ' sort-header-active' : ''} ${justSortedColumn === 'winrate' ? 'just-sorted' : ''}`} as="button" onClick={() => handleSort('winrate')} title={t('winRateTooltip')} role="columnheader" aria-label={`${t('winRateShort')} — click to sort`} aria-sort={sortColumn === 'winrate' ? (sortDir === 'asc' ? 'ascending' : 'descending') : 'none'} data-sortable>
-          {t('winRateShort')} <SortIndicator active={sortColumn === 'winrate'} dir={sortDir} />
+        <Box className={`col-winrate sort-header sort-header-end${sortColumn === 'winrate' ? ' sort-header-active' : ''} ${justSortedColumn === 'winrate' ? 'just-sorted' : ''}`} as="button" onClick={() => handleSort('winrate')} title={t('winRateTooltip') || 'Percentage of profitable trading days.'} role="columnheader" aria-label={`${t('winRateShort')} — click to sort`} aria-sort={sortColumn === 'winrate' ? (sortDir === 'asc' ? 'ascending' : 'descending') : 'none'} data-sortable
+          style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 2 }}
+        >
+          {t('winRateShort')}
+          <span title={t('winRateTooltip') || 'Percentage of profitable trading days.'} style={{ cursor: 'help', opacity: 0.6, fontSize: 11, flexShrink: 0 }} aria-label={t('winRateTooltip') || 'Percentage of profitable trading days.'}>&#9432;</span>
+          <SortIndicator active={sortColumn === 'winrate'} dir={sortDir} />
         </Box>
-        <Box className={`col-mdd sort-header sort-header-end${sortColumn === 'mdd' ? ' sort-header-active' : ''} ${justSortedColumn === 'mdd' ? 'just-sorted' : ''}`} as="button" onClick={() => handleSort('mdd')} title={t('mddTooltip')} role="columnheader" aria-label={`${t('maxDrawdownShort')} — click to sort`} aria-sort={sortColumn === 'mdd' ? (sortDir === 'asc' ? 'ascending' : 'descending') : 'none'} data-sortable>
-          {t('maxDrawdownShort')} <SortIndicator active={sortColumn === 'mdd'} dir={sortDir} />
+        <Box className={`col-mdd sort-header sort-header-end${sortColumn === 'mdd' ? ' sort-header-active' : ''} ${justSortedColumn === 'mdd' ? 'just-sorted' : ''}`} as="button" onClick={() => handleSort('mdd')} title={t('mddTooltip') || 'Largest peak-to-trough decline. Lower is better.'} role="columnheader" aria-label={`${t('maxDrawdownShort')} — click to sort`} aria-sort={sortColumn === 'mdd' ? (sortDir === 'asc' ? 'ascending' : 'descending') : 'none'} data-sortable
+          style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 2 }}
+        >
+          {t('maxDrawdownShort')}
+          <span title={t('mddTooltip') || 'Largest peak-to-trough decline. Lower is better.'} style={{ cursor: 'help', opacity: 0.6, fontSize: 11, flexShrink: 0 }} aria-label={t('mddTooltip') || 'Largest peak-to-trough decline. Lower is better.'}>&#9432;</span>
+          <SortIndicator active={sortColumn === 'mdd'} dir={sortDir} />
         </Box>
         {visibleColumns.includes('sortino') && (
-          <Box className={`col-sortino sort-header sort-header-end${sortColumn === 'sortino' ? ' sort-header-active' : ''} ${justSortedColumn === 'sortino' ? 'just-sorted' : ''}`} as="button" onClick={() => handleSort('sortino')} title={t('sortinoTooltip') || 'Sortino Ratio'} role="columnheader" aria-label={`${t('sortinoRatio')} — click to sort`} aria-sort={sortColumn === 'sortino' ? (sortDir === 'asc' ? 'ascending' : 'descending') : 'none'} data-sortable>
-            {t('sortinoRatio')} <SortIndicator active={sortColumn === 'sortino'} dir={sortDir} />
+          <Box className={`col-sortino sort-header sort-header-end${sortColumn === 'sortino' ? ' sort-header-active' : ''} ${justSortedColumn === 'sortino' ? 'just-sorted' : ''}`} as="button" onClick={() => handleSort('sortino')} title={t('sortinoTooltip') || 'Risk-adjusted return. Higher = better risk/reward.'} role="columnheader" aria-label={`${t('sortinoRatio')} — click to sort`} aria-sort={sortColumn === 'sortino' ? (sortDir === 'asc' ? 'ascending' : 'descending') : 'none'} data-sortable
+            style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 2 }}
+          >
+            {t('sortinoRatio')}
+            <span title={t('sortinoTooltip') || 'Risk-adjusted return. Higher = better risk/reward.'} style={{ cursor: 'help', opacity: 0.6, fontSize: 11, flexShrink: 0 }} aria-label={t('sortinoTooltip') || 'Risk-adjusted return. Higher = better risk/reward.'}>&#9432;</span>
+            <SortIndicator active={sortColumn === 'sortino'} dir={sortDir} />
           </Box>
         )}
         {visibleColumns.includes('alpha') && (

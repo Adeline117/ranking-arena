@@ -264,6 +264,7 @@ const SortHeader = React.memo(function SortHeader({
   currentDir,
   onSort,
   align = 'right',
+  tooltip,
 }: {
   label: string
   sortKey: SortKey
@@ -271,6 +272,7 @@ const SortHeader = React.memo(function SortHeader({
   currentDir: SortDir
   onSort: (key: SortKey) => void
   align?: 'left' | 'right' | 'center'
+  tooltip?: string
 }) {
   const active = currentKey === sortKey
   return (
@@ -290,9 +292,13 @@ const SortHeader = React.memo(function SortHeader({
         border: 'none',
         padding: 0,
         font: 'inherit',
+        gap: 2,
       }}
     >
       {label}
+      {tooltip && (
+        <span title={tooltip} style={{ cursor: 'help', opacity: 0.6, fontSize: 11, flexShrink: 0 }} aria-label={tooltip}>&#9432;</span>
+      )}
       <SortArrow active={active} dir={currentDir} />
     </button>
   )
@@ -306,7 +312,9 @@ export default function ExchangeRankingClient({
   exchange?: string
 }) {
   const { language, t } = useLanguage()
-  const [viewMode, setViewMode] = useState<ViewMode>('table')
+  const [viewMode, setViewMode] = useState<ViewMode>(
+    typeof window !== 'undefined' && window.matchMedia('(max-width: 768px)').matches ? 'card' : 'table'
+  )
   const [sortKey, setSortKey] = useState<SortKey>('rank')
   const [sortDir, setSortDir] = useState<SortDir>('asc')
   const [cardSortKey, setCardSortKey] = useState<CardSortKey>('rank')
@@ -577,14 +585,18 @@ export default function ExchangeRankingClient({
           }
           @media (max-width: 900px) {
             .exchange-table-grid {
-              grid-template-columns: 36px minmax(140px, 1fr) 80px 70px 70px 70px 80px;
+              grid-template-columns: 36px minmax(120px, 1fr) 72px 64px 64px 64px 72px;
             }
           }
           .exchange-row:hover {
             background: var(--overlay-hover) !important;
           }
+          .exchange-table-wrapper {
+            overflow-x: auto;
+            -webkit-overflow-scrolling: touch;
+          }
         `}</style>
-        <div
+        <div className="exchange-table-wrapper"><div
           style={{
             borderRadius: tokens.radius.lg,
             overflow: 'visible',
@@ -706,6 +718,7 @@ export default function ExchangeRankingClient({
               </Link>
             )
           })}
+        </div>
         </div>
         </>
       )}

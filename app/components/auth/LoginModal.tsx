@@ -25,6 +25,21 @@ const LazyWeb3Boundary = dynamic(
 
 type LoginStep = 'choose' | 'email-otp' | 'email-sent'
 
+function TermsAgreement() {
+  return (
+    <div style={{ marginTop: 16, paddingTop: 12, borderTop: '1px solid var(--glass-border-light)' }}>
+      <label style={{ display: 'flex', alignItems: 'flex-start', gap: 8, fontSize: 13, color: 'var(--color-text-tertiary)', lineHeight: 1.5 }}>
+        <span>
+          By continuing, you agree to our{' '}
+          <a href="/legal/terms" target="_blank" rel="noopener" style={{ color: 'var(--color-accent-primary)', textDecoration: 'underline' }}>Terms of Service</a>
+          {' '}and{' '}
+          <a href="/legal/privacy" target="_blank" rel="noopener" style={{ color: 'var(--color-accent-primary)', textDecoration: 'underline' }}>Privacy Policy</a>.
+        </span>
+      </label>
+    </div>
+  )
+}
+
 interface LoginModalProps {
   open: boolean
   onClose: () => void
@@ -247,6 +262,8 @@ export default function LoginModal({ open, onClose, message }: LoginModalProps) 
                 />
               </LazyWeb3Boundary>
             </div>
+
+            <TermsAgreement />
 
             {error && (
               <div style={{ marginTop: 12, color: 'var(--color-accent-error)', fontSize: 13, textAlign: 'center' }}>
