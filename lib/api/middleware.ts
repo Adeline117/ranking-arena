@@ -156,8 +156,11 @@ export function withApiMiddleware<T>(
           return withCid(errorResponse)
         }
       } else {
-        // 即使不需要认证，也尝试获取用户信息
-        user = await getAuthUser(request)
+        // Only attempt auth lookup if Authorization header is present (avoid 2 wasted DB calls on public requests)
+        const authHeader = request.headers.get('authorization')
+        if (authHeader) {
+          user = await getAuthUser(request)
+        }
       }
 
       // 3. CSRF 验证（仅针对写操作，可通过 skipCsrf 跳过）

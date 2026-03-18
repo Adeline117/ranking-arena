@@ -36,7 +36,7 @@ import logger from '@/lib/logger'
 
 // In-memory cache for availableSources (TTL 5 minutes)
 const sourcesCache = new Map<string, { sources: string[]; ts: number }>();
-const SOURCES_CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+const SOURCES_CACHE_TTL = 30 * 60 * 1000; // 30 minutes — sources change only on cron runs
 
 function getCachedSources(seasonId: string): string[] | null {
   const entry = sourcesCache.get(seasonId);
