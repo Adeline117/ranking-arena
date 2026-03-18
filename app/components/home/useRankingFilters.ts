@@ -401,16 +401,19 @@ export function useRankingFilters({ traders, activeTimeRange }: UseRankingFilter
       : raw
   }, [categoryFiltered, selectedExchange])
 
+  // Auto-clear exchange filter when no traders match (avoids stale filter)
+  // NOTE: syncStateToUrl intentionally excluded from deps to prevent infinite loop
+  // (calling syncStateToUrl changes its deps → recreates → re-triggers this effect)
   useEffect(() => {
     if (selectedExchange && categoryFiltered.length > 0) {
       const hasMatch = categoryFiltered.some(trader => trader.source === selectedExchange)
       if (!hasMatch) {
         setSelectedExchange(null)
         try { localStorage.removeItem(LS_KEY_EXCHANGE) } catch { /* ignore */ }
-        syncStateToUrl({ ex: null })
       }
     }
-  }, [selectedExchange, categoryFiltered, syncStateToUrl])
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- syncStateToUrl excluded to prevent infinite loop
+  }, [selectedExchange, categoryFiltered])
 
   const presetFiltered = useMemo(() => {
     if (!activePreset || activePreset === 'all') return exchangeFiltered
@@ -420,6 +423,8 @@ export function useRankingFilters({ traders, activeTimeRange }: UseRankingFilter
     return (raw.length === 0 && exchangeFiltered.length > 0) ? exchangeFiltered : raw
   }, [activePreset, exchangeFiltered])
 
+  // Auto-clear preset filter when no traders match
+  // NOTE: syncStateToUrl intentionally excluded from deps to prevent infinite loop
   useEffect(() => {
     if (activePreset && activePreset !== 'all' && exchangeFiltered.length > 0) {
       const presetConfig = PRESETS.find(p => p.id === activePreset)
@@ -428,11 +433,11 @@ export function useRankingFilters({ traders, activeTimeRange }: UseRankingFilter
         if (!hasMatch) {
           setActivePreset(null)
           try { localStorage.removeItem(LS_KEY_PRESET) } catch { /* ignore */ }
-          syncStateToUrl({ preset: null })
         }
       }
     }
-  }, [activePreset, exchangeFiltered, syncStateToUrl])
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- syncStateToUrl excluded to prevent infinite loop
+  }, [activePreset, exchangeFiltered])
 
   const advancedFiltered = useMemo(
     () => hasActiveFilters ? applyAdvancedFilter(presetFiltered, filterConfig) : presetFiltered,
