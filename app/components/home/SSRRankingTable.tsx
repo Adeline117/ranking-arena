@@ -140,8 +140,8 @@ export default function SSRRankingTable({ traders }: Props) {
                 </div>
               </div>
 
-              <span className={`ssr-score ${getScoreColor(trader.arena_score ?? 0)}`}>
-                {(trader.arena_score ?? 0).toFixed(0)}
+              <span className={`ssr-score ${trader.arena_score != null ? getScoreColor(trader.arena_score) : ''}`}>
+                {trader.arena_score != null ? trader.arena_score.toFixed(0) : '—'}
               </span>
 
               <div className="ssr-roi">

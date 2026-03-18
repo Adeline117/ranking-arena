@@ -101,8 +101,8 @@ interface TraderData {
   display_name: string | null
   avatar_url: string | null
   platform: string
-  roi: number
-  pnl: number
+  roi: number | null
+  pnl: number | null
   win_rate: number | null
   max_drawdown: number | null
   arena_score: number | null
@@ -138,8 +138,8 @@ async function fetchExchangeTraders(exchange: string): Promise<TraderData[]> {
       display_name: row.handle ? String(row.handle) : null,
       avatar_url: row.avatar_url as string | null,
       platform: String(row.source || ''),
-      roi: Number(row.roi ?? 0),
-      pnl: Number(row.pnl ?? 0),
+      roi: row.roi != null ? Number(row.roi) : null,
+      pnl: row.pnl != null ? Number(row.pnl) : null,
       win_rate: row.win_rate as number | null,
       max_drawdown: row.max_drawdown as number | null,
       arena_score: row.arena_score as number | null,
