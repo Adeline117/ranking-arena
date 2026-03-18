@@ -568,7 +568,7 @@ export default function CommentsModal({
                         title={language === 'zh' ? sticker.name_zh : sticker.name_en}
                       >
                         <Image src={sticker.path} alt={sticker.name_en} width={36} height={36} loading="lazy" style={{ objectFit: 'contain' }} />
-                        <span style={{ fontSize: 9, color: tokens.colors.text.tertiary, lineHeight: 1 }}>
+                        <span style={{ fontSize: 10, color: tokens.colors.text.tertiary, lineHeight: 1 }}>
                           {language === 'zh' ? sticker.name_zh : sticker.name_en}
                         </span>
                       </button>

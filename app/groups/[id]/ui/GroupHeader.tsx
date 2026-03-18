@@ -170,7 +170,7 @@ export default function GroupHeader({
                               alignItems: 'center',
                               justifyContent: 'center',
                               background: tokens.colors.bg.tertiary,
-                              fontSize: 9,
+                              fontSize: 10,
                               fontWeight: 700,
                               color: tokens.colors.text.tertiary,
                               zIndex: 4 - i,

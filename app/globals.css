@@ -1534,6 +1534,18 @@ a:focus-visible, button:focus-visible, [role="button"]:focus-visible, [tabindex=
 .touch-target {
   min-height: 48px;
 }
+/* Hero top-3 card hover/focus — replaces JS onMouseEnter/onMouseLeave */
+.hero-top3-card {
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+.hero-top3-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 20px rgba(0,0,0,0.15);
+}
+.hero-top3-card:focus-visible {
+  outline: 2px solid var(--color-brand);
+  outline-offset: 2px;
+}
 
 /* Empty state styling */
 .empty-state {

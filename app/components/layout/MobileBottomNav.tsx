@@ -345,15 +345,8 @@ function NavItemLink({ item, active, onClick, t }: NavItemLinkProps): React.Reac
         minWidth: 60,
         minHeight: tokens.touchTarget.comfortable,
         background: active ? 'var(--color-accent-primary-12)' : 'transparent',
-        outline: 'none',
       }}
-      onFocus={(e) => {
-        e.currentTarget.style.outline = '2px solid var(--color-accent-primary)'
-        e.currentTarget.style.outlineOffset = '2px'
-      }}
-      onBlur={(e) => {
-        e.currentTarget.style.outline = 'none'
-      }}
+      // focus-visible handled by global CSS rule in globals.css
     >
       {active && <ActiveIndicator />}
 

@@ -131,7 +131,7 @@ export const PostCard = memo(function PostCard({
           overflow: 'hidden',
         }}>
           {displayTitle}
-          {isTranslated && <span style={{ fontSize: 9, fontWeight: 600, color: 'var(--color-translated)', background: 'var(--color-translated-08)', padding: '0 4px', borderRadius: tokens.radius.full, marginLeft: 4 }}>译</span>}
+          {isTranslated && <span style={{ fontSize: 10, fontWeight: 600, color: 'var(--color-translated)', background: 'var(--color-translated-08)', padding: '0 4px', borderRadius: tokens.radius.full, marginLeft: 4 }}>译</span>}
         </div>
         
         {/* 底部信息 */}

@@ -190,7 +190,7 @@ const TraderCardItem = React.memo(function TraderCardItem({ trader, rank }: { tr
               {EXCHANGE_NAMES[trader.platform] || trader.platform}
               {(trader.platform === 'web3_bot' || trader.trader_type === 'bot' || trader.is_bot) && (
                 <span style={{
-                  padding: '0px 4px', borderRadius: 4, fontSize: 9, fontWeight: 600,
+                  padding: '0px 4px', borderRadius: 4, fontSize: 10, fontWeight: 600,
                   color: '#a78bfa', background: 'rgba(167,139,250,0.12)', border: '1px solid rgba(167,139,250,0.25)',
                 }}>Bot</span>
               )}
@@ -627,7 +627,7 @@ export default function ExchangeRankingClient({
                   </span>
                   {(t.platform === 'web3_bot' || t.trader_type === 'bot' || t.is_bot) && (
                     <span style={{
-                      padding: '0px 4px', borderRadius: 4, fontSize: 9, fontWeight: 600, flexShrink: 0,
+                      padding: '0px 4px', borderRadius: 4, fontSize: 10, fontWeight: 600, flexShrink: 0,
                       color: '#a78bfa', background: 'rgba(167,139,250,0.12)', border: '1px solid rgba(167,139,250,0.25)',
                     }}>Bot</span>
                   )}

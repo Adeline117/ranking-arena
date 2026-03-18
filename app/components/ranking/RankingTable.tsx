@@ -413,7 +413,7 @@ function RankingTableInner(props: {
               height: 13,
               borderRadius: '50%',
               border: `1px solid var(--color-text-tertiary)`,
-              fontSize: 9,
+              fontSize: 10,
               fontWeight: 700,
               color: 'var(--color-text-tertiary)',
               lineHeight: 1,

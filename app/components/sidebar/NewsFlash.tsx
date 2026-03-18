@@ -142,7 +142,7 @@ export default function NewsFlash() {
                     if (!badge) return null
                     return (
                       <span style={{
-                        fontSize: 9, fontWeight: tokens.typography.fontWeight.bold, color: tokens.colors.text.tertiary,
+                        fontSize: 10, fontWeight: tokens.typography.fontWeight.bold, color: tokens.colors.text.tertiary,
                         background: 'var(--glass-bg-medium)', padding: '1px 4px',
                         borderRadius: tokens.radius.sm, marginLeft: 4, verticalAlign: 'middle',
                         lineHeight: '14px', display: 'inline-block',

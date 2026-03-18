@@ -186,7 +186,7 @@ export function PremiumBlur({
  */
 export function ProLabel({ size = 'sm' }: { size?: 'xs' | 'sm' | 'md' }) {
   const sizeMap = {
-    xs: { fontSize: 9, padding: '2px 6px', iconSize: 8, gap: 3 },
+    xs: { fontSize: 10, padding: '2px 6px', iconSize: 8, gap: 3 },
     sm: { fontSize: 10, padding: '3px 8px', iconSize: 10, gap: 4 },
     md: { fontSize: 11, padding: '4px 10px', iconSize: 11, gap: 4 },
   }
