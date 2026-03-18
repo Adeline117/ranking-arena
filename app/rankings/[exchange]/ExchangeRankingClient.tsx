@@ -626,9 +626,9 @@ export default function ExchangeRankingClient({
             <div>{t('rankingTrader')}</div>
             <SortHeader label={`${t('rankingRoi')} (90D)`} sortKey="roi" currentKey={sortKey} currentDir={sortDir} onSort={handleSort} />
             <div style={{ textAlign: 'center' }}>{t('rankingTrend')}</div>
-            <SortHeader label={t('rankingWinRate')} sortKey="win_rate" currentKey={sortKey} currentDir={sortDir} onSort={handleSort} />
-            <SortHeader label={t('rankingMdd')} sortKey="max_drawdown" currentKey={sortKey} currentDir={sortDir} onSort={handleSort} />
-            <SortHeader label={t('rankingScore')} sortKey="arena_score" currentKey={sortKey} currentDir={sortDir} onSort={handleSort} />
+            <SortHeader label={t('rankingWinRate')} sortKey="win_rate" currentKey={sortKey} currentDir={sortDir} onSort={handleSort} tooltip="Percentage of profitable trading days." />
+            <SortHeader label={t('rankingMdd')} sortKey="max_drawdown" currentKey={sortKey} currentDir={sortDir} onSort={handleSort} tooltip="Largest peak-to-trough decline. Lower is better." />
+            <SortHeader label={t('rankingScore')} sortKey="arena_score" currentKey={sortKey} currentDir={sortDir} onSort={handleSort} tooltip="Arena Score is a 0-100 composite metric combining ROI (60%) and PnL (40%), adjusted for confidence and platform trust." />
           </div>
           {/* Rows */}
           {activeTraders.map((t, i) => {
