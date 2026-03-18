@@ -104,22 +104,25 @@ export async function GET(request: NextRequest) {
     const _traderKeys = Array.from(snapshotMap.keys())
     const platforms = [...new Set(Array.from(snapshotMap.values()).map(s => s.source))]
 
-    // Get the latest daily snapshot before dateStr for each trader
+    // Get the latest daily snapshot before dateStr for each trader (ROI + PnL for daily return calc)
     const { data: prevSnapshots } = await supabase
       .from('trader_daily_snapshots')
-      .select('platform, trader_key, pnl')
+      .select('platform, trader_key, pnl, roi')
       .in('platform', platforms)
       .lt('date', dateStr)
       .order('date', { ascending: false })
       .limit(50000)
 
     // Build lookup: keep only the latest per trader
-    const prevPnlMap = new Map<string, number>()
+    const prevDataMap = new Map<string, { pnl: number | null; roi: number | null }>()
     if (prevSnapshots) {
       for (const ps of prevSnapshots) {
         const key = `${ps.platform}:${ps.trader_key}`
-        if (!prevPnlMap.has(key) && ps.pnl != null) {
-          prevPnlMap.set(key, parseFloat(String(ps.pnl)))
+        if (!prevDataMap.has(key)) {
+          prevDataMap.set(key, {
+            pnl: ps.pnl != null ? parseFloat(String(ps.pnl)) : null,
+            roi: ps.roi != null ? parseFloat(String(ps.roi)) : null,
+          })
         }
       }
     }
@@ -141,11 +144,17 @@ export async function GET(request: NextRequest) {
 
     for (const [key, snapshot] of snapshotMap) {
       const currentPnl = snapshot.pnl != null ? parseFloat(String(snapshot.pnl)) : null
-      const prevPnl = prevPnlMap.get(key)
+      const currentRoi = snapshot.roi != null ? parseFloat(String(snapshot.roi)) : null
+      const prev = prevDataMap.get(key)
 
+      // Compute daily return: prefer ROI delta (works for all platforms), fallback to PnL delta
       let dailyReturnPct: number | null = null
-      if (prevPnl != null && prevPnl !== 0 && currentPnl != null) {
-        dailyReturnPct = ((currentPnl - prevPnl) / Math.abs(prevPnl)) * 100
+      if (currentRoi != null && prev?.roi != null) {
+        // ROI delta: e.g. today 150% - yesterday 148% = +2% daily return
+        dailyReturnPct = currentRoi - prev.roi
+      } else if (currentPnl != null && prev?.pnl != null && prev.pnl !== 0) {
+        // PnL delta fallback
+        dailyReturnPct = ((currentPnl - prev.pnl) / Math.abs(prev.pnl)) * 100
       }
 
       records.push({
@@ -219,7 +228,6 @@ export async function GET(request: NextRequest) {
                   .update({ sharpe_ratio: upd.sharpe_ratio })
                   .eq('source', upd.source)
                   .eq('source_trader_id', upd.source_trader_id)
-                  .is('sharpe_ratio', null)
               )
             )
             sharpeUpdated += results.filter(r => !r.error).length
@@ -237,7 +245,6 @@ export async function GET(request: NextRequest) {
                   .update({ sharpe_ratio: upd.sharpe_ratio })
                   .eq('platform', upd.source)
                   .eq('trader_key', upd.source_trader_id)
-                  .is('sharpe_ratio', null)
               )
             )
             v2Updated += v2Results.filter(r => !r.error).length
