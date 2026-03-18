@@ -64,8 +64,20 @@ export async function POST(request: NextRequest) {
   const body = await request.json()
   const { source, source_trader_id, handle } = body
 
-  if (!source || !source_trader_id) {
-    return NextResponse.json({ error: 'source and source_trader_id required' }, { status: 400 })
+  if (!source || !source_trader_id || typeof source !== 'string' || typeof source_trader_id !== 'string') {
+    return NextResponse.json({ error: 'source and source_trader_id required (strings)' }, { status: 400 })
+  }
+  if (source.length > 50 || source_trader_id.length > 200) {
+    return NextResponse.json({ error: 'Invalid input length' }, { status: 400 })
+  }
+
+  // Enforce max watchlist size (200)
+  const { count } = await supabase
+    .from('trader_watchlist')
+    .select('id', { count: 'exact', head: true })
+    .eq('user_id', user.id)
+  if ((count ?? 0) >= 200) {
+    return NextResponse.json({ error: 'Watchlist full (max 200)' }, { status: 400 })
   }
 
   const { error } = await supabase
