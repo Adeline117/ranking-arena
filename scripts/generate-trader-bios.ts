@@ -243,7 +243,7 @@ function generateTags(
   if ((metrics.roi ?? 0) > 100) tags.push('high-roi')
   if (metrics.arena_score != null && metrics.arena_score >= 80) tags.push('elite')
 
-  return [...new Set(tags)]
+  return Array.from(new Set(tags))
 }
 
 // ─── Main ────────────────────────────────────────────────────────────────────
@@ -272,15 +272,8 @@ async function main() {
 
   // Step 2: Get platform trader counts for percentile calculation
   const platformCounts: Record<string, number> = {}
-  const { data: platformCountRows } = await supabase
-    .rpc('get_platform_counts_v2')
-    .select('*')
-    .throwOnError()
-    .then(() => ({ data: null as unknown }))
-    .catch(() => ({ data: null }))
-
-  // Fallback: count per platform manually if RPC doesn't exist
-  if (!platformCountRows) {
+  {
+    // Fetch all platform values and count in-memory
     const { data: platforms } = await supabase
       .from('trader_profiles_v2')
       .select('platform')
