@@ -120,7 +120,9 @@ export function mapLeaderboardRow(row: Record<string, unknown>): UnifiedTrader {
     profitabilityScore: row.profitability_score != null ? Number(row.profitability_score) : null,
     riskControlScore: row.risk_control_score != null ? Number(row.risk_control_score) : null,
     executionScore: row.execution_score != null ? Number(row.execution_score) : null,
-    scoreConfidence: (row.score_completeness as string) || null,
+    scoreConfidence: row.score_completeness != null
+      ? (Number(row.score_completeness) >= 80 ? 'full' : Number(row.score_completeness) >= 50 ? 'partial' : 'minimal')
+      : null,
 
     // Rankings
     rank: row.rank != null ? Number(row.rank) : null,

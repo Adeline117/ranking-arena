@@ -240,6 +240,9 @@ export default async function TraderPage({ params, searchParams }: { params: Pro
       profitability_score: (serverTraderData.performance as Record<string, unknown>).profitability_score as number | null,
       risk_control_score: (serverTraderData.performance as Record<string, unknown>).risk_control_score as number | null,
       execution_score: (serverTraderData.performance as Record<string, unknown>).execution_score as number | null,
+      sortino_ratio: (serverTraderData.performance as Record<string, unknown>).sortinoRatio as number | null ?? null,
+      calmar_ratio: (serverTraderData.performance as Record<string, unknown>).calmarRatio as number | null ?? null,
+      profit_factor: (serverTraderData.performance as Record<string, unknown>).profitFactor as number | null ?? null,
     } : {}),
   }
 
