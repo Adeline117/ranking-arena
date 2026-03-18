@@ -641,18 +641,37 @@ async function computeSeason(
     Array.from(bySource.entries()).map(async ([source, traderIds]) => {
       for (let i = 0; i < traderIds.length; i += 500) {
         const chunk = traderIds.slice(i, i + 500)
-        const { data } = await supabase
+        // Primary: trader_profiles_v2 (most complete — has generated display_names and avatars)
+        const { data: v2Data } = await supabase
+          .from('trader_profiles_v2')
+          .select('trader_key, display_name, avatar_url')
+          .eq('platform', source)
+          .in('trader_key', chunk)
+
+        v2Data?.forEach((s: { trader_key: string; display_name: string | null; avatar_url: string | null }) => {
+          const tid = s.trader_key.startsWith('0x') ? s.trader_key.toLowerCase() : s.trader_key
+          handleMap.set(`${source}:${tid}`, {
+            handle: s.display_name,
+            avatar_url: s.avatar_url || null,
+          })
+        })
+
+        // Fallback: traders view for any not found in profiles_v2
+        const { data: fallbackData } = await supabase
           .from('traders')
           .select('trader_key, handle, avatar_url')
           .eq('platform', source)
           .in('trader_key', chunk)
 
-        data?.forEach((s: { trader_key: string; handle: string | null; avatar_url: string | null }) => {
+        fallbackData?.forEach((s: { trader_key: string; handle: string | null; avatar_url: string | null }) => {
           const tid = s.trader_key.startsWith('0x') ? s.trader_key.toLowerCase() : s.trader_key
-          handleMap.set(`${source}:${tid}`, {
-            handle: s.handle,
-            avatar_url: s.avatar_url || null,
-          })
+          const key = `${source}:${tid}`
+          if (!handleMap.has(key) || (!handleMap.get(key)!.handle && s.handle)) {
+            handleMap.set(key, {
+              handle: handleMap.get(key)?.handle || s.handle,
+              avatar_url: handleMap.get(key)?.avatar_url || s.avatar_url || null,
+            })
+          }
         })
       }
     })
