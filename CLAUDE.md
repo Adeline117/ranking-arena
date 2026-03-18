@@ -164,6 +164,22 @@ STRIPE_SECRET_KEY
 
 ## Claude Code Resources
 See `.claude/ARENA_SKILL_SYSTEM.md` for full list of agents, skills, and slash commands.
+
+### Virtual Engineering Team (gstack-inspired)
+| Role | Command | Description |
+|------|---------|-------------|
+| CEO | `/plan-ceo-review` | Challenge premises, 10-star vision, scope decision |
+| Eng Manager | `/plan-eng-review` | Architecture, code quality, tests, performance (gates `/ship`) |
+| Designer (audit) | `/design-audit` | 80-item visual audit, 10 categories, A-F grades |
+| Designer (system) | `/design-system` | Full design system proposal + DESIGN.md |
+| Release Manager | `/ship` | Merge base → test → version bump → CHANGELOG → PR |
+| QA Lead (fix) | `/qa` | Test + auto-fix + atomic commits + health score |
+| QA Lead (report) | `/qa-report` | Same testing, report only, no code changes |
+| Design QA (fix) | `/qa-design` | Fix visual inconsistencies + AI slop |
+| Retro Facilitator | `/retro` | Weekly retro with trend tracking |
+| Doc Engineer | `/doc-release` | Post-ship docs sync |
+
+### Pipeline & Operations
 Key commands: `/fix-pipeline`, `/debug-cron`, `/deploy-staging`, `/implement-spec`, `/weekly-self-check`
 
 ## Agent Work Rules (MUST FOLLOW)
@@ -271,3 +287,13 @@ try {
 | Implement feature | `/implement-spec specs/xxx.md` |
 | Weekly self-check | `/weekly-self-check` |
 | Health dashboard | `/admin/monitoring` |
+| **CEO product review** | `/plan-ceo-review` |
+| **Eng manager review** | `/plan-eng-review` (gates `/ship`) |
+| **Design audit** | `/design-audit` (report-only, 80 checks) |
+| **Design system** | `/design-system` (creates DESIGN.md) |
+| **Ship release** | `/ship` (test → version bump → CHANGELOG → PR) |
+| **QA test + fix** | `/qa` (quick/standard/exhaustive) |
+| **QA report only** | `/qa-report` (no code changes) |
+| **Design QA + fix** | `/qa-design` (fix visual issues) |
+| **Retrospective** | `/retro` (weekly engineering retro) |
+| **Post-ship docs** | `/doc-release` (sync all docs after ship) |
