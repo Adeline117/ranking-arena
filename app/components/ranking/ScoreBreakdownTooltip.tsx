@@ -89,9 +89,10 @@ export const ScoreBreakdownTooltip = memo(function ScoreBreakdownTooltip({
   }
 
   // Derive confidence from data if API didn't provide it
+  // Use == null instead of falsy check: win_rate=0 and max_drawdown=0 are valid values
   const confidence = trader.score_confidence ?? (
-    (!trader.win_rate) && (!trader.max_drawdown) ? 'minimal' :
-    (!trader.win_rate) || (!trader.max_drawdown) ? 'partial' :
+    (trader.win_rate == null) && (trader.max_drawdown == null) ? 'minimal' :
+    (trader.win_rate == null) || (trader.max_drawdown == null) ? 'partial' :
     'full'
   )
   const confidenceInfo = confidence !== 'full'
@@ -151,8 +152,8 @@ export const ScoreBreakdownTooltip = memo(function ScoreBreakdownTooltip({
           <div style={{ marginTop: 2, opacity: 0.8, fontSize: tokens.typography.fontSize.xs, color: tokens.colors.text.tertiary }}>
             {t('scoreConfidenceMissing')}
             {[
-              !trader.win_rate && t('scoreConfidenceWinRate'),
-              !trader.max_drawdown && t('scoreConfidenceDrawdown'),
+              trader.win_rate == null && t('scoreConfidenceWinRate'),
+              trader.max_drawdown == null && t('scoreConfidenceDrawdown'),
             ].filter(Boolean).join(', ')}
           </div>
         </div>
