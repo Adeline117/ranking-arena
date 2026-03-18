@@ -83,12 +83,14 @@ export class XtFuturesConnector extends BaseConnector {
       // or legacy: { traders: [...] }
       const vpsAny = vpsData as Record<string, unknown>
       const groups = (vpsAny?.result || vpsAny?.traders || []) as Array<{ sotType?: string; items?: XTLeaderboardEntry[] }>
+      const seen = new Set<string>()
       if (Array.isArray(groups)) {
         for (const group of groups) {
           const items = group?.items || []
           for (const item of items) {
             const uid = String(item.accountId || item.uid || item.leaderUid || '')
-            if (!uid) continue
+            if (!uid || seen.has(uid)) continue
+            seen.add(uid)
             allTraders.push({
               platform: 'xt',
               market_type: 'futures' as const,
