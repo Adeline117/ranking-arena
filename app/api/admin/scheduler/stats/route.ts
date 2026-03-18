@@ -13,6 +13,7 @@
 
 import { NextResponse } from 'next/server'
 import { createSupabaseAdmin } from '@/lib/cron/utils'
+import { env } from '@/lib/env'
 import { createScheduleManager } from '@/lib/services/schedule-manager'
 import { TIER_SCHEDULES } from '@/lib/services/smart-scheduler'
 import { createLogger } from '@/lib/utils/logger'
@@ -38,7 +39,7 @@ export async function GET(_req: Request) {
     const authHeader = _req.headers.get('authorization')
     const token = authHeader?.replace('Bearer ', '')
     const cronSecret = process.env.CRON_SECRET
-    const adminSecret = process.env.ADMIN_SECRET
+    const adminSecret = env.ADMIN_SECRET
     if (!token || (token !== cronSecret && token !== adminSecret)) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }

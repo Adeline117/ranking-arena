@@ -12,6 +12,7 @@ import logger from '@/lib/logger'
 import { PipelineLogger } from '@/lib/services/pipeline-logger'
 import { getPushNotificationService } from '@/lib/services/push-notification'
 import { sendEmail, buildTraderAlertEmail } from '@/lib/services/email'
+import { env } from '@/lib/env'
 
 export const runtime = 'nodejs'
 export const preferredRegion = 'sfo1'
@@ -21,7 +22,7 @@ export const maxDuration = 120
 // 验证 Cron 密钥
 function isAuthorized(req: Request): boolean {
   const authHeader = req.headers.get('authorization')
-  const cronSecret = process.env.CRON_SECRET
+  const cronSecret = env.CRON_SECRET
 
   if (!cronSecret) {
     logger.warn('[TraderAlerts Cron] CRON_SECRET 未配置')

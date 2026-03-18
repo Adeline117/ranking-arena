@@ -9,10 +9,11 @@ import Stripe from 'stripe'
 import { createLogger } from '@/lib/utils/logger'
 import { checkRateLimit, RateLimitPresets } from '@/lib/utils/rate-limit'
 import { getAuthUser } from '@/lib/supabase/server'
+import { env } from '@/lib/env'
 
 // 懒加载 Stripe 客户端
 function getStripe() {
-  const secretKey = process.env.STRIPE_SECRET_KEY
+  const secretKey = env.STRIPE_SECRET_KEY
   if (!secretKey) {
     throw new Error('STRIPE_SECRET_KEY is not configured')
   }

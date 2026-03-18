@@ -16,13 +16,14 @@ import { PipelineLogger } from '@/lib/services/pipeline-logger'
 import { sendDailyDigest, type DailyDigestData } from '@/lib/notifications/telegram'
 import { DEAD_BLOCKED_PLATFORMS } from '@/lib/constants/exchanges'
 import { getSupportedInlinePlatforms } from '@/lib/cron/fetchers'
+import { env } from '@/lib/env'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 60
 
 export async function GET(request: NextRequest) {
   const authHeader = request.headers.get('authorization')
-  const cronSecret = process.env.CRON_SECRET
+  const cronSecret = env.CRON_SECRET
   if (!cronSecret || authHeader !== `Bearer ${cronSecret}`) {
     return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
   }

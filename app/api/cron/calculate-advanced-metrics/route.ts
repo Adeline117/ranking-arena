@@ -22,6 +22,7 @@ import {
 } from '@/lib/utils/advanced-metrics'
 import { calculateArenaScoreV3Legacy, type Period } from '@/lib/utils/arena-score'
 import { logger } from '@/lib/logger'
+import { env } from '@/lib/env'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 300 // 5 minutes
@@ -31,7 +32,7 @@ const BATCH_SIZE = 50
 export async function POST(request: NextRequest) {
   // Verify cron secret
   const authHeader = request.headers.get('authorization')
-  if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
+  if (authHeader !== `Bearer ${env.CRON_SECRET}`) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 

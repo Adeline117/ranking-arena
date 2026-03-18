@@ -14,6 +14,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { PipelineLogger } from '@/lib/services/pipeline-logger'
 import { runEnrichment, type EnrichmentResult } from '@/lib/cron/enrichment-runner'
 import { createLogger } from '@/lib/utils/logger'
+import { env } from '@/lib/env'
 
 const logger = createLogger('batch-enrich')
 
@@ -82,7 +83,7 @@ interface BatchResult {
 
 export async function GET(request: NextRequest) {
   const authHeader = request.headers.get('authorization')
-  const cronSecret = process.env.CRON_SECRET
+  const cronSecret = env.CRON_SECRET
   if (!cronSecret || authHeader !== `Bearer ${cronSecret}`) {
     return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
   }

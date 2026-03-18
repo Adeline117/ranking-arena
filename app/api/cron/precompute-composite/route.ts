@@ -17,6 +17,7 @@ import { PLATFORM_CATEGORY } from '@/lib/types/leaderboard'
 import type { GranularPlatform } from '@/lib/types/leaderboard'
 import { createLogger } from '@/lib/utils/logger'
 import { PipelineLogger } from '@/lib/services/pipeline-logger'
+import { env } from '@/lib/env'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 120
@@ -31,7 +32,7 @@ const FRESHNESS_HOURS = 168 // 7 days — resilient to intermittent fetch failur
 
 export async function GET(request: NextRequest) {
   const authHeader = request.headers.get('authorization')
-  if (process.env.CRON_SECRET && authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
+  if (env.CRON_SECRET && authHeader !== `Bearer ${env.CRON_SECRET}`) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 

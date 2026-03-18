@@ -8,6 +8,7 @@ import {
 } from '@/lib/stripe'
 import { createLogger } from '@/lib/utils/logger'
 import { checkRateLimit, RateLimitPresets } from '@/lib/utils/rate-limit'
+import { env } from '@/lib/env'
 
 // 懒加载 Supabase Admin 客户端，避免构建时环境变量缺失
 function getSupabaseAdmin() {
@@ -30,7 +31,7 @@ export async function POST(request: NextRequest) {
 
   try {
     // 前置校验：确保 Stripe 环境变量已配置
-    if (!process.env.STRIPE_SECRET_KEY) {
+    if (!env.STRIPE_SECRET_KEY) {
       return NextResponse.json(
         { error: 'Payment system not configured. Please contact support.' },
         { status: 503 }
@@ -129,8 +130,8 @@ export async function POST(request: NextRequest) {
       userId: user.id,
       plan: plan,
     }
-    const sUrl = successUrl || `${process.env.NEXT_PUBLIC_APP_URL}/pricing/success?session_id={CHECKOUT_SESSION_ID}`
-    const cUrl = cancelUrl || `${process.env.NEXT_PUBLIC_APP_URL}/pricing`
+    const sUrl = successUrl || `${env.NEXT_PUBLIC_APP_URL}/pricing/success?session_id={CHECKOUT_SESSION_ID}`
+    const cUrl = cancelUrl || `${env.NEXT_PUBLIC_APP_URL}/pricing`
 
     let checkoutSession
 

@@ -11,6 +11,7 @@ import { z } from 'zod'
 import { verifyQStashSignature } from '@/lib/cron/qstash-client'
 import { createLogger } from '@/lib/utils/logger'
 import { circuitBreaker as circuitBreakerManager, withCircuitBreaker } from '@/lib/middleware/circuit-breaker'
+import { env } from '@/lib/env'
 
 const logger = createLogger('CronRoute')
 
@@ -99,11 +100,11 @@ export async function POST(
     } else {
       // Require CRON_SECRET auth
       const authHeader = request.headers.get('authorization')
-      if (!process.env.CRON_SECRET) {
+      if (!env.CRON_SECRET) {
         if (process.env.NODE_ENV !== 'development') {
           return NextResponse.json({ error: 'CRON_SECRET not configured' }, { status: 500 })
         }
-      } else if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
+      } else if (authHeader !== `Bearer ${env.CRON_SECRET}`) {
         return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
       }
     }

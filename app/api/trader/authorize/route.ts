@@ -11,6 +11,7 @@ import { encrypt } from '@/lib/crypto/encryption'
 import { validateExchangeApiKey } from '@/lib/validators/api-key-validator'
 import { logger } from '@/lib/logger'
 import { checkRateLimit, RateLimitPresets } from '@/lib/utils/rate-limit'
+import { env } from '@/lib/env'
 
 export const dynamic = 'force-dynamic'
 
@@ -203,7 +204,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Trigger initial data sync (async, don't wait)
-    fetch(`${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/api/trader/sync`, {
+    fetch(`${env.NEXT_PUBLIC_APP_URL}/api/trader/sync`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',

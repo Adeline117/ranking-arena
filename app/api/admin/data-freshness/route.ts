@@ -9,6 +9,7 @@
 
 import { NextResponse } from 'next/server'
 import { buildFreshnessReport } from '@/app/api/cron/check-data-freshness/route'
+import { env } from '@/lib/env'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -18,7 +19,7 @@ export async function GET(req: Request) {
   const authHeader = req.headers.get('authorization')
   const token = authHeader?.replace('Bearer ', '')
   const validSecret =
-    process.env.ADMIN_SECRET || process.env.CRON_SECRET
+    env.ADMIN_SECRET || env.CRON_SECRET
 
   if (!validSecret || token !== validSecret) {
     return NextResponse.json({ error: 'unauthorized' }, { status: 401 })

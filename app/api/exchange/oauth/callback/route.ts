@@ -5,6 +5,7 @@ import { createLogger } from '@/lib/utils/logger'
 import { getAuthUser } from '@/lib/supabase/server'
 import { validateCsrfToken, CSRF_COOKIE_NAME, CSRF_HEADER_NAME } from '@/lib/utils/csrf'
 import { checkRateLimit, RateLimitPresets } from '@/lib/utils/rate-limit'
+import { env } from '@/lib/env'
 
 const logger = createLogger('exchange-oauth-callback')
 
@@ -23,14 +24,14 @@ const TOKEN_CONFIG: Record<string, {
     clientId: process.env.BINANCE_OAUTH_CLIENT_ID || '',
     clientSecret: process.env.BINANCE_OAUTH_CLIENT_SECRET || '',
     tokenUrl: 'https://accounts.binance.com/oauth/token',
-    redirectUri: `${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/exchange/auth/callback`,
+    redirectUri: `${env.NEXT_PUBLIC_APP_URL}/exchange/auth/callback`,
     userInfoUrl: 'https://www.binanceapis.com/oauth-api/v1/user-info',
   },
   bybit: {
     clientId: process.env.BYBIT_OAUTH_CLIENT_ID || '',
     clientSecret: process.env.BYBIT_OAUTH_CLIENT_SECRET || '',
     tokenUrl: 'https://api.bybit.com/v5/account/oauth/token',
-    redirectUri: `${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/exchange/auth/callback`,
+    redirectUri: `${env.NEXT_PUBLIC_APP_URL}/exchange/auth/callback`,
   },
 }
 

@@ -14,6 +14,7 @@ import { getSupabaseAdmin } from '@/lib/supabase/server'
 import { generateAutoBio, generateAutoTags, type AutoProfileInput } from '@/lib/utils/auto-profile'
 import { PipelineLogger } from '@/lib/services/pipeline-logger'
 import { logger } from '@/lib/logger'
+import { env } from '@/lib/env'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 120
@@ -21,7 +22,7 @@ export const maxDuration = 120
 export async function POST(request: NextRequest) {
   // Auth check
   const authHeader = request.headers.get('authorization')
-  if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
+  if (authHeader !== `Bearer ${env.CRON_SECRET}`) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 

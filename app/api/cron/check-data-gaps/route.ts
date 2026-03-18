@@ -13,6 +13,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { logger } from '@/lib/logger'
 import { PipelineLogger } from '@/lib/services/pipeline-logger'
+import { env } from '@/lib/env'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 120
@@ -82,7 +83,7 @@ function getSupabaseClient() {
 }
 
 function isAuthorized(req: Request): boolean {
-  const secret = process.env.CRON_SECRET
+  const secret = env.CRON_SECRET
   if (!secret) return false
 
   const authHeader = req.headers.get('authorization')
