@@ -48,6 +48,11 @@ export default function BottomSheet({
   // Sync open state
   useEffect(() => {
     if (open) {
+      // #35: Clear pending close timer if open becomes true again (rapid toggle guard)
+      if (closeTimerRef.current) {
+        clearTimeout(closeTimerRef.current)
+        closeTimerRef.current = null
+      }
       setSnap(initialSnap)
       document.body.style.overflow = 'hidden'
     } else {

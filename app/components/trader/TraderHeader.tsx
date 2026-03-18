@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import Image from 'next/image'
 import dynamic from 'next/dynamic'
 import { useRouter } from 'next/navigation'
@@ -123,6 +123,17 @@ export default function TraderHeader({
   const [avatarHovered, setAvatarHovered] = useState(false)
   const [avatarError, setAvatarError] = useState(false)
   const [followerCount, setFollowerCount] = useState(followers)
+  // #34: Track follower count changes for animation
+  const [followerAnimating, setFollowerAnimating] = useState(false)
+  const prevFollowerCountRef = useRef(followers)
+  useEffect(() => {
+    if (followerCount !== prevFollowerCountRef.current) {
+      prevFollowerCountRef.current = followerCount
+      setFollowerAnimating(true)
+      const timer = setTimeout(() => setFollowerAnimating(false), 300)
+      return () => clearTimeout(timer)
+    }
+  }, [followerCount])
   const [badgesExpanded, setBadgesExpanded] = useState(false)
   const [moreMenuOpen, setMoreMenuOpen] = useState(false)
   const router = useRouter()
@@ -413,7 +424,13 @@ export default function TraderHeader({
           {(subtitleParts.length > 0 || lastUpdated) && (
             <Box style={{ display: 'flex', alignItems: 'center', gap: 4, marginTop: 2, flexWrap: 'wrap' }}>
               {subtitleParts.length > 0 && (
-                <Text size="xs" style={{ color: hasCover ? 'rgba(255,255,255,0.7)' : tokens.colors.text.tertiary, fontSize: 12, lineHeight: 1.3 }}>
+                <Text size="xs" style={{
+                  color: hasCover ? 'rgba(255,255,255,0.7)' : tokens.colors.text.tertiary,
+                  fontSize: 12, lineHeight: 1.3,
+                  // #34: Brief scale animation when follower count changes
+                  transition: 'transform 0.3s ease',
+                  transform: followerAnimating ? 'scale(1.08)' : 'scale(1)',
+                }}>
                   {subtitleParts.join(' · ')}
                 </Text>
               )}

@@ -21,19 +21,25 @@ const cache: {
  * 简单的订阅状态 hook - 带缓存机制
  * 检查 subscriptions 表和 user_profiles.subscription_tier
  * 缓存有效期 5 分钟，减少重复请求
+ *
+ * When BETA_PRO_FEATURES_FREE is true, returns isPro: true immediately
+ * without making any Supabase queries (all hooks still called to satisfy rules-of-hooks).
  */
 export function useSubscription() {
-  const [isPro, setIsPro] = useState(false)
-  const [isLoading, setIsLoading] = useState(true)
-  const [tier, setTier] = useState<string>('free')
+  const [isPro, setIsPro] = useState(BETA_PRO_FEATURES_FREE)
+  const [isLoading, setIsLoading] = useState(!BETA_PRO_FEATURES_FREE)
+  const [tier, setTier] = useState<string>(BETA_PRO_FEATURES_FREE ? 'pro' : 'free')
   const isMountedRef = useRef(true)
 
   const checkSubscription = useCallback(async (forceRefresh = false) => {
+    // During beta, skip all Supabase queries
+    if (BETA_PRO_FEATURES_FREE) return
+
     try {
       // Use getSession() — reads from local storage instead of making a network request
       const { data: { session } } = await supabase.auth.getSession()
       const user = session?.user ?? null
-      
+
       if (!user) {
         if (isMountedRef.current) {
           setIsPro(false)
@@ -91,12 +97,12 @@ export function useSubscription() {
         finalTier = 'pro'
         isPro = true
       }
-      
+
       // 更新缓存
       cache.userId = user.id
       cache.isPro = isPro
       cache.timestamp = now
-      
+
       if (isMountedRef.current) {
         setIsPro(isPro)
         setTier(finalTier)
@@ -120,11 +126,13 @@ export function useSubscription() {
   }, [checkSubscription])
 
   useEffect(() => {
+    // During beta, no need to check subscription or listen to auth changes
+    if (BETA_PRO_FEATURES_FREE) return
+
     isMountedRef.current = true
     checkSubscription()
 
     // 监听登录状态变化
-     
     const { data: { subscription: authSub } } = supabase.auth.onAuthStateChange((event) => {
       // 登录或登出时强制刷新
       if (event === 'SIGNED_IN' || event === 'SIGNED_OUT') {

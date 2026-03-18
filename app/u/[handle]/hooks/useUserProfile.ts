@@ -2,9 +2,10 @@
 
 import { useEffect, useState, useRef, useCallback } from 'react'
 import useSWR from 'swr'
-import { fetcher as rawFetcher } from '@/lib/hooks/useSWR'
+import { traderFetcher } from '@/lib/hooks/traderFetcher'
 import { useRouter, useSearchParams, usePathname } from 'next/navigation'
 import { supabase } from '@/lib/supabase/client'
+import { useAuthSession } from '@/lib/hooks/useAuthSession'
 import { useSubscription } from '@/app/components/home/hooks/useSubscription'
 import { useToast } from '@/app/components/ui/Toast'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
@@ -12,14 +13,7 @@ import { logger } from '@/lib/logger'
 
 import type { ServerProfile, ProfileTabKey, TraderPageData } from '../components/types'
 
-// Unwrap the API envelope { success, data } to get the raw TraderPageData
-async function traderFetcher(url: string): Promise<TraderPageData> {
-  const raw = await rawFetcher<{ success: boolean; data: TraderPageData }>(url)
-  if (raw && typeof raw === 'object' && 'data' in raw && 'success' in raw) {
-    return raw.data
-  }
-  return raw as unknown as TraderPageData
-}
+// #31: traderFetcher extracted to lib/hooks/traderFetcher.ts (shared with TraderProfileClient)
 
 interface UseUserProfileProps {
   handle: string
@@ -33,6 +27,7 @@ export function useUserProfile({ handle, serverProfile, serverTraderData }: UseU
   const { t } = useLanguage()
   const { isPro } = useSubscription()
 
+  const { userId: authUserId, email: authEmail } = useAuthSession()
   const [email, setEmail] = useState<string | null>(null)
   const [currentUserId, setCurrentUserId] = useState<string | null>(null)
   const [profile, setProfile] = useState<ServerProfile | null>(serverProfile)
@@ -52,7 +47,7 @@ export function useUserProfile({ handle, serverProfile, serverTraderData }: UseU
     traderFetcher,
     {
       revalidateOnFocus: false,
-      refreshInterval: 60_000,
+      refreshInterval: 0,
       dedupingInterval: 5000,
       errorRetryCount: 2,
       fallbackData: serverTraderData ?? undefined,
@@ -81,24 +76,20 @@ export function useUserProfile({ handle, serverProfile, serverTraderData }: UseU
     updateUrl(tab)
   }, [updateUrl])
 
-  // Auth check
+  // Sync auth state from useAuthSession (no network call)
   useEffect(() => {
-    supabase.auth.getUser().then(({ data }) => {
-      setEmail(data.user?.email ?? null)
-      setCurrentUserId(data.user?.id ?? null)
+    setEmail(authEmail)
+    setCurrentUserId(authUserId)
 
-      if (!serverProfile && data.user) {
-        const emailHandle = data.user.email?.split('@')[0]
-        const isOwnProfile = handle === data.user.id || handle === emailHandle
-        if (isOwnProfile) {
-          handleOwnProfileCreation(data.user.id, emailHandle)
-        }
+    if (!serverProfile && authUserId) {
+      const emailHandle = authEmail?.split('@')[0]
+      const isOwnProfile = handle === authUserId || handle === emailHandle
+      if (isOwnProfile) {
+        handleOwnProfileCreation(authUserId, emailHandle)
       }
-    }).catch((err) => {
-      logger.error('[UserProfile] Auth check failed:', err)
-    })
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- run once on mount; handle/serverProfile are initial props, supabase is stable
-  }, [])
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- handle/serverProfile are initial props
+  }, [authUserId, authEmail])
 
   async function handleOwnProfileCreation(userId: string, emailHandle?: string) {
     if (profileCreationRef.current) return

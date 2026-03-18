@@ -218,12 +218,13 @@ export default function OverviewPerformanceCard({
           lastUpdated={lastUpdated}
         />
 
-        {/* Content */}
+        {/* Content — shimmer on period switch */}
         <Box
+          className={isAnimating ? 'period-switch-shimmer' : ''}
           style={{
-            opacity: isAnimating ? 0.3 : 1,
+            opacity: isAnimating ? 0.4 : 1,
             transform: isAnimating ? 'scale(0.98)' : 'scale(1)',
-            transition: `all ${tokens.transition.base}`,
+            transition: `opacity 0.2s ease, transform 0.2s ease`,
           }}
         >
           {/* ROI & PnL - 主指标区 Hero Metrics */}

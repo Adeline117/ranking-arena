@@ -142,6 +142,14 @@ export default function ExchangeLinksBar({ primary, linkedAccounts, activeAccoun
                 transition: 'all 0.2s',
                 cursor: 'pointer',
               }}
+              onClick={() => {
+                // #33: Fire-and-forget click tracking for exchange link analytics
+                fetch('/api/interactions', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ type: 'exchange_link_click', platform: acc.platform, traderKey: acc.traderKey }),
+                }).catch(() => {}) // Intentional: analytics is non-critical
+              }}
               onMouseEnter={e => {
                 e.currentTarget.style.borderColor = tokens.colors.accent.primary + '80'
                 e.currentTarget.style.background = tokens.colors.accent.primary + '10'
