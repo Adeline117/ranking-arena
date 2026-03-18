@@ -49,7 +49,6 @@ const REFERRAL_LINKS: Record<string, { url: string; code: string; color: string 
 function getReferralKey(source: string): string | null {
   const s = source.toLowerCase()
   if (s.startsWith('binance')) return 'binance'
-  // Add more exchanges here as needed
   return null
 }
 
@@ -60,16 +59,16 @@ export interface ExchangeLink {
 }
 
 interface ExchangeLinksBarProps {
-  /** Primary account (always shown) */
   primary: ExchangeLink
-  /** Additional linked accounts (multi-account users) */
   linkedAccounts?: ExchangeLink[]
+  /** Active account tab: 'all' or 'platform:traderKey' */
+  activeAccount?: string
 }
 
-export default function ExchangeLinksBar({ primary, linkedAccounts }: ExchangeLinksBarProps) {
+export default function ExchangeLinksBar({ primary, linkedAccounts, activeAccount }: ExchangeLinksBarProps) {
   const { t } = useLanguage()
 
-  // Dedupe: primary + linked, unique by platform
+  // Dedupe: primary + linked, unique by platform+traderKey
   const allAccounts: ExchangeLink[] = [primary]
   if (linkedAccounts) {
     for (const acc of linkedAccounts) {
@@ -91,13 +90,19 @@ export default function ExchangeLinksBar({ primary, linkedAccounts }: ExchangeLi
     const referralKey = getReferralKey(acc.platform)
     const referral = referralKey ? REFERRAL_LINKS[referralKey] : null
 
-    return { acc, url, name, isCopyTrade, referral }
+    // Highlight when this account is the active tab
+    const isActive = activeAccount && activeAccount !== 'all'
+      ? activeAccount === `${acc.platform}:${acc.traderKey}`
+      : acc.platform === primary.platform && acc.traderKey === primary.traderKey
+
+    return { acc, url, name, isCopyTrade, referral, isActive }
   }).filter(Boolean) as Array<{
     acc: ExchangeLink
     url: string
     name: string
     isCopyTrade: boolean
     referral: { url: string; code: string; color: string } | null
+    isActive: boolean
   }>
 
   if (entries.length === 0) return null
@@ -112,75 +117,79 @@ export default function ExchangeLinksBar({ primary, linkedAccounts }: ExchangeLi
         padding: `${tokens.spacing[3]} 0`,
       }}
     >
-      {entries.map(({ acc, url, name, isCopyTrade, referral }) => (
-        <Box key={`${acc.platform}:${acc.traderKey}`} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-          <a
-            href={url}
-            target="_blank"
-            rel="noopener noreferrer"
-            style={{
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: 8,
-              padding: '8px 14px',
-              borderRadius: tokens.radius.lg,
-              background: tokens.colors.bg.secondary,
-              border: `1px solid ${tokens.colors.border.primary}`,
-              textDecoration: 'none',
-              transition: 'all 0.2s',
-              cursor: 'pointer',
-            }}
-            onMouseEnter={e => {
-              e.currentTarget.style.borderColor = tokens.colors.accent.primary + '80'
-              e.currentTarget.style.background = tokens.colors.accent.primary + '10'
-            }}
-            onMouseLeave={e => {
-              e.currentTarget.style.borderColor = tokens.colors.border.primary
-              e.currentTarget.style.background = tokens.colors.bg.secondary
-            }}
-          >
-            <ExchangeLogo exchange={acc.platform} size={18} />
-            <Text size="sm" weight="bold" style={{ color: tokens.colors.text.primary, whiteSpace: 'nowrap' }}>
-              {isCopyTrade
-                ? t('copyTradeOn').replace('{exchange}', name)
-                : t('dexViewOn').replace('{platform}', name)}
-            </Text>
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={tokens.colors.text.tertiary} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6" />
-              <polyline points="15 3 21 3 21 9" />
-              <line x1="10" y1="14" x2="21" y2="3" />
-            </svg>
-          </a>
+      {entries.map(({ acc, url, name, isCopyTrade, referral, isActive }) => {
+        const activeBorder = isActive ? tokens.colors.accent.primary + '80' : tokens.colors.border.primary
+        const activeBg = isActive ? tokens.colors.accent.primary + '10' : tokens.colors.bg.secondary
 
-          {/* Referral badge */}
-          {referral && (
+        return (
+          <Box key={`${acc.platform}:${acc.traderKey}`} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
             <a
-              href={referral.url}
+              href={url}
               target="_blank"
               rel="noopener noreferrer"
               style={{
                 display: 'inline-flex',
                 alignItems: 'center',
-                gap: 4,
-                padding: '6px 10px',
-                borderRadius: tokens.radius.md,
-                background: `${referral.color}15`,
-                border: `1px solid ${referral.color}35`,
-                fontSize: 12,
-                fontWeight: 700,
-                color: referral.color,
+                gap: 8,
+                padding: '8px 14px',
+                borderRadius: tokens.radius.lg,
+                background: activeBg,
+                border: `1px solid ${activeBorder}`,
                 textDecoration: 'none',
-                whiteSpace: 'nowrap',
                 transition: 'all 0.2s',
+                cursor: 'pointer',
               }}
-              title={`Invite code: ${referral.code}`}
+              onMouseEnter={e => {
+                e.currentTarget.style.borderColor = tokens.colors.accent.primary + '80'
+                e.currentTarget.style.background = tokens.colors.accent.primary + '10'
+              }}
+              onMouseLeave={e => {
+                e.currentTarget.style.borderColor = activeBorder
+                e.currentTarget.style.background = activeBg
+              }}
             >
-              <span style={{ fontSize: 11 }}>🎁</span>
-              {referral.code}
+              <ExchangeLogo exchange={acc.platform} size={18} />
+              <Text size="sm" weight="bold" style={{ color: isActive ? tokens.colors.accent.primary : tokens.colors.text.primary, whiteSpace: 'nowrap' }}>
+                {isCopyTrade
+                  ? t('copyTradeOn').replace('{exchange}', name)
+                  : t('dexViewOn').replace('{platform}', name)}
+              </Text>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={isActive ? tokens.colors.accent.primary : tokens.colors.text.tertiary} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6" />
+                <polyline points="15 3 21 3 21 9" />
+                <line x1="10" y1="14" x2="21" y2="3" />
+              </svg>
             </a>
-          )}
-        </Box>
-      ))}
+
+            {referral && (
+              <a
+                href={referral.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 4,
+                  padding: '6px 10px',
+                  borderRadius: tokens.radius.md,
+                  background: `${referral.color}15`,
+                  border: `1px solid ${referral.color}35`,
+                  fontSize: 12,
+                  fontWeight: 700,
+                  color: referral.color,
+                  textDecoration: 'none',
+                  whiteSpace: 'nowrap',
+                  transition: 'all 0.2s',
+                }}
+                title={`Invite code: ${referral.code}`}
+              >
+                <span style={{ fontSize: 11 }}>🎁</span>
+                {referral.code}
+              </a>
+            )}
+          </Box>
+        )
+      })}
     </Box>
   )
 }
