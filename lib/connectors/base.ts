@@ -421,72 +421,75 @@ export abstract class BaseConnector implements PlatformConnector {
       // Cache read failed, proceed to scraper
     }
 
-    try {
-      const queryString = new URLSearchParams(
-        Object.entries(params).map(([k, v]) => [k, String(v)])
-      ).toString();
+    const queryString = new URLSearchParams(
+      Object.entries(params).map(([k, v]) => [k, String(v)])
+    ).toString();
 
-      // Named endpoints (e.g., /toobit/leaderboard) are served by the Playwright scraper.
-      // Scraper: port 3457, Proxy: port 3456.
-      // Strategy: try scraper directly first, then route through proxy to scraper.
-      const rawScraperSg = (process.env.VPS_SCRAPER_SG || '').replace(/\\n$/, '').trim()
-      const scraperHost = rawScraperSg || vpsHost.replace(':3456', ':3457');
-      const scraperUrl = `${scraperHost}${endpoint}${queryString ? `?${queryString}` : ''}`;
+    const rawScraperSg = (process.env.VPS_SCRAPER_SG || '').replace(/\\n$/, '').trim()
+    const scraperHost = rawScraperSg || vpsHost.replace(':3456', ':3457');
+    const scraperUrl = `${scraperHost}${endpoint}${queryString ? `?${queryString}` : ''}`;
+    const proxyHost = (process.env.VPS_PROXY_SG || process.env.VPS_PROXY_URL || vpsHost).replace(':3457', ':3456');
+    const localScraperUrl = `http://localhost:3457${endpoint}${queryString ? `?${queryString}` : ''}`;
 
-      // Strategy 1: Direct to scraper port 3457
-      let response: Response | null = null;
-      try {
-        response = await fetch(scraperUrl, {
-          method: 'GET',
-          headers: { 'X-Proxy-Key': vpsKey, 'Accept': 'application/json' },
-          signal: AbortSignal.timeout(timeoutMs), // Allow full timeout for scraper (was capped at 30s)
-        });
-      } catch {
-        // Port 3457 might be firewalled from Vercel — try routing through proxy
+    // Retry up to 2 attempts (initial + 1 retry with 3s backoff)
+    for (let attempt = 0; attempt < 2; attempt++) {
+      if (attempt > 0) {
+        await new Promise(r => setTimeout(r, 3000)); // 3s backoff before retry
+        exchangeLogger.info(`[VPS] ${this.platform} retry attempt ${attempt + 1} for ${endpoint}`)
       }
 
-      // Strategy 2: Route through proxy (3456) → scraper (localhost:3457)
-      if (!response || !response.ok) {
+      try {
+        // Strategy 1: Direct to scraper port 3457
+        let response: Response | null = null;
         try {
-          // proxyHost MUST be port 3456 (proxy), NOT 3457 (scraper)
-          const proxyHost = (process.env.VPS_PROXY_SG || process.env.VPS_PROXY_URL || vpsHost).replace(':3457', ':3456');
-          const localScraperUrl = `http://localhost:3457${endpoint}${queryString ? `?${queryString}` : ''}`;
-          response = await fetch(proxyHost, {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'X-Proxy-Key': vpsKey,
-            },
-            body: JSON.stringify({
-              url: localScraperUrl,
-              method: 'GET',
-              headers: { 'X-Proxy-Key': vpsKey },
-            }),
+          response = await fetch(scraperUrl, {
+            method: 'GET',
+            headers: { 'X-Proxy-Key': vpsKey, 'Accept': 'application/json' },
             signal: AbortSignal.timeout(timeoutMs),
           });
         } catch {
-          // Both strategies failed
+          // Port 3457 might be firewalled from Vercel — try routing through proxy
+        }
+
+        // Strategy 2: Route through proxy (3456) → scraper (localhost:3457)
+        if (!response || !response.ok) {
+          try {
+            response = await fetch(proxyHost, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'X-Proxy-Key': vpsKey,
+              },
+              body: JSON.stringify({
+                url: localScraperUrl,
+                method: 'GET',
+                headers: { 'X-Proxy-Key': vpsKey },
+              }),
+              signal: AbortSignal.timeout(timeoutMs),
+            });
+          } catch {
+            // Both strategies failed this attempt
+          }
+        }
+
+        if (response?.ok) {
+          const data = await response.json() as T;
+          // Cache successful scraper result for 90 min (was 30 min — leaderboard data changes slowly)
+          const dataObj = data as Record<string, unknown>
+          if (!dataObj?.error) {
+            cache.set(cacheKey, data, { ttl: 90 * 60 }).catch(() => {})
+          }
+          return data;
+        }
+      } catch (error) {
+        if (attempt === 0) {
+          exchangeLogger.warn(`[VPS] ${this.platform} attempt 1 failed: ${toError(error).message}`)
         }
       }
-
-      if (!response || !response.ok) {
-        console.warn(`[VPS] ${this.platform} scraper failed (status: ${response?.status || 'no response'})`);
-        return null;
-      }
-
-      const data = await response.json() as T;
-
-      // Cache successful scraper result for 30 min (never cache error responses)
-      const dataObj = data as Record<string, unknown>
-      if (!dataObj?.error) {
-        cache.set(cacheKey, data, { ttl: SCRAPER_CACHE_TTL }).catch(() => {})
-      }
-
-      return data;
-    } catch (error) {
-      console.warn(`[VPS] ${this.platform} failed:`, toError(error).message);
-      return null;
     }
+
+    console.warn(`[VPS] ${this.platform} scraper failed after 2 attempts for ${endpoint}`);
+    return null;
   }
 
   /**
