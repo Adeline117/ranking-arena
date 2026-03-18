@@ -71,7 +71,8 @@ function checkFetcherErrorHandling() {
   const fetcherDir = join(ROOT_DIR, 'lib/cron/fetchers')
   // Skip non-fetcher utility files (DB ops, math calculations, type definitions, config helpers)
   // Skip utility files: DB ops, math, types, configs, enrichment sub-modules (called by enrichment-runner.ts with withRetry)
-  const SKIP_FILES = new Set(['index.ts', 'shared.ts', 'enrichment.ts', 'enrichment-types.ts', 'enrichment-db.ts', 'enrichment-metrics.ts', 'enrichment-binance.ts', 'enrichment-bybit.ts', 'enrichment-bitget.ts', 'enrichment-dex.ts', 'enrichment-htx.ts', 'enrichment-okx.ts', 'exchange-configs.ts', 'scraper-config.ts', 'verify-registry.ts', 'vertex.ts'])
+  // Skip ALL enrichment-*.ts sub-modules — they are called by enrichment-runner.ts with withRetry/circuit breaker
+  const SKIP_FILES = new Set(['index.ts', 'shared.ts', 'enrichment.ts', 'enrichment-types.ts', 'enrichment-db.ts', 'enrichment-metrics.ts', 'enrichment-binance.ts', 'enrichment-bybit.ts', 'enrichment-bitget.ts', 'enrichment-dex.ts', 'enrichment-htx.ts', 'enrichment-okx.ts', 'enrichment-bitunix.ts', 'enrichment-btcc.ts', 'enrichment-coinex.ts', 'enrichment-copin.ts', 'enrichment-drift.ts', 'enrichment-dydx.ts', 'enrichment-etoro.ts', 'enrichment-gateio.ts', 'enrichment-jupiter.ts', 'enrichment-mexc.ts', 'enrichment-onchain.ts', 'enrichment-wallet.ts', 'exchange-configs.ts', 'scraper-config.ts', 'verify-registry.ts', 'vertex.ts'])
   const files = readdirSync(fetcherDir).filter(f => f.endsWith('.ts') && !SKIP_FILES.has(f))
 
   // Read index.ts to check which fetchers are registered (and thus get retry wrapper)
