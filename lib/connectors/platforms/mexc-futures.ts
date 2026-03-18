@@ -52,9 +52,10 @@ export class MexcFuturesConnector extends BaseConnector {
         if (!vpsData) throw new Error('Both direct API and VPS scraper failed for mexc')
         _rawLb = vpsData
       }
-      const data = warnValidate(MexcFuturesLeaderboardResponseSchema, _rawLb, 'mexc-futures/leaderboard')
-      const list = data?.data?.list || []
-      if (data?.data?.total) totalAvailable = Number(data.data.total)
+      // Parse directly — scraper returns data.comprehensives or data.resultList, not data.list
+      const dataObj = (_rawLb?.data ?? {}) as Record<string, unknown>
+      const list = (dataObj?.list || dataObj?.comprehensives || dataObj?.resultList || []) as unknown[]
+      if (dataObj?.total) totalAvailable = Number(dataObj.total)
 
       for (const item of list) {
         allTraders.push({

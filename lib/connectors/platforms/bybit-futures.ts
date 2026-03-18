@@ -70,13 +70,11 @@ export class BybitFuturesConnector extends BaseConnector {
       if (!vpsData) throw new Error('Both direct API and VPS scraper failed for bybit')
       _rawLb = vpsData
     }
-    const data = warnValidate(BybitFuturesLeaderboardResponseSchema, _rawLb, 'bybit-futures/leaderboard')
-
-    // VPS scraper returns result.leaderDetails, direct API returns result.data
-    // Check leaderDetails first — Zod schema defaults result.data to [] which is truthy
-    const details = data?.result?.leaderDetails as unknown[]  | undefined
-    const dataArr = data?.result?.data as unknown[] | undefined
-    const rawList = (details?.length ? details : null)
+    // Parse directly from raw response — skip Zod which defaults result.data=[] and hides leaderDetails
+    const resultObj = (_rawLb as Record<string, unknown>)?.result as Record<string, unknown> | undefined
+    const leaderDetails = resultObj?.leaderDetails as unknown[] | undefined
+    const dataArr = resultObj?.data as unknown[] | undefined
+    const rawList = (leaderDetails?.length ? leaderDetails : null)
       || (dataArr?.length ? dataArr : null)
       || []
     const list = (Array.isArray(rawList) ? rawList : []) as Record<string, unknown>[]
@@ -95,7 +93,7 @@ export class BybitFuturesConnector extends BaseConnector {
 
     return {
       traders,
-      total_available: data?.result?.total || null,
+      total_available: (resultObj?.total as number) || null,
       window,
       fetched_at: new Date().toISOString(),
     }
