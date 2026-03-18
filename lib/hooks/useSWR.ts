@@ -68,14 +68,17 @@ const defaultConfig: SWRConfiguration = {
 // ============================================
 
 export async function fetcher<T>(url: string): Promise<T> {
+  const startTime = performance.now()
   try {
     const response = await fetchWithTimeout(url, {
       credentials: 'include',
     })
 
     if (!response.ok) {
-      const error = new Error(t('errorRequestFailed')) as Error & { status: number; info: unknown }
+      const error = new Error(t('errorRequestFailed')) as Error & { status: number; info: unknown; url: string; duration: number }
       error.status = response.status
+      error.url = url
+      error.duration = Math.round(performance.now() - startTime)
       try {
         error.info = await response.json()
       } catch {
@@ -86,8 +89,12 @@ export async function fetcher<T>(url: string): Promise<T> {
 
     return response.json()
   } catch (error) {
-    // 处理超时和网络错误
+    // Enrich error with request context (Sentry breadcrumb pattern)
     if (error instanceof Error) {
+      const enriched = error as Error & { url?: string; duration?: number }
+      if (!enriched.url) enriched.url = url
+      if (!enriched.duration) enriched.duration = Math.round(performance.now() - startTime)
+
       if (error.name === 'TimeoutError' || error.message.includes('timeout') || error.message.includes('超时')) {
         throw new Error(t('errorTimeout'))
       }

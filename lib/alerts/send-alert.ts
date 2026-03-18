@@ -1,38 +1,97 @@
 /**
- * 告警发送 - 统一走 Telegram
+ * 告警发送 - 多渠道支持 (Novu 38.7K★ 启发)
  *
- * 所有告警通过 lib/notifications/telegram.ts 发送。
+ * 默认走 Telegram。支持扩展到 Slack、Email 等渠道。
  * 保留 sendAlert / sendScraperAlert / sendSmartAlert 等接口向后兼容。
  */
 
 import { sendTelegramAlert, type AlertLevel } from '@/lib/notifications/telegram'
+import { logger } from '@/lib/logger'
 
 interface AlertPayload {
   title: string
   message: string
   level: 'info' | 'warning' | 'critical'
   details?: Record<string, unknown>
+  /** Override default channels. Default: ['telegram'] */
+  channels?: AlertChannel[]
+}
+
+type AlertChannel = 'telegram' | 'slack' | 'email' | 'webhook'
+
+/** Channel registry — add new channels here (Novu-inspired) */
+const CHANNEL_HANDLERS: Record<AlertChannel, (payload: AlertPayload) => Promise<boolean>> = {
+  telegram: async (payload) => {
+    return sendTelegramAlert({
+      level: payload.level as AlertLevel,
+      source: '系统告警',
+      title: payload.title,
+      message: payload.message,
+      details: payload.details ? Object.fromEntries(
+        Object.entries(payload.details).map(([k, v]) => [k, String(v)])
+      ) : undefined,
+    })
+  },
+  slack: async (_payload) => {
+    // TODO: Implement Slack webhook
+    return false
+  },
+  email: async (_payload) => {
+    // TODO: Implement email via Resend (18.2K★)
+    return false
+  },
+  webhook: async (payload) => {
+    const url = process.env.ALERT_WEBHOOK_URL
+    if (!url) return false
+    // Retry with exponential backoff (svix 3.1K★ pattern)
+    const maxRetries = 3
+    for (let attempt = 0; attempt < maxRetries; attempt++) {
+      try {
+        const res = await fetch(url, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ ...payload, attempt, timestamp: new Date().toISOString() }),
+          signal: AbortSignal.timeout(5000),
+        })
+        if (res.ok) return true
+        if (res.status >= 400 && res.status < 500) return false // Don't retry 4xx
+      } catch {
+        // Retry on network errors
+      }
+      if (attempt < maxRetries - 1) {
+        await new Promise(r => setTimeout(r, 1000 * Math.pow(2, attempt))) // 1s, 2s, 4s
+      }
+    }
+    return false
+  },
 }
 
 // ============================================
-// 核心发送
+// 核心发送 — 多渠道并发
 // ============================================
 
 export async function sendAlert(payload: AlertPayload): Promise<{ sent: boolean; channels: string[] }> {
-  const success = await sendTelegramAlert({
-    level: payload.level as AlertLevel,
-    source: '系统告警',
-    title: payload.title,
-    message: payload.message,
-    details: payload.details ? Object.fromEntries(
-      Object.entries(payload.details).map(([k, v]) => [k, String(v)])
-    ) : undefined,
-  })
+  const channels = payload.channels || ['telegram']
+  const sentChannels: string[] = []
 
-  return {
-    sent: success,
-    channels: success ? ['telegram'] : [],
-  }
+  // Send to all channels in parallel (Novu pattern)
+  const results = await Promise.allSettled(
+    channels.map(async (channel) => {
+      const handler = CHANNEL_HANDLERS[channel]
+      if (!handler) return false
+      try {
+        const success = await handler(payload)
+        if (success) sentChannels.push(channel)
+        return success
+      } catch (err) {
+        logger.warn(`[Alert] Channel ${channel} failed:`, err)
+        return false
+      }
+    })
+  )
+
+  const anySent = results.some(r => r.status === 'fulfilled' && r.value)
+  return { sent: anySent, channels: sentChannels }
 }
 
 // ============================================
