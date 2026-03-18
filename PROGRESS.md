@@ -3,8 +3,18 @@
 > Auto-read by Claude Code at session start. Keep concise — archive completed items weekly.
 
 ## Current Sprint Focus
-- All P0-P3 tasks complete. Backlog 5/6 done (only multi-language remains).
-- Team audit completed 2026-03-15: 28+ fixes across security, performance, pipeline.
+- All P0-P3 tasks complete. All backlog items done (including multi-language ja/ko 100%).
+- Test suite repair in progress (102→target 0 failures).
+
+## Recently Completed (2026-03-18) — QA, Performance, Pipeline Polish
+- **Lighthouse optimization**: NumberTicker removed framer-motion (~50KB), defer hero stats + route prefetch via requestIdleCallback, enable Next.js image optimization
+- **Connector timeout tiers**: fast/medium/slow (15s/30s/120s) based on platform WAF characteristics, lazy config in BaseConnector
+- **metrics_estimated flag**: Phase 5 estimated win_rate/MDD marked in compute-leaderboard, visual indicator in UI
+- **CRITICAL FIX**: compute-leaderboard arena_score sync used wrong column names (trader_key→source_trader_id, period→season_id)
+- **trigger.dev Phase 2**: batch-fetch-traders fan-out tasks with 15min timeout per platform
+- **Dead code cleanup**: deleted TraderPageClient.tsx (564 lines), fixed double API call in TraderProfileClient
+- **i18n complete**: ja/ko 100% coverage (3977/3977 keys each)
+- **Test suite repair**: fixing 102 failing suites (connector mocks, Supabase chaining, ESM transform)
 
 ## Recently Completed (2026-03-15) — Comprehensive Team Audit
 5-agent parallel audit (pipeline, performance, security, frontend UX, operations).
