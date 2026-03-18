@@ -57,10 +57,17 @@ export default function BottomSheet({
     return () => { document.body.style.overflow = '' }
   }, [open, initialSnap])
 
+  const closeTimerRef = useRef<NodeJS.Timeout | null>(null)
   const handleClose = useCallback(() => {
     setSnap('closed')
-    setTimeout(onClose, 300)
+    if (closeTimerRef.current) clearTimeout(closeTimerRef.current)
+    closeTimerRef.current = setTimeout(onClose, 300)
   }, [onClose])
+
+  // Cleanup close timer on unmount
+  useEffect(() => () => {
+    if (closeTimerRef.current) clearTimeout(closeTimerRef.current)
+  }, [])
 
   // Backdrop click
   const handleBackdropClick = useCallback((e: React.MouseEvent) => {

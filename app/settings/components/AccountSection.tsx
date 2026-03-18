@@ -47,14 +47,17 @@ export const AccountSection = React.memo(function AccountSection({ onLogout, onD
       }
       const blob = await res.blob()
       const url = URL.createObjectURL(blob)
-      const a = document.createElement('a')
-      a.href = url
-      a.download = `arena-data-export-${new Date().toISOString().slice(0, 10)}.json`
-      document.body.appendChild(a)
-      a.click()
-      document.body.removeChild(a)
-      URL.revokeObjectURL(url)
-      showToast(t('exportSuccess') || 'Data exported successfully!', 'success')
+      try {
+        const a = document.createElement('a')
+        a.href = url
+        a.download = `arena-data-export-${new Date().toISOString().slice(0, 10)}.json`
+        document.body.appendChild(a)
+        a.click()
+        document.body.removeChild(a)
+        showToast(t('exportSuccess') || 'Data exported successfully!', 'success')
+      } finally {
+        URL.revokeObjectURL(url) // Always revoke, even if download trigger fails
+      }
     } catch {
       showToast(t('networkError'), 'error')
     } finally {

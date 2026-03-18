@@ -16,22 +16,33 @@ export default function VoiceRecorder({ onVoiceSent, disabled }: VoiceRecorderPr
   const [duration, setDuration] = useState(0)
   const [uploading, setUploading] = useState(false)
   const mediaRecorderRef = useRef<MediaRecorder | null>(null)
+  const streamRef = useRef<MediaStream | null>(null)
   const chunksRef = useRef<Blob[]>([])
   const timerRef = useRef<NodeJS.Timeout | null>(null)
   const startTimeRef = useRef<number>(0)
 
   useEffect(() => {
     return () => {
-      if (timerRef.current) clearInterval(timerRef.current)
+      // Clean up interval
+      if (timerRef.current) { clearInterval(timerRef.current); timerRef.current = null }
+      // Stop recorder
       if (mediaRecorderRef.current && mediaRecorderRef.current.state === 'recording') {
         mediaRecorderRef.current.stop()
+      }
+      // Release microphone stream directly (don't wait for onstop callback)
+      if (streamRef.current) {
+        streamRef.current.getTracks().forEach(track => track.stop())
+        streamRef.current = null
       }
     }
   }, [])
 
   const startRecording = useCallback(async () => {
+    // Clear any stale interval from previous recording
+    if (timerRef.current) { clearInterval(timerRef.current); timerRef.current = null }
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+      streamRef.current = stream
       const mediaRecorder = new MediaRecorder(stream, {
         mimeType: MediaRecorder.isTypeSupported('audio/webm;codecs=opus')
           ? 'audio/webm;codecs=opus'
