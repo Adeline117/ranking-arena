@@ -3,9 +3,24 @@
 > Auto-read by Claude Code at session start. Keep concise — archive completed items weekly.
 
 ## Current Sprint Focus
-- All P0-P3 tasks complete. Pipeline 100% healthy, 0 warnings, 0 failures.
-- Data completeness: win_rate 94.5%, max_drawdown 95.1%, sharpe_ratio 83.8% (all real API data).
-- GitHub research optimizations applied: cockatiel, baseline charts, healthchecks.io, gap-fill.
+- Pipeline 100% healthy: 0 warnings, 0 failures, 25 active platforms all fresh.
+- Data completeness: win_rate 94.5%, max_drawdown 95.1%, sharpe_ratio 83.8%.
+- Daily snapshots: 377K rows (142 days history), sharpe computation has full depth.
+- 26 platforms with enrichment configs (added bitunix, xt, bybit VPS path).
+
+## Recently Completed (2026-03-18) — Per-Platform Data Quality Fixes
+
+### P0 Fixes
+- **bitunix enrichment**: Rewrote to batch-cache leaderboard API. Added to batch-enrich schedule. Was 0 enrichment data despite 7.8K snapshots.
+- **bitget ROI/PnL 87% null**: Root cause = stale Feb 2026 data with old hex keys. Migration to clean up. Current data (Mar) is correct.
+- **daily_snapshots only 1 day**: Fixed filter `created_at` → `as_of_ts`. Backfilled 421K rows across 25 dates (35K → 377K total, 142 days history).
+
+### P1 Fixes
+- **bybit enrichment re-enabled**: VPS scraper `/bybit/trader-detail` endpoint added. Enrichment now routes through Playwright instead of dead api2.bybit.com.
+- **bitfinex ROI**: Cross-reference plu_diff + plu rankings for better ROI coverage.
+- **weex → DEAD**: Removed from fetch groups and vercel.json (521 server down, 0 traders).
+- **vertex/kwenta cleaned up**: Removed stale references from utility lists.
+- **xt enrichment**: New module with batch-cache internal API. Added to ENRICHMENT_PLATFORM_CONFIGS.
 
 ## Recently Completed (2026-03-18) — GitHub Research Optimizations
 
