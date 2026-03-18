@@ -97,6 +97,7 @@ import { captureMessage } from '@/lib/utils/logger'
 import { sendRateLimitedAlert } from '@/lib/alerts/send-alert'
 import { logger } from '@/lib/logger'
 import { PipelineLogger } from '@/lib/services/pipeline-logger'
+import { LR, V2 } from '@/lib/types/schema-mapping'
 
 const RETRY_CONFIG = {
   maxAttempts: 3,
@@ -478,13 +479,14 @@ export async function runEnrichment(params: {
     // Read from leaderboard_ranks (canonical, has latest trader keys)
     // Previously read from trader_snapshots v1, which has stale keys
     // (e.g., Binance migrated from encryptedUid to leadPortfolioId)
+    // LR columns: source → platform, source_trader_id → traderKey, season_id → period
     const { data: traders, error: fetchError } = await supabase
       .from('leaderboard_ranks')
-      .select('source_trader_id')
-      .eq('source', platformKey)
-      .eq('season_id', period)
-      .not('arena_score', 'is', null)
-      .order('arena_score', { ascending: false })
+      .select(LR.source_trader_id)
+      .eq(LR.source, platformKey)
+      .eq(LR.season_id, period)
+      .not(LR.arena_score, 'is', null)
+      .order(LR.arena_score, { ascending: false })
       .range(offset, offset + limit - 1)
 
     if (fetchError || !traders) {

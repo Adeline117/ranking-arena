@@ -1,10 +1,21 @@
 /**
  * Field mapping functions for converting database rows to UnifiedTrader.
- * Handles differences between leaderboard_ranks, trader_snapshots v1, and v2.
+ *
+ * This module is the SINGLE place where DB column names are mapped to
+ * canonical application-layer field names (UnifiedTrader).
+ *
+ * Schema mapping reference: @/lib/types/schema-mapping.ts
+ *
+ * Table column differences:
+ *   leaderboard_ranks:  source → platform, source_trader_id → traderKey, season_id → period
+ *   trader_snapshots_v2: platform → platform, trader_key → traderKey, window → period
+ *   enrichment tables:  source → platform, source_trader_id → traderKey
  */
 
 import type { UnifiedTrader, TradingPeriod } from './types'
 import { SOURCE_TYPE_MAP } from '@/lib/constants/exchanges'
+// Schema mapping reference: see LEADERBOARD_RANKS_FIELDS and SNAPSHOTS_V2_FIELDS
+// in '@/lib/types/schema-mapping' for the canonical column→field mapping documentation.
 
 // ============================================================
 // Period normalization
@@ -88,7 +99,13 @@ export function getSourceAliases(platform: string): string[] {
 
 /**
  * Map leaderboard_ranks row -> UnifiedTrader.
- * leaderboard_ranks uses: source, source_trader_id, season_id, roi (already pct), pnl (USD)
+ *
+ * DB column → App field (see LEADERBOARD_RANKS_FIELDS in schema-mapping.ts):
+ *   source           → platform
+ *   source_trader_id → traderKey
+ *   season_id        → period
+ *   roi              → roi (already percentage in this table)
+ *   pnl              → pnl (already USD)
  */
 export function mapLeaderboardRow(row: Record<string, unknown>): UnifiedTrader {
   const platform = String(row.source || '')
@@ -174,7 +191,13 @@ export function mapV1Snapshot(row: Record<string, unknown>, period: TradingPerio
 
 /**
  * Map trader_snapshots_v2 row -> Partial<UnifiedTrader>.
- * v2 uses: platform, trader_key, window, roi_pct (already percentage), pnl_usd
+ *
+ * DB column → App field (see SNAPSHOTS_V2_FIELDS in schema-mapping.ts):
+ *   platform    → platform  (same name)
+ *   trader_key  → traderKey
+ *   window      → period
+ *   roi_pct     → roi (already percentage)
+ *   pnl_usd     → pnl (already USD)
  */
 export function mapV2Snapshot(row: Record<string, unknown>, period?: TradingPeriod): Partial<UnifiedTrader> {
   return {

@@ -521,16 +521,15 @@ export async function searchTraders(supabase: SupabaseClient, params: {
   if (filteredSources.length === 0) return []
 
   // Fetch arena scores from leaderboard_ranks for ranking
-  // Select only fields needed for search results (handle, platform, roi, arena_score, rank, avatar_url)
-  // Omit win_rate, max_drawdown, followers — not used in search dropdown
+  // LR columns: source → platform, source_trader_id → traderKey, season_id → period
   const traderIds = filteredSources.map(t => t.source_trader_id)
   const { data: scoreRows } = await supabase
     .from('leaderboard_ranks')
-    .select('source, source_trader_id, arena_score, roi, pnl, rank, season_id, trader_type')
-    .in('source_trader_id', traderIds.slice(0, 200))
-    .eq('season_id', '90D')
-    .not('arena_score', 'is', null)
-    .order('arena_score', { ascending: false })
+    .select(`${LR.source}, ${LR.source_trader_id}, ${LR.arena_score}, ${LR.roi}, ${LR.pnl}, ${LR.rank}, ${LR.season_id}, trader_type`)
+    .in(LR.source_trader_id, traderIds.slice(0, 200))
+    .eq(LR.season_id, '90D')
+    .not(LR.arena_score, 'is', null)
+    .order(LR.arena_score, { ascending: false })
 
   // Build score map
   const scoreMap = new Map<string, Record<string, unknown>>()
@@ -661,14 +660,14 @@ export async function resolveTrader(supabase: SupabaseClient, params: {
       const ids = candidates.map((c: { trader_key: string }) => c.trader_key)
       const { data: lbCheck } = await supabase
         .from('leaderboard_ranks')
-        .select('source_trader_id, arena_score')
-        .in('source_trader_id', ids)
-        .eq('season_id', '90D')
-        .not('arena_score', 'is', null)
-        .order('arena_score', { ascending: false })
+        .select(`${LR.source_trader_id}, ${LR.arena_score}`)
+        .in(LR.source_trader_id, ids)
+        .eq(LR.season_id, '90D')
+        .not(LR.arena_score, 'is', null)
+        .order(LR.arena_score, { ascending: false })
         .limit(1)
       if (lbCheck?.[0]) {
-        data = candidates.find((c: { trader_key: string }) => c.trader_key === lbCheck[0].source_trader_id) || data
+        data = candidates.find((c: { trader_key: string }) => c.trader_key === lbCheck[0][LR.source_trader_id]) || data
       }
     }
     if (data) {
@@ -685,11 +684,12 @@ export async function resolveTrader(supabase: SupabaseClient, params: {
   // Search by BOTH source_trader_id AND handle/display_name to support platforms
   // where the URL uses the handle but the DB key is a numeric ID (e.g., eToro).
   {
+    // leaderboard_ranks uses v1 naming: source → platform, source_trader_id → traderKey
     let lbQuery = supabase
       .from('leaderboard_ranks')
-      .select('source, source_trader_id, handle, avatar_url')
-      .or(`source_trader_id.eq.${decodedHandle},handle.eq.${decodedHandle}`)
-      .eq('season_id', '90D')
+      .select(`${LR.source}, ${LR.source_trader_id}, ${LR.handle}, ${LR.avatar_url}`)
+      .or(`${LR.source_trader_id}.eq.${decodedHandle},${LR.handle}.eq.${decodedHandle}`)
+      .eq(LR.season_id, '90D')
 
     let profileQuery = supabase
       .from('trader_profiles_v2')
@@ -697,7 +697,7 @@ export async function resolveTrader(supabase: SupabaseClient, params: {
       .or(`trader_key.eq.${decodedHandle},display_name.eq.${decodedHandle}`)
 
     if (platformFilter) {
-      lbQuery = lbQuery.eq('source', platformFilter)
+      lbQuery = lbQuery.eq(LR.source, platformFilter)
       profileQuery = profileQuery.eq('platform', platformFilter)
     }
 
@@ -708,10 +708,10 @@ export async function resolveTrader(supabase: SupabaseClient, params: {
 
     if (lbResult.data) {
       return {
-        platform: lbResult.data.source,
-        traderKey: lbResult.data.source_trader_id,
-        handle: lbResult.data.handle || null,
-        avatarUrl: lbResult.data.avatar_url || null,
+        platform: lbResult.data[LR.source],
+        traderKey: lbResult.data[LR.source_trader_id],
+        handle: lbResult.data[LR.handle] || null,
+        avatarUrl: lbResult.data[LR.avatar_url] || null,
       }
     }
 
