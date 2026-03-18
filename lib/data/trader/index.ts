@@ -39,3 +39,7 @@ export { toTraderPageData } from './bridge'
 
 // Similar traders
 export { fetchSimilarTraders } from './similar'
+
+// Schema mapping constants (re-export for convenience)
+export { LR, V2, ENRICH } from '@/lib/types/schema-mapping'
+export type { Period, Platform } from '@/lib/types/schema-mapping'
