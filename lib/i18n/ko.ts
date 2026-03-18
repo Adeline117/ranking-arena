@@ -922,6 +922,11 @@ const ko = {
     digestNone: '없음',
     digestDaily: '일간 다이제스트',
     digestWeekly: '주간 다이제스트',
+    unsubscribeSuccess: '구독이 성공적으로 취소되었습니다',
+    unsubscribeFromDigest: '이메일 다이제스트 구독 취소',
+    unsubscribeFromAll: '모든 이메일 구독 취소',
+    unsubscribeInvalidLink: '이 구독 취소 링크가 유효하지 않거나 만료되었습니다',
+    manageEmailPreferences: '이메일 환경설정 관리',
     // Account management
     multiAccount: '멀티 계정',
     multiAccountDesc: '연결된 계정 관리',
