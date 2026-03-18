@@ -99,6 +99,7 @@ export default function SearchDropdown({ open, query, onClose }: SearchDropdownP
   const [searchHistory, setSearchHistory] = useState<string[]>([])
   const [hotPosts, setHotPosts] = useState<HotPost[]>([])
   const [trendingSearches, setTrendingSearches] = useState<TrendingSearchItem[]>([])
+  const [trendingLoading, setTrendingLoading] = useState(false)
   const [loading, setLoading] = useState(false)
   const [searchData, setSearchData] = useState<UnifiedSearchResponse | null>(null)
   const [searching, setSearching] = useState(false)
@@ -132,6 +133,7 @@ export default function SearchDropdown({ open, query, onClose }: SearchDropdownP
   // Load trending searches
   const loadTrendingSearches = useCallback(async () => {
     if (!open) return
+    setTrendingLoading(true)
     try {
       const response = await fetch('/api/search?type=trending')
       if (response.ok) {
@@ -160,6 +162,8 @@ export default function SearchDropdown({ open, query, onClose }: SearchDropdownP
           query: q, searchCount: 100 - index * 10, rank: index + 1, category: 'token' as const,
         }))
       )
+    } finally {
+      setTrendingLoading(false)
     }
   }, [open])
 
@@ -270,8 +274,11 @@ export default function SearchDropdown({ open, query, onClose }: SearchDropdownP
   // Unified search with 200ms debounce
   useEffect(() => {
     if (!open || !query.trim() || query.length < 2) {
+      // Immediately clear stale results (no debounce on clear)
       setSearchData(null)
+      setSearching(false)
       setSelectedIndex(-1)
+      if (abortControllerRef.current) abortControllerRef.current.abort()
       return
     }
 
@@ -632,6 +639,7 @@ export default function SearchDropdown({ open, query, onClose }: SearchDropdownP
             language={language}
             onClose={onClose}
             hasHistory={searchHistory.length > 0}
+            loading={trendingLoading}
           />
           {features.social && (
             <HotPosts

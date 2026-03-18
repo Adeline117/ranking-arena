@@ -101,11 +101,12 @@ interface TrendingSearchesProps {
   language: string
   onClose: () => void
   hasHistory: boolean
+  loading?: boolean
 }
 
 /** Trending / popular searches section */
-export function TrendingSearches({ trending, language, onClose, hasHistory }: TrendingSearchesProps) {
-  if (trending.length === 0) return null
+export function TrendingSearches({ trending, language, onClose, hasHistory, loading }: TrendingSearchesProps) {
+  if (!loading && trending.length === 0) return null
 
   return (
     <Box>
@@ -118,6 +119,13 @@ export function TrendingSearches({ trending, language, onClose, hasHistory }: Tr
         </Text>
       </Box>
       <Box style={{ padding: `${tokens.spacing[2]} ${tokens.spacing[4]}` }}>
+        {loading ? (
+          <Box style={{ display: 'flex', gap: tokens.spacing[2], flexWrap: 'wrap' }}>
+            {[1,2,3,4,5].map(i => (
+              <Box key={i} style={{ width: 60 + i * 10, height: 28, borderRadius: tokens.radius.full, background: 'var(--overlay-hover)', animation: 'pulse 1.5s infinite' }} />
+            ))}
+          </Box>
+        ) : (
         <Box style={{ display: 'flex', flexWrap: 'wrap', gap: tokens.spacing[2] }}>
           {trending.slice(0, 6).map((item) => {
             const q = typeof item === 'string' ? item : item.query
@@ -161,6 +169,7 @@ export function TrendingSearches({ trending, language, onClose, hasHistory }: Tr
             )
           })}
         </Box>
+        )}
       </Box>
     </Box>
   )
