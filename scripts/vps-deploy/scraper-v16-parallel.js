@@ -69,28 +69,14 @@ const startedAt = new Date().toISOString()
 // ---------------------------------------------------------------------------
 
 async function ensureBrowser() {
-  if (browser && browser.isConnected()) return browser
-
-  log('Launching browser...')
-  browser = await chromium.launch({
-    headless: true,
-    args: BROWSER_ARGS,
-  })
-
-  browser.on('disconnected', () => {
-    log('Browser disconnected — will relaunch on next request')
-    browser = null
-    contextPool = []
-  })
-
-  // Concurrency slots (no pre-created contexts — fresh context per request)
-  contextPool = []
-  for (let i = 0; i < POOL_SIZE; i++) {
-    contextPool.push({ context: null, busy: false, id: i })
+  // No shared browser — each request launches its own (v15 pattern for WAF isolation)
+  // Just ensure the concurrency slots are initialized
+  if (contextPool.length === 0) {
+    for (let i = 0; i < POOL_SIZE; i++) {
+      contextPool.push({ context: null, busy: false, id: i })
+    }
+    log(`${POOL_SIZE} concurrency slots ready (fresh browser per request)`)
   }
-
-  log(`Browser launched, ${POOL_SIZE} concurrency slots ready (fresh context per request)`)
-  return browser
 }
 
 /**
@@ -107,11 +93,7 @@ function acquireContext() {
 }
 
 function releaseContext(slot) {
-  // Close the context (fresh one created next time)
-  if (slot.context) {
-    slot.context.close().catch(() => {})
-    slot.context = null
-  }
+  slot.context = null
   slot.busy = false
   // Process next queued request
   processQueue()
@@ -162,8 +144,9 @@ function processQueue() {
 async function executeRequest(slot, item) {
   const { handler, params } = item
 
-  // Create a FRESH context per request (critical for WAF/CF cookie isolation)
-  const context = await browser.newContext({
+  // Launch FRESH browser per request (v15 pattern — full WAF/fingerprint isolation)
+  const reqBrowser = await chromium.launch({ headless: true, args: BROWSER_ARGS })
+  const context = await reqBrowser.newContext({
     userAgent: DEFAULT_UA,
     viewport: { width: 1280, height: 720 },
     ignoreHTTPSErrors: true,
@@ -172,7 +155,7 @@ async function executeRequest(slot, item) {
 
   // Per-request timeout
   const timeout = setTimeout(() => {
-    context.close().catch(() => {})
+    reqBrowser.close().catch(() => {})
   }, REQUEST_TIMEOUT_MS)
 
   try {
@@ -188,6 +171,7 @@ async function executeRequest(slot, item) {
     }
   } finally {
     clearTimeout(timeout)
+    await reqBrowser.close().catch(() => {})
   }
 }
 
@@ -717,7 +701,7 @@ const server = http.createServer(async (req, res) => {
           heapUsed: Math.round(memUsage.heapUsed / 1024 / 1024),
           heapTotal: Math.round(memUsage.heapTotal / 1024 / 1024),
         },
-        browserConnected: browser ? browser.isConnected() : false,
+        browserMode: 'fresh-per-request',
       })
     )
     return
@@ -790,8 +774,8 @@ async function shutdown(signal) {
     if (item) item.reject(new Error('Server shutting down'))
   }
 
-  // Close browser
-  if (browser) {
+  // No shared browser to close (fresh per request)
+  if (false) {
     try {
       await browser.close()
     } catch {
