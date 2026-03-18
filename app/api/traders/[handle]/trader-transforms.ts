@@ -122,6 +122,7 @@ export async function getTraderDetails(
     profitability_score: lr.profitability_score as number | null,
     risk_control_score: lr.risk_control_score as number | null,
     execution_score: lr.execution_score as number | null,
+    sharpe_ratio: lr.sharpe_ratio as number | null,
   })
 
   const lr90 = lrRows.find(r => r.season_id === '90D')
@@ -159,6 +160,7 @@ export async function getTraderDetails(
         profitability_score: null,
         risk_control_score: null,
         execution_score: null,
+        sharpe_ratio: row.sharpe_ratio as number | null,
       })
 
       const v2_90 = v2Rows.find((r: Record<string, unknown>) => r.window === '90d' || r.window === '90D')
@@ -517,9 +519,9 @@ function buildPerformanceObj(
     stability_score_30d: score30d?.stabilityScore ?? undefined,
     stability_score_7d: score7d?.stabilityScore ?? undefined,
     score_confidence: score90d?.scoreConfidence ?? undefined,
-    sharpe_ratio: statsDetail90d?.sharpe_ratio ?? undefined,
-    sharpe_ratio_30d: statsDetail30d?.sharpe_ratio ?? undefined,
-    sharpe_ratio_7d: statsDetail7d?.sharpe_ratio ?? undefined,
+    sharpe_ratio: statsDetail90d?.sharpe_ratio ?? snapshot?.sharpe_ratio ?? undefined,
+    sharpe_ratio_30d: statsDetail30d?.sharpe_ratio ?? snapshot30d?.sharpe_ratio ?? undefined,
+    sharpe_ratio_7d: statsDetail7d?.sharpe_ratio ?? snapshot7d?.sharpe_ratio ?? undefined,
     winning_positions: statsDetail90d?.winning_positions ?? undefined,
     winning_positions_30d: statsDetail30d?.winning_positions ?? undefined,
     winning_positions_7d: statsDetail7d?.winning_positions ?? undefined,

@@ -30,6 +30,7 @@ export interface SnapshotData {
   arena_score_v3?: number | null
   score_completeness?: string | null
   score_penalty?: number | null
+  sharpe_ratio?: number | null
 }
 
 export interface AssetBreakdownItem {

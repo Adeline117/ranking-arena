@@ -69,6 +69,9 @@ export function toTraderPageData(detail: TraderDetail): Record<string, unknown> 
     stability_score: t.stabilityScore,
     stability_score_7d: p7?.stabilityScore ?? null,
     score_confidence: t.scoreConfidence || 'full',
+    sharpe_ratio: t.sharpeRatio ?? null,
+    sharpe_ratio_30d: p30?.sharpeRatio ?? null,
+    sharpe_ratio_7d: p7?.sharpeRatio ?? null,
     winning_positions: detail.stats?.winningPositions,
     total_positions: detail.stats?.totalPositions,
     score_penalty: 0,
@@ -80,7 +83,9 @@ export function toTraderPageData(detail: TraderDetail): Record<string, unknown> 
       tradesCount: t.tradesCount,
       avgProfit: detail.stats?.avgProfit ?? null,
       avgLoss: detail.stats?.avgLoss ?? null,
-      activeSince: detail.trackedSince || null,
+      activeSince: detail.trackedSince
+        ? new Date(detail.trackedSince).toLocaleDateString('zh-CN', { year: 'numeric', month: 'short', day: 'numeric' })
+        : null,
       maxDrawdown: t.maxDrawdown,
       sharpeRatio: t.sharpeRatio,
     },
