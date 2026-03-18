@@ -3,6 +3,7 @@ import { createClient } from '@supabase/supabase-js'
 import { createPortalSession } from '@/lib/stripe'
 import { checkRateLimit, RateLimitPresets } from '@/lib/utils/rate-limit'
 import logger from '@/lib/logger'
+import { env } from '@/lib/env'
 
 export async function POST(request: NextRequest) {
   // 敏感操作限流
@@ -13,7 +14,7 @@ export async function POST(request: NextRequest) {
 
   try {
     // 前置校验：确保 Stripe 环境变量已配置
-    if (!process.env.STRIPE_SECRET_KEY) {
+    if (!env.STRIPE_SECRET_KEY) {
       return NextResponse.json(
         { error: 'Payment system not configured. Please contact support.' },
         { status: 503 }
@@ -92,7 +93,7 @@ export async function POST(request: NextRequest) {
     // 创建客户门户会话
     const portalSession = await createPortalSession(
       profile.stripe_customer_id,
-      returnUrl || `${process.env.NEXT_PUBLIC_APP_URL}/settings`
+      returnUrl || `${env.NEXT_PUBLIC_APP_URL}/settings`
     )
 
     return NextResponse.json({

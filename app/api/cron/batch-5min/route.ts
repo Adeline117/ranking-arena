@@ -21,6 +21,7 @@ import {
   syncTradersInline,
   type InlineJobResult,
 } from '@/lib/cron/inline-jobs'
+import { env } from '@/lib/env'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 300 // 5 minutes — longest of the three
@@ -28,11 +29,11 @@ export const maxDuration = 300 // 5 minutes — longest of the three
 export async function GET(request: NextRequest) {
   // Verify cron secret
   const authHeader = request.headers.get('authorization')
-  if (!process.env.CRON_SECRET) {
+  if (!env.CRON_SECRET) {
     if (process.env.NODE_ENV !== 'development') {
       return NextResponse.json({ error: 'CRON_SECRET not configured' }, { status: 500 })
     }
-  } else if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
+  } else if (authHeader !== `Bearer ${env.CRON_SECRET}`) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 

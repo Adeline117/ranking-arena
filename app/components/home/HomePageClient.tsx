@@ -22,11 +22,24 @@ interface HomePageClientProps {
  * 数据通过客户端fetch获取，SSR排行榜由SSRRankingTable提供
  */
 export default function HomePageClient({ initialTraders, initialLastUpdated }: HomePageClientProps) {
-  // DEBUG: Minimal render to isolate infinite loop
+  // DEBUG: Test with only useTraderData
+  const convertedInitialTraders: Trader[] | undefined = useMemo(() =>
+    initialTraders?.map(t => ({
+      id: t.id, handle: t.handle, roi: t.roi, pnl: t.pnl,
+      win_rate: t.win_rate, max_drawdown: t.max_drawdown,
+      followers: t.followers, source: t.source, avatar_url: t.avatar_url,
+      arena_score: t.arena_score, score_confidence: t.score_confidence,
+    })), [initialTraders])
+
+  const { traders, loading } = useTraderData({
+    initialTraders: convertedInitialTraders,
+    initialLastUpdated,
+  })
+
   return (
     <div className="home-ranking-section" style={{ padding: 20, textAlign: 'center', color: 'var(--color-text-secondary)' }}>
-      <p>DEBUG: HomePageClient rendering OK</p>
-      <p>{initialTraders?.length ?? 0} traders loaded from SSR</p>
+      <p>DEBUG: useTraderData active</p>
+      <p>{traders.length} traders | loading: {String(loading)}</p>
     </div>
   )
 }

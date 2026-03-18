@@ -27,6 +27,7 @@ import {
   type ScriptResult,
 } from '@/lib/cron/utils'
 import { logger } from '@/lib/logger'
+import { env } from '@/lib/env'
 
 export const runtime = 'nodejs'
 export const preferredRegion = 'hnd1' // Tokyo — avoids Binance/OKX US geo-blocking
@@ -47,7 +48,7 @@ export async function GET() {
     config: {
       hasSupabaseUrl: !!url,
       hasServiceKey: !!serviceKey,
-      hasCronSecret: !!process.env.CRON_SECRET,
+      hasCronSecret: !!env.CRON_SECRET,
     },
   })
 }

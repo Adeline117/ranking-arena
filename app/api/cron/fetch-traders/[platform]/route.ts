@@ -17,6 +17,7 @@ import { recordFetchResult } from '@/lib/utils/pipeline-monitor'
 import { connectorRegistry, initializeConnectors } from '@/lib/connectors/registry'
 import { runConnectorBatch } from '@/lib/connectors/connector-db-adapter'
 import { SOURCE_TO_CONNECTOR_MAP } from '@/lib/constants/exchanges'
+import { env } from '@/lib/env'
 
 export const runtime = 'nodejs'
 export const preferredRegion = 'hnd1' // Tokyo — avoids Binance/OKX US geo-blocking
@@ -27,7 +28,7 @@ type Params = { params: Promise<{ platform: string }> }
 
 function isVercelCronAuthorized(request: Request): boolean {
   const authHeader = request.headers.get('authorization')
-  const cronSecret = process.env.CRON_SECRET
+  const cronSecret = env.CRON_SECRET
   if (!cronSecret && process.env.NODE_ENV === 'development') return true
   if (!cronSecret) return false
   return authHeader === `Bearer ${cronSecret}`

@@ -37,6 +37,7 @@ import { connectorRegistry, initializeConnectors } from '@/lib/connectors/regist
 import { SOURCE_TO_CONNECTOR_MAP } from '@/lib/constants/exchanges'
 import * as cache from '@/lib/cache'
 import { sendAlert } from '@/lib/alerts/send-alert'
+import { env } from '@/lib/env'
 
 const DEAD_COUNTER_PREFIX = 'dead:consecutive:'
 const DEAD_COUNTER_TTL = 7 * 24 * 60 * 60 // 7 days in seconds
@@ -106,7 +107,7 @@ let connectorsInitialized = false
 
 export async function GET(request: NextRequest) {
   const authHeader = request.headers.get('authorization')
-  const cronSecret = process.env.CRON_SECRET
+  const cronSecret = env.CRON_SECRET
   if (!cronSecret || authHeader !== `Bearer ${cronSecret}`) {
     return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
   }

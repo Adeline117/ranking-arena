@@ -3,6 +3,7 @@ import { createClient } from '@supabase/supabase-js'
 import crypto from 'crypto'
 import { createLogger } from '@/lib/utils/logger'
 import { getAuthUser } from '@/lib/supabase/server'
+import { env } from '@/lib/env'
 
 const logger = createLogger('exchange-oauth-authorize')
 
@@ -19,7 +20,7 @@ const OAUTH_CONFIG: Record<string, {
 }> = {
   binance: {
     clientId: process.env.BINANCE_OAUTH_CLIENT_ID || '',
-    redirectUri: `${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/exchange/auth/callback`,
+    redirectUri: `${env.NEXT_PUBLIC_APP_URL}/exchange/auth/callback`,
     // Binance 授权 URL 需要带语言前缀
     authUrl: 'https://accounts.binance.com/en/oauth/authorize',
     // Binance scope 格式：逗号分隔
@@ -28,7 +29,7 @@ const OAUTH_CONFIG: Record<string, {
   },
   bybit: {
     clientId: process.env.BYBIT_OAUTH_CLIENT_ID || '',
-    redirectUri: `${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/exchange/auth/callback`,
+    redirectUri: `${env.NEXT_PUBLIC_APP_URL}/exchange/auth/callback`,
     authUrl: 'https://api.bybit.com/v5/account/oauth/authorize',
     scope: 'read',
     supportsPKCE: false,

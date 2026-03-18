@@ -8,11 +8,12 @@ import { createClient } from '@supabase/supabase-js'
 import Stripe from 'stripe'
 import logger from '@/lib/logger'
 import { checkRateLimit, RateLimitPresets } from '@/lib/utils/rate-limit'
+import { env } from '@/lib/env'
 
 export const dynamic = 'force-dynamic'
 
 function getStripe(): Stripe {
-  const secretKey = process.env.STRIPE_SECRET_KEY
+  const secretKey = env.STRIPE_SECRET_KEY
   if (!secretKey) {
     throw new Error('STRIPE_SECRET_KEY is not configured')
   }
@@ -187,8 +188,8 @@ export async function POST(request: NextRequest) {
           quantity: 1,
         },
       ],
-      success_url: `${process.env.NEXT_PUBLIC_APP_URL || 'https://www.arenafi.org'}/tip/success?session_id={CHECKOUT_SESSION_ID}`,
-      cancel_url: `${process.env.NEXT_PUBLIC_APP_URL || 'https://www.arenafi.org'}/groups/${post_id}?tip_canceled=true`,
+      success_url: `${env.NEXT_PUBLIC_APP_URL}/tip/success?session_id={CHECKOUT_SESSION_ID}`,
+      cancel_url: `${env.NEXT_PUBLIC_APP_URL}/groups/${post_id}?tip_canceled=true`,
       metadata: {
         type: 'tip',
         tip_id: tip.id,

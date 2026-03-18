@@ -9,6 +9,7 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { PipelineLogger } from '@/lib/services/pipeline-logger'
+import { env } from '@/lib/env'
 
 export const runtime = 'nodejs'
 export const preferredRegion = 'sfo1'
@@ -19,7 +20,7 @@ const sleep = (ms: number) => new Promise(r => setTimeout(r, ms))
 
 function isAuthorized(request: Request): boolean {
   const authHeader = request.headers.get('authorization')
-  const cronSecret = process.env.CRON_SECRET
+  const cronSecret = env.CRON_SECRET
   if (!cronSecret) return false
   return authHeader === `Bearer ${cronSecret}`
 }

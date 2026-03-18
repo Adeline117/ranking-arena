@@ -21,6 +21,7 @@ import { PipelineLogger } from '@/lib/services/pipeline-logger'
 import { connectorRegistry, initializeConnectors } from '@/lib/connectors/registry'
 import { runConnectorBatch } from '@/lib/connectors/connector-db-adapter'
 import { SOURCE_TO_CONNECTOR_MAP } from '@/lib/constants/exchanges'
+import { env } from '@/lib/env'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 300
@@ -71,7 +72,7 @@ function getSupabaseClient(): SupabaseClient | null {
 }
 
 function isAuthorized(req: Request): boolean {
-  const secret = process.env.CRON_SECRET
+  const secret = env.CRON_SECRET
   if (!secret) return false
 
   const authHeader = req.headers.get('authorization')

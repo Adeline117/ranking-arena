@@ -7,6 +7,7 @@ import { handleSubscriptionUpdate, handleSubscriptionCanceled, handleTrialWillEn
 import { handlePaymentSucceeded, handlePaymentFailed } from './handlers/invoice'
 import { handleChargeRefunded, handleRefundUpdated } from './handlers/refund'
 import { getOrCreateCorrelationId, runWithCorrelationId } from '@/lib/api/correlation'
+import { env } from '@/lib/env'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -15,11 +16,11 @@ export async function POST(request: NextRequest) {
   const correlationId = getOrCreateCorrelationId(request)
   return runWithCorrelationId(correlationId, async () => {
   const startTime = Date.now()
-  if (!process.env.STRIPE_SECRET_KEY) {
+  if (!env.STRIPE_SECRET_KEY) {
     logger.error('STRIPE_SECRET_KEY is not configured')
     return NextResponse.json({ error: 'Payment system not configured' }, { status: 503 })
   }
-  if (!process.env.STRIPE_WEBHOOK_SECRET) {
+  if (!env.STRIPE_WEBHOOK_SECRET) {
     logger.error('STRIPE_WEBHOOK_SECRET is not configured')
     return NextResponse.json({ error: 'Webhook not configured' }, { status: 503 })
   }

@@ -14,6 +14,7 @@ import { createClient } from '@supabase/supabase-js'
 import { createLogger } from '@/lib/utils/logger'
 import { checkNFTMembership } from '@/lib/web3/nft'
 import { PipelineLogger } from '@/lib/services/pipeline-logger'
+import { env } from '@/lib/env'
 
 export const runtime = 'nodejs'
 export const preferredRegion = 'sfo1'
@@ -36,7 +37,7 @@ function getSupabase() {
 // 验证 Cron 请求
 function isAuthorized(req: NextRequest): boolean {
   const authHeader = req.headers.get('authorization')
-  const cronSecret = process.env.CRON_SECRET
+  const cronSecret = env.CRON_SECRET
 
   if (!cronSecret && process.env.NODE_ENV === 'development') {
     return true

@@ -14,6 +14,7 @@
 import { NextResponse } from 'next/server'
 import { logger } from '@/lib/logger'
 import { runEnrichment, ENRICHMENT_PLATFORM_CONFIGS, NO_ENRICHMENT_PLATFORMS } from '@/lib/cron/enrichment-runner'
+import { env } from '@/lib/env'
 
 export const runtime = 'nodejs'
 export const preferredRegion = 'hnd1'
@@ -30,7 +31,7 @@ export async function POST(req: Request) {
 
 async function handleEnrichment(req: Request) {
   // Authorize
-  const secret = process.env.CRON_SECRET
+  const secret = env.CRON_SECRET
   if (!secret) {
     logger.error('[enrich] CRON_SECRET not configured')
     return NextResponse.json({ error: 'CRON_SECRET not configured' }, { status: 500 })

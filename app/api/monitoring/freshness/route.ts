@@ -13,6 +13,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import logger from '@/lib/logger'
 import { DEAD_BLOCKED_PLATFORMS } from '@/lib/constants/exchanges'
+import { env } from '@/lib/env'
 
 const PLATFORM_THRESHOLDS: Record<string, number> = {
   // Tier 1: High-frequency platforms (every 3h)
@@ -82,7 +83,7 @@ interface FreshnessResult {
 export async function GET(request: NextRequest) {
   // Security: Verify CRON_SECRET or ADMIN_SECRET
   const authHeader = request.headers.get('authorization')
-  const validSecret = process.env.ADMIN_SECRET || process.env.CRON_SECRET
+  const validSecret = env.ADMIN_SECRET || env.CRON_SECRET
   if (!validSecret || authHeader !== `Bearer ${validSecret}`) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
