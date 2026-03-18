@@ -947,25 +947,30 @@ async function warmupLeaderboardCache(
   supabase: ReturnType<typeof getSupabaseAdmin>
 ): Promise<void> {
   const { tieredSet } = await import('@/lib/cache/redis-layer')
-  const TTL_SECONDS = 30 * 60 // 30 minutes
+
+  // Pre-populate the exact cache keys that /api/traders uses
+  // Key pattern: leaderboard:{season}:{exchange}:{sort}:{order}:{cursor}:{limit}
+  const defaultLimit = 50
+  const warmupTargets = SEASONS.map(season => ({
+    season,
+    key: `leaderboard:${season}:all:arena_score:desc:start:${defaultLimit}`,
+  }))
 
   await Promise.all(
-    SEASONS.map(async (season) => {
+    warmupTargets.map(async ({ season, key }) => {
       const { data, error } = await supabase
         .from('leaderboard_ranks')
         .select('*')
         .eq('season_id', season)
-        .order('rank', { ascending: true })
-        .limit(100)
+        .not('arena_score', 'is', null)
+        .gt('arena_score', 0)
+        .order('arena_score', { ascending: false })
+        .limit(defaultLimit)
 
-      if (error || !data?.length) {
-        logger.warn(`[warmup] Failed to fetch top 100 for ${season}:`, error)
-        return
-      }
+      if (error || !data?.length) return
 
-      const cacheKey = `leaderboard:${season}:all:top100`
-      await tieredSet(cacheKey, data, 'hot', ['rankings', `season:${season}`])
-      logger.info(`[warmup] Cached ${data.length} rows for ${cacheKey} (TTL ${TTL_SECONDS}s)`)
+      await tieredSet(key, data, 'warm', ['rankings', `season:${season}`])
+      logger.info(`[warmup] Cached ${data.length} rows → ${key}`)
     })
   )
 }
