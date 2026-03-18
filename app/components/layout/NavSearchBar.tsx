@@ -48,6 +48,11 @@ export default function NavSearchBar({
           value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}
           aria-label={t('searchTraders')}
+          aria-expanded={showSearchDropdown}
+          aria-haspopup="listbox"
+          aria-controls="search-dropdown-listbox"
+          aria-autocomplete="list"
+          role="combobox"
           tabIndex={0}
           style={{
             width: '100%',

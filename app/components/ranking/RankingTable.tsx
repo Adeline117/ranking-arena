@@ -394,9 +394,9 @@ function RankingTableInner(props: {
       {viewMode === 'table' && (
       <Box className="ranking-table-header ranking-table-grid ranking-table-grid-custom"
         style={{ display: 'grid', gap: tokens.spacing[2], padding: `${tokens.spacing[2]} ${tokens.spacing[4]}`, borderBottom: `1px solid var(--glass-border-light)`, background: onCategoryChange ? 'var(--color-bg-secondary)' : tokens.glass.bg.light, borderRadius: onCategoryChange ? '0' : `${tokens.radius.xl} ${tokens.radius.xl} 0 0`, position: 'sticky', top: 56, zIndex: 20, backdropFilter: tokens.glass.blur.lg, WebkitBackdropFilter: tokens.glass.blur.lg, transform: 'translateZ(0)' }}>
-        <Text size="xs" weight="bold" color="tertiary" style={{ textAlign: 'center', textTransform: 'uppercase', letterSpacing: '0.8px', whiteSpace: 'nowrap', fontSize: tokens.typography.fontSize.xs }}>{t('rank')}</Text>
+        <Text size="xs" weight="bold" color="tertiary" role="columnheader" aria-label={t('rank')} style={{ textAlign: 'center', textTransform: 'uppercase', letterSpacing: '0.8px', whiteSpace: 'nowrap', fontSize: tokens.typography.fontSize.xs }}>{t('rank')}</Text>
         <Box style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[2] }}>
-          <Text size="xs" weight="bold" color="tertiary" style={{ textTransform: 'uppercase', letterSpacing: '0.8px', whiteSpace: 'nowrap', fontSize: tokens.typography.fontSize.xs }}>{t('trader')}</Text>
+          <Text size="xs" weight="bold" color="tertiary" role="columnheader" aria-label={t('trader')} style={{ textTransform: 'uppercase', letterSpacing: '0.8px', whiteSpace: 'nowrap', fontSize: tokens.typography.fontSize.xs }}>{t('trader')}</Text>
           <button onClick={() => setShowRules(!showRules)}
             className="info-btn-circle"
             title={t('rankingRules')}
@@ -404,7 +404,7 @@ function RankingTableInner(props: {
             aria-expanded={showRules}
           >?</button>
         </Box>
-        <Box className={`col-score sort-header sort-header-center${sortColumn === 'score' ? ' sort-header-active' : ''} ${justSortedColumn === 'score' ? 'just-sorted' : ''}`} as="button" onClick={() => handleSort('score')} aria-sort={sortColumn === 'score' ? (sortDir === 'asc' ? 'ascending' : 'descending') : 'none'} data-sortable
+        <Box className={`col-score sort-header sort-header-center${sortColumn === 'score' ? ' sort-header-active' : ''} ${justSortedColumn === 'score' ? 'just-sorted' : ''}`} as="button" onClick={() => handleSort('score')} role="columnheader" aria-label={`${t('score')} — click to sort`} aria-sort={sortColumn === 'score' ? (sortDir === 'asc' ? 'ascending' : 'descending') : 'none'} data-sortable
           style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 3 }}
         >
           {t('score')}
@@ -433,25 +433,25 @@ function RankingTableInner(props: {
           </span>
           <SortIndicator active={sortColumn === 'score'} dir={sortDir} />
         </Box>
-        <Box className={`roi-cell sort-header sort-header-end${sortColumn === 'roi' ? ' sort-header-active' : ''} ${justSortedColumn === 'roi' ? 'just-sorted' : ''}`} as="button" onClick={() => handleSort('roi')} title={t('roiTooltip').replace('{range}', timeRange)} aria-sort={sortColumn === 'roi' ? (sortDir === 'asc' ? 'ascending' : 'descending') : 'none'} data-sortable>
+        <Box className={`roi-cell sort-header sort-header-end${sortColumn === 'roi' ? ' sort-header-active' : ''} ${justSortedColumn === 'roi' ? 'just-sorted' : ''}`} as="button" onClick={() => handleSort('roi')} title={t('roiTooltip').replace('{range}', timeRange)} role="columnheader" aria-label={`${t('roi')} (${timeRange}) — click to sort`} aria-sort={sortColumn === 'roi' ? (sortDir === 'asc' ? 'ascending' : 'descending') : 'none'} data-sortable>
           {t('roi')} ({timeRange}) <SortIndicator active={sortColumn === 'roi'} dir={sortDir} />
         </Box>
-        <Box className={`col-pnl sort-header sort-header-end${sortColumn === 'pnl' ? ' sort-header-active' : ''} ${justSortedColumn === 'pnl' ? 'just-sorted' : ''}`} as="button" onClick={() => handleSort('pnl')} title={t('pnlTooltip') || 'Profit & Loss'} aria-sort={sortColumn === 'pnl' ? (sortDir === 'asc' ? 'ascending' : 'descending') : 'none'} data-sortable>
+        <Box className={`col-pnl sort-header sort-header-end${sortColumn === 'pnl' ? ' sort-header-active' : ''} ${justSortedColumn === 'pnl' ? 'just-sorted' : ''}`} as="button" onClick={() => handleSort('pnl')} title={t('pnlTooltip') || 'Profit & Loss'} role="columnheader" aria-label={`${t('pnl')} — click to sort`} aria-sort={sortColumn === 'pnl' ? (sortDir === 'asc' ? 'ascending' : 'descending') : 'none'} data-sortable>
           {t('pnl')} <SortIndicator active={sortColumn === 'pnl'} dir={sortDir} />
         </Box>
-        <Box className={`col-winrate sort-header sort-header-end${sortColumn === 'winrate' ? ' sort-header-active' : ''} ${justSortedColumn === 'winrate' ? 'just-sorted' : ''}`} as="button" onClick={() => handleSort('winrate')} title={t('winRateTooltip')} aria-sort={sortColumn === 'winrate' ? (sortDir === 'asc' ? 'ascending' : 'descending') : 'none'} data-sortable>
+        <Box className={`col-winrate sort-header sort-header-end${sortColumn === 'winrate' ? ' sort-header-active' : ''} ${justSortedColumn === 'winrate' ? 'just-sorted' : ''}`} as="button" onClick={() => handleSort('winrate')} title={t('winRateTooltip')} role="columnheader" aria-label={`${t('winRateShort')} — click to sort`} aria-sort={sortColumn === 'winrate' ? (sortDir === 'asc' ? 'ascending' : 'descending') : 'none'} data-sortable>
           {t('winRateShort')} <SortIndicator active={sortColumn === 'winrate'} dir={sortDir} />
         </Box>
-        <Box className={`col-mdd sort-header sort-header-end${sortColumn === 'mdd' ? ' sort-header-active' : ''} ${justSortedColumn === 'mdd' ? 'just-sorted' : ''}`} as="button" onClick={() => handleSort('mdd')} title={t('mddTooltip')} aria-sort={sortColumn === 'mdd' ? (sortDir === 'asc' ? 'ascending' : 'descending') : 'none'} data-sortable>
+        <Box className={`col-mdd sort-header sort-header-end${sortColumn === 'mdd' ? ' sort-header-active' : ''} ${justSortedColumn === 'mdd' ? 'just-sorted' : ''}`} as="button" onClick={() => handleSort('mdd')} title={t('mddTooltip')} role="columnheader" aria-label={`${t('maxDrawdownShort')} — click to sort`} aria-sort={sortColumn === 'mdd' ? (sortDir === 'asc' ? 'ascending' : 'descending') : 'none'} data-sortable>
           {t('maxDrawdownShort')} <SortIndicator active={sortColumn === 'mdd'} dir={sortDir} />
         </Box>
         {visibleColumns.includes('sortino') && (
-          <Box className={`col-sortino sort-header sort-header-end${sortColumn === 'sortino' ? ' sort-header-active' : ''} ${justSortedColumn === 'sortino' ? 'just-sorted' : ''}`} as="button" onClick={() => handleSort('sortino')} title={t('sortinoTooltip') || 'Sortino Ratio'} aria-sort={sortColumn === 'sortino' ? (sortDir === 'asc' ? 'ascending' : 'descending') : 'none'} data-sortable>
+          <Box className={`col-sortino sort-header sort-header-end${sortColumn === 'sortino' ? ' sort-header-active' : ''} ${justSortedColumn === 'sortino' ? 'just-sorted' : ''}`} as="button" onClick={() => handleSort('sortino')} title={t('sortinoTooltip') || 'Sortino Ratio'} role="columnheader" aria-label={`${t('sortinoRatio')} — click to sort`} aria-sort={sortColumn === 'sortino' ? (sortDir === 'asc' ? 'ascending' : 'descending') : 'none'} data-sortable>
             {t('sortinoRatio')} <SortIndicator active={sortColumn === 'sortino'} dir={sortDir} />
           </Box>
         )}
         {visibleColumns.includes('alpha') && (
-          <Box className={`col-alpha sort-header sort-header-end${sortColumn === 'alpha' ? ' sort-header-active' : ''} ${justSortedColumn === 'alpha' ? 'just-sorted' : ''}`} as="button" onClick={() => handleSort('alpha')} title={t('alphaTooltip') || 'Alpha (excess return)'} aria-sort={sortColumn === 'alpha' ? (sortDir === 'asc' ? 'ascending' : 'descending') : 'none'} data-sortable>
+          <Box className={`col-alpha sort-header sort-header-end${sortColumn === 'alpha' ? ' sort-header-active' : ''} ${justSortedColumn === 'alpha' ? 'just-sorted' : ''}`} as="button" onClick={() => handleSort('alpha')} title={t('alphaTooltip') || 'Alpha (excess return)'} role="columnheader" aria-label="Alpha — click to sort" aria-sort={sortColumn === 'alpha' ? (sortDir === 'asc' ? 'ascending' : 'descending') : 'none'} data-sortable>
             Alpha <SortIndicator active={sortColumn === 'alpha'} dir={sortDir} />
           </Box>
         )}
