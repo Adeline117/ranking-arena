@@ -172,7 +172,7 @@ export const PLATFORM_CONNECTORS: Record<string, UnifiedConnectorConfig> = {
   binance_futures: { platform: 'binance_futures', enrichmentLimit: 200, timeoutMs: 600000 }, // 10min (was 7min, too short)
   // binance_spot: REMOVED 2026-03-14 - repeatedly hangs 45-76min
   bybit: { platform: 'bybit', enrichmentLimit: 150, timeoutMs: 600000 }, // 10min (was 6min, too short)
-  bitget_futures: { platform: 'bitget_futures', enrichmentLimit: 60, timeoutMs: 600000, enableEnrichment: false }, // 10min (was 5min, VPS scraper slow)
+  // bitget_futures: PERMANENTLY REMOVED (2026-03-18) - VPS scraper repeatedly hangs 44+ min (6th stuck), blocks pipeline
   okx_futures: { platform: 'okx_futures', enrichmentLimit: 80, timeoutMs: 300000, enableEnrichment: false },
   
   // Group B: Top DEX (every 4h) - Disable enrichment to fit Cloudflare 120s timeout
