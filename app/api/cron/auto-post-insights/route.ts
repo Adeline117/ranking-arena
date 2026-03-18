@@ -150,7 +150,7 @@ async function generateRankChanges(supabase: AnySupabase): Promise<{ title: stri
 }
 
 async function generateExchangeCompare(supabase: AnySupabase): Promise<{ title: string; content: string }> {
-  const exchanges = ['binance_futures', 'hyperliquid', 'bybit', 'okx_futures', 'bitget_futures']
+  const exchanges = ['binance_futures', 'hyperliquid', 'bybit', 'okx_futures'] // bitget_futures removed 2026-03-18 (7th stuck)
   const results: { name: string; avgScore: number; count: number; topRoi: number }[] = []
 
   for (const ex of exchanges) {
@@ -265,7 +265,7 @@ async function generateWeeklyRecap(supabase: AnySupabase): Promise<{ title: stri
 function formatPlatform(source: string): string {
   const map: Record<string, string> = {
     binance_futures: 'Binance', binance_spot: 'Binance Spot', bybit: 'Bybit',
-    okx_futures: 'OKX', bitget_futures: 'Bitget', hyperliquid: 'Hyperliquid',
+    okx_futures: 'OKX', hyperliquid: 'Hyperliquid', // bitget_futures removed 2026-03-18
     gmx: 'GMX', dydx: 'dYdX', drift: 'Drift', aevo: 'Aevo', gains: 'Gains',
     mexc: 'MEXC', gateio: 'Gate.io', coinex: 'CoinEx', htx_futures: 'HTX',
     etoro: 'eToro', btcc: 'BTCC', bitfinex: 'Bitfinex',

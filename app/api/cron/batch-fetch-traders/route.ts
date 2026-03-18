@@ -40,6 +40,19 @@ import * as cache from '@/lib/cache'
 import { sendAlert } from '@/lib/alerts/send-alert'
 import { env } from '@/lib/env'
 
+// 🚨 DISABLED PLATFORMS - permanently blocked from fetch-traders
+const DISABLED_PLATFORMS = [
+  'bitget_futures',  // 7th stuck >44min (2026-03-18) - VPS scraper repeatedly hangs
+  'bitget_spot',     // No public API (all endpoints 404)
+  'binance_spot',    // Repeatedly hangs 45-76min (2026-03-14)
+]
+
+function validatePlatform(platform: string): void {
+  if (DISABLED_PLATFORMS.includes(platform)) {
+    throw new Error(`❌ Platform ${platform} is permanently disabled (see DISABLED_PLATFORMS blacklist)`)
+  }
+}
+
 const DEAD_COUNTER_PREFIX = 'dead:consecutive:'
 const DEAD_COUNTER_TTL = 7 * 24 * 60 * 60 // 7 days in seconds
 const DEAD_THRESHOLD = 10 // consecutive failures before alerting
@@ -55,8 +68,8 @@ const GROUPS: Record<string, string[]> = {
   a2: ['okx_futures'],
   // Group A3: Bybit (every 3h) — VPS scraper, needs own group (Playwright slow)
   a3: ['bybit'],
-  // Group A4: Bitget (every 3h) — VPS scraper, needs own group
-  a4: ['bitget_futures'],
+  // Group A4: Bitget (every 3h) — DISABLED 2026-03-18 EMERGENCY (7th stuck >44min)
+  a4: [], // bitget_futures PERMANENTLY REMOVED - VPS scraper repeatedly hangs 44+ min
   // Group B: Top DEX (every 4h) + GMX (switched to subgraph 2026-03-15)
   b: ['hyperliquid', 'gmx'],
   // Group C: Mid-priority (every 4h) — okx_futures moved to a2, bitunix re-enabled
@@ -152,6 +165,15 @@ export async function GET(request: NextRequest) {
   // Run a single platform via Connector
   async function runPlatform(platform: string): Promise<BatchResult> {
     const start = Date.now()
+    
+    // 🚨 Blacklist check - prevent disabled platforms
+    try {
+      validatePlatform(platform)
+    } catch (err) {
+      const errMsg = err instanceof Error ? err.message : String(err)
+      logger.error(`[${platform}] ${errMsg}`)
+      return { platform, status: 'error', error: errMsg, durationMs: 0 }
+    }
 
     const mapping = SOURCE_TO_CONNECTOR_MAP[platform]
     const connector = mapping

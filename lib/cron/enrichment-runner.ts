@@ -3,6 +3,19 @@
  * Can be called inline from batch-enrich (no HTTP needed) or from the route.
  */
 
+// 🚨 DISABLED PLATFORMS - permanently blocked due to repeated failures/hangs
+const DISABLED_PLATFORMS = [
+  'bitget_futures',  // 7th stuck >44min (2026-03-18) - VPS scraper repeatedly hangs
+  'bitget_spot',     // No public API (all endpoints 404)
+  'binance_spot',    // Repeatedly hangs 45-76min (2026-03-14)
+]
+
+function validatePlatform(platform: string): void {
+  if (DISABLED_PLATFORMS.includes(platform)) {
+    throw new Error(`❌ Platform ${platform} is permanently disabled (see DISABLED_PLATFORMS blacklist)`)
+  }
+}
+
 import { getSupabaseAdmin } from '@/lib/supabase/server'
 import {
   fetchBinanceEquityCurve,
@@ -205,13 +218,14 @@ export const ENRICHMENT_PLATFORM_CONFIGS: Record<string, EnrichmentConfig> = {
     fetchCurrentPositions: fetchOkxCurrentPositions,
     concurrency: 3, delayMs: 1500,
   },
-  bitget_futures: {
-    platform: 'bitget_futures',
-    fetchEquityCurve: fetchBitgetEquityCurve,
-    fetchStatsDetail: fetchBitgetStatsDetail,
-    fetchPositionHistory: fetchBitgetPositionHistory,
-    concurrency: 2, delayMs: 2000,
-  },
+  // bitget_futures: DISABLED 2026-03-18 EMERGENCY (7th stuck >44min - VPS scraper hangs)
+  // bitget_futures: {
+  //   platform: 'bitget_futures',
+  //   fetchEquityCurve: fetchBitgetEquityCurve,
+  //   fetchStatsDetail: fetchBitgetStatsDetail,
+  //   fetchPositionHistory: fetchBitgetPositionHistory,
+  //   concurrency: 2, delayMs: 2000,
+  // },
   // bitget_spot: enrichment not yet configured — spot-specific enrichment endpoints TBD
   hyperliquid: {
     platform: 'hyperliquid',
@@ -440,7 +454,7 @@ export const NO_ENRICHMENT_PLATFORMS = new Set([
 // Per-platform timeout: prevents any single platform from burning the entire batch budget
 // CEX platforms get 45s, onchain platforms get 90s (GraphQL/RPC calls are slower)
 const PLATFORM_TIMEOUT_MS: Record<string, number> = {
-  'bitget_futures': 60_000, // VPS scraper slower than direct API, give 60s (was hanging 44min due to missing per-trader timeout)
+  // 'bitget_futures': 60_000, // DISABLED 2026-03-18 (7th stuck) - VPS scraper hangs 44+ min
 }
 const DEFAULT_PLATFORM_TIMEOUT_MS = 45_000
 const ONCHAIN_PLATFORM_TIMEOUT_MS = 90_000
@@ -458,6 +472,10 @@ export async function runEnrichment(params: {
 }): Promise<EnrichmentResult> {
   const { platform: platformParam, period, limit, offset = 0 } = params
   const startTime = Date.now()
+  
+  // 🚨 Blacklist check - prevent disabled platforms from running
+  validatePlatform(platformParam)
+  
   const plog = await PipelineLogger.start(`enrich-${platformParam}`)
 
   // Early exit for platforms that don't support enrichment
