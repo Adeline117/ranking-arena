@@ -431,13 +431,6 @@ async function computeSeason(
     }
   }
   logger.info(`[${season}] ${traderMap.size} unique traders after dedup (v2 + v1)`)
-  // Temp debug: log per-source counts
-  const sourceCounts = new Map<string, number>()
-  for (const [key] of traderMap) {
-    const src = key.split(':')[0]
-    sourceCounts.set(src, (sourceCounts.get(src) || 0) + 1)
-  }
-  logger.info(`[${season}] Per-source counts: ${JSON.stringify(Object.fromEntries(sourceCounts))}`)
 
   // Phase 3: Fill missing win_rate/max_drawdown from trader_stats_detail (enrichment table)
   // This catches data from enrichment runs that wrote to stats_detail but not back to snapshots
