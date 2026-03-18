@@ -771,7 +771,7 @@ async function computeSeason(
 
   // Phase 2: Incremental upsert — only update changed rows to reduce write volume ~40%
   // Fetch current arena_scores to diff against
-  const currentScoreMap = new Map<string, { arena_score: number; rank: number }>()
+  const currentScoreMap = new Map<string, { arena_score: number; rank: number; handle: string | null; avatar_url: string | null }>()
   {
     // Fetch in pages of 1000 to handle large leaderboards
     let offset = 0
@@ -779,7 +779,7 @@ async function computeSeason(
     while (true) {
       const { data: currentScores } = await supabase
         .from('leaderboard_ranks')
-        .select('source, source_trader_id, arena_score, rank')
+        .select('source, source_trader_id, arena_score, rank, handle, avatar_url')
         .eq('season_id', season)
         .range(offset, offset + PAGE - 1)
       if (!currentScores?.length) break
@@ -787,6 +787,8 @@ async function computeSeason(
         currentScoreMap.set(`${r.source}:${r.source_trader_id}`, {
           arena_score: r.arena_score,
           rank: r.rank,
+          handle: r.handle,
+          avatar_url: r.avatar_url,
         })
       }
       if (currentScores.length < PAGE) break
@@ -798,6 +800,8 @@ async function computeSeason(
   const changedTraders = scored.filter((t, idx) => {
     const current = currentScoreMap.get(`${t.source}:${t.source_trader_id}`)
     if (current == null) return true // new trader
+    // Always update if handle/avatar changed (backfill)
+    if (t.handle !== current.handle || t.avatar_url !== current.avatar_url) return true
     const newRank = idx + 1
     if (current.rank !== newRank) return true // rank changed
     if (current.arena_score === 0) return t.arena_score !== 0 // was zero, check if now non-zero
