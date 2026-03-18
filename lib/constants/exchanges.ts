@@ -76,6 +76,8 @@ export type TraderSource =
   | 'toobit'
   // Social trading
   | 'etoro'
+  // Crypto.com
+  | 'crypto_com'
   // Web3 bots / AI agents
   | 'web3_bot'
 
@@ -123,6 +125,7 @@ export const ALL_SOURCES: TraderSource[] = [
   'btcc',
   'bitfinex',
   'toobit',
+  'crypto_com',
   // Social trading
   'etoro',
   // Web3 bots
@@ -323,6 +326,7 @@ export const EXCHANGE_CONFIG: Record<TraderSource, ExchangeConfig> = {
   btcc: { name: 'BTCC', sourceType: 'futures', reliability: 65, trustWeight: 0.75, roiType: 'mixed' },
   bitfinex: { name: 'Bitfinex', sourceType: 'futures', reliability: 70, trustWeight: 0.80, roiType: 'mixed' },
   toobit: { name: 'Toobit', sourceType: 'futures', reliability: 50, trustWeight: 0.65, roiType: 'mixed' },
+  crypto_com: { name: 'Crypto.com', sourceType: 'futures', reliability: 50, trustWeight: 0.75, roiType: 'mixed' },
   etoro: { name: 'eToro', sourceType: 'spot', reliability: 90, trustWeight: 0.85, roiType: 'realized' },
   web3_bot: { name: 'Web3 Bot', sourceType: 'web3', reliability: 75, trustWeight: 0.70, roiType: 'mixed' },
   kwenta: { name: 'Kwenta', sourceType: 'web3', reliability: 70, trustWeight: 0.75, roiType: 'realized' },
@@ -416,6 +420,7 @@ export const SOURCE_TO_CONNECTOR_MAP: Record<string, { platform: string; marketT
   bitunix: { platform: 'bitunix', marketType: 'futures' },
   bitfinex: { platform: 'bitfinex', marketType: 'futures' },
   toobit: { platform: 'toobit', marketType: 'futures' },
+  crypto_com: { platform: 'crypto_com', marketType: 'futures' },
   etoro: { platform: 'etoro', marketType: 'spot' },
   bybit: { platform: 'bybit', marketType: 'futures' },
   hyperliquid: { platform: 'hyperliquid', marketType: 'perp' },

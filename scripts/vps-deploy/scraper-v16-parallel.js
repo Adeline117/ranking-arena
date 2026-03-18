@@ -674,6 +674,120 @@ const HANDLERS = {
   'weex/leaderboard-v2': async (page, params) => {
     return HANDLERS['weex/leaderboard'](page, params)
   },
+
+  // ─── Crypto.com (Cloudflare JS challenge, intercept copy-trade APIs) ───
+  'crypto_com/leaderboard': async (page, params) => {
+    const period = params.period || '30'
+
+    // Anti-bot evasion
+    await page.addInitScript(() => {
+      Object.defineProperty(navigator, 'webdriver', { get: () => false })
+      window.chrome = { runtime: {} }
+    })
+
+    // Intercept any copy-trade / leaderboard / trader API calls
+    const captured = setupInterception(page, (url) =>
+      url.includes('copy_trade') || url.includes('copy-trade') ||
+      url.includes('leaderboard') || url.includes('lead_trader') ||
+      url.includes('trader_list') || url.includes('traderList')
+    )
+
+    // Navigate to the copy trading page
+    await page.goto('https://crypto.com/exchange/copy-trading', {
+      waitUntil: 'domcontentloaded', timeout: 60000,
+    })
+
+    // Wait for Cloudflare challenge to resolve
+    await waitForCF(page, 25000)
+
+    // Wait for SPA to load and fire API calls
+    await page.waitForTimeout(5000)
+
+    // Scroll to trigger lazy-loaded content
+    await page.evaluate(() => window.scrollTo(0, 500)).catch(() => {})
+    await page.waitForTimeout(3000)
+
+    // Check if we captured API responses via interception
+    if (captured.length > 0) {
+      // Sort by size — largest response likely has the most traders
+      captured.sort((a, b) => b.size - a.size)
+      return captured[0].data
+    }
+
+    // Fallback: try fetching from page context (inherits CF cookies)
+    const data = await page.evaluate(async (opts) => {
+      async function safeFetch(url, fetchOpts = {}) {
+        try {
+          const r = await fetch(url, { credentials: 'include', ...fetchOpts })
+          if (!r.ok) return null
+          const text = await r.text()
+          if (!text.startsWith('{') && !text.startsWith('[')) return null
+          return JSON.parse(text)
+        } catch { return null }
+      }
+
+      // Try known/likely API patterns
+      const endpoints = [
+        // GET endpoints
+        { url: `/fe-ex-api/copy_trade/get_lead_trader_leaderboard?page=1&page_size=100&period=${opts.period}` },
+        { url: `/fe-ex-api/copy_trade/get_lead_trader_list?page=1&page_size=100&sort_by=roi&period=${opts.period}` },
+        { url: `/exchange/api/v1/copy-trading/leaders?page=1&size=100&period=${opts.period}` },
+        { url: `/api/v1/copy-trade/leader/list?page=1&pageSize=100&period=${opts.period}` },
+      ]
+
+      for (const ep of endpoints) {
+        const json = await safeFetch(ep.url)
+        if (json) {
+          // Check if response has meaningful data
+          const hasData = json.data || json.result || json.list || json.traders || json.rows || Array.isArray(json)
+          if (hasData) return json
+        }
+      }
+
+      // Try POST endpoints
+      const postEndpoints = [
+        { url: '/fe-ex-api/copy_trade/get_lead_trader_leaderboard', body: { page: 1, page_size: 100, period: parseInt(opts.period) } },
+        { url: '/fe-ex-api/copy_trade/get_lead_trader_list', body: { page: 1, page_size: 100, sort_by: 'roi', period: parseInt(opts.period) } },
+      ]
+
+      for (const ep of postEndpoints) {
+        const json = await safeFetch(ep.url, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(ep.body),
+        })
+        if (json) {
+          const hasData = json.data || json.result || json.list || json.traders || json.rows || Array.isArray(json)
+          if (hasData) return json
+        }
+      }
+
+      return null
+    }, { period }).catch(() => null)
+
+    if (data) return data
+
+    // Last resort: try to extract trader data from the DOM
+    const domData = await page.evaluate(() => {
+      try {
+        // Look for trader cards/rows in the page
+        const cards = document.querySelectorAll('[class*="trader"], [class*="leader"], [class*="copy"]')
+        if (cards.length === 0) return null
+
+        const traders = []
+        cards.forEach((card) => {
+          const name = card.querySelector('[class*="name"]')?.textContent?.trim()
+          const roi = card.querySelector('[class*="roi"], [class*="profit"], [class*="return"]')?.textContent?.trim()
+          if (name && roi) {
+            traders.push({ display_name: name, roi_text: roi })
+          }
+        })
+        return traders.length > 0 ? { traders, source: 'dom_extraction' } : null
+      } catch { return null }
+    }).catch(() => null)
+
+    return domData || { error: 'No API response captured and DOM extraction failed' }
+  },
 }
 
 // ---------------------------------------------------------------------------
