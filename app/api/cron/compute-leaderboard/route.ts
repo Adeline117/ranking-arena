@@ -166,16 +166,25 @@ export async function GET(request: NextRequest) {
 
         if (ranks && ranks.length > 0) {
           const scoreMap = new Map(ranks.map(r => [`${r.source}:${r.trader_key}:${r.period}`, r.arena_score]))
-          let synced = 0
+          // Batch updates instead of N+1 individual queries
+          const updates: { id: string; arena_score: number }[] = []
           for (const row of missingScores) {
             const key = `${row.platform}:${row.trader_key}:${row.window}`
             const score = scoreMap.get(key)
             if (score != null && score > 0) {
-              await supabase.from('trader_snapshots_v2').update({ arena_score: score }).eq('id', row.id)
-              synced++
+              updates.push({ id: row.id, arena_score: score })
             }
           }
-          logger.info(`Synced arena_score to v2: ${synced}/${missingScores.length} rows`)
+          // Execute in batches of 100
+          let synced = 0
+          for (let i = 0; i < updates.length; i += 100) {
+            const chunk = updates.slice(i, i + 100)
+            const { error: upsertErr } = await supabase
+              .from('trader_snapshots_v2')
+              .upsert(chunk, { onConflict: 'id' })
+            if (!upsertErr) synced += chunk.length
+          }
+          logger.info(`Synced arena_score to v2: ${synced}/${missingScores.length} rows (${updates.length} updates, batched)`)
         }
       }
     } catch (syncErr) {
@@ -874,17 +883,22 @@ async function deriveWinRateMDD(supabase: ReturnType<typeof getSupabaseAdmin>): 
       for (const e of eq) { if (e > peak) peak = e; const dd = peak > 0 ? (peak - e) / peak : 0; if (dd > maxDD) maxDD = dd }
       const mdd = parseFloat((maxDD * 100).toFixed(2))
 
-      // Update all season rows for this trader
+      // Batch update all season rows for this trader
+      const batchUpdates: Promise<void>[] = []
       for (const row of rows) {
         const upd: Record<string, number> = {}
         if (row.win_rate == null && wr != null) upd.win_rate = wr
         if (row.max_drawdown == null && mdd > 0) upd.max_drawdown = Math.min(mdd, 100)
         if (Object.keys(upd).length > 0) {
-          await supabase.from('leaderboard_ranks').update(upd)
-            .eq('source', platform).eq('source_trader_id', traderId).eq('season_id', row.season_id)
-          derived++
+          batchUpdates.push(
+            Promise.resolve(
+              supabase.from('leaderboard_ranks').update(upd)
+                .eq('source', platform).eq('source_trader_id', traderId).eq('season_id', row.season_id)
+            ).then(() => { derived++ })
+          )
         }
       }
+      await Promise.all(batchUpdates)
     }))
   }
 

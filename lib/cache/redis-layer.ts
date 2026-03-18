@@ -331,6 +331,9 @@ export async function tieredDelByTag(tag: string): Promise<number> {
  * When the primary cache misses but stale data exists in the extended
  * memory bucket, serves stale data immediately and refreshes in background.
  */
+// In-flight request dedup map — prevents cache stampede (thundering herd)
+const inFlightRequests = new Map<string, Promise<unknown>>()
+
 export async function tieredGetOrSet<T>(
   key: string,
   fetcher: () => Promise<T>,
@@ -358,8 +361,20 @@ export async function tieredGetOrSet<T>(
     }
   }
 
+  // Coalesce concurrent fetches for the same key (stampede protection)
+  const existing = inFlightRequests.get(key) as Promise<T> | undefined
+  if (existing) {
+    return existing
+  }
+
   // 缓存未命中，获取新数据
-  const freshData = await fetcher()
+  const promise = fetcher().catch(err => {
+    inFlightRequests.delete(key)
+    throw err
+  })
+  inFlightRequests.set(key, promise)
+  const freshData = await promise
+  inFlightRequests.delete(key)
 
   // 异步写入缓存+ SWR bucket
   tieredSet(key, freshData, tier, tags).catch((err) => {

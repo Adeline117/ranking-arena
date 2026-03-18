@@ -26,7 +26,7 @@ export const dynamic = 'force-dynamic'
 
 // In-memory cache for available sources (shared across requests, TTL 5 min)
 const availableSourcesCache = new Map<string, { sources: string[]; ts: number }>()
-const SOURCES_TTL = 5 * 60 * 1000
+const SOURCES_TTL = 30 * 60 * 1000 // 30 min — sources change only on cron runs
 
 // Select only needed columns from leaderboard_ranks (avoid SELECT *)
 const LEADERBOARD_COLUMNS = 'source_trader_id, handle, roi, pnl, win_rate, max_drawdown, trades_count, followers, source, source_type, avatar_url, arena_score, rank, profitability_score, risk_control_score, execution_score, score_completeness, trading_style, avg_holding_hours, style_confidence, is_outlier, computed_at, season_id, sharpe_ratio, trader_type'
