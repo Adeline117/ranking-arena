@@ -163,9 +163,10 @@ async function findUserProfileByTraderHandle(traderHandle: string): Promise<stri
   }
 }
 
-export default async function TraderPage({ params, searchParams }: { params: Promise<{ handle: string }>; searchParams: Promise<{ platform?: string }> }) {
+export default async function TraderPage({ params, searchParams }: { params: Promise<{ handle: string }>; searchParams: Promise<Record<string, string | undefined>> }) {
   const { handle } = await params
-  const { platform } = await searchParams
+  const allSearchParams = await searchParams
+  const platform = allSearchParams.platform
 
   let decodedHandle = handle
   try {
@@ -200,8 +201,12 @@ export default async function TraderPage({ params, searchParams }: { params: Pro
 
   // Redirect raw address URLs to human-readable handle URLs (better SEO)
   if (resolved.handle && resolved.handle !== decodedHandle) {
-    const platformParam = `?platform=${resolved.platform}`
-    redirect(`/trader/${encodeURIComponent(resolved.handle)}${platformParam}`)
+    const redirectParams = new URLSearchParams({ platform: resolved.platform })
+    // Preserve any additional query params (e.g. UTM tracking)
+    for (const [key, val] of Object.entries(allSearchParams)) {
+      if (key !== 'platform' && val) redirectParams.set(key, val)
+    }
+    redirect(`/trader/${encodeURIComponent(resolved.handle)}?${redirectParams.toString()}`)
   }
 
   // 3. 获取完整交易员数据（通过统一数据层 — 自动处理 v1/v2/leaderboard fallback）
