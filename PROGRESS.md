@@ -3,9 +3,36 @@
 > Auto-read by Claude Code at session start. Keep concise — archive completed items weekly.
 
 ## Current Sprint Focus
-- All P0-P3 tasks complete. All backlog items done.
-- Pipeline 100% healthy — 28 exchanges, ~6.5K ranked traders per season.
+- All P0-P3 tasks complete. Pipeline 100% healthy, 0 warnings, 0 failures.
 - Data completeness: win_rate 94.5%, max_drawdown 95.1%, sharpe_ratio 83.8% (all real API data).
+- GitHub research optimizations applied: cockatiel, baseline charts, healthchecks.io, gap-fill.
+
+## Recently Completed (2026-03-18) — GitHub Research Optimizations
+
+### From Cockatiel (1.5k stars) — Retry + Circuit Breaker
+- Replaced hand-rolled VPS retry with `cockatiel` `wrap(retry, circuitBreaker)` policy
+- `ExponentialBackoff` 3s initial, 2 max attempts + `ConsecutiveBreaker(5)` with 60s recovery
+- Static policy shared across all connector instances for global VPS health
+
+### From Copin.io — Equity Curve Baseline Series
+- Two-tone chart: green above zero (profit), red below (loss), dashed zero baseline
+- SVG `clipPath` for smooth color transition at zero crossing
+- Hover dot color matches profit/loss zone
+
+### From Copin.io — Gap-Fill Daily PnL Chart
+- `fillDateGaps()` inserts zero-value entries for missing dates
+- Eliminates misleading visual jumps in equity curve
+
+### From Healthchecks.io (14k stars) — Dead Man's Switch
+- `lib/utils/healthcheck.ts`: `pingHealthcheck(slug, 'start'|'success'|'fail')`
+- Integrated into `PipelineLogger` — 5 critical crons auto-ping: batch-fetch, compute-leaderboard, aggregate-daily, batch-enrich, check-freshness
+- Controlled via `HEALTHCHECKS_PING_URL` env var
+
+### Additional Fixes
+- TraderCard: removed redundant `?? 0` for ROI
+- Client-side resource leaks: VoiceRecorder, BottomSheet, AccountSection cleanup
+- Exchange ranking sort: nulls always at bottom regardless of sort direction
+- 2 new API endpoints: `/api/rankings/movers`, `/api/rankings/platform-stats`
 
 ## Recently Completed (2026-03-18) — Data Completeness + Frontend Fixes
 
