@@ -7,12 +7,29 @@ import { Box } from '../base'
 import { useLanguage } from '../Providers/LanguageProvider'
 import { SOURCE_TYPE_MAP, type SourceType } from '@/lib/constants/exchanges'
 
-export type PresetId = 'all' | 'cex_futures' | 'cex_spot' | 'onchain_dex'
+export type PresetId =
+  | 'all'
+  | 'cex_futures'
+  | 'cex_spot'
+  | 'onchain_dex'
+  | 'low_risk'
+  | 'high_pnl'
+  | 'consistent'
+  | 'top_scorers'
+
+/** Trader shape used by preset filters */
+interface FilterableTrader {
+  source?: string
+  max_drawdown?: number | null
+  win_rate?: number | null
+  pnl?: number | null
+  arena_score?: number | null
+}
 
 export interface PresetConfig {
   id: PresetId
   label: { zh: string; en: string }
-  filter: (trader: { source?: string }) => boolean
+  filter: (trader: FilterableTrader) => boolean
 }
 
 // Helper to check source type
@@ -21,10 +38,15 @@ const getSourceType = (source: string | undefined): SourceType | undefined => {
   return SOURCE_TYPE_MAP[source]
 }
 
+const ALL_PRESET_IDS: PresetId[] = [
+  'all', 'cex_futures', 'cex_spot', 'onchain_dex',
+  'low_risk', 'high_pnl', 'consistent', 'top_scorers',
+]
+
 // Validation helper for preset IDs
 export function isValidPresetId(id: string | null | undefined): id is PresetId {
   if (!id) return false
-  return ['all', 'cex_futures', 'cex_spot', 'onchain_dex'].includes(id)
+  return ALL_PRESET_IDS.includes(id as PresetId)
 }
 
 export const PRESETS: PresetConfig[] = [
@@ -48,6 +70,30 @@ export const PRESETS: PresetConfig[] = [
     label: { zh: '链上DEX', en: 'On-chain DEX' },
     filter: (t) => getSourceType(t.source) === 'web3',
   },
+  {
+    id: 'low_risk',
+    label: { zh: '低风险', en: 'Low Risk' },
+    filter: (t) =>
+      (t.max_drawdown != null && Math.abs(t.max_drawdown) <= 20) &&
+      (t.win_rate != null && t.win_rate >= 55),
+  },
+  {
+    id: 'high_pnl',
+    label: { zh: '高收益', en: 'High PnL' },
+    filter: (t) => t.pnl != null && t.pnl >= 10000,
+  },
+  {
+    id: 'consistent',
+    label: { zh: '稳定盈利', en: 'Consistent' },
+    filter: (t) =>
+      (t.win_rate != null && t.win_rate >= 60) &&
+      (t.arena_score != null && t.arena_score >= 50),
+  },
+  {
+    id: 'top_scorers',
+    label: { zh: '顶级评分', en: 'Top Scorers' },
+    filter: (t) => t.arena_score != null && t.arena_score >= 75,
+  },
 ]
 
 interface FilterPresetsProps {
@@ -62,10 +108,10 @@ export default function FilterPresets({ activePreset, onPresetChange }: FilterPr
     <Box style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[1], flexWrap: 'wrap' }}>
       {PRESETS.map((preset) => {
         // 'all' is active when nothing selected or explicitly selected
-        const isActive = preset.id === 'all' 
+        const isActive = preset.id === 'all'
           ? (activePreset === null || activePreset === 'all')
           : activePreset === preset.id
-        
+
         return (
           <button
             key={preset.id}
