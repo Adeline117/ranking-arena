@@ -1,63 +1,41 @@
-import { NextRequest, NextResponse } from 'next/server'
-import { getSupabaseAdmin } from '@/lib/supabase/server'
-import { logger } from '@/lib/logger'
-import { PipelineLogger } from '@/lib/services/pipeline-logger'
+/**
+ * Cron: Aggregate daily analytics metrics
+ * Refactored to use withCron wrapper (dub.co pattern)
+ */
 
-export async function POST(request: NextRequest) {
-  const authHeader = request.headers.get('authorization')
-  if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+import { withCron } from '@/lib/api/with-cron'
+
+const handler = withCron('analytics-daily', async (_request, { supabase }) => {
+  const today = new Date().toISOString().split('T')[0]
+
+  const [{ count: signups }, { count: activeUsers }, { count: newClaims }, { count: newFollows }] = await Promise.all([
+    supabase.from('user_profiles').select('id', { count: 'exact', head: true })
+      .gte('created_at', `${today}T00:00:00Z`).lt('created_at', `${today}T23:59:59Z`),
+    supabase.from('interactions').select('user_id', { count: 'exact', head: true })
+      .gte('created_at', `${today}T00:00:00Z`),
+    supabase.from('trader_claims').select('id', { count: 'exact', head: true })
+      .gte('created_at', `${today}T00:00:00Z`),
+    supabase.from('trader_follows').select('id', { count: 'exact', head: true })
+      .gte('created_at', `${today}T00:00:00Z`),
+  ])
+
+  const row = {
+    date: today,
+    signups: signups ?? 0,
+    active_users: activeUsers ?? 0,
+    new_claims: newClaims ?? 0,
+    new_follows: newFollows ?? 0,
   }
 
-  const plog = await PipelineLogger.start('analytics-daily')
+  const { error } = await supabase
+    .from('analytics_daily')
+    .upsert(row, { onConflict: 'date' })
 
-  try {
-    const supabase = getSupabaseAdmin()
-    const today = new Date().toISOString().split('T')[0]
+  if (error) throw new Error(`DB upsert error: ${error.message}`)
 
-    const { count: signups } = await supabase
-      .from('user_profiles')
-      .select('id', { count: 'exact', head: true })
-      .gte('created_at', `${today}T00:00:00Z`)
-      .lt('created_at', `${today}T23:59:59Z`)
+  return { count: 1, ...row }
+})
 
-    const { count: activeUsers } = await supabase
-      .from('interactions')
-      .select('user_id', { count: 'exact', head: true })
-      .gte('created_at', `${today}T00:00:00Z`)
-
-    const { count: newClaims } = await supabase
-      .from('trader_claims')
-      .select('id', { count: 'exact', head: true })
-      .gte('created_at', `${today}T00:00:00Z`)
-
-    const { count: newFollows } = await supabase
-      .from('trader_follows')
-      .select('id', { count: 'exact', head: true })
-      .gte('created_at', `${today}T00:00:00Z`)
-
-    const row = {
-      date: today,
-      signups: signups ?? 0,
-      active_users: activeUsers ?? 0,
-      new_claims: newClaims ?? 0,
-      new_follows: newFollows ?? 0,
-    }
-
-    const { error } = await supabase
-      .from('analytics_daily')
-      .upsert(row, { onConflict: 'date' })
-
-    if (error) {
-      logger.error('[Analytics Daily] Upsert error:', error)
-      return NextResponse.json({ error: 'DB error' }, { status: 500 })
-    }
-
-    await plog.success(1, row)
-    return NextResponse.json({ ok: true, data: row })
-  } catch (err) {
-    await plog.error(err instanceof Error ? err : new Error(String(err)))
-    logger.error('[Analytics Daily] Error:', err)
-    return NextResponse.json({ error: 'Internal error' }, { status: 500 })
-  }
-}
+// Support both GET (Vercel cron) and POST (manual trigger)
+export const GET = handler
+export const POST = handler

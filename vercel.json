@@ -9,6 +9,10 @@
       "schedule": "0,30 * * * *"
     },
     {
+      "path": "/api/cron/sync-meilisearch",
+      "schedule": "5,35 * * * *"
+    },
+    {
       "path": "/api/cron/daily-digest",
       "schedule": "2 0 * * *"
     },
