@@ -7,7 +7,6 @@ import { useRouter } from 'next/navigation'
 import { tokens } from '@/lib/design-tokens'
 import { supabase } from '@/lib/supabase/client'
 import { Box, Text } from '../base'
-import CopyTradeButton from './CopyTradeButton'
 import { getAvatarGradient, getAvatarInitial, isWalletAddress, generateBlockieSvg } from '@/lib/utils/avatar'
 import { EXCHANGE_NAMES, EXCHANGE_CONFIG } from '@/lib/constants/exchanges'
 import { formatDisplayName } from '@/app/components/ranking/utils'
@@ -84,50 +83,7 @@ interface TraderHeaderProps {
 }
 
 // Helpers extracted to ./TraderHeaderHelpers.tsx
-
-interface CopyTradeSectionProps {
-  isPro: boolean
-  traderId: string
-  source?: string
-  handle: string
-  router: ReturnType<typeof useRouter>
-  t: (key: string) => string
-}
-
-function CopyTradeSection({ isPro: _isPro, traderId, source, handle, router: _router, t: _t }: CopyTradeSectionProps): React.ReactElement {
-  const isBinance = source?.toLowerCase().startsWith('binance')
-  return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-      <CopyTradeButton traderId={traderId} source={source} traderHandle={handle} />
-      {isBinance && (
-        <a
-          href="https://www.bsmkweb.cc/register?ref=ARENA"
-          target="_blank"
-          rel="noopener noreferrer"
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: 4,
-            padding: '6px 12px',
-            borderRadius: 'var(--radius-xl, 12px)',
-            background: 'linear-gradient(135deg, #F0B90B22, #F0B90B11)',
-            border: '1px solid #F0B90B40',
-            fontSize: 12,
-            fontWeight: 700,
-            color: '#F0B90B',
-            textDecoration: 'none',
-            whiteSpace: 'nowrap',
-            transition: 'all 0.2s',
-          }}
-          title="Use invite code ARENA to register on Binance"
-        >
-          <span style={{ fontSize: 11 }}>🎁</span>
-          邀请码 ARENA
-        </a>
-      )}
-    </div>
-  )
-}
+// Exchange links (copy-trade, DEX view, referral) moved to ExchangeLinksBar below header
 
 export default function TraderHeader({
   handle,

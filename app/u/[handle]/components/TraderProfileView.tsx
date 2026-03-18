@@ -96,7 +96,6 @@ export default function TraderProfileView({
           coverUrl={traderProfile?.cover_url || profile.cover_url}
           isRegistered={traderProfile?.isRegistered ?? profile.isRegistered}
           followers={traderProfile?.followers ?? profile.followers}
-          copiers={traderProfile?.copiers}
           source={traderProfile?.source}
           isPro={isPro}
           roi90d={traderPerformance?.roi_90d}
