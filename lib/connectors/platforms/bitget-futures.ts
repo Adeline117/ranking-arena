@@ -81,9 +81,9 @@ export class BitgetFuturesConnector extends BaseConnector {
       const traders: TraderSource[] = list.map((item: Record<string, unknown>) => ({
         platform: 'bitget' as const,
         market_type: 'futures' as const,
-        trader_key: String(item.traderId || ''),
-        display_name: (item.traderName as string) || null,
-        profile_url: `https://www.bitget.com/copy-trading/trader/${item.traderId}`,
+        trader_key: String(item.traderId || item.traderUid || ''),
+        display_name: (item.traderName as string) || (item.traderNickName as string) || null,
+        profile_url: `https://www.bitget.com/copy-trading/trader/${item.traderId || item.traderUid}`,
         discovered_at: new Date().toISOString(),
         last_seen_at: new Date().toISOString(),
         is_active: true,
@@ -217,16 +217,18 @@ export class BitgetFuturesConnector extends BaseConnector {
    * followerNum, copyTraderNum, totalFollowAssets (AUM), headUrl (avatar).
    */
   normalize(raw: Record<string, unknown>): Record<string, unknown> {
+    // traderList API uses: traderUid, traderNickName, returnRate, winningRate, headPic
+    // currentTrader/list uses: traderId, traderName, roi, winRate, drawDown, headUrl
     return {
       trader_key: raw.traderId ?? raw.traderUid ?? raw.uid ?? null,
-      display_name: raw.traderName ?? raw.nickName ?? null,
-      avatar_url: raw.headUrl ?? raw.avatar ?? null,
-      roi: this.parseNumber(raw.roi ?? raw.profitRate ?? raw.yieldRate),
-      pnl: this.parseNumber(raw.profit ?? raw.totalProfit),
-      win_rate: this.parseNumber(raw.winRate),
+      display_name: raw.traderName ?? raw.traderNickName ?? raw.nickName ?? null,
+      avatar_url: raw.headUrl ?? raw.headPic ?? raw.avatar ?? null,
+      roi: this.parseNumber(raw.roi ?? raw.returnRate ?? raw.profitRate ?? raw.yieldRate),
+      pnl: this.parseNumber(raw.profit ?? raw.totalProfit ?? raw.totalFollowProfit ?? raw.allTotalRevenue),
+      win_rate: this.parseNumber(raw.winRate ?? raw.winningRate),
       max_drawdown: this.parseNumber(raw.drawDown ?? raw.maxDrawdown ?? raw.mdd),
-      trades_count: null,
-      followers: this.parseNumber(raw.followerNum ?? raw.followerCount ?? raw.copyUserNum),
+      trades_count: this.parseNumber(raw.tradeTimes) ?? null,
+      followers: this.parseNumber(raw.followerNum ?? raw.followerCount ?? raw.copyUserNum ?? raw.traceNum),
       copiers: this.parseNumber(raw.copyTraderNum),
       aum: this.parseNumber(raw.totalFollowAssets),
       sharpe_ratio: null,
