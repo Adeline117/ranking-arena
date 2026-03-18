@@ -13,6 +13,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getTopTraders, getSortedSetSize } from '@/lib/realtime/ranking-store'
 import { getSupabaseAdmin } from '@/lib/api'
 import { createLogger } from '@/lib/utils/logger'
+import { tieredGet, tieredSet } from '@/lib/cache/redis-layer'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -27,6 +28,17 @@ export async function GET(request: NextRequest) {
   const offset = Math.max(0, parseInt(searchParams.get('offset') || '0', 10) || 0)
 
   try {
+    // CQRS read-through cache: avoid hitting ZREVRANGE for repeated requests within 30s
+    const cacheKey = `rankings:live:${period}:${limit}:${offset}`
+    const cached = await tieredGet<Record<string, unknown>>(cacheKey, 'hot')
+    if (cached.data) {
+      const response = NextResponse.json(cached.data)
+      response.headers.set('Cache-Control', 'no-cache, no-store, must-revalidate')
+      response.headers.set('X-Cache', 'HIT')
+      response.headers.set('X-Cache-Layer', cached.layer || 'unknown')
+      return response
+    }
+
     // Try Redis sorted set first
     const sortedSetSize = await getSortedSetSize(period)
 
@@ -83,14 +95,20 @@ export async function GET(request: NextRequest) {
           }
         })
 
-        const response = NextResponse.json({
+        const responseBody = {
           traders: enrichedTraders,
           total: sortedSetSize,
           period,
           source: 'redis',
           hasMore: offset + limit < sortedSetSize,
-        })
+        }
+
+        // Cache the response for subsequent requests (hot tier = 60s memory, 300s Redis)
+        tieredSet(cacheKey, responseBody, 'hot', ['rankings', `live:${period}`]).catch(() => {})
+
+        const response = NextResponse.json(responseBody)
         response.headers.set('Cache-Control', 'no-cache, no-store, must-revalidate')
+        response.headers.set('X-Cache', 'MISS')
         return response
       }
     }
@@ -136,14 +154,20 @@ export async function GET(request: NextRequest) {
     }))
 
     const totalCount = count ?? 0
-    const response = NextResponse.json({
+    const responseBody = {
       traders,
       total: totalCount,
       period,
       source: 'database',
       hasMore: offset + limit < totalCount,
-    })
+    }
+
+    // Cache the DB fallback response too
+    tieredSet(cacheKey, responseBody, 'hot', ['rankings', `live:${period}`]).catch(() => {})
+
+    const response = NextResponse.json(responseBody)
     response.headers.set('Cache-Control', 'no-cache, no-store, must-revalidate')
+    response.headers.set('X-Cache', 'MISS')
     return response
   } catch (error) {
     logger.error('[rankings-live] Unexpected error:', error)

@@ -1,4 +1,5 @@
 import { Metadata } from 'next'
+import { Suspense } from 'react'
 import { notFound } from 'next/navigation'
 import { getSupabaseAdmin } from '@/lib/supabase/server'
 import { EXCHANGE_NAMES, SOURCE_TYPE_MAP, EXCHANGE_CONFIG, DEAD_BLOCKED_PLATFORMS, resolveExchangeSlug } from '@/lib/constants/exchanges'
@@ -6,6 +7,7 @@ import type { TraderSource } from '@/lib/constants/exchanges'
 import { tokens } from '@/lib/design-tokens'
 import MobileBottomNav from '@/app/components/layout/MobileBottomNav'
 import { Box } from '@/app/components/base'
+import { RankingSkeleton } from '@/app/components/ui/Skeleton'
 import ExchangeRankingClient from './ExchangeRankingClient'
 import { logger } from '@/lib/logger'
 
@@ -172,24 +174,11 @@ async function fetchExchangeTraders(exchange: string): Promise<TraderData[]> {
   }
 }
 
-export default async function ExchangeRankingPage({
-  params,
-}: {
-  params: Promise<{ exchange: string }>
-}) {
-  const rawExchange = (await params).exchange
-  const exchange = resolveExchangeSlug(rawExchange)
-
-  // Validate exchange slug — return 404 for unknown exchanges
-  if (!EXCHANGE_NAMES[exchange]) {
-    notFound()
-  }
-
-  // Return 404 for DEAD/blocked exchanges
-  if (DEAD_BLOCKED_PLATFORMS.includes(exchange as TraderSource)) {
-    notFound()
-  }
-
+/**
+ * Async server component that fetches and renders the ranking table.
+ * Wrapped in Suspense by the page so the page shell streams instantly.
+ */
+async function RankingsContent({ exchange }: { exchange: string }) {
   const displayName = EXCHANGE_NAMES[exchange]
   const traders = await fetchExchangeTraders(exchange)
   const sourceType = SOURCE_TYPE_MAP[exchange] || 'futures'
@@ -216,11 +205,49 @@ export default async function ExchangeRankingPage({
   }
 
   return (
-    <Box style={{ minHeight: '100vh', background: tokens.colors.bg.primary, color: tokens.colors.text.primary }}>
+    <>
       <script
         type="application/ld+json"
         dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
       />
+      <p
+        style={{
+          fontSize: tokens.typography.fontSize.sm,
+          color: tokens.colors.text.secondary,
+          marginBottom: tokens.spacing[6],
+        }}
+      >
+        {traders.length} traders | Ranked by Arena Score | 90-day window
+      </p>
+      <ExchangeRankingClient traders={traders} exchange={exchange} />
+    </>
+  )
+}
+
+export default async function ExchangeRankingPage({
+  params,
+}: {
+  params: Promise<{ exchange: string }>
+}) {
+  const rawExchange = (await params).exchange
+  const exchange = resolveExchangeSlug(rawExchange)
+
+  // Validate exchange slug — return 404 for unknown exchanges
+  if (!EXCHANGE_NAMES[exchange]) {
+    notFound()
+  }
+
+  // Return 404 for DEAD/blocked exchanges
+  if (DEAD_BLOCKED_PLATFORMS.includes(exchange as TraderSource)) {
+    notFound()
+  }
+
+  const displayName = EXCHANGE_NAMES[exchange]
+  const sourceType = SOURCE_TYPE_MAP[exchange] || 'futures'
+  const labels = TYPE_LABELS[sourceType] || TYPE_LABELS.futures
+
+  return (
+    <Box style={{ minHeight: '100vh', background: tokens.colors.bg.primary, color: tokens.colors.text.primary }}>
       <div className="max-w-5xl mx-auto px-4 py-6" style={{ paddingBottom: 80 }}>
         <h1
           style={{
@@ -232,17 +259,10 @@ export default async function ExchangeRankingPage({
         >
           {displayName} {labels.en} Trader Rankings
         </h1>
-        <p
-          style={{
-            fontSize: tokens.typography.fontSize.sm,
-            color: tokens.colors.text.secondary,
-            marginBottom: tokens.spacing[6],
-          }}
-        >
-          {traders.length} traders | Ranked by Arena Score | 90-day window
-        </p>
 
-        <ExchangeRankingClient traders={traders} exchange={exchange} />
+        <Suspense fallback={<RankingSkeleton rows={20} />}>
+          <RankingsContent exchange={exchange} />
+        </Suspense>
       </div>
       <MobileBottomNav />
     </Box>
