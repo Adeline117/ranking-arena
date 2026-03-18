@@ -179,9 +179,15 @@ export function useRankingFilters({ traders, activeTimeRange }: UseRankingFilter
       }
     }
   }, [])
-  const [, startTransition] = useTransition()
 
-  // Sync state to URL (debounced)
+  // Use refs for URL sync to avoid recreating syncStateToUrl on every state change
+  // This prevents cascading dependency changes that cause infinite re-render loops
+  const stateRef = useRef({ filterConfig, sortColumn, sortDir, currentPage, searchQuery, activePreset, selectedExchange })
+  useEffect(() => {
+    stateRef.current = { filterConfig, sortColumn, sortDir, currentPage, searchQuery, activePreset, selectedExchange }
+  })
+
+  // Sync state to URL (debounced) — stable reference, reads from stateRef
   const syncStateToUrl = useCallback((overrides: {
     config?: FilterConfig
     sort?: string
@@ -195,9 +201,9 @@ export function useRankingFilters({ traders, activeTimeRange }: UseRankingFilter
       clearTimeout(syncTimeoutRef.current)
     }
     syncTimeoutRef.current = setTimeout(() => {
-      startTransition(() => {
+      const s = stateRef.current
       const params = new URLSearchParams(window.location.search)
-      const config = overrides.config ?? filterConfig
+      const config = overrides.config ?? s.filterConfig
 
       ;['roi_min', 'roi_max', 'dd_min', 'dd_max', 'min_pnl', 'min_score', 'min_wr', 'exchange', 'fcat', 'sort', 'order', 'page', 'q', 'preset', 'ex'].forEach(k => params.delete(k))
 
@@ -211,11 +217,11 @@ export function useRankingFilters({ traders, activeTimeRange }: UseRankingFilter
       if (config.exchange?.length) params.set('exchange', config.exchange.join(','))
       if (config.category?.length) params.set('fcat', config.category.join(','))
 
-      const sort = overrides.sort ?? sortColumn
-      const order = overrides.order ?? sortDir
-      const page = overrides.page ?? currentPage
-      const q = overrides.q ?? searchQuery
-      const preset = overrides.preset !== undefined ? overrides.preset : activePreset
+      const sort = overrides.sort ?? s.sortColumn
+      const order = overrides.order ?? s.sortDir
+      const page = overrides.page ?? s.currentPage
+      const q = overrides.q ?? s.searchQuery
+      const preset = overrides.preset !== undefined ? overrides.preset : s.activePreset
 
       if (sort && sort !== 'score') params.set('sort', sort)
       if (order && order !== 'desc') params.set('order', order)
@@ -223,15 +229,14 @@ export function useRankingFilters({ traders, activeTimeRange }: UseRankingFilter
       if (q) params.set('q', q)
       if (preset) params.set('preset', preset)
 
-      const ex = overrides.ex !== undefined ? overrides.ex : selectedExchange
+      const ex = overrides.ex !== undefined ? overrides.ex : s.selectedExchange
       if (ex) params.set('ex', ex)
 
-        const qs = params.toString()
-        const newUrl = qs ? `${window.location.pathname}?${qs}` : window.location.pathname
-        window.history.replaceState(null, '', newUrl)
-      })
+      const qs = params.toString()
+      const newUrl = qs ? `${window.location.pathname}?${qs}` : window.location.pathname
+      window.history.replaceState(null, '', newUrl)
     }, 300)
-  }, [filterConfig, sortColumn, sortDir, currentPage, searchQuery, activePreset, selectedExchange])
+  }, []) // Stable — never recreates, reads current state from stateRef
 
   const syncFilterToUrl = useCallback((config: FilterConfig) => {
     syncStateToUrl({ config })

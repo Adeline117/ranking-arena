@@ -4,7 +4,6 @@ import { getInitialTraders } from '@/lib/getInitialTraders'
 import SSRRankingTable from './components/home/SSRRankingTable'
 import { JsonLd } from './components/Providers/JsonLd'
 import { HomePage } from './components/home'
-import TopNavWrapper from './rankings/TopNavWrapper'
 
 const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://www.arenafi.org'
 
@@ -85,11 +84,6 @@ export default async function Page() {
       ))}
       <JsonLd data={organizationJsonLd} />
       <JsonLd data={webSiteJsonLd} />
-      {/* TopNav rendered before SSR table so navbar always appears above traders.
-          Hidden by CSS :has() when HomePage renders its own TopNav. */}
-      <div id="ssr-nav">
-        <TopNavWrapper />
-      </div>
       {/* SSR ranking table — LCP element, hidden by CSS :has() when client renders */}
       <div id="ssr-ranking">
         <SSRRankingTable traders={initialTraders} />

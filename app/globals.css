@@ -3,8 +3,7 @@
 /* SSR Ranking Table: visible by default for instant LCP.
    Hidden via :has() when client-side .home-ranking-section renders.
    Pure CSS — zero CLS, no JavaScript needed. */
-body:has(.home-ranking-section) #ssr-ranking,
-body:has(.home-ranking-section) #ssr-nav {
+body:has(.home-ranking-section) #ssr-ranking {
   display: none !important;
 }
 
