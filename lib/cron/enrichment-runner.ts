@@ -65,6 +65,18 @@ import {
   fetchBitunixStatsDetail,
   fetchBitunixCurrentPositions,
   fetchBitunixPositionHistory,
+  fetchBitfinexEquityCurve,
+  fetchBitfinexStatsDetail,
+  fetchBlofinEquityCurve,
+  fetchBlofinStatsDetail,
+  fetchPhemexEquityCurve,
+  fetchPhemexStatsDetail,
+  fetchBingxEquityCurve,
+  fetchBingxStatsDetail,
+  fetchToobitEquityCurve,
+  fetchToobitStatsDetail,
+  fetchBinanceSpotEquityCurve,
+  fetchBinanceSpotStatsDetail,
   fetchWalletAUM,
   fetchWalletPortfolio,
   isDexPlatform,
@@ -335,6 +347,45 @@ export const ENRICHMENT_PLATFORM_CONFIGS: Record<string, EnrichmentConfig> = {
     fetchCurrentPositions: fetchBitunixCurrentPositions,
     concurrency: 2, delayMs: 1500,
   },
+  bitfinex: {
+    platform: 'bitfinex',
+    fetchEquityCurve: fetchBitfinexEquityCurve,
+    fetchStatsDetail: fetchBitfinexStatsDetail,
+    concurrency: 3, delayMs: 500, // Public API, generous rate limits
+  },
+  blofin: {
+    platform: 'blofin',
+    fetchEquityCurve: fetchBlofinEquityCurve,
+    fetchStatsDetail: fetchBlofinStatsDetail,
+    concurrency: 2, delayMs: 2000,
+  },
+  phemex: {
+    platform: 'phemex',
+    fetchEquityCurve: fetchPhemexEquityCurve,
+    fetchStatsDetail: fetchPhemexStatsDetail,
+    concurrency: 1, delayMs: 3000, // Phemex has strict rate limits
+  },
+  bingx: {
+    platform: 'bingx',
+    fetchEquityCurve: fetchBingxEquityCurve,
+    fetchStatsDetail: fetchBingxStatsDetail,
+    concurrency: 2, delayMs: 2000, // Via CF proxy
+  },
+  toobit: {
+    platform: 'toobit',
+    fetchEquityCurve: fetchToobitEquityCurve,
+    fetchStatsDetail: fetchToobitStatsDetail,
+    concurrency: 3, delayMs: 500, // Cached rankings, fast lookups
+  },
+  binance_spot: {
+    platform: 'binance_spot',
+    fetchEquityCurve: async (traderId: string, days: number) => {
+      const timeRangeMap: Record<number, string> = { 7: '7D', 30: '30D', 90: '90D' }
+      return fetchBinanceSpotEquityCurve(traderId, timeRangeMap[days] || '90D')
+    },
+    fetchStatsDetail: fetchBinanceSpotStatsDetail,
+    concurrency: 3, delayMs: 1500,
+  },
 }
 
 export interface EnrichmentResult {
@@ -351,17 +402,21 @@ export interface EnrichmentResult {
  */
 // Platforms that don't support enrichment (wallet-based, CF-protected, or no enrichment API)
 export const NO_ENRICHMENT_PLATFORMS = new Set([
-  // Wallet-based platforms (no equity curve API)
+  // Wallet-based platforms (no per-trader equity curve API)
   'binance_web3', 'okx_web3', 'web3_bot',
   // API removed/unavailable
   'bybit', 'bybit_spot',  // Akamai WAF blocks all
   'bitmart', 'paradex', 'okx_spot',  // Dead
   // No enrichment API / CF protected
-  'xt', 'toobit', 'bingx',
+  'xt',
   // kucoin, weex: dead platforms, no enrichment possible
-  'kucoin', 'weex',
+  'kucoin', 'weex',  // weex returns 521, janapw.com needs dynamic auth
+  // NOTE: bitfinex re-enabled — public rankings API for stats
+  // NOTE: blofin re-enabled — trader detail endpoint
+  // NOTE: phemex re-enabled — public copy-trading API
+  // NOTE: bingx re-enabled — CF Worker proxy to internal API
+  // NOTE: toobit re-enabled — ranking API with cached batch lookups
   // NOTE: binance_spot re-enabled (2026-03-16) — new GET API + per-platform timeout
-  // NOTE: bitfinex re-enabled — uses Copin fallback
   // NOTE: bitunix re-enabled — enrichment via connector detail API
 ])
 
