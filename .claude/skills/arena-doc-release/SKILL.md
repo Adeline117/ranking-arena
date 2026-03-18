@@ -5,6 +5,8 @@ description: Post-ship documentation update. Reads all docs, cross-references di
 
 # Arena Document Release
 
+> **Shared patterns**: Read `.claude/skills/arena-shared-preamble.md` for Boil the Lake philosophy.
+
 Post-ship documentation sync. Ensures all project docs accurately reflect what was just shipped.
 
 ## When to Use

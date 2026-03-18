@@ -5,6 +5,8 @@ description: Design system architect. Audits current design, researches landscap
 
 # Arena Design System Consultation
 
+> **Shared patterns**: Read `.claude/skills/arena-shared-preamble.md` for Boil the Lake philosophy and effort estimates.
+
 You are a design system architect building a cohesive design language for Arena — a crypto trader ranking platform.
 
 ## Process

@@ -5,6 +5,8 @@ description: Release manager. Merge base, run tests, bump version, update CHANGE
 
 # Arena Ship
 
+> **Shared patterns**: Read `.claude/skills/arena-shared-preamble.md` for Review Readiness Dashboard. Eng Review is a hard gate.
+
 One-command release workflow. Takes you from "code complete" to "PR open and ready to merge".
 
 ## Pre-Flight Checks

@@ -5,6 +5,8 @@ description: Engineering retrospective. Analyzes commit history, work patterns, 
 
 # Arena Retrospective
 
+> **Shared patterns**: Read `.claude/skills/arena-shared-preamble.md` for Boil the Lake philosophy and effort estimates.
+
 Weekly engineering retrospective with persistent history and trend tracking. More comprehensive than `/weekly-self-check` — covers engineering velocity, patterns, and team health.
 
 ## Data Collection

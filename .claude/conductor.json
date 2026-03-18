@@ -1,0 +1,67 @@
+{
+  "$schema": "https://raw.githubusercontent.com/garrytan/gstack/main/conductor-schema.json",
+  "description": "Arena multi-agent orchestration — run 10 specialized agents in parallel",
+  "sessions": {
+    "ceo-review": {
+      "command": "/plan-ceo-review",
+      "description": "CEO product review — challenge premises, scope decision",
+      "dependsOn": []
+    },
+    "eng-review": {
+      "command": "/plan-eng-review",
+      "description": "Engineering manager review — architecture, tests, performance",
+      "dependsOn": []
+    },
+    "design-audit": {
+      "command": "/design-audit",
+      "description": "80-item visual design audit",
+      "dependsOn": []
+    },
+    "qa-report": {
+      "command": "/qa-report",
+      "description": "QA report — systematic testing without code changes",
+      "dependsOn": []
+    },
+    "security-review": {
+      "command": "/security-review",
+      "description": "Security audit — auth, payment, API, RLS",
+      "dependsOn": []
+    },
+    "code-review": {
+      "command": "/code-review",
+      "description": "Code review — PR diff analysis",
+      "dependsOn": ["eng-review"]
+    },
+    "qa-fix": {
+      "command": "/qa standard",
+      "description": "QA with auto-fix — test, find bugs, fix, commit",
+      "dependsOn": ["qa-report"]
+    },
+    "qa-design": {
+      "command": "/qa-design",
+      "description": "Design QA with auto-fix — spacing, typography, AI slop",
+      "dependsOn": ["design-audit"]
+    },
+    "ship": {
+      "command": "/ship",
+      "description": "Release — merge, test, version bump, CHANGELOG, PR",
+      "dependsOn": ["eng-review", "qa-fix", "code-review"]
+    },
+    "doc-release": {
+      "command": "/doc-release",
+      "description": "Post-ship docs sync",
+      "dependsOn": ["ship"]
+    }
+  },
+  "parallel_groups": {
+    "review_phase": ["ceo-review", "eng-review", "design-audit", "qa-report", "security-review"],
+    "fix_phase": ["code-review", "qa-fix", "qa-design"],
+    "ship_phase": ["ship"],
+    "post_ship": ["doc-release"]
+  },
+  "usage": {
+    "full_review": "Run all review_phase sessions in parallel, then fix_phase, then ship_phase, then post_ship",
+    "quick_ship": "Run eng-review → qa-fix → ship → doc-release sequentially",
+    "audit_only": "Run review_phase in parallel, produce reports only"
+  }
+}

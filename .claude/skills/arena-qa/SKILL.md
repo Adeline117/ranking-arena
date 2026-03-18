@@ -5,6 +5,8 @@ description: QA lead with auto-fix. Systematically tests Arena, finds bugs, fixe
 
 # Arena QA — Test & Fix
 
+> **Shared patterns**: Read `.claude/skills/arena-shared-preamble.md` for Boil the Lake philosophy and effort estimates.
+
 Systematically QA test Arena and automatically fix bugs found. Each fix is committed atomically with verification.
 
 ## Tier Selection
