@@ -206,6 +206,52 @@ export function EquityCurveSection({
         <Box style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[2] }}>
           {/* Period Selector */}
           <PeriodSelector value={period} onChange={setPeriod} t={t} />
+          {/* Export chart as image */}
+          <button
+            onClick={async () => {
+              const chartContainer = document.querySelector('.chart-container')
+              if (!chartContainer) return
+              try {
+                const { default: html2canvas } = await import(/* webpackIgnore: true */ 'html2canvas' as string) as { default: (el: HTMLElement, opts?: Record<string, unknown>) => Promise<HTMLCanvasElement> }
+                const canvas = await html2canvas(chartContainer as HTMLElement, { backgroundColor: null })
+                const link = document.createElement('a')
+                link.download = `arena-chart-${period}-${chartType}.png`
+                link.href = canvas.toDataURL('image/png')
+                link.click()
+              } catch {
+                // Fallback: export SVG directly
+                const svg = chartContainer.querySelector('svg')
+                if (svg) {
+                  const blob = new Blob([svg.outerHTML], { type: 'image/svg+xml' })
+                  const link = document.createElement('a')
+                  link.download = `arena-chart-${period}-${chartType}.svg`
+                  link.href = URL.createObjectURL(blob)
+                  link.click()
+                  URL.revokeObjectURL(link.href)
+                }
+              }
+            }}
+            aria-label={t('exportChart') || 'Export chart'}
+            style={{
+              background: 'none',
+              border: `1px solid ${tokens.colors.border.primary}`,
+              borderRadius: tokens.radius.sm,
+              padding: tokens.spacing[1],
+              color: tokens.colors.text.secondary,
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              width: 32,
+              height: 32,
+            }}
+          >
+            <svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" strokeLinecap="round" strokeLinejoin="round" />
+              <polyline points="7 10 12 15 17 10" strokeLinecap="round" strokeLinejoin="round" />
+              <line x1="12" y1="15" x2="12" y2="3" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+          </button>
           {/* Fullscreen button */}
           <button
             onClick={() => setShowFullscreen(true)}
@@ -360,6 +406,9 @@ function SimpleLineChart({
   const [hoverIndex, setHoverIndex] = useState<number | null>(null)
   const [tooltipPos, setTooltipPos] = useState<{ x: number; y: number } | null>(null)
   const chartRef = useRef<HTMLDivElement>(null)
+  // Zoom state: show a subset of data points
+  const [zoomLevel, setZoomLevel] = useState(1) // 1 = full data, 2 = half, 4 = quarter
+  const [zoomOffset, setZoomOffset] = useState(0) // offset from the end
 
   const formatAxisLabel = (val: number) => {
     const abs = Math.abs(val)
@@ -373,11 +422,22 @@ function SimpleLineChart({
     return null
   }
 
+  // Reset zoom when data/period changes
+  useEffect(() => { setZoomLevel(1); setZoomOffset(0) }, [data, period])
+
   // Fill date gaps with zero entries to prevent misleading visual jumps
   const gapFilled = fillDateGaps(data)
   // Filter out data points with null/NaN values defensively (API types say number, but runtime may differ)
-  const validData = gapFilled.filter(d => d[dataKey] != null && !isNaN(d[dataKey] as number))
-  if (validData.length === 0) return null
+  const allValidData = gapFilled.filter(d => d[dataKey] != null && !isNaN(d[dataKey] as number))
+  if (allValidData.length === 0) return null
+
+  // Apply zoom: show a window of data points
+  const windowSize = Math.max(4, Math.ceil(allValidData.length / zoomLevel))
+  const maxOffset = Math.max(0, allValidData.length - windowSize)
+  const effectiveOffset = Math.min(zoomOffset, maxOffset)
+  const startIdx = Math.max(0, allValidData.length - windowSize - effectiveOffset)
+  const endIdx = startIdx + windowSize
+  const validData = allValidData.slice(startIdx, endIdx)
 
   const values = validData.map(d => d[dataKey] as number)
   const maxValue = Math.max(...values)
@@ -640,6 +700,47 @@ function SimpleLineChart({
           </Box>
         )}
       </Box>
+
+      {/* Zoom controls */}
+      {allValidData.length > 8 && (
+        <Box style={{
+          position: 'absolute',
+          top: tokens.spacing[3],
+          right: tokens.spacing[3],
+          display: 'flex',
+          gap: 2,
+          background: `${tokens.colors.bg.primary}E0`,
+          borderRadius: tokens.radius.md,
+          border: `1px solid ${tokens.colors.border.primary}40`,
+          padding: 2,
+          zIndex: 5,
+        }}>
+          <button
+            onClick={() => setZoomLevel(prev => Math.min(prev * 2, Math.floor(allValidData.length / 4)))}
+            disabled={zoomLevel >= Math.floor(allValidData.length / 4)}
+            aria-label="Zoom in"
+            style={{
+              width: 24, height: 24, border: 'none', borderRadius: tokens.radius.sm,
+              background: 'transparent', color: tokens.colors.text.secondary,
+              cursor: zoomLevel >= Math.floor(allValidData.length / 4) ? 'not-allowed' : 'pointer',
+              opacity: zoomLevel >= Math.floor(allValidData.length / 4) ? 0.3 : 1,
+              display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14, fontWeight: 700,
+            }}
+          >+</button>
+          <button
+            onClick={() => { setZoomLevel(prev => Math.max(1, prev / 2)); setZoomOffset(0) }}
+            disabled={zoomLevel <= 1}
+            aria-label="Zoom out"
+            style={{
+              width: 24, height: 24, border: 'none', borderRadius: tokens.radius.sm,
+              background: 'transparent', color: tokens.colors.text.secondary,
+              cursor: zoomLevel <= 1 ? 'not-allowed' : 'pointer',
+              opacity: zoomLevel <= 1 ? 0.3 : 1,
+              display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14, fontWeight: 700,
+            }}
+          >-</button>
+        </Box>
+      )}
 
       {/* X-axis Labels */}
       <Box style={{
