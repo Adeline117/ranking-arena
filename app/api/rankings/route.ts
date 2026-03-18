@@ -210,7 +210,7 @@ async function getRankingsFallback(rankingsQuery: RankingsQuery, _cursor?: strin
       `source_trader_id, handle, source, source_type, roi, pnl, win_rate, max_drawdown,
        trades_count, followers, arena_score, avatar_url, rank, computed_at,
        profitability_score, risk_control_score, execution_score, score_completeness,
-       trading_style, avg_holding_hours, sharpe_ratio, sortino_ratio, trader_type, is_outlier`,
+       trading_style, avg_holding_hours, sharpe_ratio, sortino_ratio, trader_type, is_outlier, metrics_estimated`,
       { count: 'exact' }
     )
     .eq('season_id', seasonId)

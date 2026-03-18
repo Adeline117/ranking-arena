@@ -475,8 +475,8 @@ export const TraderRow = memo(function TraderRow({
         {/* Win% */}
         <Box className="col-winrate" style={{ textAlign: 'right', alignItems: 'center', justifyContent: 'flex-end' }}>
           {trader.win_rate != null ? (
-            <Text size="sm" weight="semibold" style={{ color: trader.win_rate > 50 ? tokens.colors.accent.success : TRADER_TEXT_TERTIARY, lineHeight: 1.2, fontSize: tokens.typography.fontSize.sm, fontVariantNumeric: 'tabular-nums' }}>
-              {trader.win_rate.toFixed(1)}%
+            <Text size="sm" weight="semibold" style={{ color: trader.win_rate > 50 ? tokens.colors.accent.success : TRADER_TEXT_TERTIARY, lineHeight: 1.2, fontSize: tokens.typography.fontSize.sm, fontVariantNumeric: 'tabular-nums', opacity: trader.metrics_estimated ? 0.5 : 1 }} title={trader.metrics_estimated ? 'Estimated from ROI' : undefined}>
+              {trader.metrics_estimated ? '~' : ''}{trader.win_rate.toFixed(1)}%
             </Text>
           ) : (
             <NaIndicator source={trader.source || source} metricType="winRate" />
@@ -486,8 +486,8 @@ export const TraderRow = memo(function TraderRow({
         {/* MDD */}
         <Box className="col-mdd" style={{ textAlign: 'right', alignItems: 'center', justifyContent: 'flex-end' }}>
           {trader.max_drawdown != null ? (
-            <Text size="sm" weight="semibold" style={{ color: TRADER_ACCENT_ERROR, lineHeight: 1.2, fontSize: tokens.typography.fontSize.sm, fontVariantNumeric: 'tabular-nums' }}>
-              {Math.abs(trader.max_drawdown) < 0.05 ? '< 0.1' : `-${Math.abs(trader.max_drawdown).toFixed(1)}`}%
+            <Text size="sm" weight="semibold" style={{ color: TRADER_ACCENT_ERROR, lineHeight: 1.2, fontSize: tokens.typography.fontSize.sm, fontVariantNumeric: 'tabular-nums', opacity: trader.metrics_estimated ? 0.5 : 1 }} title={trader.metrics_estimated ? 'Estimated from ROI' : undefined}>
+              {trader.metrics_estimated ? '~' : ''}{Math.abs(trader.max_drawdown) < 0.05 ? '< 0.1' : `-${Math.abs(trader.max_drawdown).toFixed(1)}`}%
             </Text>
           ) : (
             <NaIndicator source={trader.source || source} metricType="drawdown" />

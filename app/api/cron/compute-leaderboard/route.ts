@@ -272,6 +272,7 @@ async function computeSeason(
     profit_factor: number | null
     calmar_ratio: number | null
     trader_type: string | null
+    metrics_estimated: boolean
   }
 
   // Stream directly into traderMap instead of accumulating allSnapshots array
@@ -283,6 +284,8 @@ async function computeSeason(
     if (snap.source_trader_id.startsWith('0x')) {
       snap.source_trader_id = snap.source_trader_id.toLowerCase()
     }
+    // Ensure metrics_estimated is initialized (v1 snapshots don't have this field)
+    if (snap.metrics_estimated == null) snap.metrics_estimated = false
     const key = `${snap.source}:${snap.source_trader_id}`
     if (!traderMap.has(key)) {
       traderMap.set(key, snap)
@@ -373,6 +376,7 @@ async function computeSeason(
             profit_factor: null,
             calmar_ratio: null,
             trader_type: null,
+            metrics_estimated: false,
           })
         }
         return rows
@@ -562,6 +566,7 @@ async function computeSeason(
   // Phase 5: For remaining nulls, estimate from ROI + trades_count
   // If a trader has positive ROI and trades_count, we can estimate WR
   // If ROI is known, MDD can be estimated as a fraction of absolute ROI (conservative)
+  // IMPORTANT: mark these as estimated so frontend can display visual indicator
   let phase5Count = 0
   for (const snap of Array.from(traderMap.values())) {
     if (snap.roi == null) continue
@@ -573,14 +578,17 @@ async function computeSeason(
         // Use a conservative sigmoid: WR = 50 + 30*tanh(ROI/100)
         const wr = 50 + 30 * Math.tanh(snap.roi / 100)
         snap.win_rate = Math.round(Math.max(5, Math.min(95, wr)) * 100) / 100
+        snap.metrics_estimated = true
         phase5Count++
       } else if (snap.roi > 0) {
         // No trades_count but positive ROI — estimate conservatively
         snap.win_rate = Math.round(Math.max(30, Math.min(80, 50 + 20 * Math.tanh(snap.roi / 200))) * 100) / 100
+        snap.metrics_estimated = true
         phase5Count++
       } else {
         // Negative ROI — below 50%
         snap.win_rate = Math.round(Math.max(10, Math.min(50, 50 + 20 * Math.tanh(snap.roi / 200))) * 100) / 100
+        snap.metrics_estimated = true
         phase5Count++
       }
     }
@@ -595,6 +603,7 @@ async function computeSeason(
       } else {
         snap.max_drawdown = Math.round(Math.min(Math.abs(snap.roi), 95) * 100) / 100
       }
+      snap.metrics_estimated = true
       phase5Count++
     }
   }
@@ -757,6 +766,7 @@ async function computeSeason(
       profit_factor: t.profit_factor ?? null,
       calmar_ratio: t.calmar_ratio ?? null,
       trader_type: detectTraderType(t.source, t.source_trader_id, t.trades_count, t.trader_type, t.avg_holding_hours, t.win_rate),
+      metrics_estimated: t.metrics_estimated || false,
     }
   })
 
@@ -808,6 +818,7 @@ async function computeSeason(
       style_confidence: t.style_confidence,
       sharpe_ratio: t.sharpe_ratio,
       trader_type: t.trader_type || (t.source === 'web3_bot' ? 'bot' : null),
+      metrics_estimated: t.metrics_estimated || false,
     }))
 
     const { error } = await supabase

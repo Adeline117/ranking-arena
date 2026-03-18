@@ -304,6 +304,8 @@ export interface Trader {
   bot_category?: BotCategory | null
   /** Whether this trader is verified (claimed profile) */
   is_verified?: boolean
+  /** Whether win_rate/max_drawdown were estimated from ROI (not from exchange data) */
+  metrics_estimated?: boolean
 }
 
 /** @deprecated Use UnifiedTrader from lib/types/unified-trader.ts */
