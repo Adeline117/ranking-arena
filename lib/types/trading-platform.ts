@@ -1,9 +1,8 @@
 /**
- * Trading Platform MVP - Canonical Type Definitions
- * These types are the source of truth for the trading platform data model.
+ * Trading Platform — DB ROW TYPES
  *
- * @deprecated Most types here are DB row types. Use UnifiedTrader from lib/types/unified-trader.ts
- * for application code. These types remain for backward compatibility with the data layer.
+ * These types map directly to database table schemas.
+ * For frontend/UI code, use UnifiedTrader from './unified-trader'.
  */
 
 // ============================================
@@ -57,7 +56,7 @@ export type SeriesType = typeof SERIES_TYPES[number]
 // Database Row Types (snake_case, matches DB)
 // ============================================
 
-/** @deprecated DB row type. Use UnifiedTrader from '@/lib/types/unified-trader' for application code. */
+/** DB row type */
 export interface TraderSourceRow {
   id: string
   platform: Platform
@@ -70,7 +69,7 @@ export interface TraderSourceRow {
   is_active: boolean
 }
 
-/** @deprecated DB row type. Use UnifiedTrader from '@/lib/types/unified-trader' for application code. */
+/** DB row type */
 export interface TraderProfileRow {
   id: string
   platform: Platform
@@ -130,7 +129,7 @@ export interface QualityFlags {
   data_completeness: number  // 0-1
 }
 
-/** @deprecated DB row type. Use UnifiedTrader from '@/lib/types/unified-trader' for application code. */
+/** DB row type */
 export interface TraderSnapshotV2Row {
   id: string
   platform: Platform
@@ -229,7 +228,7 @@ export interface RankingsResponse {
   stale_sources?: string[]
 }
 
-/** @deprecated DB row type. Use UnifiedTrader from '@/lib/types/unified-trader' for application code. */
+/** DB row type */
 export interface RankedTraderV2 {
   platform: Platform
   trader_key: string
@@ -241,7 +240,7 @@ export interface RankedTraderV2 {
   updated_at: string
 }
 
-/** @deprecated DB row type. Use TraderDetail from '@/lib/types/unified-trader' for application code. */
+/** DB row type */
 export interface TraderDetailResponse {
   profile: TraderProfileRow
   snapshots: Record<SnapshotWindow, SnapshotMetrics | null>
@@ -274,7 +273,7 @@ export interface RefreshResponse {
 // Connector Interface Types
 // ============================================
 
-/** @deprecated DB row type. Use UnifiedTrader from '@/lib/types/unified-trader' for application code. */
+/** DB row type */
 export interface ConnectorTraderProfile {
   trader_key: string
   display_name: string | null

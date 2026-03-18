@@ -5,7 +5,7 @@ import { tokens } from '@/lib/design-tokens'
 import { Box, Text } from '../base'
 import { NULL_DISPLAY } from '@/lib/utils/format'
 import { useLanguage } from '../Providers/LanguageProvider'
-import type { TraderAdvancedMetrics } from '@/lib/types/trader'
+import type { TraderAdvancedMetrics } from '@/lib/types/unified-trader'
 
 export interface AdvancedMetricsCardProps {
   metrics: TraderAdvancedMetrics

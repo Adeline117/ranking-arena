@@ -4,7 +4,7 @@ import React, { useRef, useState, useEffect } from 'react'
 import { tokens } from '@/lib/design-tokens'
 import { Box, Text } from '../base'
 import { useLanguage } from '../Providers/LanguageProvider'
-import type { TraderMarketCorrelation, MarketCondition } from '@/lib/types/trader'
+import type { TraderMarketCorrelation, MarketCondition } from '@/lib/types/unified-trader'
 
 export interface MarketCorrelationCardProps {
   correlation: TraderMarketCorrelation

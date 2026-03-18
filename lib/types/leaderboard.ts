@@ -1,10 +1,10 @@
 /**
- * Multi-Exchange Leaderboard Canonical Schema
+ * Multi-Exchange Leaderboard Schema — DATA PIPELINE TYPES
  *
- * @deprecated Most types here are superseded by UnifiedTrader in lib/types/unified-trader.ts.
- * New code should import from unified-trader.ts. These types remain for backward compatibility.
+ * These types serve the data pipeline (connectors, services, cron jobs).
+ * For frontend/UI code, use UnifiedTrader from './unified-trader'.
  *
- * Defines unified types for trader identity, snapshots, timeseries,
+ * Defines types for trader identity, snapshots, timeseries,
  * and data provenance across all supported platforms.
  *
  * Architecture invariants:
@@ -185,7 +185,7 @@ export const PLATFORM_CATEGORY: Record<GranularPlatform, TradingCategory> = {
 // Trader Identity (trader_sources + trader_profiles)
 // ============================================
 
-/** @deprecated Use UnifiedTrader from '@/lib/types/unified-trader' for application code */
+/** Pipeline type: trader identity as discovered from platform */
 export interface TraderIdentity {
   platform: Platform | GranularPlatform
   trader_key: string
@@ -196,7 +196,7 @@ export interface TraderIdentity {
   last_seen: string
 }
 
-/** @deprecated Use UnifiedTrader from '@/lib/types/unified-trader' for application code */
+/** Pipeline type: trader source record from connector discovery */
 export interface TraderSource {
   platform: LeaderboardPlatform
   market_type: MarketType
@@ -209,7 +209,7 @@ export interface TraderSource {
   raw: Record<string, unknown> | null
 }
 
-/** @deprecated Use UnifiedTrader from lib/types/unified-trader.ts */
+/** Pipeline type: trader profile from connector enrichment */
 export interface TraderProfile {
   platform: LeaderboardPlatform
   market_type: MarketType
@@ -227,7 +227,7 @@ export interface TraderProfile {
   provenance: DataProvenance
 }
 
-/** @deprecated Use UnifiedTrader from '@/lib/types/unified-trader' for application code */
+/** Pipeline type: enriched trader profile */
 export interface TraderProfileEnriched {
   platform: Platform | GranularPlatform
   trader_key: string
@@ -321,7 +321,7 @@ export interface SnapshotMetricsLegacy {
   score_confidence?: 'full' | 'partial' | 'minimal' | null
 }
 
-/** @deprecated Use UnifiedTrader from '@/lib/types/unified-trader' for application code */
+/** Pipeline type: snapshot data from connectors */
 export interface TraderSnapshot {
   platform: LeaderboardPlatform
   market_type: MarketType
@@ -333,7 +333,7 @@ export interface TraderSnapshot {
   updated_at: string
 }
 
-/** @deprecated Use UnifiedTrader from '@/lib/types/unified-trader' for application code */
+/** Pipeline type: legacy snapshot format (v1 tables) */
 export interface TraderSnapshotLegacy {
   id: string
   platform: Platform | GranularPlatform
@@ -368,7 +368,7 @@ export interface TimeseriesPoint {
   value: number
 }
 
-/** @deprecated Use UnifiedTrader from '@/lib/types/unified-trader' for application code */
+/** Pipeline type: timeseries data from connectors */
 export interface TraderTimeseries {
   platform: LeaderboardPlatform
   market_type: MarketType
@@ -379,7 +379,7 @@ export interface TraderTimeseries {
   updated_at: string
 }
 
-/** @deprecated Use UnifiedTrader from '@/lib/types/unified-trader' for application code */
+/** Pipeline type: legacy timeseries format (v1 tables) */
 export interface TraderTimeseriesLegacy {
   id: string
   platform: Platform | GranularPlatform
@@ -541,7 +541,7 @@ export interface RankingsQuery {
   trader_type?: 'human' | 'bot'
 }
 
-/** @deprecated Use UnifiedTrader from lib/types/unified-trader.ts */
+/** Pipeline type: ranked trader row for leaderboard queries */
 export interface RankedTraderRow {
   rank: number
   platform: Platform
@@ -586,7 +586,7 @@ export interface RankingEntry {
   updated_at: string
 }
 
-/** @deprecated Use TraderDetail from lib/types/unified-trader.ts */
+/** Pipeline type: raw trader detail response (pre-unification) */
 export interface TraderDetailResponse {
   profile: TraderProfile
   snapshots: Record<Window, TraderSnapshot | null>
@@ -644,28 +644,6 @@ export interface TimeseriesResult {
   series: TraderTimeseries[]
   fetched_at: string
 }
-
-/** What a platform connector must implement (legacy interface) */
-export interface LegacyPlatformConnector {
-  platform: Platform | GranularPlatform
-
-  discoverLeaderboard(window: RankingWindow): Promise<TraderIdentity[]>
-
-  fetchTraderSnapshot(
-    traderKey: string,
-    window: RankingWindow,
-  ): Promise<Omit<TraderSnapshotLegacy, 'id' | 'created_at'>>
-
-  fetchTraderProfile(traderKey: string): Promise<Omit<TraderProfileEnriched, 'last_enriched_at'>>
-
-  fetchTimeseries(
-    traderKey: string,
-    seriesType: TimeseriesType,
-  ): Promise<Omit<TraderTimeseriesLegacy, 'id' | 'created_at'>>
-}
-
-/** @deprecated Use LegacyPlatformConnector instead */
-export type PlatformConnectorLegacy = LegacyPlatformConnector
 
 // ============================================
 // Platform Capability Matrix
