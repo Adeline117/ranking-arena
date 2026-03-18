@@ -210,8 +210,8 @@ export const tokens = {
     primarySubtle: 'linear-gradient(135deg, rgba(139, 111, 168, 0.2) 0%, rgba(139, 111, 168, 0.05) 100%)',
     
     // Accent gradients
-    purple: 'linear-gradient(135deg, #A78BFA 0%, #8B5CF6 50%, #7C3AED 100%)',
-    purpleSubtle: 'linear-gradient(135deg, rgba(167, 139, 250, 0.15) 0%, rgba(124, 58, 237, 0.05) 100%)',
+    purple: 'linear-gradient(135deg, #9B7EC8 0%, #7B5EA7 50%, #5E4580 100%)',
+    purpleSubtle: 'linear-gradient(135deg, rgba(155, 126, 200, 0.15) 0%, rgba(94, 69, 128, 0.05) 100%)',
     
     // Status gradients
     success: 'linear-gradient(135deg, #2fe57d 0%, #22c55e 100%)',

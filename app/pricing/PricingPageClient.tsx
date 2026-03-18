@@ -204,7 +204,7 @@ export default function PricingPageClient({ lifetimeCount = 0 }: PricingPageClie
             </Link>
           </div>
 
-          {/* Pro Plan */}
+          {/* Pro Plan — elevated with shadow + scale */}
           <div style={{
             padding: tokens.spacing[8],
             paddingTop: tokens.spacing[10],
@@ -215,7 +215,8 @@ export default function PricingPageClient({ lifetimeCount = 0 }: PricingPageClie
             position: 'relative',
             display: 'flex',
             flexDirection: 'column',
-            marginTop: 4,
+            transform: 'scale(1.03)',
+            boxShadow: `0 20px 40px -15px rgba(139, 111, 168, 0.2), 0 0 0 1px ${tokens.colors.accent.brand}20`,
           }}>
             {/* Badge */}
             <div style={{
