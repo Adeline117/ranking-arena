@@ -405,10 +405,10 @@ export const GET = withPublic(
 
     // Try Meilisearch first (1-6ms), fall back to Supabase (100-300ms)
     const meiliTraderSearch = isMeilisearchAvailable() && sanitizedQuery.length >= 2
-      ? searchTradersMeili(sanitizedQuery, { limit: effectiveLimit, platform: effectivePlatform || undefined })
+      ? searchTradersMeili(sanitizedQuery, { limit: effectiveLimit, platform: effectivePlatform || undefined, season: '90D' })
           .then(result => result?.hits.map(h => ({
             handle: h.handle,
-            traderKey: h.id.split('--')[1] || h.handle,
+            traderKey: h.id.split('--').slice(1, -1).join('--') || h.id.split('--')[1] || h.handle,
             platform: h.platform,
             roi: h.roi,
             pnl: h.pnl,
