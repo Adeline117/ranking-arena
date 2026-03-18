@@ -5,8 +5,7 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server'
-import { getSupabaseAdmin } from '@/lib/supabase/server'
-import { checkRateLimit, RateLimitPresets } from '@/lib/api'
+import { withPublic } from '@/lib/api/middleware'
 import type {
   Platform,
   SnapshotWindow,
@@ -19,12 +18,10 @@ import type {
   RefreshJobSummary,
 } from '@/lib/types/trading-platform'
 import { getStalenessSeconds, STALENESS_THRESHOLDS } from '@/lib/types/trading-platform'
-import { logger } from '@/lib/logger'
 import { tieredGet, tieredSet } from '@/lib/cache/redis-layer'
+import { ALL_SOURCES } from '@/lib/constants/exchanges'
 
 export const dynamic = 'force-dynamic'
-
-import { ALL_SOURCES } from '@/lib/constants/exchanges'
 
 const VALID_PLATFORMS: string[] = ALL_SOURCES as string[]
 
@@ -32,266 +29,257 @@ export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ platform: string; trader_key: string }> }
 ) {
-  const rateLimitResponse = await checkRateLimit(request, RateLimitPresets.public)
-  if (rateLimitResponse) return rateLimitResponse
-
-  try {
   const { platform, trader_key } = await params
 
-  // Validate platform
-  if (!VALID_PLATFORMS.includes(platform)) {
-    return NextResponse.json(
-      { error: `Invalid platform: ${platform}` },
-      { status: 400 }
-    )
-  }
-
-  if (!trader_key) {
-    return NextResponse.json(
-      { error: 'trader_key is required' },
-      { status: 400 }
-    )
-  }
-
-  // Check cache first (warm tier - 5min TTL)
-  const cacheKey = `trader:${platform}:${trader_key}`
-  const cached = await tieredGet<TraderDetailResponse>(cacheKey)
-  if (cached.data) {
-    return NextResponse.json(cached.data, {
-      headers: { 'X-Cache': 'HIT', 'Cache-Control': 'public, s-maxage=60, stale-while-revalidate=300' },
-    })
-  }
-
-  const supabase = getSupabaseAdmin()
-
-  // Legacy source aliases for fallback queries to old tables
-  const LEGACY_SOURCE_ALIASES: Record<string, string[]> = {
-    binance_futures: ['binance', 'binance_futures'],
-    bitget_futures: ['bitget', 'bitget_futures'],
-    htx_futures: ['htx_futures', 'htx'],
-    okx_web3: ['okx', 'okx_web3'],
-  }
-  const sourceAliases = LEGACY_SOURCE_ALIASES[platform] || [platform]
-
-  // Fetch all data in parallel (pure DB reads, fast)
-  const [profileResult, snapshotsResult, timeseriesResult, jobResult] = await Promise.all([
-    // 1. Profile
-    supabase
-      .from('trader_profiles_v2')
-      .select('id, platform, trader_key, display_name, avatar_url, bio, bio_source, tags, follower_count, copier_count, aum, updated_at, last_enriched_at, created_at')
-      .eq('platform', platform)
-      .eq('trader_key', trader_key)
-      .maybeSingle(),
-
-    // 2. Latest snapshot for each window
-    supabase
-      .from('trader_snapshots_v2')
-      .select('window, metrics, quality_flags, as_of_ts, updated_at')
-      .eq('platform', platform)
-      .eq('trader_key', trader_key)
-      .order('as_of_ts', { ascending: false })
-      .limit(10),
-
-    // 3. Latest timeseries
-    supabase
-      .from('trader_timeseries')
-      .select('series_type, data, as_of_ts, updated_at')
-      .eq('platform', platform)
-      .eq('trader_key', trader_key)
-      .order('as_of_ts', { ascending: false })
-      .limit(5),
-
-    // 4. Active/recent refresh job
-    supabase
-      .from('refresh_jobs')
-      .select('id, status, attempts, last_error, created_at, updated_at')
-      .eq('platform', platform)
-      .eq('trader_key', trader_key)
-      .in('status', ['pending', 'running'])
-      .order('created_at', { ascending: false })
-      .limit(1)
-      .maybeSingle(),
-  ])
-
-  // Build profile (graceful degradation if missing)
-  const profile: TraderProfileRow = profileResult.data || {
-    id: '',
-    platform: platform as Platform,
-    trader_key,
-    display_name: null,
-    avatar_url: null,
-    bio: null,
-    bio_source: null,
-    tags: [],
-    follower_count: null,
-    copier_count: null,
-    aum: null,
-    updated_at: new Date(0).toISOString(),
-    last_enriched_at: null,
-    created_at: new Date(0).toISOString(),
-  }
-
-  // Build snapshots map (latest per window)
-  const snapshots: Record<SnapshotWindow, SnapshotMetrics | null> = {
-    '7D': null,
-    '30D': null,
-    '90D': null,
-  }
-
-  if (snapshotsResult.data) {
-    const seenWindows = new Set<string>()
-    for (const snap of snapshotsResult.data) {
-      if (!seenWindows.has(snap.window)) {
-        seenWindows.add(snap.window)
-        snapshots[snap.window as SnapshotWindow] = snap.metrics as SnapshotMetrics
-      }
+  const handler = withPublic(async ({ supabase }) => {
+    // Validate platform
+    if (!VALID_PLATFORMS.includes(platform)) {
+      return NextResponse.json(
+        { error: `Invalid platform: ${platform}` },
+        { status: 400 }
+      )
     }
-  }
 
-  // Build timeseries
-  const timeseries: TraderDetailResponse['timeseries'] = {
-    equity_curve: null,
-    daily_pnl: null,
-    asset_breakdown: null,
-  }
+    if (!trader_key) {
+      return NextResponse.json(
+        { error: 'trader_key is required' },
+        { status: 400 }
+      )
+    }
 
-  if (timeseriesResult.data) {
-    const seenTypes = new Set<string>()
-    for (const ts of timeseriesResult.data) {
-      if (!seenTypes.has(ts.series_type)) {
-        seenTypes.add(ts.series_type)
-        switch (ts.series_type) {
-          case 'equity_curve':
-            timeseries.equity_curve = ts.data as EquityCurvePoint[]
-            break
-          case 'daily_pnl':
-            timeseries.daily_pnl = ts.data as DailyPnlPoint[]
-            break
-          case 'asset_breakdown':
-            timeseries.asset_breakdown = ts.data as AssetBreakdownPoint[]
-            break
+    // Check cache first (warm tier - 5min TTL)
+    const cacheKey = `trader:${platform}:${trader_key}`
+    const cached = await tieredGet<TraderDetailResponse>(cacheKey)
+    if (cached.data) {
+      return NextResponse.json(cached.data, {
+        headers: { 'X-Cache': 'HIT', 'Cache-Control': 'public, s-maxage=60, stale-while-revalidate=300' },
+      })
+    }
+
+    // Legacy source aliases for fallback queries to old tables
+    const LEGACY_SOURCE_ALIASES: Record<string, string[]> = {
+      binance_futures: ['binance', 'binance_futures'],
+      bitget_futures: ['bitget', 'bitget_futures'],
+      htx_futures: ['htx_futures', 'htx'],
+      okx_web3: ['okx', 'okx_web3'],
+    }
+    const sourceAliases = LEGACY_SOURCE_ALIASES[platform] || [platform]
+
+    // Fetch all data in parallel (pure DB reads, fast)
+    const [profileResult, snapshotsResult, timeseriesResult, jobResult] = await Promise.all([
+      // 1. Profile
+      supabase
+        .from('trader_profiles_v2')
+        .select('id, platform, trader_key, display_name, avatar_url, bio, bio_source, tags, follower_count, copier_count, aum, updated_at, last_enriched_at, created_at')
+        .eq('platform', platform)
+        .eq('trader_key', trader_key)
+        .maybeSingle(),
+
+      // 2. Latest snapshot for each window
+      supabase
+        .from('trader_snapshots_v2')
+        .select('window, metrics, quality_flags, as_of_ts, updated_at')
+        .eq('platform', platform)
+        .eq('trader_key', trader_key)
+        .order('as_of_ts', { ascending: false })
+        .limit(10),
+
+      // 3. Latest timeseries
+      supabase
+        .from('trader_timeseries')
+        .select('series_type, data, as_of_ts, updated_at')
+        .eq('platform', platform)
+        .eq('trader_key', trader_key)
+        .order('as_of_ts', { ascending: false })
+        .limit(5),
+
+      // 4. Active/recent refresh job
+      supabase
+        .from('refresh_jobs')
+        .select('id, status, attempts, last_error, created_at, updated_at')
+        .eq('platform', platform)
+        .eq('trader_key', trader_key)
+        .in('status', ['pending', 'running'])
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle(),
+    ])
+
+    // Build profile (graceful degradation if missing)
+    const profile: TraderProfileRow = profileResult.data || {
+      id: '',
+      platform: platform as Platform,
+      trader_key,
+      display_name: null,
+      avatar_url: null,
+      bio: null,
+      bio_source: null,
+      tags: [],
+      follower_count: null,
+      copier_count: null,
+      aum: null,
+      updated_at: new Date(0).toISOString(),
+      last_enriched_at: null,
+      created_at: new Date(0).toISOString(),
+    }
+
+    // Build snapshots map (latest per window)
+    const snapshots: Record<SnapshotWindow, SnapshotMetrics | null> = {
+      '7D': null,
+      '30D': null,
+      '90D': null,
+    }
+
+    if (snapshotsResult.data) {
+      const seenWindows = new Set<string>()
+      for (const snap of snapshotsResult.data) {
+        if (!seenWindows.has(snap.window)) {
+          seenWindows.add(snap.window)
+          snapshots[snap.window as SnapshotWindow] = snap.metrics as SnapshotMetrics
         }
       }
     }
-  }
 
-  // --- Fallback to legacy tables when V2 tables are empty ---
-
-  // Fallback: profile from leaderboard_ranks (unified data layer)
-  if (!profileResult.data) {
-    const { data: lrProfile } = await supabase
-      .from('leaderboard_ranks')
-      .select('handle, avatar_url')
-      .eq('source', platform)
-      .eq('source_trader_id', trader_key)
-      .eq('season_id', '90D')
-      .limit(1)
-      .maybeSingle()
-
-    if (lrProfile) {
-      profile.display_name = lrProfile.handle || null
-      profile.avatar_url = lrProfile.avatar_url || null
+    // Build timeseries
+    const timeseries: TraderDetailResponse['timeseries'] = {
+      equity_curve: null,
+      daily_pnl: null,
+      asset_breakdown: null,
     }
-  }
 
-  // Fallback: snapshots from leaderboard_ranks (unified data layer)
-  const hasAnyV2Snapshot = Object.values(snapshots).some(s => s !== null)
-  if (!hasAnyV2Snapshot) {
-    const windows: SnapshotWindow[] = ['7D', '30D', '90D']
-    const lrSnapshotQueries = windows.map(w =>
-      supabase
-        .from('leaderboard_ranks')
-        .select('roi, pnl, win_rate, max_drawdown, trades_count, followers, arena_score, rank, computed_at')
-        .eq('source', platform)
-        .eq('source_trader_id', trader_key)
-        .eq('season_id', w)
-        .maybeSingle()
-    )
-    const lrResults = await Promise.all(lrSnapshotQueries)
-    for (let i = 0; i < windows.length; i++) {
-      const snap = lrResults[i].data
-      if (snap) {
-        // Normalize win_rate: if <= 1, treat as decimal and multiply by 100
-        const winRate = snap.win_rate != null ? (snap.win_rate <= 1 ? snap.win_rate * 100 : snap.win_rate) : null
-        snapshots[windows[i]] = {
-          roi: snap.roi ?? 0,
-          pnl: snap.pnl ?? 0,
-          win_rate: winRate,
-          max_drawdown: snap.max_drawdown ?? null,
-          trades_count: snap.trades_count ?? null,
-          arena_score: snap.arena_score != null ? parseFloat(String(snap.arena_score)) : null,
-          followers: snap.followers ?? null,
-          aum: null,
-          return_score: null,
-          drawdown_score: null,
-          stability_score: null,
-          rank: snap.rank ?? null,
-        } as SnapshotMetrics
+    if (timeseriesResult.data) {
+      const seenTypes = new Set<string>()
+      for (const ts of timeseriesResult.data) {
+        if (!seenTypes.has(ts.series_type)) {
+          seenTypes.add(ts.series_type)
+          switch (ts.series_type) {
+            case 'equity_curve':
+              timeseries.equity_curve = ts.data as EquityCurvePoint[]
+              break
+            case 'daily_pnl':
+              timeseries.daily_pnl = ts.data as DailyPnlPoint[]
+              break
+            case 'asset_breakdown':
+              timeseries.asset_breakdown = ts.data as AssetBreakdownPoint[]
+              break
+          }
+        }
       }
     }
-  }
 
-  // Fallback: equity curve from trader_equity_curve (old table)
-  if (!timeseries.equity_curve) {
-    const { data: legacyCurve } = await supabase
-      .from('trader_equity_curve')
-      .select('data_date, roi_pct, pnl_usd')
-      .in('source', sourceAliases)
-      .eq('source_trader_id', trader_key)
-      .in('period', ['90D', '30D', '7D'])
-      .order('data_date', { ascending: true })
-      .limit(90)
+    // --- Fallback to legacy tables when V2 tables are empty ---
 
-    if (legacyCurve && legacyCurve.length > 0) {
-      timeseries.equity_curve = legacyCurve.map(p => ({
-        date: p.data_date,
-        roi: p.roi_pct ?? 0,
-      })) as EquityCurvePoint[]
+    // Fallback: profile from leaderboard_ranks (unified data layer)
+    if (!profileResult.data) {
+      const { data: lrProfile } = await supabase
+        .from('leaderboard_ranks')
+        .select('handle, avatar_url')
+        .eq('source', platform)
+        .eq('source_trader_id', trader_key)
+        .eq('season_id', '90D')
+        .limit(1)
+        .maybeSingle()
+
+      if (lrProfile) {
+        profile.display_name = lrProfile.handle || null
+        profile.avatar_url = lrProfile.avatar_url || null
+      }
     }
-  }
 
-  // Determine staleness from most recent update
-  const latestUpdate = getLatestUpdate(
-    profile.updated_at,
-    snapshotsResult.data?.map(s => s.updated_at || s.as_of_ts) || [],
-  )
-  const stalenessSeconds = getStalenessSeconds(latestUpdate)
-  const isStale = stalenessSeconds > STALENESS_THRESHOLDS.STALE
+    // Fallback: snapshots from leaderboard_ranks (unified data layer)
+    const hasAnyV2Snapshot = Object.values(snapshots).some(s => s !== null)
+    if (!hasAnyV2Snapshot) {
+      const windows: SnapshotWindow[] = ['7D', '30D', '90D']
+      const lrSnapshotQueries = windows.map(w =>
+        supabase
+          .from('leaderboard_ranks')
+          .select('roi, pnl, win_rate, max_drawdown, trades_count, followers, arena_score, rank, computed_at')
+          .eq('source', platform)
+          .eq('source_trader_id', trader_key)
+          .eq('season_id', w)
+          .maybeSingle()
+      )
+      const lrResults = await Promise.all(lrSnapshotQueries)
+      for (let i = 0; i < windows.length; i++) {
+        const snap = lrResults[i].data
+        if (snap) {
+          // Normalize win_rate: if <= 1, treat as decimal and multiply by 100
+          const winRate = snap.win_rate != null ? (snap.win_rate <= 1 ? snap.win_rate * 100 : snap.win_rate) : null
+          snapshots[windows[i]] = {
+            roi: snap.roi ?? 0,
+            pnl: snap.pnl ?? 0,
+            win_rate: winRate,
+            max_drawdown: snap.max_drawdown ?? null,
+            trades_count: snap.trades_count ?? null,
+            arena_score: snap.arena_score != null ? parseFloat(String(snap.arena_score)) : null,
+            followers: snap.followers ?? null,
+            aum: null,
+            return_score: null,
+            drawdown_score: null,
+            stability_score: null,
+            rank: snap.rank ?? null,
+          } as SnapshotMetrics
+        }
+      }
+    }
 
-  // Build refresh job summary
-  const refreshJob: RefreshJobSummary | null = jobResult.data ? {
-    id: jobResult.data.id,
-    status: jobResult.data.status,
-    attempts: jobResult.data.attempts,
-    last_error: jobResult.data.last_error,
-    created_at: jobResult.data.created_at,
-    updated_at: jobResult.data.updated_at,
-  } : null
+    // Fallback: equity curve from trader_equity_curve (old table)
+    if (!timeseries.equity_curve) {
+      const { data: legacyCurve } = await supabase
+        .from('trader_equity_curve')
+        .select('data_date, roi_pct, pnl_usd')
+        .in('source', sourceAliases)
+        .eq('source_trader_id', trader_key)
+        .in('period', ['90D', '30D', '7D'])
+        .order('data_date', { ascending: true })
+        .limit(90)
 
-  const response: TraderDetailResponse = {
-    profile,
-    snapshots,
-    timeseries,
-    updated_at: latestUpdate,
-    is_stale: isStale,
-    staleness_seconds: stalenessSeconds,
-    refresh_job: refreshJob,
-  }
+      if (legacyCurve && legacyCurve.length > 0) {
+        timeseries.equity_curve = legacyCurve.map(p => ({
+          date: p.data_date,
+          roi: p.roi_pct ?? 0,
+        })) as EquityCurvePoint[]
+      }
+    }
 
-  // Cache to Redis (warm tier - 5min TTL, async)
-  void tieredSet(cacheKey, response, 'warm', ['trader', platform])
-
-  const res = NextResponse.json(response)
-  res.headers.set('Cache-Control', 'public, s-maxage=30, stale-while-revalidate=120')
-  res.headers.set('X-Cache', 'MISS')
-  return res
-  } catch (error) {
-    logger.error('[trader-detail] Unexpected error:', error)
-    return NextResponse.json(
-      { error: 'Internal server error' },
-      { status: 500 }
+    // Determine staleness from most recent update
+    const latestUpdate = getLatestUpdate(
+      profile.updated_at,
+      snapshotsResult.data?.map(s => s.updated_at || s.as_of_ts) || [],
     )
-  }
+    const stalenessSeconds = getStalenessSeconds(latestUpdate)
+    const isStale = stalenessSeconds > STALENESS_THRESHOLDS.STALE
+
+    // Build refresh job summary
+    const refreshJob: RefreshJobSummary | null = jobResult.data ? {
+      id: jobResult.data.id,
+      status: jobResult.data.status,
+      attempts: jobResult.data.attempts,
+      last_error: jobResult.data.last_error,
+      created_at: jobResult.data.created_at,
+      updated_at: jobResult.data.updated_at,
+    } : null
+
+    const response: TraderDetailResponse = {
+      profile,
+      snapshots,
+      timeseries,
+      updated_at: latestUpdate,
+      is_stale: isStale,
+      staleness_seconds: stalenessSeconds,
+      refresh_job: refreshJob,
+    }
+
+    // Cache to Redis (warm tier - 5min TTL, async)
+    void tieredSet(cacheKey, response, 'warm', ['trader', platform])
+
+    const res = NextResponse.json(response)
+    res.headers.set('Cache-Control', 'public, s-maxage=30, stale-while-revalidate=120')
+    res.headers.set('X-Cache', 'MISS')
+    return res
+  }, { name: 'trader-detail' })
+
+  return handler(request)
 }
 
 function getLatestUpdate(profileUpdated: string, snapshotDates: string[]): string {

@@ -25,23 +25,17 @@
  *   - meta: { platform, market_type, window, total_count, updated_at, staleness_seconds }
  */
 
-import { NextRequest, NextResponse } from 'next/server'
-import { getSupabaseAdmin } from '@/lib/supabase/server'
-import { checkRateLimit, RateLimitPresets } from '@/lib/api'
+import { NextResponse } from 'next/server'
 import type { Window, LeaderboardPlatform, RankingEntry, RankingsResponse } from '@/lib/types/leaderboard'
 import { VALID_TRADING_STYLES, TRADING_STYLE_LEGACY_MAP, type TradingStyle } from '@/lib/types/trader'
 import { LEADERBOARD_PLATFORMS, WINDOWS } from '@/lib/types/leaderboard'
 import { SOURCE_TYPE_MAP } from '@/lib/constants/exchanges'
-import logger from '@/lib/logger'
+import { withPublic } from '@/lib/api/middleware'
 
 export const dynamic = 'force-dynamic'
 export const revalidate = 60  // ISR: revalidate every 60 seconds
 
-export async function GET(request: NextRequest) {
-  const rateLimitResponse = await checkRateLimit(request, RateLimitPresets.public)
-  if (rateLimitResponse) return rateLimitResponse
-
-  try {
+export const GET = withPublic(async ({ supabase, request }) => {
   const { searchParams } = new URL(request.url)
 
   // Parse and validate params
@@ -101,7 +95,6 @@ export async function GET(request: NextRequest) {
 
   // Database query — use leaderboard_ranks (precomputed, unified source of truth)
   // instead of trader_snapshots v1 which has stale/inconsistent data
-  const supabase = getSupabaseAdmin()
 
   // Map window to season_id format used in leaderboard_ranks (uppercase)
   const seasonId = window.toUpperCase()
@@ -174,7 +167,6 @@ export async function GET(request: NextRequest) {
   }
 
   if (error) {
-    logger.error('[Rankings API] Query error:', error)
     return NextResponse.json(
       { error: 'Database query failed' },
       { status: 500 }
@@ -258,11 +250,4 @@ export async function GET(request: NextRequest) {
       'Cache-Control': 'public, s-maxage=60, stale-while-revalidate=300',
     },
   })
-  } catch (error) {
-    logger.error('[v2-rankings] Unexpected error:', error)
-    return NextResponse.json(
-      { error: 'Internal server error' },
-      { status: 500 }
-    )
-  }
-}
+}, { name: 'v2-rankings' })

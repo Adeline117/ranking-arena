@@ -4,15 +4,11 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@supabase/supabase-js'
 import { apiLogger } from '@/lib/utils/logger'
-import { getAuthUser } from '@/lib/supabase/server'
+import { getAuthUser, getSupabaseAdmin } from '@/lib/supabase/server'
 import { validateCsrfToken, CSRF_COOKIE_NAME, CSRF_HEADER_NAME } from '@/lib/utils/csrf'
 import { checkRateLimit, RateLimitPresets } from '@/lib/utils/rate-limit'
 import { socialFeatureGuard } from '@/lib/features'
-
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
-const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!
 
 // 批量检查多个帖子的收藏状态
 export async function POST(request: NextRequest) {
@@ -35,7 +31,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'CSRF validation failed' }, { status: 403 })
     }
 
-    const supabase = createClient(supabaseUrl, supabaseServiceKey)
+    const supabase = getSupabaseAdmin()
 
     const body = await request.json()
     const postIds: string[] = body.postIds || []

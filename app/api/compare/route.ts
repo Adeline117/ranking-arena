@@ -3,19 +3,16 @@
  * Pro 会员功能：批量获取多traders allowed for comparison数据用于对比
  */
 
-import { NextRequest } from 'next/server'
 import {
-  getSupabaseAdmin,
   requireAuth,
   success,
   error,
   handleError,
-  checkRateLimit,
-  RateLimitPresets,
 } from '@/lib/api'
 import { hasFeatureAccess, getFeatureLimits } from '@/lib/types/premium'
 import logger from '@/lib/logger'
 import { resolveTrader, getTraderDetail, toTraderPageData } from '@/lib/data/unified'
+import { withPublic } from '@/lib/api/middleware'
 
 export const runtime = 'nodejs'
 export const preferredRegion = ['sfo1', 'hnd1']
@@ -46,14 +43,8 @@ interface TraderCompareData {
  * GET - 获取多traders allowed for comparison的对比数据
  * Query params: ids=trader1,trader2,trader3 (最多5个)
  */
-export async function GET(request: NextRequest) {
-  // 限流
-  const rateLimitResponse = await checkRateLimit(request, RateLimitPresets.authenticated)
-  if (rateLimitResponse) return rateLimitResponse
-
-  try {
+export const GET = withPublic(async ({ supabase, request }) => {
     const user = await requireAuth(request)
-    const supabase = getSupabaseAdmin()
 
     // 获取用户订阅等级
     const { data: subscription } = await supabase
@@ -155,7 +146,4 @@ export async function GET(request: NextRequest) {
       requestedIds: traderIds,
       foundCount: sortedData.length,
     })
-  } catch (err: unknown) {
-    return handleError(err)
-  }
-}
+}, { name: 'compare', rateLimit: 'authenticated' })

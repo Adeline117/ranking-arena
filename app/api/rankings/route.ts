@@ -22,17 +22,16 @@
  * Caching: s-maxage=60, stale-while-revalidate=300
  */
 
-import { NextRequest, NextResponse } from 'next/server';
+import { NextResponse } from 'next/server';
 import type { RankingWindow, TradingCategory, Platform, GranularPlatform, RankingsQuery } from '@/lib/types/leaderboard';
 import { GRANULAR_PLATFORMS, PLATFORM_CATEGORY } from '@/lib/types/leaderboard';
 import { getSupabaseAdmin } from '@/lib/supabase/server';
 import { getLeaderboard } from '@/lib/data/unified';
 import type { TradingPeriod } from '@/lib/types/unified-trader';
-import { checkRateLimit, RateLimitPresets } from '@/lib/utils/rate-limit';
 import { tieredGetOrSet } from '@/lib/cache/redis-layer';
 import { ApiError } from '@/lib/api/errors';
-import { success as apiSuccess, handleError, withCache } from '@/lib/api/response';
-import logger from '@/lib/logger'
+import { success as apiSuccess, withCache } from '@/lib/api/response';
+import { withPublic } from '@/lib/api/middleware'
 
 // In-memory cache for availableSources (TTL 5 minutes)
 const sourcesCache = new Map<string, { sources: string[]; ts: number }>();
@@ -58,12 +57,7 @@ const COMPOSITE_WEIGHTS = { '7D': 0.20, '30D': 0.45, '90D': 0.35 } as const;
 // Data quality: ROI values above this threshold are considered anomalous
 const ROI_ANOMALY_THRESHOLD = 5000; // 5000% = 50x — anything above is likely data error
 
-export async function GET(request: NextRequest) {
-  try {
-    // Rate limit check (Redis-backed, global across all serverless instances)
-    const rateLimitResponse = await checkRateLimit(request, RateLimitPresets.read)
-    if (rateLimitResponse) return rateLimitResponse
-
+export const GET = withPublic(async ({ request }) => {
     const { searchParams } = new URL(request.url);
 
     // Parse & validate window (required)
@@ -166,11 +160,7 @@ export async function GET(request: NextRequest) {
 
     const response = apiSuccess(result);
     return withCache(response, { maxAge: 60, staleWhileRevalidate: 300 });
-  } catch (error: unknown) {
-    logger.error('[API /rankings] Error:', error);
-    return handleError(error, 'rankings');
-  }
-}
+}, { name: 'rankings', rateLimit: 'read' })
 
 /**
  * Fetch rankings via unified data layer (leaderboard_ranks).

@@ -1,14 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@supabase/supabase-js'
 import { createLogger } from '@/lib/utils/logger'
 import { deleteServerCacheByPrefix } from '@/lib/utils/server-cache'
 import { checkRateLimit, RateLimitPresets } from '@/lib/utils/rate-limit'
 import { socialFeatureGuard } from '@/lib/features'
+import { getSupabaseAdmin } from '@/lib/supabase/server'
 
 const logger = createLogger('posts-delete')
-
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
-const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!
 
 export async function DELETE(
   request: NextRequest,
@@ -30,7 +27,7 @@ export async function DELETE(
     }
 
     const token = authHeader.split(' ')[1]
-    const supabase = createClient(supabaseUrl, supabaseServiceKey)
+    const supabase = getSupabaseAdmin()
 
     // 验证 token 并获取用户
     const { data: { user }, error: authError } = await supabase.auth.getUser(token)

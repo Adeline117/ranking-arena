@@ -1,11 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@supabase/supabase-js'
 import { logger } from '@/lib/logger'
 import { getOrSetWithLock } from '@/lib/cache'
 import { socialFeatureGuard } from '@/lib/features'
-
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
-const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!
+import { getSupabaseAdmin } from '@/lib/supabase/server'
 
 /**
  * GET /api/groups
@@ -31,7 +28,7 @@ export async function GET(request: NextRequest) {
     const result = await getOrSetWithLock(
       cacheKey,
       async () => {
-        const supabase = createClient(supabaseUrl, supabaseServiceKey)
+        const supabase = getSupabaseAdmin()
 
         // Run data + count queries in parallel
         const [dataResult, countResult] = await Promise.all([

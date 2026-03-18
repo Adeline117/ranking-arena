@@ -6,19 +6,16 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
-import { createClient } from '@supabase/supabase-js'
 import { apiLogger } from '@/lib/utils/logger'
 import { validateCsrfToken, CSRF_COOKIE_NAME, CSRF_HEADER_NAME } from '@/lib/utils/csrf'
 import { checkRateLimit, RateLimitPresets } from '@/lib/utils/rate-limit'
 import { socialFeatureGuard } from '@/lib/features'
+import { getSupabaseAdmin } from '@/lib/supabase/server'
 
 // Zod schema for POST /api/posts/[id]/bookmark (body is optional)
 const BookmarkSchema = z.object({
   folder_id: z.string().uuid().optional().nullable(),
 }).optional()
-
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
-const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!
 
 type RouteContext = { params: Promise<{ id: string }> }
 
@@ -39,7 +36,7 @@ export async function GET(request: NextRequest, context: RouteContext) {
     }
 
     const token = authHeader.slice(7)
-    const supabase = createClient(supabaseUrl, supabaseServiceKey)
+    const supabase = getSupabaseAdmin()
 
     const { data: { user }, error: authError } = await supabase.auth.getUser(token)
     if (authError || !user) {
@@ -82,7 +79,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
     }
 
     const token = authHeader.slice(7)
-    const supabase = createClient(supabaseUrl, supabaseServiceKey)
+    const supabase = getSupabaseAdmin()
 
     const { data: { user }, error: authError } = await supabase.auth.getUser(token)
     if (authError || !user) {
