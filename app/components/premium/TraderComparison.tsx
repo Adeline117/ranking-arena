@@ -10,6 +10,7 @@ import RadarChart from './RadarChart'
 import EquityCurveOverlay, { CHART_COLORS } from './EquityCurveOverlay'
 import { CompactErrorBoundary } from '../utils/ErrorBoundary'
 import ShareCompareButton from './ShareCompareButton'
+import { formatPnL, formatRatio } from '@/lib/utils/format'
 
 interface TraderCompareData {
   id: string
@@ -40,19 +41,7 @@ interface TraderComparisonProps {
 
 type TabKey = 'metrics' | 'radar' | 'equity'
 
-// Format helpers
-function formatNumber(num: number | undefined | null, decimals = 2): string {
-  if (num == null) return '—'
-  return num.toFixed(decimals)
-}
-
-function formatPnL(pnl: number | undefined | null): string {
-  if (pnl == null) return '—'
-  const absPnL = Math.abs(pnl)
-  if (absPnL >= 1000000) return `$${(pnl / 1000000).toFixed(2)}M`
-  if (absPnL >= 1000) return `$${(pnl / 1000).toFixed(2)}K`
-  return `$${pnl.toFixed(2)}`
-}
+// Format helpers — formatPnL and formatRatio imported from @/lib/utils/format
 
 function getValueColor(value: number | undefined | null, isPositiveGood = true): string {
   if (value == null) return tokens.colors.text.tertiary
@@ -135,17 +124,17 @@ export default function TraderComparison({ traders, onRemove, showRemoveButton =
 
   // Metrics rows - bilingual
   const metrics = [
-    { key: 'arena_score', label: t('compareArenaScore'), format: (v: number) => formatNumber(v, 1), higherBetter: true },
-    { key: 'roi', label: t('compareROI90D'), format: (v: number) => `${v >= 0 ? '+' : ''}${formatNumber(v)}%`, higherBetter: true, isPercent: true },
-    { key: 'roi_30d', label: t('compareROI30D'), format: (v: number) => `${v >= 0 ? '+' : ''}${formatNumber(v)}%`, higherBetter: true, isPercent: true },
-    { key: 'roi_7d', label: t('compareROI7D'), format: (v: number) => `${v >= 0 ? '+' : ''}${formatNumber(v)}%`, higherBetter: true, isPercent: true },
+    { key: 'arena_score', label: t('compareArenaScore'), format: (v: number) => formatRatio(v, 1), higherBetter: true },
+    { key: 'roi', label: t('compareROI90D'), format: (v: number) => `${v >= 0 ? '+' : ''}${formatRatio(v)}%`, higherBetter: true, isPercent: true },
+    { key: 'roi_30d', label: t('compareROI30D'), format: (v: number) => `${v >= 0 ? '+' : ''}${formatRatio(v)}%`, higherBetter: true, isPercent: true },
+    { key: 'roi_7d', label: t('compareROI7D'), format: (v: number) => `${v >= 0 ? '+' : ''}${formatRatio(v)}%`, higherBetter: true, isPercent: true },
     { key: 'pnl', label: t('comparePnL'), format: formatPnL, higherBetter: true },
-    { key: 'win_rate', label: t('compareWinRate'), format: (v: number) => `${formatNumber(v, 1)}%`, higherBetter: true },
-    { key: 'max_drawdown', label: t('compareMDD'), format: (v: number) => `-${formatNumber(Math.abs(v))}%`, higherBetter: false, isNegative: true },
+    { key: 'win_rate', label: t('compareWinRate'), format: (v: number) => `${formatRatio(v, 1)}%`, higherBetter: true },
+    { key: 'max_drawdown', label: t('compareMDD'), format: (v: number) => `-${formatRatio(Math.abs(v))}%`, higherBetter: false, isNegative: true },
     { key: 'trades_count', label: t('compareTrades'), format: (v: number) => v?.toString() || '—', higherBetter: true },
-    { key: 'return_score', label: t('compareReturnScore'), format: (v: number) => formatNumber(v, 1), higherBetter: true },
-    { key: 'drawdown_score', label: t('compareDrawdownScore'), format: (v: number) => formatNumber(v, 1), higherBetter: true },
-    { key: 'stability_score', label: t('compareStabilityScore'), format: (v: number) => formatNumber(v, 1), higherBetter: true },
+    { key: 'return_score', label: t('compareReturnScore'), format: (v: number) => formatRatio(v, 1), higherBetter: true },
+    { key: 'drawdown_score', label: t('compareDrawdownScore'), format: (v: number) => formatRatio(v, 1), higherBetter: true },
+    { key: 'stability_score', label: t('compareStabilityScore'), format: (v: number) => formatRatio(v, 1), higherBetter: true },
     { key: 'followers', label: t('compareFollowers'), format: (v: number) => v?.toString() || '0', higherBetter: true },
   ]
 

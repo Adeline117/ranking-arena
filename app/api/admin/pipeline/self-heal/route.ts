@@ -12,6 +12,7 @@
  */
 
 import { NextRequest } from 'next/server'
+import { env } from '@/lib/env'
 import { success as apiSuccess, handleError } from '@/lib/api/response'
 import { ApiError } from '@/lib/api/errors'
 import { getSupabaseAdmin } from '@/lib/supabase/server'
@@ -23,7 +24,7 @@ import { getRouteConfig } from '@/lib/connectors/route-config'
 export const dynamic = 'force-dynamic'
 
 function isAuthorized(request: NextRequest): boolean {
-  const cronSecret = process.env.CRON_SECRET
+  const cronSecret = env.CRON_SECRET
   if (!cronSecret) return false
   const authHeader = request.headers.get('authorization')
   if (authHeader === `Bearer ${cronSecret}`) return true

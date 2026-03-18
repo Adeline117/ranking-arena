@@ -40,7 +40,7 @@ function getSupabase() {
 // 订阅计划配置 - 只有 Pro 会员
 const PLANS: Record<string, { priceId: string; name: string }> = {
   pro: {
-    priceId: process.env.STRIPE_PRO_PRICE_ID || process.env.STRIPE_PRO_MONTHLY_PRICE_ID || '',
+    priceId: process.env.STRIPE_PRO_PRICE_ID || env.STRIPE_PRO_MONTHLY_PRICE_ID || '',
     name: 'Pro',
   },
 }

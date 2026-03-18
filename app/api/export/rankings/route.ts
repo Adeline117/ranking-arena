@@ -4,6 +4,7 @@
  */
 
 import { NextResponse } from 'next/server'
+import { env } from '@/lib/env'
 import { createClient } from '@supabase/supabase-js'
 import logger from '@/lib/logger'
 
@@ -22,7 +23,7 @@ function escapeCsv(v: unknown): string {
 export async function GET(request: Request) {
   // Require authentication to prevent data scraping
   const authHeader = request.headers.get('authorization')
-  const cronSecret = process.env.CRON_SECRET
+  const cronSecret = env.CRON_SECRET
   if (!cronSecret || authHeader !== `Bearer ${cronSecret}`) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }

@@ -3,40 +3,8 @@ import { tokens } from '@/lib/design-tokens'
 import { t } from "@/lib/i18n"
 import { sanitizeDisplayName } from '@/lib/utils/profanity'
 
-/**
- * 格式化 PnL 显示
- */
-export function formatPnL(pnl: number): string {
-  if (!isFinite(pnl) || isNaN(pnl)) return '$0'
-  const absPnL = Math.abs(pnl)
-  const sign = pnl >= 0 ? '+' : '-'
-  
-  if (absPnL >= 1000000) {
-    return `${sign}$${(absPnL / 1000000).toFixed(2)}M`
-  } else if (absPnL >= 1000) {
-    return `${sign}$${(absPnL / 1000).toFixed(1)}K`
-  } else {
-    return `${sign}$${absPnL.toFixed(2)}`
-  }
-}
-
-/**
- * 格式化 ROI 显示（处理极端值）
- */
-export function formatROI(roi: number): string {
-  if (!isFinite(roi) || isNaN(roi)) return '+0.00%'
-  const absRoi = Math.abs(roi)
-  
-  if (absRoi >= 10000) {
-    return `${roi >= 0 ? '+' : ''}${(roi / 1000).toFixed(1)}K%`
-  } else if (absRoi >= 1000) {
-    return `${roi >= 0 ? '+' : ''}${roi.toFixed(0)}%`
-  } else if (absRoi >= 100) {
-    return `${roi >= 0 ? '+' : ''}${roi.toFixed(1)}%`
-  } else {
-    return `${roi >= 0 ? '+' : ''}${roi.toFixed(2)}%`
-  }
-}
+// Re-export canonical formatters from lib/utils/format
+export { formatROI, formatPnL } from '@/lib/utils/format'
 
 /**
  * 获取 PnL 数据来源提示

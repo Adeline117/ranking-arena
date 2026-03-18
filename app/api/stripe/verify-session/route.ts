@@ -36,8 +36,8 @@ function getSupabaseAdmin() {
 
 // 从价格 ID 获取订阅等级
 function getTierFromPriceId(priceId: string): 'free' | 'pro' {
-  if (priceId === process.env.STRIPE_PRO_MONTHLY_PRICE_ID ||
-      priceId === process.env.STRIPE_PRO_YEARLY_PRICE_ID ||
+  if (priceId === env.STRIPE_PRO_MONTHLY_PRICE_ID ||
+      priceId === env.STRIPE_PRO_YEARLY_PRICE_ID ||
       priceId === process.env.STRIPE_PRO_LIFETIME_PRICE_ID ||
       priceId === process.env.STRIPE_PRO_PRICE_ID) {
     return 'pro'

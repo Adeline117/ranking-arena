@@ -4,6 +4,7 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server'
+import { env } from '@/lib/env'
 import { createClient } from '@supabase/supabase-js'
 import { createLogger } from '@/lib/utils/logger'
 
@@ -20,7 +21,7 @@ function safeCompare(a: string, b: string): boolean {
 }
 
 function isAuthorized(request: NextRequest): boolean {
-  const cronSecret = process.env.CRON_SECRET
+  const cronSecret = env.CRON_SECRET
   if (!cronSecret) return false
   const authHeader = request.headers.get('authorization')
   if (authHeader && safeCompare(authHeader, `Bearer ${cronSecret}`)) return true
