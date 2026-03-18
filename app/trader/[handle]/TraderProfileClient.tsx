@@ -19,6 +19,7 @@ import TraderHeader from '@/app/components/trader/TraderHeader'
 import TraderTabs from '@/app/components/trader/TraderTabs'
 import OverviewPerformanceCard, { type ExtendedPerformance } from '@/app/components/trader/OverviewPerformanceCard'
 const AdvancedMetricsCard = dynamic(() => import('@/app/components/trader/AdvancedMetricsCard'), { ssr: false })
+const MarketCorrelationCard = dynamic(() => import('@/app/components/trader/MarketCorrelationCard'), { ssr: false })
 import { RankingSkeleton } from '@/app/components/ui/Skeleton'
 import { formatDisplayName, formatROI } from '@/app/components/ranking/utils'
 import { getAvatarGradient } from '@/lib/utils/avatar'
@@ -547,6 +548,27 @@ export default function TraderProfileClient({ data, serverTraderData, claimedUse
                     }}
                   />
                 )}
+
+                {/* Market Correlation */}
+                {(() => {
+                  const perf = traderPerformance as Record<string, unknown> | null
+                  const betaBtc = perf?.beta_btc as number | null | undefined
+                  const betaEth = perf?.beta_eth as number | null | undefined
+                  const alphaVal = perf?.alpha as number | null | undefined
+                  if (betaBtc != null || betaEth != null || alphaVal != null) {
+                    return (
+                      <MarketCorrelationCard
+                        correlation={{
+                          beta_btc: betaBtc ?? null,
+                          beta_eth: betaEth ?? null,
+                          alpha: alphaVal ?? null,
+                          market_condition_performance: { bull: null, bear: null, sideways: null },
+                        }}
+                      />
+                    )
+                  }
+                  return null
+                })()}
 
                 {/* Trading Style Radar */}
                 {(data.profitability_score != null || data.risk_control_score != null || data.execution_score != null) && (
