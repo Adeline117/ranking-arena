@@ -81,8 +81,8 @@ export interface TraderProfileRow {
   /** Source of the bio: 'auto' = generated, 'manual' = user-written, 'exchange' = from exchange API */
   bio_source: 'auto' | 'manual' | 'exchange' | null
   tags: string[]
-  follower_count: number | null
-  copier_count: number | null
+  followers: number | null
+  copiers: number | null
   aum: number | null
   updated_at: string
   last_enriched_at: string | null
@@ -282,8 +282,8 @@ export interface ConnectorTraderProfile {
   display_name: string | null
   avatar_url: string | null
   bio: string | null
-  follower_count: number | null
-  copier_count: number | null
+  followers: number | null
+  copiers: number | null
   aum: number | null
   tags: string[]
 }

@@ -122,8 +122,8 @@ export default function TraderPageV2({ platform, traderKey }: TraderPageV2Props)
             className="grid grid-cols-3 gap-4 p-4 rounded-xl"
             style={{ backgroundColor: tokens.colors.bg.secondary }}
           >
-            <StatItem label={t('copiers')} value={data.profile.copier_count} format="number" />
-            <StatItem label={t('followers')} value={data.profile.follower_count} format="number" />
+            <StatItem label={t('copiers')} value={data.profile.copiers} format="number" />
+            <StatItem label={t('followers')} value={data.profile.followers} format="number" />
             <StatItem label={t('aumLabel')} value={data.profile.aum} format="currency" />
           </div>
 
