@@ -327,11 +327,11 @@ async function computeSeason(
         const freshnessISO = freshnessISOBySource(source)
         let { data, error } = await supabase
           .from('trader_snapshots_v2')
-          .select('platform, trader_key, roi_pct, pnl_usd, win_rate, max_drawdown, trades_count, followers, arena_score, created_at, sharpe_ratio')
+          .select('platform, trader_key, roi_pct, pnl_usd, win_rate, max_drawdown, trades_count, followers, arena_score, updated_at, sharpe_ratio')
           .eq('platform', source)
           .eq('window', v2Window)
-          .gte('created_at', freshnessISO)
-          .order('created_at', { ascending: false })
+          .gte('updated_at', freshnessISO)
+          .order('updated_at', { ascending: false })
           .limit(5000)
 
         // Fallback: if this window has too few traders, use 30D data
@@ -339,11 +339,11 @@ async function computeSeason(
         if ((!data || data.length < FALLBACK_THRESHOLD) && v2Window !== '30D') {
           const fallback = await supabase
             .from('trader_snapshots_v2')
-            .select('platform, trader_key, roi_pct, pnl_usd, win_rate, max_drawdown, trades_count, followers, arena_score, created_at, sharpe_ratio')
+            .select('platform, trader_key, roi_pct, pnl_usd, win_rate, max_drawdown, trades_count, followers, arena_score, updated_at, sharpe_ratio')
             .eq('platform', source)
             .eq('window', '30D')
-            .gte('created_at', freshnessISO)
-            .order('created_at', { ascending: false })
+            .gte('updated_at', freshnessISO)
+            .order('updated_at', { ascending: false })
             .limit(5000)
           if (!fallback.error && fallback.data && fallback.data.length > (data?.length || 0)) {
             data = fallback.data
@@ -364,7 +364,7 @@ async function computeSeason(
             trades_count: d.trades_count as number | null,
             followers: d.followers as number | null,
             arena_score: d.arena_score as number | null,
-            captured_at: d.created_at as string,
+            captured_at: d.updated_at as string,
             full_confidence_at: null,
             profitability_score: null,
             risk_control_score: null,
