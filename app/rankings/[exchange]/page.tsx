@@ -9,7 +9,7 @@ import { Box } from '@/app/components/base'
 import ExchangeRankingClient from './ExchangeRankingClient'
 import { logger } from '@/lib/logger'
 
-export const revalidate = 3600 // ISR: 1 hour
+export const revalidate = 600 // ISR: 10 min (aligned with compute-leaderboard on-demand revalidation)
 
 // Pre-render pages for active exchanges at build time
 const deadSet = new Set(DEAD_BLOCKED_PLATFORMS)

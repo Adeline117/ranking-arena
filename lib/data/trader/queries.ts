@@ -22,6 +22,7 @@ import {
   getSourceAliases,
 } from './mappers'
 import { fetchSimilarTraders } from './similar'
+import { LR, V2, ENRICH } from '@/lib/types/schema-mapping'
 
 // ============================================================
 // INTERNAL: Safe query helper
@@ -86,20 +87,21 @@ export async function getLeaderboard(supabase: SupabaseClient, params: {
     sortBy = 'rank',
   } = params
 
-  // Build query
+  // Build query against leaderboard_ranks (uses v1 column names: source, source_trader_id, season_id)
+  // See LR constants and LEADERBOARD_RANKS_FIELDS in schema-mapping.ts for column→field mapping
   let query = supabase
     .from('leaderboard_ranks')
     .select(
-      `source_trader_id, handle, source, source_type, roi, pnl, win_rate, max_drawdown,
-       trades_count, followers, arena_score, avatar_url, rank, computed_at,
+      `${LR.source_trader_id}, ${LR.handle}, ${LR.source}, source_type, ${LR.roi}, ${LR.pnl}, win_rate, max_drawdown,
+       trades_count, followers, ${LR.arena_score}, ${LR.avatar_url}, ${LR.rank}, computed_at,
        profitability_score, risk_control_score, execution_score, score_completeness,
-       trading_style, avg_holding_hours, sharpe_ratio, trader_type, is_outlier, season_id`,
+       trading_style, avg_holding_hours, sharpe_ratio, trader_type, is_outlier, ${LR.season_id}`,
       { count: 'exact' }
     )
-    .eq('season_id', period)
+    .eq(LR.season_id, period)
 
   if (platform) {
-    query = query.eq('source', platform)
+    query = query.eq(LR.source, platform)
   }
 
   if (excludeOutliers) {
@@ -155,25 +157,27 @@ export async function getTraderDetail(supabase: SupabaseClient, params: {
   const [lrResult, v2Result] = await withTimeout(
     Promise.all([
       // leaderboard_ranks: all periods (precomputed, primary source)
+      // Uses v1 column names: source, source_trader_id, season_id
       safeQuery(() =>
         supabase
           .from('leaderboard_ranks')
-          .select(`source_trader_id, handle, source, source_type, roi, pnl, win_rate, max_drawdown,
-                   trades_count, followers, arena_score, avatar_url, rank, computed_at,
+          .select(`${LR.source_trader_id}, ${LR.handle}, ${LR.source}, source_type, ${LR.roi}, ${LR.pnl}, win_rate, max_drawdown,
+                   trades_count, followers, ${LR.arena_score}, ${LR.avatar_url}, ${LR.rank}, computed_at,
                    profitability_score, risk_control_score, execution_score, score_completeness,
                    trading_style, avg_holding_hours, sharpe_ratio, sortino_ratio, profit_factor,
-                   calmar_ratio, trader_type, is_outlier, season_id`)
-          .eq('source', platform)
-          .eq('source_trader_id', traderKey)
+                   calmar_ratio, trader_type, is_outlier, ${LR.season_id}`)
+          .eq(LR.source, platform)
+          .eq(LR.source_trader_id, traderKey)
           .limit(5)
       ),
       // trader_snapshots_v2: all windows (fallback)
+      // Uses v2 column names: platform, trader_key, window
       safeQuery(() =>
         supabase
           .from('trader_snapshots_v2')
-          .select('platform, trader_key, window, roi_pct, pnl_usd, win_rate, max_drawdown, trades_count, followers, copiers, sharpe_ratio, arena_score, created_at')
-          .eq('platform', platform)
-          .eq('trader_key', traderKey)
+          .select(`${V2.platform}, ${V2.trader_key}, ${V2.window}, ${V2.roi_pct}, ${V2.pnl_usd}, win_rate, max_drawdown, trades_count, followers, copiers, sharpe_ratio, ${V2.arena_score}, created_at`)
+          .eq(V2.platform, platform)
+          .eq(V2.trader_key, traderKey)
           .order('created_at', { ascending: false })
           .limit(5)
       ),
@@ -192,17 +196,17 @@ export async function getTraderDetail(supabase: SupabaseClient, params: {
   }
 
   for (const p of ['90D', '30D', '7D'] as TradingPeriod[]) {
-    // Try leaderboard_ranks first
-    const lrRow = lrRows.find(r => normalizePeriod(r.season_id as string) === p)
+    // Try leaderboard_ranks first (season_id → period)
+    const lrRow = lrRows.find(r => normalizePeriod(r[LR.season_id] as string) === p)
     if (lrRow) {
       const mapped = mapLeaderboardRow(lrRow)
       periods[p] = mapped
       continue
     }
 
-    // Fallback: trader_snapshots_v2
+    // Fallback: trader_snapshots_v2 (window → period)
     const v2Row = v2Rows.find(r =>
-      normalizePeriod(r.window as string) === p
+      normalizePeriod(r[V2.window] as string) === p
     )
     if (v2Row) {
       periods[p] = mapV2Snapshot(v2Row, p)
@@ -283,70 +287,70 @@ export async function getTraderDetail(supabase: SupabaseClient, params: {
     similarTradersResult,
   ] = await withTimeout(
     Promise.all([
-      // Equity curves (3 periods)
+      // Equity curves (3 periods) — enrichment tables use v1 naming: source, source_trader_id
       safeQuery(() =>
         supabase.from('trader_equity_curve')
           .select('data_date, roi_pct, pnl_usd')
-          .in('source', sourceAliases).eq('source_trader_id', traderKey).eq('period', '90D')
+          .in(ENRICH.source, sourceAliases).eq(ENRICH.source_trader_id, traderKey).eq(ENRICH.period, '90D')
           .order('data_date', { ascending: true }).limit(90)
       ),
       safeQuery(() =>
         supabase.from('trader_equity_curve')
           .select('data_date, roi_pct, pnl_usd')
-          .in('source', sourceAliases).eq('source_trader_id', traderKey).eq('period', '30D')
+          .in(ENRICH.source, sourceAliases).eq(ENRICH.source_trader_id, traderKey).eq(ENRICH.period, '30D')
           .order('data_date', { ascending: true }).limit(30)
       ),
       safeQuery(() =>
         supabase.from('trader_equity_curve')
           .select('data_date, roi_pct, pnl_usd')
-          .in('source', sourceAliases).eq('source_trader_id', traderKey).eq('period', '7D')
+          .in(ENRICH.source, sourceAliases).eq(ENRICH.source_trader_id, traderKey).eq(ENRICH.period, '7D')
           .order('data_date', { ascending: true }).limit(7)
       ),
-      // Asset breakdowns (3 periods)
+      // Asset breakdowns (3 periods) — enrichment tables use v1 naming
       safeQuery(() =>
         supabase.from('trader_asset_breakdown')
           .select('symbol, weight_pct')
-          .in('source', sourceAliases).eq('source_trader_id', traderKey).eq('period', '90D')
+          .in(ENRICH.source, sourceAliases).eq(ENRICH.source_trader_id, traderKey).eq(ENRICH.period, '90D')
           .order('weight_pct', { ascending: false }).limit(20)
       ),
       safeQuery(() =>
         supabase.from('trader_asset_breakdown')
           .select('symbol, weight_pct')
-          .in('source', sourceAliases).eq('source_trader_id', traderKey).eq('period', '30D')
+          .in(ENRICH.source, sourceAliases).eq(ENRICH.source_trader_id, traderKey).eq(ENRICH.period, '30D')
           .order('weight_pct', { ascending: false }).limit(20)
       ),
       safeQuery(() =>
         supabase.from('trader_asset_breakdown')
           .select('symbol, weight_pct')
-          .in('source', sourceAliases).eq('source_trader_id', traderKey).eq('period', '7D')
+          .in(ENRICH.source, sourceAliases).eq(ENRICH.source_trader_id, traderKey).eq(ENRICH.period, '7D')
           .order('weight_pct', { ascending: false }).limit(20)
       ),
-      // Stats detail (all periods)
+      // Stats detail (all periods) — enrichment tables use v1 naming
       safeQuery(() =>
         supabase.from('trader_stats_detail')
           .select('sharpe_ratio, copiers_pnl, copiers_count, winning_positions, total_positions, avg_holding_time_hours, avg_profit, avg_loss, aum, period')
-          .in('source', sourceAliases).eq('source_trader_id', traderKey)
+          .in(ENRICH.source, sourceAliases).eq(ENRICH.source_trader_id, traderKey)
           .order('captured_at', { ascending: false }).limit(3)
       ),
-      // Portfolio
+      // Portfolio — enrichment tables use v1 naming
       safeQuery(() =>
         supabase.from('trader_portfolio')
           .select('symbol, direction, invested_pct, entry_price, pnl')
-          .in('source', sourceAliases).eq('source_trader_id', traderKey)
+          .in(ENRICH.source, sourceAliases).eq(ENRICH.source_trader_id, traderKey)
           .order('captured_at', { ascending: false }).limit(50)
       ),
-      // Position history
+      // Position history — enrichment tables use v1 naming
       safeQuery(() =>
         supabase.from('trader_position_history')
           .select('symbol, direction, open_time, close_time, entry_price, exit_price, pnl_usd, pnl_pct, status')
-          .in('source', sourceAliases).eq('source_trader_id', traderKey)
+          .in(ENRICH.source, sourceAliases).eq(ENRICH.source_trader_id, traderKey)
           .order('open_time', { ascending: false }).limit(100)
       ),
       // Tracked since (earliest v2 snapshot)
       safeQuery(() =>
         supabase.from('trader_snapshots_v2')
           .select('created_at')
-          .eq('platform', platform).eq('trader_key', traderKey)
+          .eq(V2.platform, platform).eq(V2.trader_key, traderKey)
           .order('created_at', { ascending: true }).limit(1).maybeSingle()
       ),
       // Similar traders (by arena score range)
@@ -517,10 +521,12 @@ export async function searchTraders(supabase: SupabaseClient, params: {
   if (filteredSources.length === 0) return []
 
   // Fetch arena scores from leaderboard_ranks for ranking
+  // Select only fields needed for search results (handle, platform, roi, arena_score, rank, avatar_url)
+  // Omit win_rate, max_drawdown, followers — not used in search dropdown
   const traderIds = filteredSources.map(t => t.source_trader_id)
   const { data: scoreRows } = await supabase
     .from('leaderboard_ranks')
-    .select('source, source_trader_id, arena_score, roi, pnl, win_rate, max_drawdown, followers, rank, season_id')
+    .select('source, source_trader_id, arena_score, roi, pnl, rank, season_id, trader_type')
     .in('source_trader_id', traderIds.slice(0, 200))
     .eq('season_id', '90D')
     .not('arena_score', 'is', null)
@@ -568,10 +574,10 @@ export async function searchTraders(supabase: SupabaseClient, params: {
       sourceType: SOURCE_TYPE_MAP[plat] || null,
       roi: scoreRow?.roi != null ? Number(scoreRow.roi) : null,
       pnl: scoreRow?.pnl != null ? Number(scoreRow.pnl) : null,
-      winRate: normalizeWinRate(scoreRow?.win_rate as number | null | undefined),
-      maxDrawdown: scoreRow?.max_drawdown != null ? Number(scoreRow.max_drawdown) : null,
+      winRate: null, // Not fetched in search query (not needed for dropdown)
+      maxDrawdown: null,
       tradesCount: null,
-      followers: scoreRow?.followers != null ? Number(scoreRow.followers) : null,
+      followers: null,
       copiers: null,
       arenaScore: scoreRow?.arena_score != null ? Number(scoreRow.arena_score) : null,
       returnScore: null,
@@ -590,7 +596,7 @@ export async function searchTraders(supabase: SupabaseClient, params: {
       calmarRatio: null,
       tradingStyle: null,
       avgHoldingHours: null,
-      traderType: plat === 'web3_bot' ? 'bot' : null,
+      traderType: (scoreRow?.trader_type as string) || (plat === 'web3_bot' ? 'bot' : null),
       isOutlier: false,
       lastUpdated: null,
     }
