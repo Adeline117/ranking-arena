@@ -13,6 +13,7 @@ import FoundingMemberBanner from './FoundingMemberBanner'
 const ExchangePartners = lazy(() => import('./ExchangePartners'))
 const GuestSignupPrompt = lazy(() => import('./GuestSignupPrompt'))
 const HomeHero = lazy(() => import('./HomeHero'))
+const WelcomeModal = lazy(() => import('../onboarding/WelcomeModal'))
 import HomePageClient from './HomePageClient'
 import { SectionErrorBoundary } from '../utils/ErrorBoundary'
 import { features } from '@/lib/features'
@@ -117,6 +118,7 @@ export default function HomePage({ initialTraders, initialLastUpdated }: HomePag
       <Suspense fallback={<div style={{ minHeight: 200 }} />}><Footer /></Suspense>
       {/* MobileBottomNav rendered in root layout.tsx */}
       <Suspense fallback={null}><GuestSignupPrompt /></Suspense>
+      <Suspense fallback={null}><WelcomeModal /></Suspense>
     </Box>
   )
 }
