@@ -5,14 +5,11 @@
 
 import { NextResponse } from 'next/server'
 import { env } from '@/lib/env'
-import { createClient } from '@supabase/supabase-js'
+import { getSupabaseAdmin } from '@/lib/supabase/server'
 import logger from '@/lib/logger'
 
 export const runtime = 'edge'
 export const dynamic = 'force-dynamic'
-
-const supabaseUrl = env.NEXT_PUBLIC_SUPABASE_URL
-const supabaseKey = env.SUPABASE_SERVICE_ROLE_KEY
 
 function escapeCsv(v: unknown): string {
   if (v == null) return ''
@@ -39,11 +36,7 @@ export async function GET(request: Request) {
       return NextResponse.json({ error: 'Invalid format. Use csv or json.' }, { status: 400 })
     }
 
-    if (!supabaseUrl || !supabaseKey) {
-      return NextResponse.json({ error: 'Server configuration error' }, { status: 500 })
-    }
-
-    const supabase = createClient(supabaseUrl, supabaseKey)
+    const supabase = getSupabaseAdmin()
 
     let query = supabase
       .from('leaderboard_ranks')

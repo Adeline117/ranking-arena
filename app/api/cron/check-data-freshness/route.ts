@@ -11,8 +11,8 @@
  */
 
 import { NextResponse } from 'next/server'
-import { createClient } from '@supabase/supabase-js'
-import { isAuthorized, getSupabaseEnv } from '@/lib/cron/utils'
+import { getSupabaseAdmin } from '@/lib/supabase/server'
+import { isAuthorized } from '@/lib/cron/utils'
 import { getSupportedInlinePlatforms } from '@/lib/cron/fetchers'
 import { DEAD_BLOCKED_PLATFORMS } from '@/lib/constants/exchanges'
 import { sendScraperAlert } from '@/lib/alerts/send-alert'
@@ -107,14 +107,7 @@ export interface FreshnessReport {
  * 构建新鲜度报告（共享逻辑，cron 和 admin endpoint 都用）
  */
 export async function buildFreshnessReport(): Promise<FreshnessReport> {
-  const { url, serviceKey } = getSupabaseEnv()
-  if (!url || !serviceKey) {
-    throw new Error('Supabase environment variables missing')
-  }
-
-  const supabase = createClient(url, serviceKey, {
-    auth: { persistSession: false },
-  })
+  const supabase = getSupabaseAdmin()
 
   const allPlatforms = getSupportedInlinePlatforms()
   const deadSet = new Set(DEAD_BLOCKED_PLATFORMS as string[])
