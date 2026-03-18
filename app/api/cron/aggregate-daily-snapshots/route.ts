@@ -12,6 +12,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { logger } from '@/lib/logger'
 import { getSupabaseAdmin } from '@/lib/supabase/server'
 import { PipelineLogger } from '@/lib/services/pipeline-logger'
+import { refreshComputedMetrics } from '@/lib/cron/metrics-backfill'
 import { env } from '@/lib/env'
 
 export const dynamic = 'force-dynamic'
@@ -387,12 +388,21 @@ export async function GET(request: NextRequest) {
       logger.warn(`[aggregate] Snapshot cleanup failed: ${cleanupErr}`)
     }
 
+    // Step 7: Refresh computed metrics from equity curves (sharpe, win_rate, max_drawdown, trades_count, arena_score)
+    let metricsResult = null
+    try {
+      metricsResult = await refreshComputedMetrics(supabase)
+      logger.info(`[aggregate] Metrics backfill: sharpe=${metricsResult.sharpeUpdated}, wr=${metricsResult.winRateUpdated}, mdd=${metricsResult.maxDrawdownUpdated}, score=${metricsResult.arenaScoreUpdated}`)
+    } catch (metricsErr) {
+      logger.warn(`[aggregate] Metrics backfill failed: ${metricsErr}`)
+    }
+
     const duration = Date.now() - startTime
 
     if (errors > 0) {
       await plog.error(new Error(`${errors} upsert errors`), { inserted, errors, date: dateStr, cleanedUp })
     } else {
-      await plog.success(inserted, { date: dateStr, cleanedUp })
+      await plog.success(inserted, { date: dateStr, cleanedUp, metricsBackfill: metricsResult })
     }
 
     return NextResponse.json({
@@ -402,6 +412,7 @@ export async function GET(request: NextRequest) {
       inserted,
       errors,
       cleanedUp,
+      metricsBackfill: metricsResult,
       queries: 3,
       duration: `${duration}ms`,
     })
