@@ -97,7 +97,7 @@ describe('Constants', () => {
   test('PLATFORM_SCRIPTS should have multiple platforms', () => {
     const platforms = Object.keys(PLATFORM_SCRIPTS)
     expect(platforms).toContain('binance_futures')
-    expect(platforms).toContain('binance_spot')
+    // binance_spot permanently removed (2026-03-14) — blocks pipeline
     expect(platforms).toContain('bybit')
     expect(platforms).toContain('bitget_futures')
     expect(platforms).toContain('mexc')
