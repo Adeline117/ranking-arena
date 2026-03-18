@@ -68,8 +68,6 @@ function TopTraderCard({ trader, rank }: { trader: Trader; rank: number }) {
           transition: `transform ${tokens.transition.fast}`,
           overflow: 'hidden',
         }}
-        onMouseEnter={e => e.currentTarget.style.transform = 'translateY(-2px)'}
-        onMouseLeave={e => e.currentTarget.style.transform = 'none'}
       >
         {/* Rank + Avatar row */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>

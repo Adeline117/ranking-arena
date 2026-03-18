@@ -60,6 +60,8 @@ export default function SSRRankingTable({ traders }: Props) {
 .ssr-hdr{display:grid;grid-template-columns:40px 1fr 60px 80px 60px 60px;padding:10px 16px;font-size:10px;font-weight:700;color:var(--color-text-quaternary,var(--color-text-tertiary));border-bottom:1px solid var(--color-border-primary);gap:8px;text-transform:uppercase;letter-spacing:0.05em;position:sticky;top:0;z-index:10;background:var(--color-bg-secondary);backdrop-filter:blur(12px)}
 .ssr-row{display:grid;grid-template-columns:40px 1fr 60px 80px 60px 60px;padding:10px 16px;gap:8px;align-items:center;text-decoration:none;color:inherit;border-bottom:1px solid var(--color-border-primary);min-height:52px;transition:background 0.18s ease,transform 0.18s ease}
 .ssr-row:hover{background:var(--color-bg-hover,#252232);transform:translateY(-1px)}
+.ssr-row:focus-visible{outline:2px solid var(--color-brand);outline-offset:-2px;border-radius:4px}
+.ssr-row:active{transform:scale(0.998)}
 .ssr-row-gold{background:linear-gradient(135deg,rgba(255,215,0,0.10) 0%,rgba(255,215,0,0.03) 40%,transparent 80%);box-shadow:inset 3px 0 0 var(--color-rank-gold,#FFD700)}.ssr-row-silver{background:linear-gradient(135deg,rgba(192,192,192,0.08) 0%,rgba(192,192,192,0.02) 40%,transparent 80%);box-shadow:inset 3px 0 0 var(--color-rank-silver,#C0C0C0)}.ssr-row-bronze{background:linear-gradient(135deg,rgba(205,127,50,0.08) 0%,rgba(205,127,50,0.02) 40%,transparent 80%);box-shadow:inset 3px 0 0 var(--color-rank-bronze,#CD7F32)}
 .ssr-rank{font-size:13px;font-weight:800;text-align:center;display:flex;align-items:center;justify-content:center}
 .ssr-rank-default{color:var(--color-text-tertiary)}
@@ -109,10 +111,10 @@ export default function SSRRankingTable({ traders }: Props) {
                     className="ssr-rank-circle"
                     style={{
                       background: rank === 1
-                        ? 'linear-gradient(135deg, #FFD700, #FFA500)'
+                        ? 'linear-gradient(135deg, var(--color-rank-gold, #FFD700), #FFA500)'
                         : rank === 2
-                        ? 'linear-gradient(135deg, #C0C0C0, #A0A0A0)'
-                        : 'linear-gradient(135deg, #CD7F32, #A0522D)',
+                        ? 'linear-gradient(135deg, var(--color-rank-silver, #C0C0C0), #A0A0A0)'
+                        : 'linear-gradient(135deg, var(--color-rank-bronze, #CD7F32), #A0522D)',
                     }}
                   >
                     {rank}

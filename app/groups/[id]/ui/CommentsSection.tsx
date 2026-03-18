@@ -93,7 +93,7 @@ export default function CommentsSection(props: CommentsSectionProps) {
                         {comment.author_avatar_url ? (
                           <Image src={comment.author_avatar_url} alt={comment.author_handle || 'User avatar'} fill sizes="24px" style={{ objectFit: 'cover' }} />
                         ) : (
-                          <span style={{ color: tokens.colors.white, fontSize: 9, fontWeight: 700 }}>
+                          <span style={{ color: tokens.colors.white, fontSize: 10, fontWeight: 700 }}>
                             {(comment.author_handle || 'U').charAt(0).toUpperCase()}
                           </span>
                         )}

@@ -72,7 +72,7 @@ export function AvatarLink({ handle, avatarUrl, isPro, showProBadge = true, isOf
         {handle}
         {isOfficial && (
           <span style={{
-            fontSize: 9,
+            fontSize: 10,
             fontWeight: 800,
             color: tokens.colors.accent.brand,
             background: `color-mix(in srgb, ${tokens.colors.accent.brand} 12%, transparent)`,

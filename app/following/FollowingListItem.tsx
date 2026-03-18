@@ -137,7 +137,7 @@ export default function FollowingListItem({
             borderRadius: tokens.radius.md,
             minWidth: 50,
           }}>
-            <Text size="xs" color="tertiary" style={{ fontSize: 9, lineHeight: 1 }}>Score</Text>
+            <Text size="xs" color="tertiary" style={{ fontSize: 10, lineHeight: 1 }}>Score</Text>
             <Text size="sm" weight="bold" style={{ color: tokens.colors.accent.brand }}>
               {item.arena_score.toFixed(0)}
             </Text>

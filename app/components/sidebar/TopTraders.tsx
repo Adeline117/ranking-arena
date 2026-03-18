@@ -208,7 +208,7 @@ export default function TopTraders() {
                   {trader.arena_score != null && (
                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 3 }}>
                       <span style={{
-                        fontSize: 9,
+                        fontSize: 10,
                         fontWeight: tokens.typography.fontWeight.bold,
                         color: 'var(--color-text-tertiary)',
                         letterSpacing: '0.04em',

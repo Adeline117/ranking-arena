@@ -214,7 +214,7 @@ export default function TraderHeader({
         padding: `${tokens.spacing[4]} ${tokens.spacing[5]}`,
         background: containerBackground,
         borderRadius: tokens.radius.lg,
-        border: `1px solid ${tokens.colors.border.primary}50`,
+        border: '1px solid var(--color-border-primary)',
         boxShadow: '0 4px 16px var(--color-overlay-subtle), inset 0 1px 0 var(--overlay-hover)',
         position: 'relative',
         overflow: 'visible',
@@ -320,7 +320,7 @@ export default function TraderHeader({
               aria-label={handleCopied ? t('copiedToClipboard') : `${t('copyHandle')}: ${handle}`}
               style={{
                 background: 'none', border: 'none', cursor: 'pointer',
-                padding: 4, minWidth: 28, minHeight: 28,
+                padding: 4, minWidth: 44, minHeight: 44,
                 display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
                 color: handleCopied ? tokens.colors.accent.success : tokens.colors.text.tertiary,
                 transition: 'color 0.2s ease', flexShrink: 0,
@@ -399,9 +399,9 @@ export default function TraderHeader({
                   gap: 2,
                   marginLeft: 4,
                   padding: '2px 6px',
-                  background: `${tokens.colors.accent.primary}10`,
+                  background: 'var(--color-accent-primary-08)',
                   borderRadius: tokens.radius.full,
-                  border: `1px solid ${tokens.colors.accent.primary}25`,
+                  border: '1px solid var(--color-accent-primary-15)',
                 }}
                 title={`${linkedPlatforms.length} linked accounts`}
               >
@@ -411,7 +411,7 @@ export default function TraderHeader({
                   </Box>
                 ))}
                 {[...new Set(linkedPlatforms)].length > 5 && (
-                  <Text size="xs" style={{ color: tokens.colors.text.tertiary, fontSize: 9 }}>
+                  <Text size="xs" style={{ color: tokens.colors.text.tertiary, fontSize: 10 }}>
                     +{[...new Set(linkedPlatforms)].length - 5}
                   </Text>
                 )}
@@ -430,7 +430,7 @@ export default function TraderHeader({
               {lastUpdated && (
                 <Text
                   size="xs"
-                  style={{ color: tokens.colors.text.tertiary, fontSize: 10, opacity: 0.6 }}
+                  style={{ color: tokens.colors.text.tertiary, fontSize: 11, opacity: 0.6 }}
                   title={new Date(lastUpdated).toLocaleString()}
                 >
                   {subtitleParts.length > 0 ? ' · ' : ''}{t('updated') || 'Updated'} {getRelativeTime(lastUpdated)}
