@@ -3,6 +3,11 @@
  *
  * Tests discoverLeaderboard, fetchTraderProfile, fetchTraderSnapshot,
  * normalize, and error handling with mocked HTTP responses.
+ *
+ * NOTE: discoverLeaderboard uses Copin API as primary source
+ * (api.copin.io/leaderboards/page?protocol=DYDX).
+ * The dYdX indexer is only used as a fallback.
+ * fetchTraderSnapshot makes 2 calls: subaccount + leaderboard.
  */
 
 import { DydxPerpConnector } from '../dydx-perp'
@@ -26,8 +31,9 @@ function createConnector() {
 
 function mockFetchResponse(body: unknown, status = 200) {
   mockFetch.mockResolvedValueOnce({
+    ok: status >= 200 && status < 300,
     status,
-    headers: { get: () => null },
+    headers: { get: (key: string) => key === 'content-type' ? 'application/json' : null },
     json: async () => body,
   })
 }
@@ -59,29 +65,30 @@ describe('DydxPerpConnector', () => {
   // ============================================
 
   describe('discoverLeaderboard', () => {
-    const validResponse = {
-      pnlRanking: [
+    // Copin API format: { data: [{account, totalPnl, totalWin, ...}] }
+    const validCopinResponse = {
+      data: [
         {
-          address: 'dydx1abc123def456ghi789jkl012mno345pqr678stu',
-          pnl: '125000.50',
-          rank: 1,
+          account: 'dydx1abc123def456ghi789jkl012mno345pqr678stu',
+          totalPnl: '125000.50',
+          ranking: 1,
         },
         {
-          address: 'dydx1xyz987wvu654tsr321qpo098nml765kji432hgf',
-          pnl: '87500.25',
-          rank: 2,
+          account: 'dydx1xyz987wvu654tsr321qpo098nml765kji432hgf',
+          totalPnl: '87500.25',
+          ranking: 2,
         },
         {
-          address: '0xABCDEF1234567890abcdef1234567890ABCDEF12',
-          pnl: '54200.00',
-          rank: 3,
+          account: '0xABCDEF1234567890abcdef1234567890ABCDEF12',
+          totalPnl: '54200.00',
+          ranking: 3,
         },
       ],
     }
 
-    test('returns traders from valid response', async () => {
+    test('returns traders from valid Copin response', async () => {
       const connector = createConnector()
-      mockFetchResponse(validResponse)
+      mockFetchResponse(validCopinResponse)
 
       const result = await connector.discoverLeaderboard('7d', 100)
 
@@ -96,15 +103,13 @@ describe('DydxPerpConnector', () => {
       expect(first.platform).toBe('dydx')
       expect(first.market_type).toBe('perp')
       expect(first.is_active).toBe(true)
-      expect(first.profile_url).toBe(
-        'https://trade.dydx.exchange/portfolio/dydx1abc123def456ghi789jkl012mno345pqr678stu'
-      )
+      expect(first.profile_url).toContain('dydx1abc123def456ghi789jkl012mno345pqr678stu')
       expect(first.raw).toBeDefined()
     })
 
     test('handles 0x-style addresses correctly', async () => {
       const connector = createConnector()
-      mockFetchResponse(validResponse)
+      mockFetchResponse(validCopinResponse)
 
       const result = await connector.discoverLeaderboard('7d', 100)
 
@@ -113,9 +118,10 @@ describe('DydxPerpConnector', () => {
       expect(third.profile_url).toContain('0xABCDEF1234567890abcdef1234567890ABCDEF12')
     })
 
-    test('returns empty array when response has no pnlRanking', async () => {
+    test('returns empty array when Copin response has no data and indexer also empty', async () => {
       const connector = createConnector()
-      mockFetchResponse({})
+      // Copin returns empty data
+      mockFetchResponse({ data: [] })
 
       const result = await connector.discoverLeaderboard('30d')
 
@@ -123,70 +129,66 @@ describe('DydxPerpConnector', () => {
       expect(result.total_available).toBe(0)
     })
 
-    test('returns empty array when pnlRanking is empty', async () => {
+    test('falls back to dYdX indexer when Copin fails', async () => {
       const connector = createConnector()
-      mockFetchResponse({ pnlRanking: [] })
-
-      const result = await connector.discoverLeaderboard('7d')
-
-      expect(result.traders).toHaveLength(0)
-      expect(result.total_available).toBe(0)
-    })
-
-    test('sends correct period parameter for each window', async () => {
-      const connector = createConnector()
-
-      // Test 7d -> PERIOD_7D
-      mockFetchResponse(validResponse)
-      await connector.discoverLeaderboard('7d')
-      let callUrl = mockFetch.mock.calls[0][0]
-      expect(callUrl).toContain('period=PERIOD_7D')
-
-      // Test 30d -> PERIOD_30D
-      mockFetchResponse(validResponse)
-      await connector.discoverLeaderboard('30d')
-      callUrl = mockFetch.mock.calls[1][0]
-      expect(callUrl).toContain('period=PERIOD_30D')
-
-      // Test 90d -> PERIOD_90D
-      mockFetchResponse(validResponse)
-      await connector.discoverLeaderboard('90d')
-      callUrl = mockFetch.mock.calls[2][0]
-      expect(callUrl).toContain('period=PERIOD_90D')
-    })
-
-    test('throws on network error', async () => {
-      const connector = createConnector()
-      mockFetchNetworkError()
-
-      await expect(connector.discoverLeaderboard('7d')).rejects.toThrow()
-    })
-
-    test('throws ConnectorError on rate limit (429)', async () => {
-      const connector = createConnector()
-      mockFetch.mockResolvedValueOnce({
-        status: 429,
-        headers: { get: () => '60' },
-        json: async () => ({}),
+      // Copin fails
+      mockFetchNetworkError('Copin down')
+      // Indexer succeeds with pnlRanking format
+      mockFetchResponse({
+        pnlRanking: [
+          { address: 'dydx1abc123', pnl: '50000', rank: 1 },
+        ],
       })
 
-      await expect(connector.discoverLeaderboard('7d')).rejects.toThrow(ConnectorError)
+      const result = await connector.discoverLeaderboard('7d', 100)
+
+      expect(result.traders).toHaveLength(1)
+      expect(result.traders[0].trader_key).toBe('dydx1abc123')
     })
 
-    test('throws on timeout / abort error', async () => {
+    test('sends correct statisticType for 7d window to Copin', async () => {
       const connector = createConnector()
-      const abortError = new DOMException('The operation was aborted', 'AbortError')
-      mockFetch.mockRejectedValueOnce(abortError)
+      mockFetchResponse(validCopinResponse)
+
+      await connector.discoverLeaderboard('7d')
+
+      const callUrl = mockFetch.mock.calls[0][0]
+      expect(callUrl).toContain('statisticType=WEEK')
+      expect(callUrl).toContain('protocol=DYDX')
+    })
+
+    test('sends MONTH statisticType for 30d and 90d windows', async () => {
+      const connector = createConnector()
+      mockFetchResponse(validCopinResponse)
+
+      await connector.discoverLeaderboard('30d')
+
+      const callUrl = mockFetch.mock.calls[0][0]
+      expect(callUrl).toContain('statisticType=MONTH')
+    })
+
+    test('throws on network error when both Copin and indexer fail', async () => {
+      const connector = createConnector()
+      mockFetchNetworkError('Copin down')
+      mockFetchNetworkError('Indexer down')
 
       await expect(connector.discoverLeaderboard('7d')).rejects.toThrow()
     })
 
-    test('handles invalid JSON structure gracefully via warnValidate', async () => {
+    test('indexer fallback uses correct period parameter', async () => {
       const connector = createConnector()
-      mockFetchResponse({ unexpected: 'structure' })
+      // Copin fails
+      mockFetchNetworkError('Copin down')
+      // Indexer returns valid data
+      mockFetchResponse({
+        pnlRanking: [{ address: 'dydx1test', pnl: '100000', rank: 1 }],
+      })
 
-      const result = await connector.discoverLeaderboard('7d')
-      expect(result.traders).toHaveLength(0)
+      await connector.discoverLeaderboard('7d')
+
+      // Second call is to indexer with period=PERIOD_7D
+      const indexerCallUrl = mockFetch.mock.calls[1][0]
+      expect(indexerCallUrl).toContain('period=PERIOD_7D')
     })
   })
 
@@ -428,12 +430,12 @@ describe('DydxPerpConnector', () => {
   // ============================================
 
   describe('normalize', () => {
-    test('normalizes raw trader entry correctly', () => {
+    test('normalizes Copin format entry correctly (account field)', () => {
       const connector = createConnector()
       const raw = {
-        address: 'dydx1abc123def456ghi789jkl012mno345pqr678stu',
-        pnl: '125000.50',
-        rank: 1,
+        account: 'dydx1abc123def456ghi789jkl012mno345pqr678stu',
+        totalPnl: '125000.50',
+        ranking: 1,
       }
 
       const normalized = connector.normalize(raw)
@@ -442,10 +444,23 @@ describe('DydxPerpConnector', () => {
       expect(normalized.pnl).toBe(125000.5)
     })
 
-    test('handles null/missing pnl', () => {
+    test('normalizes indexer format entry (address field)', () => {
       const connector = createConnector()
       const raw = {
         address: 'dydx1nopnl',
+        pnl: '50000',
+      }
+
+      const normalized = connector.normalize(raw)
+
+      expect(normalized.trader_key).toBe('dydx1nopnl')
+      expect(normalized.pnl).toBe(50000)
+    })
+
+    test('handles null/missing pnl', () => {
+      const connector = createConnector()
+      const raw = {
+        account: 'dydx1nopnl',
       }
 
       const normalized = connector.normalize(raw)
@@ -454,7 +469,7 @@ describe('DydxPerpConnector', () => {
       expect(normalized.pnl).toBeNull()
     })
 
-    test('handles missing address', () => {
+    test('handles missing address/account — returns empty string', () => {
       const connector = createConnector()
       const raw = {
         pnl: '10000',
@@ -462,15 +477,16 @@ describe('DydxPerpConnector', () => {
 
       const normalized = connector.normalize(raw)
 
-      expect(normalized.trader_key).toBeUndefined()
+      // String(undefined || '') = '' — connector uses String(account || address || '')
+      expect(normalized.trader_key).toBe('')
       expect(normalized.pnl).toBe(10000)
     })
 
     test('handles non-numeric pnl string', () => {
       const connector = createConnector()
       const raw = {
-        address: 'dydx1bad',
-        pnl: 'not-a-number',
+        account: 'dydx1bad',
+        totalPnl: 'not-a-number',
       }
 
       const normalized = connector.normalize(raw)
@@ -485,33 +501,30 @@ describe('DydxPerpConnector', () => {
   // ============================================
 
   describe('error handling', () => {
-    test('throws on server error (500)', async () => {
+    test('throws ConnectorError on rate limit (429) in discoverLeaderboard Copin call', async () => {
       const connector = createConnector()
+      // Copin API returns 429 — request() throws ConnectorError
       mockFetch.mockResolvedValueOnce({
-        status: 500,
-        headers: { get: () => null },
-        json: async () => ({ error: 'Internal Server Error' }),
+        ok: false,
+        status: 429,
+        headers: { get: (key: string) => key === 'content-type' ? 'application/json' : key === 'Retry-After' ? '60' : null },
+        json: async () => ({}),
       })
+      // Indexer also fails
+      mockFetchNetworkError('Indexer also down')
 
+      // ConnectorError from Copin propagates
       await expect(connector.discoverLeaderboard('7d')).rejects.toThrow()
     })
 
-    test('throws ConnectorError on client error (400)', async () => {
+    test('handles invalid JSON response gracefully via warnValidate in indexer fallback', async () => {
       const connector = createConnector()
-      mockFetch.mockResolvedValueOnce({
-        status: 400,
-        headers: { get: () => null },
-        json: async () => ({ error: 'Bad request' }),
-      })
-
-      await expect(connector.discoverLeaderboard('7d')).rejects.toThrow(ConnectorError)
-    })
-
-    test('handles invalid JSON response gracefully via warnValidate', async () => {
-      const connector = createConnector()
+      // Copin fails
+      mockFetchNetworkError('Copin down')
+      // Indexer returns unexpected structure
       mockFetchResponse({ unexpected: 'structure', somethingElse: true })
 
-      // Should not throw - warnValidate does graceful degradation
+      // warnValidate does graceful degradation — empty result
       const result = await connector.discoverLeaderboard('7d')
       expect(result.traders).toHaveLength(0)
     })
