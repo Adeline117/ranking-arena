@@ -87,12 +87,16 @@ export class BingxFuturesConnector extends BaseConnector {
 
       const data = warnValidate(BingxFuturesLeaderboardResponseSchema, _rawLb, 'bingx-futures/leaderboard')
 
-      const list = data?.data?.list || []
-      const traders: TraderSource[] = list.map((item) => ({
+      // BingX API: data.list, VPS scraper (multi-rank): data.global.result
+      const dataObj = data?.data as Record<string, unknown> | undefined
+      const globalObj = dataObj?.global as Record<string, unknown> | undefined
+      const rawList = dataObj?.list || globalObj?.result || []
+      const list = Array.isArray(rawList) ? rawList : []
+      const traders: TraderSource[] = list.map((item: Record<string, unknown>) => ({
         platform: 'bingx' as const,
         market_type: 'futures' as const,
-        trader_key: String(item.uniqueId || ''),
-        display_name: item.traderName || null,
+        trader_key: String(item.uniqueId || item.traderUid || item.uid || ''),
+        display_name: String(item.traderName || '') || null,
         profile_url: `https://bingx.com/en/CopyTrading/tradeDetail/${item.uniqueId}`,
         discovered_at: new Date().toISOString(),
         last_seen_at: new Date().toISOString(),
