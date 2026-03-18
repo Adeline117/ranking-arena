@@ -63,8 +63,6 @@ import {
   fetchCoinexStatsDetail,
   fetchBitunixEquityCurve,
   fetchBitunixStatsDetail,
-  fetchBitunixCurrentPositions,
-  fetchBitunixPositionHistory,
   fetchBitfinexEquityCurve,
   fetchBitfinexStatsDetail,
   fetchBlofinEquityCurve,
@@ -344,9 +342,9 @@ export const ENRICHMENT_PLATFORM_CONFIGS: Record<string, EnrichmentConfig> = {
     platform: 'bitunix',
     fetchEquityCurve: fetchBitunixEquityCurve,
     fetchStatsDetail: fetchBitunixStatsDetail,
-    fetchPositionHistory: fetchBitunixPositionHistory,
-    fetchCurrentPositions: fetchBitunixCurrentPositions,
-    concurrency: 2, delayMs: 1500,
+    // Position endpoints (/trader/positions, /trader/history) return 404 since 2026-03
+    // Stats + equity curve come from batch-cached leaderboard list API
+    concurrency: 5, delayMs: 200, // Fast: lookups from in-memory cache, no per-trader API calls
   },
   bitfinex: {
     platform: 'bitfinex',
