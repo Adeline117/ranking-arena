@@ -366,6 +366,21 @@ export async function upsertTraders(
   }
   if (validated.length === 0) return { saved: 0, error: `All ${traders.length} traders failed validation` }
 
+  // Deduplicate by (source, source_trader_id, season_id) — PostgreSQL ON CONFLICT
+  // cannot affect the same row twice in a single upsert batch
+  const deduped: TraderData[] = []
+  const seenKeys = new Set<string>()
+  for (const t of validated) {
+    const key = `${t.source}|${t.source_trader_id}|${t.season_id}`
+    if (!seenKeys.has(key)) {
+      seenKeys.add(key)
+      deduped.push(t)
+    }
+  }
+  if (deduped.length < validated.length) {
+    dataLogger.warn(`[upsert] Deduped ${validated.length - deduped.length} duplicate traders for ${validated[0]?.source}`)
+  }
+
   const BATCH = 100
 
   let saved = 0
@@ -379,8 +394,8 @@ export async function upsertTraders(
     trader_snapshots_v2: 'ok',
   }
 
-  for (let i = 0; i < validated.length; i += BATCH) {
-    const batch = validated.slice(i, i + BATCH)
+  for (let i = 0; i < deduped.length; i += BATCH) {
+    const batch = deduped.slice(i, i + BATCH)
 
     // --- 1. trader_sources ---
     try {
