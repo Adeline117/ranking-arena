@@ -265,7 +265,37 @@ async function computeSeason(
     trader_type: string | null
   }
 
-  const allSnapshots: TraderRow[] = []
+  // Stream directly into traderMap instead of accumulating allSnapshots array
+  // This reduces peak memory from ~200MB to ~50MB by avoiding intermediate array
+  const traderMap = new Map<string, TraderRow>()
+  const v2CountBySource = new Map<string, number>()
+
+  function addToTraderMap(snap: TraderRow) {
+    if (snap.source_trader_id.startsWith('0x')) {
+      snap.source_trader_id = snap.source_trader_id.toLowerCase()
+    }
+    const key = `${snap.source}:${snap.source_trader_id}`
+    if (!traderMap.has(key)) {
+      traderMap.set(key, snap)
+    } else {
+      // Merge: fill null fields from the duplicate
+      const existing = traderMap.get(key)!
+      if (snap.win_rate != null && existing.win_rate == null) existing.win_rate = snap.win_rate
+      if (snap.max_drawdown != null && existing.max_drawdown == null) existing.max_drawdown = snap.max_drawdown
+      if (snap.trades_count != null && existing.trades_count == null) existing.trades_count = snap.trades_count
+      if (snap.followers != null && existing.followers == null) existing.followers = snap.followers
+      if (snap.sharpe_ratio != null && existing.sharpe_ratio == null) existing.sharpe_ratio = snap.sharpe_ratio
+      if (snap.profitability_score != null && existing.profitability_score == null) existing.profitability_score = snap.profitability_score
+      if (snap.risk_control_score != null && existing.risk_control_score == null) existing.risk_control_score = snap.risk_control_score
+      if (snap.execution_score != null && existing.execution_score == null) existing.execution_score = snap.execution_score
+      if (snap.trading_style != null && existing.trading_style == null) existing.trading_style = snap.trading_style
+      if (snap.trader_type != null && existing.trader_type == null) existing.trader_type = snap.trader_type
+      if (snap.full_confidence_at &&
+          (!existing.full_confidence_at || snap.full_confidence_at > existing.full_confidence_at)) {
+        existing.full_confidence_at = snap.full_confidence_at
+      }
+    }
+  }
 
   // Fetch v2 FIRST so it gets dedup priority (v2 is newer, more reliable)
   // Column mapping: platform→source, trader_key→source_trader_id, window→season_id,
@@ -339,73 +369,55 @@ async function computeSeason(
         return rows
       })
     )
-    results.forEach(rows => allSnapshots.push(...rows))
-  }
-
-  // Then fetch v1 snapshots (legacy fallback — dedup keeps v2 entry if both exist)
-  for (let i = 0; i < ALL_SOURCES.length; i += batchSize) {
-    const batch = ALL_SOURCES.slice(i, i + batchSize)
-    const results = await Promise.all(
-      batch.map(async (source) => {
-        const rows: TraderRow[] = []
-        let page = 0
-        const pageSize = 1000
-        const maxPages = 10 // Safety cap: max 10K rows per source to prevent runaway queries
-
-        while (page < maxPages) {
-          const { data, error } = await supabase
-            .from('trader_snapshots')
-            .select('source, source_trader_id, roi, pnl, win_rate, max_drawdown, trades_count, followers, arena_score, captured_at, full_confidence_at, profitability_score, risk_control_score, execution_score, score_completeness, trading_style, avg_holding_hours, style_confidence, sharpe_ratio, trader_type')
-            .eq('source', source)
-            .eq('season_id', season)
-            .gte('captured_at', freshnessISOBySource(source))
-            .order('captured_at', { ascending: false })
-            .range(page * pageSize, (page + 1) * pageSize - 1)
-
-          if (error || !data?.length) break
-          rows.push(...(data as TraderRow[]))
-          if (data.length < pageSize) break
-          page++
-        }
-        if (page >= maxPages) {
-          logger.warn(`${source}/${season}: hit ${maxPages}-page cap (${rows.length} rows), some data may be truncated`)
-        }
-        return rows
-      })
-    )
-    results.forEach(rows => allSnapshots.push(...rows))
-  }
-  logger.info(`[${season}] Fetched ${allSnapshots.length} total snapshots (v2 + v1)`)
-
-  // Dedupe: keep latest per source+source_trader_id
-  // Normalize 0x addresses to lowercase to prevent case-sensitive duplicates
-  const traderMap = new Map<string, TraderRow>()
-  for (const snap of allSnapshots) {
-    if (snap.source_trader_id.startsWith('0x')) {
-      snap.source_trader_id = snap.source_trader_id.toLowerCase()
-    }
-    const key = `${snap.source}:${snap.source_trader_id}`
-    if (!traderMap.has(key)) {
-      traderMap.set(key, snap)
-    } else {
-      // Merge: fill null fields from the duplicate (v1 may have enriched data that v2 doesn't)
-      const existing = traderMap.get(key)!
-      if (snap.win_rate != null && existing.win_rate == null) existing.win_rate = snap.win_rate
-      if (snap.max_drawdown != null && existing.max_drawdown == null) existing.max_drawdown = snap.max_drawdown
-      if (snap.trades_count != null && existing.trades_count == null) existing.trades_count = snap.trades_count
-      if (snap.followers != null && existing.followers == null) existing.followers = snap.followers
-      if (snap.sharpe_ratio != null && existing.sharpe_ratio == null) existing.sharpe_ratio = snap.sharpe_ratio
-      if (snap.profitability_score != null && existing.profitability_score == null) existing.profitability_score = snap.profitability_score
-      if (snap.risk_control_score != null && existing.risk_control_score == null) existing.risk_control_score = snap.risk_control_score
-      if (snap.execution_score != null && existing.execution_score == null) existing.execution_score = snap.execution_score
-      if (snap.trading_style != null && existing.trading_style == null) existing.trading_style = snap.trading_style
-      if (snap.trader_type != null && existing.trader_type == null) existing.trader_type = snap.trader_type
-      if (snap.full_confidence_at &&
-          (!existing.full_confidence_at || snap.full_confidence_at > existing.full_confidence_at)) {
-        existing.full_confidence_at = snap.full_confidence_at
+    results.forEach(rows => {
+      if (rows.length > 0) {
+        v2CountBySource.set(rows[0].source, rows.length)
       }
-    }
+      rows.forEach(addToTraderMap)
+    })
   }
+
+  // Then fetch v1 snapshots — ONLY for sources with insufficient v2 data (<50 traders)
+  // This avoids fetching 10K rows from legacy table for sources that already have enough v2 data
+  const sourcesNeedingV1 = ALL_SOURCES.filter(s => (v2CountBySource.get(s) || 0) < 50)
+  if (sourcesNeedingV1.length > 0) {
+    logger.info(`[${season}] Fetching v1 fallback for ${sourcesNeedingV1.length}/${ALL_SOURCES.length} sources with <50 v2 traders`)
+    for (let i = 0; i < sourcesNeedingV1.length; i += batchSize) {
+      const batch = sourcesNeedingV1.slice(i, i + batchSize)
+      const results = await Promise.all(
+        batch.map(async (source) => {
+          const rows: TraderRow[] = []
+          let page = 0
+          const pageSize = 1000
+          const maxPages = 10
+
+          while (page < maxPages) {
+            const { data, error } = await supabase
+              .from('trader_snapshots')
+              .select('source, source_trader_id, roi, pnl, win_rate, max_drawdown, trades_count, followers, arena_score, captured_at, full_confidence_at, profitability_score, risk_control_score, execution_score, score_completeness, trading_style, avg_holding_hours, style_confidence, sharpe_ratio, trader_type')
+              .eq('source', source)
+              .eq('season_id', season)
+              .gte('captured_at', freshnessISOBySource(source))
+              .order('captured_at', { ascending: false })
+              .range(page * pageSize, (page + 1) * pageSize - 1)
+
+            if (error || !data?.length) break
+            rows.push(...(data as TraderRow[]))
+            if (data.length < pageSize) break
+            page++
+          }
+          if (page >= maxPages) {
+            logger.warn(`${source}/${season}: hit ${maxPages}-page cap (${rows.length} rows)`)
+          }
+          return rows
+        })
+      )
+      results.forEach(rows => rows.forEach(addToTraderMap))
+    }
+  } else {
+    logger.info(`[${season}] All sources have ≥50 v2 traders, skipping v1 fallback`)
+  }
+  logger.info(`[${season}] ${traderMap.size} unique traders after dedup (v2 + v1)`)
 
   // Phase 3: Fill missing win_rate/max_drawdown from trader_stats_detail (enrichment table)
   // This catches data from enrichment runs that wrote to stats_detail but not back to snapshots

@@ -98,10 +98,15 @@ export async function GET(request: NextRequest) {
     const minTrades = searchParams.get('min_trades') ? Number(searchParams.get('min_trades')) : undefined;
     const traderType = searchParams.get('trader_type') as 'human' | 'bot' | null;
 
-    // Use tiered cache (memory → Redis → DB) for rankings
-    const cacheKey = `api:rankings:${normalizedWindow}:${category || 'all'}:${platform || 'all'}:${sortBy}:${sortDir}:${limit}:${cursor || offset}:${minPnl || ''}:${minTrades || ''}:${traderType || ''}`
+    // Only cache "hot" default queries (no filters, default sort, first page)
+    // Filtered/paginated queries skip cache to avoid key explosion (thousands of permutations)
+    const isDefaultQuery = sortBy === 'arena_score' && sortDir === 'desc'
+      && !platform && !minPnl && !minTrades && !traderType && !cursor && offset === 0
+    const cacheKey = isDefaultQuery
+      ? `api:rankings:${normalizedWindow}:${category || 'all'}:${limit}`
+      : null // skip cache for filtered queries
 
-     
+
     let result: unknown;
 
     if (normalizedWindow === 'composite') {
@@ -126,21 +131,19 @@ export async function GET(request: NextRequest) {
         }
       } else {
         // Fall back to real-time compute for filtered/sorted queries
-        result = await tieredGetOrSet(
-          cacheKey,
-          () => getCompositeRankings({
-            category: category || undefined,
-            platform: (platform || undefined) as Platform | undefined,
-            limit,
-            offset,
-            sort_by: sortBy,
-            sort_dir: sortDir,
-            min_pnl: minPnl,
-            min_trades: minTrades,
-          }),
-          'hot',
-          ['rankings']
-        );
+        const compositeFetcher = () => getCompositeRankings({
+          category: category || undefined,
+          platform: (platform || undefined) as Platform | undefined,
+          limit,
+          offset,
+          sort_by: sortBy,
+          sort_dir: sortDir,
+          min_pnl: minPnl,
+          min_trades: minTrades,
+        })
+        result = cacheKey
+          ? await tieredGetOrSet(cacheKey, compositeFetcher, 'hot', ['rankings'])
+          : await compositeFetcher()
       }
     } else {
       const query: RankingsQuery = {
@@ -155,12 +158,10 @@ export async function GET(request: NextRequest) {
         min_trades: minTrades,
         trader_type: traderType || undefined,
       };
-      result = await tieredGetOrSet(
-        cacheKey,
-        () => getRankingsFallback(query, cursor),
-        'hot',
-        ['rankings']
-      );
+      const rankingsFetcher = () => getRankingsFallback(query, cursor)
+      result = cacheKey
+        ? await tieredGetOrSet(cacheKey, rankingsFetcher, 'hot', ['rankings'])
+        : await rankingsFetcher()
     }
 
     const response = apiSuccess(result);
