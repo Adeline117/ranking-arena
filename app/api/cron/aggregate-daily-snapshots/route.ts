@@ -58,13 +58,16 @@ export async function GET(request: NextRequest) {
       // Fallback: fetch with regular query (less optimal but works without RPC)
       logger.warn('[aggregate] RPC not available, falling back to v2 paginated query')
 
+      // Use as_of_ts (updated on every upsert) instead of created_at (set only on INSERT).
+      // created_at never changes after initial row creation, so filtering by it
+      // missed most traders — only ~1000/day instead of all ~16K active traders.
       const { data: fallbackData, error: fallbackError } = await supabase
         .from('trader_snapshots_v2')
-        .select('platform, trader_key, window, roi_pct, pnl_usd, win_rate, max_drawdown, followers, trades_count, created_at')
+        .select('platform, trader_key, window, roi_pct, pnl_usd, win_rate, max_drawdown, followers, trades_count, as_of_ts')
         .eq('window', '90D')
-        .gte('created_at', `${dateStr}T00:00:00Z`)
-        .lt('created_at', `${todayStr}T00:00:00Z`)
-        .order('created_at', { ascending: false })
+        .gte('as_of_ts', `${dateStr}T00:00:00Z`)
+        .lt('as_of_ts', `${todayStr}T00:00:00Z`)
+        .order('as_of_ts', { ascending: false })
         .limit(50000)
 
       if (fallbackError || !fallbackData) {
