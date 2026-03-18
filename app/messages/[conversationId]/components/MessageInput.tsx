@@ -217,7 +217,7 @@ export default function MessageInput({
               color: showStickerPicker ? tokens.colors.accent.brand : tokens.colors.text.tertiary,
               cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, transition: 'all 0.2s',
             }}
-            title={language === 'zh' ? '贴纸' : 'Stickers'}
+            title={t('stickersButton')}
           >
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <path d="M15.5 3H5a2 2 0 0 0-2 2v14c0 1.1.9 2 2 2h14a2 2 0 0 0 2-2V8.5L15.5 3Z" />

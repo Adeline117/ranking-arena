@@ -44,7 +44,7 @@ export default memo(function Pagination({ currentPage, totalPages, onPageChange 
 
   return (
     <nav
-      aria-label={language === 'zh' ? '分页导航' : 'Pagination'}
+      aria-label={t('paginationNav')}
       className="pagination-container"
       style={{
         padding: `${tokens.spacing[4]} ${tokens.spacing[4]}`,

@@ -1,5 +1,6 @@
 'use client'
 
+import { getLocaleFromLanguage } from '@/lib/utils/format'
 import { tokens } from '@/lib/design-tokens'
 import Card from '@/app/components/ui/Card'
 import { Box, Text, Button } from '@/app/components/base'
@@ -103,7 +104,7 @@ export default function ContentManagement({
                     )}
                     <Text weight="bold" style={{ textDecoration: post.deleted_at ? 'line-through' : 'none' }}>{post.title}</Text>
                   </Box>
-                  <Text size="xs" color="tertiary">@{post.author_handle} · {new Date(post.created_at).toLocaleString(language === 'zh' ? 'zh-CN' : 'en-US')}</Text>
+                  <Text size="xs" color="tertiary">@{post.author_handle} · {new Date(post.created_at).toLocaleString(getLocaleFromLanguage(language))}</Text>
                   {post.deleted_at && <Text size="xs" style={{ color: 'var(--color-accent-error)', marginTop: 4 }}>{t('deletedByAdmin')}</Text>}
                 </Box>
                 {!post.deleted_at && (
@@ -144,7 +145,7 @@ export default function ContentManagement({
                   <Text size="sm" style={{ textDecoration: comment.deleted_at ? 'line-through' : 'none' }}>
                     {comment.content.slice(0, 100)}{comment.content.length > 100 ? '...' : ''}
                   </Text>
-                  <Text size="xs" color="tertiary">@{comment.author_handle} · {new Date(comment.created_at).toLocaleString(language === 'zh' ? 'zh-CN' : 'en-US')}</Text>
+                  <Text size="xs" color="tertiary">@{comment.author_handle} · {new Date(comment.created_at).toLocaleString(getLocaleFromLanguage(language))}</Text>
                   {comment.deleted_at && <Text size="xs" style={{ color: 'var(--color-accent-error)', marginTop: 4 }}>{t('deletedByAdmin')}</Text>}
                 </Box>
                 {!comment.deleted_at && (

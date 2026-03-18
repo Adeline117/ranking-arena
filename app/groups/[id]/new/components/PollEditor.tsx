@@ -1,5 +1,6 @@
 'use client'
 
+import { localizedLabel } from '@/lib/utils/format'
 import { Box, Text } from '@/app/components/base'
 import { tokens } from '@/lib/design-tokens'
 import type { PollOption } from '../types'
@@ -151,7 +152,7 @@ export function PollEditor({
             }}
           >
             {POLL_DURATION_OPTIONS.map(opt => (
-              <option key={opt.value} value={opt.value}>{language === 'zh' ? opt.label_zh : opt.label_en}</option>
+              <option key={opt.value} value={opt.value}>{localizedLabel(opt.label_zh, opt.label_en, language)}</option>
             ))}
           </select>
         </Box>

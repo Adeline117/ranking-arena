@@ -1,6 +1,7 @@
 'use client'
 
 import Link from 'next/link'
+import { getLocaleFromLanguage } from '@/lib/utils/format'
 import { tokens } from '@/lib/design-tokens'
 import { Box, Text } from '@/app/components/base'
 import { ThumbsUpIcon, CommentIcon } from '@/app/components/ui/icons'
@@ -110,7 +111,7 @@ export default function MasonryPostCard({ post, language = 'zh', onLike, onComme
               </Text>
             )}
             <Text size="xs" color="tertiary">
-              {new Date(post.created_at).toLocaleDateString(language === 'zh' ? 'zh-CN' : 'en-US')}
+              {new Date(post.created_at).toLocaleDateString(getLocaleFromLanguage(language))}
             </Text>
           </Box>
 

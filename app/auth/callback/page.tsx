@@ -12,7 +12,7 @@ import { useMultiAccountStore } from '@/lib/stores/multiAccountStore'
 function AuthCallbackContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
-  const { language } = useLanguage()
+  const { t, language } = useLanguage()
 
   useEffect(() => {
     const handleCallback = async () => {
@@ -138,7 +138,7 @@ function AuthCallbackContent() {
           margin: '0 auto 16px',
         }} />
         <p style={{ color: tokens.colors.text.secondary, fontSize: 14 }}>
-          {language === 'zh' ? '正在登录...' : 'Signing in...'}
+          {t('signingIn')}
         </p>
         <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
       </div>

@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect } from 'react'
+import { getLocaleFromLanguage } from '@/lib/utils/format'
 import { tokens } from '@/lib/design-tokens'
 import { Box, Text } from '../../base'
 import { useLanguage } from '../../Providers/LanguageProvider'
@@ -57,7 +58,7 @@ export function PeriodSelector({ period, onPeriodChange, source, lastUpdated }: 
         </Text>
         {lastUpdated && (
           <Text size="xs" color="tertiary" style={{ opacity: 0.6 }}>
-            {t('updatedAt')} {new Date(lastUpdated).toLocaleTimeString(language === 'zh' ? 'zh-CN' : 'en-US', { hour: '2-digit', minute: '2-digit' })}
+            {t('updatedAt')} {new Date(lastUpdated).toLocaleTimeString(getLocaleFromLanguage(language), { hour: '2-digit', minute: '2-digit' })}
           </Text>
         )}
       </Box>
@@ -75,9 +76,7 @@ export function PeriodSelector({ period, onPeriodChange, source, lastUpdated }: 
               background: 'color-mix(in srgb, var(--color-text-tertiary) 8%, transparent)',
               borderRadius: tokens.radius.md,
             }}
-            title={language === 'zh'
-              ? '该平台 API 返回的是累计 ROI，30D 和 90D 可能相同'
-              : 'This exchange API returns cumulative ROI. 30D and 90D values may be identical.'}
+            title={t('cumulativeRoiTooltip')}
           >
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="var(--color-text-tertiary)" strokeWidth="2">
               <circle cx="12" cy="12" r="10" />
@@ -85,7 +84,7 @@ export function PeriodSelector({ period, onPeriodChange, source, lastUpdated }: 
               <line x1="12" y1="8" x2="12.01" y2="8" />
             </svg>
             <Text size="xs" style={{ color: 'var(--color-text-tertiary)', fontWeight: 500 }}>
-              {language === 'zh' ? '累计 ROI' : 'Cumulative'}
+              {t('cumulativeRoiLabel')}
             </Text>
           </Box>
         )}

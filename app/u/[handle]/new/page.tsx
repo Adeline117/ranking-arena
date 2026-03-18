@@ -733,7 +733,7 @@ export default function NewPostPage() {
                   <path d="M15.5 3H5a2 2 0 0 0-2 2v14c0 1.1.9 2 2 2h14a2 2 0 0 0 2-2V8.5L15.5 3Z" />
                   <path d="M14 3v4a2 2 0 0 0 2 2h4" />
                 </svg>
-                {language === 'zh' ? '贴纸' : 'Sticker'}
+                {t('stickerButton')}
               </button>
               <DynamicStickerPicker
                 isOpen={showStickerPicker}
@@ -749,7 +749,7 @@ export default function NewPostPage() {
                 {t('mentionTip')}
               </Text>
               <Text size="xs" color="tertiary">
-                Ctrl+Enter {language === 'zh' ? '快速发布' : 'to publish'}
+                Ctrl+Enter {t('quickPublish')}
               </Text>
             </Box>
           </Box>

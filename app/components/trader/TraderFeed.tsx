@@ -2,6 +2,7 @@
 
 import { useState, useMemo, useEffect } from 'react'
 import Link from 'next/link'
+import { getLocaleFromLanguage } from '@/lib/utils/format'
 import { tokens } from '@/lib/design-tokens'
 import { Box, Text } from '../base'
 import ClaimTraderButton from './ClaimTraderButton'
@@ -45,7 +46,7 @@ function formatRelativeTime(dateString: string, language: string, t: (key: strin
   if (hours < 1) return t('justNow')
   if (hours < 24) return t('hoursAgoShort').replace('{n}', String(hours))
   if (days < 7) return t('daysAgoShort').replace('{n}', String(days))
-  return date.toLocaleDateString(language === 'zh' ? 'zh-CN' : 'en-US', { month: 'short', day: 'numeric' })
+  return date.toLocaleDateString(getLocaleFromLanguage(language), { month: 'short', day: 'numeric' })
 }
 
 export default function TraderFeed({ items, title, showPostButton = false, onPostClick, isRegistered, traderId, traderHandle, source }: TraderFeedProps) {

@@ -93,7 +93,7 @@ export default function LinkedAccountTabs({
             color: activeAccount === 'all' ? tokens.colors.accent.primary : tokens.colors.text.secondary,
           }}
         >
-          {language === 'zh' ? '综合' : 'All'}
+          {t('linkedAccountAll')}
         </Text>
         <Text
           size="xs"

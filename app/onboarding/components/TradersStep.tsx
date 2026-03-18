@@ -55,7 +55,7 @@ export default function TradersStep({ theme, language, traders, followedTraders,
           ))
         ) : traders.length === 0 ? (
           <Text style={{ textAlign: 'center', color: theme.textSecondary, padding: '20px 0' }}>
-            {language === 'zh' ? '暂无数据' : 'No data'}
+            {tr('noDataShort')}
           </Text>
         ) : (
           traders.slice(0, 10).map((t, idx) => {
@@ -91,7 +91,7 @@ export default function TradersStep({ theme, language, traders, followedTraders,
                     {formatTraderName(t)}
                   </Text>
                   <Text size="xs" style={{ color: theme.textSecondary }}>
-                    {t.arena_score != null ? `${(language === 'zh' ? '分数' : 'Score')} ${t.arena_score.toFixed(0)}` : t.source}
+                    {t.arena_score != null ? `${tr('scoreLabel')} ${t.arena_score.toFixed(0)}` : t.source}
                   </Text>
                 </Box>
                 <button className="follow-btn" onClick={() => onFollowTrader(tid)}

@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState, useRef } from 'react'
+import { getLocaleFromLanguage } from '@/lib/utils/format'
 import { tokens } from '@/lib/design-tokens'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import type { FearGreedData } from '@/lib/utils/fear-greed'
@@ -168,7 +169,7 @@ export default function FearGreedGauge() {
             color: tokens.colors.text.tertiary,
             fontWeight: 400,
           }}>
-            {new Date(Number(data.timestamp) * 1000).toLocaleDateString(language === 'zh' ? 'zh-CN' : 'en-US')}
+            {new Date(Number(data.timestamp) * 1000).toLocaleDateString(getLocaleFromLanguage(language))}
           </span>
         )}
       </div>

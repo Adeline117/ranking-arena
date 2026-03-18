@@ -19,18 +19,14 @@ export function getPnLTooltip(source: string, language: string): string {
   const sourceLower = source.toLowerCase()
 
   if (traderPnlSources.some(s => sourceLower.includes(s))) {
-    return language === 'zh'
-      ? 'PnL = 交易员本人盈亏'
-      : 'PnL = Trader\'s own profit/loss'
+    return t('pnlTraderOwn')
   }
 
   if (followerPnlSources.some(s => sourceLower.includes(s))) {
-    return language === 'zh'
-      ? 'PnL = 跟单者收益（非交易员本人）'
-      : 'PnL = Followers\' profit (not trader\'s own)'
+    return t('pnlFollowers')
   }
 
-  return language === 'zh' ? 'PnL = 盈亏金额' : 'PnL = Profit/Loss'
+  return t('pnlDefault')
 }
 
 export type SourceInfo = { exchange: string; type: string; typeColor: string }

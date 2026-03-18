@@ -1,5 +1,6 @@
 'use client'
 
+import { localizedLabel } from '@/lib/utils/format'
 import React from 'react'
 import { tokens } from '@/lib/design-tokens'
 import { Box } from '../base'
@@ -82,7 +83,7 @@ export default function FilterPresets({ activePreset, onPresetChange }: FilterPr
               whiteSpace: 'nowrap',
             }}
           >
-            {language === 'zh' ? preset.label.zh : preset.label.en}
+            {localizedLabel(preset.label.zh, preset.label.en, language)}
           </button>
         )
       })}

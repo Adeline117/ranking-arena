@@ -81,7 +81,7 @@ function HotContent() {
             <Card title={t('hotList')}>
               {!loggedIn && (
                 <Text size="xs" color="tertiary" style={{ marginBottom: tokens.spacing[2], fontSize: '11px' }}>
-                  {language === 'zh' ? '登录后可点赞、评论和发帖' : 'Log in to like, comment and post'}
+                  {t('loginToLikeCommentPost')}
                 </Text>
               )}
 

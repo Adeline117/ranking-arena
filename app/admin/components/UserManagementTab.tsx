@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import Image from 'next/image'
+import { getLocaleFromLanguage } from '@/lib/utils/format'
 import { tokens } from '@/lib/design-tokens'
 import { Box, Text, Button } from '@/app/components/base'
 import Card from '@/app/components/ui/Card'
@@ -221,7 +222,7 @@ export default function UserManagementTab({ accessToken }: UserManagementTabProp
                     </td>
                     <td style={{ padding: tokens.spacing[3] }}>
                       <Text size="xs" color="tertiary">
-                        {new Date(user.created_at).toLocaleDateString(language === 'zh' ? 'zh-CN' : 'en-US', { year: 'numeric', month: 'short', day: 'numeric' })}
+                        {new Date(user.created_at).toLocaleDateString(getLocaleFromLanguage(language), { year: 'numeric', month: 'short', day: 'numeric' })}
                       </Text>
                     </td>
                     <td style={{ padding: tokens.spacing[3], textAlign: 'right' }}>

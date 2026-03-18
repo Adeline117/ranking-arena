@@ -1,5 +1,6 @@
 'use client'
 
+import { getLocaleFromLanguage } from '@/lib/utils/format'
 import { tokens } from '@/lib/design-tokens'
 import { ARENA_PURPLE } from '@/lib/utils/content'
 
@@ -89,7 +90,7 @@ export function CustomPollCard({
           }}>
             {poll.isExpired
               ? t('pollEnded')
-              : t('pollDeadline').replace('{date}', new Date(poll.endAt).toLocaleString(language === 'zh' ? 'zh-CN' : 'en-US'))
+              : t('pollDeadline').replace('{date}', new Date(poll.endAt).toLocaleString(getLocaleFromLanguage(language)))
             }
           </span>
         )}

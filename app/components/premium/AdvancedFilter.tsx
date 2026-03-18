@@ -108,7 +108,7 @@ export default function AdvancedFilter({
   const gradeSection = (
     <Box style={{ marginBottom: tokens.spacing[4] }}>
       <Text size="xs" weight="bold" color="tertiary" style={{ marginBottom: tokens.spacing[2] }}>
-        {t('grade') || (language === 'zh' ? '等级' : 'Grade')}
+        {t('grade')}
       </Text>
       <Box style={{ display: 'flex', flexWrap: 'wrap', gap: tokens.spacing[2] }}>
         {['S', 'A', 'B', 'C', 'D'].map(g => {

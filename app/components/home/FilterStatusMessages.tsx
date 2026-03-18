@@ -1,6 +1,7 @@
 'use client'
 
 import { tokens } from '@/lib/design-tokens'
+import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import { Box, Text } from '../base'
 import type { FilterConfig } from '../premium/AdvancedFilter'
 
@@ -23,6 +24,7 @@ export default function FilterStatusMessages({
   hasActiveFilters,
   onResetFilters,
 }: FilterStatusMessagesProps) {
+  const { t } = useLanguage()
   return (
     <>
       {/* Exchange trader count hint */}
@@ -36,9 +38,7 @@ export default function FilterStatusMessages({
           background: tokens.glass.bg.light,
           borderRadius: tokens.radius.md,
         }}>
-          {language === 'zh'
-            ? `该平台共 ${advancedFilteredCount} 名交易员`
-            : `${advancedFilteredCount} traders on this exchange`}
+          {t('tradersOnExchange').replace('{count}', String(advancedFilteredCount))}
         </Box>
       )}
 
@@ -53,9 +53,7 @@ export default function FilterStatusMessages({
           border: `1px solid var(--color-border-primary)`,
         }}>
           <Text size="sm" style={{ color: 'var(--color-text-secondary)', marginBottom: tokens.spacing[2], display: 'block' }}>
-            {language === 'zh'
-              ? '当前筛选条件过滤了所有交易员'
-              : 'All traders have been filtered out'}
+            {t('allTradersFilteredOut')}
           </Text>
           <button
             onClick={onResetFilters}
@@ -70,7 +68,7 @@ export default function FilterStatusMessages({
               fontWeight: tokens.typography.fontWeight.bold,
             }}
           >
-            {language === 'zh' ? '重置筛选' : 'Reset Filters'}
+            {t('resetFilters')}
           </button>
         </Box>
       )}

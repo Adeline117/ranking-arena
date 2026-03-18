@@ -1,5 +1,6 @@
 'use client'
 
+import { localizedLabel } from '@/lib/utils/format'
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { tokens } from '@/lib/design-tokens'
@@ -33,7 +34,7 @@ const SETTINGS_ITEMS = [
  * Displays user info + quick navigation links in iOS Settings-like layout
  */
 export default function MobileProfileMenu() {
-  const { language } = useLanguage()
+  const { t, language } = useLanguage()
   const [user, setUser] = useState<UserInfo | null>(null)
   const [loading, setLoading] = useState(true)
 
@@ -116,7 +117,7 @@ export default function MobileProfileMenu() {
 
           <div style={{ flex: 1, minWidth: 0 }}>
             <div style={{ fontSize: tokens.typography.fontSize.md, fontWeight: 700, color: 'var(--color-text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-              {user ? (user.displayName || user.handle || user.email) : (language === 'zh' ? '登录 / 注册' : 'Sign In / Sign Up')}
+              {user ? (user.displayName || user.handle || user.email) : t('loginOrSignUp')}
             </div>
             {user?.handle && (
               <div style={{ fontSize: tokens.typography.fontSize.sm, color: 'var(--color-text-tertiary)', marginTop: 2 }}>
@@ -145,7 +146,7 @@ export default function MobileProfileMenu() {
             key={item.href}
             href={item.href}
             iconPath={item.iconPath}
-            label={language === 'zh' ? item.labelZh : item.labelEn}
+            label={localizedLabel(item.labelZh, item.labelEn, language)}
             showDivider={i < MENU_ITEMS.length - 1}
           />
         ))}
@@ -165,7 +166,7 @@ export default function MobileProfileMenu() {
             key={item.href}
             href={item.href}
             iconPath={item.iconPath}
-            label={language === 'zh' ? item.labelZh : item.labelEn}
+            label={localizedLabel(item.labelZh, item.labelEn, language)}
             showDivider={i < SETTINGS_ITEMS.length - 1}
             highlight={'highlight' in item ? item.highlight : false}
           />

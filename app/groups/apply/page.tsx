@@ -5,6 +5,7 @@ import { notFound } from 'next/navigation'
 import { useState, useEffect, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
+import { getLocaleFromLanguage } from '@/lib/utils/format'
 import { tokens } from '@/lib/design-tokens'
 import TopNav from '@/app/components/layout/TopNav'
 import Card from '@/app/components/ui/Card'
@@ -443,7 +444,7 @@ export default function ApplyGroupPage() {
                   <Box>
                     <Text weight="bold">{app.name}</Text>
                     <Text size="xs" color="tertiary">
-                      {new Date(app.created_at).toLocaleString(language === 'zh' ? 'zh-CN' : 'en-US')}
+                      {new Date(app.created_at).toLocaleString(getLocaleFromLanguage(language))}
                     </Text>
                   </Box>
                   {getStatusBadge(app.status)}

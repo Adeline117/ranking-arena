@@ -319,7 +319,7 @@ export default function NotificationsPage() {
           />
           {features.social && postReplyCount > 0 && (
             <FilterTab
-              label={language === 'zh' ? '帖子回复' : 'Replies'}
+              label={t('notifPostReplies')}
               count={postReplyCount}
               active={filterType === 'post_reply'}
               onClick={() => setFilterType('post_reply')}
@@ -327,7 +327,7 @@ export default function NotificationsPage() {
           )}
           {features.social && newFollowerCount > 0 && (
             <FilterTab
-              label={language === 'zh' ? '新粉丝' : 'Followers'}
+              label={t('notifNewFollowers')}
               count={newFollowerCount}
               active={filterType === 'new_follower'}
               onClick={() => setFilterType('new_follower')}
@@ -335,7 +335,7 @@ export default function NotificationsPage() {
           )}
           {features.social && groupUpdateCount > 0 && (
             <FilterTab
-              label={language === 'zh' ? '群组更新' : 'Groups'}
+              label={t('notifGroupUpdates')}
               count={groupUpdateCount}
               active={filterType === 'group_update'}
               onClick={() => setFilterType('group_update')}

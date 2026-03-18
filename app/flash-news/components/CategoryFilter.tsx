@@ -1,5 +1,6 @@
 'use client'
 
+import { localizedLabel } from '@/lib/utils/format'
 import { tokens } from '@/lib/design-tokens'
 import { Box } from '@/app/components/base'
 
@@ -43,7 +44,7 @@ export default function CategoryFilter({ categories, selectedCategory, onCategor
               outline: 'none',
             }}
           >
-            {language === 'zh' ? cat.label : cat.label_en}
+            {localizedLabel(cat.label, cat.label_en, language)}
           </button>
         )
       })}

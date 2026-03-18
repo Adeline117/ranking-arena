@@ -1,5 +1,6 @@
 'use client'
 
+import { localizedLabel } from '@/lib/utils/format'
 import { tokens } from '@/lib/design-tokens'
 import { Box, Text } from '@/app/components/base'
 import Card from '@/app/components/ui/Card'
@@ -94,7 +95,7 @@ export default function NewsCard({
               fontSize: '12px', fontWeight: '600',
               borderRadius: `0 0 ${tokens.radius.sm} 0`,
             }}>
-              {language === 'zh' ? impConfig.label : impConfig.label_en}
+              {localizedLabel(impConfig.label, impConfig.label_en, language)}
             </Box>
           )}
 

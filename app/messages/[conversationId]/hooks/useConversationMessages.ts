@@ -15,6 +15,7 @@ import { useRealtime } from '@/lib/hooks/useRealtime'
 import { getCsrfHeaders } from '@/lib/api/client'
 import { getMediaTypeLabel, updateMessageStatus, groupMessagesByDate } from '../components/types'
 import type { Message, MediaAttachment, OtherUser, MessageStatus } from '../components/types'
+import { getLocaleFromLanguage } from '@/lib/utils/format'
 
 interface UseConversationMessagesOptions {
   conversationId: string
@@ -197,14 +198,14 @@ export function useConversationMessages({ conversationId, userId, accessToken }:
   }, [])
 
   const formatTime = useCallback((dateString: string) => {
-    return new Date(dateString).toLocaleTimeString(language === 'zh' ? 'zh-CN' : 'en-US', { hour: '2-digit', minute: '2-digit' })
+    return new Date(dateString).toLocaleTimeString(getLocaleFromLanguage(language), { hour: '2-digit', minute: '2-digit' })
   }, [language])
 
   const formatDate = useCallback((dateString: string) => {
     const date = new Date(dateString); const today = new Date(); const yesterday = new Date(today); yesterday.setDate(yesterday.getDate() - 1)
     if (date.toDateString() === today.toDateString()) return t('today')
     if (date.toDateString() === yesterday.toDateString()) return t('yesterday')
-    return date.toLocaleDateString(language === 'zh' ? 'zh-CN' : 'en-US', { month: 'long', day: 'numeric' })
+    return date.toLocaleDateString(getLocaleFromLanguage(language), { month: 'long', day: 'numeric' })
   }, [language, t])
 
   const handleDeleteMessage = useCallback(async (msgId: string) => {

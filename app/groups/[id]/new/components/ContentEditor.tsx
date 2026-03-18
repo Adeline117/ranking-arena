@@ -139,7 +139,7 @@ export function ContentEditor({
       {/* UF15: Link Preview Card */}
       {linkPreviewLoading && (
         <Box style={{ marginTop: tokens.spacing[2], padding: tokens.spacing[3], borderRadius: tokens.radius.md, background: tokens.colors.bg.secondary, border: `1px solid ${tokens.colors.border.primary}` }}>
-          <Text size="xs" color="tertiary">{language === 'zh' ? '正在获取链接预览...' : 'Fetching link preview...'}</Text>
+          <Text size="xs" color="tertiary">{t('fetchingLinkPreview')}</Text>
         </Box>
       )}
       {linkPreview && !linkPreviewLoading && (
@@ -189,7 +189,7 @@ export function ContentEditor({
             <path d="M15.5 3H5a2 2 0 0 0-2 2v14c0 1.1.9 2 2 2h14a2 2 0 0 0 2-2V8.5L15.5 3Z" />
             <path d="M14 3v4a2 2 0 0 0 2 2h4" />
           </svg>
-          {language === 'zh' ? '贴纸' : 'Sticker'}
+          {t('stickerButton')}
         </button>
         <DynamicStickerPicker
           isOpen={showStickerPicker}

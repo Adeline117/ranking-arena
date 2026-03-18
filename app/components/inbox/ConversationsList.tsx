@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useCallback } from 'react'
 import Link from 'next/link'
+import { getLocaleFromLanguage } from '@/lib/utils/format'
 import { tokens } from '@/lib/design-tokens'
 import { supabase } from '@/lib/supabase/client'
 import { useInboxStore } from '@/lib/stores/inboxStore'
@@ -180,7 +181,7 @@ export default function ConversationsList(): React.ReactElement {
     const now = new Date()
     const diffMs = now.getTime() - date.getTime()
     const days = Math.floor(diffMs / (1000 * 60 * 60 * 24))
-    const locale = language === 'zh' ? 'zh-CN' : 'en-US'
+    const locale = getLocaleFromLanguage(language)
 
     if (days === 0) {
       return date.toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit' })
@@ -292,7 +293,7 @@ export default function ConversationsList(): React.ReactElement {
               {t('noMessages')}
             </div>
             <div style={{ fontSize: 12, color: tokens.colors.text.tertiary, lineHeight: 1.5, maxWidth: 240, margin: '0 auto' }}>
-              {t('noMessagesHint') || (language === 'zh' ? '关注交易者后可以发起私信对话' : 'Follow traders to start a conversation')}
+              {t('noMessagesHint')}
             </div>
           </div>
         </div>

@@ -1,5 +1,6 @@
 'use client'
 
+import { localizedLabel } from '@/lib/utils/format'
 import { useEffect, useRef, type CSSProperties } from 'react'
 import Image from 'next/image'
 import { tokens } from '@/lib/design-tokens'
@@ -69,7 +70,7 @@ export default function StickerPicker({ onSelect, isOpen, onClose }: StickerPick
     <div ref={panelRef} style={containerStyle}>
       <div style={gridStyle}>
         {STICKERS.map((sticker) => {
-          const label = language === 'zh' ? sticker.label_zh : sticker.label_en
+          const label = localizedLabel(sticker.label_zh, sticker.label_en, language)
           return (
             <button
               key={sticker.id}
@@ -98,7 +99,7 @@ export default function StickerPicker({ onSelect, isOpen, onClose }: StickerPick
                 whiteSpace: 'nowrap',
                 maxWidth: '100%',
               }}>
-                {language === 'zh' ? sticker.name_zh : sticker.name_en}
+                {localizedLabel(sticker.name_zh, sticker.name_en, language)}
               </span>
             </button>
           )
