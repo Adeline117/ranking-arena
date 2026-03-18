@@ -106,8 +106,19 @@ export function DeleteAccountModal({
             background: `${tokens.colors.accent.warning}10`,
             border: `1px solid ${tokens.colors.accent.warning}30`,
           }}>
-            <Text size="xs" style={{ color: tokens.colors.accent.warning }}>
+            <Text size="xs" style={{ color: tokens.colors.accent.warning, lineHeight: 1.6 }}>
               {t('deleteAccountWarning')}
+            </Text>
+          </Box>
+          <Box style={{
+            marginTop: tokens.spacing[2],
+            padding: tokens.spacing[3],
+            borderRadius: tokens.radius.md,
+            background: `${tokens.colors.accent.primary}08`,
+            border: `1px solid ${tokens.colors.accent.primary}20`,
+          }}>
+            <Text size="xs" style={{ color: tokens.colors.accent.primary, lineHeight: 1.6 }}>
+              {t('deleteAccountRecoveryNote') || 'Your account will be deactivated for 30 days before permanent deletion. You can log back in during this period to cancel.'}
             </Text>
           </Box>
         </Box>
@@ -154,9 +165,14 @@ export function DeleteAccountModal({
           />
         </Box>
         {error && (
-          <Text size="xs" style={{ color: tokens.colors.accent.error, marginBottom: tokens.spacing[3] }}>
-            {error}
-          </Text>
+          <Box style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[2], marginBottom: tokens.spacing[3] }}>
+            <Text size="xs" style={{ color: tokens.colors.accent.error, flex: 1 }}>
+              {error}
+            </Text>
+            <Button variant="ghost" size="sm" onClick={onDelete} disabled={deleting} style={{ color: tokens.colors.accent.error, fontSize: tokens.typography.fontSize.xs, padding: `${tokens.spacing[1]} ${tokens.spacing[2]}` }}>
+              {t('retry') || 'Retry'}
+            </Button>
+          </Box>
         )}
         <Box style={{ display: 'flex', gap: tokens.spacing[3], justifyContent: 'flex-end' }}>
           <Button variant="secondary" size="sm" onClick={onClose}>

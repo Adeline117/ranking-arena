@@ -126,7 +126,7 @@ export default function UserFollowButton({
         setLoading(false)
         showToast(t('timeoutRetry'), 'warning')
       }
-    }, 10000)
+    }, 8000) // Unified 8s timeout (same as TraderFollowButton)
 
     try {
       const authHeaders = await getAuthHeadersAsync()

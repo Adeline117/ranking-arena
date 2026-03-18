@@ -25,6 +25,7 @@ import {
 import { isSolanaPlatform, isDexWalletPlatform } from '@/lib/validators/exchange-uid-resolver'
 import { logger } from '@/lib/logger'
 import { resolveTrader } from '@/lib/data/unified'
+import { getSharedRedis } from '@/lib/cache/redis-client'
 
 /** Maximum age of a signature message (5 minutes) */
 const MAX_MESSAGE_AGE_MS = 5 * 60 * 1000
@@ -135,6 +136,21 @@ export async function POST(request: NextRequest) {
         new Error('Signature message has expired. Please sign a new message.'),
         'verify-wallet'
       )
+    }
+
+    // Replay prevention: check if this exact signature was already used (Redis dedup, 10min TTL)
+    try {
+      const redis = await getSharedRedis()
+      if (redis) {
+        const sigKey = `wallet-sig:${signature.slice(0, 32)}`
+        const existing = await redis.get(sigKey)
+        if (existing) {
+          return handleError(new Error('This signature has already been used. Please sign a new message.'), 'verify-wallet')
+        }
+        await redis.set(sigKey, '1', { ex: 600 }) // 10min TTL (covers the 5min message age window + buffer)
+      }
+    } catch (err) {
+      logger.warn('[verify-wallet] Redis nonce check failed, continuing without dedup:', err)
     }
 
     // If trader_key is provided, validate it matches the message

@@ -350,6 +350,12 @@ export function useSettingsHandlers({ showToast, showConfirm, t }: UseSettingsHa
     if (handle && !handleValidation.valid) { showToast(handleValidation.message, 'error'); return }
     if (handle && handleAvailable === false) { showToast(t('usernameInUse'), 'error'); return }
 
+    // Server-side bio length validation
+    if (bio && bio.length > 200) {
+      showToast(t('bioTooLong') || 'Bio must be 200 characters or less', 'error')
+      return
+    }
+
     submittingRef.current = true
     setSaving(true)
     try {
@@ -469,10 +475,16 @@ export function useSettingsHandlers({ showToast, showConfirm, t }: UseSettingsHa
 
   const handleChangeEmail = async () => {
     if (submittingRef.current || savingEmail || !newEmail) return
+    // Basic server-side email format validation before calling Supabase Auth
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+    if (!emailRegex.test(newEmail.trim())) {
+      showToast(t('invalidEmailFormat') || 'Invalid email format', 'error')
+      return
+    }
     submittingRef.current = true
     setSavingEmail(true)
     try {
-      const { error } = await supabase.auth.updateUser({ email: newEmail })
+      const { error } = await supabase.auth.updateUser({ email: newEmail.trim() })
       if (error) { showToast(error.message, 'error'); return }
       showToast(t('verificationEmailSent'), 'success')
       setNewEmail('')
