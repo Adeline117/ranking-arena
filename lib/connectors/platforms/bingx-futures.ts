@@ -90,17 +90,24 @@ export class BingxFuturesConnector extends BaseConnector {
       const globalObj = dataObj?.global as Record<string, unknown> | undefined
       const rawList = dataObj?.list || globalObj?.result || []
       const list = Array.isArray(rawList) ? rawList : []
-      const traders: TraderSource[] = list.map((item: Record<string, unknown>) => ({
-        platform: 'bingx' as const,
-        market_type: 'futures' as const,
-        trader_key: String(item.uniqueId || item.traderUid || item.uid || ''),
-        display_name: String(item.traderName || '') || null,
-        profile_url: `https://bingx.com/en/CopyTrading/tradeDetail/${item.uniqueId}`,
-        discovered_at: new Date().toISOString(),
-        last_seen_at: new Date().toISOString(),
-        is_active: true,
-        raw: item as Record<string, unknown>,
-      }))
+      const traders: TraderSource[] = list.map((item: Record<string, unknown>) => {
+        // BingX scraper returns nested: { traderInfoVo: { trader, traderName, ... }, ... }
+        // Direct API returns flat: { uniqueId, traderName, ... }
+        const info = item.traderInfoVo as Record<string, unknown> | undefined
+        const traderId = String(info?.trader || info?.apiIdentity || item.uniqueId || item.traderUid || item.uid || '')
+        const traderName = String(info?.traderName || item.traderName || '') || null
+        return {
+          platform: 'bingx' as const,
+          market_type: 'futures' as const,
+          trader_key: traderId,
+          display_name: traderName,
+          profile_url: `https://bingx.com/en/CopyTrading/tradeDetail/${traderId}`,
+          discovered_at: new Date().toISOString(),
+          last_seen_at: new Date().toISOString(),
+          is_active: true,
+          raw: item as Record<string, unknown>,
+        }
+      })
 
       return { traders, total_available: traders.length, window, fetched_at: new Date().toISOString() }
     } catch (err) {
@@ -213,7 +220,10 @@ export class BingxFuturesConnector extends BaseConnector {
    * Note: ROI in decimal format, normalized via ×100 if ≤1.
    */
   normalize(raw: Record<string, unknown>): Record<string, unknown> {
-    const rawRoi = this.num(raw.roi ?? raw.roiRate ?? raw.returnRate ?? raw.pnlRatio)
+    // Handle nested scraper format: { traderInfoVo: { trader, traderName }, cumulativePnlRate7Days, ... }
+    const info = raw.traderInfoVo as Record<string, unknown> | undefined
+
+    const rawRoi = this.num(raw.roi ?? raw.roiRate ?? raw.returnRate ?? raw.pnlRatio ?? raw.cumulativePnlRate7Days)
     const roi = rawRoi != null ? (Math.abs(rawRoi) <= 1 ? rawRoi * 100 : rawRoi) : null
     const rawWr = this.num(raw.winRate)
     const winRate = rawWr != null ? (rawWr <= 1 ? rawWr * 100 : rawWr) : null
@@ -221,11 +231,11 @@ export class BingxFuturesConnector extends BaseConnector {
     const maxDrawdown = rawMdd != null ? Math.abs(rawMdd <= 1 ? rawMdd * 100 : rawMdd) : null
 
     return {
-      trader_key: raw.uniqueId ?? raw.uid ?? raw.traderId ?? null,
-      display_name: raw.traderName ?? raw.nickname ?? raw.nickName ?? raw.displayName ?? null,
-      avatar_url: raw.headUrl ?? raw.avatarUrl ?? raw.avatar ?? null,
+      trader_key: info?.trader ?? info?.apiIdentity ?? raw.uniqueId ?? raw.uid ?? raw.traderId ?? null,
+      display_name: info?.traderName ?? raw.traderName ?? raw.nickname ?? raw.nickName ?? raw.displayName ?? null,
+      avatar_url: info?.avatar ?? raw.headUrl ?? raw.avatarUrl ?? raw.avatar ?? null,
       roi,
-      pnl: this.num(raw.pnl ?? raw.totalPnl ?? raw.totalEarnings ?? raw.profit),
+      pnl: this.num(raw.pnl ?? raw.totalPnl ?? raw.totalEarnings ?? raw.followerEarning ?? raw.profit),
       win_rate: winRate,
       max_drawdown: maxDrawdown,
       trades_count: null,
@@ -233,7 +243,7 @@ export class BingxFuturesConnector extends BaseConnector {
       copiers: null,
       aum: null,
       sharpe_ratio: null,
-      platform_rank: null,
+      platform_rank: this.num(raw.rank),
     }
   }
 
