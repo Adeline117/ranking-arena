@@ -311,22 +311,22 @@ export default function ExchangeRankingClient({
   const [traders, setTraders] = useState(initialTraders)
   useEffect(() => { setTraders(initialTraders) }, [initialTraders])
 
-  const handleRealtimeUpdate = useCallback((updates: Array<{ source_trader_id: string; roi: number; pnl: number; win_rate: number | null; max_drawdown: number | null; arena_score: number | null }>) => {
+  const handleRealtimeUpdate = useCallback((updates: Array<{ id: string; source: string; roi: number; pnl: number | null; win_rate: number | null; max_drawdown: number | null; arena_score: number | null; [key: string]: unknown }>) => {
     setTraders(prev => {
-      const updateMap = new Map(updates.map(u => [u.source_trader_id, u]))
+      const updateMap = new Map(updates.map(u => [u.id, u]))
       let changed = false
       const next = prev.map(t => {
         // Match on _source_id (source_trader_id) first, fall back to trader_key (handle)
         const u = updateMap.get(t._source_id || '') || updateMap.get(t.trader_key)
         if (!u) return t
         changed = true
-        return { ...t, roi: u.roi, pnl: u.pnl, win_rate: u.win_rate, max_drawdown: u.max_drawdown, arena_score: u.arena_score }
+        return { ...t, roi: u.roi, pnl: u.pnl ?? t.pnl, win_rate: u.win_rate, max_drawdown: u.max_drawdown, arena_score: u.arena_score }
       })
       return changed ? next : prev
     })
   }, [])
 
-  useRealtimeRankings({ source: exchange, onUpdate: handleRealtimeUpdate })
+  useRealtimeRankings({ onUpdate: handleRealtimeUpdate })
 
   // Compute data freshness from the most recent captured_at timestamp
   const { lastUpdatedText, isStale } = useMemo(() => {
