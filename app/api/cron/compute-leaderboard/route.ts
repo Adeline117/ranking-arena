@@ -97,21 +97,96 @@ export async function GET(request: NextRequest) {
   const supabase = getSupabaseAdmin()
   const isDiag = request.nextUrl.searchParams.get('diag') === '1'
 
-  // Quick diagnostic mode: test v1+v2 queries without computing
+  // Quick diagnostic mode: test v1+v2 queries and run one season with debug
   if (isDiag) {
-    const diag: Record<string, unknown> = { v2: {}, v1: {}, freshness: {} }
+    const diag: Record<string, unknown> = { v2: {}, v1: {} }
     const threshold48h = new Date(Date.now() - 48 * 3600 * 1000).toISOString()
     const testSources = ['binance_futures', 'hyperliquid', 'bybit', 'drift']
+
+    // Test individual queries with count
     for (const src of testSources) {
-      const { data: v2Data, error: v2Err } = await supabase
-        .from('trader_snapshots_v2').select('trader_key').eq('platform', src).eq('window', '90D').gte('created_at', threshold48h).limit(1)
-      ;(diag.v2 as Record<string, unknown>)[src] = v2Err ? `ERROR: ${v2Err.message}` : (v2Data?.length ?? 0)
-      const { data: v1Data, error: v1Err } = await supabase
-        .from('trader_snapshots').select('source_trader_id').eq('source', src).eq('season_id', '90D').gte('captured_at', threshold48h).limit(1)
-      ;(diag.v1 as Record<string, unknown>)[src] = v1Err ? `ERROR: ${v1Err.message}` : (v1Data?.length ?? 0)
+      const { count: v2Count, error: v2Err } = await supabase
+        .from('trader_snapshots_v2').select('*', { count: 'exact', head: true }).eq('platform', src).eq('window', '90D').gte('created_at', threshold48h)
+      ;(diag.v2 as Record<string, unknown>)[src] = v2Err ? `ERROR: ${v2Err.message}` : v2Count
+      const { count: v1Count, error: v1Err } = await supabase
+        .from('trader_snapshots').select('*', { count: 'exact', head: true }).eq('source', src).eq('season_id', '90D').gte('captured_at', threshold48h)
+      ;(diag.v1 as Record<string, unknown>)[src] = v1Err ? `ERROR: ${v1Err.message}` : v1Count
     }
     diag.all_sources_count = ALL_SOURCES.length
     diag.threshold_48h = threshold48h
+
+    // Run computeSeason for 90D in dry-run mode and capture traderMap size
+    const traderMap = new Map<string, { source: string; roi: number | null }>()
+    const batchSize = 10
+    const freshnessISOBySource = (source: string): string => {
+      const t = new Date(); t.setHours(t.getHours() - getFreshnessHours(source)); return t.toISOString()
+    }
+    // v2
+    for (let i = 0; i < ALL_SOURCES.length; i += batchSize) {
+      const batch = ALL_SOURCES.slice(i, i + batchSize)
+      const results = await Promise.all(batch.map(async (source) => {
+        const { data } = await supabase.from('trader_snapshots_v2')
+          .select('platform, trader_key, roi_pct')
+          .eq('platform', source).eq('window', '90D')
+          .gte('created_at', freshnessISOBySource(source)).limit(5000)
+        return (data || []).map((d: { platform: string; trader_key: string; roi_pct: number }) => ({
+          source: d.platform, trader_key: d.trader_key, roi: d.roi_pct
+        }))
+      }))
+      results.forEach(rows => rows.forEach(r => {
+        const key = `${r.source}:${r.trader_key}`
+        if (!traderMap.has(key)) traderMap.set(key, { source: r.source, roi: r.roi })
+      }))
+    }
+    diag.v2_total = traderMap.size
+
+    // v1
+    const v1Before = traderMap.size
+    for (let i = 0; i < ALL_SOURCES.length; i += batchSize) {
+      const batch = ALL_SOURCES.slice(i, i + batchSize)
+      const results = await Promise.all(batch.map(async (source) => {
+        const { data, error } = await supabase.from('trader_snapshots')
+          .select('source, source_trader_id, roi')
+          .eq('source', source).eq('season_id', '90D')
+          .gte('captured_at', freshnessISOBySource(source))
+          .order('captured_at', { ascending: false }).limit(5000)
+        if (error) return { source, error: error.message, count: 0 }
+        return { source, count: data?.length ?? 0, error: null }
+      }))
+      results.forEach(r => {
+        if ('error' in r && r.error) {
+          ;(diag as Record<string, unknown>)[`v1_error_${r.source}`] = r.error
+        }
+      })
+      // Also add to map
+      const results2 = await Promise.all(batch.map(async (source) => {
+        const { data } = await supabase.from('trader_snapshots')
+          .select('source, source_trader_id, roi')
+          .eq('source', source).eq('season_id', '90D')
+          .gte('captured_at', freshnessISOBySource(source))
+          .order('captured_at', { ascending: false }).limit(5000)
+        return (data || []).map((d: { source: string; source_trader_id: string; roi: number }) => ({
+          source: d.source, trader_key: d.source_trader_id, roi: d.roi
+        }))
+      }))
+      results2.forEach(rows => rows.forEach(r => {
+        const key = `${r.source}:${r.trader_key}`
+        if (!traderMap.has(key)) traderMap.set(key, { source: r.source, roi: r.roi })
+      }))
+    }
+    diag.v1_added = traderMap.size - v1Before
+    diag.total_after_merge = traderMap.size
+
+    // Apply filters
+    const roiThreshold = ROI_ANOMALY_THRESHOLDS['90D']
+    const withRoi = Array.from(traderMap.values()).filter(t => t.roi != null)
+    const withinThreshold = withRoi.filter(t => Math.abs(t.roi!) <= roiThreshold)
+    const notBusted = withinThreshold.filter(t => t.roi! > -90)
+    diag.filter_roi_not_null = withRoi.length
+    diag.filter_roi_threshold = withinThreshold.length
+    diag.filter_not_busted = notBusted.length
+    diag.roi_threshold = roiThreshold
+
     return NextResponse.json(diag)
   }
 
@@ -647,11 +722,6 @@ async function computeSeason(
 
   if (!uniqueTraders.length) {
     logger.warn(`[${season}] No traders passed filters! traderMap.size=${traderMap.size}, roiThreshold=${roiThreshold}`)
-    // Log a sample of filtered-out traders
-    const sample = Array.from(traderMap.values()).slice(0, 5)
-    for (const t of sample) {
-      logger.warn(`[${season}] Sample: ${t.source}:${t.source_trader_id} roi=${t.roi} trades=${t.trades_count}`)
-    }
     return 0
   }
 
