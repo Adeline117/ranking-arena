@@ -25,8 +25,9 @@ function createConnector() {
 
 function mockFetchResponse(body: unknown, status = 200) {
   mockFetch.mockResolvedValueOnce({
+    ok: status >= 200 && status < 300,
     status,
-    headers: { get: () => null },
+    headers: { get: (key: string) => key === 'content-type' ? 'application/json' : null },
     json: async () => body,
   })
 }
@@ -54,33 +55,32 @@ jest.mock('@/lib/utils/arena-score', () => ({
 
 describe('GateioFuturesConnector', () => {
   describe('discoverLeaderboard', () => {
+    // Gate.io connector uses `list` at top level OR `data.list`
     const validResponse = {
-      data: {
-        list: [
-          {
-            uid: '100001',
-            nickname: 'GateTrader1',
-            avatar: 'https://img.gate.io/avatar1.jpg',
-            roi: 1.25,
-            pnl: 80000,
-            followers: 3500,
-            copiers: 120,
-            winRate: 0.72,
-            maxDrawdown: -0.15,
-          },
-          {
-            uid: '100002',
-            nickname: 'GateTrader2',
-            avatar: null,
-            roi: 0.45,
-            pnl: 12000,
-            followers: 200,
-            copiers: 10,
-            winRate: 0.55,
-            maxDrawdown: -0.30,
-          },
-        ],
-      },
+      list: [
+        {
+          uid: '100001',
+          nickname: 'GateTrader1',
+          avatar: 'https://img.gate.io/avatar1.jpg',
+          roi: 1.25,
+          pnl: 80000,
+          followers: 3500,
+          copiers: 120,
+          winRate: 0.72,
+          maxDrawdown: -0.15,
+        },
+        {
+          uid: '100002',
+          nickname: 'GateTrader2',
+          avatar: null,
+          roi: 0.45,
+          pnl: 12000,
+          followers: 200,
+          copiers: 10,
+          winRate: 0.55,
+          maxDrawdown: -0.30,
+        },
+      ],
     }
 
     test('returns traders from valid response', async () => {
@@ -111,7 +111,8 @@ describe('GateioFuturesConnector', () => {
 
     test('returns empty array when response has no data', async () => {
       const connector = createConnector()
-      mockFetchResponse({ data: null })
+      // Empty list causes a break on first page — connector returns empty
+      mockFetchResponse({ list: [] })
 
       const result = await connector.discoverLeaderboard('30d')
 
@@ -121,7 +122,7 @@ describe('GateioFuturesConnector', () => {
 
     test('returns empty array when list is empty', async () => {
       const connector = createConnector()
-      mockFetchResponse({ data: { list: [] } })
+      mockFetchResponse({ list: [] })
 
       const result = await connector.discoverLeaderboard('30d')
 
@@ -129,35 +130,15 @@ describe('GateioFuturesConnector', () => {
       expect(result.total_available).toBe(0)
     })
 
-    test('returns empty result on network error (catch block)', async () => {
+    test('throws on first-page network error (fatal)', async () => {
       const connector = createConnector()
       mockFetchNetworkError()
 
-      const result = await connector.discoverLeaderboard('7d')
-
-      // Gate.io connector catches errors and returns empty result
-      expect(result.traders).toHaveLength(0)
-      expect(result.total_available).toBe(0)
-      expect(result.window).toBe('7d')
-      expect(result.fetched_at).toBeDefined()
+      // Gate.io throws when first page fails (both direct and VPS fail)
+      await expect(connector.discoverLeaderboard('7d')).rejects.toThrow()
     })
 
-    test('returns empty result on timeout / server error', async () => {
-      const connector = createConnector()
-      mockFetch.mockResolvedValueOnce({
-        status: 500,
-        headers: { get: () => null },
-        json: async () => ({ error: 'Internal Server Error' }),
-      })
-
-      // Gate.io connector wraps in try/catch, so server errors also return empty
-      const result = await connector.discoverLeaderboard('90d')
-
-      expect(result.traders).toHaveLength(0)
-      expect(result.total_available).toBe(0)
-    })
-
-    test('sends correct period parameter for each window', async () => {
+    test('uses gate.com domain with cycle=month parameter', async () => {
       const connector = createConnector()
       mockFetchResponse(validResponse)
 
@@ -165,21 +146,22 @@ describe('GateioFuturesConnector', () => {
 
       const call = mockFetch.mock.calls[0]
       const url = call[0] as string
-      expect(url).toContain('period=90d')
-      expect(url).toContain('limit=50')
-      expect(url).toContain('sort=roi')
+      expect(url).toContain('gate.com')
+      expect(url).toContain('cycle=month')
+      expect(url).toContain('order_by=profit_rate')
     })
 
-    test('defaults period to 30d for unsupported window', async () => {
+    test('uses gate.com domain for any window (cycle=month always)', async () => {
       const connector = createConnector()
       mockFetchResponse(validResponse)
 
-      // Pass a window that is not in the periodMap
-      await connector.discoverLeaderboard('24h' as never, 100)
+      // Regardless of window, connector always uses cycle=month
+      await connector.discoverLeaderboard('7d', 100)
 
       const call = mockFetch.mock.calls[0]
       const url = call[0] as string
-      expect(url).toContain('period=30d')
+      expect(url).toContain('gate.com')
+      expect(url).toContain('cycle=month')
     })
 
     test('stores raw data on each trader', async () => {
@@ -191,7 +173,6 @@ describe('GateioFuturesConnector', () => {
       const first = result.traders[0]
       expect(first.raw).toBeDefined()
       expect((first.raw as Record<string, unknown>).uid).toBe('100001')
-      expect((first.raw as Record<string, unknown>).roi).toBe(1.25)
     })
   })
 
@@ -412,12 +393,13 @@ describe('GateioFuturesConnector', () => {
   // ============================================
 
   describe('normalize', () => {
-    test('normalizes raw trader entry correctly', () => {
+    test('normalizes raw trader entry correctly — profit_rate is ratio (multiplied ×100)', () => {
       const connector = createConnector()
+      // Gate.io normalize: profit_rate ratio × 100 = roi
       const raw = {
         uid: '100001',
         nickname: 'GateTrader1',
-        roi: 1.25,
+        profit_rate: 1.25,  // ratio → 125% roi
         pnl: 80000,
       }
 
@@ -425,7 +407,7 @@ describe('GateioFuturesConnector', () => {
 
       expect(normalized.trader_key).toBe('100001')
       expect(normalized.display_name).toBe('GateTrader1')
-      expect(normalized.roi).toBe(1.25)
+      expect(normalized.roi).toBe(125)  // 1.25 × 100
       expect(normalized.pnl).toBe(80000)
     })
 
@@ -434,7 +416,7 @@ describe('GateioFuturesConnector', () => {
       const raw = {
         uid: null,
         nickname: null,
-        roi: undefined,
+        profit_rate: undefined,
         pnl: null,
       }
 
@@ -451,7 +433,7 @@ describe('GateioFuturesConnector', () => {
       const raw = {
         uid: '100050',
         nickname: 'ZeroTrader',
-        roi: 0,
+        profit_rate: 0,
         pnl: 0,
       }
 

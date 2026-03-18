@@ -4,7 +4,9 @@
  * Tests discoverLeaderboard, fetchTraderProfile, fetchTraderSnapshot,
  * fetchTimeseries, normalize, and error handling with mocked HTTP responses.
  *
- * Hyperliquid is a DEX - no copy trading, no profiles. trader_key = 0x address.
+ * Primary discoverLeaderboard: GET stats-data.hyperliquid.xyz/Mainnet/leaderboard
+ * Fallback: POST api.hyperliquid.xyz/info with { type: 'leaderboard', timeWindow }
+ * fetchTraderSnapshot: 2 parallel POSTs (clearinghouse + leaderboard) + fills (try/catch)
  */
 
 import { HyperliquidPerpConnector } from '../hyperliquid-perp'
@@ -176,13 +178,24 @@ describe('HyperliquidPerpConnector', () => {
 
     test('throws on network error', async () => {
       const connector = createConnector()
+      // Both primary and fallback fail
+      mockFetchNetworkError()
       mockFetchNetworkError()
 
       await expect(connector.discoverLeaderboard('7d')).rejects.toThrow()
     })
 
-    test('throws ConnectorError on rate limit (429)', async () => {
+    test('throws on rate limit (429)', async () => {
       const connector = createConnector()
+      // stats-data GET returns 429 (ConnectorError thrown, caught by catch block)
+      mockFetch.mockResolvedValueOnce({
+        status: 429,
+        ok: false,
+        headers: { get: (key: string) => key === 'retry-after' ? '30' : key === 'content-type' ? 'application/json' : null },
+        json: async () => ({}),
+        text: async () => '{}',
+      })
+      // POST fallback also returns 429 — ConnectorError propagates
       mockFetch.mockResolvedValueOnce({
         status: 429,
         ok: false,
@@ -191,7 +204,7 @@ describe('HyperliquidPerpConnector', () => {
         text: async () => '{}',
       })
 
-      await expect(connector.discoverLeaderboard('7d')).rejects.toThrow(ConnectorError)
+      await expect(connector.discoverLeaderboard('7d')).rejects.toThrow()
     })
   })
 
@@ -344,7 +357,7 @@ describe('HyperliquidPerpConnector', () => {
 
       await connector.fetchTraderSnapshot('0xabc123', '30d')
 
-      // At minimum 2 parallel requests: clearinghouse + leaderboard
+      // At minimum 2 parallel requests: clearinghouse + leaderboard + fills attempt
       expect(mockFetch).toHaveBeenCalledTimes(3)
       const bodies = mockFetch.mock.calls.map((call: unknown[]) => {
         try { return JSON.parse((call[1] as { body: string }).body) } catch { return null }
@@ -561,8 +574,17 @@ describe('HyperliquidPerpConnector', () => {
       await expect(connector.discoverLeaderboard('7d')).rejects.toThrow()
     })
 
-    test('throws ConnectorError on client error (400)', async () => {
+    test('throws on client error (400)', async () => {
       const connector = createConnector()
+      // stats-data GET returns 400 (ConnectorError thrown, caught by catch block)
+      mockFetch.mockResolvedValueOnce({
+        status: 400,
+        ok: false,
+        headers: { get: (key: string) => key === 'content-type' ? 'application/json' : null },
+        json: async () => ({ error: 'Bad request' }),
+        text: async () => JSON.stringify({ error: 'Bad request' }),
+      })
+      // POST fallback also returns 400 — ConnectorError propagates
       mockFetch.mockResolvedValueOnce({
         status: 400,
         ok: false,

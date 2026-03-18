@@ -3,6 +3,9 @@
  *
  * Tests discoverLeaderboard, fetchTraderProfile, fetchTraderSnapshot,
  * fetchTimeseries, normalize, and error handling with mocked HTTP responses.
+ *
+ * NOTE: discoverLeaderboard is VPS-first with pagination loop.
+ * fetchTraderProfile and fetchTraderSnapshot use direct this.request() calls.
  */
 
 import { BitgetFuturesConnector } from '../bitget-futures'
@@ -26,8 +29,9 @@ function createConnector() {
 
 function mockFetchResponse(body: unknown, status = 200) {
   mockFetch.mockResolvedValueOnce({
+    ok: status >= 200 && status < 300,
     status,
-    headers: { get: () => null },
+    headers: { get: (key: string) => key === 'content-type' ? 'application/json' : null },
     json: async () => body,
   })
 }
@@ -77,8 +81,9 @@ describe('BitgetFuturesConnector', () => {
       },
     }
 
-    test('returns traders from valid response', async () => {
+    test('returns traders from valid response (via VPS mock)', async () => {
       const connector = createConnector()
+      // VPS strategy 1 (scraper) gets first mock — needs ok: true to succeed
       mockFetchResponse(validResponse)
 
       const result = await connector.discoverLeaderboard('7d', 20)
@@ -114,34 +119,35 @@ describe('BitgetFuturesConnector', () => {
       expect(result.traders).toHaveLength(0)
     })
 
-    test('sends correct timeRange query parameter', async () => {
+    test('VPS call contains period parameter for 30d window', async () => {
       const connector = createConnector()
       mockFetchResponse(validResponse)
 
       await connector.discoverLeaderboard('30d')
 
       const url = mockFetch.mock.calls[0][0]
-      expect(url).toContain('timeRange=2')  // 30d maps to 2
+      // VPS URL uses period=2 (WINDOW_MAP['30d'] = 2)
+      expect(url).toContain('period=2')
     })
 
-    test('sends timeRange=1 for 7d window', async () => {
+    test('VPS call contains period=1 for 7d window', async () => {
       const connector = createConnector()
       mockFetchResponse(validResponse)
 
       await connector.discoverLeaderboard('7d')
 
       const url = mockFetch.mock.calls[0][0]
-      expect(url).toContain('timeRange=1')
+      expect(url).toContain('period=1')
     })
 
-    test('sends timeRange=3 for 90d window', async () => {
+    test('VPS call contains period=3 for 90d window', async () => {
       const connector = createConnector()
       mockFetchResponse(validResponse)
 
       await connector.discoverLeaderboard('90d')
 
       const url = mockFetch.mock.calls[0][0]
-      expect(url).toContain('timeRange=3')
+      expect(url).toContain('period=3')
     })
 
     test('throws on network error', async () => {
@@ -151,11 +157,22 @@ describe('BitgetFuturesConnector', () => {
       await expect(connector.discoverLeaderboard('7d')).rejects.toThrow()
     })
 
-    test('throws ConnectorError on rate limit (429)', async () => {
+    test('throws ConnectorError on rate limit (429) in direct API call', async () => {
       const connector = createConnector()
+      // VPS strategy 1 fails (ok: false → VPS returns null, tries strategy 2)
       mockFetch.mockResolvedValueOnce({
+        ok: false,
+        status: 503,
+        headers: { get: (key: string) => key === 'content-type' ? 'application/json' : null },
+        json: async () => ({}),
+      })
+      // VPS strategy 2 also fails (POST to proxy also rejected)
+      mockFetchNetworkError('VPS strategy 2 failed')
+      // VPS returns null → direct API call gets 429
+      mockFetch.mockResolvedValueOnce({
+        ok: false,
         status: 429,
-        headers: { get: () => '60' },
+        headers: { get: (key: string) => key === 'content-type' ? 'application/json' : key === 'Retry-After' ? '60' : null },
         json: async () => ({}),
       })
 
@@ -440,29 +457,31 @@ describe('BitgetFuturesConnector', () => {
   // ============================================
 
   describe('error handling', () => {
-    test('throws on server error (500)', async () => {
+    test('throws on server error (500) in fetchTraderProfile (direct request)', async () => {
       const connector = createConnector()
       mockFetch.mockResolvedValueOnce({
+        ok: false,
         status: 500,
-        headers: { get: () => null },
+        headers: { get: (key: string) => key === 'content-type' ? 'application/json' : null },
         json: async () => ({}),
       })
 
-      await expect(connector.discoverLeaderboard('7d')).rejects.toThrow()
+      await expect(connector.fetchTraderProfile('BG_TRADER_1')).rejects.toThrow()
     })
 
-    test('throws ConnectorError on client error (403)', async () => {
+    test('throws ConnectorError on client error (403) in fetchTraderProfile', async () => {
       const connector = createConnector()
       mockFetch.mockResolvedValueOnce({
+        ok: false,
         status: 403,
-        headers: { get: () => null },
+        headers: { get: (key: string) => key === 'content-type' ? 'application/json' : null },
         json: async () => ({ message: 'Forbidden' }),
       })
 
-      await expect(connector.discoverLeaderboard('7d')).rejects.toThrow(ConnectorError)
+      await expect(connector.fetchTraderProfile('BG_TRADER_1')).rejects.toThrow(ConnectorError)
     })
 
-    test('handles malformed response gracefully', async () => {
+    test('handles malformed response gracefully in discoverLeaderboard', async () => {
       const connector = createConnector()
       mockFetchResponse({ wrong: 'data' })
 

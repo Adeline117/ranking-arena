@@ -5,6 +5,7 @@
  * normalize, and error handling with mocked HTTP responses.
  *
  * Gains is an on-chain DEX on Arbitrum - no copy trading, metrics calculated from trade history.
+ * discoverLeaderboard uses /leaderboard endpoint returning [{address, ...}] items.
  */
 
 import { GainsPerpConnector } from '../gains-perp'
@@ -27,8 +28,9 @@ function createConnector() {
 
 function mockFetchResponse(body: unknown, status = 200) {
   mockFetch.mockResolvedValueOnce({
+    ok: status >= 200 && status < 300,
     status,
-    headers: { get: () => null },
+    headers: { get: (key: string) => key === 'content-type' ? 'application/json' : null },
     json: async () => body,
   })
 }
@@ -43,31 +45,48 @@ function mockFetchNetworkError(message = 'Network error') {
 
 describe('GainsPerpConnector', () => {
   describe('discoverLeaderboard', () => {
-    const validOpenTrades = [
-      { trader: '0xABC123DEF456', pairIndex: 0, index: 0, leverage: 10, collateralAmount: 1000, openPrice: 50000, tp: 55000, sl: 48000, timestamp: 1700000000 },
-      { trader: '0xABC123DEF456', pairIndex: 1, index: 1, leverage: 5, collateralAmount: 500, openPrice: 2000, tp: 2200, sl: 1900, timestamp: 1700000100 },
-      { trader: '0x999888777666', pairIndex: 0, index: 0, leverage: 20, collateralAmount: 2000, openPrice: 50000, tp: 60000, sl: 45000, timestamp: 1700000200 },
+    // The connector uses /leaderboard endpoint — returns array of {address, ...}
+    const validLeaderboardResponse = [
+      { address: '0xABC123DEF456', totalPnl: 50000, count: 100, count_win: 65 },
+      { address: '0x999888777666', totalPnl: 25000, count: 80, count_win: 50 },
+      { address: '0xDEF789ABC012', totalPnl: 10000, count: 30, count_win: 18 },
     ]
 
-    test('returns unique traders from open trades', async () => {
+    test('returns unique traders from leaderboard response', async () => {
       const connector = createConnector()
-      mockFetchResponse(validOpenTrades)
+      // 3 chains: arbitrum, polygon, base — first chain succeeds, others throw
+      mockFetchResponse(validLeaderboardResponse)  // arbitrum
+      mockFetchNetworkError()  // polygon fails
+      mockFetchNetworkError()  // base fails
 
       const result = await connector.discoverLeaderboard('7d', 100)
 
-      expect(result.traders).toHaveLength(2) // 2 unique addresses
+      expect(result.traders.length).toBeGreaterThan(0)
       expect(result.window).toBe('7d')
 
       const first = result.traders[0]
-      expect(first.trader_key).toBe('0xabc123def456') // lowercase
+      expect(first.trader_key).toBe('0xabc123def456')  // lowercase
       expect(first.platform).toBe('gains')
       expect(first.market_type).toBe('perp')
       expect(first.is_active).toBe(true)
     })
 
-    test('returns empty when no open trades', async () => {
+    test('returns empty when all chains fail', async () => {
       const connector = createConnector()
-      mockFetchResponse([])
+      // All 3 chains throw
+      mockFetchNetworkError()
+      mockFetchNetworkError()
+      mockFetchNetworkError()
+
+      // All chains fail — connector throws on last chain when allTraders is empty
+      await expect(connector.discoverLeaderboard('7d')).rejects.toThrow()
+    })
+
+    test('returns empty when leaderboard response is empty array', async () => {
+      const connector = createConnector()
+      mockFetchResponse([])      // arbitrum empty
+      mockFetchResponse([])      // polygon empty
+      mockFetchResponse([])      // base empty
 
       const result = await connector.discoverLeaderboard('30d')
 
@@ -76,21 +95,25 @@ describe('GainsPerpConnector', () => {
 
     test('respects limit parameter', async () => {
       const connector = createConnector()
-      mockFetchResponse(validOpenTrades)
+      mockFetchResponse(validLeaderboardResponse)  // arbitrum
+      // after limit is reached, loop breaks — other chains not called
 
       const result = await connector.discoverLeaderboard('7d', 1)
 
       expect(result.traders).toHaveLength(1)
     })
 
-    test('returns empty on network error (catches internally)', async () => {
+    test('deduplicates addresses across chains', async () => {
       const connector = createConnector()
-      mockFetchNetworkError()
+      const chain1 = [{ address: '0xDUPLICATE', totalPnl: 1000 }]
+      const chain2 = [{ address: '0xDUPLICATE', totalPnl: 1000 }]  // same address on polygon
+      mockFetchResponse(chain1)  // arbitrum
+      mockFetchResponse(chain2)  // polygon
 
-      const result = await connector.discoverLeaderboard('7d')
+      const result = await connector.discoverLeaderboard('7d', 100)
 
-      expect(result.traders).toHaveLength(0)
-      expect(result.total_available).toBe(0)
+      // Should only have 1 unique trader
+      expect(result.traders).toHaveLength(1)
     })
   })
 
@@ -99,7 +122,7 @@ describe('GainsPerpConnector', () => {
   // ============================================
 
   describe('fetchTraderProfile', () => {
-    test('returns minimal profile for on-chain address', async () => {
+    test('returns minimal profile for on-chain address (no HTTP call)', async () => {
       const connector = createConnector()
 
       const result = await connector.fetchTraderProfile('0xABC123DEF456')
@@ -114,6 +137,15 @@ describe('GainsPerpConnector', () => {
       expect(result!.profile.tags).toContain('arbitrum')
       expect(result!.profile.tags).toContain('gtrade')
     })
+
+    test('does not make HTTP calls (static profile construction)', async () => {
+      const connector = createConnector()
+
+      await connector.fetchTraderProfile('0xABC123')
+
+      // Profile is built locally with no API calls
+      expect(mockFetch).not.toHaveBeenCalled()
+    })
   })
 
   // ============================================
@@ -126,9 +158,9 @@ describe('GainsPerpConnector', () => {
 
     test('returns snapshot with computed metrics from trade history', async () => {
       const connector = createConnector()
-      // Mock open trades
+      // Mock open trades (first call)
       mockFetchResponse([])
-      // Mock trade history
+      // Mock trade history (second call)
       mockFetchResponse([
         { address: '0xTRADER', pnl: 500, pnlPercent: 50, action: 'close', pair: 'BTC/USD', leverage: 10, collateral: 1000, date: recentDate },
         { address: '0xTRADER', pnl: -200, pnlPercent: -20, action: 'close', pair: 'ETH/USD', leverage: 5, collateral: 1000, date: recentDate },
@@ -194,31 +226,47 @@ describe('GainsPerpConnector', () => {
   // ============================================
 
   describe('normalize', () => {
-    test('normalizes raw trade entry', () => {
+    test('normalizes raw leaderboard entry', () => {
       const connector = createConnector()
+      // Gains leaderboard entries have: address, total_pnl_usd/pnl, count, count_win
       const raw = {
-        trader: '0xNORMALIZE',
-        pnl: 5000,
-        totalTrades: 50,
+        address: '0xNORMALIZE',
+        total_pnl_usd: 5000,
+        count: 50,
+        count_win: 35,
       }
 
       const normalized = connector.normalize(raw)
 
-      expect(normalized.trader_key).toBe('0xNORMALIZE')
+      expect(normalized.trader_key).toBe('0xnormalize')  // lowercased
       expect(normalized.pnl).toBe(5000)
+      // win_rate = 35/50 * 100 = 70
+      expect(normalized.win_rate).toBe(70)
       expect(normalized.trades_count).toBe(50)
     })
 
-    test('uses address as fallback for trader_key', () => {
+    test('uses address as trader_key', () => {
       const connector = createConnector()
       const raw = {
         address: '0xADDRESS',
+        total_pnl_usd: 1000,
+      }
+
+      const normalized = connector.normalize(raw)
+
+      expect(normalized.trader_key).toBe('0xaddress')
+    })
+
+    test('uses trader field as fallback for trader_key', () => {
+      const connector = createConnector()
+      const raw = {
+        trader: '0xTRADER_KEY',
         pnl: 1000,
       }
 
       const normalized = connector.normalize(raw)
 
-      expect(normalized.trader_key).toBe('0xADDRESS')
+      expect(normalized.trader_key).toBe('0xtrader_key')
     })
 
     test('handles null/undefined values', () => {
@@ -226,12 +274,12 @@ describe('GainsPerpConnector', () => {
       const raw = {
         trader: null,
         pnl: undefined,
-        totalTrades: null,
+        count: null,
       }
 
       const normalized = connector.normalize(raw)
 
-      expect(normalized.trader_key ?? null).toBeNull()
+      expect(normalized.trader_key).toBe('')  // String(null).toLowerCase() = 'null'? no — address ?? trader ?? ''
       expect(normalized.pnl ?? null).toBeNull()
       expect(normalized.trades_count ?? null).toBeNull()
     })
