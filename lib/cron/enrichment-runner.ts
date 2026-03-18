@@ -8,7 +8,9 @@ import {
   fetchBinanceEquityCurve,
   fetchBinanceStatsDetail,
   fetchBinancePositionHistory,
-  // Bybit enrichment removed — api2.bybit.com endpoints return 404 globally (2026-03-10)
+  // Bybit enrichment re-enabled (2026-03-18) — now routes through VPS scraper
+  fetchBybitEquityCurve,
+  fetchBybitStatsDetail,
   fetchOkxEquityCurve,
   fetchOkxStatsDetail,
   fetchOkxCurrentPositions,
@@ -63,6 +65,8 @@ import {
   fetchCoinexStatsDetail,
   fetchBitunixEquityCurve,
   fetchBitunixStatsDetail,
+  fetchXtEquityCurve,
+  fetchXtStatsDetail,
   fetchBitfinexEquityCurve,
   fetchBitfinexStatsDetail,
   fetchBlofinEquityCurve,
@@ -186,7 +190,13 @@ export const ENRICHMENT_PLATFORM_CONFIGS: Record<string, EnrichmentConfig> = {
     concurrency: 5, delayMs: 1000,
   },
   // binance_spot: PERMANENTLY REMOVED (2026-03-14) - repeatedly hangs 45-76min, blocks entire pipeline
-  // bybit/bybit_spot: enrichment disabled — api2.bybit.com endpoints return 404 globally (2026-03-10)
+  // Bybit enrichment re-enabled (2026-03-18) — routes through VPS scraper
+  bybit: {
+    platform: 'bybit',
+    fetchEquityCurve: fetchBybitEquityCurve,
+    fetchStatsDetail: fetchBybitStatsDetail,
+    concurrency: 1, delayMs: 3000, // VPS scraper is serial (Playwright), go slow
+  },
   okx_futures: {
     platform: 'okx_futures',
     fetchEquityCurve: fetchOkxEquityCurve,
@@ -346,6 +356,13 @@ export const ENRICHMENT_PLATFORM_CONFIGS: Record<string, EnrichmentConfig> = {
     // Stats + equity curve come from batch-cached leaderboard list API
     concurrency: 5, delayMs: 200, // Fast: lookups from in-memory cache, no per-trader API calls
   },
+  xt: {
+    platform: 'xt',
+    fetchEquityCurve: fetchXtEquityCurve,
+    fetchStatsDetail: fetchXtStatsDetail,
+    // Stats + equity curve come from batch-cached internal list API
+    concurrency: 5, delayMs: 200, // Fast: lookups from in-memory cache, no per-trader API calls
+  },
   bitfinex: {
     platform: 'bitfinex',
     fetchEquityCurve: fetchBitfinexEquityCurve,
@@ -404,10 +421,10 @@ export const NO_ENRICHMENT_PLATFORMS = new Set([
   // Wallet-based platforms (no per-trader equity curve API)
   'binance_web3', 'okx_web3', 'web3_bot',
   // API removed/unavailable
-  'bybit', 'bybit_spot',  // Akamai WAF blocks all
+  // 'bybit' re-enabled (2026-03-18) — VPS scraper bypasses Akamai WAF
+  'bybit_spot',  // No separate spot enrichment API
   'bitmart', 'paradex', 'okx_spot',  // Dead
-  // No enrichment API / CF protected
-  'xt',
+  // XT: re-enabled — internal copy-trading list API with batch cache (2026-03-18)
   // kucoin, weex: dead platforms, no enrichment possible
   'kucoin', 'weex',  // weex returns 521, janapw.com needs dynamic auth
   // bitget_spot not yet configured (no enrichment API)
