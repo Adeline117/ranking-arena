@@ -66,7 +66,7 @@ export class BybitFuturesConnector extends BaseConnector {
         dataDuration: timeRange,
         pageNo: String(page),
         pageSize: String(limit),
-      })
+      }, 600000) // 10min — scraper queue can be backed up
       if (!vpsData) throw new Error('Both direct API and VPS scraper failed for bybit')
       _rawLb = vpsData
     }
