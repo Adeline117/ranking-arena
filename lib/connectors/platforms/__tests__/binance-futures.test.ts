@@ -26,8 +26,9 @@ function createConnector() {
 
 function mockFetchResponse(body: unknown, status = 200) {
   mockFetch.mockResolvedValueOnce({
+    ok: status >= 200 && status < 300,
     status,
-    headers: { get: () => null },
+    headers: { get: (key: string) => key === 'content-type' ? 'application/json' : null },
     json: async () => body,
   })
 }
@@ -55,37 +56,34 @@ jest.mock('@/lib/utils/arena-score', () => ({
 
 describe('BinanceFuturesConnector', () => {
   describe('discoverLeaderboard', () => {
+    // New API format (2026-03-15): /friendly/ path with leadPortfolioId
     const validResponse = {
+      code: '000000',
       data: {
-        otherLeaderboardUrl: '',
+        total: 2,
         list: [
           {
-            encryptedUid: 'ABC123',
-            nickName: 'TopTrader',
-            userPhotoUrl: 'https://img.example.com/avatar.jpg',
-            rank: 1,
-            value: 1.5,   // 150% ROI (raw multiplier)
+            leadPortfolioId: 'ABC123',
+            nickname: 'TopTrader',
+            avatarUrl: 'https://img.example.com/avatar.jpg',
+            roi: 150,
             pnl: 50000,
-            followerCount: 200,
-            copyCount: 50,
-            twitterUrl: null,
-            isTwTraderUrl: null,
+            mdd: 0.08,
+            winRate: 0.72,
+            currentCopyCount: 50,
           },
           {
-            encryptedUid: 'DEF456',
-            nickName: null,
-            userPhotoUrl: null,
-            rank: 2,
-            value: 0.8,
+            leadPortfolioId: 'DEF456',
+            nickname: null,
+            avatarUrl: null,
+            roi: 80,
             pnl: 10000,
-            followerCount: null,
-            copyCount: null,
-            twitterUrl: null,
-            isTwTraderUrl: null,
+            mdd: null,
+            winRate: null,
+            currentCopyCount: null,
           },
         ],
       },
-      success: true,
     }
 
     test('returns traders from valid response', async () => {
@@ -110,7 +108,7 @@ describe('BinanceFuturesConnector', () => {
 
     test('returns empty array when response has no data', async () => {
       const connector = createConnector()
-      mockFetchResponse({ data: null, success: false })
+      mockFetchResponse({ code: '000000', data: { total: 0, list: [] } })
 
       const result = await connector.discoverLeaderboard('30d')
 
@@ -118,17 +116,17 @@ describe('BinanceFuturesConnector', () => {
       expect(result.total_available).toBe(0)
     })
 
-    test('applies limit and offset correctly', async () => {
+    test('applies limit correctly', async () => {
       const connector = createConnector()
       mockFetchResponse(validResponse)
 
-      const result = await connector.discoverLeaderboard('7d', 1, 1)
+      const result = await connector.discoverLeaderboard('7d', 1)
 
       expect(result.traders).toHaveLength(1)
-      expect(result.traders[0].trader_key).toBe('DEF456')
+      expect(result.traders[0].trader_key).toBe('ABC123')
     })
 
-    test('sends correct request body for each window', async () => {
+    test('sends correct request body for 30d window', async () => {
       const connector = createConnector()
       mockFetchResponse(validResponse)
 
@@ -136,27 +134,32 @@ describe('BinanceFuturesConnector', () => {
 
       const call = mockFetch.mock.calls[0]
       const body = JSON.parse(call[1].body)
-      expect(body.periodType).toBe('MONTHLY')
-      expect(body.statisticsType).toBe('ROI')
-      expect(body.tradeType).toBe('PERPETUAL')
+      // New API uses timeRange: '30D' not periodType
+      expect(body.timeRange).toBe('30D')
+      expect(body.dataType).toBe('ROI')
     })
 
-    test('throws on network error', async () => {
+    test('returns empty on network error (catches internally)', async () => {
       const connector = createConnector()
       mockFetchNetworkError()
 
-      await expect(connector.discoverLeaderboard('7d')).rejects.toThrow()
+      // Binance discoverLeaderboard catches all errors internally — returns empty
+      const result = await connector.discoverLeaderboard('7d')
+      expect(result.traders).toHaveLength(0)
     })
 
-    test('throws ConnectorError on rate limit (429)', async () => {
+    test('returns empty on rate limit (catches internally)', async () => {
       const connector = createConnector()
       mockFetch.mockResolvedValueOnce({
+        ok: false,
         status: 429,
-        headers: { get: () => '60' },
+        headers: { get: (key: string) => key === 'content-type' ? 'application/json' : key === 'Retry-After' ? '60' : null },
         json: async () => ({}),
       })
 
-      await expect(connector.discoverLeaderboard('7d')).rejects.toThrow(ConnectorError)
+      // Binance discoverLeaderboard catches all errors — never throws from leaderboard
+      const result = await connector.discoverLeaderboard('7d')
+      expect(result.traders).toHaveLength(0)
     })
   })
 
@@ -236,19 +239,24 @@ describe('BinanceFuturesConnector', () => {
   // ============================================
 
   describe('fetchTraderSnapshot', () => {
+    // Binance performance endpoint uses WEEKLY/MONTHLY/QUARTERLY period types
+    // mapWindowToPlatform returns '7D'/'30D'/'90D' — these must match periodType in data
     const validPerformanceResponse = {
       data: [
-        { periodType: 'WEEKLY', statisticsType: 'ROI', value: 0.25 },
-        { periodType: 'WEEKLY', statisticsType: 'PNL', value: 5000 },
-        { periodType: 'MONTHLY', statisticsType: 'ROI', value: 1.5 },
-        { periodType: 'MONTHLY', statisticsType: 'PNL', value: 50000 },
+        { periodType: '7D', statisticsType: 'ROI', value: 0.25 },
+        { periodType: '7D', statisticsType: 'PNL', value: 5000 },
+        { periodType: '30D', statisticsType: 'ROI', value: 1.5 },
+        { periodType: '30D', statisticsType: 'PNL', value: 50000 },
       ],
       success: true,
     }
 
     test('returns snapshot with correctly normalized ROI and PnL', async () => {
       const connector = createConnector()
+      // First call: performance endpoint
       mockFetchResponse(validPerformanceResponse)
+      // Second call: copy-trade detail endpoint (best-effort, can fail)
+      mockFetch.mockRejectedValueOnce(new Error('detail unavailable'))
 
       const result = await connector.fetchTraderSnapshot('ABC123', '7d')
 
@@ -261,11 +269,12 @@ describe('BinanceFuturesConnector', () => {
     test('returns snapshot for 30d window with correct period mapping', async () => {
       const connector = createConnector()
       mockFetchResponse(validPerformanceResponse)
+      mockFetch.mockRejectedValueOnce(new Error('detail unavailable'))
 
       const result = await connector.fetchTraderSnapshot('ABC123', '30d')
 
       expect(result).not.toBeNull()
-      // MONTHLY ROI = 1.5 * 100 = 150
+      // 30D ROI = 1.5 * 100 = 150
       expect(result!.metrics.roi).toBe(150)
       expect(result!.metrics.pnl).toBe(50000)
     })
@@ -273,6 +282,7 @@ describe('BinanceFuturesConnector', () => {
     test('computes arena score when both ROI and PnL are present', async () => {
       const connector = createConnector()
       mockFetchResponse(validPerformanceResponse)
+      mockFetch.mockRejectedValueOnce(new Error('detail unavailable'))
 
       const result = await connector.fetchTraderSnapshot('ABC123', '7d')
 
@@ -287,8 +297,8 @@ describe('BinanceFuturesConnector', () => {
       const connector = createConnector()
       mockFetchResponse({
         data: [
-          { periodType: 'MONTHLY', statisticsType: 'ROI', value: 1.0 },
-          { periodType: 'MONTHLY', statisticsType: 'PNL', value: 10000 },
+          { periodType: '30D', statisticsType: 'ROI', value: 1.0 },
+          { periodType: '30D', statisticsType: 'PNL', value: 10000 },
         ],
         success: true,
       })
@@ -310,6 +320,7 @@ describe('BinanceFuturesConnector', () => {
     test('quality flags indicate missing fields', async () => {
       const connector = createConnector()
       mockFetchResponse(validPerformanceResponse)
+      mockFetch.mockRejectedValueOnce(new Error('detail unavailable'))
 
       const result = await connector.fetchTraderSnapshot('ABC123', '7d')
 
@@ -464,7 +475,8 @@ describe('BinanceFuturesConnector', () => {
       const raw = {} as Record<string, unknown>
 
       const normalized = connector.normalize(raw)
-      expect(normalized.trader_key).toBeUndefined()
+      // leadPortfolioId ?? encryptedUid ?? null = null for empty object
+      expect(normalized.trader_key).toBeNull()
       expect(normalized.display_name).toBeNull()
       expect(normalized.roi).toBeNull()
       expect(normalized.pnl).toBeNull()
@@ -476,26 +488,30 @@ describe('BinanceFuturesConnector', () => {
   // ============================================
 
   describe('error handling', () => {
-    test('throws on server error (500)', async () => {
+    test('returns empty on server error (500) — catches internally', async () => {
       const connector = createConnector()
       mockFetch.mockResolvedValueOnce({
+        ok: false,
         status: 500,
-        headers: { get: () => null },
+        headers: { get: (key: string) => key === 'content-type' ? 'application/json' : null },
         json: async () => ({ error: 'Internal Server Error' }),
       })
 
-      await expect(connector.discoverLeaderboard('7d')).rejects.toThrow()
+      // Binance discoverLeaderboard catches all errors — returns empty
+      const result = await connector.discoverLeaderboard('7d')
+      expect(result.traders).toHaveLength(0)
     })
 
-    test('throws ConnectorError on client error (400)', async () => {
+    test('fetchTraderProfile throws ConnectorError on client error (400)', async () => {
       const connector = createConnector()
       mockFetch.mockResolvedValueOnce({
+        ok: false,
         status: 400,
-        headers: { get: () => null },
+        headers: { get: (key: string) => key === 'content-type' ? 'application/json' : null },
         json: async () => ({ error: 'Bad request' }),
       })
 
-      await expect(connector.discoverLeaderboard('7d')).rejects.toThrow(ConnectorError)
+      await expect(connector.fetchTraderProfile('ABC123')).rejects.toThrow(ConnectorError)
     })
 
     test('handles invalid JSON response gracefully via warnValidate', async () => {

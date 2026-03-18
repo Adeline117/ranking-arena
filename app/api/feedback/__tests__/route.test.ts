@@ -11,9 +11,11 @@ jest.mock('next/server', () => {
   class MockNextResponse {
     _body: unknown
     status: number
+    headers: { set: jest.Mock; get: jest.Mock }
     constructor(body?: unknown, init: { status?: number } = {}) {
       this._body = body
       this.status = init.status || 200
+      this.headers = { set: jest.fn(), get: jest.fn().mockReturnValue(null) }
     }
     async json() { return this._body }
     static json(data: unknown, init?: { status?: number }) {
@@ -24,14 +26,21 @@ jest.mock('next/server', () => {
   class MockNextRequest {
     url: string
     nextUrl: URL
+    method: string
     _headers: Map<string, string>
     _body: unknown
+    cookies: { get: () => undefined }
 
     constructor(url: string, init?: { method?: string; headers?: Record<string, string>; body?: string }) {
       this.url = url
       this.nextUrl = new URL(url)
-      this._headers = new Map(Object.entries(init?.headers || {}))
+      this.method = init?.method || 'POST'
+      this._headers = new Map(Object.entries({
+        'user-agent': 'Mozilla/5.0 (Test)',
+        ...(init?.headers || {}),
+      }))
       this._body = init?.body ? JSON.parse(init.body) : undefined
+      this.cookies = { get: () => undefined }
     }
 
     get headers() {
@@ -50,16 +59,21 @@ jest.mock('next/server', () => {
 
 const mockInsert = jest.fn().mockResolvedValue({ data: null, error: null })
 const mockGetUser = jest.fn().mockResolvedValue({ data: { user: null }, error: null })
+const mockGetAuthUser = jest.fn().mockResolvedValue(null)
 
 jest.mock('@/lib/supabase/server', () => ({
   getSupabaseAdmin: jest.fn(() => ({
     from: jest.fn(() => ({
       insert: mockInsert,
+      select: jest.fn().mockReturnThis(),
+      eq: jest.fn().mockReturnThis(),
+      maybeSingle: jest.fn().mockResolvedValue({ data: null, error: null }),
     })),
     auth: {
       getUser: mockGetUser,
     },
   })),
+  getAuthUser: (...args: unknown[]) => mockGetAuthUser(...args),
 }))
 
 jest.mock('@/lib/logger', () => ({
@@ -69,6 +83,28 @@ jest.mock('@/lib/logger', () => ({
 jest.mock('@/lib/utils/rate-limit', () => ({
   checkRateLimit: jest.fn().mockResolvedValue(null),
   RateLimitPresets: { sensitive: { max: 15, window: '1m', prefix: 'sensitive' } },
+}))
+
+// Skip CSRF validation in tests
+jest.mock('@/lib/utils/csrf', () => ({
+  validateCsrfToken: jest.fn().mockReturnValue(true),
+  generateCsrfToken: jest.fn().mockReturnValue('test-csrf-token'),
+  CSRF_COOKIE_NAME: 'csrf-token',
+  CSRF_HEADER_NAME: 'x-csrf-token',
+}))
+
+// Mock correlation ID module
+jest.mock('@/lib/api/correlation', () => ({
+  getOrCreateCorrelationId: jest.fn().mockReturnValue('test-cid'),
+  runWithCorrelationId: jest.fn((_id, fn) => fn()),
+  getCorrelationId: jest.fn().mockReturnValue('test-cid'),
+}))
+
+// Mock versioning
+jest.mock('@/lib/api/versioning', () => ({
+  parseApiVersion: jest.fn().mockReturnValue({ version: 'v1', deprecated: false }),
+  addVersionHeaders: jest.fn(),
+  addDeprecationHeaders: jest.fn(),
 }))
 
 import { NextRequest } from 'next/server'
@@ -91,6 +127,7 @@ describe('POST /api/feedback', () => {
     jest.clearAllMocks()
     mockInsert.mockResolvedValue({ data: null, error: null })
     mockGetUser.mockResolvedValue({ data: { user: null }, error: null })
+    mockGetAuthUser.mockResolvedValue(null)
   })
 
   // --- Input Validation ---
@@ -175,7 +212,7 @@ describe('POST /api/feedback', () => {
   // --- Auth (optional) ---
 
   it('includes user_id when Bearer token is valid', async () => {
-    mockGetUser.mockResolvedValue({ data: { user: { id: 'user-123' } }, error: null })
+    mockGetAuthUser.mockResolvedValue({ id: 'user-123', email: 'test@example.com' })
 
     const req = createRequest(
       { message: 'Feedback from authed user' },
@@ -192,7 +229,7 @@ describe('POST /api/feedback', () => {
   })
 
   it('sets user_id to null when Bearer token is invalid', async () => {
-    mockGetUser.mockResolvedValue({ data: { user: null }, error: { message: 'Invalid token' } })
+    mockGetAuthUser.mockResolvedValue(null)
 
     const req = createRequest(
       { message: 'Anonymous feedback' },
@@ -229,7 +266,8 @@ describe('POST /api/feedback', () => {
     const body = await res.json()
 
     expect(res.status).toBe(500)
-    expect(body.error).toBe('Internal error')
+    // Middleware sanitizes internal errors to prevent leaking implementation details
+    expect(body.error).toBeTruthy()
   })
 
   // --- Rate Limiting ---

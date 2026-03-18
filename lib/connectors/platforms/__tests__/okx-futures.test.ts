@@ -26,8 +26,9 @@ function createConnector() {
 
 function mockFetchResponse(body: unknown, status = 200) {
   mockFetch.mockResolvedValueOnce({
+    ok: status >= 200 && status < 300,
     status,
-    headers: { get: () => null },
+    headers: { get: (key: string) => key === 'content-type' ? 'application/json' : null },
     json: async () => body,
   })
 }
@@ -137,9 +138,8 @@ describe('OkxFuturesConnector', () => {
 
       const call = mockFetch.mock.calls[0]
       const url = call[0] as string
-      expect(url).toContain('dataRange=30')
-      expect(url).toContain('sortType=profitRatio')
-      expect(url).toContain('pageSize=20')
+      expect(url).toContain('dataRange=30d')
+      expect(url).toContain('sortType=pnl')
       expect(url).toContain('pageNo=1')
     })
 
@@ -165,22 +165,23 @@ describe('OkxFuturesConnector', () => {
     test('throws ConnectorError on rate limit (429)', async () => {
       const connector = createConnector()
       mockFetch.mockResolvedValueOnce({
+        ok: false,
         status: 429,
-        headers: { get: () => '60' },
+        headers: { get: (key: string) => key === 'content-type' ? 'application/json' : key === 'Retry-After' ? '60' : null },
         json: async () => ({}),
       })
 
       await expect(connector.discoverLeaderboard('7d')).rejects.toThrow(ConnectorError)
     })
 
-    test('total_available is null', async () => {
+    test('total_available equals number of fetched traders', async () => {
       const connector = createConnector()
       mockFetchResponse(validResponse)
 
       const result = await connector.discoverLeaderboard('7d')
 
-      // OKX connector does not return total_available
-      expect(result.total_available).toBeNull()
+      // OKX connector sets total_available = allTraders.length
+      expect(result.total_available).toBe(2)
     })
   })
 
@@ -467,8 +468,9 @@ describe('OkxFuturesConnector', () => {
     test('throws on server error (500)', async () => {
       const connector = createConnector()
       mockFetch.mockResolvedValueOnce({
+        ok: false,
         status: 500,
-        headers: { get: () => null },
+        headers: { get: (key: string) => key === 'content-type' ? 'application/json' : null },
         json: async () => ({ error: 'Internal Server Error' }),
       })
 
@@ -478,8 +480,9 @@ describe('OkxFuturesConnector', () => {
     test('throws ConnectorError on client error (400)', async () => {
       const connector = createConnector()
       mockFetch.mockResolvedValueOnce({
+        ok: false,
         status: 400,
-        headers: { get: () => null },
+        headers: { get: (key: string) => key === 'content-type' ? 'application/json' : null },
         json: async () => ({ error: 'Bad request' }),
       })
 

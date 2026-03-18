@@ -8,11 +8,17 @@ jest.mock('next/server', () => {
     url: string
     headers: Map<string, string>
     method: string
+    cookies: { get: () => undefined }
 
     constructor(url: string, init?: { method?: string; headers?: Record<string, string> }) {
       this.url = url
       this.method = init?.method || 'GET'
-      this.headers = new Map(Object.entries(init?.headers || {}))
+      // Include a default user-agent so bot-protection check passes
+      this.headers = new Map(Object.entries({
+        'user-agent': 'Mozilla/5.0 (Test)',
+        ...(init?.headers || {}),
+      }))
+      this.cookies = { get: () => undefined }
     }
 
     get nextUrl() {
