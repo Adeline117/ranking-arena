@@ -214,10 +214,7 @@
       "path": "/api/cron/fetch-traders/okx_web3",
       "schedule": "20 */6 * * *"
     },
-    {
-      "path": "/api/cron/fetch-traders/bitget_futures",
-      "schedule": "28 */6 * * *"
-    },
+
     {
       "path": "/api/cron/fetch-traders/xt",
       "schedule": "34 */6 * * *"
