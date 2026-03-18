@@ -3993,6 +3993,7 @@ const ko = {
     rankingTrend: '추세',
     rankingWinRate: '승률',
     rankingMdd: 'MDD',
+    sortBy: '정렬',
     rankingScore: '점수',
     rankingArenaScore: 'Arena 점수',
     rankingNoData: '순위 데이터 없음',
