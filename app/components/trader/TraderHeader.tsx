@@ -45,7 +45,6 @@ interface TraderHeaderProps {
   isRegistered?: boolean
   followers?: number
   following?: number
-  copiers?: number
   aum?: number
   isOwnProfile?: boolean
   source?: string
@@ -139,7 +138,6 @@ export default function TraderHeader({
   isRegistered,
   followers = 0,
   following = 0,
-  copiers,
   aum,
   isOwnProfile = false,
   source,
@@ -161,6 +159,7 @@ export default function TraderHeader({
   linkedPlatforms,
   platform,
   traderKey,
+  profileUrl,
 }: TraderHeaderProps): React.ReactElement {
   const [userId, setUserId] = useState<string | null>(externalUserId ?? null)
   const [mounted, setMounted] = useState(false)
@@ -227,7 +226,7 @@ export default function TraderHeader({
     subtitleParts.push(`${linkedAccountCount} verified accounts`)
   }
   if (followerCount > 0) subtitleParts.push(`${followerCount.toLocaleString()} ${t('arenaFollowers') || 'followers'}`)
-  if (copiers !== undefined && copiers > 0) subtitleParts.push(`${copiers.toLocaleString()} ${t('copiers')}`)
+  // copiers removed — only show platform internal followers
   if (aum !== undefined && aum > 0) subtitleParts.push(`AUM ${formatAum(aum)}`)
   if (activeDays !== null && activeDays >= 7) subtitleParts.push(formatActiveDays(activeDays, t))
   if (rank != null && rank > 0 && source && EXCHANGE_NAMES[source.toLowerCase()]) {
@@ -496,6 +495,37 @@ export default function TraderHeader({
         {/* Primary CTA: Copy on Exchange */}
         {!isOwnProfile && (
           <CopyTradeSection isPro={isPro} traderId={traderId} source={source} handle={handle} router={router} t={t} />
+        )}
+
+        {/* View on Exchange link */}
+        {profileUrl && (
+          <a
+            href={profileUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 4,
+              padding: '6px 10px',
+              borderRadius: 'var(--radius-xl, 12px)',
+              background: tokens.colors.bg.tertiary,
+              border: `1px solid ${tokens.colors.border.primary}`,
+              fontSize: 12,
+              fontWeight: 600,
+              color: tokens.colors.text.secondary,
+              textDecoration: 'none',
+              whiteSpace: 'nowrap',
+            }}
+            title={t('viewOnExchange')}
+          >
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+              <path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6" />
+              <polyline points="15 3 21 3 21 9" />
+              <line x1="10" y1="14" x2="21" y2="3" />
+            </svg>
+            {t('viewOnExchange')}
+          </a>
         )}
 
         {isOwnProfile && (

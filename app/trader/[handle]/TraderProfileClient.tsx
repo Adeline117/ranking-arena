@@ -385,7 +385,7 @@ export default function TraderProfileClient({ data, serverTraderData, claimedUse
           avatarUrl={traderProfile?.avatar_url || data.avatar_url || undefined}
           isRegistered={false}
           followers={traderProfile?.followers ?? 0}
-          copiers={traderProfile?.copiers}
+          profileUrl={traderProfile?.profile_url || data.profile_url || undefined}
           source={traderProfile?.source || data.source}
           isPro={isPro}
           roi90d={traderPerformance?.roi_90d ?? (data.roi != null ? data.roi : undefined)}
