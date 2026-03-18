@@ -20,6 +20,28 @@ interface EquityCurveSectionProps {
   delay: number
 }
 
+/**
+ * Fill date gaps in time-series data with zero entries.
+ * Prevents misleading visual jumps when days are missing.
+ */
+function fillDateGaps(data: Array<{ date: string; roi: number; pnl: number }>): Array<{ date: string; roi: number; pnl: number }> {
+  if (data.length < 2) return data
+  const filled: Array<{ date: string; roi: number; pnl: number }> = []
+  for (let i = 0; i < data.length; i++) {
+    filled.push(data[i])
+    if (i < data.length - 1) {
+      const current = new Date(data[i].date)
+      const next = new Date(data[i + 1].date)
+      const gap = Math.round((next.getTime() - current.getTime()) / 86400000)
+      for (let d = 1; d < gap; d++) {
+        const fillDate = new Date(current.getTime() + d * 86400000)
+        filled.push({ date: fillDate.toISOString().split('T')[0], roi: 0, pnl: 0 })
+      }
+    }
+  }
+  return filled
+}
+
 // Check if ROI data has any meaningful non-zero values
 function hasNonZeroRoi(data: Array<{ date: string; roi: number; pnl: number }>): boolean {
   return data.some(d => d.roi !== 0 && d.roi != null)
@@ -351,8 +373,10 @@ function SimpleLineChart({
     return null
   }
 
+  // Fill date gaps with zero entries to prevent misleading visual jumps
+  const gapFilled = fillDateGaps(data)
   // Filter out data points with null/NaN values defensively (API types say number, but runtime may differ)
-  const validData = data.filter(d => d[dataKey] != null && !isNaN(d[dataKey] as number))
+  const validData = gapFilled.filter(d => d[dataKey] != null && !isNaN(d[dataKey] as number))
   if (validData.length === 0) return null
 
   const values = validData.map(d => d[dataKey] as number)
