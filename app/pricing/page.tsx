@@ -1,6 +1,7 @@
 import type { Metadata } from 'next'
 import { getSupabaseAdmin } from '@/lib/supabase/server'
 import { createLogger } from '@/lib/utils/logger'
+import { JsonLd } from '@/app/components/Providers/JsonLd'
 import PricingPageClient from './PricingPageClient'
 
 const logger = createLogger('pricing-page')
@@ -58,5 +59,52 @@ async function getLifetimeMemberCount(): Promise<number> {
 export default async function PricingPage() {
   const lifetimeCount = await getLifetimeMemberCount()
 
-  return <PricingPageClient lifetimeCount={lifetimeCount} />
+  const jsonLd = {
+    '@context': 'https://schema.org',
+    '@type': 'Product',
+    name: 'Arena Pro',
+    description: 'Professional crypto trader analytics and ranking platform with advanced filters, alerts, and score breakdowns.',
+    url: `${baseUrl}/pricing`,
+    brand: {
+      '@type': 'Organization',
+      name: 'Arena',
+      url: baseUrl,
+    },
+    offers: [
+      {
+        '@type': 'Offer',
+        name: 'Monthly',
+        price: '4.99',
+        priceCurrency: 'USD',
+        priceValidUntil: new Date(Date.now() + 365 * 86400000).toISOString().split('T')[0],
+        availability: 'https://schema.org/InStock',
+        url: `${baseUrl}/pricing`,
+      },
+      {
+        '@type': 'Offer',
+        name: 'Yearly',
+        price: '29.99',
+        priceCurrency: 'USD',
+        priceValidUntil: new Date(Date.now() + 365 * 86400000).toISOString().split('T')[0],
+        availability: 'https://schema.org/InStock',
+        url: `${baseUrl}/pricing`,
+      },
+      {
+        '@type': 'Offer',
+        name: 'Lifetime (Founding Member)',
+        price: '49.99',
+        priceCurrency: 'USD',
+        priceValidUntil: new Date(Date.now() + 365 * 86400000).toISOString().split('T')[0],
+        availability: 'https://schema.org/LimitedAvailability',
+        url: `${baseUrl}/pricing`,
+      },
+    ],
+  }
+
+  return (
+    <>
+      <JsonLd data={jsonLd} />
+      <PricingPageClient lifetimeCount={lifetimeCount} />
+    </>
+  )
 }
