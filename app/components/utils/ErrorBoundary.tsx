@@ -24,7 +24,11 @@ interface State {
   error: Error | null
   errorInfo: React.ErrorInfo | null
   showStack: boolean
+  retryCount: number
 }
+
+/** Max auto-retries before showing error UI (Sentry recovery pattern) */
+const MAX_AUTO_RETRIES = 1
 
 /**
  * 全局错误边界组件
@@ -38,6 +42,7 @@ export class ErrorBoundary extends Component<Props, State> {
       error: null,
       errorInfo: null,
       showStack: false,
+      retryCount: 0,
     }
   }
 
@@ -56,6 +61,13 @@ export class ErrorBoundary extends Component<Props, State> {
       error,
       errorInfo,
     })
+
+    // Auto-retry once before showing error UI (Sentry recovery pattern)
+    if (this.state.retryCount < MAX_AUTO_RETRIES) {
+      logger.info(`ErrorBoundary: auto-retry ${this.state.retryCount + 1}/${MAX_AUTO_RETRIES}`)
+      setTimeout(() => this.handleReset(), 500)
+      return
+    }
 
     // 调用自定义错误处理回调
     this.props.onError?.(error, errorInfo)
@@ -76,12 +88,13 @@ export class ErrorBoundary extends Component<Props, State> {
   }
 
   handleReset = () => {
-    this.setState({
+    this.setState(prev => ({
       hasError: false,
       error: null,
       errorInfo: null,
       showStack: false,
-    })
+      retryCount: prev.retryCount + 1,
+    }))
   }
 
   toggleStack = () => {

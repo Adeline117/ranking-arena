@@ -209,6 +209,9 @@ export function withApiMiddleware<T>(
       const duration = Date.now() - startTime
       response.headers.set('X-Response-Time', `${duration}ms`)
       response.headers.set('X-Correlation-ID', correlationId)
+      // Server-Timing header — visible in Chrome DevTools Network tab (OpenTelemetry-lite)
+      response.headers.set('Server-Timing', `api;dur=${duration};desc="${name}"`)
+
 
       if (duration >= 3000) {
         logger.error(`CRITICAL SLOW API: ${name} took ${duration}ms`, { path: request.nextUrl.pathname, correlationId })
