@@ -8,6 +8,7 @@ import { features } from '@/lib/features'
 import { useLanguage } from '../Providers/LanguageProvider'
 import { supabase } from '@/lib/supabase/client'
 import { useCapacitorHaptics } from '@/lib/hooks/useCapacitor'
+import { useInboxStore } from '@/lib/stores/inboxStore'
 
 interface IconProps {
   active: boolean
@@ -153,8 +154,14 @@ interface NavItem {
   highlight?: boolean
 }
 
+// Cache key for persisting user handle across navigations
+const USER_HANDLE_CACHE_KEY = 'arena:user_handle'
+
 function useUserHandle(): string | null {
-  const [userHandle, setUserHandle] = useState<string | null>(null)
+  const [userHandle, setUserHandle] = useState<string | null>(() => {
+    if (typeof window === 'undefined') return null
+    try { return sessionStorage.getItem(USER_HANDLE_CACHE_KEY) } catch { return null }
+  })
 
   useEffect(() => {
     let alive = true
@@ -168,6 +175,9 @@ function useUserHandle(): string | null {
         if (!userId) return
         const emailHandle = data.session?.user?.email?.split('@')[0] || null
 
+        // If we already have a cached handle, skip the DB query
+        if (userHandle) return
+
         supabase
           .from('user_profiles')
           .select('handle')
@@ -175,16 +185,17 @@ function useUserHandle(): string | null {
           .maybeSingle()
           .then(({ data: profile, error: profileError }) => {
             if (!alive) return
-            if (profileError) {
-              setUserHandle(emailHandle)
-              return
+            const resolved = profileError ? emailHandle : (profile?.handle || emailHandle)
+            setUserHandle(resolved)
+            // Persist to sessionStorage to avoid re-querying on every navigation
+            if (resolved) {
+              try { sessionStorage.setItem(USER_HANDLE_CACHE_KEY, resolved) } catch { /* ignore */ }
             }
-            setUserHandle(profile?.handle || emailHandle)
           })
       })
 
     return () => { alive = false }
-  }, [])
+  }, [userHandle])
 
   return userHandle
 }
@@ -249,6 +260,7 @@ export default function MobileBottomNav(): React.ReactElement {
   const { impact } = useCapacitorHaptics()
   const userHandle = useUserHandle()
   const isVisible = useScrollVisibility()
+  const unreadCount = useInboxStore(s => s.unreadNotifications + s.unreadMessages)
 
   const handleNavClick = useCallback(() => {
     impact('light')
@@ -259,18 +271,25 @@ export default function MobileBottomNav(): React.ReactElement {
       { href: '/', labelKey: 'rankings', Icon: RankingsIcon },
     ]
     if (features.social) {
-      items.push({ href: '/hot', labelKey: 'hot', Icon: FireIcon })
+      items.push({ href: '/hot', labelKey: 'hot', Icon: FireIcon, badge: unreadCount > 0 ? unreadCount : undefined })
       items.push({ href: '/groups', labelKey: 'groups', Icon: GroupsIcon })
     }
     items.push({ href: '/market', labelKey: 'market', Icon: MarketIcon })
     items.push({ href: userHandle ? `/u/${encodeURIComponent(userHandle)}` : '/settings', labelKey: 'me', Icon: UserIcon })
     return items
-  }, [userHandle])
+  }, [userHandle, unreadCount])
+
+  // Compute active index for sliding indicator
+  const activeIndex = useMemo(() => {
+    return navItems.findIndex(item => isActivePath(item.href, pathname))
+  }, [navItems, pathname])
 
   // Hide nav on auth / onboarding pages
   if (HIDDEN_PATHS.some(p => pathname === p || pathname.startsWith(p + '/'))) {
     return <></>
   }
+
+  const itemCount = navItems.length
 
   return (
     <>
@@ -298,6 +317,32 @@ export default function MobileBottomNav(): React.ReactElement {
           transition: 'transform 0.3s ease',
         }}
       >
+        {/* Sliding active indicator pill */}
+        {activeIndex >= 0 && (
+          <span
+            aria-hidden="true"
+            style={{
+              position: 'absolute',
+              top: 0,
+              left: `${(activeIndex / itemCount) * 100}%`,
+              width: `${100 / itemCount}%`,
+              display: 'flex',
+              justifyContent: 'center',
+              transition: 'left 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+              pointerEvents: 'none',
+            }}
+          >
+            <span
+              style={{
+                width: 28,
+                height: 3,
+                borderRadius: '0 0 4px 4px',
+                background: tokens.gradient.primary,
+                boxShadow: `0 2px 8px var(--color-accent-primary-60)`,
+              }}
+            />
+          </span>
+        )}
         {navItems.map((item) => (
           <NavItemLink
             key={item.href}
@@ -348,8 +393,6 @@ function NavItemLink({ item, active, onClick, t }: NavItemLinkProps): React.Reac
       }}
       // focus-visible handled by global CSS rule in globals.css
     >
-      {active && <ActiveIndicator />}
-
       <span
         style={{
           position: 'relative',

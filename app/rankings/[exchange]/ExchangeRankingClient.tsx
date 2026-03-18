@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useMemo, useCallback } from 'react'
 import Link from 'next/link'
+import { useRouter } from 'next/navigation'
 import { tokens } from '@/lib/design-tokens'
 import { avatarSrc } from '@/lib/utils/avatar-proxy'
 import { getAvatarGradient, getAvatarInitial, isWalletAddress, generateBlockieSvg } from '@/lib/utils/avatar'
@@ -14,6 +15,7 @@ import { NULL_DISPLAY } from '@/lib/utils/format'
 import { getScoreColor } from '@/lib/utils/score-colors'
 import { formatTimeAgo, type Locale } from '@/lib/utils/date'
 import dynamic from 'next/dynamic'
+import PullToRefresh from '@/app/components/ui/PullToRefresh'
 const ShareLeaderboardButton = dynamic(() => import('./ShareLeaderboardButton'), { ssr: false })
 
 interface TraderData {
@@ -399,6 +401,22 @@ export default function ExchangeRankingClient({
     return () => mq.removeEventListener('change', handler)
   }, [])
 
+  // Pull-to-refresh: refetch exchange data from server
+  const router = useRouter()
+  const handleRefresh = useCallback(async () => {
+    try {
+      const res = await fetch(`/api/rankings/exchange?exchange=${encodeURIComponent(exchange || '')}`)
+      if (res.ok) {
+        const json = await res.json()
+        if (Array.isArray(json.data) && json.data.length > 0) {
+          setTraders(json.data)
+          return
+        }
+      }
+    } catch { /* fallback to router refresh */ }
+    router.refresh()
+  }, [exchange, router])
+
   if (traders.length === 0) {
     return (
       <div style={{ textAlign: 'center', padding: tokens.spacing[8], color: tokens.colors.text.tertiary }}>
@@ -418,6 +436,7 @@ export default function ExchangeRankingClient({
   }
 
   return (
+    <PullToRefresh onRefresh={handleRefresh}>
     <div>
       {/* View toggle + Share button */}
       <div style={{ display: 'flex', gap: 8, marginBottom: tokens.spacing[4], justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap' }}>
@@ -691,5 +710,6 @@ export default function ExchangeRankingClient({
 
 
     </div>
+    </PullToRefresh>
   )
 }

@@ -3084,3 +3084,38 @@ td[data-numeric],
   display: none;
 }
 
+/* Flash animation for ranking value changes */
+@keyframes flash-green-bg {
+  0% { background-color: rgba(34, 197, 94, 0.18); }
+  100% { background-color: transparent; }
+}
+@keyframes flash-red-bg {
+  0% { background-color: rgba(239, 68, 68, 0.18); }
+  100% { background-color: transparent; }
+}
+.flash-green {
+  animation: flash-green-bg 1s ease-out;
+}
+.flash-red {
+  animation: flash-red-bg 1s ease-out;
+}
+
+/* View Transitions API — cross-fade on route change */
+@view-transition {
+  navigation: auto;
+}
+::view-transition-old(root) {
+  animation: fade-out 0.15s ease-out;
+}
+::view-transition-new(root) {
+  animation: fade-in 0.15s ease-in;
+}
+@keyframes fade-out {
+  from { opacity: 1; }
+  to { opacity: 0; }
+}
+@keyframes fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+

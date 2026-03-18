@@ -173,6 +173,29 @@ export const TraderRow = memo(function TraderRow({
     }
   }
 
+  // Flash animation when ROI or rank changes
+  const prevRoiRef = useRef(trader.roi)
+  const prevRankRef = useRef(rank)
+  const [flashClass, setFlashClass] = useState('')
+  useEffect(() => {
+    const prevRoi = prevRoiRef.current
+    const prevRank = prevRankRef.current
+    prevRoiRef.current = trader.roi
+    prevRankRef.current = rank
+    // Compare ROI changes
+    if (prevRoi != null && trader.roi != null && prevRoi !== trader.roi) {
+      setFlashClass(trader.roi > prevRoi ? 'flash-green' : 'flash-red')
+      const timer = setTimeout(() => setFlashClass(''), 1000)
+      return () => clearTimeout(timer)
+    }
+    // Compare rank changes
+    if (prevRank !== rank && prevRank !== 0) {
+      setFlashClass(rank < prevRank ? 'flash-green' : 'flash-red')
+      const timer = setTimeout(() => setFlashClass(''), 1000)
+      return () => clearTimeout(timer)
+    }
+  }, [trader.roi, rank])
+
   // Rank class for CSS art direction (top 3 heroes)
   const rankClass = rank <= 3 ? ` rank-${rank}` : ''
 
@@ -287,7 +310,7 @@ export const TraderRow = memo(function TraderRow({
       onMouseLeave={handleMouseLeave}
     >
       <Box
-        className={`ranking-row ranking-table-grid ranking-table-grid-custom touch-target${rankClass}`}
+        className={`ranking-row ranking-table-grid ranking-table-grid-custom touch-target${rankClass}${flashClass ? ` ${flashClass}` : ''}`}
         style={{
           display: 'grid',
           alignItems: 'center',

@@ -205,12 +205,28 @@ function VolumeBar({ value, max }: { value: number; max: number }) {
   )
 }
 
+function useTimeSince(timestamp: number | null): string {
+  const [now, setNow] = useState(Date.now())
+  useEffect(() => {
+    if (!timestamp) return
+    const id = setInterval(() => setNow(Date.now()), 1000)
+    return () => clearInterval(id)
+  }, [timestamp])
+  if (!timestamp) return ''
+  const seconds = Math.max(0, Math.floor((now - timestamp) / 1000))
+  if (seconds < 60) return `${seconds}s ago`
+  const minutes = Math.floor(seconds / 60)
+  return `${minutes}m ago`
+}
+
 export default function CoreCards() {
   const { t } = useLanguage()
   const [gainers, setGainers] = useState<CoinRow[]>([])
   const [losers, setLosers] = useState<CoinRow[]>([])
   const [marketLoaded, setMarketLoaded] = useState(false)
   const [exchanges, setExchanges] = useState<ExchangeInfo[]>([])
+  const [lastFetchedAt, setLastFetchedAt] = useState<number | null>(null)
+  const updatedAgo = useTimeSince(lastFetchedAt)
 
   useEffect(() => {
     let alive = true
@@ -267,6 +283,7 @@ export default function CoreCards() {
           setGainers(primaryGainers)
           setLosers(primaryLosers)
           setMarketLoaded(true)
+          setLastFetchedAt(Date.now())
         })
         .catch(() => {
           // Fallback: use spot market data for gainers/losers
@@ -280,6 +297,7 @@ export default function CoreCards() {
               setGainers(sorted.filter(r => r.direction === 'up').slice(0, 5))
               setLosers(sorted.filter(r => r.direction === 'down').slice(-5).reverse())
               setMarketLoaded(true)
+              setLastFetchedAt(Date.now())
             })
             .catch(() => { if (alive) setMarketLoaded(true) })
         })
@@ -301,18 +319,16 @@ export default function CoreCards() {
 
   const maxVol = exchanges.length > 0 ? Math.max(...exchanges.map(e => e.trade_volume_24h_btc)) : 0
 
-  const [isMobile, setIsMobile] = useState(false)
-  useEffect(() => {
-    const check = () => setIsMobile(window.innerWidth < 768)
-    check()
-    window.addEventListener('resize', check)
-    return () => window.removeEventListener('resize', check)
-  }, [])
-
   return (
-    <div style={{
+    <div>
+    {updatedAgo && (
+      <div style={{ textAlign: 'right', fontSize: 11, color: tokens.colors.text.tertiary, marginBottom: 6 }} suppressHydrationWarning>
+        {t('lastUpdated') || 'Updated'} {updatedAgo}
+      </div>
+    )}
+    <div className="core-cards-grid" style={{
       display: 'grid',
-      gridTemplateColumns: isMobile ? '1fr' : 'repeat(3, 1fr)',
+      gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))',
       gap: tokens.spacing[4],
       overflowX: 'hidden',
     }}>
@@ -407,6 +423,7 @@ export default function CoreCards() {
           </div>
         )}
       </CardWrapper>
+    </div>
     </div>
   )
 }

@@ -78,13 +78,13 @@ export default function SSRRankingTable({ traders }: Props) {
         {traders.slice(0, 25).map((trader, idx) => {
           const rank = idx + 1
           const isTop3 = rank <= 3
-          // Top 3: use direct CDN URL to match preload hints for faster LCP
-          // Others: route through avatar proxy for CORS/caching
-          const avatarUrl = trader.avatar_url
-            ? (rank <= 3 && !trader.avatar_url.startsWith('/')
-              ? trader.avatar_url
-              : `/api/avatar?url=${encodeURIComponent(trader.avatar_url)}`)
-            : null
+          // SSR: always use direct CDN URLs — no CORS issue for server-rendered <img>
+          // The /api/avatar proxy is only needed for client-side fetch() where CORS applies
+          const avatarUrl = trader.avatar_url && !trader.avatar_url.startsWith('/')
+            ? trader.avatar_url
+            : trader.avatar_url
+              ? `/api/avatar?url=${encodeURIComponent(trader.avatar_url)}`
+              : null
 
           return (
             <a
