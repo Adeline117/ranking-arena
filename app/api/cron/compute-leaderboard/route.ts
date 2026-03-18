@@ -95,6 +95,26 @@ export async function GET(request: NextRequest) {
   }
 
   const supabase = getSupabaseAdmin()
+  const isDiag = request.nextUrl.searchParams.get('diag') === '1'
+
+  // Quick diagnostic mode: test v1+v2 queries without computing
+  if (isDiag) {
+    const diag: Record<string, unknown> = { v2: {}, v1: {}, freshness: {} }
+    const threshold48h = new Date(Date.now() - 48 * 3600 * 1000).toISOString()
+    const testSources = ['binance_futures', 'hyperliquid', 'bybit', 'drift']
+    for (const src of testSources) {
+      const { data: v2Data, error: v2Err } = await supabase
+        .from('trader_snapshots_v2').select('trader_key').eq('platform', src).eq('window', '90D').gte('created_at', threshold48h).limit(1)
+      ;(diag.v2 as Record<string, unknown>)[src] = v2Err ? `ERROR: ${v2Err.message}` : (v2Data?.length ?? 0)
+      const { data: v1Data, error: v1Err } = await supabase
+        .from('trader_snapshots').select('source_trader_id').eq('source', src).eq('season_id', '90D').gte('captured_at', threshold48h).limit(1)
+      ;(diag.v1 as Record<string, unknown>)[src] = v1Err ? `ERROR: ${v1Err.message}` : (v1Data?.length ?? 0)
+    }
+    diag.all_sources_count = ALL_SOURCES.length
+    diag.threshold_48h = threshold48h
+    return NextResponse.json(diag)
+  }
+
   const startTime = Date.now()
   const stats = { seasons: {} as Record<string, number> }
   const warnings: string[] = []
