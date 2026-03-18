@@ -5,6 +5,7 @@ import Link from 'next/link'
 import Image from 'next/image'
 import useSWR from 'swr'
 import { supabase } from '@/lib/supabase/client'
+import { localizedLabel } from '@/lib/utils/format'
 import { tokens } from '@/lib/design-tokens'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import { useUnifiedAuth } from '@/lib/hooks/useUnifiedAuth'
@@ -135,8 +136,8 @@ export default function RecommendedGroups() {
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
           {groups.map(g => {
-            const displayName = language === 'zh' ? g.name : (g.name_en || g.name)
-            const desc = language === 'zh' ? g.description : (g.description_en || g.description)
+            const displayName = localizedLabel(g.name, g.name_en, language)
+            const desc = localizedLabel(g.description || '', g.description_en, language)
             return (
               <Link prefetch={false}
                 key={g.id}
