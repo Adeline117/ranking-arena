@@ -274,10 +274,10 @@ describe('POST /api/feedback', () => {
 
   it('returns 429 when rate limit is exceeded', async () => {
     // Mock checkRateLimit to return a 429 response
-    const { checkRateLimit } = require('@/lib/utils/rate-limit')
-    const { NextResponse } = require('next/server')
-    checkRateLimit.mockResolvedValueOnce(
-      NextResponse.json({ error: 'Too many requests' }, { status: 429 })
+    const rateLimit = jest.requireMock('@/lib/utils/rate-limit') as { checkRateLimit: jest.Mock }
+    const { NextResponse: NR } = jest.requireMock('next/server') as { NextResponse: typeof import('next/server').NextResponse }
+    rateLimit.checkRateLimit.mockResolvedValueOnce(
+      NR.json({ error: 'Too many requests' }, { status: 429 })
     )
 
     const req = createRequest({ message: 'Rate limited' })
