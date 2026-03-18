@@ -12,9 +12,10 @@
  *   }
  */
 
-import { logger } from '@/lib/logger'
+import { logger, fireAndForget } from '@/lib/logger'
 import { getSupabaseAdmin } from '@/lib/supabase/server'
 import { sendAlert } from '@/lib/alerts/send-alert'
+import { syncPipelineLog } from '@/lib/analytics/dual-write'
 
 function getClient() {
   return getSupabaseAdmin()
@@ -61,39 +62,72 @@ export class PipelineLogger {
       id: logId,
       async success(recordsProcessed = 0, meta) {
         const durationMs = Date.now() - startedAt
+        const endedAt = new Date().toISOString()
         await client
           .from('pipeline_logs')
           .update({
             status: 'success',
-            ended_at: new Date().toISOString(),
+            ended_at: endedAt,
             records_processed: recordsProcessed,
             ...(meta ? { metadata: { ...metadata, ...meta, duration_ms: durationMs } } : { metadata: { ...metadata, duration_ms: durationMs } }),
           })
           .eq('id', logId)
+        // Dual-write to ClickHouse (fire-and-forget)
+        fireAndForget(
+          syncPipelineLog({
+            id: logId, job_name: jobName, status: 'success',
+            started_at: new Date(startedAt).toISOString(), ended_at: endedAt,
+            duration_ms: durationMs, records_processed: recordsProcessed,
+            metadata: { ...metadata, ...meta, duration_ms: durationMs },
+          }),
+          'clickhouse-pipeline-log-success'
+        )
       },
       async error(err, meta) {
         const durationMs = Date.now() - startedAt
         const errorMessage = err instanceof Error ? err.message : String(err)
+        const endedAt = new Date().toISOString()
         await client
           .from('pipeline_logs')
           .update({
             status: 'error',
-            ended_at: new Date().toISOString(),
+            ended_at: endedAt,
             error_message: errorMessage.slice(0, 2000),
             ...(meta ? { metadata: { ...metadata, ...meta, duration_ms: durationMs } } : { metadata: { ...metadata, duration_ms: durationMs } }),
           })
           .eq('id', logId)
+        // Dual-write to ClickHouse (fire-and-forget)
+        fireAndForget(
+          syncPipelineLog({
+            id: logId, job_name: jobName, status: 'error',
+            started_at: new Date(startedAt).toISOString(), ended_at: endedAt,
+            duration_ms: durationMs, error_message: errorMessage.slice(0, 2000),
+            metadata: { ...metadata, ...meta, duration_ms: durationMs },
+          }),
+          'clickhouse-pipeline-log-error'
+        )
       },
       async timeout(meta) {
         const durationMs = Date.now() - startedAt
+        const endedAt = new Date().toISOString()
         await client
           .from('pipeline_logs')
           .update({
             status: 'timeout',
-            ended_at: new Date().toISOString(),
+            ended_at: endedAt,
             ...(meta ? { metadata: { ...metadata, ...meta, duration_ms: durationMs } } : { metadata: { ...metadata, duration_ms: durationMs } }),
           })
           .eq('id', logId)
+        // Dual-write to ClickHouse (fire-and-forget)
+        fireAndForget(
+          syncPipelineLog({
+            id: logId, job_name: jobName, status: 'timeout',
+            started_at: new Date(startedAt).toISOString(), ended_at: endedAt,
+            duration_ms: durationMs,
+            metadata: { ...metadata, ...meta, duration_ms: durationMs },
+          }),
+          'clickhouse-pipeline-log-timeout'
+        )
       },
     }
   }
