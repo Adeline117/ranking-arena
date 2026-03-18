@@ -25,7 +25,7 @@ const { chromium } = require('playwright')
 const PORT = parseInt(process.env.SCRAPER_PORT || '3457', 10)
 const PROXY_KEY = process.env.PROXY_KEY || 'arena-proxy-sg-2026'
 const POOL_SIZE = parseInt(process.env.POOL_SIZE || '3', 10)
-const REQUEST_TIMEOUT_MS = parseInt(process.env.REQUEST_TIMEOUT || '90000', 10)
+const REQUEST_TIMEOUT_MS = parseInt(process.env.REQUEST_TIMEOUT || '120000', 10)
 const VERSION = '16.0.0'
 
 const BROWSER_ARGS = [
@@ -593,34 +593,55 @@ const HANDLERS = {
     return { code: 200, data: { list: Array.from(allTraders.values()), total: allTraders.size } }
   },
 
-  // ─── XT (v15 port: page.evaluate for /fapi/user/v1) ─────────────
+  // ─── XT (v15: intercept + page.evaluate, 60s timeout for WAF) ──
   'xt/leaderboard': async (page, params) => {
     const pageSize = parseInt(params.pageSize || '500', 10)
 
+    // Anti-bot evasion
+    await page.addInitScript(() => {
+      Object.defineProperty(navigator, 'webdriver', { get: () => false })
+      window.chrome = { runtime: {} }
+    })
+
     const captured = setupInterception(page, (url) =>
-      url.includes('fapi') && (url.includes('user') || url.includes('rank') || url.includes('leader'))
+      url.includes('fapi') && (url.includes('user') || url.includes('rank') || url.includes('leader') || url.includes('elite'))
     )
 
+    // XT.com WAF can be slow — use 60s timeout
     await page.goto('https://www.xt.com/en/futures/copy-trading', {
-      waitUntil: 'domcontentloaded', timeout: 30000,
+      waitUntil: 'domcontentloaded', timeout: 60000,
     })
-    await page.waitForTimeout(5000)
-    await page.evaluate(() => window.scrollTo(0, 500)).catch(() => {})
+    await waitForCF(page, 20000)
     await page.waitForTimeout(3000)
+    await page.evaluate(() => window.scrollTo(0, 500)).catch(() => {})
+    await page.waitForTimeout(5000)
 
     if (captured.length > 0) {
       captured.sort((a, b) => b.size - a.size)
       return captured[0].data
     }
 
+    // Fallback: try multiple API endpoints from page context
     const data = await page.evaluate(async (opts) => {
-      try {
-        const r = await fetch(`/fapi/user/v1/public/trader/list?page=1&size=${opts.pageSize}&sortField=yield&sortType=1`, { credentials: 'include' })
-        if (!r.ok) return null
-        const text = await r.text()
-        if (!text.startsWith('{')) return null
-        return JSON.parse(text)
-      } catch { return null }
+      async function safeFetch(url) {
+        try {
+          const r = await fetch(url, { credentials: 'include' })
+          if (!r.ok) return null
+          const text = await r.text()
+          if (!text.startsWith('{')) return null
+          return JSON.parse(text)
+        } catch { return null }
+      }
+      // Try multiple known endpoints
+      const eps = [
+        `/fapi/user/v1/public/copy-trade/elite-leader-list-v2?page=1&size=${opts.pageSize}`,
+        `/fapi/user/v1/public/trader/list?page=1&size=${opts.pageSize}&sortField=yield&sortType=1`,
+      ]
+      for (const ep of eps) {
+        const json = await safeFetch(ep)
+        if (json?.result || json?.data) return json
+      }
+      return null
     }, { pageSize }).catch(() => null)
 
     return data || { error: 'No API response captured' }
