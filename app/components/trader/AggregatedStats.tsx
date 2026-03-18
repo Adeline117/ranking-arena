@@ -47,7 +47,7 @@ export default function AggregatedStats({
   weightedScore,
   accounts,
 }: AggregatedStatsProps) {
-  const { language } = useLanguage()
+  const { t } = useLanguage()
 
   // Find max |pnl| for bar chart scaling
   const maxAbsPnl = Math.max(...accounts.map((a) => Math.abs(a.pnl ?? 0)), 1)
@@ -73,10 +73,10 @@ export default function AggregatedStats({
           <line x1="23" y1="11" x2="17" y2="11" />
         </svg>
         <Text size="sm" weight="bold" style={{ color: tokens.colors.text.secondary }}>
-          {language === 'zh' ? '综合表现' : 'Combined Performance'}
+          {t('traderCombinedPerformance')}
         </Text>
         <Text size="xs" style={{ color: tokens.colors.text.tertiary, marginLeft: 'auto' }}>
-          {accounts.length} {language === 'zh' ? '个账号' : 'accounts'}
+          {accounts.length} {t('traderAccountsCount')}
         </Text>
       </Box>
 
@@ -99,7 +99,7 @@ export default function AggregatedStats({
           }}
         >
           <Text size="xs" style={{ color: tokens.colors.text.tertiary, marginBottom: 4 }}>
-            {language === 'zh' ? '综合 PnL' : 'Combined PnL'}
+            {t('traderCombinedPnl')}
           </Text>
           <Text
             size="lg"
@@ -124,7 +124,7 @@ export default function AggregatedStats({
           }}
         >
           <Text size="xs" style={{ color: tokens.colors.text.tertiary, marginBottom: 4 }}>
-            {language === 'zh' ? '最佳 ROI' : 'Best ROI'}
+            {t('traderBestRoi')}
           </Text>
           {bestRoi ? (
             <Box style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
@@ -156,7 +156,7 @@ export default function AggregatedStats({
           }}
         >
           <Text size="xs" style={{ color: tokens.colors.text.tertiary, marginBottom: 4 }}>
-            {language === 'zh' ? '综合评分' : 'Weighted Score'}
+            {t('traderWeightedScore')}
           </Text>
           <Text
             size="lg"
@@ -175,7 +175,7 @@ export default function AggregatedStats({
       {/* Per-exchange ROI breakdown bars */}
       <Box style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
         <Text size="xs" weight="medium" style={{ color: tokens.colors.text.tertiary }}>
-          {language === 'zh' ? '各账号 PnL 分布' : 'PnL Breakdown'}
+          {t('traderPnlBreakdown')}
         </Text>
         {accounts.map((account) => {
           const pnl = account.pnl ?? 0

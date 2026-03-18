@@ -75,9 +75,7 @@ export default function LoginModal({ open, onClose, message }: LoginModalProps) 
     const ua = navigator.userAgent || ''
     if (/Telegram|FBAN|FBAV|Instagram|Line\/|WeChat|MicroMessenger/i.test(ua)) {
       try { await navigator.clipboard.writeText(window.location.href) } catch { /* clipboard unavailable */ }
-      setError(language === 'zh'
-        ? '请在系统浏览器(Safari/Chrome)中打开此页面。链接已复制。'
-        : 'Please open in your system browser (Safari/Chrome). Link copied.')
+      setError(t('authInAppBrowserError'))
       setLoading(false)
       return
     }
@@ -92,7 +90,7 @@ export default function LoginModal({ open, onClose, message }: LoginModalProps) 
       setError(oauthError.message)
       setLoading(false)
     }
-  }, [language])
+  }, [t])
 
   const handleSendOTP = useCallback(async () => {
     if (!email.trim() || loading) return
@@ -187,7 +185,7 @@ export default function LoginModal({ open, onClose, message }: LoginModalProps) 
           <>
             <div style={{ textAlign: 'center', marginBottom: 24 }}>
               <div style={{ fontSize: 20, fontWeight: 800, color: 'var(--color-text-primary)', marginBottom: 6 }}>
-                {language === 'zh' ? '登录 Arena' : 'Log in to Arena'}
+                {t('authLoginTitle')}
               </div>
               {message && (
                 <div style={{ fontSize: 13, color: 'var(--color-text-tertiary)' }}>
@@ -217,7 +215,7 @@ export default function LoginModal({ open, onClose, message }: LoginModalProps) 
                 <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05"/>
                 <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/>
               </svg>
-              {language === 'zh' ? 'Google 登录' : 'Continue with Google'}
+              {t('authGoogleLogin')}
             </button>
 
             {/* Email OTP */}
@@ -236,7 +234,7 @@ export default function LoginModal({ open, onClose, message }: LoginModalProps) 
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <rect x="2" y="4" width="20" height="16" rx="2" /><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7" />
               </svg>
-              {language === 'zh' ? '邮箱验证码' : 'Email code'}
+              {t('authEmailCode')}
             </button>
 
             {/* Wallet */}
@@ -270,11 +268,11 @@ export default function LoginModal({ open, onClose, message }: LoginModalProps) 
               }}
             >
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="m15 18-6-6 6-6"/></svg>
-              {language === 'zh' ? '返回' : 'Back'}
+              {t('authBack')}
             </button>
 
             <div style={{ fontSize: 16, fontWeight: 700, color: 'var(--color-text-primary)', marginBottom: 16 }}>
-              {language === 'zh' ? '输入邮箱' : 'Enter your email'}
+              {t('authEnterEmail')}
             </div>
 
             <input
@@ -305,8 +303,8 @@ export default function LoginModal({ open, onClose, message }: LoginModalProps) 
               }}
             >
               {loading
-                ? (language === 'zh' ? '发送中...' : 'Sending...')
-                : (language === 'zh' ? '发送验证码' : 'Send code')}
+                ? t('authSending')
+                : t('authSendCode')}
             </button>
 
             {error && (
@@ -329,14 +327,14 @@ export default function LoginModal({ open, onClose, message }: LoginModalProps) 
               }}
             >
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="m15 18-6-6 6-6"/></svg>
-              {language === 'zh' ? '返回' : 'Back'}
+              {t('authBack')}
             </button>
 
             <div style={{ fontSize: 16, fontWeight: 700, color: 'var(--color-text-primary)', marginBottom: 4 }}>
-              {language === 'zh' ? '输入验证码' : 'Enter verification code'}
+              {t('authEnterCode')}
             </div>
             <div style={{ fontSize: 13, color: 'var(--color-text-tertiary)', marginBottom: 16 }}>
-              {language === 'zh' ? `验证码已发送到 ${email}` : `Code sent to ${email}`}
+              {t('authCodeSentTo').replace('{email}', email)}
             </div>
 
             <input
@@ -370,8 +368,8 @@ export default function LoginModal({ open, onClose, message }: LoginModalProps) 
               }}
             >
               {loading
-                ? (language === 'zh' ? '验证中...' : 'Verifying...')
-                : (language === 'zh' ? '验证' : 'Verify')}
+                ? t('authVerifying')
+                : t('authVerify')}
             </button>
 
             {error && (

@@ -1,22 +1,21 @@
 import React, { useState, useRef, useEffect, memo } from 'react'
 import { createPortal } from 'react-dom'
 import { tokens } from '@/lib/design-tokens'
+import { useLanguage } from '../Providers/LanguageProvider'
 import type { Trader } from './RankingTable'
 
 /**
  * 置信度标签配置
  */
-const CONFIDENCE_LABELS: Record<string, { zh: string; en: string; color: string; icon: string; penalty: string }> = {
+const CONFIDENCE_LABELS: Record<string, { i18nKey: 'scoreConfidencePartial' | 'scoreConfidenceMinimal'; color: string; icon: string; penalty: string }> = {
   partial: {
-    zh: '部分数据缺失（分数 ×0.92）',
-    en: 'Partial data — score ×0.92',
+    i18nKey: 'scoreConfidencePartial',
     color: tokens.colors.accent.warning,
     icon: '!',
     penalty: '-8%',
   },
   minimal: {
-    zh: '胜率和回撤均缺失（分数 ×0.80）',
-    en: 'Win rate & drawdown missing — score ×0.80',
+    i18nKey: 'scoreConfidenceMinimal',
     color: tokens.colors.accent.error ?? tokens.colors.accent.warning,
     icon: '!',
     penalty: '-20%',
@@ -25,11 +24,12 @@ const CONFIDENCE_LABELS: Record<string, { zh: string; en: string; color: string;
 
 export const ScoreBreakdownTooltip = memo(function ScoreBreakdownTooltip({
   trader,
-  language,
+  language: _language,
 }: {
   trader: Trader
   language: string
 }) {
+  const { t } = useLanguage()
   const [show, setShow] = useState(false)
   const [positioned, setPositioned] = useState(false)
   const [tooltipPos, setTooltipPos] = useState({ top: 0, left: 0 })
@@ -122,16 +122,16 @@ export const ScoreBreakdownTooltip = memo(function ScoreBreakdownTooltip({
       }}
     >
       <div style={{ fontWeight: 700, marginBottom: 2, color: tokens.colors.text.primary }}>
-        {language === 'zh' ? '分数构成' : 'Score Breakdown'}
+        {t('scoreBreakdownLabel')}
       </div>
-      <div>{language === 'zh' ? '收益' : 'Return'}: <span style={{ color: tokens.colors.accent.success, fontWeight: 700 }}>{trader.return_score?.toFixed(1) ?? '—'}</span>/70</div>
-      <div>{language === 'zh' ? '盈亏' : 'PnL'}: <span style={{ color: tokens.colors.accent.success, fontWeight: 700 }}>{trader.pnl_score?.toFixed(1) ?? '—'}</span>/15</div>
+      <div>{t('scoreReturn')}: <span style={{ color: tokens.colors.accent.success, fontWeight: 700 }}>{trader.return_score?.toFixed(1) ?? '—'}</span>/70</div>
+      <div>{t('scorePnlLabel')}: <span style={{ color: tokens.colors.accent.success, fontWeight: 700 }}>{trader.pnl_score?.toFixed(1) ?? '—'}</span>/15</div>
       <div>
-        {language === 'zh' ? '回撤' : 'Drawdown'}: <span style={{ color: tokens.colors.accent.warning, fontWeight: 700 }}>{trader.drawdown_score?.toFixed(1) ?? '—'}</span>/8
+        {t('scoreDrawdown')}: <span style={{ color: tokens.colors.accent.warning, fontWeight: 700 }}>{trader.drawdown_score?.toFixed(1) ?? '—'}</span>/8
         {!trader.max_drawdown && <span style={{ opacity: 0.6, fontSize: tokens.typography.fontSize.xs }}> *</span>}
       </div>
       <div>
-        {language === 'zh' ? '稳定' : 'Stability'}: <span style={{ color: tokens.colors.accent.primary, fontWeight: 700 }}>{trader.stability_score?.toFixed(1) ?? '—'}</span>/7
+        {t('scoreStability')}: <span style={{ color: tokens.colors.accent.primary, fontWeight: 700 }}>{trader.stability_score?.toFixed(1) ?? '—'}</span>/7
         {!trader.win_rate && <span style={{ opacity: 0.6, fontSize: tokens.typography.fontSize.xs }}> *</span>}
       </div>
       {confidenceInfo && (
@@ -146,13 +146,13 @@ export const ScoreBreakdownTooltip = memo(function ScoreBreakdownTooltip({
             maxWidth: 220,
           }}
         >
-          {language === 'zh' ? confidenceInfo.zh : confidenceInfo.en}
+          {t(confidenceInfo.i18nKey)}
           {/* Show which fields are missing */}
           <div style={{ marginTop: 2, opacity: 0.8, fontSize: tokens.typography.fontSize.xs, color: tokens.colors.text.tertiary }}>
-            {language === 'zh' ? '缺失: ' : 'Missing: '}
+            {t('scoreConfidenceMissing')}
             {[
-              !trader.win_rate && (language === 'zh' ? '胜率' : 'Win Rate'),
-              !trader.max_drawdown && (language === 'zh' ? '回撤' : 'Drawdown'),
+              !trader.win_rate && t('scoreConfidenceWinRate'),
+              !trader.max_drawdown && t('scoreConfidenceDrawdown'),
             ].filter(Boolean).join(', ')}
           </div>
         </div>
@@ -166,7 +166,7 @@ export const ScoreBreakdownTooltip = memo(function ScoreBreakdownTooltip({
       className="score-tooltip-trigger"
       role="button"
       tabIndex={0}
-      aria-label="Score breakdown"
+      aria-label={t('scoreBreakdownLabel')}
       onClick={(e) => { e.preventDefault(); e.stopPropagation(); setShow(s => !s) }}
       onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setShow(s => !s) } }}
       onMouseEnter={() => setShow(true)}

@@ -126,9 +126,7 @@ export function EquityCurveSection({
           {t('noEquityCurveData')}
         </Text>
         <Text size="xs" color="tertiary" style={{ textAlign: 'center', maxWidth: 280, lineHeight: 1.6, opacity: 0.8 }}>
-          {t('chartDataAccumulatesDaily') || (language === 'zh'
-            ? '数据每天积累。首次交易后24小时内即可看到资金曲线图。'
-            : 'Data accumulates daily. Check back soon — your first chart will appear within 24 hours of first trade.')}
+          {t('chartDataAccumulatesDaily')}
         </Text>
       </Box>
     )
@@ -189,7 +187,7 @@ export function EquityCurveSection({
           {/* Fullscreen button */}
           <button
             onClick={() => setShowFullscreen(true)}
-            aria-label={language === 'zh' ? '全屏查看' : 'Fullscreen'}
+            aria-label={t('traderFullscreen')}
             style={{
               background: 'none',
               border: `1px solid ${tokens.colors.border.primary}`,
@@ -229,12 +227,10 @@ export function EquityCurveSection({
             <circle cx="20" cy="20" r="2" fill="currentColor" opacity="0.5" />
           </svg>
           <Text size="sm" weight="semibold" color="tertiary" style={{ textAlign: 'center' }}>
-            {language === 'zh' ? '数据积累中' : 'Accumulating data...'}
+            {t('traderAccumulatingData')}
           </Text>
           <Text size="sm" color="tertiary" style={{ textAlign: 'center', maxWidth: 300, lineHeight: 1.6 }}>
-            {t('insufficientDataForChart') || (language === 'zh'
-              ? `数据点不足（仅 ${currentData.length} 个），图表需要更多数据才能有效展示趋势。`
-              : `Not enough data points (only ${currentData.length}). More data is needed to display a meaningful chart.`)}
+            {t('insufficientDataForChart')}
           </Text>
           <Text size="xs" color="tertiary" style={{ textAlign: 'center', fontFamily: tokens.typography.fontFamily.mono.join(', '), opacity: 0.7 }}>
             {currentData.map(d => `${new Date(d.date).toLocaleDateString()}: ${chartType === 'roi' ? d.roi.toFixed(2) + '%' : '$' + d.pnl.toLocaleString()}`).join('  |  ')}
@@ -379,7 +375,7 @@ function SimpleLineChart({
   const isPositive = values[values.length - 1] >= values[0]
   const color = isPositive ? tokens.colors.accent.success : tokens.colors.accent.error
 
-  const locale = language === 'zh' ? 'zh-CN' : 'en-US'
+  const locale = language === 'zh' ? 'zh-CN' : language === 'ja' ? 'ja-JP' : language === 'ko' ? 'ko-KR' : 'en-US'
 
   const formatTooltipValue = (val: number) => {
     if (dataKey === 'roi') return `${val >= 0 ? '+' : ''}${val.toFixed(2)}%`

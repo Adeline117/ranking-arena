@@ -96,7 +96,7 @@ export default function TradingStyleBadge({
   showConfidence = true,
   showTooltip = true,
 }: TradingStyleBadgeProps) {
-  const { language } = useLanguage()
+  const { t } = useLanguage()
 
   if (!style) {
     return null
@@ -127,8 +127,8 @@ export default function TradingStyleBadge({
   }
 
   const s = sizeStyles[size]
-  const label = language === 'zh' ? config.labelZh : config.label
-  const description = language === 'zh' ? config.descriptionZh : config.description
+  const label = t('tradingStyle' + style.charAt(0).toUpperCase() + style.slice(1)) || config.label
+  const description = t('tradingStyle' + style.charAt(0).toUpperCase() + style.slice(1) + 'Desc') || config.description
 
   return (
     <Box
@@ -266,7 +266,7 @@ export function TradingStyleCard({
   }
 
   const config = STYLE_CONFIGS[style]
-  const description = language === 'zh' ? config.descriptionZh : config.description
+  const description = t('tradingStyle' + style.charAt(0).toUpperCase() + style.slice(1) + 'Desc') || config.description
 
   return (
     <Box
@@ -282,7 +282,7 @@ export function TradingStyleCard({
           <span style={{ display: 'flex', alignItems: 'center', color: config.color }}>{getStyleIcon(style, 24)}</span>
           <Box>
             <Text size="lg" weight="bold" style={{ color: config.color }}>
-              {language === 'zh' ? config.labelZh : config.label}
+              {t('tradingStyle' + style.charAt(0).toUpperCase() + style.slice(1)) || config.label}
             </Text>
             {confidence !== null && (
               <Text size="xs" color="tertiary">

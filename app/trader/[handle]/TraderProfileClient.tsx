@@ -355,7 +355,7 @@ export default function TraderProfileClient({ data, serverTraderData, claimedUse
 
       <Box className="page-container" style={{ maxWidth: 1200, margin: '0 auto', padding: tokens.spacing[6], paddingBottom: 100 }}>
         <Breadcrumb items={[
-          { label: language === 'zh' ? '排行榜' : 'Leaderboard', href: '/rankings' },
+          { label: t('leaderboardBreadcrumb'), href: '/rankings' },
           { label: displayName },
         ]} />
 
@@ -483,7 +483,7 @@ export default function TraderProfileClient({ data, serverTraderData, claimedUse
                       <path d="M7 16l4-8 4 4 4-6" strokeLinecap="round" strokeLinejoin="round" />
                     </svg>
                     <Text size="sm" color="tertiary">
-                      {language === 'zh' ? '性能图表将在下一次数据采集后可用' : 'Performance charts will be available after the next data collection'}
+                      {t('traderPerformanceUnavailable')}
                     </Text>
                   </Box>
                 )}
@@ -526,7 +526,7 @@ export default function TraderProfileClient({ data, serverTraderData, claimedUse
                     }}
                   >
                     <Text size="sm" weight="bold" style={{ color: 'var(--color-text-secondary)', marginBottom: tokens.spacing[3], textAlign: 'center' }}>
-                      {language === 'zh' ? '交易风格' : 'Trading Style'}
+                      {t('traderTradingStyleLabel')}
                     </Text>
                     <TradingStyleRadar
                       profitability={data.profitability_score}
