@@ -39,8 +39,9 @@ export const PLATFORM_CRON_CONFIGS: PlatformCronConfig[] = [
   // 中优先级 - 每 2 小时
   { platform: 'htx_futures', schedule: '20 */2 * * *', endpoint: '/api/cron/htx-futures', enabled: true, priority: 'medium' },
   { platform: 'mexc', schedule: '25 */2 * * *', endpoint: '/api/cron/mexc', enabled: true, priority: 'medium' },
-  { platform: 'bitget_futures', schedule: '30 */2 * * *', endpoint: '/api/cron/bitget-futures', enabled: true, priority: 'medium' },
-  { platform: 'bitget_spot', schedule: '35 */2 * * *', endpoint: '/api/cron/bitget-spot', enabled: true, priority: 'medium' },
+  // bitget_futures/spot: DISABLED 2026-03-18 EMERGENCY #7 - VPS scraper hangs 44+ min repeatedly
+  { platform: 'bitget_futures', schedule: '30 */2 * * *', endpoint: '/api/cron/bitget-futures', enabled: false, priority: 'medium' },
+  { platform: 'bitget_spot', schedule: '35 */2 * * *', endpoint: '/api/cron/bitget-spot', enabled: false, priority: 'medium' },
   
   // 低优先级 - 每 4 小时
   { platform: 'hyperliquid', schedule: '40 */4 * * *', endpoint: '/api/cron/hyperliquid', enabled: true, priority: 'low' },
