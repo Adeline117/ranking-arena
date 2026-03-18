@@ -23,6 +23,7 @@ import { fireAndForget } from '@/lib/utils/logger'
 import { features } from '@/lib/features'
 import { searchTraders as unifiedSearchTraders, getSearchSuggestions } from '@/lib/data/unified'
 import { EXCHANGE_CONFIG } from '@/lib/constants/exchanges'
+import { searchTradersMeili, isMeilisearchAvailable } from '@/lib/search/meilisearch'
 
 export const dynamic = 'force-dynamic'
 
@@ -402,7 +403,26 @@ export const GET = withPublic(
     interface UserRow { id: string; handle: string | null; display_name: string | null; avatar_url: string | null; bio: string | null }
     interface GroupRow { id: string; name: string; member_count: number | null; description: string | null }
 
-    const [unifiedTraders, postsData, libraryData, usersData, groupsData] = await Promise.all([
+    // Try Meilisearch first (1-6ms), fall back to Supabase (100-300ms)
+    const meiliTraderSearch = isMeilisearchAvailable() && sanitizedQuery.length >= 2
+      ? searchTradersMeili(sanitizedQuery, { limit: effectiveLimit, platform: effectivePlatform || undefined })
+          .then(result => result?.hits.map(h => ({
+            handle: h.handle,
+            traderKey: h.id.split('--')[1] || h.handle,
+            platform: h.platform,
+            roi: h.roi,
+            pnl: h.pnl,
+            arenaScore: h.arena_score,
+            rank: h.rank,
+            avatarUrl: h.avatar_url,
+            traderType: h.trader_type,
+          })) || null)
+          .catch(() => null)
+      : Promise.resolve(null)
+
+    const [meiliResults, supabaseTraders, postsData, libraryData, usersData, groupsData] = await Promise.all([
+      meiliTraderSearch,
+      // Supabase fallback (skipped if Meilisearch returns results)
       unifiedSearchTraders(supabase, {
         query: matchedExchange && !platformFilter ? '' : sanitizedQuery,
         limit: effectiveLimit,
@@ -446,8 +466,9 @@ export const GET = withPublic(
     ])
 
     // For exchange name search, fetch top traders from leaderboard if direct search returned nothing
-    let exchangeTopTraders = unifiedTraders
-    if (matchedExchange && !platformFilter && unifiedTraders.length === 0) {
+    // Use Meilisearch results if available (1-6ms), otherwise Supabase (100-300ms)
+    let exchangeTopTraders = (meiliResults && meiliResults.length > 0) ? meiliResults : supabaseTraders
+    if (matchedExchange && !platformFilter && exchangeTopTraders.length === 0) {
       try {
         const { getLeaderboard } = await import('@/lib/data/unified')
         const { traders: topTraders } = await getLeaderboard(supabase, {
