@@ -220,7 +220,7 @@ export default function RootLayout({
             </Suspense>
             <KeyboardShortcuts />
             <PageErrorBoundary>
-              <main id="main-content" tabIndex={-1} style={{ viewTransitionName: 'page-content' }}>
+              <main id="main-content" tabIndex={-1}>
                 {children}
               </main>
             </PageErrorBoundary>

@@ -174,7 +174,7 @@ export default function PullToRefresh({
       {/* Content with transform */}
       <div
         style={{
-          transform: showIndicator ? `translateY(${pullDistance * 0.3}px)` : 'translateY(0)',
+          transform: showIndicator ? `translateY(${pullDistance * 0.3}px)` : 'none',
           transition: isRefreshing ? 'none' : 'transform 0.2s ease-out',
         }}
       >
