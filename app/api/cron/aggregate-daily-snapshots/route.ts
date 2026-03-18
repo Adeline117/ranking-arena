@@ -160,6 +160,20 @@ export async function GET(request: NextRequest) {
       const currentRoi = snapshot.roi != null ? parseFloat(String(snapshot.roi)) : null
       const prev = prevDataMap.get(key)
 
+      // Data validation: skip records with extreme values that exceed DB schema limits
+      // roi: numeric(12,4) → max ~99,999,999.9999
+      // pnl/cumulative_pnl: numeric(18,2) → max ~9,999,999,999,999,999.99
+      // win_rate/max_drawdown: numeric(5,2) → max 999.99
+      if (
+        (currentRoi != null && (Math.abs(currentRoi) > 99999999 || !Number.isFinite(currentRoi))) ||
+        (currentPnl != null && (Math.abs(currentPnl) > 9999999999999999 || !Number.isFinite(currentPnl))) ||
+        (snapshot.win_rate != null && (Math.abs(parseFloat(String(snapshot.win_rate))) > 999 || !Number.isFinite(parseFloat(String(snapshot.win_rate))))) ||
+        (snapshot.max_drawdown != null && (Math.abs(parseFloat(String(snapshot.max_drawdown))) > 999 || !Number.isFinite(parseFloat(String(snapshot.max_drawdown)))))
+      ) {
+        logger.warn(`[aggregate] Skipping record with extreme value: ${key}, roi=${currentRoi}, pnl=${currentPnl}`)
+        continue
+      }
+
       // Compute daily return: prefer ROI delta (works for all platforms), fallback to PnL delta
       let dailyReturnPct: number | null = null
       if (currentRoi != null && prev?.roi != null) {
