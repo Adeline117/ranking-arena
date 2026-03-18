@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { supabase } from '@/lib/supabase/client'
 import { logger } from '@/lib/logger'
+import { t } from '@/lib/i18n'
 
 export type Group = {
   id: string
@@ -82,7 +83,7 @@ export function useGroupData({ groupId, userId, accessToken, showToast, language
       if (groupErr) {
         // Sanitize DB error messages — don't show raw SQL errors to users
         const isInvalidId = groupErr.code === '22P02' || groupErr.message?.includes('invalid input syntax')
-        setError(isInvalidId ? (language === 'zh' ? '群组不存在' : 'Group not found') : (language === 'zh' ? '加载失败' : 'Failed to load'))
+        setError(isInvalidId ? t('groupNotFound') : t('loadFailed'))
         setLoading(false)
         return
       }
@@ -102,7 +103,7 @@ export function useGroupData({ groupId, userId, accessToken, showToast, language
       }
     } catch (err) {
       if (controller.signal.aborted) return
-      const errorMsg = err instanceof Error ? err.message : (language === 'zh' ? '加载失败' : 'Failed to load')
+      const errorMsg = err instanceof Error ? err.message : t('loadFailed')
       setError(errorMsg)
     } finally {
       if (!controller.signal.aborted) {
@@ -121,7 +122,7 @@ export function useGroupData({ groupId, userId, accessToken, showToast, language
   // Join group
   const handleJoin = useCallback(async (_bypassPro = false) => {
     if (!userId || !accessToken) {
-      showToast(language === 'zh' ? '请先登录' : 'Please login first', 'warning')
+      showToast(t('pleaseLogin'), 'warning')
       return
     }
 
@@ -134,7 +135,7 @@ export function useGroupData({ groupId, userId, accessToken, showToast, language
       if (joinErr) {
         if (joinErr.code === '23505') {
           setIsMember(true)
-          showToast(language === 'zh' ? '你已经是成员了' : 'Already a member', 'warning')
+          showToast(t('groupAlreadyMember'), 'warning')
         } else {
           showToast(joinErr.message, 'error')
         }
@@ -142,11 +143,11 @@ export function useGroupData({ groupId, userId, accessToken, showToast, language
         setIsMember(true)
         setUserRole('member')
         setGroup(prev => prev ? { ...prev, member_count: (prev.member_count || 0) + 1 } : null)
-        showToast(language === 'zh' ? '已加入小组' : 'Joined group', 'success')
+        showToast(t('joinedGroup'), 'success')
       }
     } catch (err) {
       logger.error('Join error:', err)
-      showToast(language === 'zh' ? '加入失败' : 'Failed to join', 'error')
+      showToast(t('joinFailed'), 'error')
     } finally {
       setJoining(false)
     }
@@ -169,11 +170,11 @@ export function useGroupData({ groupId, userId, accessToken, showToast, language
         setIsMember(false)
         setUserRole(null)
         setGroup(prev => prev ? { ...prev, member_count: Math.max(0, (prev.member_count || 1) - 1) } : null)
-        showToast(language === 'zh' ? '已退出小组' : 'Left group', 'success')
+        showToast(t('leftGroup'), 'success')
       }
     } catch (err) {
       logger.error('Leave error:', err)
-      showToast(language === 'zh' ? '退出失败' : 'Failed to leave', 'error')
+      showToast(t('leaveFailed'), 'error')
     }
   }, [userId, groupId, showToast, language])
 

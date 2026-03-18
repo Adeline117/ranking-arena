@@ -569,8 +569,8 @@ export default function GroupDetailPage({ params }: { params: Promise<{ id: stri
         >
         <Box>
           <Breadcrumb items={[
-            { label: language === 'zh' ? '小组' : 'Groups', href: '/groups' },
-            { label: (language === 'zh' ? group?.name : (group?.name_en || group?.name)) || '...' },
+            { label: t('groups'), href: '/groups' },
+            { label: (language !== 'zh' && group?.name_en ? group?.name_en : group?.name) || '...' },
           ]} />
           <GroupHeader
             group={group}
@@ -651,7 +651,7 @@ export default function GroupDetailPage({ params }: { params: Promise<{ id: stri
           {isMember && (
             <Link
               href={`/groups/${groupId}/new`}
-              aria-label={language === 'zh' ? '发动态' : 'New Post'}
+              aria-label={t('groupNewPost')}
               style={{
                 position: 'fixed',
                 bottom: `calc(${tokens.spacing[20]} + env(safe-area-inset-bottom, 0px))`,

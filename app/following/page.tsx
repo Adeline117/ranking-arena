@@ -191,7 +191,7 @@ export default function FollowingPage() {
         setItems(snapshot)
         showToast(t('operationFailed'), 'error')
       } else {
-        showToast(language === 'zh' ? '已取消关注' : 'Unfollowed', 'success')
+        showToast(t('followingUnfollowed'), 'success')
       }
     } catch {
       // Rollback to snapshot (preserves original order)
@@ -200,7 +200,7 @@ export default function FollowingPage() {
     } finally {
       setUnfollowingId(null)
     }
-  }, [items, unfollowingId, getAuthHeadersAsync, showToast, t, language])
+  }, [items, unfollowingId, getAuthHeadersAsync, showToast, t])
 
   // userId now comes from useAuthSession directly
 
@@ -492,7 +492,7 @@ export default function FollowingPage() {
                 type="text"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder={language === 'zh' ? '搜索关注...' : 'Search following...'}
+                placeholder={t('followingSearchPlaceholder')}
                 style={{
                   flex: '1 1 200px',
                   padding: `${tokens.spacing[2]} ${tokens.spacing[3]}`,
@@ -519,9 +519,9 @@ export default function FollowingPage() {
                   minHeight: 40,
                 }}
               >
-                <option value="all">{language === 'zh' ? '全部平台' : 'All Platforms'}</option>
+                <option value="all">{t('followingAllPlatforms')}</option>
                 {features.social && (
-                  <option value="user">{language === 'zh' ? '用户' : 'Users'}</option>
+                  <option value="user">{t('users')}</option>
                 )}
                 {availablePlatforms.map(p => (
                   <option key={p} value={p}>{getSourceDisplayName(p, language)}</option>
@@ -617,7 +617,7 @@ export default function FollowingPage() {
                       }}>
                         {item.type === 'trader'
                           ? getSourceDisplayName(item.source || 'binance', language)
-                          : (language === 'en' ? 'User' : '用户')}
+                          : t('followingUserType')}
                       </span>
                     </Box>
 
@@ -690,7 +690,7 @@ export default function FollowingPage() {
                     <button
                       onClick={(e) => handleUnfollow(item, e)}
                       disabled={unfollowingId === item.id}
-                      title={language === 'zh' ? '取消关注' : 'Unfollow'}
+                      title={t('followingUnfollowTitle')}
                       style={{
                         padding: `${tokens.spacing[1]} ${tokens.spacing[2]}`,
                         borderRadius: tokens.radius.md,
@@ -706,8 +706,8 @@ export default function FollowingPage() {
                       className="hover-unfollow"
                     >
                       {unfollowingId === item.id
-                        ? (language === 'zh' ? '取消中...' : 'Removing...')
-                        : (language === 'zh' ? '取消关注' : 'Unfollow')
+                        ? t('followingUnfollowing')
+                        : t('followingUnfollowTitle')
                       }
                     </button>
                     <Box style={{ color: tokens.colors.text.tertiary }}>
@@ -738,8 +738,8 @@ export default function FollowingPage() {
                   }}
                 >
                   {loadingMore
-                    ? (language === 'zh' ? '加载中...' : 'Loading...')
-                    : (language === 'zh' ? '加载更多' : 'Load More')}
+                    ? t('loading')
+                    : t('loadMore')}
                 </button>
               </Box>
             )}
@@ -753,12 +753,10 @@ export default function FollowingPage() {
               textAlign: 'center',
             }}>
               <Text size="base" weight="semibold" style={{ marginBottom: tokens.spacing[2] }}>
-                {language === 'zh' ? '发现更多优秀交易员' : 'Discover more traders'}
+                {t('followingDiscoverTitle')}
               </Text>
               <Text size="sm" color="tertiary" style={{ marginBottom: tokens.spacing[4] }}>
-                {language === 'zh'
-                  ? '浏览排行榜，找到更多值得关注的交易员'
-                  : 'Browse the leaderboard to find more traders worth following'}
+                {t('followingDiscoverDesc')}
               </Text>
               <Link
                 href="/rankings"
@@ -774,7 +772,7 @@ export default function FollowingPage() {
                   transition: `opacity ${tokens.transition.base}`,
                 }}
               >
-                {language === 'zh' ? '浏览排行榜' : 'View Rankings'}
+                {t('followingViewRankings')}
               </Link>
             </Box>
           </>
