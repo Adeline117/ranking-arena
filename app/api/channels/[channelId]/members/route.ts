@@ -66,7 +66,7 @@ export async function POST(
       .from('channel_members')
       .upsert(newMembers, { onConflict: 'channel_id,user_id' })
 
-    if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+    if (error) return NextResponse.json({ error: 'Failed to add members' }, { status: 500 })
 
     return NextResponse.json({ ok: true, added: userIds.length })
   } catch (error) {

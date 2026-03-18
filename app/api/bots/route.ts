@@ -14,12 +14,19 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { getSupabaseAdmin } from '@/lib/supabase/server'
+import { checkRateLimit, RateLimitPresets } from '@/lib/utils/rate-limit'
+import { createLogger } from '@/lib/utils/logger'
+
+const logger = createLogger('bots-api')
 
 const VALID_WINDOWS = ['7D', '30D', '90D']
 const VALID_CATEGORIES = ['tg_bot', 'ai_agent', 'vault', 'strategy']
 const VALID_SORT = ['arena_score', 'tvl', 'total_volume', 'unique_users', 'apy', 'roi', 'market_cap']
 
 export async function GET(request: NextRequest) {
+  const rateLimitResponse = await checkRateLimit(request, RateLimitPresets.public)
+  if (rateLimitResponse) return rateLimitResponse
+
   try {
     const { searchParams } = new URL(request.url)
     const window = (searchParams.get('window') || '90D').toUpperCase()
@@ -96,7 +103,8 @@ export async function GET(request: NextRequest) {
     const { data: rows, count, error } = await query
 
     if (error) {
-      return NextResponse.json({ error: error.message }, { status: 500 })
+      logger.error('Bots query failed', { error: error.message })
+      return NextResponse.json({ error: 'Failed to fetch bots' }, { status: 500 })
     }
 
     // Transform to a flat response shape
@@ -151,7 +159,7 @@ export async function GET(request: NextRequest) {
       },
     })
   } catch (err: unknown) {
-    const msg = err instanceof Error ? err.message : String(err)
-    return NextResponse.json({ error: msg }, { status: 500 })
+    logger.error('Bots API error', { error: err instanceof Error ? err.message : String(err) })
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
 }

@@ -111,7 +111,7 @@ export async function GET(request: NextRequest) {
         return NextResponse.json({ messages: [], has_more: false })
       }
       logger.error('Query error', { error: msgError.message })
-      return NextResponse.json({ error: msgError.message }, { status: 500 })
+      return NextResponse.json({ error: 'Failed to fetch messages' }, { status: 500 })
     }
 
     // 判断是否还有更多消息
