@@ -108,15 +108,15 @@
     },
     {
       "path": "/api/cron/batch-fetch-traders?group=f",
-      "schedule": "44 */6 * * *"
+      "schedule": "42 */6 * * *"
     },
     {
       "path": "/api/cron/batch-fetch-traders?group=f2",
-      "schedule": "54 */6 * * *"
+      "schedule": "48 */6 * * *"
     },
     {
       "path": "/api/cron/batch-fetch-traders?group=h",
-      "schedule": "52 */6 * * *"
+      "schedule": "54 */6 * * *"
     },
     {
       "path": "/api/cron/batch-fetch-traders?group=e",
@@ -220,23 +220,23 @@
     },
     {
       "path": "/api/cron/fetch-traders/bitget_futures",
-      "schedule": "30 */6 * * *"
+      "schedule": "28 */6 * * *"
     },
     {
       "path": "/api/cron/fetch-traders/xt",
-      "schedule": "40 */6 * * *"
+      "schedule": "34 */6 * * *"
     },
     {
       "path": "/api/cron/fetch-traders/bingx",
-      "schedule": "50 */6 * * *"
+      "schedule": "38 */6 * * *"
     },
     {
       "path": "/api/cron/fetch-traders/gateio",
-      "schedule": "5 1,7,13,19 * * *"
+      "schedule": "3 1,7,13,19 * * *"
     },
     {
       "path": "/api/cron/fetch-traders/mexc",
-      "schedule": "15 1,7,13,19 * * *"
+      "schedule": "9 1,7,13,19 * * *"
     },
     {
       "path": "/api/cron/fetch-traders/coinex",

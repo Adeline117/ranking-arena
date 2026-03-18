@@ -127,32 +127,24 @@ async function ensureSystemUser(supabase: AnySupabase) {
       user_metadata: { handle: SYSTEM_HANDLE, display_name: SYSTEM_DISPLAY_NAME },
     } as Parameters<typeof supabase.auth.admin.createUser>[0])
     if (authErr && !authErr.message.includes('already')) {
-      console.warn('Could not create system auth user:', authErr.message)
+      throw new Error(`Cannot create system auth user (required for user_activities FK): ${authErr.message}`)
     }
   }
 
   // Then ensure user_profiles entry
-  const { data: existing } = await supabase
+  const { error } = await supabase
     .from('user_profiles')
-    .select('id')
-    .eq('id', SYSTEM_USER_ID)
-    .maybeSingle()
+    .upsert({
+      id: SYSTEM_USER_ID,
+      handle: SYSTEM_HANDLE,
+      display_name: SYSTEM_DISPLAY_NAME,
+      avatar_url: 'https://www.arenafi.org/logo-symbol.png',
+      bio: 'Automated market analysis by Arena',
+      role: 'official',
+    }, { onConflict: 'id' })
 
-  if (!existing) {
-    const { error } = await supabase
-      .from('user_profiles')
-      .upsert({
-        id: SYSTEM_USER_ID,
-        handle: SYSTEM_HANDLE,
-        display_name: SYSTEM_DISPLAY_NAME,
-        avatar_url: 'https://www.arenafi.org/logo-symbol.png',
-        bio: 'Automated market analysis by Arena',
-        role: 'official',
-      }, { onConflict: 'id' })
-
-    if (error) {
-      console.warn('Could not create system user profile:', error.message)
-    }
+  if (error) {
+    console.warn('Could not create system user profile:', error.message)
   }
 }
 
