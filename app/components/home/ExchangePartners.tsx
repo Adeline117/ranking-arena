@@ -2,7 +2,6 @@
 
 import Link from 'next/link'
 import { tokens } from '@/lib/design-tokens'
-import { useLanguage } from '../Providers/LanguageProvider'
 import ExchangeLogo from '../ui/ExchangeLogo'
 import type { Exchange } from '@/lib/exchange'
 
@@ -57,10 +56,9 @@ const EXCHANGES: { name: string; key: Exchange }[] = [
   { name: 'eToro', key: 'etoro' as Exchange },
 ]
 
-export default function ExchangePartners() {
-  const { language } = useLanguage()
+const DOUBLED_EXCHANGES = [...EXCHANGES, ...EXCHANGES]
 
-  const doubled = [...EXCHANGES, ...EXCHANGES]
+export default function ExchangePartners() {
 
   return (
     <div style={{
@@ -88,7 +86,7 @@ export default function ExchangePartners() {
         animation: 'exchange-scroll 35s linear infinite',
         width: 'max-content',
       }}>
-        {doubled.map((ex, i) => {
+        {DOUBLED_EXCHANGES.map((ex, i) => {
           const source = EXCHANGE_SOURCE_MAP[ex.key] || ''
           const content = (
             <>
@@ -114,7 +112,7 @@ export default function ExchangePartners() {
             <Link
               key={`${ex.key}-${i}`}
               href={`/rankings/${source}`}
-              prefetch={true}
+              prefetch={false}
               className="exchange-item"
               style={sharedStyle}
             >

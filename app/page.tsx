@@ -52,20 +52,7 @@ const organizationJsonLd = {
   description: 'Arena aggregates trader rankings from 30+ exchanges. Follow top traders, share insights, and level up your trading.',
 }
 
-const webSiteJsonLd = {
-  '@context': 'https://schema.org',
-  '@type': 'WebSite',
-  name: 'Arena',
-  url: baseUrl,
-  potentialAction: {
-    '@type': 'SearchAction',
-    target: {
-      '@type': 'EntryPoint',
-      urlTemplate: `${baseUrl}/search?q={search_term_string}`,
-    },
-    'query-input': 'required name=search_term_string',
-  },
-}
+// WebSite JSON-LD is in layout.tsx (site-wide, with potentialAction)
 
 export default async function Page() {
   const { traders: initialTraders, lastUpdated } = await getInitialTraders('90D', 50)
@@ -83,7 +70,6 @@ export default async function Page() {
         <link key={url} rel="preload" as="image" href={url} crossOrigin="anonymous" />
       ))}
       <JsonLd data={organizationJsonLd} />
-      <JsonLd data={webSiteJsonLd} />
       {/* SSR ranking table — LCP element, hidden by CSS :has() when client renders */}
       <div id="ssr-ranking">
         <SSRRankingTable traders={initialTraders} />

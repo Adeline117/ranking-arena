@@ -203,7 +203,7 @@ export async function fetchHyperliquidPositionHistory(
 // GMX Position History (from GraphQL)
 // ============================================
 
-const GMX_SUBSQUID_URL = 'https://gmx.squids.live/gmx-synthetics-arbitrum/graphql'
+const GMX_SUBSQUID_URL = 'https://gmx.squids.live/gmx-synthetics-arbitrum:prod/api/graphql'
 const GMX_VALUE_SCALE = 1e30
 
 // Common GMX v2 market address → symbol mapping (Arbitrum)
