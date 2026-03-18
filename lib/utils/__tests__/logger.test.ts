@@ -2,6 +2,9 @@
  * Logger 工具单元测试
  */
 
+// Undo global mock from jest.setup.js so we test the real logger
+jest.unmock('@/lib/utils/logger')
+
 import { Logger, createLogger, silent, logIf } from '../logger'
 
 describe('Logger', () => {
