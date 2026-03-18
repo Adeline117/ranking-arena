@@ -372,8 +372,18 @@ function SimpleLineChart({
   })
   const pathD = `M ${points.join(' L ')}`
 
+  // Baseline series: baseline is 0 for both ROI and PnL
+  // Compute where the zero line sits in the chart coordinate space
+  const baselineValue = 0
+  const baselineY = range === 0 ? height / 2 : height - ((baselineValue - minValue) / range) * height
+  // Clamp to chart bounds (if all values are positive or all negative, baseline may be off-screen)
+  const clampedBaselineY = Math.max(0, Math.min(height, baselineY))
+
   const isPositive = values[values.length - 1] >= values[0]
   const color = isPositive ? tokens.colors.accent.success : tokens.colors.accent.error
+
+  // Check if baseline is within view (mixed positive/negative data)
+  const hasBaseline = minValue < 0 && maxValue > 0
 
   const locale = language === 'zh' ? 'zh-CN' : language === 'ja' ? 'ja-JP' : language === 'ko' ? 'ko-KR' : 'en-US'
 
@@ -452,23 +462,96 @@ function SimpleLineChart({
             <line key={y} x1="0" y1={y} x2="100" y2={y} stroke={tokens.colors.border.primary} strokeWidth="0.3" strokeDasharray="2,2" />
           ))}
 
-          {/* Area Fill */}
-          <path
-            d={`${pathD} L 100,100 L 0,100 Z`}
-            fill={`url(#gradient-${period}-${isPositive ? 'positive' : 'negative'})`}
-            opacity="0.4"
-          />
+          {/* Baseline zero line (when data crosses zero) */}
+          {hasBaseline && (
+            <line
+              x1="0" y1={clampedBaselineY} x2="100" y2={clampedBaselineY}
+              stroke={tokens.colors.text.tertiary}
+              strokeWidth="0.5"
+              strokeDasharray="2,2"
+              opacity="0.6"
+            />
+          )}
 
-          {/* Line - thicker stroke */}
-          <path
-            d={pathD}
-            fill="none"
-            stroke={color}
-            strokeWidth="3"
-            vectorEffect="non-scaling-stroke"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          />
+          {/* Baseline series: split fill above/below zero using clipPath */}
+          <defs>
+            {/* Clip to above baseline (profit zone) */}
+            <clipPath id={`clip-above-${period}`}>
+              <rect x="0" y="0" width={width} height={clampedBaselineY} />
+            </clipPath>
+            {/* Clip to below baseline (loss zone) */}
+            <clipPath id={`clip-below-${period}`}>
+              <rect x="0" y={clampedBaselineY} width={width} height={height - clampedBaselineY} />
+            </clipPath>
+            <linearGradient id={`gradient-${period}-positive`} x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stopColor={tokens.colors.accent.success} stopOpacity="0.4" />
+              <stop offset="100%" stopColor={tokens.colors.accent.success} stopOpacity="0" />
+            </linearGradient>
+            <linearGradient id={`gradient-${period}-negative`} x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stopColor={tokens.colors.accent.error} stopOpacity="0.4" />
+              <stop offset="100%" stopColor={tokens.colors.accent.error} stopOpacity="0" />
+            </linearGradient>
+          </defs>
+
+          {hasBaseline ? (
+            <>
+              {/* Green area fill above baseline */}
+              <path
+                d={`${pathD} L ${width},${clampedBaselineY} L 0,${clampedBaselineY} Z`}
+                fill={`url(#gradient-${period}-positive)`}
+                clipPath={`url(#clip-above-${period})`}
+                opacity="0.4"
+              />
+              {/* Red area fill below baseline */}
+              <path
+                d={`${pathD} L ${width},${clampedBaselineY} L 0,${clampedBaselineY} Z`}
+                fill={`url(#gradient-${period}-negative)`}
+                clipPath={`url(#clip-below-${period})`}
+                opacity="0.4"
+              />
+              {/* Green line above baseline */}
+              <path
+                d={pathD}
+                fill="none"
+                stroke={tokens.colors.accent.success}
+                strokeWidth="3"
+                vectorEffect="non-scaling-stroke"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                clipPath={`url(#clip-above-${period})`}
+              />
+              {/* Red line below baseline */}
+              <path
+                d={pathD}
+                fill="none"
+                stroke={tokens.colors.accent.error}
+                strokeWidth="3"
+                vectorEffect="non-scaling-stroke"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                clipPath={`url(#clip-below-${period})`}
+              />
+            </>
+          ) : (
+            <>
+              {/* Single-color fill (all values same sign) */}
+              <path
+                d={`${pathD} L 100,100 L 0,100 Z`}
+                fill={`url(#gradient-${period}-${isPositive ? 'positive' : 'negative'})`}
+                opacity="0.4"
+              />
+              {/* Single-color line */}
+              <path
+                d={pathD}
+                fill="none"
+                stroke={color}
+                strokeWidth="3"
+                vectorEffect="non-scaling-stroke"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+            </>
+          )}
 
           {/* Hover vertical line */}
           {hoverIndex !== null && (
@@ -484,24 +567,16 @@ function SimpleLineChart({
             />
           )}
 
-          {/* Hover dot */}
+          {/* Hover dot — color matches whether point is above or below baseline */}
           {hoverIndex !== null && (() => {
             const cx = (hoverIndex / denominator) * width
-            const cy = height - (((validData[hoverIndex][dataKey] as number) - minValue) / range) * height
-            return <circle cx={cx} cy={cy} r="4" fill={color} stroke={tokens.colors.bg.primary} strokeWidth="2" vectorEffect="non-scaling-stroke" />
+            const val = validData[hoverIndex][dataKey] as number
+            const cy = height - ((val - minValue) / range) * height
+            const dotColor = hasBaseline
+              ? (val >= 0 ? tokens.colors.accent.success : tokens.colors.accent.error)
+              : color
+            return <circle cx={cx} cy={cy} r="4" fill={dotColor} stroke={tokens.colors.bg.primary} strokeWidth="2" vectorEffect="non-scaling-stroke" />
           })()}
-
-          {/* Gradient Definitions */}
-          <defs>
-            <linearGradient id={`gradient-${period}-positive`} x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stopColor={tokens.colors.accent.success} stopOpacity="0.4" />
-              <stop offset="100%" stopColor={tokens.colors.accent.success} stopOpacity="0" />
-            </linearGradient>
-            <linearGradient id={`gradient-${period}-negative`} x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stopColor={tokens.colors.accent.error} stopOpacity="0.4" />
-              <stop offset="100%" stopColor={tokens.colors.accent.error} stopOpacity="0" />
-            </linearGradient>
-          </defs>
         </svg>
 
         {/* Tooltip */}
@@ -525,7 +600,7 @@ function SimpleLineChart({
             <Text size="xs" color="tertiary" style={{ marginBottom: 2, display: 'block' }}>
               {new Date(hoverData.date).toLocaleDateString(locale, { month: 'short', day: 'numeric' })}
             </Text>
-            <Text size="sm" weight="bold" style={{ color, fontFamily: tokens.typography.fontFamily.mono.join(', ') }}>
+            <Text size="sm" weight="bold" style={{ color: hasBaseline ? (hoverData[dataKey] >= 0 ? tokens.colors.accent.success : tokens.colors.accent.error) : color, fontFamily: tokens.typography.fontFamily.mono.join(', ') }}>
               {formatTooltipValue(hoverData[dataKey])}
             </Text>
             {dataKey === 'roi' && hoverData.pnl != null && !isNaN(hoverData.pnl) && (
