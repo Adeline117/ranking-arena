@@ -9,6 +9,7 @@ import { useAuthSession } from '@/lib/hooks/useAuthSession'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import { useLoginModal } from '@/lib/hooks/useLoginModal'
 import { logger } from '@/lib/logger'
+import { haptic } from '@/lib/utils/haptics'
 
 type UserFollowButtonProps = {
   targetUserId: string
@@ -157,6 +158,7 @@ export default function UserFollowButton({
           setFollowedBy(result.mutual)
         }
         onFollowChange?.(result.following, result.mutual ?? false)
+        haptic('success')
         showToast(result.following ? t('followSuccess') : t('unfollowSuccess'), 'success')
       } else if (result.tableNotFound) {
         setFollowing(previousFollowing) // rollback
@@ -179,7 +181,9 @@ export default function UserFollowButton({
         return
       }
 
-      showToast(t('operationFailedRetry'), 'error')
+      // #22: Show retry hint on network error
+      const isNetworkError = error instanceof TypeError && (error as TypeError).message.includes('fetch')
+      showToast(isNetworkError ? `${t('operationFailedRetry')} — ${t('tapToRetry') || 'Tap to retry'}` : t('operationFailedRetry'), 'error')
     } finally {
       setLoading(false)
       pendingRef.current = false

@@ -103,9 +103,9 @@ export default function ShareButton({ data, size = 'sm', variant = 'ghost', show
   const copyLink = useCallback(async () => {
     try {
       await navigator.clipboard.writeText(data.url)
-      showToast(t('linkCopied'), 'success')
+      showToast(t('linkCopied'), 'success', 2000)
     } catch {
-      showToast(t('copyFailed'), 'error')
+      showToast(t('copyFailed'), 'error', 2000)
     }
     setOpen(false)
   }, [data.url, showToast, t])
@@ -158,7 +158,27 @@ export default function ShareButton({ data, size = 'sm', variant = 'ghost', show
       </button>
 
       {open && (
-        <div style={{
+        <div
+          role="menu"
+          onKeyDown={(e) => {
+            // #26: Keyboard navigation for share dropdown
+            const items = e.currentTarget.querySelectorAll<HTMLButtonElement>('button[role="menuitem"]')
+            const active = document.activeElement as HTMLElement
+            const idx = Array.from(items).indexOf(active as HTMLButtonElement)
+            if (e.key === 'ArrowDown') {
+              e.preventDefault()
+              const next = idx < items.length - 1 ? idx + 1 : 0
+              items[next]?.focus()
+            } else if (e.key === 'ArrowUp') {
+              e.preventDefault()
+              const prev = idx > 0 ? idx - 1 : items.length - 1
+              items[prev]?.focus()
+            } else if (e.key === 'Escape') {
+              e.preventDefault()
+              setOpen(false)
+            }
+          }}
+          style={{
           position: 'absolute', top: '100%', right: 0, marginTop: 6,
           minWidth: 180, padding: `${tokens.spacing[2]} 0`,
           background: tokens.colors.bg.secondary,
@@ -166,6 +186,7 @@ export default function ShareButton({ data, size = 'sm', variant = 'ghost', show
           borderRadius: tokens.radius.lg,
           boxShadow: tokens.shadow.lg,
           zIndex: tokens.zIndex.dropdown,
+          animation: 'shareDropdownIn 0.15s ease-out',
         }}>
           <DropdownItem label={t('shareToTwitter')} onClick={shareToTwitter} icon={
             <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/></svg>
@@ -192,6 +213,7 @@ export default function ShareButton({ data, size = 'sm', variant = 'ghost', show
 function DropdownItem({ label, onClick, icon }: { label: string; onClick: () => void; icon: React.ReactNode }) {
   return (
     <button
+      role="menuitem"
       onClick={onClick}
       style={{
         display: 'flex', alignItems: 'center', gap: 10,

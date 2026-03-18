@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import { getCsrfHeaders } from '@/lib/api/client'
 import { usePostStore } from '@/lib/stores/postStore'
 import { logger } from '@/lib/logger'
+import { haptic } from '@/lib/utils/haptics'
 import { type PollChoice, type PostWithUserState } from '@/lib/types'
 
 type Post = PostWithUserState
@@ -120,6 +121,7 @@ export function usePostActions({
       }
       setPosts(prev => prev.map(p => p.id === postId ? { ...p, ...optimistic } : p))
       if (openPost?.id === postId) setOpenPost({ ...openPost, ...optimistic } as Post)
+      haptic('light')
     }
 
     try {
@@ -199,19 +201,42 @@ export function usePostActions({
   // eslint-disable-next-line react-hooks/exhaustive-deps -- t/showToast/setters are stable refs; only re-create when auth or selected options change
   }, [accessToken, selectedPollOptions])
 
-  // Bookmark
+  // Bookmark (with optimistic update, matching toggleReaction pattern)
   const handleBookmark = useCallback(async (postId: string) => {
     if (!accessToken) { showToast(t('pleaseLogin'), 'warning'); return }
     if (bookmarkLoading[postId]) return
     setBookmarkLoading(prev => ({ ...prev, [postId]: true }))
+
+    // Save previous state for rollback
+    const prevBookmarked = userBookmarks[postId] ?? false
+    const prevCount = bookmarkCounts[postId] ?? 0
+
+    // Optimistic update: toggle bookmark immediately
+    const optimisticBookmarked = !prevBookmarked
+    setUserBookmarks(prev => ({ ...prev, [postId]: optimisticBookmarked }))
+    setBookmarkCounts(prev => ({ ...prev, [postId]: optimisticBookmarked ? prevCount + 1 : Math.max(0, prevCount - 1) }))
+
     try {
       const response = await fetch(`/api/posts/${postId}/bookmark`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${accessToken}`, ...getCsrfHeaders() } })
       const result = await response.json()
-      if (response.ok) { setUserBookmarks(prev => ({ ...prev, [postId]: result.bookmarked })); setBookmarkCounts(prev => ({ ...prev, [postId]: result.bookmark_count })); showToast(result.bookmarked ? t('bookmarked') : t('unbookmarked'), 'success') }
-      else { showToast(result.error || t('operationFailed'), 'error') }
-    } catch { showToast(t('networkError'), 'error') }
-    finally { setBookmarkLoading(prev => ({ ...prev, [postId]: false })) }
-  }, [accessToken, showToast, t, bookmarkLoading])
+      if (response.ok) {
+        // Reconcile with server state
+        setUserBookmarks(prev => ({ ...prev, [postId]: result.bookmarked }))
+        setBookmarkCounts(prev => ({ ...prev, [postId]: result.bookmark_count }))
+        showToast(result.bookmarked ? t('bookmarked') : t('unbookmarked'), 'success')
+      } else {
+        // Rollback on server error
+        setUserBookmarks(prev => ({ ...prev, [postId]: prevBookmarked }))
+        setBookmarkCounts(prev => ({ ...prev, [postId]: prevCount }))
+        showToast(result.error || t('operationFailed'), 'error')
+      }
+    } catch {
+      // Rollback on network error
+      setUserBookmarks(prev => ({ ...prev, [postId]: prevBookmarked }))
+      setBookmarkCounts(prev => ({ ...prev, [postId]: prevCount }))
+      showToast(t('networkError'), 'error')
+    } finally { setBookmarkLoading(prev => ({ ...prev, [postId]: false })) }
+  }, [accessToken, showToast, t, bookmarkLoading, userBookmarks, bookmarkCounts])
 
   const openBookmarkFolderModal = useCallback((postId: string) => {
     if (!accessToken) { showToast(t('pleaseLogin'), 'warning'); return }

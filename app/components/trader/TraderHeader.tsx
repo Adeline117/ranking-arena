@@ -146,10 +146,11 @@ export default function TraderHeader({
     navigator.clipboard.writeText(handle).then(() => {
       setHandleCopied(true)
       setTimeout(() => setHandleCopied(false), 2000)
+      _showToast(t('copiedToClipboard'), 'success', 2000)
     }).catch(() => { // eslint-disable-line no-restricted-syntax -- intentional fire-and-forget
-      console.warn('[TraderHeader] clipboard.writeText failed')
+      _showToast(t('copyFailed') || 'Copy failed', 'error', 2000)
     })
-  }, [handle])
+  }, [handle, _showToast, t])
 
   useEffect(() => {
     setMounted(true)
