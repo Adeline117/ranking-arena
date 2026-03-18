@@ -100,11 +100,12 @@ export async function GET(request: Request, { params }: Params) {
 
     // 6) Return result
     return NextResponse.json({
-      ok: !hasErrors,
+      ok: !hasErrors && totalSaved > 0,
       platform: result.source,
       ran_at: new Date().toISOString(),
       duration: result.duration,
       periods: result.periods,
+      write_consistency: result.write_consistency,
     })
   } catch (error: unknown) {
     const msg = error instanceof Error ? error.message : String(error)
