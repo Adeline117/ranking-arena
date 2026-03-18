@@ -52,7 +52,7 @@ const VALID_CATEGORIES: TradingCategory[] = ['futures', 'spot', 'onchain'];
 const VALID_SORT_BY = ['arena_score', 'roi', 'pnl', 'drawdown', 'copiers'] as const;
 
 // Data quality: ROI values above this threshold are considered anomalous
-const ROI_ANOMALY_THRESHOLD = 5000; // 5000% = 50x — anything above is likely data error
+const ROI_ANOMALY_THRESHOLD = 50000; // 50000% = 500x — only filter extreme data errors, not legitimate high performers
 
 export const GET = withPublic(async ({ request }) => {
     const { searchParams } = new URL(request.url);

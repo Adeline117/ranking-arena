@@ -75,6 +75,13 @@ export function toTraderPageData(detail: TraderDetail): Record<string, unknown> 
     winning_positions: detail.stats?.winningPositions,
     total_positions: detail.stats?.totalPositions,
     score_penalty: 0,
+    // Advanced metrics
+    sortinoRatio: t.sortinoRatio ?? null,
+    calmarRatio: t.calmarRatio ?? null,
+    profitFactor: t.profitFactor ?? null,
+    profitability_score: t.profitabilityScore ?? null,
+    risk_control_score: t.riskControlScore ?? null,
+    execution_score: t.executionScore ?? null,
   }
 
   // Stats (matches TraderStats interface)
