@@ -392,45 +392,10 @@ async function computeSeason(
     })
   }
 
-  // Then fetch v1 snapshots for ALL sources to merge with v2 data.
-  // v2 has incomplete coverage for many platforms — v1 often has 3-5x more traders.
-  // addToTraderMap handles dedup (v2 gets priority since it's added first).
-  {
-    logger.info(`[${season}] Fetching v1 for all ${ALL_SOURCES.length} sources (merge with v2)`)
-    for (let i = 0; i < ALL_SOURCES.length; i += batchSize) {
-      const batch = ALL_SOURCES.slice(i, i + batchSize)
-      const results = await Promise.all(
-        batch.map(async (source) => {
-          const rows: TraderRow[] = []
-          let page = 0
-          const pageSize = 1000
-          const maxPages = 10
-
-          while (page < maxPages) {
-            const { data, error } = await supabase
-              .from('trader_snapshots')
-              .select('source, source_trader_id, roi, pnl, win_rate, max_drawdown, trades_count, followers, arena_score, captured_at, full_confidence_at, profitability_score, risk_control_score, execution_score, score_completeness, trading_style, avg_holding_hours, style_confidence, sharpe_ratio, trader_type')
-              .eq('source', source)
-              .eq('season_id', season)
-              .gte('captured_at', freshnessISOBySource(source))
-              .order('captured_at', { ascending: false })
-              .range(page * pageSize, (page + 1) * pageSize - 1)
-
-            if (error || !data?.length) break
-            rows.push(...(data as TraderRow[]))
-            if (data.length < pageSize) break
-            page++
-          }
-          if (page >= maxPages) {
-            logger.warn(`${source}/${season}: hit ${maxPages}-page cap (${rows.length} rows)`)
-          }
-          return rows
-        })
-      )
-      results.forEach(rows => rows.forEach(addToTraderMap))
-    }
-  }
-  logger.info(`[${season}] ${traderMap.size} unique traders after dedup (v2 + v1)`)
+  // V1 fetch removed — v2 backfill (migration 20260319b) ensures v2 has full coverage.
+  // upsertTraders() writes to both v1 and v2 on every cron run, so v2 stays current.
+  // If v2 coverage drops below expectations, run the backfill migration again.
+  logger.info(`[${season}] ${traderMap.size} unique traders from v2`)
 
   // Phase 3: Fill missing win_rate/max_drawdown from trader_stats_detail (enrichment table)
   // This catches data from enrichment runs that wrote to stats_detail but not back to snapshots
