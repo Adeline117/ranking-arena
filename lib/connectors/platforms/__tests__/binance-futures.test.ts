@@ -133,10 +133,13 @@ describe('BinanceFuturesConnector', () => {
       await connector.discoverLeaderboard('30d')
 
       const call = mockFetch.mock.calls[0]
-      const body = JSON.parse(call[1].body)
+      const outerBody = JSON.parse(call[1].body)
+      // proxyViaVPS wraps the actual body in {url, method, body, headers}
+      // The actual request body is nested inside outerBody.body
+      const actualBody = outerBody.body ? JSON.parse(outerBody.body) : outerBody
       // New API uses timeRange: '30D' not periodType
-      expect(body.timeRange).toBe('30D')
-      expect(body.dataType).toBe('ROI')
+      expect(actualBody.timeRange).toBe('30D')
+      expect(actualBody.dataType).toBe('ROI')
     })
 
     test('returns empty on network error (catches internally)', async () => {

@@ -30,7 +30,7 @@ jest.mock('next/server', () => {
     constructor(url: string, opts?: { method?: string; headers?: Record<string, string>; body?: string }) {
       this.url = url
       this.nextUrl = new URL(url)
-      this._headers = new Map(Object.entries(opts?.headers || {}))
+      this._headers = new Map(Object.entries({ 'user-agent': 'Mozilla/5.0 (Test)', ...(opts?.headers || {}) }))
       this._body = opts?.body
     }
 

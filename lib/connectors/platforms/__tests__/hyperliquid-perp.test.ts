@@ -114,35 +114,54 @@ describe('HyperliquidPerpConnector', () => {
       expect(result).toBeDefined()
     })
 
-    test('sends correct timeWindow in request body', async () => {
+    test('sends GET request to stats-data endpoint (primary path)', async () => {
       const connector = createConnector()
       mockFetchResponse(validResponse)
 
       await connector.discoverLeaderboard('7d')
 
+      // Primary path: GET to stats-data.hyperliquid.xyz (no body)
       const call = mockFetch.mock.calls[0]
-      const body = JSON.parse(call[1].body)
+      const url = call[0] as string
+      const options = call[1] as RequestInit
+      expect(url).toContain('stats-data.hyperliquid.xyz')
+      expect(options.method).toBe('GET')
+    })
+
+    test('uses POST fallback with correct timeWindow when stats-data fails', async () => {
+      const connector = createConnector()
+      // Simulate stats-data failing, then POST endpoint succeeding
+      mockFetchNetworkError()  // stats-data fails
+      mockFetchResponse(validResponse)  // info POST succeeds
+
+      await connector.discoverLeaderboard('7d')
+
+      // Second call is the POST fallback
+      const call = mockFetch.mock.calls[1]
+      const body = JSON.parse((call[1] as RequestInit).body as string)
       expect(body.type).toBe('leaderboard')
       expect(body.timeWindow).toBe('day')
     })
 
-    test('maps 30d to month timeWindow', async () => {
+    test('maps 30d to month timeWindow in POST fallback', async () => {
       const connector = createConnector()
+      mockFetchNetworkError()
       mockFetchResponse(validResponse)
 
       await connector.discoverLeaderboard('30d')
 
-      const body = JSON.parse(mockFetch.mock.calls[0][1].body)
+      const body = JSON.parse(mockFetch.mock.calls[1][1].body)
       expect(body.timeWindow).toBe('month')
     })
 
-    test('maps 90d to allTime timeWindow', async () => {
+    test('maps 90d to allTime timeWindow in POST fallback', async () => {
       const connector = createConnector()
+      mockFetchNetworkError()
       mockFetchResponse(validResponse)
 
       await connector.discoverLeaderboard('90d')
 
-      const body = JSON.parse(mockFetch.mock.calls[0][1].body)
+      const body = JSON.parse(mockFetch.mock.calls[1][1].body)
       expect(body.timeWindow).toBe('allTime')
     })
 
@@ -225,9 +244,11 @@ describe('HyperliquidPerpConnector', () => {
 
     test('returns snapshot with ROI from leaderboard', async () => {
       const connector = createConnector()
-      // fetchTraderSnapshot now makes 2 parallel requests: clearinghouse + leaderboard
+      // fetchTraderSnapshot makes 2 parallel requests: clearinghouse + leaderboard
+      // then optionally a 3rd for fills (try/catch)
       mockFetchResponse(validClearinghouseState)
       mockFetchResponse(validLeaderboardWithTrader)
+      mockFetchNetworkError()  // fills fetch fails silently
 
       const result = await connector.fetchTraderSnapshot('0xabc123', '30d')
 
@@ -242,6 +263,7 @@ describe('HyperliquidPerpConnector', () => {
       const connector = createConnector()
       mockFetchResponse(validClearinghouseState)
       mockFetchResponse(emptyLeaderboard)
+      mockFetchNetworkError()  // fills fetch fails silently
 
       const result = await connector.fetchTraderSnapshot('0xabc123', '30d')
 
@@ -257,6 +279,7 @@ describe('HyperliquidPerpConnector', () => {
         assetPositions: [],
       })
       mockFetchResponse(emptyLeaderboard)
+      mockFetchNetworkError()  // fills fetch fails silently
 
       const result = await connector.fetchTraderSnapshot('0xempty', '7d')
 
@@ -269,6 +292,7 @@ describe('HyperliquidPerpConnector', () => {
       const connector = createConnector()
       mockFetchResponse(validClearinghouseState)
       mockFetchResponse(validLeaderboardWithTrader)
+      mockFetchNetworkError()  // fills fetch fails silently
 
       const result = await connector.fetchTraderSnapshot('0xabc123', '7d')
 
@@ -284,14 +308,17 @@ describe('HyperliquidPerpConnector', () => {
       const connector = createConnector()
       mockFetchResponse(validClearinghouseState)
       mockFetchResponse(validLeaderboardWithTrader)
+      // Third call is fills (wrapped in try/catch, can fail silently)
+      mockFetchNetworkError()
 
       const result = await connector.fetchTraderSnapshot('0xabc123', '30d')
 
       expect(result).not.toBeNull()
-      expect(result!.quality_flags.missing_fields).toContain('win_rate')
-      expect(result!.quality_flags.missing_fields).toContain('max_drawdown')
+      // Connector missing_fields: followers, copiers, sharpe_ratio, sortino_ratio
       expect(result!.quality_flags.missing_fields).toContain('followers')
       expect(result!.quality_flags.missing_fields).toContain('copiers')
+      expect(result!.quality_flags.missing_fields).toContain('sharpe_ratio')
+      expect(result!.quality_flags.missing_fields).toContain('sortino_ratio')
       // 30d is the native window
       expect(result!.quality_flags.window_native).toBe(true)
     })
@@ -300,6 +327,7 @@ describe('HyperliquidPerpConnector', () => {
       const connector = createConnector()
       mockFetchResponse(validClearinghouseState)
       mockFetchResponse(validLeaderboardWithTrader)
+      mockFetchNetworkError()  // fills fetch fails silently
 
       const result = await connector.fetchTraderSnapshot('0xabc123', '7d')
 
@@ -311,12 +339,16 @@ describe('HyperliquidPerpConnector', () => {
       const connector = createConnector()
       mockFetchResponse(validClearinghouseState)
       mockFetchResponse(validLeaderboardWithTrader)
+      // Third call is fills (wrapped in try/catch, ok to fail)
+      mockFetchNetworkError()
 
       await connector.fetchTraderSnapshot('0xabc123', '30d')
 
-      // Two parallel requests: clearinghouse + leaderboard
-      expect(mockFetch).toHaveBeenCalledTimes(2)
-      const bodies = mockFetch.mock.calls.map((call: unknown[]) => JSON.parse((call[1] as { body: string }).body))
+      // At minimum 2 parallel requests: clearinghouse + leaderboard
+      expect(mockFetch).toHaveBeenCalledTimes(3)
+      const bodies = mockFetch.mock.calls.map((call: unknown[]) => {
+        try { return JSON.parse((call[1] as { body: string }).body) } catch { return null }
+      }).filter(Boolean)
       const clearinghouseCall = bodies.find((b: Record<string, unknown>) => b.type === 'clearinghouseState')
       const leaderboardCall = bodies.find((b: Record<string, unknown>) => b.type === 'leaderboard')
       expect(clearinghouseCall).toEqual({ type: 'clearinghouseState', user: '0xabc123' })

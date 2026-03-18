@@ -35,7 +35,7 @@ jest.mock('next/server', () => {
     constructor(url: string, opts?: { headers?: Record<string, string>; method?: string; body?: unknown }) {
       this.url = url
       this.nextUrl = new URL(url)
-      this.headers = new Map(Object.entries(opts?.headers || {}))
+      this.headers = new Map(Object.entries({ 'user-agent': 'Mozilla/5.0 (Test)', ...(opts?.headers || {}) }))
       this.method = opts?.method || 'GET'
       this.cookies = { get: jest.fn() }
       this._body = opts?.body
