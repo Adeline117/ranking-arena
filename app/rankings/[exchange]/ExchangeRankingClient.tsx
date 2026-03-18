@@ -30,6 +30,7 @@ interface TraderData {
   trader_type?: string | null
   is_bot?: boolean
   captured_at?: string | null
+  _source_id?: string
 }
 
 type ViewMode = 'table' | 'card'
@@ -205,9 +206,10 @@ const TraderCardItem = React.memo(function TraderCardItem({ trader, rank }: { tr
         </div>
 
         {/* Bottom stats */}
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: tokens.spacing[2] }}>
-          <StatBlock label={t('rankingWinRate')} value={trader.win_rate != null ? `${trader.win_rate.toFixed(2)}%` : NULL_DISPLAY} color={trader.win_rate != null ? (trader.win_rate >= 50 ? tokens.colors.accent.success : tokens.colors.accent.error) : undefined} />
-          <StatBlock label={t('rankingMdd')} value={trader.max_drawdown != null ? `-${Math.abs(trader.max_drawdown).toFixed(2)}%` : NULL_DISPLAY} color={trader.max_drawdown != null ? tokens.colors.accent.error + 'cc' : undefined} />
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: tokens.spacing[2] }}>
+          <StatBlock label="PnL" value={trader.pnl != null ? `$${trader.pnl >= 1000 ? `${(trader.pnl / 1000).toFixed(1)}K` : trader.pnl.toFixed(0)}` : NULL_DISPLAY} color={trader.pnl != null ? (trader.pnl >= 0 ? tokens.colors.accent.success : tokens.colors.accent.error) : undefined} />
+          <StatBlock label={t('rankingWinRate')} value={trader.win_rate != null ? `${trader.win_rate.toFixed(1)}%` : NULL_DISPLAY} color={trader.win_rate != null ? (trader.win_rate >= 50 ? tokens.colors.accent.success : tokens.colors.accent.error) : undefined} />
+          <StatBlock label={t('rankingMdd')} value={trader.max_drawdown != null ? `-${Math.abs(trader.max_drawdown).toFixed(1)}%` : NULL_DISPLAY} color={trader.max_drawdown != null ? tokens.colors.accent.error + 'cc' : undefined} />
           <StatBlock label={t('rankingArenaScore')} value={trader.arena_score != null ? trader.arena_score.toFixed(0) : NULL_DISPLAY} color={trader.arena_score != null ? getScoreColor(trader.arena_score) : undefined} />
         </div>
       </div>
@@ -305,6 +307,7 @@ export default function ExchangeRankingClient({
   const [sortKey, setSortKey] = useState<SortKey>('rank')
   const [sortDir, setSortDir] = useState<SortDir>('asc')
   const [cardSortKey, setCardSortKey] = useState<CardSortKey>('rank')
+  const [cardSortDir, setCardSortDir] = useState<SortDir>('desc')
   // Live-updating traders state (starts from server props, updates via Realtime)
   const [traders, setTraders] = useState(initialTraders)
   useEffect(() => { setTraders(initialTraders) }, [initialTraders])
@@ -314,7 +317,8 @@ export default function ExchangeRankingClient({
       const updateMap = new Map(updates.map(u => [u.source_trader_id, u]))
       let changed = false
       const next = prev.map(t => {
-        const u = updateMap.get(t.trader_key)
+        // Match on _source_id (source_trader_id) first, fall back to trader_key (handle)
+        const u = updateMap.get(t._source_id || '') || updateMap.get(t.trader_key)
         if (!u) return t
         changed = true
         return { ...t, roi: u.roi, pnl: u.pnl, win_rate: u.win_rate, max_drawdown: u.max_drawdown, arena_score: u.arena_score }
@@ -370,13 +374,13 @@ export default function ExchangeRankingClient({
   }, [traders, sortKey, sortDir])
 
   const cardSortedTraders = React.useMemo(() => {
-    if (cardSortKey === 'rank') return traders
+    if (cardSortKey === 'rank') return cardSortDir === 'asc' ? traders : [...traders].reverse()
     return [...traders].sort((a, b) => {
       const av = a[cardSortKey] ?? -Infinity
       const bv = b[cardSortKey] ?? -Infinity
-      return (bv as number) - (av as number)
+      return cardSortDir === 'desc' ? (bv as number) - (av as number) : (av as number) - (bv as number)
     })
-  }, [traders, cardSortKey])
+  }, [traders, cardSortKey, cardSortDir])
 
   const activeTraders = viewMode === 'card' ? cardSortedTraders : sortedTraders
 
@@ -509,6 +513,21 @@ export default function ExchangeRankingClient({
               <option value="arena_score">{t('rankingScore')}</option>
               <option value="win_rate">{t('rankingWinRate')}</option>
             </select>
+            <button
+              onClick={() => setCardSortDir(d => d === 'desc' ? 'asc' : 'desc')}
+              style={{
+                padding: '4px 8px',
+                borderRadius: tokens.radius.md,
+                border: '1px solid var(--glass-border-light)',
+                background: 'var(--overlay-hover)',
+                color: tokens.colors.text.primary,
+                fontSize: 12,
+                cursor: 'pointer',
+              }}
+              title={cardSortDir === 'desc' ? 'Descending' : 'Ascending'}
+            >
+              {cardSortDir === 'desc' ? '↓' : '↑'}
+            </button>
           </div>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: tokens.spacing[3], paddingBottom: tokens.spacing[4] }}>
             {activeTraders.map((t, i) => {
