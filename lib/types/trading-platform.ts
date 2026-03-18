@@ -76,6 +76,7 @@ export interface TraderProfileRow {
   trader_key: string
   display_name: string | null
   avatar_url: string | null
+  profile_url: string | null
   bio: string | null
   /** Source of the bio: 'auto' = generated, 'manual' = user-written, 'exchange' = from exchange API */
   bio_source: 'auto' | 'manual' | 'exchange' | null
@@ -95,7 +96,9 @@ export interface SnapshotMetrics {
   max_drawdown: number | null
   trades_count: number | null
   followers: number | null
+  copiers: number | null
   aum: number | null
+  sharpe_ratio: number | null
   arena_score: number | null
   return_score: number | null
   drawdown_score: number | null
