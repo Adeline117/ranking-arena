@@ -72,11 +72,16 @@ export class BybitFuturesConnector extends BaseConnector {
     }
     const data = warnValidate(BybitFuturesLeaderboardResponseSchema, _rawLb, 'bybit-futures/leaderboard')
 
-    // Support both old API format (result.data) and VPS scraper format (result.leaderDetails)
-    const rawList = data?.result?.data || data?.result?.leaderDetails || []
-    const list = Array.isArray(rawList) ? rawList : []
+    // VPS scraper returns result.leaderDetails, direct API returns result.data
+    // Check leaderDetails first — Zod schema defaults result.data to [] which is truthy
+    const details = data?.result?.leaderDetails as unknown[]  | undefined
+    const dataArr = data?.result?.data as unknown[] | undefined
+    const rawList = (details?.length ? details : null)
+      || (dataArr?.length ? dataArr : null)
+      || []
+    const list = (Array.isArray(rawList) ? rawList : []) as Record<string, unknown>[]
 
-    const traders: TraderSource[] = list.map((item: Record<string, unknown>) => ({
+    const traders: TraderSource[] = list.map((item) => ({
       platform: 'bybit' as const,
       market_type: 'futures' as const,
       trader_key: String(item.leaderMark || ''),
