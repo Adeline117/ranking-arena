@@ -51,6 +51,8 @@ export interface UnifiedSearchResponse {
   suggestions?: string[]
   /** Matched exchange platform filter (when query matches an exchange name) */
   matchedExchange?: string
+  /** Facet distribution from Meilisearch (platform counts, trader_type counts, etc.) */
+  facetDistribution?: Record<string, Record<string, number>>
 }
 
 // ---------- Exchange name matcher ----------
@@ -404,19 +406,25 @@ export const GET = withPublic(
     interface GroupRow { id: string; name: string; member_count: number | null; description: string | null }
 
     // Try Meilisearch first (1-6ms), fall back to Supabase (100-300ms)
+    let meliFacetDistribution: Record<string, Record<string, number>> | undefined
     const meiliTraderSearch = isMeilisearchAvailable() && sanitizedQuery.length >= 2
       ? searchTradersMeili(sanitizedQuery, { limit: effectiveLimit, platform: effectivePlatform || undefined, season: '90D' })
-          .then(result => result?.hits.map(h => ({
-            handle: h.handle,
-            traderKey: h.id.split('--').slice(1, -1).join('--') || h.id.split('--')[1] || h.handle,
-            platform: h.platform,
-            roi: h.roi,
-            pnl: h.pnl,
-            arenaScore: h.arena_score,
-            rank: h.rank,
-            avatarUrl: h.avatar_url,
-            traderType: h.trader_type,
-          })) || null)
+          .then(result => {
+            if (!result) return null
+            // Capture facet distribution for response
+            if (result.facetDistribution) meliFacetDistribution = result.facetDistribution
+            return result.hits.map(h => ({
+              handle: h.handle,
+              traderKey: h.id.split('--').slice(1, -1).join('--') || h.id.split('--')[1] || h.handle,
+              platform: h.platform,
+              roi: h.roi,
+              pnl: h.pnl,
+              arenaScore: h.arena_score,
+              rank: h.rank,
+              avatarUrl: h.avatar_url,
+              traderType: h.trader_type,
+            }))
+          })
           .catch(() => null)
       : Promise.resolve(null)
 
@@ -603,6 +611,7 @@ export const GET = withPublic(
       total: totalResults,
       ...(suggestions ? { suggestions } : {}),
       ...(matchedExchange && !platformFilter ? { matchedExchange } : {}),
+      ...(meliFacetDistribution ? { facetDistribution: meliFacetDistribution } : {}),
     }
 
     const cacheTtl = totalResults > 5 ? 600 : 300

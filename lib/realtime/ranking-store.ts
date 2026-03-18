@@ -20,6 +20,10 @@ const logger = createLogger('ranking-store')
 const REDIS_KEY_PREFIX = 'ranking:live'
 const TTL_SECONDS = 2 * 60 * 60 // 2 hours
 
+// Write buffer configuration
+const BUFFER_FLUSH_MS = 1000  // flush every 1s
+const BUFFER_MAX_SIZE = 100   // or when buffer hits 100 items per key
+
 function redisKey(period: string): string {
   return `${REDIS_KEY_PREFIX}:${period.toUpperCase()}`
 }
@@ -36,9 +40,63 @@ function parseMemberKey(member: string): { platform: string; traderKey: string }
   }
 }
 
+// ============================================
+// Write Buffer — batches individual ZADD calls into pipelined writes
+// ============================================
+
+const writeBuffer: Map<string, Array<{ member: string; score: number }>> = new Map()
+let flushTimer: ReturnType<typeof setTimeout> | null = null
+
+function scheduleFlush() {
+  if (flushTimer) return
+  flushTimer = setTimeout(() => {
+    flushTimer = null
+    flushBuffer().catch(err => logger.warn('[ranking-store] flushBuffer failed:', err))
+  }, BUFFER_FLUSH_MS)
+}
+
+/**
+ * Flush all buffered writes to Redis via pipeline (single round-trip per key).
+ * Exported for testing and explicit flush (e.g., at end of cron job).
+ */
+export async function flushBuffer(): Promise<void> {
+  if (flushTimer) {
+    clearTimeout(flushTimer)
+    flushTimer = null
+  }
+
+  if (writeBuffer.size === 0) return
+
+  const redis = await getSharedRedis()
+  if (!redis) {
+    writeBuffer.clear()
+    return
+  }
+
+  // Snapshot and clear buffer atomically to avoid losing items during async flush
+  const snapshot = new Map(writeBuffer)
+  writeBuffer.clear()
+
+  for (const [key, items] of snapshot) {
+    if (items.length === 0) continue
+
+    try {
+      const pipeline = redis.pipeline()
+      for (const { member, score } of items) {
+        pipeline.zadd(key, { score, member })
+      }
+      pipeline.expire(key, TTL_SECONDS)
+      await pipeline.exec()
+    } catch (error) {
+      logger.warn(`[ranking-store] flushBuffer failed for ${key} (${items.length} items):`, error)
+    }
+  }
+}
+
 /**
  * Update a trader's score in the sorted set.
- * Called incrementally when new snapshot data arrives.
+ * Writes are buffered and flushed every 1s or when 100 items accumulate per key,
+ * reducing Redis round-trips by ~100x during batch cron runs.
  */
 export async function updateTraderScore(
   period: string,
@@ -46,17 +104,16 @@ export async function updateTraderScore(
   traderKey: string,
   arenaScore: number
 ): Promise<void> {
-  const redis = await getSharedRedis()
-  if (!redis) return
+  const key = redisKey(period)
+  const member = memberKey(platform, traderKey)
 
-  try {
-    const key = redisKey(period)
-    const member = memberKey(platform, traderKey)
-    await redis.zadd(key, { score: arenaScore, member })
-    // Refresh TTL on each write to keep the set alive
-    await redis.expire(key, TTL_SECONDS)
-  } catch (error) {
-    logger.warn('[ranking-store] updateTraderScore failed:', error)
+  if (!writeBuffer.has(key)) writeBuffer.set(key, [])
+  writeBuffer.get(key)!.push({ member, score: arenaScore })
+
+  if (writeBuffer.get(key)!.length >= BUFFER_MAX_SIZE) {
+    await flushBuffer()
+  } else {
+    scheduleFlush()
   }
 }
 
