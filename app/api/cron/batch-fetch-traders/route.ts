@@ -19,10 +19,8 @@
  *   group=g1 → drift, jupiter_perps, aevo (every 6h)
  *   group=g2 → web3_bot, toobit, xt, crypto_com (every 6h)
  *   group=i  → etoro, dydx (every 6h)
- *   group=j  → weex (every 6h)
- *
  * Dead/blocked platforms:
- *   kucoin, mux, synthetix, bitmart,
+ *   kucoin, mux, synthetix, bitmart, weex,
  *   whitebit, btse, pionex, vertex, okx_spot, paradex
  * Mac Mini only (crontab feeds data directly):
  *   phemex (CloudFront blocks VPS), lbank (browser crashes on VPS), blofin (API needs auth)
@@ -77,8 +75,7 @@ const GROUPS: Record<string, string[]> = {
   g1: ['drift', 'jupiter_perps', 'aevo'],
   // Group G2: DEX+CEX+scraper (every 6h)
   g2: ['web3_bot', 'toobit', 'xt', 'crypto_com'],
-  // Group J: Restored via VPS scraper (every 6h)
-  j: ['weex'],
+  // Group J: REMOVED — weex dead (521 server down, 0 traders) — 2026-03-18
   // Group I: Social trading + restored platforms (every 6h)
   // dYdX restored via Copin API (2026-03-15)
   // blofin/phemex: Mac Mini feeds data, connector as backup
