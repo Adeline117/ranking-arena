@@ -3,7 +3,7 @@
  * Schedule: Every 30 min (after leaderboard compute)
  *
  * Syncs leaderboard_ranks → Meilisearch traders index for instant search.
- * Runs after compute-leaderboard to keep search data fresh.
+ * Syncs all 3 seasons (7D, 30D, 90D) with compound document IDs.
  */
 
 import { NextRequest, NextResponse } from 'next/server'
@@ -20,6 +20,8 @@ const logger = createLogger('sync-meilisearch')
 
 const MEILI_URL = process.env.MEILISEARCH_URL
 const MEILI_KEY = process.env.MEILISEARCH_ADMIN_KEY
+
+const SEASONS = ['7D', '30D', '90D'] as const
 
 async function meiliRequest(path: string, method: string, body?: unknown) {
   if (!MEILI_URL || !MEILI_KEY) throw new Error('MEILISEARCH_URL or MEILISEARCH_ADMIN_KEY not configured')
@@ -49,56 +51,74 @@ export async function GET(request: NextRequest) {
   try {
     const supabase = getSupabaseAdmin()
 
-    // Paginated fetch from leaderboard_ranks
-    const allData: Record<string, unknown>[] = []
-    let offset = 0
-    const pageSize = 1000
-    while (true) {
-      const { data, error } = await supabase
-        .from('leaderboard_ranks')
-        .select('source, source_trader_id, handle, avatar_url, roi, pnl, arena_score, win_rate, max_drawdown, followers, rank, trader_type, computed_at')
-        .eq('season_id', '90D')
-        .not('arena_score', 'is', null)
-        .gt('arena_score', 0)
-        .order('arena_score', { ascending: false })
-        .range(offset, offset + pageSize - 1)
-
-      if (error) throw new Error(`Supabase query failed: ${error.message}`)
-      if (!data || data.length === 0) break
-      allData.push(...data)
-      if (data.length < pageSize) break
-      offset += pageSize
+    // Ensure season_id is filterable in Meilisearch index
+    try {
+      await meiliRequest('/indexes/traders/settings/filterable-attributes', 'PUT',
+        ['platform', 'trader_type', 'arena_score', 'roi', 'rank', 'season_id']
+      )
+    } catch {
+      // Non-critical — settings may already be configured
     }
 
-    // Map to Meilisearch documents
-    const traders = allData.map((r) => ({
-      id: `${String(r.source)}--${String(r.source_trader_id || '').replace(/[^a-zA-Z0-9_-]/g, '_')}`,
-      handle: String(r.handle || r.source_trader_id || ''),
-      platform: String(r.source || ''),
-      platform_name: EXCHANGE_CONFIG[r.source as keyof typeof EXCHANGE_CONFIG]?.name || String(r.source || ''),
-      roi: Number(r.roi ?? 0),
-      pnl: Number(r.pnl ?? 0),
-      arena_score: Number(r.arena_score ?? 0),
-      win_rate: r.win_rate != null ? Number(r.win_rate) : null,
-      max_drawdown: r.max_drawdown != null ? Number(r.max_drawdown) : null,
-      followers: r.followers != null ? Number(r.followers) : null,
-      rank: Number(r.rank ?? 0),
-      trader_type: r.trader_type ? String(r.trader_type) : null,
-      avatar_url: r.avatar_url ? String(r.avatar_url) : null,
-      updated_at: String(r.computed_at || new Date().toISOString()),
-    }))
+    let totalSynced = 0
+    const seasonCounts: Record<string, number> = {}
 
-    // Batch upload to Meilisearch
-    for (let i = 0; i < traders.length; i += 5000) {
-      const chunk = traders.slice(i, i + 5000)
-      await meiliRequest('/indexes/traders/documents', 'POST', chunk)
+    for (const season of SEASONS) {
+      // Paginated fetch from leaderboard_ranks
+      const allData: Record<string, unknown>[] = []
+      let offset = 0
+      const pageSize = 1000
+      while (true) {
+        const { data, error } = await supabase
+          .from('leaderboard_ranks')
+          .select('source, source_trader_id, handle, avatar_url, roi, pnl, arena_score, win_rate, max_drawdown, followers, rank, trader_type, computed_at')
+          .eq('season_id', season)
+          .not('arena_score', 'is', null)
+          .gt('arena_score', 0)
+          .order('arena_score', { ascending: false })
+          .range(offset, offset + pageSize - 1)
+
+        if (error) throw new Error(`Supabase query failed (${season}): ${error.message}`)
+        if (!data || data.length === 0) break
+        allData.push(...data)
+        if (data.length < pageSize) break
+        offset += pageSize
+      }
+
+      // Map to Meilisearch documents with compound ID including season
+      const traders = allData.map((r) => ({
+        id: `${String(r.source)}--${String(r.source_trader_id || '').replace(/[^a-zA-Z0-9_-]/g, '_')}--${season}`,
+        handle: String(r.handle || r.source_trader_id || ''),
+        platform: String(r.source || ''),
+        platform_name: EXCHANGE_CONFIG[r.source as keyof typeof EXCHANGE_CONFIG]?.name || String(r.source || ''),
+        season_id: season,
+        roi: Number(r.roi ?? 0),
+        pnl: Number(r.pnl ?? 0),
+        arena_score: Number(r.arena_score ?? 0),
+        win_rate: r.win_rate != null ? Number(r.win_rate) : null,
+        max_drawdown: r.max_drawdown != null ? Number(r.max_drawdown) : null,
+        followers: r.followers != null ? Number(r.followers) : null,
+        rank: Number(r.rank ?? 0),
+        trader_type: r.trader_type ? String(r.trader_type) : null,
+        avatar_url: r.avatar_url ? String(r.avatar_url) : null,
+        updated_at: String(r.computed_at || new Date().toISOString()),
+      }))
+
+      // Batch upload to Meilisearch
+      for (let i = 0; i < traders.length; i += 5000) {
+        const chunk = traders.slice(i, i + 5000)
+        await meiliRequest('/indexes/traders/documents', 'POST', chunk)
+      }
+
+      seasonCounts[season] = traders.length
+      totalSynced += traders.length
     }
 
     const elapsed = Date.now() - startTime
-    logger.info(`Meilisearch synced: ${traders.length} traders in ${elapsed}ms`)
-    await plog.success(traders.length, { elapsed_ms: elapsed })
+    logger.info(`Meilisearch synced: ${totalSynced} traders (${JSON.stringify(seasonCounts)}) in ${elapsed}ms`)
+    await plog.success(totalSynced, { elapsed_ms: elapsed, seasons: seasonCounts })
 
-    return NextResponse.json({ ok: true, traders: traders.length, elapsed_ms: elapsed })
+    return NextResponse.json({ ok: true, traders: totalSynced, seasons: seasonCounts, elapsed_ms: elapsed })
   } catch (err: unknown) {
     const errorMessage = err instanceof Error ? err.message : String(err)
     logger.error('Meilisearch sync failed:', err)

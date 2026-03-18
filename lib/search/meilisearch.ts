@@ -54,14 +54,16 @@ export async function searchTradersMeili(
     platform?: string
     minScore?: number
     traderType?: string
+    season?: string
   } = {}
 ): Promise<MeiliResponse | null> {
   if (!isMeilisearchAvailable()) return null
 
-  const { limit = 20, platform, minScore, traderType } = options
+  const { limit = 20, platform, minScore, traderType, season = '90D' } = options
 
   // Build filter array
   const filters: string[] = []
+  filters.push(`season_id = "${season}"`)
   if (platform) filters.push(`platform = "${platform}"`)
   if (minScore != null) filters.push(`arena_score >= ${minScore}`)
   if (traderType) filters.push(`trader_type = "${traderType}"`)
@@ -76,8 +78,8 @@ export async function searchTradersMeili(
       body: JSON.stringify({
         q: query,
         limit,
-        ...(filters.length > 0 ? { filter: filters.join(' AND ') } : {}),
-        attributesToRetrieve: ['id', 'handle', 'platform', 'platform_name', 'roi', 'pnl', 'arena_score', 'win_rate', 'rank', 'trader_type', 'avatar_url'],
+        filter: filters.join(' AND '),
+        attributesToRetrieve: ['id', 'handle', 'platform', 'platform_name', 'roi', 'pnl', 'arena_score', 'win_rate', 'rank', 'trader_type', 'avatar_url', 'season_id'],
         attributesToHighlight: ['handle'],
         highlightPreTag: '<mark>',
         highlightPostTag: '</mark>',
