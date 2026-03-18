@@ -51,6 +51,8 @@ export const LEADERBOARD_PLATFORMS = [
   'etoro',
   // Bots
   'web3_bot',
+  // Crypto.com (Cloudflare protected, VPS scraper)
+  'crypto_com',
   // Dead/blocked but may have historical data or connectors
   'kucoin', 'phemex', 'lbank', 'blofin', 'weex', 'toobit',
   'kwenta', 'synthetix', 'mux', 'perpetual_protocol', 'pionex',

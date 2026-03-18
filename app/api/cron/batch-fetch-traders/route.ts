@@ -17,13 +17,13 @@
  *   group=f2 → bingx (every 6h, VPS scraper)
  *   group=h  → gateio, btcc (every 6h)
  *   group=g1 → drift, jupiter_perps, aevo (every 6h)
- *   group=g2 → web3_bot, toobit, xt (every 6h)
+ *   group=g2 → web3_bot, toobit, xt, crypto_com (every 6h)
  *   group=i  → etoro, dydx (every 6h)
  *   group=j  → weex (every 6h)
  *
  * Dead/blocked platforms:
  *   kucoin, mux, synthetix, bitmart,
- *   whitebit, btse, cryptocom, pionex, vertex, okx_spot, paradex
+ *   whitebit, btse, pionex, vertex, okx_spot, paradex
  * Mac Mini only (crontab feeds data directly):
  *   phemex (CloudFront blocks VPS), lbank (browser crashes on VPS), blofin (API needs auth)
  * Restored 2026-03-15:
@@ -76,7 +76,7 @@ const GROUPS: Record<string, string[]> = {
   // Group G1: DEX (every 6h)
   g1: ['drift', 'jupiter_perps', 'aevo'],
   // Group G2: DEX+CEX+scraper (every 6h)
-  g2: ['web3_bot', 'toobit', 'xt'],
+  g2: ['web3_bot', 'toobit', 'xt', 'crypto_com'],
   // Group J: Restored via VPS scraper (every 6h)
   j: ['weex'],
   // Group I: Social trading + restored platforms (every 6h)
