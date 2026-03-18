@@ -924,6 +924,11 @@ const en = {
     digestNone: 'None',
     digestDaily: 'Daily digest',
     digestWeekly: 'Weekly digest',
+    unsubscribeSuccess: 'You have been unsubscribed successfully',
+    unsubscribeFromDigest: 'Unsubscribe from email digest',
+    unsubscribeFromAll: 'Unsubscribe from all emails',
+    unsubscribeInvalidLink: 'This unsubscribe link is invalid or has expired',
+    manageEmailPreferences: 'Manage email preferences',
     // Account management
     multiAccount: 'Multi-Account',
     multiAccountDesc: 'Manage linked accounts',

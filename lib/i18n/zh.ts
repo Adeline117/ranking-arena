@@ -924,6 +924,11 @@ const zh = {
     digestNone: '不接收',
     digestDaily: '每日摘要',
     digestWeekly: '每周摘要',
+    unsubscribeSuccess: '您已成功取消订阅',
+    unsubscribeFromDigest: '取消订阅邮件摘要',
+    unsubscribeFromAll: '取消订阅所有邮件',
+    unsubscribeInvalidLink: '此退订链接无效或已过期',
+    manageEmailPreferences: '管理邮件偏好设置',
     // 账号管理
     multiAccount: '多账号',
     multiAccountDesc: '管理关联的账号',
