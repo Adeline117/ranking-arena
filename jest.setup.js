@@ -208,6 +208,40 @@ jest.mock('@/lib/supabase/client', () => ({
   },
 }))
 
+// ---------------------------------------------------------------------------
+// Global mock: @/lib/utils/rate-limit
+// Prevents Redis connection attempts in tests using withAuth/withApiMiddleware
+// ---------------------------------------------------------------------------
+jest.mock('@/lib/utils/rate-limit', () => ({
+  checkRateLimit: jest.fn().mockResolvedValue(null), // null = not rate limited
+  RateLimitPresets: {
+    standard: { windowMs: 60000, maxRequests: 100 },
+    strict: { windowMs: 60000, maxRequests: 10 },
+    lenient: { windowMs: 60000, maxRequests: 1000 },
+  },
+}))
+
+// ---------------------------------------------------------------------------
+// Global mock: @/lib/cache/redis
+// Prevents Upstash Redis connection in tests
+// ---------------------------------------------------------------------------
+jest.mock('@/lib/cache/redis-client', () => ({
+  redis: {
+    get: jest.fn().mockResolvedValue(null),
+    set: jest.fn().mockResolvedValue('OK'),
+    del: jest.fn().mockResolvedValue(1),
+    incr: jest.fn().mockResolvedValue(1),
+    expire: jest.fn().mockResolvedValue(1),
+    pipeline: jest.fn().mockReturnValue({
+      get: jest.fn().mockReturnThis(),
+      set: jest.fn().mockReturnThis(),
+      del: jest.fn().mockReturnThis(),
+      exec: jest.fn().mockResolvedValue([]),
+    }),
+  },
+  getRedis: jest.fn(),
+}))
+
 // Mock localStorage
 const localStorageMock = {
   getItem: jest.fn(),

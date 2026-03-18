@@ -11,9 +11,11 @@ jest.mock('next/server', () => {
   class MockNextResponse {
     _body: unknown
     status: number
+    headers: Map<string, string>
     constructor(body?: unknown, init: { status?: number } = {}) {
       this._body = body
       this.status = init.status || 200
+      this.headers = new Map()
     }
     async json() { return this._body }
     static json(data: unknown, init?: { status?: number }) {
