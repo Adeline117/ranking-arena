@@ -35,7 +35,7 @@ export default function HomeHero() {
             const platforms = new Set(data.map((r: { source: string }) =>
               r.source.replace(/_(futures|spot|web3|perps|network)$/, '')
             ))
-            const count = Math.max(platforms.size, 20)
+            const count = Math.max(platforms.size, 27)
             setExchangeCount(`${count}+`)
             setExchangeNum(count)
           }
