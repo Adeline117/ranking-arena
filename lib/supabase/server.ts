@@ -57,6 +57,10 @@ export function getSupabaseAdmin(): SupabaseClient {
  * 从 JWT Token 获取用户信息
  * @param token Bearer Token（不含 "Bearer " 前缀）
  */
+// In-memory ban status cache (60s TTL) to avoid querying user_profiles on every request
+const banStatusCache = new Map<string, { banned: boolean; ts: number }>()
+const BAN_CACHE_TTL = 60_000 // 60 seconds
+
 export async function getUserFromToken(token: string): Promise<User | null> {
   if (!token) return null
 
@@ -68,18 +72,28 @@ export async function getUserFromToken(token: string): Promise<User | null> {
       return null
     }
 
-    // 检查用户是否被禁用或已注销
+    // Check ban/delete status with in-memory cache (avoids 1 DB query per auth check)
+    const cached = banStatusCache.get(user.id)
+    if (cached && Date.now() - cached.ts < BAN_CACHE_TTL) {
+      return cached.banned ? null : user
+    }
+
     const { data: profile } = await supabase
       .from('user_profiles')
       .select('banned_at, deleted_at')
       .eq('id', user.id)
       .maybeSingle()
 
-    if (profile?.banned_at || profile?.deleted_at) {
-      return null
+    const isBanned = !!(profile?.banned_at || profile?.deleted_at)
+    banStatusCache.set(user.id, { banned: isBanned, ts: Date.now() })
+
+    // Prevent cache from growing unbounded
+    if (banStatusCache.size > 10000) {
+      const oldest = [...banStatusCache.entries()].sort((a, b) => a[1].ts - b[1].ts)
+      for (let i = 0; i < 5000; i++) banStatusCache.delete(oldest[i][0])
     }
 
-    return user
+    return isBanned ? null : user
   } catch (error) {
     logger.error('[supabase/server] getUserFromToken 错误:', error)
     return null
