@@ -157,7 +157,7 @@ export const DEAD_BLOCKED_PLATFORMS: TraderSource[] = [
   // 'lbank' — VPS scraper working (42 traders)
   // 'blofin' — VPS/Mac Mini working (429 traders)
   // 'kucoin' — Mac Mini fetch-kucoin-v2.mjs (12 traders, browser-only API)
-  // 'weex' — Mac Mini fetch-weex.mjs (11 traders, DOM extraction)
+  'weex',         // DEAD: returns 521 (server down), janapw.com domain needs dynamic auth, 0 traders in leaderboard — 2026-03-18
 
   // ═══════════════════════════════════════════════════════════════
   // BLOCKED — needs API key or credentials to unlock
