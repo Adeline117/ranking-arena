@@ -1,5 +1,6 @@
 'use client'
 
+import { useState } from 'react'
 import { tokens } from '@/lib/design-tokens'
 import { EXCHANGE_NAMES } from '@/lib/constants/exchanges'
 import { Box, Text } from '@/app/components/base'
@@ -15,6 +16,9 @@ interface AggregatedAccount {
   roi: number | null
   pnl: number | null
   arenaScore: number | null
+  winRate?: number | null
+  maxDrawdown?: number | null
+  rank?: number | null
 }
 
 interface AggregatedStatsProps {
@@ -37,10 +41,6 @@ function formatRoi(roi: number): string {
   return `${sign}${roi.toFixed(1)}%`
 }
 
-/**
- * AggregatedStats — shows combined stats across all linked accounts.
- * Only rendered when user has 2+ linked accounts.
- */
 export default function AggregatedStats({
   combinedPnl,
   bestRoi,
@@ -48,6 +48,8 @@ export default function AggregatedStats({
   accounts,
 }: AggregatedStatsProps) {
   const { t } = useLanguage()
+  const [showScoreTooltip, setShowScoreTooltip] = useState(false)
+  const [showComparison, setShowComparison] = useState(false)
 
   // Find max |pnl| for bar chart scaling
   const maxAbsPnl = Math.max(...accounts.map((a) => Math.abs(a.pnl ?? 0)), 1)
@@ -146,18 +148,37 @@ export default function AggregatedStats({
           )}
         </Box>
 
-        {/* Weighted Score */}
+        {/* Weighted Score with tooltip */}
         <Box
           style={{
             background: `${getScoreColor(weightedScore)}08`,
             borderRadius: tokens.radius.lg,
             padding: `${tokens.spacing[3]} ${tokens.spacing[4]}`,
             border: `1px solid ${getScoreColor(weightedScore)}20`,
+            position: 'relative',
           }}
         >
-          <Text size="xs" style={{ color: tokens.colors.text.tertiary, marginBottom: 4 }}>
-            {t('traderWeightedScore')}
-          </Text>
+          <Box style={{ display: 'flex', alignItems: 'center', gap: 4, marginBottom: 4 }}>
+            <Text size="xs" style={{ color: tokens.colors.text.tertiary }}>
+              {t('traderWeightedScore')}
+            </Text>
+            <button
+              onClick={() => setShowScoreTooltip(!showScoreTooltip)}
+              onMouseEnter={() => setShowScoreTooltip(true)}
+              onMouseLeave={() => setShowScoreTooltip(false)}
+              style={{
+                background: 'none', border: 'none', cursor: 'pointer', padding: 0,
+                display: 'inline-flex', alignItems: 'center', color: tokens.colors.text.tertiary,
+              }}
+              aria-label="Score info"
+            >
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <circle cx="12" cy="12" r="10" />
+                <path d="M12 16v-4" />
+                <path d="M12 8h.01" />
+              </svg>
+            </button>
+          </Box>
           <Text
             size="lg"
             weight="black"
@@ -169,6 +190,30 @@ export default function AggregatedStats({
           >
             {weightedScore > 0 ? weightedScore.toFixed(1) : '--'}
           </Text>
+          {/* Tooltip */}
+          {showScoreTooltip && (
+            <Box
+              style={{
+                position: 'absolute',
+                bottom: '100%',
+                left: '50%',
+                transform: 'translateX(-50%)',
+                marginBottom: 8,
+                padding: '8px 12px',
+                background: tokens.colors.bg.primary,
+                border: `1px solid ${tokens.colors.border.primary}`,
+                borderRadius: tokens.radius.md,
+                boxShadow: '0 4px 12px var(--color-overlay-medium)',
+                zIndex: 10,
+                maxWidth: 220,
+                whiteSpace: 'normal',
+              }}
+            >
+              <Text size="xs" style={{ color: tokens.colors.text.secondary, lineHeight: 1.5 }}>
+                {t('traderWeightedScoreTooltip')}
+              </Text>
+            </Box>
+          )}
         </Box>
       </Box>
 
@@ -179,18 +224,14 @@ export default function AggregatedStats({
         </Text>
         {accounts.map((account) => {
           const pnl = account.pnl ?? 0
-          const barWidth = Math.max((Math.abs(pnl) / maxAbsPnl) * 100, 2) // min 2% for visibility
+          const barWidth = Math.max((Math.abs(pnl) / maxAbsPnl) * 100, 2)
           const isPositive = pnl >= 0
           const label = account.label || EXCHANGE_NAMES[account.platform] || account.platform
 
           return (
             <Box
               key={`${account.platform}:${account.traderKey}`}
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: 8,
-              }}
+              style={{ display: 'flex', alignItems: 'center', gap: 8 }}
             >
               <ExchangeLogo exchange={account.platform} size={16} />
               <Text size="xs" style={{ color: tokens.colors.text.secondary, width: 80, flexShrink: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
@@ -227,6 +268,75 @@ export default function AggregatedStats({
         })}
       </Box>
 
+      {/* Compare Accounts button */}
+      {accounts.length >= 2 && (
+        <button
+          onClick={() => setShowComparison(!showComparison)}
+          style={{
+            display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+            padding: '8px 16px', borderRadius: tokens.radius.md,
+            background: showComparison ? `${tokens.colors.accent.primary}15` : 'transparent',
+            border: `1px solid ${showComparison ? tokens.colors.accent.primary + '40' : tokens.colors.border.primary}`,
+            cursor: 'pointer', transition: 'all 0.2s',
+            color: tokens.colors.accent.primary, fontSize: 13, fontWeight: 600,
+          }}
+        >
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <line x1="18" y1="20" x2="18" y2="10" /><line x1="12" y1="20" x2="12" y2="4" /><line x1="6" y1="20" x2="6" y2="14" />
+          </svg>
+          {t('traderCompareAccounts')}
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ transform: showComparison ? 'rotate(180deg)' : undefined, transition: 'transform 0.2s' }}>
+            <polyline points="6 9 12 15 18 9" />
+          </svg>
+        </button>
+      )}
+
+      {/* Comparison table */}
+      {showComparison && accounts.length >= 2 && (
+        <Box
+          className="comparison-table-scroll"
+          style={{
+            overflowX: 'auto',
+            borderRadius: tokens.radius.md,
+            border: `1px solid ${tokens.colors.border.primary}`,
+          }}
+        >
+          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13, minWidth: accounts.length > 2 ? 500 : undefined }}>
+            <thead>
+              <tr style={{ background: tokens.colors.bg.tertiary }}>
+                <th style={{ padding: '8px 12px', textAlign: 'left', color: tokens.colors.text.tertiary, fontWeight: 500, fontSize: 12 }}>
+                  {t('traderMetric') || 'Metric'}
+                </th>
+                {accounts.map(acc => (
+                  <th key={`${acc.platform}:${acc.traderKey}`} style={{ padding: '8px 12px', textAlign: 'right', whiteSpace: 'nowrap' }}>
+                    <Box style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 4 }}>
+                      <ExchangeLogo exchange={acc.platform} size={14} />
+                      <Text size="xs" weight="bold" style={{ color: tokens.colors.text.primary }}>
+                        {acc.label || EXCHANGE_NAMES[acc.platform] || acc.platform}
+                      </Text>
+                      {acc.isPrimary && <span style={{ color: tokens.colors.accent.warning, fontSize: 10 }}>★</span>}
+                    </Box>
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {/* ROI */}
+              <ComparisonRow label="ROI" accounts={accounts} getValue={a => a.roi} format={v => formatRoi(v)} higherIsBetter />
+              {/* PnL */}
+              <ComparisonRow label="PnL" accounts={accounts} getValue={a => a.pnl} format={v => formatPnl(v)} higherIsBetter />
+              {/* Arena Score */}
+              <ComparisonRow label="Arena Score" accounts={accounts} getValue={a => a.arenaScore} format={v => v.toFixed(1)} higherIsBetter />
+              {/* Win Rate */}
+              <ComparisonRow label={t('winRate') || 'Win Rate'} accounts={accounts} getValue={a => a.winRate ?? null} format={v => `${v.toFixed(1)}%`} higherIsBetter />
+              {/* Max Drawdown */}
+              <ComparisonRow label={t('maxDrawdown') || 'Max DD'} accounts={accounts} getValue={a => a.maxDrawdown ?? null} format={v => `${v.toFixed(1)}%`} higherIsBetter={false} />
+            </tbody>
+          </table>
+          <style>{`.comparison-table-scroll::-webkit-scrollbar { display: none; }`}</style>
+        </Box>
+      )}
+
       <style>{`
         @media (max-width: 640px) {
           .agg-stats-grid {
@@ -236,4 +346,69 @@ export default function AggregatedStats({
       `}</style>
     </Box>
   )
+}
+
+/** Comparison table row with best-value highlight */
+function ComparisonRow({
+  label,
+  accounts,
+  getValue,
+  format,
+  higherIsBetter,
+}: {
+  label: string
+  accounts: AggregatedAccount[]
+  getValue: (a: AggregatedAccount) => number | null | undefined
+  format: (v: number) => string
+  higherIsBetter: boolean
+}) {
+  const values = accounts.map(a => getValue(a) ?? null)
+  const validValues = values.filter((v): v is number => v !== null)
+  const bestValue = validValues.length > 0
+    ? (higherIsBetter ? Math.max(...validValues) : Math.min(...validValues))
+    : null
+
+  return (
+    <tr style={{ borderTop: `1px solid ${tokens.colors.border.primary}40` }}>
+      <td style={{ padding: '8px 12px', color: tokens.colors.text.tertiary, fontSize: 12 }}>{label}</td>
+      {values.map((v, i) => {
+        const isBest = v !== null && bestValue !== null && v === bestValue && validValues.length > 1
+        const color = v === null
+          ? tokens.colors.text.tertiary
+          : v >= 0
+            ? tokens.colors.accent.success
+            : tokens.colors.accent.error
+        return (
+          <td
+            key={i}
+            style={{
+              padding: '8px 12px',
+              textAlign: 'right',
+              fontFamily: tokens.typography.fontFamily.mono.join(', '),
+              fontWeight: isBest ? 700 : 500,
+              color: isBest ? tokens.colors.accent.success : color,
+              fontSize: 13,
+              background: isBest ? `${tokens.colors.accent.success}08` : undefined,
+            }}
+          >
+            {v !== null ? format(v) : '--'}
+          </td>
+        )
+      })}
+    </tr>
+  )
+}
+
+interface AggregatedAccount {
+  platform: string
+  traderKey: string
+  handle: string | null
+  label: string | null
+  roi: number | null
+  pnl: number | null
+  arenaScore: number | null
+  winRate?: number | null
+  maxDrawdown?: number | null
+  rank?: number | null
+  isPrimary?: boolean
 }

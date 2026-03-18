@@ -267,12 +267,22 @@ export default function TraderProfileClient({ data, serverTraderData, claimedUse
     router.replace(`${pathname}${qs ? `?${qs}` : ''}`, { scroll: false })
   }, [searchParams, pathname, router])
 
-  // SWR for full trader data from API — prefer handle (human-readable, Cloudflare-safe)
-  const platform = searchParams?.get('platform') || data.source || ''
-  const traderApiHandle = data.handle || data.source_trader_id
-  const traderApiUrl = platform
-    ? `/api/traders/${encodeURIComponent(traderApiHandle)}?source=${encodeURIComponent(platform)}`
-    : `/api/traders/${encodeURIComponent(traderApiHandle)}`
+  // Parse active account into platform + traderKey for per-account data fetching
+  const activeAccountParsed = useMemo(() => {
+    if (activeAccount === 'all' || !activeAccount.includes(':')) return null
+    const [platform, ...rest] = activeAccount.split(':')
+    const traderKey = rest.join(':')
+    const account = linkedAccounts.find(a => a.platform === platform && a.traderKey === traderKey)
+    return account ? { platform, traderKey, handle: account.handle } : null
+  }, [activeAccount, linkedAccounts])
+
+  // SWR for full trader data — switches URL when account tab changes
+  const effectivePlatform = activeAccountParsed?.platform || searchParams?.get('platform') || data.source || ''
+  const effectiveHandle = activeAccountParsed?.handle || activeAccountParsed?.traderKey || data.handle || data.source_trader_id
+  const traderApiUrl = effectivePlatform
+    ? `/api/traders/${encodeURIComponent(effectiveHandle)}?source=${encodeURIComponent(effectivePlatform)}`
+    : `/api/traders/${encodeURIComponent(effectiveHandle)}`
+  const isPrimaryAccount = !activeAccountParsed
   const { data: traderData, error: traderError, isLoading: traderLoading } = useSWR<TraderPageData>(
     traderApiUrl,
     traderFetcher,
@@ -281,7 +291,8 @@ export default function TraderProfileClient({ data, serverTraderData, claimedUse
       refreshInterval: 60_000,
       dedupingInterval: 5000,
       errorRetryCount: 2,
-      fallbackData: serverTraderData ?? undefined,
+      fallbackData: isPrimaryAccount ? (serverTraderData ?? undefined) : undefined,
+      keepPreviousData: true,
     }
   )
 
@@ -424,6 +435,7 @@ export default function TraderProfileClient({ data, serverTraderData, claimedUse
             ? linkedAccounts.map(a => ({ platform: a.platform, traderKey: a.traderKey, handle: a.handle }))
             : undefined
           }
+          activeAccount={activeAccount}
         />
 
         {/* Tabs */}
@@ -436,7 +448,12 @@ export default function TraderProfileClient({ data, serverTraderData, claimedUse
           hideTabs={hidePortfolio ? ['portfolio'] : undefined}
         />
 
-        {/* Tab Content — swipeable on mobile */}
+        {/* Tab Content — dims while loading account switch */}
+        <div style={{
+          opacity: (traderLoading && !isPrimaryAccount) ? 0.5 : 1,
+          transition: 'opacity 0.2s ease',
+          pointerEvents: (traderLoading && !isPrimaryAccount) ? 'none' : 'auto',
+        }}>
         <SwipeableView
           activeIndex={tabKeys.indexOf(activeTab)}
           onIndexChange={(i) => handleTabChange(tabKeys[i])}
@@ -467,6 +484,10 @@ export default function TraderProfileClient({ data, serverTraderData, claimedUse
                       roi: a.roi,
                       pnl: a.pnl,
                       arenaScore: a.arenaScore,
+                      winRate: a.winRate,
+                      maxDrawdown: a.maxDrawdown,
+                      rank: a.rank,
+                      isPrimary: a.isPrimary,
                     }))}
                   />
                 )}
@@ -696,6 +717,7 @@ export default function TraderProfileClient({ data, serverTraderData, claimedUse
             </Box>
           )}
         </SwipeableView>
+        </div>
 
         <style>{`
           .profile-tabs::-webkit-scrollbar { display: none; }
