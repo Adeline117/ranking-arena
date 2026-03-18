@@ -132,8 +132,9 @@ export async function GET(request: NextRequest) {
       previousCounts[season] = count || 0
     }
 
+    const forceWrite = request.nextUrl.searchParams.get('force') === '1'
     for (const season of SEASONS) {
-      const count = await computeSeason(supabase, season, previousCounts[season])
+      const count = await computeSeason(supabase, season, previousCounts[season], forceWrite)
       stats.seasons[season] = count
 
       // Degradation protection: computeSeason returns -1 if it aborted
@@ -258,7 +259,8 @@ export async function GET(request: NextRequest) {
 async function computeSeason(
   supabase: ReturnType<typeof getSupabaseAdmin>,
   season: Period,
-  previousCount?: number
+  previousCount?: number,
+  forceWrite?: boolean,
 ): Promise<number> {
   // Per-source freshness thresholds
   const freshnessISOBySource = (source: string): string => {
@@ -815,12 +817,14 @@ async function computeSeason(
 
   // Pre-upsert degradation check: block if new count drops below DEGRADATION_THRESHOLD (85%) of previous
   // Also enforce absolute minimum of 500 traders for a viable leaderboard
-  if (previousCount && previousCount > 500) {
+  if (previousCount && previousCount > 500 && !forceWrite) {
     const ratio = scored.length / previousCount
     if (scored.length < 500 || ratio < DEGRADATION_THRESHOLD) {
       logger.error(`${season}: computed ${scored.length} traders (previous: ${previousCount}, ratio: ${(ratio * 100).toFixed(1)}%). SKIPPING — below ${DEGRADATION_THRESHOLD * 100}% threshold.`)
       return -1
     }
+  } else if (forceWrite) {
+    logger.warn(`${season}: force write enabled, skipping degradation check (scored: ${scored.length}, previous: ${previousCount})`)
   }
 
   // Upsert into leaderboard_ranks in batches
