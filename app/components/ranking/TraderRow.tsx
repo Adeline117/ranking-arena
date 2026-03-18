@@ -275,7 +275,7 @@ export const TraderRow = memo(function TraderRow({
     <Link
       href={href}
       className="ranking-row-link"
-      style={{ textDecoration: 'none', display: 'block' }}
+      style={{ textDecoration: 'none', display: 'block', '--row-index': rank } as React.CSSProperties}
       aria-label={`#${rank} ${displayName}, ROI ${(trader.roi ?? 0) >= 0 ? '+' : ''}${(trader.roi ?? 0).toFixed(2)}%`}
       tabIndex={0}
       onMouseEnter={handleMouseEnter}

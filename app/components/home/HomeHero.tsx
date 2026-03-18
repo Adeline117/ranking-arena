@@ -1,11 +1,13 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, lazy, Suspense } from 'react'
 import Link from 'next/link'
 import { tokens } from '@/lib/design-tokens'
 import { useLanguage } from '../Providers/LanguageProvider'
 import { supabase } from '@/lib/supabase/client'
 import { t } from '@/lib/i18n'
+
+const NumberTicker = lazy(() => import('../ui/NumberTicker'))
 
 function formatCount(n: number): string {
   if (n >= 1000) return `${Math.floor(n / 1000)}K+`
@@ -15,11 +17,13 @@ function formatCount(n: number): string {
 export default function HomeHero() {
   useLanguage() // subscribe to language changes for re-render
   const [traderCount, setTraderCount] = useState('34K+')
+  const [traderNum, setTraderNum] = useState(34000)
   const [exchangeCount, setExchangeCount] = useState('27+')
+  const [exchangeNum, setExchangeNum] = useState(27)
 
   useEffect(() => {
     supabase.from('trader_sources').select('*', { count: 'exact', head: true })
-      .then(({ count }) => { if (count) setTraderCount(formatCount(count)) })
+      .then(({ count }) => { if (count) { setTraderCount(formatCount(count)); setTraderNum(count) } })
 
     supabase.from('leaderboard_ranks').select('source').eq('season_id', '90D').limit(10000)
       .then(({ data }) => {
@@ -27,7 +31,9 @@ export default function HomeHero() {
           const platforms = new Set(data.map((r: { source: string }) =>
             r.source.replace(/_(futures|spot|web3|perps|network)$/, '')
           ))
-          setExchangeCount(`${Math.max(platforms.size, 20)}+`)
+          const count = Math.max(platforms.size, 20)
+          setExchangeCount(`${count}+`)
+          setExchangeNum(count)
         }
       })
   }, [])
@@ -103,9 +109,9 @@ export default function HomeHero() {
           flexShrink: 0,
         }}>
           {[
-            { value: traderCount, label: t('heroStatTraders' as Parameters<typeof t>[0]) },
-            { value: exchangeCount, label: t('heroStatExchanges' as Parameters<typeof t>[0]) },
-            { value: '30m', label: t('heroStatUpdated' as Parameters<typeof t>[0]) },
+            { num: Math.floor(traderNum / 1000), suffix: 'K+', fallback: traderCount, label: t('heroStatTraders' as Parameters<typeof t>[0]), delay: 0 },
+            { num: exchangeNum, suffix: '+', fallback: exchangeCount, label: t('heroStatExchanges' as Parameters<typeof t>[0]), delay: 0.2 },
+            { num: 30, suffix: 'm', fallback: '30m', label: t('heroStatUpdated' as Parameters<typeof t>[0]), delay: 0.4 },
           ].map((stat) => (
             <div key={stat.label} style={{ textAlign: 'center' }}>
               <div style={{
@@ -115,7 +121,9 @@ export default function HomeHero() {
                 fontVariantNumeric: 'tabular-nums',
                 lineHeight: 1.2,
               }}>
-                {stat.value}
+                <Suspense fallback={<span>{stat.fallback}</span>}>
+                  <NumberTicker value={stat.num} suffix={stat.suffix} delay={stat.delay} />
+                </Suspense>
               </div>
               <div style={{
                 fontSize: tokens.typography.fontSize.xs,
@@ -153,10 +161,10 @@ export default function HomeHero() {
           fontWeight: 500,
         }}
       >
-        <svg width={12} height={12} viewBox="0 0 24 24" fill="currentColor" style={{ flexShrink: 0 }}>
+        <svg width={12} height={12} viewBox="0 0 24 24" fill="var(--color-pro-gradient-start, #a78bfa)" style={{ flexShrink: 0 }}>
           <path d="M12 2L15.09 8.26L22 9.27L17 14.14L18.18 21.02L12 17.77L5.82 21.02L7 14.14L2 9.27L8.91 8.26L12 2Z" />
         </svg>
-        {t('heroProBadge' as Parameters<typeof t>[0])}
+        <span className="shiny-text">{t('heroProBadge' as Parameters<typeof t>[0])}</span>
       </Link>
     </section>
   )

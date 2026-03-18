@@ -1534,17 +1534,64 @@ a:focus-visible, button:focus-visible, [role="button"]:focus-visible, [tabindex=
 .touch-target {
   min-height: 48px;
 }
+/* Shimmer text effect for premium badges */
+@keyframes shiny-text {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+.shiny-text {
+  background: linear-gradient(
+    90deg,
+    currentColor 0%,
+    currentColor 40%,
+    var(--color-brand-accent, #c9b8db) 50%,
+    currentColor 60%,
+    currentColor 100%
+  );
+  background-size: 200% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  animation: shiny-text 4s ease-in-out infinite;
+}
+
 /* Hero top-3 card hover/focus — replaces JS onMouseEnter/onMouseLeave */
 .hero-top3-card {
-  transition: transform 0.15s ease, box-shadow 0.15s ease;
+  transition: transform 0.2s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.2s ease;
 }
 .hero-top3-card:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 8px 20px rgba(0,0,0,0.15);
+  transform: translateY(-3px);
+  box-shadow: 0 12px 24px rgba(0,0,0,0.15);
+}
+.hero-top3-card:active {
+  transform: translateY(-1px) scale(0.98);
 }
 .hero-top3-card:focus-visible {
   outline: 2px solid var(--color-brand);
   outline-offset: 2px;
+}
+
+/* Staggered row entrance animation for ranking table */
+@keyframes row-enter {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.ranking-row-link {
+  animation: row-enter 0.3s cubic-bezier(0.4, 0, 0.2, 1) backwards;
+  animation-delay: calc(var(--row-index, 0) * 20ms);
+}
+/* Disable animation after initial load (perf) */
+.ranking-row-link.loaded {
+  animation: none;
+}
+
+/* Smooth score change highlight */
+@keyframes score-flash {
+  0% { background: var(--color-accent-primary-15); }
+  100% { background: transparent; }
+}
+.score-updated {
+  animation: score-flash 1s ease-out;
 }
 
 /* Empty state styling */
