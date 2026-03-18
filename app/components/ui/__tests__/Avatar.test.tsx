@@ -43,6 +43,8 @@ jest.mock('@/lib/utils/avatar', () => ({
   getAvatarInitial: (name: string) => name?.charAt(0)?.toUpperCase() || '?',
   getUserAvatarUrl: (_userId: string, _avatarUrl: string | null, _name?: string) => null,
   getTraderAvatarUrl: (avatarUrl: string | null) => avatarUrl?.trim() || null,
+  needsProxy: (_url: string | null | undefined) => false,
+  isWalletAddress: (id: string) => /^0x[a-fA-F0-9]{40,}$/.test(id),
 }))
 
 // Mock Box and Text components

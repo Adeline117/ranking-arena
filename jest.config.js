@@ -42,6 +42,20 @@ const customJestConfig = {
 }
 
 // createJestConfig is exported this way to ensure that next/jest can load the Next.js config which is async
-module.exports = createJestConfig(customJestConfig)
+// We wrap to add ESM-only packages to transformIgnorePatterns (next/jest overwrites the user-provided value)
+const baseConfig = createJestConfig(customJestConfig)
+module.exports = async () => {
+  const config = await baseConfig()
+  // Add ESM-only packages that Jest must transform
+  const esmPackages = ['uncrypto']
+  config.transformIgnorePatterns = config.transformIgnorePatterns?.map(pattern => {
+    // Inject ESM packages into the negative lookahead of node_modules patterns
+    if (pattern.includes('node_modules') && pattern.includes('(?!')) {
+      return pattern.replace('(?!', `(?!(${esmPackages.join('|')})|`)
+    }
+    return pattern
+  }) || []
+  return config
+}
 
 
