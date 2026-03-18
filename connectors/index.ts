@@ -30,8 +30,8 @@ const CONNECTOR_MAP: Record<string, () => IConnector> = {
   'binance:spot': () => new BinanceSpotConnector(),
   'binance:web3': () => new BinanceWeb3Connector(),
   'bybit:futures': () => new BybitConnector(),
-  'bitget:futures': () => new BitgetFuturesConnector(),
-  'bitget:spot': () => new BitgetSpotConnector(),
+  // 'bitget:futures': PERMANENTLY REMOVED (2026-03-18) - VPS scraper repeatedly hangs 44+ min (6th stuck), blocks pipeline
+  // 'bitget:spot': PERMANENTLY REMOVED (2026-03-18) - no public API exists (all endpoints 404)
   'mexc:futures': () => new MexcConnector(),
   'coinex:futures': () => new CoinexConnector(),
   'okx:futures': () => new OkxConnector(),

@@ -16,7 +16,7 @@
  */
 const ACTIVE_PLATFORMS = [
   'okx_futures', 'htx_futures', 'binance_futures', // binance_spot REMOVED 2026-03-14
-  'binance_web3', 'okx_web3', 'bitget_futures', 'xt', 'bingx',
+  'binance_web3', 'okx_web3', 'xt', 'bingx', // bitget_futures REMOVED 2026-03-18 (6th stuck)
   'gateio', 'mexc', 'coinex', 'phemex', 'bybit', 'blofin',
   'bitfinex', 'toobit', 'drift', 'bitunix', 'btcc', 'web3_bot',
   'etoro', 'hyperliquid', 'gmx', 'gains', 'jupiter_perps',
