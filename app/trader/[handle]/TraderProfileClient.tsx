@@ -41,7 +41,7 @@ const EquityCurveSection = dynamic(() => import('@/app/components/trader/stats/c
   ),
 })
 const TradingStyleRadar = dynamic(() => import('@/app/components/trader/TradingStyleRadar'), { ssr: false })
-const SimilarTraders = dynamic(() => import('@/app/components/trader/SimilarTraders'))
+const SimilarTraders = dynamic(() => import('@/app/components/trader/SimilarTraders'), { ssr: false })
 const ClaimTraderButton = dynamic(() => import('@/app/components/trader/ClaimTraderButton'), { ssr: false })
 const VerifiedTraderEditor = dynamic(() => import('@/app/components/trader/VerifiedTraderEditor'), { ssr: false })
 const StatsPage = dynamic(() => import('@/app/components/trader/stats/StatsPage'), {
