@@ -160,19 +160,35 @@ export default function TraderProfileClient({ data, serverTraderData, claimedUse
   }, [])
 
   // Check if this trader is verified (claimed) and if current user is the owner
+  // Store claim data so we can re-check ownership when currentUserId resolves
+  const claimDataRef = useRef<{ is_verified: boolean; owner_id: string | null } | null>(null)
   useEffect(() => {
     const traderId = data.source_trader_id
     const source = data.source
     if (!traderId || !source) return
 
+    // Only fetch once — don't re-fetch when currentUserId changes
+    if (claimDataRef.current !== null) {
+      // Re-check ownership with newly resolved currentUserId
+      if (claimDataRef.current.is_verified && currentUserId && claimDataRef.current.owner_id === currentUserId) {
+        setIsOwner(true)
+      }
+      return
+    }
+
     fetch(`/api/traders/claim/status?trader_id=${encodeURIComponent(traderId)}&source=${encodeURIComponent(source)}`)
       .then(res => res.ok ? res.json() : null)
       .then(result => {
-        if (result?.data?.is_verified) {
-          setIsVerifiedTrader(true)
-          if (currentUserId && result.data.owner_id === currentUserId) {
-            setIsOwner(true)
+        if (result?.data) {
+          claimDataRef.current = { is_verified: result.data.is_verified, owner_id: result.data.owner_id }
+          if (result.data.is_verified) {
+            setIsVerifiedTrader(true)
+            if (currentUserId && result.data.owner_id === currentUserId) {
+              setIsOwner(true)
+            }
           }
+        } else {
+          claimDataRef.current = { is_verified: false, owner_id: null }
         }
       })
       .catch(() => {})
