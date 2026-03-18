@@ -31,7 +31,7 @@ export const dynamic = 'force-dynamic'
 export const maxDuration = 300
 
 // DEX sources where 0x addresses may be bots
-const DEX_SOURCES = new Set(['hyperliquid', 'gmx', 'dydx', 'vertex', 'drift', 'aevo', 'gains', 'kwenta'])
+const DEX_SOURCES = new Set(['hyperliquid', 'gmx', 'dydx', 'drift', 'aevo', 'gains', 'jupiter_perps'])
 
 // Heuristic bot detection for DEX traders
 // Enhanced bot detection (freqtrade 47.8K★ trading frequency patterns)
