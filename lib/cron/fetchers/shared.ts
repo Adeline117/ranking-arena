@@ -247,8 +247,7 @@ export const TraderDataSchema = z.object({
 
 /** Tracks which tables succeeded/failed during a write batch */
 export interface WriteConsistency {
-  trader_sources: 'ok' | 'failed'
-  trader_profiles_v2: 'ok' | 'failed'
+  trader_sources: 'ok' | 'failed'  // now writes to unified `traders` table
   trader_snapshots_v2: 'ok' | 'failed'
 }
 
@@ -388,73 +387,41 @@ export async function upsertTraders(
   // Track write consistency across all batches
   const consistency: WriteConsistency = {
     trader_sources: 'ok',
-    trader_profiles_v2: 'ok',
     trader_snapshots_v2: 'ok',
   }
 
   for (let i = 0; i < deduped.length; i += BATCH) {
     const batch = deduped.slice(i, i + BATCH)
 
-    // --- 1. trader_sources ---
+    // --- 1. traders (unified identity table) ---
+    // Replaces both trader_sources and trader_profiles_v2 (merged 2026-03-18)
     try {
-      const sources = batch.map((t) => ({
-        source: t.source,
-        source_trader_id: t.source_trader_id,
+      const traderRows = batch.map((t) => ({
+        platform: t.source,
+        trader_key: t.source_trader_id,
+        market_type: getMarketType(t.source),
         handle: t.handle || null,
         avatar_url: t.avatar_url || null,
         profile_url: t.profile_url || null,
+        followers: t.followers ?? 0,
+        aum: t.aum || null,
         is_active: true,
         last_seen_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
       }))
 
-      const { error: srcErr } = await supabase
-        .from('trader_sources')
-        .upsert(sources, { onConflict: 'source,source_trader_id', ignoreDuplicates: false })
+      const { error: traderErr } = await supabase
+        .from('traders')
+        .upsert(traderRows, { onConflict: 'platform,trader_key' })
 
-      if (srcErr) {
+      if (traderErr) {
         consistency.trader_sources = 'failed'
-        writeErrors.push(`trader_sources: ${srcErr.message} (${srcErr.code})`)
-        dataLogger.warn(`[upsert] trader_sources error: ${srcErr.message}`)
+        writeErrors.push(`traders: ${traderErr.message} (${traderErr.code})`)
+        dataLogger.warn(`[upsert] traders error: ${traderErr.message}`)
       }
     } catch (err) {
       consistency.trader_sources = 'failed'
-      dataLogger.error(`[upsert] trader_sources exception: ${err instanceof Error ? err.message : String(err)}`)
-    }
-
-    // --- 2. trader_profiles_v2 ---
-    try {
-      const profiles = batch.map((t) => ({
-        platform: t.source,
-        market_type: getMarketType(t.source),
-        trader_key: t.source_trader_id,
-        display_name: t.handle || null,
-        avatar_url: t.avatar_url || null,
-        // bio, bio_source, tags intentionally omitted — managed by generate-profiles cron
-        profile_url: t.profile_url || null,
-        followers: t.followers ?? null,
-        copiers: 0,
-        aum: t.aum || null,
-        provenance: {
-          source_url: t.profile_url || null,
-          created_by: 'fetcher',
-          created_at: new Date().toISOString(),
-        },
-        updated_at: new Date().toISOString(),
-        last_enriched_at: null,
-      }))
-
-      const { error: profileErr } = await supabase
-        .from('trader_profiles_v2')
-        .upsert(profiles, { onConflict: 'platform,market_type,trader_key' })
-
-      if (profileErr) {
-        consistency.trader_profiles_v2 = 'failed'
-        writeErrors.push(`trader_profiles_v2: ${profileErr.message} (${profileErr.code})`)
-        dataLogger.warn(`[upsert] trader_profiles_v2 error: ${profileErr.message}`)
-      }
-    } catch (err) {
-      consistency.trader_profiles_v2 = 'failed'
-      dataLogger.error(`[upsert] trader_profiles_v2 exception: ${err instanceof Error ? err.message : String(err)}`)
+      dataLogger.error(`[upsert] traders exception: ${err instanceof Error ? err.message : String(err)}`)
     }
 
     // --- 3. trader_snapshots (v1) — REMOVED ---
