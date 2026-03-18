@@ -185,8 +185,13 @@ export async function POST(request: NextRequest) {
     }
     const { receiverId, content, media_url, media_type, media_name } = parsed.data
 
-    // SECURITY: Use authenticated user's ID as sender, ignoring any client-provided senderId.
-    // This prevents users from sending messages impersonating other users.
+    // SECURITY: Explicitly reject client-provided senderId to prevent impersonation
+    if ('senderId' in body && body.senderId !== user.id) {
+      return NextResponse.json(
+        { error: 'Cannot specify senderId', error_code: 'IMPERSONATION_BLOCKED' },
+        { status: 403 }
+      )
+    }
     const senderId = user.id
 
     if (senderId === receiverId) {

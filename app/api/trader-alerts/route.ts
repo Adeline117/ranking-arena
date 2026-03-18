@@ -107,13 +107,24 @@ export const POST = withAuth(async ({ user, supabase, request }) => {
   }
   const config = parsed.data
 
-  // 检查是否已存在配置
+  // Check existing config for this trader
   const { data: existing } = await supabase
     .from('trader_alerts')
     .select('id')
     .eq('user_id', user.id)
     .eq('trader_id', config.trader_id)
     .maybeSingle()
+
+  // Enforce max 50 alerts per user
+  if (!existing) {
+    const { count } = await supabase
+      .from('trader_alerts')
+      .select('id', { count: 'exact', head: true })
+      .eq('user_id', user.id)
+    if ((count ?? 0) >= 50) {
+      return NextResponse.json({ success: false, error: 'Maximum 50 alerts. Delete some first.' }, { status: 400 })
+    }
+  }
 
   const alertData = {
     user_id: user.id,

@@ -77,6 +77,9 @@ export async function POST(request: NextRequest, context: RouteContext) {
 
       if (deleteError) {
         logger.error('Soft delete member error:', deleteError)
+        // Rollback ban to avoid inconsistent state (banned + still member)
+        await supabase.from('group_bans').delete().eq('group_id', groupId).eq('user_id', targetUserId)
+        return NextResponse.json({ error: 'Failed to remove member' }, { status: 500 })
       }
 
       // Decrement member count

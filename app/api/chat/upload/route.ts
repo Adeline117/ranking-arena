@@ -45,6 +45,17 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'No conversationId provided' }, { status: 400 })
     }
 
+    // SECURITY: Verify user is a member of this conversation
+    const supabaseCheck = getSupabaseAdmin()
+    const { data: conv } = await supabaseCheck
+      .from('conversations')
+      .select('user1_id, user2_id')
+      .eq('id', conversationId)
+      .maybeSingle()
+    if (!conv || (conv.user1_id !== authUser.id && conv.user2_id !== authUser.id)) {
+      return NextResponse.json({ error: 'Not a member of this conversation' }, { status: 403 })
+    }
+
     // Determine file category
     let fileCategory: 'image' | 'video' | 'file'
     let maxSize: number
