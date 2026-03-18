@@ -22,8 +22,8 @@ export class OkxFuturesConnector extends BaseConnector {
   readonly platform = 'okx' as const
   readonly marketType = 'futures' as const
 
-  constructor() {
-    super({ timeout: 15000, maxRetries: 1 }) // Fast fail: OKX paginates many requests through VPS proxy
+  constructor(config?: Partial<import('../types').ConnectorConfig>) {
+    super({ timeout: 15000, maxRetries: 1, ...config }) // Fast fail: OKX paginates many requests through VPS proxy
   }
 
   readonly capabilities: PlatformCapabilities = {
