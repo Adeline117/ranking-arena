@@ -9,11 +9,26 @@
 // Mocks
 // ---------------------------------------------------------------------------
 
+// Mock @/lib/env so env.CRON_SECRET reads process.env.CRON_SECRET at call time
+jest.mock('@/lib/env', () => ({
+  env: new Proxy({}, {
+    get(_t, key) {
+      if (key === 'CRON_SECRET') return process.env.CRON_SECRET
+      return process.env[String(key)]
+    },
+  }),
+}))
+
+
 const mockFrom = jest.fn()
 const mockSupabaseClient = { from: mockFrom }
 
 jest.mock('@supabase/supabase-js', () => ({
   createClient: jest.fn(() => mockSupabaseClient),
+}))
+
+jest.mock('@/lib/supabase/server', () => ({
+  getSupabaseAdmin: jest.fn(() => mockSupabaseClient),
 }))
 
 jest.mock('@/lib/cron/utils', () => ({
@@ -46,6 +61,10 @@ jest.mock('@/lib/utils/logger', () => ({
     warn: jest.fn(),
     error: jest.fn(),
   }),
+  logger: { info: jest.fn(), warn: jest.fn(), error: jest.fn(), debug: jest.fn(), apiError: jest.fn(), dbError: jest.fn() },
+  apiLogger: { info: jest.fn(), warn: jest.fn(), error: jest.fn(), debug: jest.fn(), apiError: jest.fn(), dbError: jest.fn() },
+  dataLogger: { info: jest.fn(), warn: jest.fn(), error: jest.fn(), debug: jest.fn(), apiError: jest.fn(), dbError: jest.fn() },
+  captureError: jest.fn(),
 }))
 
 jest.mock('@/lib/logger', () => ({
@@ -176,13 +195,14 @@ describe('GET /api/cron/check-data-freshness', () => {
     expect(body.summary.stale).toBeGreaterThanOrEqual(1)
   })
 
-  it('returns 500 when buildFreshnessReport throws', async () => {
-    // Force getSupabaseEnv to return empty to cause an error
+  it('returns 500 when getSupabaseAdmin throws', async () => {
     // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const { getSupabaseEnv } = require('@/lib/cron/utils')
-    getSupabaseEnv.mockReturnValueOnce({ url: '', serviceKey: '' })
+    const { getSupabaseAdmin } = require('@/lib/supabase/server')
+    getSupabaseAdmin.mockImplementationOnce(() => {
+      throw new Error('Supabase env vars missing')
+    })
 
-    // Since buildFreshnessReport will throw, the catch block should return 500
+    // Since getSupabaseAdmin throws, the catch block should return 500
     const res = await GET(createRequest('test-secret'))
     expect(res.status).toBe(500)
   })

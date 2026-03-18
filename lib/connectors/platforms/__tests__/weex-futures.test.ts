@@ -1,8 +1,11 @@
 /**
  * WEEX Futures Connector Tests
  *
- * Tests discoverLeaderboard, fetchTraderProfile, fetchTraderSnapshot,
- * normalize, and error handling with mocked HTTP responses.
+ * Tests fetchTraderProfile, fetchTraderSnapshot, normalize, and error handling.
+ *
+ * NOTE: discoverLeaderboard is VPS-scraper-only — when VPS env vars are not set,
+ * fetchViaVPS returns null and the connector returns an empty result.
+ * The profile/snapshot methods use direct API calls testable via mockFetch.
  */
 
 import { WeexFuturesConnector } from '../weex-futures'
@@ -26,8 +29,9 @@ function createConnector() {
 
 function mockFetchResponse(body: unknown, status = 200) {
   mockFetch.mockResolvedValueOnce({
+    ok: status >= 200 && status < 300,
     status,
-    headers: { get: () => null },
+    headers: { get: (key: string) => key === 'content-type' ? 'application/json' : null },
     json: async () => body,
   })
 }
@@ -42,98 +46,35 @@ function mockFetchNetworkError(message = 'Network error') {
 
 describe('WeexFuturesConnector', () => {
   describe('discoverLeaderboard', () => {
-    const validResponse = {
-      code: 0,
-      data: {
-        list: [
-          {
-            uid: 'WX_TRADER_1',
-            nickname: 'WeexStar',
-            avatar: 'https://img.example.com/wx1.jpg',
-            roi: 160.5,
-            pnl: 55000,
-            winRate: 70.0,
-            maxDrawdown: 9.5,
-            followers: 900,
-            copiers: 180,
-          },
-          {
-            uid: 'WX_TRADER_2',
-            nickname: 'CryptoAce',
-            avatar: null,
-            roi: 38.2,
-            pnl: 9000,
-            winRate: 52.0,
-            maxDrawdown: 24.0,
-            followers: 150,
-            copiers: 25,
-          },
-        ],
-      },
-    }
-
-    test('returns traders from valid response', async () => {
+    test('returns empty result when VPS scraper unavailable (no env vars)', async () => {
+      // Without VPS_SCRAPER_SG / VPS_PROXY_SG env vars, fetchViaVPS returns null.
+      // The connector has no direct-API fallback for leaderboard — returns empty.
       const connector = createConnector()
-      mockFetchResponse(validResponse)
 
       const result = await connector.discoverLeaderboard('7d', 20)
 
-      expect(result.traders).toHaveLength(2)
+      expect(result.traders).toHaveLength(0)
+      expect(result.total_available).toBe(0)
       expect(result.window).toBe('7d')
-
-      const first = result.traders[0]
-      expect(first.trader_key).toBe('WX_TRADER_1')
-      expect(first.display_name).toBe('WeexStar')
-      expect(first.platform).toBe('weex')
-      expect(first.market_type).toBe('futures')
-      expect(first.is_active).toBe(true)
-      expect(first.profile_url).toContain('WX_TRADER_1')
+      expect(result.fetched_at).toBeDefined()
     })
 
-    test('returns empty array when data list is empty', async () => {
+    test('returns empty result for 30d window when VPS unavailable', async () => {
       const connector = createConnector()
-      mockFetchResponse({ code: 0, data: { list: [] } })
 
       const result = await connector.discoverLeaderboard('30d')
 
       expect(result.traders).toHaveLength(0)
+      expect(result.window).toBe('30d')
     })
 
-    test('returns empty array when data is null', async () => {
-      const connector = createConnector()
-      mockFetchResponse({ code: 0, data: null })
-
-      const result = await connector.discoverLeaderboard('7d')
-
-      expect(result.traders).toHaveLength(0)
-    })
-
-    test('returns empty for unsupported 90d window', async () => {
+    test('returns empty result for 90d window when VPS unavailable', async () => {
       const connector = createConnector()
 
       const result = await connector.discoverLeaderboard('90d')
 
       expect(result.traders).toHaveLength(0)
       expect(result.total_available).toBe(0)
-      expect(mockFetch).not.toHaveBeenCalled()
-    })
-
-    test('throws on network error', async () => {
-      const connector = createConnector()
-      mockFetchNetworkError()
-
-      await expect(connector.discoverLeaderboard('7d')).rejects.toThrow()
-    })
-
-    test('throws ConnectorError on rate limit (429)', async () => {
-      const connector = createConnector()
-      mockFetch.mockResolvedValueOnce({
-        status: 429,
-        headers: { get: () => '60' },
-        json: async () => ({}),
-      })
-
-      await expect(connector.discoverLeaderboard('7d')).rejects.toThrow(ConnectorError)
     })
   })
 
@@ -196,6 +137,25 @@ describe('WeexFuturesConnector', () => {
       expect(result!.profile.avatar_url).toBeNull()
       expect(result!.profile.followers).toBeNull()
     })
+
+    test('throws on network error', async () => {
+      const connector = createConnector()
+      mockFetchNetworkError()
+
+      await expect(connector.fetchTraderProfile('WX_ERR')).rejects.toThrow()
+    })
+
+    test('throws ConnectorError on rate limit (429)', async () => {
+      const connector = createConnector()
+      mockFetch.mockResolvedValueOnce({
+        ok: false,
+        status: 429,
+        headers: { get: (key: string) => key === 'content-type' ? 'application/json' : key === 'Retry-After' ? '60' : null },
+        json: async () => ({}),
+      })
+
+      await expect(connector.fetchTraderProfile('WX_RATE')).rejects.toThrow(ConnectorError)
+    })
   })
 
   // ============================================
@@ -231,7 +191,7 @@ describe('WeexFuturesConnector', () => {
       expect(result!.metrics.copiers).toBe(180)
     })
 
-    test('returns empty metrics for unsupported 90d window', async () => {
+    test('returns empty metrics for unsupported 90d window (no HTTP call)', async () => {
       const connector = createConnector()
 
       const result = await connector.fetchTraderSnapshot('WX_TRADER_1', '90d')
@@ -264,6 +224,37 @@ describe('WeexFuturesConnector', () => {
       expect(result!.quality_flags.missing_fields).toContain('sortino_ratio')
       expect(result!.quality_flags.missing_fields).toContain('trades_count')
       expect(result!.quality_flags.window_native).toBe(true)
+    })
+
+    test('throws on network error', async () => {
+      const connector = createConnector()
+      mockFetchNetworkError()
+
+      await expect(connector.fetchTraderSnapshot('WX_ERR', '7d')).rejects.toThrow()
+    })
+
+    test('throws ConnectorError on server error (500)', async () => {
+      const connector = createConnector()
+      mockFetch.mockResolvedValueOnce({
+        ok: false,
+        status: 500,
+        headers: { get: (key: string) => key === 'content-type' ? 'application/json' : null },
+        json: async () => ({ error: 'Internal Server Error' }),
+      })
+
+      await expect(connector.fetchTraderSnapshot('WX_ERR', '7d')).rejects.toThrow()
+    })
+
+    test('throws ConnectorError on client error (403)', async () => {
+      const connector = createConnector()
+      mockFetch.mockResolvedValueOnce({
+        ok: false,
+        status: 403,
+        headers: { get: (key: string) => key === 'content-type' ? 'application/json' : null },
+        json: async () => ({ message: 'Forbidden' }),
+      })
+
+      await expect(connector.fetchTraderSnapshot('WX_ERR', '7d')).rejects.toThrow(ConnectorError)
     })
   })
 
@@ -300,42 +291,6 @@ describe('WeexFuturesConnector', () => {
       expect(normalized.trader_key).toBeNull()
       expect(normalized.roi).toBeNull()
       expect(normalized.pnl).toBeNull()
-    })
-  })
-
-  // ============================================
-  // Tests: Error Handling
-  // ============================================
-
-  describe('error handling', () => {
-    test('throws on server error (500)', async () => {
-      const connector = createConnector()
-      mockFetch.mockResolvedValueOnce({
-        status: 500,
-        headers: { get: () => null },
-        json: async () => ({}),
-      })
-
-      await expect(connector.discoverLeaderboard('7d')).rejects.toThrow()
-    })
-
-    test('throws ConnectorError on client error (403)', async () => {
-      const connector = createConnector()
-      mockFetch.mockResolvedValueOnce({
-        status: 403,
-        headers: { get: () => null },
-        json: async () => ({ message: 'Forbidden' }),
-      })
-
-      await expect(connector.discoverLeaderboard('7d')).rejects.toThrow(ConnectorError)
-    })
-
-    test('handles malformed response gracefully', async () => {
-      const connector = createConnector()
-      mockFetchResponse({ wrong: 'data' })
-
-      const result = await connector.discoverLeaderboard('7d')
-      expect(result.traders).toHaveLength(0)
     })
   })
 

@@ -26,8 +26,9 @@ function createConnector() {
 
 function mockFetchResponse(body: unknown, status = 200) {
   mockFetch.mockResolvedValueOnce({
+    ok: status >= 200 && status < 300,
     status,
-    headers: { get: () => null },
+    headers: { get: (key: string) => key === 'content-type' ? 'application/json' : null },
     json: async () => body,
   })
 }
@@ -109,16 +110,16 @@ describe('HtxFuturesConnector', () => {
       expect(result.traders).toHaveLength(0)
     })
 
-    test('sends correct POST body with period', async () => {
+    test('sends correct GET URL with rankType parameter', async () => {
       const connector = createConnector()
       mockFetchResponse(validResponse)
 
       await connector.discoverLeaderboard('30d')
 
       const call = mockFetch.mock.calls[0]
-      const body = JSON.parse(call[1].body)
-      expect(body.period).toBe('30d')
-      expect(body.sortBy).toBe('roi')
+      const url = call[0] as string
+      expect(url).toContain('rankType=1')
+      expect(url).toContain('pageNo=1')
     })
 
     test('throws on network error', async () => {
@@ -306,7 +307,7 @@ describe('HtxFuturesConnector', () => {
       const connector = createConnector()
       mockFetch.mockResolvedValueOnce({
         status: 500,
-        headers: { get: () => null },
+        headers: { get: (key: string) => key === 'content-type' ? 'application/json' : null },
         json: async () => ({}),
       })
 
@@ -317,7 +318,7 @@ describe('HtxFuturesConnector', () => {
       const connector = createConnector()
       mockFetch.mockResolvedValueOnce({
         status: 403,
-        headers: { get: () => null },
+        headers: { get: (key: string) => key === 'content-type' ? 'application/json' : null },
         json: async () => ({ message: 'Forbidden' }),
       })
 

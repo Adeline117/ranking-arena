@@ -9,6 +9,17 @@
 // Mocks
 // ---------------------------------------------------------------------------
 
+// Mock @/lib/env so env.CRON_SECRET reads process.env.CRON_SECRET at call time
+jest.mock('@/lib/env', () => ({
+  env: new Proxy({}, {
+    get(_t, key) {
+      if (key === 'CRON_SECRET') return process.env.CRON_SECRET
+      return process.env[String(key)]
+    },
+  }),
+}))
+
+
 const mockRpc = jest.fn()
 const mockFrom = jest.fn()
 
