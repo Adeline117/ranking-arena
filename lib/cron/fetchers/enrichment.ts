@@ -168,12 +168,10 @@ export {
   fetchCoinexStatsDetail,
 } from './enrichment-coinex'
 
-// Bitunix
+// Bitunix — uses leaderboard list API with batch cache (individual endpoints 404)
 export {
   fetchBitunixEquityCurve,
   fetchBitunixStatsDetail,
-  fetchBitunixCurrentPositions,
-  fetchBitunixPositionHistory,
 } from './enrichment-bitunix'
 
 // Bitfinex

@@ -1,66 +1,45 @@
 /**
  * Bitunix Enrichment Module
  *
- * Uses the Bitunix copy-trading API for trader detail stats and position history.
+ * Uses the Bitunix copy-trading LIST API for trader stats and equity curve.
+ * The individual /trader/detail endpoint returns only basic profile info (no ROI/winRate/mdd).
+ * The /trader/positions and /trader/history endpoints return 404.
+ *
+ * Strategy: batch-fetch the leaderboard list once per enrichment run, cache it,
+ * then look up individual traders from the cache. The list API returns:
+ *   - roi, pl, mdd, winRate, winCount, aum, currentFollow
+ *   - dailyWinRate[] (daily ROI equity curve)
+ *   - symbolList[] (traded assets)
  *
  * Endpoints:
- * - POST https://api.bitunix.com/copy/trading/v1/trader/detail  (trader stats)
- * - POST https://api.bitunix.com/copy/trading/v1/trader/positions (current positions, if showPosition=true)
- * - POST https://api.bitunix.com/copy/trading/v1/trader/history  (closed positions)
+ * - POST https://api.bitunix.com/copy/trading/v1/trader/list  (leaderboard with stats + equity curve)
+ * - POST https://api.bitunix.com/copy/trading/v1/trader/detail (basic profile only — aum, followers)
  */
 
-import type { StatsDetail, PositionHistoryItem, PortfolioPosition } from './enrichment-types'
-import { fetchWithProxyFallback } from './enrichment-types'
+import type { StatsDetail } from './enrichment-types'
 import { logger } from '@/lib/logger'
 
 const API_BASE = 'https://api.bitunix.com/copy/trading/v1'
 
-interface BitunixDetailResponse {
-  code: number
-  data?: {
-    uid?: string | number
-    nickname?: string
-    header?: string | null
-    roi?: string | number
-    pl?: string | number
-    winRate?: string | number
-    mdd?: string | number
-    currentFollow?: number
-    aum?: string | number
-    winCount?: number
-    totalCount?: number
-    avgHoldTime?: number // in seconds or hours
-    avgProfit?: string | number
-    avgLoss?: string | number
-    largestWin?: string | number
-    largestLoss?: string | number
-    showPosition?: boolean
-    totalPl?: string | number
-    sharpeRatio?: string | number
-  }
+interface BitunixListEntry {
+  uid?: number | string
+  nickname?: string
+  header?: string | null
+  roi?: string | number
+  pl?: string | number
+  mdd?: string | number
+  winRate?: string | number
+  winCount?: number
+  currentFollow?: number
+  aum?: string | number
+  dailyWinRate?: Array<{ date: number | string; amount: string | number }>
+  symbolList?: string[]
 }
 
-interface BitunixPositionEntry {
-  symbol?: string
-  side?: string | number // 1=long, 2=short or "BUY"/"SELL"
-  openPrice?: string | number
-  markPrice?: string | number
-  size?: string | number
-  leverage?: string | number
-  unrealizedPl?: string | number
-  margin?: string | number
-  openTime?: string | number
-  closeTime?: string | number
-  closePrice?: string | number
-  realizedPl?: string | number
-  status?: string
-}
-
-interface BitunixPositionsResponse {
+interface BitunixListResponse {
   code: number
   data?: {
-    records?: BitunixPositionEntry[]
-    list?: BitunixPositionEntry[]
+    records?: BitunixListEntry[]
   }
 }
 
@@ -70,53 +49,120 @@ const toNum = (v: string | number | null | undefined): number | null => {
   return isNaN(n) ? null : n
 }
 
+// ============================================================
+// Module-level cache: batch-fetched leaderboard data
+// Keyed by period string (e.g., "7", "30", "90")
+// Expires after 10 minutes to avoid stale data across runs
+// ============================================================
+interface CacheEntry {
+  traders: Map<string, BitunixListEntry>
+  fetchedAt: number
+}
+
+const leaderboardCache = new Map<string, CacheEntry>()
+const CACHE_TTL_MS = 10 * 60 * 1000 // 10 minutes
+
 /**
- * Fetch stats detail from Bitunix trader detail API.
+ * Fetch all pages of the Bitunix leaderboard and cache them.
+ * Returns a Map of uid -> trader entry for O(1) lookups.
+ */
+async function ensureLeaderboardCached(period: string): Promise<Map<string, BitunixListEntry>> {
+  const existing = leaderboardCache.get(period)
+  if (existing && Date.now() - existing.fetchedAt < CACHE_TTL_MS) {
+    return existing.traders
+  }
+
+  const traders = new Map<string, BitunixListEntry>()
+  const maxPages = 10 // 100 per page × 10 = 1000 traders max
+  const pageSize = 100
+
+  for (let page = 1; page <= maxPages; page++) {
+    try {
+      const res = await fetch(`${API_BASE}/trader/list`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ period, pageNo: page, pageSize }),
+        signal: AbortSignal.timeout(15000),
+      })
+
+      if (!res.ok) {
+        logger.warn(`[bitunix] List API page ${page} returned ${res.status}`)
+        break
+      }
+
+      const json = (await res.json()) as BitunixListResponse
+      const records = json?.data?.records || []
+
+      if (records.length === 0) break
+
+      for (const entry of records) {
+        const uid = String(entry.uid || '')
+        if (uid) traders.set(uid, entry)
+      }
+
+      if (records.length < pageSize) break // Last page
+    } catch (err) {
+      logger.warn(`[bitunix] List API page ${page} failed: ${err instanceof Error ? err.message : String(err)}`)
+      break
+    }
+  }
+
+  logger.info(`[bitunix] Cached ${traders.size} traders for period ${period}`)
+  leaderboardCache.set(period, { traders, fetchedAt: Date.now() })
+  return traders
+}
+
+/**
+ * Map days param to Bitunix period string.
+ * The list API uses "7", "30", "90" (not "7D", "30D", "90D").
+ */
+function daysToPeriod(days: number): string {
+  if (days <= 7) return '7'
+  if (days <= 30) return '30'
+  return '90'
+}
+
+/**
+ * Fetch stats detail from Bitunix leaderboard list API (cached batch lookup).
  */
 export async function fetchBitunixStatsDetail(
   traderId: string
 ): Promise<StatsDetail | null> {
   try {
-    const data = await fetchWithProxyFallback<BitunixDetailResponse>(
-      `${API_BASE}/trader/detail`,
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: { uid: traderId },
-        timeoutMs: 10000,
+    // Try 30D period first (most common), fall back to 7D then 90D
+    for (const period of ['30', '7', '90']) {
+      const cache = await ensureLeaderboardCached(period)
+      const entry = cache.get(traderId)
+      if (!entry) continue
+
+      const winRate = toNum(entry.winRate)
+      // winRate is in decimal format (0.65 = 65%)
+      const profitableTradesPct = winRate != null ? winRate * 100 : null
+
+      const mddRaw = toNum(entry.mdd)
+      const maxDrawdown = mddRaw != null ? Math.abs(mddRaw * 100) : null
+
+      return {
+        totalTrades: null,
+        profitableTradesPct: profitableTradesPct != null ? Math.round(profitableTradesPct * 10) / 10 : null,
+        avgHoldingTimeHours: null,
+        avgProfit: null,
+        avgLoss: null,
+        largestWin: null,
+        largestLoss: null,
+        sharpeRatio: null,
+        maxDrawdown,
+        currentDrawdown: null,
+        volatility: null,
+        copiersCount: toNum(entry.currentFollow),
+        copiersPnl: null,
+        aum: toNum(entry.aum),
+        winningPositions: entry.winCount ?? null,
+        totalPositions: null,
       }
-    )
-
-    if (!data?.data || data.code !== 0) return null
-
-    const d = data.data
-    const totalTrades = toNum(d.totalCount)
-    const winCount = toNum(d.winCount)
-    const winRate = toNum(d.winRate)
-    // winRate is in decimal format (0.65 = 65%)
-    const profitableTradesPct = winRate != null ? winRate * 100 : null
-
-    const mddRaw = toNum(d.mdd)
-    const maxDrawdown = mddRaw != null ? Math.abs(mddRaw * 100) : null
-
-    return {
-      totalTrades,
-      profitableTradesPct: profitableTradesPct != null ? Math.round(profitableTradesPct * 10) / 10 : null,
-      avgHoldingTimeHours: toNum(d.avgHoldTime),
-      avgProfit: toNum(d.avgProfit),
-      avgLoss: toNum(d.avgLoss),
-      largestWin: toNum(d.largestWin),
-      largestLoss: toNum(d.largestLoss),
-      sharpeRatio: toNum(d.sharpeRatio),
-      maxDrawdown,
-      currentDrawdown: null,
-      volatility: null,
-      copiersCount: toNum(d.currentFollow),
-      copiersPnl: null,
-      aum: toNum(d.aum),
-      winningPositions: winCount,
-      totalPositions: totalTrades,
     }
+
+    return null
   } catch (err) {
     logger.warn(`[bitunix] Stats detail failed for ${traderId}: ${err instanceof Error ? err.message : String(err)}`)
     return null
@@ -124,110 +170,46 @@ export async function fetchBitunixStatsDetail(
 }
 
 /**
- * Fetch current open positions from Bitunix.
- * Only works if the trader has showPosition=true in their detail.
- */
-export async function fetchBitunixCurrentPositions(
-  traderId: string
-): Promise<PortfolioPosition[]> {
-  try {
-    const data = await fetchWithProxyFallback<BitunixPositionsResponse>(
-      `${API_BASE}/trader/positions`,
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: { uid: traderId, pageNo: 1, pageSize: 50 },
-        timeoutMs: 10000,
-      }
-    )
-
-    if (!data?.data || data.code !== 0) return []
-
-    const list = data.data.records || data.data.list || []
-    if (list.length === 0) return []
-
-    return list.map((pos) => {
-      const side = typeof pos.side === 'string'
-        ? (pos.side.toUpperCase() === 'BUY' || pos.side === '1' ? 'long' : 'short')
-        : (pos.side === 1 ? 'long' : 'short')
-
-      return {
-        symbol: pos.symbol || 'UNKNOWN',
-        direction: side as 'long' | 'short',
-        investedPct: null,
-        entryPrice: toNum(pos.openPrice),
-        pnl: toNum(pos.unrealizedPl),
-      }
-    })
-  } catch (err) {
-    logger.warn(`[bitunix] Current positions failed for ${traderId}: ${err instanceof Error ? err.message : String(err)}`)
-    return []
-  }
-}
-
-/**
- * Fetch closed position history from Bitunix.
- */
-export async function fetchBitunixPositionHistory(
-  traderId: string
-): Promise<PositionHistoryItem[]> {
-  try {
-    const data = await fetchWithProxyFallback<BitunixPositionsResponse>(
-      `${API_BASE}/trader/history`,
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: { uid: traderId, pageNo: 1, pageSize: 100 },
-        timeoutMs: 10000,
-      }
-    )
-
-    if (!data?.data || data.code !== 0) return []
-
-    const list = data.data.records || data.data.list || []
-    if (list.length === 0) return []
-
-    return list.map((pos) => {
-      const side = typeof pos.side === 'string'
-        ? (pos.side.toUpperCase() === 'BUY' || pos.side === '1' ? 'long' : 'short')
-        : (pos.side === 1 ? 'long' : 'short')
-
-      const openTime = pos.openTime
-        ? (typeof pos.openTime === 'number' ? new Date(pos.openTime).toISOString() : String(pos.openTime))
-        : null
-      const closeTime = pos.closeTime
-        ? (typeof pos.closeTime === 'number' ? new Date(pos.closeTime).toISOString() : String(pos.closeTime))
-        : null
-
-      return {
-        symbol: pos.symbol || 'UNKNOWN',
-        direction: side as 'long' | 'short',
-        positionType: 'perpetual',
-        marginMode: 'cross',
-        openTime,
-        closeTime,
-        entryPrice: toNum(pos.openPrice),
-        exitPrice: toNum(pos.closePrice),
-        maxPositionSize: toNum(pos.size),
-        closedSize: toNum(pos.size),
-        pnlUsd: toNum(pos.realizedPl),
-        pnlPct: null,
-        status: 'closed',
-      }
-    })
-  } catch (err) {
-    logger.warn(`[bitunix] Position history failed for ${traderId}: ${err instanceof Error ? err.message : String(err)}`)
-    return []
-  }
-}
-
-/**
- * Build equity curve from Bitunix (placeholder — no API for historical PnL).
- * Returns empty array; enrichment-runner will fall back to DB snapshots.
+ * Build equity curve from Bitunix dailyWinRate (daily ROI data from list API).
+ * dailyWinRate[].amount is cumulative ROI as ratio (0.812880 = 81.29%).
  */
 export async function fetchBitunixEquityCurve(
-  _traderId: string,
-  _days: number
+  traderId: string,
+  days: number
 ): Promise<Array<{ date: string; roi: number; pnl: number | null }>> {
-  return []
+  try {
+    const period = daysToPeriod(days)
+    const cache = await ensureLeaderboardCached(period)
+    const entry = cache.get(traderId)
+
+    if (!entry?.dailyWinRate || entry.dailyWinRate.length === 0) return []
+
+    return entry.dailyWinRate.map((point) => {
+      // date format: 20260312 (YYYYMMDD)
+      const dateStr = String(point.date)
+      const formatted = dateStr.length === 8
+        ? `${dateStr.slice(0, 4)}-${dateStr.slice(4, 6)}-${dateStr.slice(6, 8)}`
+        : dateStr
+
+      const roiRatio = toNum(point.amount)
+      // Convert ratio to percentage (0.812880 → 81.29)
+      const roiPct = roiRatio != null ? roiRatio * 100 : 0
+
+      return {
+        date: formatted,
+        roi: roiPct,
+        pnl: null, // List API doesn't provide daily PnL breakdown
+      }
+    })
+  } catch (err) {
+    logger.warn(`[bitunix] Equity curve failed for ${traderId}: ${err instanceof Error ? err.message : String(err)}`)
+    return []
+  }
+}
+
+/**
+ * Clear the leaderboard cache (useful for testing or forced refresh).
+ */
+export function clearBitunixCache(): void {
+  leaderboardCache.clear()
 }
