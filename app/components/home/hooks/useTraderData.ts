@@ -281,8 +281,8 @@ export function useTraderData(options: UseTraderDataOptions = {}) {
   useEffect(() => {
     if (hasInitialData && !initialDataSeeded.current) {
       initialDataSeeded.current = true
-      // Seed the cache with initial data for 30D
-      tradersCache.current.set('90D', {
+      // Seed the cache with initial data for the active time range (default 90D)
+      tradersCache.current.set(activeTimeRange, {
         traders: initialTraders!,
         lastUpdated: initialLastUpdated || null,
         fetchedAt: Date.now(),
