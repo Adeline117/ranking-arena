@@ -21,6 +21,11 @@ const V5_WINDOW_MAP: Record<Window, string> = { '7d': '7d', '30d': '30d', '90d':
 export class OkxFuturesConnector extends BaseConnector {
   readonly platform = 'okx' as const
   readonly marketType = 'futures' as const
+
+  constructor() {
+    super({ timeout: 15000, maxRetries: 1 }) // Fast fail: OKX paginates many requests through VPS proxy
+  }
+
   readonly capabilities: PlatformCapabilities = {
     platform: 'okx',
     market_types: ['futures', 'copy'],
@@ -33,18 +38,24 @@ export class OkxFuturesConnector extends BaseConnector {
     notes: ['priapi endpoints, CF protected'],
   }
 
-  async discoverLeaderboard(window: Window, limit = 500, offset = 0): Promise<DiscoverResult> {
+  async discoverLeaderboard(window: Window, limit = 260, offset = 0): Promise<DiscoverResult> {
     // v5 copytrading public API (priapi removed 2026-03-14)
-    // Auto-paginate: OKX returns max 20 per page
-    const pageSize = Math.min(limit, 20)
-    const maxPages = Math.ceil(Math.min(limit, 500) / pageSize)
+    // OKX returns max 20 per page, ~13 pages total (~260 traders)
+    const pageSize = 20
+    const maxPages = Math.min(Math.ceil(limit / pageSize), 15) // Cap at 15 pages to avoid timeout
     const allTraders: TraderSource[] = []
 
     for (let page = Math.floor(offset / pageSize) + 1; page <= maxPages + Math.floor(offset / pageSize); page++) {
-      const _rawLb = await this.request<Record<string, unknown>>(
-        `https://www.okx.com/api/v5/copytrading/public-lead-traders?instType=SWAP&sortType=pnl&dataRange=${V5_WINDOW_MAP[window]}&pageNo=${page}&limit=${pageSize}`,
-        { method: 'GET' }
-      )
+      let _rawLb: Record<string, unknown>
+      try {
+        _rawLb = await this.request<Record<string, unknown>>(
+          `https://www.okx.com/api/v5/copytrading/public-lead-traders?instType=SWAP&sortType=pnl&dataRange=${V5_WINDOW_MAP[window]}&pageNo=${page}&limit=${pageSize}`,
+          { method: 'GET' }
+        )
+      } catch (err) {
+        console.warn(`[okx] Page ${page} failed: ${err instanceof Error ? err.message : String(err)}`)
+        break // Stop pagination on error instead of hanging
+      }
       const data = warnValidate(OkxFuturesLeaderboardResponseSchema, _rawLb, 'okx-futures/leaderboard')
 
       // v5 response: { code: "0", data: [{ ranks: [...], totalPage, dataVer }] }
