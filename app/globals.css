@@ -255,7 +255,7 @@ html.theme-transition *::after {
   --glass-bg-light: rgba(255, 255, 255, 0.08);
   --glass-bg-medium: rgba(255, 255, 255, 0.12);
   --glass-bg-heavy: rgba(255, 255, 255, 0.18);
-  --glass-bg-primary: rgba(20, 18, 28, 0.85);
+  --glass-bg-primary: rgba(20, 18, 28, 0.95);
   --glass-bg-secondary: rgba(28, 25, 38, 0.9);
   --glass-bg-tertiary: rgba(37, 34, 50, 0.95);
   --glass-border-light: rgba(255, 255, 255, 0.1);
@@ -470,7 +470,7 @@ html.theme-transition *::after {
   --glass-bg-light: rgba(255, 255, 255, 0.7);
   --glass-bg-medium: rgba(255, 255, 255, 0.8);
   --glass-bg-heavy: rgba(255, 255, 255, 0.9);
-  --glass-bg-primary: rgba(255, 255, 255, 0.85);
+  --glass-bg-primary: rgba(255, 255, 255, 0.95);
   --glass-bg-secondary: rgba(248, 248, 250, 0.9);
   --glass-bg-tertiary: rgba(240, 240, 244, 0.95);
   --glass-border-light: rgba(0, 0, 0, 0.08);
