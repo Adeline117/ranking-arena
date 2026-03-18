@@ -56,15 +56,15 @@ export async function GET(request: NextRequest) {
 
     if (snapshotError || !snapshots) {
       // Fallback: fetch with regular query (less optimal but works without RPC)
-      logger.warn('[aggregate] RPC not available, falling back to paginated query')
+      logger.warn('[aggregate] RPC not available, falling back to v2 paginated query')
 
       const { data: fallbackData, error: fallbackError } = await supabase
-        .from('trader_snapshots')
-        .select('source, source_trader_id, season_id, roi, pnl, win_rate, max_drawdown, followers, trades_count, captured_at')
-        .eq('season_id', '90D')
-        .gte('captured_at', `${dateStr}T00:00:00Z`)
-        .lt('captured_at', `${todayStr}T00:00:00Z`)
-        .order('captured_at', { ascending: false })
+        .from('trader_snapshots_v2')
+        .select('platform, trader_key, window, roi_pct, pnl_usd, win_rate, max_drawdown, followers, trades_count, created_at')
+        .eq('window', '90D')
+        .gte('created_at', `${dateStr}T00:00:00Z`)
+        .lt('created_at', `${todayStr}T00:00:00Z`)
+        .order('created_at', { ascending: false })
         .limit(50000)
 
       if (fallbackError || !fallbackData) {
@@ -75,12 +75,21 @@ export async function GET(request: NextRequest) {
         )
       }
 
-      // Deduplicate: keep latest per (source, source_trader_id)
+      // Deduplicate: keep latest per (platform, trader_key) — map v2 columns to v1 shape
       snapshotMap = new Map()
       for (const s of fallbackData) {
-        const key = `${s.source}:${s.source_trader_id}`
+        const key = `${s.platform}:${s.trader_key}`
         if (!snapshotMap.has(key)) {
-          snapshotMap.set(key, s)
+          snapshotMap.set(key, {
+            source: s.platform,
+            source_trader_id: s.trader_key,
+            roi: s.roi_pct,
+            pnl: s.pnl_usd,
+            win_rate: s.win_rate,
+            max_drawdown: s.max_drawdown,
+            followers: s.followers,
+            trades_count: s.trades_count,
+          })
         }
       }
     } else {
@@ -196,7 +205,7 @@ export async function GET(request: NextRequest) {
           returnsByTrader.get(key)!.push(parseFloat(String(row.daily_return_pct)))
         }
 
-        // Compute Sharpe and batch update trader_snapshots
+        // Compute Sharpe and batch update trader_snapshots_v2
         const sharpeUpdates: Array<{ source: string; source_trader_id: string; sharpe_ratio: number }> = []
         for (const [key, returns] of returnsByTrader) {
           if (returns.length < 7) continue
@@ -215,8 +224,7 @@ export async function GET(request: NextRequest) {
           })
         }
 
-        // Batch update sharpe_ratio in trader_snapshots
-        // Use Promise.all with batches of 50 to reduce N+1 pattern (was 1 query per trader)
+        // Batch update sharpe_ratio in trader_snapshots_v2
         if (sharpeUpdates.length > 0) {
           let sharpeUpdated = 0
           const SHARPE_BATCH = 50
@@ -225,32 +233,15 @@ export async function GET(request: NextRequest) {
             const results = await Promise.all(
               batch.map(upd =>
                 supabase
-                  .from('trader_snapshots')
-                  .update({ sharpe_ratio: upd.sharpe_ratio })
-                  .eq('source', upd.source)
-                  .eq('source_trader_id', upd.source_trader_id)
-              )
-            )
-            sharpeUpdated += results.filter(r => !r.error).length
-          }
-          logger.info(`[aggregate] Computed Sharpe ratio for ${sharpeUpdated}/${sharpeUpdates.length} traders (legacy table)`)
-
-          // Also update trader_snapshots_v2
-          let v2Updated = 0
-          for (let i = 0; i < sharpeUpdates.length; i += SHARPE_BATCH) {
-            const batch = sharpeUpdates.slice(i, i + SHARPE_BATCH)
-            const v2Results = await Promise.all(
-              batch.map(upd =>
-                supabase
                   .from('trader_snapshots_v2')
                   .update({ sharpe_ratio: upd.sharpe_ratio })
                   .eq('platform', upd.source)
                   .eq('trader_key', upd.source_trader_id)
               )
             )
-            v2Updated += v2Results.filter(r => !r.error).length
+            sharpeUpdated += results.filter(r => !r.error).length
           }
-          logger.info(`[aggregate] Synced Sharpe ratio to v2: ${v2Updated}/${sharpeUpdates.length}`)
+          logger.info(`[aggregate] Computed Sharpe ratio for ${sharpeUpdated}/${sharpeUpdates.length} traders`)
         }
 
         // Step 4b: Compute max_drawdown from ROI history for traders that lack it
