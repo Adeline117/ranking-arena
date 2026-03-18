@@ -588,10 +588,10 @@ async function computeSeason(
     return 0
   }
 
-  // Batch fetch handles and avatars from trader_sources + trader_profiles_v2 fallback
+  // Batch fetch handles and avatars from unified `traders` table
+  // (replaces two-step trader_sources + trader_profiles_v2 fallback)
   const handleMap = new Map<string, { handle: string | null; avatar_url: string | null }>()
 
-  // Group by source for efficient queries
   const bySource = new Map<string, string[]>()
   for (const t of uniqueTraders) {
     const ids = bySource.get(t.source) || []
@@ -601,18 +601,16 @@ async function computeSeason(
 
   await Promise.all(
     Array.from(bySource.entries()).map(async ([source, traderIds]) => {
-      // Query in chunks of 500 (Supabase IN limit)
       for (let i = 0; i < traderIds.length; i += 500) {
         const chunk = traderIds.slice(i, i + 500)
         const { data } = await supabase
-          .from('trader_sources')
-          .select('source_trader_id, handle, avatar_url')
-          .eq('source', source)
-          .in('source_trader_id', chunk)
+          .from('traders')
+          .select('trader_key, handle, avatar_url')
+          .eq('platform', source)
+          .in('trader_key', chunk)
 
-        data?.forEach((s: { source_trader_id: string; handle: string | null; avatar_url: string | null }) => {
-          // Normalize 0x addresses to lowercase to match dedup key
-          const tid = s.source_trader_id.startsWith('0x') ? s.source_trader_id.toLowerCase() : s.source_trader_id
+        data?.forEach((s: { trader_key: string; handle: string | null; avatar_url: string | null }) => {
+          const tid = s.trader_key.startsWith('0x') ? s.trader_key.toLowerCase() : s.trader_key
           handleMap.set(`${source}:${tid}`, {
             handle: s.handle,
             avatar_url: s.avatar_url || null,
@@ -621,52 +619,6 @@ async function computeSeason(
       }
     })
   )
-
-  // Fallback: fill missing handle/avatar from trader_profiles_v2.
-  // This covers (a) traders in handleMap but without avatar, AND
-  // (b) traders not in trader_sources at all (e.g., eToro, new platforms).
-  const tradersNeedingProfile = new Map<string, string[]>()
-  for (const t of uniqueTraders) {
-    const key = `${t.source}:${t.source_trader_id}`
-    const existing = handleMap.get(key)
-    if (!existing || !existing.avatar_url || !existing.handle) {
-      const ids = tradersNeedingProfile.get(t.source) || []
-      ids.push(t.source_trader_id)
-      tradersNeedingProfile.set(t.source, ids)
-    }
-  }
-
-  if (tradersNeedingProfile.size > 0) {
-
-    await Promise.all(
-      Array.from(tradersNeedingProfile.entries()).map(async ([source, traderIds]) => {
-        for (let i = 0; i < traderIds.length; i += 500) {
-          const chunk = traderIds.slice(i, i + 500)
-          const { data } = await supabase
-            .from('trader_profiles_v2')
-            .select('trader_key, display_name, avatar_url')
-            .eq('platform', source)
-            .in('trader_key', chunk)
-
-          data?.forEach((p: { trader_key: string; display_name: string | null; avatar_url: string | null }) => {
-            const key = `${source}:${p.trader_key}`
-            const existing = handleMap.get(key)
-            if (existing) {
-              // Fill in missing fields from profile
-              if (!existing.avatar_url && p.avatar_url) existing.avatar_url = p.avatar_url
-              if (!existing.handle && p.display_name) existing.handle = p.display_name
-            } else {
-              // Trader not in trader_sources at all — create entry from profile
-              handleMap.set(key, {
-                handle: p.display_name || null,
-                avatar_url: p.avatar_url || null,
-              })
-            }
-          })
-        }
-      })
-    )
-  }
 
   // Calculate arena_score and rank
   const scored = uniqueTraders.map(t => {

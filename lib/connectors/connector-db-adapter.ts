@@ -230,7 +230,6 @@ export async function runConnectorBatch(
   // Aggregate write consistency across all windows
   const aggregatedConsistency: WriteConsistency = {
     trader_sources: 'ok',
-    trader_profiles_v2: 'ok',
     trader_snapshots_v2: 'ok',
   }
 

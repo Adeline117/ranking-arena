@@ -25,7 +25,7 @@ export default function HomeHero() {
     // Defer non-critical stats queries to avoid blocking LCP/TBT.
     // Uses requestIdleCallback to run during browser idle time.
     const fetchStats = () => {
-      supabase.from('trader_sources').select('*', { count: 'exact', head: true })
+      supabase.from('traders').select('*', { count: 'exact', head: true })
         .then(({ count }) => { if (count) { setTraderCount(formatCount(count)); setTraderNum(count) } })
 
       // Only need unique source names (~30 platforms) — limit 200 instead of 10000
