@@ -12,6 +12,7 @@ import { createLogger } from '@/lib/utils/logger'
 import { PipelineLogger } from '@/lib/services/pipeline-logger'
 import { EXCHANGE_CONFIG } from '@/lib/constants/exchanges'
 import { env } from '@/lib/env'
+import { getSharedRedis } from '@/lib/cache/redis-client'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 60
@@ -48,8 +49,21 @@ export async function GET(request: NextRequest) {
   const plog = await PipelineLogger.start('sync-meilisearch')
   const startTime = Date.now()
 
+  // Check if full sync requested via ?full=1 query param
+  const isFull = request.nextUrl.searchParams.get('full') === '1'
+
   try {
     const supabase = getSupabaseAdmin()
+    const redis = await getSharedRedis()
+
+    // Determine last sync timestamp for incremental sync
+    const LAST_SYNC_KEY = 'meilisearch:last_sync'
+    let lastSync = '1970-01-01T00:00:00Z'
+    if (!isFull && redis) {
+      const stored = await redis.get<string>(LAST_SYNC_KEY)
+      if (stored) lastSync = stored
+    }
+    const syncStartTime = new Date().toISOString()
 
     // Ensure season_id is filterable in Meilisearch index
     try {
@@ -64,17 +78,24 @@ export async function GET(request: NextRequest) {
     const seasonCounts: Record<string, number> = {}
 
     for (const season of SEASONS) {
-      // Paginated fetch from leaderboard_ranks
+      // Paginated fetch from leaderboard_ranks (incremental: only changed since lastSync)
       const allData: Record<string, unknown>[] = []
       let offset = 0
       const pageSize = 1000
       while (true) {
-        const { data, error } = await supabase
+        let query = supabase
           .from('leaderboard_ranks')
           .select('source, source_trader_id, handle, avatar_url, roi, pnl, arena_score, win_rate, max_drawdown, followers, rank, trader_type, computed_at')
           .eq('season_id', season)
           .not('arena_score', 'is', null)
           .gt('arena_score', 0)
+
+        // Incremental: only fetch traders updated since last sync
+        if (!isFull) {
+          query = query.gte('computed_at', lastSync)
+        }
+
+        const { data, error } = await query
           .order('arena_score', { ascending: false })
           .range(offset, offset + pageSize - 1)
 
@@ -114,11 +135,24 @@ export async function GET(request: NextRequest) {
       totalSynced += traders.length
     }
 
-    const elapsed = Date.now() - startTime
-    logger.info(`Meilisearch synced: ${totalSynced} traders (${JSON.stringify(seasonCounts)}) in ${elapsed}ms`)
-    await plog.success(totalSynced, { elapsed_ms: elapsed, seasons: seasonCounts })
+    // If no changes found (incremental sync), return early
+    if (totalSynced === 0 && !isFull) {
+      const elapsed = Date.now() - startTime
+      logger.info(`Meilisearch incremental sync: no changes since ${lastSync} (${elapsed}ms)`)
+      await plog.success(0, { elapsed_ms: elapsed, message: 'no changes' })
+      return NextResponse.json({ ok: true, traders: 0, message: 'no changes', elapsed_ms: elapsed })
+    }
 
-    return NextResponse.json({ ok: true, traders: totalSynced, seasons: seasonCounts, elapsed_ms: elapsed })
+    // Update last sync timestamp in Redis
+    if (redis) {
+      await redis.set(LAST_SYNC_KEY, syncStartTime)
+    }
+
+    const elapsed = Date.now() - startTime
+    logger.info(`Meilisearch synced: ${totalSynced} traders (${JSON.stringify(seasonCounts)}) in ${elapsed}ms${isFull ? ' [full]' : ' [incremental]'}`)
+    await plog.success(totalSynced, { elapsed_ms: elapsed, seasons: seasonCounts, mode: isFull ? 'full' : 'incremental' })
+
+    return NextResponse.json({ ok: true, traders: totalSynced, seasons: seasonCounts, elapsed_ms: elapsed, mode: isFull ? 'full' : 'incremental' })
   } catch (err: unknown) {
     const errorMessage = err instanceof Error ? err.message : String(err)
     logger.error('Meilisearch sync failed:', err)

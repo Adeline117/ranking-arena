@@ -51,9 +51,6 @@ const VALID_WINDOWS: (RankingWindow | 'composite')[] = ['7d', '30d', '90d', 'com
 const VALID_CATEGORIES: TradingCategory[] = ['futures', 'spot', 'onchain'];
 const VALID_SORT_BY = ['arena_score', 'roi', 'pnl', 'drawdown', 'copiers'] as const;
 
-// Composite window weights
-const COMPOSITE_WEIGHTS = { '7D': 0.20, '30D': 0.45, '90D': 0.35 } as const;
-
 // Data quality: ROI values above this threshold are considered anomalous
 const ROI_ANOMALY_THRESHOLD = 5000; // 5000% = 50x — anything above is likely data error
 
@@ -344,9 +341,12 @@ async function getRankingsFallback(rankingsQuery: RankingsQuery, _cursor?: strin
 }
 
 /**
- * Composite rankings: weighted average of 7D/30D/90D arena_score
- * Weight: 7D×0.20 + 30D×0.45 + 90D×0.35
- * Now reads from leaderboard_ranks instead of trader_snapshots.
+ * Composite rankings: uses 90D arena_score directly.
+ *
+ * compute-leaderboard already computes a weighted composite score
+ * (90D x 0.70 + 30D x 0.25 + 7D x 0.05) and stores it as arena_score in 90D.
+ * So instead of fetching 3 seasons and merging in JS, we just query 90D.
+ * This reduces DB load from 3 queries to 1 and eliminates in-memory merge.
  */
 async function getCompositeRankings(params: {
   category?: TradingCategory;
@@ -358,186 +358,22 @@ async function getCompositeRankings(params: {
   min_pnl?: number;
   min_trades?: number;
 }) {
-  const { category, platform, limit, offset, sort_by, sort_dir, min_pnl, min_trades } = params;
-  const supabase = getSupabaseAdmin();
-
-  // Fetch all three windows in parallel from leaderboard_ranks
-  const fetchWindow = async (seasonId: string) => {
-    let q = supabase
-      .from('leaderboard_ranks')
-      .select('source, source_trader_id, handle, avatar_url, computed_at, arena_score, roi, pnl, max_drawdown, win_rate, trades_count, followers, profitability_score, risk_control_score, execution_score, score_completeness, trading_style, avg_holding_hours, sharpe_ratio, trader_type, is_outlier')
-      .eq('season_id', seasonId)
-      .not('arena_score', 'is', null)
-      .or('is_outlier.is.null,is_outlier.eq.false')
-      .lte('roi', ROI_ANOMALY_THRESHOLD)
-      .gte('roi', -ROI_ANOMALY_THRESHOLD)
-      .order('arena_score', { ascending: false, nullsFirst: false })
-      .limit(2000);
-
-    if (platform) q = q.eq('source', platform);
-    else if (category) {
-      const platformsInCategory = Object.entries(PLATFORM_CATEGORY)
-        .filter(([, cat]) => cat === category)
-        .map(([p]) => p);
-      if (platformsInCategory.length > 0) q = q.in('source', platformsInCategory);
-    }
-    if (min_pnl != null) q = q.gte('pnl', min_pnl);
-    if (min_trades != null) q = q.gte('trades_count', min_trades);
-
-    const { data, error } = await q;
-    if (error) throw new Error(`Composite fetch ${seasonId} failed: ${error.message}`);
-    return data || [];
-  };
-
-  const [rows7d, rows30d, rows90d] = await Promise.all([
-    fetchWindow('7D'),
-    fetchWindow('30D'),
-    fetchWindow('90D'),
-  ]);
-
-  // Build maps keyed by source:source_trader_id
-  type LRRow = typeof rows7d[number];
-  type RowMap = Map<string, LRRow>;
-  const buildMap = (rows: LRRow[]): RowMap => {
-    const m = new Map<string, LRRow>();
-    for (const r of rows) {
-      const key = `${r.source}:${r.source_trader_id}`;
-      if (!m.has(key)) m.set(key, r);
-    }
-    return m;
-  };
-
-  const map7d = buildMap(rows7d);
-  const map30d = buildMap(rows30d);
-  const map90d = buildMap(rows90d);
-
-  // Union all trader keys
-  const allKeys = new Set<string>();
-  [map7d, map30d, map90d].forEach(m => m.forEach((_, k) => allKeys.add(k)));
-
-  // Compute weighted scores
-  interface CompositeEntry {
-    key: string;
-    source: string;
-    source_trader_id: string;
-    compositeScore: number;
-    primaryRow: LRRow;
-  }
-
-  const entries: CompositeEntry[] = [];
-  for (const key of allKeys) {
-    const r7 = map7d.get(key);
-    const r30 = map30d.get(key);
-    const r90 = map90d.get(key);
-
-    const getScore = (r: LRRow | undefined) => {
-      if (!r) return null;
-      return r.arena_score != null ? Number(r.arena_score) : null;
-    };
-
-    const s7 = getScore(r7);
-    const s30 = getScore(r30);
-    const s90 = getScore(r90);
-
-    // Need at least one score
-    if (s7 == null && s30 == null && s90 == null) continue;
-
-    // Weighted average (re-normalize weights for available windows)
-    let totalWeight = 0;
-    let weightedSum = 0;
-    if (s7 != null) { weightedSum += s7 * COMPOSITE_WEIGHTS['7D']; totalWeight += COMPOSITE_WEIGHTS['7D']; }
-    if (s30 != null) { weightedSum += s30 * COMPOSITE_WEIGHTS['30D']; totalWeight += COMPOSITE_WEIGHTS['30D']; }
-    if (s90 != null) { weightedSum += s90 * COMPOSITE_WEIGHTS['90D']; totalWeight += COMPOSITE_WEIGHTS['90D']; }
-
-    const compositeScore = totalWeight > 0 ? weightedSum / totalWeight : 0;
-    const primaryRow = r90 || r30 || r7!;
-    const [source, ...restParts] = key.split(':');
-    const source_trader_id = restParts.join(':');
-
-    entries.push({ key, source, source_trader_id, compositeScore, primaryRow });
-  }
-
-  // Sort
-  const sortFn = (a: CompositeEntry, b: CompositeEntry) => {
-    let aVal = a.compositeScore, bVal = b.compositeScore;
-    if (sort_by === 'roi') {
-      aVal = a.primaryRow.roi != null ? Number(a.primaryRow.roi) : 0;
-      bVal = b.primaryRow.roi != null ? Number(b.primaryRow.roi) : 0;
-    }
-    return sort_dir === 'desc' ? bVal - aVal : aVal - bVal;
-  };
-  entries.sort(sortFn);
-
-  const total = entries.length;
-  const paginated = entries.slice(offset, offset + limit);
-
-  const traders = paginated.map((entry, idx) => {
-    const row = entry.primaryRow;
-    return {
-      platform: entry.source,
-      trader_key: entry.source_trader_id,
-      display_name: (row.handle as string) || null,
-      avatar_url: (row.avatar_url as string) || null,
-      rank: offset + idx + 1,
-      metrics: {
-        roi: row.roi != null ? Number(row.roi) : null,
-        pnl: row.pnl != null ? Number(row.pnl) : null,
-        win_rate: row.win_rate != null ? Number(row.win_rate) : null,
-        max_drawdown: row.max_drawdown != null ? Number(row.max_drawdown) : null,
-        trades_count: row.trades_count ?? null,
-        followers: row.followers ?? null,
-        copiers: null,
-        aum: null,
-        arena_score: Math.round(entry.compositeScore * 10) / 10,
-        return_score: null,
-        drawdown_score: null,
-        stability_score: null,
-        sharpe_ratio: row.sharpe_ratio != null ? Number(row.sharpe_ratio) : null,
-        sortino_ratio: null,
-        platform_rank: offset + idx + 1,
-      },
-      quality_flags: { is_suspicious: false, suspicion_reasons: [], data_completeness: 1.0 },
-      updated_at: row.computed_at,
-      profitability_score: row.profitability_score != null ? Number(row.profitability_score) : null,
-      risk_control_score: row.risk_control_score != null ? Number(row.risk_control_score) : null,
-      execution_score: row.execution_score != null ? Number(row.execution_score) : null,
-      score_completeness: row.score_completeness || null,
-      trading_style: row.trading_style || null,
-      avg_holding_hours: row.avg_holding_hours != null ? Number(row.avg_holding_hours) : null,
-      style_confidence: null,
-      is_bot: entry.source === 'web3_bot' || row.trader_type === 'bot',
-      trader_type: row.trader_type || (entry.source === 'web3_bot' ? 'bot' : null),
-    };
-  });
-
-  // Deduplicate 0x addresses (case-insensitive)
-  const seenComposite = new Set<string>()
-  const dedupedCompositeTraders = traders.filter((t: { trader_key: string; platform: string }) => {
-    const key = (t.trader_key.startsWith('0x') ? t.trader_key.toLowerCase() : t.trader_key) + '|' + t.platform
-    if (seenComposite.has(key)) return false
-    seenComposite.add(key)
-    return true
+  // Composite = 90D (which already contains the weighted composite arena_score)
+  // Delegate to getRankingsFallback with window='90d' and relabel as COMPOSITE
+  const result = await getRankingsFallback({
+    window: '90d' as RankingWindow,
+    category: params.category,
+    platform: params.platform,
+    limit: params.limit,
+    offset: params.offset,
+    sort_by: params.sort_by as 'arena_score' | 'roi' | 'pnl' | 'drawdown' | 'copiers',
+    sort_dir: params.sort_dir,
+    min_pnl: params.min_pnl,
+    min_trades: params.min_trades,
   })
 
-  // Collect all unique sources across all windows for UI filter
-  const allSources = new Set<string>();
-  [map7d, map30d, map90d].forEach(m => m.forEach(r => allSources.add(r.source)));
-  const availableSources = [...allSources].sort();
-
-  // Check freshness
-  const latestCaptured = Math.max(
-    ...entries.slice(0, 100).map(e => new Date(e.primaryRow.computed_at as string).getTime()).filter(t => t > 0),
-    0
-  )
-  const compositeIsStale = latestCaptured > 0 ? (Date.now() - latestCaptured) > 2 * 3600 * 1000 : true
-
   return {
-    traders: dedupedCompositeTraders,
+    ...result,
     window: 'COMPOSITE' as const,
-    totalcount: total,
-    total_count: total,
-    as_of: latestCaptured > 0 ? new Date(latestCaptured).toISOString() : new Date().toISOString(),
-    is_stale: compositeIsStale,
-    availableSources,
-  };
+  }
 }

@@ -365,6 +365,14 @@ export async function upsertTraders(
   }
   if (validated.length === 0) return { saved: 0, error: `All ${traders.length} traders failed validation` }
 
+  // Normalize 0x addresses to lowercase before dedup and DB writes
+  // This prevents duplicate entries for the same trader with different casing
+  for (const t of validated) {
+    if (t.source_trader_id.startsWith('0x') || t.source_trader_id.startsWith('0X')) {
+      t.source_trader_id = t.source_trader_id.toLowerCase()
+    }
+  }
+
   // Deduplicate by (source, source_trader_id, season_id) — PostgreSQL ON CONFLICT
   // cannot affect the same row twice in a single upsert batch
   const deduped: TraderData[] = []
