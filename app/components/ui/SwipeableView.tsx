@@ -29,15 +29,18 @@ export default function SwipeableView({
   const [offsetX, setOffsetX] = useState(0)
   const [isDragging, setIsDragging] = useState(false)
   const containerRef = useRef<HTMLDivElement>(null)
-  const startRef = useRef({ x: 0, y: 0 })
+  const startRef = useRef({ x: 0, y: 0, time: 0 })
   const trackingRef = useRef(false)
   const directionLockedRef = useRef<'horizontal' | 'vertical' | null>(null)
+
+  // Velocity threshold: px/ms — if swipe speed exceeds this, trigger even for short distances
+  const VELOCITY_THRESHOLD = 0.5
 
   const count = children.length
 
   const handleTouchStart = useCallback((e: React.TouchEvent) => {
     if (disabled) return
-    startRef.current = { x: e.touches[0].clientX, y: e.touches[0].clientY }
+    startRef.current = { x: e.touches[0].clientX, y: e.touches[0].clientY, time: Date.now() }
     trackingRef.current = true
     directionLockedRef.current = null
     setIsDragging(true)
@@ -76,16 +79,23 @@ export default function SwipeableView({
     setIsDragging(false)
 
     if (directionLockedRef.current === 'horizontal') {
-      if (offsetX > threshold && activeIndex > 0) {
-        onIndexChange(activeIndex - 1)
-      } else if (offsetX < -threshold && activeIndex < count - 1) {
-        onIndexChange(activeIndex + 1)
+      const elapsed = Date.now() - startRef.current.time
+      const velocity = elapsed > 0 ? Math.abs(offsetX) / elapsed : 0
+      const triggeredByVelocity = velocity > VELOCITY_THRESHOLD && Math.abs(offsetX) > 15
+      const triggeredByDistance = Math.abs(offsetX) > threshold
+
+      if (triggeredByDistance || triggeredByVelocity) {
+        if (offsetX > 0 && activeIndex > 0) {
+          onIndexChange(activeIndex - 1)
+        } else if (offsetX < 0 && activeIndex < count - 1) {
+          onIndexChange(activeIndex + 1)
+        }
       }
     }
 
     setOffsetX(0)
     directionLockedRef.current = null
-  }, [offsetX, threshold, activeIndex, count, onIndexChange])
+  }, [offsetX, threshold, activeIndex, count, onIndexChange, VELOCITY_THRESHOLD])
 
   return (
     <div
