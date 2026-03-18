@@ -239,6 +239,40 @@ const HANDLERS = {
     return data || { error: 'No API response captured' }
   },
 
+  'bybit/trader-detail': async (page, params) => {
+    const leaderMark = params.leaderMark || ''
+    if (!leaderMark) return { error: 'leaderMark required' }
+
+    // Navigate to a Bybit copy-trade page to get valid session cookies
+    await page.goto('https://www.bybitglobal.com/copyTrading/en/leaderboard-master', {
+      waitUntil: 'domcontentloaded', timeout: 45000,
+    })
+    await page.waitForTimeout(2000)
+
+    // Fetch trader detail via same-origin x-api (bypasses Akamai WAF)
+    const data = await page.evaluate(async (mark) => {
+      try {
+        // Fetch leader details (includes PnL, AUM, follower stats)
+        const detailPath = `/x-api/fapi/beehive/public/v1/common/leader-details?leaderMark=${encodeURIComponent(mark)}`
+        const r = await fetch(detailPath)
+        if (!r.ok) return { error: 'HTTP ' + r.status }
+        const detail = await r.json()
+
+        // Also fetch performance history (PnL curve)
+        let pnlHistory = null
+        try {
+          const histPath = `/x-api/fapi/beehive/public/v1/common/leader-history-pnl?leaderMark=${encodeURIComponent(mark)}`
+          const h = await fetch(histPath)
+          if (h.ok) pnlHistory = await h.json()
+        } catch {}
+
+        return { detail, pnlHistory }
+      } catch (e) { return { error: e.message } }
+    }, leaderMark).catch(() => null)
+
+    return data || { error: 'No API response captured' }
+  },
+
   'bybit/leaderboard-batch': async (page, params) => {
     const pageSize = parseInt(params.pageSize || '50', 10)
     const durations = (params.durations || 'DATA_DURATION_THIRTY_DAY').split(',')

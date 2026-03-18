@@ -590,11 +590,19 @@ export async function runEnrichment(params: {
                 }
                 await withRetry(() => upsertStatsDetail(supabase, platformKey, traderId, period, stats!), `${platformKey}:${traderId} save stats detail`)
 
-                // Write win_rate and max_drawdown back to snapshot so leaderboard shows them
+                // Write win_rate, max_drawdown, and PnL back to snapshot so leaderboard shows them
                 const snapshotUpdate: Record<string, unknown> = {}
                 if (stats.profitableTradesPct != null) snapshotUpdate.win_rate = stats.profitableTradesPct
                 if (stats.maxDrawdown != null) snapshotUpdate.max_drawdown = stats.maxDrawdown
                 if (stats.totalTrades != null) snapshotUpdate.trades_count = stats.totalTrades
+                // Write PnL from equity curve when snapshot PnL is null
+                // (e.g., Bybit leaderboard doesn't include PnL, only the detail endpoint does)
+                if (curve.length > 0) {
+                  const lastPoint = curve[curve.length - 1]
+                  if (lastPoint.pnl != null) {
+                    snapshotUpdate.pnl_usd = lastPoint.pnl
+                  }
+                }
                 if (Object.keys(snapshotUpdate).length > 0) {
                   // Write enrichment results to v2 only (v1 writes removed 2026-03-18)
                   // V2 columns: platform, trader_key, window

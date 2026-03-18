@@ -1,60 +1,111 @@
 /**
  * Bybit enrichment: equity curve, position history, stats detail
+ *
+ * api2.bybit.com endpoints return 404 globally since 2026-03.
+ * All enrichment now routes through VPS scraper at /bybit/trader-detail,
+ * which uses Playwright to call bybitglobal.com x-api from within
+ * a browser context (bypasses Akamai WAF).
  */
 
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { logger } from '@/lib/logger'
 import { sleep } from './shared'
-import { fetchWithProxyFallback, type EquityCurvePoint, type PositionHistoryItem, type StatsDetail } from './enrichment-types'
+import type { EquityCurvePoint, PositionHistoryItem, StatsDetail } from './enrichment-types'
 import { upsertEquityCurve } from './enrichment-db'
 import { withRetry } from '@/lib/utils/circuit-breaker'
 import { type Result, Ok, Err } from '@/lib/types'
 
-interface BybitChartResponse {
-  retCode?: number
-  result?: {
-    dataList?: Array<{
-      date?: string
-      value?: string | number
-      pnl?: string | number
-    }>
+// ---------------------------------------------------------------------------
+// VPS Scraper helpers
+// ---------------------------------------------------------------------------
+
+const VPS_SCRAPER_URL = () => {
+  const raw = (process.env.VPS_SCRAPER_SG || process.env.VPS_PROXY_SG || '').replace(/\n$/, '').trim()
+  return raw || null
+}
+const VPS_PROXY_KEY = () => (process.env.VPS_PROXY_KEY || '').trim() || null
+
+interface VpsTraderDetailResponse {
+  detail?: {
+    retCode?: number
+    result?: {
+      nickName?: string
+      roi?: string
+      pnl?: string
+      winRate?: string
+      maxDrawdown?: string
+      sharpeRatio?: string
+      followerCount?: number
+      currentFollowerCount?: number
+      copierPnl?: string
+      aum?: string
+      tradeCount?: number
+      avgHoldingPeriod?: number // seconds
+      avgProfit?: string
+      avgLoss?: string
+    }
   }
+  pnlHistory?: {
+    retCode?: number
+    result?: {
+      pnlList?: Array<{
+        timestamp?: string | number
+        pnl?: string | number
+        roi?: string | number
+      }>
+    }
+  }
+  error?: string
+}
+
+async function fetchBybitViaVPS(leaderMark: string, timeoutMs = 60000): Promise<VpsTraderDetailResponse | null> {
+  const host = VPS_SCRAPER_URL()
+  const key = VPS_PROXY_KEY()
+  if (!host || !key) {
+    logger.warn('[bybit-enrichment] VPS not configured (VPS_SCRAPER_SG / VPS_PROXY_KEY missing)')
+    return null
+  }
+
+  const url = `${host}/bybit/trader-detail?leaderMark=${encodeURIComponent(leaderMark)}`
+  try {
+    const res = await fetch(url, {
+      headers: { 'X-Proxy-Key': key, 'Accept': 'application/json' },
+      signal: AbortSignal.timeout(timeoutMs),
+    })
+    if (!res.ok) {
+      logger.warn(`[bybit-enrichment] VPS returned ${res.status} for ${leaderMark}`)
+      return null
+    }
+    return await res.json() as VpsTraderDetailResponse
+  } catch (err) {
+    logger.warn(`[bybit-enrichment] VPS fetch failed for ${leaderMark}: ${err instanceof Error ? err.message : String(err)}`)
+    return null
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Enrichment functions
+// ---------------------------------------------------------------------------
+
+function parseNum(v: string | number | undefined | null): number | null {
+  if (v == null) return null
+  const n = typeof v === 'string' ? parseFloat(v) : Number(v)
+  return isNaN(n) ? null : n
 }
 
 export async function fetchBybitEquityCurve(
   traderId: string,
-  days = 90
+  _days = 90
 ): Promise<EquityCurvePoint[]> {
   try {
-    const data = await fetchWithProxyFallback<BybitChartResponse>(
-      'https://api2.bybit.com/fapi/beehive/public/v1/common/leader-chart',
-      {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Origin: 'https://www.bybit.com',
-          Referer: 'https://www.bybit.com/copyTrade',
-        },
-        body: { leaderId: traderId, days },
-        timeoutMs: 5000,
-      }
-    )
+    const data = await fetchBybitViaVPS(traderId)
+    if (!data?.pnlHistory?.result?.pnlList) return []
 
-    if (data?.retCode !== 0 && data?.retCode !== undefined) {
-      logger.warn(`[enrichment] Bybit equity curve API error for ${traderId}: retCode=${data.retCode}`)
-      return []
-    }
-
-    if (!data?.result?.dataList) {
-      logger.warn(`[enrichment] Bybit equity curve empty for ${traderId}`)
-      return []
-    }
-
-    return data.result.dataList
-      .filter((d) => d.date)
+    return data.pnlHistory.result.pnlList
+      .filter((d) => d.timestamp)
       .map((d) => ({
-        date: d.date!,
-        roi: d.value != null ? Number(d.value) : 0,
+        date: new Date(Number(d.timestamp) || Date.now()).toISOString().split('T')[0],
+        roi: d.roi != null ? Number(d.roi) : 0,
         pnl: d.pnl != null ? Number(d.pnl) : null,
       }))
   } catch (err) {
@@ -63,129 +114,23 @@ export async function fetchBybitEquityCurve(
   }
 }
 
-interface BybitHistoryOrderResponse {
-  retCode?: number
-  result?: {
-    data?: Array<{
-      symbol?: string
-      side?: string
-      entryPrice?: string | number
-      closePrice?: string | number
-      qty?: string | number
-      closedSize?: string | number
-      leverage?: string | number
-      createdAt?: string | number
-      closedAt?: string | number
-      pnl?: string | number
-      pnlRate?: string | number
-    }>
-  }
-}
-
 export async function fetchBybitPositionHistory(
-  traderId: string,
-  pageSize = 50
+  _traderId: string,
+  _pageSize = 50
 ): Promise<PositionHistoryItem[]> {
-  try {
-    const data = await fetchWithProxyFallback<BybitHistoryOrderResponse>(
-      'https://api2.bybit.com/fapi/beehive/public/v1/common/leader-history-order',
-      {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Origin: 'https://www.bybit.com',
-          Referer: 'https://www.bybit.com/copyTrade',
-        },
-        body: { leaderId: traderId, pageNo: 1, pageSize },
-        timeoutMs: 5000,
-      }
-    )
-
-    if (data?.retCode !== 0 && data?.retCode !== undefined) {
-      logger.warn(`[enrichment] Bybit position history API error for ${traderId}: retCode=${data.retCode}`)
-      return []
-    }
-
-    if (!data?.result?.data) {
-      logger.warn(`[enrichment] Bybit position history empty for ${traderId}`)
-      return []
-    }
-
-    return data.result.data.map((p) => ({
-      symbol: p.symbol || '',
-      direction: (p.side || '').toLowerCase().includes('sell') ? 'short' as const : 'long' as const,
-      positionType: 'perpetual',
-      marginMode: 'cross',
-      openTime: p.createdAt ? new Date(Number(p.createdAt)).toISOString() : null,
-      closeTime: p.closedAt ? new Date(Number(p.closedAt)).toISOString() : null,
-      entryPrice: p.entryPrice != null ? Number(p.entryPrice) : null,
-      exitPrice: p.closePrice != null ? Number(p.closePrice) : null,
-      maxPositionSize: p.qty != null ? Number(p.qty) : null,
-      closedSize: p.closedSize != null ? Number(p.closedSize) : null,
-      pnlUsd: p.pnl != null ? Number(p.pnl) : null,
-      pnlPct: p.pnlRate != null ? Number(p.pnlRate) * 100 : null,
-      status: 'closed',
-    }))
-  } catch (err) {
-    logger.warn(`[enrichment] Bybit position history failed for ${traderId}: ${err}`)
-    return []
-  }
-}
-
-interface BybitTraderDetailResponse {
-  retCode?: number
-  result?: {
-    leaderId?: string
-    nickName?: string
-    roi?: string
-    pnl?: string
-    winRate?: string
-    maxDrawdown?: string
-    sharpeRatio?: string
-    followerCount?: number
-    copierPnl?: string
-    aum?: string
-    tradeCount?: number
-    avgHoldingPeriod?: number // in seconds
-    avgProfit?: string
-    avgLoss?: string
-  }
+  // Position history requires a separate API call not yet supported by VPS scraper.
+  // Return empty for now — equity curve + stats detail provide the key metrics.
+  return []
 }
 
 export async function fetchBybitStatsDetail(
   traderId: string
 ): Promise<StatsDetail | null> {
   try {
-    const data = await fetchWithProxyFallback<BybitTraderDetailResponse>(
-      `https://api2.bybit.com/fapi/beehive/public/v1/common/leader-detail`,
-      {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Origin: 'https://www.bybit.com',
-          Referer: 'https://www.bybit.com/copyTrade',
-        },
-        body: { leaderId: traderId },
-        timeoutMs: 5000,
-      }
-    )
+    const data = await fetchBybitViaVPS(traderId)
+    if (!data?.detail?.result) return null
 
-    if (data?.retCode !== 0 && data?.retCode !== undefined) {
-      logger.warn(`[enrichment] Bybit stats detail API error for ${traderId}: retCode=${data.retCode}`)
-      return null
-    }
-
-    if (!data?.result) {
-      logger.warn(`[enrichment] Bybit stats detail empty for ${traderId}`)
-      return null
-    }
-
-    const d = data.result
-    const parseNum = (v: string | number | undefined): number | null => {
-      if (v == null) return null
-      const n = typeof v === 'string' ? parseFloat(v) : Number(v)
-      return isNaN(n) ? null : n
-    }
+    const d = data.detail.result
 
     return {
       totalTrades: d.tradeCount ?? null,
@@ -199,7 +144,7 @@ export async function fetchBybitStatsDetail(
       maxDrawdown: parseNum(d.maxDrawdown),
       currentDrawdown: null,
       volatility: null,
-      copiersCount: d.followerCount ?? null,
+      copiersCount: d.followerCount ?? d.currentFollowerCount ?? null,
       copiersPnl: parseNum(d.copierPnl),
       aum: parseNum(d.aum),
       winningPositions: null,
@@ -266,13 +211,13 @@ export async function enrichBybitTraders(
         }
       } else {
         failed++
-        const errorMsg = settledResult.reason instanceof Error 
-          ? settledResult.reason.message 
+        const errorMsg = settledResult.reason instanceof Error
+          ? settledResult.reason.message
           : String(settledResult.reason)
         if (errors.length < 10) errors.push(errorMsg)
       }
     }
-    
+
     logger.info(`Bybit batch: ${success} success, ${failed} failed so far`)
 
     if (i + concurrency < traderIds.length) {
