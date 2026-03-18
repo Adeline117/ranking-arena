@@ -11,6 +11,7 @@ import { getCsrfHeaders } from '@/lib/api/client'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import { useLoginModal } from '@/lib/hooks/useLoginModal'
 import { logger } from '@/lib/logger'
+import { haptic } from '@/lib/utils/haptics'
 
 type TraderFollowButtonProps = {
   traderId: string
@@ -139,6 +140,10 @@ export default function TraderFollowButton({ traderId, userId, initialFollowing 
       setFollowing(data.following)
       onFollowChange?.(data.following)
 
+      // Haptic feedback + success toast
+      haptic('success')
+      showToast(data.following ? t('followSuccess') : t('unfollowSuccess'), 'success')
+
       // 广播状态变化到其他窗口
       if (userId) {
         broadcast('FOLLOW_CHANGED', {
@@ -154,6 +159,7 @@ export default function TraderFollowButton({ traderId, userId, initialFollowing 
         timeoutRef.current = null
       }
       pendingRef.current = false
+      const failedAction = action
       // 回滚乐观更新
       if (expectedStateRef.current !== null) {
         setFollowing(!expectedStateRef.current)
@@ -164,7 +170,12 @@ export default function TraderFollowButton({ traderId, userId, initialFollowing 
         setFeatureDisabled(true)
         showToast(t('followFeatureComingSoon'), 'info')
       } else {
-        showToast(errorMsg, 'error')
+        // #22: Show retry hint on network error
+        const isNetworkError = error instanceof TypeError && error.message.includes('fetch')
+        showToast(isNetworkError ? `${errorMsg} — ${t('tapToRetry') || 'Tap to retry'}` : errorMsg, 'error')
+        if (isNetworkError) {
+          setTimeout(() => executeFollow(failedAction), 2000)
+        }
       }
     } finally {
       setIsLoading(false)
@@ -242,7 +253,7 @@ export default function TraderFollowButton({ traderId, userId, initialFollowing 
     const newState = !following
     expectedStateRef.current = newState
 
-    // 超时保护：5秒后自动解锁，防止永久锁定
+    // 超时保护：8秒后自动解锁，防止永久锁定 (unified with UserFollowButton)
     if (timeoutRef.current) {
       clearTimeout(timeoutRef.current)
     }
@@ -254,7 +265,7 @@ export default function TraderFollowButton({ traderId, userId, initialFollowing 
         refreshFollowState()
         showToast(t('timeoutRetry'), 'warning')
       }
-    }, 5000)
+    }, 8000)
 
     // 乐观更新 UI
     setFollowing(newState)

@@ -22,6 +22,10 @@ import { SearchHistory, TrendingSearches, HotPosts } from './SearchSuggestions'
 import { features } from '@/lib/features'
 import { EXCHANGE_CONFIG } from '@/lib/constants/exchanges'
 
+// Module-level cache for trending searches (5-min TTL)
+let _trendingCache: { data: TrendingSearchItem[]; ts: number } | null = null
+const TRENDING_CACHE_TTL = 5 * 60 * 1000 // 5 minutes
+
 interface TrendingSearchItem {
   query: string
   searchCount: number
@@ -131,9 +135,16 @@ export default function SearchDropdown({ open, query, onClose }: SearchDropdownP
     loadHistory()
   }, [authChecked, userId, isLoggedIn])
 
-  // Load trending searches
+  // Load trending searches (with module-level 5-min cache)
   const loadTrendingSearches = useCallback(async () => {
     if (!open) return
+
+    // Return cached data if still fresh
+    if (_trendingCache && Date.now() - _trendingCache.ts < TRENDING_CACHE_TTL) {
+      setTrendingSearches(_trendingCache.data)
+      return
+    }
+
     setTrendingLoading(true)
     try {
       const response = await fetch('/api/search?type=trending')
@@ -142,27 +153,27 @@ export default function SearchDropdown({ open, query, onClose }: SearchDropdownP
         const data = result.data || result
         const trending = data.trending || []
         const fallback = data.fallback || ['BTC', 'ETH', 'SOL', 'DOGE', 'PEPE']
+        let items: TrendingSearchItem[]
         if (trending.length >= 3) {
-          setTrendingSearches(trending.slice(0, 8))
+          items = trending.slice(0, 8)
         } else {
-          setTrendingSearches(
-            fallback.slice(0, 8).map((q: string, index: number) => ({
-              query: q,
-              searchCount: 100 - index * 10,
-              rank: index + 1,
-              category: /^[A-Z]{2,6}$/.test(q) ? 'token' as const : 'general' as const,
-            }))
-          )
+          items = fallback.slice(0, 8).map((q: string, index: number) => ({
+            query: q,
+            searchCount: 100 - index * 10,
+            rank: index + 1,
+            category: /^[A-Z]{2,6}$/.test(q) ? 'token' as const : 'general' as const,
+          }))
         }
+        _trendingCache = { data: items, ts: Date.now() }
+        setTrendingSearches(items)
       }
     } catch (e) {
       logger.error('Failed to load trending searches:', e)
       const fallback = ['BTC', 'ETH', 'SOL', 'DOGE', 'PEPE']
-      setTrendingSearches(
-        fallback.map((q, index) => ({
-          query: q, searchCount: 100 - index * 10, rank: index + 1, category: 'token' as const,
-        }))
-      )
+      const items = fallback.map((q, index) => ({
+        query: q, searchCount: 100 - index * 10, rank: index + 1, category: 'token' as const,
+      }))
+      setTrendingSearches(items)
     } finally {
       setTrendingLoading(false)
     }
@@ -284,6 +295,13 @@ export default function SearchDropdown({ open, query, onClose }: SearchDropdownP
     }
 
     const searchTimer = setTimeout(async () => {
+      // #23: Offline fallback — show cached trending + history instead of fetching
+      if (typeof navigator !== 'undefined' && !navigator.onLine) {
+        setSearchData(null)
+        setSearching(false)
+        return
+      }
+
       if (abortControllerRef.current) abortControllerRef.current.abort()
 
       const controller = new AbortController()
@@ -358,6 +376,19 @@ export default function SearchDropdown({ open, query, onClose }: SearchDropdownP
     document.addEventListener('keydown', handleKeyDown)
     return () => document.removeEventListener('keydown', handleKeyDown)
   }, [open, flatResults, selectedIndex, query, onClose, router, saveToHistory])
+
+  // Prefetch on hover with debounce to avoid excessive prefetches
+  const prefetchTimerRef = useRef<NodeJS.Timeout | null>(null)
+  const prefetchedRef = useRef<Set<string>>(new Set())
+
+  const handleResultMouseEnter = useCallback((href: string) => {
+    if (prefetchedRef.current.has(href)) return
+    if (prefetchTimerRef.current) clearTimeout(prefetchTimerRef.current)
+    prefetchTimerRef.current = setTimeout(() => {
+      router.prefetch(href)
+      prefetchedRef.current.add(href)
+    }, 100)
+  }, [router])
 
   const scrollItemIntoView = (index: number) => {
     if (!containerRef.current) return
@@ -442,6 +473,7 @@ export default function SearchDropdown({ open, query, onClose }: SearchDropdownP
               href={result.href}
               style={{ textDecoration: 'none' }}
               onClick={() => handleResultClick(result.id, result.type)}
+              onMouseEnter={() => handleResultMouseEnter(result.href)}
               role="option"
               aria-selected={isSelected}
               id={`search-option-${globalIndex}`}

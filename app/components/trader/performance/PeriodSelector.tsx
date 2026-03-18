@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect } from 'react'
+import { useEffect, useRef, useState, useCallback } from 'react'
 import { getLocaleFromLanguage } from '@/lib/utils/format'
 import { tokens } from '@/lib/design-tokens'
 import { Box, Text } from '../../base'
@@ -37,6 +37,27 @@ export interface PeriodSelectorProps {
 export function PeriodSelector({ period, onPeriodChange, source, lastUpdated }: PeriodSelectorProps) {
   const { t, language } = useLanguage()
   const setGlobalPeriod = usePeriodStore(s => s.setPeriod)
+  const containerRef = useRef<HTMLDivElement>(null)
+  const [indicatorStyle, setIndicatorStyle] = useState<{ left: number; width: number } | null>(null)
+
+  // Sliding indicator: measure active button position
+  const updateIndicator = useCallback(() => {
+    if (!containerRef.current) return
+    const periods: Period[] = ['7D', '30D', '90D']
+    const idx = periods.indexOf(period)
+    const buttons = containerRef.current.querySelectorAll<HTMLButtonElement>('button')
+    const btn = buttons[idx]
+    if (btn) {
+      setIndicatorStyle({
+        left: btn.offsetLeft,
+        width: btn.offsetWidth,
+      })
+    }
+  }, [period])
+
+  useEffect(() => {
+    updateIndicator()
+  }, [updateIndicator])
 
   // Sync selected period to global store so ShareOnXButton reads the current window
   useEffect(() => {
@@ -123,6 +144,7 @@ export function PeriodSelector({ period, onPeriodChange, source, lastUpdated }: 
         )}
 
         <Box
+          ref={containerRef}
           style={{
             display: 'flex',
             gap: tokens.spacing[1],
@@ -130,8 +152,27 @@ export function PeriodSelector({ period, onPeriodChange, source, lastUpdated }: 
             padding: tokens.spacing[1],
             borderRadius: tokens.radius.lg,
             border: '1px solid ' + tokens.colors.border.primary,
+            position: 'relative',
           }}
         >
+          {/* Sliding indicator pill */}
+          {indicatorStyle && (
+            <div
+              style={{
+                position: 'absolute',
+                top: tokens.spacing[1],
+                left: indicatorStyle.left,
+                width: indicatorStyle.width,
+                height: `calc(100% - ${tokens.spacing[1]} - ${tokens.spacing[1]})`,
+                borderRadius: tokens.radius.md,
+                background: tokens.colors.bg.primary,
+                boxShadow: '0 2px 8px var(--color-overlay-subtle)',
+                transition: 'left 0.25s cubic-bezier(0.4, 0, 0.2, 1), width 0.25s cubic-bezier(0.4, 0, 0.2, 1)',
+                pointerEvents: 'none',
+                zIndex: 0,
+              }}
+            />
+          )}
           {(['7D', '30D', '90D'] as Period[]).map((p) => {
             const sourceNote = source && DATA_SOURCE_NOTES[source.toLowerCase()]
             const isDisabled = !!(sourceNote && sourceNote.periods[p] === '--')
@@ -146,7 +187,7 @@ export function PeriodSelector({ period, onPeriodChange, source, lastUpdated }: 
                   minHeight: 44,
                   borderRadius: tokens.radius.md,
                   border: 'none',
-                  background: period === p ? tokens.colors.bg.primary : 'transparent',
+                  background: 'transparent',
                   color: isDisabled
                     ? tokens.colors.text.tertiary
                     : period === p
@@ -155,10 +196,11 @@ export function PeriodSelector({ period, onPeriodChange, source, lastUpdated }: 
                   fontSize: 13,
                   fontWeight: period === p ? 600 : 400,
                   cursor: isDisabled ? 'not-allowed' : 'pointer',
-                  transition: 'all ' + tokens.transition.base,
+                  transition: 'color 0.2s ease, font-weight 0.2s ease',
                   fontFamily: tokens.typography.fontFamily.sans.join(', '),
-                  boxShadow: period === p ? '0 2px 8px var(--color-overlay-subtle)' : 'none',
                   opacity: isDisabled ? 0.5 : 1,
+                  position: 'relative',
+                  zIndex: 1,
                 }}
                 title={isDisabled ? t('noDataForPeriod') : undefined}
               >
