@@ -20,7 +20,7 @@ BEGIN
   RETURN NEXT;
 
   -- trader_daily_snapshots: 365 days
-  DELETE FROM trader_daily_snapshots WHERE snapshot_date < CURRENT_DATE - INTERVAL '365 days';
+  DELETE FROM trader_daily_snapshots WHERE date < CURRENT_DATE - INTERVAL '365 days';
   GET DIAGNOSTICS v_deleted = ROW_COUNT;
   table_name := 'trader_daily_snapshots'; deleted_rows := v_deleted;
   RETURN NEXT;
