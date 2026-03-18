@@ -3119,3 +3119,40 @@ td[data-numeric],
   to { opacity: 1; }
 }
 
+/* #26: StatsPage layout (moved from inline <style>) */
+@keyframes statsSkeletonPulse {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+.stats-two-col { grid-template-columns: 1fr 1fr; }
+@media (max-width: 768px) {
+  .stats-two-col { grid-template-columns: 1fr !important; }
+  .trading-grid { grid-template-columns: 1fr !important; }
+}
+
+/* #32: Onboarding animations (moved from DOM injection) */
+@keyframes stepEnter { from { opacity: 0; transform: translateX(30px); } to { opacity: 1; transform: translateX(0); } }
+@keyframes celebrationBurst { 0% { transform: scale(0); opacity: 0; } 50% { transform: scale(1.15); opacity: 1; } 100% { transform: scale(1); opacity: 1; } }
+@keyframes checkDraw { from { stroke-dashoffset: 50; } to { stroke-dashoffset: 0; } }
+@keyframes progressPulse { 0%, 100% { transform: scale(1); box-shadow: 0 0 0 0 var(--color-accent-primary-40); } 50% { transform: scale(1.1); box-shadow: 0 0 0 8px transparent; } }
+.onboarding-bg { position: fixed; inset: 0; z-index: 0; transition: background 0.5s ease; }
+.onboarding-bg.dark { background: var(--color-bg-primary); }
+.onboarding-bg.light { background: linear-gradient(135deg, #f5f5f7 0%, #e8e8ed 50%, #f0f0f5 100%); }
+.onboarding-bg::before { content: ''; position: absolute; top: -50%; left: -50%; width: 200%; height: 200%; background: radial-gradient(ellipse at center, var(--color-accent-primary-08) 0%, transparent 50%); }
+.onboarding-card { animation: fadeIn 0.6s cubic-bezier(0.16, 1, 0.3, 1) forwards; backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px); }
+.option-card { cursor: pointer; transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1); }
+.option-card:hover { transform: translateY(-2px); }
+.continue-btn { transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1); }
+.continue-btn:not(:disabled):hover { transform: translateY(-2px); box-shadow: 0 8px 30px var(--color-accent-primary-40); }
+.continue-btn:not(:disabled):active { transform: translateY(0) scale(0.98); }
+.step-content { animation: stepEnter 0.5s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
+.interest-card { transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1); cursor: pointer; }
+.interest-card:hover { transform: translateY(-2px); }
+.progress-dot.active { animation: progressPulse 2s ease infinite; }
+.celebration-icon { animation: celebrationBurst 0.6s cubic-bezier(0.34, 1.56, 0.64, 1) forwards; }
+.check-animation { stroke-dasharray: 50; stroke-dashoffset: 50; animation: checkDraw 0.5s ease 0.3s forwards; }
+.trader-row { transition: all 0.2s ease; cursor: default; }
+.trader-row:hover { background: var(--color-notification-unread); }
+.follow-btn { transition: all 0.2s ease; cursor: pointer; border: none; font-weight: 600; font-size: 13px; padding: 6px 16px; border-radius: 8px; }
+.follow-btn:hover { transform: scale(1.03); }
+

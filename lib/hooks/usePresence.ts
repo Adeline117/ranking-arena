@@ -106,7 +106,7 @@ export function usePresence(currentUserId: string | null, watchUserIds: string[]
       } catch {
         // Intentionally swallowed: presence heartbeat is best-effort, missed heartbeats auto-recover
       }
-    }, 300000)
+    }, 60000)
 
     return () => {
       if (heartbeatRef.current) clearInterval(heartbeatRef.current)

@@ -33,19 +33,24 @@ export default function HomeLoading() {
             alignItems: 'start',
           }}
         >
-          {/* Left Column - Posts Skeleton */}
+          {/* Left Column - Hot Discussions Skeleton */}
           <Box className="home-left-section">
             <Box className="glass-card" style={{
               borderRadius: tokens.radius.lg,
               padding: tokens.spacing[4],
+              minHeight: 400,
             }}>
-              <Skeleton width="120px" height="20px" style={{ marginBottom: tokens.spacing[4] }} />
-              {[1, 2, 3].map(i => (
+              <Skeleton width="140px" height="20px" style={{ marginBottom: tokens.spacing[4] }} />
+              {[1, 2, 3, 4, 5].map(i => (
                 <Box key={i} style={{
                   padding: tokens.spacing[3],
                   marginBottom: tokens.spacing[2],
                   borderRadius: tokens.radius.md,
                 }}>
+                  <Box style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[2], marginBottom: tokens.spacing[2] }}>
+                    <Skeleton width="24px" height="24px" variant="rounded" />
+                    <Skeleton width="80px" height="14px" />
+                  </Box>
                   <Skeleton width="100%" height="16px" style={{ marginBottom: tokens.spacing[2] }} />
                   <Skeleton width="60%" height="12px" />
                 </Box>
@@ -55,7 +60,14 @@ export default function HomeLoading() {
 
           {/* Center Column - Ranking Skeleton */}
           <Box className="home-ranking-section">
-            {/* Time Range Tabs */}
+            {/* Sub nav placeholder */}
+            <Box style={{ display: 'flex', gap: tokens.spacing[2], marginBottom: tokens.spacing[3] }}>
+              <Skeleton width="80px" height="32px" variant="rounded" />
+              <Skeleton width="80px" height="32px" variant="rounded" />
+              <Skeleton width="80px" height="32px" variant="rounded" />
+            </Box>
+
+            {/* Period tabs */}
             <Box className="glass-card" style={{
               display: 'flex',
               gap: tokens.spacing[2],
@@ -71,9 +83,12 @@ export default function HomeLoading() {
             <RankingSkeleton />
           </Box>
 
-          {/* Right Column - Market Skeleton */}
+          {/* Right Column - Market + News Skeleton */}
           <Box className="home-right-section">
-            <SkeletonCard />
+            <Box style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+              <SkeletonCard />
+              <SkeletonCard />
+            </Box>
           </Box>
         </Box>
       </Box>

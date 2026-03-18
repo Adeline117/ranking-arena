@@ -79,14 +79,20 @@ export default function ScrollRestoration() {
     const map = getScrollMap()
     const savedY = map[pathname]
     if (savedY !== undefined && savedY > 0) {
-      // Use a short delay to let the page render
-      const timer = setTimeout(() => {
+      // Wait for browser idle to ensure content is rendered before restoring scroll
+      const ric = typeof requestIdleCallback === 'function'
+        ? requestIdleCallback
+        : (cb: () => void) => setTimeout(cb, 100) as unknown as number
+      const cancelRic = typeof cancelIdleCallback === 'function'
+        ? cancelIdleCallback
+        : (id: number) => clearTimeout(id)
+      const id = ric(() => {
         window.scrollTo(0, savedY)
         // Clean up after restore
         delete map[pathname]
         saveScrollMap(map)
-      }, 100)
-      return () => clearTimeout(timer)
+      })
+      return () => cancelRic(id)
     }
   }, [pathname])
 

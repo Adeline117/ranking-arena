@@ -1,3 +1,5 @@
+// TODO (#21): Add swipe-to-delete gesture on conversation rows using touch events
+// (touchstart/touchmove/touchend) with translateX transform and a red delete backdrop.
 'use client'
 
 import { useEffect, useState, useCallback } from 'react'
@@ -12,6 +14,7 @@ import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import { useToast } from '@/app/components/ui/Toast'
 import CreateGroupModal from '@/app/components/features/CreateGroupModal'
 import { logger } from '@/lib/logger'
+import { Skeleton, SkeletonAvatar } from '@/app/components/ui/Skeleton'
 
 type GroupChannel = {
   id: string
@@ -176,6 +179,41 @@ export default function ConversationsList(): React.ReactElement {
     return () => { supabase.removeChannel(channel) }
   }, [user?.id, loadConversations, setUnreadMessages])
 
+  // Realtime: auto-refresh when new group channel messages arrive
+  useEffect(() => {
+    if (!user?.id || groupChannels.length === 0) return
+    const channel = supabase
+      .channel(`group-inbox:${user.id}`)
+      .on('postgres_changes', {
+        event: 'INSERT',
+        schema: 'public',
+        table: 'channel_messages',
+      }, (payload) => {
+        const newMsg = payload.new as { channel_id?: string; content?: string; created_at?: string; sender_id?: string }
+        // Skip messages sent by ourselves
+        if (newMsg.sender_id === user.id) return
+        // Update the affected group channel in-place
+        if (!newMsg.channel_id) { loadConversations(); return }
+        setGroupChannels(prev => {
+          const idx = prev.findIndex(ch => ch.id === newMsg.channel_id)
+          if (idx === -1) {
+            loadConversations()
+            return prev
+          }
+          const updated = [...prev]
+          updated[idx] = {
+            ...updated[idx],
+            last_message_at: newMsg.created_at || new Date().toISOString(),
+            last_message_preview: newMsg.content || '',
+          }
+          updated.sort((a, b) => new Date(b.last_message_at).getTime() - new Date(a.last_message_at).getTime())
+          return updated
+        })
+      })
+      .subscribe()
+    return () => { supabase.removeChannel(channel) }
+  }, [user?.id, groupChannels.length, loadConversations])
+
   function formatTime(dateString: string): string {
     const date = new Date(dateString)
     const now = new Date()
@@ -231,13 +269,13 @@ export default function ConversationsList(): React.ReactElement {
         <div style={{ padding: tokens.spacing[3], display: 'flex', flexDirection: 'column', gap: tokens.spacing[1] }}>
           {[1, 2, 3, 4].map(i => (
             <div key={i} style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[3], padding: `${tokens.spacing[3]} ${tokens.spacing[4]}` }}>
-              <div style={{ width: 40, height: 40, borderRadius: '50%', background: tokens.colors.bg.tertiary, flexShrink: 0, animation: 'shimmer 1.5s ease-in-out infinite', backgroundImage: `linear-gradient(90deg, ${tokens.colors.bg.tertiary} 0%, var(--glass-bg-light) 50%, ${tokens.colors.bg.tertiary} 100%)`, backgroundSize: '200% 100%' }} />
+              <SkeletonAvatar size={40} />
               <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 6 }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                  <div style={{ width: '40%', height: 14, borderRadius: 4, background: tokens.colors.bg.tertiary, animation: 'shimmer 1.5s ease-in-out infinite', backgroundImage: `linear-gradient(90deg, ${tokens.colors.bg.tertiary} 0%, var(--glass-bg-light) 50%, ${tokens.colors.bg.tertiary} 100%)`, backgroundSize: '200% 100%' }} />
-                  <div style={{ width: 40, height: 10, borderRadius: 4, background: tokens.colors.bg.tertiary, animation: 'shimmer 1.5s ease-in-out infinite', backgroundImage: `linear-gradient(90deg, ${tokens.colors.bg.tertiary} 0%, var(--glass-bg-light) 50%, ${tokens.colors.bg.tertiary} 100%)`, backgroundSize: '200% 100%' }} />
+                  <Skeleton width="40%" height="14px" />
+                  <Skeleton width="40px" height="10px" />
                 </div>
-                <div style={{ width: '65%', height: 12, borderRadius: 4, background: tokens.colors.bg.tertiary, animation: 'shimmer 1.5s ease-in-out infinite', backgroundImage: `linear-gradient(90deg, ${tokens.colors.bg.tertiary} 0%, var(--glass-bg-light) 50%, ${tokens.colors.bg.tertiary} 100%)`, backgroundSize: '200% 100%' }} />
+                <Skeleton width="65%" height="12px" />
               </div>
             </div>
           ))}

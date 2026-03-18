@@ -87,6 +87,8 @@ export async function fetchLeaderboardFromDB(
   try {
     // Use unified data layer to fetch leaderboard
     // Fetch a large pool (2000) for platform diversity filtering
+    // TODO (#P7): Consider SQL-level diversity filter (DISTINCT ON or ROW_NUMBER per platform)
+    // to reduce the 2000-row fetch to ~200 rows while maintaining cross-platform mix
     const { traders: unifiedTraders } = await Promise.race([
       getLeaderboard(supabase, {
         period: timeRange as '7D' | '30D' | '90D',

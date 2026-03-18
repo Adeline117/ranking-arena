@@ -67,19 +67,19 @@ export default function MessageBubble({
   }, [showContextMenu])
 
   const handleContextMenu = useCallback((e: React.MouseEvent) => {
-    if (!isMine || msg._status === 'sending') return
+    if (msg._status === 'sending') return
     e.preventDefault()
     setContextMenuPos({ x: e.clientX, y: e.clientY })
     setShowContextMenu(true)
-  }, [isMine, msg._status])
+  }, [msg._status])
 
   const handleTouchStart = useCallback(() => {
-    if (!isMine || msg._status === 'sending') return
+    if (msg._status === 'sending') return
     longPressTimer.current = setTimeout(() => {
       setShowContextMenu(true)
       setContextMenuPos({ x: 0, y: 0 }) // centered for mobile
     }, 500)
-  }, [isMine, msg._status])
+  }, [msg._status])
 
   const handleTouchEnd = useCallback(() => {
     if (longPressTimer.current) {
@@ -87,6 +87,13 @@ export default function MessageBubble({
       longPressTimer.current = null
     }
   }, [])
+
+  const handleCopyText = useCallback(() => {
+    setShowContextMenu(false)
+    if (msg.content) {
+      navigator.clipboard.writeText(msg.content).catch(() => { /* clipboard write may fail in some browsers */ })
+    }
+  }, [msg.content])
 
   const handleDelete = useCallback(() => {
     setShowContextMenu(false)
@@ -226,8 +233,8 @@ export default function MessageBubble({
         </Box>
       )}
 
-      {/* Context menu for delete */}
-      {showContextMenu && isMine && onDelete && (
+      {/* Context menu for message actions */}
+      {showContextMenu && (
         <div
           ref={menuRef}
           style={{
@@ -244,30 +251,60 @@ export default function MessageBubble({
             minWidth: 140,
           }}
         >
-          <button
-            onClick={handleDelete}
-            aria-label="Delete message"
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: 8,
-              width: '100%',
-              padding: '10px 16px',
-              border: 'none',
-              background: 'transparent',
-              color: 'var(--color-accent-error)',
-              fontSize: 13,
-              fontWeight: 600,
-              cursor: 'pointer',
-              textAlign: 'left',
-            }}
-            className="hover-bg-tertiary"
-          >
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <polyline points="3 6 5 6 21 6" /><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
-            </svg>
-            {t('deleteMessage') || (typeof window !== 'undefined' && navigator.language.startsWith('zh') ? '删除消息' : 'Delete')}
-          </button>
+          {/* Copy text - available for all messages with content */}
+          {msg.content && !msg.content.startsWith('[') && (
+            <button
+              onClick={handleCopyText}
+              aria-label="Copy text"
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 8,
+                width: '100%',
+                padding: '10px 16px',
+                border: 'none',
+                background: 'transparent',
+                color: tokens.colors.text.primary,
+                fontSize: 13,
+                fontWeight: 600,
+                cursor: 'pointer',
+                textAlign: 'left',
+              }}
+              className="hover-bg-tertiary"
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <rect x="9" y="9" width="13" height="13" rx="2" ry="2" /><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+              </svg>
+              {t('copyText') || 'Copy'}
+            </button>
+          )}
+          {/* Delete - only for own messages */}
+          {isMine && onDelete && (
+            <button
+              onClick={handleDelete}
+              aria-label="Delete message"
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 8,
+                width: '100%',
+                padding: '10px 16px',
+                border: 'none',
+                background: 'transparent',
+                color: 'var(--color-accent-error)',
+                fontSize: 13,
+                fontWeight: 600,
+                cursor: 'pointer',
+                textAlign: 'left',
+              }}
+              className="hover-bg-tertiary"
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <polyline points="3 6 5 6 21 6" /><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+              </svg>
+              {t('deleteMessage') || (typeof window !== 'undefined' && navigator.language.startsWith('zh') ? '删除消息' : 'Delete')}
+            </button>
+          )}
         </div>
       )}
 

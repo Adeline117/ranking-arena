@@ -67,12 +67,12 @@ export default function HomePage({ initialTraders, initialLastUpdated }: HomePag
         }}
       >
         <h1 className="sr-only">Arena</h1>
-        <Suspense fallback={null}><HomeHero /></Suspense>
+        <Suspense fallback={<div style={{ minHeight: 120 }} />}><HomeHero /></Suspense>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
           <HomeSubNav />
           <FoundingMemberBanner />
         </div>
-        <Suspense fallback={null}><ExchangePartners /></Suspense>
+        <Suspense fallback={<div style={{ minHeight: 48 }} />}><ExchangePartners /></Suspense>
         <ThreeColumnLayout
           leftSidebar={
             features.social ? (
@@ -114,7 +114,7 @@ export default function HomePage({ initialTraders, initialLastUpdated }: HomePag
         </ThreeColumnLayout>
       </Box>
 
-      <Suspense fallback={null}><Footer /></Suspense>
+      <Suspense fallback={<div style={{ minHeight: 200 }} />}><Footer /></Suspense>
       {/* MobileBottomNav rendered in root layout.tsx */}
       <Suspense fallback={null}><GuestSignupPrompt /></Suspense>
     </Box>

@@ -1,3 +1,6 @@
+// TODO (#P8): Consider splitting into TopNavShell (server component with logo + static nav links)
+// and TopNavClient (interactive search, user menu, notifications). The shell would reduce JS
+// bundle and improve TTFB. Currently too tightly coupled with client hooks to split easily.
 'use client'
 
 import { useEffect } from 'react'
