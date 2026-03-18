@@ -34,7 +34,6 @@ const CRITICAL_PLATFORMS = new Set([
   'bybit',
   'okx_futures',
   'hyperliquid',
-  'bitget_futures',
 ])
 
 export async function GET(request: Request) {

@@ -24,7 +24,6 @@ const ALL_PLATFORMS = [
   'bybit',
   'bybit_spot',
   'okx_futures',
-  'bitget_futures',
   'bitget_spot',
   'hyperliquid',
   'gmx',

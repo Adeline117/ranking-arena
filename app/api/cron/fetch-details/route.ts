@@ -51,7 +51,6 @@ const ENRICHABLE_PLATFORMS = [
   'hyperliquid',
   'gmx',
   'aevo',
-  'bitget_futures',
   'jupiter_perps',
 ]
 
@@ -144,7 +143,6 @@ async function enrichTrader(
       // These platforms already enrich during their main fetch cycle
       // or don't have accessible position history APIs
       case 'aevo':
-      case 'bitget_futures':
       case 'jupiter_perps': {
         return { success: true }
       }
