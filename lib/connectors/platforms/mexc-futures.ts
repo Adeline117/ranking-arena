@@ -43,7 +43,7 @@ export class MexcFuturesConnector extends BaseConnector {
       let _rawLb: Record<string, unknown>
       const vpsData = await this.fetchViaVPS<Record<string, unknown>>('/mexc/leaderboard', {
         periodType: String(WINDOW_MAP[window]), pageSize: String(pageSize),
-      }, 600000)
+      }, 120000)
       if (vpsData) {
         _rawLb = vpsData
       } else {

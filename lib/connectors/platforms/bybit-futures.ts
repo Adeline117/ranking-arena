@@ -64,7 +64,7 @@ export class BybitFuturesConnector extends BaseConnector {
       dataDuration: SCRAPER_DURATION_MAP[window],
       pageNo: String(page),
       pageSize: String(limit),
-    }, 600000) // 10min — scraper queue can be backed up
+    }, 120000)
 
     let _rawLb: Record<string, unknown>
     if (vpsData) {

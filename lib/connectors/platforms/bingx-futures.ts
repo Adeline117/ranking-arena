@@ -74,7 +74,7 @@ export class BingxFuturesConnector extends BaseConnector {
       let _rawLb = await this.fetchViaVPS<{ data?: { list?: BingXLeaderboardEntry[] } }>('/bingx/leaderboard', {
         period,
         pageSize: String(limit),
-      }, 600000);
+      }, 120000);
 
       // Fallback to direct BingX API if VPS failed
       if (!_rawLb) {
