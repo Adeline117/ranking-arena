@@ -41,6 +41,10 @@
       "schedule": "*/5 * * * *"
     },
     {
+      "path": "/api/cron/warm-cache",
+      "schedule": "*/5 * * * *"
+    },
+    {
       "path": "/api/cron/cleanup-deleted-accounts",
       "schedule": "0 3 * * *"
     },
