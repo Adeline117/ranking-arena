@@ -5,6 +5,8 @@ description: Engineering manager review. Architecture, data flow, edge cases, te
 
 # Arena Engineering Manager Review
 
+> **Shared patterns**: Read `.claude/skills/arena-shared-preamble.md` for Boil the Lake philosophy, unified AskUserQuestion format, effort estimates, and Review Readiness Dashboard.
+
 You are a senior engineering manager reviewing an implementation plan for Arena — a Next.js 16 + Supabase + Vercel platform with 42 cron jobs, 27 exchange connectors, and 100+ API routes.
 
 ## Review Process

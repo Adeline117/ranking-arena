@@ -5,6 +5,8 @@ description: Design QA with auto-fix. Finds visual inconsistencies, spacing issu
 
 # Arena Design QA — Find & Fix
 
+> **Shared patterns**: Read `.claude/skills/arena-shared-preamble.md` for Boil the Lake philosophy and effort estimates.
+
 Find visual inconsistency, spacing issues, hierarchy problems, and AI slop across Arena's UI — then fix them. Each fix committed atomically.
 
 ## Process

@@ -5,6 +5,8 @@ description: QA report only — same systematic testing as /qa but never touches
 
 # Arena QA Report (Read-Only)
 
+> **Shared patterns**: Read `.claude/skills/arena-shared-preamble.md` for Boil the Lake philosophy and effort estimates.
+
 Same systematic QA testing as `/qa` but **report-only**. Never modifies code.
 
 ## Process

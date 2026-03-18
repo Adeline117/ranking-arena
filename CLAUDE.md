@@ -179,6 +179,19 @@ See `.claude/ARENA_SKILL_SYSTEM.md` for full list of agents, skills, and slash c
 | Retro Facilitator | `/retro` | Weekly retro with trend tracking |
 | Doc Engineer | `/doc-release` | Post-ship docs sync |
 
+### Orchestration Workflows (conductor.json)
+See `.claude/conductor.json` for multi-agent parallel orchestration:
+- **Full Review**: 5 reviews in parallel → fix phase → ship → doc-release
+- **Quick Ship**: eng-review → qa-fix → ship → doc-release
+- **Audit Only**: All reviews in parallel, reports only
+
+### Shared Patterns
+All virtual team skills share `.claude/skills/arena-shared-preamble.md`:
+- **Boil the Lake**: Always recommend complete implementation (AI makes marginal cost ~0)
+- **Unified AskUserQuestion**: Re-ground context → simplify → recommend with score → lettered options with dual effort estimates
+- **Effort Compression**: Show human time vs CC time (100x boilerplate, 50x tests, 30x features)
+- **Review Readiness Dashboard**: Track review completion, Eng Review gates `/ship`
+
 ### Pipeline & Operations
 Key commands: `/fix-pipeline`, `/debug-cron`, `/deploy-staging`, `/implement-spec`, `/weekly-self-check`
 
@@ -297,3 +310,5 @@ try {
 | **Design QA + fix** | `/qa-design` (fix visual issues) |
 | **Retrospective** | `/retro` (weekly engineering retro) |
 | **Post-ship docs** | `/doc-release` (sync all docs after ship) |
+| **Headless browser** | `/browse` (screenshots, interactions, responsive) |
+| **Auth for browser** | `/setup-browser-cookies` (import real cookies) |
