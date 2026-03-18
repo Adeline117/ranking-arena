@@ -206,11 +206,7 @@
       "path": "/api/cron/snapshot-positions",
       "schedule": "15 * * * *"
     },
-    {
-      "path": "/api/cron/fetch-traders/okx_futures",
-      "schedule": "0 */6 * * *"
-    },
-    {
+{
       "path": "/api/cron/fetch-traders/binance_web3",
       "schedule": "10 */6 * * *"
     },
@@ -234,11 +230,7 @@
       "path": "/api/cron/fetch-traders/gateio",
       "schedule": "3 1,7,13,19 * * *"
     },
-    {
-      "path": "/api/cron/fetch-traders/mexc",
-      "schedule": "9 1,7,13,19 * * *"
-    },
-    {
+{
       "path": "/api/cron/fetch-traders/coinex",
       "schedule": "25 1,7,13,19 * * *"
     },
