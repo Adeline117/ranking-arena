@@ -47,14 +47,14 @@ export function HeroMetrics({ roi, pnl, sparklineData, isVisible }: HeroMetricsP
           overflow: 'hidden',
         }}
       >
-        <Text size="xs" style={{ color: tokens.colors.text.tertiary, marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.5px', fontSize: 11, fontWeight: 500 }}>
+        <Text size="xs" style={{ color: tokens.colors.text.tertiary, marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.5px', fontSize: tokens.typography.fontSize.xs, fontWeight: 500 }}>
           {t('roi')}
         </Text>
         <Box style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between' }}>
           <Text
             className="hero-metric-value"
             style={{
-              fontSize: 28,
+              fontSize: tokens.typography.fontSize.hero,
               fontWeight: 800,
               color: roi != null ? (roi >= 0 ? tokens.colors.accent.success : tokens.colors.accent.error) : tokens.colors.text.secondary,
               fontFamily: tokens.typography.fontFamily.mono.join(', '),
@@ -92,13 +92,13 @@ export function HeroMetrics({ roi, pnl, sparklineData, isVisible }: HeroMetricsP
           border: `1px solid ${pnl != null && pnl >= 0 ? tokens.colors.accent.success + '20' : pnl != null ? tokens.colors.accent.error + '20' : tokens.colors.border.primary}`,
         }}
       >
-        <Text size="xs" style={{ color: tokens.colors.text.tertiary, marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.5px', fontSize: 11, fontWeight: 500 }}>
+        <Text size="xs" style={{ color: tokens.colors.text.tertiary, marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.5px', fontSize: tokens.typography.fontSize.xs, fontWeight: 500 }}>
           {t('pnl')}
         </Text>
         <Text
           className="hero-metric-value"
           style={{
-            fontSize: 28,
+            fontSize: tokens.typography.fontSize.hero,
             fontWeight: 800,
             color: pnl != null ? (pnl >= 0 ? tokens.colors.accent.success : tokens.colors.accent.error) : tokens.colors.text.secondary,
             fontFamily: tokens.typography.fontFamily.mono.join(', '),

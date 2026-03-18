@@ -75,7 +75,8 @@ export default function LinkedAccountTabs({
     display: 'flex',
     alignItems: 'center',
     gap: 6,
-    padding: '8px 14px',
+    padding: '10px 14px',
+    minHeight: 44,
     borderRadius: tokens.radius.md,
     border: `1px solid ${isActive ? tokens.colors.accent.primary + '60' : tokens.colors.border.primary}`,
     background: isActive

@@ -71,7 +71,7 @@ export function PeriodSelector({ period, onPeriodChange, source, lastUpdated }: 
             style={{
               display: 'flex',
               alignItems: 'center',
-              gap: 4,
+              gap: tokens.spacing[1],
               padding: '4px 8px',
               background: 'color-mix(in srgb, var(--color-text-tertiary) 8%, transparent)',
               borderRadius: tokens.radius.md,
@@ -95,7 +95,7 @@ export function PeriodSelector({ period, onPeriodChange, source, lastUpdated }: 
             style={{
               display: 'flex',
               alignItems: 'center',
-              gap: 4,
+              gap: tokens.spacing[1],
               padding: '4px 8px',
               background: tokens.colors.accent.warning + '15',
               borderRadius: tokens.radius.md,
@@ -125,9 +125,9 @@ export function PeriodSelector({ period, onPeriodChange, source, lastUpdated }: 
         <Box
           style={{
             display: 'flex',
-            gap: 4,
+            gap: tokens.spacing[1],
             background: tokens.colors.bg.tertiary,
-            padding: 3,
+            padding: tokens.spacing[1],
             borderRadius: tokens.radius.lg,
             border: '1px solid ' + tokens.colors.border.primary,
           }}
@@ -142,7 +142,7 @@ export function PeriodSelector({ period, onPeriodChange, source, lastUpdated }: 
                 onClick={() => !isDisabled && onPeriodChange(p)}
                 disabled={isDisabled}
                 style={{
-                  padding: '6px 14px',
+                  padding: `${tokens.spacing[2]} ${tokens.spacing[4]}`,
                   minHeight: 44,
                   borderRadius: tokens.radius.md,
                   border: 'none',
