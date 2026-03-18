@@ -86,19 +86,23 @@ jest.mock('@/lib/api/versioning', () => ({
 import { NextRequest } from 'next/server'
 import { GET } from '../route'
 
-/** Proxy-based chainable Supabase mock that resolves to a default result */
+/** Build a thenable chainable Supabase mock */
 function makeChainableQuery(result = { data: [], error: null, count: 0 }) {
-  const chain: Record<string, jest.Mock> = new Proxy({} as Record<string, jest.Mock>, {
+  const storage: Record<string, jest.Mock> = {}
+  const chain = new Proxy(storage, {
     get(target, prop) {
-      if (prop === 'then') return undefined
-      if (!target[prop as string]) {
-        target[prop as string] = jest.fn(() => chain)
+      const key = prop as string
+      if (key === 'then') {
+        // Make chain directly awaitable
+        return (resolve: (v: unknown) => void) => Promise.resolve(result).then(resolve)
       }
-      return target[prop as string]
+      if (key === 'catch' || key === 'finally') return undefined
+      if (!target[key]) {
+        target[key] = jest.fn(() => chain)
+      }
+      return target[key]
     },
   })
-  // Make it thenable so `await dbQuery` works
-  ;(chain as unknown as Promise<unknown>).then = (resolve: (v: unknown) => void) => Promise.resolve(result).then(resolve)
   return chain
 }
 
