@@ -25,12 +25,28 @@ jest.mock('@/lib/cron/fetchers/shared', () => ({
   getSupabaseClient: () => mockGetSupabaseClient(),
 }))
 
-jest.mock('@/lib/utils/logger', () => ({
-  dataLogger: { warn: jest.fn(), error: jest.fn(), info: jest.fn() },
-}))
+jest.mock('@/lib/utils/logger', () => {
+  const mockLoggerInstance = { error: jest.fn(), warn: jest.fn(), info: jest.fn(), debug: jest.fn(), apiError: jest.fn(), dbError: jest.fn() }
+  return {
+    logger: mockLoggerInstance,
+    apiLogger: mockLoggerInstance,
+    dataLogger: { warn: jest.fn(), error: jest.fn(), info: jest.fn() },
+    authLogger: mockLoggerInstance,
+    perfLogger: mockLoggerInstance,
+    createLogger: jest.fn(() => mockLoggerInstance),
+    captureError: jest.fn(),
+    captureMessage: jest.fn(),
+  }
+})
 
 jest.mock('@/lib/constants/exchanges', () => ({
   SOURCE_TYPE_MAP: {},
+}))
+
+jest.mock('@/lib/cron/enrichment-runner', () => ({
+  ENRICHMENT_PLATFORM_CONFIGS: {},
+  NO_ENRICHMENT_PLATFORMS: [],
+  runEnrichment: jest.fn(),
 }))
 
 // ============================================
@@ -201,7 +217,8 @@ describe('writeDiscoverResult', () => {
 
     expect(writeResult.total).toBe(0)
     expect(writeResult.saved).toBe(0)
-    expect(writeResult.error).toContain('failed normalization')
+    // Empty list is not an error — no traders to normalize
+    expect(writeResult.error).toBeUndefined()
   })
 
   it('returns error when supabase client not available', async () => {
