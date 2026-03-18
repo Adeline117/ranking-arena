@@ -8,7 +8,7 @@ import type { Metadata } from 'next'
 import { redirect } from 'next/navigation'
 import { Suspense } from 'react'
 import { features } from '@/lib/features'
-import { createClient } from '@supabase/supabase-js'
+import { getSupabaseAdmin } from '@/lib/supabase/server'
 import ActivityFeed from '@/app/components/feed/ActivityFeed'
 import type { TraderActivity } from '@/lib/types/activities'
 import TopNav from '@/app/components/layout/TopNav'
@@ -50,14 +50,7 @@ async function fetchInitialActivities(): Promise<{
   nextCursor: string | null
 }> {
   try {
-    const supabaseUrl = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL
-    const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY
-
-    if (!supabaseUrl || !supabaseKey) {
-      return { activities: [], hasMore: false, nextCursor: null }
-    }
-
-    const supabase = createClient(supabaseUrl, supabaseKey)
+    const supabase = getSupabaseAdmin()
 
     const LIMIT = 50
     const { data, error } = await supabase
