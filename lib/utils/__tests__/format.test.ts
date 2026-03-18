@@ -29,8 +29,8 @@ describe('format utilities', () => {
     })
 
     it('应该处理 NaN', () => {
-      expect(formatNumber(NaN)).toBe('0')
-      expect(formatNumber('not a number')).toBe('0')
+      expect(formatNumber(NaN)).toBe('—')
+      expect(formatNumber('not a number')).toBe('—')
     })
   })
 
@@ -45,7 +45,7 @@ describe('format utilities', () => {
     })
 
     it('应该处理零', () => {
-      expect(formatPercent(0)).toBe('+0.00%')
+      expect(formatPercent(0)).toBe('0.00%')
     })
 
     it('应该处理 100%', () => {
@@ -83,29 +83,29 @@ describe('format utilities', () => {
     })
 
     it('应该处理 NaN', () => {
-      expect(formatCurrency(NaN)).toBe('$0')
+      expect(formatCurrency(NaN)).toBe('—')
     })
   })
 
   describe('formatCompact', () => {
     it('应该格式化千位数', () => {
-      expect(formatCompact(1500)).toBe('1.5K')
+      expect(formatCompact(1500)).toBe('1.50K')
     })
 
     it('应该格式化百万位数', () => {
-      expect(formatCompact(1500000)).toBe('1.5M')
+      expect(formatCompact(1500000)).toBe('1.50M')
     })
 
     it('应该格式化十亿位数', () => {
-      expect(formatCompact(1500000000)).toBe('1.5B')
+      expect(formatCompact(1500000000)).toBe('1.50B')
     })
 
     it('应该处理小数字', () => {
-      expect(formatCompact(100)).toBe('100')
+      expect(formatCompact(100)).toBe('100.00')
     })
 
     it('应该处理负数', () => {
-      expect(formatCompact(-1500)).toBe('-1.5K')
+      expect(formatCompact(-1500)).toBe('-1.50K')
     })
 
     it('应该支持自定义小数位数', () => {
@@ -113,7 +113,7 @@ describe('format utilities', () => {
     })
 
     it('应该处理 NaN', () => {
-      expect(formatCompact(NaN)).toBe('0')
+      expect(formatCompact(NaN)).toBe('—')
     })
   })
 
