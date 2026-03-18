@@ -1,5 +1,5 @@
 import type { Metadata } from 'next'
-import { createClient } from '@supabase/supabase-js'
+import { getSupabaseAdmin } from '@/lib/supabase/server'
 import { createLogger } from '@/lib/utils/logger'
 import PricingPageClient from './PricingPageClient'
 
@@ -34,14 +34,7 @@ export const revalidate = 3600 // ISR: refresh lifetime count every hour
 
 async function getLifetimeMemberCount(): Promise<number> {
   try {
-    const url = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL
-    const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY
-
-    if (!url || !serviceKey) return 0
-
-    const supabase = createClient(url, serviceKey, {
-      auth: { persistSession: false },
-    })
+    const supabase = getSupabaseAdmin()
 
     // Query user_profiles for lifetime plan members
     // NOTE: subscriptions table does not have a plan column; pro_plan is stored in user_profiles
