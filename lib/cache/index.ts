@@ -9,6 +9,7 @@
 import { dataLogger } from '@/lib/utils/logger'
 import { getMemoryCache } from './memory-fallback'
 import { getSharedRedis, recordRedisError, isRedisAvailable, pingRedis } from './redis-client'
+import type { ZodSchema } from 'zod'
 
 // ============================================
 // 类型定义
@@ -259,12 +260,26 @@ export async function delByTag(tag: string): Promise<number> {
 export async function getOrSet<T>(
   key: string,
   fetcher: () => Promise<T>,
-  options: CacheOptions & { staleTtl?: number } = {}
+  options: CacheOptions & { staleTtl?: number; schema?: ZodSchema<T> } = {}
 ): Promise<T> {
   // 尝试从缓存获取
   const cached = await get<T>(key)
   if (cached !== null) {
-    return cached
+    // Optional Zod schema validation on deserialized cache (prevents schema drift)
+    if (options.schema) {
+      const result = options.schema.safeParse(cached)
+      if (!result.success) {
+        dataLogger.warn(`[Cache] Schema validation failed for ${key}, refetching`, {
+          errors: result.error.issues.slice(0, 3),
+        })
+        // Evict invalid cache entry
+        del(key).catch(() => {})
+      } else {
+        return result.data
+      }
+    } else {
+      return cached
+    }
   }
 
   // If staleTtl is set, check memory for stale data and revalidate in background
