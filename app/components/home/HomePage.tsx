@@ -1,7 +1,7 @@
 
 'use client'
 
-import { Suspense, lazy, useState, useEffect } from 'react'
+import { Suspense, lazy } from 'react'
 import { tokens } from '@/lib/design-tokens'
 import { Box } from '../base'
 import TopNav from '../layout/TopNav'
@@ -29,12 +29,6 @@ interface HomePageProps {
 }
 
 export default function HomePage({ initialTraders, initialLastUpdated }: HomePageProps) {
-  const [mounted, setMounted] = useState(false)
-
-  useEffect(() => {
-    setMounted(true)
-  }, [])
-
   return (
     <Box
       suppressHydrationWarning
