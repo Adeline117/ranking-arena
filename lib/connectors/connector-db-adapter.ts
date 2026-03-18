@@ -231,7 +231,6 @@ export async function runConnectorBatch(
   const aggregatedConsistency: WriteConsistency = {
     trader_sources: 'ok',
     trader_profiles_v2: 'ok',
-    trader_snapshots: 'ok',
     trader_snapshots_v2: 'ok',
   }
 

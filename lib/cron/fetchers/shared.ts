@@ -249,7 +249,6 @@ export const TraderDataSchema = z.object({
 export interface WriteConsistency {
   trader_sources: 'ok' | 'failed'
   trader_profiles_v2: 'ok' | 'failed'
-  trader_snapshots: 'ok' | 'failed'
   trader_snapshots_v2: 'ok' | 'failed'
 }
 
@@ -390,7 +389,6 @@ export async function upsertTraders(
   const consistency: WriteConsistency = {
     trader_sources: 'ok',
     trader_profiles_v2: 'ok',
-    trader_snapshots: 'ok',
     trader_snapshots_v2: 'ok',
   }
 
@@ -459,38 +457,11 @@ export async function upsertTraders(
       dataLogger.error(`[upsert] trader_profiles_v2 exception: ${err instanceof Error ? err.message : String(err)}`)
     }
 
-    // --- 3. trader_snapshots (v1) ---
-    try {
-      const snapshotsV1 = batch.map((t) => ({
-        source: t.source,
-        source_trader_id: t.source_trader_id,
-        season_id: t.season_id,
-        rank: t.rank ?? null,
-        roi: t.roi ?? null,
-        pnl: t.pnl ?? null,
-        followers: t.followers ?? null,
-        win_rate: t.win_rate ?? null,
-        max_drawdown: t.max_drawdown ?? null,
-        trades_count: t.trades_count ?? null,
-        arena_score: t.arena_score ?? null,
-        captured_at: t.captured_at || new Date().toISOString(),
-      }))
+    // --- 3. trader_snapshots (v1) — REMOVED ---
+    // v1 writes eliminated 2026-03-18. v2 is now the sole snapshot table.
+    // compute-leaderboard reads v2 only. v1 table retained read-only for scripts.
 
-      const { error: v1Err } = await supabase
-        .from('trader_snapshots')
-        .upsert(snapshotsV1, { onConflict: 'source,source_trader_id,season_id', ignoreDuplicates: false })
-
-      if (v1Err) {
-        consistency.trader_snapshots = 'failed'
-        writeErrors.push(`trader_snapshots: ${v1Err.message} (${v1Err.code})`)
-        dataLogger.warn(`[upsert] trader_snapshots (v1) error: ${v1Err.message}`)
-      }
-    } catch (err) {
-      consistency.trader_snapshots = 'failed'
-      dataLogger.error(`[upsert] trader_snapshots (v1) exception: ${err instanceof Error ? err.message : String(err)}`)
-    }
-
-    // --- 4. trader_snapshots_v2 ---
+    // --- 4. trader_snapshots_v2 (PRIMARY) ---
     try {
       const snapshots = batch.map((t) => ({
         platform: t.source,
