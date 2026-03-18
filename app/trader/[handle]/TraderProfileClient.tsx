@@ -57,6 +57,7 @@ const PostFeed = dynamic(() => import('@/app/components/post/PostFeed'), {
 const SwipeableView = dynamic(() => import('@/app/components/ui/SwipeableView'), { ssr: false })
 const LinkedAccountTabs = dynamic(() => import('@/app/components/trader/LinkedAccountTabs'), { ssr: false })
 const AggregatedStats = dynamic(() => import('@/app/components/trader/AggregatedStats'), { ssr: false })
+const ExchangeLinksBar = dynamic(() => import('@/app/components/trader/ExchangeLinksBar'), { ssr: false })
 
 /** @deprecated UI-specific. Will be replaced by UnifiedTrader adapter. */
 export interface UnregisteredTraderData {
@@ -415,6 +416,15 @@ export default function TraderProfileClient({ data, serverTraderData, claimedUse
             onAccountChange={handleAccountChange}
           />
         )}
+
+        {/* Exchange links — copy-trade / DEX view per exchange, below header */}
+        <ExchangeLinksBar
+          primary={{ platform: data.source, traderKey: data.source_trader_id, handle: data.handle }}
+          linkedAccounts={hasMultipleAccounts
+            ? linkedAccounts.map(a => ({ platform: a.platform, traderKey: a.traderKey, handle: a.handle }))
+            : undefined
+          }
+        />
 
         {/* Tabs */}
         <TraderTabs

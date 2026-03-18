@@ -437,7 +437,7 @@ export default function TraderHeader({
         </Box>
       </Box>
 
-      {/* Action buttons — compact: CopyTrade CTA + Follow icon + Share icon */}
+      {/* Action buttons — Follow + Share (exchange links moved to ExchangeLinksBar below) */}
       <Box
         className="profile-header-actions action-buttons"
         style={{
@@ -449,42 +449,6 @@ export default function TraderHeader({
           zIndex: 1,
         }}
       >
-        {/* Primary CTA: Copy on Exchange */}
-        {!isOwnProfile && (
-          <CopyTradeSection isPro={isPro} traderId={traderId} source={source} handle={handle} router={router} t={t} />
-        )}
-
-        {/* View on Exchange link */}
-        {profileUrl && (
-          <a
-            href={profileUrl}
-            target="_blank"
-            rel="noopener noreferrer"
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: 4,
-              padding: '6px 10px',
-              borderRadius: 'var(--radius-xl, 12px)',
-              background: tokens.colors.bg.tertiary,
-              border: `1px solid ${tokens.colors.border.primary}`,
-              fontSize: 12,
-              fontWeight: 600,
-              color: tokens.colors.text.secondary,
-              textDecoration: 'none',
-              whiteSpace: 'nowrap',
-            }}
-            title={t('viewOnExchange')}
-          >
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
-              <path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6" />
-              <polyline points="15 3 21 3 21 9" />
-              <line x1="10" y1="14" x2="21" y2="3" />
-            </svg>
-            {t('viewOnExchange')}
-          </a>
-        )}
-
         {isOwnProfile && (
           <ActionButton
             onClick={() => router.push('/settings')}
