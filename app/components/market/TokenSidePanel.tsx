@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useRef, useState, useCallback } from 'react'
-import { m, LazyMotion, domAnimation, AnimatePresence } from 'framer-motion'
+// CSS animations replace framer-motion (~40KB bundle savings)
 import Image from 'next/image'
 import { tokens } from '@/lib/design-tokens'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
@@ -200,15 +200,10 @@ export default function TokenSidePanel({ token, onClose }: {
   const md = coinDetail?.market_data
 
   return (
-    <LazyMotion features={domAnimation}>
-    <AnimatePresence>
+    <>
       {token && (
         <>
-          <m.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            transition={{ duration: 0.2 }}
+          <div
             onClick={onClose}
             aria-label="Close panel"
             style={{
@@ -216,6 +211,7 @@ export default function TokenSidePanel({ token, onClose }: {
               inset: 0,
               background: 'var(--color-backdrop-light)',
               zIndex: tokens.zIndex.overlay,
+              animation: 'fadeIn 0.2s ease-out',
             }}
           />
           <div style={{
@@ -227,13 +223,10 @@ export default function TokenSidePanel({ token, onClose }: {
             zIndex: tokens.zIndex.overlay + 1,
             pointerEvents: 'none',
           }}>
-          <m.div
+          <div
             ref={panelRef}
-            initial={{ opacity: 0, scale: 0.95 }}
-            animate={{ opacity: 1, scale: 1 }}
-            exit={{ opacity: 0, scale: 0.95 }}
-            transition={{ duration: 0.2 }}
             style={{
+              animation: 'fadeInScale 0.2s ease-out',
               width: 'min(95vw, 900px)',
               maxHeight: '90vh',
               background: tokens.colors.bg.primary,
@@ -522,11 +515,10 @@ export default function TokenSidePanel({ token, onClose }: {
                 {t('noDataComingSoon')}
               </div>
             </div>
-          </m.div>
+          </div>
           </div>
         </>
       )}
-    </AnimatePresence>
-    </LazyMotion>
+    </>
   )
 }
