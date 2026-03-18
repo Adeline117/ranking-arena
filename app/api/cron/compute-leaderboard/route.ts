@@ -390,13 +390,13 @@ async function computeSeason(
     })
   }
 
-  // Then fetch v1 snapshots — ONLY for sources with insufficient v2 data (<50 traders)
-  // This avoids fetching 10K rows from legacy table for sources that already have enough v2 data
-  const sourcesNeedingV1 = ALL_SOURCES.filter(s => (v2CountBySource.get(s) || 0) < 50)
-  if (sourcesNeedingV1.length > 0) {
-    logger.info(`[${season}] Fetching v1 fallback for ${sourcesNeedingV1.length}/${ALL_SOURCES.length} sources with <50 v2 traders`)
-    for (let i = 0; i < sourcesNeedingV1.length; i += batchSize) {
-      const batch = sourcesNeedingV1.slice(i, i + batchSize)
+  // Then fetch v1 snapshots for ALL sources to merge with v2 data.
+  // v2 has incomplete coverage for many platforms — v1 often has 3-5x more traders.
+  // addToTraderMap handles dedup (v2 gets priority since it's added first).
+  {
+    logger.info(`[${season}] Fetching v1 for all ${ALL_SOURCES.length} sources (merge with v2)`)
+    for (let i = 0; i < ALL_SOURCES.length; i += batchSize) {
+      const batch = ALL_SOURCES.slice(i, i + batchSize)
       const results = await Promise.all(
         batch.map(async (source) => {
           const rows: TraderRow[] = []
@@ -427,8 +427,6 @@ async function computeSeason(
       )
       results.forEach(rows => rows.forEach(addToTraderMap))
     }
-  } else {
-    logger.info(`[${season}] All sources have ≥50 v2 traders, skipping v1 fallback`)
   }
   logger.info(`[${season}] ${traderMap.size} unique traders after dedup (v2 + v1)`)
 
@@ -780,13 +778,14 @@ async function computeSeason(
     return a.source_trader_id.localeCompare(b.source_trader_id)
   })
 
-  // Pre-upsert degradation check: skip if new count is <15% of previous (catastrophic drop)
-  // Uses a minimum floor of 500 — always allow if scored > 500 (viable leaderboard)
-  // NOTE: After the 2026-03-15 pipeline rebuild, previous counts are inflated from stale accumulation.
-  // The check will self-correct once counts stabilize over 2-3 cron cycles.
-  if (previousCount && previousCount > 500 && scored.length < 500) {
-    logger.error(`${season}: computed only ${scored.length} traders (previous: ${previousCount}). SKIPPING — minimum 500 required.`)
-    return -1
+  // Pre-upsert degradation check: block if new count drops below DEGRADATION_THRESHOLD (85%) of previous
+  // Also enforce absolute minimum of 500 traders for a viable leaderboard
+  if (previousCount && previousCount > 500) {
+    const ratio = scored.length / previousCount
+    if (scored.length < 500 || ratio < DEGRADATION_THRESHOLD) {
+      logger.error(`${season}: computed ${scored.length} traders (previous: ${previousCount}, ratio: ${(ratio * 100).toFixed(1)}%). SKIPPING — below ${DEGRADATION_THRESHOLD * 100}% threshold.`)
+      return -1
+    }
   }
 
   // Upsert into leaderboard_ranks in batches
