@@ -1,8 +1,11 @@
 /**
  * XT.com Futures Connector Tests
  *
- * Tests discoverLeaderboard, fetchTraderProfile, fetchTraderSnapshot,
- * normalize, and error handling with mocked HTTP responses.
+ * Tests fetchTraderProfile, fetchTraderSnapshot, normalize, and error handling.
+ *
+ * NOTE: discoverLeaderboard uses fetchViaVPS exclusively (no direct-API fallback).
+ * Without VPS env vars, it always returns empty. Only profile/snapshot/normalize
+ * are testable via mockFetch.
  */
 
 import { XtFuturesConnector } from '../xt-futures'
@@ -25,8 +28,9 @@ function createConnector() {
 
 function mockFetchResponse(body: unknown, status = 200) {
   mockFetch.mockResolvedValueOnce({
+    ok: status >= 200 && status < 300,
     status,
-    headers: { get: () => null },
+    headers: { get: (key: string) => key === 'content-type' ? 'application/json' : null },
     json: async () => body,
   })
 }
@@ -41,81 +45,18 @@ function mockFetchNetworkError(message = 'Network error') {
 
 describe('XtFuturesConnector', () => {
   describe('discoverLeaderboard', () => {
-    const validResponse = {
-      code: 0,
-      data: {
-        list: [
-          {
-            uid: 'XT_TRADER_1',
-            nickname: 'XTStar',
-            avatar: 'https://img.example.com/xt1.jpg',
-            roi: 185.5,
-            pnl: 75000,
-            followerCount: 1100,
-            copyCount: 220,
-            winRate: 72.0,
-            maxDrawdown: 9.0,
-            aum: 800000,
-          },
-          {
-            uid: 'XT_TRADER_2',
-            nickname: 'FuturesKing',
-            avatar: null,
-            roi: 52.3,
-            pnl: 16000,
-            followerCount: 250,
-            copyCount: 45,
-            winRate: 58.0,
-            maxDrawdown: 19.5,
-            aum: 100000,
-          },
-        ],
-      },
-    }
-
-    test('returns traders from valid response', async () => {
+    test('returns empty result when VPS scraper unavailable (no env vars)', async () => {
+      // XT discoverLeaderboard is VPS-only — no direct-API fallback.
+      // Without VPS_SCRAPER_SG / VPS_PROXY_SG, fetchViaVPS returns null and
+      // the connector returns an empty result via the catch block.
       const connector = createConnector()
-      mockFetchResponse(validResponse)
 
       const result = await connector.discoverLeaderboard('7d', 100)
 
-      expect(result.traders).toHaveLength(2)
+      expect(result.traders).toHaveLength(0)
+      expect(result.total_available).toBe(0)
       expect(result.window).toBe('7d')
-
-      const first = result.traders[0]
-      expect(first.trader_key).toBe('XT_TRADER_1')
-      expect(first.display_name).toBe('XTStar')
-      expect(first.platform).toBe('xt')
-      expect(first.market_type).toBe('futures')
-      expect(first.is_active).toBe(true)
-    })
-
-    test('returns empty when data list is empty', async () => {
-      const connector = createConnector()
-      mockFetchResponse({ code: 0, data: { list: [] } })
-
-      const result = await connector.discoverLeaderboard('30d')
-
-      expect(result.traders).toHaveLength(0)
-    })
-
-    test('returns empty when data is null', async () => {
-      const connector = createConnector()
-      mockFetchResponse({ code: 0, data: null })
-
-      const result = await connector.discoverLeaderboard('7d')
-
-      expect(result.traders).toHaveLength(0)
-    })
-
-    test('sends correct period parameter for each window', async () => {
-      const connector = createConnector()
-      mockFetchResponse(validResponse)
-
-      await connector.discoverLeaderboard('90d')
-
-      const url = mockFetch.mock.calls[0][0]
-      expect(url).toContain('period=90')
+      expect(result.fetched_at).toBeDefined()
     })
 
     test('returns empty on network error (catches internally)', async () => {
@@ -126,6 +67,16 @@ describe('XtFuturesConnector', () => {
 
       expect(result.traders).toHaveLength(0)
       expect(result.total_available).toBe(0)
+    })
+
+    test('returns empty result for 30d and 90d windows', async () => {
+      const connector = createConnector()
+
+      for (const window of ['30d', '90d'] as const) {
+        const result = await connector.discoverLeaderboard(window)
+        expect(result.traders).toHaveLength(0)
+        expect(result.window).toBe(window)
+      }
     })
   })
 
@@ -244,8 +195,9 @@ describe('XtFuturesConnector', () => {
       const connector = createConnector()
       mockFetchResponse({ code: 0, data: null })
 
-      const result = await connector.fetchTraderSnapshot('XT_TRADER_1', '30d')
+      const result = await connector.fetchTraderSnapshot('INVALID', '30d')
 
+      // XT returns object with empty metrics (not null) when data is null
       expect(result).not.toBeNull()
       expect(result!.quality_flags.missing_fields).toContain('all')
     })
@@ -254,7 +206,7 @@ describe('XtFuturesConnector', () => {
       const connector = createConnector()
       mockFetchNetworkError()
 
-      const result = await connector.fetchTraderSnapshot('FAIL', '7d')
+      const result = await connector.fetchTraderSnapshot('XT_TRADER_1', '7d')
 
       expect(result).toBeNull()
     })
@@ -271,6 +223,24 @@ describe('XtFuturesConnector', () => {
       expect(result!.quality_flags.missing_fields).toContain('trades_count')
       expect(result!.quality_flags.window_native).toBe(true)
     })
+
+    test('sends correct period URL parameter for each window', async () => {
+      const connector = createConnector()
+
+      // Test 7d window
+      mockFetchResponse(validDetailResponse)
+      await connector.fetchTraderSnapshot('XT_TRADER_1', '7d')
+      let url = mockFetch.mock.calls[0][0] as string
+      expect(url).toContain('period=7')
+
+      mockFetch.mockReset()
+
+      // Test 30d window
+      mockFetchResponse(validDetailResponse)
+      await connector.fetchTraderSnapshot('XT_TRADER_1', '30d')
+      url = mockFetch.mock.calls[0][0] as string
+      expect(url).toContain('period=30')
+    })
   })
 
   // ============================================
@@ -280,11 +250,12 @@ describe('XtFuturesConnector', () => {
   describe('normalize', () => {
     test('normalizes raw entry correctly', () => {
       const connector = createConnector()
+      // XT uses incomeRate as ratio (1.0852 = 108.52%), winRate as ratio (0-1)
       const raw = {
-        uid: 'XT_123',
-        nickname: 'NormalizeTest',
-        roi: 88.5,
-        pnl: 25000,
+        accountId: 'XT_123',
+        nickName: 'NormalizeTest',
+        incomeRate: 0.885,   // ratio → 88.5%
+        income: 25000,
       }
 
       const normalized = connector.normalize(raw)
@@ -295,13 +266,28 @@ describe('XtFuturesConnector', () => {
       expect(normalized.pnl).toBe(25000)
     })
 
+    test('falls back to uid when accountId absent', () => {
+      const connector = createConnector()
+      const raw = {
+        uid: 'XT_FALLBACK',
+        nickname: 'FallbackName',
+        incomeRate: 0.5,
+      }
+
+      const normalized = connector.normalize(raw)
+
+      expect(normalized.trader_key).toBe('XT_FALLBACK')
+      // nickname mapped via raw.nickName ?? raw.nickname
+      expect(normalized.display_name).toBe('FallbackName')
+      expect(normalized.roi).toBe(50)
+    })
+
     test('handles null/undefined values', () => {
       const connector = createConnector()
       const raw = {
         uid: null,
-        nickname: null,
-        roi: null,
-        pnl: undefined,
+        incomeRate: null,
+        income: undefined,
       }
 
       const normalized = connector.normalize(raw)

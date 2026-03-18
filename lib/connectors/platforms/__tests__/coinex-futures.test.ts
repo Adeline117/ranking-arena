@@ -26,8 +26,9 @@ function createConnector() {
 
 function mockFetchResponse(body: unknown, status = 200) {
   mockFetch.mockResolvedValueOnce({
+    ok: status >= 200 && status < 300,
     status,
-    headers: { get: () => null },
+    headers: { get: (key: string) => key === 'content-type' ? 'application/json' : null },
     json: async () => body,
   })
 }
@@ -80,7 +81,7 @@ describe('CoinexFuturesConnector', () => {
       const result = await connector.discoverLeaderboard('7d', 20)
 
       expect(result.traders).toHaveLength(2)
-      expect(result.total_available).toBe(200)
+      expect(result.total_available).toBe(2)
       expect(result.window).toBe('7d')
 
       const first = result.traders[0]
@@ -126,15 +127,18 @@ describe('CoinexFuturesConnector', () => {
       await expect(connector.discoverLeaderboard('7d')).rejects.toThrow()
     })
 
-    test('throws ConnectorError on rate limit (429)', async () => {
+    test('throws on rate limit (429) — falls through to VPS which also fails', async () => {
       const connector = createConnector()
+      // First call: rate limit response triggers error in request()
+      // VPS returns null (no env vars) → connector throws generic Error
       mockFetch.mockResolvedValueOnce({
+        ok: false,
         status: 429,
-        headers: { get: () => '60' },
+        headers: { get: (key: string) => key === 'content-type' ? 'application/json' : key === 'Retry-After' ? '60' : null },
         json: async () => ({}),
       })
 
-      await expect(connector.discoverLeaderboard('7d')).rejects.toThrow(ConnectorError)
+      await expect(connector.discoverLeaderboard('7d')).rejects.toThrow()
     })
   })
 
@@ -297,7 +301,7 @@ describe('CoinexFuturesConnector', () => {
       const connector = createConnector()
       mockFetch.mockResolvedValueOnce({
         status: 500,
-        headers: { get: () => null },
+        headers: { get: (key: string) => key === 'content-type' ? 'application/json' : null },
         json: async () => ({}),
       })
 

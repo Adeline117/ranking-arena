@@ -9,11 +9,26 @@
 // Mocks
 // ---------------------------------------------------------------------------
 
+// Mock @/lib/env so env.CRON_SECRET reads process.env.CRON_SECRET at call time
+jest.mock('@/lib/env', () => ({
+  env: new Proxy({}, {
+    get(_t, key) {
+      if (key === 'CRON_SECRET') return process.env.CRON_SECRET
+      return process.env[String(key)]
+    },
+  }),
+}))
+
+
 const mockFrom = jest.fn()
 const mockSupabaseClient = { from: mockFrom }
 
 jest.mock('@supabase/supabase-js', () => ({
   createClient: jest.fn(() => mockSupabaseClient),
+}))
+
+jest.mock('@/lib/supabase/server', () => ({
+  getSupabaseAdmin: jest.fn(() => mockSupabaseClient),
 }))
 
 jest.mock('@/lib/cron/utils', () => ({
@@ -65,6 +80,11 @@ jest.mock('@/lib/utils/logger', () => ({
     warn: jest.fn(),
     error: jest.fn(),
   }),
+  logger: { info: jest.fn(), warn: jest.fn(), error: jest.fn(), debug: jest.fn(), apiError: jest.fn(), dbError: jest.fn() },
+  apiLogger: { info: jest.fn(), warn: jest.fn(), error: jest.fn(), debug: jest.fn(), apiError: jest.fn(), dbError: jest.fn() },
+  dataLogger: { info: jest.fn(), warn: jest.fn(), error: jest.fn(), debug: jest.fn(), apiError: jest.fn(), dbError: jest.fn() },
+  captureError: jest.fn(),
+  captureMessage: jest.fn(),
 }))
 
 jest.mock('@/lib/cron/fetchers/shared', () => ({
@@ -161,20 +181,16 @@ describe('GET /api/cron/fetch-details', () => {
     expect(body.summary.success).toBe(2)
   })
 
-  it('returns 500 when supabase env is missing', async () => {
-    const origUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
-    const origKey = process.env.SUPABASE_SERVICE_ROLE_KEY
-
-    // Mock getSupabaseEnv to return empty
+  it('returns 500 when database query throws', async () => {
+    // Test that unhandled errors return 500
     // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const { getSupabaseEnv } = require('@/lib/cron/utils')
-    getSupabaseEnv.mockReturnValueOnce({ url: '', serviceKey: '' })
+    const { getSupabaseAdmin } = require('@/lib/supabase/server')
+    getSupabaseAdmin.mockImplementationOnce(() => {
+      throw new Error('Supabase env vars missing')
+    })
 
     const res = await GET(createRequest('test-secret'))
     expect(res.status).toBe(500)
-
-    process.env.NEXT_PUBLIC_SUPABASE_URL = origUrl
-    process.env.SUPABASE_SERVICE_ROLE_KEY = origKey
   })
 
   it('returns 500 when database query throws', async () => {

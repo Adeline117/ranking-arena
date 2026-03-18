@@ -9,6 +9,17 @@
 // Mocks
 // ---------------------------------------------------------------------------
 
+// Mock @/lib/env so env.CRON_SECRET reads process.env.CRON_SECRET at call time
+jest.mock('@/lib/env', () => ({
+  env: new Proxy({}, {
+    get(_t, key) {
+      if (key === 'CRON_SECRET') return process.env.CRON_SECRET
+      return process.env[String(key)]
+    },
+  }),
+}))
+
+
 const mockSupabaseFrom = jest.fn()
 
 jest.mock('@/lib/supabase/server', () => ({
@@ -28,6 +39,11 @@ jest.mock('@/lib/utils/logger', () => ({
     warn: jest.fn(),
     error: jest.fn(),
   }),
+  logger: { info: jest.fn(), warn: jest.fn(), error: jest.fn(), debug: jest.fn(), apiError: jest.fn(), dbError: jest.fn() },
+  apiLogger: { info: jest.fn(), warn: jest.fn(), error: jest.fn(), debug: jest.fn(), apiError: jest.fn(), dbError: jest.fn() },
+  dataLogger: { info: jest.fn(), warn: jest.fn(), error: jest.fn(), debug: jest.fn(), apiError: jest.fn(), dbError: jest.fn() },
+  captureError: jest.fn(),
+  captureMessage: jest.fn(),
 }))
 
 jest.mock('@/lib/logger', () => ({

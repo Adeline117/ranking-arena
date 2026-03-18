@@ -9,6 +9,17 @@
 // Mocks
 // ---------------------------------------------------------------------------
 
+// Mock @/lib/env so env.CRON_SECRET reads process.env.CRON_SECRET at call time
+jest.mock('@/lib/env', () => ({
+  env: new Proxy({}, {
+    get(_t, key) {
+      if (key === 'CRON_SECRET') return process.env.CRON_SECRET
+      return process.env[String(key)]
+    },
+  }),
+}))
+
+
 jest.mock('@/lib/services/pipeline-logger', () => ({
   PipelineLogger: {
     start: jest.fn(() =>
@@ -48,6 +59,7 @@ jest.mock('@/lib/connectors/connector-db-adapter', () => ({
 jest.mock('@/lib/connectors/registry', () => ({
   connectorRegistry: {
     get: jest.fn(() => ({ platform: 'test', marketType: 'futures' })),
+    getOrInit: jest.fn().mockResolvedValue({ platform: 'test', marketType: 'futures' }),
   },
   initializeConnectors: jest.fn().mockResolvedValue(undefined),
 }))
@@ -91,7 +103,7 @@ jest.mock('@/lib/utils/logger', () => ({
 }))
 
 jest.mock('@/lib/logger', () => {
-  const mockLogger = { info: jest.fn(), warn: jest.fn(), error: jest.fn(), debug: jest.fn() }
+  const mockLogger = { info: jest.fn(), warn: jest.fn(), error: jest.fn(), debug: jest.fn(), apiError: jest.fn(), dbError: jest.fn() }
   return {
     __esModule: true,
     default: mockLogger,
@@ -100,8 +112,21 @@ jest.mock('@/lib/logger', () => {
     logWarn: jest.fn(),
     logInfo: jest.fn(),
     logDebug: jest.fn(),
+    logApiError: jest.fn(),
+    logDbError: jest.fn(),
   }
 })
+
+jest.mock('@/lib/cache', () => ({
+  incr: jest.fn().mockResolvedValue(1),
+  set: jest.fn().mockResolvedValue(undefined),
+  del: jest.fn().mockResolvedValue(undefined),
+  get: jest.fn().mockResolvedValue(null),
+}))
+
+jest.mock('@/lib/alerts/send-alert', () => ({
+  sendAlert: jest.fn().mockResolvedValue(undefined),
+}))
 
 import { NextRequest } from 'next/server'
 import { GET } from '../route'
