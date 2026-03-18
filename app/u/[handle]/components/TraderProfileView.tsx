@@ -1,14 +1,14 @@
 'use client'
 
+import { useState, useEffect, useCallback, useMemo } from 'react'
 import Link from 'next/link'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams, usePathname } from 'next/navigation'
 import dynamic from 'next/dynamic'
 import { tokens } from '@/lib/design-tokens'
 import TopNav from '@/app/components/layout/TopNav'
 import Breadcrumb from '@/app/components/ui/Breadcrumb'
 import TraderHeader from '@/app/components/trader/TraderHeader'
 import TraderTabs from '@/app/components/trader/TraderTabs'
-const ExchangeLinksBar = dynamic(() => import('@/app/components/trader/ExchangeLinksBar'), { ssr: false })
 import { Box, Text } from '@/app/components/base'
 import { RankingSkeleton } from '@/app/components/ui/Skeleton'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
@@ -26,6 +26,31 @@ const StatsPage = dynamic(() => import('@/app/components/trader/stats/StatsPage'
 const PortfolioTable = dynamic(() => import('@/app/components/trader/PortfolioTable'), {
   loading: () => <RankingSkeleton />,
 })
+const ExchangeLinksBar = dynamic(() => import('@/app/components/trader/ExchangeLinksBar'), { ssr: false })
+const LinkedAccountTabs = dynamic(() => import('@/app/components/trader/LinkedAccountTabs'), { ssr: false })
+const AggregatedStats = dynamic(() => import('@/app/components/trader/AggregatedStats'), { ssr: false })
+const PostFeed = dynamic(() => import('@/app/components/post/PostFeed'), { ssr: false })
+
+interface LinkedAccountData {
+  id: string
+  platform: string
+  traderKey: string
+  handle: string | null
+  label: string | null
+  isPrimary: boolean
+  roi: number | null
+  pnl: number | null
+  arenaScore: number | null
+  winRate: number | null
+  maxDrawdown: number | null
+  rank: number | null
+}
+
+interface AggregatedData {
+  combinedPnl: number
+  bestRoi: { value: number; platform: string; traderKey: string } | null
+  weightedScore: number
+}
 
 interface TraderProfileViewProps {
   email: string | null
@@ -63,13 +88,38 @@ export default function TraderProfileView({
   const _traderFeed = traderData?.feed ?? []
   const _traderSimilar = traderData?.similarTraders ?? []
 
-  type TraderTabKey = 'overview' | 'stats' | 'portfolio' | 'posts'
-  const traderActiveTab = (activeTab === 'overview' || activeTab === 'stats' || activeTab === 'portfolio')
-    ? activeTab as TraderTabKey
-    : 'overview'
-
   const isOwn = !!(currentUserId && profile.id === currentUserId)
   const canView = isPro || isOwn
+
+  // Multi-account support — fetch linked accounts
+  const [linkedAccounts, setLinkedAccounts] = useState<LinkedAccountData[]>([])
+  const [aggregatedData, setAggregatedData] = useState<AggregatedData | null>(null)
+  const [activeAccount, setActiveAccount] = useState<string>('all')
+  const hasMultipleAccounts = linkedAccounts.length >= 2
+
+  useEffect(() => {
+    if (!traderProfile?.source || !traderProfile?.trader_key) return
+    fetch(`/api/traders/aggregate?platform=${encodeURIComponent(traderProfile.source)}&trader_key=${encodeURIComponent(traderProfile.trader_key)}`)
+      .then(res => res.ok ? res.json() : null)
+      .then(result => {
+        if (result?.data?.totalAccounts >= 2) {
+          setLinkedAccounts(result.data.accounts)
+          setAggregatedData(result.data.aggregated)
+        }
+      })
+      .catch(() => {})
+  }, [traderProfile?.source, traderProfile?.trader_key])
+
+  // Tabs — include 'posts' for own profile or claimed user
+  type TraderTabKey = 'overview' | 'stats' | 'portfolio' | 'posts'
+  const showPosts = isOwn || profile.isRegistered
+  const traderActiveTab = (['overview', 'stats', 'portfolio', 'posts'].includes(activeTab)
+    ? activeTab as TraderTabKey
+    : 'overview')
+
+  const handleAccountChange = useCallback((account: string) => {
+    setActiveAccount(account)
+  }, [])
 
   return (
     <Box
@@ -88,7 +138,7 @@ export default function TraderProfileView({
           { label: traderProfile?.handle || profile.handle || handle },
         ]} />
 
-        {/* TraderHeader */}
+        {/* TraderHeader — pass user profile bio/avatar for claimed users */}
         <TraderHeader
           handle={traderProfile?.handle || traderProfile?.trader_key || serverProfile?.traderHandle || ''}
           displayName={traderProfile?.display_name || undefined}
@@ -96,20 +146,40 @@ export default function TraderProfileView({
           avatarUrl={traderProfile?.avatar_url || profile.avatar_url}
           coverUrl={traderProfile?.cover_url || profile.cover_url}
           isRegistered={traderProfile?.isRegistered ?? profile.isRegistered}
+          isOwnProfile={isOwn}
           followers={traderProfile?.followers ?? profile.followers}
           source={traderProfile?.source}
           isPro={isPro}
-          isOwnProfile={isOwn}
           roi90d={traderPerformance?.roi_90d}
           maxDrawdown={traderPerformance?.max_drawdown}
           winRate={traderPerformance?.win_rate}
+          arenaScore={(traderPerformance as ExtendedPerformance | null)?.arena_score_90d ?? null}
           currentUserId={currentUserId}
+          isVerifiedTrader={profile.isVerifiedTrader}
+          claimedBio={profile.bio}
+          claimedAvatarUrl={profile.avatar_url}
+          linkedAccountCount={hasMultipleAccounts ? linkedAccounts.length : undefined}
+          linkedPlatforms={hasMultipleAccounts ? linkedAccounts.map(a => a.platform) : undefined}
         />
+
+        {/* Multi-account tabs */}
+        {hasMultipleAccounts && (
+          <LinkedAccountTabs
+            accounts={linkedAccounts}
+            activeAccount={activeAccount}
+            onAccountChange={handleAccountChange}
+          />
+        )}
 
         {/* Exchange links — copy-trade / DEX view */}
         {traderProfile?.source && traderProfile?.trader_key && (
           <ExchangeLinksBar
             primary={{ platform: traderProfile.source, traderKey: traderProfile.trader_key, handle: traderProfile.handle }}
+            linkedAccounts={hasMultipleAccounts
+              ? linkedAccounts.map(a => ({ platform: a.platform, traderKey: a.traderKey, handle: a.handle }))
+              : undefined
+            }
+            activeAccount={activeAccount}
             isOwnProfile={isOwn}
           />
         )}
@@ -120,6 +190,7 @@ export default function TraderProfileView({
           onTabChange={(tab) => onTabChange(tab as ProfileTabKey)}
           isPro={isPro}
           onProRequired={() => router.push('/pricing')}
+          extraTabs={showPosts ? ['posts'] : undefined}
         />
 
         {/* Tab Content with animation */}
@@ -130,17 +201,43 @@ export default function TraderProfileView({
           }}
         >
           {traderActiveTab === 'overview' && (
-            <TraderOverviewTab
-              handle={handle}
-              email={email}
-              traderProfile={traderProfile}
-              traderPerformance={traderPerformance}
-              traderEquityCurve={traderEquityCurve}
-              traderFeed={_traderFeed}
-              traderSimilar={_traderSimilar}
-              serverProfile={serverProfile}
-              t={t}
-            />
+            <>
+              {/* Aggregated stats for multi-account "All" view */}
+              {hasMultipleAccounts && activeAccount === 'all' && aggregatedData && (
+                <Box style={{ marginBottom: tokens.spacing[6] }}>
+                  <AggregatedStats
+                    combinedPnl={aggregatedData.combinedPnl}
+                    bestRoi={aggregatedData.bestRoi}
+                    weightedScore={aggregatedData.weightedScore}
+                    accounts={linkedAccounts.map(a => ({
+                      platform: a.platform,
+                      traderKey: a.traderKey,
+                      handle: a.handle,
+                      label: a.label,
+                      roi: a.roi,
+                      pnl: a.pnl,
+                      arenaScore: a.arenaScore,
+                      winRate: a.winRate,
+                      maxDrawdown: a.maxDrawdown,
+                      rank: a.rank,
+                      isPrimary: a.isPrimary,
+                    }))}
+                  />
+                </Box>
+              )}
+
+              <TraderOverviewTab
+                handle={handle}
+                email={email}
+                traderProfile={traderProfile}
+                traderPerformance={traderPerformance}
+                traderEquityCurve={traderEquityCurve}
+                traderFeed={_traderFeed}
+                traderSimilar={_traderSimilar}
+                serverProfile={serverProfile}
+                t={t}
+              />
+            </>
           )}
 
           {traderActiveTab === 'stats' && (
@@ -169,7 +266,19 @@ export default function TraderProfileView({
             )
           )}
 
-          {traderActiveTab === 'portfolio' && <PortfolioTable items={traderPortfolio} history={traderPositionHistory} isPro={canView} onUnlock={() => router.push('/pricing')} />}
+          {traderActiveTab === 'portfolio' && (
+            <PortfolioTable items={traderPortfolio} history={traderPositionHistory} isPro={canView} onUnlock={() => router.push('/pricing')} />
+          )}
+
+          {traderActiveTab === 'posts' && showPosts && (
+            <Box style={{ maxWidth: 900 }}>
+              <PostFeed
+                authorHandle={profile.handle}
+                variant="compact"
+                showSortButtons
+              />
+            </Box>
+          )}
         </Box>
 
         <style>{profileStyles}</style>
@@ -179,7 +288,7 @@ export default function TraderProfileView({
 }
 
 /* ------------------------------------------------------------------ */
-/* Overview Tab (extracted inline to keep TraderProfileView manageable) */
+/* Overview Tab                                                        */
 /* ------------------------------------------------------------------ */
 
 interface TraderOverviewTabProps {
