@@ -11,7 +11,7 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { env } from '@/lib/env'
-import { createClient } from '@supabase/supabase-js'
+import { getSupabaseAdmin } from '@/lib/supabase/server'
 import { logger } from '@/lib/logger'
 
 export const dynamic = 'force-dynamic'
@@ -29,9 +29,7 @@ interface ManipulationAlert {
 // ============================================
 
 export async function GET(request: NextRequest) {
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
-  const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!
-  const supabase = createClient(supabaseUrl, supabaseServiceKey)
+  const supabase = getSupabaseAdmin()
 
   // Auth check
   const authHeader = request.headers.get('authorization')
@@ -117,9 +115,7 @@ export async function GET(request: NextRequest) {
 // ============================================
 
 export async function POST(request: NextRequest) {
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
-  const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!
-  const supabase = createClient(supabaseUrl, supabaseServiceKey)
+  const supabase = getSupabaseAdmin()
 
   // Auth check (allow cron secret or admin)
   const authHeader = request.headers.get('authorization')

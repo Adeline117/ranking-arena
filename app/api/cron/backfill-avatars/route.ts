@@ -7,8 +7,8 @@
  */
 
 import { NextResponse } from 'next/server'
-import { createClient } from '@supabase/supabase-js'
 import { PipelineLogger } from '@/lib/services/pipeline-logger'
+import { getSupabaseAdmin } from '@/lib/supabase/server'
 import { env } from '@/lib/env'
 
 export const runtime = 'nodejs'
@@ -434,13 +434,7 @@ export async function GET(request: Request) {
     }, { status: 400 })
   }
 
-  const supabaseUrl = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL
-  const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY
-  if (!supabaseUrl || !supabaseKey) {
-    await plog.error(new Error('missing env'))
-    return NextResponse.json({ error: 'missing env' }, { status: 500 })
-  }
-  const supabase = createClient(supabaseUrl, supabaseKey)
+  const supabase = getSupabaseAdmin()
 
   const result: AvatarResult = { platform, total: 0, updated: 0, errors: 0 }
 

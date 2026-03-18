@@ -6,7 +6,7 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@supabase/supabase-js'
+import { getSupabaseAdmin } from '@/lib/supabase/server'
 import { z } from 'zod'
 import { verifyQStashSignature } from '@/lib/cron/qstash-client'
 import { createLogger } from '@/lib/utils/logger'
@@ -164,10 +164,7 @@ export async function POST(
     }
 
     // 6. 写入数据库
-    const supabase = createClient(
-      process.env.SUPABASE_URL!,
-      process.env.SUPABASE_SERVICE_ROLE_KEY!
-    )
+    const supabase = getSupabaseAdmin()
 
     const { error: upsertError } = await supabase
       .from('trader_snapshots')

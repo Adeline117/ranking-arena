@@ -16,9 +16,9 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { PipelineLogger } from '@/lib/services/pipeline-logger'
-import { createClient } from '@supabase/supabase-js'
 import logger from '@/lib/logger'
 import { env } from '@/lib/env'
+import { getSupabaseAdmin } from '@/lib/supabase/server'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 300
@@ -36,13 +36,7 @@ async function discoverRankingsInline(): Promise<BatchResult> {
   const start = Date.now()
   const name = 'discover-rankings'
   try {
-    const supabaseUrl = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL || ''
-    const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || ''
-    if (!supabaseKey) {
-      return { name, status: 'error', durationMs: Date.now() - start, error: 'SUPABASE_SERVICE_ROLE_KEY not set' }
-    }
-
-    const supabase = createClient(supabaseUrl, supabaseKey)
+    const supabase = getSupabaseAdmin()
 
     // Check which platforms have healthy status (not circuit-open)
     // platform_health table may not exist — skip gracefully

@@ -10,8 +10,8 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@supabase/supabase-js'
 import { logger } from '@/lib/logger'
+import { getSupabaseAdmin } from '@/lib/supabase/server'
 import { PipelineLogger } from '@/lib/services/pipeline-logger'
 import { env } from '@/lib/env'
 
@@ -75,13 +75,6 @@ interface PlatformGapReport {
   }
 }
 
-function getSupabaseClient() {
-  const url = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL || ''
-  const key = process.env.SUPABASE_SERVICE_ROLE_KEY || ''
-  if (!url || !key) return null
-  return createClient(url, key, { auth: { persistSession: false } })
-}
-
 function isAuthorized(req: Request): boolean {
   const secret = env.CRON_SECRET
   if (!secret) return false
@@ -97,10 +90,7 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
   }
 
-  const supabase = getSupabaseClient()
-  if (!supabase) {
-    return NextResponse.json({ error: 'Supabase not configured' }, { status: 500 })
-  }
+  const supabase = getSupabaseAdmin()
 
   const platformParam = req.nextUrl.searchParams.get('platform')
   const detailed = req.nextUrl.searchParams.get('detailed') === 'true'

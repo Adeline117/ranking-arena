@@ -1,6 +1,6 @@
 import { ImageResponse } from 'next/og'
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@supabase/supabase-js'
+import { getSupabaseAdmin } from '@/lib/supabase/server'
 
 export const runtime = 'edge'
 
@@ -14,9 +14,7 @@ export async function GET(request: NextRequest) {
   const { searchParams: sp } = new URL(request.url)
   const handle = sp.get('handle'), platform = sp.get('platform') || '', windowParam = sp.get('window') || '7d', ref = sp.get('ref') || ''
   if (!handle) return NextResponse.json({ error: 'handle required' }, { status: 400 })
-  const url = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL, key = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
-  if (!url || !key) return NextResponse.json({ error: 'DB not configured' }, { status: 500 })
-  const sb = createClient(url, key, { auth: { persistSession: false } })
+  const sb = getSupabaseAdmin()
   const sMap: Record<string, string> = { '7d': '7D', '30d': '30D', '90d': '90D', '7D': '7D', '30D': '30D', '90D': '90D' }
   const sId = sMap[windowParam] ?? '7D'
   let q = sb.from('trader_sources').select('handle, source, source_trader_id').or(`handle.eq.${handle},source_trader_id.eq.${handle}`).limit(1)

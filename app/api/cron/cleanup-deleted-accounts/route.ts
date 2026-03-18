@@ -6,8 +6,8 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@supabase/supabase-js'
 import { isAuthorized } from '@/lib/cron/utils'
+import { getSupabaseAdmin } from '@/lib/supabase/server'
 import logger from '@/lib/logger'
 import { PipelineLogger } from '@/lib/services/pipeline-logger'
 
@@ -24,9 +24,7 @@ export async function GET(request: NextRequest) {
   const plog = await PipelineLogger.start('cleanup-deleted-accounts')
 
   try {
-    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
-    const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!
-    const supabase = createClient(supabaseUrl, supabaseServiceKey)
+    const supabase = getSupabaseAdmin()
 
     // Find users whose deletion grace period has passed
     const { data: expiredAccounts, error } = await supabase

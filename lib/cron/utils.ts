@@ -4,7 +4,8 @@
  * 集成熔断器、重试机制、遥测和告警通知
  */
 
-import { createClient, SupabaseClient } from '@supabase/supabase-js'
+import { SupabaseClient } from '@supabase/supabase-js'
+import { getSupabaseAdmin } from '@/lib/supabase/server'
 import { exec } from 'child_process'
 import { promisify } from 'util'
 import {
@@ -209,13 +210,11 @@ export function isAuthorized(req: Request): boolean {
  * 创建 Supabase Admin 客户端
  */
 export function createSupabaseAdmin(): SupabaseClient | null {
-  const { url, serviceKey } = getSupabaseEnv()
-  if (!url || !serviceKey) {
+  try {
+    return getSupabaseAdmin()
+  } catch {
     return null
   }
-  return createClient(url, serviceKey, {
-    auth: { persistSession: false },
-  })
 }
 
 /**

@@ -3,7 +3,7 @@
  * Aggregates funding rates + open interest from Supabase.
  */
 import { NextResponse } from 'next/server'
-import { createClient } from '@supabase/supabase-js'
+import { getSupabaseAdmin } from '@/lib/supabase/server'
 
 export const dynamic = 'force-dynamic'
 
@@ -19,9 +19,7 @@ export async function GET() {
     return cached
   }
 
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
-  const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-  const supabase = createClient(supabaseUrl, supabaseKey)
+  const supabase = getSupabaseAdmin()
 
   try {
     // Fetch latest funding rates — select only needed columns

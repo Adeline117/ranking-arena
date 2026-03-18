@@ -13,7 +13,7 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { env } from '@/lib/env'
-import { createClient } from '@supabase/supabase-js'
+import { getSupabaseAdmin } from '@/lib/supabase/server'
 import { checkHealth as checkCacheHealth, getCacheStats } from '@/lib/cache'
 import { getSupportedPlatforms } from '@/lib/cron/utils'
 import { DEAD_BLOCKED_PLATFORMS } from '@/lib/constants/exchanges'
@@ -96,22 +96,10 @@ async function checkDatabaseAndCron(): Promise<{
   database: ServiceStatus
   cronRuns: CronRunInfo[]
 }> {
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL
-  const key = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
-
-  if (!url || !key) {
-    return {
-      database: { status: 'skip', message: 'Database connection not configured' },
-      cronRuns: [],
-    }
-  }
-
   const start = Date.now()
 
   try {
-    const supabase = createClient(url, key, {
-      auth: { persistSession: false },
-    })
+    const supabase = getSupabaseAdmin()
 
     // 1. 测试数据库连接
     const { error: dbError } = await supabase
@@ -278,12 +266,7 @@ async function getConnectorsSection(cronSecret: string | undefined, authHeader: 
     return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
   }
 
-  const supabaseUrl = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL || ''
-  const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || ''
-  if (!supabaseUrl || !supabaseKey) {
-    return NextResponse.json({ error: 'Supabase not configured' }, { status: 500 })
-  }
-  const supabase = createClient(supabaseUrl, supabaseKey, { auth: { persistSession: false } })
+  const supabase = getSupabaseAdmin()
 
   const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString()
 

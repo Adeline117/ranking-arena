@@ -3,7 +3,8 @@
  * 统一前端和后端的管理员验证逻辑
  */
 
-import { createClient, SupabaseClient } from '@supabase/supabase-js'
+import { SupabaseClient } from '@supabase/supabase-js'
+import { getSupabaseAdmin } from '@/lib/supabase/server'
 
 // 管理员邮箱白名单（与前端 useAdminAuth 保持一致）
 // 必须通过环境变量 ADMIN_EMAILS 配置，生产环境不能为空
@@ -11,19 +12,7 @@ const ADMIN_EMAILS: string[] = process.env.ADMIN_EMAILS
   ? process.env.ADMIN_EMAILS.split(',').map(e => e.trim()).filter(e => e.length > 0)
   : [] // 安全默认值：空数组，不允许任何未配置的管理员
 
-/**
- * 创建 Supabase Admin 客户端
- */
-export function getSupabaseAdmin(): SupabaseClient {
-  const url = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL
-  const key = process.env.SUPABASE_SERVICE_ROLE_KEY
-
-  if (!url || !key) {
-    throw new Error('Supabase 环境变量缺失: SUPABASE_URL 或 SUPABASE_SERVICE_ROLE_KEY')
-  }
-
-  return createClient(url, key, { auth: { persistSession: false } })
-}
+export { getSupabaseAdmin }
 
 /**
  * 验证管理员身份

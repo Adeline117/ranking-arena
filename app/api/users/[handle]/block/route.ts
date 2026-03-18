@@ -5,19 +5,11 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@supabase/supabase-js'
+import { getSupabaseAdmin } from '@/lib/supabase/server'
 import { checkRateLimit, RateLimitPresets } from '@/lib/utils/rate-limit'
 import logger from '@/lib/logger'
 
 export const dynamic = 'force-dynamic'
-
-function getSupabaseAdmin() {
-  return createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!,
-    { auth: { persistSession: false } }
-  )
-}
 
 interface RouteContext {
   params: Promise<{ handle: string }>

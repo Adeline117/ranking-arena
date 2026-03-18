@@ -62,7 +62,7 @@ export class BitgetFuturesConnector extends BaseConnector {
       let _rawLb: Record<string, unknown>
       const vpsData = await this.fetchViaVPS<Record<string, unknown>>('/bitget/leaderboard', {
         period: timeRange, pageNo: String(currentPage), pageSize: String(limit),
-      }, 600000)
+      }, 120000)
       if (vpsData) {
         _rawLb = vpsData
       } else {

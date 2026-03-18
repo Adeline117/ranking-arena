@@ -6,17 +6,14 @@
  */
 
 import { NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
+import { getSupabaseAdmin } from '@/lib/supabase/server';
 import logger from '@/lib/logger'
 
 export const dynamic = 'force-dynamic';
 
-const SUPABASE_URL = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL || '';
-const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
-
 export async function GET() {
   try {
-    const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
+    const supabase = getSupabaseAdmin();
 
     const { data: health } = await supabase
       .from('platform_health')

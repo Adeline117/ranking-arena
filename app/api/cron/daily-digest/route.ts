@@ -11,8 +11,8 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@supabase/supabase-js'
 import { PipelineLogger } from '@/lib/services/pipeline-logger'
+import { getSupabaseAdmin } from '@/lib/supabase/server'
 import { sendDailyDigest, type DailyDigestData } from '@/lib/notifications/telegram'
 import { DEAD_BLOCKED_PLATFORMS } from '@/lib/constants/exchanges'
 import { getSupportedInlinePlatforms } from '@/lib/cron/fetchers'
@@ -31,13 +31,7 @@ export async function GET(request: NextRequest) {
   const plog = await PipelineLogger.start('daily-digest')
 
   try {
-    const supabaseUrl = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL || ''
-    const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || ''
-    if (!supabaseUrl || !supabaseKey) {
-      await plog.error(new Error('Supabase env vars missing'))
-      return NextResponse.json({ error: 'Supabase not configured' }, { status: 500 })
-    }
-    const supabase = createClient(supabaseUrl, supabaseKey, { auth: { persistSession: false } })
+    const supabase = getSupabaseAdmin()
 
     const deadSet = new Set(DEAD_BLOCKED_PLATFORMS as string[])
     const activePlatforms = getSupportedInlinePlatforms().filter(p => !deadSet.has(p))

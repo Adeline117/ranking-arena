@@ -1,14 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@supabase/supabase-js'
 import crypto from 'crypto'
 import { createLogger } from '@/lib/utils/logger'
-import { getAuthUser } from '@/lib/supabase/server'
+import { getAuthUser, getSupabaseAdmin } from '@/lib/supabase/server'
 import { env } from '@/lib/env'
 
 const logger = createLogger('exchange-oauth-authorize')
-
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || ''
-const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || ''
 
 // OAuth 配置（根据 Binance 官方文档）
 const OAUTH_CONFIG: Record<string, {
@@ -92,7 +88,7 @@ export async function GET(request: NextRequest) {
     }
 
     // 存储 state 到数据库（关联 userId）
-    const supabase = createClient(supabaseUrl, supabaseServiceKey)
+    const supabase = getSupabaseAdmin()
     const { error: insertError } = await supabase
       .from('oauth_states')
       .insert({

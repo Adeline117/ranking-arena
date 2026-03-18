@@ -8,8 +8,8 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@supabase/supabase-js'
 import { env } from '@/lib/env'
+import { getSupabaseAdmin } from '@/lib/supabase/server'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 30
@@ -100,12 +100,7 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    const supabaseUrl = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL || ''
-    const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || ''
-    if (!supabaseUrl || !supabaseKey) {
-      return NextResponse.json({ error: 'Supabase not configured' }, { status: 500 })
-    }
-    const supabase = createClient(supabaseUrl, supabaseKey, { auth: { persistSession: false } })
+    const supabase = getSupabaseAdmin()
 
     // Ensure system user exists
     await supabase

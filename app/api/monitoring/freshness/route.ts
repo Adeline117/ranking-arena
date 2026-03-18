@@ -10,7 +10,7 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@supabase/supabase-js'
+import { getSupabaseAdmin } from '@/lib/supabase/server'
 import logger from '@/lib/logger'
 import { DEAD_BLOCKED_PLATFORMS } from '@/lib/constants/exchanges'
 import { env } from '@/lib/env'
@@ -93,10 +93,7 @@ export async function GET(request: NextRequest) {
   const threshold = parseInt(url.searchParams.get('threshold') || '12') || 12
   const format = url.searchParams.get('format') || 'json'
 
-  const supabase = createClient(
-    process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL || '',
-    process.env.SUPABASE_SERVICE_ROLE_KEY || ''
-  )
+  const supabase = getSupabaseAdmin()
 
   const { data: aggRows, error: aggErr } = await supabase.rpc('get_monitoring_freshness_summary')
 

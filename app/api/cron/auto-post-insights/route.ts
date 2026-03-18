@@ -8,9 +8,10 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient, SupabaseClient } from '@supabase/supabase-js'
+import { type SupabaseClient } from '@supabase/supabase-js'
 import { PipelineLogger } from '@/lib/services/pipeline-logger'
 import { env } from '@/lib/env'
+import { getSupabaseAdmin } from '@/lib/supabase/server'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type AnySupabase = SupabaseClient<any>
@@ -31,13 +32,7 @@ export async function GET(request: NextRequest) {
   const plog = await PipelineLogger.start('auto-post-insights')
 
   try {
-    const supabaseUrl = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL || ''
-    const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || ''
-    if (!supabaseUrl || !supabaseKey) {
-      await plog.error(new Error('Supabase env vars missing'))
-      return NextResponse.json({ error: 'not configured' }, { status: 500 })
-    }
-    const supabase = createClient(supabaseUrl, supabaseKey, { auth: { persistSession: false } })
+    const supabase = getSupabaseAdmin()
 
     // Ensure system user exists in auth.users (user_activities trigger has FK constraint)
     await ensureSystemUser(supabase)

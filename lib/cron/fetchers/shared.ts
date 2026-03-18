@@ -3,7 +3,8 @@
  * Used by Vercel serverless functions — no child_process, no puppeteer
  */
 
-import { createClient, SupabaseClient } from '@supabase/supabase-js'
+import { SupabaseClient } from '@supabase/supabase-js'
+import { getSupabaseAdmin } from '@/lib/supabase/server'
 import { z } from 'zod'
 import { dataLogger } from '@/lib/utils/logger'
 import { SOURCE_TYPE_MAP } from '@/lib/constants/exchanges'
@@ -269,10 +270,11 @@ export type PlatformFetcher = (
 // ============================================
 
 export function getSupabaseClient(): SupabaseClient | null {
-  const url = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL || ''
-  const key = process.env.SUPABASE_SERVICE_ROLE_KEY || ''
-  if (!url || !key) return null
-  return createClient(url, key, { auth: { persistSession: false } })
+  try {
+    return getSupabaseAdmin()
+  } catch {
+    return null
+  }
 }
 
 // ============================================

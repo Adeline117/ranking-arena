@@ -12,8 +12,8 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@supabase/supabase-js'
 import { PipelineLogger } from '@/lib/services/pipeline-logger'
+import { getSupabaseAdmin } from '@/lib/supabase/server'
 import {
   calculateSortinoRatio,
   calculateCalmarRatio,
@@ -36,9 +36,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
-  const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!
-  const supabase = createClient(supabaseUrl, supabaseServiceKey)
+  const supabase = getSupabaseAdmin()
 
   const startTime = Date.now()
   let processed = 0

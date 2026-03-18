@@ -16,7 +16,7 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@supabase/supabase-js'
+import { getSupabaseAdmin } from '@/lib/supabase/server'
 import { z } from 'zod'
 import { checkRateLimit, RateLimitPresets } from '@/lib/api'
 import { getServerCache, setServerCache, CacheTTL } from '@/lib/utils/server-cache'
@@ -32,13 +32,6 @@ const logger = createLogger('trader-api')
 
 // Next.js 缓存配置
 export const revalidate = 300 // 5分钟，与 Cache-Control s-maxage 一致
-
-function getSupabaseUrl() {
-  return process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL || ''
-}
-function getSupabaseKey() {
-  return process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || ''
-}
 
 // 缓存键前缀
 const CACHE_PREFIX = 'trader:'
@@ -61,12 +54,6 @@ export async function GET(
     }
     const handle = parsed.data
 
-    const supabaseUrl = getSupabaseUrl()
-    const supabaseKey = getSupabaseKey()
-    if (!supabaseUrl || !supabaseKey) {
-      throw ApiError.internal('Missing Supabase config')
-    }
-
     const decodedHandle = decodeURIComponent(handle)
 
     // Accept optional ?source= param to disambiguate traders with same handle across exchanges
@@ -80,7 +67,7 @@ export async function GET(
       return apiSuccess({ ...cachedData, cached: true })
     }
 
-    const supabase = createClient(supabaseUrl, supabaseKey)
+    const supabase = getSupabaseAdmin()
 
     // ── Unified data layer: resolveTrader → getTraderDetail ──
     const resolved = await resolveTrader(supabase, {

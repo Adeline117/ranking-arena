@@ -10,7 +10,7 @@
  * No ML -- pure rule-based signal aggregation.
  */
 
-import { createClient } from '@supabase/supabase-js'
+import { getSupabaseAdmin } from '@/lib/supabase/server'
 import { createLogger } from '@/lib/utils/logger'
 
 const logger = createLogger('hot-score')
@@ -61,10 +61,7 @@ const LOOKBACK_HOURS = 48
 // ---------------------------------------------------------------------------
 
 function getSupabase() {
-  return createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!,
-  )
+  return getSupabaseAdmin()
 }
 
 // ---------------------------------------------------------------------------

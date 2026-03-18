@@ -14,8 +14,9 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient, SupabaseClient } from '@supabase/supabase-js'
+import { type SupabaseClient } from '@supabase/supabase-js'
 import { logger } from '@/lib/logger'
+import { getSupabaseAdmin } from '@/lib/supabase/server'
 import { sleep } from '@/lib/cron/fetchers/shared'
 import { PipelineLogger } from '@/lib/services/pipeline-logger'
 import { connectorRegistry, initializeConnectors } from '@/lib/connectors/registry'
@@ -62,13 +63,6 @@ interface BackfillResult {
   success: number
   failed: number
   errors: string[]
-}
-
-function getSupabaseClient(): SupabaseClient | null {
-  const url = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL || ''
-  const key = process.env.SUPABASE_SERVICE_ROLE_KEY || ''
-  if (!url || !key) return null
-  return createClient(url, key, { auth: { persistSession: false } })
 }
 
 function isAuthorized(req: Request): boolean {
@@ -263,10 +257,7 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
   }
 
-  const supabase = getSupabaseClient()
-  if (!supabase) {
-    return NextResponse.json({ error: 'Supabase not configured' }, { status: 500 })
-  }
+  const supabase = getSupabaseAdmin()
 
   // Initialize connectors for backfill
   await initializeConnectors()

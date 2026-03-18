@@ -10,8 +10,8 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@supabase/supabase-js'
 import { createLogger } from '@/lib/utils/logger'
+import { getSupabaseAdmin } from '@/lib/supabase/server'
 import { checkNFTMembership } from '@/lib/web3/nft'
 import { PipelineLogger } from '@/lib/services/pipeline-logger'
 import { env } from '@/lib/env'
@@ -22,17 +22,6 @@ export const dynamic = 'force-dynamic'
 export const maxDuration = 60
 
 const logger = createLogger('subscription-expiry')
-
-function getSupabase() {
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL
-  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY
-  if (!url || !serviceKey) {
-    throw new Error('Supabase credentials not configured')
-  }
-  return createClient(url, serviceKey, {
-    auth: { persistSession: false },
-  })
-}
 
 // 验证 Cron 请求
 function isAuthorized(req: NextRequest): boolean {
@@ -51,7 +40,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
-  const supabase = getSupabase()
+  const supabase = getSupabaseAdmin()
   const now = new Date()
   const results = {
     expiringReminders: 0,

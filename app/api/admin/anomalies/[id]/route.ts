@@ -7,7 +7,7 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@supabase/supabase-js'
+import { getSupabaseAdmin } from '@/lib/supabase/server'
 import { updateAnomalyStatus } from '@/lib/services/anomaly-manager'
 import logger from '@/lib/logger'
 
@@ -19,14 +19,7 @@ async function verifyAdminAndGetUserId(request: NextRequest): Promise<string | n
   }
 
   const token = authHeader.substring(7)
-  const supabaseUrl = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL
-  const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY
-
-  if (!supabaseUrl || !supabaseKey) {
-    return null
-  }
-
-  const supabase = createClient(supabaseUrl, supabaseKey)
+  const supabase = getSupabaseAdmin()
 
   const { data: { user }, error } = await supabase.auth.getUser(token)
 
@@ -64,14 +57,7 @@ export async function GET(
 
     const anomalyId = params.id
 
-    const supabaseUrl = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL
-    const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY
-
-    if (!supabaseUrl || !supabaseKey) {
-      throw new Error('Missing Supabase credentials')
-    }
-
-    const supabase = createClient(supabaseUrl, supabaseKey)
+    const supabase = getSupabaseAdmin()
 
     const { data, error } = await supabase
       .from('trader_anomalies')
