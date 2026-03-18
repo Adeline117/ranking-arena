@@ -6,6 +6,7 @@ import { supabase } from '@/lib/supabase/client'
 import { formatTimeAgo } from '@/lib/utils/date'
 import { getCsrfHeaders } from '@/lib/api/client'
 import { useAuthSession } from '@/lib/hooks/useAuthSession'
+import { localizedLabel } from '@/lib/utils/format'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import { useToast } from '@/app/components/ui/Toast'
 import { logger } from '@/lib/logger'
@@ -13,7 +14,7 @@ import type { Trader, Post, Comment } from './types'
 
 export function useHotPageData() {
   const { t, language } = useLanguage()
-  const localizedName = (zh: string, en?: string | null) => language === 'zh' ? zh : (en || zh)
+  const localizedName = (zh: string, en?: string | null) => localizedLabel(zh, en, language)
   const { showToast } = useToast()
   const router = useRouter()
   const searchParams = useSearchParams()
