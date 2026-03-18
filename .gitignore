@@ -141,5 +141,6 @@ financial_publications_summary.md
 !.claude/settings.json
 !.claude/ARENA_SKILL_SYSTEM.md
 .backup-*
-trigger.config.ts
-lib/jobs/trigger.ts
+# trigger.dev (tracked — Phase 1 canary)
+# trigger.config.ts
+# lib/jobs/trigger.ts
