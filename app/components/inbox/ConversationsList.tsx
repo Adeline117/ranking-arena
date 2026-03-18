@@ -1,8 +1,6 @@
-// TODO (#21): Add swipe-to-delete gesture on conversation rows using touch events
-// (touchstart/touchmove/touchend) with translateX transform and a red delete backdrop.
 'use client'
 
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, useRef } from 'react'
 import Link from 'next/link'
 import { getLocaleFromLanguage } from '@/lib/utils/format'
 import { tokens } from '@/lib/design-tokens'
@@ -66,6 +64,155 @@ function UnreadBadge({ count }: { count: number }): React.ReactElement | null {
   )
 }
 
+/**
+ * Swipeable conversation row with left-swipe to reveal delete action.
+ * Uses raw touch events for smooth swipe-to-delete UX.
+ */
+function SwipeableConversationRow({
+  children,
+  onDelete,
+  deleteLabel,
+}: {
+  children: React.ReactNode
+  onDelete: () => void
+  deleteLabel: string
+}) {
+  const rowRef = useRef<HTMLDivElement>(null)
+  const startX = useRef(0)
+  const isTracking = useRef(false)
+  const [swipeX, setSwipeX] = useState(0)
+  const [isAnimating, setIsAnimating] = useState(false)
+  const [showConfirm, setShowConfirm] = useState(false)
+
+  const DELETE_THRESHOLD = 80
+  const MAX_SWIPE = 100
+
+  useEffect(() => {
+    const el = rowRef.current
+    if (!el) return
+
+    const onTouchStart = (e: TouchEvent) => {
+      startX.current = e.touches[0].clientX
+      isTracking.current = true
+      setIsAnimating(false)
+    }
+    const onTouchMove = (e: TouchEvent) => {
+      if (!isTracking.current) return
+      const deltaX = e.touches[0].clientX - startX.current
+      if (deltaX < 0) {
+        const damped = Math.max(deltaX * 0.8, -MAX_SWIPE)
+        setSwipeX(damped)
+      }
+    }
+    const onTouchEnd = () => {
+      if (!isTracking.current) return
+      isTracking.current = false
+      setIsAnimating(true)
+
+      if (Math.abs(swipeX) >= DELETE_THRESHOLD) {
+        setShowConfirm(true)
+      }
+      setSwipeX(0)
+    }
+
+    el.addEventListener('touchstart', onTouchStart, { passive: true })
+    el.addEventListener('touchmove', onTouchMove, { passive: true })
+    el.addEventListener('touchend', onTouchEnd)
+
+    return () => {
+      el.removeEventListener('touchstart', onTouchStart)
+      el.removeEventListener('touchmove', onTouchMove)
+      el.removeEventListener('touchend', onTouchEnd)
+    }
+  }, [swipeX])
+
+  return (
+    <div style={{ position: 'relative', overflow: 'hidden' }}>
+      {/* Red delete backdrop */}
+      <div
+        style={{
+          position: 'absolute',
+          top: 0,
+          right: 0,
+          bottom: 0,
+          width: MAX_SWIPE,
+          background: tokens.colors.accent.error,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          color: tokens.colors.white,
+          fontSize: 12,
+          fontWeight: 700,
+          opacity: Math.min(Math.abs(swipeX) / DELETE_THRESHOLD, 1),
+        }}
+      >
+        {deleteLabel}
+      </div>
+
+      {/* Slideable content */}
+      <div
+        ref={rowRef}
+        style={{
+          transform: `translateX(${swipeX}px)`,
+          transition: isAnimating ? 'transform 0.2s ease' : 'none',
+          position: 'relative',
+          zIndex: 1,
+          background: tokens.colors.bg.primary,
+        }}
+      >
+        {children}
+      </div>
+
+      {/* Delete confirmation overlay */}
+      {showConfirm && (
+        <div
+          style={{
+            position: 'absolute',
+            inset: 0,
+            background: 'rgba(0,0,0,0.6)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: 8,
+            zIndex: 2,
+          }}
+        >
+          <button
+            onClick={() => { setShowConfirm(false); onDelete() }}
+            style={{
+              padding: '6px 16px',
+              borderRadius: tokens.radius.md,
+              border: 'none',
+              background: tokens.colors.accent.error,
+              color: tokens.colors.white,
+              fontSize: 12,
+              fontWeight: 700,
+              cursor: 'pointer',
+            }}
+          >
+            {deleteLabel}
+          </button>
+          <button
+            onClick={() => setShowConfirm(false)}
+            style={{
+              padding: '6px 16px',
+              borderRadius: tokens.radius.md,
+              border: `1px solid ${tokens.colors.border.primary}`,
+              background: tokens.colors.bg.secondary,
+              color: tokens.colors.text.primary,
+              fontSize: 12,
+              fontWeight: 600,
+              cursor: 'pointer',
+            }}
+          >
+            Cancel
+          </button>
+        </div>
+      )}
+    </div>
+  )
+}
+
 export default function ConversationsList(): React.ReactElement {
   const [conversations, setConversations] = useState<Conversation[]>([])
   const [groupChannels, setGroupChannels] = useState<GroupChannel[]>([])
@@ -77,6 +224,32 @@ export default function ConversationsList(): React.ReactElement {
   const { language, t } = useLanguage()
   const { user, accessToken, getAuthHeadersAsync } = useAuthSession()
   const { showToast } = useToast()
+
+  // Swipe-to-delete: clear conversation history and hide from list
+  const handleDeleteConversation = useCallback(async (conversationId: string) => {
+    if (!accessToken) return
+    try {
+      const headers = await getAuthHeadersAsync()
+      const res = await fetch(`/api/chat/${conversationId}/settings`, {
+        method: 'PATCH',
+        headers: { ...headers, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ cleared_before: new Date().toISOString() }),
+      })
+      if (res.ok) {
+        // Remove from local list immediately
+        setConversations(prev => {
+          const updated = prev.filter(c => c.id !== conversationId)
+          setUnreadMessages(calculateTotalUnread(updated))
+          return updated
+        })
+        showToast(t('conversationDeleted') || 'Conversation cleared', 'success')
+      } else {
+        showToast(t('unexpectedError'), 'error')
+      }
+    } catch {
+      showToast(t('unexpectedError'), 'error')
+    }
+  }, [accessToken, getAuthHeadersAsync, setUnreadMessages, showToast, t])
 
   const loadConversations = useCallback(async (abortSignal?: AbortSignal) => {
     if (!accessToken) return
@@ -372,60 +545,65 @@ export default function ConversationsList(): React.ReactElement {
               </div>
             </Link>
           ))}
-          {/* Direct conversations */}
+          {/* Direct conversations — swipe left to reveal delete */}
           {(chatFilter === 'all' || chatFilter === 'direct') && conversations.map((conv) => (
-            <Link
+            <SwipeableConversationRow
               key={conv.id}
-              href={`/messages/${conv.id}`}
-              style={{ textDecoration: 'none', color: 'inherit' }}
+              onDelete={() => handleDeleteConversation(conv.id)}
+              deleteLabel={t('delete') || 'Delete'}
             >
-              <div
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: tokens.spacing[3],
-                  padding: `${tokens.spacing[3]} ${tokens.spacing[4]}`,
-                  background: conv.unread_count > 0 ? 'var(--color-notification-unread)' : 'transparent',
-                  transition: 'background 0.15s',
-                  cursor: 'pointer',
-                }}
-                className="hover-bg-secondary"
+              <Link
+                href={`/messages/${conv.id}`}
+                style={{ textDecoration: 'none', color: 'inherit', display: 'block' }}
               >
-                <div style={{ flexShrink: 0 }}>
-                  <Avatar
-                    userId={conv.other_user.id}
-                    name={conv.other_user.handle || 'User'}
-                    avatarUrl={conv.other_user.avatar_url}
-                    size={40}
-                  />
-                </div>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 2 }}>
-                    <span style={{ fontWeight: conv.unread_count > 0 ? 800 : 600, fontSize: 13, color: tokens.colors.text.primary }}>
-                      {conv.other_user.handle || `User ${conv.other_user.id.slice(0, 8)}`}
-                    </span>
-                    <span style={{ fontSize: 11, color: tokens.colors.text.tertiary, flexShrink: 0 }}>
-                      {formatTime(conv.last_message_at)}
-                    </span>
+                <div
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: tokens.spacing[3],
+                    padding: `${tokens.spacing[3]} ${tokens.spacing[4]}`,
+                    background: conv.unread_count > 0 ? 'var(--color-notification-unread)' : 'transparent',
+                    transition: 'background 0.15s',
+                    cursor: 'pointer',
+                  }}
+                  className="hover-bg-secondary"
+                >
+                  <div style={{ flexShrink: 0 }}>
+                    <Avatar
+                      userId={conv.other_user.id}
+                      name={conv.other_user.handle || 'User'}
+                      avatarUrl={conv.other_user.avatar_url}
+                      size={40}
+                    />
                   </div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                    <span
-                      style={{
-                        fontSize: 12,
-                        color: conv.unread_count > 0 ? tokens.colors.text.primary : tokens.colors.text.tertiary,
-                        overflow: 'hidden',
-                        textOverflow: 'ellipsis',
-                        whiteSpace: 'nowrap',
-                        flex: 1,
-                      }}
-                    >
-                      {conv.last_message_preview || t('startChat')}
-                    </span>
-                    <UnreadBadge count={conv.unread_count} />
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 2 }}>
+                      <span style={{ fontWeight: conv.unread_count > 0 ? 800 : 600, fontSize: 13, color: tokens.colors.text.primary }}>
+                        {conv.other_user.handle || `User ${conv.other_user.id.slice(0, 8)}`}
+                      </span>
+                      <span style={{ fontSize: 11, color: tokens.colors.text.tertiary, flexShrink: 0 }}>
+                        {formatTime(conv.last_message_at)}
+                      </span>
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                      <span
+                        style={{
+                          fontSize: 12,
+                          color: conv.unread_count > 0 ? tokens.colors.text.primary : tokens.colors.text.tertiary,
+                          overflow: 'hidden',
+                          textOverflow: 'ellipsis',
+                          whiteSpace: 'nowrap',
+                          flex: 1,
+                        }}
+                      >
+                        {conv.last_message_preview || t('startChat')}
+                      </span>
+                      <UnreadBadge count={conv.unread_count} />
+                    </div>
                   </div>
                 </div>
-              </div>
-            </Link>
+              </Link>
+            </SwipeableConversationRow>
           ))}
         </div>
       )}

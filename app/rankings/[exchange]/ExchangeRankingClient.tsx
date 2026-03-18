@@ -1,8 +1,6 @@
 'use client'
 
-// TODO (#P5): Add @tanstack/react-virtual to the table view rows when trader count > 100.
-// The virtualizer needs a scrolling container ref and estimateSize. Sticky header complicates this.
-import React, { useState, useEffect, useMemo, useCallback } from 'react'
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { tokens } from '@/lib/design-tokens'
@@ -17,6 +15,7 @@ import { NULL_DISPLAY } from '@/lib/utils/format'
 import { getScoreColor } from '@/lib/utils/score-colors'
 import { formatTimeAgo, type Locale } from '@/lib/utils/date'
 import dynamic from 'next/dynamic'
+import { useVirtualizer } from '@tanstack/react-virtual'
 import PullToRefresh from '@/app/components/ui/PullToRefresh'
 const ShareLeaderboardButton = dynamic(() => import('./ShareLeaderboardButton'), { ssr: false })
 
@@ -427,6 +426,17 @@ export default function ExchangeRankingClient({
     router.refresh()
   }, [exchange, router])
 
+  // Virtualize table rows when count > 50 for smooth scrolling on large lists
+  const tableScrollRef = useRef<HTMLDivElement>(null)
+  const ROW_HEIGHT = 48
+  const shouldVirtualize = viewMode === 'table' && activeTraders.length > 50
+  const rowVirtualizer = useVirtualizer({
+    count: shouldVirtualize ? activeTraders.length : 0,
+    getScrollElement: () => tableScrollRef.current,
+    estimateSize: () => ROW_HEIGHT,
+    overscan: 10,
+  })
+
   if (traders.length === 0) {
     return (
       <div style={{ textAlign: 'center', padding: tokens.spacing[8], color: tokens.colors.text.tertiary }}>
@@ -596,7 +606,7 @@ export default function ExchangeRankingClient({
             -webkit-overflow-scrolling: touch;
           }
         `}</style>
-        <div className="exchange-table-wrapper"><div
+        <div className="exchange-table-wrapper" ref={shouldVirtualize ? tableScrollRef : undefined} style={shouldVirtualize ? { height: '80vh', overflow: 'auto' } : undefined}><div
           style={{
             borderRadius: tokens.radius.lg,
             overflow: 'visible',
@@ -616,7 +626,7 @@ export default function ExchangeRankingClient({
               color: tokens.colors.text.secondary,
               borderBottom: '1px solid var(--glass-border-light)',
               position: 'sticky',
-              top: 56,
+              top: shouldVirtualize ? 0 : 56,
               zIndex: 10,
               background: 'var(--color-bg-primary)',
               borderRadius: `${tokens.radius.lg} ${tokens.radius.lg} 0 0`,
@@ -630,8 +640,74 @@ export default function ExchangeRankingClient({
             <SortHeader label={t('rankingMdd')} sortKey="max_drawdown" currentKey={sortKey} currentDir={sortDir} onSort={handleSort} tooltip="Largest peak-to-trough decline. Lower is better." />
             <SortHeader label={t('rankingScore')} sortKey="arena_score" currentKey={sortKey} currentDir={sortDir} onSort={handleSort} tooltip="Arena Score is a 0-100 composite metric combining ROI (60%) and PnL (40%), adjusted for confidence and platform trust." />
           </div>
-          {/* Rows */}
-          {activeTraders.map((t, i) => {
+          {/* Rows — virtualized when > 50 items for smooth scrolling */}
+          {shouldVirtualize ? (
+            <div style={{ height: rowVirtualizer.getTotalSize(), width: '100%', position: 'relative' }}>
+              {rowVirtualizer.getVirtualItems().map((virtualRow) => {
+                const i = virtualRow.index
+                const t = activeTraders[i]
+                const name = getDisplayName(t)
+                const roiColor = t.roi != null && t.roi >= 0 ? tokens.colors.accent.success : tokens.colors.accent.error
+                const wrColor = t.win_rate != null
+                  ? t.win_rate >= 50 ? tokens.colors.accent.success : tokens.colors.accent.error
+                  : tokens.colors.text.tertiary
+                const originalRank = rankMap.get(t) || 0
+                return (
+                  <Link
+                    key={`${t.platform}:${t.trader_key}:${i}`}
+                    href={`/trader/${encodeURIComponent(t.trader_key)}?platform=${t.platform}`}
+                    className="exchange-table-grid exchange-row"
+                    data-index={virtualRow.index}
+                    ref={rowVirtualizer.measureElement}
+                    style={{
+                      position: 'absolute',
+                      top: 0,
+                      left: 0,
+                      width: '100%',
+                      transform: `translateY(${virtualRow.start}px)`,
+                      display: 'grid',
+                      gap: 8,
+                      padding: '10px 16px',
+                      alignItems: 'center',
+                      textDecoration: 'none',
+                      borderBottom: originalRank <= 3 ? undefined : '1px solid var(--overlay-hover)',
+                      transition: 'background 0.15s',
+                      ...(originalRank === 1
+                        ? { background: 'linear-gradient(135deg, rgba(255,215,0,0.10) 0%, rgba(255,215,0,0.03) 40%, transparent 80%)', boxShadow: 'inset 3px 0 0 #FFD700', borderRadius: 10, margin: '2px 4px' }
+                        : originalRank === 2
+                        ? { background: 'linear-gradient(135deg, rgba(192,192,192,0.08) 0%, rgba(192,192,192,0.02) 40%, transparent 80%)', boxShadow: 'inset 3px 0 0 #C0C0C0', borderRadius: 10, margin: '2px 4px' }
+                        : originalRank === 3
+                        ? { background: 'linear-gradient(135deg, rgba(205,127,50,0.08) 0%, rgba(205,127,50,0.02) 40%, transparent 80%)', boxShadow: 'inset 3px 0 0 #CD7F32', borderRadius: 10, margin: '2px 4px' }
+                        : {}),
+                    }}
+                  >
+                    <div><RankBadge rank={originalRank} /></div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
+                      <div style={{ width: 32, height: 32, borderRadius: '50%', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', background: getAvatarGradient(t.trader_key) }}>
+                        <TraderAvatarImg avatarUrl={t.avatar_url} traderKey={t.trader_key} name={name} size={32} />
+                      </div>
+                      <span style={{ fontSize: 13, fontWeight: 600, color: tokens.colors.text.primary, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{name}</span>
+                      {(t.platform === 'web3_bot' || t.trader_type === 'bot' || t.is_bot) && (
+                        <span style={{ padding: '0px 4px', borderRadius: 4, fontSize: 10, fontWeight: 600, flexShrink: 0, color: '#a78bfa', background: 'rgba(167,139,250,0.12)', border: '1px solid rgba(167,139,250,0.25)' }}>Bot</span>
+                      )}
+                    </div>
+                    <div style={{ textAlign: 'right', fontSize: 13, fontWeight: 700, color: roiColor }}>{formatROI(t.roi)}</div>
+                    <div style={{ display: 'flex', justifyContent: 'center' }}><Sparkline roi={t.roi ?? undefined} width={72} height={20} /></div>
+                    <div style={{ textAlign: 'right', fontSize: 13, fontWeight: 600, color: wrColor }}>{t.win_rate != null ? `${t.win_rate.toFixed(2)}%` : NULL_DISPLAY}</div>
+                    <div style={{ textAlign: 'right', fontSize: 13, fontWeight: 600, color: t.max_drawdown != null ? tokens.colors.accent.error + 'cc' : tokens.colors.text.tertiary }}>{t.max_drawdown != null ? `-${Math.abs(t.max_drawdown).toFixed(2)}%` : NULL_DISPLAY}</div>
+                    <div style={{ textAlign: 'right', display: 'flex', justifyContent: 'flex-end' }}>
+                      {t.arena_score != null ? (
+                        <span style={{ width: 32, height: 32, borderRadius: '50%', border: `2px solid ${getScoreColor(t.arena_score)}`, background: `color-mix(in srgb, ${getScoreColor(t.arena_score)} 10%, transparent)`, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 800, color: getScoreColor(t.arena_score) }}>{t.arena_score.toFixed(0)}</span>
+                      ) : (
+                        <span style={{ fontSize: 13, color: tokens.colors.text.tertiary }}>{NULL_DISPLAY}</span>
+                      )}
+                    </div>
+                  </Link>
+                )
+              })}
+            </div>
+          ) : (
+          activeTraders.map((t, i) => {
             const name = getDisplayName(t)
             const roiColor = t.roi != null && t.roi >= 0 ? tokens.colors.accent.success : tokens.colors.accent.error
             const wrColor = t.win_rate != null
@@ -717,7 +793,8 @@ export default function ExchangeRankingClient({
                 </div>
               </Link>
             )
-          })}
+          })
+          )}
         </div>
         </div>
         </>
