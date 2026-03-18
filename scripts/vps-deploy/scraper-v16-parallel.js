@@ -346,20 +346,25 @@ const HANDLERS = {
     )
 
     await page.goto('https://www.mexc.com/futures/copyTrade/home', {
-      waitUntil: 'domcontentloaded', timeout: 45000,
+      waitUntil: 'domcontentloaded', timeout: 30000,
     })
-    await page.waitForTimeout(5000)
+    await page.waitForTimeout(2000)
 
     // Same-origin relative paths — bypass WAF
+    // Each fetch has a 10s AbortController timeout to prevent hanging
     const data = await page.evaluate(async (opts) => {
+      const FETCH_TIMEOUT = 10000
       async function safeFetch(url, fetchOpts) {
+        const ac = new AbortController()
+        const timer = setTimeout(() => ac.abort(), FETCH_TIMEOUT)
         try {
-          const r = await fetch(url, { credentials: 'include', ...fetchOpts })
+          const r = await fetch(url, { credentials: 'include', signal: ac.signal, ...fetchOpts })
+          clearTimeout(timer)
           if (!r.ok) return null
           const text = await r.text()
           if (!text.startsWith('{') && !text.startsWith('[')) return null
           return JSON.parse(text)
-        } catch { return null }
+        } catch { clearTimeout(timer); return null }
       }
       const r1 = await safeFetch(`/api/platform/futures/copyFutures/api/v1/traders/top?limit=${opts.pageSize}`)
       if (r1?.data?.comprehensives?.length > 0) return r1
@@ -375,8 +380,7 @@ const HANDLERS = {
 
     if (data) return data
 
-    // Fallback to intercepted responses
-    await page.waitForTimeout(3000)
+    // Fallback to intercepted responses (no extra wait — interception ran during page load)
     if (captured.length > 0) {
       captured.sort((a, b) => b.size - a.size)
       return captured[0].data
