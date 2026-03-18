@@ -19,8 +19,9 @@ export async function handleSubscriptionUpdate(subscription: Stripe.Subscription
   }
 
   const priceId = subscription.items.data[0]?.price.id
+  const lifetimePriceId = process.env.STRIPE_PRO_LIFETIME_PRICE_ID
   const plan = priceId === env.STRIPE_PRO_YEARLY_PRICE_ID ? 'yearly'
-    : priceId === process.env.STRIPE_PRO_LIFETIME_PRICE_ID ? 'lifetime'
+    : (lifetimePriceId && priceId === lifetimePriceId) ? 'lifetime'
     : 'monthly'
 
   await updateUserSubscription(profile.id, subscription, plan)
