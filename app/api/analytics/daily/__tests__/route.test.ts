@@ -133,7 +133,7 @@ describe('POST /api/analytics/daily', () => {
     const body = await res.json()
 
     expect(res.status).toBe(401)
-    expect(body.error).toBe('Unauthorized')
+    expect(body.error).toBe('unauthorized')
   })
 
   it('returns 401 when CRON_SECRET does not match', async () => {
@@ -142,7 +142,7 @@ describe('POST /api/analytics/daily', () => {
     const body = await res.json()
 
     expect(res.status).toBe(401)
-    expect(body.error).toBe('Unauthorized')
+    expect(body.error).toBe('unauthorized')
   })
 
   // --- Success Case ---
@@ -154,12 +154,12 @@ describe('POST /api/analytics/daily', () => {
 
     expect(res.status).toBe(200)
     expect(body.ok).toBe(true)
-    expect(body.data).toBeDefined()
-    expect(body.data.signups).toBe(10)
-    expect(body.data.active_users).toBe(50)
-    expect(body.data.new_claims).toBe(3)
-    expect(body.data.new_follows).toBe(12)
-    expect(body.data.date).toBeDefined()
+    // withCron spreads result at top level, not under .data
+    expect(body.signups).toBe(10)
+    expect(body.active_users).toBe(50)
+    expect(body.new_claims).toBe(3)
+    expect(body.new_follows).toBe(12)
+    expect(body.date).toBeDefined()
   })
 
   it('calls upsert with onConflict date', async () => {
@@ -186,8 +186,8 @@ describe('POST /api/analytics/daily', () => {
     const body = await res.json()
 
     expect(res.status).toBe(200)
-    expect(body.data.signups).toBe(0)
-    expect(body.data.active_users).toBe(0)
+    expect(body.signups).toBe(0)
+    expect(body.active_users).toBe(0)
   })
 
   // --- Database Error ---
@@ -200,7 +200,8 @@ describe('POST /api/analytics/daily', () => {
     const body = await res.json()
 
     expect(res.status).toBe(500)
-    expect(body.error).toBe('DB error')
+    // withCron passes through the original error message
+    expect(body.error).toContain('constraint violation')
   })
 
   // --- Unexpected Error ---
@@ -213,6 +214,6 @@ describe('POST /api/analytics/daily', () => {
     const body = await res.json()
 
     expect(res.status).toBe(500)
-    expect(body.error).toBe('Internal error')
+    expect(body.error).toContain('Connection timeout')
   })
 })
