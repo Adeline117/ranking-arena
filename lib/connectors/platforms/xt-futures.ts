@@ -74,8 +74,11 @@ export class XtFuturesConnector extends BaseConnector {
       const vpsData = await this.fetchViaVPS<{ traders?: Array<{ sotType?: string; items?: XTLeaderboardEntry[] }> }>(
         '/xt/leaderboard',
         { pageSize: String(limit) },
-        90000
+        120000
       )
+      if (!vpsData) {
+        console.warn('[xt] VPS scraper returned null — scraper may be busy or unreachable')
+      }
       // Scraper returns: { returnCode: 0, result: [{ sotType: "INCOME_RATE", items: [...] }] }
       // or legacy: { traders: [...] }
       const vpsAny = vpsData as Record<string, unknown>
@@ -100,8 +103,8 @@ export class XtFuturesConnector extends BaseConnector {
           }
         }
       }
-    } catch {
-      // VPS scraper failed
+    } catch (err) {
+      console.warn(`[xt] VPS scraper error: ${err instanceof Error ? err.message : String(err)}`)
     }
 
     return { traders: allTraders.slice(0, limit), total_available: allTraders.length, window, fetched_at: new Date().toISOString() }
