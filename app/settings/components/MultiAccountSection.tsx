@@ -63,7 +63,7 @@ export function MultiAccountSection() {
                   opacity: switchingId ? 0.5 : 1,
                 }}
               >
-                {switchingId === account.userId ? '...' : t('switchAccount')}
+                {switchingId === account.userId ? (t('switching') || 'Switching...') : t('switchAccount')}
               </button>
               <button
                 onClick={() => removeAccount(account.userId)}

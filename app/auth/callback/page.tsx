@@ -25,9 +25,7 @@ function AuthCallbackContent() {
       }
 
       const isAddAccount = searchParams.get('addAccount') === 'true' || localStorage.getItem('arena_adding_account') === 'true'
-      if (isAddAccount) {
-        localStorage.removeItem('arena_adding_account')
-      }
+      // Don't clear flag yet — wait until saveToStore succeeds
 
       const returnUrl = searchParams.get('returnUrl')
       const defaultRedirect = isAddAccount ? '/' : (returnUrl && returnUrl.startsWith('/') ? returnUrl : '/')
@@ -93,6 +91,7 @@ function AuthCallbackContent() {
         }
 
         await saveToStore(session)
+        if (isAddAccount) localStorage.removeItem('arena_adding_account')
         // Check if this is a new user (created within the last 30 seconds)
         const createdAt = new Date(session.user.created_at).getTime()
         const now = Date.now()
@@ -105,6 +104,7 @@ function AuthCallbackContent() {
           const { data: { session: retrySession } } = await supabase.auth.getSession()
           if (retrySession) {
             await saveToStore(retrySession)
+            if (isAddAccount) localStorage.removeItem('arena_adding_account')
             const createdAt = new Date(retrySession.user.created_at).getTime()
             const now = Date.now()
             const isNewUser = now - createdAt < 30_000

@@ -86,7 +86,9 @@ export default function ClaimTraderButton({ traderId, handle, userId, source = '
     }
 
     checkClaimStatus()
-    return () => { alive = false }
+    // Auto-refresh every 30s (catches claim status changes from other tabs/devices)
+    const interval = setInterval(checkClaimStatus, 30000)
+    return () => { alive = false; clearInterval(interval) }
   }, [userId, source, traderId])
 
   const handleClaim = async () => {
