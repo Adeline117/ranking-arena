@@ -7,7 +7,8 @@ describe('formatPercent edge cases', () => {
   })
 
   it('formats zero ROI', () => {
-    expect(formatPercent(0)).toBe('+0.00%')
+    // zero is not > 0 so no '+' sign
+    expect(formatPercent(0)).toBe('0.00%')
   })
 
   it('formats large positive ROI', () => {
@@ -20,8 +21,9 @@ describe('formatPercent edge cases', () => {
   })
 
   it('handles NaN', () => {
-    expect(formatPercent(NaN)).toBe('0%')
-    expect(formatPercent('abc')).toBe('0%')
+    // non-finite values return NULL_DISPLAY ('—')
+    expect(formatPercent(NaN)).toBe('—')
+    expect(formatPercent('abc')).toBe('—')
   })
 
   it('custom decimals', () => {
@@ -48,7 +50,8 @@ describe('formatCurrency edge cases', () => {
   })
 
   it('handles NaN', () => {
-    expect(formatCurrency('abc')).toBe('$0')
+    // non-finite values return NULL_DISPLAY ('—')
+    expect(formatCurrency('abc')).toBe('—')
   })
 
   it('formats very large PnL', () => {
@@ -58,28 +61,31 @@ describe('formatCurrency edge cases', () => {
 
 describe('formatCompact edge cases', () => {
   it('formats billions', () => {
-    expect(formatCompact(1500000000)).toBe('1.5B')
+    // default decimals=2
+    expect(formatCompact(1500000000)).toBe('1.50B')
   })
 
   it('formats millions', () => {
-    expect(formatCompact(3400000)).toBe('3.4M')
+    expect(formatCompact(3400000)).toBe('3.40M')
   })
 
   it('formats thousands', () => {
-    expect(formatCompact(1200)).toBe('1.2K')
+    expect(formatCompact(1200)).toBe('1.20K')
   })
 
   it('small numbers pass through', () => {
-    expect(formatCompact(500)).toBe('500')
+    // default decimals=2 applies to sub-1000 numbers too
+    expect(formatCompact(500)).toBe('500.00')
   })
 
   it('handles negative values', () => {
-    expect(formatCompact(-5000)).toBe('-5.0K')
-    expect(formatCompact(-2000000)).toBe('-2.0M')
+    expect(formatCompact(-5000)).toBe('-5.00K')
+    expect(formatCompact(-2000000)).toBe('-2.00M')
   })
 
   it('handles NaN', () => {
-    expect(formatCompact('abc')).toBe('0')
+    // non-finite values return NULL_DISPLAY ('—')
+    expect(formatCompact('abc')).toBe('—')
   })
 
   it('custom decimals', () => {

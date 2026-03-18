@@ -36,12 +36,13 @@ describe('format utilities - edge cases', () => {
 
   describe('formatPercent edge cases', () => {
     it('should handle NaN', () => {
-      expect(formatPercent(NaN)).toBe('0%')
+      // non-finite returns NULL_DISPLAY ('—')
+      expect(formatPercent(NaN)).toBe('—')
     })
 
     it('should handle Infinity', () => {
-      const result = formatPercent(Infinity)
-      expect(result).toContain('Infinity')
+      // non-finite returns NULL_DISPLAY ('—')
+      expect(formatPercent(Infinity)).toBe('—')
     })
 
     it('should handle very small percentages', () => {
@@ -51,7 +52,8 @@ describe('format utilities - edge cases', () => {
 
     it('should handle string input', () => {
       expect(formatPercent('0.5')).toBe('+50.00%')
-      expect(formatPercent('invalid')).toBe('0%')
+      // invalid string → parseFloat → NaN → NULL_DISPLAY
+      expect(formatPercent('invalid')).toBe('—')
     })
 
     it('should handle extremely large percentage', () => {
@@ -65,8 +67,8 @@ describe('format utilities - edge cases', () => {
 
   describe('formatCurrency edge cases', () => {
     it('should handle Infinity', () => {
-      const result = formatCurrency(Infinity)
-      expect(result).toContain('$')
+      // non-finite returns NULL_DISPLAY ('—')
+      expect(formatCurrency(Infinity)).toBe('—')
     })
 
     it('should handle zero with different currencies', () => {
@@ -80,7 +82,8 @@ describe('format utilities - edge cases', () => {
     })
 
     it('should handle string NaN input', () => {
-      expect(formatCurrency('abc')).toBe('$0')
+      // invalid string → parseFloat → NaN → NULL_DISPLAY
+      expect(formatCurrency('abc')).toBe('—')
     })
 
     it('should handle string number input', () => {
@@ -90,49 +93,53 @@ describe('format utilities - edge cases', () => {
 
   describe('formatCompact edge cases', () => {
     it('should handle Infinity', () => {
-      const result = formatCompact(Infinity)
-      expect(result).toContain('B') // Infinity >= 1e9
+      // non-finite returns NULL_DISPLAY ('—')
+      expect(formatCompact(Infinity)).toBe('—')
     })
 
     it('should handle -Infinity', () => {
-      const result = formatCompact(-Infinity)
-      expect(result).toContain('B')
+      expect(formatCompact(-Infinity)).toBe('—')
     })
 
     it('should handle zero', () => {
-      expect(formatCompact(0)).toBe('0')
+      // default decimals=2
+      expect(formatCompact(0)).toBe('0.00')
     })
 
     it('should handle negative zero', () => {
-      expect(formatCompact(-0)).toBe('0')
+      // -0 treated as 0, sign='' since -0 < 0 is false
+      expect(formatCompact(-0)).toBe('0.00')
     })
 
     it('should handle exact thresholds', () => {
-      expect(formatCompact(1000)).toBe('1.0K')
-      expect(formatCompact(999)).toBe('999')
-      expect(formatCompact(1000000)).toBe('1.0M')
-      expect(formatCompact(1000000000)).toBe('1.0B')
+      // default decimals=2
+      expect(formatCompact(1000)).toBe('1.00K')
+      expect(formatCompact(999)).toBe('999.00')
+      expect(formatCompact(1000000)).toBe('1.00M')
+      expect(formatCompact(1000000000)).toBe('1.00B')
     })
 
     it('should handle negative millions', () => {
-      expect(formatCompact(-5500000)).toBe('-5.5M')
+      expect(formatCompact(-5500000)).toBe('-5.50M')
     })
 
     it('should handle negative billions', () => {
-      expect(formatCompact(-2300000000)).toBe('-2.3B')
+      expect(formatCompact(-2300000000)).toBe('-2.30B')
     })
 
     it('should handle string input', () => {
-      expect(formatCompact('1500')).toBe('1.5K')
-      expect(formatCompact('invalid')).toBe('0')
+      expect(formatCompact('1500')).toBe('1.50K')
+      // invalid string → parseFloat → NaN → NULL_DISPLAY
+      expect(formatCompact('invalid')).toBe('—')
     })
 
     it('should handle very large numbers beyond billions', () => {
-      expect(formatCompact(1e12)).toBe('1000.0B')
+      expect(formatCompact(1e12)).toBe('1000.00B')
     })
 
     it('should handle small negative numbers', () => {
-      expect(formatCompact(-50)).toBe('-50')
+      // default decimals=2
+      expect(formatCompact(-50)).toBe('-50.00')
     })
 
     it('should handle decimals with 0 precision', () => {
