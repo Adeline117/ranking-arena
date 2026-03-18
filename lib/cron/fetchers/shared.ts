@@ -369,6 +369,7 @@ export async function upsertTraders(
   const BATCH = 100
 
   let saved = 0
+  const writeErrors: string[] = []
 
   // Track write consistency across all batches
   const consistency: WriteConsistency = {
@@ -399,6 +400,7 @@ export async function upsertTraders(
 
       if (srcErr) {
         consistency.trader_sources = 'failed'
+        writeErrors.push(`trader_sources: ${srcErr.message} (${srcErr.code})`)
         dataLogger.warn(`[upsert] trader_sources error: ${srcErr.message}`)
       }
     } catch (err) {
@@ -434,6 +436,7 @@ export async function upsertTraders(
 
       if (profileErr) {
         consistency.trader_profiles_v2 = 'failed'
+        writeErrors.push(`trader_profiles_v2: ${profileErr.message} (${profileErr.code})`)
         dataLogger.warn(`[upsert] trader_profiles_v2 error: ${profileErr.message}`)
       }
     } catch (err) {
@@ -464,6 +467,7 @@ export async function upsertTraders(
 
       if (v1Err) {
         consistency.trader_snapshots = 'failed'
+        writeErrors.push(`trader_snapshots: ${v1Err.message} (${v1Err.code})`)
         dataLogger.warn(`[upsert] trader_snapshots (v1) error: ${v1Err.message}`)
       }
     } catch (err) {
@@ -518,6 +522,7 @@ export async function upsertTraders(
 
       if (snapErr) {
         consistency.trader_snapshots_v2 = 'failed'
+        writeErrors.push(`trader_snapshots_v2: ${snapErr.message} (${snapErr.code})`)
         dataLogger.error(`[upsert] trader_snapshots_v2 error: ${snapErr.message}`)
       }
     } catch (err) {
@@ -542,7 +547,12 @@ export async function upsertTraders(
     )
   }
 
-  return { saved, write_consistency: consistency }
+  // Surface write errors so callers can detect and report failures
+  const writeError = failedTables.length > 0
+    ? `Write failed for tables: ${failedTables.join(', ')}${writeErrors.length > 0 ? ` (${writeErrors.slice(0, 3).join('; ')})` : ''}`
+    : undefined
+
+  return { saved, error: writeError, write_consistency: consistency }
 }
 
 // ============================================
