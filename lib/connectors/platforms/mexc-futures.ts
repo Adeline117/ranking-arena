@@ -38,19 +38,19 @@ export class MexcFuturesConnector extends BaseConnector {
     let totalAvailable: number | null = null
 
     for (let page = Math.floor(offset / pageSize) + 1; page <= maxPages + Math.floor(offset / pageSize); page++) {
+      // MEXC is CF-protected; proxy forwards get empty responses.
+      // Try VPS Playwright scraper first, fall back to direct API.
       let _rawLb: Record<string, unknown>
-      try {
+      const vpsData = await this.fetchViaVPS<Record<string, unknown>>('/mexc/leaderboard', {
+        periodType: String(WINDOW_MAP[window]), pageSize: String(pageSize),
+      }, 600000)
+      if (vpsData) {
+        _rawLb = vpsData
+      } else {
         _rawLb = await this.request<Record<string, unknown>>(
           `https://futures.mexc.com/api/v1/private/account/assets/copy-trading/trader/list?page=${page}&pageSize=${pageSize}&sortField=yield&sortType=DESC&timeType=${WINDOW_MAP[window]}`,
           { method: 'GET' }
         )
-      } catch {
-        // Fallback: VPS Playwright scraper (bypasses WAF)
-        const vpsData = await this.fetchViaVPS<Record<string, unknown>>('/mexc/leaderboard', {
-          periodType: String(WINDOW_MAP[window]), pageSize: String(pageSize),
-        }, 600000)
-        if (!vpsData) throw new Error('Both direct API and VPS scraper failed for mexc')
-        _rawLb = vpsData
       }
       // Parse directly — scraper returns data.comprehensives or data.resultList, not data.list
       const dataObj = (_rawLb?.data ?? {}) as Record<string, unknown>

@@ -57,19 +57,19 @@ export class BitgetFuturesConnector extends BaseConnector {
     let totalAvailable: number | null = null
 
     while (currentPage <= maxPages) {
+      // Bitget is CF-protected; proxy forwards get empty responses.
+      // Try VPS Playwright scraper first, fall back to direct API.
       let _rawLb: Record<string, unknown>
-      try {
+      const vpsData = await this.fetchViaVPS<Record<string, unknown>>('/bitget/leaderboard', {
+        period: timeRange, pageNo: String(currentPage), pageSize: String(limit),
+      }, 600000)
+      if (vpsData) {
+        _rawLb = vpsData
+      } else {
         _rawLb = await this.request<Record<string, unknown>>(
           `https://www.bitget.com/v1/trigger/trace/public/currentTrader/list?pageNo=${currentPage}&pageSize=${limit}&sortType=2&timeRange=${timeRange}`,
           { method: 'GET' }
         )
-      } catch {
-        // Fallback: VPS Playwright scraper (bypasses Cloudflare WAF)
-        const vpsData = await this.fetchViaVPS<Record<string, unknown>>('/bitget/leaderboard', {
-          period: timeRange, pageNo: String(currentPage), pageSize: String(limit),
-        }, 600000)
-        if (!vpsData) throw new Error('Both direct API and VPS scraper failed for bitget')
-        _rawLb = vpsData
       }
       // Parse directly — Zod defaults data.list=[] hiding scraper's data.traderList/data.rows
       const dataObj = (_rawLb?.data ?? {}) as Record<string, unknown>

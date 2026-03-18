@@ -58,24 +58,23 @@ export class BybitFuturesConnector extends BaseConnector {
     const timeRange = WINDOW_MAP[window]
     const page = Math.floor(offset / limit) + 1
 
-    // Primary: direct API (blocked from most datacenter IPs)
-    // Fallback: VPS Playwright scraper at port 3456
+    // Bybit API is geo-blocked from datacenter IPs and returns empty data even via proxy.
+    // Go directly to VPS Playwright scraper which renders the real page.
+    const vpsData = await this.fetchViaVPS<Record<string, unknown>>('/bybit/leaderboard', {
+      dataDuration: SCRAPER_DURATION_MAP[window],
+      pageNo: String(page),
+      pageSize: String(limit),
+    }, 600000) // 10min — scraper queue can be backed up
+
     let _rawLb: Record<string, unknown>
-    try {
+    if (vpsData) {
+      _rawLb = vpsData
+    } else {
+      // Fallback: try direct API (rarely works from datacenter IPs)
       _rawLb = await this.request<Record<string, unknown>>(
         `https://api2.bybit.com/fapi/beehive/public/v1/common/dynamic-leader-list?timeRange=${timeRange}&dataType=DATA_ROI&page=${page}&pageSize=${limit}`,
         { method: 'GET' }
       )
-    } catch {
-      // Fallback: VPS Playwright scraper (renders full page, bypasses WAF)
-      // NOT proxyViaVPS which just forwards HTTP and gets 403
-      const vpsData = await this.fetchViaVPS<Record<string, unknown>>('/bybit/leaderboard', {
-        dataDuration: SCRAPER_DURATION_MAP[window],
-        pageNo: String(page),
-        pageSize: String(limit),
-      }, 600000) // 10min — scraper queue can be backed up
-      if (!vpsData) throw new Error('Both direct API and VPS scraper failed for bybit')
-      _rawLb = vpsData
     }
     // Parse directly from raw response — skip Zod which defaults result.data=[] and hides leaderDetails
     const resultObj = (_rawLb as Record<string, unknown>)?.result as Record<string, unknown> | undefined
