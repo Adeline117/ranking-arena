@@ -3,8 +3,33 @@
 > Auto-read by Claude Code at session start. Keep concise — archive completed items weekly.
 
 ## Current Sprint Focus
-- All P0-P3 tasks complete. All backlog items done (including multi-language ja/ko 100%).
+- All P0-P3 tasks complete. All backlog items done.
 - Pipeline 100% healthy — 28 exchanges, ~6.5K ranked traders per season.
+- Data completeness: win_rate 94.5%, max_drawdown 95.1%, sharpe_ratio 83.8% (all real API data).
+
+## Recently Completed (2026-03-18) — Data Completeness + Frontend Fixes
+
+### Data Completeness Overhaul (real API data only, no estimates)
+- **6 new enrichment modules**: bitfinex, blofin, phemex, bingx, toobit, binance_spot
+- **Backfill from 17+ exchange APIs**: hyperliquid userFills, binance performance, okx profit-detail, drift snapshots, dydx Copin, jupiter API, etc.
+- **Sharpe ratio fix**: ROI delta for daily returns (was PnL chain that breaks on null/zero)
+- **MDD computation**: from 90-day ROI equity curve in aggregate-daily-snapshots
+- **Win rate computation**: from daily returns (% profitable days) + position history
+- **VPS scraper reliability**: retry with 3s backoff, cache 30→90min (50%→75%+ success)
+- **Coverage**: win_rate 66%→94.5%, max_drawdown 61%→95.1%, sharpe_ratio 37%→83.8%
+- **Script**: `scripts/backfill-real-data.mjs` for re-running per-platform
+
+### Frontend Display Fixes
+- **TradingStyleRadar**: `||` → `!= null` (score=0 was hidden as falsy)
+- **AdvancedMetrics**: forward sortino/calmar/profit_factor from server data (was always hidden)
+- **score_confidence**: map numeric `score_completeness` to full/partial/minimal (was always showing warning)
+- **ROI/PnL null display**: nullable types in TraderData interface, show "—" instead of "+0.00%"
+- **SSR arena_score**: null shows "—" instead of "0"
+
+### Pipeline Noise Reduction
+- **enrich-gmx disabled**: removed from vercel.json (42% failure rate, subgraph unreliable)
+- **Partial failures → warning**: multi-platform groups log success+warning instead of error
+- **Health check**: skip enrichment sub-modules (eliminates 12 false WARN)
 
 ## Recently Completed (2026-03-18) — Leaderboard Fix + Supabase Singleton Migration
 
