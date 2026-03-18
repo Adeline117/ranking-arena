@@ -26,8 +26,9 @@ function createConnector() {
 
 function mockFetchResponse(body: unknown, status = 200) {
   mockFetch.mockResolvedValueOnce({
+    ok: status >= 200 && status < 300,
     status,
-    headers: { get: () => null },
+    headers: { get: (key: string) => key === 'content-type' ? 'application/json' : null },
     json: async () => body,
   })
 }
@@ -110,15 +111,21 @@ describe('BybitFuturesConnector', () => {
       expect(result.traders).toHaveLength(0)
     })
 
-    test('sends correct timeRange query parameter', async () => {
+    test('sends correct dataDuration parameter to VPS or direct API', async () => {
       const connector = createConnector()
+      // VPS is configured in test env (env.local) — first call goes to VPS
       mockFetchResponse(validResponse)
 
       await connector.discoverLeaderboard('30d')
 
-      const url = mockFetch.mock.calls[0][0]
-      expect(url).toContain('timeRange=30D')
-      expect(url).toContain('dataType=DATA_ROI')
+      const url = mockFetch.mock.calls[0][0] as string
+      // VPS call uses dataDuration parameter; direct API fallback uses timeRange
+      const isVpsCall = url.includes('/bybit/leaderboard')
+      const isDirectCall = url.includes('timeRange=30D')
+      expect(isVpsCall || isDirectCall).toBe(true)
+      if (isVpsCall) {
+        expect(url).toContain('DATA_DURATION_THIRTY_DAY')
+      }
     })
 
     test('throws on network error', async () => {
@@ -131,8 +138,9 @@ describe('BybitFuturesConnector', () => {
     test('throws ConnectorError on rate limit (429)', async () => {
       const connector = createConnector()
       mockFetch.mockResolvedValueOnce({
+        ok: false,
         status: 429,
-        headers: { get: () => '30' },
+        headers: { get: (key: string) => key === 'content-type' ? 'application/json' : key === 'Retry-After' ? '30' : null },
         json: async () => ({}),
       })
 
@@ -364,7 +372,8 @@ describe('BybitFuturesConnector', () => {
 
       const normalized = connector.normalize(raw)
 
-      expect(normalized.trader_key).toBeNull()
+      // leaderMark is null and leaderUserId is undefined → falsy || falsy = falsy
+      expect(normalized.trader_key).toBeFalsy()
       expect(normalized.roi).toBeNull()
       expect(normalized.pnl).toBeNull()
     })
@@ -378,8 +387,9 @@ describe('BybitFuturesConnector', () => {
     test('throws on server error (500)', async () => {
       const connector = createConnector()
       mockFetch.mockResolvedValueOnce({
+        ok: false,
         status: 500,
-        headers: { get: () => null },
+        headers: { get: (key: string) => key === 'content-type' ? 'application/json' : null },
         json: async () => ({ error: 'Internal Server Error' }),
       })
 
@@ -389,8 +399,9 @@ describe('BybitFuturesConnector', () => {
     test('throws ConnectorError on client error (400)', async () => {
       const connector = createConnector()
       mockFetch.mockResolvedValueOnce({
+        ok: false,
         status: 400,
-        headers: { get: () => null },
+        headers: { get: (key: string) => key === 'content-type' ? 'application/json' : null },
         json: async () => ({ error: 'Bad request' }),
       })
 

@@ -42,8 +42,9 @@ const createMockSupabase = () => {
 describe('getPostComments', () => {
   test('should return empty array when no comments found', async () => {
     const mockSupabase = createMockSupabase()
-    // Final method in chain returns resolved value
-    mockSupabase.is.mockResolvedValueOnce({ data: [], error: null })
+    // The query chain is: from().select().eq().is().order().limit()
+    // limit() is the terminal call that returns the result
+    mockSupabase.limit.mockResolvedValueOnce({ data: [], error: null })
 
     const result = await getPostComments(mockSupabase as unknown as SupabaseClient, 'post1')
     expect(result).toEqual([])
@@ -51,14 +52,14 @@ describe('getPostComments', () => {
 
   test('should throw error on database error', async () => {
     const mockSupabase = createMockSupabase()
-    mockSupabase.is.mockResolvedValueOnce({ data: null, error: new Error('DB Error') })
+    mockSupabase.limit.mockResolvedValueOnce({ data: null, error: new Error('DB Error') })
 
     await expect(getPostComments(mockSupabase as unknown as SupabaseClient, 'post1')).rejects.toThrow()
   })
 
   test('should query correct table with correct filters', async () => {
     const mockSupabase = createMockSupabase()
-    mockSupabase.is.mockResolvedValueOnce({ data: [], error: null })
+    mockSupabase.limit.mockResolvedValueOnce({ data: [], error: null })
 
     await getPostComments(mockSupabase as unknown as SupabaseClient, 'post123')
 
@@ -73,13 +74,11 @@ describe('getPostComments', () => {
       { id: 'c1', post_id: 'post1', user_id: 'u1', content: 'Comment 1', like_count: 2, created_at: '2024-01-01T00:00:00Z', updated_at: '2024-01-01T00:00:00Z' },
     ]
 
-    // Mock the chain: from().select().eq().is() - is() returns data
-    mockSupabase.is.mockResolvedValueOnce({ data: mockComments, error: null })
-    // Mock chain for replies: from().select().in().order() - order() returns data
-    // .in() needs to return mockSupabase so .order() can be called
-    mockSupabase.in.mockReturnValueOnce(mockSupabase)
+    // Mock the chain: from().select().eq().is().order().limit() — limit() is terminal
+    mockSupabase.limit.mockResolvedValueOnce({ data: mockComments, error: null })
+    // Mock chain for replies: from().select().in().order() — order() returns data
     mockSupabase.order.mockResolvedValueOnce({ data: [], error: null })
-    // Mock chain for profiles: from().select().in() - in() returns data
+    // Mock chain for profiles: from().select().in() — in() returns data
     mockSupabase.in.mockResolvedValueOnce({ data: [], error: null })
 
     const result = await getPostComments(mockSupabase as unknown as SupabaseClient, 'post1')
