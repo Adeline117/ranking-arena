@@ -16,8 +16,8 @@ interface TraderData {
   trader_key: string
   display_name: string | null
   platform: string
-  roi: number
-  pnl: number
+  roi: number | null
+  pnl: number | null
   win_rate: number | null
   max_drawdown: number | null
   arena_score: number | null
