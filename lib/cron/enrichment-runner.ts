@@ -197,13 +197,7 @@ export const ENRICHMENT_PLATFORM_CONFIGS: Record<string, EnrichmentConfig> = {
     fetchCurrentPositions: fetchOkxCurrentPositions,
     concurrency: 3, delayMs: 1500,
   },
-  bitget_futures: {
-    platform: 'bitget_futures',
-    fetchEquityCurve: fetchBitgetEquityCurve,
-    fetchStatsDetail: fetchBitgetStatsDetail,
-    fetchPositionHistory: fetchBitgetPositionHistory,
-    concurrency: 2, delayMs: 2000,
-  },
+  // bitget_futures: PERMANENTLY REMOVED (2026-03-18 EMERGENCY #7) - VPS scraper repeatedly hangs 44+ min, blocks entire pipeline
   // bitget_spot: enrichment not yet configured — spot-specific enrichment endpoints TBD
   hyperliquid: {
     platform: 'hyperliquid',
@@ -412,6 +406,8 @@ export const NO_ENRICHMENT_PLATFORMS = new Set([
   'xt',
   // kucoin, weex: dead platforms, no enrichment possible
   'kucoin', 'weex',  // weex returns 521, janapw.com needs dynamic auth
+  // EMERGENCY BLOCKS (repeatedly hang/timeout, block entire pipeline)
+  'bitget_futures', 'bitget_spot',  // VPS scraper hangs 44+ min (2026-03-18 #7)
   // NOTE: bitfinex re-enabled — public rankings API for stats
   // NOTE: blofin re-enabled — trader detail endpoint
   // NOTE: phemex re-enabled — public copy-trading API
