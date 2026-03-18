@@ -93,8 +93,15 @@ export function useTraderData(options: UseTraderDataOptions = {}) {
   // 时间范围状态 - 固定初始值避免 hydration mismatch
   const [activeTimeRange, setActiveTimeRange] = useState<TimeRange>('90D')
 
-  // 客户端 hydration 后从 localStorage 读取偏好
+  // 客户端 hydration 后从 URL params 或 localStorage 读取偏好
+  // URL param (?window=7d) takes priority for shareable links
   useEffect(() => {
+    const params = new URLSearchParams(window.location.search)
+    const urlWindow = params.get('window')?.toUpperCase()
+    if (urlWindow === '90D' || urlWindow === '30D' || urlWindow === '7D') {
+      setActiveTimeRange(urlWindow)
+      return
+    }
     const saved = localStorage.getItem(TIME_RANGE_STORAGE_KEY)
     if (saved === '90D' || saved === '30D' || saved === '7D') {
       setActiveTimeRange(saved)
