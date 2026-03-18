@@ -62,6 +62,7 @@ const AggregatedStats = dynamic(() => import('@/app/components/trader/Aggregated
 export interface UnregisteredTraderData {
   handle: string
   avatar_url?: string | null
+  profile_url?: string | null
   source: string
   source_trader_id: string
   rank?: number | null

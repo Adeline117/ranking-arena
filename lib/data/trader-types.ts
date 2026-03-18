@@ -36,6 +36,7 @@ export interface TraderProfile {
   copiers?: number
   avatar_url?: string
   cover_url?: string
+  profile_url?: string | null
   isRegistered?: boolean
   source?: string
   showFollowers?: boolean
