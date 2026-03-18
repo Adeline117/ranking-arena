@@ -33,21 +33,29 @@ export const maxDuration = 300
 const DEX_SOURCES = new Set(['hyperliquid', 'gmx', 'dydx', 'vertex', 'drift', 'aevo', 'gains', 'kwenta'])
 
 // Heuristic bot detection for DEX traders
-// High trade counts on DEX with 0x addresses are likely automated
+// Enhanced bot detection (freqtrade 47.8K★ trading frequency patterns)
 function detectTraderType(
   source: string,
   sourceId: string,
   tradesCount: number | null,
   existingType: string | null,
+  avgHoldingHours?: number | null,
+  winRate?: number | null,
 ): 'human' | 'bot' | null {
   // Explicit type always wins
   if (existingType === 'human' || existingType === 'bot') return existingType
   // web3_bot source is always bot
   if (source === 'web3_bot') return 'bot'
-  // DEX 0x address with very high trade count → likely bot
-  if (DEX_SOURCES.has(source) && sourceId.startsWith('0x') && tradesCount != null && tradesCount > 500) {
-    return 'bot'
+
+  if (DEX_SOURCES.has(source) && sourceId.startsWith('0x')) {
+    // High trade count → likely bot
+    if (tradesCount != null && tradesCount > 500) return 'bot'
+    // Extremely short hold times + high trade count → algorithmic trading
+    if (avgHoldingHours != null && avgHoldingHours < 0.5 && tradesCount != null && tradesCount > 100) return 'bot'
+    // Suspiciously perfect win rate with many trades → likely bot
+    if (winRate != null && winRate >= 95 && tradesCount != null && tradesCount > 50) return 'bot'
   }
+
   return null
 }
 
@@ -747,7 +755,7 @@ async function computeSeason(
       sortino_ratio: t.sortino_ratio ?? null,
       profit_factor: t.profit_factor ?? null,
       calmar_ratio: t.calmar_ratio ?? null,
-      trader_type: detectTraderType(t.source, t.source_trader_id, t.trades_count, t.trader_type),
+      trader_type: detectTraderType(t.source, t.source_trader_id, t.trades_count, t.trader_type, t.avg_holding_hours, t.win_rate),
     }
   })
 

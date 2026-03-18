@@ -112,10 +112,12 @@ export async function GET(request: NextRequest) {
   }
 
   const group = request.nextUrl.searchParams.get('group') || 'a'
-  const platforms = GROUPS[group]
-  if (!platforms) {
+  const groupPlatforms = GROUPS[group]
+  if (!groupPlatforms) {
     return NextResponse.json({ error: `Unknown group: ${group}`, available: Object.keys(GROUPS) }, { status: 400 })
   }
+  // Randomize execution order to prevent timing pattern detection (DeFiLlama pattern)
+  const platforms = [...groupPlatforms].sort(() => Math.random() - 0.5)
 
   const supabaseOrNull = createSupabaseAdmin()
   if (!supabaseOrNull) {
@@ -229,11 +231,15 @@ export async function GET(request: NextRequest) {
     }
   }
 
-  // All platforms run in parallel — each platform uses a different fetcher module
-  // so there's no shared state corruption risk.
-  // Module-scoped strategy caches (_bybitStrategy, _cachedStrategy) are only shared
-  // if the SAME fetcher is called concurrently, which doesn't happen within a group.
-  const results = await Promise.all(platforms.map(runPlatform))
+  // Run platforms with concurrency limit (DeFiLlama PromisePool pattern)
+  // Prevents overwhelming VPS proxy with too many concurrent scraper requests
+  const CONCURRENCY = Math.min(platforms.length, 3) // Max 3 concurrent
+  const results: BatchResult[] = []
+  for (let i = 0; i < platforms.length; i += CONCURRENCY) {
+    const batch = platforms.slice(i, i + CONCURRENCY)
+    const batchResults = await Promise.all(batch.map(runPlatform))
+    results.push(...batchResults)
+  }
 
   clearTimeout(safetyTimer)
   const succeeded = results.filter((r) => r.status === 'success').length
