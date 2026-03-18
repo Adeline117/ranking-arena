@@ -619,7 +619,7 @@ function RankingTableInner(props: {
           </Box>
           {/* Registration CTA after first page for non-logged-in users */}
           {!props.loggedIn && currentPage === 1 && sortedTraders.length > itemsPerPage && (
-            <button onClick={() => useLoginModal.getState().openLoginModal()} style={{ border: 'none', cursor: 'pointer', background: 'none', width: '100%', padding: 0 }}>
+            <button onClick={() => useLoginModal.getState()?.openLoginModal?.()} style={{ border: 'none', cursor: 'pointer', background: 'none', width: '100%', padding: 0 }}>
               <Box style={{
                 margin: `${tokens.spacing[2]} ${tokens.spacing[4]}`,
                 padding: `${tokens.spacing[4]} ${tokens.spacing[5]}`,
