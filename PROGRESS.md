@@ -4,7 +4,20 @@
 
 ## Current Sprint Focus
 - All P0-P3 tasks complete. All backlog items done (including multi-language ja/ko 100%).
-- Pipeline 100% healthy — 27/27 active platforms fresh, 0 warnings, 0 failures.
+- Pipeline 100% healthy — 28 exchanges, ~6.5K ranked traders per season.
+
+## Recently Completed (2026-03-18) — Leaderboard Fix + Supabase Singleton Migration
+
+### Trader Count Anomaly Fix (3 root causes)
+1. **`metrics_estimated` column in upsert**: Column doesn't exist in `leaderboard_ranks` → PGRST204 on every batch → 100% upsert failure. Removed from upsert payload.
+2. **v1 fallback threshold**: v1 data only fetched for sources with <50 v2 traders, but v1 has 3-5x more data → always merge v1+v2 now.
+3. **Degradation check too lenient**: Used absolute `< 500` floor instead of 85% threshold → now uses `DEGRADATION_THRESHOLD = 0.85`.
+- **Result**: 7 exchanges → 28 exchanges, 9,133 → 9,212 traders visible in API.
+
+### Supabase Admin Singleton Migration
+- Migrated 111+ files from raw `createClient(url, key)` to `getSupabaseAdmin()` singleton.
+- Covers all API routes, lib modules, and page components.
+- Remaining legitimate uses: anon key auth flows, health check HTTP calls, standalone scripts.
 
 ## Recently Completed (2026-03-18) — Pipeline Critical Fix + QA Polish
 
