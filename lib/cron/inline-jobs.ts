@@ -395,16 +395,15 @@ export async function syncTradersInline(): Promise<InlineJobResult> {
         const period: Period = traderData.periodDays === 30 ? '30D' : '7D'
         const arenaScoreResult = calculateArenaScore({ roi: traderData.roi, pnl: traderData.pnl, maxDrawdown: traderData.maxDrawdown, winRate: traderData.winRate }, period)
 
-        await supabase.from('trader_snapshots').upsert({
-          source: auth.platform, source_trader_id: auth.trader_id, season_id: period,
-          roi: traderData.roi, pnl: traderData.pnl, followers: traderData.followers,
-          copiers: traderData.followers, trades_count: traderData.tradesCount,
+        // Write to v2 only (v1 writes removed 2026-03-18)
+        await supabase.from('trader_snapshots_v2').upsert({
+          platform: auth.platform, market_type: 'futures', trader_key: auth.trader_id, window: period,
+          roi_pct: traderData.roi, pnl_usd: traderData.pnl, followers: traderData.followers,
+          trades_count: traderData.tradesCount,
           win_rate: traderData.winRate, max_drawdown: traderData.maxDrawdown,
-          arena_score: arenaScoreResult.totalScore, return_score: arenaScoreResult.returnScore,
-          pnl_score: arenaScoreResult.pnlScore, drawdown_score: arenaScoreResult.drawdownScore,
-          stability_score: arenaScoreResult.stabilityScore,
-          captured_at: new Date().toISOString(), authorization_id: auth.id, is_authorized: true,
-        }, { onConflict: 'source,source_trader_id,season_id' })
+          arena_score: arenaScoreResult.totalScore,
+          updated_at: new Date().toISOString(),
+        }, { onConflict: 'platform,market_type,trader_key,window' })
 
         await supabase.from('trader_sources').upsert({
           source: auth.platform, source_trader_id: auth.trader_id,

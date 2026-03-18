@@ -521,21 +521,13 @@ export async function runEnrichment(params: {
                 if (stats.maxDrawdown != null) snapshotUpdate.max_drawdown = stats.maxDrawdown
                 if (stats.totalTrades != null) snapshotUpdate.trades_count = stats.totalTrades
                 if (Object.keys(snapshotUpdate).length > 0) {
-                  // Write to both v1 and v2 snapshots
-                  await Promise.all([
-                    supabase
-                      .from('trader_snapshots')
-                      .update(snapshotUpdate)
-                      .eq('source', platformKey)
-                      .eq('source_trader_id', traderId)
-                      .eq('season_id', period),
-                    supabase
-                      .from('trader_snapshots_v2')
-                      .update(snapshotUpdate)
-                      .eq('platform', platformKey)
-                      .eq('trader_key', traderId)
-                      .eq('window', period),
-                  ])
+                  // Write enrichment results to v2 only (v1 writes removed 2026-03-18)
+                  await supabase
+                    .from('trader_snapshots_v2')
+                    .update(snapshotUpdate)
+                    .eq('platform', platformKey)
+                    .eq('trader_key', traderId)
+                    .eq('window', period)
                 }
               }
             }
