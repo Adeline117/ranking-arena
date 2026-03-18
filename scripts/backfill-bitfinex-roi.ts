@@ -2,12 +2,11 @@
  * Backfill Bitfinex ROI from live API
  *
  * Fetches plu_diff (PnL USD) and plu (equity proxy) from Bitfinex public API,
- * cross-references them to compute ROI for all traders, then updates
- * trader_snapshots_v2 rows that have null roi_pct.
+ * cross-references them to compute ROI for traders with null roi_pct.
  *
  * Usage:
- *   npx tsx scripts/backfill-bitfinex-roi.ts              # Run backfill
- *   npx tsx scripts/backfill-bitfinex-roi.ts --dry-run    # Preview only
+ *   npx tsx scripts/backfill-bitfinex-roi.ts
+ *   npx tsx scripts/backfill-bitfinex-roi.ts --dry-run
  */
 
 import 'dotenv/config'
@@ -30,10 +29,7 @@ async function fetchRanking(key: string, timeframe: string): Promise<Map<string,
   const map = new Map<string, number>()
   const url = `https://api-pub.bitfinex.com/v2/rankings/${key}:${timeframe}:tGLOBAL:USD/hist`
   const res = await fetch(url)
-  if (!res.ok) {
-    console.warn(`Failed to fetch ${url}: ${res.status}`)
-    return map
-  }
+  if (!res.ok) return map
   const rows = await res.json() as BitfinexRow[]
   if (!Array.isArray(rows)) return map
   for (const row of rows) {
@@ -47,71 +43,43 @@ async function fetchRanking(key: string, timeframe: string): Promise<Map<string,
 async function main() {
   console.log(`Backfilling Bitfinex ROI${dryRun ? ' (DRY RUN)' : ''}`)
 
-  // Fetch all ranking data from API
-  console.log('Fetching Bitfinex ranking data...')
   const [pnl1w, pnl1m, equity] = await Promise.all([
     fetchRanking('plu_diff', '1w'),
     fetchRanking('plu_diff', '1M'),
     fetchRanking('plu', '1M'),
   ])
 
-  console.log(`  plu_diff 1w: ${pnl1w.size} traders`)
-  console.log(`  plu_diff 1M: ${pnl1m.size} traders`)
-  console.log(`  plu (equity): ${equity.size} traders`)
+  console.log(`  plu_diff 1w: ${pnl1w.size}, 1M: ${pnl1m.size}, equity: ${equity.size}`)
 
-  // Compute ROI for all traders that have both PnL and equity
+  // Compute ROI for traders with both PnL and equity
   const roiMap = new Map<string, number>()
-  const allTraders = new Set([...pnl1w.keys(), ...pnl1m.keys()])
-
-  for (const id of allTraders) {
+  for (const id of new Set([...pnl1w.keys(), ...pnl1m.keys()])) {
     const pnl = pnl1m.get(id) ?? pnl1w.get(id) ?? 0
     const eq = equity.get(id)
     if (eq != null && Math.abs(eq) > 1 && pnl !== 0) {
-      const roi = Math.max(-500, Math.min(50000, (pnl / Math.abs(eq)) * 100))
-      roiMap.set(id, Math.round(roi * 100) / 100)
+      roiMap.set(id, Math.round(Math.max(-500, Math.min(50000, (pnl / Math.abs(eq)) * 100)) * 100) / 100)
     }
   }
 
-  console.log(`\nComputed ROI for ${roiMap.size} / ${allTraders.size} traders`)
+  console.log(`Computed ROI for ${roiMap.size} traders`)
 
-  // Fetch bitfinex traders with null roi_pct
-  const { data: nullRoiTraders, error } = await supabase
+  const { data: nullRoiTraders } = await supabase
     .from('trader_snapshots_v2')
     .select('trader_key, window')
     .eq('platform', 'bitfinex')
     .is('roi_pct', null)
 
-  if (error) {
-    console.error('Error fetching null ROI traders:', error.message)
-    return
-  }
+  const updates = (nullRoiTraders || [])
+    .filter(row => roiMap.has(row.trader_key))
+    .map(row => ({ trader_key: row.trader_key, window: row.window, roi_pct: roiMap.get(row.trader_key)! }))
 
-  console.log(`Found ${nullRoiTraders?.length || 0} bitfinex v2 rows with null ROI`)
+  console.log(`${nullRoiTraders?.length || 0} null ROI rows, ${updates.length} matchable`)
 
-  // Match and update
-  const updates: Array<{ trader_key: string; window: string; roi_pct: number }> = []
-  for (const row of nullRoiTraders || []) {
-    const roi = roiMap.get(row.trader_key)
-    if (roi != null) {
-      updates.push({ trader_key: row.trader_key, window: row.window, roi_pct: roi })
-    }
-  }
+  if (dryRun || updates.length === 0) return
 
-  console.log(`Matched ${updates.length} rows for ROI update`)
-
-  if (dryRun) {
-    console.log('\nDRY RUN — sample updates:')
-    for (const u of updates.slice(0, 10)) {
-      console.log(`  ${u.trader_key} (${u.window}): roi_pct = ${u.roi_pct}%`)
-    }
-    return
-  }
-
-  // Batch update
   let updated = 0
-  const BATCH = 50
-  for (let i = 0; i < updates.length; i += BATCH) {
-    const batch = updates.slice(i, i + BATCH)
+  for (let i = 0; i < updates.length; i += 50) {
+    const batch = updates.slice(i, i + 50)
     const results = await Promise.all(
       batch.map(u =>
         supabase
@@ -125,39 +93,7 @@ async function main() {
     updated += results.filter(r => !r.error).length
   }
 
-  console.log(`\nUpdated ${updated} / ${updates.length} rows with ROI`)
-
-  // Also update arena_score for these traders
-  const { calculateArenaScore } = await import('../lib/utils/arena-score')
-  let scoreUpdated = 0
-  for (const u of updates) {
-    // Fetch full row to compute score
-    const { data: row } = await supabase
-      .from('trader_snapshots_v2')
-      .select('pnl_usd, max_drawdown, win_rate')
-      .eq('platform', 'bitfinex')
-      .eq('trader_key', u.trader_key)
-      .eq('window', u.window)
-      .single()
-
-    if (row) {
-      const scoreResult = calculateArenaScore(
-        { roi: u.roi_pct, pnl: row.pnl_usd, maxDrawdown: row.max_drawdown, winRate: row.win_rate },
-        u.window as '7D' | '30D' | '90D'
-      )
-      if (scoreResult != null) {
-        await supabase
-          .from('trader_snapshots_v2')
-          .update({ arena_score: scoreResult.totalScore })
-          .eq('platform', 'bitfinex')
-          .eq('trader_key', u.trader_key)
-          .eq('window', u.window)
-        scoreUpdated++
-      }
-    }
-  }
-
-  console.log(`Updated ${scoreUpdated} arena scores`)
+  console.log(`Updated ${updated} / ${updates.length} rows`)
 }
 
 main().catch(err => {
