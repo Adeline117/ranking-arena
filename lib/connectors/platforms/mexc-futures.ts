@@ -48,7 +48,7 @@ export class MexcFuturesConnector extends BaseConnector {
         // Fallback: VPS Playwright scraper (bypasses WAF)
         const vpsData = await this.fetchViaVPS<Record<string, unknown>>('/mexc/leaderboard', {
           page: String(page), pageSize: String(pageSize),
-        })
+        }, 600000)
         if (!vpsData) throw new Error('Both direct API and VPS scraper failed for mexc')
         _rawLb = vpsData
       }

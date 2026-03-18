@@ -67,7 +67,7 @@ export class BitgetFuturesConnector extends BaseConnector {
         // Fallback: VPS Playwright scraper (bypasses Cloudflare WAF)
         const vpsData = await this.fetchViaVPS<Record<string, unknown>>('/bitget/leaderboard', {
           period: timeRange, pageNo: String(currentPage), pageSize: String(limit),
-        })
+        }, 600000)
         if (!vpsData) throw new Error('Both direct API and VPS scraper failed for bitget')
         _rawLb = vpsData
       }
