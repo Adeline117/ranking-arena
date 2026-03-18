@@ -366,8 +366,12 @@ export default function ExchangeRankingClient({
       return sortDir === 'asc' ? traders : [...traders].reverse()
     }
     return [...traders].sort((a, b) => {
-      const av = a[sortKey] ?? -Infinity
-      const bv = b[sortKey] ?? -Infinity
+      const av = a[sortKey]
+      const bv = b[sortKey]
+      // Nulls always sort to bottom regardless of direction
+      if (av == null && bv == null) return 0
+      if (av == null) return 1
+      if (bv == null) return -1
       return sortDir === 'desc' ? (bv as number) - (av as number) : (av as number) - (bv as number)
     })
   }, [traders, sortKey, sortDir])
@@ -375,8 +379,11 @@ export default function ExchangeRankingClient({
   const cardSortedTraders = React.useMemo(() => {
     if (cardSortKey === 'rank') return cardSortDir === 'asc' ? traders : [...traders].reverse()
     return [...traders].sort((a, b) => {
-      const av = a[cardSortKey] ?? -Infinity
-      const bv = b[cardSortKey] ?? -Infinity
+      const av = a[cardSortKey]
+      const bv = b[cardSortKey]
+      if (av == null && bv == null) return 0
+      if (av == null) return 1
+      if (bv == null) return -1
       return cardSortDir === 'desc' ? (bv as number) - (av as number) : (av as number) - (bv as number)
     })
   }, [traders, cardSortKey, cardSortDir])
