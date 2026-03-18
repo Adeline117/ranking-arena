@@ -29,7 +29,7 @@ jest.mock('next/server', () => {
     constructor(url: string, init?: { method?: string; headers?: Record<string, string> }) {
       this.url = url
       this.nextUrl = new URL(url)
-      this._headers = new Map(Object.entries(init?.headers || {}))
+      this._headers = new Map(Object.entries({ 'user-agent': 'Mozilla/5.0 (Test)', ...(init?.headers || {}) }))
     }
 
     get headers() {

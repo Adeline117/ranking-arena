@@ -19,16 +19,27 @@ jest.mock('@/lib/cache', () => ({
   set: jest.fn(),
 }))
 
-const mockFrom = jest.fn(() => ({
-  select: jest.fn().mockReturnThis(),
-  or: jest.fn().mockReturnThis(),
-  ilike: jest.fn().mockReturnThis(),
-  order: jest.fn().mockReturnThis(),
-  limit: jest.fn().mockResolvedValue({ data: [], error: null }),
-  textSearch: jest.fn().mockReturnThis(),
-  insert: jest.fn().mockResolvedValue({ data: null, error: null }),
-  eq: jest.fn().mockReturnThis(),
-}))
+// Build a proxy-based chain so ANY method can be chained, and .limit() resolves
+function makeChainMock(terminalResult = { data: [], error: null }) {
+  const chain: Record<string, jest.Mock> = {}
+  const proxy: Record<string, jest.Mock> = new Proxy(chain, {
+    get(target, prop) {
+      if (prop === 'then') return undefined // not a thenable unless explicitly resolved
+      if (!target[prop as string]) {
+        // Terminal methods that resolve
+        if (['limit', 'single', 'maybeSingle', 'insert'].includes(prop as string)) {
+          target[prop as string] = jest.fn().mockResolvedValue(terminalResult)
+        } else {
+          target[prop as string] = jest.fn().mockReturnValue(proxy)
+        }
+      }
+      return target[prop as string]
+    },
+  }) as Record<string, jest.Mock>
+  return proxy
+}
+
+const mockFrom = jest.fn(() => makeChainMock())
 
 jest.mock('@/lib/api/middleware', () => ({
   withPublic: (handler: any) => {

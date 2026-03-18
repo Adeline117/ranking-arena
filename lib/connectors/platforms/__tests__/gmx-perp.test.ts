@@ -4,7 +4,8 @@
  * Tests discoverLeaderboard, fetchTraderProfile, fetchTraderSnapshot,
  * fetchTimeseries, normalize, and error handling with mocked HTTP responses.
  *
- * GMX is an on-chain DEX - PnL in wei (30 decimals for GMX v2), no profiles.
+ * GMX is an on-chain DEX - uses Subsquid GraphQL (gmx.squids.live).
+ * Response format: { data: { accountStats: [...] } }
  */
 
 import { GmxPerpConnector } from '../gmx-perp'
@@ -28,8 +29,9 @@ function createConnector() {
 
 function mockFetchResponse(body: unknown, status = 200) {
   mockFetch.mockResolvedValueOnce({
+    ok: status >= 200 && status < 300,
     status,
-    headers: { get: () => null },
+    headers: { get: (key: string) => key === 'content-type' ? 'application/json' : null },
     json: async () => body,
   })
 }
@@ -44,38 +46,34 @@ function mockFetchNetworkError(message = 'Network error') {
 
 describe('GmxPerpConnector', () => {
   describe('discoverLeaderboard', () => {
-    const validArrayResponse = [
-      {
-        account: '0xGMX_TRADER_1',
-        realizedPnl: 5000,
-        maxCapital: 10000,
-        wins: 45,
-        losses: 15,
+    // GMX connector uses Subsquid GraphQL (POST with query body).
+    // Response format: { data: { accountStats: [...] } }
+    const validSubsquidResponse = {
+      data: {
+        accountStats: [
+          {
+            id: '0xgmx_trader_1',
+            realizedPnl: 5000,
+            maxCapital: 10000,
+            wins: 45,
+            losses: 15,
+            closedCount: 60,
+          },
+          {
+            id: '0xgmx_trader_2',
+            realizedPnl: 2000,
+            maxCapital: 8000,
+            wins: 30,
+            losses: 20,
+            closedCount: 50,
+          },
+        ],
       },
-      {
-        account: '0xGMX_TRADER_2',
-        realizedPnl: 2000,
-        maxCapital: 8000,
-        wins: 30,
-        losses: 20,
-      },
-    ]
-
-    const validObjectResponse = {
-      accounts: [
-        {
-          account: '0xGMX_OBJ_1',
-          realizedPnl: 3000,
-          maxCapital: 5000,
-          wins: 20,
-          losses: 10,
-        },
-      ],
     }
 
-    test('returns traders from array-format response', async () => {
+    test('returns traders from Subsquid GraphQL response', async () => {
       const connector = createConnector()
-      mockFetchResponse(validArrayResponse)
+      mockFetchResponse(validSubsquidResponse)
 
       const result = await connector.discoverLeaderboard('7d', 100)
 
@@ -84,16 +82,28 @@ describe('GmxPerpConnector', () => {
       expect(result.window).toBe('7d')
 
       const first = result.traders[0]
-      expect(first.trader_key).toBe('0xgmx_trader_1')  // lowercase
-      expect(first.display_name).toBeNull()  // on-chain, no names
+      expect(first.trader_key).toBe('0xgmx_trader_1')
+      expect(first.display_name).toBeNull()
       expect(first.platform).toBe('gmx')
       expect(first.market_type).toBe('perp')
       expect(first.is_active).toBe(true)
     })
 
-    test('returns traders from object-format response (accounts field)', async () => {
+    test('returns traders from periodAccountStats field (fallback)', async () => {
       const connector = createConnector()
-      mockFetchResponse(validObjectResponse)
+      mockFetchResponse({
+        data: {
+          periodAccountStats: [
+            {
+              id: '0xgmx_obj_1',
+              realizedPnl: 3000,
+              maxCapital: 5000,
+              wins: 20,
+              losses: 10,
+            },
+          ],
+        },
+      })
 
       const result = await connector.discoverLeaderboard('30d', 100)
 
@@ -101,29 +111,34 @@ describe('GmxPerpConnector', () => {
       expect(result.traders[0].trader_key).toBe('0xgmx_obj_1')
     })
 
-    test('returns empty when response has no accounts', async () => {
+    test('returns empty when accountStats is empty', async () => {
       const connector = createConnector()
-      mockFetchResponse({ accounts: [] })
+      mockFetchResponse({ data: { accountStats: [] } })
 
       const result = await connector.discoverLeaderboard('7d')
 
       expect(result.traders).toHaveLength(0)
     })
 
-    test('sends correct period and limit in URL', async () => {
+    test('sends GraphQL POST request to Subsquid endpoint', async () => {
       const connector = createConnector()
-      mockFetchResponse(validArrayResponse)
+      mockFetchResponse(validSubsquidResponse)
 
       await connector.discoverLeaderboard('30d', 50)
 
-      const url = mockFetch.mock.calls[0][0]
-      expect(url).toContain('period=30d')
-      expect(url).toContain('limit=50')
+      const call = mockFetch.mock.calls[0]
+      const url = call[0] as string
+      const options = call[1] as RequestInit
+      expect(url).toContain('gmx.squids.live')
+      expect(options.method).toBe('POST')
+      const body = JSON.parse(options.body as string)
+      expect(body.query).toContain('accountStats')
+      expect(body.query).toContain('50')
     })
 
     test('respects limit parameter', async () => {
       const connector = createConnector()
-      mockFetchResponse(validArrayResponse)
+      mockFetchResponse(validSubsquidResponse)
 
       const result = await connector.discoverLeaderboard('7d', 1)
 
@@ -140,8 +155,9 @@ describe('GmxPerpConnector', () => {
     test('throws ConnectorError on rate limit (429)', async () => {
       const connector = createConnector()
       mockFetch.mockResolvedValueOnce({
+        ok: false,
         status: 429,
-        headers: { get: () => '60' },
+        headers: { get: (key: string) => key === 'retry-after' ? '60' : key === 'content-type' ? 'application/json' : null },
         json: async () => ({}),
       })
 
@@ -157,11 +173,10 @@ describe('GmxPerpConnector', () => {
     test('returns minimal profile for on-chain address', async () => {
       const connector = createConnector()
 
-      // fetchTraderProfile doesn't make HTTP calls for GMX
       const result = await connector.fetchTraderProfile('0xABC123')
 
       expect(result).not.toBeNull()
-      expect(result!.profile.trader_key).toBe('0xabc123')  // lowercase
+      expect(result!.profile.trader_key).toBe('0xabc123')
       expect(result!.profile.platform).toBe('gmx')
       expect(result!.profile.market_type).toBe('perp')
       expect(result!.profile.display_name).toBeNull()
@@ -181,55 +196,53 @@ describe('GmxPerpConnector', () => {
   describe('fetchTraderSnapshot', () => {
     test('returns snapshot with computed ROI and win rate', async () => {
       const connector = createConnector()
-      mockFetchResponse([
-        {
-          account: '0xTARGET',
-          realizedPnl: 5000,     // already in USD (small numbers)
-          maxCapital: 10000,
-          wins: 45,
-          losses: 15,
+      mockFetchResponse({
+        data: {
+          accountStats: [
+            {
+              id: '0xtarget',
+              realizedPnl: 5000,
+              maxCapital: 10000,
+              wins: 45,
+              losses: 15,
+              closedCount: 60,
+            },
+          ],
         },
-        {
-          account: '0xOTHER',
-          realizedPnl: 1000,
-          maxCapital: 5000,
-          wins: 10,
-          losses: 10,
-        },
-      ])
+      })
 
       const result = await connector.fetchTraderSnapshot('0xTARGET', '7d')
 
       expect(result).not.toBeNull()
-      // ROI = (realizedPnl / maxCapital) * 100 = (5000/10000)*100 = 50
       expect(result!.metrics.roi).toBe(50)
       expect(result!.metrics.pnl).toBe(5000)
-      // Win rate = (45 / (45+15)) * 100 = 75
       expect(result!.metrics.win_rate).toBe(75)
       expect(result!.metrics.trades_count).toBe(60)
-      expect(result!.metrics.aum).toBe(10000)  // maxCapital as AUM
+      expect(result!.metrics.aum).toBe(10000)
     })
 
     test('handles GMX v2 large decimal values (>1e20)', async () => {
       const connector = createConnector()
-      const largePnl = 5e30   // 5 USD in GMX v2 raw
-      const largeCap = 10e30  // 10 USD in GMX v2 raw
+      const largePnl = 5e30
+      const largeCap = 10e30
 
-      mockFetchResponse([
-        {
-          account: '0xBIGNUM',
-          realizedPnl: largePnl,
-          maxCapital: largeCap,
-          wins: 10,
-          losses: 5,
+      mockFetchResponse({
+        data: {
+          accountStats: [
+            {
+              id: '0xbignum',
+              realizedPnl: largePnl,
+              maxCapital: largeCap,
+              wins: 10,
+              losses: 5,
+            },
+          ],
         },
-      ])
+      })
 
       const result = await connector.fetchTraderSnapshot('0xBIGNUM', '30d')
 
       expect(result).not.toBeNull()
-      // After dividing by 10^30: pnl = 5, capital = 10
-      // ROI = (5/10) * 100 = 50
       expect(result!.metrics.roi).toBe(50)
       expect(result!.metrics.pnl).toBe(5)
       expect(result!.metrics.aum).toBe(10)
@@ -237,15 +250,19 @@ describe('GmxPerpConnector', () => {
 
     test('handles string numeric values in PnL', async () => {
       const connector = createConnector()
-      mockFetchResponse([
-        {
-          account: '0xSTRINGS',
-          realizedPnl: '3000',
-          maxCapital: '6000',
-          wins: 20,
-          losses: 10,
+      mockFetchResponse({
+        data: {
+          accountStats: [
+            {
+              id: '0xstrings',
+              realizedPnl: '3000',
+              maxCapital: '6000',
+              wins: 20,
+              losses: 10,
+            },
+          ],
         },
-      ])
+      })
 
       const result = await connector.fetchTraderSnapshot('0xSTRINGS', '7d')
 
@@ -256,9 +273,7 @@ describe('GmxPerpConnector', () => {
 
     test('returns empty metrics when trader not found in rankings', async () => {
       const connector = createConnector()
-      mockFetchResponse([
-        { account: '0xOTHER', realizedPnl: 1000, maxCapital: 5000, wins: 10, losses: 5 },
-      ])
+      mockFetchResponse({ data: { accountStats: [] } })
 
       const result = await connector.fetchTraderSnapshot('0xNOTFOUND', '7d')
 
@@ -272,15 +287,19 @@ describe('GmxPerpConnector', () => {
 
     test('case-insensitive trader key matching', async () => {
       const connector = createConnector()
-      mockFetchResponse([
-        {
-          account: '0xAbCdEf',
-          realizedPnl: 1000,
-          maxCapital: 2000,
-          wins: 5,
-          losses: 3,
+      mockFetchResponse({
+        data: {
+          accountStats: [
+            {
+              id: '0xabcdef',
+              realizedPnl: 1000,
+              maxCapital: 2000,
+              wins: 5,
+              losses: 3,
+            },
+          ],
         },
-      ])
+      })
 
       const result = await connector.fetchTraderSnapshot('0xABCDEF', '7d')
 
@@ -290,15 +309,19 @@ describe('GmxPerpConnector', () => {
 
     test('ROI is null when maxCapital is 0', async () => {
       const connector = createConnector()
-      mockFetchResponse([
-        {
-          account: '0xZEROCAP',
-          realizedPnl: 1000,
-          maxCapital: 0,
-          wins: 5,
-          losses: 2,
+      mockFetchResponse({
+        data: {
+          accountStats: [
+            {
+              id: '0xzerocap',
+              realizedPnl: 1000,
+              maxCapital: 0,
+              wins: 5,
+              losses: 2,
+            },
+          ],
         },
-      ])
+      })
 
       const result = await connector.fetchTraderSnapshot('0xZEROCAP', '7d')
 
@@ -308,34 +331,42 @@ describe('GmxPerpConnector', () => {
 
     test('win rate is null when no trades', async () => {
       const connector = createConnector()
-      mockFetchResponse([
-        {
-          account: '0xNOTRADES',
-          realizedPnl: 0,
-          maxCapital: 1000,
-          wins: 0,
-          losses: 0,
+      mockFetchResponse({
+        data: {
+          accountStats: [
+            {
+              id: '0xnotrades',
+              realizedPnl: 0,
+              maxCapital: 1000,
+              wins: 0,
+              losses: 0,
+            },
+          ],
         },
-      ])
+      })
 
       const result = await connector.fetchTraderSnapshot('0xNOTRADES', '7d')
 
       expect(result).not.toBeNull()
       expect(result!.metrics.win_rate).toBeNull()
-      expect(result!.metrics.trades_count).toBeNull()  // 0 becomes null
+      expect(result!.metrics.trades_count).toBeNull()
     })
 
     test('quality flags reflect DEX limitations', async () => {
       const connector = createConnector()
-      mockFetchResponse([
-        {
-          account: '0xFLAGS',
-          realizedPnl: 1000,
-          maxCapital: 5000,
-          wins: 10,
-          losses: 5,
+      mockFetchResponse({
+        data: {
+          accountStats: [
+            {
+              id: '0xflags',
+              realizedPnl: 1000,
+              maxCapital: 5000,
+              wins: 10,
+              losses: 5,
+            },
+          ],
         },
-      ])
+      })
 
       const result = await connector.fetchTraderSnapshot('0xFLAGS', '7d')
 
@@ -385,7 +416,6 @@ describe('GmxPerpConnector', () => {
       const connector = createConnector()
       mockFetchNetworkError('Subgraph unavailable')
 
-      // fetchTimeseries catches errors and returns empty
       const result = await connector.fetchTimeseries('0xfail')
 
       expect(result.series).toHaveLength(0)
@@ -399,7 +429,7 @@ describe('GmxPerpConnector', () => {
 
       const body = JSON.parse(mockFetch.mock.calls[0][1].body)
       expect(body.query).toContain('periodAccountStats')
-      expect(body.query).toContain('0xabc123')  // lowercase
+      expect(body.query).toContain('0xabc123')
     })
   })
 
@@ -421,14 +451,12 @@ describe('GmxPerpConnector', () => {
 
       const normalized = connector.normalize(raw)
 
-      expect(normalized.trader_key).toBe('0xnormalize')  // lowercase
+      expect(normalized.trader_key).toBe('0xnormalize')
       expect(normalized.pnl).toBe(5000)
       expect(normalized.aum).toBe(10000)
-      // ROI = (5000/10000)*100 = 50
       expect(normalized.roi).toBe(50)
-      // win_rate = (30/(30+10))*100 = 75
       expect(normalized.win_rate).toBe(75)
-      expect(normalized.trades_count).toBe(50)  // from closedCount
+      expect(normalized.trades_count).toBe(50)
     })
 
     test('handles id field as fallback for account', () => {
@@ -450,8 +478,8 @@ describe('GmxPerpConnector', () => {
       const connector = createConnector()
       const raw = {
         account: '0xBIGNUM',
-        realizedPnl: 3e30,   // 3 USD in GMX v2 raw
-        maxCapital: 10e30,   // 10 USD in GMX v2 raw
+        realizedPnl: 3e30,
+        maxCapital: 10e30,
         wins: 5,
         losses: 3,
       }
@@ -506,7 +534,7 @@ describe('GmxPerpConnector', () => {
       const raw = {
         account: '0xSMALLCAP',
         realizedPnl: 50,
-        maxCapital: 50,  // <= 100 threshold
+        maxCapital: 50,
         wins: 5,
         losses: 2,
       }
@@ -517,7 +545,6 @@ describe('GmxPerpConnector', () => {
 
     test('ROI is clamped to [-100, 10000]', () => {
       const connector = createConnector()
-      // PnL much larger than capital
       const raw = {
         account: '0xCLAMP',
         realizedPnl: 5000000,
@@ -527,8 +554,6 @@ describe('GmxPerpConnector', () => {
       }
 
       const normalized = connector.normalize(raw)
-      // Without clamping: (5000000/200)*100 = 2500000000
-      // Clamped to 10000
       expect(normalized.roi).toBeLessThanOrEqual(10000)
     })
 
@@ -558,7 +583,7 @@ describe('GmxPerpConnector', () => {
 
       const normalized = connector.normalize(raw)
       expect(normalized.pnl).toBe(-5000)
-      expect(normalized.roi).toBe(-25)  // (-5000/20000)*100
+      expect(normalized.roi).toBe(-25)
     })
 
     test('DEX-only fields are always null', () => {
@@ -600,8 +625,9 @@ describe('GmxPerpConnector', () => {
     test('throws on server error (500)', async () => {
       const connector = createConnector()
       mockFetch.mockResolvedValueOnce({
+        ok: false,
         status: 500,
-        headers: { get: () => null },
+        headers: { get: (key: string) => key === 'content-type' ? 'application/json' : null },
         json: async () => ({}),
       })
 
@@ -611,8 +637,9 @@ describe('GmxPerpConnector', () => {
     test('throws ConnectorError on client error (403)', async () => {
       const connector = createConnector()
       mockFetch.mockResolvedValueOnce({
+        ok: false,
         status: 403,
-        headers: { get: () => null },
+        headers: { get: (key: string) => key === 'content-type' ? 'application/json' : null },
         json: async () => ({ error: 'Forbidden' }),
       })
 

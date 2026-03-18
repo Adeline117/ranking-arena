@@ -155,15 +155,18 @@ describe('OkxFuturesConnector', () => {
       expect(url).toContain('pageNo=3')
     })
 
-    test('throws on network error', async () => {
+    test('returns empty on network error (catches internally)', async () => {
       const connector = createConnector()
       mockFetchNetworkError()
 
-      await expect(connector.discoverLeaderboard('7d')).rejects.toThrow()
+      // OKX discoverLeaderboard catches errors and breaks the loop
+      const result = await connector.discoverLeaderboard('7d')
+      expect(result.traders).toHaveLength(0)
     })
 
-    test('throws ConnectorError on rate limit (429)', async () => {
+    test('fetchTraderProfile throws ConnectorError on rate limit (429)', async () => {
       const connector = createConnector()
+      // fetchTraderProfile uses request() directly and does NOT catch errors
       mockFetch.mockResolvedValueOnce({
         ok: false,
         status: 429,
@@ -171,7 +174,7 @@ describe('OkxFuturesConnector', () => {
         json: async () => ({}),
       })
 
-      await expect(connector.discoverLeaderboard('7d')).rejects.toThrow(ConnectorError)
+      await expect(connector.fetchTraderProfile('trader-abc-123')).rejects.toThrow(ConnectorError)
     })
 
     test('total_available equals number of fetched traders', async () => {
@@ -465,7 +468,7 @@ describe('OkxFuturesConnector', () => {
   // ============================================
 
   describe('error handling', () => {
-    test('throws on server error (500)', async () => {
+    test('returns empty on server error (500) — leaderboard catches internally', async () => {
       const connector = createConnector()
       mockFetch.mockResolvedValueOnce({
         ok: false,
@@ -474,11 +477,14 @@ describe('OkxFuturesConnector', () => {
         json: async () => ({ error: 'Internal Server Error' }),
       })
 
-      await expect(connector.discoverLeaderboard('7d')).rejects.toThrow()
+      // OKX discoverLeaderboard catches errors — returns empty
+      const result = await connector.discoverLeaderboard('7d')
+      expect(result.traders).toHaveLength(0)
     })
 
-    test('throws ConnectorError on client error (400)', async () => {
+    test('fetchTraderProfile throws ConnectorError on client error (400)', async () => {
       const connector = createConnector()
+      // fetchTraderProfile does NOT catch errors
       mockFetch.mockResolvedValueOnce({
         ok: false,
         status: 400,
@@ -486,7 +492,7 @@ describe('OkxFuturesConnector', () => {
         json: async () => ({ error: 'Bad request' }),
       })
 
-      await expect(connector.discoverLeaderboard('7d')).rejects.toThrow(ConnectorError)
+      await expect(connector.fetchTraderProfile('trader-abc-123')).rejects.toThrow(ConnectorError)
     })
 
     test('handles invalid JSON response gracefully via warnValidate', async () => {

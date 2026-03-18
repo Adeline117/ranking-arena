@@ -135,8 +135,9 @@ describe('BybitFuturesConnector', () => {
       await expect(connector.discoverLeaderboard('7d')).rejects.toThrow()
     })
 
-    test('throws ConnectorError on rate limit (429)', async () => {
+    test('throws ConnectorError on rate limit via fetchTraderProfile (direct API)', async () => {
       const connector = createConnector()
+      // fetchTraderProfile uses request() directly (not VPS)
       mockFetch.mockResolvedValueOnce({
         ok: false,
         status: 429,
@@ -144,7 +145,7 @@ describe('BybitFuturesConnector', () => {
         json: async () => ({}),
       })
 
-      await expect(connector.discoverLeaderboard('7d')).rejects.toThrow(ConnectorError)
+      await expect(connector.fetchTraderProfile('BYBIT_LEADER_1')).rejects.toThrow(ConnectorError)
     })
   })
 
@@ -396,8 +397,9 @@ describe('BybitFuturesConnector', () => {
       await expect(connector.discoverLeaderboard('7d')).rejects.toThrow()
     })
 
-    test('throws ConnectorError on client error (400)', async () => {
+    test('throws ConnectorError on client error (400) via fetchTraderProfile', async () => {
       const connector = createConnector()
+      // fetchTraderProfile uses request() directly (not VPS-first)
       mockFetch.mockResolvedValueOnce({
         ok: false,
         status: 400,
@@ -405,7 +407,7 @@ describe('BybitFuturesConnector', () => {
         json: async () => ({ error: 'Bad request' }),
       })
 
-      await expect(connector.discoverLeaderboard('7d')).rejects.toThrow(ConnectorError)
+      await expect(connector.fetchTraderProfile('BYBIT_LEADER_1')).rejects.toThrow(ConnectorError)
     })
 
     test('handles malformed response gracefully', async () => {
