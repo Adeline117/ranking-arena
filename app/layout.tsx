@@ -15,8 +15,8 @@ import { JsonLd } from "./components/Providers/JsonLd";
 const KeyboardShortcuts = dynamic(() => import("./components/Providers/KeyboardShortcuts"));
 const GlobalProgress = dynamic(() => import("./components/ui/GlobalProgress").then(m => ({ default: m.GlobalProgress })));
 const ServiceWorkerRegistration = dynamic(() => import("./components/Providers/ServiceWorkerRegistration").then(m => ({ default: m.ServiceWorkerRegistration })));
-// Removed: CookieConsent, WelcomeGuide, InstallPrompt — 用户进来直接用
 // WelcomeGuide removed
+const CookieConsent = dynamic(() => import("./components/ui/CookieConsent"));
 const CompareFloatingBar = dynamic(() => import("./components/trader/CompareFloatingBar"));
 const ScrollToTop = dynamic(() => import("./components/ui/ScrollToTop"));
 const ScrollRestoration = dynamic(() => import("./components/Providers/ScrollRestoration"));
@@ -229,6 +229,9 @@ export default function RootLayout({
             <ScrollToTop />
             <FeedbackWidget />
             <ScrollRestoration />
+            <Suspense fallback={null}>
+              <CookieConsent />
+            </Suspense>
           </CapacitorProvider>
         </Providers>
       </body>
