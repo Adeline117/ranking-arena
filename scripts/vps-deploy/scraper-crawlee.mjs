@@ -169,6 +169,192 @@ const HANDLERS = {
 
     return data
   },
+
+  'bybit/leaderboard-batch': async (page, params) => {
+    const pageSize = parseInt(params.pageSize || '50', 10)
+    const durations = (params.durations || 'DATA_DURATION_THIRTY_DAY').split(',')
+
+    await page.goto('https://www.bybitglobal.com/copyTrading/en/leaderboard-master', {
+      waitUntil: 'domcontentloaded', timeout: 45000,
+    })
+    await page.waitForTimeout(2000)
+
+    const results = await page.evaluate(async (opts) => {
+      const out = {}
+      for (const dur of opts.durations) {
+        const d = dur.trim()
+        try {
+          const path = `/x-api/fapi/beehive/public/v1/common/dynamic-leader-list?pageNo=1&pageSize=${opts.pageSize}&dataDuration=${d}&sortField=LEADER_SORT_FIELD_SORT_ROI`
+          const r = await fetch(path)
+          out[d] = r.ok ? await r.json() : { error: 'HTTP ' + r.status }
+        } catch (e) { out[d] = { error: e.message } }
+      }
+      return out
+    }, { durations, pageSize })
+
+    return results
+  },
+
+  'bitunix/leaderboard': async (page, params) => {
+    const pageSize = parseInt(params.pageSize || '50', 10)
+
+    await page.goto('https://www.bitunix.com/copy-trading', {
+      waitUntil: 'domcontentloaded', timeout: 45000,
+    })
+    await page.waitForTimeout(3000)
+    await page.evaluate(() => window.scrollBy(0, 500))
+    await page.waitForTimeout(3000)
+
+    // Try page.evaluate fetch with credentials (same-origin)
+    const data = await page.evaluate(async (opts) => {
+      try {
+        const r = await fetch(`/api/v1/copy-trade/traders?page=1&pageSize=${opts.pageSize}&sortType=2`, {
+          credentials: 'include',
+        })
+        if (!r.ok) return null
+        const text = await r.text()
+        if (!text.startsWith('{')) return null
+        return JSON.parse(text)
+      } catch { return null }
+    }, { pageSize })
+
+    return data || { error: 'No API response captured' }
+  },
+
+  'toobit/leaderboard': async (_page, params) => {
+    // Direct fetch — no browser needed (Toobit API is publicly accessible)
+    const period = params.period || '30'
+    const headers = {
+      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+      'Referer': 'https://www.toobit.com/copytrading/ranking',
+      'Origin': 'https://www.toobit.com',
+      'Accept': 'application/json',
+    }
+    const allTraders = new Map()
+
+    // Strategy 1: Ranking API — kind 0-4 (ROI, PnL, follower profit, followers, AUM)
+    for (const kind of [0, 1, 2, 3, 4]) {
+      try {
+        const url = `https://bapi.toobit.com/bapi/v1/copy-trading/ranking?page=1&dataType=${period}&kind=${kind}`
+        const r = await fetch(url, { headers, signal: AbortSignal.timeout(10000) })
+        if (!r.ok) continue
+        const text = await r.text()
+        if (!text.startsWith('{')) continue
+        const json = JSON.parse(text)
+        const list = json?.data?.list || []
+        for (const item of list) {
+          const id = item.leaderUserId
+          if (id && !allTraders.has(id)) allTraders.set(id, item)
+        }
+      } catch { /* skip */ }
+    }
+
+    // Strategy 2: identity-type-leaders
+    try {
+      const url = `https://bapi.toobit.com/bapi/v1/copy-trading/identity-type-leaders?dataType=${period}`
+      const r = await fetch(url, { headers, signal: AbortSignal.timeout(10000) })
+      if (r.ok) {
+        const json = await r.json()
+        for (const key of Object.keys(json?.data || {})) {
+          const list = json.data[key]
+          if (!Array.isArray(list)) continue
+          for (const item of list) {
+            const id = item.leaderUserId
+            if (id && !allTraders.has(id)) {
+              allTraders.set(id, {
+                leaderUserId: id, name: item.nickname, avatar: item.avatar,
+                profitRatio: item.leaderAvgProfitRatio, profit: item.pnl,
+                followerProfit: item.followTotalProfit, followerTotal: item.currentFollowerCount,
+              })
+            }
+          }
+        }
+      }
+    } catch { /* skip */ }
+
+    return { code: 200, data: { list: Array.from(allTraders.values()), total: allTraders.size } }
+  },
+
+  'xt/leaderboard': async (page, params) => {
+    const pageSize = parseInt(params.pageSize || '500', 10)
+
+    // Anti-bot evasion
+    await page.addInitScript(() => {
+      Object.defineProperty(navigator, 'webdriver', { get: () => false })
+      window.chrome = { runtime: {} }
+    })
+
+    // XT.com WAF can be slow — use 60s timeout
+    await page.goto('https://www.xt.com/en/futures/copy-trading', {
+      waitUntil: 'domcontentloaded', timeout: 60000,
+    })
+
+    // Wait for CF challenge to pass
+    try {
+      await page.waitForFunction(() => {
+        return !document.title.includes('Just a moment') && !document.querySelector('#challenge-running')
+      }, { timeout: 20000 })
+    } catch { /* proceed anyway */ }
+    await page.waitForTimeout(3000)
+    await page.evaluate(() => window.scrollTo(0, 500)).catch(() => {})
+    await page.waitForTimeout(5000)
+
+    // Try multiple API endpoints from page context
+    const data = await page.evaluate(async (opts) => {
+      async function safeFetch(url) {
+        try {
+          const r = await fetch(url, { credentials: 'include' })
+          if (!r.ok) return null
+          const text = await r.text()
+          if (!text.startsWith('{')) return null
+          return JSON.parse(text)
+        } catch { return null }
+      }
+      const eps = [
+        `/fapi/user/v1/public/copy-trade/elite-leader-list-v2?page=1&size=${opts.pageSize}`,
+        `/fapi/user/v1/public/trader/list?page=1&size=${opts.pageSize}&sortField=yield&sortType=1`,
+      ]
+      for (const ep of eps) {
+        const json = await safeFetch(ep)
+        if (json?.result || json?.data) return json
+      }
+      return null
+    }, { pageSize })
+
+    return data || { error: 'No API response captured' }
+  },
+
+  'weex/leaderboard': async (page, params) => {
+    await page.goto('https://www.weex.com/en/copy-trading', {
+      waitUntil: 'domcontentloaded', timeout: 45000,
+    })
+    await page.waitForTimeout(8000)
+    await page.evaluate(() => window.scrollTo(0, 500)).catch(() => {})
+    await page.waitForTimeout(3000)
+
+    // Try to capture copy-trade API responses via page.evaluate
+    const data = await page.evaluate(async () => {
+      try {
+        const r = await fetch('/api/copy-trade/rank/list', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+          body: JSON.stringify({ pageNum: 1, pageSize: 50, sortField: 'ROI' }),
+        })
+        if (!r.ok) return null
+        const text = await r.text()
+        if (!text.startsWith('{') && !text.startsWith('[')) return null
+        return JSON.parse(text)
+      } catch { return null }
+    })
+
+    return data || { error: 'No API response captured' }
+  },
+
+  'weex/leaderboard-v2': async (page, params) => {
+    // Alias — same handler as weex/leaderboard
+    return HANDLERS['weex/leaderboard'](page, params)
+  },
 }
 
 // ─── HTTP Server ────────────────────────────────────────────────────────
