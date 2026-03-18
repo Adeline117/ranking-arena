@@ -174,6 +174,12 @@ export {
   fetchBitunixStatsDetail,
 } from './enrichment-bitunix'
 
+// XT.com — uses internal copy-trading list API with batch cache
+export {
+  fetchXtEquityCurve,
+  fetchXtStatsDetail,
+} from './enrichment-xt'
+
 // Bitfinex
 export {
   fetchBitfinexEquityCurve,
