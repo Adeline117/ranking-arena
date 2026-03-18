@@ -316,22 +316,7 @@ export default function LoginPage() {
     }}>
       <div className="login-page-bg" />
       
-      {[...Array(6)].map((_, i) => (
-        <div
-          key={i}
-          className="floating-particle"
-          style={{
-            width: 8 + i * 4,
-            height: 8 + i * 4,
-            left: `${10 + i * 15}%`,
-            top: `${20 + (i % 3) * 25}%`,
-            animationDelay: `${i * 0.5}s`,
-            animationDuration: `${5 + i}s`,
-          }}
-        />
-      ))}
-      
-      <div 
+      <div
         className="login-card"
         style={{ 
           maxWidth: 440, 
@@ -339,7 +324,7 @@ export default function LoginPage() {
           background: 'var(--color-bg-secondary, var(--color-backdrop-heavy))',
           border: '1px solid var(--color-accent-primary-15)',
           borderRadius: tokens.radius['3xl'],
-          padding: '40px 36px',
+          padding: 'clamp(24px, 5vw, 40px) clamp(20px, 4vw, 36px)',
           position: 'relative',
           zIndex: 1,
           boxShadow: '0 25px 50px -12px var(--color-overlay-dark), 0 0 80px var(--color-accent-primary-08)',

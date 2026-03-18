@@ -144,7 +144,7 @@ export function RankingSkeleton({ rows = 10 }: { rows?: number } = {}) {
       <Box
         style={{
           display: 'grid',
-          gridTemplateColumns: '48px 1fr 90px 100px 70px 70px 72px',
+          gridTemplateColumns: '40px minmax(140px, 1.5fr) 58px 96px 80px 64px 64px',
           alignItems: 'center',
           gap: tokens.spacing[2],
           padding: `${tokens.spacing[3]} ${tokens.spacing[4]}`,
@@ -164,7 +164,7 @@ export function RankingSkeleton({ rows = 10 }: { rows?: number } = {}) {
           key={i}
           style={{
             display: 'grid',
-            gridTemplateColumns: '48px 1fr 90px 100px 70px 70px 72px',
+            gridTemplateColumns: '40px minmax(140px, 1.5fr) 58px 96px 80px 64px 64px',
             alignItems: 'center',
             gap: tokens.spacing[2],
             padding: `10px ${tokens.spacing[4]}`,
