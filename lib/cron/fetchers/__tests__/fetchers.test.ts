@@ -17,54 +17,44 @@ import { calculateArenaScore, parseNum, normalizeWinRate } from '../shared'
 // ============================================
 
 describe('Fetcher Registry', () => {
-  const expectedPlatforms = [
-    'okx_futures', 'htx', 'htx_futures', 'binance_futures', 'binance_spot',
-    'binance_web3', 'bybit', 'bybit_spot', 'okx_web3', 'bitget_futures',
-    'bitget_spot', 'xt', 'bingx', 'gateio', 'mexc',
-    'coinex', 'phemex', 'blofin', 'bitfinex',
-    'drift', 'bitunix', 'btcc', 'web3_bot', 'etoro',
-    'hyperliquid', 'gmx', 'gains', 'jupiter_perps', 'aevo', 'dydx', 'kwenta',
-  ]
+  // NOTE: Inline fetchers have been removed (2026-03-13). All platforms use ConnectorRegistry.
+  // INLINE_FETCHERS is now an empty stub for backward compatibility.
+  // getSupportedInlinePlatforms() now returns the active platform list (for monitoring).
 
-  test('INLINE_FETCHERS has all expected platform keys', () => {
-    for (const platform of expectedPlatforms) {
-      expect(INLINE_FETCHERS).toHaveProperty(platform)
-    }
+  test('INLINE_FETCHERS is an empty stub (all platforms migrated to ConnectorRegistry)', () => {
+    // After connector migration, INLINE_FETCHERS is empty
+    expect(typeof INLINE_FETCHERS).toBe('object')
   })
 
-  test('all fetcher values are functions', () => {
+  test('all fetcher values are functions (empty registry has no entries)', () => {
+    // With empty INLINE_FETCHERS, this is a no-op assertion
     for (const [_key, fetcher] of Object.entries(INLINE_FETCHERS)) {
       expect(typeof fetcher).toBe('function')
-      // Each fetcher should accept (supabase, periods) and return Promise<FetchResult>
-      expect(fetcher.length).toBeGreaterThanOrEqual(1) // at least 1 param (supabase)
     }
   })
 
-  test('getInlineFetcher returns correct fetcher for known platform', () => {
+  test('getInlineFetcher returns null for all platforms (deprecated)', () => {
+    // After migration, getInlineFetcher returns null for everything
     const fetcher = getInlineFetcher('binance_futures')
-    expect(fetcher).toBeDefined()
-    expect(typeof fetcher).toBe('function')
+    expect(fetcher).toBeNull()
   })
 
-  test('getInlineFetcher returns undefined for unknown platform', () => {
+  test('getInlineFetcher returns null for unknown platform', () => {
     const fetcher = getInlineFetcher('nonexistent_platform_xyz')
-    expect(fetcher).toBeUndefined()
+    expect(fetcher).toBeNull()
   })
 
-  test('getSupportedInlinePlatforms returns deduplicated list', () => {
+  test('getSupportedInlinePlatforms returns active platform list', () => {
     const platforms = getSupportedInlinePlatforms()
     expect(platforms.length).toBeGreaterThan(0)
 
-    // Should be deduplicated
-    const unique = new Set(platforms)
-    expect(unique.size).toBe(platforms.length)
-
-    // htx_futures is an alias for htx — both should be in keys but dedup in platforms list
-    expect(platforms).toContain('htx')
+    // Should contain known active platforms
+    expect(platforms).toContain('binance_futures')
+    expect(platforms).toContain('bybit')
+    expect(platforms).toContain('hyperliquid')
   })
 
-  test('fetcher count matches expected', () => {
-    // At least 25 unique fetchers (some are aliases)
+  test('fetcher count matches expected (at least 25 active platforms)', () => {
     const platforms = getSupportedInlinePlatforms()
     expect(platforms.length).toBeGreaterThanOrEqual(25)
   })
@@ -243,19 +233,12 @@ function _createMockSupabase() {
 }
 
 describe('Fetcher Function Signatures', () => {
-  // Verify each fetcher can be called with mock supabase without throwing immediately
-  // (They will fail on actual API calls, but the function shape should be correct)
+  // NOTE: Inline fetchers have been removed (2026-03-13). All platforms use ConnectorRegistry.
+  // INLINE_FETCHERS is now an empty stub, so there are no function signatures to verify.
 
-  const platforms = Object.keys(INLINE_FETCHERS).filter((k) => k !== 'htx_futures') // skip alias
-
-  test.each(platforms)('%s fetcher accepts (supabase, periods) args', (platform) => {
-    const fetcher = INLINE_FETCHERS[platform]
-    expect(fetcher).toBeDefined()
-    expect(typeof fetcher).toBe('function')
-
-    // Function should accept at least 1 parameter (supabase); 2nd (periods) may have default
-    expect(fetcher.length).toBeGreaterThanOrEqual(1)
-    expect(fetcher.length).toBeLessThanOrEqual(2)
+  test('INLINE_FETCHERS is empty after connector migration', () => {
+    const platforms = Object.keys(INLINE_FETCHERS)
+    expect(platforms).toHaveLength(0)
   })
 })
 

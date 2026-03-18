@@ -45,6 +45,22 @@ jest.mock('next/server', () => {
   return { NextResponse: MockNextResponse, NextRequest: MockNextRequest }
 })
 
+// Mock env as a static object. The route reads env.STRIPE_SECRET_KEY at request time.
+// We use a mutable object so tests can modify it.
+const mockEnv: Record<string, string | undefined> = {
+  STRIPE_SECRET_KEY: 'sk_test_123',
+  NEXT_PUBLIC_APP_URL: 'https://app.test.com',
+  NEXT_PUBLIC_SUPABASE_URL: 'https://test.supabase.co',
+  NEXT_PUBLIC_SUPABASE_ANON_KEY: 'test-anon-key',
+}
+jest.mock('@/lib/env', () => ({
+  env: new Proxy({}, {
+    get(_t, key) {
+      return mockEnv[String(key)]
+    },
+  }),
+}))
+
 const mockCheckRateLimit = jest.fn().mockResolvedValue(null)
 jest.mock('@/lib/utils/rate-limit', () => ({
   checkRateLimit: (...args: unknown[]) => mockCheckRateLimit(...args),
@@ -80,6 +96,20 @@ jest.mock('@/lib/stripe', () => ({
 // Mock supabase: auth.getUser and from().upsert()
 const mockGetUser = jest.fn()
 
+// The route uses getSupabaseAdmin() from '@/lib/supabase/server', not createClient directly
+jest.mock('@/lib/supabase/server', () => ({
+  getSupabaseAdmin: jest.fn(() => ({
+    auth: { getUser: (...args: unknown[]) => mockGetUser(...args) },
+    from: jest.fn(() => ({
+      upsert: jest.fn().mockResolvedValue({ data: null, error: null }),
+      select: jest.fn().mockReturnValue({
+        eq: jest.fn().mockResolvedValue({ count: 0, error: null }),
+      }),
+    })),
+  })),
+}))
+
+// Also mock createClient for the cookie-auth fallback path in the route
 jest.mock('@supabase/supabase-js', () => ({
   createClient: jest.fn(() => ({
     auth: { getUser: (...args: unknown[]) => mockGetUser(...args) },
@@ -104,7 +134,11 @@ describe('POST /api/stripe/create-checkout', () => {
     mockGetUser.mockResolvedValue({ data: { user: validUser }, error: null })
     mockGetOrCreateStripeCustomer.mockResolvedValue('cus_test123')
     mockCreateCheckoutSession.mockResolvedValue({ url: 'https://checkout.stripe.com/session', id: 'cs_test123' })
-    process.env.STRIPE_SECRET_KEY = 'sk_test_123'
+    // Reset env mock
+    mockEnv.STRIPE_SECRET_KEY = 'sk_test_123'
+    mockEnv.NEXT_PUBLIC_APP_URL = 'https://app.test.com'
+    mockEnv.NEXT_PUBLIC_SUPABASE_URL = 'https://test.supabase.co'
+    mockEnv.NEXT_PUBLIC_SUPABASE_ANON_KEY = 'test-anon-key'
     process.env.NEXT_PUBLIC_SUPABASE_URL = 'https://test.supabase.co'
     process.env.SUPABASE_SERVICE_ROLE_KEY = 'test-service-key'
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY = 'test-anon-key'
@@ -130,7 +164,7 @@ describe('POST /api/stripe/create-checkout', () => {
   // --- Stripe Not Configured ---
 
   it('returns 503 when STRIPE_SECRET_KEY is not set', async () => {
-    delete process.env.STRIPE_SECRET_KEY
+    mockEnv.STRIPE_SECRET_KEY = undefined
 
     const req = new NextRequest('http://localhost/api/stripe/create-checkout', {
       method: 'POST',

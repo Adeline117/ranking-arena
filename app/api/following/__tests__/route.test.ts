@@ -11,12 +11,23 @@ jest.mock('next/server', () => {
   class MockNextResponse {
     _body: unknown
     status: number
-    headers: Map<string, string>
+    _headersMap: Map<string, string>
+
     constructor(body?: unknown, init: { status?: number } = {}) {
       this._body = body
       this.status = init.status || 200
-      this.headers = new Map()
+      this._headersMap = new Map()
     }
+
+    get headers() {
+      const map = this._headersMap
+      return {
+        set: (key: string, value: string) => map.set(key, value),
+        get: (key: string) => map.get(key) || null,
+        has: (key: string) => map.has(key),
+      }
+    }
+
     async json() { return this._body }
     static json(data: unknown, init?: { status?: number }) {
       return new MockNextResponse(data, init)
@@ -26,20 +37,72 @@ jest.mock('next/server', () => {
   class MockNextRequest {
     url: string
     nextUrl: URL
-    headers: Map<string, string>
+    _headers: Map<string, string>
+    method: string
+    cookies: { get: () => undefined }
     constructor(url: string, opts?: { headers?: Record<string, string> }) {
       this.url = url
       this.nextUrl = new URL(url)
-      this.headers = new Map(Object.entries({ 'user-agent': 'Mozilla/5.0 (Test)', ...(opts?.headers || {}) }))
+      this._headers = new Map(Object.entries({ 'user-agent': 'Mozilla/5.0 (Test)', ...(opts?.headers || {}) }))
+      this.method = 'GET'
+      this.cookies = { get: () => undefined }
+    }
+    get headers() {
+      const h = this._headers
+      return { get: (key: string) => h.get(key) || null }
     }
   }
 
   return { NextResponse: MockNextResponse, NextRequest: MockNextRequest }
 })
 
+jest.mock('@/lib/utils/csrf', () => ({
+  validateCsrfToken: jest.fn().mockReturnValue(true),
+  generateCsrfToken: jest.fn().mockReturnValue('test-csrf'),
+  CSRF_COOKIE_NAME: 'csrf-token',
+  CSRF_HEADER_NAME: 'x-csrf-token',
+}))
+
+jest.mock('@/lib/api/correlation', () => ({
+  getOrCreateCorrelationId: jest.fn().mockReturnValue('test-cid'),
+  runWithCorrelationId: jest.fn((_id: string, fn: () => unknown) => fn()),
+  getCorrelationId: jest.fn().mockReturnValue('test-cid'),
+}))
+
+jest.mock('@/lib/api/versioning', () => ({
+  parseApiVersion: jest.fn().mockReturnValue({ version: 'v1', deprecated: false }),
+  addVersionHeaders: jest.fn(),
+  addDeprecationHeaders: jest.fn(),
+}))
+
 const mockGetAuthUser = jest.fn()
+
+// Supabase query chain proxy
+let supabaseQueryResult: { data: unknown; error: unknown } = { data: [], error: null }
+
+function buildChainMock(): unknown {
+  const handler: ProxyHandler<object> = {
+    get(_target, prop) {
+      if (prop === 'then') {
+        return (resolve: (v: unknown) => void) => resolve(supabaseQueryResult)
+      }
+      if (prop === 'catch' || prop === 'finally') return undefined
+      return jest.fn(() => new Proxy({}, handler))
+    },
+  }
+  return new Proxy({}, handler)
+}
+
 jest.mock('@/lib/supabase/server', () => ({
   getAuthUser: (...args: unknown[]) => mockGetAuthUser(...args),
+  getSupabaseAdmin: jest.fn(() => ({
+    from: jest.fn(() => buildChainMock()),
+  })),
+}))
+
+jest.mock('@/lib/utils/rate-limit', () => ({
+  checkRateLimit: jest.fn().mockResolvedValue(null),
+  RateLimitPresets: { authenticated: { limit: 60, window: 60 }, public: { limit: 100, window: 60 } },
 }))
 
 jest.mock('@/lib/utils/logger', () => {
@@ -62,24 +125,8 @@ jest.mock('@/lib/cache/redis-layer', () => ({
   tieredDel: (...args: unknown[]) => mockTieredDel(...args),
 }))
 
-// Supabase mock
-let supabaseQueryResult: { data: unknown; error: unknown } = { data: [], error: null }
-
-jest.mock('@supabase/supabase-js', () => ({
-  createClient: jest.fn(() => ({
-    from: jest.fn(() => {
-      const handler: ProxyHandler<object> = {
-        get(_target, prop) {
-          if (prop === 'then') {
-            return (resolve: (v: unknown) => void) => resolve(supabaseQueryResult)
-          }
-          if (prop === 'catch' || prop === 'finally') return undefined
-          return jest.fn(() => new Proxy({}, handler))
-        },
-      }
-      return new Proxy({}, handler)
-    }),
-  })),
+jest.mock('@/lib/features', () => ({
+  features: { social: true },
 }))
 
 import { NextRequest } from 'next/server'
@@ -108,7 +155,8 @@ describe('GET /api/following', () => {
     const body = await res.json()
 
     expect(res.status).toBe(401)
-    expect(body.error).toBe('Authentication required')
+    // withAuth middleware returns Chinese error: { success: false, error: '未授权' }
+    expect(body.error).toBe('未授权')
   })
 
   // --- Input Validation ---
@@ -224,6 +272,7 @@ describe('GET /api/following', () => {
     const body = await res.json()
 
     expect(res.status).toBe(500)
-    expect(body.error).toBe('Internal server error')
+    // withAuth middleware catch block returns Chinese: '服务器内部错误'
+    expect(body.error).toBe('服务器内部错误')
   })
 })

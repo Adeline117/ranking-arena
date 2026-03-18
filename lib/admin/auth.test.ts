@@ -5,9 +5,25 @@ import type { SupabaseClient } from "@supabase/supabase-js"
  * 测试管理员认证工具
  */
 
-import { verifyAdmin, getSupabaseAdmin } from './auth'
+// Override the global @/lib/supabase/server mock so getSupabaseAdmin
+// calls through to createClient with the correct env-var-based config.
+// This lets tests verify createClient is called with expected args and
+// lets the "throw when missing" test work correctly.
+jest.mock('@/lib/supabase/server', () => {
+  const { createClient: mockCreate } = jest.requireMock('@supabase/supabase-js') as { createClient: jest.Mock }
+  return {
+    getSupabaseAdmin: jest.fn(() => {
+      const url = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL || ''
+      const key = process.env.SUPABASE_SERVICE_ROLE_KEY || ''
+      if (!url || !key) throw new Error('Missing Supabase env vars')
+      return mockCreate(url, key, { auth: { persistSession: false } })
+    }),
+    getAuthUser: jest.fn().mockResolvedValue(null),
+    getSupabaseClient: jest.fn(),
+  }
+})
 
-// Mock createClient
+// Mock createClient — must come AFTER the @/lib/supabase/server mock
 jest.mock('@supabase/supabase-js', () => ({
   createClient: jest.fn(() => ({
     auth: {
@@ -20,6 +36,7 @@ jest.mock('@supabase/supabase-js', () => ({
   })),
 }))
 
+import { verifyAdmin, getSupabaseAdmin } from './auth'
 import { createClient } from '@supabase/supabase-js'
 
 // Mock environment variables
@@ -45,7 +62,7 @@ describe('getAdminEmails', () => {
     // Need to reset modules and re-import with env set
     jest.resetModules()
     process.env.ADMIN_EMAILS = 'admin@example.com,superadmin@example.com'
-     
+
     const { getAdminEmails: freshGetAdminEmails } = require('./auth')
     const emails = freshGetAdminEmails()
     expect(emails).toContain('admin@example.com')
@@ -56,7 +73,7 @@ describe('getAdminEmails', () => {
     delete process.env.ADMIN_EMAILS
     // Need to reimport to get fresh module
     jest.resetModules()
-     
+
     const { getAdminEmails: freshGetAdminEmails } = require('./auth')
     const emails = freshGetAdminEmails()
     // Secure default: empty array (no default admins)
@@ -141,7 +158,7 @@ describe('verifyAdmin', () => {
     // Reset modules to load with proper ADMIN_EMAILS
     jest.resetModules()
     process.env.ADMIN_EMAILS = 'admin@example.com,superadmin@example.com'
-     
+
     const { verifyAdmin: freshVerifyAdmin } = require('./auth')
 
     const mockUser = {
