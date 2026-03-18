@@ -42,8 +42,8 @@ export function MetricBadge({
       style={{
         display: 'inline-flex',
         alignItems: 'baseline',
-        gap: 6,
-        padding: `5px 12px`,
+        gap: tokens.spacing[2],
+        padding: `${tokens.spacing[1]} ${tokens.spacing[3]}`,
         background: bgColor,
         borderRadius: tokens.radius.full,
         border: `1px solid ${highlight ? tokens.colors.accent.success + '30' : negative ? tokens.colors.accent.error + '20' : tokens.colors.border.primary}`,
@@ -52,11 +52,11 @@ export function MetricBadge({
       }}
       title={tooltip}
     >
-      <Text style={{ fontSize: 11, color: tokens.colors.text.tertiary, fontWeight: 500, whiteSpace: 'nowrap' }}>
+      <Text style={{ fontSize: tokens.typography.fontSize.xs, color: tokens.colors.text.tertiary, fontWeight: 500, whiteSpace: 'nowrap' }}>
         {label}
       </Text>
       <Text style={{
-        fontSize: 13,
+        fontSize: tokens.typography.fontSize.sm,
         color,
         fontWeight: 700,
         fontFamily: tokens.typography.fontFamily.mono.join(', '),

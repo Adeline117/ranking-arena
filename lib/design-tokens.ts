@@ -117,6 +117,7 @@ export const tokens = {
       lg: '18px',    // 1.125rem
       xl: '20px',    // 1.25rem
       '2xl': '24px', // 1.5rem
+      hero: '28px',  // 1.75rem — hero metrics (ROI/PnL)
       '3xl': '32px', // 2rem
       '4xl': '40px', // 2.5rem
       '5xl': '48px', // 3rem

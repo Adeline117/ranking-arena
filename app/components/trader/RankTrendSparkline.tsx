@@ -74,6 +74,21 @@ export default function RankTrendSparkline({
 
   const handleMouseLeave = useCallback(() => setTooltip(null), [])
 
+  // Touch support for mobile
+  const handleTouchMove = useCallback(
+    (e: React.TouchEvent<SVGSVGElement>) => {
+      if (!svgRef.current || points.length < 2) return
+      const rect = svgRef.current.getBoundingClientRect()
+      const touch = e.touches[0]
+      const x = touch.clientX - rect.left
+      const idx = Math.round((x / width) * (points.length - 1))
+      const clamped = Math.max(0, Math.min(idx, points.length - 1))
+      setTooltip({ x: (clamped / (points.length - 1)) * width, point: points[clamped] })
+    },
+    [points, width],
+  )
+  const handleTouchEnd = useCallback(() => setTooltip(null), [])
+
   if (!points || points.length < 2) return null
 
   const scores = points.map(p => p.arenaScore as number)
@@ -104,7 +119,8 @@ export default function RankTrendSparkline({
       <svg ref={svgRef} width={width} height={height}
         viewBox={`0 0 ${width} ${height}`}
         style={{ cursor: 'crosshair', overflow: 'visible' }}
-        onMouseMove={handleMouseMove} onMouseLeave={handleMouseLeave}>
+        onMouseMove={handleMouseMove} onMouseLeave={handleMouseLeave}
+        onTouchMove={handleTouchMove} onTouchEnd={handleTouchEnd}>
         <defs>
           <linearGradient id={gradientId} x1="0" y1="0" x2="0" y2="1">
             <stop offset="0%" stopColor={strokeColor} stopOpacity={0.25} />

@@ -202,7 +202,7 @@ export default function StatsPage({
         />
 
         {/* Chart + Compare Two Columns - 没数据时各自隐藏 */}
-        <Box className="stats-two-col" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: tokens.spacing[6], marginTop: tokens.spacing[6] }}>
+        <Box className="stats-two-col" style={{ display: 'grid', gap: tokens.spacing[6], marginTop: tokens.spacing[6] }}>
           <SectionErrorBoundary fallbackMessage="">
             <EquityCurveSection equityCurve={equityCurve} traderHandle={traderHandle} delay={0.1} />
           </SectionErrorBoundary>
@@ -222,6 +222,14 @@ export default function StatsPage({
           />
         </Box>
       </Box>
+
+      <style>{`
+        .stats-two-col { grid-template-columns: 1fr 1fr; }
+        @media (max-width: 768px) {
+          .stats-two-col { grid-template-columns: 1fr !important; }
+          .trading-grid { grid-template-columns: 1fr !important; }
+        }
+      `}</style>
     </Box>
   )
 }

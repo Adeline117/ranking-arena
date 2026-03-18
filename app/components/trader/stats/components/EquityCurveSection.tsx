@@ -530,7 +530,7 @@ function SimpleLineChart({
             </Text>
             {dataKey === 'roi' && hoverData.pnl != null && !isNaN(hoverData.pnl) && (
               <Text size="xs" color="tertiary" style={{ display: 'block', marginTop: 2, fontFamily: tokens.typography.fontFamily.mono.join(', ') }}>
-                PnL: {formatTooltipValue(hoverData.pnl).replace(/[+-]/, m => m)}
+                PnL: {formatTooltipValue(hoverData.pnl)}
               </Text>
             )}
             {dataKey === 'pnl' && hoverData.roi != null && !isNaN(hoverData.roi) && (

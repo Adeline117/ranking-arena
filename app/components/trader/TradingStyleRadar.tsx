@@ -64,7 +64,7 @@ export default function TradingStyleRadar({
 
   return (
     <div style={{ width: '100%', maxWidth: 200, margin: '0 auto' }}>
-      <svg viewBox="0 0 120 120" style={{ width: '100%', height: 'auto' }}>
+      <svg viewBox="0 0 120 120" style={{ width: '100%', height: 'auto' }} role="img" aria-label={t('traderTradingStyleLabel')}>
         {/* Ring guides */}
         {rings.map((level) => {
           const ringPoints = Array.from({ length: AXES }, (_, i) => {
@@ -82,12 +82,28 @@ export default function TradingStyleRadar({
           return <line key={i} x1={CENTER} y1={CENTER} x2={x} y2={y} stroke="var(--color-border-primary)" strokeWidth="0.5" opacity="0.3" />
         })}
 
-        {/* Data fill */}
-        <path d={dataPath} fill="var(--color-accent-primary)" fillOpacity="0.15" stroke="var(--color-accent-primary)" strokeWidth="1.5" />
+        {/* Pattern for colorblind accessibility */}
+        <defs>
+          <pattern id="radar-hatch" patternUnits="userSpaceOnUse" width="4" height="4" patternTransform="rotate(45)">
+            <line x1="0" y1="0" x2="0" y2="4" stroke="var(--color-accent-primary)" strokeWidth="0.5" opacity="0.3" />
+          </pattern>
+        </defs>
 
-        {/* Data dots */}
+        {/* Data fill with pattern overlay */}
+        <path d={dataPath} fill="var(--color-accent-primary)" fillOpacity="0.15" stroke="var(--color-accent-primary)" strokeWidth="1.5" />
+        <path d={dataPath} fill="url(#radar-hatch)" />
+
+        {/* Data dots with value labels */}
         {dataPoints.map((p, i) => (
-          <circle key={i} cx={p[0]} cy={p[1]} r="2.5" fill="var(--color-accent-primary)" />
+          <g key={i}>
+            <circle cx={p[0]} cy={p[1]} r="2.5" fill="var(--color-accent-primary)" />
+            {values[i] > 0 && (
+              <text x={p[0]} y={p[1] - 5} textAnchor="middle" fontSize="6" fill="var(--color-text-secondary)" fontWeight="600"
+                style={{ fontFamily: tokens.typography.fontFamily.mono.join(', ') }}>
+                {Math.round(values[i] * 100)}
+              </text>
+            )}
+          </g>
         ))}
 
         {/* Labels */}
@@ -101,7 +117,7 @@ export default function TradingStyleRadar({
               y={y}
               textAnchor="middle"
               dominantBaseline="central"
-              fontSize="7"
+              fontSize="9"
               fontWeight="600"
               fill="var(--color-text-tertiary)"
               style={{ fontFamily: tokens.typography.fontFamily.sans.join(', ') }}

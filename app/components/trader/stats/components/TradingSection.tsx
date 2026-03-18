@@ -76,7 +76,7 @@ export function TradingSection({
     >
       <Box style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[2], marginBottom: tokens.spacing[5] }}>
         <Text size="lg" weight="black" style={{ color: tokens.colors.text.primary }}>
-          交易统计
+          {t('tradingStats')}
         </Text>
       </Box>
 

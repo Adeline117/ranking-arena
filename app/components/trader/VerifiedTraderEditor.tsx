@@ -226,7 +226,7 @@ export default function VerifiedTraderEditor({
           onClick={() => setIsEditing(false)}
           disabled={saving}
         >
-          Cancel
+          {t('cancel')}
         </Button>
         <Button
           variant="primary"

@@ -87,7 +87,13 @@ export default function PortfolioTable({ items, history = [], isPro = true, onUn
         {/* Content */}
         <Box style={{ padding: tokens.spacing[5], filter: isPro ? 'none' : 'blur(3px)', pointerEvents: isPro ? 'auto' : 'none' }}>
           {viewMode === 'current' ? (
-            <Box>{/* PortfolioCurrentView removed in cleanup */}</Box>
+            <PortfolioCurrentView
+              items={items}
+              hoveredRow={hoveredRow}
+              selectedMarket={selectedMarket}
+              onHoverRow={setHoveredRow}
+              onSelectMarket={setSelectedMarket}
+            />
           ) : (
             <PositionHistoryView
               sortedHistory={sortedHistory}
