@@ -32,6 +32,13 @@ const WINDOW_MAP: Record<Window, string> = {
   '90d': '90D',
 }
 
+// Bybit's x-api uses DATA_DURATION_* enum for the dataDuration param
+const SCRAPER_DURATION_MAP: Record<Window, string> = {
+  '7d': 'DATA_DURATION_SEVEN_DAY',
+  '30d': 'DATA_DURATION_THIRTY_DAY',
+  '90d': 'DATA_DURATION_NINETY_DAY',
+}
+
 export class BybitFuturesConnector extends BaseConnector {
   readonly platform = 'bybit' as const
   readonly marketType = 'futures' as const
@@ -63,7 +70,7 @@ export class BybitFuturesConnector extends BaseConnector {
       // Fallback: VPS Playwright scraper (renders full page, bypasses WAF)
       // NOT proxyViaVPS which just forwards HTTP and gets 403
       const vpsData = await this.fetchViaVPS<Record<string, unknown>>('/bybit/leaderboard', {
-        dataDuration: timeRange,
+        dataDuration: SCRAPER_DURATION_MAP[window],
         pageNo: String(page),
         pageSize: String(limit),
       }, 600000) // 10min — scraper queue can be backed up
