@@ -10,8 +10,8 @@
  */
 
 import { NextResponse } from 'next/server'
-import { createClient } from '@supabase/supabase-js'
-import { isAuthorized, getSupabaseEnv } from '@/lib/cron/utils'
+import { getSupabaseAdmin } from '@/lib/supabase/server'
+import { isAuthorized } from '@/lib/cron/utils'
 import { fetchBinancePositionHistory } from '@/lib/cron/fetchers/enrichment-binance'
 import { upsertPositionHistory } from '@/lib/cron/fetchers/enrichment-db'
 import { PipelineLogger } from '@/lib/services/pipeline-logger'
@@ -36,14 +36,7 @@ export async function GET(req: Request) {
   const plog = await PipelineLogger.start('snapshot-positions')
 
   try {
-    const { url, serviceKey } = getSupabaseEnv()
-    if (!url || !serviceKey) {
-      throw new Error('Supabase environment variables missing')
-    }
-
-    const supabase = createClient(url, serviceKey, {
-      auth: { persistSession: false },
-    })
+    const supabase = getSupabaseAdmin()
 
     // Get top 50 binance_futures traders by arena_score
     const { data: traders, error: queryError } = await supabase

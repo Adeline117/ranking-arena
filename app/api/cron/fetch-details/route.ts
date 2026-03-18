@@ -13,8 +13,8 @@
  */
 
 import { NextResponse } from 'next/server'
-import { createClient } from '@supabase/supabase-js'
-import { isAuthorized, getSupabaseEnv, createSupabaseAdmin, logCronExecution } from '@/lib/cron/utils'
+import { getSupabaseAdmin } from '@/lib/supabase/server'
+import { isAuthorized, createSupabaseAdmin, logCronExecution } from '@/lib/cron/utils'
 import { PipelineLogger } from '@/lib/services/pipeline-logger'
 import { createScheduleManager } from '@/lib/services/schedule-manager'
 import { ActivityTier } from '@/lib/services/smart-scheduler'
@@ -68,7 +68,7 @@ interface TraderToEnrich {
  * Enrich a single trader based on platform
  */
 async function enrichTrader(
-  supabase: ReturnType<typeof createClient<any>>,
+  supabase: ReturnType<typeof getSupabaseAdmin>,
   trader: TraderToEnrich
 ): Promise<{ success: boolean; error?: string }> {
   const { source, source_trader_id: traderId } = trader
@@ -166,15 +166,7 @@ export async function GET(req: Request) {
       return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
     }
 
-    const { url, serviceKey } = getSupabaseEnv()
-    if (!url || !serviceKey) {
-      return NextResponse.json(
-        { error: 'Supabase environment variables missing' },
-        { status: 500 }
-      )
-    }
-
-    const supabase = createClient(url, serviceKey)
+    const supabase = getSupabaseAdmin()
 
     // Parse params
     const requestUrl = new URL(req.url)
@@ -271,7 +263,7 @@ export async function GET(req: Request) {
 }
 
 async function processTraders(
-  supabase: ReturnType<typeof createClient<any>>,
+  supabase: ReturnType<typeof getSupabaseAdmin>,
   traders: TraderToEnrich[],
   concurrency: number,
   startTime: number,
