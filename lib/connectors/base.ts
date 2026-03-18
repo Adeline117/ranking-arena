@@ -257,7 +257,7 @@ export abstract class BaseConnector implements PlatformConnector {
             signal: controller.signal,
             headers: {
               'Content-Type': 'application/json',
-              'X-Proxy-Key': process.env.VPS_PROXY_KEY || '',
+              'X-Proxy-Key': (process.env.VPS_PROXY_KEY || '').trim(),
             },
             body: JSON.stringify({
               url,
@@ -384,7 +384,7 @@ export abstract class BaseConnector implements PlatformConnector {
   ): Promise<T | null> {
     // Use scraper port (3457) for named endpoints, proxy port (3456) as fallback
     const vpsHost = process.env.VPS_SCRAPER_SG || process.env.VPS_PROXY_SG || process.env.VPS_PROXY_URL || process.env.VPS_SCRAPER_HOST;
-    const vpsKey = process.env.VPS_PROXY_KEY;
+    const vpsKey = process.env.VPS_PROXY_KEY?.trim();
 
     if (!vpsHost || !vpsKey) {
       return null; // VPS not configured, return null to allow fallback
@@ -485,7 +485,7 @@ export abstract class BaseConnector implements PlatformConnector {
     timeoutMs = 120000
   ): Promise<T | null> {
     const vpsHost = process.env.VPS_PROXY_SG || process.env.VPS_PROXY_URL || process.env.VPS_SCRAPER_HOST;
-    const vpsKey = process.env.VPS_PROXY_KEY;
+    const vpsKey = process.env.VPS_PROXY_KEY?.trim();
 
     if (!vpsHost || !vpsKey) return null;
 

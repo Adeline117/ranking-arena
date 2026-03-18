@@ -59,7 +59,7 @@ export async function fetchWithProxyFallback<T>(
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            'X-Proxy-Key': process.env.VPS_PROXY_KEY || '',
+            'X-Proxy-Key': (process.env.VPS_PROXY_KEY || '').trim(),
           },
           body: JSON.stringify({
             url,
