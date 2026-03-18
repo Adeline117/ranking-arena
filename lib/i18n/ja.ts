@@ -4112,7 +4112,6 @@ const ja = {
     rankingTrend: 'トレンド',
     rankingWinRate: '勝率',
     rankingMdd: 'MDD',
-    sortBy: '並び替え',
     rankingScore: 'スコア',
     rankingArenaScore: 'Arena Score',
     rankingNoData: 'ランキングデータがありません',
