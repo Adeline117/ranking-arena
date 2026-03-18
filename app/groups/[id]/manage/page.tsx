@@ -5,6 +5,7 @@ import { notFound } from 'next/navigation'
 import Link from 'next/link'
 import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase/client'
+import { getLocaleFromLanguage } from '@/lib/utils/format'
 import { tokens } from '@/lib/design-tokens'
 import TopNav from '@/app/components/layout/TopNav'
 import Card from '@/app/components/ui/Card'
@@ -77,7 +78,7 @@ function ActivityLogSection({ groupId }: { groupId: string }) {
         <Box key={activity.id} style={{ padding: tokens.spacing[2], background: tokens.colors.bg.secondary, borderRadius: tokens.radius.md, borderLeft: `3px solid ${tokens.colors.accent?.primary || tokens.colors.accent.brand}` }}>
           <Box style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <Text size="sm" weight="bold">{activity.title}</Text>
-            <Text size="xs" color="tertiary">{new Date(activity.created_at).toLocaleString(language === 'zh' ? 'zh-CN' : 'en-US')}</Text>
+            <Text size="xs" color="tertiary">{new Date(activity.created_at).toLocaleString(getLocaleFromLanguage(language))}</Text>
           </Box>
           <Text size="xs" color="secondary" style={{ marginTop: 2 }}>{activity.message}</Text>
         </Box>

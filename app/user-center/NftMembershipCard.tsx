@@ -1,6 +1,7 @@
 'use client'
 
 import { useRouter } from 'next/navigation'
+import { getLocaleFromLanguage } from '@/lib/utils/format'
 import { tokens } from '@/lib/design-tokens'
 import { Button } from '@/app/components/base'
 import type { MembershipInfo } from './membership-config'
@@ -52,7 +53,7 @@ export default function NftMembershipCard({ info, language, cardStyle, t }: NftM
           </div>
           {info.nft.expiresAt && (
             <div style={{ fontSize: 13, color: tokens.colors.text.tertiary }}>
-              {t('validUntil')} {new Date(info.nft.expiresAt).toLocaleDateString(language === 'zh' ? 'zh-CN' : 'en-US')}
+              {t('validUntil')} {new Date(info.nft.expiresAt).toLocaleDateString(getLocaleFromLanguage(language))}
             </div>
           )}
         </div>

@@ -1,6 +1,7 @@
 'use client'
 
 import Link from 'next/link'
+import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import { tokens } from '@/lib/design-tokens'
 import { Box, Text } from '../base'
 import { CloseIcon } from '../ui/icons'
@@ -106,6 +107,7 @@ interface TrendingSearchesProps {
 
 /** Trending / popular searches section */
 export function TrendingSearches({ trending, language, onClose, hasHistory, loading }: TrendingSearchesProps) {
+  const { t } = useLanguage()
   if (!loading && trending.length === 0) return null
 
   return (
@@ -115,7 +117,7 @@ export function TrendingSearches({ trending, language, onClose, hasHistory, load
         borderBottom: hasHistory ? `1px solid ${tokens.colors.border.primary}` : 'none',
       }}>
         <Text size="xs" weight="bold" color="tertiary" style={{ textTransform: 'uppercase' }}>
-          {language === 'zh' ? '热门搜索' : 'Popular searches'}
+          {t('popularSearches')}
         </Text>
       </Box>
       <Box style={{ padding: `${tokens.spacing[2]} ${tokens.spacing[4]}` }}>

@@ -47,7 +47,7 @@ export default function GroupsStep({ theme, language, groups, joinedGroups, load
           ))
         ) : groups.length === 0 ? (
           <Text style={{ textAlign: 'center', color: theme.textSecondary, padding: '20px 0' }}>
-            {language === 'zh' ? '暂无小组' : 'No groups yet'}
+            {tr('noGroupsYet')}
           </Text>
         ) : (
           groups.map(g => {
@@ -78,7 +78,7 @@ export default function GroupsStep({ theme, language, groups, joinedGroups, load
                   </Text>
                   {g.member_count != null && (
                     <Text size="xs" style={{ color: theme.textSecondary }}>
-                      {g.member_count} {language === 'zh' ? '成员' : 'members'}
+                      {g.member_count} {tr('membersCount')}
                     </Text>
                   )}
                 </Box>

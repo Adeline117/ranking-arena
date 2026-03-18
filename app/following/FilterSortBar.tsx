@@ -42,7 +42,7 @@ export default function FilterSortBar({
           type="text"
           value={searchQuery}
           onChange={(e) => onSearchChange(e.target.value)}
-          placeholder={language === 'zh' ? '搜索关注...' : 'Search following...'}
+          placeholder={t('searchFollowingPlaceholder')}
           style={{
             flex: '1 1 200px',
             padding: `${tokens.spacing[2]} ${tokens.spacing[3]}`,
@@ -69,8 +69,8 @@ export default function FilterSortBar({
             minHeight: 40,
           }}
         >
-          <option value="all">{language === 'zh' ? '全部平台' : 'All Platforms'}</option>
-          <option value="user">{language === 'zh' ? '用户' : 'Users'}</option>
+          <option value="all">{t('allPlatformsFilter')}</option>
+          <option value="user">{t('usersFilter')}</option>
           {availablePlatforms.map(p => (
             <option key={p} value={p}>{getSourceDisplayName(p, language)}</option>
           ))}

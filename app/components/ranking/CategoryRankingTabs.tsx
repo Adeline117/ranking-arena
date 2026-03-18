@@ -56,7 +56,7 @@ export default function CategoryRankingTabs({
       } else {
         // 默认提示：如果父组件没有传入 onProRequired
         showToast(
-          language === 'zh' ? '此功能需要 Pro 会员' : 'Pro membership required',
+          t('proRequired'),
           'warning'
         )
       }
@@ -68,7 +68,7 @@ export default function CategoryRankingTabs({
   return (
     <Box
       role="tablist"
-      aria-label={language === 'zh' ? '排行榜分类' : 'Ranking categories'}
+      aria-label={t('rankingCategoriesLabel')}
       className="category-tabs swipe-container"
       style={{
         display: 'flex',

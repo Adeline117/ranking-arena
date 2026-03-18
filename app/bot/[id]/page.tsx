@@ -1,5 +1,6 @@
 'use client'
 
+import { localizedLabel } from '@/lib/utils/format'
 /**
  * Bot Detail Page - /bot/[id]
  * Shows performance, stats, and on-chain info for a specific bot.
@@ -139,7 +140,7 @@ function BotDetailContent({ id }: { id: string }) {
                 background: 'var(--color-accent-brand-bg, rgba(99,102,241,0.15))',
                 color: 'var(--color-accent-brand)',
               }}>
-                {language === 'zh' ? catLabel.zh : catLabel.en}
+                {localizedLabel(catLabel.zh, catLabel.en, language)}
               </span>
               {bot.chain && (
                 <span style={{

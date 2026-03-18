@@ -1,3 +1,6 @@
+'use client'
+
+import { localizedLabel } from '@/lib/utils/format'
 import React, { memo, useCallback, useRef, useState, useEffect, useMemo } from 'react'
 import Link from 'next/link'
 import { mutate } from 'swr'
@@ -9,6 +12,7 @@ import { useCountUp } from '@/lib/hooks/useCountUp'
 import { EXCHANGE_NAMES } from '@/lib/constants/exchanges'
 import { getPlatformNote } from '@/lib/constants/platform-metrics'
 import { t as i18nT } from '@/lib/i18n'
+import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import type { Trader } from './RankingTable'
 import type { SourceInfo } from './utils'
 import { formatPnL, formatROI, formatDisplayName } from './utils'
@@ -110,6 +114,7 @@ export const TraderRow = memo(function TraderRow({
   isExpanded,
   onToggleExpand,
 }: TraderRowProps) {
+  const { t } = useLanguage()
   const traderHandle = trader.handle || trader.id
   const href = `/trader/${encodeURIComponent(trader.id)}${trader.source ? `?platform=${encodeURIComponent(trader.source)}` : ""}`
   // Show original platform ID as primary display name
@@ -414,7 +419,7 @@ export const TraderRow = memo(function TraderRow({
                   border: `1px solid ${tradingStyleInfo.borderColor}`,
                   lineHeight: 1.4,
                 }}>
-                  {language === 'zh' ? tradingStyleInfo.label : tradingStyleInfo.labelEn}
+                  {localizedLabel(tradingStyleInfo.label, tradingStyleInfo.labelEn, language)}
                 </span>
               )}
               {trader.also_on && trader.also_on.length > 0 && (
@@ -506,7 +511,7 @@ export const TraderRow = memo(function TraderRow({
             borderRadius: tokens.radius.sm,
           }}
           className="expand-btn"
-          title={language === 'zh' ? '展开评分详情' : 'Expand score details'}
+          title={t('expandScoreDetails')}
         >
           <svg width={10} height={10} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"
             style={{ transform: isExpanded ? 'rotate(180deg)' : 'rotate(0deg)', transition: 'transform 0.2s' }}>

@@ -1,5 +1,6 @@
 'use client'
 
+import { getLocaleFromLanguage } from '@/lib/utils/format'
 import { tokens } from '@/lib/design-tokens'
 import type { MembershipInfo } from './membership-config'
 
@@ -97,7 +98,7 @@ export default function CurrentPlanCard({ isPro, info, language, cardStyle, t }:
               </div>
               <div style={{ fontWeight: 600, marginTop: 4, color: tokens.colors.text.primary }}>
                 {new Date(info.subscription.currentPeriodEnd).toLocaleDateString(
-                  language === 'zh' ? 'zh-CN' : 'en-US'
+                  getLocaleFromLanguage(language)
                 )}
               </div>
             </div>

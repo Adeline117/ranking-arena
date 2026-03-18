@@ -181,13 +181,13 @@ export default function MobileSearchOverlay({ open, onClose }: MobileSearchOverl
           <Box style={{ padding: tokens.spacing[4] }}>
             <Box style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: tokens.spacing[3] }}>
               <Text size="sm" weight="bold" style={{ color: tokens.colors.text.secondary }}>
-                {language === 'zh' ? '搜索历史' : 'Recent Searches'}
+                {t('recentSearches')}
               </Text>
               <button
                 onClick={clearHistory}
                 style={{ background: 'none', border: 'none', color: tokens.colors.text.tertiary, fontSize: tokens.typography.fontSize.xs, cursor: 'pointer', padding: tokens.spacing[1] }}
               >
-                {language === 'zh' ? '清除' : 'Clear'}
+                {t('clearButton')}
               </button>
             </Box>
             <Box style={{ display: 'flex', flexWrap: 'wrap', gap: tokens.spacing[2] }}>

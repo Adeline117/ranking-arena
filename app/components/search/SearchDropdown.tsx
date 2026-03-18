@@ -1,5 +1,6 @@
 'use client'
 
+import { localizedLabel } from '@/lib/utils/format'
 import { useEffect, useState, useCallback, useRef, useMemo } from 'react'
 import Link from 'next/link'
 import Image from 'next/image'
@@ -409,7 +410,7 @@ export default function SearchDropdown({ open, query, onClose }: SearchDropdownP
     if (items.length === 0) return null
     const config = CATEGORY_CONFIG[category]
     const offset = getCategoryOffset(category)
-    const label = language === 'zh' ? config.labelZh : config.labelEn
+    const label = localizedLabel(config.labelZh, config.labelEn, language)
 
     return (
       <Box key={category}>

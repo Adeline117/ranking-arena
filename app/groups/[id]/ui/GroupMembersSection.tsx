@@ -2,6 +2,7 @@
 
 import Link from 'next/link'
 import Image from 'next/image'
+import { getLocaleFromLanguage } from '@/lib/utils/format'
 import { tokens } from '@/lib/design-tokens'
 import { Box, Text, Button } from '@/app/components/base'
 import { ListSkeleton } from '@/app/components/ui/Skeleton'
@@ -179,7 +180,7 @@ export function GroupInfoModal({ group, language, onClose, onShowMembers }: Grou
     ? group.rules_json.map(r => language === 'en' ? r.en : r.zh).filter(Boolean).join('\n')
     : group.rules
   const createdDate = group.created_at
-    ? new Date(group.created_at).toLocaleDateString(language === 'zh' ? 'zh-CN' : 'en-US', {
+    ? new Date(group.created_at).toLocaleDateString(getLocaleFromLanguage(language), {
         year: 'numeric',
         month: 'long',
         day: 'numeric',

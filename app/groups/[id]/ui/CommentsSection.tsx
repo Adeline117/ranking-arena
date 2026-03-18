@@ -2,6 +2,7 @@
 
 import Link from 'next/link'
 import Image from 'next/image'
+import { getLocaleFromLanguage } from '@/lib/utils/format'
 import { tokens } from '@/lib/design-tokens'
 import { Box, Text, Button } from '@/app/components/base'
 import { renderContentWithLinks, ARENA_PURPLE } from '@/lib/utils/content'
@@ -106,7 +107,7 @@ export default function CommentsSection(props: CommentsSectionProps) {
                     </Text>
                   )}
                   <Text size="xs" color="tertiary">
-                    {new Date(comment.created_at).toLocaleString(language === 'zh' ? 'zh-CN' : 'en-US')}
+                    {new Date(comment.created_at).toLocaleString(getLocaleFromLanguage(language))}
                   </Text>
                 </Box>
                 <Text size="sm">{renderContentWithLinks(comment.content)}</Text>
@@ -185,7 +186,7 @@ export default function CommentsSection(props: CommentsSectionProps) {
                           </Text>
                         )}
                         <Text size="xs" color="tertiary">
-                          {new Date(reply.created_at).toLocaleString(language === 'zh' ? 'zh-CN' : 'en-US')}
+                          {new Date(reply.created_at).toLocaleString(getLocaleFromLanguage(language))}
                         </Text>
                       </Box>
                       <Text size="xs" style={{ marginLeft: tokens.spacing[1] }}>{reply.content}</Text>

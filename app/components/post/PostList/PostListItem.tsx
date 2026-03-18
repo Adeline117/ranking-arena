@@ -1,5 +1,6 @@
 'use client'
 
+import { localizedLabel } from '@/lib/utils/format'
 import React, { memo } from 'react'
 import Link from 'next/link'
 import Image from 'next/image'
@@ -113,7 +114,7 @@ export const PostListItem = memo(function PostListItem({
               minWidth: 0,
             }}
           >
-            {language === 'zh' ? (p.group_name || t('group')) : (p.group_name_en || p.group_name || t('group'))}
+            {localizedLabel(p.group_name || t('group'), p.group_name_en || p.group_name, language)}
           </Link>
         ) : null}
         <AvatarLink handle={p.author_handle} avatarUrl={p.author_avatar_url} isPro={p.author_is_pro} showProBadge={p.author_show_pro_badge} isOfficial={p.author_handle === 'arena_bot'} />

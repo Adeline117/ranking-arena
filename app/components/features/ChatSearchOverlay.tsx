@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useRef, useCallback, useEffect } from 'react'
+import { getLocaleFromLanguage } from '@/lib/utils/format'
 import { tokens } from '@/lib/design-tokens'
 import { Box, Text } from '@/app/components/base'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
@@ -142,10 +143,10 @@ export default function ChatSearchOverlay({
     const now = new Date()
     const isToday = date.toDateString() === now.toDateString()
     if (isToday) {
-      const locale = language === 'zh' ? 'zh-CN' : 'en-US'
+      const locale = getLocaleFromLanguage(language)
       return date.toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit' })
     }
-    const locale = language === 'zh' ? 'zh-CN' : 'en-US'
+    const locale = getLocaleFromLanguage(language)
     return date.toLocaleDateString(locale, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })
   }
 

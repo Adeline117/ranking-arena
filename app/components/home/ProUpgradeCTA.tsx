@@ -37,9 +37,7 @@ export default function ProUpgradeCTA({
           {t('upgradeProViewAll')}
         </Text>
         <Text size="sm" style={{ color: 'var(--color-text-tertiary)', lineHeight: 1.5 }}>
-          {language === 'zh'
-            ? `当前显示 Top ${freeLimit} · 升级解锁全部交易员、高级筛选、CSV 导出`
-            : `Showing Top ${freeLimit} · Unlock all traders, advanced filters & CSV export`}
+          {t('showingTopFreeLimit').replace('{limit}', String(freeLimit))}
         </Text>
       </Box>
       <button

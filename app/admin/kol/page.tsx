@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
+import { getLocaleFromLanguage } from '@/lib/utils/format'
 import { tokens } from '@/lib/design-tokens'
 import TopNav from '@/app/components/layout/TopNav'
 import { useAdminAuth } from '../hooks/useAdminAuth'
@@ -141,7 +142,7 @@ export default function AdminKolPage() {
                 fontSize: tokens.typography.fontSize.sm,
               }}
             >
-              {language === 'zh' ? '重试' : 'Retry'}
+              {t('retry')}
             </button>
           </div>
         ) : applications.length === 0 ? (
@@ -177,7 +178,7 @@ export default function AdminKolPage() {
                   {app.platform && <div>{t('kolPlatform')}: {app.platform}</div>}
                   {app.platform_handle && <div>{t('kolAccount')}: {app.platform_handle}</div>}
                   {app.follower_count && <div>{t('kolFollowerCount')}: {app.follower_count.toLocaleString()}</div>}
-                  <div>{t('kolApplyTime')}: {new Date(app.created_at).toLocaleDateString(language === 'zh' ? 'zh-CN' : 'en-US', { year: 'numeric', month: 'short', day: 'numeric' })}</div>
+                  <div>{t('kolApplyTime')}: {new Date(app.created_at).toLocaleDateString(getLocaleFromLanguage(language), { year: 'numeric', month: 'short', day: 'numeric' })}</div>
                 </div>
 
                 {app.description && (
@@ -232,7 +233,7 @@ export default function AdminKolPage() {
                           fontSize: tokens.typography.fontSize.sm,
                         }}
                       >
-                        {reviewing[app.id] ? (language === 'zh' ? '处理中...' : 'Processing...') : t('kolApprove')}
+                        {reviewing[app.id] ? t('processing') : t('kolApprove')}
                       </button>
                       <button
                         onClick={() => handleReview(app.id, 'rejected')}
@@ -248,7 +249,7 @@ export default function AdminKolPage() {
                           fontSize: tokens.typography.fontSize.sm,
                         }}
                       >
-                        {reviewing[app.id] ? (language === 'zh' ? '处理中...' : 'Processing...') : t('kolReject')}
+                        {reviewing[app.id] ? t('processing') : t('kolReject')}
                       </button>
                     </div>
                   </div>

@@ -164,12 +164,10 @@ export default function StatsPage({
               </svg>
             </Box>
             <Text size="lg" weight="bold" style={{ color: tokens.colors.text.primary, marginBottom: tokens.spacing[2] }}>
-              {language === 'zh' ? '解锁完整数据统计' : 'Unlock Full Statistics'}
+              {t('unlockFullStatistics')}
             </Text>
             <Text size="sm" color="secondary" style={{ marginBottom: tokens.spacing[4] }}>
-              {language === 'zh'
-                ? '升级 Pro 会员查看详细的交易统计数据、收益曲线和历史表现'
-                : 'Upgrade to Pro to view detailed trading stats, equity curves and historical performance'}
+              {t('upgradeProStatsDesc')}
             </Text>
             {onUnlock && (
               <button
@@ -187,7 +185,7 @@ export default function StatsPage({
                   fontFamily: tokens.typography.fontFamily.sans.join(', '),
                 }}
               >
-                {language === 'zh' ? '升级 Pro' : 'Upgrade to Pro'}
+                {t('upgradeToPro')}
               </button>
             )}
           </Box>

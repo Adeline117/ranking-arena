@@ -28,7 +28,7 @@ export default function TradingStyleRadar({
   winRate,
   maxDrawdown,
 }: TradingStyleRadarProps) {
-  const { language } = useLanguage()
+  const { t, language } = useLanguage()
 
   // Normalize values to 0-1
   const normalize = (v: number | null | undefined, max: number = 100) => {
@@ -44,9 +44,7 @@ export default function TradingStyleRadar({
     maxDrawdown != null ? Math.max(0, 1 - Math.abs(maxDrawdown) / 50) : 0, // Lower MDD = higher score
   ]
 
-  const labels = language === 'zh'
-    ? ['盈利', '风控', '执行', '胜率', '稳定']
-    : ['Profit', 'Risk', 'Exec', 'Win%', 'Stable']
+  const labels = [t('radarProfit'), t('radarRisk'), t('radarExec'), t('radarWinRate'), t('radarStable')]
 
   // Check if we have any data
   const hasData = values.some(v => v > 0)

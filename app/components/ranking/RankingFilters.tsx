@@ -1,5 +1,6 @@
 'use client'
 
+import { localizedLabel } from '@/lib/utils/format'
 import React, { useRef, useEffect } from 'react'
 import Link from 'next/link'
 import { tokens } from '@/lib/design-tokens'
@@ -284,7 +285,7 @@ export function RankingFilters({
                     fontSize: tokens.typography.fontSize.sm, color: tokens.colors.text.primary,
                   }}>
                     <input type="checkbox" checked={visibleColumns.includes(col)} onChange={() => onToggleColumn(col)} style={{ cursor: 'pointer' }} />
-                    {language === 'zh' ? COLUMN_LABELS[col].zh : COLUMN_LABELS[col].en}
+                    {localizedLabel(COLUMN_LABELS[col].zh, COLUMN_LABELS[col].en, language)}
                   </label>
                 ))}
                 <button onClick={onResetColumns} style={{
@@ -373,7 +374,7 @@ export function RankingFilters({
           </Text>
           {[
             { value: 'all' as const, label: t('rankingStyleAll') },
-            ...getFilterableStyles().map(s => ({ value: s.style, label: language === 'zh' ? s.label : s.labelEn })),
+            ...getFilterableStyles().map(s => ({ value: s.style, label: localizedLabel(s.label, s.labelEn, language) })),
           ].map(opt => (
             <button
               key={opt.value}

@@ -146,7 +146,7 @@ export default function FollowingListItem({
         <button
           onClick={(e) => onUnfollow(item, e)}
           disabled={unfollowingId === item.id}
-          title={language === 'zh' ? '取消关注' : 'Unfollow'}
+          title={t('unfollow')}
           style={{
             padding: `${tokens.spacing[1]} ${tokens.spacing[2]}`,
             borderRadius: tokens.radius.md,
@@ -162,8 +162,8 @@ export default function FollowingListItem({
           className="hover-unfollow"
         >
           {unfollowingId === item.id
-            ? (language === 'zh' ? '取消中...' : 'Removing...')
-            : (language === 'zh' ? '取消关注' : 'Unfollow')
+            ? t('removing')
+            : t('unfollow')
           }
         </button>
         <Box style={{ color: tokens.colors.text.tertiary }}>

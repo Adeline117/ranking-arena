@@ -32,7 +32,7 @@ export default function TimeRangeSelector({
   const getLabel = (range: TimeRange): string => {
     switch (range) {
       case 'COMPOSITE':
-        return language === 'zh' ? '综合' : 'Composite'
+        return t('compositeLabel')
       case '90D':
         return t('days90')
       case '30D':

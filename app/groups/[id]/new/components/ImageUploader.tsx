@@ -78,7 +78,7 @@ export function ImageUploader({
             >
               <button
                 onClick={() => onInsert(image.url)}
-                title={t('imageInserted') || (language === 'zh' ? '插入到内容' : 'Insert to content')}
+                title={t('imageInserted') || t('insertToContent')}
                 style={{
                   width: 24,
                   height: 24,
@@ -96,7 +96,7 @@ export function ImageUploader({
               </button>
               <button aria-label="Close"
                 onClick={() => onRemove(index)}
-                title={language === 'zh' ? '删除' : 'Delete'}
+                title={t('deleteButton')}
                 style={{
                   width: 24,
                   height: 24,

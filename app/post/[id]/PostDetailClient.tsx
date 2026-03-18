@@ -83,7 +83,7 @@ export default function PostDetailClient({ postId }: { postId: string }) {
       }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <Breadcrumb items={[
-            { label: language === 'zh' ? '热榜' : 'Hot', href: '/hot' },
+            { label: t('hotBreadcrumb'), href: '/hot' },
             { label: postData?.title?.slice(0, 30) || '...' },
           ]} />
           {postData && (

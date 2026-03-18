@@ -85,6 +85,15 @@ export function getLocaleFromLanguage(language: string): string {
 }
 
 /**
+ * Pick the correct localized string from a bilingual data object.
+ * Data objects typically have `zh` and `en` fields (e.g., `name` + `name_en`).
+ * For ja/ko users, we fall back to English since data is only available in zh/en.
+ */
+export function localizedLabel(zh: string, en: string | null | undefined, language: string): string {
+  return language === 'zh' ? zh : (en || zh)
+}
+
+/**
  * Format a date string for display, respecting the user's language.
  */
 export function formatDateLocalized(

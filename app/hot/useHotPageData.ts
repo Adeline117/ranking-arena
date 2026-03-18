@@ -447,7 +447,7 @@ export function useHotPageData() {
       const needsTranslation = (language === 'en' && isChinese) || (language === 'zh' && !isChinese)
 
       if (needsTranslation) {
-        translateContent(post.id, post.body, language)
+        translateContent(post.id, post.body, (language === 'zh' ? 'zh' : 'en') as 'zh' | 'en')
       }
     }
   }, [loadComments, language, isChineseText, translateContent, searchParams, router])
@@ -510,7 +510,7 @@ export function useHotPageData() {
       setShowingOriginal(true)
 
       if (needsTranslation) {
-        translateContent(openPost.id, openPost.body, language)
+        translateContent(openPost.id, openPost.body, (language === 'zh' ? 'zh' : 'en') as 'zh' | 'en')
       }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps -- only re-translate when language changes; openPost and translateContent are stable refs

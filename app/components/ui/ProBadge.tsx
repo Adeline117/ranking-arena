@@ -1,5 +1,6 @@
 'use client'
 
+import { localizedLabel } from '@/lib/utils/format'
 import { tokens } from '@/lib/design-tokens'
 import { Box, Text } from '../base'
 import { useLanguage } from '../Providers/LanguageProvider'
@@ -52,7 +53,7 @@ export default function ProBadge({ size = 'md', showLabel = true, style }: ProBa
   const { language } = useLanguage()
   const config = PRO_CONFIG
   const sizeConfig = SIZE_CONFIG[size]
-  const label = language === 'zh' ? config.labelZh : config.label
+  const label = localizedLabel(config.labelZh, config.label, language)
 
   if (!showLabel) {
     return (

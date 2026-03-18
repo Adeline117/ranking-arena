@@ -21,8 +21,8 @@ interface TraderData {
   display_name: string | null
   avatar_url: string | null
   platform: string
-  roi: number
-  pnl: number
+  roi: number | null
+  pnl: number | null
   win_rate: number | null
   max_drawdown: number | null
   arena_score: number | null
@@ -131,7 +131,7 @@ const RankBadge = React.memo(function RankBadge({ rank }: { rank: number }) {
 const TraderCardItem = React.memo(function TraderCardItem({ trader, rank }: { trader: TraderData; rank: number }) {
   const { t } = useLanguage()
   const name = getDisplayName(trader)
-  const roiColor = trader.roi >= 0 ? tokens.colors.accent.success : tokens.colors.accent.error
+  const roiColor = trader.roi != null && trader.roi >= 0 ? tokens.colors.accent.success : tokens.colors.accent.error
 
   return (
     <Link
@@ -201,7 +201,7 @@ const TraderCardItem = React.memo(function TraderCardItem({ trader, rank }: { tr
             <div style={{ fontSize: 18, fontWeight: 800, color: roiColor }}>
               {formatROI(trader.roi)}
             </div>
-            <Sparkline roi={trader.roi} width={60} height={16} />
+            <Sparkline roi={trader.roi ?? undefined} width={60} height={16} />
           </div>
         </div>
 
@@ -302,7 +302,6 @@ export default function ExchangeRankingClient({
   exchange?: string
 }) {
   const { language, t } = useLanguage()
-  const zh = language === 'zh'
   const [viewMode, setViewMode] = useState<ViewMode>('table')
   const [sortKey, setSortKey] = useState<SortKey>('rank')
   const [sortDir, setSortDir] = useState<SortDir>('asc')
@@ -539,9 +538,7 @@ export default function ExchangeRankingClient({
           </div>
           {/* Total count */}
           <div style={{ textAlign: 'center', padding: `${tokens.spacing[3]} 0`, fontSize: 12, color: tokens.colors.text.tertiary }}>
-            {zh
-              ? `共 ${activeTraders.length} 位交易员`
-              : `${activeTraders.length} traders`}
+            {t('tradersOnExchange').replace('{count}', String(activeTraders.length))}
           </div>
         </div>
       ) : (
@@ -596,7 +593,7 @@ export default function ExchangeRankingClient({
           {/* Rows */}
           {activeTraders.map((t, i) => {
             const name = getDisplayName(t)
-            const roiColor = t.roi >= 0 ? tokens.colors.accent.success : tokens.colors.accent.error
+            const roiColor = t.roi != null && t.roi >= 0 ? tokens.colors.accent.success : tokens.colors.accent.error
             const wrColor = t.win_rate != null
               ? t.win_rate >= 50 ? tokens.colors.accent.success : tokens.colors.accent.error
               : tokens.colors.text.tertiary
@@ -655,7 +652,7 @@ export default function ExchangeRankingClient({
                   {formatROI(t.roi)}
                 </div>
                 <div style={{ display: 'flex', justifyContent: 'center' }}>
-                  <Sparkline roi={t.roi} width={72} height={20} />
+                  <Sparkline roi={t.roi ?? undefined} width={72} height={20} />
                 </div>
                 <div style={{ textAlign: 'right', fontSize: 13, fontWeight: 600, color: wrColor }}>
                   {t.win_rate != null ? `${t.win_rate.toFixed(2)}%` : NULL_DISPLAY}

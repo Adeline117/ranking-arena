@@ -1,4 +1,5 @@
 import React, { memo } from 'react'
+import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import Link from 'next/link'
 import { tokens } from '@/lib/design-tokens'
 import { Box, Text } from '../base'
@@ -41,6 +42,7 @@ export const TraderCard = memo(function TraderCard({
   getMedalGlowClass,
   parseSourceInfo,
 }: TraderCardProps) {
+  const { t } = useLanguage()
   const traderHandle = trader.handle || trader.id
   const href = `/trader/${encodeURIComponent(trader.id)}${trader.source ? `?platform=${encodeURIComponent(trader.source)}` : ""}`
   const displayName = trader.display_name || formatDisplayName(traderHandle, trader.source || source)
@@ -213,7 +215,7 @@ export const TraderCard = memo(function TraderCard({
             color={trader.pnl != null ? ((trader.pnl >= 0) ? tokens.colors.accent.success : TRADER_ACCENT_ERROR) : undefined}
           />
           <MetricStat
-            label={language === 'zh' ? '胜率' : 'Win%'}
+            label={t('winRatePercent')}
             value={trader.win_rate != null ? `${trader.win_rate.toFixed(0)}%` : undefined}
             color={trader.win_rate != null && trader.win_rate > 50 ? tokens.colors.accent.success : undefined}
             nullTooltip={trader.win_rate == null ? (getPlatformNote(trader.source || source || '') || `Not available for ${EXCHANGE_NAMES[trader.source || source || ''] || (trader.source || source || '').replace('_', ' ')}`) : undefined}

@@ -15,11 +15,11 @@ export default function NavLinks() {
   const items = [
     { href: '/rankings', labelKey: 'rankings' as const, tooltip: undefined as string | undefined },
     ...(features.social ? [
-      { href: '/groups', labelKey: 'groups' as const, tooltip: language === 'zh' ? '加入讨论小组' : 'Join discussion groups' },
+      { href: '/groups', labelKey: 'groups' as const, tooltip: t('navTooltipGroups') },
     ] : []),
-    { href: '/market', labelKey: 'market' as const, tooltip: language === 'zh' ? '市场数据总览' : 'Market overview' },
+    { href: '/market', labelKey: 'market' as const, tooltip: t('navTooltipMarket') },
     ...(features.social ? [
-      { href: '/hot', labelKey: 'hot' as const, tooltip: language === 'zh' ? '全站热门帖子' : 'Trending posts' },
+      { href: '/hot', labelKey: 'hot' as const, tooltip: t('navTooltipTrending') },
     ] : []),
   ]
 

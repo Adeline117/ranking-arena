@@ -1,5 +1,6 @@
 'use client'
 
+import { localizedLabel } from '@/lib/utils/format'
 import Image from 'next/image'
 import Link from 'next/link'
 import { tokens } from '@/lib/design-tokens'
@@ -87,10 +88,10 @@ export default function PostDetailView({
       {openPost.group_name && (
         openPost.group_id ? (
           <Link href={`/groups/${openPost.group_id}`} style={{ fontSize: 12, color: ARENA_PURPLE, textDecoration: 'none', fontWeight: 600, padding: '2px 8px', background: `${ARENA_PURPLE}20`, borderRadius: tokens.radius.sm, display: 'inline-block' }}>
-            {language === 'zh' ? openPost.group_name : (openPost.group_name_en || openPost.group_name)}
+            {localizedLabel(openPost.group_name, openPost.group_name_en, language)}
           </Link>
         ) : (
-          <div style={{ fontSize: 12, color: ARENA_PURPLE }}>{language === 'zh' ? openPost.group_name : (openPost.group_name_en || openPost.group_name)}</div>
+          <div style={{ fontSize: 12, color: ARENA_PURPLE }}>{localizedLabel(openPost.group_name, openPost.group_name_en, language)}</div>
         )
       )}
 

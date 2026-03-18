@@ -16,7 +16,7 @@ import { Box } from '@/app/components/base'
 type FeedTab = 'hot' | 'latest' | 'following'
 
 export default function FeedPage() {
-  const { language } = useLanguage()
+  const { t, language } = useLanguage()
   const [email, setEmail] = useState<string | null>(null)
   const [activeTab, setActiveTab] = useState<FeedTab>('hot')
 
@@ -69,9 +69,9 @@ export default function FeedPage() {
           }}
         >
           {([
-            { key: 'hot' as FeedTab, label: language === 'zh' ? '推荐' : 'Recommended' },
-            { key: 'latest' as FeedTab, label: language === 'zh' ? '最新' : 'Latest' },
-            { key: 'following' as FeedTab, label: language === 'zh' ? '关注' : 'Following' },
+            { key: 'hot' as FeedTab, label: t('feedRecommendedTab') },
+            { key: 'latest' as FeedTab, label: t('feedLatestTab') },
+            { key: 'following' as FeedTab, label: t('feedFollowingTab') },
           ]).map((tab) => (
             <button
               key={tab.key}

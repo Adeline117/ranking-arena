@@ -1,5 +1,6 @@
 'use client'
 
+import { getLocaleFromLanguage } from '@/lib/utils/format'
 import { tokens } from '@/lib/design-tokens'
 import Card from '@/app/components/ui/Card'
 import { Box, Text } from '@/app/components/base'
@@ -41,7 +42,7 @@ export function ApplicationsList({ applications }: ApplicationsListProps) {
             <Box>
               <Text weight="bold">{app.name}</Text>
               <Text size="xs" color="tertiary">
-                {new Date(app.created_at).toLocaleString(language === 'zh' ? 'zh-CN' : 'en-US')}
+                {new Date(app.created_at).toLocaleString(getLocaleFromLanguage(language))}
               </Text>
             </Box>
             <StatusBadge status={app.status} />
