@@ -22,20 +22,32 @@ export default function HomeHero() {
   const [exchangeNum, setExchangeNum] = useState(27)
 
   useEffect(() => {
-    supabase.from('trader_sources').select('*', { count: 'exact', head: true })
-      .then(({ count }) => { if (count) { setTraderCount(formatCount(count)); setTraderNum(count) } })
+    // Defer non-critical stats queries to avoid blocking LCP/TBT.
+    // Uses requestIdleCallback to run during browser idle time.
+    const fetchStats = () => {
+      supabase.from('trader_sources').select('*', { count: 'exact', head: true })
+        .then(({ count }) => { if (count) { setTraderCount(formatCount(count)); setTraderNum(count) } })
 
-    supabase.from('leaderboard_ranks').select('source').eq('season_id', '90D').limit(10000)
-      .then(({ data }) => {
-        if (data) {
-          const platforms = new Set(data.map((r: { source: string }) =>
-            r.source.replace(/_(futures|spot|web3|perps|network)$/, '')
-          ))
-          const count = Math.max(platforms.size, 20)
-          setExchangeCount(`${count}+`)
-          setExchangeNum(count)
-        }
-      })
+      supabase.from('leaderboard_ranks').select('source').eq('season_id', '90D').limit(10000)
+        .then(({ data }) => {
+          if (data) {
+            const platforms = new Set(data.map((r: { source: string }) =>
+              r.source.replace(/_(futures|spot|web3|perps|network)$/, '')
+            ))
+            const count = Math.max(platforms.size, 20)
+            setExchangeCount(`${count}+`)
+            setExchangeNum(count)
+          }
+        })
+    }
+
+    if ('requestIdleCallback' in window) {
+      const id = requestIdleCallback(fetchStats, { timeout: 3000 })
+      return () => cancelIdleCallback(id)
+    } else {
+      const id = setTimeout(fetchStats, 100)
+      return () => clearTimeout(id)
+    }
   }, [])
 
   const subtitle = t('heroSubtitle' as Parameters<typeof t>[0])

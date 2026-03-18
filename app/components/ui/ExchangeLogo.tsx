@@ -127,7 +127,6 @@ export default function ExchangeLogo({ exchange, size = 24, className }: Exchang
           width={size}
           height={size}
           sizes={`${size}px`}
-          unoptimized={true}
           style={{
             objectFit: 'contain',
             borderRadius: tokens.radius.sm,

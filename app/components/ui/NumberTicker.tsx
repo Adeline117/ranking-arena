@@ -1,7 +1,6 @@
 'use client'
 
-import { useEffect, useRef } from 'react'
-import { useInView, useMotionValue, useSpring } from 'framer-motion'
+import { useEffect, useRef, useCallback } from 'react'
 
 interface NumberTickerProps {
   value: number
@@ -14,9 +13,9 @@ interface NumberTickerProps {
 }
 
 /**
- * Animated number counter with spring physics.
- * Inspired by MagicUI NumberTicker, adapted for Arena's design tokens.
- * Triggers animation when element scrolls into view.
+ * Animated number counter using native IntersectionObserver + requestAnimationFrame.
+ * Replaces framer-motion dependency (~50KB gzipped) with zero-dependency animation.
+ * Spring-like easing via exponential decay for smooth, natural feel.
  */
 export default function NumberTicker({
   value,
@@ -28,34 +27,59 @@ export default function NumberTicker({
   style,
 }: NumberTickerProps) {
   const ref = useRef<HTMLSpanElement>(null)
-  const motionValue = useMotionValue(direction === 'down' ? value : 0)
-  const springValue = useSpring(motionValue, {
-    damping: 60,
-    stiffness: 100,
-  })
-  const isInView = useInView(ref, { once: true })
+  const animatedRef = useRef(false)
+
+  const formatNumber = useCallback((n: number) => {
+    return Intl.NumberFormat('en-US', {
+      minimumFractionDigits: decimalPlaces,
+      maximumFractionDigits: decimalPlaces,
+    }).format(Number(n.toFixed(decimalPlaces)))
+  }, [decimalPlaces])
 
   useEffect(() => {
-    if (!isInView) return
-    const timer = setTimeout(() => {
-      motionValue.set(direction === 'down' ? 0 : value)
-    }, delay * 1000)
-    return () => clearTimeout(timer)
-  }, [motionValue, isInView, delay, value, direction])
+    const el = ref.current
+    if (!el) return
 
-  useEffect(
-    () =>
-      springValue.on('change', (latest) => {
-        if (ref.current) {
-          const formatted = Intl.NumberFormat('en-US', {
-            minimumFractionDigits: decimalPlaces,
-            maximumFractionDigits: decimalPlaces,
-          }).format(Number(latest.toFixed(decimalPlaces)))
-          ref.current.textContent = formatted + suffix
-        }
-      }),
-    [springValue, decimalPlaces, suffix]
-  )
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (!entry.isIntersecting || animatedRef.current) return
+        animatedRef.current = true
+        observer.disconnect()
+
+        const startValue = direction === 'down' ? value : 0
+        const endValue = direction === 'down' ? 0 : value
+
+        const delayTimer = setTimeout(() => {
+          const duration = 800 // ms
+          const startTime = performance.now()
+
+          const tick = (now: number) => {
+            const elapsed = now - startTime
+            const progress = Math.min(elapsed / duration, 1)
+            // Exponential ease-out for spring-like feel
+            const eased = 1 - Math.pow(1 - progress, 3)
+            const current = startValue + (endValue - startValue) * eased
+
+            if (ref.current) {
+              ref.current.textContent = formatNumber(current) + suffix
+            }
+
+            if (progress < 1) {
+              requestAnimationFrame(tick)
+            }
+          }
+
+          requestAnimationFrame(tick)
+        }, delay * 1000)
+
+        return () => clearTimeout(delayTimer)
+      },
+      { threshold: 0.1 }
+    )
+
+    observer.observe(el)
+    return () => observer.disconnect()
+  }, [value, direction, delay, suffix, formatNumber])
 
   return (
     <span
