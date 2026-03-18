@@ -70,18 +70,18 @@ export async function GET(
       // 1. Profile
       supabase
         .from('trader_profiles_v2')
-        .select('id, platform, trader_key, display_name, avatar_url, bio, bio_source, tags, follower_count, copier_count, aum, updated_at, last_enriched_at, created_at')
+        .select('id, platform, trader_key, display_name, avatar_url, profile_url, bio, bio_source, tags, follower_count, copier_count, aum, updated_at, last_enriched_at, created_at')
         .eq('platform', platform)
         .eq('trader_key', trader_key)
         .maybeSingle(),
 
-      // 2. Latest snapshot for each window
+      // 2. Latest snapshot for each window (flat columns are more reliable than metrics JSONB)
       supabase
         .from('trader_snapshots_v2')
-        .select('window, metrics, quality_flags, as_of_ts, updated_at')
+        .select('window, roi_pct, pnl_usd, win_rate, max_drawdown, trades_count, followers, copiers, arena_score, sharpe_ratio, metrics, quality_flags, as_of_ts, updated_at')
         .eq('platform', platform)
         .eq('trader_key', trader_key)
-        .order('as_of_ts', { ascending: false })
+        .order('updated_at', { ascending: false })
         .limit(10),
 
       // 3. Latest timeseries
@@ -112,6 +112,7 @@ export async function GET(
       trader_key,
       display_name: null,
       avatar_url: null,
+      profile_url: null,
       bio: null,
       bio_source: null,
       tags: [],
@@ -133,10 +134,28 @@ export async function GET(
     if (snapshotsResult.data) {
       const seenWindows = new Set<string>()
       for (const snap of snapshotsResult.data) {
-        if (!seenWindows.has(snap.window)) {
-          seenWindows.add(snap.window)
-          snapshots[snap.window as SnapshotWindow] = snap.metrics as SnapshotMetrics
-        }
+        // Normalize window key: '30d' → '30D'
+        const windowKey = snap.window?.toUpperCase() as SnapshotWindow
+        if (!windowKey || seenWindows.has(windowKey)) continue
+        seenWindows.add(windowKey)
+        // Prefer flat columns over JSONB metrics (flat columns are more consistently updated)
+        const m = (snap.metrics || {}) as Record<string, unknown>
+        snapshots[windowKey] = {
+          roi: snap.roi_pct ?? m.roi ?? null,
+          pnl: snap.pnl_usd ?? m.pnl ?? null,
+          win_rate: snap.win_rate ?? m.win_rate ?? null,
+          max_drawdown: snap.max_drawdown ?? m.max_drawdown ?? null,
+          trades_count: snap.trades_count ?? m.trades_count ?? null,
+          arena_score: snap.arena_score ?? m.arena_score ?? null,
+          followers: snap.followers ?? m.followers ?? null,
+          copiers: snap.copiers ?? m.copiers ?? null,
+          aum: m.aum ?? null,
+          sharpe_ratio: snap.sharpe_ratio ?? m.sharpe_ratio ?? null,
+          return_score: m.return_score ?? null,
+          drawdown_score: m.drawdown_score ?? null,
+          stability_score: m.stability_score ?? null,
+          rank: m.platform_rank ?? null,
+        } as SnapshotMetrics
       }
     }
 
