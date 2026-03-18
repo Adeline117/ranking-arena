@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect } from 'react'
+import { useEffect, useMemo, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import { Box } from '../base'
 import RankingSection from './RankingSection'
@@ -27,19 +27,23 @@ export default function HomePageClient({ initialTraders, initialLastUpdated }: H
   const router = useRouter()
 
   // Convert InitialTrader[] to Trader[] for compatibility
-  const convertedInitialTraders: Trader[] | undefined = initialTraders?.map(t => ({
-    id: t.id,
-    handle: t.handle,
-    roi: t.roi,
-    pnl: t.pnl,
-    win_rate: t.win_rate,
-    max_drawdown: t.max_drawdown,
-    followers: t.followers,
-    source: t.source,
-    avatar_url: t.avatar_url,
-    arena_score: t.arena_score,
-    score_confidence: t.score_confidence,
-  }))
+  // Memoize to prevent new array reference on every render (triggers useTraderData effects)
+  const convertedInitialTraders: Trader[] | undefined = useMemo(() =>
+    initialTraders?.map(t => ({
+      id: t.id,
+      handle: t.handle,
+      roi: t.roi,
+      pnl: t.pnl,
+      win_rate: t.win_rate,
+      max_drawdown: t.max_drawdown,
+      followers: t.followers,
+      source: t.source,
+      avatar_url: t.avatar_url,
+      arena_score: t.arena_score,
+      score_confidence: t.score_confidence,
+    })),
+    [initialTraders]
+  )
 
   // 交易者数据管理 - 传入服务端预获取的数据
   const {
@@ -70,12 +74,12 @@ export default function HomePageClient({ initialTraders, initialLastUpdated }: H
   }, []) // Only run once on mount
 
   // Custom handler to update both state and URL
-  const handleTimeRangeChange = (range: TimeRange) => {
+  const handleTimeRangeChange = useCallback((range: TimeRange) => {
     changeTimeRange(range)
     const params = new URLSearchParams(window.location.search)
     params.set('range', range)
     router.replace(`?${params.toString()}`, { scroll: false })
-  }
+  }, [changeTimeRange, router])
 
   // Pull-to-refresh handler (async for PullToRefresh component)
   const handlePullRefresh = async () => {
