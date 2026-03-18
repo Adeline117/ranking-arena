@@ -390,7 +390,7 @@ export async function upsertTraders(
         avatar_url: t.avatar_url || null,
         profile_url: t.profile_url || null,
         is_active: true,
-        updated_at: new Date().toISOString(),
+        last_seen_at: new Date().toISOString(),
       }))
 
       const { error: srcErr } = await supabase
