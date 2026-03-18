@@ -9,10 +9,8 @@
 
 export async function sendEmail(to: string, subject: string, html: string): Promise<void> {
   // Stub: log email for now, integrate Resend/SendGrid later
-  console.log(`[EMAIL] To: ${to}, Subject: ${subject}`)
-  if (process.env.NODE_ENV === 'development') {
-    console.log(`[EMAIL] Body preview: ${html.slice(0, 200)}...`)
-  }
+  // eslint-disable-next-line no-console
+  console.warn(`[EMAIL] To: ${to}, Subject: ${subject}, Body length: ${html.length}`)
   // TODO: integrate with Resend (https://resend.com)
   // import { Resend } from 'resend'
   // const resend = new Resend(process.env.RESEND_API_KEY)
