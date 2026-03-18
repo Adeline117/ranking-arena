@@ -67,13 +67,13 @@ Start a conversation — share your trading insights, ask questions, or discuss 
     hot_score: 60,
   },
   {
-    title: '32,000+ Traders Across 27 Exchanges — The Data Behind Arena',
+    title: '34,000+ Traders Across 28 Exchanges — The Data Behind Arena',
     content: `**Ever wonder how Arena tracks so many traders? Here's a peek behind the curtain.**
 
-We aggregate data from **27+ exchanges** including Binance, Bybit, OKX, Bitget, Hyperliquid, GMX, dYdX, and more.
+We aggregate data from **28+ exchanges** including Binance, Bybit, OKX, Bitget, Hyperliquid, GMX, dYdX, and more.
 
 📊 **By the numbers / 数据概览**:
-• 32,000+ unique traders tracked
+• 34,000+ unique traders tracked
 • 42 automated cron jobs refreshing data every 3-6 hours
 • CEX + DEX coverage — centralized and decentralized exchanges
 • Bot detection — automated traders are flagged with a ⚡ badge

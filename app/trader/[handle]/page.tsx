@@ -83,10 +83,10 @@ export async function generateMetadata({ params }: { params: Promise<{ handle: s
   const fallbackOgImage = `${BASE}/api/og/trader?handle=${encodeURIComponent(decoded)}`
   return {
     title: `${decoded} | Crypto Trader Rankings`,
-    description: `View ${decoded}'s comprehensive crypto trading performance, PnL, ROI, win rate, and rank on Arena among 32,000+ traders across 30+ exchanges. Real-time analytics and historical data.`,
+    description: `View ${decoded}'s comprehensive crypto trading performance, PnL, ROI, win rate, and rank on Arena among 34,000+ traders across 28+ exchanges. Real-time analytics and historical data.`,
     openGraph: {
       title: `${decoded} | Crypto Trader`,
-      description: `View ${decoded}'s crypto trading performance, analytics, and rank on Arena among 32,000+ traders across 30+ exchanges.`,
+      description: `View ${decoded}'s crypto trading performance, analytics, and rank on Arena among 34,000+ traders across 28+ exchanges.`,
       url: `${BASE}/trader/${encodeURIComponent(decoded)}`,
       siteName: 'Arena',
       type: 'profile',

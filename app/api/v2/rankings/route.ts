@@ -105,9 +105,9 @@ export const GET = withPublic(async ({ supabase, request }) => {
       `source, source_trader_id, handle, avatar_url, source_type,
        roi, pnl, win_rate, max_drawdown, trades_count, followers,
        arena_score, rank, computed_at, season_id,
-       sharpe_ratio, sortino_ratio, calmar_ratio, profit_factor,
+       sharpe_ratio,
        profitability_score, risk_control_score, execution_score, score_completeness,
-       trading_style, avg_holding_hours, trader_type, is_outlier`,
+       trading_style, avg_holding_hours, trader_type`,
       { count: 'exact' }
     )
     .eq('source', platform)
@@ -119,7 +119,7 @@ export const GET = withPublic(async ({ supabase, request }) => {
     query = query.eq('trading_style', normalizedStyle)
   }
   if (minSortino !== null) {
-    query = query.gte('sortino_ratio', minSortino)
+    query = query.gte('sharpe_ratio', minSortino) // sortino not in leaderboard_ranks, use sharpe as proxy
   }
   if (minRoi !== null) {
     query = query.gte('roi', minRoi)
@@ -147,10 +147,10 @@ export const GET = withPublic(async ({ supabase, request }) => {
       query = query.order('pnl', { ascending: false, nullsFirst: false })
       break
     case 'sortino':
-      query = query.order('sortino_ratio', { ascending: false, nullsFirst: false })
+      query = query.order('sharpe_ratio', { ascending: false, nullsFirst: false }) // sortino not in leaderboard_ranks
       break
     case 'calmar':
-      query = query.order('calmar_ratio', { ascending: false, nullsFirst: false })
+      query = query.order('arena_score', { ascending: false, nullsFirst: false }) // calmar not in leaderboard_ranks
       break
     case 'arena_score_v3':
     case 'alpha':
@@ -198,7 +198,7 @@ export const GET = withPublic(async ({ supabase, request }) => {
         win_rate: r.win_rate != null ? Number(r.win_rate) : null,
         max_drawdown: r.max_drawdown != null ? Number(r.max_drawdown) : null,
         sharpe_ratio: r.sharpe_ratio != null ? Number(r.sharpe_ratio) : null,
-        sortino_ratio: r.sortino_ratio != null ? Number(r.sortino_ratio) : null,
+        sortino_ratio: null, // not in leaderboard_ranks
         trades_count: r.trades_count != null ? Number(r.trades_count) : null,
         followers: r.followers != null ? Number(r.followers) : null,
         copiers: null as number | null,
@@ -210,7 +210,7 @@ export const GET = withPublic(async ({ supabase, request }) => {
         stability_score: null as number | null,
         volatility_pct: null as number | null,
         avg_holding_hours: r.avg_holding_hours != null ? Number(r.avg_holding_hours) : null,
-        profit_factor: r.profit_factor != null ? Number(r.profit_factor) : null,
+        profit_factor: null, // not in leaderboard_ranks
       },
       quality_flags: { missing_fields: [] as string[], non_standard_fields: {} as Record<string, string>, window_native: true, notes: [] as string[] },
       updated_at: String(r.computed_at || ''),
@@ -220,8 +220,8 @@ export const GET = withPublic(async ({ supabase, request }) => {
       ...baseEntry,
       // V3 extended fields
       arena_score_v3: null,
-      sortino_ratio: r.sortino_ratio != null ? Number(r.sortino_ratio) : null,
-      calmar_ratio: r.calmar_ratio != null ? Number(r.calmar_ratio) : null,
+      sortino_ratio: null, // not in leaderboard_ranks
+      calmar_ratio: null, // not in leaderboard_ranks
       alpha: null,
       trading_style: (r.trading_style as string) || null,
     } as RankingEntry & {

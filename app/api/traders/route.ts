@@ -29,7 +29,7 @@ const availableSourcesCache = new Map<string, { sources: string[]; ts: number }>
 const SOURCES_TTL = 30 * 60 * 1000 // 30 min — sources change only on cron runs
 
 // Select only needed columns from leaderboard_ranks (avoid SELECT *)
-const LEADERBOARD_COLUMNS = 'source_trader_id, handle, roi, pnl, win_rate, max_drawdown, trades_count, followers, source, source_type, avatar_url, arena_score, rank, profitability_score, risk_control_score, execution_score, score_completeness, trading_style, avg_holding_hours, style_confidence, is_outlier, computed_at, season_id, sharpe_ratio, trader_type'
+const LEADERBOARD_COLUMNS = 'source_trader_id, handle, roi, pnl, win_rate, max_drawdown, trades_count, followers, source, source_type, avatar_url, arena_score, rank, profitability_score, risk_control_score, execution_score, score_completeness, trading_style, avg_holding_hours, style_confidence, computed_at, season_id, sharpe_ratio, trader_type'
 
 export const GET = withPublic(
   async ({ supabase, request }) => {
@@ -114,10 +114,8 @@ async function fetchFromLeaderboard(
     query = query.eq('source', exchangeFilter)
   }
 
-  // Filter out outlier data (ROI > 5000% etc.)
-  query = query.or('is_outlier.is.null,is_outlier.eq.false')
-
   // Include all scored traders (score > 0 means valid ROI data)
+  // Note: outlier filtering already done in compute-leaderboard (ROI anomaly thresholds)
   query = query.gt('arena_score', 0)
 
   // Cursor-based: filter by rank

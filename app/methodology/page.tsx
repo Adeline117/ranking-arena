@@ -364,7 +364,7 @@ export default function MethodologyPage() {
             <p style={{ margin: 0 }}>
               A: We fetch the top-ranked traders from each exchange. If a trader is not in
               the exchange&apos;s public leaderboard or has insufficient data, they may not
-              appear. We currently track 32,000+ traders across all platforms.
+              appear. We currently track 34,000+ traders across all platforms.
             </p>
           </div>
           <div style={faqStyle}>
@@ -576,7 +576,7 @@ export default function MethodologyPage() {
               问：为什么我在某交易所关注的交易者没有出现在 Arena 上？
             </p>
             <p style={{ margin: 0 }}>
-              答：我们从每个交易所获取排名靠前的交易者。如果交易者不在交易所的公开排行榜中或数据不足，可能不会出现。我们目前跟踪所有平台的 32,000 多名交易者。
+              答：我们从每个交易所获取排名靠前的交易者。如果交易者不在交易所的公开排行榜中或数据不足，可能不会出现。我们目前跟踪所有平台的 34,000 多名交易者。
             </p>
           </div>
           <div style={faqStyle}>
