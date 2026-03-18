@@ -292,7 +292,7 @@ export default function SearchDropdown({ open, query, onClose }: SearchDropdownP
 
       try {
         const response = await fetch(
-          `/api/search?q=${encodeURIComponent(query.trim())}&limit=5`,
+          `/api/search?q=${encodeURIComponent(query.trim())}&limit=10`,
           { signal: controller.signal }
         )
         if (!response.ok) throw new Error('Search failed')
@@ -308,7 +308,7 @@ export default function SearchDropdown({ open, query, onClose }: SearchDropdownP
       } finally {
         if (!controller.signal.aborted) setSearching(false)
       }
-    }, 300)
+    }, 150)
 
     return () => {
       clearTimeout(searchTimer)
