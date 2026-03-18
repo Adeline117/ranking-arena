@@ -44,6 +44,7 @@ interface TraderHeaderProps {
   coverUrl?: string
   isRegistered?: boolean
   followers?: number
+  copiers?: number
   following?: number
   aum?: number
   isOwnProfile?: boolean
