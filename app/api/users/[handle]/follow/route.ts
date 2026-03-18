@@ -10,14 +10,11 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@supabase/supabase-js'
+import { getSupabaseAdmin } from '@/lib/supabase/server'
 import logger from '@/lib/logger'
 import { socialFeatureGuard } from '@/lib/features'
 
 export const dynamic = 'force-dynamic'
-
-const SUPABASE_URL = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL || ''
-const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || ''
 
 type FollowerRow = {
   follower?: { id?: string; handle?: string; bio?: string; avatar_url?: string }
@@ -30,7 +27,7 @@ type FollowingRow = {
 }
 
 async function fetchFollowStatus(
-  supabase: ReturnType<typeof createClient<any>>,
+  supabase: ReturnType<typeof getSupabaseAdmin>,
   requesterId: string,
   userIds: string[]
 ): Promise<Record<string, boolean>> {
@@ -50,7 +47,7 @@ async function fetchFollowStatus(
 }
 
 async function getFollowersList(
-  supabase: ReturnType<typeof createClient<any>>,
+  supabase: ReturnType<typeof getSupabaseAdmin>,
   targetUser: { id: string; show_followers?: boolean },
   requesterId: string | null
 ) {
@@ -112,7 +109,7 @@ async function getFollowersList(
 }
 
 async function getFollowingList(
-  supabase: ReturnType<typeof createClient<any>>,
+  supabase: ReturnType<typeof getSupabaseAdmin>,
   targetUser: { id: string; show_following?: boolean },
   requesterId: string | null
 ) {
@@ -188,11 +185,7 @@ export async function GET(
       return NextResponse.json({ error: 'Missing handle' }, { status: 400 })
     }
 
-    if (!SUPABASE_URL || !SUPABASE_KEY) {
-      return NextResponse.json({ error: 'Missing Supabase config' }, { status: 500 })
-    }
-
-    const supabase = createClient(SUPABASE_URL, SUPABASE_KEY)
+    const supabase = getSupabaseAdmin()
     const searchParams = request.nextUrl.searchParams
     const list = searchParams.get('list') // 'followers' | 'following'
     const requesterId = searchParams.get('requesterId')

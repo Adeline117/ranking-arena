@@ -5,7 +5,7 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@supabase/supabase-js'
+import { getSupabaseAdmin } from '@/lib/supabase/server'
 import { checkRateLimit, RateLimitPresets } from '@/lib/utils/rate-limit'
 import logger from '@/lib/logger'
 import { fireAndForget } from '@/lib/utils/logger'
@@ -13,15 +13,12 @@ import { socialFeatureGuard } from '@/lib/features'
 
 export const dynamic = 'force-dynamic'
 
-const SUPABASE_URL = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL || ''
-const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || ''
-
 /**
  * Recount and update follower_count / following_count on user_profiles.
  * Best-effort — failures are silently ignored.
  */
 async function updateFollowCounts(
-  supabase: ReturnType<typeof createClient<any>>,
+  supabase: ReturnType<typeof getSupabaseAdmin>,
   followerId: string,
   followingId: string
 ): Promise<void> {
@@ -40,7 +37,7 @@ async function updateFollowCounts(
  * 验证用户身份并返回用户ID
  */
  
-async function authenticateUser(request: NextRequest, supabase: ReturnType<typeof createClient<any>>): Promise<{ userId: string } | { error: string; status: number }> {
+async function authenticateUser(request: NextRequest, supabase: ReturnType<typeof getSupabaseAdmin>): Promise<{ userId: string } | { error: string; status: number }> {
   const authHeader = request.headers.get('Authorization')
   if (!authHeader?.startsWith('Bearer ')) {
     return { error: 'Unauthorized: missing auth token', status: 401 }
@@ -65,11 +62,7 @@ export async function GET(request: NextRequest) {
     const rateLimitResponse = await checkRateLimit(request, RateLimitPresets.authenticated)
     if (rateLimitResponse) return rateLimitResponse
 
-    if (!SUPABASE_URL || !SUPABASE_KEY) {
-      return NextResponse.json({ error: 'Missing Supabase config' }, { status: 500 })
-    }
-
-    const supabase = createClient(SUPABASE_URL, SUPABASE_KEY)
+    const supabase = getSupabaseAdmin()
 
     // 验证用户身份
     const authResult = await authenticateUser(request, supabase)
@@ -126,11 +119,7 @@ export async function POST(request: NextRequest) {
     const rateLimitResponse = await checkRateLimit(request, RateLimitPresets.write)
     if (rateLimitResponse) return rateLimitResponse
 
-    if (!SUPABASE_URL || !SUPABASE_KEY) {
-      return NextResponse.json({ error: 'Missing Supabase config' }, { status: 500 })
-    }
-
-    const supabase = createClient(SUPABASE_URL, SUPABASE_KEY)
+    const supabase = getSupabaseAdmin()
 
     // 验证用户身份 - followerId 必须从认证token获取
     const authResult = await authenticateUser(request, supabase)
