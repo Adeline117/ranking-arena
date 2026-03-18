@@ -140,7 +140,7 @@ export const TraderRow = memo(function TraderRow({
 
   // Prefetch trader detail on hover with 300ms debounce to prevent
   // firing 20-50 requests during rapid scroll over rows
-  const hoverTimerRef = useRef<ReturnType<typeof setTimeout>>(null)
+  const hoverTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   useEffect(() => () => { if (hoverTimerRef.current) clearTimeout(hoverTimerRef.current) }, [])
   const handleMouseEnter = useCallback(() => {
     if (hoverTimerRef.current) clearTimeout(hoverTimerRef.current)

@@ -29,8 +29,8 @@ import { exchangeLogger } from '../utils/logger'
 import { PLATFORM_RATE_LIMITS } from '../types/leaderboard'
 import * as cache from '../cache'
 import type { PlatformConnector, ConnectorConfig, RateLimiter } from './types'
-import { ConnectorError, DEFAULT_CONNECTOR_CONFIG } from './types'
-export { ConnectorError, DEFAULT_CONNECTOR_CONFIG }
+import { ConnectorError, DEFAULT_CONNECTOR_CONFIG, getConnectorConfigForPlatform } from './types'
+export { ConnectorError, DEFAULT_CONNECTOR_CONFIG, getConnectorConfigForPlatform }
 
 // Scraper result cache TTL (30 minutes)
 const SCRAPER_CACHE_TTL = 30 * 60
@@ -188,6 +188,20 @@ export abstract class BaseConnector implements PlatformConnector {
 
   constructor(config?: Partial<ConnectorConfig>) {
     this.config = { ...DEFAULT_CONNECTOR_CONFIG, ...config }
+    // Defer tier config application to first request (platform is abstract at construction)
+    this._tierApplied = !!config?.timeout // Skip tier if timeout was explicitly provided
+  }
+
+  private _tierApplied: boolean
+
+  /** Lazily apply tier-based config on first access */
+  protected getConfig(): ConnectorConfig {
+    if (!this._tierApplied) {
+      this._tierApplied = true
+      const tierConfig = getConnectorConfigForPlatform(this.platform)
+      this.config = { ...this.config, timeout: tierConfig.timeout, maxRetries: tierConfig.maxRetries, retryBaseDelay: tierConfig.retryBaseDelay }
+    }
+    return this.config
   }
 
   /** Set the rate limiter for this connector */
@@ -221,9 +235,10 @@ export abstract class BaseConnector implements PlatformConnector {
    * Make an HTTP request with retry, backoff, and rate limiting.
    */
   protected async request<T>(url: string, options?: RequestInit): Promise<T> {
+    const cfg = this.getConfig()
     let lastError: Error | null = null
 
-    for (let attempt = 0; attempt <= this.config.maxRetries; attempt++) {
+    for (let attempt = 0; attempt <= cfg.maxRetries; attempt++) {
       // Rate limiting
       if (this.rateLimiter) {
         if (this.rateLimiter.isCircuitOpen()) {
@@ -240,7 +255,7 @@ export abstract class BaseConnector implements PlatformConnector {
 
       try {
         const controller = new AbortController()
-        const timeout = setTimeout(() => controller.abort(), this.config.timeout)
+        const timeout = setTimeout(() => controller.abort(), cfg.timeout)
 
         // Proxy support: route through VPS proxy for geo-blocked APIs
         let response: Response
@@ -353,8 +368,8 @@ export abstract class BaseConnector implements PlatformConnector {
         lastError = toError(error)
 
         // Exponential backoff
-        if (attempt < this.config.maxRetries) {
-          const delay = this.config.retryBaseDelay * Math.pow(2, attempt)
+        if (attempt < cfg.maxRetries) {
+          const delay = cfg.retryBaseDelay * Math.pow(2, attempt)
           const jitter = Math.random() * 1000
           await this.sleep(delay + jitter)
         }
