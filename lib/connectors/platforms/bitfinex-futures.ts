@@ -68,8 +68,15 @@ export class BitfinexFuturesConnector extends BaseConnector {
     const timeframe = this.mapWindowToTimeframe(window)
     const traderMap = new Map<string, TraderSource>()
 
-    // Fetch equity proxy (inception unrealized profit) for ROI estimation
+    // Step 1: Fetch all ranking data into lookup maps
+    // plu = inception unrealized profit (equity proxy for ROI estimation)
+    // plu_diff = PnL change in USD (per period)
+    // plr = PnL ratio ranking (proprietary scoring metric, NOT usable as ROI%)
     const equityMap = new Map<string, number>()
+    const pnlMap = new Map<string, number>()
+    const rankMap = new Map<string, { username: string; rank: number; key: string }>()
+
+    // Fetch equity proxy (always use 1M timeframe for inception data)
     try {
       const equityRows = await this.request<BitfinexRow[]>(
         `https://api-pub.bitfinex.com/v2/rankings/plu:1M:tGLOBAL:USD/hist`
@@ -82,61 +89,79 @@ export class BitfinexFuturesConnector extends BaseConnector {
         }
       }
     } catch {
-      // Equity proxy not critical — ROI will be null
+      // Equity proxy not critical — ROI will be null for these traders
     }
 
-    // Fetch PnL diff rankings (primary data source)
-    // plu_diff = actual PnL in USD, plr = PnL ratio ranking (not directly usable as ROI)
-    for (const key of ['plu_diff', 'plr']) {
-      try {
-        const rows = await this.request<BitfinexRow[]>(
-          `https://api-pub.bitfinex.com/v2/rankings/${key}:${timeframe}:tGLOBAL:USD/hist`
-        )
-
-        if (!Array.isArray(rows)) continue
-
-        for (const row of rows) {
-          if (!Array.isArray(row) || !row[2]) continue
-          const username = String(row[2])
-          const id = username.toLowerCase()
-          const value = Number(row[6]) || 0
-
-          if (traderMap.has(id)) continue
-
-          // For plu_diff, value is PnL in USD; for plr, value is a ratio metric (not ROI%)
-          const pnl = key === 'plu_diff' ? value : 0
-
-          // Estimate ROI from PnL / equity proxy
-          const equity = equityMap.get(id)
-          let roi: number | null = null
-          if (equity != null && Math.abs(equity) > 1 && pnl !== 0) {
-            roi = Math.max(-500, Math.min(50000, (pnl / Math.abs(equity)) * 100))
+    // Fetch PnL diff (actual PnL in USD) — used for ROI estimation for ALL traders
+    try {
+      const pnlRows = await this.request<BitfinexRow[]>(
+        `https://api-pub.bitfinex.com/v2/rankings/plu_diff:${timeframe}:tGLOBAL:USD/hist`
+      )
+      if (Array.isArray(pnlRows)) {
+        for (const row of pnlRows) {
+          if (Array.isArray(row) && row[2] && row[6] != null) {
+            const id = String(row[2]).toLowerCase()
+            pnlMap.set(id, Number(row[6]))
+            if (!rankMap.has(id)) {
+              rankMap.set(id, { username: String(row[2]), rank: Number(row[3]) || 0, key: 'plu_diff' })
+            }
           }
-
-          traderMap.set(id, {
-            platform: this.platform,
-            market_type: this.marketType,
-            trader_key: id,
-            display_name: username,
-            profile_url: `https://www.bitfinex.com/`,
-            discovered_at: new Date().toISOString(),
-            last_seen_at: new Date().toISOString(),
-            is_active: true,
-            raw: {
-              username,
-              rank: Number(row[3]) || null,
-              pnl,
-              key,
-              timeframe,
-              equity: equityMap.get(id) ?? null,
-              roi,
-            },
-          })
         }
-      } catch (err) {
-        if (traderMap.size === 0) throw err
-        // Continue with what we have
       }
+    } catch (err) {
+      // PnL data not available — will still try plr for discovery
+      if (equityMap.size === 0) throw err
+    }
+
+    // Fetch plr (PnL ratio ranking) — used only for discovery of additional traders
+    try {
+      const plrRows = await this.request<BitfinexRow[]>(
+        `https://api-pub.bitfinex.com/v2/rankings/plr:${timeframe}:tGLOBAL:USD/hist`
+      )
+      if (Array.isArray(plrRows)) {
+        for (const row of plrRows) {
+          if (Array.isArray(row) && row[2]) {
+            const id = String(row[2]).toLowerCase()
+            if (!rankMap.has(id)) {
+              rankMap.set(id, { username: String(row[2]), rank: Number(row[3]) || 0, key: 'plr' })
+            }
+          }
+        }
+      }
+    } catch {
+      // plr data not critical
+    }
+
+    // Step 2: Build trader entries with cross-referenced PnL + equity for ROI
+    for (const [id, info] of rankMap) {
+      const pnl = pnlMap.get(id) ?? 0
+      const equity = equityMap.get(id)
+
+      // Estimate ROI from PnL / equity proxy
+      let roi: number | null = null
+      if (equity != null && Math.abs(equity) > 1 && pnl !== 0) {
+        roi = Math.max(-500, Math.min(50000, (pnl / Math.abs(equity)) * 100))
+      }
+
+      traderMap.set(id, {
+        platform: this.platform,
+        market_type: this.marketType,
+        trader_key: id,
+        display_name: info.username,
+        profile_url: `https://www.bitfinex.com/`,
+        discovered_at: new Date().toISOString(),
+        last_seen_at: new Date().toISOString(),
+        is_active: true,
+        raw: {
+          username: info.username,
+          rank: info.rank || null,
+          pnl,
+          key: info.key,
+          timeframe,
+          equity: equity ?? null,
+          roi,
+        },
+      })
     }
 
     const traders = Array.from(traderMap.values()).slice(0, limit)
