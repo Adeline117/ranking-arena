@@ -43,7 +43,7 @@ export async function GET(request: NextRequest) {
     .limit(200)
 
   if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 })
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
 
   return NextResponse.json({ watchlist: data || [] })
@@ -80,7 +80,7 @@ export async function POST(request: NextRequest) {
     })
 
   if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 })
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
 
   return NextResponse.json({ ok: true })
@@ -113,7 +113,7 @@ export async function DELETE(request: NextRequest) {
     .eq('source_trader_id', source_trader_id)
 
   if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 })
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
 
   return NextResponse.json({ ok: true })

@@ -65,7 +65,7 @@ async function handleSnapshot(origin: string | null): Promise<NextResponse> {
   } catch (e) {
     const msg = e instanceof Error ? e.message : 'unknown error'
     logger.error('Realtime snapshot failed', { error: msg })
-    return NextResponse.json({ error: msg }, { status: 500 })
+    return NextResponse.json({ error: 'Failed to fetch market data' }, { status: 500 })
   }
 }
 

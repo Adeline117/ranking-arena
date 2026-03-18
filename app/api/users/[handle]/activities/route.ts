@@ -34,7 +34,7 @@ export async function GET(
       .range(offset, offset + limit - 1)
 
     if (error) {
-      return NextResponse.json({ error: error.message }, { status: 500 })
+      return NextResponse.json({ error: 'Failed to fetch activities' }, { status: 500 })
     }
 
     return NextResponse.json({ activities: activities || [], hasMore: (activities?.length || 0) === limit })

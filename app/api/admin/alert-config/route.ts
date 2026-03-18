@@ -29,7 +29,7 @@ export async function GET(req: Request) {
     
     if (error) {
       logger.error('Error fetching alert config', { error })
-      return NextResponse.json({ error: error.message }, { status: 500 })
+      return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
     }
     
     // Transform to object format
@@ -88,7 +88,7 @@ export async function POST(req: Request) {
     
     if (error) {
       logger.error('Error updating alert config', { error, key, enabled, adminId: admin.id })
-      return NextResponse.json({ error: error.message }, { status: 500 })
+      return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
     }
     
     // Log the action
