@@ -515,7 +515,7 @@ export default function TraderProfileClient({ data, serverTraderData, claimedUse
                 )}
 
                 {/* Trading Style Radar */}
-                {(data.profitability_score || data.risk_control_score || data.execution_score) && (
+                {(data.profitability_score != null || data.risk_control_score != null || data.execution_score != null) && (
                   <Box
                     className="glass-card"
                     style={{
