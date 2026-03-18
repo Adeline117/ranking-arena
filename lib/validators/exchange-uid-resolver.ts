@@ -389,9 +389,9 @@ export const DEX_WALLET_PLATFORMS = [
   'gmx',
   'gains',
   'aevo',
-  'kwenta',
-  'vertex',
   'dydx',
+  // kwenta: dead (Copin API stopped, 2026-03-11)
+  // vertex: never had active connector
 ] as const
 
 /**

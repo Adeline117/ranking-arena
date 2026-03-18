@@ -22,7 +22,9 @@ const PAGE_SIZE = 5000
 
 const DEX_PLATFORMS = [
   'hyperliquid', 'gmx', 'dydx', 'drift', 'aevo',
-  'gains', 'jupiter_perps', 'kwenta', 'vertex',
+  'gains', 'jupiter_perps',
+  // kwenta: dead (Copin API stopped serving, 2026-03-11)
+  // vertex: never had active connector, not in TraderSource type
 ]
 
 // ============================================
