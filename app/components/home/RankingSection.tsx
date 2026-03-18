@@ -44,42 +44,7 @@ export default function RankingSection({
   onRetry,
   onRefresh,
 }: RankingSectionProps) {
-  const {
-    language,
-    t,
-    isPro,
-    premiumLoading,
-    category,
-    setCategory,
-    showAdvancedFilter,
-    showMobileFilter,
-    setShowMobileFilter,
-    filterConfig,
-    savedFilters,
-    hasActiveFilters,
-    selectedExchange,
-    sortColumn,
-    sortDir,
-    currentPage,
-    searchQuery,
-    source,
-    advancedFiltered,
-    filteredTraders,
-    handleFilterChange,
-    handleSortChange,
-    handlePageChange,
-    handleSearchChange,
-    handleSaveFilter,
-    handleLoadFilter,
-    handleDeleteFilter,
-    handleProRequired,
-    handleCopyLink,
-    handleResetFilters,
-    handleFilterToggle,
-    formatLastUpdated,
-    router,
-  } = useRankingFilters({ traders, activeTimeRange })
-
+  // TEMPORARY: Bypass useRankingFilters to isolate infinite loop
   return (
     <Box
       as="section"
@@ -98,67 +63,14 @@ export default function RankingSection({
         />
       </Box>
 
-      <AdvancedFilterPanel
-        showAdvancedFilter={showAdvancedFilter}
-        showMobileFilter={showMobileFilter}
-        onCloseMobileFilter={() => setShowMobileFilter(false)}
-        filterConfig={filterConfig}
-        savedFilters={savedFilters}
-        onFilterChange={handleFilterChange}
-        onSaveFilter={handleSaveFilter}
-        onLoadFilter={handleLoadFilter}
-        onDeleteFilter={handleDeleteFilter}
-        hasActiveFilters={hasActiveFilters}
-        isPro={isPro}
-      />
-
-      <FilterStatusMessages
-        loading={loading}
-        language={language}
-        selectedExchange={selectedExchange}
-        advancedFilteredCount={advancedFiltered.length}
-        tradersCount={traders.length}
-        hasActiveFilters={hasActiveFilters}
-        onResetFilters={handleResetFilters}
-      />
-
       <RankingTable
-        traders={filteredTraders}
-        loading={loading || premiumLoading}
+        traders={traders}
+        loading={loading}
         loggedIn={isLoggedIn}
-        source={source}
+        source={traders.length > 0 ? traders[0].source : 'all'}
         timeRange={activeTimeRange}
-        isPro={isPro}
-        category={category}
-        onCategoryChange={setCategory}
-        onProRequired={handleProRequired}
-        onFilterToggle={handleFilterToggle}
-        hasActiveFilters={hasActiveFilters}
         error={error}
         onRetry={onRetry}
-        controlledSortColumn={sortColumn}
-        controlledSortDir={sortDir}
-        controlledPage={currentPage}
-        controlledSearchQuery={searchQuery}
-        onSortChange={handleSortChange}
-        onPageChange={handlePageChange}
-        onSearchChange={handleSearchChange}
-      />
-
-      {!isPro && !loading && advancedFiltered.length > FREE_LEADERBOARD_LIMIT && (
-        <ProUpgradeCTA
-          language={language}
-          t={t}
-          freeLimit={FREE_LEADERBOARD_LIMIT}
-          onUpgrade={() => router.push('/pricing')}
-        />
-      )}
-
-      <RankingFooter
-        loading={loading}
-        lastUpdated={lastUpdated}
-        formatLastUpdated={formatLastUpdated}
-        t={t}
       />
     </Box>
   )
