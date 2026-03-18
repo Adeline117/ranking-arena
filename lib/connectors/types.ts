@@ -110,6 +110,42 @@ export const DEFAULT_CONNECTOR_CONFIG: ConnectorConfig = {
 }
 
 /**
+ * Connector timeout tiers.
+ * fast: direct API, no WAF (binance, okx, hyperliquid, drift, btcc, bitunix, etoro, web3_bot)
+ * medium: VPS proxy or light WAF (bybit, bitget, mexc, gateio, coinex, htx, aevo, gains, jupiter, dydx)
+ * slow: heavy WAF, Playwright scraper, geo-blocked (bingx, xt, blofin, toobit, weex, phemex, lbank, kwenta)
+ */
+export type ConnectorTier = 'fast' | 'medium' | 'slow'
+
+export const CONNECTOR_TIER_CONFIG: Record<ConnectorTier, Partial<ConnectorConfig>> = {
+  fast:   { timeout: 15000, maxRetries: 2, retryBaseDelay: 1000 },
+  medium: { timeout: 30000, maxRetries: 3, retryBaseDelay: 2000 },
+  slow:   { timeout: 120000, maxRetries: 2, retryBaseDelay: 5000 },
+}
+
+export const PLATFORM_TIER: Record<string, ConnectorTier> = {
+  // Fast: direct API, no WAF
+  binance_futures: 'fast', binance_spot: 'fast', binance_web3: 'fast',
+  okx_futures: 'fast', okx_web3: 'fast',
+  hyperliquid: 'fast', drift: 'fast', btcc: 'fast', bitunix: 'fast',
+  etoro: 'fast', web3_bot: 'fast', bitfinex: 'fast',
+  // Medium: VPS proxy or light WAF
+  bybit: 'medium', bitget_futures: 'medium', mexc: 'medium',
+  gateio: 'medium', coinex: 'medium', htx_futures: 'medium',
+  aevo: 'medium', gains: 'medium', jupiter_perps: 'medium',
+  dydx: 'medium', gmx: 'medium',
+  // Slow: heavy WAF, scraper required
+  bingx: 'slow', xt: 'slow', blofin: 'slow', toobit: 'slow',
+  weex: 'slow', phemex: 'slow', lbank: 'slow', kwenta: 'slow',
+}
+
+/** Get ConnectorConfig for a platform based on its tier */
+export function getConnectorConfigForPlatform(platform: string): ConnectorConfig {
+  const tier = PLATFORM_TIER[platform] || 'medium'
+  return { ...DEFAULT_CONNECTOR_CONFIG, ...CONNECTOR_TIER_CONFIG[tier] }
+}
+
+/**
  * Error thrown by connectors when a platform-specific issue occurs.
  */
 export class ConnectorError extends Error {
