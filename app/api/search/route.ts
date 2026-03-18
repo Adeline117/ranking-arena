@@ -461,8 +461,22 @@ export const GET = withPublic(
       }
     }
 
+    // Sort traders by relevance score (Meilisearch-inspired weighted ranking)
+    // Weight: exact handle match > partial match > arena_score > ROI
+    const scoredTraders = exchangeTopTraders.map(t => {
+      let relevance = 0
+      const handle = (t.handle || t.traderKey || '').toLowerCase()
+      const q = sanitizedQuery.toLowerCase()
+      if (handle === q) relevance += 100 // Exact match
+      else if (handle.startsWith(q)) relevance += 50 // Prefix match
+      else if (handle.includes(q)) relevance += 20 // Contains
+      relevance += Math.min((t.arenaScore ?? 0) / 2, 30) // Score bonus (max 30)
+      relevance += Math.min(Math.log10(Math.max(t.roi ?? 1, 1)) * 5, 15) // ROI bonus (max 15)
+      return { ...t, _relevance: relevance }
+    }).sort((a, b) => b._relevance - a._relevance)
+
     // Map traders to UnifiedSearchResult
-    const traders: UnifiedSearchResult[] = exchangeTopTraders.map((t) => {
+    const traders: UnifiedSearchResult[] = scoredTraders.map((t) => {
       const exchangeName = EXCHANGE_CONFIG[t.platform as keyof typeof EXCHANGE_CONFIG]?.name || t.platform
       const isBot = t.traderType === 'bot' || t.platform === 'web3_bot'
       const roiStr = t.roi != null ? `${t.roi >= 0 ? '+' : ''}${t.roi >= 1000 ? `${(t.roi / 1000).toFixed(1)}K` : t.roi.toFixed(1)}%` : null
@@ -526,7 +540,7 @@ export const GET = withPublic(
 
     // "Did you mean" suggestions — combines trader handles + hot posts + popular groups
     let suggestions: string[] | undefined
-    if (totalResults <= 2 && sanitizedQuery.length >= 3) {
+    if (totalResults <= 2 && sanitizedQuery.length >= 3 && !matchedExchange) {
       const [traderSuggestions, hotPostSuggestions, groupSuggestions] = await Promise.all([
         // Trader handle suggestions (weighted by arena_score + followers)
         getSearchSuggestions(supabase, sanitizedQuery),

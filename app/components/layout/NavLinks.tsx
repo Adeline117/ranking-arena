@@ -53,14 +53,6 @@ export default function NavLinks() {
               minHeight: 44,
               display: 'inline-flex',
               alignItems: 'center',
-              outline: 'none',
-            }}
-            onFocus={(e) => {
-              e.currentTarget.style.outline = '2px solid var(--color-accent-primary)'
-              e.currentTarget.style.outlineOffset = '2px'
-            }}
-            onBlur={(e) => {
-              e.currentTarget.style.outline = 'none'
             }}
           >
             {label}
