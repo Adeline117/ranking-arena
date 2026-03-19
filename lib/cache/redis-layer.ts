@@ -629,8 +629,8 @@ export async function checkCacheHealth(): Promise<{
       const start = Date.now()
       await redis.ping()
       redisLatency = Date.now() - start
-    } catch {
-      // Intentionally swallowed: Redis ping failed, mark as unavailable for health check
+    } catch (err) {
+      console.warn('[Redis] Health check failed:', err instanceof Error ? err.message : String(err))
     }
   }
 
