@@ -69,23 +69,24 @@ export async function getLinkedTraders(
   let links: LinkedTraderAccount[] = []
 
   // Strategy 1: user_linked_traders table (Phase 1)
+  // Columns: trader_id (not trader_key), source (not platform), verified_at (not linked_at)
   const { data: ult, error: ultError } = await supabase
     .from('user_linked_traders')
-    .select('id, user_id, platform, trader_key, handle, label, is_primary, linked_at')
+    .select('id, user_id, source, trader_id, label, is_primary, verified_at')
     .eq('user_id', userId)
     .order('is_primary', { ascending: false })
-    .order('linked_at', { ascending: true })
+    .order('verified_at', { ascending: true })
 
   if (!ultError && ult && ult.length > 0) {
     links = ult.map((row: Record<string, unknown>) => ({
       id: String(row.id),
       userId: String(row.user_id),
-      platform: String(row.platform),
-      traderKey: String(row.trader_key),
-      handle: row.handle as string | null,
+      platform: String(row.source),
+      traderKey: String(row.trader_id),
+      handle: null, // not stored in user_linked_traders
       label: row.label as string | null,
       isPrimary: Boolean(row.is_primary),
-      linkedAt: String(row.linked_at),
+      linkedAt: String(row.verified_at),
       roi: null,
       pnl: null,
       arenaScore: null,
@@ -230,11 +231,12 @@ export async function findUserByTrader(
   traderKey: string
 ): Promise<string | null> {
   // Try user_linked_traders first
+  // Columns: source (not platform), trader_id (not trader_key)
   const { data: ult } = await supabase
     .from('user_linked_traders')
     .select('user_id')
-    .eq('platform', platform)
-    .eq('trader_key', traderKey)
+    .eq('source', platform)
+    .eq('trader_id', traderKey)
     .limit(1)
     .maybeSingle()
 
