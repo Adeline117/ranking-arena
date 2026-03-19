@@ -4759,6 +4759,13 @@ compFieldDescPlaceholder: '대회 규칙과 상품을 설명하세요...',
 compFieldMetric: '경쟁 지표',
 compFieldMaxParticipants: '최대 참가자 수',
 
+    // Trader comments/reviews
+    traderReviews: '리뷰',
+    noReviewsYet: '아직 리뷰가 없습니다. 첫 번째 의견을 남겨보세요!',
+    loginToReview: '로그인하고 리뷰 남기기',
+    ratingOptional: '평점 (선택)',
+    clearRating: '지우기',
+
 } as const
 
 export default ko

@@ -4748,6 +4748,13 @@ compFieldDescPlaceholder: 'Describe the competition rules and prizes...',
 compFieldMetric: 'Competition Metric',
 compFieldMaxParticipants: 'Max Participants',
 
+    // Trader comments/reviews
+    traderReviews: 'Reviews',
+    noReviewsYet: 'No reviews yet. Be the first to share your thoughts!',
+    loginToReview: 'Log in to leave a review',
+    ratingOptional: 'Rating (optional)',
+    clearRating: 'Clear',
+
 } as const
 
 export default en

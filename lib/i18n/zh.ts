@@ -4756,6 +4756,13 @@ compFieldDescPlaceholder: '描述竞赛规则和奖品...',
 compFieldMetric: '竞赛指标',
 compFieldMaxParticipants: '最大参与人数',
 
+    // Trader comments/reviews
+    traderReviews: '评价',
+    noReviewsYet: '暂无评价，成为第一个分享观点的人！',
+    loginToReview: '登录后留下评价',
+    ratingOptional: '评分（可选）',
+    clearRating: '清除',
+
 } as const
 
 export default zh
