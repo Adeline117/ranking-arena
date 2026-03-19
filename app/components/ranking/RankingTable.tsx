@@ -121,7 +121,9 @@ function RankingTableInner(props: {
   const [internalSortDir, setInternalSortDir] = useState<'asc' | 'desc'>('desc')
   const [justSortedColumn, setJustSortedColumn] = useState<string | null>(null)
   const [_sortAnimationKey, setSortAnimationKey] = useState(0)
-  const itemsPerPage = 100
+  // Reduced from 100 to 50: halves the number of simultaneously mounted TraderRow components,
+  // each of which has Zustand subscriptions, useLanguage, multiple hooks, and event handlers
+  const itemsPerPage = 50
 
   // Mobile card view: load more instead of pagination
   const [cardVisibleCount, setCardVisibleCount] = useState(20)
@@ -142,6 +144,9 @@ function RankingTableInner(props: {
   const [visibleColumns, setVisibleColumns] = useState<ColumnKey[]>(DEFAULT_VISIBLE_COLUMNS)
   const [showColumnSettings, setShowColumnSettings] = useState(false)
   const [viewMode, setViewMode] = useState<ViewMode>('table')
+  // Cache getStoredManualFlag() in a ref to avoid synchronous localStorage reads during render.
+  // Previously called as a prop value in JSX (getStoredManualFlag()) on every render.
+  const storedManualFlagRef = useRef<boolean>(false)
 
   // Trading style filter
   const [styleFilter, setStyleFilter] = useState<TradingStyle | 'all'>('all')
@@ -154,7 +159,9 @@ function RankingTableInner(props: {
     setVisibleColumns(getStoredColumns())
 
     // Mobile auto-switch: respect manual choice, otherwise follow screen width
+    // Read localStorage once on mount and cache in ref to avoid repeated sync reads
     const isManual = getStoredManualFlag()
+    storedManualFlagRef.current = isManual
     if (isManual) {
       setViewMode(getStoredViewMode())
     } else {
@@ -165,7 +172,7 @@ function RankingTableInner(props: {
     // Auto-switch on resize when user hasn't manually chosen
     const mql = window.matchMedia('(max-width: 767px)')
     const handleResize = (e: MediaQueryListEvent) => {
-      if (!getStoredManualFlag()) {
+      if (!storedManualFlagRef.current) {
         setViewMode(e.matches ? 'card' : 'table')
       }
     }
@@ -177,6 +184,7 @@ function RankingTableInner(props: {
 
   const toggleViewMode = (mode: ViewMode) => {
     setViewMode(mode)
+    storedManualFlagRef.current = true
     try {
       localStorage.setItem(LS_KEY_VIEW_MODE, mode)
       localStorage.setItem(LS_KEY_VIEW_MANUAL, 'true')
@@ -184,6 +192,7 @@ function RankingTableInner(props: {
   }
 
   const resetViewModeToAuto = () => {
+    storedManualFlagRef.current = false
     try {
       localStorage.removeItem(LS_KEY_VIEW_MANUAL)
       localStorage.removeItem(LS_KEY_VIEW_MODE)
@@ -368,7 +377,7 @@ function RankingTableInner(props: {
           viewMode={viewMode}
           onToggleViewMode={toggleViewMode}
           onResetViewModeToAuto={resetViewModeToAuto}
-          hasManualViewMode={getStoredManualFlag()}
+          hasManualViewMode={storedManualFlagRef.current}
           onFilterToggle={onFilterToggle}
           hasActiveFilters={hasActiveFilters}
           visibleColumns={visibleColumns}
