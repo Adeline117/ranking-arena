@@ -130,33 +130,20 @@ async function findUserProfileByTraderHandle(traderHandle: string): Promise<stri
     const auths = trader.trader_authorizations as unknown as Array<{ user_id: string; user_profiles: { handle: string | null } | null }>
     return auths?.[0]?.user_profiles?.handle || null
   } catch {
-    // Fallback to serial queries if join fails (table relationship may not exist)
+    // Fallback: single RPC-style query using trader_authorizations as the base
+    // Joins trader_id→traders and user_id→user_profiles in one round-trip
     try {
       const supabase = getSupabaseAdmin()
-      
-      const { data: traderData } = await supabase
-        .from('traders')
-        .select('id')
-        .eq('handle', traderHandle)
-        .maybeSingle()
-      
-      if (!traderData?.id) return null
-      
+
       const { data: auth } = await supabase
         .from('trader_authorizations')
-        .select('user_id')
-        .eq('trader_id', traderData.id)
+        .select('user_id, traders!inner(handle), user_profiles:user_id(handle)')
+        .eq('traders.handle', traderHandle)
         .eq('status', 'active')
         .maybeSingle()
-      
-      if (!auth?.user_id) return null
-      
-      const { data: profile } = await supabase
-        .from('user_profiles')
-        .select('handle')
-        .eq('id', auth.user_id)
-        .maybeSingle()
-      
+
+      if (!auth) return null
+      const profile = auth.user_profiles as unknown as { handle: string | null } | null
       return profile?.handle || null
     } catch {
       return null
