@@ -303,13 +303,81 @@ export function renderContentParts(parts: ContentPart[]): ReactNode[] {
 }
 
 /**
+ * Render #hashtags as clickable links within text.
+ * Returns an array of ReactNodes with hashtag links.
+ */
+function renderTextWithHashtags(text: string, keyPrefix: string): ReactNode[] {
+  const hashtagRegex = /#(\w{1,30})/g
+  if (!hashtagRegex.test(text)) {
+    return renderTextWithStickers(text, keyPrefix)
+  }
+
+  const nodes: ReactNode[] = []
+  let lastIdx = 0
+  let match: RegExpExecArray | null
+  hashtagRegex.lastIndex = 0
+  while ((match = hashtagRegex.exec(text)) !== null) {
+    if (match.index > lastIdx) {
+      nodes.push(...renderTextWithStickers(text.slice(lastIdx, match.index), `${keyPrefix}-ht${lastIdx}`))
+    }
+    const tag = match[1]
+    nodes.push(createElement('a', {
+      key: `${keyPrefix}-ht${match.index}`,
+      href: `/hashtag/${tag.toLowerCase()}`,
+      onClick: (e: React.MouseEvent) => e.stopPropagation(),
+      style: {
+        color: ARENA_PURPLE,
+        textDecoration: 'none',
+        fontWeight: 600,
+      },
+    }, `#${tag}`))
+    lastIdx = match.index + match[0].length
+  }
+  if (lastIdx < text.length) {
+    nodes.push(...renderTextWithStickers(text.slice(lastIdx), `${keyPrefix}-ht${lastIdx}`))
+  }
+  return nodes
+}
+
+/**
+ * Render @mention tokens within a plain text string as clickable links.
+ */
+function renderTextWithMentions(text: string, keyPrefix: string): ReactNode[] {
+  const mentionRegex = /@(\w+)/g
+  if (!mentionRegex.test(text)) {
+    return [createElement('span', { key: keyPrefix }, text)]
+  }
+
+  const nodes: ReactNode[] = []
+  let lastIdx = 0
+  let m: RegExpExecArray | null
+  mentionRegex.lastIndex = 0
+  while ((m = mentionRegex.exec(text)) !== null) {
+    if (m.index > lastIdx) {
+      nodes.push(createElement('span', { key: `${keyPrefix}-mt${lastIdx}` }, text.slice(lastIdx, m.index)))
+    }
+    nodes.push(createElement('a', {
+      key: `${keyPrefix}-m${m.index}`,
+      href: `/u/${encodeURIComponent(m[1])}`,
+      style: { color: 'var(--color-brand)', fontWeight: 600, textDecoration: 'none' },
+    }, `@${m[1]}`))
+    lastIdx = m.index + m[0].length
+  }
+  if (lastIdx < text.length) {
+    nodes.push(createElement('span', { key: `${keyPrefix}-mt${lastIdx}` }, text.slice(lastIdx)))
+  }
+  return nodes
+}
+
+/**
  * Render inline sticker tokens within a text string.
  * Returns an array of ReactNodes with sticker images replacing [sticker:xxx].
+ * Also renders @mentions as clickable links.
  */
 function renderTextWithStickers(text: string, keyPrefix: string): ReactNode[] {
   STICKER_PATTERN.lastIndex = 0
   if (!STICKER_PATTERN.test(text)) {
-    return [createElement('span', { key: keyPrefix }, text)]
+    return renderTextWithMentions(text, keyPrefix)
   }
 
   const nodes: ReactNode[] = []
@@ -318,7 +386,7 @@ function renderTextWithStickers(text: string, keyPrefix: string): ReactNode[] {
   STICKER_PATTERN.lastIndex = 0
   while ((match = STICKER_PATTERN.exec(text)) !== null) {
     if (match.index > lastIdx) {
-      nodes.push(createElement('span', { key: `${keyPrefix}-t${lastIdx}` }, text.slice(lastIdx, match.index)))
+      nodes.push(...renderTextWithMentions(text.slice(lastIdx, match.index), `${keyPrefix}-t${lastIdx}`))
     }
     const sticker = getStickerById(match[1])
     if (sticker) {
@@ -337,7 +405,7 @@ function renderTextWithStickers(text: string, keyPrefix: string): ReactNode[] {
     lastIdx = match.index + match[0].length
   }
   if (lastIdx < text.length) {
-    nodes.push(createElement('span', { key: `${keyPrefix}-t${lastIdx}` }, text.slice(lastIdx)))
+    nodes.push(...renderTextWithMentions(text.slice(lastIdx), `${keyPrefix}-t${lastIdx}`))
   }
   return nodes
 }
@@ -447,7 +515,7 @@ export function renderContentWithLinks(text: string): ReactNode[] | null {
       const parts = parseContent(ip.content)
       for (const part of parts) {
         if (part.type === 'text') {
-          result.push(...renderTextWithStickers(part.content, `p${keyIdx++}`))
+          result.push(...renderTextWithHashtags(part.content, `p${keyIdx++}`))
         } else {
           result.push(...renderContentParts([part]).map((node, i) => {
             // Re-key to avoid collisions
