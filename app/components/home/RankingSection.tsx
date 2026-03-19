@@ -2,7 +2,6 @@
 
 import { useState, useEffect } from 'react'
 import dynamic from 'next/dynamic'
-import { Box } from '../base'
 import type { Trader } from '../ranking/RankingTableTypes'
 import type { TimeRange } from './hooks/useTraderData'
 
@@ -126,22 +125,18 @@ export default function RankingSection({
   }, [])
 
   return (
-    <Box
-      as="section"
-      className="home-ranking-section"
-      style={{
-        minWidth: 0,
-        contain: 'layout style',
-      }}
+    <section
+      className="home-ranking-section contain-layout-style"
+      style={{ minWidth: 0 }}
     >
       {/* Time range selector (7D / 30D / 90D) */}
-      <Box style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', marginBottom: 8, minHeight: 48 }}>
+      <div className="ranking-time-range-bar">
         <TimeRangeSelector
           activeRange={activeTimeRange}
           onChange={onTimeRangeChange}
           disabled={loading}
         />
-      </Box>
+      </div>
 
       <AdvancedFilterPanel
         showAdvancedFilter={showAdvancedFilter}
@@ -193,16 +188,16 @@ export default function RankingSection({
       />
 
       {/* Leaderboard movers — risers & fallers (below fold, minimal CLS impact) */}
-      <div style={{ contain: 'layout style' }}>
+      <div className="contain-layout-style">
         {(movers.risers.length > 0 || movers.fallers.length > 0) && (
-          <Box style={{ marginTop: 16, marginBottom: 16 }}>
+          <div style={{ marginTop: 16, marginBottom: 16 }}>
             <LeaderboardChangelog risers={movers.risers} fallers={movers.fallers} />
-          </Box>
+          </div>
         )}
       </div>
 
       {/* ProUpgradeCTA — reserve space to prevent CLS when it appears */}
-      <div style={{ minHeight: !isPro && !loading && advancedFiltered.length > FREE_LEADERBOARD_LIMIT ? undefined : 0, contain: 'layout style' }}>
+      <div className="contain-layout-style" style={{ minHeight: !isPro && !loading && advancedFiltered.length > FREE_LEADERBOARD_LIMIT ? undefined : 0 }}>
         {!isPro && !loading && advancedFiltered.length > FREE_LEADERBOARD_LIMIT && (
           <ProUpgradeCTA
             language={language}
@@ -219,6 +214,6 @@ export default function RankingSection({
         formatLastUpdated={formatLastUpdated}
         t={t}
       />
-    </Box>
+    </section>
   )
 }

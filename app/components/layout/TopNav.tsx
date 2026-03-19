@@ -12,7 +12,6 @@ import { tokens } from '@/lib/design-tokens'
 import ThemeToggle from '../ui/ThemeToggle'
 import LanguageSwitcher from '../ui/LanguageToggle'
 import { useLanguage } from '../Providers/LanguageProvider'
-import { Box } from '../base'
 import NavLinks from './NavLinks'
 import NavSearchBar from './NavSearchBar'
 import MobileSearchButton from './MobileSearchButton'
@@ -69,38 +68,24 @@ export default function TopNav({ email = null }: { email?: string | null }) {
   }, [router])
 
   return (
-    <Box
-      as="header"
-      className="top-nav glass"
+    <header
+      className="top-nav glass top-nav-header"
       style={{
-        position: 'sticky',
-        top: 0,
-        zIndex: tokens.zIndex.sticky,
         background: tokens.glass.bg.primary,
-        borderBottom: `1px solid var(--color-border-primary)`,
-        height: 56,
         paddingTop: 'env(safe-area-inset-top, 0px)',
-        backdropFilter: tokens.glass.blur.lg,
-        WebkitBackdropFilter: tokens.glass.blur.lg,
         boxShadow: 'var(--shadow-card), var(--shadow-border-glow), var(--shadow-inset-subtle)',
       }}
     >
-      <Box
-        className="top-nav-container"
+      <div
+        className="top-nav-container top-nav-inner"
         style={{
-          maxWidth: 1200,
-          margin: '0 auto',
           paddingLeft: tokens.spacing[3],
           paddingRight: tokens.spacing[3],
-          height: '100%',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
           gap: tokens.spacing[2],
         }}
       >
         {/* Left: Logo + Nav */}
-        <Box style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[4] }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[4] }}>
           <Link
             href="/"
             className="top-nav-logo top-nav-logo-link touch-target"
@@ -121,7 +106,7 @@ export default function TopNav({ email = null }: { email?: string | null }) {
               }
             }}
           >
-            <Box
+            <div
               data-logo-box
               style={{
                 display: 'flex',
@@ -138,7 +123,7 @@ export default function TopNav({ email = null }: { email?: string | null }) {
                 priority
                 style={{ flexShrink: 0, borderRadius: 4, objectFit: 'contain' }}
               />
-              <Box
+              <div
                 style={{
                   fontSize: '20px',
                   fontWeight: 700,
@@ -148,12 +133,12 @@ export default function TopNav({ email = null }: { email?: string | null }) {
                 }}
               >
                 <span style={{ color: 'var(--color-brand)', fontWeight: 800 }}>a</span>rena
-              </Box>
-            </Box>
+              </div>
+            </div>
           </Link>
 
           <NavLinks />
-        </Box>
+        </div>
 
         {/* Center: Search (desktop) */}
         <NavSearchBar
@@ -210,12 +195,12 @@ export default function TopNav({ email = null }: { email?: string | null }) {
             <LoginButton />
           )}
         </div>
-      </Box>
+      </div>
       <MobileSearchOverlay open={showMobileSearch} onClose={() => setShowMobileSearch(false)} />
       {/* Desktop inbox panel - slides in from right */}
       <div className="hide-mobile hide-tablet">
         <InboxPanel />
       </div>
-    </Box>
+    </header>
   )
 }
