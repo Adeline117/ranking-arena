@@ -7,6 +7,7 @@ import { supabase } from '@/lib/supabase/client'
 import { tokens } from '@/lib/design-tokens'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import SidebarCard from './SidebarCard'
+import { useDeferredKey } from '@/lib/hooks/useDeferredSWR'
 
 type HotPost = {
   id: string
@@ -142,8 +143,12 @@ export default function HotDiscussions({ limit = 8 }: { limit?: number }) {
   const { language, t } = useLanguage()
 
   const targetLang = language
+  // Defer SWR key until after LCP — prevents simultaneous sidebar fetches from blocking main thread
+  const immediateKey = ['hot-discussions', limit, language] as const
+  const swrKey = useDeferredKey(immediateKey, 1400)
+
   const { data: posts = [], isLoading: loading, error: swrError, mutate } = useSWR(
-    ['hot-discussions', limit, language],
+    swrKey,
     ([key, lim, _lang]) => fetchHotPosts(key, lim, targetLang),
     {
       revalidateOnFocus: false,
@@ -212,7 +217,7 @@ export default function HotDiscussions({ limit = 8 }: { limit?: number }) {
               <Link
                 key={post.id}
                 href={`/post/${post.id}`}
-                prefetch={true}
+                prefetch={false}
                 style={{
                   display: 'flex',
                   flexDirection: 'column',

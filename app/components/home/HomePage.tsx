@@ -28,10 +28,9 @@ interface HomePageProps {
   initialTraders?: InitialTrader[]
   initialLastUpdated?: string | null
   heroStats?: { traderCount: number; exchangeCount: number }
-  ssrTable?: React.ReactNode
 }
 
-export default function HomePage({ initialTraders, initialLastUpdated, heroStats, ssrTable }: HomePageProps) {
+export default function HomePage({ initialTraders, initialLastUpdated, heroStats }: HomePageProps) {
   return (
     <div
       id="homepage-interactive"
@@ -52,7 +51,9 @@ export default function HomePage({ initialTraders, initialLastUpdated, heroStats
           <HomeSubNav />
           <FoundingMemberBanner />
         </div>
-        <Suspense fallback={<div className="contain-layout-style" style={{ minHeight: 48, height: 48 }} />}><ExchangePartners /></Suspense>
+        {/* ExchangePartners fallback: padding:10px*2 + content~26px + border:1px = 47px.
+            Must match actual rendered height to avoid CLS when component loads. */}
+        <Suspense fallback={<div className="contain-layout-style" style={{ height: 47, borderBottom: '1px solid var(--color-border-primary)' }} />}><ExchangePartners /></Suspense>
         <ThreeColumnLayout
           leftSidebar={
             features.social ? (
@@ -88,7 +89,7 @@ export default function HomePage({ initialTraders, initialLastUpdated, heroStats
                 <div className="skeleton" style={{ height: 400, borderRadius: tokens.radius.lg }} />
               </div>
             }>
-                <HomePageClient initialTraders={initialTraders} initialLastUpdated={initialLastUpdated} ssrTable={ssrTable} />
+                <HomePageClient initialTraders={initialTraders} initialLastUpdated={initialLastUpdated} />
             </Suspense>
           </SectionErrorBoundary>
         </ThreeColumnLayout>

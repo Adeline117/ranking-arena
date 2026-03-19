@@ -6,6 +6,7 @@ import { tokens, newsCategories, newsImportance } from '@/lib/design-tokens'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import SidebarCard from './SidebarCard'
 import { formatTimeAgo } from '@/lib/utils/date'
+import { useDeferredKey } from '@/lib/hooks/useDeferredSWR'
 
 type NewsItem = {
   id: string
@@ -44,8 +45,11 @@ const fetcher = async (url: string) => {
 export default function NewsFlash() {
   const { language, t } = useLanguage()
 
+  // Defer SWR key until after LCP — prevents simultaneous sidebar fetches from blocking main thread
+  const swrKey = useDeferredKey('/api/flash-news?limit=5&sort=published_at', 1000)
+
   const { data, error, isLoading, mutate } = useSWR(
-    '/api/flash-news?limit=5&sort=published_at',
+    swrKey,
     fetcher,
     {
       revalidateOnFocus: false,

@@ -41,7 +41,9 @@ export function PeriodSelector({ period, onPeriodChange, source, lastUpdated }: 
   const [indicatorStyle, setIndicatorStyle] = useState<{ left: number; width: number } | null>(null)
   const [isPending, startTransition] = useTransition()
 
-  // Sliding indicator: measure active button position
+  // Sliding indicator: measure active button position.
+  // Use rAF to defer the layout read (offsetLeft/offsetWidth) out of the commit phase.
+  // Reading layout geometry synchronously after a state update causes a forced reflow.
   const updateIndicator = useCallback(() => {
     if (!containerRef.current) return
     const periods: Period[] = ['7D', '30D', '90D']
@@ -57,7 +59,8 @@ export function PeriodSelector({ period, onPeriodChange, source, lastUpdated }: 
   }, [period])
 
   useEffect(() => {
-    updateIndicator()
+    const raf = requestAnimationFrame(updateIndicator)
+    return () => cancelAnimationFrame(raf)
   }, [updateIndicator])
 
   // Sync selected period to global store so ShareOnXButton reads the current window
