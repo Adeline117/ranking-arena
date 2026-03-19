@@ -332,12 +332,13 @@
   align-items: center;
   justify-content: center;
   height: 60px;
-  margin-top: -60px;
-  transition: margin-top 0.2s ease;
+  /* Use transform instead of margin-top — transform is GPU-composited (no layout trigger) */
+  transform: translateY(-60px);
+  transition: transform 0.2s ease;
 }
 
 .pull-to-refresh.visible {
-  margin-top: 0;
+  transform: translateY(0);
 }
 
 .pull-to-refresh .spinner {
