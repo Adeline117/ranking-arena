@@ -26,6 +26,25 @@ import { env } from '@/lib/env'
 export const dynamic = 'force-dynamic'
 export const maxDuration = 300 // 5 minutes — longest of the three
 
+/** Wrap a sub-job with a per-job timeout so one slow job doesn't block the batch */
+function withTimeout(
+  fn: () => Promise<InlineJobResult>,
+  jobName: string,
+  timeoutMs: number = 120_000, // 2 min per sub-job
+): Promise<InlineJobResult> {
+  return Promise.race([
+    fn(),
+    new Promise<InlineJobResult>((resolve) =>
+      setTimeout(() => resolve({
+        name: jobName,
+        status: 'error',
+        durationMs: timeoutMs,
+        error: `${jobName} timed out after ${Math.round(timeoutMs / 1000)}s`,
+      }), timeoutMs)
+    ),
+  ])
+}
+
 export async function GET(request: NextRequest) {
   // Verify cron secret
   const authHeader = request.headers.get('authorization')
@@ -40,18 +59,18 @@ export async function GET(request: NextRequest) {
   const startTime = Date.now()
   const plog = await PipelineLogger.start('batch-5min')
 
-  // Run all sub-jobs in parallel — they are independent, no HTTP needed
-  // Wrap with 295s timeout to ensure plog gets closed within 300s maxDuration
+  // Run all sub-jobs in parallel with per-job timeouts (120s each).
+  // This prevents a single slow job from consuming the entire 300s budget.
   let results: InlineJobResult[]
   try {
     results = await Promise.race([
       Promise.all([
-        runWorkerInline(),
-        refreshHotScoresInline(),
-        syncTradersInline(),
+        withTimeout(runWorkerInline, 'run-worker', 120_000),
+        withTimeout(refreshHotScoresInline, 'refresh-hot-scores', 120_000),
+        withTimeout(syncTradersInline, 'trader-sync', 120_000),
       ]),
       new Promise<never>((_, reject) =>
-        setTimeout(() => reject(new Error('batch-5min timed out after 295s')), 295_000)
+        setTimeout(() => reject(new Error('batch-5min timed out after 280s')), 280_000)
       ),
     ])
   } catch (err) {

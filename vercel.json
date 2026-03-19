@@ -203,6 +203,10 @@
       "schedule": "0 8 * * *"
     },
     {
+      "path": "/api/cron/auto-post-twitter",
+      "schedule": "0 8 * * *"
+    },
+    {
       "path": "/api/cron/snapshot-positions",
       "schedule": "15 * * * *"
     },

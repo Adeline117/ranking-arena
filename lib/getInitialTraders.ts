@@ -10,6 +10,7 @@ import type { Period } from '@/lib/utils/arena-score'
 import type { ScoreConfidence } from '@/lib/utils/arena-score'
 import type { UnifiedTrader } from '@/lib/types/unified-trader'
 import { getLeaderboard } from '@/lib/data/unified'
+import { mapLeaderboardRow } from '@/lib/data/trader/mappers'
 import { logger } from '@/lib/logger'
 import { sanitizeDisplayName } from '@/lib/utils/profanity'
 
@@ -73,6 +74,10 @@ export async function getInitialTraders(
 /**
  * Direct Supabase fetch -- used by cron to populate cache and as fallback.
  * Exported so the cron refresh route can call it without triggering cache reads.
+ *
+ * Strategy:
+ * 1. Try SQL RPC `get_diverse_leaderboard` (returns ~50 rows, ~10KB payload)
+ * 2. Fallback to getLeaderboard(2000) + JS-side diversity filter (~400KB) if RPC missing
  */
 export async function fetchLeaderboardFromDB(
   timeRange: Period = '90D',
@@ -85,29 +90,8 @@ export async function fetchLeaderboardFromDB(
   const timer = setTimeout(() => controller.abort(), 15_000)
 
   try {
-    // Use unified data layer to fetch leaderboard
-    // Fetch a large pool (2000) for platform diversity filtering
-    // TODO (#P7): Reduce SSR data payload — replace the 2000-row JS-side diversity filter with a
-    // SQL-level approach. Create a Supabase RPC function:
-    //   CREATE FUNCTION get_diverse_leaderboard(p_period text, p_limit int, p_per_platform int)
-    //   RETURNS SETOF leaderboard_ranks AS $$
-    //     SELECT * FROM (
-    //       SELECT *, ROW_NUMBER() OVER (PARTITION BY source ORDER BY rank ASC) AS rn
-    //       FROM leaderboard_ranks
-    //       WHERE season_id = p_period AND arena_score > 10
-    //         AND (is_outlier IS NULL OR is_outlier = false)
-    //     ) sub WHERE rn <= p_per_platform ORDER BY rank ASC LIMIT p_limit;
-    //   $$ LANGUAGE sql STABLE;
-    // Then call: supabase.rpc('get_diverse_leaderboard', { p_period: '90D', p_limit: 50, p_per_platform: 5 })
-    // This reduces the payload from ~2000 rows (~400KB) to ~50 rows (~10KB).
-    const { traders: unifiedTraders } = await Promise.race([
-      getLeaderboard(supabase, {
-        period: timeRange as '7D' | '30D' | '90D',
-        limit: 2000,
-        minScore: 10,
-        excludeOutliers: true,
-        sortBy: 'rank',
-      }),
+    const result = await Promise.race([
+      fetchViaDiverseRPC(supabase, timeRange, limit),
       new Promise<never>((_, reject) => {
         controller.signal.addEventListener('abort', () =>
           reject(new Error('Query timeout after 15000ms'))
@@ -116,39 +100,7 @@ export async function fetchLeaderboardFromDB(
     ])
 
     clearTimeout(timer)
-
-    // Dedupe by platform + trader_key (keep first occurrence, which has best rank)
-    const seen = new Set<string>()
-    const uniqueTraders = unifiedTraders.filter(t => {
-      const key = `${t.platform}:${t.traderKey}`
-      if (seen.has(key)) return false
-      seen.add(key)
-      return true
-    })
-
-    // Map UnifiedTrader -> InitialTrader
-    const initialTraders = uniqueTraders.map(mapUnifiedToInitial)
-
-    // Platform diversity: cap max traders per platform to ensure cross-platform mix
-    // Without this, a single high-PnL platform (e.g. Hyperliquid whales) monopolizes top 25
-    const MAX_PER_PLATFORM = 5
-    const platformCounts = new Map<string, number>()
-    const diverseTraders: InitialTrader[] = []
-    for (const t of initialTraders) {
-      const count = platformCounts.get(t.source) || 0
-      if (count >= MAX_PER_PLATFORM) continue
-      platformCounts.set(t.source, count + 1)
-      diverseTraders.push(t)
-      if (diverseTraders.length >= limit) break
-    }
-
-    // Extract lastUpdated from first trader (they're sorted by rank, all from same computation)
-    const lastUpdated = unifiedTraders.length > 0 ? unifiedTraders[0].lastUpdated : null
-
-    return {
-      traders: diverseTraders,
-      lastUpdated,
-    }
+    return result
   } catch (err: unknown) {
     clearTimeout(timer)
     const isTimeout = err instanceof Error &&
@@ -159,5 +111,88 @@ export async function fetchLeaderboardFromDB(
       logger.error('[getInitialTraders] Error:', err)
     }
     return { traders: [], lastUpdated: null }
+  }
+}
+
+/**
+ * Primary path: use the SQL RPC that handles diversity at the DB level.
+ * Falls back to the legacy 2000-row JS-side filter if the RPC doesn't exist.
+ */
+async function fetchViaDiverseRPC(
+  supabase: ReturnType<typeof getSupabaseAdmin>,
+  timeRange: Period,
+  limit: number
+): Promise<{ traders: InitialTrader[]; lastUpdated: string | null }> {
+  const MAX_PER_PLATFORM = 8
+
+  // Try the SQL RPC first
+  const { data, error } = await supabase.rpc('get_diverse_leaderboard', {
+    p_season_id: timeRange,
+    p_per_platform: MAX_PER_PLATFORM,
+    p_total_limit: limit,
+  })
+
+  if (!error && data && Array.isArray(data) && data.length > 0) {
+    const unifiedTraders = data.map((row: Record<string, unknown>) => mapLeaderboardRow(row))
+    const initialTraders = unifiedTraders.map(mapUnifiedToInitial)
+    const lastUpdated = unifiedTraders.length > 0 ? unifiedTraders[0].lastUpdated : null
+    return { traders: initialTraders, lastUpdated }
+  }
+
+  // Fallback: RPC doesn't exist yet or returned empty — use legacy 2000-row approach
+  if (error) {
+    logger.warn('[getInitialTraders] RPC fallback — get_diverse_leaderboard unavailable:', error.message)
+  }
+
+  return fetchLeaderboardLegacy(supabase, timeRange, limit)
+}
+
+/**
+ * Legacy fallback: fetch 2000 rows and apply JS-side diversity filter.
+ * Kept for backward compatibility until the RPC migration is applied.
+ */
+async function fetchLeaderboardLegacy(
+  supabase: ReturnType<typeof getSupabaseAdmin>,
+  timeRange: Period,
+  limit: number
+): Promise<{ traders: InitialTrader[]; lastUpdated: string | null }> {
+  const { traders: unifiedTraders } = await getLeaderboard(supabase, {
+    period: timeRange as '7D' | '30D' | '90D',
+    limit: 2000,
+    minScore: 10,
+    excludeOutliers: true,
+    sortBy: 'rank',
+  })
+
+  // Dedupe by platform + trader_key (keep first occurrence, which has best rank)
+  const seen = new Set<string>()
+  const uniqueTraders = unifiedTraders.filter(t => {
+    const key = `${t.platform}:${t.traderKey}`
+    if (seen.has(key)) return false
+    seen.add(key)
+    return true
+  })
+
+  // Map UnifiedTrader -> InitialTrader
+  const initialTraders = uniqueTraders.map(mapUnifiedToInitial)
+
+  // Platform diversity: cap max traders per platform to ensure cross-platform mix
+  const MAX_PER_PLATFORM = 5
+  const platformCounts = new Map<string, number>()
+  const diverseTraders: InitialTrader[] = []
+  for (const t of initialTraders) {
+    const count = platformCounts.get(t.source) || 0
+    if (count >= MAX_PER_PLATFORM) continue
+    platformCounts.set(t.source, count + 1)
+    diverseTraders.push(t)
+    if (diverseTraders.length >= limit) break
+  }
+
+  // Extract lastUpdated from first trader (they're sorted by rank, all from same computation)
+  const lastUpdated = unifiedTraders.length > 0 ? unifiedTraders[0].lastUpdated : null
+
+  return {
+    traders: diverseTraders,
+    lastUpdated,
   }
 }

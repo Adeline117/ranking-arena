@@ -10,6 +10,7 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server'
+import { z } from 'zod'
 import { getTopTraders, getSortedSetSize } from '@/lib/realtime/ranking-store'
 import { getSupabaseAdmin } from '@/lib/api'
 import { createLogger } from '@/lib/utils/logger'
@@ -20,12 +21,25 @@ export const runtime = 'nodejs'
 
 const logger = createLogger('rankings-live')
 
+// ── Input validation schema ──────────────────────────────────────────────────
+const liveRankingsSchema = z.object({
+  period: z.string().toUpperCase().pipe(z.enum(['7D', '30D', '90D'])).catch('90D'),
+  limit: z.coerce.number().int().min(1).max(200).catch(50),
+  offset: z.coerce.number().int().min(0).catch(0),
+})
+
 export async function GET(request: NextRequest) {
   const searchParams = request.nextUrl.searchParams
-  const rawPeriod = (searchParams.get('period') || '90D').toUpperCase()
-  const period = rawPeriod === '7D' || rawPeriod === '30D' || rawPeriod === '90D' ? rawPeriod : '90D'
-  const limit = Math.min(200, Math.max(1, parseInt(searchParams.get('limit') || '50', 10) || 50))
-  const offset = Math.max(0, parseInt(searchParams.get('offset') || '0', 10) || 0)
+  const rawParams = Object.fromEntries(searchParams)
+  const parsed = liveRankingsSchema.safeParse(rawParams)
+  if (!parsed.success) {
+    return NextResponse.json(
+      { error: 'Invalid parameters', details: parsed.error.flatten() },
+      { status: 400 }
+    )
+  }
+
+  const { period, limit, offset } = parsed.data
 
   try {
     // CQRS read-through cache: avoid hitting ZREVRANGE for repeated requests within 30s
@@ -172,7 +186,7 @@ export async function GET(request: NextRequest) {
   } catch (error) {
     logger.error('[rankings-live] Unexpected error:', error)
     return NextResponse.json(
-      { error: 'Internal server error', detail: String(error) },
+      { error: 'Internal server error' },
       { status: 500 }
     )
   }

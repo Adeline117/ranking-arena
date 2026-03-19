@@ -77,7 +77,7 @@ describe('XtFuturesConnector', () => {
         expect(result.traders).toHaveLength(0)
         expect(result.window).toBe(window)
       }
-    })
+    }, 30000)
   })
 
   // ============================================

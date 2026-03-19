@@ -84,6 +84,10 @@ jest.mock('@/lib/services/pipeline-logger', () => ({
   },
 }))
 
+jest.mock('@/lib/services/pipeline-self-heal', () => ({
+  evaluateAndAlert: jest.fn().mockResolvedValue([]),
+}))
+
 import { GET } from '../route'
 
 // ---------------------------------------------------------------------------
@@ -136,7 +140,7 @@ describe('GET /api/cron/check-data-freshness', () => {
             order: jest.fn().mockReturnValue({
               limit: jest.fn().mockReturnValue({
                 single: jest.fn().mockResolvedValue({
-                  data: { captured_at: recentTime },
+                  data: { created_at: recentTime },
                   error: null,
                 }),
               }),
@@ -176,7 +180,7 @@ describe('GET /api/cron/check-data-freshness', () => {
                   callIdx++
                   const time = callIdx === 1 ? staleTime : freshTime
                   return Promise.resolve({
-                    data: { captured_at: time },
+                    data: { created_at: time },
                     error: null,
                   })
                 }),
