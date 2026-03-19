@@ -1397,6 +1397,7 @@ const en = {
     pin: 'Pin',
     noPostsYet: 'No posts yet',
     beFirstToPost: 'Be the first to post!',
+    trendingHashtags: 'Trending Hashtags',
     refreshing: 'Refreshing...',
     refresh: 'Refresh',
     group: 'Group',
@@ -2476,6 +2477,7 @@ const en = {
     beFirstToComment: 'Be the first to comment',
     expandReplies: 'Expand {count} replies',
     send: 'Send',
+    sortBest: 'Best',
 
     // PostDetailModal
     loginBeforeComment: 'Please login to comment',

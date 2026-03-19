@@ -1395,6 +1395,7 @@ const ko = {
     pin: '고정',
     noPostsYet: '아직 게시글이 없습니다',
     beFirstToPost: '첫 번째 게시글을 작성해 보세요!',
+    trendingHashtags: '인기 해시태그',
     refreshing: '새로고침 중...',
     refresh: '새로고침',
     group: '그룹',
@@ -2474,6 +2475,7 @@ const ko = {
     beFirstToComment: '첫 번째 댓글을 달아보세요',
     expandReplies: '답글 {count}개 펼치기',
     send: '전송',
+    sortBest: '베스트',
 
     // PostDetailModal
     loginBeforeComment: '댓글을 달려면 로그인해 주세요',

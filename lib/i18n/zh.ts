@@ -1398,6 +1398,7 @@ const zh = {
     pin: '置顶',
     noPostsYet: '暂无帖子',
     beFirstToPost: '成为第一个发帖的人吧！',
+    trendingHashtags: '热门标签',
     refreshing: '刷新中...',
     refresh: '刷新',
     group: '小组',
@@ -2477,6 +2478,7 @@ const zh = {
     beFirstToComment: '来发表第一条评论吧',
     expandReplies: '展开 {count} 条回复',
     send: '发送',
+    sortBest: '最佳',
 
     // 帖子详情弹窗
     loginBeforeComment: '请先登录后发表评论',

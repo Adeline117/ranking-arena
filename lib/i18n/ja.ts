@@ -1312,6 +1312,7 @@ const ja = {
     pin: 'ピン留め',
     noPostsYet: '投稿がまだありません',
     beFirstToPost: '最初に投稿しましょう！',
+    trendingHashtags: 'トレンドハッシュタグ',
     refreshing: '更新中...',
     refresh: '更新',
     group: 'グループ',
@@ -2333,6 +2334,7 @@ const ja = {
     beFirstToComment: '最初にコメントしましょう',
     expandReplies: '{count}件の返信を表示',
     send: '送信',
+    sortBest: 'ベスト',
 
     loginBeforeComment: 'コメントするにはログインしてください',
     submittingComment: '送信中...',
