@@ -2770,7 +2770,7 @@ const en = {
     heroCTASignUp: 'Sign Up Free',
     heroStatTraders: 'Traders',
     heroStatExchanges: 'Exchanges',
-    heroStatUpdated: 'Updated Every 30min',
+    heroStatUpdated: 'Update Freq',
     heroProBadge: 'Go Pro — Unlock All Traders & Advanced Filters',
 
     // Rankings search
