@@ -239,7 +239,7 @@ export default function MarketPanel() {
   }
 
   return (
-    <Box bg="secondary" p={4} radius="xl" border="primary">
+    <Box bg="secondary" p={4} radius="xl" border="primary" style={{ minHeight: 320, contain: 'layout style' }}>
       {/* Header */}
       <Box
         style={{
@@ -274,9 +274,9 @@ export default function MarketPanel() {
 
       {/* Content */}
       {loading ? (
-        <Box style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[3] }}>
+        <Box style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[2], minHeight: 248 }}>
           {Array.from({ length: 4 }).map((_, i) => (
-            <Box key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <Box key={i} bg="primary" p={3} radius="lg" border="secondary" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', minHeight: 58 }}>
               <SkeletonLine width="80px" height="16px" />
               <Box style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[1], alignItems: 'flex-end' }}>
                 <SkeletonLine width="60px" height="14px" />

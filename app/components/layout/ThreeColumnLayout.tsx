@@ -37,7 +37,7 @@ export default function ThreeColumnLayout({
     <div className={layoutClasses}>
       {/* Left sidebar — CSS handles visibility via media queries to avoid CLS */}
       {leftSidebar && (
-        <aside className="three-col-left hide-tablet">
+        <aside className="three-col-left hide-tablet" style={{ contain: 'layout style' }}>
           {leftSidebar}
         </aside>
       )}
@@ -127,7 +127,7 @@ export default function ThreeColumnLayout({
 
       {/* Right sidebar — CSS handles visibility via media queries to avoid CLS */}
       {rightSidebar && (
-        <aside className="three-col-right hide-mobile">
+        <aside className="three-col-right hide-mobile" style={{ contain: 'layout style' }}>
           {rightSidebar}
         </aside>
       )}

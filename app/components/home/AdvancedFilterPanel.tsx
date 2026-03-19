@@ -44,20 +44,31 @@ export default function AdvancedFilterPanel({
 }: AdvancedFilterPanelProps) {
   return (
     <>
-      {/* 高级筛选面板 */}
-      {showAdvancedFilter && (
-        <Box style={{ marginBottom: tokens.spacing[2] }}>
-          <AdvancedFilter
-            currentFilter={filterConfig}
-            savedFilters={savedFilters}
-            onFilterChange={onFilterChange}
-            onSaveFilter={onSaveFilter}
-            onLoadFilter={onLoadFilter}
-            onDeleteFilter={onDeleteFilter}
-            isPro={isPro}
-          />
-        </Box>
-      )}
+      {/* 高级筛选面板 — uses CSS grid for smooth height animation to prevent CLS */}
+      <div
+        style={{
+          display: 'grid',
+          gridTemplateRows: showAdvancedFilter ? '1fr' : '0fr',
+          transition: 'grid-template-rows 0.25s ease',
+          overflow: 'hidden',
+        }}
+      >
+        <div style={{ minHeight: 0 }}>
+          {showAdvancedFilter && (
+            <Box style={{ marginBottom: tokens.spacing[2] }}>
+              <AdvancedFilter
+                currentFilter={filterConfig}
+                savedFilters={savedFilters}
+                onFilterChange={onFilterChange}
+                onSaveFilter={onSaveFilter}
+                onLoadFilter={onLoadFilter}
+                onDeleteFilter={onDeleteFilter}
+                isPro={isPro}
+              />
+            </Box>
+          )}
+        </div>
+      </div>
 
       {/* Mobile filter bottom sheet */}
       <MobileFilterSheet
