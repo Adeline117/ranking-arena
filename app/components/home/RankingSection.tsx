@@ -103,7 +103,7 @@ export default function RankingSection({
       }}
     >
       {/* Time range selector (7D / 30D / 90D) */}
-      <Box style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', marginBottom: 8 }}>
+      <Box style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', marginBottom: 8, minHeight: 48 }}>
         <TimeRangeSelector
           activeRange={activeTimeRange}
           onChange={onTimeRangeChange}
@@ -158,21 +158,26 @@ export default function RankingSection({
         onSearchChange={handleSearchChange}
       />
 
-      {/* Leaderboard movers — risers & fallers */}
-      {(movers.risers.length > 0 || movers.fallers.length > 0) && (
-        <Box style={{ marginTop: 16, marginBottom: 16 }}>
-          <LeaderboardChangelog risers={movers.risers} fallers={movers.fallers} />
-        </Box>
-      )}
+      {/* Leaderboard movers — risers & fallers (below fold, minimal CLS impact) */}
+      <div style={{ contain: 'layout style' }}>
+        {(movers.risers.length > 0 || movers.fallers.length > 0) && (
+          <Box style={{ marginTop: 16, marginBottom: 16 }}>
+            <LeaderboardChangelog risers={movers.risers} fallers={movers.fallers} />
+          </Box>
+        )}
+      </div>
 
-      {!isPro && !loading && advancedFiltered.length > FREE_LEADERBOARD_LIMIT && (
-        <ProUpgradeCTA
-          language={language}
-          t={t}
-          freeLimit={FREE_LEADERBOARD_LIMIT}
-          onUpgrade={() => router.push('/pricing')}
-        />
-      )}
+      {/* ProUpgradeCTA — reserve space to prevent CLS when it appears */}
+      <div style={{ minHeight: !isPro && !loading && advancedFiltered.length > FREE_LEADERBOARD_LIMIT ? undefined : 0, contain: 'layout style' }}>
+        {!isPro && !loading && advancedFiltered.length > FREE_LEADERBOARD_LIMIT && (
+          <ProUpgradeCTA
+            language={language}
+            t={t}
+            freeLimit={FREE_LEADERBOARD_LIMIT}
+            onUpgrade={() => router.push('/pricing')}
+          />
+        )}
+      </div>
 
       <RankingFooter
         loading={loading}
