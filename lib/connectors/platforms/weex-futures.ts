@@ -30,34 +30,50 @@ export class WeexFuturesConnector extends BaseConnector {
     notes: ['No 90d window', 'Aggressive CF'],
   }
 
-  async discoverLeaderboard(window: Window, limit = 20, offset = 0): Promise<DiscoverResult> {
-    // WEEX API (weex.com/api/) returns 521 since ~2026-03.
-    // Real API is on janapw.com with dynamic auth headers (x-sig, sidecar, vs).
-    // Strategy 1: VPS Playwright scraper with waitForResponse to capture the browser call.
+  async discoverLeaderboard(window: Window, limit = 50, offset = 0): Promise<DiscoverResult> {
+    // Strategy 1: VPS Playwright scraper (intercepts http-gateway1.weex.com API)
     const allTraders: TraderSource[] = []
 
     try {
-      const vpsData = await this.fetchViaVPS<{ traders?: Array<Record<string, unknown>>; total?: number }>(
-        '/weex/leaderboard-v2',
+      const vpsData = await this.fetchViaVPS<Record<string, unknown>>(
+        '/weex/leaderboard',
         { pageSize: String(limit) },
         90000
       )
-      if (vpsData?.traders?.length) {
-        for (const item of vpsData.traders) {
-          const uid = String(item.traderUserId || '')
-          if (!uid) continue
-          allTraders.push({
-            platform: 'weex' as const, market_type: 'futures' as const,
-            trader_key: uid,
-            display_name: (item.traderNickName as string) || null,
-            profile_url: `https://www.weex.com/copy-trading/trader/${uid}`,
-            discovered_at: new Date().toISOString(), last_seen_at: new Date().toISOString(),
-            is_active: true, raw: item,
-          })
+
+      // New API (http-gateway1.weex.com) returns { data: { traderListViewVOS: [...] } }
+      // or may return { traders: [...] } from old scraper format
+      let items: Record<string, unknown>[] = []
+      if (vpsData) {
+        const dataObj = (vpsData?.data ?? vpsData) as Record<string, unknown>
+        const candidates = [
+          dataObj?.traderListViewVOS,
+          dataObj?.traders,
+          dataObj?.list,
+          dataObj?.items,
+          vpsData?.traders,
+        ]
+        for (const c of candidates) {
+          if (Array.isArray(c) && c.length > 0) { items = c as Record<string, unknown>[]; break }
         }
+        // Flat array response
+        if (items.length === 0 && Array.isArray(dataObj)) items = dataObj as Record<string, unknown>[]
+      }
+
+      for (const item of items) {
+        const uid = String(item.traderUserId || item.uid || '')
+        if (!uid) continue
+        allTraders.push({
+          platform: 'weex' as const, market_type: 'futures' as const,
+          trader_key: uid,
+          display_name: (item.traderNickName as string) || (item.nickName as string) || null,
+          profile_url: `https://www.weex.com/copy-trading/trader/${uid}`,
+          discovered_at: new Date().toISOString(), last_seen_at: new Date().toISOString(),
+          is_active: true, raw: item,
+        })
       }
     } catch {
-      // VPS scraper failed — WEEX is unavailable
+      // VPS scraper failed
     }
 
     return { traders: allTraders.slice(0, limit), total_available: allTraders.length, window, fetched_at: new Date().toISOString() }
@@ -120,7 +136,16 @@ export class WeexFuturesConnector extends BaseConnector {
   }
 
   normalize(raw: Record<string, unknown>): Record<string, unknown> {
-    return { trader_key: raw.uid, roi: this.num(raw.roi), pnl: this.num(raw.pnl) }
+    return {
+      trader_key: raw.traderUserId || raw.uid,
+      display_name: raw.traderNickName || raw.nickName,
+      roi: this.num(raw.totalReturnRate ?? raw.roi),
+      pnl: this.num(raw.threeWeeksPNL ?? raw.pnl),
+      win_rate: null,
+      max_drawdown: null,
+      followers: this.num(raw.followCount ?? raw.followers),
+      copiers: this.num(raw.followCount ?? raw.copiers),
+    }
   }
 
   private num(val: unknown): number | null {

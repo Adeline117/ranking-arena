@@ -39,11 +39,28 @@ export class KucoinFuturesConnector extends BaseConnector {
     let rawList: Record<string, unknown>[] = []
     if (vpsData) {
       const dataObj = (vpsData?.data ?? vpsData) as Record<string, unknown>
+      // New API returns items under data.items or data directly
       const items = dataObj?.items || dataObj?.list || dataObj?.rows
       if (Array.isArray(items)) rawList = items as Record<string, unknown>[]
+      // May also return flat array under data
+      if (rawList.length === 0 && Array.isArray(dataObj)) rawList = dataObj as Record<string, unknown>[]
     }
 
-    // Strategy 2: Direct API fallback (may work from residential IPs)
+    // Strategy 2: Direct API (new ct-copy-trade endpoint, may work from residential IPs)
+    if (rawList.length === 0) {
+      try {
+        const _rawLb = await this.request<Record<string, unknown>>(
+          `https://www.kucoin.com/_api/ct-copy-trade/v1/copyTrading/rn/leaderboard/query?lang=en_US&pageNo=${pageNo}&pageSize=${limit}`,
+          { method: 'GET' }
+        )
+        const list = (_rawLb?.data as Record<string, unknown>)?.items || (_rawLb?.data as unknown[])
+        if (Array.isArray(list)) rawList = list as Record<string, unknown>[]
+      } catch {
+        // New API also requires browser cookies — expected to fail from datacenter
+      }
+    }
+
+    // Strategy 3: Legacy API fallback
     if (rawList.length === 0) {
       try {
         const _rawLb = await this.request<Record<string, unknown>>(
@@ -60,9 +77,10 @@ export class KucoinFuturesConnector extends BaseConnector {
 
     const traders: TraderSource[] = rawList.map((item: Record<string, unknown>) => ({
       platform: 'kucoin' as const, market_type: 'futures' as const,
-      trader_key: String(item.uid || item.leaderId || item.id || ''),
+      // New API uses leadConfigId, old uses uid
+      trader_key: String(item.leadConfigId || item.uid || item.leaderId || item.id || ''),
       display_name: (item.nickName as string) || (item.name as string) || null,
-      profile_url: `https://www.kucoin.com/copy-trading/leader/${item.uid || item.leaderId || item.id}`,
+      profile_url: `https://www.kucoin.com/copy-trading/leader/${item.leadConfigId || item.uid || item.leaderId || item.id}`,
       discovered_at: new Date().toISOString(), last_seen_at: new Date().toISOString(),
       is_active: true, raw: item as Record<string, unknown>,
     }))

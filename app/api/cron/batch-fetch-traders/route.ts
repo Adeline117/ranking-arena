@@ -79,7 +79,8 @@ const GROUPS: Record<string, string[]> = {
   // crypto_com: REMOVED — copy-trading feature shut down, /exchange/copy-trading redirects to /exchange/ — 2026-03-19
   // Group I: Social trading + restored platforms (every 6h)
   i: ['etoro', 'dydx'],
-  // kucoin: REMOVED — all copy-trade APIs return 404, SPA shell only — 2026-03-19
+  // Group K: Restored via VPS scraper (every 6h) — new APIs discovered 2026-03-19
+  k: ['kucoin', 'weex'],
 }
 
 interface BatchResult {
