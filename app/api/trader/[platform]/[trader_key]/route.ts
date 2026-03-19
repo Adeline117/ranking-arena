@@ -290,7 +290,9 @@ export async function GET(
     }
 
     // Cache to Redis (warm tier - 5min TTL, async)
-    void tieredSet(cacheKey, response, 'warm', ['trader', platform])
+    void tieredSet(cacheKey, response, 'warm', ['trader', platform]).catch(err =>
+      console.error('[trader-detail] cache write failed:', err instanceof Error ? err.message : String(err))
+    )
 
     const res = NextResponse.json(response)
     res.headers.set('Cache-Control', 'public, s-maxage=30, stale-while-revalidate=120')
