@@ -257,29 +257,24 @@ async function storeSyncedData(
   )
 
   // Insert/update snapshot
-  const { error } = await supabase.from('trader_snapshots').upsert(
+  const { error } = await supabase.from('trader_snapshots_v2').upsert(
     {
-      source: authorization.platform,
-      source_trader_id: authorization.trader_id,
-      season_id: period,
-      roi: traderData.roi,
-      pnl: traderData.pnl,
+      platform: authorization.platform,
+      trader_key: authorization.trader_id,
+      window: period,
+      roi_pct: traderData.roi,
+      pnl_usd: traderData.pnl,
       followers: traderData.followers,
       copiers: traderData.followers,
       trades_count: traderData.tradesCount,
       win_rate: traderData.winRate,
       max_drawdown: traderData.maxDrawdown,
       arena_score: arenaScore.totalScore,
-      return_score: arenaScore.returnScore,
-      pnl_score: arenaScore.pnlScore,
-      drawdown_score: arenaScore.drawdownScore,
-      stability_score: arenaScore.stabilityScore,
-      captured_at: new Date().toISOString(),
-      authorization_id: authorization.id,
-      is_authorized: true,
+      as_of_ts: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
     },
     {
-      onConflict: 'source,source_trader_id,season_id',
+      onConflict: 'platform,trader_key,window',
     }
   )
 
