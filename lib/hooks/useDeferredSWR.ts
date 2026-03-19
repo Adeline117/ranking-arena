@@ -49,7 +49,7 @@ export function useDeferredKey<T>(key: T, delayMs = 800): T | null {
         cancelIdleCallback(idleId)
       }
     }
-  }, [delayMs]) // eslint-disable-line react-hooks/exhaustive-deps -- key intentionally excluded; only delay matters
+  }, [delayMs])
 
   return active ? key : null
 }
