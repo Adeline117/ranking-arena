@@ -100,6 +100,10 @@ import {
   fetchOkxSpotStatsDetail,
   fetchOkxSpotCurrentPositions,
 } from '@/lib/cron/fetchers/enrichment-okx-spot'
+import {
+  fetchOkxWeb3EquityCurve,
+  fetchOkxWeb3StatsDetail,
+} from '@/lib/cron/fetchers/enrichment-okx-web3'
 import { sleep } from '@/lib/cron/fetchers/shared'
 import { captureMessage } from '@/lib/utils/logger'
 import { sendRateLimitedAlert } from '@/lib/alerts/send-alert'
@@ -217,6 +221,12 @@ export const ENRICHMENT_PLATFORM_CONFIGS: Record<string, EnrichmentConfig> = {
     fetchStatsDetail: fetchOkxSpotStatsDetail,
     fetchCurrentPositions: fetchOkxSpotCurrentPositions,
     concurrency: 3, delayMs: 1500,
+  },
+  okx_web3: {
+    platform: 'okx_web3',
+    fetchEquityCurve: fetchOkxWeb3EquityCurve,
+    fetchStatsDetail: fetchOkxWeb3StatsDetail,
+    concurrency: 2, delayMs: 2000,
   },
   // bitget_futures: equity curve only — detail/position APIs hang >44min
   // profitList endpoint works fine via CF Worker proxy (20s timeout)
@@ -432,30 +442,22 @@ export interface EnrichmentResult {
  * Run enrichment for a specific platform and period.
  * Called inline from batch-enrich or from the /api/cron/enrich route.
  */
-// Platforms that don't support enrichment (wallet-based, CF-protected, or no enrichment API)
+// Platforms that don't support enrichment — ONLY truly impossible cases
+// All active platforms with data should have enrichment via:
+// 1. Dedicated enrichment module (fetchEquityCurve/fetchStatsDetail)
+// 2. Leaderboard normalize() → connector-db-adapter writes copiers/metrics
+// 3. Daily snapshot accumulation → computed equity curve
 export const NO_ENRICHMENT_PLATFORMS = new Set([
-  // Wallet-based platforms (no per-trader equity curve API)
-  'binance_web3', 'okx_web3', 'web3_bot',
-  // API removed/unavailable
-  // 'bybit' re-enabled (2026-03-18) — VPS scraper bypasses Akamai WAF
-  'bybit_spot',  // Enrichment TBD — VPS scraper supports leaderboard but no detail endpoint yet
-  'bitmart', 'paradex',  // Dead
-  // bitget_futures: RE-ENABLED equity curve only (profitList endpoint works, detail hangs)
-  // okx_spot: RE-ENABLED 2026-03-19 — same v5 API as futures with instType=SPOT
-  // kucoin: Mac Mini only — no enrichment API accessible from datacenter
-  'kucoin',
-  // weex: stats detail available but no equity curve API
-  'weex',
-  // bingx_spot: Mac Mini only — CF blocks datacenter
-  'bingx_spot',
-  // bitget_spot not yet configured (no enrichment API)
-  // NOTE: bitfinex re-enabled — public rankings API for stats
-  // NOTE: blofin re-enabled — trader detail endpoint
-  // NOTE: phemex re-enabled — public copy-trading API
-  // NOTE: bingx re-enabled — CF Worker proxy to internal API
-  // NOTE: toobit re-enabled — ranking API with cached batch lookups
-  // NOTE: binance_spot re-enabled (2026-03-16) — new GET API + per-platform timeout
-  // NOTE: bitunix re-enabled — enrichment via connector detail API
+  // Dead platforms — 0 traders, no data to enrich
+  'bitmart', 'paradex',
+  // Leaderboard-only platforms — all metrics already from normalize(), no separate detail API
+  // Equity curves auto-generated from daily snapshots by aggregate-daily-snapshots cron
+  'bybit_spot',   // metricValues has ROI/WR/MDD/Sharpe, VPS trader-detail doesn't support spot leaderMark
+  'binance_web3', // wallet-based, no per-trader detail API, all metrics from leaderboard
+  'web3_bot',     // small platform (19 traders), all metrics from leaderboard
+  'kucoin',       // Mac Mini script provides ROI/PnL/copiers, no detail API from datacenter
+  'weex',         // VPS scraper provides leaderboard, no equity curve API
+  'bingx_spot',   // Mac Mini script provides full rankStat data
 ])
 
 // Per-platform timeout: prevents any single platform from burning the entire batch budget
