@@ -189,6 +189,25 @@ export async function GET(request: Request) {
       },
     })
   } catch (error: unknown) {
+    // Distinguish upstream/network failures from true server errors so they
+    // don't pollute 500 error dashboards.
+    if (error instanceof Error) {
+      if (error.name === 'AbortError') {
+        // Upstream CDN timed out — this is not our fault
+        return new NextResponse('Upstream timeout', { status: 504 })
+      }
+      const msg = error.message.toLowerCase()
+      if (
+        msg.includes('econnrefused') ||
+        msg.includes('enotfound') ||
+        msg.includes('econnreset') ||
+        msg.includes('network') ||
+        msg.includes('fetch failed')
+      ) {
+        // Upstream network error — return 502 Bad Gateway, not 500
+        return new NextResponse('Upstream error', { status: 502 })
+      }
+    }
     logger.error('Avatar proxy error:', error)
     return new NextResponse('Internal error', { status: 500 })
   }
