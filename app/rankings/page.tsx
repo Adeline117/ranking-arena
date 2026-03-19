@@ -1,7 +1,7 @@
 import type { Metadata } from 'next'
 import { redirect } from 'next/navigation'
 
-export const revalidate = 600 // ISR: 10 min
+export const revalidate = 0 // No cache — redirect page resolves platform dynamically
 
 const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://www.arenafi.org'
 
@@ -17,11 +17,11 @@ export const metadata: Metadata = {
     url: `${baseUrl}/rankings`,
     siteName: 'Arena',
     type: 'website',
-    images: [{ 
-      url: `${baseUrl}/og-image.png`, 
-      width: 1200, 
-      height: 630, 
-      alt: 'Arena - Crypto Trader Rankings' 
+    images: [{
+      url: `${baseUrl}/og-image.png`,
+      width: 1200,
+      height: 630,
+      alt: 'Arena - Crypto Trader Rankings'
     }],
   },
   twitter: {
@@ -33,6 +33,22 @@ export const metadata: Metadata = {
   },
 }
 
-export default function RankingsPage() {
+// Handle legacy ?platform=xxx and ?ex=xxx query params used by old share links and external references.
+// e.g. /rankings?platform=dydx  → /rankings/dydx
+//      /rankings?ex=hyperliquid → /rankings/hyperliquid
+//      /rankings (bare)         → / (homepage)
+export default async function RankingsPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ platform?: string; ex?: string }>
+}) {
+  const params = await searchParams
+  const exchange = params.platform || params.ex
+
+  if (exchange) {
+    // Redirect to the canonical exchange rankings page
+    redirect(`/rankings/${encodeURIComponent(exchange)}`)
+  }
+
   redirect('/')
 }
