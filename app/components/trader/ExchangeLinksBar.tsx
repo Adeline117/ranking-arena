@@ -5,6 +5,7 @@ import { EXCHANGE_NAMES } from '@/lib/constants/exchanges'
 import { Box, Text } from '@/app/components/base'
 import ExchangeLogo from '@/app/components/ui/ExchangeLogo'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
+import { getCopyTradeUrl, getDexUrl } from '@/lib/utils/copy-trade'
 
 /** Copy-trade URL map (CEX) */
 function getCopyTradeUrl(source: string, traderId: string, traderHandle?: string): string | null {
