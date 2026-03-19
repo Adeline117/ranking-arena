@@ -184,6 +184,41 @@ async function writeToSupabase(traders) {
   const { error: snapErr } = await supabase
     .from('trader_snapshots_v2')
     .upsert(snapshots, { onConflict: 'platform,market_type,trader_key,window' })
+
+  // Write equity curves from totalPnlDate (30-day daily PnL array)
+  const now2 = new Date()
+  const equityCurveRows = []
+  for (const t of traders) {
+    const traderKey = String(t.leadConfigId || t.uid || t.id || '')
+    const pnlDates = t.totalPnlDate
+    if (!traderKey || !Array.isArray(pnlDates) || pnlDates.length === 0) continue
+    // totalPnlDate is 30 items, newest last. Generate dates backwards from today.
+    for (let i = 0; i < pnlDates.length; i++) {
+      const date = new Date(now2)
+      date.setDate(date.getDate() - (pnlDates.length - 1 - i))
+      const pnlVal = Number(pnlDates[i])
+      if (isNaN(pnlVal)) continue
+      equityCurveRows.push({
+        source: PLATFORM,
+        source_trader_id: traderKey,
+        period: '30d',
+        data_date: date.toISOString().split('T')[0],
+        pnl_usd: pnlVal,
+        captured_at: now2.toISOString(),
+      })
+    }
+  }
+  if (equityCurveRows.length > 0) {
+    // Batch insert (no upsert — append new data points)
+    for (let i = 0; i < equityCurveRows.length; i += 500) {
+      const batch = equityCurveRows.slice(i, i + 500)
+      const { error: ecErr } = await supabase
+        .from('trader_equity_curve')
+        .upsert(batch, { onConflict: 'source,source_trader_id,period,data_date', ignoreDuplicates: true })
+      if (ecErr) console.error('[kucoin] equity curve error:', ecErr.message)
+    }
+    console.log(`[kucoin] Wrote ${equityCurveRows.length} equity curve points`)
+  }
   if (snapErr) console.error('[kucoin] snapshots error:', snapErr.message)
   else console.log(`[kucoin] Wrote ${snapshots.length} snapshots`)
 }
