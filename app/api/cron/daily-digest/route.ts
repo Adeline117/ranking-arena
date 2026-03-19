@@ -50,14 +50,14 @@ export async function GET(request: NextRequest) {
 
     // Platform freshness
     const { data: freshness } = await supabase
-      .from('trader_snapshots')
-      .select('source, captured_at')
-      .order('captured_at', { ascending: false })
+      .from('trader_snapshots_v2')
+      .select('platform, as_of_ts')
+      .order('as_of_ts', { ascending: false })
 
     const latestByPlatform = new Map<string, string>()
     for (const row of freshness || []) {
-      if (!latestByPlatform.has(row.source)) {
-        latestByPlatform.set(row.source, row.captured_at)
+      if (!latestByPlatform.has(row.platform)) {
+        latestByPlatform.set(row.platform, row.as_of_ts)
       }
     }
 
@@ -73,16 +73,16 @@ export async function GET(request: NextRequest) {
 
     // Snapshot counts
     const { count: snapshotCount24h } = await supabase
-      .from('trader_snapshots')
+      .from('trader_snapshots_v2')
       .select('*', { count: 'exact', head: true })
-      .gte('captured_at', oneDayAgo)
+      .gte('as_of_ts', oneDayAgo)
 
     const twoDaysAgo = new Date(Date.now() - 48 * 60 * 60 * 1000).toISOString()
     const { count: snapshotCountYesterday } = await supabase
-      .from('trader_snapshots')
+      .from('trader_snapshots_v2')
       .select('*', { count: 'exact', head: true })
-      .gte('captured_at', twoDaysAgo)
-      .lt('captured_at', oneDayAgo)
+      .gte('as_of_ts', twoDaysAgo)
+      .lt('as_of_ts', oneDayAgo)
 
     // Top errors
     const { data: errorLogs } = await supabase
