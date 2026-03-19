@@ -80,9 +80,12 @@ export default function PostFeed(props: PostFeedProps = {}): React.ReactNode {
   const auth = useUnifiedAuth({ onUnauthenticated: () => showToast(t('pleaseLogin'), 'warning') })
   const accessToken = auth.accessToken
   const currentUserId = auth.userId
+  const authInitialized = auth.initialized  // true once Supabase auth check completes
   const abortControllerRef = useRef<AbortController | null>(null)
   const storeSetPosts = usePostStore(s => s.setPosts)
   const pageSize = props.limit || 20
+  // Track whether we've had a successful first load — used to avoid showing skeleton on re-fetches
+  const hasLoadedOnceRef = useRef(false)
 
   // Comments hook
   const commentsHook = usePostComments({
@@ -110,8 +113,12 @@ export default function PostFeed(props: PostFeedProps = {}): React.ReactNode {
     if (abortControllerRef.current) abortControllerRef.current.abort()
     const controller = new AbortController()
     abortControllerRef.current = controller
+    // Only show the full-page skeleton on the very first load.
+    // Auth-triggered re-fetches (accessToken change) run silently so posts don't flash back to skeleton.
+    const isFirstLoad = !hasLoadedOnceRef.current
     try {
-      setLoading(true); setError(null); setOffset(0); setHasMore(true)
+      if (isFirstLoad) setLoading(true)
+      setError(null); setOffset(0); setHasMore(true)
       const params = buildPostQueryParams({
         pageSize, offset: 0, sortBy: props.sortBy, sortType,
         authorHandle: props.authorHandle, groupId: props.groupId, groupIds: props.groupIds,
@@ -142,7 +149,12 @@ export default function PostFeed(props: PostFeedProps = {}): React.ReactNode {
     } catch (err) {
       if (err instanceof Error && (err.name === 'AbortError' || controller.signal.aborted)) return
       setError(err instanceof Error ? err.message : t('loadFailed'))
-    } finally { if (!controller.signal.aborted) setLoading(false) }
+    } finally {
+      if (!controller.signal.aborted) {
+        hasLoadedOnceRef.current = true
+        if (isFirstLoad) setLoading(false)
+      }
+    }
   // eslint-disable-next-line react-hooks/exhaustive-deps -- actions/t/showToast are stable refs; only re-create when query params or auth change
   }, [props.groupId, props.authorHandle, accessToken, sortType, pageSize, props.groupIds, props.sortBy, storeSetPosts])
 
@@ -184,7 +196,14 @@ export default function PostFeed(props: PostFeedProps = {}): React.ReactNode {
   // eslint-disable-next-line react-hooks/exhaustive-deps -- t is excluded; read at call time via language dep instead
   }, [loadPosts, showToast, language])
 
-  useEffect(() => { loadPosts() }, [props.groupId, props.authorHandle, accessToken, sortType, feedRefreshTrigger]) // eslint-disable-line react-hooks/exhaustive-deps -- loadPosts is excluded to avoid circular dep; effect triggers are the meaningful query params
+  // Wait for auth to settle (authInitialized=true) before firing the first fetch.
+  // This prevents double-fetching: once with null token (pre-auth) then again when token arrives.
+  // accessToken stays in deps so logged-in users get a background re-fetch with their token
+  // after the unauthenticated first load — but hasLoadedOnceRef suppresses the skeleton re-flash.
+  useEffect(() => {
+    if (!authInitialized) return
+    loadPosts()
+  }, [props.groupId, props.authorHandle, accessToken, sortType, feedRefreshTrigger, authInitialized]) // eslint-disable-line react-hooks/exhaustive-deps -- loadPosts is excluded to avoid circular dep; effect triggers are the meaningful query params
 
   useEffect(() => {
     const el = loadMoreRef.current; if (!el) return
