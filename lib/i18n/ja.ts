@@ -4478,6 +4478,25 @@ compFieldMaxParticipants: '最大参加人数',
     ratingOptional: '評価（任意）',
     clearRating: 'クリア',
 
+    // Token Rankings
+    tokenRankingsTitle: 'トークンランキング',
+    tokenRankingsSubtitle: '各トークンのベストトレーダーを発見。誰がBTCを最もうまくトレードしているか？',
+    tokenRankingsSearchPlaceholder: 'トークン検索（BTC、ETH、SOL...）',
+    tokenRankingsTraders: 'トレーダー',
+    tokenRankingsViewRankings: 'ランキングを見る',
+    tokenRankingsTrades: '取引数',
+    tokenRankingsTotalPnl: '合計損益',
+    tokenRankingHeader: 'ベスト {token} トレーダー',
+    tokenRankingCount: '{count}人のトレーダーが{token}を取引中',
+    tokenRankingNoData: '{token}の取引データが見つかりません',
+    tokenRankingNoDataDesc: 'このトークンの取引データはまだ利用できない可能性があります。他のトークンを試すか、後でもう一度確認してください。',
+    tokenRankingBrowseAll: 'すべてのトークンを見る',
+    tokenRankingTotalPnl: '合計損益',
+    tokenRankingTrades: '取引数',
+    tokenRankingPrev: '前へ',
+    tokenRankingNext: '次へ',
+    rankingsSubNavTokens: 'トークン',
+
 } as const
 
 export default ja

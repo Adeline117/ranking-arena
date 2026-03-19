@@ -4755,6 +4755,25 @@ compFieldMaxParticipants: 'Max Participants',
     ratingOptional: 'Rating (optional)',
     clearRating: 'Clear',
 
+    // Token Rankings
+    tokenRankingsTitle: 'Token Rankings',
+    tokenRankingsSubtitle: 'Discover the best traders for every token. Who trades BTC best?',
+    tokenRankingsSearchPlaceholder: 'Search tokens (BTC, ETH, SOL...)',
+    tokenRankingsTraders: 'traders',
+    tokenRankingsViewRankings: 'View rankings',
+    tokenRankingsTrades: 'Trades',
+    tokenRankingsTotalPnl: 'Total PnL',
+    tokenRankingHeader: 'Best {token} Traders',
+    tokenRankingCount: '{count} traders trading {token}',
+    tokenRankingNoData: 'No trade data found for {token}',
+    tokenRankingNoDataDesc: 'Trade data for this token may not be available yet. Try a different token or check back later.',
+    tokenRankingBrowseAll: 'Browse All Tokens',
+    tokenRankingTotalPnl: 'Total PnL',
+    tokenRankingTrades: 'Trades',
+    tokenRankingPrev: 'Previous',
+    tokenRankingNext: 'Next',
+    rankingsSubNavTokens: 'Tokens',
+
 } as const
 
 export default en

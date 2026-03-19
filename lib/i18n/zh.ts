@@ -4763,6 +4763,25 @@ compFieldMaxParticipants: '最大参与人数',
     ratingOptional: '评分（可选）',
     clearRating: '清除',
 
+    // Token Rankings
+    tokenRankingsTitle: '币种排行',
+    tokenRankingsSubtitle: '发现每个币种的最佳交易员。谁交易 BTC 最厉害？',
+    tokenRankingsSearchPlaceholder: '搜索币种（BTC、ETH、SOL...）',
+    tokenRankingsTraders: '位交易员',
+    tokenRankingsViewRankings: '查看排行',
+    tokenRankingsTrades: '交易次数',
+    tokenRankingsTotalPnl: '总盈亏',
+    tokenRankingHeader: '最佳 {token} 交易员',
+    tokenRankingCount: '{count} 位交易员正在交易 {token}',
+    tokenRankingNoData: '未找到 {token} 的交易数据',
+    tokenRankingNoDataDesc: '该币种的交易数据可能尚不可用。请尝试其他币种或稍后再来。',
+    tokenRankingBrowseAll: '浏览所有币种',
+    tokenRankingTotalPnl: '总盈亏',
+    tokenRankingTrades: '交易数',
+    tokenRankingPrev: '上一页',
+    tokenRankingNext: '下一页',
+    rankingsSubNavTokens: '币种',
+
 } as const
 
 export default zh
