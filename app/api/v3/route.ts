@@ -15,7 +15,7 @@ import { z } from 'zod'
 import { getSupabaseAdmin } from '@/lib/supabase/server'
 import { getLeaderboard, getTraderDetail, searchTraders } from '@/lib/data/unified'
 import type { TradingPeriod } from '@/lib/data/unified'
-import { getIdentifier } from '@/lib/utils/rate-limit'
+import { checkRateLimitFull } from '@/lib/utils/rate-limit'
 import { apiSuccess, apiError } from '@/lib/api/response'
 
 // ---------------------------------------------------------------------------
@@ -47,34 +47,31 @@ async function validateApiKey(key: string): Promise<boolean> {
 }
 
 // ---------------------------------------------------------------------------
-// In-memory daily rate limiter (per IP, resets at midnight UTC)
+// Redis-backed daily rate limiter (100 requests/day per IP)
+// Uses the existing checkRateLimit infrastructure backed by Upstash Redis.
+// Falls back to in-process memory when Redis is unavailable (dev/cold start).
 // ---------------------------------------------------------------------------
 
 const FREE_DAILY_LIMIT = 100
-const dailyCounts = new Map<string, { count: number; date: string }>()
+// 24 hours in seconds
+const DAILY_WINDOW_SECONDS = 86400
 
-function checkDailyLimit(identifier: string): { allowed: boolean; remaining: number } {
-  const today = new Date().toISOString().slice(0, 10) // YYYY-MM-DD
-  const entry = dailyCounts.get(identifier)
+async function checkDailyLimit(
+  request: NextRequest
+): Promise<{ allowed: boolean; remaining: number }> {
+  const result = await checkRateLimitFull(request, {
+    requests: FREE_DAILY_LIMIT,
+    window: DAILY_WINDOW_SECONDS,
+    prefix: 'v3_daily',
+  })
 
-  // Periodic cleanup — remove stale entries (different date)
-  if (Math.random() < 0.01) {
-    for (const [k, v] of dailyCounts.entries()) {
-      if (v.date !== today) dailyCounts.delete(k)
-    }
-  }
-
-  if (!entry || entry.date !== today) {
-    dailyCounts.set(identifier, { count: 1, date: today })
-    return { allowed: true, remaining: FREE_DAILY_LIMIT - 1 }
-  }
-
-  if (entry.count >= FREE_DAILY_LIMIT) {
+  if (result.response !== null) {
+    // Rate limited
     return { allowed: false, remaining: 0 }
   }
 
-  entry.count++
-  return { allowed: true, remaining: FREE_DAILY_LIMIT - entry.count }
+  const remaining = result.meta?.remaining ?? FREE_DAILY_LIMIT - 1
+  return { allowed: true, remaining }
 }
 
 // ---------------------------------------------------------------------------
@@ -193,9 +190,8 @@ export async function GET(request: NextRequest) {
     // Authenticated: unlimited
     creditsRemaining = null
   } else {
-    // Free tier: 100/day per IP
-    const identifier = getIdentifier(request)
-    const { allowed, remaining } = checkDailyLimit(identifier)
+    // Free tier: 100/day per IP — backed by Redis (survives cold starts)
+    const { allowed, remaining } = await checkDailyLimit(request)
     creditsRemaining = remaining
 
     if (!allowed) {
