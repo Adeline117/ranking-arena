@@ -30,7 +30,7 @@ const nextConfig: NextConfig = {
     },
   },
 
-  // Webpack fallback (for analyze mode / explicit --webpack builds)
+  // Webpack config (production builds use webpack for better chunk consolidation)
   webpack: (config, { isServer }) => {
     if (!isServer) {
       config.resolve.fallback = {
@@ -40,6 +40,27 @@ const nextConfig: NextConfig = {
         net: false,
         tls: false,
         fs: false,
+      }
+
+      // Chunk consolidation — reduce HTTP requests on slow networks
+      // Turbopack creates very fine-grained chunks; webpack allows control
+      config.optimization.splitChunks = {
+        chunks: 'all',
+        maxInitialRequests: 25,
+        minSize: 20000,
+        cacheGroups: {
+          default: {
+            minChunks: 2,
+            priority: -20,
+            reuseExistingChunk: true,
+          },
+          vendor: {
+            test: /[\\/]node_modules[\\/]/,
+            name: 'vendor',
+            priority: -10,
+            chunks: 'all',
+          },
+        },
       }
     }
     config.plugins.push(
