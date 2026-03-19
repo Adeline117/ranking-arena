@@ -7,6 +7,7 @@ import Image from 'next/image'
 import dynamic from 'next/dynamic'
 import useSWR from 'swr'
 import { traderFetcher } from '@/lib/hooks/traderFetcher'
+import { fetcher } from '@/lib/hooks/useSWR'
 import { tokens } from '@/lib/design-tokens'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import { useSubscription } from '@/app/components/home/hooks/useSubscription'
@@ -132,35 +133,24 @@ export default function TraderProfileClient({ data, serverTraderData, claimedUse
   const [activeAccount, setActiveAccount] = useState<string>('all')
 
   // Check if this trader is verified (claimed) and if current user is the owner.
-  // Fire claim fetch immediately on mount (no dependency on currentUserId).
-  const claimDataRef = useRef<{ is_verified: boolean; owner_id: string | null } | null>(null)
-  useEffect(() => {
-    const traderId = data.source_trader_id
-    const source = data.source
-    if (!traderId || !source) return
-    if (claimDataRef.current !== null) return // already fetched
+  const claimUrl = data.source_trader_id && data.source
+    ? `/api/traders/claim/status?trader_id=${encodeURIComponent(data.source_trader_id)}&source=${encodeURIComponent(data.source)}`
+    : null
+  const { data: claimData } = useSWR<{ success: boolean; data: { is_verified: boolean; owner_id: string | null } }>(
+    claimUrl,
+    fetcher,
+    { revalidateOnFocus: false, dedupingInterval: 300_000 }
+  )
 
-    fetch(`/api/traders/claim/status?trader_id=${encodeURIComponent(traderId)}&source=${encodeURIComponent(source)}`)
-      .then(res => res.ok ? res.json() : null)
-      .then(result => {
-        if (result?.data) {
-          claimDataRef.current = { is_verified: result.data.is_verified, owner_id: result.data.owner_id }
-          if (result.data.is_verified) {
-            setIsVerifiedTrader(true)
-          }
-        } else {
-          claimDataRef.current = { is_verified: false, owner_id: null }
-        }
-      })
-      .catch(() => {})
-  }, [data.source_trader_id, data.source])
-
-  // Re-check ownership when both claim data and currentUserId are available
+  // Derive verified/owner state from SWR claim data
   useEffect(() => {
-    if (claimDataRef.current?.is_verified && currentUserId && claimDataRef.current.owner_id === currentUserId) {
-      setIsOwner(true)
+    if (claimData?.data?.is_verified) {
+      setIsVerifiedTrader(true)
+      if (currentUserId && claimData.data.owner_id === currentUserId) {
+        setIsOwner(true)
+      }
     }
-  }, [currentUserId])
+  }, [claimData, currentUserId])
 
   const displayName = formatDisplayName(data.handle, data.source)
   const _exchangeName = EXCHANGE_NAMES[data.source] || data.source
