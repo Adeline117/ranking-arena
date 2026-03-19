@@ -4766,6 +4766,25 @@ compFieldMaxParticipants: '최대 참가자 수',
     ratingOptional: '평점 (선택)',
     clearRating: '지우기',
 
+    // Token Rankings
+    tokenRankingsTitle: '토큰 랭킹',
+    tokenRankingsSubtitle: '각 토큰의 최고 트레이더를 발견하세요. 누가 BTC를 가장 잘 거래할까요?',
+    tokenRankingsSearchPlaceholder: '토큰 검색 (BTC, ETH, SOL...)',
+    tokenRankingsTraders: '트레이더',
+    tokenRankingsViewRankings: '랭킹 보기',
+    tokenRankingsTrades: '거래 수',
+    tokenRankingsTotalPnl: '총 손익',
+    tokenRankingHeader: '최고 {token} 트레이더',
+    tokenRankingCount: '{count}명의 트레이더가 {token}을 거래 중',
+    tokenRankingNoData: '{token}의 거래 데이터를 찾을 수 없습니다',
+    tokenRankingNoDataDesc: '이 토큰의 거래 데이터가 아직 제공되지 않을 수 있습니다. 다른 토큰을 시도하거나 나중에 다시 확인하세요.',
+    tokenRankingBrowseAll: '모든 토큰 보기',
+    tokenRankingTotalPnl: '총 손익',
+    tokenRankingTrades: '거래 수',
+    tokenRankingPrev: '이전',
+    tokenRankingNext: '다음',
+    rankingsSubNavTokens: '토큰',
+
 } as const
 
 export default ko

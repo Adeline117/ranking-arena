@@ -7,6 +7,7 @@ import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 
 const TAB_KEYS = [
   { href: '/', key: 'rankingsSubNavTraders' as const },
+  { href: '/rankings/tokens', key: 'rankingsSubNavTokens' as const },
 ]
 
 export default function RankingsSubNav() {

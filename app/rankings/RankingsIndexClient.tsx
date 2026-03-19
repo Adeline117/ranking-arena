@@ -84,6 +84,42 @@ export default function RankingsIndexClient() {
           {totalTraders.toLocaleString()} traders across {allPlatforms.length} exchanges
         </Text>
       </Box>
+      {/* Token Rankings CTA */}
+      <Link href="/rankings/tokens" style={{ textDecoration: 'none', display: 'block', marginBottom: 20 }}>
+        <Box
+          style={{
+            padding: '16px 20px',
+            borderRadius: tokens.radius.xl,
+            background: `linear-gradient(135deg, ${tokens.colors.accent.primary}10, ${tokens.colors.accent.primary}05)`,
+            border: `1px solid ${tokens.colors.accent.primary}30`,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            transition: 'all 0.2s',
+            cursor: 'pointer',
+          }}
+          onMouseEnter={(e: React.MouseEvent<HTMLDivElement>) => {
+            e.currentTarget.style.borderColor = tokens.colors.accent.primary + '60'
+            e.currentTarget.style.transform = 'translateY(-1px)'
+          }}
+          onMouseLeave={(e: React.MouseEvent<HTMLDivElement>) => {
+            e.currentTarget.style.borderColor = tokens.colors.accent.primary + '30'
+            e.currentTarget.style.transform = 'translateY(0)'
+          }}
+        >
+          <Box>
+            <Text size="md" weight="bold" style={{ color: tokens.colors.text.primary, marginBottom: 2 }}>
+              {t('tokenRankingsTitle')}
+            </Text>
+            <Text size="sm" style={{ color: tokens.colors.text.secondary }}>
+              {t('tokenRankingsSubtitle')}
+            </Text>
+          </Box>
+          <Text size="lg" style={{ color: tokens.colors.accent.primary, fontWeight: 600 }}>
+            &rarr;
+          </Text>
+        </Box>
+      </Link>
       <Box style={{ display: 'flex', gap: 8, marginBottom: 20 }}>
         {tabs.map(({ key, label, count }) => (
           <button key={key} onClick={() => setTab(key)} style={{
