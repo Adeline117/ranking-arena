@@ -90,8 +90,8 @@ export async function fetchBinanceSpotStatsDetail(
         aum = dd.aum != null ? Number(dd.aum) : null
         copiersCount = dd.currentCopyCount != null ? Number(dd.currentCopyCount) : null
       }
-    } catch {
-      // Detail failed, continue with performance data only
+    } catch (err) {
+      logger.warn(`[enrichment-binance-spot] Detail fetch failed for trader ${traderId}: ${err instanceof Error ? err.message : String(err)}`)
     }
 
     const totalTrades = d.totalOrder ?? 0
