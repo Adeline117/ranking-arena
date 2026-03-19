@@ -1,6 +1,7 @@
 import type { Metadata } from 'next'
 import { Suspense } from 'react'
 import { getInitialTraders } from '@/lib/getInitialTraders'
+import { getSupabaseAdmin } from '@/lib/supabase/server'
 import SSRRankingTable from './components/home/SSRRankingTable'
 import { JsonLd } from './components/Providers/JsonLd'
 import { HomePage } from './components/home'
@@ -55,8 +56,33 @@ const organizationJsonLd = {
 
 // WebSite JSON-LD is in layout.tsx (site-wide, with potentialAction)
 
+/** Fetch hero stats (trader count + exchange count) server-side to avoid client waterfall */
+async function getHeroStats(): Promise<{ traderCount: number; exchangeCount: number }> {
+  try {
+    const supabase = getSupabaseAdmin()
+    const [tradersRes, platformsRes] = await Promise.all([
+      supabase.from('traders').select('*', { count: 'exact', head: true }),
+      supabase.from('leaderboard_ranks').select('source').eq('season_id', '90D').limit(200),
+    ])
+    const traderCount = tradersRes.count ?? 34000
+    let exchangeCount = 27
+    if (platformsRes.data) {
+      const platforms = new Set(platformsRes.data.map((r: { source: string }) =>
+        r.source.replace(/_(futures|spot|web3|perps|network)$/, '')
+      ))
+      exchangeCount = Math.max(platforms.size, 27)
+    }
+    return { traderCount, exchangeCount }
+  } catch {
+    return { traderCount: 34000, exchangeCount: 27 }
+  }
+}
+
 export default async function Page() {
-  const { traders: initialTraders, lastUpdated } = await getInitialTraders('90D', 50)
+  const [{ traders: initialTraders, lastUpdated }, heroStats] = await Promise.all([
+    getInitialTraders('90D', 50),
+    getHeroStats(),
+  ])
 
   // Preload top 3 trader avatars — use direct CDN URLs (avoids /api/avatar proxy roundtrip)
   const top3Avatars = initialTraders
@@ -78,7 +104,7 @@ export default async function Page() {
 
       <ErrorBoundary name="homepage">
         <Suspense fallback={null}>
-          <HomePage initialTraders={initialTraders} initialLastUpdated={lastUpdated} />
+          <HomePage initialTraders={initialTraders} initialLastUpdated={lastUpdated} heroStats={heroStats} />
         </Suspense>
       </ErrorBoundary>
     </>
