@@ -687,13 +687,17 @@ const HANDLERS = {
 
   // ─── Weex (v15 port: intercept copy-trade APIs) ──────────────────
   'weex/leaderboard': async (page, params) => {
+    // Intercept trace/trader API calls (new gateway domain)
     const captured = setupInterception(page, (url) =>
-      url.includes('copy') && (url.includes('rank') || url.includes('trader'))
+      url.includes('trace') || url.includes('traderList') || url.includes('copy')
     )
 
-    await page.goto('https://www.weex.com/en/copy-trading', {
-      waitUntil: 'domcontentloaded', timeout: 30000,
+    // Navigate to copy trading page (note: /copy-trading not /copy-trade)
+    await page.goto('https://www.weex.com/copy-trading', {
+      waitUntil: 'domcontentloaded', timeout: 45000,
     })
+
+    await waitForCF(page, 20000)
     await page.waitForTimeout(8000)
     await page.evaluate(() => window.scrollTo(0, 500)).catch(() => {})
     await page.waitForTimeout(3000)
@@ -702,6 +706,20 @@ const HANDLERS = {
       captured.sort((a, b) => b.size - a.size)
       return captured[0].data
     }
+
+    // Fallback: direct API call from page context (inherits CF cookies)
+    const data = await page.evaluate(async () => {
+      try {
+        // New API discovered 2026-03-19
+        const r = await fetch('https://http-gateway1.weex.com/api/v1/public/trace/traderListView', {
+          credentials: 'include',
+        })
+        if (!r.ok) return null
+        return await r.json()
+      } catch { return null }
+    }).catch(() => null)
+
+    if (data) return data
     return { error: 'No API response captured' }
   },
 
@@ -823,7 +841,7 @@ const HANDLERS = {
     return domData || { error: 'No API response captured and DOM extraction failed' }
   },
 
-  // ─── KuCoin (CF-protected SPA, intercept copy-trade APIs) ───
+  // ─── KuCoin (CF-protected SPA, new ct-copy-trade API) ───
   'kucoin/leaderboard': async (page, params) => {
     const pageNo = parseInt(params.pageNo || '1', 10)
     const pageSize = parseInt(params.pageSize || '50', 10)
@@ -834,19 +852,26 @@ const HANDLERS = {
       window.chrome = { runtime: {} }
     })
 
-    // Intercept copy-trade API responses
+    // Intercept copy-trade API responses (new ct-copy-trade endpoint)
     const captured = setupInterception(page, (url) =>
-      url.includes('copy-trade') || url.includes('copyTrade') ||
-      url.includes('leader') || url.includes('trader') ||
-      url.includes('public/list')
+      url.includes('ct-copy-trade') || url.includes('copyTrading') ||
+      url.includes('leaderboard') || url.includes('traderList')
     )
 
-    await page.goto('https://www.kucoin.com/copytrading', {
+    // Navigate to copy trading page (note: /copytrading not /copy-trading)
+    await page.goto('https://www.kucoin.com/copy-trading', {
       waitUntil: 'domcontentloaded', timeout: 60000,
     })
 
+    // Accept cookie consent
+    await page.evaluate(() => {
+      const btns = Array.from(document.querySelectorAll('button'))
+      const accept = btns.find(b => b.textContent && b.textContent.includes('Accept All'))
+      if (accept) accept.click()
+    }).catch(() => {})
+
     await waitForCF(page, 25000)
-    await page.waitForTimeout(5000)
+    await page.waitForTimeout(8000)
     await page.evaluate(() => window.scrollTo(0, 500)).catch(() => {})
     await page.waitForTimeout(3000)
 
@@ -855,7 +880,7 @@ const HANDLERS = {
       return captured[0].data
     }
 
-    // Fallback: same-origin fetch with session cookies
+    // Fallback: same-origin fetch with session cookies (new API path)
     const data = await page.evaluate(async (opts) => {
       async function safeFetch(url) {
         try {
@@ -868,9 +893,10 @@ const HANDLERS = {
       }
 
       const endpoints = [
+        // New API (discovered 2026-03-19)
+        `/_api/ct-copy-trade/v1/copyTrading/rn/leaderboard/query?lang=en_US&pageNo=${opts.pageNo}&pageSize=${opts.pageSize}`,
+        // Legacy fallback
         `/_api/copy-trade/leader/public/list?pageNo=${opts.pageNo}&pageSize=${opts.pageSize}&sortType=2`,
-        `/api/v1/copy-trade/leader/public/list?pageNo=${opts.pageNo}&pageSize=${opts.pageSize}`,
-        `/_api/copy-trade/leader/list?page=${opts.pageNo}&size=${opts.pageSize}`,
       ]
 
       for (const url of endpoints) {
