@@ -4,6 +4,7 @@
  */
 
 import { NextRequest } from 'next/server'
+import Stripe from 'stripe'
 import {
   getSupabaseAdmin,
   requireAuth,
@@ -123,6 +124,63 @@ export async function POST(request: NextRequest) {
 
     if (groupError || !group) {
       return error('Group not found', 404)
+    }
+
+    // Paid tiers require a verified Stripe payment — trial is free and allowed without payment
+    if (tier !== 'trial') {
+      const stripeSecret = process.env.STRIPE_SECRET_KEY
+      if (!stripeSecret) {
+        // Stripe not configured: lock down paid subscriptions entirely
+        logger.error('[group-subscribe] STRIPE_SECRET_KEY not set; refusing paid subscription')
+        return error('Paid subscriptions are not available at this time', 503)
+      }
+
+      const checkoutSessionId: string | undefined = body.checkout_session_id
+      const paymentIntentId: string | undefined = body.payment_intent_id
+
+      if (!checkoutSessionId && !paymentIntentId) {
+        return error(
+          'A valid checkout_session_id or payment_intent_id is required for paid subscriptions',
+          400
+        )
+      }
+
+      const stripe = new Stripe(stripeSecret, { apiVersion: '2025-03-31.basil' })
+
+      try {
+        if (checkoutSessionId) {
+          const session = await stripe.checkout.sessions.retrieve(checkoutSessionId)
+          if (session.payment_status !== 'paid') {
+            return error('Payment not completed. Please complete payment before subscribing.', 402)
+          }
+          // Ensure the session belongs to this user (metadata or client_reference_id)
+          const sessionUserId = session.client_reference_id || session.metadata?.user_id
+          if (sessionUserId && sessionUserId !== user.id) {
+            return error('Payment session does not belong to this user', 403)
+          }
+          // Ensure the session is for the correct group
+          const sessionGroupId = session.metadata?.group_id
+          if (sessionGroupId && sessionGroupId !== groupId) {
+            return error('Payment session is for a different group', 400)
+          }
+        } else if (paymentIntentId) {
+          const intent = await stripe.paymentIntents.retrieve(paymentIntentId)
+          if (intent.status !== 'succeeded') {
+            return error('Payment not completed. Please complete payment before subscribing.', 402)
+          }
+          const intentUserId = intent.metadata?.user_id
+          if (intentUserId && intentUserId !== user.id) {
+            return error('Payment intent does not belong to this user', 403)
+          }
+          const intentGroupId = intent.metadata?.group_id
+          if (intentGroupId && intentGroupId !== groupId) {
+            return error('Payment intent is for a different group', 400)
+          }
+        }
+      } catch (stripeError: unknown) {
+        logger.error('[group-subscribe] Stripe verification failed:', stripeError)
+        return error('Failed to verify payment. Please try again.', 402)
+      }
     }
 
     // 检查是否已有有效订阅
