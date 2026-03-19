@@ -75,7 +75,7 @@ export default function SSRRankingTable({ traders }: Props) {
           <span className="hide-mobile ssr-r">MDD</span>
         </div>
 
-        {traders.slice(0, 25).map((trader, idx) => {
+        {traders.slice(0, 10).map((trader, idx) => {
           const rank = idx + 1
           const isTop3 = rank <= 3
           // SSR: always use direct CDN URLs — no CORS issue for server-rendered <img>
