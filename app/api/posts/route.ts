@@ -34,6 +34,7 @@ import { getWeightedPosts } from '@/lib/data/posts-weighted'
 import { getServerCache, setServerCache, deleteServerCacheByPrefix, CacheTTL } from '@/lib/utils/server-cache'
 import { get as cacheGet, set as cacheSet } from '@/lib/cache'
 import { fireAndForget } from '@/lib/utils/logger'
+import { extractAndSyncHashtags } from '@/lib/data/hashtags'
 
 // Zod schema for POST /api/posts
 const CreatePostSchema = z.object({
@@ -288,6 +289,12 @@ export async function POST(request: NextRequest) {
       group_id,
       poll_enabled,
     })
+
+    // Extract and sync hashtags (fire-and-forget to not block response)
+    fireAndForget(
+      extractAndSyncHashtags(supabase, post.id, `${title} ${content}`),
+      'Sync hashtags for post'
+    )
 
     // 创建帖子后清除相关缓存
     deleteServerCacheByPrefix(POSTS_CACHE_PREFIX)
