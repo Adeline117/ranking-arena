@@ -61,7 +61,7 @@ async function getHeroStats(): Promise<{ traderCount: number; exchangeCount: num
   try {
     const supabase = getSupabaseAdmin()
     const [tradersRes, platformsRes] = await Promise.all([
-      supabase.from('traders').select('*', { count: 'exact', head: true }),
+      supabase.from('traders').select('id', { count: 'exact', head: true }),
       supabase.from('leaderboard_ranks').select('source').eq('season_id', '90D').limit(200),
     ])
     const traderCount = tradersRes.count ?? 34000
