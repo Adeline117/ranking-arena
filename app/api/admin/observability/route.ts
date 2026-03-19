@@ -36,6 +36,7 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
+  try {
   const supabase = getSupabaseAdmin()
   const now = Date.now()
   const twentyFourHoursAgo = new Date(now - 24 * 3600 * 1000).toISOString()
@@ -180,4 +181,11 @@ export async function GET(req: NextRequest) {
   }, {
     headers: { 'Cache-Control': 'no-store' },
   })
+  } catch (error) {
+    console.error('[observability] Unexpected error:', error)
+    return NextResponse.json(
+      { error: 'Internal server error', detail: error instanceof Error ? error.message : String(error) },
+      { status: 500 }
+    )
+  }
 }
