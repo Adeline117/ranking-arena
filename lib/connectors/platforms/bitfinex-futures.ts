@@ -12,6 +12,7 @@
  */
 
 import { BaseConnector } from '../base'
+import { generateIdenticonSvg } from '@/lib/utils/avatar'
 import type {
   LeaderboardPlatform,
   MarketType,
@@ -201,7 +202,8 @@ export class BitfinexFuturesConnector extends BaseConnector {
       sharpe_ratio: null,
       aum: null,
       copiers: null,
-      avatar_url: e.username ? `https://api.dicebear.com/7.x/identicon/svg?seed=${encodeURIComponent(String(e.username))}` : null,
+      // Generate identicon locally — eliminates external dicebear.com request per trader
+      avatar_url: e.username ? generateIdenticonSvg(String(e.username), 64) : null,
     }
   }
 }
