@@ -27,18 +27,37 @@ export class HtxFuturesConnector extends BaseConnector {
     notes: ['Frequent API/DOM changes', 'CF protected', 'All 3 windows supported'],
   }
 
-  async discoverLeaderboard(window: Window, limit = 500, offset = 0): Promise<DiscoverResult> {
+  async discoverLeaderboard(window: Window, limit = 200, offset = 0): Promise<DiscoverResult> {
     // /bapi/ endpoint returns 405 since ~2026-03. Use futures.htx.com ranking API instead.
     // This is the same endpoint used by enrichment-htx.ts and confirmed working.
-    const pageSize = Math.min(limit, 50) // API max 50 per page
-    const maxPages = Math.ceil(Math.min(limit, 500) / pageSize) // Up to 10 pages
+    // Cap at 100 traders (2 pages) to avoid Vercel 504 — HTX API is slow and we run 3 windows.
+    const effectiveLimit = Math.min(limit, 100)
+    const pageSize = 50 // API max 50 per page
+    const maxPages = Math.ceil(effectiveLimit / pageSize) // At most 2 pages
     const allTraders: TraderSource[] = []
 
+    // Overall timeout guard: abort pagination if we're taking too long
+    const startedAt = Date.now()
+    const PAGE_TIMEOUT_MS = 25000 // 25s per page budget (leaves room for 3 windows in 300s limit)
+
     for (let page = Math.floor(offset / pageSize) + 1; page <= maxPages + Math.floor(offset / pageSize); page++) {
-      const _rawLb = await this.request<Record<string, unknown>>(
-        `https://futures.htx.com/-/x/hbg/v1/futures/copytrading/rank?rankType=1&pageNo=${page}&pageSize=${pageSize}`,
-        { method: 'GET' }
-      )
+      // Bail out early if we're running close to budget
+      if (Date.now() - startedAt > PAGE_TIMEOUT_MS * (page - Math.floor(offset / pageSize))) break
+
+      const controller = new AbortController()
+      const timer = setTimeout(() => controller.abort(), PAGE_TIMEOUT_MS)
+      let _rawLb: Record<string, unknown>
+      try {
+        _rawLb = await this.request<Record<string, unknown>>(
+          `https://futures.htx.com/-/x/hbg/v1/futures/copytrading/rank?rankType=1&pageNo=${page}&pageSize=${pageSize}`,
+          { method: 'GET', signal: controller.signal }
+        )
+      } catch {
+        clearTimeout(timer)
+        break // Skip remaining pages on timeout/error — return what we have
+      }
+      clearTimeout(timer)
+
       const data = warnValidate(HtxFuturesLeaderboardResponseSchema, _rawLb, 'htx-futures/leaderboard')
       // New endpoint returns { code: 200, data: { itemList: [...], totalPage, totalNum } }
       const list = data?.data?.itemList || data?.data?.list || []
@@ -56,10 +75,10 @@ export class HtxFuturesConnector extends BaseConnector {
       }
 
       if (items.length < pageSize) break // No more pages
-      if (allTraders.length >= limit) break
+      if (allTraders.length >= effectiveLimit) break
     }
 
-    return { traders: allTraders.slice(0, limit), total_available: null, window, fetched_at: new Date().toISOString() }
+    return { traders: allTraders.slice(0, effectiveLimit), total_available: null, window, fetched_at: new Date().toISOString() }
   }
 
   async fetchTraderProfile(traderKey: string): Promise<ProfileResult | null> {

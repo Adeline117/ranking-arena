@@ -63,7 +63,8 @@ export class JupiterPerpsPerpConnector extends BaseConnector {
   }
 
   private getWeeksForWindow(window: Window): number {
-    return window === '7d' ? 1 : window === '30d' ? 4 : 13
+    // Capped to avoid Vercel 504: 90D uses 6 weeks (enough signal, avoids >180 serial requests)
+    return window === '7d' ? 1 : window === '30d' ? 4 : 6
   }
 
   private getISOWeek(date: Date): { year: number; week: number } {
@@ -90,39 +91,42 @@ export class JupiterPerpsPerpConnector extends BaseConnector {
       weeks.push(this.getISOWeek(d))
     }
 
-    // Fetch all markets × weeks
+    // Fetch all markets × weeks — markets fetched in parallel per week to reduce total time.
+    // Sequential over weeks to respect rate limits; parallel across 3 markets is safe (public API).
     for (const { year, week } of weeks) {
-      for (const mint of MARKETS) {
-        try {
+      const marketResults = await Promise.allSettled(
+        MARKETS.map(async (mint) => {
           const url = `https://perps-api.jup.ag/v1/top-traders?marketMint=${mint}&year=${year}&week=${week}`
-          const rawData = await this.request<Record<string, unknown> | JupiterTraderEntry[]>(url)
+          return this.request<Record<string, unknown> | JupiterTraderEntry[]>(url)
+        })
+      )
 
-          // API returns { topTradersByPnl: [...] } or direct array
-          const data: JupiterTraderEntry[] = Array.isArray(rawData)
-            ? rawData
-            : Array.isArray((rawData as Record<string, unknown>)?.topTradersByPnl)
-              ? (rawData as Record<string, unknown>).topTradersByPnl as JupiterTraderEntry[]
-              : []
-          if (data.length === 0) continue
+      for (const result of marketResults) {
+        if (result.status === 'rejected') continue // Skip failed week/market combos
+        const rawData = result.value
+        // API returns { topTradersByPnl: [...] } or direct array
+        const data: JupiterTraderEntry[] = Array.isArray(rawData)
+          ? rawData
+          : Array.isArray((rawData as Record<string, unknown>)?.topTradersByPnl)
+            ? (rawData as Record<string, unknown>).topTradersByPnl as JupiterTraderEntry[]
+            : []
+        if (data.length === 0) continue
 
-          for (const entry of data) {
-            if (!entry.owner) continue
-            const existing = traderMap.get(entry.owner) || { pnl: 0, volume: 0, wins: 0, losses: 0, trades: 0 }
-            const weekPnl = Number(entry.totalPnlUsd || 0) / 1e6
-            existing.pnl += weekPnl
-            existing.volume += Number(entry.totalVolumeUsd || entry.totalVolume || 0) / 1e6
-            existing.trades += entry.totalTrades || 0
-            // Count profitable market-weeks as wins
-            if (weekPnl > 0) existing.wins++
-            else if (weekPnl < 0) existing.losses++
-            traderMap.set(entry.owner, existing)
-          }
-        } catch {
-          // Skip failed week/market combos
+        for (const entry of data) {
+          if (!entry.owner) continue
+          const existing = traderMap.get(entry.owner) || { pnl: 0, volume: 0, wins: 0, losses: 0, trades: 0 }
+          const weekPnl = Number(entry.totalPnlUsd || 0) / 1e6
+          existing.pnl += weekPnl
+          existing.volume += Number(entry.totalVolumeUsd || entry.totalVolume || 0) / 1e6
+          existing.trades += entry.totalTrades || 0
+          // Count profitable market-weeks as wins
+          if (weekPnl > 0) existing.wins++
+          else if (weekPnl < 0) existing.losses++
+          traderMap.set(entry.owner, existing)
         }
       }
-      // Brief delay between weeks
-      await this.sleep(100)
+      // Brief delay between weeks to avoid rate limiting
+      await this.sleep(200)
     }
 
     // Convert to TraderSource, sorted by PnL
