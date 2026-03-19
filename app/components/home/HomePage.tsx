@@ -27,9 +27,10 @@ import type { InitialTrader } from '@/lib/getInitialTraders'
 interface HomePageProps {
   initialTraders?: InitialTrader[]
   initialLastUpdated?: string | null
+  heroStats?: { traderCount: number; exchangeCount: number }
 }
 
-export default function HomePage({ initialTraders, initialLastUpdated }: HomePageProps) {
+export default function HomePage({ initialTraders, initialLastUpdated, heroStats }: HomePageProps) {
   return (
     <Box
       suppressHydrationWarning
@@ -68,34 +69,34 @@ export default function HomePage({ initialTraders, initialLastUpdated }: HomePag
         }}
       >
         <h1 className="sr-only">Arena</h1>
-        <Suspense fallback={<div style={{ minHeight: 120 }} />}><HomeHero /></Suspense>
+        <Suspense fallback={<div style={{ minHeight: 160, maxHeight: 200, borderRadius: tokens.radius.xl, border: '1px solid var(--color-border-primary)', background: 'var(--color-bg-secondary)', contain: 'layout style' }} className="skeleton" />}><HomeHero traderCount={heroStats?.traderCount} exchangeCount={heroStats?.exchangeCount} /></Suspense>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
           <HomeSubNav />
           <FoundingMemberBanner />
         </div>
-        <Suspense fallback={<div style={{ minHeight: 48 }} />}><ExchangePartners /></Suspense>
+        <Suspense fallback={<div style={{ minHeight: 48, height: 48, contain: 'layout style' }} />}><ExchangePartners /></Suspense>
         <ThreeColumnLayout
           leftSidebar={
             features.social ? (
               <SectionErrorBoundary>
-                <Suspense fallback={<div className="skeleton" style={{ height: 400, borderRadius: tokens.radius.lg }} />}>
+                <Suspense fallback={<div className="skeleton" style={{ minHeight: 400, height: 400, borderRadius: tokens.radius.lg, contain: 'layout style' }} />}>
                   <HotDiscussions />
                 </Suspense>
               </SectionErrorBoundary>
             ) : null
           }
           rightSidebar={
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 16, contain: 'layout style' }}>
               <div style={{ flexShrink: 0 }}>
                 <SectionErrorBoundary>
-                  <Suspense fallback={<div className="skeleton" style={{ height: 200, borderRadius: tokens.radius.lg }} />}>
+                  <Suspense fallback={<div className="skeleton" style={{ minHeight: 200, height: 200, borderRadius: tokens.radius.lg, contain: 'layout style' }} />}>
                     <WatchlistMarket />
                   </Suspense>
                 </SectionErrorBoundary>
               </div>
               <div style={{ flex: 1, minHeight: 0 }}>
                 <SectionErrorBoundary>
-                  <Suspense fallback={<div className="skeleton" style={{ height: 300, borderRadius: tokens.radius.lg }} />}>
+                  <Suspense fallback={<div className="skeleton" style={{ minHeight: 300, height: 300, borderRadius: tokens.radius.lg, contain: 'layout style' }} />}>
                     <NewsFlash />
                   </Suspense>
                 </SectionErrorBoundary>

@@ -1,10 +1,9 @@
 'use client'
 
-import { useState, useEffect, lazy, Suspense } from 'react'
+import { lazy, Suspense } from 'react'
 import Link from 'next/link'
 import { tokens } from '@/lib/design-tokens'
 import { useLanguage } from '../Providers/LanguageProvider'
-import { supabase } from '@/lib/supabase/client'
 import { t } from '@/lib/i18n'
 
 const NumberTicker = lazy(() => import('../ui/NumberTicker'))
@@ -14,46 +13,24 @@ function formatCount(n: number): string {
   return `${n}+`
 }
 
-export default function HomeHero() {
+export interface HomeHeroProps {
+  /** Total trader count from server */
+  traderCount?: number
+  /** Total exchange count from server */
+  exchangeCount?: number
+}
+
+export default function HomeHero({ traderCount: traderCountProp, exchangeCount: exchangeCountProp }: HomeHeroProps) {
   useLanguage() // subscribe to language changes for re-render
-  const [traderCount, setTraderCount] = useState('34K+')
-  const [traderNum, setTraderNum] = useState(34000)
-  const [exchangeCount, setExchangeCount] = useState('27+')
-  const [exchangeNum, setExchangeNum] = useState(27)
 
-  useEffect(() => {
-    // Defer non-critical stats queries to avoid blocking LCP/TBT.
-    // Uses requestIdleCallback to run during browser idle time.
-    const fetchStats = () => {
-      supabase.from('traders').select('*', { count: 'exact', head: true })
-        .then(({ count }) => { if (count) { setTraderCount(formatCount(count)); setTraderNum(count) } })
-
-      // Only need unique source names (~30 platforms) — limit 200 instead of 10000
-      supabase.from('leaderboard_ranks').select('source').eq('season_id', '90D').limit(200)
-        .then(({ data }) => {
-          if (data) {
-            const platforms = new Set(data.map((r: { source: string }) =>
-              r.source.replace(/_(futures|spot|web3|perps|network)$/, '')
-            ))
-            const count = Math.max(platforms.size, 27)
-            setExchangeCount(`${count}+`)
-            setExchangeNum(count)
-          }
-        })
-    }
-
-    if ('requestIdleCallback' in window) {
-      const id = requestIdleCallback(fetchStats, { timeout: 3000 })
-      return () => cancelIdleCallback(id)
-    } else {
-      const id = setTimeout(fetchStats, 100)
-      return () => clearTimeout(id)
-    }
-  }, [])
+  const traderNum = traderCountProp ?? 34000
+  const exchangeNum = exchangeCountProp ?? 27
+  const traderCountStr = formatCount(traderNum)
+  const exchangeCountStr = `${exchangeNum}+`
 
   const subtitle = t('heroSubtitle' as Parameters<typeof t>[0])
-    .replace('{exchanges}', exchangeCount.replace('+', ''))
-    .replace('{traders}', traderCount)
+    .replace('{exchanges}', exchangeCountStr.replace('+', ''))
+    .replace('{traders}', traderCountStr)
 
   return (
     <section
@@ -65,7 +42,9 @@ export default function HomeHero() {
         border: '1px solid var(--color-border-primary)',
         position: 'relative',
         overflow: 'hidden',
+        minHeight: 120,
         maxHeight: 200,
+        contain: 'layout style',
       }}
     >
       {/* Subtle decorative gradient orb */}
@@ -122,17 +101,18 @@ export default function HomeHero() {
           flexShrink: 0,
         }}>
           {[
-            { num: Math.floor(traderNum / 1000), suffix: 'K+', fallback: traderCount, label: t('heroStatTraders' as Parameters<typeof t>[0]), delay: 0 },
-            { num: exchangeNum, suffix: '+', fallback: exchangeCount, label: t('heroStatExchanges' as Parameters<typeof t>[0]), delay: 0.2 },
+            { num: Math.floor(traderNum / 1000), suffix: 'K+', fallback: traderCountStr, label: t('heroStatTraders' as Parameters<typeof t>[0]), delay: 0 },
+            { num: exchangeNum, suffix: '+', fallback: exchangeCountStr, label: t('heroStatExchanges' as Parameters<typeof t>[0]), delay: 0.2 },
             { num: 30, suffix: 'm', fallback: '30m', label: t('heroStatUpdated' as Parameters<typeof t>[0]), delay: 0.4 },
           ].map((stat) => (
-            <div key={stat.label} style={{ textAlign: 'center' }}>
+            <div key={stat.label} style={{ textAlign: 'center', minWidth: 56 }}>
               <div style={{
                 fontSize: tokens.typography.fontSize.xl,
                 fontWeight: tokens.typography.fontWeight.bold,
                 color: 'var(--color-accent-primary)',
                 fontVariantNumeric: 'tabular-nums',
                 lineHeight: 1.2,
+                minHeight: '1.2em',
               }}>
                 <Suspense fallback={<span>{stat.fallback}</span>}>
                   <NumberTicker value={stat.num} suffix={stat.suffix} delay={stat.delay} />
