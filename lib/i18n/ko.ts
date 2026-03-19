@@ -4759,10 +4759,6 @@ compFieldDescPlaceholder: '대회 규칙과 상품을 설명하세요...',
 compFieldMetric: '경쟁 지표',
 compFieldMaxParticipants: '최대 참가자 수',
 
-    // Trader comments
-    traderComments: '댓글',
-    submitComment: '댓글',
-
     // Token Rankings
     tokenRankingsTitle: '토큰 랭킹',
     tokenRankingsSubtitle: '각 토큰의 최고 트레이더를 발견하세요. 누가 BTC를 가장 잘 거래할까요?',

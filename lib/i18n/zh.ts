@@ -4756,10 +4756,6 @@ compFieldDescPlaceholder: '描述竞赛规则和奖品...',
 compFieldMetric: '竞赛指标',
 compFieldMaxParticipants: '最大参与人数',
 
-    // Trader comments
-    traderComments: '评论',
-    submitComment: '发布',
-
     // Token Rankings
     tokenRankingsTitle: '币种排行',
     tokenRankingsSubtitle: '发现每个币种的最佳交易员。谁交易 BTC 最厉害？',

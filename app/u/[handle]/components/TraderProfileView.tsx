@@ -31,7 +31,7 @@ const ExchangeLinksBar = dynamic(() => import('@/app/components/trader/ExchangeL
 const LinkedAccountTabs = dynamic(() => import('@/app/components/trader/LinkedAccountTabs'), { ssr: false })
 const AggregatedStats = dynamic(() => import('@/app/components/trader/AggregatedStats'), { ssr: false })
 const PostFeed = dynamic(() => import('@/app/components/post/PostFeed'), { ssr: false })
-const TraderComments = dynamic(() => import('@/app/components/trader/TraderComments'), { ssr: false })
+
 
 interface TraderProfileViewProps {
   email: string | null
@@ -252,13 +252,6 @@ export default function TraderProfileView({
           )}
         </Box>
         </div>
-
-        {/* Comments */}
-        <TraderComments
-          traderSource="user"
-          traderSourceId={profile.id}
-          traderHandle={handle}
-        />
 
         <style>{profileStyles}</style>
       </Box>
