@@ -9,10 +9,9 @@ interface InboxState {
   togglePanel: () => void
   openPanel: () => void
   closePanel: () => void
-  totalUnread: () => number
 }
 
-export const useInboxStore = create<InboxState>((set, get) => ({
+export const useInboxStore = create<InboxState>((set) => ({
   unreadNotifications: 0,
   unreadMessages: 0,
   panelOpen: false,
@@ -21,5 +20,8 @@ export const useInboxStore = create<InboxState>((set, get) => ({
   togglePanel: () => set((s) => ({ panelOpen: !s.panelOpen })),
   openPanel: () => set({ panelOpen: true }),
   closePanel: () => set({ panelOpen: false }),
-  totalUnread: () => get().unreadNotifications + get().unreadMessages,
 }))
+
+/** Derived selector for total unread count — stable reference, no store re-creation */
+export const selectTotalUnread = (state: InboxState) =>
+  state.unreadNotifications + state.unreadMessages
