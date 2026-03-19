@@ -6,7 +6,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { User } from '@supabase/supabase-js'
 import { getAuthUser, getSupabaseAdmin } from '@/lib/supabase/server'
-import { checkRateLimit, RateLimitPresets, type RateLimitConfig } from '@/lib/utils/rate-limit'
+import { checkRateLimit, addRateLimitHeaders, RateLimitPresets, type RateLimitConfig, type RateLimitResult } from '@/lib/utils/rate-limit'
 import { createLogger } from '@/lib/utils/logger'
 import { validateCsrfToken, CSRF_COOKIE_NAME, CSRF_HEADER_NAME } from '@/lib/utils/csrf'
 import {
@@ -132,6 +132,9 @@ export function withApiMiddleware<T>(
     // 解析 API 版本
     const versionContext = parseApiVersion(request)
 
+    // Track rate limit metadata for injecting headers on successful responses
+    let rateLimitMeta: RateLimitResult['meta'] = null
+
     try {
       // 1. 限流检查
       if (rateLimit !== false) {
@@ -139,7 +142,9 @@ export function withApiMiddleware<T>(
           ? RateLimitPresets[rateLimit]
           : rateLimit
 
-        const rateLimitResponse = await checkRateLimit(request, config)
+        const rateLimitResult = await checkRateLimit(request, config)
+        rateLimitMeta = rateLimitResult.meta
+        const rateLimitResponse = rateLimitResult.response
         if (rateLimitResponse) {
           logger.warn(`Rate limit exceeded for ${name}`, { correlationId })
           // 添加版本头到限流响应
@@ -205,7 +210,12 @@ export function withApiMiddleware<T>(
         addDeprecationHeaders(response, versionContext)
       }
 
-      // 8. 添加响应时间头 & 慢查询日志
+      // 8. 添加限流响应头到所有成功响应
+      if (rateLimitMeta) {
+        addRateLimitHeaders(response, rateLimitMeta.limit, rateLimitMeta.remaining, rateLimitMeta.reset)
+      }
+
+      // 9. 添加响应时间头 & 慢查询日志
       const duration = Date.now() - startTime
       response.headers.set('X-Response-Time', `${duration}ms`)
       response.headers.set('X-Correlation-ID', correlationId)
