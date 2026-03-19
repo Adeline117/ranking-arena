@@ -24,109 +24,134 @@ function getSupabaseWithAuth(accessToken: string) {
 }
 
 export async function GET(request: NextRequest) {
-  const token = getAuthenticatedUser(request)
-  if (!token) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  }
+  try {
+    const token = getAuthenticatedUser(request)
+    if (!token) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
 
-  const supabase = getSupabaseWithAuth(token)
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  }
+    const supabase = getSupabaseWithAuth(token)
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
 
-  const { data, error } = await supabase
-    .from('trader_watchlist')
-    .select('source, source_trader_id, handle, created_at')
-    .eq('user_id', user.id)
-    .order('created_at', { ascending: false })
-    .limit(200)
+    const { data, error } = await supabase
+      .from('trader_watchlist')
+      .select('source, source_trader_id, handle, created_at')
+      .eq('user_id', user.id)
+      .order('created_at', { ascending: false })
+      .limit(200)
 
-  if (error) {
+    if (error) {
+      return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
+    }
+
+    return NextResponse.json({ watchlist: data || [] })
+  } catch (error) {
+    console.error('[watchlist] GET failed:', error instanceof Error ? error.message : String(error))
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
-
-  return NextResponse.json({ watchlist: data || [] })
 }
 
 export async function POST(request: NextRequest) {
-  const token = getAuthenticatedUser(request)
-  if (!token) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  }
+  try {
+    const token = getAuthenticatedUser(request)
+    if (!token) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
 
-  const supabase = getSupabaseWithAuth(token)
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  }
+    const supabase = getSupabaseWithAuth(token)
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
 
-  const body = await request.json()
-  const { source, source_trader_id, handle } = body
+    let body: Record<string, unknown>
+    try {
+      body = await request.json()
+    } catch {
+      return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 })
+    }
+    const { source, source_trader_id, handle } = body as { source?: string; source_trader_id?: string; handle?: string }
 
-  if (!source || !source_trader_id || typeof source !== 'string' || typeof source_trader_id !== 'string') {
-    return NextResponse.json({ error: 'source and source_trader_id required (strings)' }, { status: 400 })
-  }
-  if (source.length > 50 || source_trader_id.length > 200) {
-    return NextResponse.json({ error: 'Invalid input length' }, { status: 400 })
-  }
+    if (!source || !source_trader_id || typeof source !== 'string' || typeof source_trader_id !== 'string') {
+      return NextResponse.json({ error: 'source and source_trader_id required (strings)' }, { status: 400 })
+    }
+    if (source.length > 50 || source_trader_id.length > 200) {
+      return NextResponse.json({ error: 'Invalid input length' }, { status: 400 })
+    }
 
-  // Enforce max watchlist size (200)
-  const { count } = await supabase
-    .from('trader_watchlist')
-    .select('id', { count: 'exact', head: true })
-    .eq('user_id', user.id)
-  if ((count ?? 0) >= 200) {
-    return NextResponse.json({ error: 'Watchlist full (max 200)' }, { status: 400 })
-  }
+    // Enforce max watchlist size (200)
+    const { count } = await supabase
+      .from('trader_watchlist')
+      .select('id', { count: 'exact', head: true })
+      .eq('user_id', user.id)
+    if ((count ?? 0) >= 200) {
+      return NextResponse.json({ error: 'Watchlist full (max 200)' }, { status: 400 })
+    }
 
-  const { error } = await supabase
-    .from('trader_watchlist')
-    .upsert({
-      user_id: user.id,
-      source,
-      source_trader_id,
-      handle: handle || null,
-    }, {
-      onConflict: 'user_id,source,source_trader_id',
-    })
+    const { error } = await supabase
+      .from('trader_watchlist')
+      .upsert({
+        user_id: user.id,
+        source,
+        source_trader_id,
+        handle: handle || null,
+      }, {
+        onConflict: 'user_id,source,source_trader_id',
+      })
 
-  if (error) {
+    if (error) {
+      return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
+    }
+
+    return NextResponse.json({ ok: true })
+  } catch (error) {
+    console.error('[watchlist] POST failed:', error instanceof Error ? error.message : String(error))
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
-
-  return NextResponse.json({ ok: true })
 }
 
 export async function DELETE(request: NextRequest) {
-  const token = getAuthenticatedUser(request)
-  if (!token) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  }
+  try {
+    const token = getAuthenticatedUser(request)
+    if (!token) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
 
-  const supabase = getSupabaseWithAuth(token)
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  }
+    const supabase = getSupabaseWithAuth(token)
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
 
-  const body = await request.json()
-  const { source, source_trader_id } = body
+    let body: Record<string, unknown>
+    try {
+      body = await request.json()
+    } catch {
+      return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 })
+    }
+    const { source, source_trader_id } = body as { source?: string; source_trader_id?: string }
 
-  if (!source || !source_trader_id) {
-    return NextResponse.json({ error: 'source and source_trader_id required' }, { status: 400 })
-  }
+    if (!source || !source_trader_id) {
+      return NextResponse.json({ error: 'source and source_trader_id required' }, { status: 400 })
+    }
 
-  const { error } = await supabase
-    .from('trader_watchlist')
-    .delete()
-    .eq('user_id', user.id)
-    .eq('source', source)
-    .eq('source_trader_id', source_trader_id)
+    const { error } = await supabase
+      .from('trader_watchlist')
+      .delete()
+      .eq('user_id', user.id)
+      .eq('source', source)
+      .eq('source_trader_id', source_trader_id)
 
-  if (error) {
+    if (error) {
+      return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
+    }
+
+    return NextResponse.json({ ok: true })
+  } catch (error) {
+    console.error('[watchlist] DELETE failed:', error instanceof Error ? error.message : String(error))
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
-
-  return NextResponse.json({ ok: true })
 }
