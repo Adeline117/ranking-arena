@@ -1,4 +1,5 @@
 import type { Metadata } from 'next'
+import { cache } from 'react'
 import { redirect, notFound } from 'next/navigation'
 import { getSupabaseAdmin } from '@/lib/supabase/server'
 import { JsonLd } from '@/app/components/Providers/JsonLd'
@@ -6,6 +7,13 @@ import { EXCHANGE_CONFIG } from '@/lib/constants/exchanges'
 import TraderProfileClient, { type UnregisteredTraderData } from './TraderProfileClient'
 import { ErrorBoundary } from '@/app/components/ui/ErrorBoundary'
 import { resolveTrader, getTraderDetail, toTraderPageData } from '@/lib/data/unified'
+
+// Deduplicate resolveTrader calls — both generateMetadata and the page component
+// call resolveTrader with the same handle. React cache() ensures the DB query
+// runs once per request, halving the number of round-trips to Supabase.
+const cachedResolveTrader = cache(
+  (handle: string, platform?: string) => resolveTrader(getSupabaseAdmin(), { handle, platform })
+)
 
 // Derive display names from central config
 const EXCHANGE_DISPLAY: Record<string, string> = Object.fromEntries(
@@ -18,14 +26,12 @@ export async function generateMetadata({ params }: { params: Promise<{ handle: s
   const BASE = 'https://www.arenafi.org'
 
   try {
-    const supabase = getSupabaseAdmin()
-
-    // Use unified resolveTrader instead of direct trader_sources query
-    const resolved = await resolveTrader(supabase, { handle: decoded })
+    // Use cached resolver — deduplicates with the page component's resolveTrader call
+    const resolved = await cachedResolveTrader(decoded)
 
     if (resolved) {
       // Fetch leaderboard data for OG meta
-      const { data: lr } = await supabase
+      const { data: lr } = await getSupabaseAdmin()
         .from('leaderboard_ranks')
         .select('rank, arena_score, roi, pnl')
         .eq('source', resolved.platform)
@@ -167,9 +173,10 @@ export default async function TraderPage({ params, searchParams }: { params: Pro
   const sb = getSupabaseAdmin()
 
   // 并行查询注册用户和解析交易员身份
+  // cachedResolveTrader deduplicates the DB query shared with generateMetadata
   const [userHandle, resolved] = await Promise.all([
     findUserProfileByTraderHandle(decodedHandle),
-    resolveTrader(sb, { handle: decodedHandle, platform }),
+    cachedResolveTrader(decodedHandle, platform),
   ])
 
   // 1. If claimed, fetch the user profile to pass to the client component
