@@ -3,8 +3,15 @@
 import { useState, useEffect } from 'react'
 import dynamic from 'next/dynamic'
 import { Box } from '../base'
-import { RankingTable, type Trader } from '../ranking/RankingTable'
+import type { Trader } from '../ranking/RankingTableTypes'
 import type { TimeRange } from './hooks/useTraderData'
+
+// Dynamic import RankingTable — it's 674 lines + pulls in TraderRow, TraderCard, etc.
+// SSRRankingTable handles LCP; this loads after hydration
+const RankingTable = dynamic(() => import('../ranking/RankingTable').then(m => ({ default: m.RankingTable })), {
+  ssr: false,
+  loading: () => <div style={{ minHeight: 600 }} />,
+})
 
 import AdvancedFilterPanel from './AdvancedFilterPanel'
 import FilterStatusMessages from './FilterStatusMessages'
@@ -84,13 +91,23 @@ export default function RankingSection({
     router,
   } = useRankingFilters({ traders, activeTimeRange })
 
-  // Leaderboard movers (risers/fallers)
+  // Leaderboard movers (risers/fallers) — deferred until browser is idle to reduce TBT
   const [movers, setMovers] = useState<{ risers: Array<{ platform: string; trader_key: string; rank: number; arena_score: number | null; rankChange: number; handle: string | null; avatar_url: string | null }>; fallers: Array<{ platform: string; trader_key: string; rank: number; arena_score: number | null; rankChange: number; handle: string | null; avatar_url: string | null }> }>({ risers: [], fallers: [] })
   useEffect(() => {
-    fetch('/api/rankings/movers')
-      .then(r => r.ok ? r.json() : null)
-      .then(data => { if (data?.risers || data?.fallers) setMovers({ risers: data.risers || [], fallers: data.fallers || [] }) })
-      .catch(() => {})
+    const doFetch = () => {
+      fetch('/api/rankings/movers')
+        .then(r => r.ok ? r.json() : null)
+        .then(data => { if (data?.risers || data?.fallers) setMovers({ risers: data.risers || [], fallers: data.fallers || [] }) })
+        .catch(() => {})
+    }
+    // Defer movers fetch — it's below-fold, non-critical data
+    if ('requestIdleCallback' in window) {
+      const id = requestIdleCallback(doFetch, { timeout: 5000 })
+      return () => cancelIdleCallback(id)
+    } else {
+      const id = setTimeout(doFetch, 2000)
+      return () => clearTimeout(id)
+    }
   }, [])
 
   return (

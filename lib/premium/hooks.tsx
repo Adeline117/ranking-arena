@@ -261,9 +261,19 @@ export function PremiumProvider({ children, initialSubscription }: PremiumProvid
     }
   }, [subscription])
 
+  // Defer subscription load until browser is idle — this makes network requests
+  // to /api/subscription and Supabase auth, which block the main thread during
+  // initial hydration. Since BETA_PRO_FEATURES_FREE=true, all features are
+  // unlocked by default, so there's no urgency.
   useEffect(() => {
     if (!initialSubscription) {
-      loadSubscription()
+      if ('requestIdleCallback' in window) {
+        const id = requestIdleCallback(() => loadSubscription(), { timeout: 4000 })
+        return () => cancelIdleCallback(id)
+      } else {
+        const id = setTimeout(() => loadSubscription(), 2000)
+        return () => clearTimeout(id)
+      }
     }
   }, [initialSubscription, loadSubscription])
 
