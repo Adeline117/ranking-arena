@@ -3,8 +3,6 @@
 import { localizedLabel } from '@/lib/utils/format'
 import React, { memo, useCallback, useRef, useState, useEffect, useMemo } from 'react'
 import Link from 'next/link'
-import { mutate } from 'swr'
-import { fetcher as rawFetcher } from '@/lib/hooks/useSWR'
 import dynamic from 'next/dynamic'
 import { tokens } from '@/lib/design-tokens'
 import { Box, Text } from '../base'
@@ -126,8 +124,6 @@ export const TraderRow = memo(function TraderRow({
   // Compare checkbox state — use individual selectors to avoid new object on every getSnapshot call
   // (returning an object from a Zustand selector causes useSyncExternalStore infinite loop)
   const isSelected = useComparisonStore(useCallback(s => s.isSelected(trader.id), [trader.id]))
-  const addTrader = useComparisonStore(s => s.addTrader)
-  const removeTrader = useComparisonStore(s => s.removeTrader)
   const canAddMore = useComparisonStore(s => s.selectedTraders.length < 5)
 
   // Memoize trading style classification to avoid recomputing on every render
@@ -149,9 +145,13 @@ export const TraderRow = memo(function TraderRow({
   useEffect(() => () => { if (hoverTimerRef.current) clearTimeout(hoverTimerRef.current) }, [])
   const handleMouseEnter = useCallback(() => {
     if (hoverTimerRef.current) clearTimeout(hoverTimerRef.current)
-    hoverTimerRef.current = setTimeout(() => {
+    hoverTimerRef.current = setTimeout(async () => {
       const detailUrl = `/api/traders/${encodeURIComponent(traderHandle)}`
-      mutate(detailUrl, rawFetcher<{ success: boolean; data: unknown }>(detailUrl).then(r => r && typeof r === 'object' && 'data' in r ? r.data : r), { revalidate: false })
+      const [{ mutate: swrMutate }, { fetcher: swrFetcher }] = await Promise.all([
+        import('swr'),
+        import('@/lib/hooks/useSWR'),
+      ])
+      swrMutate(detailUrl, swrFetcher<{ success: boolean; data: unknown }>(detailUrl).then(r => r && typeof r === 'object' && 'data' in r ? r.data : r), { revalidate: false })
     }, 100)
   }, [traderHandle])
   const handleMouseLeave = useCallback(() => {
@@ -162,9 +162,9 @@ export const TraderRow = memo(function TraderRow({
     e.preventDefault()
     e.stopPropagation()
     if (isSelected) {
-      removeTrader(trader.id)
+      useComparisonStore.getState().removeTrader(trader.id)
     } else {
-      addTrader({
+      useComparisonStore.getState().addTrader({
         id: trader.id,
         handle: traderHandle,
         source: trader.source || source || '',
