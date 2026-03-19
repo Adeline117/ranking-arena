@@ -13,8 +13,7 @@ import { useSubscription } from './hooks/useSubscription'
 
 // 懒加载组件
 const PostFeed = lazy(() => import('../post/PostFeed'))
-const MarketPanel = lazy(() => import('./MarketPanel'))
-// Market widgets moved to /market page
+// MarketPanel removed — replaced by WatchlistMarket on /market page
 
 interface SidebarSectionProps {
   position: 'left' | 'right'
@@ -85,13 +84,6 @@ export default function SidebarSection({ position }: SidebarSectionProps) {
     >
       {/* Pro 功能面板 */}
       {!isPro && <ProFeaturesPanel compact />}
-
-      {/* 市场数据 */}
-      <ErrorBoundary>
-        <Suspense fallback={<SkeletonCard />}>
-          <MarketPanel />
-        </Suspense>
-      </ErrorBoundary>
 
       {/* 市场数据已移至 /market 页面 */}
     </Box>

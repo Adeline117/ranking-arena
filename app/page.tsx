@@ -75,7 +75,22 @@ const getHeroStats = unstable_cache(
         .from('trader_sources')
         .select('id', { count: 'exact', head: true })
       const traderCount = tradersRes.count ?? 34000
-      const exchangeCount = 27
+      // Count distinct active exchanges with ranked traders (arena_score > 0)
+      let exchangeCount = 27 // fallback
+      try {
+        const { data: sources } = await supabase
+          .from('leaderboard_ranks')
+          .select('source')
+          .eq('season_id', '90D')
+          .gt('arena_score', 0)
+          .limit(10000)
+        if (sources && sources.length > 0) {
+          const uniqueSources = new Set(sources.map((r: { source: string }) => r.source))
+          if (uniqueSources.size > 0) exchangeCount = uniqueSources.size
+        }
+      } catch {
+        // fallback to 27
+      }
       return { traderCount, exchangeCount }
     } catch {
       return { traderCount: 34000, exchangeCount: 27 }

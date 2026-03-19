@@ -449,10 +449,78 @@ export function useRankingFilters({ traders, activeTimeRange }: UseRankingFilter
     [hasActiveFilters, presetFiltered, filterConfig]
   )
 
-  const filteredTraders = useMemo(
-    () => isPro ? advancedFiltered : advancedFiltered.slice(0, FREE_LEADERBOARD_LIMIT),
-    [isPro, advancedFiltered]
-  )
+  // P1-13: Server-side search fallback when client-side search returns 0 results
+  const [serverSearchResults, setServerSearchResults] = useState<Trader[]>([])
+  const serverSearchAbortRef = useRef<AbortController | null>(null)
+  const lastServerQueryRef = useRef('')
+
+  useEffect(() => {
+    const q = searchQuery.trim().toLowerCase()
+    if (q.length < 2) {
+      setServerSearchResults([])
+      lastServerQueryRef.current = ''
+      return
+    }
+    const clientMatches = advancedFiltered.filter(t => {
+      const handle = (t.handle || t.id || '').toLowerCase()
+      return handle.includes(q) || t.id.toLowerCase().includes(q)
+    })
+    if (clientMatches.length > 0) {
+      if (serverSearchResults.length > 0) setServerSearchResults([])
+      return
+    }
+    if (lastServerQueryRef.current === q) return
+    if (serverSearchAbortRef.current) serverSearchAbortRef.current.abort()
+    const controller = new AbortController()
+    serverSearchAbortRef.current = controller
+    const timer = setTimeout(() => {
+      lastServerQueryRef.current = q
+      fetch(`/api/search?q=${encodeURIComponent(q)}&limit=20`, { signal: controller.signal })
+        .then(r => r.ok ? r.json() : null)
+        .then(data => {
+          if (!data?.results?.traders?.length) {
+            setServerSearchResults([])
+            return
+          }
+          const mapped: Trader[] = data.results.traders.map((sr: {
+            id: string; title: string; avatar?: string | null
+            meta?: { roi?: number; arena_score?: number; platform?: string; is_bot?: boolean }
+          }) => {
+            const [platform, ...keyParts] = sr.id.split(':')
+            const traderKey = keyParts.join(':')
+            return {
+              id: traderKey || sr.id,
+              handle: sr.title?.replace(/^@/, '') || traderKey || sr.id,
+              source: sr.meta?.platform || platform || '',
+              roi: sr.meta?.roi ?? 0,
+              followers: 0,
+              arena_score: sr.meta?.arena_score ?? undefined,
+              avatar_url: sr.avatar || null,
+              is_bot: sr.meta?.is_bot ?? false,
+            } satisfies Trader
+          })
+          setServerSearchResults(mapped)
+        })
+        .catch(() => { /* silent best-effort fallback */ })
+    }, 400)
+    return () => { clearTimeout(timer); controller.abort() }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchQuery, advancedFiltered])
+
+  const filteredTraders = useMemo(() => {
+    const base = isPro ? advancedFiltered : advancedFiltered.slice(0, FREE_LEADERBOARD_LIMIT)
+    if (serverSearchResults.length === 0) return base
+    const q = searchQuery.trim().toLowerCase()
+    if (q.length < 2) return base
+    const clientMatches = base.filter(t => {
+      const handle = (t.handle || t.id || '').toLowerCase()
+      return handle.includes(q) || t.id.toLowerCase().includes(q)
+    })
+    if (clientMatches.length > 0) return base
+    const existingIds = new Set(base.map(t => t.id))
+    const newResults = serverSearchResults.filter(t => !existingIds.has(t.id))
+    return [...base, ...newResults]
+  }, [isPro, advancedFiltered, serverSearchResults, searchQuery])
 
   // Pro required handler
   const handleProRequired = useCallback(() => {
