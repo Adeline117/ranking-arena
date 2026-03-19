@@ -4471,10 +4471,6 @@ compFieldDescPlaceholder: 'ルールと賞品を記載...',
 compFieldMetric: '競争指標',
 compFieldMaxParticipants: '最大参加人数',
 
-    // Trader comments
-    traderComments: 'コメント',
-    submitComment: 'コメント',
-
     // Token Rankings
     tokenRankingsTitle: 'トークンランキング',
     tokenRankingsSubtitle: '各トークンのベストトレーダーを発見。誰がBTCを最もうまくトレードしているか？',

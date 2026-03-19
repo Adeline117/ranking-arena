@@ -62,7 +62,7 @@ const PostFeed = dynamic(() => import('@/app/components/post/PostFeed'), {
   ssr: false,
   loading: () => <RankingSkeleton />,
 })
-const TraderComments = dynamic(() => import('@/app/components/trader/TraderComments'), { ssr: false })
+
 const SwipeableView = dynamic(() => import('@/app/components/ui/SwipeableView'), { ssr: false })
 const LinkedAccountTabs = dynamic(() => import('@/app/components/trader/LinkedAccountTabs'), { ssr: false })
 const AggregatedStats = dynamic(() => import('@/app/components/trader/AggregatedStats'), { ssr: false })
@@ -818,13 +818,6 @@ export default function TraderProfileClient({ data, serverTraderData, claimedUse
             }
           }
         `}</style>
-
-        {/* Trader Reviews */}
-        <TraderComments
-          traderSource={data.source}
-          traderSourceId={data.source_trader_id}
-          traderHandle={data.handle}
-        />
 
         {/* Data disclaimer */}
         <Text

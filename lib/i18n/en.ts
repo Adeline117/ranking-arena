@@ -4748,10 +4748,6 @@ compFieldDescPlaceholder: 'Describe the competition rules and prizes...',
 compFieldMetric: 'Competition Metric',
 compFieldMaxParticipants: 'Max Participants',
 
-    // Trader comments
-    traderComments: 'Comments',
-    submitComment: 'Comment',
-
     // Token Rankings
     tokenRankingsTitle: 'Token Rankings',
     tokenRankingsSubtitle: 'Discover the best traders for every token. Who trades BTC best?',

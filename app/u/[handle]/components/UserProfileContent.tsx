@@ -16,7 +16,7 @@ const StatsPage = dynamic(() => import('@/app/components/trader/stats/StatsPage'
 const PortfolioTable = dynamic(() => import('@/app/components/trader/PortfolioTable'), {
   loading: () => <RankingSkeleton />,
 })
-const TraderComments = dynamic(() => import('@/app/components/trader/TraderComments'), { ssr: false })
+
 const PostFeed = dynamic(() => import('@/app/components/post/PostFeed'), {
   ssr: false,
   loading: () => (
@@ -132,12 +132,6 @@ export default function UserProfileContent({
         </Box>
       )}
 
-      {/* Comments */}
-      <TraderComments
-        traderSource="user"
-        traderSourceId={profile.id}
-        traderHandle={handle}
-      />
     </Box>
   )
 }
