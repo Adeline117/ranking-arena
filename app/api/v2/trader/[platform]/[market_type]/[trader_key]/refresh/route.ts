@@ -16,7 +16,7 @@ import { getSupabaseAdmin } from '@/lib/supabase/server'
 import type { LeaderboardPlatform, MarketType, Window, RefreshResponse } from '@/lib/types/leaderboard'
 import { LEADERBOARD_PLATFORMS } from '@/lib/types/leaderboard'
 import { createRefreshJob } from '@/lib/jobs/processor'
-import { checkRateLimit, RateLimitPresets } from '@/lib/api'
+import { checkRateLimit, RateLimitPresets, requireAuth } from '@/lib/api'
 import { logger } from '@/lib/logger'
 
 export const dynamic = 'force-dynamic'
@@ -33,6 +33,13 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
   // Rate limit: prevent abuse of refresh endpoint (writes to DB + triggers exchange API calls)
   const rateLimitResponse = await checkRateLimit(request, RateLimitPresets.write)
   if (rateLimitResponse) return rateLimitResponse
+
+  // Authentication required: unauthenticated users must not be able to trigger background jobs
+  try {
+    await requireAuth(request)
+  } catch {
+    return NextResponse.json({ error: 'Authentication required' }, { status: 401 })
+  }
 
   try {
   const { platform, market_type, trader_key } = await params
