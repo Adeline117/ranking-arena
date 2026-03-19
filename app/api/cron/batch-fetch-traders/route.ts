@@ -53,8 +53,8 @@ export const preferredRegion = 'hnd1' // Tokyo — avoids Binance/OKX/Bybit geo-
 const GROUPS: Record<string, string[]> = {
   // Group A: Binance (every 3h) — new /friendly/ API via VPS proxy (2026-03-15)
   a: ['binance_futures', 'binance_spot'],
-  // Group A2: OKX only (every 3h) — direct API works
-  a2: ['okx_futures'],
+  // Group A2: OKX futures + spot (every 3h) — direct API works
+  a2: ['okx_futures', 'okx_spot'],
   // Group A3: Bybit futures + spot (every 3h) — VPS scraper
   a3: ['bybit', 'bybit_spot'],
   // Group A4: Bitget (every 3h) — RE-ENABLED 2026-03-19 (60s/page + 4min total timeout)

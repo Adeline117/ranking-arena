@@ -215,6 +215,7 @@ export async function initializeConnectors(): Promise<void> {
   lazy('mexc:futures', () => import('./platforms/mexc-futures'), 'MexcFuturesConnector', 'mexc')
   lazy('coinex:futures', () => import('./platforms/coinex-futures'), 'CoinexFuturesConnector', 'coinex')
   lazy('okx_futures:futures', () => import('./platforms/okx-futures'), 'OkxFuturesConnector', 'okx_futures')
+  lazy('okx_spot:spot', () => import('./platforms/okx-spot'), 'OkxSpotConnector', 'okx_spot')
   lazy('kucoin:futures', () => import('./platforms/kucoin-futures'), 'KucoinFuturesConnector', 'kucoin')
   // bitmart — DEAD
   lazy('phemex:futures', () => import('./platforms/phemex-futures'), 'PhemexFuturesConnector', 'phemex')
