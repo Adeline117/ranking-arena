@@ -2,9 +2,11 @@
 
 import { useEffect, useState, useRef } from 'react'
 import { useRouter } from 'next/navigation'
-import { supabase } from '@/lib/supabase/client'
 import { useAuthSession } from '@/lib/hooks/useAuthSession'
 import { trackEvent } from '@/lib/analytics/track'
+
+// Lazy-load Supabase to keep it out of the initial client bundle (~50KB savings)
+const getSupabase = () => import('@/lib/supabase/client').then(m => m.supabase)
 
 export function useTopNavState() {
   const router = useRouter()
@@ -53,6 +55,7 @@ export function useTopNavState() {
 
     const initAuth = async () => {
       try {
+        const supabase = await getSupabase()
         const { data, error } = await supabase.auth.getSession()
         if (!alive || error || !data.session?.user) return
 
@@ -94,10 +97,10 @@ export function useTopNavState() {
           if (oauthAvatar) {
             setMyAvatarUrl(oauthAvatar)
             // Also persist to user_profiles for future loads
-            supabase.from('user_profiles')
+            getSupabase().then(sb => sb.from('user_profiles')
               .update({ avatar_url: oauthAvatar })
               .eq('id', userId)
-              .then(() => { /* best-effort sync */ })
+              .then(() => { /* best-effort sync */ }))
           }
         }
 
@@ -125,10 +128,17 @@ export function useTopNavState() {
   useEffect(() => {
     if (!myId) return
 
-    let notifChannel: ReturnType<typeof supabase.channel> | null = null
-    let msgChannel: ReturnType<typeof supabase.channel> | null = null
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    let notifChannel: any = null
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    let msgChannel: any = null
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    let sbRef: any = null
 
-    const setupSubscriptions = () => {
+    const setupSubscriptions = async () => {
+      const supabase = await getSupabase()
+      sbRef = supabase
+
       const fetchUnreadCount = async () => {
         const { count, error } = await supabase
           .from('notifications')
@@ -171,14 +181,14 @@ export function useTopNavState() {
     }
 
     const hasIdleCallback = typeof requestIdleCallback !== 'undefined'
-    const idleId = hasIdleCallback ? requestIdleCallback(setupSubscriptions, { timeout: 3000 }) : undefined
-    const fallbackTimer = hasIdleCallback ? undefined : setTimeout(setupSubscriptions, 2000)
+    const idleId = hasIdleCallback ? requestIdleCallback(() => { setupSubscriptions() }, { timeout: 3000 }) : undefined
+    const fallbackTimer = hasIdleCallback ? undefined : setTimeout(() => { setupSubscriptions() }, 2000)
 
     return () => {
       if (idleId !== undefined) cancelIdleCallback(idleId)
       if (fallbackTimer !== undefined) clearTimeout(fallbackTimer)
-      if (notifChannel) supabase.removeChannel(notifChannel)
-      if (msgChannel) supabase.removeChannel(msgChannel)
+      if (notifChannel && sbRef) sbRef.removeChannel(notifChannel)
+      if (msgChannel && sbRef) sbRef.removeChannel(msgChannel)
     }
   }, [myId])
 
