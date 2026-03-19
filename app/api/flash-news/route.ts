@@ -57,63 +57,68 @@ export async function GET(request: NextRequest) {
     const importance = searchParams.get('importance')
     const offset = (page - 1) * limit
 
-    // Use tiered cache (memory → Redis → DB)
+    // Core DB fetch logic — extracted so it can be called with or without cache
+    const fetchFromDb = async () => {
+      // 构建查询
+      let query = supabase
+        .from('flash_news')
+        .select('*', { count: 'exact' })
+        .order('published_at', { ascending: false })
+        .range(offset, offset + limit - 1)
+
+      // 添加筛选条件 — support new broad categories + legacy DB values
+      const CATEGORY_MAP: Record<string, string[]> = {
+        btc_eth: ['crypto', 'btc_eth'],          // BTC/ETH: legacy 'crypto' + new 'btc_eth'
+        altcoin: ['market', 'altcoin'],           // 山寨币: legacy 'market' + new 'altcoin'
+        defi: ['defi'],
+        macro: ['macro', 'regulation'],           // 宏观/监管 combines both
+        exchange: ['exchange'],                   // 交易所
+      }
+      if (category) {
+        const mapped = CATEGORY_MAP[category]
+        if (mapped && mapped.length === 1) {
+          query = query.eq('category', mapped[0])
+        } else if (mapped && mapped.length > 1) {
+          query = query.in('category', mapped)
+        } else if (['crypto', 'macro', 'defi', 'regulation', 'market'].includes(category)) {
+          // Legacy direct match
+          query = query.eq('category', category)
+        }
+      }
+
+      if (importance && ['breaking', 'important', 'normal'].includes(importance)) {
+        query = query.eq('importance', importance)
+      }
+
+      const { data, error: queryError, count } = await query
+
+      if (queryError) {
+        throw new Error(queryError.message)
+      }
+
+      return {
+        news: data || [],
+        pagination: {
+          page,
+          limit,
+          total: count || 0,
+          totalPages: Math.ceil((count || 0) / limit),
+          hasNext: count ? (page * limit) < count : false,
+          hasPrev: page > 1,
+        }
+      }
+    }
+
+    // Use tiered cache (memory → Redis → DB) with fallback to direct DB on cache errors
     const cacheKey = `api:flash-news:${page}:${limit}:${category || 'all'}:${importance || 'all'}`
-    const result = await tieredGetOrSet(
-      cacheKey,
-      async () => {
-        // 构建查询
-        let query = supabase
-          .from('flash_news')
-          .select('*', { count: 'exact' })
-          .order('published_at', { ascending: false })
-          .range(offset, offset + limit - 1)
-
-        // 添加筛选条件 — support new broad categories + legacy DB values
-        const CATEGORY_MAP: Record<string, string[]> = {
-          btc_eth: ['crypto', 'btc_eth'],          // BTC/ETH: legacy 'crypto' + new 'btc_eth'
-          altcoin: ['market', 'altcoin'],           // 山寨币: legacy 'market' + new 'altcoin'
-          defi: ['defi'],
-          macro: ['macro', 'regulation'],           // 宏观/监管 combines both
-          exchange: ['exchange'],                   // 交易所
-        }
-        if (category) {
-          const mapped = CATEGORY_MAP[category]
-          if (mapped && mapped.length === 1) {
-            query = query.eq('category', mapped[0])
-          } else if (mapped && mapped.length > 1) {
-            query = query.in('category', mapped)
-          } else if (['crypto', 'macro', 'defi', 'regulation', 'market'].includes(category)) {
-            // Legacy direct match
-            query = query.eq('category', category)
-          }
-        }
-
-        if (importance && ['breaking', 'important', 'normal'].includes(importance)) {
-          query = query.eq('importance', importance)
-        }
-
-        const { data, error: queryError, count } = await query
-
-        if (queryError) {
-          throw new Error(queryError.message)
-        }
-
-        return {
-          news: data || [],
-          pagination: {
-            page,
-            limit,
-            total: count || 0,
-            totalPages: Math.ceil((count || 0) / limit),
-            hasNext: count ? (page * limit) < count : false,
-            hasPrev: page > 1,
-          }
-        }
-      },
-      'hot',
-      ['flash-news']
-    )
+    let result
+    try {
+      result = await tieredGetOrSet(cacheKey, fetchFromDb, 'hot', ['flash-news'])
+    } catch (cacheErr) {
+      // Redis unavailable or cache error — fall back to direct DB query
+      logger.warn('[flash-news] Cache error, falling back to direct DB:', cacheErr)
+      result = await fetchFromDb()
+    }
 
     return success(result, 200, { 'Cache-Control': 'public, s-maxage=60, stale-while-revalidate=120' })
   } catch (err: unknown) {
