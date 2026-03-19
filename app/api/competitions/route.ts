@@ -32,9 +32,12 @@ export const GET = withPublic(
 
     if (dataResult.error) {
       // Table may not exist yet in this environment — return empty list gracefully
+      // PostgREST returns 42P01 (Postgres) or PGRST200 (schema cache miss) for missing relations
       const isMissingTable =
         dataResult.error.code === '42P01' ||
-        dataResult.error.message?.includes('does not exist')
+        dataResult.error.code === 'PGRST200' ||
+        dataResult.error.message?.includes('does not exist') ||
+        dataResult.error.message?.includes('Could not find')
       if (isMissingTable) {
         return NextResponse.json({
           success: true,
