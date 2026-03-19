@@ -4,7 +4,7 @@
  * 会员系统 React Hooks
  */
 
-import { useState, useEffect, useCallback, useMemo, createContext, useContext, ReactNode } from 'react'
+import { useState, useEffect, useCallback, useMemo, useRef, createContext, useContext, ReactNode } from 'react'
 import {
   premiumService,
   type UserSubscription,
@@ -86,6 +86,10 @@ export function PremiumProvider({ children, initialSubscription }: PremiumProvid
   const [isLoading, setIsLoading] = useState(!initialSubscription)
   const [hasNFT, setHasNFT] = useState(false)
   const [_source, setSource] = useState<'stripe' | 'nft' | 'admin' | 'free'>('free')
+  // Track subscription in a ref so checkNFTMembership can read it without being
+  // recreated on every subscription state change (which was causing useEffect churn)
+  const subscriptionRef = useRef(subscription)
+  useEffect(() => { subscriptionRef.current = subscription }, [subscription])
 
   // 加载订阅状态
   const loadSubscription = useCallback(async () => {
@@ -218,6 +222,8 @@ export function PremiumProvider({ children, initialSubscription }: PremiumProvid
   }, [])
 
   // Check NFT membership in parallel (non-blocking enhancement)
+  // Uses subscriptionRef (not subscription state) so this callback is stable and
+  // is not recreated on every subscription change, preventing useEffect re-trigger churn.
   const checkNFTMembership = useCallback(async () => {
     try {
       const { supabase } = await import('@/lib/supabase/client')
@@ -232,8 +238,8 @@ export function PremiumProvider({ children, initialSubscription }: PremiumProvid
         setHasNFT(nft)
         if (nft) {
           setSource('nft')
-          // If NFT holder but no Stripe sub, treat as pro
-          if (!subscription || subscription.tier === 'free') {
+          // If NFT holder but no Stripe sub, treat as pro — read from ref to avoid dep
+          if (!subscriptionRef.current || subscriptionRef.current.tier === 'free') {
             const nftSub: UserSubscription = {
               userId: session.user.id,
               tier: 'pro',
@@ -259,7 +265,7 @@ export function PremiumProvider({ children, initialSubscription }: PremiumProvid
     } catch {
       // Intentionally swallowed: NFT-based premium check is optional, Stripe subscription is primary
     }
-  }, [subscription])
+  }, []) // stable — subscription read via subscriptionRef to avoid recreation on sub change
 
   // Defer subscription load until browser is idle — this makes network requests
   // to /api/subscription and Supabase auth, which block the main thread during
