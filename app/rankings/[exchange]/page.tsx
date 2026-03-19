@@ -10,6 +10,7 @@ import { Box } from '@/app/components/base'
 import { RankingSkeleton } from '@/app/components/ui/Skeleton'
 import ExchangeRankingClient from './ExchangeRankingClient'
 import { ErrorBoundary } from '@/app/components/ui/ErrorBoundary'
+import { tieredGetOrSet } from '@/lib/cache/redis-layer'
 import { logger } from '@/lib/logger'
 
 export const revalidate = 600 // ISR: 10 min (aligned with compute-leaderboard on-demand revalidation)
@@ -161,65 +162,74 @@ interface TraderData {
 }
 
 async function fetchExchangeTraders(exchange: string): Promise<TraderData[]> {
-  const supabase = getSupabaseAdmin()
+  const cacheKey = `exchange-ranking:${exchange}:90D`
 
-  try {
-    // Use leaderboard_ranks (the primary ranking table) instead of trader_snapshots_v2
-    const { data, error } = await supabase
-      .from('leaderboard_ranks')
-      .select('source_trader_id, handle, avatar_url, source, roi, pnl, win_rate, max_drawdown, arena_score, followers, trader_type, computed_at')
-      .eq('source', exchange)
-      .eq('season_id', '90D')
-      .not('arena_score', 'is', null)
-      .gt('arena_score', 0)
-      .order('arena_score', { ascending: false, nullsFirst: false })
-      .limit(5000)
+  return tieredGetOrSet<TraderData[]>(
+    cacheKey,
+    async () => {
+      const supabase = getSupabaseAdmin()
 
-    if (error) {
-      logger.error(`[ExchangeRanking] Error fetching ${exchange}:`, error)
-      return []
-    }
+      try {
+        // Use leaderboard_ranks (the primary ranking table) instead of trader_snapshots_v2
+        const { data, error } = await supabase
+          .from('leaderboard_ranks')
+          .select('source_trader_id, handle, avatar_url, source, roi, pnl, win_rate, max_drawdown, arena_score, followers, trader_type, computed_at')
+          .eq('source', exchange)
+          .eq('season_id', '90D')
+          .not('arena_score', 'is', null)
+          .gt('arena_score', 0)
+          .order('arena_score', { ascending: false, nullsFirst: false })
+          .limit(5000)
 
-    // Map to TraderData shape — use handle as trader_key for correct routing to /trader/[handle]
-    const rows = (data || []).map((row: Record<string, unknown>) => ({
-      trader_key: String(row.handle || row.source_trader_id || ''),
-      display_name: row.handle ? String(row.handle) : null,
-      avatar_url: row.avatar_url as string | null,
-      platform: String(row.source || ''),
-      roi: row.roi != null ? Number(row.roi) : null,
-      pnl: row.pnl != null ? Number(row.pnl) : null,
-      win_rate: row.win_rate as number | null,
-      max_drawdown: row.max_drawdown as number | null,
-      arena_score: row.arena_score as number | null,
-      followers: row.followers as number | null,
-      trader_type: (row.trader_type as string) || null,
-      is_bot: row.source === 'web3_bot' || row.trader_type === 'bot',
-      captured_at: (row.computed_at as string) || null,
-      _source_id: String(row.source_trader_id || ''),
-    }))
+        if (error) {
+          logger.error(`[ExchangeRanking] Error fetching ${exchange}:`, error)
+          return []
+        }
 
-    // Disambiguate duplicate display names by appending short ID suffix
-    const nameCount = new Map<string, number>()
-    for (const r of rows) {
-      const name = (r.display_name || '').toLowerCase()
-      nameCount.set(name, (nameCount.get(name) || 0) + 1)
-    }
-    const nameIndex = new Map<string, number>()
-    for (const r of rows) {
-      const name = (r.display_name || '').toLowerCase()
-      if (nameCount.get(name)! > 1 && r.display_name) {
-        const idx = (nameIndex.get(name) || 0) + 1
-        nameIndex.set(name, idx)
-        const suffix = r._source_id.slice(-4)
-        r.display_name = `${r.display_name} #${suffix}`
+        // Map to TraderData shape — use handle as trader_key for correct routing to /trader/[handle]
+        const rows = (data || []).map((row: Record<string, unknown>) => ({
+          trader_key: String(row.handle || row.source_trader_id || ''),
+          display_name: row.handle ? String(row.handle) : null,
+          avatar_url: row.avatar_url as string | null,
+          platform: String(row.source || ''),
+          roi: row.roi != null ? Number(row.roi) : null,
+          pnl: row.pnl != null ? Number(row.pnl) : null,
+          win_rate: row.win_rate as number | null,
+          max_drawdown: row.max_drawdown as number | null,
+          arena_score: row.arena_score as number | null,
+          followers: row.followers as number | null,
+          trader_type: (row.trader_type as string) || null,
+          is_bot: row.source === 'web3_bot' || row.trader_type === 'bot',
+          captured_at: (row.computed_at as string) || null,
+          _source_id: String(row.source_trader_id || ''),
+        }))
+
+        // Disambiguate duplicate display names by appending short ID suffix
+        const nameCount = new Map<string, number>()
+        for (const r of rows) {
+          const name = (r.display_name || '').toLowerCase()
+          nameCount.set(name, (nameCount.get(name) || 0) + 1)
+        }
+        const nameIndex = new Map<string, number>()
+        for (const r of rows) {
+          const name = (r.display_name || '').toLowerCase()
+          if (nameCount.get(name)! > 1 && r.display_name) {
+            const idx = (nameIndex.get(name) || 0) + 1
+            nameIndex.set(name, idx)
+            const suffix = r._source_id.slice(-4)
+            r.display_name = `${r.display_name} #${suffix}`
+          }
+        }
+
+        return rows
+      } catch (e) {
+        logger.error(`[ExchangeRanking] Exception for ${exchange}:`, e)
+        return []
       }
-    }
-
-    return rows
-  } catch (e) {
-    logger.error(`[ExchangeRanking] Exception for ${exchange}:`, e)
-    return []
-  }
+    },
+    'hot', // 5 min Redis TTL via hot tier
+    ['rankings', `exchange:${exchange}`]
+  )
 }
 
 /**
