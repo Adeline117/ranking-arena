@@ -107,6 +107,7 @@ jest.mock('@/lib/utils/csrf', () => ({
 
 jest.mock('@/lib/utils/rate-limit', () => ({
   checkRateLimit: jest.fn().mockResolvedValue({ response: null, meta: null }),
+  checkRateLimitFull: jest.fn().mockResolvedValue({ response: null, meta: null }),
   addRateLimitHeaders: jest.fn(),
   RateLimitPresets: {
     public: { limit: 100, window: 60, prefix: 'public' },
@@ -172,10 +173,10 @@ describe('GET /api/compare', () => {
   // --- Rate Limiting ---
 
   it('returns rate limit response when rate limited', async () => {
-    // Mock the rate-limit module used by withPublic middleware
-    const { checkRateLimit } = require('@/lib/utils/rate-limit') // eslint-disable-line @typescript-eslint/no-require-imports
+    // Mock the rate-limit module used by withPublic middleware (uses checkRateLimitFull)
+    const { checkRateLimitFull } = require('@/lib/utils/rate-limit') // eslint-disable-line @typescript-eslint/no-require-imports
     const { NextResponse } = require('next/server') // eslint-disable-line @typescript-eslint/no-require-imports
-    checkRateLimit.mockResolvedValueOnce({
+    checkRateLimitFull.mockResolvedValueOnce({
       response: NextResponse.json({ error: 'Rate limited' }, { status: 429 }),
       meta: null,
     })

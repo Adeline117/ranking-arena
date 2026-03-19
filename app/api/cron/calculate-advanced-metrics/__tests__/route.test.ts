@@ -125,7 +125,7 @@ describe('POST /api/cron/calculate-advanced-metrics', () => {
 
   it('calculates metrics for trader snapshots', async () => {
     const snapshots = [
-      { id: 's1', source: 'binance_futures', source_trader_id: 't1', season_id: '90d', roi: '50', pnl: '10000', max_drawdown: '-10', win_rate: '0.6' },
+      { id: 's1', platform: 'binance_futures', trader_key: 't1', window: '90D', roi_pct: '50', pnl_usd: '10000', max_drawdown: '-10', win_rate: '0.6' },
     ]
 
     const dailyReturns = Array.from({ length: 30 }, (_, i) => ({
@@ -134,7 +134,7 @@ describe('POST /api/cron/calculate-advanced-metrics', () => {
     }))
 
     mockFrom.mockImplementation((table: string) => {
-      if (table === 'trader_snapshots') {
+      if (table === 'trader_snapshots_v2') {
         return {
           select: jest.fn().mockReturnValue({
             or: jest.fn().mockReturnValue({
@@ -213,7 +213,7 @@ describe('POST /api/cron/calculate-advanced-metrics', () => {
 
   it('falls back when advanced columns do not exist', async () => {
     mockFrom.mockImplementation((table: string) => {
-      if (table === 'trader_snapshots') {
+      if (table === 'trader_snapshots_v2') {
         return {
           select: jest.fn().mockReturnValue({
             or: jest.fn().mockReturnValue({

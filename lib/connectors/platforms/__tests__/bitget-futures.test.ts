@@ -95,7 +95,7 @@ describe('BitgetFuturesConnector', () => {
       const first = result.traders[0]
       expect(first.trader_key).toBe('BG_TRADER_1')
       expect(first.display_name).toBe('BitgetStar')
-      expect(first.platform).toBe('bitget')
+      expect(first.platform).toBe('bitget_futures')
       expect(first.market_type).toBe('futures')
       expect(first.is_active).toBe(true)
       expect(first.profile_url).toContain('BG_TRADER_1')
@@ -209,7 +209,7 @@ describe('BitgetFuturesConnector', () => {
       expect(result!.profile.followers).toBe(1500)
       expect(result!.profile.copiers).toBe(300)
       expect(result!.profile.aum).toBe(500000)
-      expect(result!.profile.platform).toBe('bitget')
+      expect(result!.profile.platform).toBe('bitget_futures')
     })
 
     test('returns null when data is null', async () => {
@@ -353,7 +353,7 @@ describe('BitgetFuturesConnector', () => {
       expect(result.series[0].data).toHaveLength(3)
       expect(result.series[0].data[0].value).toBe(1500)
       expect(result.series[0].data[2].value).toBe(-500)
-      expect(result.series[0].platform).toBe('bitget')
+      expect(result.series[0].platform).toBe('bitget_futures')
     })
 
     test('returns empty series when data is empty array', async () => {
@@ -491,7 +491,7 @@ describe('BitgetFuturesConnector', () => {
   describe('platform metadata', () => {
     test('has correct platform and market type', () => {
       const connector = createConnector()
-      expect(connector.platform).toBe('bitget')
+      expect(connector.platform).toBe('bitget_futures')
       expect(connector.marketType).toBe('futures')
     })
 

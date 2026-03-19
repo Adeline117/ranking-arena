@@ -84,6 +84,7 @@ jest.mock('@/lib/utils/logger', () => ({
 
 jest.mock('@/lib/utils/rate-limit', () => ({
   checkRateLimit: jest.fn().mockResolvedValue({ response: null, meta: null }),
+  checkRateLimitFull: jest.fn().mockResolvedValue({ response: null, meta: null }),
   addRateLimitHeaders: jest.fn(),
   RateLimitPresets: { sensitive: { max: 15, window: '1m', prefix: 'sensitive' } },
 }))
@@ -276,10 +277,10 @@ describe('POST /api/feedback', () => {
   // --- Rate Limiting ---
 
   it('returns 429 when rate limit is exceeded', async () => {
-    // Mock checkRateLimit to return a 429 response
-    const rateLimit = jest.requireMock('@/lib/utils/rate-limit') as { checkRateLimit: jest.Mock }
+    // Mock checkRateLimitFull to return a 429 response (middleware uses checkRateLimitFull)
+    const rateLimit = jest.requireMock('@/lib/utils/rate-limit') as { checkRateLimitFull: jest.Mock }
     const { NextResponse: NR } = jest.requireMock('next/server') as { NextResponse: typeof import('next/server').NextResponse }
-    rateLimit.checkRateLimit.mockResolvedValueOnce({
+    rateLimit.checkRateLimitFull.mockResolvedValueOnce({
       response: NR.json({ error: 'Too many requests' }, { status: 429 }),
       meta: null,
     })

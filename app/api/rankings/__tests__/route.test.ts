@@ -41,6 +41,7 @@ jest.mock('next/server', () => {
 
 jest.mock('@/lib/utils/rate-limit', () => ({
   checkRateLimit: jest.fn().mockResolvedValue({ response: null, meta: null }),
+  checkRateLimitFull: jest.fn().mockResolvedValue({ response: null, meta: null }),
   addRateLimitHeaders: jest.fn(),
   RateLimitPresets: { read: {}, write: {}, public: {} },
 }))

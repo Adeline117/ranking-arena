@@ -92,24 +92,17 @@ function createCronRequest(secret?: string): NextRequest {
 
 function makeSnapshotRow(overrides: Record<string, unknown> = {}) {
   return {
-    source: 'binance-futures',
-    source_trader_id: 'trader1',
-    captured_at: new Date().toISOString(),
+    platform: 'binance-futures',
+    trader_key: 'trader1',
+    as_of_ts: new Date().toISOString(),
     arena_score: 85,
-    arena_score_v3: null,
-    roi: 50,
-    pnl: 10000,
+    roi_pct: 50,
+    pnl_usd: 10000,
     max_drawdown: -15,
     win_rate: 0.65,
     trades_count: 20,
     followers: 100,
-    profitability_score: null,
-    risk_control_score: null,
-    execution_score: null,
-    score_completeness: null,
-    trading_style: null,
-    avg_holding_hours: null,
-    style_confidence: null,
+    metrics: null,
     ...overrides,
   }
 }
@@ -147,18 +140,18 @@ describe('GET /api/cron/precompute-composite', () => {
 
   it('computes composite rankings and stores in Redis', async () => {
     const rows7d = [
-      makeSnapshotRow({ source_trader_id: 'trader1', arena_score: 90, roi: 60 }),
-      makeSnapshotRow({ source_trader_id: 'trader2', arena_score: 70, roi: 30 }),
+      makeSnapshotRow({ trader_key: 'trader1', arena_score: 90, roi_pct: 60 }),
+      makeSnapshotRow({ trader_key: 'trader2', arena_score: 70, roi_pct: 30 }),
     ]
     const rows30d = [
-      makeSnapshotRow({ source_trader_id: 'trader1', arena_score: 85, roi: 50 }),
-      makeSnapshotRow({ source_trader_id: 'trader3', arena_score: 75, roi: 40, source: 'hyperliquid' }),
+      makeSnapshotRow({ trader_key: 'trader1', arena_score: 85, roi_pct: 50 }),
+      makeSnapshotRow({ trader_key: 'trader3', arena_score: 75, roi_pct: 40, platform: 'hyperliquid' }),
     ]
     const rows90d = [
-      makeSnapshotRow({ source_trader_id: 'trader1', arena_score: 80, roi: 45 }),
+      makeSnapshotRow({ trader_key: 'trader1', arena_score: 80, roi_pct: 45 }),
     ]
 
-    // Snapshot queries: .from('trader_snapshots').select(...).eq(...).not(...).lte(...).gte(...).or(...).order(...).limit(...)
+    // Snapshot queries: .from('trader_snapshots_v2').select(...).eq(...).not(...).gte(...).lte(...).gte(...).or(...).order(...).limit(...)
     const snapshotQueryFor = (rows: unknown[]) => ({
       select: jest.fn().mockReturnValue({
         eq: jest.fn().mockReturnValue({
@@ -179,7 +172,7 @@ describe('GET /api/cron/precompute-composite', () => {
       }),
     })
 
-    // trader_sources query
+    // trader_sources query for display names
     const traderSourcesQuery = {
       select: jest.fn().mockReturnValue({
         in: jest.fn().mockReturnValue({
@@ -195,9 +188,7 @@ describe('GET /api/cron/precompute-composite', () => {
       }),
     }
 
-    // The route calls fetchWindow 3 times (7D, 30D, 90D) in parallel,
-    // then fetches trader_sources. We track which season is being queried
-    // via the .eq('season_id', ...) call.
+    // The route calls fetchWindow 3 times (7D, 30D, 90D) in parallel
     let snapshotCallCount = 0
     const snapshotQueries = [
       snapshotQueryFor(rows7d),
@@ -206,7 +197,7 @@ describe('GET /api/cron/precompute-composite', () => {
     ]
 
     mockSupabaseFrom.mockImplementation((table: string) => {
-      if (table === 'trader_snapshots') {
+      if (table === 'trader_snapshots_v2') {
         const idx = snapshotCallCount
         snapshotCallCount++
         return snapshotQueries[idx] || snapshotQueries[0]
