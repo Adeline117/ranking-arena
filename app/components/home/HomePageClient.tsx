@@ -13,15 +13,16 @@ import type { Trader } from '../ranking/RankingTable'
 interface HomePageClientProps {
   initialTraders?: InitialTrader[]
   initialLastUpdated?: string | null
-  ssrTable?: React.ReactNode
 }
 
 /**
  * 首页客户端组件
  * 处理交互状态和数据同步
  * 数据通过客户端fetch获取，SSR排行榜由SSRRankingTable提供
+ * NOTE: ssrTable prop removed — #ssr-homepage-shell handles the Phase 1 fallback via CSS.
+ * Passing ssrTable to the client was causing duplicate DOM nodes.
  */
-export default function HomePageClient({ initialTraders, initialLastUpdated, ssrTable }: HomePageClientProps) {
+export default function HomePageClient({ initialTraders, initialLastUpdated }: HomePageClientProps) {
   const { isLoggedIn } = useAuth()
   const { t } = useLanguage()
   const router = useRouter()
@@ -103,7 +104,6 @@ export default function HomePageClient({ initialTraders, initialLastUpdated, ssr
           onRetry={deferredFetchFailed ? retryDeferredFetch : refresh}
           onRefresh={refresh}
           availableSources={availableSources}
-          ssrTable={ssrTable}
         />
       </div>
     </PullToRefresh>

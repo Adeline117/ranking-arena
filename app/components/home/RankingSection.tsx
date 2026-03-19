@@ -39,13 +39,13 @@ interface RankingSectionProps {
   onRefresh?: () => void
   /** 所有可用的数据来源 */
   availableSources?: string[]
-  /** SSR table to show while RankingTable loads */
-  ssrTable?: React.ReactNode
 }
 
 /**
  * 排行榜区域组件
  * 包含时间选择器和排行榜表格
+ * NOTE: ssrTable prop removed — the Phase 1 #ssr-homepage-shell handles the SSR fallback.
+ * The in-place duplicate caused ~200 extra DOM nodes during the client hydration window.
  */
 export default function RankingSection({
   traders,
@@ -57,7 +57,6 @@ export default function RankingSection({
   error,
   onRetry,
   onRefresh,
-  ssrTable,
 }: RankingSectionProps) {
   const {
     language,
@@ -95,15 +94,8 @@ export default function RankingSection({
     router,
   } = useRankingFilters({ traders, activeTimeRange })
 
-  // Track whether client RankingTable has loaded (to hide SSR fallback in-place)
-  const [tableReady, setTableReady] = useState(false)
-  useEffect(() => {
-    // Once filteredTraders has data and we haven't set ready yet, mark ready
-    // This fires after RankingTable dynamic import resolves and renders
-    if (filteredTraders.length > 0 && !tableReady) {
-      setTableReady(true)
-    }
-  }, [filteredTraders, tableReady])
+  // tableReady / ssrTable tracking removed — the Phase 1 #ssr-homepage-shell in page.tsx
+  // handles the SSR fallback. CSS hides it once #homepage-interactive mounts.
 
   // Leaderboard movers (risers/fallers) — deferred until browser is idle to reduce TBT
   const [movers, setMovers] = useState<{ risers: Array<{ platform: string; trader_key: string; rank: number; arena_score: number | null; rankChange: number; handle: string | null; avatar_url: string | null }>; fallers: Array<{ platform: string; trader_key: string; rank: number; arena_score: number | null; rankChange: number; handle: string | null; avatar_url: string | null }> }>({ risers: [], fallers: [] })
@@ -162,8 +154,6 @@ export default function RankingSection({
         onResetFilters={handleResetFilters}
       />
 
-      {/* Show SSR table in-place until client RankingTable loads — zero CLS */}
-      {!tableReady && ssrTable}
       <RankingTable
         traders={filteredTraders}
         loading={loading || premiumLoading}

@@ -280,7 +280,7 @@ export const TraderRow = memo(function TraderRow({
       onTouchMove={handleTouchMove}
       onTouchEnd={handleTouchEnd}
     >
-      <div className="swipe-row-actions" style={{ display: 'none' }}>
+      <div className="swipe-row-actions">
         <button
           onClick={(e) => { e.preventDefault(); e.stopPropagation(); closeSwipe(); handleCompareToggle(e) }}
           style={{ background: tokens.colors.accent.primary }}
@@ -323,35 +323,6 @@ export const TraderRow = memo(function TraderRow({
           ...heroStyle,
         }}
       >
-        {/* Compare checkbox — hidden, use toolbar compare instead */}
-        <Box
-          className="compare-checkbox-cell"
-          onClick={handleCompareToggle}
-          style={{
-            display: 'none',
-          }}
-        >
-          <input
-            type="checkbox"
-            checked={isSelected}
-            disabled={!isSelected && !canAddMore}
-            readOnly
-            aria-label="Select trader for comparison"
-            style={{
-              cursor: 'pointer',
-              width: 16,
-              height: 16,
-              accentColor: tokens.colors.accent.primary,
-              appearance: 'none',
-              WebkitAppearance: 'none',
-              border: `2px solid ${isSelected ? tokens.colors.accent.primary : 'var(--color-text-tertiary)'}`,
-              borderRadius: 4,
-              background: isSelected ? tokens.colors.accent.primary : 'transparent',
-              position: 'relative',
-            }}
-          />
-        </Box>
-
         {/* Rank */}
         <RankDisplay
           rank={rank}

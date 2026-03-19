@@ -3,6 +3,7 @@ import { getInitialTraders } from '@/lib/getInitialTraders'
 import { getSupabaseAdmin } from '@/lib/supabase/server'
 import { unstable_cache } from 'next/cache'
 import SSRRankingTable from './components/home/SSRRankingTable'
+import HomeHeroSSR from './components/home/HomeHeroSSR'
 import { JsonLd } from './components/Providers/JsonLd'
 import HomePageLoader from './components/home/HomePageLoader'
 import { ErrorBoundary } from './components/ui/ErrorBoundary'
@@ -39,13 +40,14 @@ export const revalidate = 300
 /**
  * Homepage — Two-phase rendering for extreme LCP optimization:
  *
- * Phase 1 (SSR): SSRRankingTable renders as pure static HTML.
- *   - Zero JS chunks in initial HTML payload
+ * Phase 1 (SSR): HomeHeroSSR + SSRRankingTable render as pure static HTML.
+ *   - Zero JS chunks for the above-fold content
+ *   - Hero headline "Track the World's Best Crypto Traders" is the LCP element
  *   - On slow 4G (1.6 Mbps), LCP is ~1-2s instead of 10s+
  *
  * Phase 2 (Client): HomePageLoader uses next/dynamic(ssr:false) to lazy-load
  *   the full interactive HomePage AFTER the browser finishes parsing HTML.
- *   When HomePage mounts, it hides the SSR table via CSS class swap.
+ *   When HomePage mounts, CSS hides the SSR shell (#ssr-homepage-shell).
  *
  * Key: HomePageLoader is a 'use client' wrapper so we can use ssr:false
  * (not allowed directly in Server Components).
@@ -116,9 +118,10 @@ export default async function Page() {
 
   return (
     <>
-      {/* Preload top 3 avatars for faster LCP — direct CDN URLs */}
+      {/* Preload top 3 avatars for faster LCP — fetchpriority=high ensures browser
+          starts downloading immediately, competing with other resources */}
       {top3Avatars.map(url => (
-        <link key={url} rel="preload" as="image" href={url} crossOrigin="anonymous" />
+        <link key={url} rel="preload" as="image" href={url} crossOrigin="anonymous" fetchPriority="high" />
       ))}
       {/* REMOVED: <link rel="preload" as="fetch" href="/api/traders?timeRange=90D&limit=200">
           This was forcing the browser to download ranking data before any JS initialized.
@@ -126,21 +129,24 @@ export default async function Page() {
       <JsonLd data={organizationJsonLd} />
 
       <ErrorBoundary name="homepage">
-        {/* Phase 1: Static SSR ranking table — renders instantly as pure HTML, 0 JS.
-            Hidden via CSS once the interactive HomePage mounts (see globals.css). */}
+        {/* Phase 1: SSR hero + ranking table — pure HTML, 0 JS, visible immediately.
+            HomeHeroSSR contains the LCP headline "Track the World's Best Crypto Traders".
+            Hidden via CSS once the interactive HomePage mounts (see globals.css).
+            NOTE: ssrTable is intentionally NOT passed to HomePageLoader — the Phase 1
+            shell already provides the fallback. Passing it to the client caused duplicate
+            DOM nodes (SSR shell + inline copy) inflating DOM size by ~200 nodes. */}
         <div id="ssr-homepage-shell" style={{ maxWidth: 1400, margin: '0 auto', padding: '8px 16px' }}>
+          <HomeHeroSSR traderCount={heroStats.traderCount} exchangeCount={heroStats.exchangeCount} />
           {ssrTable}
         </div>
 
         {/* Phase 2: Full interactive homepage — loaded with ssr:false via HomePageLoader.
             No JS chunks are included in the initial HTML. The browser downloads them
-            only after HTML parsing completes. On mount, HomePage adds a class that
-            hides the SSR shell above via CSS. */}
+            only after HTML parsing completes. On mount, CSS hides the SSR shell above. */}
         <HomePageLoader
           initialTraders={initialTraders}
           initialLastUpdated={lastUpdated}
           heroStats={heroStats}
-          ssrTable={ssrTable}
         />
       </ErrorBoundary>
     </>

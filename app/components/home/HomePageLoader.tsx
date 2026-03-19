@@ -25,7 +25,6 @@ interface HomePageLoaderProps {
   initialTraders?: InitialTrader[]
   initialLastUpdated?: string | null
   heroStats?: { traderCount: number; exchangeCount: number }
-  ssrTable?: React.ReactNode
 }
 
 export default function HomePageLoader(props: HomePageLoaderProps) {

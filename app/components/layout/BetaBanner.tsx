@@ -50,8 +50,12 @@ export default function BetaBanner() {
         padding: '8px 40px 8px 16px',
         fontSize: '14px',
         fontWeight: 600,
-        position: 'sticky',
+        // Use fixed positioning so this banner never causes layout shift.
+        // It overlays content without pushing other elements down.
+        position: 'fixed',
         top: 0,
+        left: 0,
+        right: 0,
         zIndex: tokens.zIndex.max,
       }}
     >

@@ -222,22 +222,28 @@
   100% { background-position: 100% 0; }
 }
 
-/* 发光效果 */
+/* 发光效果 — uses opacity + filter (GPU-composited, no paint layer).
+   box-shadow removed from keyframes: box-shadow triggers paint on every frame,
+   causing non-composited animations (Lighthouse "80 non-composited animations"). */
 @keyframes glow {
   0%, 100% {
-    box-shadow: 0 0 20px rgba(139, 111, 168, 0.3);
+    filter: drop-shadow(0 0 4px rgba(139, 111, 168, 0.4));
+    opacity: 0.85;
   }
   50% {
-    box-shadow: 0 0 40px rgba(139, 111, 168, 0.5);
+    filter: drop-shadow(0 0 8px rgba(139, 111, 168, 0.6));
+    opacity: 1;
   }
 }
 
 @keyframes glowPulse {
   0%, 100% {
-    box-shadow: 0 0 0 0 rgba(139, 111, 168, 0);
+    opacity: 0.7;
+    transform: scale(1);
   }
   50% {
-    box-shadow: 0 0 0 12px rgba(139, 111, 168, 0.15);
+    opacity: 1;
+    transform: scale(1.02);
   }
 }
 
@@ -667,21 +673,23 @@
   box-shadow: 0 0 0 3px rgba(139, 111, 168, 0.15);
 }
 
+/* Floating label: use transform instead of top/left/font-size.
+   top, left, font-size all trigger layout (non-composited). transform is GPU-composited. */
 .input-label-float {
   position: absolute;
   left: 12px;
   top: 50%;
-  transform: translateY(-50%);
-  transition: top 0.2s ease, left 0.2s ease, font-size 0.2s ease, color 0.2s ease;
+  transform: translateY(-50%) scale(1);
+  transform-origin: left center;
+  transition: transform 0.2s ease, color 0.2s ease, opacity 0.2s ease;
   pointer-events: none;
   color: var(--color-text-tertiary);
 }
 
 .input-label-float.active,
 input:focus + .input-label-float {
-  top: -8px;
-  left: 8px;
-  font-size: 11px;
+  /* Move label up using transform (composited) instead of top/left/font-size changes */
+  transform: translateY(-180%) scale(0.75);
   background: var(--color-bg-primary);
   padding: 0 4px;
   color: var(--color-brand);

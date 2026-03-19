@@ -44,20 +44,26 @@ export default function TimeRangeSelector({
     }
   }
 
-  // Update sliding indicator position
+  // Update sliding indicator position.
+  // Use rAF to defer the layout read (offsetLeft/offsetWidth) out of the commit phase.
+  // Reading layout geometry synchronously after a state update causes a forced reflow
+  // because the browser must finish layout before returning the values.
   useEffect(() => {
     const container = containerRef.current
     if (!container) return
     const activeIndex = TIME_RANGES.indexOf(activeRange)
     if (activeIndex === -1) return
-    const buttons = container.querySelectorAll<HTMLButtonElement>('[data-range-btn]')
-    const btn = buttons[activeIndex]
-    if (!btn) return
-    setIndicatorStyle({
-      left: btn.offsetLeft,
-      width: btn.offsetWidth,
+    const raf = requestAnimationFrame(() => {
+      const buttons = container.querySelectorAll<HTMLButtonElement>('[data-range-btn]')
+      const btn = buttons[activeIndex]
+      if (!btn) return
+      setIndicatorStyle({
+        left: btn.offsetLeft,
+        width: btn.offsetWidth,
+      })
+      hasInitialized.current = true
     })
-    hasInitialized.current = true
+    return () => cancelAnimationFrame(raf)
   }, [activeRange])
 
   return (

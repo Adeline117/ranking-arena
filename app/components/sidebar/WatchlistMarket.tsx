@@ -6,6 +6,7 @@ import { tokens } from '@/lib/design-tokens'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import SidebarCard from './SidebarCard'
 import CryptoIcon from '@/app/components/common/CryptoIcon'
+import { useDeferredKey } from '@/lib/hooks/useDeferredSWR'
 
 type CoinPrice = {
   id: string
@@ -122,8 +123,12 @@ export default function WatchlistMarket() {
     }).filter((r): r is CoinPrice => r !== null)
   }, [watchIds])
 
+  // Defer SWR key until after LCP — prevents simultaneous sidebar fetches from blocking main thread
+  const immediateKey = pairsParam ? `/api/market?pairs=${encodeURIComponent(pairsParam)}` : null
+  const swrKey = useDeferredKey(immediateKey, 1200)
+
   const { data: coins = [], isLoading: loading, error: swrError, mutate: mutateMarket } = useSWR(
-    pairsParam ? `/api/market?pairs=${encodeURIComponent(pairsParam)}` : null,
+    swrKey,
     marketFetcher,
     {
       revalidateOnFocus: false,
