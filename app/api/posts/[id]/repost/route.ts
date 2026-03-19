@@ -86,6 +86,25 @@ export async function POST(request: NextRequest, context: RouteContext) {
       return NextResponse.json({ error: 'Repost failed' }, { status: 500 })
     }
 
+    // Notify original post author (fire-and-forget)
+    if (originalPost.author_id && originalPost.author_id !== user.id) {
+      supabase
+        .from('notifications')
+        .insert({
+          user_id: originalPost.author_id,
+          type: 'like', // repost type — use 'like' as closest valid type
+          title: `${userHandle} reposted your post`,
+          message: (originalPost.title || '').slice(0, 100) || 'your post',
+          actor_id: user.id,
+          link: `/post/${newPost.id}`,
+          reference_id: originalPost.id,
+          read: false,
+        })
+        .then(({ error: notifError }) => {
+          if (notifError) logger.warn('[repost] Notification insert failed:', notifError)
+        })
+    }
+
     return NextResponse.json({
       success: true,
       post_id: newPost.id,

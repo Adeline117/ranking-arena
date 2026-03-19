@@ -17,6 +17,7 @@ import { validateCsrfToken, CSRF_COOKIE_NAME, CSRF_HEADER_NAME } from '@/lib/uti
 import { checkRateLimit, RateLimitPresets } from '@/lib/utils/rate-limit'
 import logger from '@/lib/logger'
 import { socialFeatureGuard } from '@/lib/features'
+import { getUserHandle } from '@/lib/supabase/server'
 
 type RouteContext = { params: Promise<{ id: string }> }
 
@@ -67,6 +68,33 @@ export async function POST(request: NextRequest, context: RouteContext) {
       logger.warn('[posts/[id]/like] Failed to fetch updated counts:', fetchError)
       likeCount = result.action === 'added' && reactionType === 'up' ? 1 : 0
       dislikeCount = result.action === 'added' && reactionType === 'down' ? 1 : 0
+    }
+
+    // Send like notification (fire-and-forget, don't block response)
+    if (result.action === 'added' && reactionType === 'up') {
+      try {
+        const post = await getPostById(supabase, id)
+        if (post?.author_id && post.author_id !== user.id) {
+          const userHandle = await getUserHandle(user.id, user.email ?? undefined)
+          supabase
+            .from('notifications')
+            .insert({
+              user_id: post.author_id,
+              type: 'like',
+              title: `${userHandle} liked your post`,
+              message: (post.title || '').slice(0, 100) || 'your post',
+              actor_id: user.id,
+              link: `/post/${id}`,
+              reference_id: id,
+              read: false,
+            })
+            .then(({ error: notifError }) => {
+              if (notifError) logger.warn('[posts/[id]/like] Notification insert failed:', notifError)
+            })
+        }
+      } catch (notifErr) {
+        logger.warn('[posts/[id]/like] Notification error:', notifErr)
+      }
     }
 
     return success({

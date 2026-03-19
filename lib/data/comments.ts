@@ -103,16 +103,35 @@ function buildProfileMap(
 }
 
 /**
- * 对评论进行自定义排序：前3条按点赞数降序，其余按时间升序
+ * Wilson score lower bound for ranking comments.
+ * https://www.evanmiller.org/how-not-to-sort-by-average-rating.html
  */
-function sortComments(comments: CommentRow[]): CommentRow[] {
-  const byLikes = [...comments].sort((a, b) => (b.like_count || 0) - (a.like_count || 0))
-  const top3 = byLikes.slice(0, 3)
-  const top3Ids = new Set(top3.map(c => c.id))
-  const rest = comments
-    .filter(c => !top3Ids.has(c.id))
-    .sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime())
-  return [...top3, ...rest]
+function wilsonScoreLower(ups: number, downs: number): number {
+  const n = ups + downs
+  if (n === 0) return 0
+  const z = 1.96 // 95% confidence
+  const phat = ups / n
+  return (phat + z * z / (2 * n) - z * Math.sqrt((phat * (1 - phat) + z * z / (4 * n)) / n)) / (1 + z * z / n)
+}
+
+export type CommentSortMode = 'best' | 'time'
+
+/**
+ * Sort comments by mode:
+ * - 'best': Wilson score lower bound (handles small sample sizes correctly)
+ * - 'time': newest first
+ */
+function sortComments(comments: CommentRow[], mode: CommentSortMode = 'best'): CommentRow[] {
+  if (mode === 'time') {
+    return [...comments].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+  }
+  // 'best': Wilson score descending, then created_at descending as tiebreaker
+  return [...comments].sort((a, b) => {
+    const scoreA = wilsonScoreLower(a.like_count || 0, a.dislike_count || 0)
+    const scoreB = wilsonScoreLower(b.like_count || 0, b.dislike_count || 0)
+    if (scoreB !== scoreA) return scoreB - scoreA
+    return new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+  })
 }
 
 /**
@@ -121,9 +140,9 @@ function sortComments(comments: CommentRow[]): CommentRow[] {
 export async function getPostComments(
   supabase: SupabaseClient,
   postId: string,
-  options: { limit?: number; offset?: number; userId?: string } = {}
+  options: { limit?: number; offset?: number; userId?: string; sort?: CommentSortMode } = {}
 ): Promise<Comment[]> {
-  const { limit = 50, offset = 0, userId } = options
+  const { limit = 50, offset = 0, userId, sort = 'best' } = options
 
   const { data: allTopComments, error } = await supabase
     .from('comments')
@@ -136,7 +155,7 @@ export async function getPostComments(
   if (error) throw error
   if (!allTopComments || allTopComments.length === 0) return []
 
-  const comments = sortComments(allTopComments).slice(offset, offset + limit)
+  const comments = sortComments(allTopComments, sort).slice(offset, offset + limit)
   if (comments.length === 0) return []
 
   const commentIds = comments.map(c => c.id)

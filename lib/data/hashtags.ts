@@ -85,14 +85,6 @@ export async function extractAndSyncHashtags(
         row_id: h.id,
         field_name: 'post_count',
         amount: 1,
-      }).catch(() => {
-        // Fallback: direct update if RPC doesn't exist
-        supabase
-          .from('hashtags')
-          .update({ post_count: (supabase as unknown as { sql: unknown }) ? undefined : 1 })
-          .eq('id', h.id)
-          .then(() => {})
-          .catch(() => {})
       })
     }
 
