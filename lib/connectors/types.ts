@@ -131,8 +131,8 @@ export const PLATFORM_TIER: Record<string, ConnectorTier> = {
   etoro: 'fast', web3_bot: 'fast', bitfinex: 'fast',
   // Medium: VPS proxy or light WAF
   bybit: 'medium', bitget_futures: 'medium', mexc: 'medium',
-  gateio: 'medium', coinex: 'medium', htx_futures: 'medium',
-  aevo: 'medium', gains: 'medium', jupiter_perps: 'medium',
+  gateio: 'medium', coinex: 'medium', htx_futures: 'fast',
+  aevo: 'medium', gains: 'medium', jupiter_perps: 'fast',
   dydx: 'medium', gmx: 'medium',
   // Slow: heavy WAF, scraper required
   bingx: 'slow', xt: 'slow', blofin: 'slow', toobit: 'slow',
