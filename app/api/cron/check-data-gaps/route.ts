@@ -130,12 +130,12 @@ export async function GET(req: NextRequest) {
 
       for (const period of TIME_PERIODS) {
         const { data: snapshots } = await supabase
-          .from('trader_snapshots')
-          .select('source_trader_id, roi, pnl, win_rate, max_drawdown, followers')
-          .eq('source', platform)
-          .eq('season_id', period)
+          .from('trader_snapshots_v2')
+          .select('trader_key, roi_pct, pnl_usd, win_rate, max_drawdown, followers')
+          .eq('platform', platform)
+          .eq('window', period)
 
-        const _snapshotMap = new Map(snapshots?.map((s) => [s.source_trader_id, s]) || [])
+        const _snapshotMap = new Map(snapshots?.map((s) => [s.trader_key, s]) || [])
 
         let missingRoi = 0
         let missingPnl = 0
@@ -144,8 +144,8 @@ export async function GET(req: NextRequest) {
         let missingFollowers = 0
 
         for (const snap of snapshots || []) {
-          if (snap.roi == null) missingRoi++
-          if (snap.pnl == null) missingPnl++
+          if (snap.roi_pct == null) missingRoi++
+          if (snap.pnl_usd == null) missingPnl++
           if (snap.win_rate == null) missingWinRate++
           if (snap.max_drawdown == null) missingDrawdown++
           if (snap.followers == null) missingFollowers++
@@ -211,16 +211,16 @@ export async function GET(req: NextRequest) {
 
       for (const period of TIME_PERIODS) {
         const { data: periodSnaps } = await supabase
-          .from('trader_snapshots')
-          .select('source_trader_id')
-          .eq('source', platform)
-          .eq('season_id', period)
+          .from('trader_snapshots_v2')
+          .select('trader_key')
+          .eq('platform', platform)
+          .eq('window', period)
 
         for (const snap of periodSnaps || []) {
-          if (!tradersWithPeriods.has(snap.source_trader_id)) {
-            tradersWithPeriods.set(snap.source_trader_id, new Set())
+          if (!tradersWithPeriods.has(snap.trader_key)) {
+            tradersWithPeriods.set(snap.trader_key, new Set())
           }
-          tradersWithPeriods.get(snap.source_trader_id)!.add(period)
+          tradersWithPeriods.get(snap.trader_key)!.add(period)
         }
       }
 
