@@ -145,6 +145,19 @@ export async function generateMetadata({
   }
 }
 
+// Slim SSR shape — only essential fields for above-the-fold render.
+// avatar_url, followers, trader_type, is_bot, pnl are loaded client-side.
+interface TraderSSR {
+  trader_key: string
+  display_name: string | null
+  roi: number | null
+  win_rate: number | null
+  max_drawdown: number | null
+  arena_score: number | null
+  captured_at?: string | null
+}
+
+// Full shape used by ExchangeRankingClient (kept for reference / client mapping)
 interface TraderData {
   trader_key: string
   display_name: string | null
@@ -165,93 +178,106 @@ interface TraderData {
 // Upstash SDK's internal fetch uses `cache: 'no-store'` which forces Next.js
 // to treat the entire page as dynamic, breaking ISR completely.
 // unstable_cache uses Next.js's built-in Data Cache which is ISR-compatible.
-const fetchExchangeTraders = unstable_cache(
-  async (exchange: string): Promise<TraderData[]> => {
+//
+// IMPORTANT: Only fetches 20 slim rows to keep the RSC/HTML payload small.
+// The client fetches the full list post-hydration via /api/rankings.
+const fetchExchangeTradersSSR = unstable_cache(
+  async (exchange: string): Promise<{
+    traders: TraderSSR[]
+    totalCount: number
+    top10ForJsonLd: Array<{ trader_key: string; display_name: string | null; avatar_url: string | null }>
+  }> => {
     const supabase = getSupabaseAdmin()
 
-      try {
-        // Use leaderboard_ranks (the primary ranking table) instead of trader_snapshots_v2
-        const { data, error } = await supabase
+    try {
+      // Run 3 parallel queries to keep latency low:
+      // 1. Top 20 slim rows for SSR table render
+      // 2. Estimated total count (head-only, no row data)
+      // 3. Top 10 with avatar_url for JSON-LD (not passed as RSC props)
+      const [{ data, error }, { count }, { data: top10Data }] = await Promise.all([
+        supabase
           .from('leaderboard_ranks')
-          .select('source_trader_id, handle, avatar_url, source, roi, pnl, win_rate, max_drawdown, arena_score, followers, trader_type, computed_at')
+          .select('source_trader_id, handle, roi, win_rate, max_drawdown, arena_score, computed_at')
           .eq('source', exchange)
           .eq('season_id', '90D')
           .not('arena_score', 'is', null)
           .gt('arena_score', 0)
           .order('arena_score', { ascending: false, nullsFirst: false })
-          .limit(5000)
+          .limit(20),
+        supabase
+          .from('leaderboard_ranks')
+          .select('*', { count: 'estimated', head: true })
+          .eq('source', exchange)
+          .eq('season_id', '90D')
+          .not('arena_score', 'is', null)
+          .gt('arena_score', 0),
+        supabase
+          .from('leaderboard_ranks')
+          .select('source_trader_id, handle, avatar_url')
+          .eq('source', exchange)
+          .eq('season_id', '90D')
+          .not('arena_score', 'is', null)
+          .gt('arena_score', 0)
+          .order('arena_score', { ascending: false, nullsFirst: false })
+          .limit(10),
+      ])
 
-        if (error) {
-          logger.error(`[ExchangeRanking] Error fetching ${exchange}:`, error)
-          return []
-        }
-
-        // Map to TraderData shape — use handle as trader_key for correct routing to /trader/[handle]
-        const rows = (data || []).map((row: Record<string, unknown>) => ({
-          trader_key: String(row.handle || row.source_trader_id || ''),
-          display_name: row.handle ? String(row.handle) : null,
-          avatar_url: row.avatar_url as string | null,
-          platform: String(row.source || ''),
-          roi: row.roi != null ? Number(row.roi) : null,
-          pnl: row.pnl != null ? Number(row.pnl) : null,
-          win_rate: row.win_rate as number | null,
-          max_drawdown: row.max_drawdown as number | null,
-          arena_score: row.arena_score as number | null,
-          followers: row.followers as number | null,
-          trader_type: (row.trader_type as string) || null,
-          is_bot: row.source === 'web3_bot' || row.trader_type === 'bot',
-          captured_at: (row.computed_at as string) || null,
-          _source_id: String(row.source_trader_id || ''),
-        }))
-
-        // Disambiguate duplicate display names by appending short ID suffix
-        const nameCount = new Map<string, number>()
-        for (const r of rows) {
-          const name = (r.display_name || '').toLowerCase()
-          nameCount.set(name, (nameCount.get(name) || 0) + 1)
-        }
-        const nameIndex = new Map<string, number>()
-        for (const r of rows) {
-          const name = (r.display_name || '').toLowerCase()
-          if (nameCount.get(name)! > 1 && r.display_name) {
-            const idx = (nameIndex.get(name) || 0) + 1
-            nameIndex.set(name, idx)
-            const suffix = r._source_id.slice(-4)
-            r.display_name = `${r.display_name} #${suffix}`
-          }
-        }
-
-        return rows
-      } catch (e) {
-        logger.error(`[ExchangeRanking] Exception for ${exchange}:`, e)
-        return []
+      if (error) {
+        logger.error(`[ExchangeRanking] Error fetching ${exchange}:`, error)
+        return { traders: [], totalCount: 0, top10ForJsonLd: [] }
       }
+
+      const traders: TraderSSR[] = (data || []).map((row: Record<string, unknown>) => ({
+        trader_key: String(row.handle || row.source_trader_id || ''),
+        display_name: row.handle ? String(row.handle) : null,
+        roi: row.roi != null ? Number(row.roi) : null,
+        win_rate: row.win_rate as number | null,
+        max_drawdown: row.max_drawdown as number | null,
+        arena_score: row.arena_score as number | null,
+        captured_at: (row.computed_at as string) || null,
+      }))
+
+      const top10ForJsonLd = (top10Data || []).map((row: Record<string, unknown>) => ({
+        trader_key: String(row.handle || row.source_trader_id || ''),
+        display_name: row.handle ? String(row.handle) : null,
+        avatar_url: (row.avatar_url as string | null) ?? null,
+      }))
+
+      return { traders, totalCount: count ?? traders.length, top10ForJsonLd }
+    } catch (e) {
+      logger.error(`[ExchangeRanking] Exception for ${exchange}:`, e)
+      return { traders: [], totalCount: 0, top10ForJsonLd: [] }
+    }
   },
-  ['exchange-ranking'], // cache key prefix
+  ['exchange-ranking-ssr'], // cache key prefix — different from old key to bust stale cache
   { revalidate: 300, tags: ['rankings'] } // 5 min, same as hot tier
 )
+
+// Keep the old name as a type alias so nothing else breaks if referenced externally
+type _TraderDataCompat = TraderData
 
 /**
  * Async server component that fetches and renders the ranking table.
  * Wrapped in Suspense by the page so the page shell streams instantly.
+ *
+ * Fetches only 20 slim rows for SSR — client hydrates full list post-mount.
  */
 async function RankingsContent({ exchange }: { exchange: string }) {
   const displayName = EXCHANGE_NAMES[exchange]
-  const traders = await fetchExchangeTraders(exchange)
+  const { traders, totalCount, top10ForJsonLd } = await fetchExchangeTradersSSR(exchange)
   const sourceType = SOURCE_TYPE_MAP[exchange] || 'futures'
   const labels = TYPE_LABELS[sourceType] || TYPE_LABELS.futures
   const baseUrl = 'https://www.arenafi.org'
 
-  // JSON-LD ItemList for top traders (SEO structured data)
-  // Limit to 20 to keep the ISR HTML payload small (~50KB vs 1MB for 5000 traders).
-  const top20 = traders.slice(0, 20)
+  // JSON-LD ItemList — top 10 only to keep HTML lean.
+  // avatar_url is in a separate query result and NOT passed as RSC props.
   const itemListJsonLd = {
     '@context': 'https://schema.org',
     '@type': 'ItemList',
     name: `Top ${displayName} ${labels.en} Traders ${CURRENT_YEAR}`,
     description: `Best ${displayName} ${labels.en.toLowerCase()} traders ranked by Arena Score in ${CURRENT_YEAR}`,
-    numberOfItems: top20.length,
-    itemListElement: top20.map((t, i) => ({
+    numberOfItems: top10ForJsonLd.length,
+    itemListElement: top10ForJsonLd.map((t, i) => ({
       '@type': 'ListItem',
       position: i + 1,
       item: {
@@ -322,10 +348,25 @@ async function RankingsContent({ exchange }: { exchange: string }) {
           marginBottom: tokens.spacing[6],
         }}
       >
-        {traders.length.toLocaleString()} traders | Ranked by Arena Score | 90-day window | Updated {new Date().toLocaleDateString('en-US', { month: 'short', year: 'numeric' })}
+        {(totalCount || traders.length).toLocaleString()} traders | Ranked by Arena Score | 90-day window | Updated {new Date().toLocaleDateString('en-US', { month: 'short', year: 'numeric' })}
       </p>
-      {/* SSR only passes first 20 traders to keep ISR HTML small. Client hydrates the full list. */}
-      <ExchangeRankingClient traders={traders.slice(0, 20)} exchange={exchange} totalCount={traders.length} />
+      {/*
+       * SSR passes 20 slim rows (no avatar_url / pnl / followers) to keep
+       * the RSC payload and HTML tiny. Client fetches the full list with all
+       * fields post-hydration via /api/rankings.
+       */}
+      <ExchangeRankingClient
+        traders={traders.map((t) => ({
+          ...t,
+          avatar_url: null,
+          platform: exchange,
+          pnl: null,
+          followers: null,
+          is_bot: false,
+        }))}
+        exchange={exchange}
+        totalCount={totalCount || traders.length}
+      />
     </>
   )
 }
