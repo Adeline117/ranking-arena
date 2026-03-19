@@ -651,11 +651,11 @@ async function computeSeason(
     bySource.set(t.source, ids)
   }
 
+  // Step 1: Query trader_profiles_v2 first (primary source)
   await Promise.all(
     Array.from(bySource.entries()).map(async ([source, traderIds]) => {
       for (let i = 0; i < traderIds.length; i += 500) {
         const chunk = traderIds.slice(i, i + 500)
-        // Primary: trader_profiles_v2 (most complete — has generated display_names and avatars)
         const { data: v2Data } = await supabase
           .from('trader_profiles_v2')
           .select('trader_key, display_name, avatar_url')
@@ -669,27 +669,48 @@ async function computeSeason(
             avatar_url: s.avatar_url || null,
           })
         })
-
-        // Fallback: traders view for any not found in profiles_v2
-        const { data: fallbackData } = await supabase
-          .from('traders')
-          .select('trader_key, handle, avatar_url')
-          .eq('platform', source)
-          .in('trader_key', chunk)
-
-        fallbackData?.forEach((s: { trader_key: string; handle: string | null; avatar_url: string | null }) => {
-          const tid = s.trader_key.startsWith('0x') ? s.trader_key.toLowerCase() : s.trader_key
-          const key = `${source}:${tid}`
-          if (!handleMap.has(key) || (!handleMap.get(key)!.handle && s.handle)) {
-            handleMap.set(key, {
-              handle: handleMap.get(key)?.handle || s.handle,
-              avatar_url: handleMap.get(key)?.avatar_url || s.avatar_url || null,
-            })
-          }
-        })
       }
     })
   )
+
+  // Step 2: Targeted fallback — only query traders table for keys with NULL handles
+  const missingHandleBySource = new Map<string, string[]>()
+  for (const t of uniqueTraders) {
+    const tid = t.source_trader_id.startsWith('0x') ? t.source_trader_id.toLowerCase() : t.source_trader_id
+    const key = `${t.source}:${tid}`
+    const entry = handleMap.get(key)
+    if (!entry || !entry.handle) {
+      const ids = missingHandleBySource.get(t.source) || []
+      ids.push(t.source_trader_id)
+      missingHandleBySource.set(t.source, ids)
+    }
+  }
+
+  if (missingHandleBySource.size > 0) {
+    await Promise.all(
+      Array.from(missingHandleBySource.entries()).map(async ([source, traderIds]) => {
+        for (let i = 0; i < traderIds.length; i += 500) {
+          const chunk = traderIds.slice(i, i + 500)
+          const { data: fallbackData } = await supabase
+            .from('traders')
+            .select('trader_key, handle, avatar_url')
+            .eq('platform', source)
+            .in('trader_key', chunk)
+
+          fallbackData?.forEach((s: { trader_key: string; handle: string | null; avatar_url: string | null }) => {
+            const tid = s.trader_key.startsWith('0x') ? s.trader_key.toLowerCase() : s.trader_key
+            const key = `${source}:${tid}`
+            if (!handleMap.has(key) || (!handleMap.get(key)!.handle && s.handle)) {
+              handleMap.set(key, {
+                handle: handleMap.get(key)?.handle || s.handle,
+                avatar_url: handleMap.get(key)?.avatar_url || s.avatar_url || null,
+              })
+            }
+          })
+        }
+      })
+    )
+  }
 
   // Calculate arena_score and rank
   const scored = uniqueTraders.map(t => {
