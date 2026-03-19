@@ -104,6 +104,10 @@ import {
   fetchOkxWeb3EquityCurve,
   fetchOkxWeb3StatsDetail,
 } from '@/lib/cron/fetchers/enrichment-okx-web3'
+import {
+  fetchWeexEquityCurve,
+  fetchWeexStatsDetail,
+} from '@/lib/cron/fetchers/enrichment-weex'
 import { sleep } from '@/lib/cron/fetchers/shared'
 import { captureMessage } from '@/lib/utils/logger'
 import { sendRateLimitedAlert } from '@/lib/alerts/send-alert'
@@ -227,6 +231,12 @@ export const ENRICHMENT_PLATFORM_CONFIGS: Record<string, EnrichmentConfig> = {
     fetchEquityCurve: fetchOkxWeb3EquityCurve,
     fetchStatsDetail: fetchOkxWeb3StatsDetail,
     concurrency: 2, delayMs: 2000,
+  },
+  weex: {
+    platform: 'weex',
+    fetchEquityCurve: fetchWeexEquityCurve,
+    fetchStatsDetail: fetchWeexStatsDetail,
+    concurrency: 1, delayMs: 3000, // VPS scraper is slow, one at a time
   },
   // bitget_futures: equity curve only — detail/position APIs hang >44min
   // profitList endpoint works fine via CF Worker proxy (20s timeout)
@@ -455,8 +465,8 @@ export const NO_ENRICHMENT_PLATFORMS = new Set([
   'bybit_spot',   // metricValues has ROI/WR/MDD/Sharpe, VPS trader-detail doesn't support spot leaderMark
   'binance_web3', // wallet-based, no per-trader detail API, all metrics from leaderboard
   'web3_bot',     // small platform (19 traders), all metrics from leaderboard
-  'kucoin',       // Mac Mini script provides ROI/PnL/copiers, no detail API from datacenter
-  'weex',         // VPS scraper provides leaderboard, no equity curve API
+  'kucoin',       // Mac Mini script provides ROI/PnL/copiers + totalPnlDate equity curve
+  // weex: RE-ENABLED — ndaysReturnRates from VPS scraper leaderboard = equity curve
   'bingx_spot',   // Mac Mini script provides full rankStat data
 ])
 
