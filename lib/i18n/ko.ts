@@ -2768,7 +2768,7 @@ const ko = {
     heroCTASignUp: '무료 가입',
     heroStatTraders: '트레이더',
     heroStatExchanges: '거래소',
-    heroStatUpdated: '30분마다 업데이트',
+    heroStatUpdated: '업데이트 주기',
     heroProBadge: 'Pro로 업그레이드 — 모든 트레이더와 고급 필터 잠금 해제',
 
     // Rankings search

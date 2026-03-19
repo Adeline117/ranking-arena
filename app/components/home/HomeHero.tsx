@@ -103,7 +103,7 @@ export default function HomeHero({ traderCount: traderCountProp, exchangeCount: 
           {[
             { num: Math.floor(traderNum / 1000), suffix: 'K+', fallback: traderCountStr, label: t('heroStatTraders' as Parameters<typeof t>[0]), delay: 0 },
             { num: exchangeNum, suffix: '+', fallback: exchangeCountStr, label: t('heroStatExchanges' as Parameters<typeof t>[0]), delay: 0.2 },
-            { num: 30, suffix: 'm', fallback: '30m', label: t('heroStatUpdated' as Parameters<typeof t>[0]), delay: 0.4 },
+            { num: 30, suffix: ' min', fallback: '30 min', label: t('heroStatUpdated' as Parameters<typeof t>[0]), delay: 0.4 },
           ].map((stat) => (
             <div key={stat.label} style={{ textAlign: 'center', minWidth: 56 }}>
               <div style={{
