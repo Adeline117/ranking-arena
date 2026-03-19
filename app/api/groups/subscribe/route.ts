@@ -145,7 +145,7 @@ export async function POST(request: NextRequest) {
         )
       }
 
-      const stripe = new Stripe(stripeSecret, { apiVersion: '2025-03-31.basil' })
+      const stripe = new Stripe(stripeSecret, { apiVersion: '2026-02-25.clover' })
 
       try {
         if (checkoutSessionId) {
