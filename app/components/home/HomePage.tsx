@@ -35,6 +35,7 @@ interface HomePageProps {
 export default function HomePage({ initialTraders, initialLastUpdated, heroStats, ssrTable }: HomePageProps) {
   return (
     <Box
+      id="homepage-interactive"
       suppressHydrationWarning
       style={{
         minHeight: '100vh',
