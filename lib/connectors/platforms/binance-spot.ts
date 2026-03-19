@@ -69,10 +69,16 @@ export class BinanceSpotConnector extends BaseConnector {
   ): Promise<DiscoverResult> {
     const periodType = WINDOW_MAP[window]
     const pageSize = Math.min(limit, 20)
-    const maxPages = Math.ceil(Math.min(limit, 1500) / pageSize)
+    // Cap at 30 pages (600 traders) to prevent runaway pagination
+    const maxPages = Math.min(Math.ceil(Math.min(limit, 600) / pageSize), 30)
     const allTraders: TraderSource[] = []
+    // Total timeout: 4 minutes — hard cap to prevent cron hangs
+    const totalDeadline = Date.now() + 4 * 60 * 1000
 
     for (let page = Math.floor(offset / pageSize) + 1; page <= maxPages + Math.floor(offset / pageSize); page++) {
+      // Bail if approaching total deadline
+      if (Date.now() > totalDeadline) break
+
       const requestBody = {
         pageNumber: page,
         pageSize,
@@ -89,17 +95,19 @@ export class BinanceSpotConnector extends BaseConnector {
       const apiUrl = `${this.BASE_URL}/v1/friendly/future/spot-copy-trade/common/home-page-list`
 
       // Always try VPS proxy first — Binance is geo-blocked from Vercel hnd1
+      // Per-page timeout: 30s via proxyViaVPS
       response = await this.proxyViaVPS<Record<string, unknown>>(
         apiUrl,
-        { method: 'POST', body: requestBody, headers: this.HEADERS }
+        { method: 'POST', body: requestBody, headers: this.HEADERS },
+        30000
       )
 
       // Fallback: try direct (works from non-restricted IPs like Mac Mini)
       // Binance success: code = "000000" (string)
       // Binance geo-block: code = 0 (number)
-      const hasValidData = response && 
+      const hasValidData = response &&
         (response.code === "000000" || (response.data as Record<string, unknown> | null)?.list)
-      
+
       if (!hasValidData) {
         try {
           response = await this.request<Record<string, unknown>>(

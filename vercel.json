@@ -139,6 +139,10 @@
       "schedule": "24 2,8,14,20 * * *"
     },
     {
+      "path": "/api/cron/batch-fetch-traders?group=k",
+      "schedule": "36 2,8,14,20 * * *"
+    },
+    {
       "path": "/api/cron/batch-enrich?period=90D",
       "schedule": "10 */4 * * *"
     },
@@ -301,6 +305,15 @@
     }
   ],
   "headers": [
+    {
+      "source": "/api/avatar",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "public, s-maxage=604800, max-age=604800, stale-while-revalidate=86400"
+        }
+      ]
+    },
     {
       "source": "/api/traders",
       "headers": [

@@ -822,6 +822,69 @@ const HANDLERS = {
 
     return domData || { error: 'No API response captured and DOM extraction failed' }
   },
+
+  // ─── KuCoin (CF-protected SPA, intercept copy-trade APIs) ───
+  'kucoin/leaderboard': async (page, params) => {
+    const pageNo = parseInt(params.pageNo || '1', 10)
+    const pageSize = parseInt(params.pageSize || '50', 10)
+
+    // Anti-bot evasion
+    await page.addInitScript(() => {
+      Object.defineProperty(navigator, 'webdriver', { get: () => false })
+      window.chrome = { runtime: {} }
+    })
+
+    // Intercept copy-trade API responses
+    const captured = setupInterception(page, (url) =>
+      url.includes('copy-trade') || url.includes('copyTrade') ||
+      url.includes('leader') || url.includes('trader') ||
+      url.includes('public/list')
+    )
+
+    await page.goto('https://www.kucoin.com/copytrading', {
+      waitUntil: 'domcontentloaded', timeout: 60000,
+    })
+
+    await waitForCF(page, 25000)
+    await page.waitForTimeout(5000)
+    await page.evaluate(() => window.scrollTo(0, 500)).catch(() => {})
+    await page.waitForTimeout(3000)
+
+    if (captured.length > 0) {
+      captured.sort((a, b) => b.size - a.size)
+      return captured[0].data
+    }
+
+    // Fallback: same-origin fetch with session cookies
+    const data = await page.evaluate(async (opts) => {
+      async function safeFetch(url) {
+        try {
+          const r = await fetch(url, { credentials: 'include' })
+          if (!r.ok) return null
+          const text = await r.text()
+          if (!text.startsWith('{') && !text.startsWith('[')) return null
+          return JSON.parse(text)
+        } catch { return null }
+      }
+
+      const endpoints = [
+        `/_api/copy-trade/leader/public/list?pageNo=${opts.pageNo}&pageSize=${opts.pageSize}&sortType=2`,
+        `/api/v1/copy-trade/leader/public/list?pageNo=${opts.pageNo}&pageSize=${opts.pageSize}`,
+        `/_api/copy-trade/leader/list?page=${opts.pageNo}&size=${opts.pageSize}`,
+      ]
+
+      for (const url of endpoints) {
+        const json = await safeFetch(url)
+        if (json) {
+          const hasData = json.data || json.result || json.list || json.items || Array.isArray(json)
+          if (hasData) return json
+        }
+      }
+      return null
+    }, { pageNo, pageSize }).catch(() => null)
+
+    return data || { error: 'No API response captured' }
+  },
 }
 
 // ---------------------------------------------------------------------------

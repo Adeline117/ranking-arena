@@ -206,14 +206,14 @@ export const ENRICHMENT_PLATFORM_CONFIGS: Record<string, EnrichmentConfig> = {
     fetchCurrentPositions: fetchOkxCurrentPositions,
     concurrency: 3, delayMs: 1500,
   },
-  // bitget_futures: DISABLED 2026-03-18 EMERGENCY (7th stuck >44min - VPS scraper hangs)
-  // bitget_futures: {
-  //   platform: 'bitget_futures',
-  //   fetchEquityCurve: fetchBitgetEquityCurve,
-  //   fetchStatsDetail: fetchBitgetStatsDetail,
-  //   fetchPositionHistory: fetchBitgetPositionHistory,
-  //   concurrency: 2, delayMs: 2000,
-  // },
+  // bitget_futures: RE-ENABLED 2026-03-19 (60s/page + 4min timeout on fetcher)
+  bitget_futures: {
+    platform: 'bitget_futures',
+    fetchEquityCurve: fetchBitgetEquityCurve,
+    fetchStatsDetail: fetchBitgetStatsDetail,
+    fetchPositionHistory: fetchBitgetPositionHistory,
+    concurrency: 2, delayMs: 2000,
+  },
   // bitget_spot: enrichment not yet configured — spot-specific enrichment endpoints TBD
   hyperliquid: {
     platform: 'hyperliquid',
@@ -442,7 +442,8 @@ export const NO_ENRICHMENT_PLATFORMS = new Set([
 // Per-platform timeout: prevents any single platform from burning the entire batch budget
 // CEX platforms get 45s, onchain platforms get 90s (GraphQL/RPC calls are slower)
 const PLATFORM_TIMEOUT_MS: Record<string, number> = {
-  // 'bitget_futures': 60_000, // DISABLED 2026-03-18 (7th stuck) - VPS scraper hangs 44+ min
+  'bitget_futures': 60_000, // RE-ENABLED 2026-03-19 — 60s per-platform timeout
+  'binance_spot': 60_000,  // RE-ENABLED 2026-03-19 — 60s per-platform timeout
 }
 const DEFAULT_PLATFORM_TIMEOUT_MS = 45_000
 const ONCHAIN_PLATFORM_TIMEOUT_MS = 90_000
