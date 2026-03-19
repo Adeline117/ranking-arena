@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import useSWR from 'swr'
 import { tokens } from '@/lib/design-tokens'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
@@ -105,7 +105,7 @@ export default function WatchlistMarket() {
     return opt ? `${opt.symbol}-USD` : null
   }).filter(Boolean).join(',')
 
-  const marketFetcher = async (url: string): Promise<CoinPrice[]> => {
+  const marketFetcher = useCallback(async (url: string): Promise<CoinPrice[]> => {
     const res = await fetch(url)
     if (!res.ok) throw new Error('fetch failed')
     const data = await res.json()
@@ -120,7 +120,7 @@ export default function WatchlistMarket() {
       const change = parseFloat(row.changePct) || 0
       return { id, symbol: opt.symbol, price, change24h: change }
     }).filter((r): r is CoinPrice => r !== null)
-  }
+  }, [watchIds])
 
   const { data: coins = [], isLoading: loading, error: swrError, mutate: mutateMarket } = useSWR(
     pairsParam ? `/api/market?pairs=${encodeURIComponent(pairsParam)}` : null,
