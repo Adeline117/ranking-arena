@@ -3,19 +3,7 @@
  * Can be called inline from batch-enrich (no HTTP needed) or from the route.
  */
 
-// 🚨 DISABLED PLATFORMS - permanently blocked due to repeated failures/hangs
-const DISABLED_PLATFORMS = [
-  'bitget_futures',  // 7th stuck >44min (2026-03-18) - VPS scraper repeatedly hangs
-  'bitget_spot',     // No public API (all endpoints 404)
-  'binance_spot',    // Repeatedly hangs 45-76min (2026-03-14)
-]
-
-function validatePlatform(platform: string): void {
-  if (DISABLED_PLATFORMS.includes(platform)) {
-    throw new Error(`❌ Platform ${platform} is permanently disabled (see DISABLED_PLATFORMS blacklist)`)
-  }
-}
-
+import { validatePlatform } from '@/lib/config/platforms'
 import { getSupabaseAdmin } from '@/lib/supabase/server'
 import {
   fetchBinanceEquityCurve,
