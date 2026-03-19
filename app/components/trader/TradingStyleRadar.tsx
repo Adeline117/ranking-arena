@@ -13,7 +13,7 @@ interface TradingStyleRadarProps {
 }
 
 const AXES = 5
-const CENTER = 60
+const CENTER = 70
 const RADIUS = 45
 
 function polarToCartesian(angle: number, r: number): [number, number] {
@@ -64,7 +64,7 @@ export default function TradingStyleRadar({
 
   return (
     <div style={{ width: '100%', maxWidth: 200, margin: '0 auto' }}>
-      <svg viewBox="0 0 120 120" style={{ width: '100%', height: 'auto' }} role="img" aria-label={t('traderTradingStyleLabel')}>
+      <svg viewBox="0 0 140 140" style={{ width: '100%', height: 'auto' }} role="img" aria-label={t('traderTradingStyleLabel')}>
         {/* Ring guides */}
         {rings.map((level) => {
           const ringPoints = Array.from({ length: AXES }, (_, i) => {
@@ -109,7 +109,7 @@ export default function TradingStyleRadar({
         {/* Labels */}
         {labels.map((label, i) => {
           const angle = i * angleStep
-          const [x, y] = polarToCartesian(angle, RADIUS + 12)
+          const [x, y] = polarToCartesian(angle, RADIUS + 14)
           return (
             <text
               key={i}
@@ -117,7 +117,7 @@ export default function TradingStyleRadar({
               y={y}
               textAnchor="middle"
               dominantBaseline="central"
-              fontSize="9"
+              fontSize="8"
               fontWeight="600"
               fill="var(--color-text-tertiary)"
               style={{ fontFamily: tokens.typography.fontFamily.sans.join(', ') }}
