@@ -5,6 +5,7 @@ import { tokens } from '@/lib/design-tokens'
 import { Box, Text, Button } from '../base'
 import { useLanguage } from '../Providers/LanguageProvider'
 import { useToast } from '../ui/Toast'
+import { getCopyTradeUrl, getDexUrl } from '@/lib/utils/copy-trade'
 
 // 外部链接图标
 const ExternalLinkIcon = ({ size = 16 }: { size?: number }) => (
@@ -30,57 +31,7 @@ const CloseIcon = ({ size = 20 }: { size?: number }) => (
     <path d="M18 6L6 18M6 6l12 12" />
   </svg>
 )
-
-/**
- * 根据交易所来源生成跟单链接
- * v2.0: 仅保留 4 个核心交易所
- */
-function getCopyTradeUrl(source: string | undefined, traderId: string, traderHandle?: string): string | null {
-  if (!source) return null
-
-  const urlMap: Record<string, string> = {
-    // Binance
-    binance_futures: `https://www.binance.com/zh-CN/copy-trading/lead-details/${traderId}?type=um`,
-    binance_spot: `https://www.binance.com/zh-CN/copy-trading/lead-details/${traderId}`,
-    binance_web3: `https://www.binance.com/zh-CN/copy-trading/lead-details/${traderId}`,
-    binance: `https://www.binance.com/zh-CN/copy-trading/lead-details/${traderId}`,
-    // Bybit
-    bybit: `https://www.bybit.com/copyTrade/trade-center/detail?leaderMark=${traderId}`,
-    // Bitget
-    bitget_futures: `https://www.bitget.com/zh-CN/copy-trading/trader?id=${traderId}`,
-    bitget_spot: `https://www.bitget.com/zh-CN/copy-trading/trader?id=${traderId}`,
-    bitget: `https://www.bitget.com/zh-CN/copy-trading/trader?id=${traderId}`,
-    // OKX
-    okx: `https://www.okx.com/copy-trading/trader/${traderId}`,
-    // HTX
-    htx: `https://futures.htx.com/en-us/copytrading/futures/detail/${traderId}`,
-    htx_futures: `https://futures.htx.com/en-us/copytrading/futures/detail/${traderId}`,
-    // Weex
-    weex: `https://www.weex.com/zh-CN/copy-trading/trader/${traderId}`,
-    // eToro — uses handle (UserName) not numeric ID
-    etoro: `https://www.etoro.com/people/${traderHandle || traderId}/portfolio`,
-  }
-
-  return urlMap[source.toLowerCase()] || null
-}
-
-/** DEX platforms: link to trading page or trader profile (not copy-trade) */
-function getDexTradingUrl(source: string | undefined, traderId: string): string | null {
-  if (!source) return null
-
-  const urlMap: Record<string, string> = {
-    hyperliquid: `https://app.hyperliquid.xyz/explorer/address/${traderId}`,
-    dydx: `https://trade.dydx.exchange/portfolio/${traderId}`,
-    gmx: `https://app.gmx.io/#/actions/v2/${traderId}`,
-    jupiter_perps: `https://www.jup.ag/perps/${traderId}`,
-    drift: `https://app.drift.trade/overview?userAccount=${traderId}`,
-    aevo: `https://app.aevo.xyz/portfolio/${traderId}`,
-    gains: `https://gains.trade`,
-    vertex: `https://app.vertexprotocol.com/portfolio/${traderId}`,
-  }
-
-  return urlMap[source.toLowerCase()] || null
-}
+// getCopyTradeUrl and getDexUrl imported from @/lib/utils/copy-trade
 
 function getDexPlatformName(source: string | undefined): string | null {
   if (!source) return null
@@ -151,7 +102,7 @@ export default function CopyTradeButton({
   const [acknowledged, setAcknowledged] = useState(false)
 
   const copyTradeUrl = getCopyTradeUrl(source, traderId, traderHandle)
-  const dexUrl = getDexTradingUrl(source, traderId)
+  const dexUrl = getDexUrl(source, traderId)
   const dexName = getDexPlatformName(source)
   const exchangeName = getExchangeName(source)
 

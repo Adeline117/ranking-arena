@@ -1,5 +1,6 @@
 import type { Metadata } from 'next'
 import { redirect } from 'next/navigation'
+import RankingsIndexClient from './RankingsIndexClient'
 
 export const revalidate = 0 // No cache — redirect page resolves platform dynamically
 
@@ -50,5 +51,6 @@ export default async function RankingsPage({
     redirect(`/rankings/${encodeURIComponent(exchange)}`)
   }
 
-  redirect('/')
+  // Show exchange index page
+  return <RankingsIndexClient />
 }

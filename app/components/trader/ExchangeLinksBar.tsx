@@ -5,6 +5,7 @@ import { EXCHANGE_NAMES } from '@/lib/constants/exchanges'
 import { Box, Text } from '@/app/components/base'
 import ExchangeLogo from '@/app/components/ui/ExchangeLogo'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
+import { getCopyTradeUrl, getDexUrl } from '@/lib/utils/copy-trade'
 
 /** Copy-trade URL map (CEX) */
 function getCopyTradeUrl(source: string, traderId: string, traderHandle?: string): string | null {
@@ -21,7 +22,19 @@ function getCopyTradeUrl(source: string, traderId: string, traderHandle?: string
     htx: `https://futures.htx.com/en-us/copytrading/futures/detail/${traderId}`,
     htx_futures: `https://futures.htx.com/en-us/copytrading/futures/detail/${traderId}`,
     weex: `https://www.weex.com/zh-CN/copy-trading/trader/${traderId}`,
-    etoro: `https://www.etoro.com/people/${traderHandle || traderId}/portfolio`,
+    etoro: \`https://www.etoro.com/people/\${traderHandle || traderId}/portfolio\`,
+    mexc: \`https://futures.mexc.com/copy-trading/trader/\${traderId}\`,
+    gateio: \`https://www.gate.io/strategybot/trader/\${traderId}\`,
+    bingx: \`https://bingx.com/en/CopyTrading/tradeDetail/\${traderId}\`,
+    bingx_spot: \`https://bingx.com/en/CopyTrading/tradeDetail/\${traderId}\`,
+    phemex: \`https://phemex.com/copy-trading/trader/\${traderId}\`,
+    blofin: \`https://blofin.com/en/copy-trade/details/\${traderId}\`,
+    coinex: \`https://www.coinex.com/copy-trading/trader/\${traderId}\`,
+    xt: \`https://www.xt.com/en/copy-trading/trader/\${traderId}\`,
+    btcc: \`https://www.btcc.com/en-US/copy-trading\`,
+    bitfinex: \`https://www.bitfinex.com/\`,
+    toobit: \`https://www.toobit.com/en-US/copy-trading\`,
+    bitunix: \`https://www.bitunix.com/copy-trading\`,
   }
   return urlMap[source.toLowerCase()] || null
 }
