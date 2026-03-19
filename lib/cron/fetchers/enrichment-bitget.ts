@@ -1,5 +1,9 @@
 /**
  * Bitget enrichment: equity curve, position history, stats detail
+ *
+ * Uses Cloudflare Worker proxy to bypass WAF protection.
+ * Strict per-request timeouts (10s) prevent the 44+ minute hangs
+ * that previously caused this enrichment to be disabled.
  */
 
 import { fetchJson } from './shared'
@@ -7,6 +11,11 @@ import { logger } from '@/lib/logger'
 import type { EquityCurvePoint, PositionHistoryItem, StatsDetail } from './enrichment-types'
 
 const BITGET_PROXY_URL = process.env.CLOUDFLARE_PROXY_URL || 'https://ranking-arena-proxy.broosbook.workers.dev'
+
+// Strict timeout for detail endpoints — prevents 44min hangs
+// profitList (equity curve) gets 15s, detail endpoints get 10s
+const EQUITY_TIMEOUT_MS = 15_000
+const DETAIL_TIMEOUT_MS = 10_000
 
 interface BitgetProfitLineResponse {
   code?: string
@@ -25,7 +34,7 @@ export async function fetchBitgetEquityCurve(
     const targetUrl = `https://www.bitget.com/v1/trigger/trace/public/trader/profitList?traderId=${traderId}`
     const data = await fetchJson<BitgetProfitLineResponse>(
       `${BITGET_PROXY_URL}?url=${encodeURIComponent(targetUrl)}`,
-      { timeoutMs: 20000 }
+      { timeoutMs: EQUITY_TIMEOUT_MS }
     )
 
     if (!data?.data?.length) return []
@@ -71,7 +80,7 @@ export async function fetchBitgetPositionHistory(
     const targetUrl = `https://www.bitget.com/v1/copy/mix/trader/detail?traderId=${traderId}`
     const data = await fetchJson<{ data?: { historyOrders?: BitgetPositionHistoryResponse['data'] } }>(
       `${BITGET_PROXY_URL}?url=${encodeURIComponent(targetUrl)}`,
-      { timeoutMs: 20000 }
+      { timeoutMs: DETAIL_TIMEOUT_MS }
     )
 
     const list = data?.data?.historyOrders?.list
@@ -117,7 +126,7 @@ export async function fetchBitgetStatsDetail(
       }
     }>(
       `${BITGET_PROXY_URL}?url=${encodeURIComponent(targetUrl)}`,
-      { timeoutMs: 20000 }
+      { timeoutMs: DETAIL_TIMEOUT_MS }
     )
 
     if (!data?.data) return null
@@ -129,14 +138,11 @@ export async function fetchBitgetStatsDetail(
       return isNaN(n) ? null : n
     }
 
-    const positions = await fetchBitgetPositionHistory(traderId, 100)
-    let winningPositions = 0
-    for (const pos of positions) {
-      if (pos.pnlUsd != null && pos.pnlUsd > 0) winningPositions++
-    }
-
+    // DO NOT call fetchBitgetPositionHistory here — it was the cause of 44min hangs.
+    // Stats detail is standalone. Position history is fetched separately by the runner
+    // if fetchPositionHistory is configured.
     return {
-      totalTrades: d.tradeCount ?? positions.length,
+      totalTrades: d.tradeCount ?? null,
       profitableTradesPct: parseNum(d.winRate),
       avgHoldingTimeHours: d.avgHoldingTime ? d.avgHoldingTime / 3600 : null,
       avgProfit: null,
@@ -150,8 +156,8 @@ export async function fetchBitgetStatsDetail(
       copiersCount: d.followerCount ?? d.copierCount ?? null,
       copiersPnl: parseNum(d.copierPnl),
       aum: parseNum(d.aum),
-      winningPositions,
-      totalPositions: positions.length,
+      winningPositions: null,
+      totalPositions: null,
     }
   } catch (err) {
     logger.warn(`[enrichment] Bitget stats detail failed: ${err}`)

@@ -238,15 +238,16 @@ export const ENRICHMENT_PLATFORM_CONFIGS: Record<string, EnrichmentConfig> = {
     fetchStatsDetail: fetchWeexStatsDetail,
     concurrency: 1, delayMs: 3000, // VPS scraper is slow, one at a time
   },
-  // bitget_futures: equity curve only — detail/position APIs hang >44min
-  // profitList endpoint works fine via CF Worker proxy (20s timeout)
+  // bitget_futures: RE-ENABLED stats+positions (2026-03-19)
+  // Root cause of 44min hang: fetchStatsDetail internally called fetchPositionHistory,
+  // doubling request time (2x20s timeout). Fix: standalone stats, strict 10s timeouts.
+  // Safety: concurrency:1, per-trader 25s timeout, per-platform 120s timeout.
   bitget_futures: {
     platform: 'bitget_futures',
     fetchEquityCurve: fetchBitgetEquityCurve,
-    // fetchStatsDetail REMOVED — hangs on trader/detail endpoint
-    // fetchPositionHistory REMOVED — hangs on copy/mix/trader/detail endpoint
-    // Stats already populated from leaderboard normalize() (ROI, win_rate, MDD, followers)
-    concurrency: 2, delayMs: 2000,
+    fetchStatsDetail: fetchBitgetStatsDetail,
+    fetchPositionHistory: fetchBitgetPositionHistory,
+    concurrency: 1, delayMs: 2000, // Serial: 1 trader at a time to prevent CF rate limits
   },
   // bitget_spot: enrichment not yet configured — spot-specific enrichment endpoints TBD
   hyperliquid: {
