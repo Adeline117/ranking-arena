@@ -45,7 +45,8 @@ async function fetchJSON(url: string, options: RequestInit = {}): Promise<unknow
     })
     if (!resp.ok) return null
     return await resp.json()
-  } catch {
+  } catch (err) {
+    console.warn('[backfill-avatars] fetchJSON failed for', url, '-', err instanceof Error ? err.message : String(err))
     return null
   }
 }
@@ -520,7 +521,8 @@ export async function GET(request: Request) {
           if (!error) { result.updated++; individualUpdated++ }
           else result.errors++
         }
-      } catch {
+      } catch (err) {
+        console.warn(`[backfill-avatars] Individual fetch failed for ${platform}/${t.source_trader_id}:`, err instanceof Error ? err.message : String(err))
         result.errors++
       }
 
