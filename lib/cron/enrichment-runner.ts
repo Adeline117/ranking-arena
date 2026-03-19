@@ -503,11 +503,14 @@ export async function runEnrichment(params: {
     if (!config) continue
 
     results[platformKey] = { enriched: 0, failed: 0, errors: [] }
+    let walletEnrichFailCount = 0
 
     // Per-platform timeout: isolate each platform so one hanging platform
     // doesn't burn the entire batch's time budget
     const platformTimeoutMs = getPlatformTimeout(platformKey)
     const platformStart = Date.now()
+    const platformController = new AbortController()
+    const platformTimer = setTimeout(() => platformController.abort(), platformTimeoutMs)
 
     try {
       await Promise.race([
@@ -549,97 +552,131 @@ export async function runEnrichment(params: {
           const traderId = trader.source_trader_id
           // Per-trader timeout: 30s for CEX, 60s for onchain
           const traderTimeoutMs = ONCHAIN_SET.has(platformKey) ? 60_000 : 30_000
-          const traderTimeout = new Promise<void>((_, reject) =>
-            setTimeout(() => reject(new Error(`Trader ${traderId} timed out after ${traderTimeoutMs / 1000}s`)), traderTimeoutMs)
-          )
+          const traderController = new AbortController()
+          const traderTimer = setTimeout(() => traderController.abort(), traderTimeoutMs)
+          // Cascade: if platform aborts, abort all its traders
+          const onPlatformAbort = () => traderController.abort()
+          platformController.signal.addEventListener('abort', onPlatformAbort, { once: true })
 
           try {
             await Promise.race([
               (async () => {
-                let curve: EquityCurvePoint[] = []
+                // --- Phase 1: Parallel API fetches (independent network calls) ---
+                const fetchPromises: Record<string, Promise<unknown>> = {}
 
-            if (config.fetchEquityCurve) {
-              curve = await withRetry(() => config.fetchEquityCurve!(traderId, days), `${platformKey}:${traderId} equity curve`)
-            }
-
-            // Fallback: build equity curve from daily snapshots in our DB
-            if (curve.length === 0) {
-              curve = await buildEquityCurveFromSnapshots(supabase, platformKey, traderId, days)
-            }
-
-            if (curve.length > 0) {
-              await withRetry(() => upsertEquityCurve(supabase, platformKey, traderId, period, curve), `${platformKey}:${traderId} save equity curve`)
-            }
-
-            if (config.fetchPositionHistory) {
-              const positions = await withRetry(() => config.fetchPositionHistory!(traderId), `${platformKey}:${traderId} position history`)
-              if (positions.length > 0) {
-                await withRetry(() => upsertPositionHistory(supabase, platformKey, traderId, positions), `${platformKey}:${traderId} save position history`)
-                // Compute and save asset breakdown from position history
-                const breakdown = calculateAssetBreakdown(positions)
-                if (breakdown.length > 0) {
-                  await withRetry(() => upsertAssetBreakdown(supabase, platformKey, traderId, period, breakdown), `${platformKey}:${traderId} save asset breakdown`)
+                // Equity curve fetch
+                if (config.fetchEquityCurve) {
+                  fetchPromises.equityCurve = withRetry(
+                    () => config.fetchEquityCurve!(traderId, days),
+                    `${platformKey}:${traderId} equity curve`
+                  ).catch(() => [] as EquityCurvePoint[])
                 }
-              }
-            }
 
-            if (config.fetchCurrentPositions) {
-              const currentPos = await withRetry(() => config.fetchCurrentPositions!(traderId), `${platformKey}:${traderId} current positions`)
-              if (currentPos.length > 0) {
-                await withRetry(
-                  () => upsertPortfolio(supabase, platformKey, traderId,
-                    currentPos.map((p) => ({
-                      symbol: p.symbol,
-                      direction: p.direction,
-                      investedPct: 'investedPct' in p ? p.investedPct : null,
-                      entryPrice: p.entryPrice,
-                      pnl: 'pnl' in p ? p.pnl : ('pnlUsd' in p ? (p as PositionHistoryItem).pnlUsd : null),
-                    }))),
-                  `${platformKey}:${traderId} save current positions`
-                )
-              }
-            }
-
-            if (config.fetchStatsDetail) {
-              let stats = await withRetry(() => config.fetchStatsDetail!(traderId), `${platformKey}:${traderId} stats detail`)
-              if (stats) {
-                if (curve.length > 0) {
-                  stats = enhanceStatsWithDerivedMetrics(stats, curve, period)
+                // Position history fetch
+                if (config.fetchPositionHistory) {
+                  fetchPromises.positions = withRetry(
+                    () => config.fetchPositionHistory!(traderId),
+                    `${platformKey}:${traderId} position history`
+                  ).catch(() => [] as PositionHistoryItem[])
                 }
-                await withRetry(() => upsertStatsDetail(supabase, platformKey, traderId, period, stats!), `${platformKey}:${traderId} save stats detail`)
 
-                // Write win_rate, max_drawdown, and PnL back to snapshot so leaderboard shows them
-                const snapshotUpdate: Record<string, unknown> = {}
-                if (stats.profitableTradesPct != null) snapshotUpdate.win_rate = stats.profitableTradesPct
-                if (stats.maxDrawdown != null) snapshotUpdate.max_drawdown = stats.maxDrawdown
-                if (stats.totalTrades != null) snapshotUpdate.trades_count = stats.totalTrades
-                // Write PnL from equity curve when snapshot PnL is null
-                // (e.g., Bybit leaderboard doesn't include PnL, only the detail endpoint does)
+                // Current positions fetch
+                if (config.fetchCurrentPositions) {
+                  fetchPromises.currentPositions = withRetry(
+                    () => config.fetchCurrentPositions!(traderId),
+                    `${platformKey}:${traderId} current positions`
+                  ).catch(() => [] as (PortfolioPosition | PositionHistoryItem)[])
+                }
+
+                // Stats detail fetch
+                if (config.fetchStatsDetail) {
+                  fetchPromises.stats = withRetry(
+                    () => config.fetchStatsDetail!(traderId),
+                    `${platformKey}:${traderId} stats detail`
+                  ).catch(() => null as StatsDetail | null)
+                }
+
+                // DEX wallet AUM fetch (optional, failures swallowed)
+                if (isDexPlatform(platformKey)) {
+                  fetchPromises.walletAum = fetchWalletAUM(platformKey, traderId).catch(() => null)
+                }
+
+                // Await all API fetches in parallel
+                const settled = await Promise.allSettled(Object.values(fetchPromises))
+                const keys = Object.keys(fetchPromises)
+                const fetchResults: Record<string, unknown> = {}
+                keys.forEach((key, idx) => {
+                  const result = settled[idx]
+                  fetchResults[key] = result.status === 'fulfilled' ? result.value : null
+                })
+
+                let curve = (fetchResults.equityCurve as EquityCurvePoint[] | null) ?? []
+                const positions = (fetchResults.positions as PositionHistoryItem[] | null) ?? []
+                const currentPos = (fetchResults.currentPositions as (PortfolioPosition | PositionHistoryItem)[] | null) ?? []
+                let stats = fetchResults.stats as StatsDetail | null
+                const walletAum = fetchResults.walletAum as number | null
+
+                // --- Phase 2: Fallback equity curve from DB snapshots ---
+                if (curve.length === 0) {
+                  curve = await buildEquityCurveFromSnapshots(supabase, platformKey, traderId, days)
+                }
+
+                // --- Phase 3: Sequential DB writes (depend on fetch results) ---
                 if (curve.length > 0) {
-                  const lastPoint = curve[curve.length - 1]
-                  if (lastPoint.pnl != null) {
-                    snapshotUpdate.pnl_usd = lastPoint.pnl
+                  await withRetry(() => upsertEquityCurve(supabase, platformKey, traderId, period, curve), `${platformKey}:${traderId} save equity curve`)
+                }
+
+                if (config.fetchPositionHistory && positions.length > 0) {
+                  await withRetry(() => upsertPositionHistory(supabase, platformKey, traderId, positions), `${platformKey}:${traderId} save position history`)
+                  const breakdown = calculateAssetBreakdown(positions)
+                  if (breakdown.length > 0) {
+                    await withRetry(() => upsertAssetBreakdown(supabase, platformKey, traderId, period, breakdown), `${platformKey}:${traderId} save asset breakdown`)
                   }
                 }
-                if (Object.keys(snapshotUpdate).length > 0) {
-                  // Write enrichment results to v2 only (v1 writes removed 2026-03-18)
-                  // V2 columns: platform, trader_key, window
-                  await supabase
-                    .from('trader_snapshots_v2')
-                    .update(snapshotUpdate)
-                    .eq(V2.platform, platformKey)
-                    .eq(V2.trader_key, traderId)
-                    .eq(V2.window, period)
-                }
-              }
-            }
 
-            // On-chain wallet enrichment for DEX platforms (AUM + portfolio)
-            if (isDexPlatform(platformKey)) {
-              try {
-                const walletAum = await fetchWalletAUM(platformKey, traderId)
-                if (walletAum != null && walletAum > 10) {
-                  // Update AUM in stats_detail
+                if (config.fetchCurrentPositions && currentPos.length > 0) {
+                  await withRetry(
+                    () => upsertPortfolio(supabase, platformKey, traderId,
+                      currentPos.map((p) => ({
+                        symbol: p.symbol,
+                        direction: p.direction,
+                        investedPct: 'investedPct' in p ? p.investedPct : null,
+                        entryPrice: p.entryPrice,
+                        pnl: 'pnl' in p ? p.pnl : ('pnlUsd' in p ? (p as PositionHistoryItem).pnlUsd : null),
+                      }))),
+                    `${platformKey}:${traderId} save current positions`
+                  )
+                }
+
+                if (config.fetchStatsDetail && stats) {
+                  if (curve.length > 0) {
+                    stats = enhanceStatsWithDerivedMetrics(stats, curve, period)
+                  }
+                  await withRetry(() => upsertStatsDetail(supabase, platformKey, traderId, period, stats!), `${platformKey}:${traderId} save stats detail`)
+
+                  // Write win_rate, max_drawdown, and PnL back to snapshot so leaderboard shows them
+                  const snapshotUpdate: Record<string, unknown> = {}
+                  if (stats.profitableTradesPct != null) snapshotUpdate.win_rate = stats.profitableTradesPct
+                  if (stats.maxDrawdown != null) snapshotUpdate.max_drawdown = stats.maxDrawdown
+                  if (stats.totalTrades != null) snapshotUpdate.trades_count = stats.totalTrades
+                  if (curve.length > 0) {
+                    const lastPoint = curve[curve.length - 1]
+                    if (lastPoint.pnl != null) {
+                      snapshotUpdate.pnl_usd = lastPoint.pnl
+                    }
+                  }
+                  if (Object.keys(snapshotUpdate).length > 0) {
+                    await supabase
+                      .from('trader_snapshots_v2')
+                      .update(snapshotUpdate)
+                      .eq(V2.platform, platformKey)
+                      .eq(V2.trader_key, traderId)
+                      .eq(V2.window, period)
+                  }
+                }
+
+                // On-chain wallet enrichment DB writes (AUM + portfolio)
+                if (isDexPlatform(platformKey) && walletAum != null && walletAum > 10) {
                   await supabase
                     .from('trader_stats_detail')
                     .update({ aum: walletAum })
@@ -647,22 +684,25 @@ export async function runEnrichment(params: {
                     .eq('source_trader_id', traderId)
                     .eq('season_id', period)
 
-                  // Also save on-chain portfolio if no current positions exist
                   if (!config.fetchCurrentPositions) {
-                    const walletPortfolio = await fetchWalletPortfolio(platformKey, traderId)
-                    if (walletPortfolio.length > 0) {
-                      await upsertPortfolio(supabase, platformKey, traderId, walletPortfolio)
+                    try {
+                      const walletPortfolio = await fetchWalletPortfolio(platformKey, traderId)
+                      if (walletPortfolio.length > 0) {
+                        await upsertPortfolio(supabase, platformKey, traderId, walletPortfolio)
+                      }
+                    } catch {
+                      // Wallet portfolio is optional
                     }
                   }
                 }
-              } catch {
-                // Intentionally swallowed: wallet enrichment is optional, main trader data already upserted
-              }
-            }
 
                 results[platformKey].enriched++
               })(),
-              traderTimeout
+              new Promise<void>((_, reject) => {
+                if (traderController.signal.aborted) return reject(new Error(`Trader ${traderId} timed out after ${traderTimeoutMs / 1000}s`))
+                traderController.signal.addEventListener('abort', () =>
+                  reject(new Error(`Trader ${traderId} timed out after ${traderTimeoutMs / 1000}s`)), { once: true })
+              })
             ])
           } catch (err) {
             results[platformKey].failed++
@@ -671,6 +711,9 @@ export async function runEnrichment(params: {
               results[platformKey].errors.push(`${traderId}: ${errMsg}`)
             }
             throw err // Re-throw to be caught by allSettled
+          } finally {
+            clearTimeout(traderTimer)
+            platformController.signal.removeEventListener('abort', onPlatformAbort)
           }
         })
       )
@@ -692,15 +735,20 @@ export async function runEnrichment(params: {
       }
     }
         })(),
-        new Promise<void>((_, reject) =>
-          setTimeout(() => reject(new Error(`Platform ${platformKey} timed out after ${platformTimeoutMs / 1000}s`)), platformTimeoutMs)
-        ),
+        new Promise<void>((_, reject) => {
+          if (platformController.signal.aborted) return reject(new Error(`Platform ${platformKey} timed out after ${platformTimeoutMs / 1000}s`))
+          platformController.signal.addEventListener('abort', () =>
+            reject(new Error(`Platform ${platformKey} timed out after ${platformTimeoutMs / 1000}s`)), { once: true })
+        }),
       ])
     } catch (err) {
       const errMsg = err instanceof Error ? err.message : String(err)
       logger.error(`[enrich] Platform ${platformKey} failed/timed out: ${errMsg}`)
       results[platformKey].errors.push(errMsg)
       // Continue to next platform - don't let one platform block others
+    } finally {
+      clearTimeout(platformTimer)
+      platformController.abort() // Clean up any lingering trader work on platform completion/timeout
     }
   }
 
