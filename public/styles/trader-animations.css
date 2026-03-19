@@ -163,7 +163,7 @@
 
 .profile-tab-button {
   position: relative;
-  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  transition: transform 0.25s cubic-bezier(0.4, 0, 0.2, 1), color 0.25s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .profile-tab-button:hover {
@@ -194,7 +194,7 @@
 /* Performance 卡片 */
 .performance-card {
   animation: fadeInScale 0.5s ease-out 0.35s both;
-  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .performance-card:hover {
@@ -204,7 +204,7 @@
 
 /* Arena Score 徽章 */
 .arena-score-badge {
-  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .arena-score-badge:hover {
@@ -222,7 +222,7 @@
 }
 
 .metric-item {
-  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  transition: transform 0.25s cubic-bezier(0.4, 0, 0.2, 1), background-color 0.25s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .metric-item:hover {
@@ -234,7 +234,7 @@
 /* About 卡片 */
 .about-card {
   animation: slideInRight 0.5s ease-out 0.4s both;
-  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .about-card:hover {
@@ -248,7 +248,7 @@
 }
 
 .feed-item {
-  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  transition: transform 0.25s cubic-bezier(0.4, 0, 0.2, 1), background-color 0.25s cubic-bezier(0.4, 0, 0.2, 1);
   position: relative;
   overflow: hidden;
 }
@@ -278,7 +278,7 @@
 .stats-card {
   animation: fadeInScale 0.5s ease-out;
   animation-fill-mode: both;
-  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .stats-card:nth-child(1) { animation-delay: 0.1s; }
@@ -297,7 +297,7 @@
 }
 
 .portfolio-row {
-  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  transition: transform 0.25s cubic-bezier(0.4, 0, 0.2, 1), background-color 0.25s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .portfolio-row:hover {
@@ -309,7 +309,7 @@
 .position-card {
   animation: fadeInUp 0.4s ease-out;
   animation-fill-mode: both;
-  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.3s cubic-bezier(0.4, 0, 0.2, 1), border-color 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .position-card:nth-child(1) { animation-delay: 0.05s; }
@@ -330,7 +330,7 @@
 }
 
 .similar-trader-item {
-  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  transition: transform 0.25s cubic-bezier(0.4, 0, 0.2, 1), background-color 0.25s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .similar-trader-item:hover {

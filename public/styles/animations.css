@@ -306,7 +306,7 @@
 }
 
 .card-hover-glow {
-  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  transition: box-shadow 0.3s cubic-bezier(0.4, 0, 0.2, 1), border-color 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .card-hover-glow:hover {
@@ -337,7 +337,7 @@
 }
 
 .btn-glow {
-  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  transition: box-shadow 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .btn-glow:hover {
@@ -376,7 +376,7 @@
 
 /* 列表项悬停 */
 .list-item-hover {
-  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  transition: background-color 0.25s cubic-bezier(0.4, 0, 0.2, 1), transform 0.25s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .list-item-hover:hover {
@@ -387,7 +387,7 @@
 /* 列表项带边框指示器 */
 .list-item-indicator {
   position: relative;
-  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  transition: background-color 0.25s cubic-bezier(0.4, 0, 0.2, 1), color 0.25s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .list-item-indicator::before {
@@ -478,7 +478,7 @@
   backdrop-filter: blur(20px);
   -webkit-backdrop-filter: blur(20px);
   border: 1px solid var(--glass-border-light);
-  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  transition: background-color 0.3s cubic-bezier(0.4, 0, 0.2, 1), border-color 0.3s cubic-bezier(0.4, 0, 0.2, 1), transform 0.3s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .glass-card-hover:hover {
@@ -646,7 +646,7 @@
 }
 
 .dropdown-item {
-  transition: all 0.15s ease;
+  transition: background-color 0.15s ease, transform 0.15s ease;
 }
 
 .dropdown-item:hover {
@@ -659,7 +659,7 @@
    ============================================ */
 
 .input-focus-glow {
-  transition: all 0.2s ease;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
 }
 
 .input-focus-glow:focus {
@@ -672,7 +672,7 @@
   left: 12px;
   top: 50%;
   transform: translateY(-50%);
-  transition: all 0.2s ease;
+  transition: top 0.2s ease, left 0.2s ease, font-size 0.2s ease, color 0.2s ease;
   pointer-events: none;
   color: var(--color-text-tertiary);
 }
