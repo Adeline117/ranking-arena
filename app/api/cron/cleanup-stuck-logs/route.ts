@@ -89,7 +89,34 @@ export async function GET(request: NextRequest) {
 
     const cleaned = count || 0
     logger.warn(`[cleanup-stuck-logs] Successfully marked ${cleaned} stuck logs as timeout`)
-    await plog.success(cleaned, { jobs: stuckLogs.map(l => l.job_name) })
+
+    // Delete pipeline_logs older than 30 days to prevent unbounded growth
+    let oldLogsDeleted = 0
+    try {
+      const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString()
+      const MAX_LOG_CLEANUP_BATCHES = 5 // max 25K rows per run
+      for (let batch = 0; batch < MAX_LOG_CLEANUP_BATCHES; batch++) {
+        const { count: deletedCount, error: deleteErr } = await supabase
+          .from('pipeline_logs')
+          .delete({ count: 'exact' })
+          .lt('started_at', thirtyDaysAgo)
+          .limit(5000)
+        if (deleteErr) {
+          logger.warn('[cleanup-stuck-logs] Failed to delete old pipeline_logs:', deleteErr.message)
+          break
+        }
+        const deleted = deletedCount ?? 0
+        oldLogsDeleted += deleted
+        if (deleted < 5000) break
+      }
+      if (oldLogsDeleted > 0) {
+        logger.info(`[cleanup-stuck-logs] Deleted ${oldLogsDeleted} pipeline_logs older than 30 days`)
+      }
+    } catch (deleteErr) {
+      logger.warn('[cleanup-stuck-logs] pipeline_logs rotation failed:', deleteErr)
+    }
+
+    await plog.success(cleaned, { jobs: stuckLogs.map(l => l.job_name), oldLogsDeleted })
 
     // Send Telegram alert listing stuck job names
     const jobDetails = stuckLogs
