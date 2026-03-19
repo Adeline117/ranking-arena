@@ -4,7 +4,9 @@
  */
 
 // 🚨 DISABLED PLATFORMS - permanently blocked due to repeated failures/hangs
-export const DISABLED_PLATFORMS = ['bitget_futures', 'bitget_spot', 'binance_spot'] as const
+// binance_spot: RE-ENABLED 2026-03-19 — added 30s per-page + 4min total timeout
+// bitget_futures: RE-ENABLED 2026-03-19 — reduced to 60s per-page + 4min total timeout
+export const DISABLED_PLATFORMS = ['bitget_spot'] as const
 export type DisabledPlatform = typeof DISABLED_PLATFORMS[number]
 
 export function isPlatformDisabled(platform: string): boolean {

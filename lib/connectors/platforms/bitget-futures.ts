@@ -13,6 +13,7 @@ import {
   BitgetFuturesTimeseriesResponseSchema,
 } from './schemas'
 import type {
+  LeaderboardPlatform,
   DiscoverResult,
   ProfileResult,
   SnapshotResult,
@@ -40,10 +41,10 @@ const VPS_PERIOD_MAP: Record<Window, string> = {
 }
 
 export class BitgetFuturesConnector extends BaseConnector {
-  readonly platform = 'bitget' as const
+  readonly platform = 'bitget_futures' as const
   readonly marketType = 'futures' as const
   readonly capabilities: PlatformCapabilities = {
-    platform: 'bitget',
+    platform: 'bitget_futures' as LeaderboardPlatform,
     market_types: ['futures', 'spot'],
     native_windows: ['7d', '30d', '90d'],
     available_fields: ['roi', 'pnl', 'win_rate', 'max_drawdown', 'followers', 'copiers', 'aum'],
@@ -60,16 +61,21 @@ export class BitgetFuturesConnector extends BaseConnector {
     // Auto-paginate: fetch all pages (Bitget has 100+ traders per timeRange)
     const allTraders: TraderSource[] = []
     let currentPage = Math.floor(offset / limit) + 1
-    const maxPages = 10 // Safety: 10 pages × 100 = 1000 max
+    const maxPages = 5 // Safety: 5 pages × 100 = 500 max (reduced from 10 to prevent hangs)
     let totalAvailable: number | null = null
+    // Total timeout: 4 minutes — hard cap to prevent cron hangs
+    const totalDeadline = Date.now() + 4 * 60 * 1000
 
     while (currentPage <= maxPages) {
+      // Bail if approaching total deadline
+      if (Date.now() > totalDeadline) break
+
       // Bitget is CF-protected; proxy forwards get empty responses.
       // Try VPS Playwright scraper first, fall back to direct API.
       let _rawLb: Record<string, unknown>
       const vpsData = await this.fetchViaVPS<Record<string, unknown>>('/bitget/leaderboard', {
         period: VPS_PERIOD_MAP[window], pageNo: String(currentPage), pageSize: String(limit),
-      }, 120000)
+      }, 60000) // 60s per page (reduced from 120s)
       if (vpsData) {
         _rawLb = vpsData
       } else {
@@ -86,7 +92,7 @@ export class BitgetFuturesConnector extends BaseConnector {
       if (!Array.isArray(list) || list.length === 0) break
 
       const traders: TraderSource[] = list.map((item: Record<string, unknown>) => ({
-        platform: 'bitget' as const,
+        platform: 'bitget_futures' as const,
         market_type: 'futures' as const,
         trader_key: String(item.traderId || item.traderUid || ''),
         display_name: (item.traderName as string) || (item.traderNickName as string) || null,
@@ -123,7 +129,7 @@ export class BitgetFuturesConnector extends BaseConnector {
     if (!info) return null
 
     const profile: TraderProfile = {
-      platform: 'bitget',
+      platform: 'bitget_futures',
       market_type: 'futures',
       trader_key: traderKey,
       display_name: (info.traderName as string) || null,
@@ -137,7 +143,7 @@ export class BitgetFuturesConnector extends BaseConnector {
       updated_at: new Date().toISOString(),
       last_enriched_at: new Date().toISOString(),
       provenance: {
-        source_platform: 'bitget',
+        source_platform: 'bitget_futures',
         acquisition_method: 'api',
         fetched_at: new Date().toISOString(),
         source_url: `https://www.bitget.com/v1/trigger/trace/public/trader/detail?traderId=${traderKey}`,
@@ -202,7 +208,7 @@ export class BitgetFuturesConnector extends BaseConnector {
 
     if (Array.isArray(profitList) && profitList.length > 0) {
       series.push({
-        platform: 'bitget',
+        platform: 'bitget_futures',
         market_type: 'futures',
         trader_key: traderKey,
         series_type: 'daily_pnl',

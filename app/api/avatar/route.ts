@@ -7,12 +7,15 @@ import { NextResponse } from 'next/server'
 import logger from '@/lib/logger'
 import { getCorsOrigin } from '@/lib/utils/cors'
 
-export const dynamic = 'force-dynamic'
+// Avatar proxy is a read-only, cacheable operation — do NOT force-dynamic.
+// Removing force-dynamic allows Vercel's CDN to cache each unique avatar URL
+// so repeated requests for the same avatar hit the edge, not the serverless function.
+// This is the primary fix for 429s when 20+ avatars load simultaneously on a leaderboard page.
 
 // Pin to Tokyo — exchange CDNs are geo-blocked from US regions
 export const preferredRegion = 'hnd1'
 
-// 缓存时间：7 天
+// Browser cache: 7 days. CDN edge cache: also 7 days (via Surrogate-Control).
 const CACHE_MAX_AGE = 60 * 60 * 24 * 7
 
 export async function GET(request: Request) {
@@ -163,7 +166,10 @@ export async function GET(request: Request) {
           return new NextResponse(buf, {
             headers: {
               'Content-Type': ct,
-              'Cache-Control': `public, max-age=${CACHE_MAX_AGE}`,
+              // Browser cache: 7d. CDN edge cache: 7d so repeated avatar loads hit edge, not serverless.
+              'Cache-Control': `public, max-age=${CACHE_MAX_AGE}, stale-while-revalidate=86400`,
+              'Surrogate-Control': `max-age=${CACHE_MAX_AGE}`,
+              'CDN-Cache-Control': `public, max-age=${CACHE_MAX_AGE}`,
               'Access-Control-Allow-Origin': getCorsOrigin(origin2),
             },
           })
@@ -184,7 +190,10 @@ export async function GET(request: Request) {
     return new NextResponse(buffer, {
       headers: {
         'Content-Type': contentType,
-        'Cache-Control': `public, max-age=${CACHE_MAX_AGE}`,
+        // Browser cache: 7d. CDN edge cache: 7d so repeated avatar loads hit edge, not serverless.
+        'Cache-Control': `public, max-age=${CACHE_MAX_AGE}, stale-while-revalidate=86400`,
+        'Surrogate-Control': `max-age=${CACHE_MAX_AGE}`,
+        'CDN-Cache-Control': `public, max-age=${CACHE_MAX_AGE}`,
         'Access-Control-Allow-Origin': getCorsOrigin(origin),
       },
     })

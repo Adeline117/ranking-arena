@@ -54,10 +54,10 @@ const GROUPS: Record<string, string[]> = {
   a: ['binance_futures', 'binance_spot'],
   // Group A2: OKX only (every 3h) — direct API works
   a2: ['okx_futures'],
-  // Group A3: Bybit (every 3h) — VPS scraper, needs own group (Playwright slow)
-  a3: ['bybit'],
-  // Group A4: Bitget (every 3h) — DISABLED 2026-03-18 EMERGENCY (7th stuck >44min)
-  a4: [], // bitget_futures PERMANENTLY REMOVED - VPS scraper repeatedly hangs 44+ min
+  // Group A3: Bybit futures + spot (every 3h) — VPS scraper
+  a3: ['bybit', 'bybit_spot'],
+  // Group A4: Bitget (every 3h) — RE-ENABLED 2026-03-19 (60s/page + 4min total timeout)
+  a4: ['bitget_futures'],
   // Group B: Top DEX (every 4h) + GMX (switched to subgraph 2026-03-15)
   b: ['hyperliquid', 'gmx'],
   // Group C: Mid-priority (every 4h) — okx_futures moved to a2, bitunix re-enabled
@@ -81,6 +81,8 @@ const GROUPS: Record<string, string[]> = {
   // dYdX restored via Copin API (2026-03-15)
   // blofin/phemex: Mac Mini feeds data, connector as backup
   i: ['etoro', 'dydx'],
+  // Group K: Restored platforms via VPS scraper (every 6h)
+  k: ['kucoin'],
 }
 
 interface BatchResult {

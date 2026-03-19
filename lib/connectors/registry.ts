@@ -210,11 +210,12 @@ export async function initializeConnectors(): Promise<void> {
   // CEX Connectors
   lazy('binance_futures:futures', () => import('./platforms/binance-futures'), 'BinanceFuturesConnector', 'binance_futures')
   lazy('bybit:futures', () => import('./platforms/bybit-futures'), 'BybitFuturesConnector', 'bybit')
+  lazy('bybit_spot:spot', () => import('./platforms/bybit-spot'), 'BybitSpotConnector', 'bybit_spot')
   lazy('bitget_futures:futures', () => import('./platforms/bitget-futures'), 'BitgetFuturesConnector', 'bitget_futures')
   lazy('mexc:futures', () => import('./platforms/mexc-futures'), 'MexcFuturesConnector', 'mexc')
   lazy('coinex:futures', () => import('./platforms/coinex-futures'), 'CoinexFuturesConnector', 'coinex')
   lazy('okx_futures:futures', () => import('./platforms/okx-futures'), 'OkxFuturesConnector', 'okx_futures')
-  // kucoin — DEAD
+  lazy('kucoin:futures', () => import('./platforms/kucoin-futures'), 'KucoinFuturesConnector', 'kucoin')
   // bitmart — DEAD
   lazy('phemex:futures', () => import('./platforms/phemex-futures'), 'PhemexFuturesConnector', 'phemex')
   lazy('htx_futures:futures', () => import('./platforms/htx-futures'), 'HtxFuturesConnector', 'htx_futures')
@@ -268,7 +269,7 @@ export async function initializeConnectors(): Promise<void> {
  */
 const IMPLEMENTED_PLATFORMS: GranularPlatform[] = [
   'binance_futures',
-  // 'binance_spot', — PERMANENTLY REMOVED (2026-03-14): repeatedly hangs 45-76min, blocks entire pipeline
+  'binance_spot', // RE-ENABLED 2026-03-19: added 30s per-page + 4min total timeout
   'bybit',
   'bitget_futures',
   'bitget_spot',

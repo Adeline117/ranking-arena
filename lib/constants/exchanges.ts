@@ -423,6 +423,7 @@ export const SOURCE_TO_CONNECTOR_MAP: Record<string, { platform: string; marketT
   crypto_com: { platform: 'crypto_com', marketType: 'futures' },
   etoro: { platform: 'etoro', marketType: 'spot' },
   bybit: { platform: 'bybit', marketType: 'futures' },
+  bybit_spot: { platform: 'bybit_spot', marketType: 'spot' },
   hyperliquid: { platform: 'hyperliquid', marketType: 'perp' },
   gmx: { platform: 'gmx', marketType: 'perp' },
   dydx: { platform: 'dydx', marketType: 'perp' },
@@ -434,5 +435,6 @@ export const SOURCE_TO_CONNECTOR_MAP: Record<string, { platform: string; marketT
   weex: { platform: 'weex', marketType: 'futures' },
   phemex: { platform: 'phemex', marketType: 'futures' },
   lbank: { platform: 'lbank', marketType: 'futures' },
+  kucoin: { platform: 'kucoin', marketType: 'futures' },
   kwenta: { platform: 'kwenta', marketType: 'perp' },
 }

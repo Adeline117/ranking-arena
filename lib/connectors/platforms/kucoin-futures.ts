@@ -28,20 +28,41 @@ export class KucoinFuturesConnector extends BaseConnector {
     notes: ['CF protected', 'All 3 windows supported'],
   }
 
-  async discoverLeaderboard(window: Window, limit = 20, offset = 0): Promise<DiscoverResult> {
+  async discoverLeaderboard(window: Window, limit = 50, offset = 0): Promise<DiscoverResult> {
     const pageNo = Math.floor(offset / limit) + 1
-    const _rawLb = await this.request<Record<string, unknown>>(
-      `https://www.kucoin.com/_api/copy-trade/leader/public/list?pageNo=${pageNo}&pageSize=${limit}&orderBy=ROI&period=${WINDOW_MAP[window]}`,
-      { method: 'GET' }
-    )
-    const data = warnValidate(KucoinFuturesLeaderboardResponseSchema, _rawLb, 'kucoin-futures/leaderboard')
-    const list = data?.data?.items || []
 
-    const traders: TraderSource[] = (Array.isArray(list) ? list : []).map((item: Record<string, unknown>) => ({
+    // Strategy 1: VPS Playwright scraper (primary — KuCoin API returns 404 from datacenter)
+    const vpsData = await this.fetchViaVPS<Record<string, unknown>>('/kucoin/leaderboard', {
+      pageNo: String(pageNo), pageSize: String(limit),
+    }, 90000) // 90s — CF challenge can be slow
+
+    let rawList: Record<string, unknown>[] = []
+    if (vpsData) {
+      const dataObj = (vpsData?.data ?? vpsData) as Record<string, unknown>
+      const items = dataObj?.items || dataObj?.list || dataObj?.rows
+      if (Array.isArray(items)) rawList = items as Record<string, unknown>[]
+    }
+
+    // Strategy 2: Direct API fallback (may work from residential IPs)
+    if (rawList.length === 0) {
+      try {
+        const _rawLb = await this.request<Record<string, unknown>>(
+          `https://www.kucoin.com/_api/copy-trade/leader/public/list?pageNo=${pageNo}&pageSize=${limit}&orderBy=ROI&period=${WINDOW_MAP[window]}`,
+          { method: 'GET' }
+        )
+        const data = warnValidate(KucoinFuturesLeaderboardResponseSchema, _rawLb, 'kucoin-futures/leaderboard')
+        const list = data?.data?.items || []
+        if (Array.isArray(list)) rawList = list as Record<string, unknown>[]
+      } catch {
+        // Direct API failed — expected
+      }
+    }
+
+    const traders: TraderSource[] = rawList.map((item: Record<string, unknown>) => ({
       platform: 'kucoin' as const, market_type: 'futures' as const,
-      trader_key: String(item.uid || ''),
-      display_name: (item.nickName as string) || null,
-      profile_url: `https://www.kucoin.com/copy-trading/leader/${item.uid}`,
+      trader_key: String(item.uid || item.leaderId || item.id || ''),
+      display_name: (item.nickName as string) || (item.name as string) || null,
+      profile_url: `https://www.kucoin.com/copy-trading/leader/${item.uid || item.leaderId || item.id}`,
       discovered_at: new Date().toISOString(), last_seen_at: new Date().toISOString(),
       is_active: true, raw: item as Record<string, unknown>,
     }))
