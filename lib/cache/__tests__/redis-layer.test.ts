@@ -90,7 +90,7 @@ describe('redis-layer', () => {
 
   describe('tieredGet', () => {
     it('should return from memory cache on hit', async () => {
-      const cached = { data: { foo: 'bar' }, tier: 'warm', cachedAt: Date.now(), expiresAt: Date.now() + 60000, hitCount: 1 }
+      const cached = { data: { foo: 'bar' }, tier: 'warm', cachedAt: Date.now(), expiresAt: Date.now() + 60000 }
       mockMemoryCache.get.mockReturnValue(cached)
 
       const result = await tieredGet('test-key', 'warm')
@@ -106,7 +106,7 @@ describe('redis-layer', () => {
     })
 
     it('should track memory hits in stats', async () => {
-      const cached = { data: 'value', tier: 'hot', cachedAt: Date.now(), expiresAt: Date.now() + 60000, hitCount: 0 }
+      const cached = { data: 'value', tier: 'hot', cachedAt: Date.now(), expiresAt: Date.now() + 60000 }
       mockMemoryCache.get.mockReturnValue(cached)
 
       await tieredGet('key1', 'hot')
@@ -156,7 +156,6 @@ describe('redis-layer', () => {
       expect(entry.cachedAt).toBeGreaterThanOrEqual(before)
       expect(entry.cachedAt).toBeLessThanOrEqual(after)
       expect(entry.expiresAt).toBe(entry.cachedAt + CACHE_TIERS.cold.redisTtlSeconds * 1000)
-      expect(entry.hitCount).toBe(0)
     })
   })
 
@@ -169,7 +168,7 @@ describe('redis-layer', () => {
 
   describe('tieredGetOrSet', () => {
     it('should return cached data without calling fetcher', async () => {
-      const cached = { data: 'cached-value', tier: 'warm', cachedAt: Date.now(), expiresAt: Date.now() + 60000, hitCount: 1 }
+      const cached = { data: 'cached-value', tier: 'warm', cachedAt: Date.now(), expiresAt: Date.now() + 60000 }
       mockMemoryCache.get.mockReturnValue(cached)
 
       const fetcher = jest.fn().mockResolvedValue('fresh-value')
@@ -203,7 +202,7 @@ describe('redis-layer', () => {
   describe('resetLayerStats', () => {
     it('should reset all counters to zero', async () => {
       // Generate some stats
-      const cached = { data: 'v', tier: 'hot', cachedAt: Date.now(), expiresAt: Date.now() + 60000, hitCount: 0 }
+      const cached = { data: 'v', tier: 'hot', cachedAt: Date.now(), expiresAt: Date.now() + 60000 }
       mockMemoryCache.get.mockReturnValue(cached)
       await tieredGet('k', 'hot')
 
