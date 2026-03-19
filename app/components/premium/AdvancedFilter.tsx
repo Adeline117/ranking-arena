@@ -348,6 +348,7 @@ export default function AdvancedFilter({
               <input
                 type="number"
                 placeholder={t('min')}
+                aria-label={`${t('roiRange')} ${t('min')}`}
                 value={currentFilter.roi_min ?? ''}
                 onChange={(e) => updateFilter('roi_min', e.target.value ? Number(e.target.value) : undefined)}
                 style={{
@@ -365,6 +366,7 @@ export default function AdvancedFilter({
               <input
                 type="number"
                 placeholder={t('max')}
+                aria-label={`${t('roiRange')} ${t('max')}`}
                 value={currentFilter.roi_max ?? ''}
                 onChange={(e) => updateFilter('roi_max', e.target.value ? Number(e.target.value) : undefined)}
                 style={{
@@ -390,6 +392,7 @@ export default function AdvancedFilter({
               <input
                 type="number"
                 placeholder={t('min')}
+                aria-label={`${t('drawdownRange')} ${t('min')}`}
                 value={currentFilter.drawdown_min ?? ''}
                 onChange={(e) => updateFilter('drawdown_min', e.target.value ? Number(e.target.value) : undefined)}
                 style={{
@@ -407,6 +410,7 @@ export default function AdvancedFilter({
               <input
                 type="number"
                 placeholder={t('max')}
+                aria-label={`${t('drawdownRange')} ${t('max')}`}
                 value={currentFilter.drawdown_max ?? ''}
                 onChange={(e) => updateFilter('drawdown_max', e.target.value ? Number(e.target.value) : undefined)}
                 style={{
@@ -432,6 +436,7 @@ export default function AdvancedFilter({
               <input
                 type="number"
                 placeholder={`${t('egExample')} 1000`}
+                aria-label={t('minPnl')}
                 value={currentFilter.min_pnl ?? ''}
                 onChange={(e) => updateFilter('min_pnl', e.target.value ? Number(e.target.value) : undefined)}
                 style={{
@@ -453,6 +458,7 @@ export default function AdvancedFilter({
               <input
                 type="number"
                 placeholder={`${t('egExample')} 40`}
+                aria-label={t('minScore')}
                 value={currentFilter.min_score ?? ''}
                 onChange={(e) => updateFilter('min_score', e.target.value ? Number(e.target.value) : undefined)}
                 style={{
@@ -474,6 +480,7 @@ export default function AdvancedFilter({
               <input
                 type="number"
                 placeholder={`${t('egExample')} 50`}
+                aria-label={t('minWinRate')}
                 value={currentFilter.min_win_rate ?? ''}
                 onChange={(e) => updateFilter('min_win_rate', e.target.value ? Number(e.target.value) : undefined)}
                 style={{
