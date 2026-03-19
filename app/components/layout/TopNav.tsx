@@ -16,10 +16,12 @@ import { Box } from '../base'
 import NavLinks from './NavLinks'
 import NavSearchBar from './NavSearchBar'
 import MobileSearchButton from './MobileSearchButton'
-import NotificationButton from './NotificationButton'
-import UserMenuDropdown from './UserMenuDropdown'
 import LoginButton from './LoginButton'
 import { useTopNavState } from './useTopNavState'
+
+// Auth-dependent components: only needed when logged in, dynamic to reduce initial bundle
+const NotificationButton = dynamic(() => import('./NotificationButton'), { ssr: false })
+const UserMenuDropdown = dynamic(() => import('./UserMenuDropdown'), { ssr: false })
 
 // Lazy load non-critical components
 const MobileSearchOverlay = dynamic(() => import('../search/MobileSearchOverlay'), { ssr: false })

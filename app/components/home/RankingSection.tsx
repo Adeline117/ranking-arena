@@ -13,12 +13,15 @@ const RankingTable = dynamic(() => import('../ranking/RankingTable').then(m => (
   loading: () => <div style={{ minHeight: 600 }} />,
 })
 
-import AdvancedFilterPanel from './AdvancedFilterPanel'
-import FilterStatusMessages from './FilterStatusMessages'
-import ProUpgradeCTA from './ProUpgradeCTA'
-import RankingFooter from './RankingFooter'
+// Above-fold: keep eager
 import TimeRangeSelector from './TimeRangeSelector'
 import { useRankingFilters, FREE_LEADERBOARD_LIMIT } from './useRankingFilters'
+
+// Below-fold / non-critical: dynamic import to reduce initial JS bundle
+const AdvancedFilterPanel = dynamic(() => import('./AdvancedFilterPanel'), { ssr: false })
+const FilterStatusMessages = dynamic(() => import('./FilterStatusMessages'), { ssr: false })
+const ProUpgradeCTA = dynamic(() => import('./ProUpgradeCTA'), { ssr: false })
+const RankingFooter = dynamic(() => import('./RankingFooter'), { ssr: false })
 
 const LeaderboardChangelog = dynamic(() => import('../ranking/LeaderboardChangelog'), { ssr: false })
 
