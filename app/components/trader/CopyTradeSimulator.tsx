@@ -95,6 +95,7 @@ export default function CopyTradeSimulator({ equityCurve }: CopyTradeSimulatorPr
             <input
               type="number"
               value={investment}
+              aria-label={t('investmentAmount') || 'Investment amount in USD'}
               onChange={(e) => {
                 const val = parseFloat(e.target.value)
                 if (!isNaN(val) && val >= 0) setInvestment(val)
@@ -126,6 +127,7 @@ export default function CopyTradeSimulator({ equityCurve }: CopyTradeSimulatorPr
             min={0}
             max={Math.max(0, equityCurve.length - 2)}
             value={startIdx}
+            aria-label={t('startDate') || 'Start date for simulation'}
             onChange={(e) => setStartIdx(parseInt(e.target.value, 10))}
             style={{
               width: '100%',
