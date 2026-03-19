@@ -3,7 +3,7 @@ import type { Metadata } from 'next'
 const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://www.arenafi.org'
 
 export const metadata: Metadata = {
-  title: '行情总览',
+  title: 'Market Overview',
   description:
     'Real-time crypto market overview — sentiment, sector treemaps, spot prices, and trending tokens across major exchanges.',
   alternates: {
