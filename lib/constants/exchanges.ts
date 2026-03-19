@@ -172,7 +172,7 @@ export const DEAD_BLOCKED_PLATFORMS: TraderSource[] = [
   // ═══════════════════════════════════════════════════════════════
   // STRUCTURAL — API limitation, not a bug
   // ═══════════════════════════════════════════════════════════════
-  'okx_spot',     // OKX API only supports instType=SWAP — no spot leaderboard possible
+  // 'okx_spot' — RECOVERED: v5 API supports instType=SPOT, 20+ traders — 2026-03-19
   // 'bitget_spot' — RECOVERED: 55 traders in leaderboard from old data
 ]
 
@@ -410,6 +410,7 @@ export const SOURCE_TO_CONNECTOR_MAP: Record<string, { platform: string; marketT
   bitget_futures: { platform: 'bitget_futures', marketType: 'futures' },
   bitget_spot: { platform: 'bitget_spot', marketType: 'spot' },
   okx_futures: { platform: 'okx_futures', marketType: 'futures' },
+  okx_spot: { platform: 'okx_spot', marketType: 'spot' },
   okx_web3: { platform: 'okx_web3', marketType: 'web3' },
   htx_futures: { platform: 'htx_futures', marketType: 'futures' },
   mexc: { platform: 'mexc', marketType: 'futures' },
