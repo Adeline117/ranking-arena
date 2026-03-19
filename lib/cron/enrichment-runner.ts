@@ -461,12 +461,17 @@ export const NO_ENRICHMENT_PLATFORMS = new Set([
 // Per-platform timeout: prevents any single platform from burning the entire batch budget
 // CEX platforms get 45s, onchain platforms get 90s (GraphQL/RPC calls are slower)
 const PLATFORM_TIMEOUT_MS: Record<string, number> = {
-  // 'bitget_futures': PERMANENTLY REMOVED 2026-03-19 (8th stuck >44min)
+  'bitget_futures': 120_000,  // 2min total - CF Worker proxy can be slow
   'binance_spot': 60_000,  // RE-ENABLED 2026-03-19 — 60s per-platform timeout
 }
 const DEFAULT_PLATFORM_TIMEOUT_MS = 45_000
 const ONCHAIN_PLATFORM_TIMEOUT_MS = 90_000
 const ONCHAIN_SET = new Set(['gmx', 'dydx', 'jupiter_perps', 'hyperliquid', 'drift', 'aevo', 'gains', 'kwenta'])
+
+// Per-trader timeout: aggressive timeout for platforms that hang
+const PER_TRADER_TIMEOUT_MS: Record<string, number> = {
+  'bitget_futures': 25_000,  // 25s per trader - aggressive to prevent 44min hangs
+}
 
 function getPlatformTimeout(platform: string): number {
   return PLATFORM_TIMEOUT_MS[platform] ?? (ONCHAIN_SET.has(platform) ? ONCHAIN_PLATFORM_TIMEOUT_MS : DEFAULT_PLATFORM_TIMEOUT_MS)
@@ -568,8 +573,9 @@ export async function runEnrichment(params: {
       const batchResults = await Promise.allSettled(
         batch.map(async (trader) => {
           const traderId = trader.source_trader_id
-          // Per-trader timeout: 30s for CEX, 60s for onchain
-          const traderTimeoutMs = ONCHAIN_SET.has(platformKey) ? 60_000 : 30_000
+          // Per-trader timeout: platform-specific > onchain (60s) > CEX (30s)
+          const traderTimeoutMs = PER_TRADER_TIMEOUT_MS[platformKey] 
+            ?? (ONCHAIN_SET.has(platformKey) ? 60_000 : 30_000)
           const traderController = new AbortController()
           const traderTimer = setTimeout(() => traderController.abort(), traderTimeoutMs)
           // Cascade: if platform aborts, abort all its traders
