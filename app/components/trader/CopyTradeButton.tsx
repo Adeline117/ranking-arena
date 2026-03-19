@@ -5,6 +5,7 @@ import { tokens } from '@/lib/design-tokens'
 import { Box, Text, Button } from '../base'
 import { useLanguage } from '../Providers/LanguageProvider'
 import { useToast } from '../ui/Toast'
+import { getCopyTradeUrl, getDexUrl } from '@/lib/utils/copy-trade'
 
 // 外部链接图标
 const ExternalLinkIcon = ({ size = 16 }: { size?: number }) => (
@@ -65,7 +66,7 @@ function getCopyTradeUrl(source: string | undefined, traderId: string, traderHan
 }
 
 /** DEX platforms: link to trading page or trader profile (not copy-trade) */
-function getDexTradingUrl(source: string | undefined, traderId: string): string | null {
+function getDexUrl(source: string | undefined, traderId: string): string | null {
   if (!source) return null
 
   const urlMap: Record<string, string> = {
@@ -151,7 +152,7 @@ export default function CopyTradeButton({
   const [acknowledged, setAcknowledged] = useState(false)
 
   const copyTradeUrl = getCopyTradeUrl(source, traderId, traderHandle)
-  const dexUrl = getDexTradingUrl(source, traderId)
+  const dexUrl = getDexUrl(source, traderId)
   const dexName = getDexPlatformName(source)
   const exchangeName = getExchangeName(source)
 
