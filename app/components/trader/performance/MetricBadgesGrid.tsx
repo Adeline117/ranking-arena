@@ -16,7 +16,6 @@ export interface MetricBadgesGridProps {
   alpha: number | undefined
   tradesCount: number | undefined
   avgHoldingTimeHours: number | undefined
-  copiersPnl: number | undefined
   isVisible: boolean
 }
 
@@ -31,7 +30,6 @@ export function MetricBadgesGrid({
   alpha,
   tradesCount,
   avgHoldingTimeHours,
-  copiersPnl,
   isVisible,
 }: MetricBadgesGridProps) {
   const { t } = useLanguage()
@@ -107,14 +105,6 @@ export function MetricBadgesGrid({
         <MetricBadge
           label={t('avgHoldingTime') || 'Avg Hold'}
           value={avgHoldingTimeHours < 1 ? `${Math.round(avgHoldingTimeHours * 60)}m` : `${Math.round(avgHoldingTimeHours)}h`}
-        />
-      )}
-      {copiersPnl != null && (
-        <MetricBadge
-          label={t('copiersPnl') || 'Copiers PnL'}
-          value={`${copiersPnl >= 0 ? '+' : ''}$${Math.abs(copiersPnl).toLocaleString('en-US', { maximumFractionDigits: 0 })}`}
-          highlight={copiersPnl > 0}
-          negative={copiersPnl < 0}
         />
       )}
     </Box>
