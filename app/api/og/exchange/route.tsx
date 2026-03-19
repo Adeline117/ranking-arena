@@ -130,6 +130,29 @@ export async function GET(request: NextRequest) {
 
     const { traders, total } = await fetchExchangeData(exchange)
 
+    // Pre-fetch all trader avatars as base64 data URLs so Satori (next/og)
+    // doesn't try to load them itself — self-referential proxy calls from Edge
+    // runtime to the Node.js avatar proxy are unreliable and produce
+    // "Can't load <url>" errors in the OG image renderer.
+    const avatarDataUrls: (string | null)[] = await Promise.all(
+      traders.map(async (trader) => {
+        if (!trader.avatar_url) return null
+        if (trader.avatar_url.startsWith('data:')) return trader.avatar_url
+        try {
+          const proxyUrl = `https://www.arenafi.org/api/avatar?url=${encodeURIComponent(trader.avatar_url)}`
+          const res = await fetch(proxyUrl, { signal: AbortSignal.timeout(4000) })
+          if (!res.ok) return null
+          const ct = res.headers.get('content-type') || 'image/png'
+          if (!ct.startsWith('image/')) return null
+          const buf = await res.arrayBuffer()
+          const b64 = Buffer.from(buf).toString('base64')
+          return `data:${ct};base64,${b64}`
+        } catch {
+          return null
+        }
+      })
+    )
+
     return new ImageResponse(
       (
         <div style={{ width: 1200, height: 630, display: 'flex', flexDirection: 'column', background: `linear-gradient(135deg, ${C.bgTop} 0%, ${C.bgMid} 50%, ${C.bgTop} 100%)`, fontFamily: 'Inter, -apple-system, BlinkMacSystemFont, system-ui, sans-serif', position: 'relative', overflow: 'hidden' }}>
@@ -172,9 +195,8 @@ export async function GET(request: NextRequest) {
                   const roiColor = trader.roi != null && trader.roi >= 0 ? C.success : C.error
                   const roiStr = trader.roi != null ? formatRoi(trader.roi) : '--'
                   const traderName = trader.handle || `Trader ${i + 1}`
-                  const avatarSrc = trader.avatar_url
-                    ? (trader.avatar_url.startsWith('data:') ? trader.avatar_url : `https://www.arenafi.org/api/avatar?url=${encodeURIComponent(trader.avatar_url)}`)
-                    : null
+                  // avatarSrc is pre-fetched below into base64 — index i
+                  const avatarSrc = avatarDataUrls[i] ?? null
 
                   return (
                     <div key={i} style={{

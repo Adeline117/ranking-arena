@@ -14,13 +14,36 @@ export async function GET(request: NextRequest) {
   const stat2Value = searchParams.get('s2v') || ''
   const stat3Label = searchParams.get('s3l') || ''
   const stat3Value = searchParams.get('s3v') || ''
-  const avatarUrl = searchParams.get('avatar') || ''
+  const avatarUrlParam = searchParams.get('avatar') || ''
 
   const stats = [
     stat1Label && { label: stat1Label, value: stat1Value },
     stat2Label && { label: stat2Label, value: stat2Value },
     stat3Label && { label: stat3Label, value: stat3Value },
   ].filter(Boolean) as Array<{ label: string; value: string }>
+
+  // Pre-fetch avatar as base64 so Satori doesn't try to load it directly
+  let avatarUrl = ''
+  if (avatarUrlParam) {
+    if (avatarUrlParam.startsWith('data:')) {
+      avatarUrl = avatarUrlParam
+    } else {
+      try {
+        const proxyUrl = 'https://www.arenafi.org/api/avatar?url=' + encodeURIComponent(avatarUrlParam)
+        const res = await fetch(proxyUrl, { signal: AbortSignal.timeout(4000) })
+        if (res.ok) {
+          const ct = res.headers.get('content-type') || 'image/png'
+          if (ct.startsWith('image/')) {
+            const buf = await res.arrayBuffer()
+            avatarUrl = `data:${ct};base64,${Buffer.from(buf).toString('base64')}`
+          }
+        }
+      } catch {
+        // Avatar unavailable — omit it
+        avatarUrl = ''
+      }
+    }
+  }
 
   return new ImageResponse(
     (
