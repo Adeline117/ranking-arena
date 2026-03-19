@@ -5,6 +5,22 @@
 import { SupabaseClient } from '@supabase/supabase-js'
 import { logger } from '@/lib/logger'
 
+/**
+ * Simple language detection heuristic.
+ * If content contains CJK characters, classify as 'zh'; otherwise 'en'.
+ */
+export function detectPostLanguage(content: string): string {
+  const cjkRegex = /[\u4e00-\u9fff\u3400-\u4dbf\u3040-\u30ff\uac00-\ud7af]/
+  const cjkCount = (content.match(new RegExp(cjkRegex.source, 'g')) || []).length
+  const ratio = cjkCount / Math.max(content.length, 1)
+  if (ratio > 0.1) return 'zh'
+  if (/[\u3040-\u309f\u30a0-\u30ff]/.test(content)) return 'ja'
+  if (/[\uac00-\ud7af]/.test(content)) return 'ko'
+  return 'en'
+}
+
+export type PostVisibility = 'public' | 'followers' | 'group'
+
 export interface Post {
   id: string
   title: string
@@ -29,6 +45,10 @@ export interface Post {
   created_at: string
   updated_at?: string
   original_post_id?: string | null
+  visibility?: PostVisibility
+  is_sensitive?: boolean
+  content_warning?: string | null
+  language?: string
 }
 
 export interface OriginalPost {
@@ -54,6 +74,10 @@ export interface CreatePostInput {
   content: string
   group_id?: string
   poll_enabled?: boolean
+  visibility?: PostVisibility
+  is_sensitive?: boolean
+  content_warning?: string
+  language?: string
 }
 
 export interface PostListOptions {
@@ -64,6 +88,8 @@ export interface PostListOptions {
   author_handle?: string
   sort_by?: 'created_at' | 'hot_score' | 'like_count'
   sort_order?: 'asc' | 'desc'
+  viewer_id?: string
+  language?: string
 }
 
 interface PostRow {
@@ -91,6 +117,10 @@ interface PostRow {
   updated_at?: string
   original_post_id?: string | null
   groups?: { name: string; name_en?: string | null } | { name: string; name_en?: string | null }[]
+  visibility?: PostVisibility
+  is_sensitive?: boolean
+  content_warning?: string | null
+  language?: string
 }
 
 interface AuthorProfile {
@@ -178,6 +208,10 @@ function toPostWithAuthor(
     updated_at: row.updated_at,
     original_post_id: row.original_post_id || null,
     original_post: originalPost ?? null,
+    visibility: (row.visibility as PostVisibility) || 'public',
+    is_sensitive: row.is_sensitive || false,
+    content_warning: row.content_warning || null,
+    language: row.language || 'zh',
   }
 }
 
@@ -186,7 +220,9 @@ const POST_SELECT_FIELDS = `
   poll_enabled, poll_id, poll_bull, poll_bear, poll_wait,
   like_count, dislike_count, comment_count, bookmark_count,
   repost_count, view_count, hot_score, is_pinned, images,
-  created_at, updated_at, original_post_id, groups(name, name_en)
+  created_at, updated_at, original_post_id,
+  visibility, is_sensitive, content_warning, language,
+  groups(name, name_en)
 `
 
 /**
@@ -204,6 +240,8 @@ export async function getPosts(
     author_handle,
     sort_by = 'created_at',
     sort_order = 'desc',
+    viewer_id,
+    language: langFilter,
   } = options
 
   let query = supabase
@@ -216,6 +254,16 @@ export async function getPosts(
     query = query.eq('group_id', group_id)
   } else if (group_ids && group_ids.length > 0) {
     query = query.in('group_id', group_ids)
+  }
+
+  // Visibility filtering: unauthenticated users only see public posts
+  if (!group_id && !viewer_id) {
+    query = query.eq('visibility', 'public')
+  }
+
+  // Language filter
+  if (langFilter) {
+    query = query.eq('language', langFilter)
   }
 
   if (author_handle) {
@@ -285,13 +333,110 @@ export async function getPosts(
     }
   }
 
-  return data.map((post: PostRow) =>
+  let filteredData = data as PostRow[]
+
+  // Post-fetch visibility filtering for "followers" posts
+  if (!group_id && viewer_id) {
+    const followersPostAuthors = [...new Set(
+      filteredData
+        .filter(p => p.visibility === 'followers')
+        .map(p => p.author_id)
+    )]
+
+    let followedSet = new Set<string>()
+    if (followersPostAuthors.length > 0) {
+      const { data: follows } = await supabase
+        .from('user_follows')
+        .select('following_id')
+        .eq('follower_id', viewer_id)
+        .in('following_id', followersPostAuthors)
+
+      if (follows) {
+        followedSet = new Set(follows.map((f: { following_id: string }) => f.following_id))
+      }
+    }
+
+    filteredData = filteredData.filter(post => {
+      if (post.visibility === 'public') return true
+      if (post.visibility === 'followers') {
+        return post.author_id === viewer_id || followedSet.has(post.author_id)
+      }
+      if (post.visibility === 'group') return false
+      return true
+    })
+  }
+
+  return filteredData.map((post: PostRow) =>
     toPostWithAuthor(
       post,
       authorProfileMap.get(post.author_id),
       post.original_post_id ? originalPostMap.get(post.original_post_id) : null
     )
   )
+}
+
+/**
+ * Search posts using full-text search
+ */
+export async function searchPosts(
+  supabase: SupabaseClient,
+  query: string,
+  options: { limit?: number; offset?: number; viewer_id?: string } = {}
+): Promise<{ posts: PostWithAuthor[]; total: number }> {
+  const { limit = 20, offset = 0, viewer_id } = options
+
+  let queryBuilder = supabase
+    .from('posts')
+    .select(POST_SELECT_FIELDS, { count: 'exact' })
+    .textSearch('search_vector', query, { type: 'plain' })
+    .range(offset, offset + limit - 1)
+    .order('created_at', { ascending: false })
+
+  if (!viewer_id) {
+    queryBuilder = queryBuilder.eq('visibility', 'public')
+  }
+
+  const { data, error, count } = await queryBuilder
+  if (error) throw error
+  if (!data || data.length === 0) return { posts: [], total: 0 }
+
+  const authorIds = [...new Set(data.map(p => p.author_id).filter(Boolean))]
+  const { data: profiles } = authorIds.length > 0
+    ? await supabase.from('user_profiles').select('id, handle, avatar_url, subscription_tier, show_pro_badge').in('id', authorIds)
+    : { data: null }
+
+  const profileMap = profiles ? buildAuthorProfileMap(profiles) : new Map()
+
+  let filteredData = data as PostRow[]
+  if (viewer_id) {
+    const followersAuthors = [...new Set(
+      filteredData.filter(p => p.visibility === 'followers').map(p => p.author_id)
+    )]
+    let followedSet = new Set<string>()
+    if (followersAuthors.length > 0) {
+      const { data: follows } = await supabase
+        .from('user_follows')
+        .select('following_id')
+        .eq('follower_id', viewer_id)
+        .in('following_id', followersAuthors)
+      if (follows) {
+        followedSet = new Set(follows.map((f: { following_id: string }) => f.following_id))
+      }
+    }
+    filteredData = filteredData.filter(post => {
+      if (post.visibility === 'public') return true
+      if (post.visibility === 'followers') {
+        return post.author_id === viewer_id || followedSet.has(post.author_id)
+      }
+      return post.visibility !== 'group'
+    })
+  }
+
+  const posts = filteredData.map((post: PostRow) =>
+    toPostWithAuthor(post, profileMap.get(post.author_id), null)
+  )
+
+  return { posts, total: count || posts.length }
 }
 
 /**
@@ -384,6 +529,8 @@ export async function createPost(
     // Intentionally swallowed: reputation score lookup failed, post will be created with default score 0
   }
 
+  const detectedLanguage = input.language || detectPostLanguage(input.content)
+
   const { data, error } = await supabase
     .from('posts')
     .insert({
@@ -395,6 +542,10 @@ export async function createPost(
       poll_enabled: input.poll_enabled || false,
       author_arena_score: authorScore,
       author_is_verified: authorVerified,
+      visibility: input.visibility || (input.group_id ? 'group' : 'public'),
+      is_sensitive: input.is_sensitive || false,
+      content_warning: input.content_warning || null,
+      language: detectedLanguage,
     })
     .select()
     .single()
@@ -410,7 +561,7 @@ export async function updatePost(
   supabase: SupabaseClient,
   postId: string,
   userId: string,
-  updates: { title?: string; content?: string; poll_enabled?: boolean }
+  updates: { title?: string; content?: string; poll_enabled?: boolean; visibility?: PostVisibility; is_sensitive?: boolean; content_warning?: string | null }
 ): Promise<Post> {
   const { data, error } = await supabase
     .from('posts')

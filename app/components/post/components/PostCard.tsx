@@ -8,9 +8,17 @@ import { renderContentWithLinks, ARENA_PURPLE, truncateText } from '@/lib/utils/
 import { type PollChoice, type PostWithUserState, getPollWinner } from '@/lib/types'
 import { ReactButton } from './PostActions'
 import { AvatarLink } from './AvatarLink'
+import { SensitiveContentWrapper } from './SensitiveContentWrapper'
 import LevelBadge from '@/app/components/user/LevelBadge'
 import { memo, useRef, useEffect } from 'react'
 import { useLanguage } from '../../Providers/LanguageProvider'
+
+// Visibility icon paths
+const VISIBILITY_ICONS: Record<string, string> = {
+  public: 'M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 17.93c-3.95-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93zm6.9-2.54c-.26-.81-1-1.39-1.9-1.39h-1v-3c0-.55-.45-1-1-1H8v-2h2c.55 0 1-.45 1-1V7h2c1.1 0 2-.9 2-2v-.41c2.93 1.19 5 4.06 5 7.41 0 2.08-.8 3.97-2.1 5.39z',
+  followers: 'M16 11c1.66 0 2.99-1.34 2.99-3S17.66 5 16 5c-1.66 0-3 1.34-3 3s1.34 3 3 3zm-8 0c1.66 0 2.99-1.34 2.99-3S9.66 5 8 5C6.34 5 5 6.34 5 8s1.34 3 3 3zm0 2c-2.33 0-7 1.17-7 3.5V19h14v-2.5c0-2.33-4.67-3.5-7-3.5zm8 0c-.29 0-.62.02-.97.05 1.16.84 1.97 1.97 1.97 3.45V19h6v-2.5c0-2.33-4.67-3.5-7-3.5z',
+  group: 'M18 8h-1V6c0-2.76-2.24-5-5-5S7 3.24 7 6v2H6c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V10c0-1.1-.9-2-2-2zm-6 9c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2zm3.1-9H8.9V6c0-1.71 1.39-3.1 3.1-3.1 1.71 0 3.1 1.39 3.1 3.1v2z',
+}
 
 // Module-level Set to prevent duplicate impression reports
 const reportedImpressions = new Set<string>()
@@ -229,37 +237,79 @@ export const PostCard = memo(function PostCard({
               {post.group_name}
             </Link>
           )}
+          {/* Visibility indicator */}
+          {post.visibility && post.visibility !== 'public' && (
+            <span title={t(post.visibility === 'followers' ? 'visibilityFollowers' : 'visibilityGroup')} style={{ display: 'inline-flex', alignItems: 'center' }}>
+              <svg width="12" height="12" viewBox="0 0 24 24" fill={tokens.colors.text.tertiary}>
+                <path d={VISIBILITY_ICONS[post.visibility] || VISIBILITY_ICONS.public} />
+              </svg>
+            </span>
+          )}
           <span style={{ fontSize: tokens.typography.fontSize.xs, color: tokens.colors.text.tertiary }}>
             {formatTimeAgo(post.created_at, language)}
           </span>
         </div>
       </div>
-      
-      {/* 标题 */}
-      <div style={{
-        fontWeight: tokens.typography.fontWeight.bold,
-        fontSize: tokens.typography.fontSize.base,
-        color: isTranslated ? 'var(--color-translated)' : tokens.colors.text.primary,
-        lineHeight: 1.4,
-      }}>
-        {displayTitle}
-        {isTranslated && <span style={{ fontSize: 10, fontWeight: 600, color: 'var(--color-translated)', background: 'var(--color-translated-08)', border: '1px solid var(--color-translated-20)', padding: '1px 5px', borderRadius: tokens.radius.full, marginLeft: 6, verticalAlign: 'middle' }}>译</span>}
-      </div>
-      
-      {/* 内容预览 */}
-      {displayContent && (
-        <div style={{
-          fontSize: tokens.typography.fontSize.sm,
-          color: isTranslated ? 'var(--color-translated)' : tokens.colors.text.secondary,
-          opacity: isTranslated ? 0.8 : 1,
-          lineHeight: 1.6,
-          display: '-webkit-box',
-          WebkitLineClamp: 3,
-          WebkitBoxOrient: 'vertical',
-          overflow: 'hidden',
-        }}>
-          {renderContentWithLinks(truncateText(displayContent, 200))}
-        </div>
+
+      {/* Content wrapper: blur if sensitive */}
+      {post.is_sensitive || post.content_warning ? (
+        <SensitiveContentWrapper contentWarning={post.content_warning}>
+          {/* 标题 */}
+          <div style={{
+            fontWeight: tokens.typography.fontWeight.bold,
+            fontSize: tokens.typography.fontSize.base,
+            color: isTranslated ? 'var(--color-translated)' : tokens.colors.text.primary,
+            lineHeight: 1.4,
+          }}>
+            {displayTitle}
+            {isTranslated && <span style={{ fontSize: 10, fontWeight: 600, color: 'var(--color-translated)', background: 'var(--color-translated-08)', border: '1px solid var(--color-translated-20)', padding: '1px 5px', borderRadius: tokens.radius.full, marginLeft: 6, verticalAlign: 'middle' }}>译</span>}
+          </div>
+
+          {/* 内容预览 */}
+          {displayContent && (
+            <div style={{
+              fontSize: tokens.typography.fontSize.sm,
+              color: isTranslated ? 'var(--color-translated)' : tokens.colors.text.secondary,
+              opacity: isTranslated ? 0.8 : 1,
+              lineHeight: 1.6,
+              display: '-webkit-box',
+              WebkitLineClamp: 3,
+              WebkitBoxOrient: 'vertical',
+              overflow: 'hidden',
+            }}>
+              {renderContentWithLinks(truncateText(displayContent, 200))}
+            </div>
+          )}
+        </SensitiveContentWrapper>
+      ) : (
+        <>
+          {/* 标题 */}
+          <div style={{
+            fontWeight: tokens.typography.fontWeight.bold,
+            fontSize: tokens.typography.fontSize.base,
+            color: isTranslated ? 'var(--color-translated)' : tokens.colors.text.primary,
+            lineHeight: 1.4,
+          }}>
+            {displayTitle}
+            {isTranslated && <span style={{ fontSize: 10, fontWeight: 600, color: 'var(--color-translated)', background: 'var(--color-translated-08)', border: '1px solid var(--color-translated-20)', padding: '1px 5px', borderRadius: tokens.radius.full, marginLeft: 6, verticalAlign: 'middle' }}>译</span>}
+          </div>
+
+          {/* 内容预览 */}
+          {displayContent && (
+            <div style={{
+              fontSize: tokens.typography.fontSize.sm,
+              color: isTranslated ? 'var(--color-translated)' : tokens.colors.text.secondary,
+              opacity: isTranslated ? 0.8 : 1,
+              lineHeight: 1.6,
+              display: '-webkit-box',
+              WebkitLineClamp: 3,
+              WebkitBoxOrient: 'vertical',
+              overflow: 'hidden',
+            }}>
+              {renderContentWithLinks(truncateText(displayContent, 200))}
+            </div>
+          )}
+        </>
       )}
       
       {/* 投票显示 */}

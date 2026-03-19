@@ -42,6 +42,9 @@ const CreatePostSchema = z.object({
   content: z.string().min(1, 'Content is required').max(10000, 'Content must be at most 10000 characters'),
   group_id: z.string().uuid().optional().nullable(),
   poll_enabled: z.boolean().optional().default(false),
+  visibility: z.enum(['public', 'followers', 'group']).optional().default('public'),
+  is_sensitive: z.boolean().optional().default(false),
+  content_warning: z.string().max(200).optional().nullable(),
 })
 
 // 缓存键前缀
@@ -90,6 +93,7 @@ export async function GET(request: NextRequest) {
     // 权重增强排序参数
     const enable_weight = searchParams.get('enable_weight') === 'true'
     const weight_factor = validateNumber(searchParams.get('weight_factor'), { min: 0, max: 1 }) ?? 0.3
+    const langFilter = validateString(searchParams.get('language')) ?? undefined
 
     // 检查用户登录状态
     const user = await getAuthUser(request)
@@ -139,6 +143,7 @@ export async function GET(request: NextRequest) {
         posts = await getPosts(supabase, {
           limit, offset, group_id, group_ids, author_handle,
           sort_by: 'hot_score', sort_order: 'desc',
+          viewer_id: user?.id, language: langFilter,
         })
       }
 
@@ -206,6 +211,8 @@ export async function GET(request: NextRequest) {
           author_handle,
           sort_by,
           sort_order,
+          viewer_id: user?.id,
+          language: langFilter,
         })
       }
 
@@ -277,7 +284,7 @@ export async function POST(request: NextRequest) {
         details: { errors: parsed.error.flatten() },
       })
     }
-    const { title, content, poll_enabled } = parsed.data
+    const { title, content, poll_enabled, visibility, is_sensitive, content_warning } = parsed.data
     const group_id = parsed.data.group_id ?? undefined
 
     // 获取用户 handle
@@ -288,6 +295,9 @@ export async function POST(request: NextRequest) {
       content,
       group_id,
       poll_enabled,
+      visibility: group_id ? 'group' : visibility,
+      is_sensitive,
+      content_warning: content_warning ?? undefined,
     })
 
     // Extract and sync hashtags (fire-and-forget to not block response)

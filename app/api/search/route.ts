@@ -462,9 +462,17 @@ export const GET = withPublic(
         ? safeQuery(supabase
             .from('posts')
             .select('id, title, author_handle, created_at, view_count')
-            .or(`title.ilike.%${sanitizedQuery}%`)
+            .textSearch('search_vector', sanitizedQuery, { type: 'plain' })
+            .eq('visibility', 'public')
             .order('view_count', { ascending: false, nullsFirst: false })
             .limit(limitPerCategory))
+            .then((results: PostRow[]) => results.length > 0 ? results : safeQuery(supabase
+              .from('posts')
+              .select('id, title, author_handle, created_at, view_count')
+              .or(`title.ilike.%${sanitizedQuery}%`)
+              .eq('visibility', 'public')
+              .order('view_count', { ascending: false, nullsFirst: false })
+              .limit(limitPerCategory)))
         : Promise.resolve([]),
 
       safeQuery(supabase
