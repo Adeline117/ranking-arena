@@ -459,7 +459,7 @@ export interface EnrichmentResult {
 // 3. Daily snapshot accumulation → computed equity curve
 export const NO_ENRICHMENT_PLATFORMS = new Set([
   // Dead platforms — 0 traders, no data to enrich
-  'bitmart', 'paradex',
+  'bitmart', 'paradex', 'lbank',
   // Leaderboard-only platforms — all metrics already from normalize(), no separate detail API
   // Equity curves auto-generated from daily snapshots by aggregate-daily-snapshots cron
   'bybit_spot',   // metricValues has ROI/WR/MDD/Sharpe, VPS trader-detail doesn't support spot leaderMark
