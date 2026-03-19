@@ -1,8 +1,14 @@
 'use client'
 
 import { useState, useEffect, useCallback, useRef } from 'react'
-import { supabase } from '@/lib/supabase/client'
 import { logger } from '@/lib/logger'
+
+// Lazy import supabase — @supabase/supabase-js is 167KB; keep it out of the
+// initial bundle so it loads after FCP.
+async function getSupabase() {
+  const { supabase } = await import('@/lib/supabase/client')
+  return supabase
+}
 
 // 缓存配置
 const CACHE_TTL = 5 * 60 * 1000 // 5分钟
@@ -45,6 +51,7 @@ export function useProStatus(): ProStatus {
 
   const check = useCallback(async (force = false) => {
     try {
+      const supabase = await getSupabase()
       const { data: { user } } = await supabase.auth.getUser()
 
       if (!user) {
@@ -135,15 +142,21 @@ export function useProStatus(): ProStatus {
     isMountedRef.current = true
     check()
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((event) => {
-      if (event === 'SIGNED_IN' || event === 'SIGNED_OUT') {
-        check(true)
-      }
-    })
+    let unsubscribe: (() => void) | undefined
+
+    getSupabase().then((supabase) => {
+      if (!isMountedRef.current) return
+      const { data: { subscription } } = supabase.auth.onAuthStateChange((event) => {
+        if (event === 'SIGNED_IN' || event === 'SIGNED_OUT') {
+          check(true)
+        }
+      })
+      unsubscribe = () => subscription.unsubscribe()
+    }).catch((err) => logger.error('useProStatus: failed to load supabase', err))
 
     return () => {
       isMountedRef.current = false
-      subscription.unsubscribe()
+      unsubscribe?.()
     }
   }, [check])
 
