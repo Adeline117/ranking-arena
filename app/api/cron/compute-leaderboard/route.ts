@@ -239,6 +239,14 @@ export async function GET(request: NextRequest) {
     // Fire-and-forget: warm Redis cache with top 100 for each season
     fireAndForget(warmupLeaderboardCache(supabase), 'warmup-leaderboard-cache')
 
+    // Fire-and-forget: warm the SSR homepage cache (home-initial-traders:90D)
+    // This keeps getInitialTraders() hitting Redis instead of doing a cold DB query on page load
+    fireAndForget((async () => {
+      const { fetchLeaderboardFromDB } = await import('@/lib/getInitialTraders')
+      await fetchLeaderboardFromDB('90D', 50)
+      logger.info('[warmup] Refreshed home-initial-traders:90D SSR cache')
+    })(), 'warmup-ssr-homepage-cache')
+
     // Fire-and-forget: sync Redis sorted sets for near-real-time rankings
     fireAndForget((async () => {
       const { syncSortedSetFromLeaderboard } = await import('@/lib/realtime/ranking-store')
