@@ -363,7 +363,7 @@ async function RankingsContent({ exchange }: { exchange: string }) {
           avatar_url: null,
           platform: exchange,
           pnl: null,
-          followers: null,
+          followers: null, sharpe_ratio: null, trades_count: null,
           is_bot: false,
         }))}
         exchange={exchange}

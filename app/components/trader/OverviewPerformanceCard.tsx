@@ -134,6 +134,7 @@ export default function OverviewPerformanceCard({
           // Additional stats
           tradesCount: performance.trades_count_7d,
           avgHoldingTimeHours: performance.avg_holding_time_hours_7d,
+          copiersPnl: performance.copiers_pnl_7d,
         }
       case '30D':
         return {
@@ -157,6 +158,7 @@ export default function OverviewPerformanceCard({
           // Additional stats
           tradesCount: performance.trades_count_30d,
           avgHoldingTimeHours: performance.avg_holding_time_hours_30d,
+          copiersPnl: performance.copiers_pnl_30d,
         }
       case '90D':
       default:
@@ -181,6 +183,7 @@ export default function OverviewPerformanceCard({
           // Additional stats
           tradesCount: performance.trades_count,
           avgHoldingTimeHours: performance.avg_holding_time_hours,
+          copiersPnl: performance.copiers_pnl,
         }
     }
   }
@@ -248,6 +251,7 @@ export default function OverviewPerformanceCard({
             alpha={alpha}
             tradesCount={tradesCount}
             avgHoldingTimeHours={avgHoldingTimeHours}
+            copiersPnl={copiersPnl}
             isVisible={isVisible}
           />
 
