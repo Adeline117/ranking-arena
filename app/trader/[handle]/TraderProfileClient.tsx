@@ -496,6 +496,7 @@ export default function TraderProfileClient({ data, serverTraderData, claimedUse
                   <OverviewPerformanceCard
                     performance={traderPerformance as ExtendedPerformance}
                     equityCurve={traderEquityCurve?.['90D']}
+                    allEquityCurves={traderEquityCurve as Partial<Record<'7D' | '30D' | '90D', Array<{ date: string; roi: number; pnl: number }>>> | undefined}
                     source={traderProfile?.source || data.source}
                   />
                 ) : (
