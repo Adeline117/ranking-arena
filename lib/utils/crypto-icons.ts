@@ -10,13 +10,25 @@ const ICON_BASE_PATH = '/icons/crypto'
 /**
  * Normalize a trading symbol to the base coin symbol.
  * e.g. "BTCUSDT" → "btc", "ETH-USD" → "eth", "BTC/USDT" → "btc"
+ * Handles Hyperliquid exotic markets: "xyz:tsla" → "tsla", "xyz:cl" → "cl"
  */
 export function normalizeCoinSymbol(symbol: string): string {
   return symbol
+    // Strip Hyperliquid xyz: prefix for exotic/RWA perp markets
+    .replace(/^xyz:/i, '')
     .replace(/[-/]?(USDT|BUSD|USD|USDC|PERP|SWAP)$/i, '')
     .replace(/[-/].*$/, '')
     .toLowerCase()
     .trim()
+}
+
+/**
+ * Extract a display label (1-2 chars) for use in text fallback icons.
+ * Strips the xyz: prefix before extracting initials.
+ */
+export function getSymbolLabel(symbol: string): string {
+  const base = symbol.replace(/^xyz:/i, '').replace(/[-/]?(USDT|BUSD|USD|USDC|PERP|SWAP)$/i, '')
+  return base.slice(0, 2).toUpperCase()
 }
 
 /**
