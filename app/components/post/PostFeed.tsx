@@ -35,6 +35,8 @@ interface PostFeedProps {
   showRefreshButton?: boolean
   /** When provided and posts are empty, shows a "Write your first post" CTA linking here */
   createPostHref?: string
+  /** Server-side prefetched posts — skips the initial client fetch if provided */
+  initialPosts?: unknown[]
 }
 
 /** Build URLSearchParams for post queries — shared between loadPosts and loadMorePosts */
@@ -61,11 +63,14 @@ export default function PostFeed(props: PostFeedProps = {}): React.ReactNode {
   const { t, language } = useLanguage()
   const { showToast } = useToast()
   const { showDangerConfirm } = useDialog()
-  const [posts, setPosts] = useState<Post[]>([])
+  const [posts, setPosts] = useState<Post[]>(
+    // Use server-prefetched posts as initial state to avoid client waterfall
+    (props.initialPosts as Post[]) || []
+  )
   const postsRef = useRef<Post[]>([])
   // Keep ref in sync for use in loadMorePosts without adding posts to its deps (#38)
   postsRef.current = posts
-  const [loading, setLoading] = useState(true)
+  const [loading, setLoading] = useState(!props.initialPosts || props.initialPosts.length === 0)
   const [refreshing, setRefreshing] = useState(false)
   const [loadingMore, setLoadingMore] = useState(false)
   const [hasMore, setHasMore] = useState(true)

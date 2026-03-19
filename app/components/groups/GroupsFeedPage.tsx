@@ -26,7 +26,12 @@ type Group = {
 type SubTabKey = 'following' | 'recommended'
 
 
-export default function GroupsFeedPage() {
+interface GroupsFeedPageProps {
+  initialPosts?: unknown[]
+  initialGroups?: unknown[]
+}
+
+export default function GroupsFeedPage({ initialPosts, initialGroups }: GroupsFeedPageProps) {
   const { language: _language, t } = useLanguage()
   const { email, userId } = useAuthSession()
   const [myGroups, setMyGroups] = useState<Group[]>([])
@@ -142,7 +147,7 @@ export default function GroupsFeedPage() {
         )}
 
         {subTab === 'recommended' && (
-          <PostFeed layout="masonry" />
+          <PostFeed layout="masonry" initialPosts={initialPosts} />
         )}
 
       </ThreeColumnLayout>
