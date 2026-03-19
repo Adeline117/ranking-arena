@@ -238,21 +238,47 @@ export async function runConnectorBatch(
 
   let anySaved = false
 
-  for (const window of windows) {
-    const windowUpper = window.toUpperCase()
-    try {
-      // Fetch leaderboard for this window
-      const result = await connector.discoverLeaderboard(
-        window as '7d' | '30d' | '90d',
-        limit
-      )
+  // Fetch all windows in parallel — rate limiter handles per-platform concurrency
+  const windowResults = await Promise.allSettled(
+    windows.map(async (window) => {
+      const windowUpper = window.toUpperCase()
+      try {
+        // Fetch leaderboard for this window
+        const result = await connector.discoverLeaderboard(
+          window as '7d' | '30d' | '90d',
+          limit
+        )
 
-      // Write to DB
-      const writeResult = await writeDiscoverResult(connector, result, {
-        ...options,
-        supabase: supabase || undefined,
-      })
+        // Write to DB
+        const writeResult = await writeDiscoverResult(connector, result, {
+          ...options,
+          supabase: supabase || undefined,
+        })
 
+        return { windowUpper, writeResult }
+      } catch (err) {
+        const errMsg = err instanceof Error ? err.message : String(err)
+        dataLogger.error(`[${platform}] Failed to fetch ${windowUpper}: ${errMsg}`)
+        return { windowUpper, error: errMsg }
+      }
+    })
+  )
+
+  // Collect results from parallel execution
+  for (const settled of windowResults) {
+    if (settled.status === 'rejected') continue
+    const { windowUpper, writeResult, error } = settled.value as {
+      windowUpper: string
+      writeResult?: AdapterResult
+      error?: string
+    }
+
+    if (error) {
+      periods[windowUpper] = { total: 0, saved: 0, error }
+      continue
+    }
+
+    if (writeResult) {
       periods[windowUpper] = {
         total: writeResult.total,
         saved: writeResult.saved,
@@ -269,10 +295,6 @@ export async function runConnectorBatch(
           }
         }
       }
-    } catch (err) {
-      const errMsg = err instanceof Error ? err.message : String(err)
-      dataLogger.error(`[${platform}] Failed to fetch ${windowUpper}: ${errMsg}`)
-      periods[windowUpper] = { total: 0, saved: 0, error: errMsg }
     }
   }
 
