@@ -62,7 +62,9 @@ export async function GET(request: NextRequest) {
       // Table may not exist yet — return empty feed gracefully
       const isMissingTable =
         (error as { code?: string }).code === '42P01' ||
-        error.message?.includes('does not exist')
+        (error as { code?: string }).code === 'PGRST200' ||
+        error.message?.includes('does not exist') ||
+        error.message?.includes('Could not find')
       if (isMissingTable) {
         return success({ activities: [], pagination: { limit, hasMore: false, nextCursor: null } })
       }
