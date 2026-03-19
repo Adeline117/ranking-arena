@@ -72,7 +72,7 @@ export default function TraderProfileView({
   const canView = isPro || isOwn
 
   // Multi-account support (SWR-based)
-  const { linkedAccounts, aggregatedData, hasMultipleAccounts } = useLinkedAccounts(traderProfile?.source, traderProfile?.trader_key)
+  const { linkedAccounts, aggregatedData, hasMultipleAccounts, isLoading } = useLinkedAccounts(traderProfile?.source, traderProfile?.trader_key)
   const [activeAccount, setActiveAccount] = useState<string>('all')
 
   // Tabs — include 'posts' for own profile or claimed user
@@ -158,7 +158,12 @@ export default function TraderProfileView({
           extraTabs={showPosts ? ['posts'] : undefined}
         />
 
-        {/* Tab Content with animation */}
+        {/* Tab Content — dims while loading account switch (parity with /trader) */}
+        <div style={{
+          opacity: (activeAccount !== 'all' && isLoading) ? 0.5 : 1,
+          transition: 'opacity 0.2s ease',
+          pointerEvents: (activeAccount !== 'all' && isLoading) ? 'none' : 'auto',
+        }}>
         <Box
           key={traderActiveTab}
           style={{
@@ -245,6 +250,7 @@ export default function TraderProfileView({
             </Box>
           )}
         </Box>
+        </div>
 
         <style>{profileStyles}</style>
       </Box>
