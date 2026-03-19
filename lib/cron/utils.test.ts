@@ -113,8 +113,8 @@ describe('Constants', () => {
     const platforms = Object.keys(PLATFORM_SCRIPTS)
     expect(platforms).toContain('binance_futures')
     // binance_spot permanently removed (2026-03-14) — blocks pipeline
+    // bitget_futures disabled 2026-03-18 EMERGENCY (VPS scraper repeatedly hangs)
     expect(platforms).toContain('bybit')
-    expect(platforms).toContain('bitget_futures')
     expect(platforms).toContain('mexc')
   })
 
@@ -388,8 +388,8 @@ describe('getSupportedPlatforms', () => {
 
     expect(platforms).toContain('binance_futures')
     // binance_spot permanently removed (2026-03-14) — blocks pipeline
+    // bitget_futures disabled 2026-03-18 EMERGENCY (VPS scraper repeatedly hangs)
     expect(platforms).toContain('bybit')
-    expect(platforms).toContain('bitget_futures')
     expect(platforms).toContain('mexc')
     expect(platforms).toContain('coinex')
     expect(platforms).toContain('okx_web3')

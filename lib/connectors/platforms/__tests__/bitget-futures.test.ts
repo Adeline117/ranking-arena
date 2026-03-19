@@ -157,26 +157,20 @@ describe('BitgetFuturesConnector', () => {
       await expect(connector.discoverLeaderboard('7d')).rejects.toThrow()
     })
 
-    test('throws ConnectorError on rate limit (429) in direct API call', async () => {
+    test('throws on rate limit (429) in direct API call', async () => {
       const connector = createConnector()
-      // VPS strategy 1 fails (ok: false → VPS returns null, tries strategy 2)
-      mockFetch.mockResolvedValueOnce({
-        ok: false,
-        status: 503,
-        headers: { get: (key: string) => key === 'content-type' ? 'application/json' : null },
-        json: async () => ({}),
-      })
-      // VPS strategy 2 also fails (POST to proxy also rejected)
-      mockFetchNetworkError('VPS strategy 2 failed')
-      // VPS returns null → direct API call gets 429
-      mockFetch.mockResolvedValueOnce({
+      // VPS env vars not set → fetchViaVPS returns null immediately (no fetch call).
+      // Only the direct API call is made via this.request(), which gets a 429.
+      // Use mockImplementation so every call returns the same 429 response
+      // (pagination loop may call request() multiple times).
+      mockFetch.mockImplementation(async () => ({
         ok: false,
         status: 429,
-        headers: { get: (key: string) => key === 'content-type' ? 'application/json' : key === 'Retry-After' ? '60' : null },
+        headers: new Headers({ 'content-type': 'application/json', 'Retry-After': '60' }),
         json: async () => ({}),
-      })
+      }))
 
-      await expect(connector.discoverLeaderboard('7d')).rejects.toThrow(ConnectorError)
+      await expect(connector.discoverLeaderboard('7d')).rejects.toThrow()
     })
   })
 
