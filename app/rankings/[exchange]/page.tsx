@@ -10,8 +10,8 @@ import { Box } from '@/app/components/base'
 import { RankingSkeleton } from '@/app/components/ui/Skeleton'
 import ExchangeRankingClient from './ExchangeRankingClient'
 import { ErrorBoundary } from '@/app/components/ui/ErrorBoundary'
-import { tieredGetOrSet } from '@/lib/cache/redis-layer'
 import { logger } from '@/lib/logger'
+import { unstable_cache } from 'next/cache'
 
 export const revalidate = 600 // ISR: 10 min (aligned with compute-leaderboard on-demand revalidation)
 
@@ -161,13 +161,13 @@ interface TraderData {
   captured_at?: string | null
 }
 
-async function fetchExchangeTraders(exchange: string): Promise<TraderData[]> {
-  const cacheKey = `exchange-ranking:${exchange}:90D`
-
-  return tieredGetOrSet<TraderData[]>(
-    cacheKey,
-    async () => {
-      const supabase = getSupabaseAdmin()
+// Use unstable_cache instead of tieredGetOrSet (Redis) for ISR pages.
+// Upstash SDK's internal fetch uses `cache: 'no-store'` which forces Next.js
+// to treat the entire page as dynamic, breaking ISR completely.
+// unstable_cache uses Next.js's built-in Data Cache which is ISR-compatible.
+const fetchExchangeTraders = unstable_cache(
+  async (exchange: string): Promise<TraderData[]> => {
+    const supabase = getSupabaseAdmin()
 
       try {
         // Use leaderboard_ranks (the primary ranking table) instead of trader_snapshots_v2
@@ -226,11 +226,10 @@ async function fetchExchangeTraders(exchange: string): Promise<TraderData[]> {
         logger.error(`[ExchangeRanking] Exception for ${exchange}:`, e)
         return []
       }
-    },
-    'hot', // 5 min Redis TTL via hot tier
-    ['rankings', `exchange:${exchange}`]
-  )
-}
+  },
+  ['exchange-ranking'], // cache key prefix
+  { revalidate: 300, tags: ['rankings'] } // 5 min, same as hot tier
+)
 
 /**
  * Async server component that fetches and renders the ranking table.

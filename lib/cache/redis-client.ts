@@ -50,7 +50,19 @@ export async function getSharedRedis(): Promise<UpstashRedisType | null> {
 
   try {
     const { Redis } = await import('@upstash/redis')
-    redisClient = new Redis({ url, token })
+    // CRITICAL: Upstash SDK defaults to `cache: 'no-store'` on its internal fetch calls.
+    // This causes Next.js to treat ANY page that touches Redis as fully dynamic,
+    // breaking ISR on /rankings/[exchange], homepage, and all cached pages.
+    // Solution: pass a custom fetch wrapper that replaces 'no-store' with revalidate.
+    const isrSafeFetch: typeof fetch = (input, init) => {
+      if (init?.cache === 'no-store') {
+        const { cache: _, ...rest } = init
+        return fetch(input, { ...rest, next: { revalidate: 60 } })
+      }
+      return fetch(input, init)
+    }
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    redisClient = new Redis({ url, token, enableAutoPipelining: true, fetch: isrSafeFetch } as any)
     dataLogger.info('[Redis] connected')
     return redisClient
   } catch (error) {
