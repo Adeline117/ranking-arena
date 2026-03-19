@@ -158,7 +158,7 @@ export default function TraderProfileView({
           extraTabs={showPosts ? ['posts'] : undefined}
         />
 
-        {/* Tab Content — dims while loading account switch (parity with /trader) */}
+        {/* Tab Content — dims while loading account switch */}
         <div style={{
           opacity: (activeAccount !== 'all' && isLoading) ? 0.5 : 1,
           transition: 'opacity 0.2s ease',

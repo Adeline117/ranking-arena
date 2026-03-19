@@ -67,7 +67,7 @@ export interface OverviewPerformanceCardProps {
   performance: ExtendedPerformance
   profitableWeeksPct?: number
   equityCurve?: Array<{ date: string; roi: number; pnl: number }>
-  /** Full equity curve data for all periods — used to switch sparkline on period change */
+  /** Full equity curve data for all periods (7D/30D/90D) — used to switch sparkline on period change */
   allEquityCurves?: Partial<Record<Period, Array<{ date: string; roi: number; pnl: number }>>>
   lastUpdated?: string
   // Data source for period mapping notes
