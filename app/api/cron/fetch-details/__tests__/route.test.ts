@@ -146,8 +146,8 @@ describe('GET /api/cron/fetch-details', () => {
 
   it('processes traders successfully', async () => {
     const traders = [
-      { source: 'binance_futures', source_trader_id: 'trader1' },
-      { source: 'bybit', source_trader_id: 'trader2' },
+      { platform: 'binance_futures', trader_key: 'trader1' },
+      { platform: 'bybit', trader_key: 'trader2' },
     ]
 
     mockFrom.mockImplementation((table: string) => {
@@ -155,9 +155,11 @@ describe('GET /api/cron/fetch-details', () => {
         return {
           select: jest.fn().mockReturnValue({
             in: jest.fn().mockReturnValue({
-              order: jest.fn().mockReturnValue({
-                limit: jest.fn().mockReturnValue({
-                  or: jest.fn().mockResolvedValue({ data: traders, error: null }),
+              eq: jest.fn().mockReturnValue({
+                order: jest.fn().mockReturnValue({
+                  limit: jest.fn().mockReturnValue({
+                    or: jest.fn().mockResolvedValue({ data: traders, error: null }),
+                  }),
                 }),
               }),
             }),

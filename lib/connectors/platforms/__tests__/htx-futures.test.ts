@@ -122,14 +122,15 @@ describe('HtxFuturesConnector', () => {
       expect(url).toContain('pageNo=1')
     })
 
-    test('throws on network error', async () => {
+    test('returns empty array on network error', async () => {
       const connector = createConnector()
       mockFetchNetworkError()
 
-      await expect(connector.discoverLeaderboard('7d')).rejects.toThrow()
+      const result = await connector.discoverLeaderboard('7d')
+      expect(result.traders).toHaveLength(0)
     })
 
-    test('throws ConnectorError on rate limit (429)', async () => {
+    test('returns empty array on rate limit (429)', async () => {
       const connector = createConnector()
       mockFetch.mockResolvedValueOnce({
         status: 429,
@@ -137,7 +138,8 @@ describe('HtxFuturesConnector', () => {
         json: async () => ({}),
       })
 
-      await expect(connector.discoverLeaderboard('7d')).rejects.toThrow(ConnectorError)
+      const result = await connector.discoverLeaderboard('7d')
+      expect(result.traders).toHaveLength(0)
     })
   })
 
@@ -303,7 +305,7 @@ describe('HtxFuturesConnector', () => {
   // ============================================
 
   describe('error handling', () => {
-    test('throws on server error (500)', async () => {
+    test('returns empty array on server error (500)', async () => {
       const connector = createConnector()
       mockFetch.mockResolvedValueOnce({
         status: 500,
@@ -311,10 +313,11 @@ describe('HtxFuturesConnector', () => {
         json: async () => ({}),
       })
 
-      await expect(connector.discoverLeaderboard('7d')).rejects.toThrow()
+      const result = await connector.discoverLeaderboard('7d')
+      expect(result.traders).toHaveLength(0)
     })
 
-    test('throws ConnectorError on client error (403)', async () => {
+    test('returns empty array on client error (403)', async () => {
       const connector = createConnector()
       mockFetch.mockResolvedValueOnce({
         status: 403,
@@ -322,7 +325,8 @@ describe('HtxFuturesConnector', () => {
         json: async () => ({ message: 'Forbidden' }),
       })
 
-      await expect(connector.discoverLeaderboard('7d')).rejects.toThrow(ConnectorError)
+      const result = await connector.discoverLeaderboard('7d')
+      expect(result.traders).toHaveLength(0)
     })
 
     test('handles malformed response gracefully', async () => {
