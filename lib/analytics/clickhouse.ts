@@ -68,9 +68,11 @@ export function getClickHouseClient(): ClickHouseClient | null {
   if (!isClickHouseAvailable()) return null
 
   try {
-    // Dynamic require so the module compiles even without @clickhouse/client
+    // Fully dynamic require — the variable indirection prevents Turbopack/webpack
+    // from statically resolving (and failing) when @clickhouse/client is not installed.
+    const pkgName = '@clickhouse/client'
     // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const { createClient } = require('@clickhouse/client') as {
+    const { createClient } = require(pkgName) as {
       createClient: (opts: Record<string, unknown>) => ClickHouseClient
     }
 

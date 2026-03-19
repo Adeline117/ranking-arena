@@ -9,27 +9,25 @@ import { SkipLink } from "./components/Providers/Accessibility";
 import { PageErrorBoundary } from "./components/utils/ErrorBoundary";
 import { JsonLd } from "./components/Providers/JsonLd";
 
-// Defer non-critical layout components via dynamic import with ssr:false.
-// These components are ALL non-critical for initial render — disabling SSR means
-// they won't hydrate during initial page load, reducing TBT significantly.
-// They load lazily after the main content is interactive.
-const KeyboardShortcuts = dynamic(() => import("./components/Providers/KeyboardShortcuts"), { ssr: false });
-const GlobalProgress = dynamic(() => import("./components/ui/GlobalProgress").then(m => ({ default: m.GlobalProgress })), { ssr: false });
-const ServiceWorkerRegistration = dynamic(() => import("./components/Providers/ServiceWorkerRegistration").then(m => ({ default: m.ServiceWorkerRegistration })), { ssr: false });
+// Defer non-critical layout components via dynamic import (code-split)
+// Note: ssr:false not allowed in Server Components (layout.tsx is a Server Component)
+const KeyboardShortcuts = dynamic(() => import("./components/Providers/KeyboardShortcuts"));
+const GlobalProgress = dynamic(() => import("./components/ui/GlobalProgress").then(m => ({ default: m.GlobalProgress })));
+const ServiceWorkerRegistration = dynamic(() => import("./components/Providers/ServiceWorkerRegistration").then(m => ({ default: m.ServiceWorkerRegistration })));
 // WelcomeGuide removed
-const CookieConsent = dynamic(() => import("./components/ui/CookieConsent"), { ssr: false });
-const CompareFloatingBar = dynamic(() => import("./components/trader/CompareFloatingBar"), { ssr: false });
-const ScrollToTop = dynamic(() => import("./components/ui/ScrollToTop"), { ssr: false });
-const ScrollRestoration = dynamic(() => import("./components/Providers/ScrollRestoration"), { ssr: false });
-const MobileBottomNav = dynamic(() => import("./components/layout/MobileBottomNav"), { ssr: false });
+const CookieConsent = dynamic(() => import("./components/ui/CookieConsent"));
+const CompareFloatingBar = dynamic(() => import("./components/trader/CompareFloatingBar"));
+const ScrollToTop = dynamic(() => import("./components/ui/ScrollToTop"));
+const ScrollRestoration = dynamic(() => import("./components/Providers/ScrollRestoration"));
+const MobileBottomNav = dynamic(() => import("./components/layout/MobileBottomNav"));
 // InstallPrompt removed
-const WebVitals = dynamic(() => import("./components/Providers/WebVitals").then(m => ({ default: m.WebVitals })), { ssr: false });
-const SpeedInsights = dynamic(() => import("@vercel/speed-insights/next").then(m => ({ default: m.SpeedInsights })), { ssr: false });
-const Analytics = dynamic(() => import("@vercel/analytics/next").then(m => ({ default: m.Analytics })), { ssr: false });
-const NetworkStatusBanner = dynamic(() => import("./components/ui/NetworkStatusBanner"), { ssr: false });
-const BetaBanner = dynamic(() => import("./components/layout/BetaBanner"), { ssr: false });
-const FeedbackWidget = dynamic(() => import("./components/common/FeedbackWidget"), { ssr: false });
-const PlausibleAnalytics = dynamic(() => import("./components/PlausibleAnalytics"), { ssr: false });
+const WebVitals = dynamic(() => import("./components/Providers/WebVitals").then(m => ({ default: m.WebVitals })));
+const SpeedInsights = dynamic(() => import("@vercel/speed-insights/next").then(m => ({ default: m.SpeedInsights })));
+const Analytics = dynamic(() => import("@vercel/analytics/next").then(m => ({ default: m.Analytics })));
+const NetworkStatusBanner = dynamic(() => import("./components/ui/NetworkStatusBanner"));
+const BetaBanner = dynamic(() => import("./components/layout/BetaBanner"));
+const FeedbackWidget = dynamic(() => import("./components/common/FeedbackWidget"));
+const PlausibleAnalytics = dynamic(() => import("./components/PlausibleAnalytics"));
 import { getCriticalCss, getResourceHints } from "@/lib/performance/critical-css";
 import { AsyncStylesheets } from "./components/Providers/AsyncStylesheets";
 

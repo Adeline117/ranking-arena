@@ -25,6 +25,8 @@ const nextConfig: NextConfig = {
       '@gemini-wallet/core': './lib/stubs/empty.js',
       'porto': './lib/stubs/empty.js',
       'porto/internal': './lib/stubs/empty.js',
+      // ClickHouse client is optional — only used when env vars are set
+      '@clickhouse/client': './lib/stubs/empty.js',
     },
   },
 
@@ -43,7 +45,7 @@ const nextConfig: NextConfig = {
     config.plugins.push(
       // eslint-disable-next-line @typescript-eslint/no-require-imports
       new (require('webpack').IgnorePlugin)({
-        resourceRegExp: /^(@react-native-async-storage\/async-storage|@gemini-wallet\/core|porto|porto\/internal)$/,
+        resourceRegExp: /^(@react-native-async-storage\/async-storage|@gemini-wallet\/core|porto|porto\/internal|@clickhouse\/client)$/,
       })
     )
     return config
