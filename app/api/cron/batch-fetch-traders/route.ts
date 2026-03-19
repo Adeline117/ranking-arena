@@ -57,8 +57,8 @@ const GROUPS: Record<string, string[]> = {
   a2: ['okx_futures', 'okx_spot'],
   // Group A3: Bybit futures + spot (every 3h) — VPS scraper
   a3: ['bybit', 'bybit_spot'],
-  // Group A4: Bitget (every 3h) — RE-ENABLED 2026-03-19 (60s/page + 4min total timeout)
-  a4: ['bitget_futures'],
+  // Group A4: Bitget (every 3h) — PERMANENTLY DISABLED 2026-03-19 (8th stuck >44min - blacklist bypass)
+  a4: [], // bitget_futures NEVER RE-ENABLE - scraper hangs repeatedly
   // Group B: Top DEX (every 4h) + GMX (switched to subgraph 2026-03-15)
   b: ['hyperliquid', 'gmx'],
   // Group C: Mid-priority (every 4h) — okx_futures moved to a2, bitunix re-enabled
