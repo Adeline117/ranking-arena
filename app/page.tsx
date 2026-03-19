@@ -136,7 +136,17 @@ export default async function Page() {
             shell already provides the fallback. Passing it to the client caused duplicate
             DOM nodes (SSR shell + inline copy) inflating DOM size by ~200 nodes. */}
         <div id="ssr-homepage-shell" style={{ maxWidth: 1400, margin: '0 auto', padding: '8px 16px' }}>
+          {/* CLS fix: reserve space for elements in Phase 2 (interactive HomePage) that
+              are NOT present in Phase 1 SSR shell. Without these spacers, the Phase 1→2
+              transition shifts visible content (hero, ranking table) by the missing heights.
+              - 56px: TopNav (sticky header rendered by HomePage, not in SSR shell)
+              - 40px: HomeSubNav + FoundingMemberBanner row
+              - 47px: ExchangePartners lazy-loaded strip
+              Total: ~143px extra before the ranking table in Phase 2. */}
+          <div aria-hidden="true" style={{ height: 56 }} />
           <HomeHeroSSR traderCount={heroStats.traderCount} exchangeCount={heroStats.exchangeCount} />
+          <div aria-hidden="true" style={{ height: 40 }} />
+          <div aria-hidden="true" style={{ height: 47, borderBottom: '1px solid var(--color-border-primary, rgba(255,255,255,0.1))' }} />
           {ssrTable}
         </div>
 

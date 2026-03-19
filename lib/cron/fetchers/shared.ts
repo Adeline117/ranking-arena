@@ -442,22 +442,10 @@ export async function upsertTraders(
     // --- 4. trader_snapshots_v2 (PRIMARY) ---
     try {
       const snapshots = batch.map((t) => {
-        const roi = t.roi ?? 0
         const w = t.season_id?.toUpperCase() || '30D'
-        const periodDays = w === '7D' ? 7 : w === '90D' ? 90 : 30
 
-        // Auto-estimate missing metrics from ROI (no null metrics in frontend)
-        const winRate = t.win_rate ?? (roi > 0
-          ? Math.round(Math.min(75, 48 + roi / 10) * 10) / 10
-          : Math.round(Math.max(20, 40 + roi / 5) * 10) / 10)
-        const maxDrawdown = t.max_drawdown ?? (roi > 0
-          ? Math.round(Math.min(65, 10 + roi / 5) * 10) / 10
-          : Math.round(Math.min(90, 30 + Math.abs(roi) / 3) * 10) / 10)
-        const sharpeRatio = t.sharpe_ratio ?? Math.round(
-          Math.max(-3, Math.min(5, (roi * 365 / periodDays) / 50)) * 100
-        ) / 100
-        const tradesCount = t.trades_count ?? Math.round(periodDays * 0.7)
-
+        // Real data only — null is better than estimated values.
+        // Enrichment pipeline fills in WR/MDD/Sharpe from real API data + equity curve.
         return {
         platform: t.source,
         market_type: getMarketType(t.source),
@@ -468,23 +456,23 @@ export async function upsertTraders(
         // Cap extreme ROI values (>100,000% is likely a normalization bug)
         roi_pct: t.roi != null && Math.abs(t.roi) > 100000 ? null : (t.roi ?? null),
         pnl_usd: t.pnl ?? null,
-        win_rate: winRate,
-        max_drawdown: maxDrawdown,
+        win_rate: t.win_rate ?? null,
+        max_drawdown: t.max_drawdown ?? null,
         arena_score: t.arena_score ?? (t.roi != null ? 0 : null),
-        sharpe_ratio: sharpeRatio,
-        trades_count: tradesCount,
+        sharpe_ratio: t.sharpe_ratio ?? null,
+        trades_count: t.trades_count ?? null,
         followers: null, // Arena internal only — do NOT write exchange follower counts
         copiers: null,  // Arena internal only — do NOT write exchange copier counts
         // JSONB metrics — full data for detail views and future use
         metrics: {
           roi: t.roi ?? null,
           pnl: t.pnl ?? null,
-          win_rate: winRate,
-          max_drawdown: maxDrawdown,
-          trades_count: tradesCount,
+          win_rate: t.win_rate ?? null,
+          max_drawdown: t.max_drawdown ?? null,
+          trades_count: t.trades_count ?? null,
           followers: null,
           copiers: null,
-          sharpe_ratio: sharpeRatio,
+          sharpe_ratio: t.sharpe_ratio ?? null,
           arena_score: t.arena_score ?? null,
           aum: t.aum || null,
         },
