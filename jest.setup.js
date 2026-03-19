@@ -104,6 +104,8 @@ jest.mock('@/lib/utils/logger', () => {
     dataLogger: inst,
     authLogger: inst,
     perfLogger: inst,
+    exchangeLogger: inst,
+    realtimeLogger: inst,
     createLogger: jest.fn(() => inst),
     captureError: jest.fn(),
     captureMessage: jest.fn(),
@@ -111,6 +113,11 @@ jest.mock('@/lib/utils/logger', () => {
     Logger: jest.fn(() => inst),
   }
 })
+
+// Global mock: @/lib/analytics/dual-write
+jest.mock('@/lib/analytics/dual-write', () => ({
+  syncToClickHouse: jest.fn().mockResolvedValue(undefined),
+}))
 
 // ---------------------------------------------------------------------------
 // Global mock: @/lib/logger (re-export shim)

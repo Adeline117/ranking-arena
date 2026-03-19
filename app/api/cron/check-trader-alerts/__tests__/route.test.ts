@@ -45,6 +45,21 @@ jest.mock('@/lib/services/pipeline-logger', () => ({
   },
 }))
 
+jest.mock('@/lib/supabase/server', () => ({
+  getSupabaseAdmin: jest.fn(() => ({ from: mockFrom })),
+}))
+
+jest.mock('@/lib/services/push-notification', () => ({
+  getPushNotificationService: jest.fn(() => ({
+    sendToUser: jest.fn().mockResolvedValue(undefined),
+  })),
+}))
+
+jest.mock('@/lib/services/email', () => ({
+  sendEmail: jest.fn().mockResolvedValue(true),
+  buildTraderAlertEmail: jest.fn().mockReturnValue('<html>alert</html>'),
+}))
+
 import { POST, GET } from '../route'
 
 // ---------------------------------------------------------------------------
@@ -169,12 +184,14 @@ describe('check-trader-alerts cron', () => {
       },
     ]
 
-    const traderData = [
-      { source_trader_id: 'trader1', source: 'binance_futures', roi: 60, roi_7d: null, roi_30d: null, pnl: 10000, pnl_7d: null, pnl_30d: null, max_drawdown: -10, win_rate: 0.6, arena_score: 85 },
+    // Route now queries leaderboard_ranks for current data
+    const leaderboardData = [
+      { source_trader_id: 'trader1', source: 'binance_futures', roi: 60, pnl: 10000, max_drawdown: -10, win_rate: 0.6, arena_score: 85, season_id: '90D' },
     ]
 
-    const snapshots = [
-      { trader_id: 'trader1', source: 'binance_futures', roi_90d: 40, pnl_90d: 8000, max_drawdown: -8, arena_score: 80 },
+    // Route now queries trader_daily_snapshots for yesterday's data
+    const dailySnapshots = [
+      { trader_key: 'trader1', platform: 'binance_futures', roi: 40, pnl: 8000, max_drawdown: -8, date: new Date(Date.now() - 86400000).toISOString().split('T')[0] },
     ]
 
     mockFrom.mockImplementation((table: string) => {
@@ -190,19 +207,21 @@ describe('check-trader-alerts cron', () => {
           }),
         }
       }
-      if (table === 'trader_sources') {
+      if (table === 'leaderboard_ranks') {
         return {
           select: jest.fn().mockReturnValue({
-            in: jest.fn().mockResolvedValue({ data: traderData, error: null }),
+            in: jest.fn().mockReturnValue({
+              eq: jest.fn().mockResolvedValue({ data: leaderboardData, error: null }),
+            }),
           }),
         }
       }
-      if (table === 'trader_snapshots') {
+      if (table === 'trader_daily_snapshots') {
         return {
           select: jest.fn().mockReturnValue({
             in: jest.fn().mockReturnValue({
               eq: jest.fn().mockReturnValue({
-                limit: jest.fn().mockResolvedValue({ data: snapshots, error: null }),
+                limit: jest.fn().mockResolvedValue({ data: dailySnapshots, error: null }),
               }),
             }),
           }),
@@ -217,6 +236,13 @@ describe('check-trader-alerts cron', () => {
       if (table === 'notifications') {
         return {
           insert: jest.fn().mockResolvedValue({ error: null }),
+        }
+      }
+      if (table === 'user_profiles') {
+        return {
+          select: jest.fn().mockReturnValue({
+            in: jest.fn().mockResolvedValue({ data: [], error: null }),
+          }),
         }
       }
       return chainable({ data: null, error: null })
