@@ -229,11 +229,12 @@ export default function PostFeed(props: PostFeedProps = {}): React.ReactNode {
     }
   }, [props.initialPostId, posts, openPost, setComments]) // eslint-disable-line react-hooks/exhaustive-deps -- t is excluded; read at call time from closure
 
-  // Translation effects
+  // Translation effects — only for authenticated users (translate API requires auth)
   useEffect(() => {
+    if (!accessToken) return
     if (posts.length > 0) translateListPosts(posts, language as 'zh' | 'en')
     if (comments.length > 0 && openPost) translateComments(comments, language === 'en' ? 'en' : 'zh')
-  }, [language, posts, translateListPosts, comments, openPost, translateComments])
+  }, [language, posts, translateListPosts, comments, openPost, translateComments, accessToken])
 
   const sortedPosts = useMemo(() => {
     if (!props.authorHandle) return posts
@@ -251,8 +252,8 @@ export default function PostFeed(props: PostFeedProps = {}): React.ReactNode {
     const hasTranslatedTitle = !!translatedListPosts[post.id]?.title
     if (needsContentTranslation || needsTitleTranslation || hasTranslatedTitle) setShowingOriginal(false)
     else setShowingOriginal(true)
-    if (needsContentTranslation) translateContent(post.id, post.content!, language)
-    if (!hasTranslatedTitle && needsTitleTranslation) translateListPosts([post], language as 'zh' | 'en')
+    if (accessToken && needsContentTranslation) translateContent(post.id, post.content!, language)
+    if (accessToken && !hasTranslatedTitle && needsTitleTranslation) translateListPosts([post], language as 'zh' | 'en')
   // eslint-disable-next-line react-hooks/exhaustive-deps -- actions/setters/showingOriginal excluded; only re-create when translation dependencies change
   }, [loadComments, language, isChineseText, translateContent, translatedListPosts, translateListPosts])
 

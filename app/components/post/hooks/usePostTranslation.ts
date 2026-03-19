@@ -80,6 +80,7 @@ export function usePostTranslation({
   }, [])
 
   const translateContent = useCallback(async (postId: string, content: string, targetLang: 'zh' | 'en') => {
+    if (!accessToken) return
     const cacheKey = `${postId}-content-${targetLang}`
     const originalImages = extractImagesFromContent(content)
 
@@ -124,6 +125,7 @@ export function usePostTranslation({
   }, [translationCache, showToast, extractImagesFromContent, removeImagesFromContent, accessToken])
 
   const translateListPosts = useCallback(async (postsToTranslate: Post[], targetLang: 'zh' | 'en') => {
+    if (!accessToken) return
     // Use refs to avoid stale closures without adding state to deps (prevents infinite re-render loop)
     if (translatingListRef.current) return
     const currentTranslated = translatedListPostsRef.current
@@ -175,6 +177,7 @@ export function usePostTranslation({
   }, [isChineseText, removeImagesFromContent])
 
   const translateComments = useCallback(async (commentsToTranslate: Comment[], targetLang: 'zh' | 'en') => {
+    if (!accessToken) return
     // Use refs to avoid stale closures without adding state to deps (prevents infinite re-render loop)
     if (translatingCommentsRef.current) return
     const currentTranslatedComments = translatedCommentsRef.current
