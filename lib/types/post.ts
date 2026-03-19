@@ -2,6 +2,8 @@
  * 帖子相关类型定义
  */
 
+export type PostVisibility = 'public' | 'followers' | 'group'
+
 export interface Post {
   id: string
   title: string
@@ -27,6 +29,13 @@ export interface Post {
   updated_at?: string | null
   // 转发相关
   original_post_id?: string | null
+  // Visibility level
+  visibility?: PostVisibility
+  // Content warning / sensitive flag
+  is_sensitive?: boolean
+  content_warning?: string | null
+  // Language detection
+  language?: string
 }
 
 export interface PostWithAuthor extends Post {
@@ -60,12 +69,19 @@ export interface CreatePostInput {
   content: string
   group_id?: string
   poll_enabled?: boolean
+  visibility?: PostVisibility
+  is_sensitive?: boolean
+  content_warning?: string
+  language?: string
 }
 
 export interface UpdatePostInput {
   title?: string
   content?: string
   poll_enabled?: boolean
+  visibility?: PostVisibility
+  is_sensitive?: boolean
+  content_warning?: string | null
 }
 
 export interface PostListOptions {

@@ -12,6 +12,7 @@ import { useToast } from '@/app/components/ui/Toast'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import { getCsrfHeaders } from '@/lib/api/client'
 import { logger } from '@/lib/logger'
+import { ContentWarningToggle } from '@/app/components/post/components/ContentWarningToggle'
 import type { UploadedImage, UploadedVideo, PollOption, LinkPreview } from './types'
 import {
   TITLE_MAX_LENGTH, DRAFT_KEY_PREFIX,
@@ -61,6 +62,10 @@ export default function NewGroupPostPage(): React.ReactElement {
   const [linkPreview, setLinkPreview] = useState<LinkPreview | null>(null)
   const [linkPreviewLoading, setLinkPreviewLoading] = useState(false)
   const linkPreviewUrlRef = useRef<string | null>(null)
+
+  // Content warning state
+  const [isSensitive, setIsSensitive] = useState(false)
+  const [contentWarning, setContentWarning] = useState('')
 
   // Poll state
   const [pollEnabled, setPollEnabled] = useState(false)
@@ -454,6 +459,9 @@ export default function NewGroupPostPage(): React.ReactElement {
         images: images.map(img => img.url),
         poll_enabled: pollEnabled,
         poll_id: pollId,
+        visibility: 'group',
+        is_sensitive: isSensitive,
+        content_warning: isSensitive && contentWarning ? contentWarning : null,
       }).select('id').single()
 
       if (error) {
@@ -552,6 +560,14 @@ export default function NewGroupPostPage(): React.ReactElement {
               t={t}
             />
           )}
+
+          {/* Content Warning */}
+          <ContentWarningToggle
+            isSensitive={isSensitive}
+            onToggle={setIsSensitive}
+            contentWarning={contentWarning}
+            onContentWarningChange={setContentWarning}
+          />
 
           {/* Image upload */}
           <ImageUploader

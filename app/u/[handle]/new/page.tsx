@@ -14,6 +14,9 @@ import { getCsrfHeaders } from '@/lib/api/client'
 import { DynamicStickerPicker } from '@/app/components/ui/Dynamic'
 import type { Sticker } from '@/lib/stickers'
 import { logger } from '@/lib/logger'
+import { VisibilitySelector } from '@/app/components/post/components/VisibilitySelector'
+import { ContentWarningToggle } from '@/app/components/post/components/ContentWarningToggle'
+import type { PostVisibility } from '@/lib/types/post'
 import { renderContentWithControls } from './components/ContentPreview'
 import { ImageUploader, VideoUploader } from './components/MediaUploader'
 import { PollEditor } from './components/PollEditor'
@@ -59,6 +62,9 @@ export default function NewPostPage() {
   const [pollType, setPollType] = useState<'single' | 'multiple'>('single')
   const [draggedImageIndex, setDraggedImageIndex] = useState<number | null>(null)
   const [titleTouched, setTitleTouched] = useState(false)
+  const [visibility, setVisibility] = useState<PostVisibility>('public')
+  const [isSensitive, setIsSensitive] = useState(false)
+  const [contentWarning, setContentWarning] = useState('')
   const videoInputRef = useRef<HTMLInputElement>(null)
   const [videos, setVideos] = useState<UploadedVideo[]>([])
   const [videoUploading, setVideoUploading] = useState(false)
@@ -469,6 +475,9 @@ export default function NewPostPage() {
           author_id: userId,
           images: images.map(img => img.url),
           poll_enabled: pollEnabled,
+          visibility,
+          is_sensitive: isSensitive,
+          content_warning: isSensitive && contentWarning ? contentWarning : null,
         })
         .select('id')
         .single()
@@ -774,6 +783,20 @@ export default function NewPostPage() {
             durationOptions={POLL_DURATION_OPTIONS}
             t={t}
           />
+
+          {/* Visibility & Content Warning */}
+          <Box style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[3] }}>
+            <Box style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[3] }}>
+              <Text size="sm" weight="bold">{t('visibility')}</Text>
+              <VisibilitySelector value={visibility} onChange={setVisibility} />
+            </Box>
+            <ContentWarningToggle
+              isSensitive={isSensitive}
+              onToggle={setIsSensitive}
+              contentWarning={contentWarning}
+              onContentWarningChange={setContentWarning}
+            />
+          </Box>
 
           {/* Image uploader */}
           <ImageUploader
