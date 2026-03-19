@@ -2,9 +2,18 @@
 
 /* SSR Ranking Table: visible by default for instant LCP.
    Hidden via :has() when client-side .home-ranking-section renders.
-   Pure CSS — zero CLS, no JavaScript needed. */
+   Using visibility:hidden + height:0 + overflow:hidden instead of display:none
+   to avoid layout shift (CLS). display:none causes the element to be removed from
+   flow instantly, then the client table renders — creating a massive CLS jump.
+   visibility:hidden keeps the element in flow momentarily while height:0 collapses
+   it smoothly without triggering CLS measurement. */
 body:has(.home-ranking-section) #ssr-ranking {
-  display: none !important;
+  visibility: hidden !important;
+  height: 0 !important;
+  overflow: hidden !important;
+  padding: 0 !important;
+  margin: 0 !important;
+  border: none !important;
 }
 
 /*

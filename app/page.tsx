@@ -92,6 +92,8 @@ export default async function Page() {
       {top3Avatars.map(url => (
         <link key={url} rel="preload" as="image" href={url} crossOrigin="anonymous" />
       ))}
+      {/* Preload the rankings API data so when useTraderData hydrates, the response is already cached */}
+      <link rel="preload" as="fetch" href="/api/traders?timeRange=90D&limit=200" crossOrigin="anonymous" />
       <JsonLd data={organizationJsonLd} />
       {/* SSR ranking table — LCP element, hidden by CSS :has() when client renders */}
       <div id="ssr-ranking">
