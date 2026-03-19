@@ -31,7 +31,8 @@ async function getUserFromCookieOrHeader(request: NextRequest) {
     )
     const { data: { user } } = await supabase.auth.getUser()
     return user
-  } catch {
+  } catch (err) {
+    console.error('[interactions] Cookie-based auth failed:', err instanceof Error ? err.message : String(err))
     return null
   }
 }
