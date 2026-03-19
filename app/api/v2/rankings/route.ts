@@ -26,6 +26,7 @@
  */
 
 import { NextResponse } from 'next/server'
+import { z } from 'zod'
 import type { Window, LeaderboardPlatform, RankingEntry, RankingsResponse } from '@/lib/types/leaderboard'
 import { VALID_TRADING_STYLES, TRADING_STYLE_LEGACY_MAP, type TradingStyle } from '@/lib/types/trader'
 import { LEADERBOARD_PLATFORMS, WINDOWS } from '@/lib/types/leaderboard'
@@ -35,52 +36,47 @@ import { withPublic } from '@/lib/api/middleware'
 export const dynamic = 'force-dynamic'
 export const revalidate = 600  // ISR: revalidate every 10 minutes (data refreshes via cron every 30 min)
 
+// ── Input validation schema ──────────────────────────────────────────────────
+const v2RankingsSchema = z.object({
+  window: z.enum(WINDOWS as unknown as [string, ...string[]]),
+  platform: z.enum(LEADERBOARD_PLATFORMS as unknown as [string, ...string[]]),
+  market_type: z.string().default('futures'),
+  limit: z.coerce.number().int().min(1).max(500).catch(100),
+  offset: z.coerce.number().int().min(0).catch(0),
+  sort: z.enum(['arena_score', 'arena_score_v3', 'roi', 'pnl', 'sortino', 'calmar', 'alpha']).catch('arena_score'),
+  trading_style: z.string().optional(),
+  min_alpha: z.coerce.number().optional(),
+  min_sortino: z.coerce.number().optional(),
+  min_roi: z.coerce.number().optional(),
+  min_pnl: z.coerce.number().optional(),
+  min_win_rate: z.coerce.number().optional(),
+  max_drawdown: z.coerce.number().optional(),
+  min_score: z.coerce.number().optional(),
+})
+
 export const GET = withPublic(async ({ supabase, request }) => {
   const { searchParams } = new URL(request.url)
+  const rawParams = Object.fromEntries(searchParams)
+  const parsed = v2RankingsSchema.safeParse(rawParams)
 
-  // Parse and validate params
-  const window = searchParams.get('window') as Window
-  const platform = searchParams.get('platform') as LeaderboardPlatform
-  const marketType = searchParams.get('market_type') || 'futures'
-  const limit = Math.min(parseInt(searchParams.get('limit') || '100', 10), 500)
-  const offset = parseInt(searchParams.get('offset') || '0', 10)
-  const sort = searchParams.get('sort') || 'arena_score'
-
-  // V3 filters
-  const tradingStyle = searchParams.get('trading_style')
-  const minAlpha = searchParams.get('min_alpha') ? parseFloat(searchParams.get('min_alpha')!) : null
-  const minSortino = searchParams.get('min_sortino') ? parseFloat(searchParams.get('min_sortino')!) : null
-  // Additional filters (used by AdvancedFilter component)
-  const minRoi = searchParams.get('min_roi') ? parseFloat(searchParams.get('min_roi')!) : null
-  const minPnl = searchParams.get('min_pnl') ? parseFloat(searchParams.get('min_pnl')!) : null
-  const minWinRate = searchParams.get('min_win_rate') ? parseFloat(searchParams.get('min_win_rate')!) : null
-  const maxDrawdown = searchParams.get('max_drawdown') ? parseFloat(searchParams.get('max_drawdown')!) : null
-  const minScore = searchParams.get('min_score') ? parseFloat(searchParams.get('min_score')!) : null
-
-  // Validation
-  if (!window || !WINDOWS.includes(window)) {
+  if (!parsed.success) {
     return NextResponse.json(
-      { error: 'Invalid or missing window parameter. Must be: 7d, 30d, or 90d' },
+      { error: 'Invalid parameters', details: parsed.error.flatten() },
       { status: 400 }
     )
   }
 
-  if (!platform || !LEADERBOARD_PLATFORMS.includes(platform)) {
-    return NextResponse.json(
-      { error: `Invalid platform. Must be one of: ${LEADERBOARD_PLATFORMS.join(', ')}` },
-      { status: 400 }
-    )
-  }
+  const { window, platform, market_type: marketType, limit, offset, sort } = parsed.data
+  const tradingStyle = parsed.data.trading_style || null
+  const minAlpha = parsed.data.min_alpha ?? null
+  const minSortino = parsed.data.min_sortino ?? null
+  const minRoi = parsed.data.min_roi ?? null
+  const minPnl = parsed.data.min_pnl ?? null
+  const minWinRate = parsed.data.min_win_rate ?? null
+  const maxDrawdown = parsed.data.max_drawdown ?? null
+  const minScore = parsed.data.min_score ?? null
 
-  const validSorts = ['arena_score', 'arena_score_v3', 'roi', 'pnl', 'sortino', 'calmar', 'alpha']
-  if (!validSorts.includes(sort)) {
-    return NextResponse.json(
-      { error: `Invalid sort. Must be one of: ${validSorts.join(', ')}` },
-      { status: 400 }
-    )
-  }
-
-  // Accept both current and legacy style names
+  // Validate trading_style against known values (accept both current and legacy names)
   const allValidStyles = [...VALID_TRADING_STYLES, ...Object.keys(TRADING_STYLE_LEGACY_MAP)]
   if (tradingStyle && !allValidStyles.includes(tradingStyle)) {
     return NextResponse.json(
@@ -236,9 +232,9 @@ export const GET = withPublic(async ({ supabase, request }) => {
   const response: RankingsResponse = {
     traders,
     meta: {
-      platform,
+      platform: platform as LeaderboardPlatform,
       market_type: marketType as 'futures',
-      window,
+      window: window as Window,
       total_count: count || 0,
       updated_at: latestUpdate.toISOString(),
       staleness_seconds: stalenessSeconds,
