@@ -96,14 +96,27 @@ export function toTraderPageData(detail: TraderDetail): Record<string, unknown> 
         : null,
       maxDrawdown: t.maxDrawdown,
       sharpeRatio: t.sharpeRatio,
+      avgHoldingTime: (() => {
+        const hours = t.avgHoldingHours ?? detail.stats?.avgHoldingHours
+        if (hours == null) return null
+        if (hours < 1) return `${Math.round(hours * 60)}m`
+        if (hours < 24) return `${hours.toFixed(1)}h`
+        if (hours < 168) return `${(hours / 24).toFixed(1)}d`
+        return `${(hours / 168).toFixed(1)}w`
+      })(),
     },
     trading: {
       totalTrades12M: t.tradesCount,
       avgProfit: detail.stats?.avgProfit ?? null,
       avgLoss: detail.stats?.avgLoss ?? null,
       profitableTradesPct: t.winRate,
-      winningPositions: detail.stats?.winningPositions,
-      totalPositions: detail.stats?.totalPositions,
+      winningPositions: detail.stats?.winningPositions ?? (
+        t.winRate != null && t.tradesCount != null && t.tradesCount > 0
+          ? Math.round((t.winRate / 100) * t.tradesCount) : null
+      ),
+      totalPositions: detail.stats?.totalPositions ?? (
+        t.tradesCount != null && t.tradesCount > 0 ? t.tradesCount : null
+      ),
     },
     frequentlyTraded: detail.assetBreakdown['90D']?.map(a => ({
       symbol: a.symbol,
