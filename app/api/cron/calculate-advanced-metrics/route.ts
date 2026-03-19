@@ -48,32 +48,32 @@ export async function POST(request: NextRequest) {
     // Try with advanced column filter first, fall back to simpler query
     let traders: Array<{
       id: string
-      source: string
-      source_trader_id: string
-      season_id: string | null
-      roi: string | null
-      pnl: string | null
+      platform: string
+      trader_key: string
+      window: string | null
+      roi_pct: string | null
+      pnl_usd: string | null
       max_drawdown: string | null
       win_rate: string | null
     }> | null = null
 
     const { data: tradersResult, error: fetchError } = await supabase
-      .from('trader_snapshots')
-      .select('id, source, source_trader_id, season_id, roi, pnl, max_drawdown, win_rate')
-      .or('sortino_ratio.is.null,arena_score_v3.is.null')
-      .not('roi', 'is', null)
-      .order('captured_at', { ascending: false })
+      .from('trader_snapshots_v2')
+      .select('id, platform, trader_key, window, roi_pct, pnl_usd, max_drawdown, win_rate')
+      .or('sortino_ratio.is.null,arena_score.is.null')
+      .not('roi_pct', 'is', null)
+      .order('as_of_ts', { ascending: false })
       .limit(BATCH_SIZE * 3)
 
     if (fetchError) {
       // If columns don't exist yet, fall back to simpler query
-      if (fetchError.message?.includes('sortino_ratio') || fetchError.message?.includes('arena_score_v3') || fetchError.code === '42703') {
+      if (fetchError.message?.includes('sortino_ratio') || fetchError.message?.includes('arena_score') || fetchError.code === '42703') {
         logger.warn('Advanced metric columns not found, using fallback query', {})
         const { data: fallback, error: fallbackError } = await supabase
-          .from('trader_snapshots')
-          .select('id, source, source_trader_id, season_id, roi, pnl, max_drawdown, win_rate')
-          .not('roi', 'is', null)
-          .order('captured_at', { ascending: false })
+          .from('trader_snapshots_v2')
+          .select('id, platform, trader_key, window, roi_pct, pnl_usd, max_drawdown, win_rate')
+          .not('roi_pct', 'is', null)
+          .order('as_of_ts', { ascending: false })
           .limit(BATCH_SIZE * 3)
 
         if (fallbackError) throw fallbackError
@@ -91,7 +91,7 @@ export async function POST(request: NextRequest) {
 
     // Group by trader
     for (const trader of traders || []) {
-      const key = `${trader.source}_${trader.source_trader_id}`
+      const key = `${trader.platform}_${trader.trader_key}`
       if (!processingMap.has(key)) {
         processingMap.set(key, [])
       }
@@ -104,7 +104,7 @@ export async function POST(request: NextRequest) {
 
       try {
         for (const snapshot of snapshots) {
-          const window = snapshot.season_id?.toUpperCase() as Period
+          const window = snapshot.window?.toUpperCase() as Period
           if (!windows.includes(window)) continue
 
           // Calculate period days
@@ -112,8 +112,8 @@ export async function POST(request: NextRequest) {
 
           // For now, use simplified calculations without historical trade data
           // In production, these would be fetched from trade history
-          const roi = parseFloat(snapshot.roi || '0')
-          const pnl = parseFloat(snapshot.pnl || '0')
+          const roi = parseFloat(snapshot.roi_pct || '0')
+          const pnl = parseFloat(snapshot.pnl_usd || '0')
           const maxDrawdown = parseFloat(snapshot.max_drawdown || '0')
           const winRate = parseFloat(snapshot.win_rate || '0')
 
@@ -126,8 +126,8 @@ export async function POST(request: NextRequest) {
             const { data: dailySnapshots } = await supabase
               .from('trader_daily_snapshots')
               .select('date, daily_return_pct')
-              .eq('platform', snapshot.source)
-              .eq('trader_key', snapshot.source_trader_id)
+              .eq('platform', snapshot.platform)
+              .eq('trader_key', snapshot.trader_key)
               .gte('date', startDate.toISOString().split('T')[0])
               .order('date', { ascending: true })
 
@@ -184,16 +184,13 @@ export async function POST(request: NextRequest) {
             calmar_ratio: calmarRatio,
             volatility_pct: volatilityPct,
             downside_volatility_pct: downsideVolatilityPct,
-            arena_score_v3: v3Result.totalScore,
-            alpha_score: v3Result.alphaScore,
-            consistency_score: v3Result.consistencyScore,
-            risk_adjusted_score_v3: v3Result.riskAdjustedScore,
+            arena_score: v3Result.totalScore,
             metrics_quality: metricsQuality,
             metrics_data_points: dailyReturns.length,
           }
 
           let { error: updateError } = await supabase
-            .from('trader_snapshots')
+            .from('trader_snapshots_v2')
             .update(updatePayload)
             .eq('id', snapshot.id)
 
@@ -202,11 +199,11 @@ export async function POST(request: NextRequest) {
             const minimalPayload: Record<string, unknown> = {}
             // Try only columns that are likely to exist
             if (sortinoRatio !== null) minimalPayload.sortino_ratio = sortinoRatio
-            if (v3Result.totalScore !== null) minimalPayload.arena_score_v3 = v3Result.totalScore
+            if (v3Result.totalScore !== null) minimalPayload.arena_score = v3Result.totalScore
 
             if (Object.keys(minimalPayload).length > 0) {
               const { error: retryError } = await supabase
-                .from('trader_snapshots')
+                .from('trader_snapshots_v2')
                 .update(minimalPayload)
                 .eq('id', snapshot.id)
               updateError = retryError
