@@ -1,8 +1,12 @@
 /**
- * Trader Comments/Reviews API
- * GET  /api/traders/[handle]/comments - List comments for a trader
+ * Trader Comments API
+ * GET  /api/traders/[handle]/comments - List comments for a trader or user profile
  * POST /api/traders/[handle]/comments - Create a comment (auth required)
  * DELETE /api/traders/[handle]/comments - Delete own comment (auth required)
+ *
+ * Supports both trader pages and user profile pages:
+ * - Trader page: source=binance_futures&source_id=ABC123
+ * - User profile: source=user&source_id=<user_uuid>
  */
 
 import { NextRequest } from 'next/server'
@@ -21,7 +25,6 @@ import { checkRateLimit, RateLimitPresets } from '@/lib/utils/rate-limit'
 
 const CreateCommentSchema = z.object({
   content: z.string().min(1, 'Comment is required').max(2000, 'Comment must be at most 2000 characters'),
-  rating: z.number().int().min(1).max(5).optional().nullable(),
   trader_source: z.string().min(1),
   trader_source_id: z.string().min(1),
 })
@@ -52,7 +55,7 @@ export async function GET(request: NextRequest, _context: RouteContext) {
 
     const { data: comments, error } = await supabase
       .from('trader_comments')
-      .select('id, content, rating, created_at, updated_at, user_id')
+      .select('id, content, created_at, updated_at, user_id')
       .eq('trader_source', traderSource)
       .eq('trader_source_id', traderSourceId)
       .order('created_at', { ascending: false })
@@ -80,7 +83,6 @@ export async function GET(request: NextRequest, _context: RouteContext) {
     const enrichedComments = (comments || []).map(c => ({
       id: c.id,
       content: c.content,
-      rating: c.rating,
       created_at: c.created_at,
       updated_at: c.updated_at,
       user_id: c.user_id,
@@ -88,19 +90,8 @@ export async function GET(request: NextRequest, _context: RouteContext) {
       author_avatar_url: profileMap[c.user_id]?.avatar_url || null,
     }))
 
-    // Get average rating
-    const { data: ratingData } = await supabase
-      .from('trader_comments')
-      .select('rating')
-      .eq('trader_source', traderSource)
-      .eq('trader_source_id', traderSourceId)
-      .not('rating', 'is', null)
-
-    const ratings = (ratingData || []).map(r => r.rating).filter((r): r is number => r != null)
-    const avgRating = ratings.length > 0 ? ratings.reduce((a, b) => a + b, 0) / ratings.length : null
-
     return successWithPagination(
-      { comments: enrichedComments, avg_rating: avgRating, rating_count: ratings.length },
+      { comments: enrichedComments },
       { limit, offset, has_more: (comments || []).length === limit }
     )
   } catch (error: unknown) {
@@ -122,7 +113,7 @@ export async function POST(request: NextRequest, _context: RouteContext) {
       throw ApiError.validation('Invalid input', { errors: parsed.error.flatten() })
     }
 
-    const { content, rating, trader_source, trader_source_id } = parsed.data
+    const { content, trader_source, trader_source_id } = parsed.data
 
     const { data: comment, error } = await supabase
       .from('trader_comments')
@@ -131,9 +122,8 @@ export async function POST(request: NextRequest, _context: RouteContext) {
         trader_source_id,
         user_id: user.id,
         content,
-        rating: rating ?? null,
       })
-      .select('id, content, rating, created_at, updated_at, user_id')
+      .select('id, content, created_at, updated_at, user_id')
       .single()
 
     if (error) throw error

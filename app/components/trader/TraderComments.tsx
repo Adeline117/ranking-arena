@@ -14,7 +14,6 @@ import { getLocaleFromLanguage } from '@/lib/utils/format'
 interface TraderComment {
   id: string
   content: string
-  rating: number | null
   created_at: string
   updated_at: string
   user_id: string
@@ -25,8 +24,6 @@ interface TraderComment {
 interface CommentsResponse {
   data: {
     comments: TraderComment[]
-    avg_rating: number | null
-    rating_count: number
   }
   pagination: {
     limit: number
@@ -36,8 +33,11 @@ interface CommentsResponse {
 }
 
 interface TraderCommentsProps {
+  /** Exchange source (e.g. 'binance_futures') or 'user' for user profile comments */
   traderSource: string
+  /** Exchange trader ID or user UUID for user profile comments */
   traderSourceId: string
+  /** Handle used in the API route path */
   traderHandle: string
 }
 
@@ -45,38 +45,10 @@ const PAGE_SIZE = 20
 
 const fetcher = (url: string) => fetch(url).then(r => r.json())
 
-function StarRating({ rating, onRate, interactive = false, size = 16 }: {
-  rating: number
-  onRate?: (rating: number) => void
-  interactive?: boolean
-  size?: number
-}) {
-  return (
-    <span style={{ display: 'inline-flex', gap: 2 }}>
-      {[1, 2, 3, 4, 5].map(star => (
-        <svg
-          key={star}
-          width={size}
-          height={size}
-          viewBox="0 0 24 24"
-          fill={star <= rating ? '#f59e0b' : 'none'}
-          stroke={star <= rating ? '#f59e0b' : 'var(--color-text-tertiary)'}
-          strokeWidth="1.5"
-          style={{ cursor: interactive ? 'pointer' : 'default', opacity: star <= rating ? 1 : 0.4 }}
-          onClick={() => interactive && onRate?.(star)}
-        >
-          <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
-        </svg>
-      ))}
-    </span>
-  )
-}
-
 export default function TraderComments({ traderSource, traderSourceId, traderHandle }: TraderCommentsProps) {
   const { t, language } = useLanguage()
   const { userId, accessToken, requireAuth } = useAuthSession()
   const [content, setContent] = useState('')
-  const [rating, setRating] = useState(0)
   const [submitting, setSubmitting] = useState(false)
   const [offset, setOffset] = useState(0)
   const [allComments, setAllComments] = useState<TraderComment[]>([])
@@ -116,7 +88,6 @@ export default function TraderComments({ traderSource, traderSourceId, traderHan
         headers: { ...headers, 'Content-Type': 'application/json' },
         body: JSON.stringify({
           content: content.trim(),
-          rating: rating > 0 ? rating : null,
           trader_source: traderSource,
           trader_source_id: traderSourceId,
         }),
@@ -129,20 +100,18 @@ export default function TraderComments({ traderSource, traderSourceId, traderHan
 
       const { data: resData } = await res.json()
       setContent('')
-      setRating(0)
 
       // Optimistically prepend the new comment
       if (resData?.comment) {
         setAllComments(prev => [resData.comment, ...prev])
       }
-      // Revalidate to get updated avg_rating
       mutate()
     } catch (err) {
       console.error('Failed to post comment:', err)
     } finally {
       setSubmitting(false)
     }
-  }, [content, rating, submitting, requireAuth, traderHandle, traderSource, traderSourceId, mutate])
+  }, [content, submitting, requireAuth, traderHandle, traderSource, traderSourceId, mutate])
 
   const handleDelete = useCallback(async (commentId: string) => {
     const headers = requireAuth()
@@ -171,8 +140,6 @@ export default function TraderComments({ traderSource, traderSourceId, traderHan
     setOffset(prev => prev + PAGE_SIZE)
   }, [])
 
-  const avgRating = data?.data?.avg_rating
-  const ratingCount = data?.data?.rating_count ?? 0
   const hasMore = data?.pagination?.has_more ?? false
   const comments = allComments
 
@@ -191,27 +158,19 @@ export default function TraderComments({ traderSource, traderSourceId, traderHan
       <Box style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: tokens.spacing[4] }}>
         <Box style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[2] }}>
           <Text size="sm" weight="bold" style={{ color: 'var(--color-text-secondary)' }}>
-            {t('traderReviews')}
+            {t('traderComments')}
           </Text>
           {comments.length > 0 && (
             <Text size="xs" color="tertiary">({comments.length}{hasMore ? '+' : ''})</Text>
           )}
         </Box>
-        {avgRating != null && ratingCount > 0 && (
-          <Box style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[1] }}>
-            <StarRating rating={Math.round(avgRating)} size={14} />
-            <Text size="xs" color="tertiary">
-              {avgRating.toFixed(1)} ({ratingCount})
-            </Text>
-          </Box>
-        )}
       </Box>
 
       {/* Comment form */}
       {accessToken ? (
         <Box style={{ marginBottom: tokens.spacing[4] }}>
           <textarea
-            placeholder={t('writeReview')}
+            placeholder={t('writeComment')}
             value={content}
             onChange={e => setContent(e.target.value)}
             maxLength={2000}
@@ -229,33 +188,14 @@ export default function TraderComments({ traderSource, traderSourceId, traderHan
               fontFamily: 'inherit',
             }}
           />
-          <Box style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: tokens.spacing[2] }}>
-            <Box style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[2] }}>
-              <Text size="xs" color="tertiary">{t('ratingOptional')}</Text>
-              <StarRating rating={rating} onRate={setRating} interactive size={18} />
-              {rating > 0 && (
-                <button
-                  onClick={() => setRating(0)}
-                  style={{
-                    background: 'transparent',
-                    border: 'none',
-                    color: 'var(--color-text-tertiary)',
-                    cursor: 'pointer',
-                    fontSize: 11,
-                    padding: 0,
-                  }}
-                >
-                  {t('clearRating')}
-                </button>
-              )}
-            </Box>
+          <Box style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', marginTop: tokens.spacing[2] }}>
             <Button
               variant="primary"
               size="sm"
               onClick={handleSubmit}
               disabled={submitting || !content.trim()}
             >
-              {submitting ? '...' : t('submitReview')}
+              {submitting ? '...' : t('submitComment')}
             </Button>
           </Box>
         </Box>
@@ -272,7 +212,7 @@ export default function TraderComments({ traderSource, traderSourceId, traderHan
               href={`/login?returnUrl=${encodeURIComponent(typeof window !== 'undefined' ? window.location.pathname : '/')}`}
               style={{ color: 'var(--color-brand)', textDecoration: 'none', fontWeight: 600 }}
             >
-              {t('loginToReview')}
+              {t('loginToComment')}
             </a>
           </Text>
         </Box>
@@ -285,7 +225,7 @@ export default function TraderComments({ traderSource, traderSourceId, traderHan
         </Box>
       ) : comments.length === 0 ? (
         <Box style={{ textAlign: 'center', padding: tokens.spacing[4] }}>
-          <Text size="sm" color="tertiary">{t('noReviewsYet')}</Text>
+          <Text size="sm" color="tertiary">{t('noCommentsYet')}</Text>
         </Box>
       ) : (
         <Box style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[2] }}>
@@ -327,9 +267,6 @@ export default function TraderComments({ traderSource, traderSourceId, traderHan
                     </Link>
                   ) : (
                     <Text size="xs" weight="bold" color="secondary">@user</Text>
-                  )}
-                  {comment.rating != null && (
-                    <StarRating rating={comment.rating} size={12} />
                   )}
                 </Box>
                 <Box style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[2] }}>
