@@ -1076,7 +1076,7 @@ async function warmupLeaderboardCache(
     warmupTargets.map(async ({ season, key }) => {
       const { data, error } = await supabase
         .from('leaderboard_ranks')
-        .select('*')
+        .select('source, source_trader_id, rank, arena_score, roi, pnl, win_rate, max_drawdown, handle, avatar_url, followers, trades_count, sharpe_ratio, trader_type, market_type, season_id')
         .eq('season_id', season)
         .not('arena_score', 'is', null)
         .gt('arena_score', 0)
