@@ -204,43 +204,21 @@ export function getFontPreloadLinks(): Array<{ href: string; as: string; type: s
  */
 export function getResourceHints(): Array<{ rel: string; href: string; crossOrigin?: 'anonymous' | 'use-credentials' | '' }> {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://supabase.co'
-  const upstashUrl = process.env.UPSTASH_REDIS_REST_URL || ''
-
-  // Extract origin from full URL (e.g. "https://x.upstash.io/path" -> "https://x.upstash.io")
-  let upstashOrigin = ''
-  try {
-    if (upstashUrl) {
-      upstashOrigin = new URL(upstashUrl).origin
-    }
-  } catch {
-    // Intentionally swallowed: invalid Upstash URL format, preconnect hint will be omitted
-  }
 
   const hints: Array<{ rel: string; href: string; crossOrigin?: 'anonymous' | 'use-credentials' | '' }> = [
     // Google Fonts preconnect not needed — next/font inlines font CSS and self-hosts woff2 files.
     // Supabase -- API calls on every page (rankings, auth, etc.)
     { rel: 'preconnect', href: supabaseUrl, crossOrigin: 'anonymous' },
-    { rel: 'dns-prefetch', href: supabaseUrl },
-    // CDN -- images, assets
+    // CDN -- images, assets (critical for LCP — trader avatars)
     { rel: 'preconnect', href: 'https://cdn.arenafi.org', crossOrigin: 'anonymous' },
-    { rel: 'dns-prefetch', href: 'https://cdn.arenafi.org' },
-    // Trader avatar CDNs -- dns-prefetch for faster avatar loading
-    { rel: 'dns-prefetch', href: 'https://bin.bnbstatic.com' },
-    { rel: 'dns-prefetch', href: 'https://static.bitget.com' },
-    { rel: 'dns-prefetch', href: 'https://www.okx.com' },
-    // DiceBear -- fallback avatar generation
-    { rel: 'dns-prefetch', href: 'https://api.dicebear.com' },
-    // CoinGecko -- market data API
-    { rel: 'dns-prefetch', href: 'https://api.coingecko.com' },
-    // Sentry -- error reporting (also in layout.tsx head)
-    { rel: 'dns-prefetch', href: 'https://o4509384792580096.ingest.us.sentry.io' },
-    // Stripe -- server-side only (no client-side js.stripe.com needed)
+    // Removed non-critical hints to reduce connection overhead on slow networks:
+    // - dns-prefetch duplicates of preconnect origins (browser already resolves them)
+    // - Exchange avatar CDNs (bin.bnbstatic.com, static.bitget.com, okx.com) — loaded lazily
+    // - DiceBear (api.dicebear.com) — fallback only, rarely used
+    // - CoinGecko (api.coingecko.com) — fetched server-side via API routes
+    // - Sentry (ingest.us.sentry.io) — deferred, non-critical for page load
+    // - Upstash (server-side only, browser never connects)
   ]
-
-  // Upstash Redis -- server-side cache, add dns-prefetch only (not fetched from browser)
-  if (upstashOrigin) {
-    hints.push({ rel: 'dns-prefetch', href: upstashOrigin })
-  }
 
   return hints
 }
