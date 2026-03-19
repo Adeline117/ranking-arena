@@ -21,11 +21,12 @@ import TraderHeader from '@/app/components/trader/TraderHeader'
 import TraderTabs from '@/app/components/trader/TraderTabs'
 import OverviewPerformanceCard, { type ExtendedPerformance } from '@/app/components/trader/OverviewPerformanceCard'
 const AdvancedMetricsCard = dynamic(() => import('@/app/components/trader/AdvancedMetricsCard'), { ssr: false })
-const MarketCorrelationCard = dynamic(() => import('@/app/components/trader/MarketCorrelationCard'), { ssr: false })
+// MarketCorrelationCard removed -- beta_btc/beta_eth/alpha never computed by pipeline (P0-5)
 import { RankingSkeleton } from '@/app/components/ui/Skeleton'
 import { formatDisplayName, formatROI } from '@/app/components/ranking/utils'
 import { getAvatarGradient } from '@/lib/utils/avatar'
 import { JsonLd } from '@/app/components/Providers/JsonLd'
+import { usePeriodStore } from '@/lib/stores/periodStore'
 import {
   generateTraderProfilePageSchema,
   generateBreadcrumbSchema,
@@ -124,6 +125,32 @@ export default function TraderProfileClient({ data, serverTraderData, claimedUse
   const { t, language } = useLanguage()
   const { isPro } = useSubscription()
   const { userId: currentUserId } = useAuthSession()
+  const selectedPeriod = usePeriodStore(s => s.period)
+
+  // P1-7: Read initial period from URL param
+  const urlPeriod = searchParams.get('period')
+  const setPeriod = usePeriodStore(s => s.setPeriod)
+  useEffect(() => {
+    if (urlPeriod && ['7D', '30D', '90D'].includes(urlPeriod)) {
+      setPeriod(urlPeriod as '7D' | '30D' | '90D')
+    }
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps -- only on mount
+
+  // P1-7: Sync period changes to URL
+  useEffect(() => {
+    const params = new URLSearchParams(searchParams.toString())
+    if (selectedPeriod === '90D') {
+      params.delete('period')
+    } else {
+      params.set('period', selectedPeriod)
+    }
+    const qs = params.toString()
+    const newPath = `${pathname}${qs ? `?${qs}` : ''}`
+    const currentPath = `${pathname}${searchParams.toString() ? `?${searchParams.toString()}` : ''}`
+    if (newPath !== currentPath) {
+      router.replace(newPath, { scroll: false })
+    }
+  }, [selectedPeriod]) // eslint-disable-line react-hooks/exhaustive-deps -- only sync when period changes
 
   const [isVerifiedTrader, setIsVerifiedTrader] = useState(false)
   const [isOwner, setIsOwner] = useState(false)
@@ -390,6 +417,8 @@ export default function TraderProfileClient({ data, serverTraderData, claimedUse
           claimedAvatarUrl={claimedUser?.avatar_url}
           linkedAccountCount={hasMultipleAccounts ? linkedAccounts.length : undefined}
           linkedPlatforms={hasMultipleAccounts ? linkedAccounts.map(a => a.platform) : undefined}
+          platform={effectivePlatform}
+          traderKey={data.source_trader_id}
         />
         </div>
 
@@ -521,32 +550,38 @@ export default function TraderProfileClient({ data, serverTraderData, claimedUse
                   />
                 )}
 
-                {/* Drawdown Chart — computed from equity curve */}
-                {traderEquityCurve?.['90D'] && traderEquityCurve['90D'].length > 2 && (
-                  <Box
-                    className="glass-card"
-                    style={{
-                      padding: tokens.spacing[5],
-                      background: tokens.colors.bg.secondary,
-                      borderRadius: tokens.radius.xl,
-                      border: `1px solid ${tokens.colors.border.primary}60`,
-                    }}
-                  >
-                    <Text size="sm" weight="bold" style={{ color: 'var(--color-text-secondary)', marginBottom: tokens.spacing[3] }}>
-                      {t('drawdownChart') || 'Drawdown'}
-                    </Text>
-                    <DrawdownChart equityCurve={traderEquityCurve['90D']} />
-                  </Box>
-                )}
-
-                {/* Copy-Trade Simulator */}
-                {traderEquityCurve?.['90D'] && traderEquityCurve['90D'].length > 2 && (
-                  <CopyTradeSimulator equityCurve={traderEquityCurve['90D']} />
-                )}
-
-                {/* Daily Returns Distribution — computed from equity curve */}
+                {/* Drawdown Chart — P1-6: follows selected period */}
                 {(() => {
-                  const curve = traderEquityCurve?.['90D']
+                  const curve = traderEquityCurve?.[selectedPeriod] ?? traderEquityCurve?.['90D']
+                  if (!curve || curve.length <= 2) return null
+                  return (
+                    <Box
+                      className="glass-card"
+                      style={{
+                        padding: tokens.spacing[5],
+                        background: tokens.colors.bg.secondary,
+                        borderRadius: tokens.radius.xl,
+                        border: `1px solid ${tokens.colors.border.primary}60`,
+                      }}
+                    >
+                      <Text size="sm" weight="bold" style={{ color: 'var(--color-text-secondary)', marginBottom: tokens.spacing[3] }}>
+                        {t('drawdownChart') || 'Drawdown'} ({selectedPeriod})
+                      </Text>
+                      <DrawdownChart equityCurve={curve} />
+                    </Box>
+                  )
+                })()}
+
+                {/* Copy-Trade Simulator — follows selected period */}
+                {(() => {
+                  const simCurve = traderEquityCurve?.[selectedPeriod] ?? traderEquityCurve?.['90D']
+                  if (!simCurve || simCurve.length <= 2) return null
+                  return <CopyTradeSimulator equityCurve={simCurve} />
+                })()}
+
+                {/* Daily Returns Distribution — P1-6: follows selected period */}
+                {(() => {
+                  const curve = traderEquityCurve?.[selectedPeriod] ?? traderEquityCurve?.['90D']
                   if (!curve || curve.length <= 5) return null
                   const dailyReturns = curve.slice(1).map((point, i) => ({
                     date: point.date,
@@ -566,50 +601,39 @@ export default function TraderProfileClient({ data, serverTraderData, claimedUse
                       }}
                     >
                       <Text size="sm" weight="bold" style={{ color: 'var(--color-text-secondary)', marginBottom: tokens.spacing[3] }}>
-                        {t('dailyReturnsDistribution') || 'Daily Returns Distribution'}
+                        {t('dailyReturnsDistribution') || 'Daily Returns Distribution'} ({selectedPeriod})
                       </Text>
                       <DailyReturnsChart data={dailyReturns} />
                     </Box>
                   )
                 })()}
 
-                {/* Advanced Metrics (Sortino, Calmar, Profit Factor) */}
-                {(data.sortino_ratio != null || data.calmar_ratio != null || data.profit_factor != null) && (
-                  <AdvancedMetricsCard
-                    metrics={{
-                      sortino_ratio: data.sortino_ratio ?? null,
-                      calmar_ratio: data.calmar_ratio ?? null,
-                      profit_factor: data.profit_factor ?? null,
-                      recovery_factor: null,
-                      max_consecutive_wins: null,
-                      max_consecutive_losses: null,
-                      avg_holding_hours: data.avg_holding_hours ?? null,
-                      volatility_pct: null,
-                      downside_volatility_pct: null,
-                    }}
-                  />
-                )}
-
-                {/* Market Correlation */}
+                {/* P0-6: Advanced Metrics — prefer SWR data, fallback to server data */}
                 {(() => {
                   const perf = traderPerformance as Record<string, unknown> | null
-                  const betaBtc = perf?.beta_btc as number | null | undefined
-                  const betaEth = perf?.beta_eth as number | null | undefined
-                  const alphaVal = perf?.alpha as number | null | undefined
-                  if (betaBtc != null || betaEth != null || alphaVal != null) {
-                    return (
-                      <MarketCorrelationCard
-                        correlation={{
-                          beta_btc: betaBtc ?? null,
-                          beta_eth: betaEth ?? null,
-                          alpha: alphaVal ?? null,
-                          market_condition_performance: { bull: null, bear: null, sideways: null },
-                        }}
-                      />
-                    )
-                  }
-                  return null
+                  const sortino = (perf?.sortino_ratio as number | null) ?? data.sortino_ratio ?? null
+                  const calmar = (perf?.calmar_ratio as number | null) ?? data.calmar_ratio ?? null
+                  const profitFactor = (perf?.profit_factor as number | null) ?? data.profit_factor ?? null
+                  const avgHolding = (perf?.avg_holding_time_hours as number | null) ?? data.avg_holding_hours ?? null
+                  if (sortino == null && calmar == null && profitFactor == null) return null
+                  return (
+                    <AdvancedMetricsCard
+                      metrics={{
+                        sortino_ratio: sortino,
+                        calmar_ratio: calmar,
+                        profit_factor: profitFactor,
+                        recovery_factor: null,
+                        max_consecutive_wins: null,
+                        max_consecutive_losses: null,
+                        avg_holding_hours: avgHolding,
+                        volatility_pct: null,
+                        downside_volatility_pct: null,
+                      }}
+                    />
+                  )
                 })()}
+
+
 
                 {/* Trading Style Radar */}
                 {(data.profitability_score != null || data.risk_control_score != null || data.execution_score != null) && (
