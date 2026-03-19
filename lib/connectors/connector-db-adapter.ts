@@ -97,6 +97,7 @@ export async function writeDiscoverResult(
       const winRate = clampOpt(safeNum(normalized.win_rate), 0, 100)
       const maxDrawdown = clampOpt(safeNum(normalized.max_drawdown), 0, 100)
       const followers = nonNegOpt(safeNum(normalized.followers))
+      const copiers = nonNegOpt(safeNum(normalized.copiers))
       const tradesCount = nonNegOpt(safeNum(normalized.trades_count))
       const aum = nonNegOpt(safeNum(normalized.aum))
       const sharpeRatio = safeNum(normalized.sharpe_ratio)
@@ -126,6 +127,7 @@ export async function writeDiscoverResult(
         win_rate: winRate,
         max_drawdown: maxDrawdown,
         followers,
+        copiers,
         trades_count: tradesCount,
         aum,
         sharpe_ratio: sharpeRatio,
