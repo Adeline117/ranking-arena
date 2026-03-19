@@ -118,25 +118,27 @@ export async function GET(request: NextRequest) {
     const platforms = [...new Set(Array.from(snapshotMap.values()).map(s => s.source))]
 
     // Get the latest daily snapshot before dateStr for each trader (ROI + PnL for daily return calc)
-    const { data: prevSnapshots } = await supabase
-      .from('trader_daily_snapshots')
-      .select('platform, trader_key, pnl, roi')
-      .in('platform', platforms)
-      .lt('date', dateStr)
-      .order('date', { ascending: false })
-      .limit(50000)
+    // FIXED: Use RPC function with window function to efficiently get latest record per trader
+    // Replaces inefficient query with 50K limit that missed many traders (causing 3/17 coverage drop)
+    const { data: prevSnapshots, error: prevError } = await supabase
+      .rpc('get_latest_prev_snapshots', {
+        target_platforms: platforms,
+        before_date: dateStr,
+      })
 
-    // Build lookup: keep only the latest per trader
+    if (prevError) {
+      logger.warn(`[aggregate] get_latest_prev_snapshots RPC error: ${prevError.message}`)
+    }
+
+    // Build lookup: one record per trader (already filtered by RPC)
     const prevDataMap = new Map<string, { pnl: number | null; roi: number | null }>()
     if (prevSnapshots) {
       for (const ps of prevSnapshots) {
         const key = `${ps.platform}:${ps.trader_key}`
-        if (!prevDataMap.has(key)) {
-          prevDataMap.set(key, {
-            pnl: ps.pnl != null ? parseFloat(String(ps.pnl)) : null,
-            roi: ps.roi != null ? parseFloat(String(ps.roi)) : null,
-          })
-        }
+        prevDataMap.set(key, {
+          pnl: ps.pnl != null ? parseFloat(String(ps.pnl)) : null,
+          roi: ps.roi != null ? parseFloat(String(ps.roi)) : null,
+        })
       }
     }
 
