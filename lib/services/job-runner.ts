@@ -124,7 +124,10 @@ export class JobRunner {
    */
   async getJobStatus(jobId: string): Promise<RefreshJob | null> {
     const row = await queryOne(
-      `SELECT * FROM refresh_jobs WHERE id = $1`,
+      `SELECT id, job_type, platform, market_type, trader_key, "window", priority,
+              status, attempts, max_attempts, next_run_at, locked_at, locked_by,
+              last_error, result, created_at, updated_at, idempotency_key
+       FROM refresh_jobs WHERE id = $1`,
       [jobId],
     );
     return row as RefreshJob | null;
@@ -311,7 +314,9 @@ export class JobRunner {
          FOR UPDATE SKIP LOCKED
          LIMIT 1
        )
-       RETURNING *`,
+       RETURNING id, job_type, platform, market_type, trader_key, "window", priority,
+                 status, attempts, max_attempts, next_run_at, locked_at, locked_by,
+                 last_error, result, created_at, updated_at, idempotency_key`,
     );
 
     return result as RefreshJob | null;
@@ -341,7 +346,9 @@ export class JobRunner {
          ON CONFLICT (idempotency_key) DO UPDATE SET
            status = CASE WHEN refresh_jobs.status = 'completed' THEN 'pending' ELSE refresh_jobs.status END,
            attempts = CASE WHEN refresh_jobs.status = 'completed' THEN 0 ELSE refresh_jobs.attempts END
-         RETURNING *`,
+         RETURNING id, job_type, platform, market_type, trader_key, "window", priority,
+                  status, attempts, max_attempts, next_run_at, locked_at, locked_by,
+                  last_error, result, created_at, updated_at, idempotency_key`,
         [jobType, platform, traderKey, priority, idempotencyKey],
       );
 
@@ -350,7 +357,10 @@ export class JobRunner {
       // If unique constraint on idempotency_key is missing, fall back to check-then-insert
       if (err instanceof Error && err.message.includes('ON CONFLICT')) {
         const existing = await queryOne(
-          `SELECT * FROM refresh_jobs WHERE idempotency_key = $1`,
+          `SELECT id, job_type, platform, market_type, trader_key, "window", priority,
+                  status, attempts, max_attempts, next_run_at, locked_at, locked_by,
+                  last_error, result, created_at, updated_at, idempotency_key
+           FROM refresh_jobs WHERE idempotency_key = $1`,
           [idempotencyKey],
         );
         if (existing) {
@@ -366,7 +376,9 @@ export class JobRunner {
         const result = await queryOne(
           `INSERT INTO refresh_jobs (job_type, platform, trader_key, priority, status, idempotency_key)
            VALUES ($1, $2, $3, $4, 'pending', $5)
-           RETURNING *`,
+           RETURNING id, job_type, platform, market_type, trader_key, "window", priority,
+                     status, attempts, max_attempts, next_run_at, locked_at, locked_by,
+                     last_error, result, created_at, updated_at, idempotency_key`,
           [jobType, platform, traderKey, priority, idempotencyKey],
         );
         return result as RefreshJob | null;
