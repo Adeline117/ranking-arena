@@ -131,7 +131,7 @@ const dividerStyle: React.CSSProperties = {
 
 export default function MethodologyPage() {
   return (
-    <main style={containerStyle}>
+    <div style={containerStyle}>
       {/* ======================= ENGLISH ======================= */}
       <h1 style={h1Style}>Methodology</h1>
       <p style={subtitleStyle}>
@@ -618,7 +618,7 @@ export default function MethodologyPage() {
           &larr; Back to Rankings
         </Link>
       </div>
-    </main>
+    </div>
   )
 }
 

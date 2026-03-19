@@ -38,7 +38,7 @@ export default function InboxPage() {
     <div style={{ minHeight: '100vh', background: tokens.colors.bg.primary, color: tokens.colors.text.primary }}>
       <TopNav email={email} />
 
-      <main style={{ maxWidth: 600, margin: '0 auto', padding: `${tokens.spacing[4]} ${tokens.spacing[3]}`, paddingBottom: 80 }}>
+      <div style={{ maxWidth: 600, margin: '0 auto', padding: `${tokens.spacing[4]} ${tokens.spacing[3]}`, paddingBottom: 80 }}>
         {/* Page header */}
         <div
           style={{
@@ -88,7 +88,7 @@ export default function InboxPage() {
         {/* Tab content */}
         {activeTab === 'notifications' && <NotificationsList />}
         {activeTab === 'messages' && <ConversationsList />}
-      </main>
+      </div>
     </div>
   )
 }

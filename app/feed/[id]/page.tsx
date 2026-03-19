@@ -111,7 +111,7 @@ export default async function ActivitySharePage({ params }: PageProps) {
     <div style={{ minHeight: '100vh', background: tokens.colors.bg.primary }}>
       <TopNav />
 
-      <main
+      <div
         style={{
           maxWidth: 600,
           margin: '0 auto',
@@ -340,7 +340,7 @@ export default async function ActivitySharePage({ params }: PageProps) {
             View Full Activity Feed
           </Link>
         </div>
-      </main>
+      </div>
     </div>
   )
 }

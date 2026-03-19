@@ -357,7 +357,7 @@ function SearchContent() {
       <TopNav email={email} />
       <h1 className="sr-only">{t('searchResults')}</h1>
 
-      <main style={{
+      <div style={{
         maxWidth: 900, margin: '0 auto',
         padding: '24px 20px 100px',
         position: 'relative', zIndex: 1,
@@ -631,7 +631,7 @@ function SearchContent() {
             )}
           </div>
         )}
-      </main>
+      </div>
       <MobileBottomNav />
     </div>
   )
@@ -643,11 +643,11 @@ export default function SearchPage() {
     <Suspense fallback={
       <div style={{ minHeight: '100vh', background: tokens.colors.bg.primary, color: tokens.colors.text.primary }}>
         <TopNav email={null} />
-        <main style={{ maxWidth: 900, margin: '0 auto', padding: '24px 20px' }}>
+        <div style={{ maxWidth: 900, margin: '0 auto', padding: '24px 20px' }}>
           <div style={{ marginTop: 60 }}>
             <div className="skeleton" style={{ height: 200, borderRadius: 14 }} />
           </div>
-        </main>
+        </div>
       </div>
     }>
       <SearchContent />
