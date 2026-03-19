@@ -403,6 +403,39 @@ export async function GET(request: NextRequest) {
     }
     } // end time budget check
 
+    // Step 6b: Cleanup old trader_daily_snapshots rows (keep 365 days)
+    // Batched deletes of 5K rows to avoid long table locks.
+    // 377K rows growing ~1K/day: without cleanup table grows unbounded.
+    let dailySnapshotsCleanedUp = 0
+    const elapsedMsAfterStep6 = Date.now() - startTime
+    if (elapsedMsAfterStep6 > 240_000) {
+      logger.warn('[DailySnapshots] Skipping daily_snapshots cleanup - time budget low')
+    } else {
+      try {
+        const dailyCutoffDate = new Date(Date.now() - 365 * 24 * 3600 * 1000).toISOString().split('T')[0]
+        const MAX_DAILY_CLEANUP_BATCHES = 10 // max 50K rows per run to stay within time budget
+        for (let batch = 0; batch < MAX_DAILY_CLEANUP_BATCHES; batch++) {
+          const { count: deletedCount, error: dailyCleanupErr } = await supabase
+            .from('trader_daily_snapshots')
+            .delete({ count: 'exact' })
+            .lt('date', dailyCutoffDate)
+            .limit(5000)
+          if (dailyCleanupErr) {
+            logger.warn(`[aggregate] daily_snapshots cleanup error: ${dailyCleanupErr.message}`)
+            break
+          }
+          const deleted = deletedCount ?? 0
+          dailySnapshotsCleanedUp += deleted
+          if (deleted < 5000) break // No more rows to delete
+        }
+        if (dailySnapshotsCleanedUp > 0) {
+          logger.info(`[aggregate] Cleaned up ${dailySnapshotsCleanedUp} old daily_snapshots rows (>365d)`)
+        }
+      } catch (dailyCleanupErr) {
+        logger.warn(`[aggregate] daily_snapshots cleanup failed: ${dailyCleanupErr}`)
+      }
+    }
+
     // Step 7: Refresh computed metrics from equity curves (sharpe, win_rate, max_drawdown, trades_count, arena_score)
     let metricsResult = null
     try {
@@ -439,9 +472,9 @@ export async function GET(request: NextRequest) {
     const duration = Date.now() - startTime
 
     if (errors > 0) {
-      await plog.error(new Error(`${errors} upsert errors`), { inserted, errors, date: dateStr, cleanedUp })
+      await plog.error(new Error(`${errors} upsert errors`), { inserted, errors, date: dateStr, cleanedUp, dailySnapshotsCleanedUp })
     } else {
-      await plog.success(inserted, { date: dateStr, cleanedUp, metricsBackfill: metricsResult, staleDataCleanup })
+      await plog.success(inserted, { date: dateStr, cleanedUp, dailySnapshotsCleanedUp, metricsBackfill: metricsResult, staleDataCleanup })
     }
 
     return NextResponse.json({
@@ -451,6 +484,7 @@ export async function GET(request: NextRequest) {
       inserted,
       errors,
       cleanedUp,
+      dailySnapshotsCleanedUp,
       staleDataCleanup,
       metricsBackfill: metricsResult,
       queries: 3,
