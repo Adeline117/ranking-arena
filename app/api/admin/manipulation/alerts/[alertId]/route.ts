@@ -44,7 +44,7 @@ export async function GET(
   const { data: getProfile } = await supabase
     .from('user_profiles')
     .select('role')
-    .eq('user_id', getUser.id)
+    .eq('id', getUser.id)
     .single()
   if (getProfile?.role !== 'admin') {
     return NextResponse.json({ error: 'Admin access required' }, { status: 403 })
@@ -127,7 +127,7 @@ export async function PATCH(
     const { data: patchProfile } = await supabase
       .from('user_profiles')
       .select('role')
-      .eq('user_id', user.id)
+      .eq('id', user.id)
       .single()
     if (patchProfile?.role !== 'admin') {
       return NextResponse.json({ error: 'Admin access required' }, { status: 403 })
