@@ -69,11 +69,17 @@ async function cleanupStuckLogs() {
 
 async function checkPipelineHealth() {
   try {
+    const controller = new AbortController()
+    const timeoutId = setTimeout(() => controller.abort(), 15000) // 15s timeout
+    
     const response = await fetch(API_URL, {
       headers: {
         'Authorization': `Bearer ${CRON_SECRET}`
-      }
+      },
+      signal: controller.signal
     })
+    
+    clearTimeout(timeoutId)
 
     if (!response.ok) {
       throw new Error(`HTTP ${response.status}: ${response.statusText}`)
@@ -110,9 +116,13 @@ async function checkPipelineHealth() {
         if (cleanupResult.cleaned > 0) {
           console.log(`✅ Auto-cleaned ${cleanupResult.cleaned} stuck logs`)
           // Re-check after cleanup
+          const recheckController = new AbortController()
+          const recheckTimeoutId = setTimeout(() => recheckController.abort(), 15000)
           const recheckResponse = await fetch(API_URL, {
-            headers: { 'Authorization': `Bearer ${CRON_SECRET}` }
+            headers: { 'Authorization': `Bearer ${CRON_SECRET}` },
+            signal: recheckController.signal
           })
+          clearTimeout(recheckTimeoutId)
           if (recheckResponse.ok) {
             const recheckData = await recheckResponse.json()
             const recheckStuck = recheckData.jobs.filter(j => j.health_status === 'stuck')
@@ -194,11 +204,13 @@ async function checkPipelineHealth() {
     }
 
   } catch (error) {
-    console.error('❌ Error checking pipeline health:', error.message)
+    const isTimeout = error.name === 'AbortError'
+    const errorMsg = isTimeout ? 'Request timeout (>15s)' : error.message
+    console.error('❌ Error checking pipeline health:', errorMsg)
     return {
       alert: true,
       level: 'ERROR',
-      message: `❌ Pipeline health check failed: ${error.message}`,
+      message: `❌ Pipeline health check failed: ${errorMsg}`,
       data: null
     }
   }
