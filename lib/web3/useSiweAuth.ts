@@ -17,8 +17,14 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useAccount, useSignMessage } from 'wagmi'
-import { SiweMessage } from 'siwe'
 import { supabase } from '@/lib/supabase/client'
+
+// Lazy-load siwe (pulls in ethers ~668KB) — only needed when user triggers
+// Web3 sign-in, not on initial page load.
+async function getSiweMessage() {
+  const { SiweMessage } = await import('siwe')
+  return SiweMessage
+}
 import { useLanguage, type TranslationFunction } from '@/app/components/Providers/LanguageProvider'
 import { logger } from '@/lib/logger'
 
@@ -128,6 +134,7 @@ export function useSiweAuth(): UseSiweAuthReturn {
   const clearError = useCallback(() => setError(null), [])
 
   const createSiweMessage = useCallback(async (nonce: string): Promise<string> => {
+    const SiweMessage = await getSiweMessage()
     const message = new SiweMessage({
       domain: window.location.host,
       address: address!,
