@@ -180,7 +180,7 @@ export function useTraderList(options: UseTraderListOptions = {}) {
     {
       ...defaultConfig,
       revalidateOnFocus: false,
-      refreshInterval: 15 * 60 * 1000, // 15 分钟自动刷新（数据每 30 分钟由 cron 更新）
+      refreshInterval: 30 * 60 * 1000, // 30 分钟自动刷新（数据每 30 分钟由 cron 更新）
     }
   )
 }
@@ -240,7 +240,7 @@ export function useTraderEquity(handle: string | undefined) {
     {
       ...defaultConfig,
       revalidateOnFocus: false,
-      refreshInterval: 5 * 60 * 1000, // 5 分钟刷新资金曲线
+      refreshInterval: 60 * 60 * 1000, // 60 分钟刷新资金曲线（enrichment 每 4-6 小时更新）
     }
   )
 }
