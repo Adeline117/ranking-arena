@@ -72,8 +72,24 @@ export function toTraderPageData(detail: TraderDetail): Record<string, unknown> 
     sharpe_ratio: t.sharpeRatio ?? null,
     sharpe_ratio_30d: p30?.sharpeRatio ?? null,
     sharpe_ratio_7d: p7?.sharpeRatio ?? null,
-    winning_positions: detail.stats?.winningPositions,
-    total_positions: detail.stats?.totalPositions,
+    winning_positions: detail.stats?.winningPositions ?? (
+      t.winRate != null && t.tradesCount != null && t.tradesCount > 0
+        ? Math.round((t.winRate / 100) * t.tradesCount)
+        : undefined
+    ),
+    total_positions: detail.stats?.totalPositions ?? (
+      t.tradesCount != null && t.tradesCount > 0 ? t.tradesCount : undefined
+    ),
+    // Per-period winning positions (computed from win_rate * trades_count when not available)
+    winning_positions_7d: p7?.winRate != null && p7?.tradesCount != null && p7.tradesCount > 0
+      ? Math.round((p7.winRate / 100) * p7.tradesCount) : undefined,
+    winning_positions_30d: p30?.winRate != null && p30?.tradesCount != null && p30.tradesCount > 0
+      ? Math.round((p30.winRate / 100) * p30.tradesCount) : undefined,
+    total_positions_7d: p7?.tradesCount ?? undefined,
+    total_positions_30d: p30?.tradesCount ?? undefined,
+    // Per-period trades count
+    trades_count_7d: p7?.tradesCount ?? undefined,
+    trades_count_30d: p30?.tradesCount ?? undefined,
     score_penalty: 0,
     // Advanced metrics
     sortinoRatio: t.sortinoRatio ?? null,
@@ -82,6 +98,8 @@ export function toTraderPageData(detail: TraderDetail): Record<string, unknown> 
     profitability_score: t.profitabilityScore ?? null,
     risk_control_score: t.riskControlScore ?? null,
     execution_score: t.executionScore ?? null,
+    // Avg holding time
+    avg_holding_time_hours: t.avgHoldingHours ?? detail.stats?.avgHoldingHours ?? null,
   }
 
   // Stats (matches TraderStats interface)
