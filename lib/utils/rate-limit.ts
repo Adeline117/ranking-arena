@@ -144,14 +144,24 @@ function checkMemoryRateLimit(
 }
 
 /**
+ * Rate limit check result — returned on success (null = blocked, object = allowed with metadata)
+ */
+export interface RateLimitResult {
+  /** Response to return (non-null = 429 blocked) */
+  response: NextResponse | null
+  /** Rate limit metadata for injecting headers on allowed responses */
+  meta: { limit: number; remaining: number; reset: number } | null
+}
+
+/**
  * 检查限流
- * @returns 如果未超过限制返回 null，超过限制返回 429 响应
+ * @returns RateLimitResult with response (if blocked) and meta (for injecting headers on allowed responses)
  */
 export async function checkRateLimit(
   request: NextRequest,
   config?: Partial<RateLimitConfig>,
   userId?: string
-): Promise<NextResponse | null> {
+): Promise<RateLimitResult> {
   const finalConfig = { ...defaultConfig, ...config }
   const identifier = getIdentifier(request, userId)
 
@@ -163,7 +173,42 @@ export async function checkRateLimit(
       const memResult = checkMemoryRateLimit(identifier, finalConfig)
       if (!memResult.success) {
         const retryAfter = Math.ceil((memResult.reset - Date.now()) / 1000)
-        return new NextResponse(
+        return {
+          response: new NextResponse(
+            JSON.stringify({
+              success: false,
+              error: '请求过于频繁，请稍后再试',
+              code: 'RATE_LIMIT_EXCEEDED',
+              retryAfter,
+            }),
+            {
+              status: 429,
+              headers: {
+                'Content-Type': 'application/json',
+                'X-RateLimit-Limit': finalConfig.requests.toString(),
+                'X-RateLimit-Remaining': '0',
+                'X-RateLimit-Reset': memResult.reset.toString(),
+                'Retry-After': retryAfter.toString(),
+              },
+            }
+          ),
+          meta: null,
+        }
+      }
+      return {
+        response: null,
+        meta: { limit: finalConfig.requests, remaining: memResult.remaining, reset: memResult.reset },
+      }
+    }
+
+    const limiter = getRateLimiter(finalConfig, redisClient)
+    const { success, limit, remaining, reset } = await limiter.limit(identifier)
+
+    if (!success) {
+      const retryAfter = Math.ceil((reset - Date.now()) / 1000)
+
+      return {
+        response: new NextResponse(
           JSON.stringify({
             success: false,
             error: '请求过于频繁，请稍后再试',
@@ -174,67 +219,47 @@ export async function checkRateLimit(
             status: 429,
             headers: {
               'Content-Type': 'application/json',
-              'X-RateLimit-Limit': finalConfig.requests.toString(),
+              'X-RateLimit-Limit': limit.toString(),
               'X-RateLimit-Remaining': '0',
-              'X-RateLimit-Reset': memResult.reset.toString(),
+              'X-RateLimit-Reset': reset.toString(),
               'Retry-After': retryAfter.toString(),
             },
           }
-        )
+        ),
+        meta: null,
       }
-      return null
     }
 
-    const limiter = getRateLimiter(finalConfig, redisClient)
-    const { success, limit, remaining: _remaining, reset } = await limiter.limit(identifier)
-    
-    if (!success) {
-      const retryAfter = Math.ceil((reset - Date.now()) / 1000)
-      
-      return new NextResponse(
-        JSON.stringify({
-          success: false,
-          error: '请求过于频繁，请稍后再试',
-          code: 'RATE_LIMIT_EXCEEDED',
-          retryAfter,
-        }),
-        {
-          status: 429,
-          headers: {
-            'Content-Type': 'application/json',
-            'X-RateLimit-Limit': limit.toString(),
-            'X-RateLimit-Remaining': '0',
-            'X-RateLimit-Reset': reset.toString(),
-            'Retry-After': retryAfter.toString(),
-          },
-        }
-      )
+    return {
+      response: null,
+      meta: { limit, remaining, reset },
     }
-    
-    return null // 未超过限制
   } catch (error) {
     rateLimitLogger.error('限流检查失败:', error)
 
     // 敏感操作使用 fail-close 策略，拒绝请求
     if (finalConfig.failClose) {
-      return new NextResponse(
-        JSON.stringify({
-          success: false,
-          error: '服务暂时不可用，请稍后再试',
-          code: 'SERVICE_UNAVAILABLE',
-        }),
-        {
-          status: 503,
-          headers: {
-            'Content-Type': 'application/json',
-            'Retry-After': '30',
-          },
-        }
-      )
+      return {
+        response: new NextResponse(
+          JSON.stringify({
+            success: false,
+            error: '服务暂时不可用，请稍后再试',
+            code: 'SERVICE_UNAVAILABLE',
+          }),
+          {
+            status: 503,
+            headers: {
+              'Content-Type': 'application/json',
+              'Retry-After': '30',
+            },
+          }
+        ),
+        meta: null,
+      }
     }
 
     // 非敏感操作使用 fail-open 策略，允许请求通过
-    return null
+    return { response: null, meta: null }
   }
 }
 
