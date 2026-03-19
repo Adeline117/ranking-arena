@@ -115,7 +115,7 @@ export const metadata: Metadata = {
       "All rankings in crypto. Arena tracks top traders from Binance, Bybit, OKX, Hyperliquid, and 30+ exchanges — ranked by ROI, Arena Score, and PnL.",
     url: process.env.NEXT_PUBLIC_APP_URL || "https://www.arenafi.org",
     siteName: "Arena",
-    locale: "zh_CN",
+    locale: "en_US",
     images: [
       {
         url: `${process.env.NEXT_PUBLIC_APP_URL || "https://www.arenafi.org"}/api/og?title=Arena&subtitle=All+rankings+in+crypto`,
@@ -147,7 +147,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="zh-CN" dir="ltr" data-theme="dark" translate="no" className={inter.variable} suppressHydrationWarning>
+    <html lang="en" dir="ltr" data-theme="dark" translate="no" className={inter.variable} suppressHydrationWarning>
       <head>
         {/* Sync html lang attribute from localStorage before paint (prevents wrong lang for screen readers) */}
         <script dangerouslySetInnerHTML={{ __html: `try{var l=localStorage.getItem('language');if(l&&l!=='zh')document.documentElement.lang=l==='en'?'en':l==='ja'?'ja':l==='ko'?'ko':'zh-CN'}catch(e){/* localStorage unavailable */}` }} />
