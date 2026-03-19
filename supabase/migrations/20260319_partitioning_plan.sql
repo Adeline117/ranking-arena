@@ -1,0 +1,16 @@
+-- PARTITIONING PLAN FOR trader_snapshots_v2
+--
+-- Current: Single table, growing ~10K rows/day
+-- Plan: PARTITION BY RANGE (as_of_ts) with monthly partitions
+--
+-- Implementation steps (requires maintenance window):
+-- 1. Create partitioned copy: trader_snapshots_v2_partitioned
+-- 2. Create monthly partitions (2025-01 through current+1)
+-- 3. Migrate data in batches
+-- 4. Swap tables atomically with ALTER TABLE ... RENAME
+-- 5. Create auto-partition function for future months
+--
+-- Benefits: Faster cleanup (DROP PARTITION vs DELETE), smaller indexes per partition
+-- Risk: Requires app-level testing for cross-partition queries
+--
+-- Status: PLANNED - implement when table exceeds 1M rows
