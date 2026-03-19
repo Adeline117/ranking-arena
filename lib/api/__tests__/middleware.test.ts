@@ -65,9 +65,10 @@ jest.mock('@/lib/supabase/server', () => ({
   getSupabaseAdmin: jest.fn(() => ({})),
 }))
 
-// Mock rate limit — checkRateLimit now returns { response, meta }
+// Mock rate limit — checkRateLimitFull returns { response, meta }; checkRateLimit returns NextResponse | null
 jest.mock('@/lib/utils/rate-limit', () => ({
-  checkRateLimit: jest.fn(() => ({ response: null, meta: null })),
+  checkRateLimitFull: jest.fn(() => ({ response: null, meta: null })),
+  checkRateLimit: jest.fn(() => null),
   addRateLimitHeaders: jest.fn(),
   RateLimitPresets: {
     public: { requests: 100, window: 60, prefix: 'public' },
@@ -107,7 +108,7 @@ jest.mock('@/lib/utils/logger', () => ({
 
 import { withApiMiddleware, withAuth, withPublic } from '../middleware'
 import { getAuthUser } from '@/lib/supabase/server'
-import { checkRateLimit } from '@/lib/utils/rate-limit'
+import { checkRateLimitFull } from '@/lib/utils/rate-limit'
 
 describe('API 中间件', () => {
   beforeEach(() => {
@@ -131,7 +132,7 @@ describe('API 中间件', () => {
         { error: 'Rate limited' },
         { status: 429 }
       )
-      ;(checkRateLimit as jest.Mock).mockResolvedValueOnce({ response: rateLimitResponse, meta: null })
+      ;(checkRateLimitFull as jest.Mock).mockResolvedValueOnce({ response: rateLimitResponse, meta: null })
       
       const handler = jest.fn()
       const wrapped = withApiMiddleware(handler)

@@ -6,7 +6,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { User } from '@supabase/supabase-js'
 import { getAuthUser, getSupabaseAdmin } from '@/lib/supabase/server'
-import { checkRateLimit, addRateLimitHeaders, RateLimitPresets, type RateLimitConfig, type RateLimitResult } from '@/lib/utils/rate-limit'
+import { checkRateLimitFull, addRateLimitHeaders, RateLimitPresets, type RateLimitConfig, type RateLimitResult } from '@/lib/utils/rate-limit'
 import { createLogger } from '@/lib/utils/logger'
 import { validateCsrfToken, CSRF_COOKIE_NAME, CSRF_HEADER_NAME } from '@/lib/utils/csrf'
 import {
@@ -181,7 +181,7 @@ export function withApiMiddleware<T>(
           ? RateLimitPresets[rateLimit]
           : rateLimit
 
-        const rateLimitResult = await checkRateLimit(request, config)
+        const rateLimitResult = await checkRateLimitFull(request, config)
         rateLimitMeta = rateLimitResult.meta
         const rateLimitResponse = rateLimitResult.response
         if (rateLimitResponse) {
