@@ -47,6 +47,7 @@ const EquityCurveSection = dynamic(() => import('@/app/components/trader/stats/c
 const TradingStyleRadar = dynamic(() => import('@/app/components/trader/TradingStyleRadar'), { ssr: false })
 const SimilarTraders = dynamic(() => import('@/app/components/trader/SimilarTraders'), { ssr: false })
 import { RankSparkline } from '@/app/components/ranking/RankSparkline'
+const CopyTradeSimulator = dynamic(() => import('@/app/components/trader/CopyTradeSimulator'), { ssr: false })
 const ClaimTraderButton = dynamic(() => import('@/app/components/trader/ClaimTraderButton'), { ssr: false })
 const VerifiedTraderEditor = dynamic(() => import('@/app/components/trader/VerifiedTraderEditor'), { ssr: false })
 const StatsPage = dynamic(() => import('@/app/components/trader/stats/StatsPage'), {
@@ -545,6 +546,11 @@ export default function TraderProfileClient({ data, serverTraderData, claimedUse
                     </Text>
                     <DrawdownChart equityCurve={traderEquityCurve['90D']} />
                   </Box>
+                )}
+
+                {/* Copy-Trade Simulator */}
+                {traderEquityCurve?.['90D'] && traderEquityCurve['90D'].length > 2 && (
+                  <CopyTradeSimulator equityCurve={traderEquityCurve['90D']} />
                 )}
 
                 {/* Daily Returns Distribution — computed from equity curve */}
