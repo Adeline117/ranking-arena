@@ -77,7 +77,7 @@ export async function GET(request: NextRequest) {
         }
       }
 
-      console.log(`[snapshot-ranks] Snapshotted ${records.length} traders for ${period}`)
+      console.warn(`[snapshot-ranks] Snapshotted ${records.length} traders for ${period}`)
     }
 
     // Cleanup old rows (>30 days)
