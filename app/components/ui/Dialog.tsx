@@ -1,6 +1,6 @@
 'use client'
 
-import { createContext, useContext, useState, useCallback, ReactNode, useEffect, useRef } from 'react'
+import { createContext, useContext, useState, useCallback, useMemo, ReactNode, useEffect, useRef } from 'react'
 import { tokens } from '@/lib/design-tokens'
 import { t } from '@/lib/i18n'
 
@@ -242,8 +242,13 @@ export function DialogProvider({ children }: { children: ReactNode }) {
 
   const buttonConfig = getButtonConfig()
 
+  const contextValue = useMemo(
+    () => ({ showDialog, showAlert, showConfirm, showDangerConfirm, hideDialog }),
+    [showDialog, showAlert, showConfirm, showDangerConfirm, hideDialog]
+  )
+
   return (
-    <DialogContext.Provider value={{ showDialog, showAlert, showConfirm, showDangerConfirm, hideDialog }}>
+    <DialogContext.Provider value={contextValue}>
       {children}
       
       {/* Dialog Overlay */}
