@@ -76,6 +76,7 @@ import {
   fetchPhemexStatsDetail,
   fetchBingxEquityCurve,
   fetchBingxStatsDetail,
+  fetchBingxCurrentPositions,
   fetchToobitEquityCurve,
   fetchToobitStatsDetail,
   fetchBinanceSpotEquityCurve,
@@ -425,6 +426,7 @@ export const ENRICHMENT_PLATFORM_CONFIGS: Record<string, EnrichmentConfig> = {
     platform: 'bingx',
     fetchEquityCurve: fetchBingxEquityCurve,
     fetchStatsDetail: fetchBingxStatsDetail,
+    fetchCurrentPositions: fetchBingxCurrentPositions,
     concurrency: 2, delayMs: 2000, // Via CF proxy
   },
   toobit: {
