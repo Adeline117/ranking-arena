@@ -693,22 +693,80 @@ export async function runEnrichment(params: {
                     stats = enhanceStatsWithDerivedMetrics(stats, curve, period)
                   }
                   await withRetry(() => upsertStatsDetail(supabase, platformKey, traderId, period, stats!), `${platformKey}:${traderId} save stats detail`)
+                }
 
-                  // Write win_rate, max_drawdown, and PnL back to snapshot so leaderboard shows them
+                // Always sync key metrics back to trader_snapshots_v2 from stats + equity curve.
+                // This ensures new traders are immediately complete without waiting for daily cron.
+                {
                   const snapshotUpdate: Record<string, unknown> = {}
-                  if (stats.profitableTradesPct != null) snapshotUpdate.win_rate = stats.profitableTradesPct
-                  if (stats.maxDrawdown != null) snapshotUpdate.max_drawdown = stats.maxDrawdown
-                  if (stats.totalTrades != null) snapshotUpdate.trades_count = stats.totalTrades
-                  if (curve.length > 0) {
+                  if (stats?.profitableTradesPct != null) snapshotUpdate.win_rate = stats.profitableTradesPct
+                  if (stats?.maxDrawdown != null) snapshotUpdate.max_drawdown = stats.maxDrawdown
+                  if (stats?.totalTrades != null) snapshotUpdate.trades_count = stats.totalTrades
+                  if (stats?.sharpeRatio != null) snapshotUpdate.sharpe_ratio = stats.sharpeRatio
+
+                  // Compute from equity curve if stats didn't provide
+                  if (curve.length >= 2) {
                     const lastPoint = curve[curve.length - 1]
-                    if (lastPoint.pnl != null) {
-                      snapshotUpdate.pnl_usd = lastPoint.pnl
+                    const firstPoint = curve[0]
+                    if (lastPoint.pnl != null) snapshotUpdate.pnl_usd ??= lastPoint.pnl
+                    // ROI from equity curve: (last.roi - first.roi) or last.roi if first is 0
+                    if (lastPoint.roi != null && !snapshotUpdate.roi_pct) {
+                      const roiVal = firstPoint.roi != null && firstPoint.roi !== 0
+                        ? lastPoint.roi - firstPoint.roi : lastPoint.roi
+                      if (roiVal !== 0) snapshotUpdate.roi_pct = roiVal
+                    }
+                    // Sharpe from daily returns if not from stats
+                    if (!snapshotUpdate.sharpe_ratio && curve.length >= 7) {
+                      const returns: number[] = []
+                      for (let j = 1; j < curve.length; j++) {
+                        if (curve[j].roi != null && curve[j - 1].roi != null) {
+                          returns.push(curve[j].roi! - curve[j - 1].roi!)
+                        }
+                      }
+                      if (returns.length >= 5) {
+                        const mean = returns.reduce((a, b) => a + b, 0) / returns.length
+                        const std = Math.sqrt(returns.reduce((a, r) => a + (r - mean) ** 2, 0) / returns.length)
+                        if (std > 0) snapshotUpdate.sharpe_ratio = Math.round((mean / std) * Math.sqrt(365) * 100) / 100
+                      }
+                    }
+                    // Win rate from daily returns if not from stats
+                    if (!snapshotUpdate.win_rate && curve.length >= 5) {
+                      const dailyReturns: number[] = []
+                      for (let j = 1; j < curve.length; j++) {
+                        if (curve[j].pnl != null && curve[j - 1].pnl != null) {
+                          dailyReturns.push(curve[j].pnl! - curve[j - 1].pnl!)
+                        }
+                      }
+                      if (dailyReturns.length >= 3) {
+                        const wins = dailyReturns.filter(r => r > 0).length
+                        snapshotUpdate.win_rate = Math.round((wins / dailyReturns.length) * 10000) / 100
+                        snapshotUpdate.trades_count ??= dailyReturns.length
+                      }
+                    }
+                    // Max drawdown from equity curve if not from stats
+                    if (!snapshotUpdate.max_drawdown && curve.length >= 3) {
+                      let peak = -Infinity
+                      let maxDD = 0
+                      for (const pt of curve) {
+                        const val = pt.roi ?? pt.pnl ?? 0
+                        if (val > peak) peak = val
+                        if (peak > 0) {
+                          const dd = ((peak - val) / peak) * 100
+                          if (dd > maxDD) maxDD = dd
+                        }
+                      }
+                      if (maxDD > 0) snapshotUpdate.max_drawdown = Math.round(maxDD * 100) / 100
                     }
                   }
-                  if (Object.keys(snapshotUpdate).length > 0) {
+
+                  // Only write non-null updates, and only overwrite NULL fields in snapshot
+                  const updates = Object.fromEntries(
+                    Object.entries(snapshotUpdate).filter(([, v]) => v != null)
+                  )
+                  if (Object.keys(updates).length > 0) {
                     await supabase
                       .from('trader_snapshots_v2')
-                      .update(snapshotUpdate)
+                      .update(updates)
                       .eq(V2.platform, platformKey)
                       .eq(V2.trader_key, traderId)
                       .eq(V2.window, period)
