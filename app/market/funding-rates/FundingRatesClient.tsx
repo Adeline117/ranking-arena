@@ -54,7 +54,7 @@ export default function FundingRatesClient({ rates }: { rates: FundingRateRow[] 
   }, [rates])
 
   const sorted = useMemo(() => {
-    let filtered = filterPlatform === 'all' ? rates : rates.filter(r => r.platform === filterPlatform)
+    const filtered = filterPlatform === 'all' ? rates : rates.filter(r => r.platform === filterPlatform)
     return [...filtered].sort((a, b) => {
       let cmp = 0
       switch (sortField) {

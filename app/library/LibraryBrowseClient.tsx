@@ -73,7 +73,6 @@ function ItemCard({ item }: { item: LibraryItem }) {
             marginBottom: 12,
             background: tokens.colors.bg.tertiary,
           }}>
-            {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
               src={item.cover_url}
               alt={item.title}
