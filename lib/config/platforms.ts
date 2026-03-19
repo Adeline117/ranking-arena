@@ -4,11 +4,8 @@
  */
 
 // 🚨 DISABLED PLATFORMS - permanently blocked due to repeated failures/hangs
-// binance_spot: RE-ENABLED 2026-03-19 — added 30s per-page + 4min total timeout
-// bitget_futures: PERMANENTLY DISABLED 2026-03-19 (8th stuck >44min)
-//   - VPS scraper repeatedly hangs despite timeout protection
-//   - Blacklist bypassed by accidental re-enable in commit 713c5f94
-export const DISABLED_PLATFORMS = ['bitget_spot', 'bitget_futures'] as const
+// bitget_futures: RE-ENABLED for leaderboard fetch only, enrichment skipped (hangs on detail API)
+export const DISABLED_PLATFORMS = ['bitget_spot'] as const
 export type DisabledPlatform = typeof DISABLED_PLATFORMS[number]
 
 export function isPlatformDisabled(platform: string): boolean {

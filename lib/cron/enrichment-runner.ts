@@ -439,6 +439,7 @@ export const NO_ENRICHMENT_PLATFORMS = new Set([
   // 'bybit' re-enabled (2026-03-18) — VPS scraper bypasses Akamai WAF
   'bybit_spot',  // Enrichment TBD — VPS scraper supports leaderboard but no detail endpoint yet
   'bitmart', 'paradex',  // Dead
+  'bitget_futures',  // Detail API hangs >44min repeatedly — leaderboard fetch works, enrichment skipped
   // okx_spot: RE-ENABLED 2026-03-19 — same v5 API as futures with instType=SPOT
   // kucoin: Mac Mini only — no enrichment API accessible from datacenter
   'kucoin',
@@ -478,11 +479,6 @@ export async function runEnrichment(params: {
 }): Promise<EnrichmentResult> {
   const { platform: platformParam, period, limit, offset = 0 } = params
   const startTime = Date.now()
-  
-  // 🚨 NUCLEAR OPTION: Hard block bitget_futures (9TH STUCK - ALL OTHER FIXES FAILED)
-  if (platformParam === 'bitget_futures') {
-    throw new Error('❌ PLATFORM PERMANENTLY DISABLED - DO NOT RETRY (9th stuck >44min)')
-  }
   
   // 🚨 Blacklist check - prevent disabled platforms from running
   validatePlatform(platformParam)
