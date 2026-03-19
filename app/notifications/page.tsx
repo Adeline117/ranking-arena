@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, useMemo } from 'react'
 import { useRouter } from 'next/navigation'
 import { tokens } from '@/lib/design-tokens'
 import TopNav from '@/app/components/layout/TopNav'
@@ -34,6 +34,60 @@ interface Notification {
   created_at: string
   actor_handle?: string
   actor_avatar_url?: string
+}
+
+interface GroupedNotification extends Notification {
+  count: number
+  actors: Array<{ id: string; handle?: string; avatar_url?: string }>
+  isGrouped: boolean
+  groupedIds: string[]
+}
+
+// ============================================
+// Notification Digest Grouping
+// ============================================
+
+/** Group notifications by type + reference_id within 1-hour windows */
+function groupNotifications(notifications: Notification[]): GroupedNotification[] {
+  const groups = new Map<string, Notification[]>()
+
+  for (const n of notifications) {
+    // Only group social notification types (likes, comments, follows, etc.)
+    // Trader alerts should remain individual
+    const groupable = ['like', 'comment', 'post_reply', 'new_follower', 'follow', 'mention'].includes(n.type)
+    if (!groupable) {
+      // Non-groupable: each gets its own entry
+      const soloKey = `solo:${n.id}`
+      groups.set(soloKey, [n])
+      continue
+    }
+
+    const hourBucket = Math.floor(new Date(n.created_at).getTime() / 3600000)
+    const key = `${n.type}:${n.reference_id || 'none'}:${hourBucket}`
+    if (!groups.has(key)) groups.set(key, [])
+    groups.get(key)!.push(n)
+  }
+
+  return Array.from(groups.values()).map(group => {
+    // Sort group by created_at desc so the newest is first
+    group.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+    const first = group[0]
+    return {
+      ...first,
+      count: group.length,
+      actors: group
+        .map(n => ({
+          id: n.actor_id || '',
+          handle: n.actor_handle,
+          avatar_url: n.actor_avatar_url,
+        }))
+        .filter(a => a.id),
+      isGrouped: group.length > 1,
+      groupedIds: group.map(n => n.id),
+      // A group is unread if any notification in it is unread
+      read: group.every(n => n.read),
+    }
+  })
 }
 
 // ============================================
@@ -129,6 +183,61 @@ function _getNotificationIcon(type: string): string {
 function getNotificationBorderColor(type: string, severity: 'critical' | 'warning' | 'info'): string {
   if (type === 'trader_alert') return severityColors[severity]
   return NOTIFICATION_TYPE_CONFIG[type]?.color || 'transparent'
+}
+
+// ============================================
+// Grouped notification title formatter
+// ============================================
+
+function formatGroupedTitle(
+  n: GroupedNotification,
+  t: (key: string) => string,
+  language: string
+): string {
+  const firstActor = n.actors[0]?.handle || n.actor_handle || '?'
+  const othersCount = n.count - 1
+
+  const actionMap: Record<string, Record<string, string>> = {
+    like: {
+      en: `${firstActor} and ${othersCount} other${othersCount > 1 ? 's' : ''} liked your post`,
+      zh: `${firstActor} 和其他 ${othersCount} 人赞了你的帖子`,
+      ja: `${firstActor} と他 ${othersCount} 人があなたの投稿にいいねしました`,
+      ko: `${firstActor} 외 ${othersCount}명이 게시글을 좋아합니다`,
+    },
+    comment: {
+      en: `${firstActor} and ${othersCount} other${othersCount > 1 ? 's' : ''} commented on your post`,
+      zh: `${firstActor} 和其他 ${othersCount} 人评论了你的帖子`,
+      ja: `${firstActor} と他 ${othersCount} 人があなたの投稿にコメントしました`,
+      ko: `${firstActor} 외 ${othersCount}명이 댓글을 남겼습니다`,
+    },
+    post_reply: {
+      en: `${firstActor} and ${othersCount} other${othersCount > 1 ? 's' : ''} replied to your post`,
+      zh: `${firstActor} 和其他 ${othersCount} 人回复了你的帖子`,
+      ja: `${firstActor} と他 ${othersCount} 人があなたの投稿に返信しました`,
+      ko: `${firstActor} 외 ${othersCount}명이 답글을 남겼습니다`,
+    },
+    new_follower: {
+      en: `${firstActor} and ${othersCount} other${othersCount > 1 ? 's' : ''} followed you`,
+      zh: `${firstActor} 和其他 ${othersCount} 人关注了你`,
+      ja: `${firstActor} と他 ${othersCount} 人があなたをフォローしました`,
+      ko: `${firstActor} 외 ${othersCount}명이 팔로우했습니다`,
+    },
+    follow: {
+      en: `${firstActor} and ${othersCount} other${othersCount > 1 ? 's' : ''} followed you`,
+      zh: `${firstActor} 和其他 ${othersCount} 人关注了你`,
+      ja: `${firstActor} と他 ${othersCount} 人があなたをフォローしました`,
+      ko: `${firstActor} 외 ${othersCount}명이 팔로우했습니다`,
+    },
+    mention: {
+      en: `${firstActor} and ${othersCount} other${othersCount > 1 ? 's' : ''} mentioned you`,
+      zh: `${firstActor} 和其他 ${othersCount} 人提到了你`,
+      ja: `${firstActor} と他 ${othersCount} 人があなたをメンションしました`,
+      ko: `${firstActor} 외 ${othersCount}명이 멘션했습니다`,
+    },
+  }
+
+  const lang = ['zh', 'en', 'ja', 'ko'].includes(language) ? language : 'en'
+  return actionMap[n.type]?.[lang] || n.title
 }
 
 // ============================================
@@ -237,6 +346,9 @@ export default function NotificationsPage() {
   const filtered = effectiveFilterType === 'all'
     ? visibleNotifications
     : visibleNotifications.filter((n) => n.type === effectiveFilterType)
+
+  // Group notifications into digests (e.g. "UserA and 2 others liked your post")
+  const groupedFiltered = useMemo(() => groupNotifications(filtered), [filtered])
 
   const traderAlertCount = visibleNotifications.filter((n) => n.type === 'trader_alert').length
   const postReplyCount = visibleNotifications.filter((n) => n.type === 'post_reply').length
@@ -363,8 +475,14 @@ export default function NotificationsPage() {
             flexDirection: 'column',
             gap: tokens.spacing[1],
           }}>
-            {filtered.map((n) => {
+            {groupedFiltered.map((n) => {
               const severity = n.type === 'trader_alert' ? getSeverityFromMessage(n.message) : 'info'
+
+              // Build digest title for grouped notifications
+              const displayTitle = n.isGrouped
+                ? formatGroupedTitle(n, t, language)
+                : n.title
+
               return (
                 <Box
                   key={n.id}
@@ -386,60 +504,104 @@ export default function NotificationsPage() {
                     e.currentTarget.style.background = n.read ? 'transparent' : tokens.colors.bg.secondary
                   }}
                 >
-                  {/* 图标 */}
-                  <Box style={{
-                    flexShrink: 0,
-                    width: 32,
-                    height: 32,
-                    borderRadius: '50%',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    background: n.type === 'trader_alert'
-                      ? severityColors[severity] + '15'
-                      : (NOTIFICATION_TYPE_CONFIG[n.type]?.color || tokens.colors.bg.tertiary) + '15',
-                    fontSize: 14,
-                  }}>
-                    {n.type === 'trader_alert' ? severityIcons[severity] : <NotificationIconSvg type={n.type} size={16} />}
-                  </Box>
+                  {/* Icon or stacked avatars */}
+                  {n.isGrouped && n.actors.length > 1 ? (
+                    <Box style={{
+                      flexShrink: 0,
+                      width: 32,
+                      height: 32,
+                      position: 'relative',
+                    }}>
+                      {/* Stacked avatars (max 3) */}
+                      {n.actors.slice(0, 3).map((actor, i) => (
+                        <Box key={actor.id} style={{
+                          position: i === 0 ? 'relative' : 'absolute',
+                          top: i === 0 ? 0 : i * 4,
+                          left: i === 0 ? 0 : i * 6,
+                          width: 20,
+                          height: 20,
+                          borderRadius: '50%',
+                          background: (NOTIFICATION_TYPE_CONFIG[n.type]?.color || tokens.colors.bg.tertiary) + '30',
+                          border: `1.5px solid ${tokens.colors.bg.primary}`,
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          fontSize: 9,
+                          fontWeight: 700,
+                          color: tokens.colors.text.secondary,
+                          overflow: 'hidden',
+                          zIndex: 3 - i,
+                        }}>
+                          {actor.avatar_url ? (
+                            <img src={actor.avatar_url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                          ) : (
+                            (actor.handle || '?')[0].toUpperCase()
+                          )}
+                        </Box>
+                      ))}
+                    </Box>
+                  ) : (
+                    <Box style={{
+                      flexShrink: 0,
+                      width: 32,
+                      height: 32,
+                      borderRadius: '50%',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      background: n.type === 'trader_alert'
+                        ? severityColors[severity] + '15'
+                        : (NOTIFICATION_TYPE_CONFIG[n.type]?.color || tokens.colors.bg.tertiary) + '15',
+                      fontSize: 14,
+                    }}>
+                      {n.type === 'trader_alert' ? severityIcons[severity] : <NotificationIconSvg type={n.type} size={16} />}
+                    </Box>
+                  )}
 
-                  {/* 内容 */}
+                  {/* Content */}
                   <Box style={{ flex: 1, minWidth: 0 }}>
                     <Box style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: tokens.spacing[2] }}>
                       <Text size="sm" weight={n.read ? 'normal' : 'semibold'} style={{
                         overflow: 'hidden',
                         textOverflow: 'ellipsis',
                         display: '-webkit-box',
-                        WebkitLineClamp: 1,
+                        WebkitLineClamp: 2,
                         WebkitBoxOrient: 'vertical',
                       }}>
-                        {n.title}
+                        {displayTitle}
                       </Text>
                       <Text size="xs" color="tertiary" style={{ flexShrink: 0, whiteSpace: 'nowrap' }}>
                         {timeAgo(n.created_at, t)}
                       </Text>
                     </Box>
-                    <Text size="xs" color="secondary" style={{
-                      marginTop: 2,
-                      overflow: 'hidden',
-                      textOverflow: 'ellipsis',
-                      display: '-webkit-box',
-                      WebkitLineClamp: 2,
-                      WebkitBoxOrient: 'vertical',
-                    }}>
-                      {n.message}
-                    </Text>
+                    {!n.isGrouped && (
+                      <Text size="xs" color="secondary" style={{
+                        marginTop: 2,
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                        display: '-webkit-box',
+                        WebkitLineClamp: 2,
+                        WebkitBoxOrient: 'vertical',
+                      }}>
+                        {n.message}
+                      </Text>
+                    )}
+                    {n.isGrouped && (
+                      <Text size="xs" color="tertiary" style={{ marginTop: 2 }}>
+                        {n.count} {language === 'zh' ? '条通知' : language === 'ja' ? '件の通知' : language === 'ko' ? '개의 알림' : 'notifications'}
+                      </Text>
+                    )}
                     {n.link && (
                       <Text size="xs" style={{
                         color: tokens.colors.accent.brand,
                         marginTop: 4,
                       }}>
-                        {t('viewDetails')} →
+                        {t('viewDetails')} &rarr;
                       </Text>
                     )}
                   </Box>
 
-                  {/* 未读标记 */}
+                  {/* Unread indicator */}
                   {!n.read && (
                     <Box style={{
                       width: 8,
