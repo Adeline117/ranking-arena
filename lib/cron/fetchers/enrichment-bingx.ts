@@ -14,7 +14,7 @@
 
 import { fetchJson } from './shared'
 import { logger } from '@/lib/logger'
-import type { EquityCurvePoint, StatsDetail } from './enrichment-types'
+import type { EquityCurvePoint, StatsDetail, PortfolioPosition } from './enrichment-types'
 
 const PROXY_URL = process.env.CLOUDFLARE_PROXY_URL || 'https://ranking-arena-proxy.broosbook.workers.dev'
 
@@ -119,5 +119,50 @@ export async function fetchBingxStatsDetail(
   } catch (err) {
     logger.warn(`[enrichment] BingX stats detail failed for ${traderId}: ${err}`)
     return null
+  }
+}
+
+// ============================================
+// Current Positions
+// ============================================
+
+interface BingXPosition {
+  symbol?: string
+  positionSide?: string // 'Long' | 'Short'
+  entryPrice?: number | string
+  unrealizedProfit?: number | string
+  positionAmt?: number | string
+  leverage?: number | string
+}
+
+/**
+ * Fetch current open positions for a BingX trader via CF Worker proxy.
+ */
+export async function fetchBingxCurrentPositions(
+  traderId: string
+): Promise<PortfolioPosition[]> {
+  try {
+    const response = await fetchJson<{ code?: number; data?: BingXPosition[] | { list?: BingXPosition[] } }>(
+      `${PROXY_URL}/bingx/trader-positions?uid=${traderId}`,
+      { timeoutMs: 15000 }
+    )
+
+    const list = Array.isArray(response?.data) ? response.data :
+      (response?.data as { list?: BingXPosition[] })?.list || []
+
+    if (!list.length) return []
+
+    return list
+      .filter((p): p is BingXPosition => !!p.symbol)
+      .map((p) => ({
+        symbol: String(p.symbol || ''),
+        direction: String(p.positionSide || '').toLowerCase().includes('short') ? 'short' as const : 'long' as const,
+        investedPct: null,
+        entryPrice: p.entryPrice != null ? Number(p.entryPrice) : null,
+        pnl: p.unrealizedProfit != null ? Number(p.unrealizedProfit) : null,
+      }))
+  } catch (err) {
+    logger.warn(`[enrichment] BingX positions failed for ${traderId}: ${err}`)
+    return []
   }
 }
