@@ -1,9 +1,11 @@
 'use client'
 
 import { useState, useEffect, useCallback, useRef } from 'react'
-import { supabase } from '@/lib/supabase/client'
 import { logger } from '@/lib/logger'
 import { BETA_PRO_FEATURES_FREE } from '@/lib/premium/hooks'
+
+// Lazy-load Supabase to keep it out of the initial client bundle
+const getSupabase = () => import('@/lib/supabase/client').then(m => m.supabase)
 
 // 缓存配置
 const CACHE_TTL = 5 * 60 * 1000 // 5 分钟缓存
@@ -37,6 +39,7 @@ export function useSubscription() {
 
     try {
       // Use getSession() — reads from local storage instead of making a network request
+      const supabase = await getSupabase()
       const { data: { session } } = await supabase.auth.getSession()
       const user = session?.user ?? null
 
@@ -132,17 +135,23 @@ export function useSubscription() {
     isMountedRef.current = true
     checkSubscription()
 
-    // 监听登录状态变化
-    const { data: { subscription: authSub } } = supabase.auth.onAuthStateChange((event) => {
-      // 登录或登出时强制刷新
-      if (event === 'SIGNED_IN' || event === 'SIGNED_OUT') {
-        checkSubscription(true)
-      }
+    // 监听登录状态变化 (lazy-load supabase)
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    let authSub: any = null
+    getSupabase().then((supabase) => {
+      if (!isMountedRef.current) return
+      const { data } = supabase.auth.onAuthStateChange((event) => {
+        // 登录或登出时强制刷新
+        if (event === 'SIGNED_IN' || event === 'SIGNED_OUT') {
+          checkSubscription(true)
+        }
+      })
+      authSub = data.subscription
     })
 
     return () => {
       isMountedRef.current = false
-      authSub.unsubscribe()
+      authSub?.unsubscribe()
     }
   }, [checkSubscription])
 
