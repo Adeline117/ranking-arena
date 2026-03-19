@@ -25,6 +25,7 @@ import {
 import { createLogger, fireAndForget } from '@/lib/utils/logger'
 import { PipelineLogger } from '@/lib/services/pipeline-logger'
 import { sanitizeDisplayName } from '@/lib/utils/profanity'
+import { tieredGet, tieredSet, tieredDel } from '@/lib/cache/redis-layer'
 import { env } from '@/lib/env'
 
 export const dynamic = 'force-dynamic'
@@ -93,6 +94,14 @@ export async function GET(request: NextRequest) {
   } else if (authHeader !== `Bearer ${env.CRON_SECRET}`) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
+
+  // Idempotency: prevent duplicate runs within 5 minutes
+  const IDEMPOTENCY_KEY = 'cron:compute-leaderboard:running'
+  const cached = await tieredGet(IDEMPOTENCY_KEY, 'hot')
+  if (cached.data) {
+    return NextResponse.json({ ok: true, message: 'Already running, skipped', cached: true })
+  }
+  await tieredSet(IDEMPOTENCY_KEY, { startedAt: new Date().toISOString() }, 'hot', [])
 
   const supabase = getSupabaseAdmin()
   const startTime = Date.now()
@@ -248,6 +257,9 @@ export async function GET(request: NextRequest) {
       revalidatePath('/') // homepage
     })(), 'revalidate-ranking-pages')
 
+    // Release idempotency lock
+    await tieredDel(IDEMPOTENCY_KEY)
+
     const totalRanked = Object.values(stats.seasons).reduce((a, b) => a + b, 0)
     if (warnings.length > 0) {
       await plog.error(new Error(warnings.join('; ')), { stats, rolledBack })
@@ -265,6 +277,8 @@ export async function GET(request: NextRequest) {
       wr_mdd_derived: wrMddDerived,
     })
   } catch (error: unknown) {
+    // Release idempotency lock on failure
+    await tieredDel(IDEMPOTENCY_KEY).catch(() => {})
     logger.error('Failed to compute leaderboard', error)
     await plog.error(error)
     return NextResponse.json(

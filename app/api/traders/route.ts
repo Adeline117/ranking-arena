@@ -12,6 +12,7 @@
  */
 
 import { NextResponse } from 'next/server'
+import { z } from 'zod'
 import { withPublic } from '@/lib/api/middleware'
 import { getOrSetWithLock } from '@/lib/cache'
 import type { Period } from '@/lib/utils/arena-score'
@@ -24,6 +25,17 @@ export const runtime = 'nodejs'
 export const preferredRegion = ['iad1', 'sfo1', 'hnd1']
 export const dynamic = 'force-dynamic'
 
+// ── Input validation schema ──────────────────────────────────────────────────
+const tradersQuerySchema = z.object({
+  timeRange: z.string().toUpperCase().pipe(z.enum(['7D', '30D', '90D'])).catch('90D'),
+  exchange: z.string().optional(),
+  sortBy: z.enum(['arena_score', 'roi', 'win_rate', 'max_drawdown']).catch('arena_score'),
+  order: z.enum(['asc', 'desc']).catch('desc'),
+  cursor: z.coerce.number().int().min(0).optional(),
+  limit: z.coerce.number().int().min(1).max(1000).catch(50),
+  page: z.coerce.number().int().min(0).optional(),
+})
+
 // In-memory cache for available sources (shared across requests, TTL 30 min)
 const availableSourcesCache = new Map<string, { sources: string[]; ts: number }>()
 const SOURCES_TTL = 30 * 60 * 1000 // 30 min — sources change only on cron runs
@@ -35,21 +47,19 @@ const LEADERBOARD_COLUMNS = 'source_trader_id, handle, roi, pnl, win_rate, max_d
 export const GET = withPublic(
   async ({ supabase, request }) => {
     const searchParams = request.nextUrl.searchParams
-    const rawTimeRange = searchParams.get('timeRange') || '90D'
-    const normalizedTimeRange = rawTimeRange.toUpperCase()
-    const timeRange = (normalizedTimeRange === '7D' || normalizedTimeRange === '30D' || normalizedTimeRange === '90D'
-      ? normalizedTimeRange
-      : '90D') as Period
-    const exchangeFilter = searchParams.get('exchange')
-    const sortBy = searchParams.get('sortBy') as 'arena_score' | 'roi' | 'win_rate' | 'max_drawdown' | null
-    const order = (searchParams.get('order') || 'desc') as 'asc' | 'desc'
+    const rawParams = Object.fromEntries(searchParams)
+    const parsed = tradersQuerySchema.safeParse(rawParams)
+    if (!parsed.success) {
+      return NextResponse.json(
+        { success: false, error: 'Invalid parameters', details: parsed.error.flatten() },
+        { status: 400 }
+      )
+    }
 
-    // Cursor-based pagination (preferred)
-    const cursor = searchParams.get('cursor') // rank value to start after
-    const limit = Math.min(1000, Math.max(1, parseInt(searchParams.get('limit') || '50', 10) || 50))
-
-    // Legacy page-based pagination fallback
-    const page = parseInt(searchParams.get('page') || '', 10)
+    const { timeRange: timeRangeStr, exchange: exchangeFilter, sortBy, order, limit } = parsed.data
+    const timeRange = timeRangeStr as Period
+    const cursor = parsed.data.cursor != null ? String(parsed.data.cursor) : null
+    const page = parsed.data.page ?? NaN
     const useLegacyPaging = !isNaN(page) && !cursor
 
     const effectiveSortBy = sortBy || 'arena_score'
@@ -62,7 +72,7 @@ export const GET = withPublic(
       async () => {
         return await fetchFromLeaderboard(supabase, {
           timeRange,
-          exchangeFilter,
+          exchangeFilter: exchangeFilter ?? null,
           sortBy: effectiveSortBy,
           order,
           cursor: cursor ? parseInt(cursor, 10) : null,
@@ -247,7 +257,7 @@ async function fetchFromLeaderboard(
   const computedAt = data?.[0]?.computed_at || new Date().toISOString()
 
   // Apply profanity filter to all handles before returning
-  const sanitizedTraders = dedupedTraders.map((t: any) => ({
+  const sanitizedTraders = dedupedTraders.map((t: { handle: string | null; [key: string]: unknown }) => ({
     ...t,
     handle: sanitizeDisplayName(t.handle)
   }))

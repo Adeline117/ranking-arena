@@ -15,6 +15,7 @@ import { getSupabaseAdmin } from '@/lib/supabase/server'
 import { getLeaderboard, getTraderDetail, searchTraders } from '@/lib/data/unified'
 import type { TradingPeriod } from '@/lib/data/unified'
 import { getIdentifier } from '@/lib/utils/rate-limit'
+import { apiSuccess, apiError } from '@/lib/api/response'
 
 // ---------------------------------------------------------------------------
 // API Key validation
@@ -76,24 +77,24 @@ function checkDailyLimit(identifier: string): { allowed: boolean; remaining: num
 }
 
 // ---------------------------------------------------------------------------
-// Response helpers
+// Response helpers (use standard apiSuccess/apiError + CORS headers)
 // ---------------------------------------------------------------------------
 
+const CORS_HEADERS = {
+  'Access-Control-Allow-Origin': '*',
+}
+
 function jsonResponse(data: unknown, meta: Record<string, unknown>, status = 200) {
-  return NextResponse.json({ data, meta }, {
-    status,
-    headers: {
-      'Cache-Control': 'public, s-maxage=60, stale-while-revalidate=120',
-      'Access-Control-Allow-Origin': '*',
-    },
-  })
+  const res = apiSuccess(data, meta, status)
+  res.headers.set('Cache-Control', 'public, s-maxage=60, stale-while-revalidate=120')
+  res.headers.set('Access-Control-Allow-Origin', '*')
+  return res
 }
 
 function errorResponse(message: string, status: number) {
-  return NextResponse.json(
-    { data: null, meta: { error: message } },
-    { status, headers: { 'Access-Control-Allow-Origin': '*' } }
-  )
+  const res = apiError('API_ERROR', message, status)
+  res.headers.set('Access-Control-Allow-Origin', '*')
+  return res
 }
 
 // ---------------------------------------------------------------------------
@@ -225,8 +226,11 @@ export async function GET(request: NextRequest) {
       version: 'v3',
     })
   } catch (err) {
-    const message = err instanceof Error ? err.message : 'Internal server error'
-    return errorResponse(message, 500)
+    // Never expose internal error details to API consumers
+    if (err instanceof Error) {
+      console.error(`[v3] ${endpoint} error:`, err.message)
+    }
+    return errorResponse('Internal server error', 500)
   }
 }
 
