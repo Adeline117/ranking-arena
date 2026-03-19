@@ -90,7 +90,7 @@ export default function HomePageClient({ initialTraders, initialLastUpdated, ssr
 
   return (
     <PullToRefresh onRefresh={handlePullRefresh} disabled={loading}>
-      <main style={{ position: 'relative', zIndex: 1 }}>
+      <div style={{ position: 'relative', zIndex: 1 }}>
         {/* 排名榜区域 - 单栏布局，侧边栏由父组件处理 */}
         <RankingSection
           traders={traders}
@@ -105,7 +105,7 @@ export default function HomePageClient({ initialTraders, initialLastUpdated, ssr
           availableSources={availableSources}
           ssrTable={ssrTable}
         />
-      </main>
+      </div>
     </PullToRefresh>
   )
 }
