@@ -95,14 +95,19 @@ export default async function Page() {
       {/* Preload the rankings API data so when useTraderData hydrates, the response is already cached */}
       <link rel="preload" as="fetch" href="/api/traders?timeRange=90D&limit=200" crossOrigin="anonymous" />
       <JsonLd data={organizationJsonLd} />
-      {/* SSR ranking table — LCP element, hidden by CSS :has() when client renders */}
-      <div id="ssr-ranking">
-        <SSRRankingTable traders={initialTraders} />
-      </div>
 
       <ErrorBoundary name="homepage">
-        <Suspense fallback={null}>
-          <HomePage initialTraders={initialTraders} initialLastUpdated={lastUpdated} heroStats={heroStats} />
+        <Suspense fallback={
+          <div style={{ maxWidth: 1400, margin: '0 auto', padding: '8px 16px' }}>
+            <SSRRankingTable traders={initialTraders} />
+          </div>
+        }>
+          <HomePage
+            initialTraders={initialTraders}
+            initialLastUpdated={lastUpdated}
+            heroStats={heroStats}
+            ssrTable={<SSRRankingTable traders={initialTraders} />}
+          />
         </Suspense>
       </ErrorBoundary>
     </>

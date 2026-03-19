@@ -1,20 +1,8 @@
 @import "tailwindcss";
 
-/* SSR Ranking Table: visible by default for instant LCP.
-   Hidden via :has() when client-side .home-ranking-section renders.
-
-   Both the SSR table hiding and client table appearing happen in the same
-   paint frame (CSS :has() is synchronous), so the browser computes them
-   as a single layout shift. Using display:none is cleanest — the SSR table
-   collapses and the client table fills the same space atomically.
-
-   The SSR table is outside the ThreeColumnLayout while the client table is
-   inside it, so they occupy different DOM positions. However, since both
-   changes occur in the same animation frame, the net viewport shift is
-   near-zero (content above the fold stays stable). */
-body:has(.home-ranking-section) #ssr-ranking {
-  display: none !important;
-}
+/* SSR Ranking Table is now rendered IN-PLACE inside RankingSection.
+   No CSS hiding needed — React state removes it when client table mounts.
+   This eliminates CLS because the swap happens at the same DOM position. */
 
 /*
  * Performance Optimization: CSS files moved to async loading

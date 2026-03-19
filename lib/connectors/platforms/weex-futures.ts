@@ -41,23 +41,32 @@ export class WeexFuturesConnector extends BaseConnector {
         90000
       )
 
-      // New API (http-gateway1.weex.com) returns { data: { traderListViewVOS: [...] } }
-      // or may return { traders: [...] } from old scraper format
+      // VPS scraper response: { data: [{ tab, list: [...traders] }, ...] }
+      // Each tab has different sorting, merge all unique traders
       let items: Record<string, unknown>[] = []
       if (vpsData) {
-        const dataObj = (vpsData?.data ?? vpsData) as Record<string, unknown>
-        const candidates = [
-          dataObj?.traderListViewVOS,
-          dataObj?.traders,
-          dataObj?.list,
-          dataObj?.items,
-          vpsData?.traders,
-        ]
-        for (const c of candidates) {
-          if (Array.isArray(c) && c.length > 0) { items = c as Record<string, unknown>[]; break }
+        const dataObj = vpsData?.data
+        // New format: array of { tab, list: [...] } sections
+        if (Array.isArray(dataObj)) {
+          const seen = new Set<string>()
+          for (const section of dataObj as Record<string, unknown>[]) {
+            const list = (section?.list || []) as Record<string, unknown>[]
+            for (const trader of list) {
+              const uid = String(trader.traderUserId || '')
+              if (uid && !seen.has(uid)) {
+                seen.add(uid)
+                items.push(trader)
+              }
+            }
+          }
+        } else if (dataObj && typeof dataObj === 'object') {
+          // Old format: { traderListViewVOS: [...] } or { traders: [...] }
+          const obj = dataObj as Record<string, unknown>
+          const candidates = [obj?.traderListViewVOS, obj?.traders, obj?.list, obj?.items]
+          for (const c of candidates) {
+            if (Array.isArray(c) && c.length > 0) { items = c as Record<string, unknown>[]; break }
+          }
         }
-        // Flat array response
-        if (items.length === 0 && Array.isArray(dataObj)) items = dataObj as Record<string, unknown>[]
       }
 
       for (const item of items) {
