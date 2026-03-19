@@ -1,6 +1,7 @@
 import type { Metadata } from 'next'
 import { getInitialTraders } from '@/lib/getInitialTraders'
 import { getSupabaseAdmin } from '@/lib/supabase/server'
+import { tieredGetOrSet } from '@/lib/cache/redis-layer'
 import SSRRankingTable from './components/home/SSRRankingTable'
 import { JsonLd } from './components/Providers/JsonLd'
 import HomePageLoader from './components/home/HomePageLoader'
@@ -62,19 +63,27 @@ const organizationJsonLd = {
 
 // WebSite JSON-LD is in layout.tsx (site-wide, with potentialAction)
 
-/** Fetch hero stats (trader count + exchange count) server-side to avoid client waterfall */
+/** Fetch hero stats (trader count + exchange count) server-side to avoid client waterfall.
+ *  Cached in Redis for 1 hour — the COUNT query scans 34K+ rows and runs on every ISR
+ *  revalidation. The count only meaningfully changes when new exchanges go live. */
 async function getHeroStats(): Promise<{ traderCount: number; exchangeCount: number }> {
   try {
-    const supabase = getSupabaseAdmin()
-    // Only fetch trader count — exchange count is static (changes at most once a month)
-    // Use trader_sources for a fast index-only count scan
-    const tradersRes = await supabase
-      .from('trader_sources')
-      .select('id', { count: 'exact', head: true })
-    const traderCount = tradersRes.count ?? 34000
-    // Exchange count is updated manually when new exchanges go live
-    const exchangeCount = 27
-    return { traderCount, exchangeCount }
+    return await tieredGetOrSet(
+      'hero:stats:trader-count',
+      async () => {
+        const supabase = getSupabaseAdmin()
+        // Use trader_sources for a fast index-only count scan
+        const tradersRes = await supabase
+          .from('trader_sources')
+          .select('id', { count: 'exact', head: true })
+        const traderCount = tradersRes.count ?? 34000
+        // Exchange count is updated manually when new exchanges go live
+        const exchangeCount = 27
+        return { traderCount, exchangeCount }
+      },
+      'cold', // 1h Redis TTL — trader count changes slowly
+      ['hero-stats']
+    )
   } catch {
     return { traderCount: 34000, exchangeCount: 27 }
   }
