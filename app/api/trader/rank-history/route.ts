@@ -10,54 +10,63 @@ export const dynamic = 'force-dynamic'
  * Cached for 1 hour (s-maxage=3600).
  */
 export async function GET(request: NextRequest) {
-  const { searchParams } = request.nextUrl
-  const platform = searchParams.get('platform')
-  const traderKey = searchParams.get('trader_key')
-  const period = searchParams.get('period') || '90D'
-  const days = Math.min(Number(searchParams.get('days') || '7'), 30)
+  try {
+    const { searchParams } = request.nextUrl
+    const platform = searchParams.get('platform')
+    const traderKey = searchParams.get('trader_key')
+    const period = searchParams.get('period') || '90D'
+    const days = Math.min(Number(searchParams.get('days') || '7'), 30)
 
-  if (!platform || !traderKey) {
+    if (!platform || !traderKey) {
+      return NextResponse.json(
+        { error: 'Missing required params: platform, trader_key' },
+        { status: 400 }
+      )
+    }
+
+    const supabase = getSupabaseAdmin()
+
+    const cutoffDate = new Date()
+    cutoffDate.setDate(cutoffDate.getDate() - days)
+    const cutoffISO = cutoffDate.toISOString().split('T')[0]
+
+    const { data, error } = await supabase
+      .from('rank_history')
+      .select('snapshot_date, rank, arena_score')
+      .eq('platform', platform)
+      .eq('trader_key', traderKey)
+      .eq('period', period)
+      .gte('snapshot_date', cutoffISO)
+      .order('snapshot_date', { ascending: true })
+      .limit(days)
+
+    if (error) {
+      console.error('[rank-history] Query error:', error.message)
+      return NextResponse.json(
+        { error: 'Failed to fetch rank history', detail: error.message },
+        { status: 500 }
+      )
+    }
+
+    const history = (data || []).map(row => ({
+      date: row.snapshot_date,
+      rank: row.rank,
+      arena_score: row.arena_score,
+    }))
+
     return NextResponse.json(
-      { error: 'Missing required params: platform, trader_key' },
-      { status: 400 }
+      { history, platform, trader_key: traderKey, period },
+      {
+        headers: {
+          'Cache-Control': 'public, s-maxage=3600, stale-while-revalidate=1800',
+        },
+      }
     )
-  }
-
-  const supabase = getSupabaseAdmin()
-
-  const cutoffDate = new Date()
-  cutoffDate.setDate(cutoffDate.getDate() - days)
-  const cutoffISO = cutoffDate.toISOString().split('T')[0]
-
-  const { data, error } = await supabase
-    .from('rank_history')
-    .select('snapshot_date, rank, arena_score')
-    .eq('platform', platform)
-    .eq('trader_key', traderKey)
-    .eq('period', period)
-    .gte('snapshot_date', cutoffISO)
-    .order('snapshot_date', { ascending: true })
-    .limit(days)
-
-  if (error) {
+  } catch (err) {
+    console.error('[rank-history] Unexpected error:', err)
     return NextResponse.json(
-      { error: 'Failed to fetch rank history', detail: error.message },
+      { error: 'Internal server error', detail: err instanceof Error ? err.message : 'Unknown error' },
       { status: 500 }
     )
   }
-
-  const history = (data || []).map(row => ({
-    date: row.snapshot_date,
-    rank: row.rank,
-    arena_score: row.arena_score,
-  }))
-
-  return NextResponse.json(
-    { history, platform, trader_key: traderKey, period },
-    {
-      headers: {
-        'Cache-Control': 'public, s-maxage=3600, stale-while-revalidate=1800',
-      },
-    }
-  )
 }

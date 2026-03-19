@@ -14,18 +14,36 @@ CREATE TABLE IF NOT EXISTS rank_history (
 );
 
 -- Index for efficient lookups by trader + period + date range
-CREATE INDEX idx_rank_history_trader_period
+CREATE INDEX IF NOT EXISTS idx_rank_history_trader_period
   ON rank_history(platform, trader_key, period, snapshot_date DESC);
 
 -- Index for date-based cleanup
-CREATE INDEX idx_rank_history_date
+CREATE INDEX IF NOT EXISTS idx_rank_history_date
   ON rank_history(snapshot_date DESC);
 
 -- RLS
 ALTER TABLE rank_history ENABLE ROW LEVEL SECURITY;
 
 -- Public read access (rank data is not sensitive)
-CREATE POLICY "rank_history_select" ON rank_history
-  FOR SELECT USING (true);
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_policies WHERE tablename = 'rank_history' AND policyname = 'rank_history_select'
+  ) THEN
+    CREATE POLICY "rank_history_select" ON rank_history
+      FOR SELECT USING (true);
+  END IF;
+END $$;
+
+-- Service role can insert/update/delete (for cron jobs)
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_policies WHERE tablename = 'rank_history' AND policyname = 'rank_history_service_write'
+  ) THEN
+    CREATE POLICY "rank_history_service_write" ON rank_history
+      FOR ALL TO service_role USING (true) WITH CHECK (true);
+  END IF;
+END $$;
 
 COMMENT ON TABLE rank_history IS 'Daily rank snapshots for trajectory sparklines. Top 500 per season, retained 30 days.';
