@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState, useRef, useEffect } from 'react'
+import React, { useState, useRef, useEffect, useMemo } from 'react'
 import { createPortal } from 'react-dom'
 import Image from 'next/image'
 import { tokens } from '@/lib/design-tokens'
@@ -344,12 +344,21 @@ export function ArenaScoreCircle({
     setPositioned(true)
   }, [show])
 
-  if (score == null) return null
-
   // 5-tier color system (matches score-colors.ts standard):
   // 90+: legendary (purple), 70-89: great (green), 50-69: average (amber),
   // 30-49: below (orange), 0-29: low (gray-red)
-  const ringColor = getScoreColor(score)
+  const ringColor = getScoreColor(score ?? 0)
+
+  // Pre-compute color-mix() expressions — must be before any early return (rules of hooks).
+  // Without this, 50 rows × 2 color-mix string templates per row = 100 allocations per render.
+  // Memoized per ringColor (only 5 possible values), so nearly always returns cached object.
+  const colorMix = useMemo(() => ({
+    bg: `color-mix(in srgb, ${ringColor} 10%, transparent)`,
+    shadow: `0 0 6px color-mix(in srgb, ${ringColor} 12%, transparent)`,
+    shadowHover: `0 0 0 2px color-mix(in srgb, ${ringColor} 25%, transparent), 0 4px 14px color-mix(in srgb, ${ringColor} 20%, transparent)`,
+  }), [ringColor])
+
+  if (score == null) return null
 
   // Score breakdown calculated from raw roi% and pnl USD
   const roiScore = roi != null
@@ -429,15 +438,13 @@ export function ArenaScoreCircle({
           height: 38,
           borderRadius: '50%',
           border: `2.5px solid ${ringColor}`,
-          background: `color-mix(in srgb, ${ringColor} 10%, transparent)`,
+          background: colorMix.bg,
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
           position: 'relative',
           transition: 'box-shadow 0.2s ease, transform 0.2s ease',
-          boxShadow: show
-            ? `0 0 0 2px color-mix(in srgb, ${ringColor} 25%, transparent), 0 4px 14px color-mix(in srgb, ${ringColor} 20%, transparent)`
-            : `0 0 6px color-mix(in srgb, ${ringColor} 12%, transparent)`,
+          boxShadow: show ? colorMix.shadowHover : colorMix.shadow,
           transform: show ? 'scale(1.08)' : 'scale(1)',
         }}
       >
