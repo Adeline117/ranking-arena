@@ -48,14 +48,14 @@ export async function GET(request: NextRequest) {
 
     const fetchWindow = async (seasonId: string) => {
       const { data, error } = await supabase
-        .from('trader_snapshots')
-        .select('source, source_trader_id, captured_at, arena_score, arena_score_v3, roi, pnl, max_drawdown, win_rate, trades_count, followers, profitability_score, risk_control_score, execution_score, score_completeness, trading_style, avg_holding_hours, style_confidence')
-        .eq('season_id', seasonId)
+        .from('trader_snapshots_v2')
+        .select('platform, trader_key, as_of_ts, arena_score, roi_pct, pnl_usd, max_drawdown, win_rate, trades_count, followers, metrics')
+        .eq('window', seasonId)
         .not('arena_score', 'is', null)
-        .gte('captured_at', freshnessThreshold)
-        .lte('roi', ROI_ANOMALY_THRESHOLD)
-        .gte('roi', -ROI_ANOMALY_THRESHOLD)
-        .or('roi.neq.0,pnl.neq.0')
+        .gte('as_of_ts', freshnessThreshold)
+        .lte('roi_pct', ROI_ANOMALY_THRESHOLD)
+        .gte('roi_pct', -ROI_ANOMALY_THRESHOLD)
+        .or('roi_pct.neq.0,pnl_usd.neq.0')
         .order('arena_score', { ascending: false, nullsFirst: false })
         .limit(2000)
 
@@ -69,13 +69,13 @@ export async function GET(request: NextRequest) {
       fetchWindow('90D'),
     ])
 
-    // Build maps keyed by source:source_trader_id
+    // Build maps keyed by platform:trader_key
     type SnapshotRow = typeof rows7d[number]
     const buildMap = (rows: SnapshotRow[]) => {
       const m = new Map<string, SnapshotRow>()
       for (const r of rows) {
-        const tid = r.source_trader_id?.startsWith('0x') ? r.source_trader_id.toLowerCase() : r.source_trader_id
-        const key = `${r.source}:${tid}`
+        const tid = r.trader_key?.startsWith('0x') ? r.trader_key.toLowerCase() : r.trader_key
+        const key = `${r.platform}:${tid}`
         if (!m.has(key)) m.set(key, r)
       }
       return m
@@ -94,8 +94,8 @@ export async function GET(request: NextRequest) {
     // Compute weighted scores
     interface CompositeEntry {
       key: string
-      source: string
-      source_trader_id: string
+      platform: string
+      trader_key: string
       compositeScore: number
       primaryRow: SnapshotRow
     }
@@ -108,8 +108,6 @@ export async function GET(request: NextRequest) {
 
       const getScore = (r: SnapshotRow | undefined) => {
         if (!r) return null
-        const v3 = r.arena_score_v3 != null ? parseFloat(r.arena_score_v3 as string) : null
-        if (v3 != null) return Math.min(v3, 100)
         const v2 = r.arena_score != null ? parseFloat(r.arena_score as string) : null
         return v2 != null ? Math.min(v2, 100) : null
       }
@@ -128,18 +126,18 @@ export async function GET(request: NextRequest) {
 
       const compositeScore = totalWeight > 0 ? Math.min(weightedSum / totalWeight, 100) : 0
       const primaryRow = r90 || r30 || r7!
-      const [source, ...rest] = key.split(':')
-      const source_trader_id = rest.join(':')
+      const [platform, ...rest] = key.split(':')
+      const trader_key = rest.join(':')
 
-      entries.push({ key, source, source_trader_id, compositeScore, primaryRow })
+      entries.push({ key, platform, trader_key, compositeScore, primaryRow })
     }
 
     // Sort by composite score desc
     entries.sort((a, b) => b.compositeScore - a.compositeScore)
 
     // Batch fetch display names
-    const traderIds = [...new Set(entries.slice(0, 1000).map(e => e.source_trader_id))]
-    const sources = [...new Set(entries.slice(0, 1000).map(e => e.source))]
+    const traderIds = [...new Set(entries.slice(0, 1000).map(e => e.trader_key))]
+    const platforms = [...new Set(entries.slice(0, 1000).map(e => e.platform))]
     const displayNameMap = new Map<string, { display_name: string | null; avatar_url: string | null }>()
 
     if (traderIds.length > 0) {
@@ -149,7 +147,7 @@ export async function GET(request: NextRequest) {
         const { data: srcData } = await supabase
           .from('trader_sources')
           .select('source, source_trader_id, handle, avatar_url')
-          .in('source', sources)
+          .in('source', platforms)
           .in('source_trader_id', chunk)
         if (srcData) {
           for (const s of srcData) {
@@ -159,10 +157,10 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    // Collect available sources
+    // Collect available platforms
     const allSources = new Set<string>()
     for (const m of [map7d, map30d, map90d]) {
-      for (const r of m.values()) allSources.add(r.source)
+      for (const r of m.values()) allSources.add(r.platform)
     }
 
     // Build final traders array (top 1000)
@@ -170,14 +168,14 @@ export async function GET(request: NextRequest) {
       const info = displayNameMap.get(entry.key)
       const row = entry.primaryRow
       return {
-        platform: entry.source,
-        trader_key: entry.source_trader_id,
+        platform: entry.platform,
+        trader_key: entry.trader_key,
         display_name: info?.display_name || null,
         avatar_url: info?.avatar_url || null,
         rank: idx + 1,
         metrics: {
-          roi: row.roi != null ? parseFloat(row.roi as string) : 0,
-          pnl: row.pnl != null ? parseFloat(row.pnl as string) : 0,
+          roi: row.roi_pct != null ? parseFloat(row.roi_pct as string) : 0,
+          pnl: row.pnl_usd != null ? parseFloat(row.pnl_usd as string) : 0,
           win_rate: row.win_rate != null ? parseFloat(row.win_rate as string) : null,
           max_drawdown: row.max_drawdown != null ? parseFloat(row.max_drawdown as string) : null,
           trades_count: row.trades_count ?? null,
@@ -193,15 +191,15 @@ export async function GET(request: NextRequest) {
           platform_rank: idx + 1,
         },
         quality_flags: { is_suspicious: false, suspicion_reasons: [], data_completeness: 1.0 },
-        updated_at: row.captured_at,
-        profitability_score: row.profitability_score != null ? parseFloat(row.profitability_score as string) : null,
-        risk_control_score: row.risk_control_score != null ? parseFloat(row.risk_control_score as string) : null,
-        execution_score: row.execution_score != null ? parseFloat(row.execution_score as string) : null,
-        score_completeness: row.score_completeness || null,
-        trading_style: row.trading_style || null,
-        avg_holding_hours: row.avg_holding_hours != null ? parseFloat(row.avg_holding_hours as string) : null,
-        style_confidence: row.style_confidence != null ? parseFloat(row.style_confidence as string) : null,
-        category: PLATFORM_CATEGORY[entry.source as unknown as GranularPlatform] || 'futures',
+        updated_at: row.as_of_ts,
+        profitability_score: null,
+        risk_control_score: null,
+        execution_score: null,
+        score_completeness: null,
+        trading_style: null,
+        avg_holding_hours: null,
+        style_confidence: null,
+        category: PLATFORM_CATEGORY[entry.platform as unknown as GranularPlatform] || 'futures',
       }
     })
 
