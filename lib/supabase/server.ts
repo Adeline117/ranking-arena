@@ -37,8 +37,13 @@ export function getSupabaseAdmin(): SupabaseClient {
         persistSession: false,
         autoRefreshToken: false,
       },
-      // Edge Runtime 优化
+      // Edge Runtime 优化 + 30s query timeout to prevent hung Vercel functions
       global: {
+        fetch: (input: RequestInfo | URL, init?: RequestInit) => {
+          // Enforce 30s max query timeout unless caller already provides a signal
+          const signal = init?.signal ?? AbortSignal.timeout(30_000)
+          return globalThis.fetch(input, { ...init, signal })
+        },
         headers: {
           'x-client-info': 'ranking-arena-server',
         },
