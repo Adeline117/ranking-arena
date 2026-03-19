@@ -208,20 +208,24 @@ export async function GET(request: NextRequest) {
     // For each trader, get last 30 daily_return_pct values and compute annualized Sharpe
     const tradersForSharpe = records.filter(r => r.daily_return_pct != null)
     if (tradersForSharpe.length > 0) {
-      // Fetch recent daily returns (last 90 days) for these traders
-      const { data: recentDaily } = await supabase
-        .from('trader_daily_snapshots')
-        .select('platform, trader_key, daily_return_pct, roi')
-        .in('platform', platforms)
-        .gte('date', new Date(Date.now() - 90 * 24 * 3600 * 1000).toISOString().split('T')[0])
-        .order('date', { ascending: true })
-        .limit(100000)
+      // Fetch recent daily returns (last 90 days) per-platform to avoid the 100K global
+      // limit silently truncating data as the table grows beyond 100K rows in 90 days.
+      const ninetyDaysAgo = new Date(Date.now() - 90 * 24 * 3600 * 1000).toISOString().split('T')[0]
+      const returnsByTrader = new Map<string, number[]>()
+      const roiByTrader = new Map<string, number[]>()
 
-      if (recentDaily && recentDaily.length > 0) {
-        // Single-pass: group daily returns and ROIs by trader simultaneously
-        const returnsByTrader = new Map<string, number[]>()
-        const roiByTrader = new Map<string, number[]>()
-        for (const row of recentDaily) {
+      for (const platform of platforms) {
+        const { data: platformDaily } = await supabase
+          .from('trader_daily_snapshots')
+          .select('platform, trader_key, daily_return_pct, roi')
+          .eq('platform', platform)
+          .gte('date', ninetyDaysAgo)
+          .order('date', { ascending: true })
+          .limit(10000) // max ~111 traders × 90 days — well within per-platform limits
+
+        if (!platformDaily) continue
+
+        for (const row of platformDaily) {
           const key = `${row.platform}:${row.trader_key}`
           if (row.daily_return_pct != null) {
             if (!returnsByTrader.has(key)) returnsByTrader.set(key, [])
@@ -232,7 +236,9 @@ export async function GET(request: NextRequest) {
             roiByTrader.get(key)!.push(parseFloat(String(row.roi)))
           }
         }
+      }
 
+      if (returnsByTrader.size > 0 || roiByTrader.size > 0) {
         // Compute Sharpe ratio from daily returns
         const sharpeUpdates: Array<{ source: string; source_trader_id: string; sharpe_ratio: number }> = []
         // Compute win_rate from daily returns
