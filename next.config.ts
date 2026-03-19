@@ -527,6 +527,9 @@ const nextConfig: NextConfig = {
       { source: '/pk/:a/:b', destination: '/compare', permanent: true },
       { source: '/membership', destination: '/pricing', permanent: true },
       { source: '/welcome', destination: '/onboarding', permanent: true },
+      // /pro and /account redirects (2026-03)
+      { source: '/pro', destination: '/pricing', permanent: true },
+      { source: '/account', destination: '/settings', permanent: true },
     ];
   },
 };
