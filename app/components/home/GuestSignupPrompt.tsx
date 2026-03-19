@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { tokens } from '@/lib/design-tokens'
 import { useLanguage } from '../Providers/LanguageProvider'
 import { useAuthSession } from '@/lib/hooks/useAuthSession'
@@ -9,6 +9,7 @@ import { useLoginModal } from '@/lib/hooks/useLoginModal'
 /**
  * Full-screen signup prompt for guest users.
  * Triggers after scrolling or clicking around (3 interactions or 30s browsing).
+ * Uses IntersectionObserver instead of scroll listener to reduce TBT.
  */
 export default function GuestSignupPrompt() {
   const { isLoggedIn, user } = useAuthSession()
@@ -17,6 +18,7 @@ export default function GuestSignupPrompt() {
   const { t } = useLanguage()
   const [show, setShow] = useState(false)
   const [dismissed, setDismissed] = useState(false)
+  const sentinelRef = useRef<HTMLDivElement | null>(null)
 
   // Check if already dismissed this session
   useEffect(() => {
@@ -32,26 +34,43 @@ export default function GuestSignupPrompt() {
     }
   }, [dismissed, session, loading])
 
-  // Track scroll depth - trigger after scrolling 800px
+  // Use IntersectionObserver instead of scroll listener to reduce main thread blocking.
+  // A sentinel div is placed ~800px down the page; when it enters the viewport, we trigger.
   useEffect(() => {
     if (session || loading || dismissed) return
-
-    let scrollTriggered = false
-    const handleScroll = () => {
-      if (scrollTriggered) return
-      if (window.scrollY > 800) {
-        scrollTriggered = true
-        trigger()
-      }
-    }
 
     // Also trigger after 45 seconds of browsing
     const timer = setTimeout(trigger, 45000)
 
-    window.addEventListener('scroll', handleScroll, { passive: true })
+    // Create sentinel element positioned ~800px from top
+    const sentinel = document.createElement('div')
+    sentinel.style.position = 'absolute'
+    sentinel.style.top = '800px'
+    sentinel.style.height = '1px'
+    sentinel.style.width = '1px'
+    sentinel.style.pointerEvents = 'none'
+    sentinel.style.opacity = '0'
+    document.body.appendChild(sentinel)
+    sentinelRef.current = sentinel
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0]?.isIntersecting) {
+          trigger()
+          observer.disconnect()
+        }
+      },
+      { threshold: 0 }
+    )
+    observer.observe(sentinel)
+
     return () => {
-      window.removeEventListener('scroll', handleScroll)
+      observer.disconnect()
       clearTimeout(timer)
+      if (sentinelRef.current && sentinelRef.current.parentNode) {
+        sentinelRef.current.parentNode.removeChild(sentinelRef.current)
+        sentinelRef.current = null
+      }
     }
   }, [session, loading, dismissed, trigger])
 
