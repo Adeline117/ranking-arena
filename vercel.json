@@ -103,6 +103,10 @@
       "schedule": "20 */3 * * *"
     },
     {
+      "path": "/api/cron/batch-fetch-traders?group=a4",
+      "schedule": "25 */3 * * *"
+    },
+    {
       "path": "/api/cron/batch-fetch-traders?group=b",
       "schedule": "4 */4 * * *"
     },
