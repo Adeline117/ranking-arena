@@ -601,7 +601,7 @@ export default function TraderProfileClient({ data, serverTraderData, claimedUse
                       }}
                     >
                       <Text size="sm" weight="bold" style={{ color: 'var(--color-text-secondary)', marginBottom: tokens.spacing[3] }}>
-                        {t('dailyReturnsDistribution') || 'Daily Returns Distribution'} ({selectedPeriod}) ({selectedPeriod})
+                        {t('dailyReturnsDistribution') || 'Daily Returns Distribution'} ({selectedPeriod})
                       </Text>
                       <DailyReturnsChart data={dailyReturns} />
                     </Box>

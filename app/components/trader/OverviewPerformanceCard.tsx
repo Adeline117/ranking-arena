@@ -133,7 +133,6 @@ export default function OverviewPerformanceCard({
           arenaScoreV3: performance.arena_score_v3_7d,
           // Additional stats
           tradesCount: performance.trades_count_7d,
-          copiersPnl: performance.copiers_pnl_7d,
           avgHoldingTimeHours: performance.avg_holding_time_hours_7d,
         }
       case '30D':
@@ -157,7 +156,6 @@ export default function OverviewPerformanceCard({
           arenaScoreV3: performance.arena_score_v3_30d,
           // Additional stats
           tradesCount: performance.trades_count_30d,
-          copiersPnl: performance.copiers_pnl_30d,
           avgHoldingTimeHours: performance.avg_holding_time_hours_30d,
         }
       case '90D':
@@ -182,14 +180,13 @@ export default function OverviewPerformanceCard({
           arenaScoreV3: performance.arena_score_v3,
           // Additional stats
           tradesCount: performance.trades_count,
-          copiersPnl: performance.copiers_pnl,
           avgHoldingTimeHours: performance.avg_holding_time_hours,
         }
     }
   }
 
   const data = getData()
-  const { roi, pnl, winRate, maxDrawdown, sharpeRatio, winningPositions, totalPositions, returnScore: periodReturnScore, pnlScore: periodPnlScore, drawdownScore: periodDrawdownScore, stabilityScore: periodStabilityScore, sortinoRatio, calmarRatio, alpha, arenaScoreV3, tradesCount, copiersPnl, avgHoldingTimeHours } = data
+  const { roi, pnl, winRate, maxDrawdown, sharpeRatio, winningPositions, totalPositions, returnScore: periodReturnScore, pnlScore: periodPnlScore, drawdownScore: periodDrawdownScore, stabilityScore: periodStabilityScore, sortinoRatio, calmarRatio, alpha, arenaScoreV3, tradesCount, avgHoldingTimeHours } = data
   const periodArenaScore = data.arenaScore
 
   // 生成 sparkline 数据 — 使用当前 period 对应的 equity curve，过滤掉 null/NaN 值
@@ -251,7 +248,6 @@ export default function OverviewPerformanceCard({
             alpha={alpha}
             tradesCount={tradesCount}
             avgHoldingTimeHours={avgHoldingTimeHours}
-            copiersPnl={copiersPnl}
             isVisible={isVisible}
           />
 
