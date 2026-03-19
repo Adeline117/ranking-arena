@@ -461,7 +461,7 @@ export default function TraderProfileClient({ data, serverTraderData, claimedUse
         >
           {/* Overview Tab */}
           <Box style={{ minHeight: 200 }}>
-            {(activeTab === 'overview' || true) && (
+            {(activeTab === 'overview') && (
             <Box
               className="profile-grid"
               style={{
