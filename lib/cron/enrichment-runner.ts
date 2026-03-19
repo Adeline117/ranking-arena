@@ -218,15 +218,16 @@ export const ENRICHMENT_PLATFORM_CONFIGS: Record<string, EnrichmentConfig> = {
     fetchCurrentPositions: fetchOkxSpotCurrentPositions,
     concurrency: 3, delayMs: 1500,
   },
-  // bitget_futures: PERMANENTLY DISABLED 2026-03-19 (8th stuck >44min - blacklist bypass)
-  // VPS scraper repeatedly hangs despite timeout, causes pipeline freeze
-  // bitget_futures: {
-  //   platform: 'bitget_futures',
-  //   fetchEquityCurve: fetchBitgetEquityCurve,
-  //   fetchStatsDetail: fetchBitgetStatsDetail,
-  //   fetchPositionHistory: fetchBitgetPositionHistory,
-  //   concurrency: 2, delayMs: 2000,
-  // },
+  // bitget_futures: equity curve only — detail/position APIs hang >44min
+  // profitList endpoint works fine via CF Worker proxy (20s timeout)
+  bitget_futures: {
+    platform: 'bitget_futures',
+    fetchEquityCurve: fetchBitgetEquityCurve,
+    // fetchStatsDetail REMOVED — hangs on trader/detail endpoint
+    // fetchPositionHistory REMOVED — hangs on copy/mix/trader/detail endpoint
+    // Stats already populated from leaderboard normalize() (ROI, win_rate, MDD, followers)
+    concurrency: 2, delayMs: 2000,
+  },
   // bitget_spot: enrichment not yet configured — spot-specific enrichment endpoints TBD
   hyperliquid: {
     platform: 'hyperliquid',
@@ -439,7 +440,7 @@ export const NO_ENRICHMENT_PLATFORMS = new Set([
   // 'bybit' re-enabled (2026-03-18) — VPS scraper bypasses Akamai WAF
   'bybit_spot',  // Enrichment TBD — VPS scraper supports leaderboard but no detail endpoint yet
   'bitmart', 'paradex',  // Dead
-  // bitget_futures: enrichment via leaderboard normalize() — detail API hangs, but all metrics from leaderboard
+  // bitget_futures: RE-ENABLED equity curve only (profitList endpoint works, detail hangs)
   // okx_spot: RE-ENABLED 2026-03-19 — same v5 API as futures with instType=SPOT
   // kucoin: Mac Mini only — no enrichment API accessible from datacenter
   'kucoin',
@@ -480,10 +481,20 @@ export async function runEnrichment(params: {
   const { platform: platformParam, period, limit, offset = 0 } = params
   const startTime = Date.now()
   
+  // ✅ Parameter validation - prevent invalid/missing period
+  if (!period || !['7D', '30D', '90D'].includes(period)) {
+    throw new Error(`Invalid period: ${period}. Must be 7D, 30D, or 90D`)
+  }
+  
   // 🚨 Blacklist check - prevent disabled platforms from running
   validatePlatform(platformParam)
   
-  const plog = await PipelineLogger.start(`enrich-${platformParam}`)
+  const plog = await PipelineLogger.start(`enrich-${platformParam}`, { 
+    platform: platformParam, 
+    period, 
+    limit, 
+    offset 
+  })
 
   // Early exit for platforms that don't support enrichment
   if (NO_ENRICHMENT_PLATFORMS.has(platformParam)) {
