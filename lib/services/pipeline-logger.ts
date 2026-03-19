@@ -262,7 +262,7 @@ function createNoOpHandle(): PipelineLogHandle {
   return {
     id: -1,
     async success(recordsProcessed = 0) {
-      console.log(`[PipelineLogger:no-op] success — ${recordsProcessed} records processed`)
+      console.warn(`[PipelineLogger:no-op] success — ${recordsProcessed} records processed`)
     },
     async error(err: unknown) {
       const msg = err instanceof Error ? err.message : String(err)
