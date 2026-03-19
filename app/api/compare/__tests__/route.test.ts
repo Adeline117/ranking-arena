@@ -91,6 +91,12 @@ jest.mock('@/lib/logger', () => ({
   default: { info: jest.fn(), warn: jest.fn(), error: jest.fn(), debug: jest.fn() },
 }))
 
+jest.mock('@/lib/utils/logger', () => ({
+  createLogger: jest.fn(() => ({
+    info: jest.fn(), warn: jest.fn(), error: jest.fn(), debug: jest.fn(),
+  })),
+}))
+
 // Skip CSRF and correlation in tests
 jest.mock('@/lib/utils/csrf', () => ({
   validateCsrfToken: jest.fn().mockReturnValue(true),
@@ -100,7 +106,8 @@ jest.mock('@/lib/utils/csrf', () => ({
 }))
 
 jest.mock('@/lib/utils/rate-limit', () => ({
-  checkRateLimit: jest.fn().mockResolvedValue(null),
+  checkRateLimit: jest.fn().mockResolvedValue({ response: null, meta: null }),
+  addRateLimitHeaders: jest.fn(),
   RateLimitPresets: {
     public: { limit: 100, window: 60, prefix: 'public' },
     authenticated: { limit: 200, window: 60, prefix: 'auth' },
@@ -168,7 +175,10 @@ describe('GET /api/compare', () => {
     // Mock the rate-limit module used by withPublic middleware
     const { checkRateLimit } = require('@/lib/utils/rate-limit') // eslint-disable-line @typescript-eslint/no-require-imports
     const { NextResponse } = require('next/server') // eslint-disable-line @typescript-eslint/no-require-imports
-    checkRateLimit.mockResolvedValueOnce(NextResponse.json({ error: 'Rate limited' }, { status: 429 }))
+    checkRateLimit.mockResolvedValueOnce({
+      response: NextResponse.json({ error: 'Rate limited' }, { status: 429 }),
+      meta: null,
+    })
 
     const req = new NextRequest('http://localhost/api/compare?ids=t1,t2')
     const res = await GET(req)

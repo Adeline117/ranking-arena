@@ -34,7 +34,12 @@ jest.mock('next/server', () => {
     constructor(body?: string | null, init?: { status?: number; headers?: Record<string, string> }) {
       this.body = body || ''
       this.status = init?.status || 200
-      this.headers = new Map(Object.entries(init?.headers || {}))
+      const entries = Object.entries(init?.headers || {})
+      const map = new Map(entries)
+      // Add set/get methods so middleware can call response.headers.set(...)
+      ;(map as Map<string, string> & { set: (k: string, v: string) => void; get: (k: string) => string | undefined }).set = map.set.bind(map)
+      ;(map as Map<string, string> & { get: (k: string) => string | undefined }).get = map.get.bind(map)
+      this.headers = map
     }
 
     json() {
@@ -60,14 +65,44 @@ jest.mock('@/lib/supabase/server', () => ({
   getSupabaseAdmin: jest.fn(() => ({})),
 }))
 
-// Mock rate limit
+// Mock rate limit — checkRateLimit now returns { response, meta }
 jest.mock('@/lib/utils/rate-limit', () => ({
-  checkRateLimit: jest.fn(() => null),
+  checkRateLimit: jest.fn(() => ({ response: null, meta: null })),
+  addRateLimitHeaders: jest.fn(),
   RateLimitPresets: {
     public: { requests: 100, window: 60, prefix: 'public' },
     authenticated: { requests: 200, window: 60, prefix: 'auth' },
     write: { requests: 30, window: 60, prefix: 'write' },
   },
+}))
+
+// Mock CSRF
+jest.mock('@/lib/utils/csrf', () => ({
+  validateCsrfToken: jest.fn().mockReturnValue(true),
+  generateCsrfToken: jest.fn().mockReturnValue('test-csrf-token'),
+  CSRF_COOKIE_NAME: 'csrf-token',
+  CSRF_HEADER_NAME: 'x-csrf-token',
+}))
+
+// Mock correlation ID module
+jest.mock('@/lib/api/correlation', () => ({
+  getOrCreateCorrelationId: jest.fn().mockReturnValue('test-cid'),
+  runWithCorrelationId: jest.fn((_id: string, fn: () => unknown) => fn()),
+  getCorrelationId: jest.fn().mockReturnValue('test-cid'),
+}))
+
+// Mock versioning
+jest.mock('@/lib/api/versioning', () => ({
+  parseApiVersion: jest.fn().mockReturnValue({ version: 'v1', deprecated: false }),
+  addVersionHeaders: jest.fn(),
+  addDeprecationHeaders: jest.fn(),
+}))
+
+// Mock logger
+jest.mock('@/lib/utils/logger', () => ({
+  createLogger: jest.fn(() => ({
+    info: jest.fn(), warn: jest.fn(), error: jest.fn(), debug: jest.fn(),
+  })),
 }))
 
 import { withApiMiddleware, withAuth, withPublic } from '../middleware'
@@ -92,11 +127,11 @@ describe('API 中间件', () => {
     })
 
     it('应该在限流时返回 429', async () => {
-      const rateLimitResponse = new NextResponse(
-        JSON.stringify({ error: 'Rate limited' }),
+      const rateLimitResponse = NextResponse.json(
+        { error: 'Rate limited' },
         { status: 429 }
       )
-      ;(checkRateLimit as jest.Mock).mockResolvedValueOnce(rateLimitResponse)
+      ;(checkRateLimit as jest.Mock).mockResolvedValueOnce({ response: rateLimitResponse, meta: null })
       
       const handler = jest.fn()
       const wrapped = withApiMiddleware(handler)

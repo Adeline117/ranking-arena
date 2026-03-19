@@ -40,7 +40,8 @@ jest.mock('next/server', () => {
 })
 
 jest.mock('@/lib/utils/rate-limit', () => ({
-  checkRateLimit: jest.fn().mockResolvedValue(null),
+  checkRateLimit: jest.fn().mockResolvedValue({ response: null, meta: null }),
+  addRateLimitHeaders: jest.fn(),
   RateLimitPresets: { read: {}, write: {}, public: {} },
 }))
 
@@ -54,6 +55,12 @@ jest.mock('@/lib/cache/redis-layer', () => ({
 jest.mock('@/lib/logger', () => ({
   __esModule: true,
   default: { error: jest.fn(), warn: jest.fn(), info: jest.fn(), debug: jest.fn() },
+}))
+
+jest.mock('@/lib/utils/logger', () => ({
+  createLogger: jest.fn(() => ({
+    info: jest.fn(), warn: jest.fn(), error: jest.fn(), debug: jest.fn(),
+  })),
 }))
 
 // Supabase mock
