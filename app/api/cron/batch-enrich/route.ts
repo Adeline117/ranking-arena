@@ -50,6 +50,16 @@ const PLATFORM_LIMITS: Record<string, { limit90: number; limit30: number; limit7
   coinex: { limit90: 15, limit30: 10, limit7: 5 }, // New: ranking-based, geo-blocked, conservative
   bitunix: { limit90: 100, limit30: 80, limit7: 50 }, // Fast: batch-cached list API, no per-trader calls
   xt: { limit90: 80, limit30: 60, limit7: 40 }, // Fast: batch-cached internal list API, no per-trader calls
+  // Added 2026-03-19: platforms with enrichment configs but missing from batch-enrich
+  okx_spot: { limit90: 30, limit30: 25, limit7: 15 }, // OKX spot API — same as okx_futures pattern
+  okx_web3: { limit90: 15, limit30: 10, limit7: 5 }, // Wallet-based, limited stats available
+  bitfinex: { limit90: 30, limit30: 25, limit7: 15 }, // Public API, generous rate limits
+  blofin: { limit90: 20, limit30: 15, limit7: 10 }, // Public API
+  phemex: { limit90: 20, limit30: 15, limit7: 10 }, // Public API
+  bingx: { limit90: 20, limit30: 15, limit7: 10 }, // CF-protected, VPS scraper
+  toobit: { limit90: 20, limit30: 15, limit7: 10 }, // CF-protected, VPS scraper
+  bybit: { limit90: 15, limit30: 10, limit7: 5 }, // VPS Playwright scraper, go slow
+  weex: { limit90: 10, limit30: 5, limit7: 3 }, // VPS scraper, dynamic auth, conservative
 }
 
 // High priority platforms (always enriched)
@@ -63,13 +73,13 @@ const HIGH_PRIORITY = ['binance_futures', 'okx_futures', 'hyperliquid', 'jupiter
 // bybit_spot removed: api2.bybit.com endpoints return 404 globally (2026-03-10)
 // kwenta removed: Copin API stopped serving Kwenta data (2026-03-11)
 // binance_spot moved to end: repeatedly hangs 45-76min, process last to avoid blocking (2026-03-14)
-const MEDIUM_PRIORITY = ['htx_futures', 'gateio', 'mexc', 'drift', 'gains', 'bitget_futures', 'btcc', 'etoro', 'coinex', 'bitunix', 'xt']
+const MEDIUM_PRIORITY = ['htx_futures', 'gateio', 'mexc', 'drift', 'gains', 'bitget_futures', 'btcc', 'etoro', 'coinex', 'bitunix', 'xt', 'okx_spot', 'bitfinex', 'blofin', 'phemex', 'bingx', 'toobit']
 
 // Low priority - platforms that frequently timeout or hang
 // Moved here to prevent blocking high/medium priority platforms
 // dydx: consistent 360s timeout
 // binance_spot: COMPLETELY DISABLED (2026-03-14 Round 6) - see PLATFORM_LIMITS comment
-const LOW_PRIORITY: string[] = []
+const LOW_PRIORITY = ['okx_web3', 'bybit', 'weex'] // Slow/unreliable scrapers, enrich last
 
 // Lower priority (enriched only with all=true)
 const LOWER_PRIORITY: string[] = []
