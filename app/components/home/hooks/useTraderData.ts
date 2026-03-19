@@ -36,6 +36,8 @@ interface UseTraderDataOptions {
 const pendingRequests = new Map<string, Promise<CachedData>>()
 // AbortController Map for request cancellation
 const abortControllers = new Map<string, AbortController>()
+// Debounce timer for time range switching (prevents rapid-fire API calls)
+let timeRangeDebounceTimer: ReturnType<typeof setTimeout> | null = null
 
 /**
  * 交易员数据获取与管理 Hook
@@ -354,24 +356,40 @@ export function useTraderData(options: UseTraderDataOptions = {}) {
   }, [activeTimeRange])
 
   // Prefetch other time ranges in idle time for instant period switching
+  // Stagger requests by 2s each to avoid bursting rate limits
   const prefetchedRef = useRef(false)
   useEffect(() => {
     if (prefetchedRef.current || loading || currentTraders.length === 0) return
     prefetchedRef.current = true
     const otherRanges: TimeRange[] = (['90D', '30D', '7D'] as TimeRange[]).filter(r => r !== activeTimeRange)
+    const staggerMs = 2000 // 2s between each prefetch to avoid rate limit bursts
+    const timers: ReturnType<typeof setTimeout>[] = []
+
     const prefetch = () => {
-      for (const range of otherRanges) {
+      otherRanges.forEach((range, idx) => {
         if (!tradersCache.current.has(range)) {
-          loadTimeRange(range, false).catch(() => {})
+          const timer = setTimeout(() => {
+            // Only prefetch if user hasn't already switched to this range (cache miss)
+            if (!tradersCache.current.has(range)) {
+              loadTimeRange(range, false).catch(() => {})
+            }
+          }, idx * staggerMs)
+          timers.push(timer)
         }
-      }
+      })
     }
+
+    let idleId: number | null = null
     if ('requestIdleCallback' in window) {
-      const id = requestIdleCallback(prefetch, { timeout: 8000 })
-      return () => cancelIdleCallback(id)
+      idleId = requestIdleCallback(prefetch, { timeout: 8000 })
     } else {
       const id = setTimeout(prefetch, 4000)
-      return () => clearTimeout(id)
+      timers.push(id)
+    }
+
+    return () => {
+      if (idleId !== null) cancelIdleCallback(idleId)
+      timers.forEach(t => clearTimeout(t))
     }
   }, [loading, currentTraders.length, activeTimeRange, loadTimeRange])
   
@@ -433,12 +451,31 @@ export function useTraderData(options: UseTraderDataOptions = {}) {
     }
   }, [autoRefreshInterval, activeTimeRange, loadTimeRange])
 
-  // 切换时间段
+  // 切换时间段（带 300ms 防抖，防止快速切换触发多个并发请求）
   const changeTimeRange = useCallback((range: TimeRange) => {
-    if (range !== activeTimeRange) {
-      setIsChangingTimeRange(true)
+    if (range === activeTimeRange) return
+
+    // Show optimistic UI state immediately
+    setIsChangingTimeRange(true)
+
+    // Cancel any pending debounce
+    if (timeRangeDebounceTimer !== null) {
+      clearTimeout(timeRangeDebounceTimer)
     }
-    setActiveTimeRange(range)
+
+    // Cancel in-flight requests for all time ranges except the target
+    for (const [tr, controller] of abortControllers.entries()) {
+      if (tr !== range) {
+        controller.abort()
+        abortControllers.delete(tr)
+      }
+    }
+
+    // Debounce: only commit the switch after 300ms of inactivity
+    timeRangeDebounceTimer = setTimeout(() => {
+      timeRangeDebounceTimer = null
+      setActiveTimeRange(range)
+    }, 300)
   }, [activeTimeRange])
 
   // 刷新数据
