@@ -213,142 +213,138 @@ export async function GET(request: NextRequest) {
         .limit(100000)
 
       if (recentDaily && recentDaily.length > 0) {
-        // Group daily returns by trader
+        // Single-pass: group daily returns and ROIs by trader simultaneously
         const returnsByTrader = new Map<string, number[]>()
+        const roiByTrader = new Map<string, number[]>()
         for (const row of recentDaily) {
-          if (row.daily_return_pct == null) continue
           const key = `${row.platform}:${row.trader_key}`
-          if (!returnsByTrader.has(key)) returnsByTrader.set(key, [])
-          returnsByTrader.get(key)!.push(parseFloat(String(row.daily_return_pct)))
+          if (row.daily_return_pct != null) {
+            if (!returnsByTrader.has(key)) returnsByTrader.set(key, [])
+            returnsByTrader.get(key)!.push(parseFloat(String(row.daily_return_pct)))
+          }
+          if (row.roi != null) {
+            if (!roiByTrader.has(key)) roiByTrader.set(key, [])
+            roiByTrader.get(key)!.push(parseFloat(String(row.roi)))
+          }
         }
 
-        // Compute Sharpe and batch update trader_snapshots_v2
+        // Compute Sharpe ratio from daily returns
         const sharpeUpdates: Array<{ source: string; source_trader_id: string; sharpe_ratio: number }> = []
+        // Compute win_rate from daily returns
+        const wrUpdates: Array<{ source: string; source_trader_id: string; win_rate: number }> = []
+
         for (const [key, returns] of returnsByTrader) {
-          if (returns.length < 7) continue
-          const mean = returns.reduce((s, r) => s + r, 0) / returns.length
-          const variance = returns.reduce((s, r) => s + (r - mean) ** 2, 0) / returns.length
-          const stdDev = Math.sqrt(variance)
-          if (stdDev === 0) continue
-          const sharpe = (mean / stdDev) * Math.sqrt(365)
-          if (sharpe < -10 || sharpe > 10) continue
           const [platform, ...traderKeyParts] = key.split(':')
           const trader_key = traderKeyParts.join(':')
-          sharpeUpdates.push({
-            source: platform,
-            source_trader_id: trader_key,
-            sharpe_ratio: Math.round(sharpe * 100) / 100,
-          })
-        }
 
-        // Batch update sharpe_ratio in trader_snapshots_v2
-        if (sharpeUpdates.length > 0) {
-          let sharpeUpdated = 0
-          const SHARPE_BATCH = 50
-          for (let i = 0; i < sharpeUpdates.length; i += SHARPE_BATCH) {
-            const batch = sharpeUpdates.slice(i, i + SHARPE_BATCH)
-            const results = await Promise.all(
-              batch.map(upd =>
-                supabase
-                  .from('trader_snapshots_v2')
-                  .update({ sharpe_ratio: upd.sharpe_ratio })
-                  .eq('platform', upd.source)
-                  .eq('trader_key', upd.source_trader_id)
-              )
-            )
-            sharpeUpdated += results.filter(r => !r.error).length
+          // Sharpe: need at least 7 data points
+          if (returns.length >= 7) {
+            const mean = returns.reduce((s, r) => s + r, 0) / returns.length
+            const variance = returns.reduce((s, r) => s + (r - mean) ** 2, 0) / returns.length
+            const stdDev = Math.sqrt(variance)
+            if (stdDev > 0) {
+              const sharpe = (mean / stdDev) * Math.sqrt(365)
+              if (sharpe >= -10 && sharpe <= 10) {
+                sharpeUpdates.push({
+                  source: platform,
+                  source_trader_id: trader_key,
+                  sharpe_ratio: Math.round(sharpe * 100) / 100,
+                })
+              }
+            }
           }
-          logger.info(`[aggregate] Computed Sharpe ratio for ${sharpeUpdated}/${sharpeUpdates.length} traders`)
+
+          // Win rate: need at least 5 trading days
+          if (returns.length >= 5) {
+            const wins = returns.filter(r => r > 0).length
+            const wr = (wins / returns.length) * 100
+            wrUpdates.push({ source: platform, source_trader_id: trader_key, win_rate: Math.round(wr * 10) / 10 })
+          }
         }
 
-        // Step 4b: Compute max_drawdown from ROI history for traders that lack it
+        // Compute max_drawdown from ROI history
         // MDD = max((peak - current) / peak) over ROI time series
-        const roiByTrader = new Map<string, number[]>()
-      for (const row of recentDaily) {
-        if (row.roi == null) continue
-        const key = `${row.platform}:${row.trader_key}`
-        if (!roiByTrader.has(key)) roiByTrader.set(key, [])
-        roiByTrader.get(key)!.push(parseFloat(String(row.roi)))
-      }
-
-      const mddUpdates: Array<{ source: string; source_trader_id: string; max_drawdown: number }> = []
-      for (const [key, rois] of roiByTrader) {
-        if (rois.length < 3) continue // need at least 3 data points
-        // Convert ROI% to equity curve: 100 * (1 + roi/100)
-        let peak = -Infinity
-        let maxDD = 0
-        for (const roi of rois) {
-          const equity = 100 * (1 + roi / 100)
-          if (equity > peak) peak = equity
-          if (peak > 0) {
-            const dd = ((peak - equity) / peak) * 100
-            if (dd > maxDD) maxDD = dd
+        const mddUpdates: Array<{ source: string; source_trader_id: string; max_drawdown: number }> = []
+        for (const [key, rois] of roiByTrader) {
+          if (rois.length < 3) continue // need at least 3 data points
+          let peak = -Infinity
+          let maxDD = 0
+          for (const roi of rois) {
+            const equity = 100 * (1 + roi / 100)
+            if (equity > peak) peak = equity
+            if (peak > 0) {
+              const dd = ((peak - equity) / peak) * 100
+              if (dd > maxDD) maxDD = dd
+            }
+          }
+          if (maxDD > 0 && maxDD <= 100) {
+            const [platform, ...parts] = key.split(':')
+            mddUpdates.push({ source: platform, source_trader_id: parts.join(':'), max_drawdown: Math.round(maxDD * 100) / 100 })
           }
         }
-        if (maxDD > 0 && maxDD <= 100) {
-          const [platform, ...parts] = key.split(':')
-          mddUpdates.push({ source: platform, source_trader_id: parts.join(':'), max_drawdown: Math.round(maxDD * 100) / 100 })
-        }
-      }
 
-      if (mddUpdates.length > 0) {
-        let mddUpdated = 0
-        const MDD_BATCH = 50
-        for (let i = 0; i < mddUpdates.length; i += MDD_BATCH) {
-          const batch = mddUpdates.slice(i, i + MDD_BATCH)
-          // Update v2 snapshots where max_drawdown is null
-          const results = await Promise.all(
-            batch.map(upd =>
-              supabase
-                .from('trader_snapshots_v2')
-                .update({ max_drawdown: upd.max_drawdown })
-                .eq('platform', upd.source)
-                .eq('trader_key', upd.source_trader_id)
-                .is('max_drawdown', null)
-            )
-          )
-          mddUpdated += results.filter(r => !r.error).length
+        // Bulk update sharpe_ratio, max_drawdown, win_rate via single RPC call
+        // Replaces ~5000 individual UPDATE queries with batched RPC calls
+        const allMetricUpdates: Array<{
+          platform: string; trader_key: string; window: string;
+          sharpe_ratio: number | null; max_drawdown: number | null; win_rate: number | null;
+        }> = []
+
+        // Build a lookup for MDD and WR by trader key
+        const mddByKey = new Map<string, number>()
+        for (const upd of mddUpdates) {
+          mddByKey.set(`${upd.source}:${upd.source_trader_id}`, upd.max_drawdown)
         }
-        logger.info(`[aggregate] Computed MDD for ${mddUpdated}/${mddUpdates.length} traders from ROI history`)
+        const wrByKey = new Map<string, number>()
+        for (const upd of wrUpdates) {
+          wrByKey.set(`${upd.source}:${upd.source_trader_id}`, upd.win_rate)
         }
 
-        // Step 4c: Compute win_rate from daily ROI series for traders that lack it
-        // Win rate = % of days with positive ROI change
-        const dailyRoiByTrader = new Map<string, number[]>()
-        for (const row of recentDaily) {
-          if (row.daily_return_pct == null) continue
-          const key = `${row.platform}:${row.trader_key}`
-          if (!dailyRoiByTrader.has(key)) dailyRoiByTrader.set(key, [])
-          dailyRoiByTrader.get(key)!.push(parseFloat(String(row.daily_return_pct)))
+        // Collect all unique trader keys that need any metric update
+        const allTraderKeys = new Set<string>()
+        for (const upd of sharpeUpdates) allTraderKeys.add(`${upd.source}:${upd.source_trader_id}`)
+        for (const upd of mddUpdates) allTraderKeys.add(`${upd.source}:${upd.source_trader_id}`)
+        for (const upd of wrUpdates) allTraderKeys.add(`${upd.source}:${upd.source_trader_id}`)
+
+        // Build sharpe lookup
+        const sharpeByKey = new Map<string, number>()
+        for (const upd of sharpeUpdates) {
+          sharpeByKey.set(`${upd.source}:${upd.source_trader_id}`, upd.sharpe_ratio)
         }
 
-        const wrUpdates: Array<{ source: string; source_trader_id: string; win_rate: number }> = []
-        for (const [key, returns] of dailyRoiByTrader) {
-          if (returns.length < 5) continue // need at least 5 trading days
-          const wins = returns.filter(r => r > 0).length
-          const wr = (wins / returns.length) * 100
-          const [platform, ...parts] = key.split(':')
-          wrUpdates.push({ source: platform, source_trader_id: parts.join(':'), win_rate: Math.round(wr * 10) / 10 })
-        }
-
-        if (wrUpdates.length > 0) {
-          let wrUpdated = 0
-          const WR_BATCH = 50
-          for (let i = 0; i < wrUpdates.length; i += WR_BATCH) {
-            const batch = wrUpdates.slice(i, i + WR_BATCH)
-            const results = await Promise.all(
-              batch.map(upd =>
-                supabase
-                  .from('trader_snapshots_v2')
-                  .update({ win_rate: upd.win_rate })
-                  .eq('platform', upd.source)
-                  .eq('trader_key', upd.source_trader_id)
-                  .is('win_rate', null)
-              )
-            )
-            wrUpdated += results.filter(r => !r.error).length
+        // Merge all metrics into unified update records (all windows)
+        const WINDOWS = ['7D', '30D', '90D']
+        for (const compositeKey of allTraderKeys) {
+          const [platform, ...parts] = compositeKey.split(':')
+          const trader_key = parts.join(':')
+          for (const window of WINDOWS) {
+            allMetricUpdates.push({
+              platform,
+              trader_key,
+              window,
+              sharpe_ratio: sharpeByKey.get(compositeKey) ?? null,
+              max_drawdown: mddByKey.get(compositeKey) ?? null,
+              win_rate: wrByKey.get(compositeKey) ?? null,
+            })
           }
-          logger.info(`[aggregate] Computed win_rate for ${wrUpdated}/${wrUpdates.length} traders from daily returns`)
+        }
+
+        if (allMetricUpdates.length > 0) {
+          let totalUpdated = 0
+          // RPC accepts JSONB; send in batches of 1000 to avoid payload limits
+          const RPC_BATCH = 1000
+          for (let i = 0; i < allMetricUpdates.length; i += RPC_BATCH) {
+            const batch = allMetricUpdates.slice(i, i + RPC_BATCH)
+            const { data: count, error: rpcError } = await supabase
+              .rpc('bulk_update_snapshot_metrics', { updates: JSON.stringify(batch) })
+
+            if (rpcError) {
+              logger.warn(`[aggregate] bulk_update_snapshot_metrics RPC error: ${rpcError.message}`)
+            } else {
+              totalUpdated += (count as number) || 0
+            }
+          }
+          logger.info(`[aggregate] Bulk updated metrics: ${totalUpdated} rows (sharpe=${sharpeUpdates.length}, mdd=${mddUpdates.length}, wr=${wrUpdates.length} traders)`)
         }
       }
     }
@@ -373,7 +369,12 @@ export async function GET(request: NextRequest) {
 
     // Step 6: Cleanup old trader_snapshots_v2 rows (keep 180 days)
     // Batch delete in chunks of 5000 to avoid long table locks
+    // Only run if there's remaining time budget (skip if >240s elapsed)
     let cleanedUp = 0
+    const elapsedMs = Date.now() - startTime
+    if (elapsedMs > 240_000) {
+      logger.warn('[DailySnapshots] Skipping cleanup - time budget low')
+    } else {
     try {
       const cutoffDate = new Date(Date.now() - 180 * 24 * 3600 * 1000).toISOString()
       const MAX_CLEANUP_BATCHES = 20
@@ -395,6 +396,7 @@ export async function GET(request: NextRequest) {
     } catch (cleanupErr) {
       logger.warn(`[aggregate] Snapshot cleanup failed: ${cleanupErr}`)
     }
+    } // end time budget check
 
     // Step 7: Refresh computed metrics from equity curves (sharpe, win_rate, max_drawdown, trades_count, arena_score)
     let metricsResult = null
