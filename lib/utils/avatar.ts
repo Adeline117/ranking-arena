@@ -80,6 +80,26 @@ export function isWalletAddress(traderId: string): boolean {
 }
 
 /**
+ * Generate a deterministic identicon SVG — replaces api.dicebear.com calls.
+ * Zero network latency. Returns data: URI for img src.
+ */
+export function generateIdenticonSvg(seed: string, size = 64): string {
+  let hash = 5381
+  for (let i = 0; i < seed.length; i++) { hash = ((hash << 5) + hash) ^ seed.charCodeAt(i); hash |= 0 }
+  const nv = () => { hash = Math.imul(hash ^ (hash >>> 16), 0x45d9f3b) | 0; hash = Math.imul(hash ^ (hash >>> 16), 0x45d9f3b) | 0; hash = (hash ^ (hash >>> 16)) | 0; return (hash >>> 0) / 0xffffffff }
+  const h1 = Math.floor(nv() * 360), h2 = (h1 + 120 + Math.floor(nv() * 120)) % 360, bh = (h1 + 240) % 360
+  const c1 = `hsl(${h1},65%,52%)`, c2 = `hsl(${h2},60%,55%)`, bg = `hsl(${bh},20%,78%)`
+  const G = 5, cell = size / G; let rects = ''
+  for (let r = 0; r < G; r++) for (let col = 0; col < 3; col++) {
+    const v = nv(); if (v < 0.45) continue
+    const fill = v < 0.72 ? c1 : c2, mc = G - 1 - col, y = r * cell
+    rects += `<rect x="${(col*cell).toFixed(1)}" y="${y.toFixed(1)}" width="${cell.toFixed(1)}" height="${cell.toFixed(1)}" fill="${fill}"/>`
+    if (col !== mc) rects += `<rect x="${(mc*cell).toFixed(1)}" y="${y.toFixed(1)}" width="${cell.toFixed(1)}" height="${cell.toFixed(1)}" fill="${fill}"/>`
+  }
+  return `data:image/svg+xml,${encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}" viewBox="0 0 ${size} ${size}"><rect width="${size}" height="${size}" fill="${bg}"/>${rects}</svg>`)}`
+}
+
+/**
  * Generate a deterministic SVG blockie (Ethereum-style) for a wallet address.
  * Returns a data URI that can be used as an img src.
  * 8×8 grid, mirrored horizontally for symmetry (like MetaMask blockies).
@@ -160,9 +180,14 @@ export interface AvatarProps {
 }
 
 /**
- * 需要通过代理加载的头像域名列表
- * 这些域名通常有CORS或Referrer限制
+ * Domains loadable directly in browser — no CORS/Referrer restrictions.
  */
+const DIRECT_LOAD_DOMAINS = [
+  'api.dicebear.com', 'robohash.org', 'i.pravatar.cc', 'randomuser.me', 'ui-avatars.com',
+  'arenafi.org', 'cdn.arenafi.org', 'githubusercontent.com', 'googleusercontent.com',
+  'supabase.co', 'supabase.in',
+]
+
 const PROXY_REQUIRED_DOMAINS = [
   // Binance
   'bnbstatic.com',
@@ -213,13 +238,12 @@ const PROXY_REQUIRED_DOMAINS = [
  */
 export function needsProxy(url: string | null | undefined): boolean {
   if (!url) return false
+  if (url.startsWith('data:')) return false
   try {
     const hostname = new URL(url).hostname.toLowerCase()
+    if (DIRECT_LOAD_DOMAINS.some(d => hostname.includes(d))) return false
     return PROXY_REQUIRED_DOMAINS.some(domain => hostname.includes(domain))
-  } catch {
-    // Intentionally swallowed: invalid URL format, no proxy needed
-    return false
-  }
+  } catch { return false }
 }
 
 /**
@@ -340,7 +364,11 @@ export function getTraderAvatarUrl(avatarUrl: string | null | undefined): string
     return null
   }
 
-  // 其他有效图片URL也走代理（确保 DiceBear、pravatar 等外部 URL 正常渲染）
+  // Direct-load domains — serve without proxy (no CORS restrictions)
+  try {
+    const h = new URL(avatarUrl).hostname.toLowerCase()
+    if (DIRECT_LOAD_DOMAINS.some(d => h.includes(d))) return avatarUrl
+  } catch { /* fall through */ }
   return `/api/avatar?url=${encodeURIComponent(avatarUrl)}`
 }
 
