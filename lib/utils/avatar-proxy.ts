@@ -17,7 +17,7 @@ export function avatarSrc(url: string | null | undefined): string {
   try {
     const hostname = new URL(url).hostname
     if (DIRECT_DOMAINS.has(hostname)) return url
-    if (hostname.endsWith('.supabase.co')) return url
+    if (hostname.endsWith('.supabase.co') || hostname.endsWith('.supabase.in')) return url
     if (hostname.endsWith('.googleusercontent.com')) return url
   } catch {
     // Invalid URL — proxy it
