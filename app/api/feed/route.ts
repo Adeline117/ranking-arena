@@ -60,13 +60,19 @@ export async function GET(request: NextRequest) {
 
     if (error) {
       // Table may not exist yet — return empty feed gracefully
+      const errCode = (error as { code?: string }).code
+      const errMsg = error.message ?? ''
       const isMissingTable =
-        (error as { code?: string }).code === '42P01' ||
-        (error as { code?: string }).code === 'PGRST200' ||
-        error.message?.includes('does not exist')
+        errCode === '42P01' ||
+        errCode === 'PGRST200' ||
+        errMsg.includes('does not exist') ||
+        errMsg.includes('Could not find') ||
+        errMsg.includes('relation') ||
+        errMsg.includes('schema cache')
       if (isMissingTable) {
         return success({ activities: [], pagination: { limit, hasMore: false, nextCursor: null } })
       }
+      console.error('[/api/feed] Supabase error:', { code: errCode, message: errMsg, details: error })
       return handleError(error)
     }
 
