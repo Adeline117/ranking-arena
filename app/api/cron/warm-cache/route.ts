@@ -2,15 +2,19 @@
  * GET /api/cron/warm-cache
  *
  * Lightweight cron that keeps the Supabase connection pool warm
- * by issuing a single no-op query every 5 minutes.
- * Prevents cold-start latency spikes on the first real request after idle periods.
+ * and refreshes the SSR homepage Redis cache (home-initial-traders:90D).
+ *
+ * Runs every 5 minutes (configured in vercel.json) to ensure:
+ * 1. Supabase connection pool stays warm (no cold-start latency)
+ * 2. Homepage SSR cache stays fresh (TTL=2min, so we refresh every 5min)
+ *    Prevents cold-DB-query on page load → faster LCP
  *
  * Schedule: every 5 minutes (configured in vercel.json)
  */
 
 import { NextRequest, NextResponse } from 'next/server'
 import { env } from '@/lib/env'
-import { getSupabaseAdmin } from '@/lib/supabase/server'
+import { fetchLeaderboardFromDB } from '@/lib/getInitialTraders'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -24,25 +28,16 @@ export async function GET(request: NextRequest) {
   const start = Date.now()
 
   try {
-    const supabase = getSupabaseAdmin()
-
-    // Single lightweight query to keep connection pool warm
-    const { error } = await supabase
-      .from('leaderboard_ranks')
-      .select('id')
-      .limit(1)
+    // Warm the SSR homepage cache — this keeps the Redis key fresh so page.tsx
+    // getInitialTraders() always hits cache instead of doing a cold DB query.
+    // fetchLeaderboardFromDB also does the DB warm-up query as a side-effect.
+    const { traders } = await fetchLeaderboardFromDB('90D', 50)
 
     const duration = Date.now() - start
 
-    if (error) {
-      return NextResponse.json(
-        { ok: false, error: error.message, duration_ms: duration },
-        { status: 500 }
-      )
-    }
-
     return NextResponse.json({
       ok: true,
+      traders_cached: traders.length,
       duration_ms: duration,
       warmed_at: new Date().toISOString(),
     })
