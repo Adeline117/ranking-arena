@@ -147,7 +147,11 @@ export default function ExchangeRankingClient({ traders: initialTraders, exchang
   const [debouncedSearch, setDebouncedSearch] = useState('')
   const searchTimerRef = useRef<ReturnType<typeof setTimeout>>(undefined)
   const [optionalColumns, setOptionalColumns] = useState<Record<OptionalColumn, boolean>>({ pnl: true, followers: false, sharpe_ratio: false, trades_count: false })
-  const [viewMode, setViewMode] = useState<ViewMode>(typeof window !== 'undefined' && window.matchMedia('(max-width: 768px)').matches ? 'card' : 'table')
+  // Initialize with 'table' for SSR to avoid hydration mismatch.
+  // The useEffect below immediately corrects to 'card' on mobile after mount.
+  // We use suppressHydrationWarning or accept the single no-CLS swap since
+  // ExchangeRankingClient is wrapped in a Suspense on the server (skeleton shown).
+  const [viewMode, setViewMode] = useState<ViewMode>('table')
   const [sortKey, setSortKey] = useState<SortKey>('rank')
   const [sortDir, setSortDir] = useState<SortDir>('asc')
   const [cardSortKey, setCardSortKey] = useState<CardSortKey>('rank')

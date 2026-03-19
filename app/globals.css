@@ -1475,11 +1475,7 @@ a:focus-visible, button:focus-visible, [role="button"]:focus-visible, [tabindex=
   margin: 0;
 }
 
-/* Top 3 rank badge animation */
-@keyframes rankGlow {
-  0%, 100% { box-shadow: 0 0 6px rgba(255, 215, 0, 0.3); }
-  50% { box-shadow: 0 0 12px rgba(255, 215, 0, 0.5); }
-}
+/* Top 3 rank badge animation — removed unused box-shadow keyframe (non-composited paint) */
 
 @media (prefers-reduced-motion: reduce) {
   .card-hover:hover {
@@ -2565,11 +2561,9 @@ td[data-numeric],
   word-break: break-word;
 }
 
-/* Arena Score glow animation for top performers */
-@keyframes score-glow {
-  0%, 100% { box-shadow: 0 0 12px rgba(139, 92, 246, 0.5), 0 0 4px rgba(139, 92, 246, 0.3); }
-  50% { box-shadow: 0 0 20px rgba(139, 92, 246, 0.7), 0 0 8px rgba(139, 92, 246, 0.5); }
-}
+/* Arena Score glow animation for top performers.
+   Removed box-shadow keyframe (unused + non-composited paint).
+   Use score-legendary-glow (filter-based, composited) instead. */
 
 /* Purple tier (90+) shimmer effect */
 @keyframes score-shimmer {
@@ -3024,7 +3018,8 @@ td[data-numeric],
 @keyframes stepEnter { from { opacity: 0; transform: translateX(30px); } to { opacity: 1; transform: translateX(0); } }
 @keyframes celebrationBurst { 0% { transform: scale(0); opacity: 0; } 50% { transform: scale(1.15); opacity: 1; } 100% { transform: scale(1); opacity: 1; } }
 @keyframes checkDraw { from { stroke-dashoffset: 50; } to { stroke-dashoffset: 0; } }
-@keyframes progressPulse { 0%, 100% { transform: scale(1); box-shadow: 0 0 0 0 var(--color-accent-primary-40); } 50% { transform: scale(1.1); box-shadow: 0 0 0 8px transparent; } }
+/* progressPulse: box-shadow removed (non-composited paint). transform+opacity only (composited). */
+@keyframes progressPulse { 0%, 100% { transform: scale(1); opacity: 0.8; } 50% { transform: scale(1.1); opacity: 1; } }
 .onboarding-bg { position: fixed; inset: 0; z-index: 0; transition: background 0.5s ease; }
 .onboarding-bg.dark { background: var(--color-bg-primary); }
 .onboarding-bg.light { background: linear-gradient(135deg, #f5f5f7 0%, #e8e8ed 50%, #f0f0f5 100%); }
