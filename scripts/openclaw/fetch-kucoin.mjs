@@ -36,7 +36,12 @@ const MARKET_TYPE = 'futures'
 
 async function fetchKuCoinLeaderboard() {
   console.log('[kucoin] Starting Playwright fetch...')
-  const browser = await chromium.launch({ headless: true })
+  // KuCoin detects headless browsers — use headed mode or Xvfb on Linux
+  const isLinux = process.platform === 'linux'
+  const browser = await chromium.launch({
+    headless: false,
+    args: isLinux ? ['--no-sandbox', '--disable-gpu'] : [],
+  })
   const page = await browser.newPage()
 
   // Intercept leaderboard API responses
@@ -71,39 +76,56 @@ async function fetchKuCoinLeaderboard() {
   await page.evaluate(() => window.scrollTo(0, 500)).catch(() => {})
   await page.waitForTimeout(5000)
 
-  // If interception captured data, use it
+  // First page comes from interception (SPA auto-loads it)
   let traders = []
+  const seen = new Set()
+
   if (captured.length > 0) {
     captured.sort((a, b) => b.size - a.size)
     const data = captured[0].data
     const items = data?.data?.items || data?.data || []
-    if (Array.isArray(items)) traders = items
-    console.log(`[kucoin] Intercepted ${traders.length} traders from API`)
+    if (Array.isArray(items)) {
+      for (const t of items) {
+        const id = String(t.leadConfigId || t.uid || t.id || '')
+        if (id && !seen.has(id)) { seen.add(id); traders.push(t) }
+      }
+    }
+    console.log(`[kucoin] Intercepted page 1: ${traders.length} traders`)
   }
 
-  // Fallback: direct fetch from page context
-  if (traders.length === 0) {
-    const result = await page.evaluate(async () => {
-      const endpoints = [
-        '/_api/ct-copy-trade/v1/copyTrading/rn/leaderboard/query?lang=en_US&pageNo=1&pageSize=100',
-        '/_api/ct-copy-trade/v1/copyTrading/rn/leaderboard/query?lang=en_US&pageNo=2&pageSize=100',
-        '/_api/ct-copy-trade/v1/copyTrading/rn/leaderboard/query?lang=en_US&pageNo=3&pageSize=100',
-      ]
+  // Paginate remaining pages via page context (session cookies now established)
+  if (traders.length > 0) {
+    const moreTraders = await page.evaluate(async (startPage) => {
       const all = []
-      for (const ep of endpoints) {
+      const seenIds = new Set()
+      for (let pageNo = startPage; pageNo <= 65; pageNo++) {
         try {
-          const r = await fetch(ep, { credentials: 'include' })
-          if (!r.ok) continue
+          const r = await fetch(
+            `/_api/ct-copy-trade/v1/copyTrading/rn/leaderboard/query?lang=en_US&pageNo=${pageNo}&pageSize=12`,
+            { credentials: 'include' }
+          )
+          if (!r.ok) break
           const json = await r.json()
           const items = json?.data?.items || json?.data || []
-          if (Array.isArray(items)) all.push(...items)
-        } catch {}
-        await new Promise(r => setTimeout(r, 1000))
+          if (!Array.isArray(items) || items.length === 0) break
+          for (const t of items) {
+            const id = String(t.leadConfigId || t.uid || t.id || '')
+            if (id && !seenIds.has(id)) { seenIds.add(id); all.push(t) }
+          }
+          if (items.length < 12) break
+        } catch { break }
+        await new Promise(resolve => setTimeout(resolve, 500))
       }
       return all
-    }).catch(() => [])
-    traders = result || []
-    console.log(`[kucoin] Fetched ${traders.length} traders via page context`)
+    }, 2).catch(() => [])
+
+    if (moreTraders?.length) {
+      for (const t of moreTraders) {
+        const id = String(t.leadConfigId || t.uid || t.id || '')
+        if (id && !seen.has(id)) { seen.add(id); traders.push(t) }
+      }
+    }
+    console.log(`[kucoin] Total after pagination: ${traders.length} traders`)
   }
 
   await browser.close()
@@ -124,8 +146,9 @@ async function writeToSupabase(traders) {
   const sources = traders.map(t => ({
     source: PLATFORM,
     source_trader_id: String(t.leadConfigId || t.uid || t.id || ''),
-    display_name: t.nickName || null,
-    created_at: new Date().toISOString(),
+    handle: t.nickName || null,
+    profile_url: `https://www.kucoin.com/copy-trading/leader/${t.leadConfigId || t.uid || t.id}`,
+    is_active: true,
   }))
 
   const { error: srcErr } = await supabase
@@ -158,9 +181,9 @@ async function writeToSupabase(traders) {
     }
   })
 
-  const { error: snapErr, count } = await supabase
+  const { error: snapErr } = await supabase
     .from('trader_snapshots_v2')
-    .upsert(snapshots, { onConflict: 'platform,trader_key,window,as_of_ts' })
+    .upsert(snapshots, { onConflict: 'platform,market_type,trader_key,window' })
   if (snapErr) console.error('[kucoin] snapshots error:', snapErr.message)
   else console.log(`[kucoin] Wrote ${snapshots.length} snapshots`)
 }
