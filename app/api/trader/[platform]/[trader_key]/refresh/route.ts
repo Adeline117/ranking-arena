@@ -10,7 +10,7 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { getSupabaseAdmin } from '@/lib/supabase/server'
-import { checkRateLimit, RateLimitPresets } from '@/lib/api'
+import { checkRateLimit, RateLimitPresets, requireAuth } from '@/lib/api'
 import type {
   JobType,
   RefreshResponse,
@@ -35,6 +35,13 @@ export async function POST(
   // Rate limit: prevent abuse of refresh endpoint (writes to DB + triggers exchange API calls)
   const rateLimitResponse = await checkRateLimit(request, RateLimitPresets.write)
   if (rateLimitResponse) return rateLimitResponse
+
+  // Authentication required: unauthenticated users must not be able to trigger background jobs
+  try {
+    await requireAuth(request)
+  } catch {
+    return NextResponse.json({ error: 'Authentication required' }, { status: 401 })
+  }
 
   const { platform, trader_key } = await params
 
