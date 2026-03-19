@@ -76,12 +76,15 @@ jest.mock('@/lib/supabase/server', () => ({
   getAuthUser: (...args: unknown[]) => mockGetAuthUser(...args),
 }))
 
-jest.mock('@/lib/logger', () => ({
-  logger: { info: jest.fn(), warn: jest.fn(), error: jest.fn(), debug: jest.fn() },
+jest.mock('@/lib/utils/logger', () => ({
+  createLogger: jest.fn(() => ({
+    info: jest.fn(), warn: jest.fn(), error: jest.fn(), debug: jest.fn(),
+  })),
 }))
 
 jest.mock('@/lib/utils/rate-limit', () => ({
-  checkRateLimit: jest.fn().mockResolvedValue(null),
+  checkRateLimit: jest.fn().mockResolvedValue({ response: null, meta: null }),
+  addRateLimitHeaders: jest.fn(),
   RateLimitPresets: { sensitive: { max: 15, window: '1m', prefix: 'sensitive' } },
 }))
 
@@ -276,9 +279,10 @@ describe('POST /api/feedback', () => {
     // Mock checkRateLimit to return a 429 response
     const rateLimit = jest.requireMock('@/lib/utils/rate-limit') as { checkRateLimit: jest.Mock }
     const { NextResponse: NR } = jest.requireMock('next/server') as { NextResponse: typeof import('next/server').NextResponse }
-    rateLimit.checkRateLimit.mockResolvedValueOnce(
-      NR.json({ error: 'Too many requests' }, { status: 429 })
-    )
+    rateLimit.checkRateLimit.mockResolvedValueOnce({
+      response: NR.json({ error: 'Too many requests' }, { status: 429 }),
+      meta: null,
+    })
 
     const req = createRequest({ message: 'Rate limited' })
     const res = await POST(req)

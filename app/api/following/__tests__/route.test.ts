@@ -101,7 +101,8 @@ jest.mock('@/lib/supabase/server', () => ({
 }))
 
 jest.mock('@/lib/utils/rate-limit', () => ({
-  checkRateLimit: jest.fn().mockResolvedValue(null),
+  checkRateLimit: jest.fn().mockResolvedValue({ response: null, meta: null }),
+  addRateLimitHeaders: jest.fn(),
   RateLimitPresets: { authenticated: { limit: 60, window: 60 }, public: { limit: 100, window: 60 } },
 }))
 
@@ -272,7 +273,7 @@ describe('GET /api/following', () => {
     const body = await res.json()
 
     expect(res.status).toBe(500)
-    // withAuth middleware catch block returns Chinese: '服务器内部错误'
-    expect(body.error).toBe('服务器内部错误')
+    // middleware sanitizes 5xx errors to generic English message
+    expect(body.error).toBe('Internal server error')
   })
 })

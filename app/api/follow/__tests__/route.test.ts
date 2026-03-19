@@ -56,7 +56,8 @@ jest.mock('@/lib/supabase/server', () => ({
 }))
 
 jest.mock('@/lib/utils/rate-limit', () => ({
-  checkRateLimit: jest.fn().mockResolvedValue(null),
+  checkRateLimit: jest.fn().mockResolvedValue({ response: null, meta: null }),
+  addRateLimitHeaders: jest.fn(),
   RateLimitPresets: { read: {}, write: {}, authenticated: {}, public: {}, sensitive: {} },
 }))
 
