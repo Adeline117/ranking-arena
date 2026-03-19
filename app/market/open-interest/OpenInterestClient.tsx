@@ -57,7 +57,7 @@ export default function OpenInterestClient({ rows }: { rows: OpenInterestRow[] }
   }, [rows])
 
   const sorted = useMemo(() => {
-    let filtered = filterPlatform === 'all' ? rows : rows.filter(r => r.platform === filterPlatform)
+    const filtered = filterPlatform === 'all' ? rows : rows.filter(r => r.platform === filterPlatform)
     return [...filtered].sort((a, b) => {
       let cmp = 0
       switch (sortField) {
