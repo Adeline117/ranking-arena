@@ -911,6 +911,376 @@ const HANDLERS = {
 
     return data || { error: 'No API response captured' }
   },
+
+  // ─── MEXC: per-trader positions via page context ───
+  'mexc/trader-detail': async (page, params) => {
+    const uid = params.uid || ''
+    if (!uid) return { error: 'uid required' }
+
+    await page.goto('https://futures.mexc.com/en-US/copy-trading', {
+      waitUntil: 'domcontentloaded', timeout: 30000,
+    })
+    await page.waitForTimeout(2000)
+
+    const data = await page.evaluate(async (traderId) => {
+      try {
+        // Detail endpoint (stats + profit list)
+        const detailResp = await fetch(`/api/v1/private/account/assets/copy-trading/trader/detail?uid=${traderId}`)
+        const detail = detailResp.ok ? await detailResp.json() : null
+
+        // Try positions endpoint
+        let positions = null
+        for (const path of [
+          `/api/v1/private/account/assets/copy-trading/trader/current-orders?uid=${traderId}&pageSize=50`,
+          `/api/v1/private/account/assets/copy-trading/trader/orders?uid=${traderId}&pageSize=50`,
+          `/api/v1/private/account/assets/copy-trading/trader/history-orders?uid=${traderId}&pageSize=50`,
+          `/api/v1/private/account/assets/copy-trading/trader/current-positions?uid=${traderId}`,
+        ]) {
+          try {
+            const r = await fetch(path)
+            if (r.ok) {
+              const d = await r.json()
+              if (d && d.code === 0 && d.data) { positions = { path, data: d.data }; break }
+            }
+          } catch {}
+        }
+
+        return { detail, positions }
+      } catch (e) { return { error: e.message } }
+    }, uid).catch(() => null)
+
+    return data || { error: 'No API response captured' }
+  },
+
+  // ─── Phemex: per-trader positions via page context ───
+  'phemex/trader-detail': async (page, params) => {
+    const uid = params.uid || ''
+    if (!uid) return { error: 'uid required' }
+
+    await page.goto(`https://phemex.com/copy-trading/trader/${uid}`, {
+      waitUntil: 'domcontentloaded', timeout: 30000,
+    })
+    await page.waitForTimeout(3000)
+
+    const data = await page.evaluate(async (traderId) => {
+      try {
+        const results = {}
+
+        // Try detail
+        try {
+          const r = await fetch(`/copy-trading/public/trader/${traderId}/detail?period=90d`)
+          if (r.ok) results.detail = await r.json()
+        } catch {}
+
+        // Try position endpoints
+        for (const path of [
+          `/copy-trading/public/trader/${traderId}/current-positions`,
+          `/copy-trading/public/trader/${traderId}/positions`,
+          `/copy-trading/public/trader/${traderId}/order-history`,
+        ]) {
+          try {
+            const r = await fetch(path)
+            if (r.ok) {
+              const d = await r.json()
+              if (d && d.code !== 10500) { results.positions = { path, data: d }; break }
+            }
+          } catch {}
+        }
+
+        return results
+      } catch (e) { return { error: e.message } }
+    }, uid).catch(() => null)
+
+    return data || { error: 'No API response captured' }
+  },
+
+  // ─── BloFin: per-trader positions via page context ───
+  'blofin/trader-detail': async (page, params) => {
+    const uniqueCode = params.uniqueCode || ''
+    if (!uniqueCode) return { error: 'uniqueCode required' }
+
+    await page.goto(`https://blofin.com/copy-trading/trader/${uniqueCode}`, {
+      waitUntil: 'domcontentloaded', timeout: 30000,
+    })
+    await waitForCF(page)
+
+    const data = await page.evaluate(async (code) => {
+      try {
+        const results = {}
+
+        // Try position endpoints
+        for (const path of [
+          `https://openapi.blofin.com/api/v1/copytrading/public/current-position?uniqueCode=${code}`,
+          `https://openapi.blofin.com/api/v1/copytrading/public/position-history?uniqueCode=${code}`,
+          `https://openapi.blofin.com/api/v1/copytrading/public/trader/${code}?period=90`,
+        ]) {
+          try {
+            const r = await fetch(path)
+            if (r.ok) {
+              const d = await r.json()
+              const key = path.includes('current-position') ? 'currentPositions' :
+                         path.includes('position-history') ? 'positionHistory' : 'traderInfo'
+              if (d && d.code !== '401') results[key] = d
+            }
+          } catch {}
+        }
+
+        return results
+      } catch (e) { return { error: e.message } }
+    }, uniqueCode).catch(() => null)
+
+    return data || { error: 'No API response captured' }
+  },
+
+  // ─── Toobit: per-trader positions via page context ───
+  'toobit/trader-detail': async (page, params) => {
+    const traderId = params.traderId || params.uid || ''
+    if (!traderId) return { error: 'traderId required' }
+
+    await page.goto('https://www.toobit.com/en-US/copy-trading', {
+      waitUntil: 'domcontentloaded', timeout: 30000,
+    })
+    await waitForCF(page)
+
+    const data = await page.evaluate(async (uid) => {
+      try {
+        const results = {}
+        // Toobit uses Binance-like bapi
+        for (const path of [
+          `/bapi/v1/copy-trading/trader/detail?leaderUserId=${uid}`,
+          `/bapi/v1/copy-trading/trader/positions?leaderUserId=${uid}`,
+          `/bapi/v1/copy-trading/trader/current-position?leaderUserId=${uid}`,
+          `/bapi/v1/copy-trading/trader/order-history?leaderUserId=${uid}&pageSize=20`,
+        ]) {
+          try {
+            const r = await fetch(path)
+            if (r.ok) {
+              const d = await r.json()
+              const key = path.includes('detail') ? 'detail' :
+                         path.includes('positions') || path.includes('current-position') ? 'positions' : 'orderHistory'
+              if (d && (d.code === '000000' || d.code === 0 || d.data)) results[key] = d
+            }
+          } catch {}
+        }
+        return results
+      } catch (e) { return { error: e.message } }
+    }, traderId).catch(() => null)
+
+    return data || { error: 'No API response captured' }
+  },
+
+  // ─── XT: per-trader positions via page context ───
+  'xt/trader-detail': async (page, params) => {
+    const accountId = params.accountId || params.uid || ''
+    if (!accountId) return { error: 'accountId required' }
+
+    await page.goto('https://www.xt.com/en/copy-trading', {
+      waitUntil: 'domcontentloaded', timeout: 30000,
+    })
+    await waitForCF(page)
+
+    const data = await page.evaluate(async (acctId) => {
+      try {
+        const results = {}
+        for (const path of [
+          `/fapi/user/v1/public/copy-trade/elite-leader-detail?accountId=${acctId}`,
+          `/fapi/user/v1/public/copy-trade/leader-positions?accountId=${acctId}`,
+          `/fapi/user/v1/public/copy-trade/leader-current-positions?accountId=${acctId}`,
+          `/fapi/user/v1/public/copy-trade/leader-orders?accountId=${acctId}&pageSize=20`,
+          `/sapi/v1/copy-trading/leader/${acctId}/positions`,
+        ]) {
+          try {
+            const r = await fetch(path)
+            if (r.ok) {
+              const d = await r.json()
+              const key = path.includes('detail') ? 'detail' :
+                         path.includes('positions') || path.includes('current') ? 'positions' : 'orders'
+              if (d && (d.rc === 0 || d.code === 0 || d.data || d.result)) results[key] = d
+            }
+          } catch {}
+        }
+        return results
+      } catch (e) { return { error: e.message } }
+    }, accountId).catch(() => null)
+
+    return data || { error: 'No API response captured' }
+  },
+
+  // ─── HTX: per-trader positions via page context ───
+  'htx/trader-detail': async (page, params) => {
+    const uid = params.uid || ''
+    if (!uid) return { error: 'uid required' }
+
+    await page.goto('https://www.htx.com/copy-trading/', {
+      waitUntil: 'domcontentloaded', timeout: 30000,
+    })
+    await page.waitForTimeout(2000)
+
+    const data = await page.evaluate(async (traderId) => {
+      try {
+        const results = {}
+        for (const path of [
+          `/-/x/hbg/v1/futures/copytrading/trader/detail?uid=${traderId}`,
+          `/-/x/hbg/v1/futures/copytrading/trader/positions?uid=${traderId}`,
+          `/-/x/hbg/v1/futures/copytrading/trader/current-orders?uid=${traderId}`,
+          `/-/x/hbg/v1/futures/copytrading/trader/order-history?uid=${traderId}&pageSize=20`,
+        ]) {
+          try {
+            const r = await fetch(path)
+            if (r.ok) {
+              const d = await r.json()
+              const key = path.includes('detail') ? 'detail' :
+                         path.includes('positions') || path.includes('current') ? 'positions' : 'orderHistory'
+              if (d && d.code === 200 && d.data) results[key] = d
+            }
+          } catch {}
+        }
+        return results
+      } catch (e) { return { error: e.message } }
+    }, uid).catch(() => null)
+
+    return data || { error: 'No API response captured' }
+  },
+
+  // ─── CoinEx: per-trader via page context ───
+  'coinex/trader-detail': async (page, params) => {
+    const traderId = params.traderId || params.uid || ''
+    if (!traderId) return { error: 'traderId required' }
+
+    await page.goto('https://www.coinex.com/copy-trading', {
+      waitUntil: 'domcontentloaded', timeout: 30000,
+    })
+    await page.waitForTimeout(2000)
+
+    const data = await page.evaluate(async (uid) => {
+      try {
+        const results = {}
+        for (const path of [
+          `/res/copy-trading/public/trader/${uid}`,
+          `/res/copy-trading/public/trader/${uid}/positions`,
+          `/res/copy-trading/public/trader/${uid}/orders?limit=20`,
+          `/res/copy-trading/public/trader/${uid}/current-positions`,
+        ]) {
+          try {
+            const r = await fetch(path)
+            if (r.ok) {
+              const d = await r.json()
+              const key = path.includes('positions') || path.includes('current') ? 'positions' :
+                         path.includes('orders') ? 'orders' : 'detail'
+              if (d && (d.code === 0 || d.data)) results[key] = d
+            }
+          } catch {}
+        }
+        return results
+      } catch (e) { return { error: e.message } }
+    }, traderId).catch(() => null)
+
+    return data || { error: 'No API response captured' }
+  },
+
+  // ─── BTCC: per-trader via page context ───
+  'btcc/trader-detail': async (page, params) => {
+    const traderId = params.traderId || params.uid || ''
+    if (!traderId) return { error: 'traderId required' }
+
+    await page.goto('https://www.btcc.com/copy-trading', {
+      waitUntil: 'domcontentloaded', timeout: 30000,
+    })
+    await page.waitForTimeout(2000)
+
+    const data = await page.evaluate(async (uid) => {
+      try {
+        const results = {}
+        for (const path of [
+          `/documentary/trader/detail`,
+          `/documentary/trader/order-list`,
+          `/documentary/trader/trade-record`,
+        ]) {
+          try {
+            const r = await fetch(path, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ traderId: uid, pageNo: 1, pageSize: 20 }),
+            })
+            if (r.ok) {
+              const d = await r.json()
+              const key = path.includes('detail') ? 'detail' :
+                         path.includes('order') ? 'orders' : 'trades'
+              if (d) results[key] = d
+            }
+          } catch {}
+        }
+        return results
+      } catch (e) { return { error: e.message } }
+    }, traderId).catch(() => null)
+
+    return data || { error: 'No API response captured' }
+  },
+
+  // ─── Bitfinex: leaderboard user trades ───
+  'bitfinex/trader-detail': async (page, params) => {
+    const username = params.username || params.uid || ''
+    if (!username) return { error: 'username required' }
+
+    const data = await page.evaluate(async (user) => {
+      try {
+        const results = {}
+        // Bitfinex public API - no WAF needed
+        for (const path of [
+          `https://api-pub.bitfinex.com/v2/rankings/hist/${user}/`,
+          `https://api-pub.bitfinex.com/v2/rankings/details/${user}/`,
+        ]) {
+          try {
+            const r = await fetch(path)
+            if (r.ok) {
+              const d = await r.json()
+              const key = path.includes('hist') ? 'history' : 'details'
+              if (d) results[key] = d
+            }
+          } catch {}
+        }
+        return results
+      } catch (e) { return { error: e.message } }
+    }, username).catch(() => null)
+
+    return data || { error: 'No API response captured' }
+  },
+
+  // ─── Bybit: position history via page context ───
+  'bybit/trader-positions': async (page, params) => {
+    const leaderMark = params.leaderMark || ''
+    if (!leaderMark) return { error: 'leaderMark required' }
+
+    await page.goto('https://www.bybitglobal.com/copyTrading/en/leaderboard-master', {
+      waitUntil: 'domcontentloaded', timeout: 45000,
+    })
+    await page.waitForTimeout(2000)
+
+    const data = await page.evaluate(async (mark) => {
+      try {
+        const results = {}
+        // Current positions
+        try {
+          const r = await fetch(`/x-api/fapi/beehive/public/v1/common/order/list-detail`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ leaderMark: mark, pageNo: 1, pageSize: 50 }),
+          })
+          if (r.ok) results.positions = await r.json()
+        } catch {}
+
+        // Closed positions
+        try {
+          const r = await fetch(`/x-api/fapi/beehive/public/v1/common/closed-order-list?leaderMark=${encodeURIComponent(mark)}&pageNo=1&pageSize=50`)
+          if (r.ok) results.closedPositions = await r.json()
+        } catch {}
+
+        return results
+      } catch (e) { return { error: e.message } }
+    }, leaderMark).catch(() => null)
+
+    return data || { error: 'No API response captured' }
+  },
 }
 
 // ---------------------------------------------------------------------------
