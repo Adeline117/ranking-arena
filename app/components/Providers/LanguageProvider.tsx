@@ -15,18 +15,20 @@ type LanguageContextType = {
 const LanguageContext = createContext<LanguageContextType | undefined>(undefined)
 
 export function LanguageProvider({ children }: { children: ReactNode }) {
+  // Start with 'en' to match SSR output — getLanguage() reads localStorage which is only
+  // available after hydration. We update in useEffect once mounted.
+  // Previously, `isMounted` state (false→true after hydration) triggered ALL 343 useLanguage()
+  // consumers to re-render on every page load. Removing that state eliminates that mass re-render.
   const [language, setLanguageState] = useState<Language>('en')
-  const [isMounted, setIsMounted] = useState(false)
 
   useEffect(() => {
-    setIsMounted(true)
     const savedLanguage = getLanguage()
 
     if (savedLanguage !== 'en') {
+      // Only update state if language differs from default — avoids unnecessary re-render
       loadTranslations(savedLanguage).then(() => setLanguageState(savedLanguage))
-    } else {
-      setLanguageState(savedLanguage)
     }
+    // If 'en', no state update needed — already initialized to 'en'
 
     // Pre-cache all language files in the background to eliminate flash when switching
     // Language files are small (~15KB each gzipped), so this is safe to do eagerly
@@ -56,14 +58,13 @@ export function LanguageProvider({ children }: { children: ReactNode }) {
     }
   }, [])
 
-  // Reactive translation function — uses 'en' before hydration to match SSR
+  // Stable translation function — only recreated when language actually changes, not on mount
   const t = useMemo((): TranslationFunction => {
-    const currentLang = isMounted ? language : 'en'
     return (key: string): string => {
       const k = key as keyof typeof translations.en
-      return translations[currentLang][k] ?? translations.en[k] ?? key
+      return translations[language][k] ?? translations.en[k] ?? key
     }
-  }, [language, isMounted])
+  }, [language])
 
   const contextValue = useMemo(() => ({ language, setLanguage, t }), [language, setLanguage, t])
 
