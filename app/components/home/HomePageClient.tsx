@@ -14,6 +14,7 @@ import type { Trader } from '../ranking/RankingTable'
 interface HomePageClientProps {
   initialTraders?: InitialTrader[]
   initialLastUpdated?: string | null
+  ssrTable?: React.ReactNode
 }
 
 /**
@@ -21,7 +22,7 @@ interface HomePageClientProps {
  * 处理交互状态和数据同步
  * 数据通过客户端fetch获取，SSR排行榜由SSRRankingTable提供
  */
-export default function HomePageClient({ initialTraders, initialLastUpdated }: HomePageClientProps) {
+export default function HomePageClient({ initialTraders, initialLastUpdated, ssrTable }: HomePageClientProps) {
   const { isLoggedIn } = useAuth()
   const { t } = useLanguage()
   const router = useRouter()
@@ -109,6 +110,7 @@ export default function HomePageClient({ initialTraders, initialLastUpdated }: H
           onRetry={deferredFetchFailed ? retryDeferredFetch : refresh}
           onRefresh={refresh}
           availableSources={availableSources}
+          ssrTable={ssrTable}
         />
       </Box>
     </PullToRefresh>

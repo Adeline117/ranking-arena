@@ -12,7 +12,8 @@
  *   group=b  → hyperliquid, gmx (every 4h)
  *   group=c  → bitunix (every 4h)
  *   group=d1 → gains, htx_futures (every 6h)
- *   group=e  → bitfinex, coinex, binance_web3, okx_web3 (every 6h)
+ *   group=e  → bitfinex, coinex, binance_web3 (every 6h)
+ *   group=e2 → okx_web3 (every 6h, slow platform, separated to avoid timeout)
  *   group=f  → mexc (every 6h, VPS scraper)
  *   group=f2 → bingx (every 6h, VPS scraper)
  *   group=h  → gateio, btcc (every 6h)
@@ -64,8 +65,10 @@ const GROUPS: Record<string, string[]> = {
   c: ['bitunix'],
   // Group D1: CEX (every 6h) — VPS proxy enabled
   d1: ['gains', 'htx_futures'],
-  // Group E: CEX+DEX (every 6h) — coinex URL fixed + VPS proxy
-  e: ['bitfinex', 'coinex', 'binance_web3', 'okx_web3'],
+  // Group E: Fast CEX+DEX (every 6h) — coinex URL fixed + VPS proxy
+  e: ['bitfinex', 'coinex', 'binance_web3'],
+  // Group E2: OKX Web3 only (every 6h) — slow platform, separated to avoid timeout
+  e2: ['okx_web3'],
   // Group F: MEXC only (every 6h) — VPS scraper, slow
   f: ['mexc'],
   // Group F2: BingX (every 6h) — VPS scraper

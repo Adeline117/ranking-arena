@@ -7,10 +7,9 @@ import type { Trader } from '../ranking/RankingTableTypes'
 import type { TimeRange } from './hooks/useTraderData'
 
 // Dynamic import RankingTable — it's 674 lines + pulls in TraderRow, TraderCard, etc.
-// SSRRankingTable handles LCP; this loads after hydration
+// SSR table is shown in-place as fallback until this loads (zero CLS)
 const RankingTable = dynamic(() => import('../ranking/RankingTable').then(m => ({ default: m.RankingTable })), {
   ssr: false,
-  loading: () => <div style={{ minHeight: 600 }} />,
 })
 
 // Above-fold: keep eager
@@ -41,6 +40,8 @@ interface RankingSectionProps {
   onRefresh?: () => void
   /** 所有可用的数据来源 */
   availableSources?: string[]
+  /** SSR table to show while RankingTable loads */
+  ssrTable?: React.ReactNode
 }
 
 /**
@@ -57,6 +58,7 @@ export default function RankingSection({
   error,
   onRetry,
   onRefresh,
+  ssrTable,
 }: RankingSectionProps) {
   const {
     language,
@@ -93,6 +95,16 @@ export default function RankingSection({
     formatLastUpdated,
     router,
   } = useRankingFilters({ traders, activeTimeRange })
+
+  // Track whether client RankingTable has loaded (to hide SSR fallback in-place)
+  const [tableReady, setTableReady] = useState(false)
+  useEffect(() => {
+    // Once filteredTraders has data and we haven't set ready yet, mark ready
+    // This fires after RankingTable dynamic import resolves and renders
+    if (filteredTraders.length > 0 && !tableReady) {
+      setTableReady(true)
+    }
+  }, [filteredTraders, tableReady])
 
   // Leaderboard movers (risers/fallers) — deferred until browser is idle to reduce TBT
   const [movers, setMovers] = useState<{ risers: Array<{ platform: string; trader_key: string; rank: number; arena_score: number | null; rankChange: number; handle: string | null; avatar_url: string | null }>; fallers: Array<{ platform: string; trader_key: string; rank: number; arena_score: number | null; rankChange: number; handle: string | null; avatar_url: string | null }> }>({ risers: [], fallers: [] })
@@ -155,6 +167,8 @@ export default function RankingSection({
         onResetFilters={handleResetFilters}
       />
 
+      {/* Show SSR table in-place until client RankingTable loads — zero CLS */}
+      {!tableReady && ssrTable}
       <RankingTable
         traders={filteredTraders}
         loading={loading || premiumLoading}

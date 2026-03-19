@@ -29,9 +29,10 @@ interface HomePageProps {
   initialTraders?: InitialTrader[]
   initialLastUpdated?: string | null
   heroStats?: { traderCount: number; exchangeCount: number }
+  ssrTable?: React.ReactNode
 }
 
-export default function HomePage({ initialTraders, initialLastUpdated, heroStats }: HomePageProps) {
+export default function HomePage({ initialTraders, initialLastUpdated, heroStats, ssrTable }: HomePageProps) {
   return (
     <Box
       suppressHydrationWarning
@@ -114,7 +115,7 @@ export default function HomePage({ initialTraders, initialLastUpdated, heroStats
                 <div className="skeleton" style={{ height: 400, borderRadius: tokens.radius.lg }} />
               </Box>
             }>
-                <HomePageClient initialTraders={initialTraders} initialLastUpdated={initialLastUpdated} />
+                <HomePageClient initialTraders={initialTraders} initialLastUpdated={initialLastUpdated} ssrTable={ssrTable} />
             </Suspense>
           </SectionErrorBoundary>
         </ThreeColumnLayout>
