@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useRef } from 'react'
 import { getCsrfHeaders } from '@/lib/api/client'
 import type { Comment } from './usePostComments'
 
@@ -45,6 +45,17 @@ export function usePostTranslation({
   const [translatingList, setTranslatingList] = useState(false)
   const [translatedComments, setTranslatedComments] = useState<Record<string, string>>({})
   const [translatingComments, setTranslatingComments] = useState(false)
+
+  // Refs to hold current state values inside stable callbacks (prevents infinite re-render loops
+  // when translateListPosts/translateComments are used as useEffect dependencies in consumers)
+  const translatedListPostsRef = useRef(translatedListPosts)
+  translatedListPostsRef.current = translatedListPosts
+  const translatedCommentsRef = useRef(translatedComments)
+  translatedCommentsRef.current = translatedComments
+  const translatingListRef = useRef(translatingList)
+  translatingListRef.current = translatingList
+  const translatingCommentsRef = useRef(translatingComments)
+  translatingCommentsRef.current = translatingComments
 
   const isChineseText = useCallback((text: string) => {
     if (!text) return false
@@ -113,9 +124,11 @@ export function usePostTranslation({
   }, [translationCache, showToast, extractImagesFromContent, removeImagesFromContent, accessToken])
 
   const translateListPosts = useCallback(async (postsToTranslate: Post[], targetLang: 'zh' | 'en') => {
-    if (translatingList) return
+    // Use refs to avoid stale closures without adding state to deps (prevents infinite re-render loop)
+    if (translatingListRef.current) return
+    const currentTranslated = translatedListPostsRef.current
     const needsTranslation = postsToTranslate.filter(p => {
-      if (translatedListPosts[p.id]?.title && translatedListPosts[p.id]?.body) return false
+      if (currentTranslated[p.id]?.title && currentTranslated[p.id]?.body) return false
       const titleIsChinese = p.title ? isChineseText(p.title) : false
       const contentIsChinese = p.content ? isChineseText(p.content) : false
       return (p.title && (targetLang === 'en' ? titleIsChinese : !titleIsChinese)) ||
@@ -127,10 +140,10 @@ export function usePostTranslation({
     try {
       const items: Array<{ id: string; text: string; contentType: 'post_title' | 'post_content'; contentId: string }> = []
       for (const post of needsTranslation.slice(0, 10)) {
-        if (post.title && !translatedListPosts[post.id]?.title) {
+        if (post.title && !currentTranslated[post.id]?.title) {
           items.push({ id: `${post.id}_title`, text: post.title, contentType: 'post_title', contentId: post.id })
         }
-        if (post.content && !translatedListPosts[post.id]?.body) {
+        if (post.content && !currentTranslated[post.id]?.body) {
           const contentPreview = removeImagesFromContent(post.content).slice(0, 200)
           if (contentPreview) items.push({ id: `${post.id}_body`, text: contentPreview, contentType: 'post_content', contentId: post.id })
         }
@@ -158,19 +171,22 @@ export function usePostTranslation({
       }
     } catch { /* silent */ }
     finally { setTranslatingList(false) }
-  }, [translatingList, translatedListPosts, isChineseText, removeImagesFromContent])
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- translatedListPosts/translatingList accessed via refs to keep callback stable
+  }, [isChineseText, removeImagesFromContent])
 
   const translateComments = useCallback(async (commentsToTranslate: Comment[], targetLang: 'zh' | 'en') => {
-    if (translatingComments) return
+    // Use refs to avoid stale closures without adding state to deps (prevents infinite re-render loop)
+    if (translatingCommentsRef.current) return
+    const currentTranslatedComments = translatedCommentsRef.current
     const allComments: Comment[] = []
     commentsToTranslate.forEach(c => {
-      if (!translatedComments[c.id] && c.content) {
+      if (!currentTranslatedComments[c.id] && c.content) {
         const hasChinese = isChineseText(c.content)
         if ((targetLang === 'en' && hasChinese) || (targetLang === 'zh' && !hasChinese)) allComments.push(c)
       }
       if (c.replies) {
         c.replies.forEach(r => {
-          if (!translatedComments[r.id] && r.content) {
+          if (!currentTranslatedComments[r.id] && r.content) {
             const hasChinese = isChineseText(r.content)
             if ((targetLang === 'en' && hasChinese) || (targetLang === 'zh' && !hasChinese)) allComments.push(r)
           }
@@ -200,7 +216,8 @@ export function usePostTranslation({
       }
     } catch { /* silent */ }
     finally { setTranslatingComments(false) }
-  }, [translatingComments, translatedComments, isChineseText])
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- translatedComments/translatingComments accessed via refs to keep callback stable
+  }, [isChineseText])
 
   return {
     translatedContent, setTranslatedContent, showingOriginal, setShowingOriginal,
