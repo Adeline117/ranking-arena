@@ -63,6 +63,11 @@ interface TraderToEnrich {
   source_trader_id: string
 }
 
+interface TraderRow {
+  platform: string
+  trader_key: string
+}
+
 /**
  * Enrich a single trader based on platform
  */
@@ -222,37 +227,36 @@ export async function GET(req: Request) {
 
     const cutoffTime = new Date(Date.now() - skipRecent * 60 * 60 * 1000).toISOString()
 
-    let query = supabase
+    // traders table uses platform/trader_key columns (not source/source_trader_id)
+    // Order by updated_at ascending so least-recently-updated get enriched first
+    let baseQuery = supabase
       .from('traders')
-      .select('source, source_trader_id')
-      .in('source', platforms)
-      .order('captured_at', { ascending: true }) // Oldest first
+      .select('platform, trader_key')
+      .in('platform', platforms)
+      .eq('is_active', true)
+      .order('updated_at', { ascending: true })
       .limit(limit)
 
     if (!force) {
-      query = query.or(`details_fetched_at.is.null,details_fetched_at.lt.${cutoffTime}`)
+      baseQuery = baseQuery.or(`last_seen_at.is.null,last_seen_at.lt.${cutoffTime}`)
     }
 
-    const { data: traders, error: fetchError } = await query
+    const { data: rawTraders, error: fetchError } = await baseQuery
 
     if (fetchError) {
-      // If details_fetched_at column doesn't exist, fall back to simpler query
-      if (fetchError.message?.includes('details_fetched_at')) {
-        const { data: fallbackTraders, error: fallbackError } = await supabase
-          .from('traders')
-          .select('source, source_trader_id')
-          .in('source', platforms)
-          .order('captured_at', { ascending: true })
-          .limit(limit)
-
-        if (fallbackError) throw fallbackError
-        // Use fallback traders
-        return await processTraders(supabase, fallbackTraders || [], concurrency, startTime, source, limit, skipRecent, force, smartSchedulerUsed, tierParam)
-      }
-      throw fetchError
+      // Provide a useful error message instead of "[object Object]"
+      const errMsg = fetchError.message || JSON.stringify(fetchError)
+      logger.error('Failed to query traders table', { error: errMsg, code: fetchError.code })
+      throw new Error(`DB query failed: ${errMsg}`)
     }
 
-    return await processTraders(supabase, traders || [], concurrency, startTime, source, limit, skipRecent, force, smartSchedulerUsed, tierParam)
+    // Normalize to TraderToEnrich shape expected by enrichTrader()
+    const traders: TraderToEnrich[] = (rawTraders || []).map((r: TraderRow) => ({
+      source: r.platform,
+      source_trader_id: r.trader_key,
+    }))
+
+    return await processTraders(supabase, traders, concurrency, startTime, source, limit, skipRecent, force, smartSchedulerUsed, tierParam)
   } catch (error: unknown) {
     const errorMessage = error instanceof Error ? error.message : String(error)
     logger.error('执行失败', { error: errorMessage })
@@ -296,29 +300,27 @@ async function processTraders(
     }
   }
 
-  // Batch update details_fetched_at grouped by source (1 query per source instead of N per trader)
+  // Batch update last_seen_at grouped by platform (1 query per platform instead of N per trader)
   try {
     const now = new Date().toISOString()
-    const bySource = new Map<string, string[]>()
+    const byPlatform = new Map<string, string[]>()
     for (const trader of traders) {
-      const ids = bySource.get(trader.source) || []
-      ids.push(trader.source_trader_id)
-      bySource.set(trader.source, ids)
+      const keys = byPlatform.get(trader.source) || []
+      keys.push(trader.source_trader_id)
+      byPlatform.set(trader.source, keys)
     }
     await Promise.all(
-      Array.from(bySource.entries()).map(([source, ids]) =>
+      Array.from(byPlatform.entries()).map(([platform, keys]) =>
         supabase
           .from('traders')
-          .update({ details_fetched_at: now } as Record<string, unknown>)
-          .eq('source', source)
-          .in('source_trader_id', ids)
+          .update({ last_seen_at: now } as Record<string, unknown>)
+          .eq('platform', platform)
+          .in('trader_key', keys)
       )
     )
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err)
-    if (!msg.includes('details_fetched_at') && !msg.includes('column')) {
-      logger.warn('Unexpected error updating details_fetched_at', { error: msg })
-    }
+    logger.warn('Unexpected error updating last_seen_at after enrichment', { error: msg })
   }
 
   const duration = Date.now() - startTime
