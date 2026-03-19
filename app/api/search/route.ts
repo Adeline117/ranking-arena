@@ -564,7 +564,7 @@ export const GET = withPublic(
         type: 'library' as const,
         title: l.title,
         subtitle: l.author || l.category || undefined,
-        href: `/library/${l.slug || l.id}`,
+        href: `/learn/${l.slug || l.id}`,
       })
     )
 
