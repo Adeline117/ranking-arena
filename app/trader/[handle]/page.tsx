@@ -46,9 +46,10 @@ export async function generateMetadata({ params }: { params: Promise<{ handle: s
       ].filter(Boolean)
 
       const title = `${name} (${exchange}) | Crypto Trader Rankings`
-      const description = parts.length
-        ? `${name} is a ${exchange} trader with ${parts.join(', ')}. Track their performance history, detailed analytics, and ranking movements on Arena among thousands of crypto traders.`
-        : `${name} is a ${exchange} crypto trader. View comprehensive performance analytics, trading history, risk metrics, and rankings on Arena among thousands of crypto traders across 30+ exchanges.`
+      const rawDescription = parts.length
+        ? `${name} is a ${exchange} trader with ${parts.join(', ')}. Track performance history, analytics, and rankings on Arena.`
+        : `${name} is a ${exchange} crypto trader. View performance analytics, trading history, risk metrics, and rankings on Arena.`
+      const description = rawDescription.length > 160 ? rawDescription.substring(0, 157) + '...' : rawDescription
 
       const ogParams = new URLSearchParams({ handle: decoded })
       if (roi != null) ogParams.set('roi', roi.toFixed(2))
@@ -84,7 +85,7 @@ export async function generateMetadata({ params }: { params: Promise<{ handle: s
   const fallbackOgImage = `${BASE}/api/og/trader?handle=${encodeURIComponent(decoded)}`
   return {
     title: `${decoded} | Crypto Trader Rankings`,
-    description: `View ${decoded}'s comprehensive crypto trading performance, PnL, ROI, win rate, and rank on Arena among 34,000+ traders across 28+ exchanges. Real-time analytics and historical data.`,
+    description: `View ${decoded}'s crypto trading performance, PnL, ROI, win rate, and rank on Arena — 34,000+ traders across 28+ exchanges.`,
     openGraph: {
       title: `${decoded} | Crypto Trader`,
       description: `View ${decoded}'s crypto trading performance, analytics, and rank on Arena among 34,000+ traders across 28+ exchanges.`,
