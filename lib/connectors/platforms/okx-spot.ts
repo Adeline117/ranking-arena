@@ -56,14 +56,15 @@ export class OkxSpotConnector extends BaseConnector {
       if (!ranks.length) break
 
       for (const item of ranks) {
-        const uniqueName = String(item.uniqueName || '')
-        if (!uniqueName) continue
+        // OKX Spot uses uniqueCode (not uniqueName like futures)
+        const traderKey = String(item.uniqueCode || item.uniqueName || '')
+        if (!traderKey) continue
         allTraders.push({
           platform: this.platform,
           market_type: 'spot',
-          trader_key: uniqueName,
+          trader_key: traderKey,
           display_name: (item.nickName as string) || null,
-          profile_url: `https://www.okx.com/copy-trading/account/${uniqueName}`,
+          profile_url: `https://www.okx.com/copy-trading/account/${traderKey}`,
           discovered_at: new Date().toISOString(),
           last_seen_at: new Date().toISOString(),
           is_active: true,
@@ -99,7 +100,7 @@ export class OkxSpotConnector extends BaseConnector {
     const e = raw as Record<string, unknown>
     const pnlRatio = e.pnlRatio != null ? Number(e.pnlRatio) : null
     return {
-      trader_key: e.uniqueName,
+      trader_key: e.uniqueCode || e.uniqueName,
       display_name: e.nickName,
       roi: pnlRatio != null ? pnlRatio * 100 : null, // OKX returns ratio (0.15 = 15%)
       pnl: e.pnl != null ? Number(e.pnl) : null,

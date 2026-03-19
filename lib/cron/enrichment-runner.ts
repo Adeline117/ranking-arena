@@ -95,6 +95,11 @@ import {
   type PositionHistoryItem,
   type PortfolioPosition,
 } from '@/lib/cron/fetchers/enrichment'
+import {
+  fetchOkxSpotEquityCurve,
+  fetchOkxSpotStatsDetail,
+  fetchOkxSpotCurrentPositions,
+} from '@/lib/cron/fetchers/enrichment-okx-spot'
 import { sleep } from '@/lib/cron/fetchers/shared'
 import { captureMessage } from '@/lib/utils/logger'
 import { sendRateLimitedAlert } from '@/lib/alerts/send-alert'
@@ -204,6 +209,13 @@ export const ENRICHMENT_PLATFORM_CONFIGS: Record<string, EnrichmentConfig> = {
     fetchStatsDetail: fetchOkxStatsDetail,
     fetchPositionHistory: fetchOkxPositionHistory,
     fetchCurrentPositions: fetchOkxCurrentPositions,
+    concurrency: 3, delayMs: 1500,
+  },
+  okx_spot: {
+    platform: 'okx_spot',
+    fetchEquityCurve: fetchOkxSpotEquityCurve,
+    fetchStatsDetail: fetchOkxSpotStatsDetail,
+    fetchCurrentPositions: fetchOkxSpotCurrentPositions,
     concurrency: 3, delayMs: 1500,
   },
   // bitget_futures: RE-ENABLED 2026-03-19 (60s/page + 4min timeout on fetcher)
@@ -424,11 +436,15 @@ export const NO_ENRICHMENT_PLATFORMS = new Set([
   'binance_web3', 'okx_web3', 'web3_bot',
   // API removed/unavailable
   // 'bybit' re-enabled (2026-03-18) — VPS scraper bypasses Akamai WAF
-  'bybit_spot',  // No separate spot enrichment API
-  'bitmart', 'paradex', 'okx_spot',  // Dead
-  // XT: re-enabled — internal copy-trading list API with batch cache (2026-03-18)
-  // kucoin, weex: dead platforms, no enrichment possible
-  'kucoin', 'weex',  // weex returns 521, janapw.com needs dynamic auth
+  'bybit_spot',  // Enrichment TBD — VPS scraper supports leaderboard but no detail endpoint yet
+  'bitmart', 'paradex',  // Dead
+  // okx_spot: RE-ENABLED 2026-03-19 — same v5 API as futures with instType=SPOT
+  // kucoin: Mac Mini only — no enrichment API accessible from datacenter
+  'kucoin',
+  // weex: stats detail available but no equity curve API
+  'weex',
+  // bingx_spot: Mac Mini only — CF blocks datacenter
+  'bingx_spot',
   // bitget_spot not yet configured (no enrichment API)
   // NOTE: bitfinex re-enabled — public rankings API for stats
   // NOTE: blofin re-enabled — trader detail endpoint
