@@ -154,10 +154,10 @@ export interface RateLimitResult {
 }
 
 /**
- * 检查限流
+ * 检查限流（完整版，带 meta 数据，供中间件使用）
  * @returns RateLimitResult with response (if blocked) and meta (for injecting headers on allowed responses)
  */
-export async function checkRateLimit(
+export async function checkRateLimitFull(
   request: NextRequest,
   config?: Partial<RateLimitConfig>,
   userId?: string
@@ -261,6 +261,22 @@ export async function checkRateLimit(
     // 非敏感操作使用 fail-open 策略，允许请求通过
     return { response: null, meta: null }
   }
+}
+
+/**
+ * 检查限流（向后兼容版本）
+ * 直接返回 NextResponse | null，供不需要 meta 数据的路由使用。
+ * null = 允许通过；NextResponse = 429 限流响应。
+ *
+ * @returns NextResponse (429) if rate-limited, null if allowed
+ */
+export async function checkRateLimit(
+  request: NextRequest,
+  config?: Partial<RateLimitConfig>,
+  userId?: string
+): Promise<NextResponse | null> {
+  const result = await checkRateLimitFull(request, config, userId)
+  return result.response
 }
 
 /**

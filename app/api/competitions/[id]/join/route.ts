@@ -4,14 +4,14 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { getSupabaseAdmin, getAuthUser } from '@/lib/supabase/server'
-import { checkRateLimit, RateLimitPresets } from '@/lib/utils/rate-limit'
+import { checkRateLimitFull, RateLimitPresets } from '@/lib/utils/rate-limit'
 
 export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   // Rate limit
-  const rateLimitResult = await checkRateLimit(request, RateLimitPresets.write)
+  const rateLimitResult = await checkRateLimitFull(request, RateLimitPresets.write)
   if (rateLimitResult.response) return rateLimitResult.response
 
   // Auth check

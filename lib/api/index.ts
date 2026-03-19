@@ -23,6 +23,7 @@ export {
 // 重新导出限流函数
 export {
   checkRateLimit,
+  checkRateLimitFull,
   getIdentifier,
   RateLimitPresets,
 } from '@/lib/utils/rate-limit'
