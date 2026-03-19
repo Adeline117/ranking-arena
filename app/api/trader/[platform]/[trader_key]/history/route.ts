@@ -75,7 +75,7 @@ export async function GET(
     // 获取历史快照数据 from trader_snapshots_v2
     const { data: snapshots, error } = await supabase
       .from('trader_snapshots_v2')
-      .select('created_at, roi_pct, pnl_usd, rank, arena_score, win_rate, max_drawdown')
+      .select('created_at, roi_pct, pnl_usd, arena_score, win_rate, max_drawdown')
       .eq('platform', platform)
       .eq('trader_key', traderId)
       .gte('created_at', periods['90D'].toISOString())
@@ -112,7 +112,7 @@ export async function GET(
           date,
           roi: snapshot.roi_pct !== null ? Number(snapshot.roi_pct) : 0,
           pnl: snapshot.pnl_usd !== null ? Number(snapshot.pnl_usd) : null,
-          rank: snapshot.rank,
+          rank: null, // trader_snapshots_v2 does not store rank; use rank_history endpoint instead
           arenaScore: snapshot.arena_score !== null ? Number(snapshot.arena_score) : null,
           winRate: snapshot.win_rate !== null ? Number(snapshot.win_rate) : null,
           maxDrawdown: snapshot.max_drawdown !== null ? Number(snapshot.max_drawdown) : null,
