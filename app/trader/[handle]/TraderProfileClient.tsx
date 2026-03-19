@@ -94,13 +94,8 @@ export interface UnregisteredTraderData {
 
 type TraderTabKey = 'overview' | 'stats' | 'portfolio' | 'posts'
 
-/** Platforms that fundamentally do not provide position/portfolio data */
-const NO_PORTFOLIO_PLATFORMS = new Set([
-  'htx_futures', 'mexc', 'btcc', 'coinex', 'bitunix',
-  'lbank', 'bingx', 'toobit', 'xt', 'weex', 'phemex', 'blofin', 'bitfinex',
-  'binance_spot', 'binance_web3', 'okx_web3', 'bybit_spot',
-  'aevo', 'bitget_futures', 'kucoin', 'web3_bot', 'kwenta',
-])
+// NO_PORTFOLIO_PLATFORMS removed — Portfolio tab shown for ALL platforms
+// When no position data exists, the Portfolio component shows an empty state
 type TraderPageData = import('@/app/u/[handle]/components/types').TraderPageData
 
 // #31: traderFetcher extracted to lib/hooks/traderFetcher.ts (shared with useUserProfile)
@@ -197,14 +192,12 @@ export default function TraderProfileClient({ data, serverTraderData, claimedUse
     return () => obs.disconnect()
   }, [])
 
-  // Tabs — conditionally include 'posts' for claimed traders, hide 'portfolio' for platforms without position data
-  const hidePortfolio = NO_PORTFOLIO_PLATFORMS.has(data.source?.toLowerCase() || '')
+  // Tabs — always show overview + stats + portfolio; conditionally include 'posts' for claimed traders
   const tabKeys: TraderTabKey[] = useMemo(() => {
-    const keys: TraderTabKey[] = ['overview', 'stats']
-    if (!hidePortfolio) keys.push('portfolio')
+    const keys: TraderTabKey[] = ['overview', 'stats', 'portfolio']
     if (claimedUser) keys.push('posts')
     return keys
-  }, [claimedUser, hidePortfolio])
+  }, [claimedUser])
   const urlTab = searchParams.get('tab')
   const [activeTab, setActiveTab] = useState<TraderTabKey>(
     urlTab && tabKeys.includes(urlTab as TraderTabKey) ? urlTab as TraderTabKey : 'overview'
@@ -466,7 +459,7 @@ export default function TraderProfileClient({ data, serverTraderData, claimedUse
           isPro={isPro}
           onProRequired={() => router.push('/pricing')}
           extraTabs={claimedUser ? ['posts'] : undefined}
-          hideTabs={hidePortfolio ? ['portfolio'] : undefined}
+          hideTabs={undefined}
         />
 
         {/* Tab Content — dims while loading account switch */}
@@ -726,7 +719,7 @@ export default function TraderProfileClient({ data, serverTraderData, claimedUse
                 stats={traderStats}
                 traderHandle={traderProfile?.handle || data.handle}
                 assetBreakdown={traderAssetBreakdown}
-                equityCurve={undefined}
+                equityCurve={traderEquityCurve as { '90D': Array<{ date: string; roi: number; pnl: number }>; '30D': Array<{ date: string; roi: number; pnl: number }>; '7D': Array<{ date: string; roi: number; pnl: number }> } | undefined}
                 positionHistory={traderPositionHistory}
                 isPro={isPro}
                 onUnlock={() => router.push('/pricing')}
@@ -746,8 +739,7 @@ export default function TraderProfileClient({ data, serverTraderData, claimedUse
             )}
           </Box>
 
-          {/* Portfolio Tab (hidden for platforms without position data) */}
-          {!hidePortfolio && (
+          {/* Portfolio Tab — shown for ALL platforms, empty state when no data */}
           <Box style={{ minHeight: 200 }}>
             {traderPortfolio.length === 0 && traderPositionHistory.length === 0 ? (
               <Box style={{
@@ -787,7 +779,6 @@ export default function TraderProfileClient({ data, serverTraderData, claimedUse
               />
             )}
           </Box>
-          )}
 
           {/* Posts Tab (only for claimed traders) */}
           {claimedUser && (
