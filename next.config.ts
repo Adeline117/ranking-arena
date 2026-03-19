@@ -43,7 +43,8 @@ const nextConfig: NextConfig = {
       }
 
       // Chunk consolidation — reduce HTTP requests on slow networks
-      // Turbopack creates very fine-grained chunks; webpack allows control
+      // Heavy web3 packages are split into a separate async chunk that only
+      // loads when the user triggers wallet connect (siwe, ethers, wagmi, rainbowkit).
       config.optimization.splitChunks = {
         chunks: 'all',
         maxInitialRequests: 25,
@@ -53,6 +54,14 @@ const nextConfig: NextConfig = {
             minChunks: 2,
             priority: -20,
             reuseExistingChunk: true,
+          },
+          // Heavy web3 / crypto packages: isolated into async-only chunk
+          web3: {
+            test: /[\\/]node_modules[\\/](ethers|siwe|@walletconnect|@rainbow-me|wagmi|viem|abitype)[\\/]/,
+            name: 'web3',
+            chunks: 'async', // Only included in async chunks, never in initial load
+            priority: 30,
+            enforce: true,
           },
           vendor: {
             test: /[\\/]node_modules[\\/]/,
