@@ -37,6 +37,7 @@ export default function ConversationPage({ params }: { params: Promise<{ convers
   const [previewOpen, setPreviewOpen] = useState<{ type: 'image' | 'video' | 'file'; url: string; fileName?: string } | null>(null)
   const inputRef = useRef<HTMLTextAreaElement>(null)
   const typingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const isTypingRef = useRef(false)
 
   // Auth hook
   const { email, userId, authChecked, accessToken } = useConversationAuth()
@@ -58,10 +59,15 @@ export default function ConversationPage({ params }: { params: Promise<{ convers
     setNewMessage(text)
     if (!conversationId) return
     if (text.trim()) {
-      setTyping(conversationId, true)
+      // Only send track() when transitioning from not-typing to typing
+      if (!isTypingRef.current) {
+        isTypingRef.current = true
+        setTyping(conversationId, true)
+      }
       if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current)
-      typingTimeoutRef.current = setTimeout(() => { setTyping(conversationId, false) }, 3000)
+      typingTimeoutRef.current = setTimeout(() => { isTypingRef.current = false; setTyping(conversationId, false) }, 3000)
     } else {
+      isTypingRef.current = false
       setTyping(conversationId, false)
       if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current)
     }
@@ -70,7 +76,7 @@ export default function ConversationPage({ params }: { params: Promise<{ convers
   useEffect(() => {
     return () => {
       if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current)
-      if (conversationId) setTyping(conversationId, false)
+      if (conversationId) { isTypingRef.current = false; setTyping(conversationId, false) }
     }
   }, [conversationId, setTyping])
 
@@ -131,7 +137,7 @@ export default function ConversationPage({ params }: { params: Promise<{ convers
     const attachment = fileHook.pendingAttachment
     fileHook.setPendingAttachment(null)
     inputRef.current?.focus()
-    if (conversationId) { setTyping(conversationId, false); if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current) }
+    if (conversationId) { isTypingRef.current = false; setTyping(conversationId, false); if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current) }
     await msgHook.handleSend(content, attachment)
     setSending(false)
   }
