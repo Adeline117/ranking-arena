@@ -167,7 +167,7 @@ async function writeToSupabase(traders) {
       platform: PLATFORM,
       market_type: MARKET_TYPE,
       trader_key: traderKey,
-      window: '30d',
+      window: '30D',
       as_of_ts: dateBucket,
       roi_pct: roi,
       pnl_usd: pnl,
