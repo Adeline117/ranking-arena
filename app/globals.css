@@ -11,12 +11,20 @@
  * - trader-animations.css: Only loaded on /trader/[handle] pages
  */
 
-/* Theme transition - smooth color crossfade */
+/* Theme transition - smooth color crossfade.
+   Scoped to direct children of key layout containers to avoid
+   triggering non-composited animations on hundreds of elements. */
 html.theme-transition,
-html.theme-transition *,
-html.theme-transition *::before,
-html.theme-transition *::after {
-  transition: background-color 0.4s ease, color 0.3s ease, border-color 0.3s ease, box-shadow 0.3s ease, fill 0.3s ease, stroke 0.3s ease !important;
+html.theme-transition > body,
+html.theme-transition header,
+html.theme-transition main,
+html.theme-transition footer,
+html.theme-transition nav,
+html.theme-transition section,
+html.theme-transition .top-nav,
+html.theme-transition .mobile-bottom-nav,
+html.theme-transition [data-theme-transition] {
+  transition: background-color 0.4s ease, color 0.3s ease, border-color 0.3s ease !important;
 }
 
 /* View Transition API — circular reveal for theme switch */
@@ -826,13 +834,24 @@ select:focus-visible {
   }
 }
 
-/* 骨架屏 - Theme-aware with enhanced shimmer */
+/* 骨架屏 - Theme-aware with GPU-composited shimmer */
 .skeleton {
   background-color: var(--color-bg-secondary);
-  background-image: linear-gradient(90deg, transparent 25%, var(--color-bg-tertiary) 50%, transparent 75%);
-  background-size: 400% 100%;
-  animation: shimmer 1.8s ease-in-out infinite;
   border-radius: 8px;
+  position: relative;
+  overflow: hidden;
+}
+.skeleton::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(90deg, transparent 25%, var(--color-bg-tertiary) 50%, transparent 75%);
+  animation: skeletonSlide 1.8s ease-in-out infinite;
+  will-change: transform;
+}
+@keyframes skeletonSlide {
+  0% { transform: translateX(-100%); }
+  100% { transform: translateX(100%); }
 }
 
 /* Skeleton shape variants */
@@ -1228,7 +1247,7 @@ select:focus-visible {
 
 /* Base button transition */
 .btn-base {
-  transition: all 0.2s ease;
+  transition: background-color 0.2s ease, color 0.2s ease, border-color 0.2s ease, opacity 0.2s ease, transform 0.2s ease;
 }
 
 /* Hover lift effect for non-disabled buttons */
@@ -1294,7 +1313,7 @@ select:focus-visible {
 
 /* Logo link hover */
 .top-nav-logo-link {
-  transition: all 200ms cubic-bezier(0.4, 0, 0.2, 1);
+  transition: transform 200ms cubic-bezier(0.4, 0, 0.2, 1), opacity 200ms cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .top-nav-logo-link:hover {
@@ -1304,7 +1323,7 @@ select:focus-visible {
 
 /* Nav link hover (non-active) */
 .top-nav-link {
-  transition: all 200ms cubic-bezier(0.4, 0, 0.2, 1);
+  transition: color 200ms cubic-bezier(0.4, 0, 0.2, 1), opacity 200ms cubic-bezier(0.4, 0, 0.2, 1);
   position: relative;
 }
 
@@ -1346,7 +1365,7 @@ select:focus-visible {
 
 /* Search input focus */
 .top-nav-search-input {
-  transition: all 300ms cubic-bezier(0.4, 0, 0.2, 1);
+  transition: border-color 300ms cubic-bezier(0.4, 0, 0.2, 1), background-color 300ms cubic-bezier(0.4, 0, 0.2, 1), box-shadow 300ms cubic-bezier(0.4, 0, 0.2, 1), transform 300ms cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .top-nav-search-input::placeholder {
@@ -1373,12 +1392,12 @@ select:focus-visible {
 }
 
 /* Mobile bottom nav press feedback */
-.mobile-nav-item { transition: all 150ms cubic-bezier(0.4, 0, 0.2, 1); }
+.mobile-nav-item { transition: transform 150ms cubic-bezier(0.4, 0, 0.2, 1); }
 .mobile-nav-item:active { transform: scale(0.9); }
 
 /* Notification button hover */
 .top-nav-notif-btn {
-  transition: all 200ms cubic-bezier(0.4, 0, 0.2, 1);
+  transition: background-color 200ms cubic-bezier(0.4, 0, 0.2, 1), color 200ms cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .top-nav-notif-btn:hover {
@@ -1388,7 +1407,7 @@ select:focus-visible {
 
 /* Menu link hover */
 .top-nav-menu-link {
-  transition: all 200ms cubic-bezier(0.4, 0, 0.2, 1);
+  transition: background-color 200ms cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .top-nav-menu-link:hover {
@@ -1397,7 +1416,7 @@ select:focus-visible {
 
 /* Logout link hover */
 .top-nav-logout-link {
-  transition: all 200ms cubic-bezier(0.4, 0, 0.2, 1);
+  transition: background-color 200ms cubic-bezier(0.4, 0, 0.2, 1), color 200ms cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .top-nav-logout-link:hover {
@@ -1407,7 +1426,7 @@ select:focus-visible {
 
 /* Login button hover */
 .top-nav-login-link {
-  transition: all 300ms cubic-bezier(0.4, 0, 0.2, 1);
+  transition: background-color 300ms cubic-bezier(0.4, 0, 0.2, 1), color 300ms cubic-bezier(0.4, 0, 0.2, 1), transform 300ms cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .top-nav-login-link:hover {
@@ -1490,7 +1509,7 @@ select:focus-visible {
 
 /* Category pill / filter chip shared hover */
 .filter-chip {
-  transition: all 200ms cubic-bezier(0.4, 0, 0.2, 1);
+  transition: background-color 200ms cubic-bezier(0.4, 0, 0.2, 1), border-color 200ms cubic-bezier(0.4, 0, 0.2, 1), color 200ms cubic-bezier(0.4, 0, 0.2, 1), transform 200ms cubic-bezier(0.4, 0, 0.2, 1);
   min-height: 44px;
 }
 .filter-chip:hover:not([data-active="true"]) {
@@ -1503,7 +1522,7 @@ select:focus-visible {
 /* Card hover lift pattern */
 .card-hover {
   box-shadow: var(--shadow-card), var(--shadow-border-glow);
-  transition: all 200ms cubic-bezier(0.4, 0, 0.2, 1);
+  transition: transform 200ms cubic-bezier(0.4, 0, 0.2, 1), box-shadow 200ms cubic-bezier(0.4, 0, 0.2, 1);
 }
 .card-hover:hover {
   transform: translateY(-2px);
@@ -1889,7 +1908,7 @@ a:focus-visible, button:focus-visible, [role="button"]:focus-visible, [tabindex=
 /* Mobile sidebar widgets - collapsible area */
 .mobile-sidebar-widgets {
   display: none;
-  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  transition: opacity 0.3s cubic-bezier(0.4, 0, 0.2, 1), transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
 @media (max-width: 1023px) {
   .mobile-sidebar-widgets {
@@ -2723,7 +2742,7 @@ td[data-numeric],
 
 /* Group card hover */
 .group-card {
-  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  transition: transform 0.25s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.25s cubic-bezier(0.4, 0, 0.2, 1), border-color 0.25s cubic-bezier(0.4, 0, 0.2, 1);
 }
 .group-card:hover {
   transform: translateY(-3px);
@@ -2733,7 +2752,7 @@ td[data-numeric],
 
 /* Post card hover */
 .post-card {
-  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  transition: border-color 0.2s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.2s cubic-bezier(0.4, 0, 0.2, 1);
 }
 .post-card:hover {
   border-color: var(--color-accent-primary-20, rgba(139, 111, 168, 0.2));
@@ -2827,7 +2846,7 @@ td[data-numeric],
 
 /* Enhanced TopNav glass effect on scroll */
 .top-nav {
-  transition: all 0.2s ease;
+  transition: background-color 0.2s ease, box-shadow 0.2s ease;
 }
 
 .top-nav.scrolled {
@@ -2853,7 +2872,7 @@ td[data-numeric],
   .mobile-nav-item:active {
     transform: scale(0.96);
     opacity: 0.8;
-    transition: all 0.1s ease;
+    transition: transform 0.1s ease, opacity 0.1s ease;
   }
 }
 
@@ -2875,7 +2894,7 @@ td[data-numeric],
 
 /* Enhanced footer visual hierarchy */
 .footer-columns {
-  transition: all 0.2s ease;
+  transition: opacity 0.2s ease;
 }
 
 /* Improved desktop sidebar positioning */
@@ -3062,14 +3081,14 @@ td[data-numeric],
 }
 
 .hover-slide-right {
-  transition: all 0.2s ease;
+  transition: transform 0.2s ease;
 }
 .hover-slide-right:hover {
   transform: translateX(4px);
 }
 
 .hover-unfollow {
-  transition: all var(--transition-base, 0.2s);
+  transition: background-color var(--transition-base, 0.2s), color var(--transition-base, 0.2s), border-color var(--transition-base, 0.2s);
 }
 .hover-unfollow:hover {
   border-color: var(--color-accent-error) !important;
@@ -3137,19 +3156,19 @@ td[data-numeric],
 .onboarding-bg.light { background: linear-gradient(135deg, #f5f5f7 0%, #e8e8ed 50%, #f0f0f5 100%); }
 .onboarding-bg::before { content: ''; position: absolute; top: -50%; left: -50%; width: 200%; height: 200%; background: radial-gradient(ellipse at center, var(--color-accent-primary-08) 0%, transparent 50%); }
 .onboarding-card { animation: fadeIn 0.6s cubic-bezier(0.16, 1, 0.3, 1) forwards; backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px); }
-.option-card { cursor: pointer; transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1); }
+.option-card { cursor: pointer; transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.3s cubic-bezier(0.16, 1, 0.3, 1); }
 .option-card:hover { transform: translateY(-2px); }
-.continue-btn { transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1); }
+.continue-btn { transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.3s cubic-bezier(0.16, 1, 0.3, 1), background-color 0.3s cubic-bezier(0.16, 1, 0.3, 1); }
 .continue-btn:not(:disabled):hover { transform: translateY(-2px); box-shadow: 0 8px 30px var(--color-accent-primary-40); }
 .continue-btn:not(:disabled):active { transform: translateY(0) scale(0.98); }
 .step-content { animation: stepEnter 0.5s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
-.interest-card { transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1); cursor: pointer; }
+.interest-card { transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1), background-color 0.2s cubic-bezier(0.16, 1, 0.3, 1); cursor: pointer; }
 .interest-card:hover { transform: translateY(-2px); }
 .progress-dot.active { animation: progressPulse 2s ease infinite; }
 .celebration-icon { animation: celebrationBurst 0.6s cubic-bezier(0.34, 1.56, 0.64, 1) forwards; }
 .check-animation { stroke-dasharray: 50; stroke-dashoffset: 50; animation: checkDraw 0.5s ease 0.3s forwards; }
-.trader-row { transition: all 0.2s ease; cursor: default; }
+.trader-row { transition: background-color 0.2s ease; cursor: default; }
 .trader-row:hover { background: var(--color-notification-unread); }
-.follow-btn { transition: all 0.2s ease; cursor: pointer; border: none; font-weight: 600; font-size: 13px; padding: 6px 16px; border-radius: 8px; }
+.follow-btn { transition: transform 0.2s ease, background-color 0.2s ease; cursor: pointer; border: none; font-weight: 600; font-size: 13px; padding: 6px 16px; border-radius: 8px; }
 .follow-btn:hover { transform: scale(1.03); }
 

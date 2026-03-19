@@ -16,7 +16,7 @@ export default function PlausibleAnalytics() {
       defer
       data-domain={domain}
       src="https://plausible.io/js/script.js"
-      strategy="afterInteractive"
+      strategy="lazyOnload"
     />
   )
 }
