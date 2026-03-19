@@ -43,6 +43,7 @@ export type TraderSource =
   | 'bitget_spot'
   | 'bybit_spot'
   | 'okx_spot'
+  | 'bingx_spot'
   // CEX web3 / wallets
   | 'binance_web3'
   | 'okx_web3'
@@ -76,8 +77,6 @@ export type TraderSource =
   | 'toobit'
   // Social trading
   | 'etoro'
-  // Crypto.com
-  | 'crypto_com'
   // Web3 bots / AI agents
   | 'web3_bot'
 
@@ -108,6 +107,7 @@ export const ALL_SOURCES: TraderSource[] = [
   'bitget_spot',
   'bybit_spot',
   'okx_spot',
+  'bingx_spot',
   // CEX web3
   'binance_web3',
   'okx_web3',
@@ -125,7 +125,6 @@ export const ALL_SOURCES: TraderSource[] = [
   'btcc',
   'bitfinex',
   'toobit',
-  'crypto_com',
   // Social trading
   'etoro',
   // Web3 bots
@@ -158,7 +157,7 @@ export const DEAD_BLOCKED_PLATFORMS: TraderSource[] = [
   // 'blofin' — VPS/Mac Mini working (429 traders)
   // 'kucoin' — Mac Mini fetch-kucoin-v2.mjs (12 traders, browser-only API)
   // 'kucoin' — RECOVERED: new API /_api/ct-copy-trade/v1/copyTrading/rn/leaderboard/query (775 traders) — 2026-03-19
-  'crypto_com' as TraderSource, // DEAD: /exchange/copy-trading redirects to /exchange/, feature removed — confirmed 2026-03-19
+  // crypto_com: DELETED — confirmed no copy trading feature on web (2026-03-19)
   // 'weex' — RECOVERED: new API http-gateway1.weex.com/api/v1/public/trace/traderListView (417 traders) — 2026-03-19
 
   // ═══════════════════════════════════════════════════════════════
@@ -304,6 +303,7 @@ export const EXCHANGE_CONFIG: Record<TraderSource, ExchangeConfig> = {
   bitget_spot: { name: 'Bitget Spot', sourceType: 'spot', reliability: 65, trustWeight: 0.80, roiType: 'mixed' },
   bybit_spot: { name: 'Bybit Spot', sourceType: 'spot', reliability: 45, trustWeight: 0.85, roiType: 'mixed' },
   okx_spot: { name: 'OKX Spot', sourceType: 'spot', reliability: 90, trustWeight: 0.80, roiType: 'mixed' },
+  bingx_spot: { name: 'BingX Spot', sourceType: 'spot', reliability: 70, trustWeight: 0.80, roiType: 'mixed' },
   // CEX web3 / wallets
   binance_web3: { name: 'Binance Web3', sourceType: 'web3', reliability: 85, trustWeight: 0.85, roiType: 'mixed' },
   okx_web3: { name: 'OKX Web3', sourceType: 'web3', reliability: 90, trustWeight: 1.0, roiType: 'mixed' },
@@ -328,7 +328,6 @@ export const EXCHANGE_CONFIG: Record<TraderSource, ExchangeConfig> = {
   btcc: { name: 'BTCC', sourceType: 'futures', reliability: 65, trustWeight: 0.75, roiType: 'mixed' },
   bitfinex: { name: 'Bitfinex', sourceType: 'futures', reliability: 70, trustWeight: 0.80, roiType: 'mixed' },
   toobit: { name: 'Toobit', sourceType: 'futures', reliability: 50, trustWeight: 0.65, roiType: 'mixed' },
-  crypto_com: { name: 'Crypto.com', sourceType: 'futures', reliability: 50, trustWeight: 0.75, roiType: 'mixed' },
   etoro: { name: 'eToro', sourceType: 'spot', reliability: 90, trustWeight: 0.85, roiType: 'realized' },
   web3_bot: { name: 'Web3 Bot', sourceType: 'web3', reliability: 75, trustWeight: 0.70, roiType: 'mixed' },
   kwenta: { name: 'Kwenta', sourceType: 'web3', reliability: 70, trustWeight: 0.75, roiType: 'realized' },
@@ -423,7 +422,6 @@ export const SOURCE_TO_CONNECTOR_MAP: Record<string, { platform: string; marketT
   bitunix: { platform: 'bitunix', marketType: 'futures' },
   bitfinex: { platform: 'bitfinex', marketType: 'futures' },
   toobit: { platform: 'toobit', marketType: 'futures' },
-  crypto_com: { platform: 'crypto_com', marketType: 'futures' },
   etoro: { platform: 'etoro', marketType: 'spot' },
   bybit: { platform: 'bybit', marketType: 'futures' },
   bybit_spot: { platform: 'bybit_spot', marketType: 'spot' },

@@ -232,7 +232,7 @@ export async function initializeConnectors(): Promise<void> {
   lazy('bitunix:futures', () => import('./platforms/bitunix-futures'), 'BitunixFuturesConnector', 'bitunix')
   lazy('bitfinex:futures', () => import('./platforms/bitfinex-futures'), 'BitfinexFuturesConnector', 'bitfinex')
   lazy('toobit:futures', () => import('./platforms/toobit-futures'), 'ToobitFuturesConnector', 'toobit')
-  lazy('crypto_com:futures', () => import('./platforms/crypto-futures'), 'CryptoFuturesConnector', 'crypto_com')
+  // crypto_com: DELETED — no copy trading feature on web (2026-03-19)
   lazy('etoro:spot', () => import('./platforms/etoro-spot'), 'EtoroSpotConnector', 'etoro')
   lazy('bitget_spot:spot', () => import('./platforms/bitget-spot'), 'BitgetSpotConnector', 'bitget_spot')
   lazy('binance_spot:spot', () => import('./platforms/binance-spot'), 'BinanceSpotConnector', 'binance_futures')
