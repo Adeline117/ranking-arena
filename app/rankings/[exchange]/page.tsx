@@ -169,6 +169,8 @@ interface TraderData {
   max_drawdown: number | null
   arena_score: number | null
   followers: number | null
+  sharpe_ratio: number | null
+  trades_count: number | null
   trader_type?: string | null
   is_bot?: boolean
   captured_at?: string | null
@@ -277,7 +279,7 @@ async function RankingsContent({ exchange }: { exchange: string }) {
     name: `Top ${displayName} ${labels.en} Traders ${CURRENT_YEAR}`,
     description: `Best ${displayName} ${labels.en.toLowerCase()} traders ranked by Arena Score in ${CURRENT_YEAR}`,
     numberOfItems: top10ForJsonLd.length,
-    itemListElement: top10ForJsonLd.map((t, i) => ({
+    itemListElement: top10ForJsonLd.map((t: { trader_key: string; display_name: string | null; avatar_url: string | null }, i: number) => ({
       '@type': 'ListItem',
       position: i + 1,
       item: {
