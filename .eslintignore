@@ -1,0 +1,22 @@
+# Test files
+*.test.ts
+*.test.tsx
+*.spec.ts
+*.spec.tsx
+test-*.mjs
+test-*.ts
+
+# Debug scripts
+scripts/check-*.ts
+scripts/test-*.ts
+scripts/debug-*.ts
+
+# Build output
+.next
+dist
+build
+node_modules
+
+# Config files
+*.config.js
+*.config.ts
