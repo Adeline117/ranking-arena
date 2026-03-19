@@ -298,6 +298,7 @@ export default function TraderHeader({
           {/* Line 1: Name + exchange badge + score badge */}
           <Box style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'nowrap' }}>
             <Text
+              as="h1"
               size="lg"
               weight="black"
               className="trader-name-truncate"
