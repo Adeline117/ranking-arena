@@ -10,9 +10,10 @@ interface UsePostTranslationOptions {
   posts: Post[]
   language: string
   translatingEnabled?: boolean
+  accessToken?: string | null
 }
 
-export function usePostTranslation({ posts, language, translatingEnabled = true }: UsePostTranslationOptions) {
+export function usePostTranslation({ posts, language, translatingEnabled = true, accessToken }: UsePostTranslationOptions) {
   const [translatedPosts, setTranslatedPosts] = useState<Record<string, { title?: string; content?: string }>>({})
   const [translatingPosts, setTranslatingPosts] = useState(false)
 
@@ -57,6 +58,11 @@ export function usePostTranslation({ posts, language, translatingEnabled = true 
     }
 
     if (needsTranslation.length === 0) {
+      setTranslatingPosts(false)
+      return
+    }
+
+    if (!accessToken) {
       setTranslatingPosts(false)
       return
     }
