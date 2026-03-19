@@ -202,6 +202,7 @@ export {
 export {
   fetchBingxEquityCurve,
   fetchBingxStatsDetail,
+  fetchBingxCurrentPositions,
 } from './enrichment-bingx'
 
 // Toobit

@@ -226,6 +226,11 @@ const worker = {
       return handleBingxTraderDetail(request, url);
     }
 
+    // Shortcut: /bingx/trader-positions (current open positions)
+    if (url.pathname === '/bingx/trader-positions') {
+      return handleBingxTraderPositions(request, url);
+    }
+
     // Shortcut: /blofin/leaderboard
     if (url.pathname === '/blofin/leaderboard') {
       return handleBlofinLeaderboard(request, url);
@@ -277,7 +282,7 @@ const worker = {
         '/drift/leaderboard', '/paradex/leaderboard',
         '/dydx/leaderboard', '/dydx/historical-pnl', '/dydx/subaccount',
         '/blofin/leaderboard', '/blofin/trader-info',
-        '/bingx/leaderboard', '/bingx/trader-detail',
+        '/bingx/leaderboard', '/bingx/trader-detail', '/bingx/trader-positions',
         '/gains/leaderboard-all', '/gains/open-trades', '/gains/trader-stats',
       ]
     }, { status: 404 });
@@ -973,6 +978,36 @@ async function handleBingxTraderDetail(_request: Request, url: URL): Promise<Res
     const msg = error instanceof Error ? error.message : String(error);
     console.error('[proxy] error:', msg);
     return Response.json({ error: 'BingX trader detail proxy error', details: 'Upstream API unavailable' }, {
+      status: 500,
+      headers: { 'Access-Control-Allow-Origin': corsOrigin() },
+    });
+  }
+}
+
+async function handleBingxTraderPositions(_request: Request, url: URL): Promise<Response> {
+  const uid = url.searchParams.get('uid') || '';
+
+  if (!uid) {
+    return Response.json({ error: 'Missing uid' }, { status: 400, headers: { 'Access-Control-Allow-Origin': corsOrigin() } });
+  }
+
+  // BingX internal API for current open positions
+  const apiUrl = `https://api-app.qq-os.com/api/copy-trade-facade/v2/trader/current-position?uid=${uid}`;
+
+  try {
+    const response = await fetch(apiUrl, { method: 'GET', headers: BINGX_HEADERS });
+    const data = await response.text();
+    return new Response(data, {
+      status: response.status,
+      headers: {
+        'Content-Type': response.headers.get('Content-Type') || 'application/json',
+        'Access-Control-Allow-Origin': corsOrigin(),
+      },
+    });
+  } catch (error) {
+    const msg = error instanceof Error ? error.message : String(error);
+    console.error('[proxy] error:', msg);
+    return Response.json({ error: 'BingX trader positions proxy error', details: 'Upstream API unavailable' }, {
       status: 500,
       headers: { 'Access-Control-Allow-Origin': corsOrigin() },
     });
