@@ -4471,6 +4471,13 @@ compFieldDescPlaceholder: 'ルールと賞品を記載...',
 compFieldMetric: '競争指標',
 compFieldMaxParticipants: '最大参加人数',
 
+    // Trader comments/reviews
+    traderReviews: 'レビュー',
+    noReviewsYet: 'まだレビューがありません。最初の感想を共有しましょう！',
+    loginToReview: 'ログインしてレビューを投稿',
+    ratingOptional: '評価（任意）',
+    clearRating: 'クリア',
+
 } as const
 
 export default ja
