@@ -200,6 +200,9 @@ export const ENRICHMENT_PLATFORM_CONFIGS: Record<string, EnrichmentConfig> = {
       return fetchBinanceEquityCurve(traderId, timeRangeMap[days] || '90D')
     },
     fetchStatsDetail: fetchBinanceStatsDetail,
+    // Binance positions endpoint returns CURRENT open positions (not closed history)
+    // Wire as both: currentPositions saves to trader_portfolio, positionHistory to trader_position_history
+    fetchCurrentPositions: fetchBinancePositionHistory,
     fetchPositionHistory: fetchBinancePositionHistory,
     concurrency: 5, delayMs: 1000,
   },

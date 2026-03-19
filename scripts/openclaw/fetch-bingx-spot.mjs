@@ -146,12 +146,29 @@ async function writeToSupabase(traders) {
     return
   }
 
+  const validTraders = traders.filter(t => t.uid)
   const now = new Date()
   now.setMinutes(0, 0, 0)
   const dateBucket = now.toISOString()
 
-  // Write to trader_profiles_v2 — frontend API reads display_name from this table
-  const profileRows = traders.filter(t => t.uid).map(t => ({
+  // 1. Write to traders table (required for resolveTrader)
+  const traderRows = validTraders.map(t => ({
+    platform: PLATFORM, trader_key: t.uid,
+    handle: t.name || t.uid,
+    avatar_url: t.avatar || null,
+    profile_url: `https://bingx.com/en/copy-trading/trader/${t.uid}`,
+    market_type: 'spot',
+  }))
+  for (let i = 0; i < traderRows.length; i += 500) {
+    const batch = traderRows.slice(i, i + 500)
+    const { error } = await supabase
+      .from('traders').upsert(batch, { onConflict: 'platform,trader_key' })
+    if (error) console.error('[bingx_spot] traders error:', error.message)
+  }
+  console.log(`[bingx_spot] Wrote ${traderRows.length} traders`)
+
+  // 2. Write to trader_profiles_v2
+  const profileRows = validTraders.map(t => ({
     platform: PLATFORM, market_type: 'spot', trader_key: t.uid,
     display_name: t.name || null, avatar_url: t.avatar || null,
     profile_url: `https://bingx.com/en/copy-trading/trader/${t.uid}`,
@@ -163,28 +180,31 @@ async function writeToSupabase(traders) {
     .from('trader_profiles_v2').upsert(profileRows, { onConflict: 'platform,trader_key' })
   if (profErr) console.error('[bingx_spot] profiles error:', profErr.message)
 
-  const snapshots = traders.filter(t => t.uid).map(t => ({
-    platform: PLATFORM,
-    market_type: 'spot',
-    trader_key: t.uid,
-    window: '30D',
-    as_of_ts: dateBucket,
-    roi_pct: t.roi,
-    pnl_usd: t.pnl,
-    win_rate: t.win_rate,
-    max_drawdown: t.max_drawdown,
-    sharpe_ratio: t.sharpe_ratio,
-    trades_count: t.trades_count,
-    copiers: t.copiers,
-    followers: t.followers,
-    metrics: { display_name: t.name, avatar_url: t.avatar, accountEnum: t.accountEnum },
-  }))
+  // 3. Write snapshots — 30D + 7D windows
+  const allSnapshots = []
+  for (const t of validTraders) {
+    const baseRow = {
+      platform: PLATFORM, market_type: 'spot', trader_key: t.uid,
+      as_of_ts: dateBucket,
+      roi_pct: t.roi, pnl_usd: t.pnl,
+      win_rate: t.win_rate, max_drawdown: t.max_drawdown,
+      sharpe_ratio: t.sharpe_ratio, trades_count: t.trades_count,
+      copiers: t.copiers, followers: t.followers,
+      metrics: { display_name: t.name, avatar_url: t.avatar, accountEnum: t.accountEnum },
+    }
+    allSnapshots.push({ ...baseRow, window: '30D' })
+    // Also write 7D snapshot (same data — BingX API doesn't differentiate periods)
+    allSnapshots.push({ ...baseRow, window: '7D' })
+  }
 
-  const { error: snapErr } = await supabase
-    .from('trader_snapshots_v2')
-    .upsert(snapshots, { onConflict: 'platform,market_type,trader_key,window' })
-  if (snapErr) console.error('[bingx_spot] snapshots error:', snapErr.message)
-  else console.log(`[bingx_spot] Wrote ${snapshots.length} snapshots`)
+  for (let i = 0; i < allSnapshots.length; i += 500) {
+    const batch = allSnapshots.slice(i, i + 500)
+    const { error: snapErr } = await supabase
+      .from('trader_snapshots_v2')
+      .upsert(batch, { onConflict: 'platform,market_type,trader_key,window' })
+    if (snapErr) console.error('[bingx_spot] snapshots error:', snapErr.message)
+  }
+  console.log(`[bingx_spot] Wrote ${allSnapshots.length} snapshots (30D + 7D)`)
 }
 
 try {
