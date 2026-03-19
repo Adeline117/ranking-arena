@@ -517,10 +517,10 @@ export async function upsertTraders(
       import('@/lib/realtime/ranking-store').then(({ updateTraderScore }) => {
         for (const t of batch) {
           if (t.arena_score != null && t.arena_score > 0) {
-            updateTraderScore(t.season_id, t.source, t.source_trader_id, t.arena_score).catch(() => {})
+            updateTraderScore(t.season_id, t.source, t.source_trader_id, t.arena_score).catch(err => logger.warn('[RankingStore] Failed to update trader score:', err.message))
           }
         }
-      }).catch(() => {})
+      }).catch(err => logger.warn('[RankingStore] Failed to import ranking-store module:', err.message))
 
       // Fire-and-forget: dual-write snapshots to ClickHouse for analytics
       fireAndForget(
