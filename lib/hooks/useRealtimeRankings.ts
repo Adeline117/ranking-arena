@@ -8,7 +8,7 @@
  * Adds a 'ranking-pulse' CSS class on data updates for visual feedback.
  */
 
-import { useEffect, useCallback, useRef, useState } from 'react'
+import { useEffect, useCallback, useRef, useReducer } from 'react'
 
 interface RankingUpdate {
   id: string
@@ -56,6 +56,49 @@ interface UseRealtimeRankingsReturn {
  * Batches updates over a 2s window and provides an `isUpdating` flag
  * that can be used to trigger a subtle pulse animation in the UI.
  */
+interface RealtimeState {
+  isLoading: boolean
+  isError: boolean
+  isUpdating: boolean
+  dataSource: string | null
+  lastUpdatedAt: number | null
+}
+
+type RealtimeAction =
+  | { type: 'FETCH_START' }
+  | { type: 'FETCH_SUCCESS'; dataSource: string | null; lastUpdatedAt: number }
+  | { type: 'FETCH_SUCCESS_NO_CHANGE' }
+  | { type: 'FETCH_ERROR' }
+  | { type: 'FETCH_END' }
+  | { type: 'SET_UPDATING'; value: boolean }
+
+function realtimeReducer(state: RealtimeState, action: RealtimeAction): RealtimeState {
+  switch (action.type) {
+    case 'FETCH_START':
+      return { ...state, isLoading: true }
+    case 'FETCH_SUCCESS':
+      return { ...state, isError: false, dataSource: action.dataSource, lastUpdatedAt: action.lastUpdatedAt }
+    case 'FETCH_SUCCESS_NO_CHANGE':
+      return { ...state, isError: false }
+    case 'FETCH_ERROR':
+      return { ...state, isError: true }
+    case 'FETCH_END':
+      return { ...state, isLoading: false }
+    case 'SET_UPDATING':
+      return { ...state, isUpdating: action.value }
+    default:
+      return state
+  }
+}
+
+const initialRealtimeState: RealtimeState = {
+  isLoading: false,
+  isError: false,
+  isUpdating: false,
+  dataSource: null,
+  lastUpdatedAt: null,
+}
+
 export function useRealtimeRankings({
   period = '90D',
   limit = 50,
@@ -63,11 +106,7 @@ export function useRealtimeRankings({
   pollInterval = 120_000,
   onUpdate,
 }: UseRealtimeRankingsOptions): UseRealtimeRankingsReturn {
-  const [isLoading, setIsLoading] = useState(false)
-  const [isError, setIsError] = useState(false)
-  const [isUpdating, setIsUpdating] = useState(false)
-  const [dataSource, setDataSource] = useState<string | null>(null)
-  const [lastUpdatedAt, setLastUpdatedAt] = useState<number | null>(null)
+  const [state, dispatch] = useReducer(realtimeReducer, initialRealtimeState)
 
   const onUpdateRef = useRef(onUpdate)
   onUpdateRef.current = onUpdate
@@ -84,9 +123,9 @@ export function useRealtimeRankings({
     onUpdateRef.current?.(updates)
 
     // Trigger pulse animation indicator for 2 seconds
-    setIsUpdating(true)
+    dispatch({ type: 'SET_UPDATING', value: true })
     if (pulseTimerRef.current) clearTimeout(pulseTimerRef.current)
-    pulseTimerRef.current = setTimeout(() => setIsUpdating(false), 2000)
+    pulseTimerRef.current = setTimeout(() => dispatch({ type: 'SET_UPDATING', value: false }), 2000)
   }, [])
 
   useEffect(() => {
@@ -98,25 +137,28 @@ export function useRealtimeRankings({
       if (aborted) return
 
       try {
-        setIsLoading(true)
+        dispatch({ type: 'FETCH_START' })
         const url = `/api/rankings/live?period=${period}&limit=${limit}&offset=0`
         const res = await fetch(url)
 
         if (!res.ok) {
-          setIsError(true)
+          dispatch({ type: 'FETCH_ERROR' })
           return
         }
 
         const json = await res.json()
-        setIsError(false)
-        setDataSource(json.source || null)
-
         const traders = json.traders as RankingUpdate[] | undefined
-        if (!traders?.length) return
+        if (!traders?.length) {
+          dispatch({ type: 'FETCH_SUCCESS_NO_CHANGE' })
+          return
+        }
 
         // Change detection: only trigger update if data actually changed
         const fingerprint = traders.map(t => `${t.id}:${t.arena_score}:${t.rank}`).join('|')
-        if (fingerprint === previousDataRef.current) return
+        if (fingerprint === previousDataRef.current) {
+          dispatch({ type: 'FETCH_SUCCESS_NO_CHANGE' })
+          return
+        }
         previousDataRef.current = fingerprint
 
         // Buffer updates
@@ -129,11 +171,11 @@ export function useRealtimeRankings({
         if (flushTimerRef.current) clearTimeout(flushTimerRef.current)
         flushTimerRef.current = setTimeout(flush, 2000)
 
-        setLastUpdatedAt(Date.now())
+        dispatch({ type: 'FETCH_SUCCESS', dataSource: json.source || null, lastUpdatedAt: Date.now() })
       } catch {
-        setIsError(true)
+        dispatch({ type: 'FETCH_ERROR' })
       } finally {
-        setIsLoading(false)
+        dispatch({ type: 'FETCH_END' })
       }
     }
 
@@ -153,10 +195,10 @@ export function useRealtimeRankings({
   }, [period, limit, enabled, pollInterval, flush])
 
   return {
-    isLoading,
-    isError,
-    isUpdating,
-    dataSource,
-    lastUpdatedAt,
+    isLoading: state.isLoading,
+    isError: state.isError,
+    isUpdating: state.isUpdating,
+    dataSource: state.dataSource,
+    lastUpdatedAt: state.lastUpdatedAt,
   }
 }
