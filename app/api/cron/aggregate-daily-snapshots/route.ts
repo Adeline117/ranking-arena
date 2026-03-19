@@ -177,13 +177,16 @@ export async function GET(request: NextRequest) {
       }
 
       // Compute daily return: prefer ROI delta (works for all platforms), fallback to PnL delta
+      // Apply bounds checking to prevent numeric overflow (daily_return_pct: -1000% to +1000%)
       let dailyReturnPct: number | null = null
       if (currentRoi != null && prev?.roi != null) {
         // ROI delta: e.g. today 150% - yesterday 148% = +2% daily return
-        dailyReturnPct = currentRoi - prev.roi
-      } else if (currentPnl != null && prev?.pnl != null && prev.pnl !== 0) {
-        // PnL delta fallback
-        dailyReturnPct = ((currentPnl - prev.pnl) / Math.abs(prev.pnl)) * 100
+        const rawReturn = currentRoi - prev.roi
+        dailyReturnPct = Math.max(-1000, Math.min(1000, rawReturn))
+      } else if (currentPnl != null && prev?.pnl != null && Math.abs(prev.pnl) > 0.01) {
+        // PnL delta fallback (only if prev.pnl > $0.01 to avoid division by near-zero)
+        const rawReturn = ((currentPnl - prev.pnl) / Math.abs(prev.pnl)) * 100
+        dailyReturnPct = Math.max(-1000, Math.min(1000, rawReturn))
       }
 
       records.push({
