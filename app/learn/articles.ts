@@ -215,6 +215,186 @@ Visit the pricing page to learn more about Pro membership.
 Arena has a built-in social layer. Join groups, post trade ideas, and discuss strategies with other traders.
     `.trim(),
   },
+  {
+    slug: 'top-traders-by-exchange',
+    title: 'Top Traders by Exchange: Who Leads Each Platform?',
+    excerpt: 'A breakdown of trading performance across Binance, Bybit, Hyperliquid, and 25+ other exchanges.',
+    content: `
+# Top Traders by Exchange
+
+Arena tracks **28+ exchanges** spanning centralized (CEX) and decentralized (DEX) platforms. Each exchange has its own leaderboard, ranked by Arena Score.
+
+## CEX Leaders
+- **Binance Futures**: The largest exchange by volume. Top traders here tend to have high PnL but moderate ROI due to competition.
+- **Bybit**: Known for copy-trading features. Leaders often have consistent win rates above 60%.
+- **OKX Futures**: Strong performers in derivatives. The OKX leaderboard includes verified traders with transparent track records.
+
+## DEX Leaders
+- **Hyperliquid**: The fastest-growing DEX. Top traders leverage on-chain transparency — every trade is verifiable.
+- **GMX**: Built on Arbitrum. Leaders here focus on leveraged perpetual positions.
+- **dYdX**: The original DeFi perpetuals exchange. Top traders benefit from deep liquidity.
+
+## How to Compare
+Use Arena's **Platform Stats** (/api/rankings/platform-stats) to see average ROI, median score, and trader count per exchange. This helps you identify which platforms produce the most consistent performers.
+
+## Key Insight
+CEX traders typically show higher PnL (more capital), while DEX traders show higher ROI percentages (more leverage). Arena Score normalizes these differences so you can compare fairly across platforms.
+`,
+  },
+  {
+    slug: 'what-is-copy-trading',
+    title: 'What is Copy Trading? A Beginner\'s Guide',
+    excerpt: 'Learn how copy trading works, its benefits and risks, and how Arena helps you find the best traders to follow.',
+    content: `
+# What is Copy Trading?
+
+Copy trading lets you automatically replicate the trades of experienced traders. When they buy, you buy. When they sell, you sell. It's like having a professional manage your portfolio.
+
+## How It Works
+1. **Browse rankings** on Arena to find top-performing traders
+2. **Analyze their profile** — check ROI, drawdown, win rate, and trading style
+3. **Follow them** on their exchange's copy-trading platform (Binance, Bybit, OKX, etc.)
+4. **Set your allocation** — decide how much capital to allocate
+
+## Benefits
+- **No experience needed**: Let proven traders make decisions
+- **Diversification**: Follow multiple traders across different styles
+- **Transparency**: See real-time performance before committing
+
+## Risks
+- **Past performance ≠ future results**: Even top traders have losing streaks
+- **Drawdown risk**: A 50% drawdown means you need 100% gain to recover
+- **Slippage**: Your fills may differ from the trader you're copying
+
+## How Arena Helps
+Arena's **Arena Score** combines ROI and PnL into a single risk-adjusted metric. Use filters like "Low Risk" (low drawdown) or "Consistent" (high win rate) to find traders matching your risk tolerance.
+
+> **Pro tip**: Don't put all your capital with one trader. Spread across 3-5 traders with different trading styles for better risk management.
+`,
+  },
+  {
+    slug: 'trading-styles-explained',
+    title: 'Trading Styles Explained: Scalper, Swing, Trend, Position',
+    excerpt: 'Understand the four main trading styles and how Arena classifies traders automatically.',
+    content: `
+# Trading Styles Explained
+
+Arena automatically classifies traders into four styles based on their behavior:
+
+## Scalper (< 4 hours avg hold)
+- Opens and closes positions within hours or minutes
+- High trade frequency, small gains per trade
+- Requires constant market attention
+- **Best for**: Volatile markets, high-frequency strategies
+
+## Swing Trader (4 hours - 7 days avg hold)
+- Holds positions for days, capturing medium-term moves
+- Moderate trade frequency
+- Balances analysis time with active management
+- **Best for**: Traders who can't watch markets 24/7
+
+## Trend Follower (7 - 30 days avg hold)
+- Rides major market trends for weeks
+- Lower trade frequency, larger gains per trade
+- Requires patience and conviction
+- **Best for**: Trending markets, lower time commitment
+
+## Position Trader (> 30 days avg hold)
+- Long-term holding with strategic entry/exit
+- Minimal daily management
+- Highest risk per trade but potential for largest gains
+- **Best for**: Long-term conviction plays
+
+## How Arena Classifies
+Arena calculates **average holding hours** from a trader's position history. Combined with trade frequency and win rate patterns, it assigns a style with a **confidence score** (0-100%). You can filter by style on any ranking page.
+`,
+  },
+  {
+    slug: 'how-to-read-equity-curves',
+    title: 'How to Read Equity Curves and Drawdown Charts',
+    excerpt: 'Learn to interpret the visual charts on trader profiles — equity curves, drawdown depth, and daily returns.',
+    content: `
+# How to Read Equity Curves
+
+Every trader profile on Arena shows several charts. Here's how to interpret them:
+
+## Equity Curve
+The main chart showing cumulative ROI over time. A healthy equity curve slopes **upward and to the right** with minimal dips.
+
+**What to look for:**
+- **Steady upward slope**: Consistent performance (good)
+- **Sharp spikes**: Concentrated gains from few trades (risky)
+- **Flat periods**: Trader inactive or in drawdown
+- **Vertical drops**: Significant losses
+
+## Drawdown Chart (Underwater Chart)
+Shows how far below the peak the portfolio has fallen at any point. Always negative or zero.
+
+**Key metrics:**
+- **Max Drawdown**: The deepest the portfolio fell from its peak
+- **Recovery time**: How long to recover from the worst drawdown
+- **Frequency**: How often drawdowns occur
+
+**Rule of thumb**: A max drawdown of 20% means the trader lost 20% from their best point. They need 25% gain to recover.
+
+## Daily Returns Distribution
+A histogram showing how many days had positive vs negative returns.
+
+**What to look for:**
+- **Symmetry**: Bell-shaped = consistent. Skewed right = occasional big wins. Skewed left = occasional big losses.
+- **Fat tails**: Many extreme days = high volatility
+- **Narrow distribution**: Most days near 0% = low volatility, consistent
+
+## Pro Tips
+1. Compare 7D, 30D, and 90D curves — short-term performance can differ dramatically from long-term
+2. A trader with lower ROI but smaller drawdown may be better for copy-trading (less emotional stress)
+3. Check win rate + avg hold time together — a 90% win rate with 1-minute holds might be a bot
+`,
+  },
+  {
+    slug: 'arena-pro-features',
+    title: 'Arena Pro: What You Get with a Subscription',
+    excerpt: 'Detailed overview of Pro features including advanced analytics, trader comparison, rank alerts, and more.',
+    content: `
+# Arena Pro Features
+
+Arena Pro unlocks powerful tools for serious traders and analysts. Here's what's included:
+
+## Advanced Analytics
+- **Score Breakdown**: See exactly how a trader's Arena Score is calculated — Return Score, PnL Score, confidence multiplier, and platform trust weight
+- **Risk Metrics**: Sharpe ratio, Sortino ratio, Calmar ratio, and profit factor for every trader
+- **Market Correlation**: Beta to BTC/ETH and alpha generation metrics
+
+## Trader Comparison
+- Compare up to 5 traders side-by-side
+- Overlay equity curves on a single chart
+- Correlation analysis between traders
+- Style compatibility matrix
+
+## Rank Alerts
+- Get notified when a followed trader enters or exits the top 100
+- Custom threshold alerts (e.g., "Alert me if ROI drops below 50%")
+- Delivered via in-app notifications and email
+
+## Advanced Filters
+- Filter by trading style (Scalper, Swing, Trend, Position)
+- Minimum score, ROI, PnL thresholds
+- Maximum drawdown filter
+- Win rate range filter
+
+## Pro Badge
+- Purple Pro badge on your profile
+- Priority in community features
+- Access to Pro-only groups
+
+## Pricing
+- **Monthly**: $4.99/month
+- **Yearly**: $29.99/year (save 50%)
+- **Lifetime**: $49.99 one-time payment
+
+[Upgrade to Pro →](/pricing)
+`,
+  },
 ]
 
 export function getArticleBySlug(slug: string): Article | undefined {
