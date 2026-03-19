@@ -52,7 +52,6 @@ export interface CacheEntry<T> {
   tier: CacheTier
   cachedAt: number
   expiresAt: number
-  hitCount: number
 }
 
 export interface LayerStats {
@@ -258,7 +257,7 @@ export async function tieredSet<T>(
     tier,
     cachedAt: now,
     expiresAt: now + config.redisTtlSeconds * 1000,
-    hitCount: 0,
+
   }
   
   // L1: 写入内存缓存
@@ -405,7 +404,7 @@ export async function tieredGetOrSet<T>(
       tier,
       cachedAt: Date.now(),
       expiresAt: Date.now() + (config.redisTtlSeconds + config.staleWhileRevalidate) * 1000,
-      hitCount: 0,
+  
     }
     memoryCache.set(`swr:${key}`, swrEntry, config.redisTtlSeconds + config.staleWhileRevalidate)
   }
@@ -491,7 +490,7 @@ export async function warmupCache<T>(
       tier,
       cachedAt: now,
       expiresAt: now + config.redisTtlSeconds * 1000,
-      hitCount: 0,
+  
     }
 
     // 写入内存
