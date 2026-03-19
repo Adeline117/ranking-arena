@@ -84,6 +84,7 @@ export async function GET(
       .eq('source', found.source)
       .eq('source_trader_id', found.traderId)
       .order('updated_at', { ascending: false })
+      .limit(500)
     
     if (error) {
       logger.error('[Positions API] Error:', error)

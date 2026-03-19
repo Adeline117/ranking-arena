@@ -251,7 +251,7 @@ export async function GET(
         .eq('source_trader_id', trader_key)
         .in('period', ['90D', '30D', '7D'])
         .order('data_date', { ascending: true })
-        .limit(90)
+        .limit(365)
 
       if (legacyCurve && legacyCurve.length > 0) {
         timeseries.equity_curve = legacyCurve.map(p => ({
