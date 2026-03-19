@@ -71,8 +71,10 @@ export default function HomePage({ initialTraders, initialLastUpdated, heroStats
       >
         <h1 className="sr-only">Arena</h1>
         {/* HomeHero is eagerly imported — renders immediately. Suspense is for lazy NumberTicker inside it. */}
-        <Suspense fallback={null}><HomeHero traderCount={heroStats?.traderCount} exchangeCount={heroStats?.exchangeCount} /></Suspense>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+        <div style={{ contain: 'content' }}>
+          <Suspense fallback={null}><HomeHero traderCount={heroStats?.traderCount} exchangeCount={heroStats?.exchangeCount} /></Suspense>
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, contain: 'content' }}>
           <HomeSubNav />
           <FoundingMemberBanner />
         </div>
@@ -118,7 +120,9 @@ export default function HomePage({ initialTraders, initialLastUpdated, heroStats
         </ThreeColumnLayout>
       </Box>
 
-      <Suspense fallback={<div style={{ minHeight: 200 }} />}><Footer /></Suspense>
+      <div style={{ contain: 'content' }}>
+        <Suspense fallback={<div style={{ minHeight: 200 }} />}><Footer /></Suspense>
+      </div>
       {/* MobileBottomNav rendered in root layout.tsx */}
       <Suspense fallback={null}><GuestSignupPrompt /></Suspense>
       <Suspense fallback={null}><WelcomeModal /></Suspense>
