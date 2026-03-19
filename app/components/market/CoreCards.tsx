@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, memo } from 'react'
 import { tokens } from '@/lib/design-tokens'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import CryptoIcon from '@/app/components/common/CryptoIcon'
@@ -219,6 +219,29 @@ function useTimeSince(timestamp: number | null): string {
   return `${minutes}m ago`
 }
 
+/**
+ * Isolated component that owns the 1-second tick for the "updated X ago" label.
+ * Keeping state here prevents the parent CoreCards from re-rendering every second.
+ */
+const UpdatedAgoLabel = memo(function UpdatedAgoLabel({
+  timestamp,
+  label,
+}: {
+  timestamp: number | null
+  label: string
+}) {
+  const ago = useTimeSince(timestamp)
+  if (!ago) return null
+  return (
+    <div
+      style={{ textAlign: 'right', fontSize: 11, color: 'var(--color-text-tertiary)', marginBottom: 6 }}
+      suppressHydrationWarning
+    >
+      {label} {ago}
+    </div>
+  )
+})
+
 export default function CoreCards() {
   const { t } = useLanguage()
   const [gainers, setGainers] = useState<CoinRow[]>([])
@@ -226,7 +249,6 @@ export default function CoreCards() {
   const [marketLoaded, setMarketLoaded] = useState(false)
   const [exchanges, setExchanges] = useState<ExchangeInfo[]>([])
   const [lastFetchedAt, setLastFetchedAt] = useState<number | null>(null)
-  const updatedAgo = useTimeSince(lastFetchedAt)
 
   useEffect(() => {
     let alive = true
@@ -321,11 +343,7 @@ export default function CoreCards() {
 
   return (
     <div>
-    {updatedAgo && (
-      <div style={{ textAlign: 'right', fontSize: 11, color: tokens.colors.text.tertiary, marginBottom: 6 }} suppressHydrationWarning>
-        {t('lastUpdated') || 'Updated'} {updatedAgo}
-      </div>
-    )}
+    <UpdatedAgoLabel timestamp={lastFetchedAt} label={t('lastUpdated') || 'Updated'} />
     <div className="core-cards-grid" style={{
       display: 'grid',
       gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))',
