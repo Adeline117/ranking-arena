@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState, useEffect, useRef, memo, useCallback, useTransition, useMemo } from 'react'
+import React, { useState, useEffect, useRef, memo, useCallback, useTransition, useMemo, useDeferredValue } from 'react'
 import Link from 'next/link'
 import { useLoginModal } from '@/lib/hooks/useLoginModal'
 import { tokens } from '@/lib/design-tokens'
@@ -103,11 +103,17 @@ function RankingTableInner(props: {
   onPageChange?: (page: number) => void
   onSearchChange?: (query: string) => void
 }) {
-  const { traders, loading, source, timeRange = '90D', isPro = false, category = 'all', onCategoryChange, onProRequired, onFilterToggle, hasActiveFilters, error, onRetry,
+  const { traders: tradersRaw, loading, source, timeRange = '90D', isPro = false, category = 'all', onCategoryChange, onProRequired, onFilterToggle, hasActiveFilters, error, onRetry,
     controlledSortColumn, controlledSortDir, controlledPage, controlledSearchQuery,
     onSortChange, onPageChange, onSearchChange,
   } = props
   const { t, language } = useLanguage()
+
+  // useDeferredValue allows React to interrupt the expensive 50-row render during hydration.
+  // During loading state, show immediate (empty/skeleton) data.
+  // When traders arrive, React renders the deferred value in a lower-priority pass,
+  // keeping the main thread free for higher-priority interactions (TBT reduction).
+  const traders = useDeferredValue(tradersRaw)
 
   // Load ranking-table.css asynchronously (animations, hover effects)
   useRankingTableStyles()
