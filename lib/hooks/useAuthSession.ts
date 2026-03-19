@@ -13,9 +13,31 @@
  */
 
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
-import { supabase } from '@/lib/supabase/client'
 import type { User, Session } from '@supabase/supabase-js'
 import { logger } from '@/lib/logger'
+
+// Lazy-load Supabase client to avoid pulling ~50KB into the initial client bundle.
+// The actual import happens on first use (initializeAuth), which is deferred.
+type LazySupabaseClient = Awaited<typeof import('@/lib/supabase/client')>['supabase']
+let _supabase: LazySupabaseClient | null = null
+let _supabasePromise: Promise<LazySupabaseClient> | null = null
+
+function getSupabase(): Promise<LazySupabaseClient> {
+  if (_supabase) return Promise.resolve(_supabase)
+  if (!_supabasePromise) {
+    _supabasePromise = import('@/lib/supabase/client').then(m => {
+      _supabase = m.supabase
+      return _supabase
+    })
+  }
+  return _supabasePromise
+}
+
+// Synchronous getter — only works after lazy init resolves.
+// Falls back to null before that (callers must handle).
+function getSupabaseSync() {
+  return _supabase
+}
 
 export type AuthState = {
   user: User | null
@@ -75,31 +97,37 @@ function initializeAuth() {
   if (initialized) return
   initialized = true
 
-  // Get initial session
-  supabase.auth.getSession().then(({ data }) => {
-    updateFromSession(data.session)
-    setGlobalAuthState({ loading: false, authChecked: true })
-  }).catch((err) => {
-    logger.error('[useAuthSession] Failed to get initial session:', err)
-    setGlobalAuthState({ loading: false, authChecked: true })
-  })
-
-  // Subscribe to auth state changes
-  supabase.auth.onAuthStateChange((event, session) => {
-    if (event === 'SIGNED_OUT') {
-      setGlobalAuthState({
-        user: null,
-        userId: null,
-        email: null,
-        accessToken: null,
-        isLoggedIn: false,
-        authChecked: true,
-        loading: false,
-      })
-    } else if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED' || event === 'INITIAL_SESSION') {
-      updateFromSession(session)
+  // Lazy-load Supabase then initialize auth
+  getSupabase().then((sb) => {
+    // Get initial session
+    sb.auth.getSession().then(({ data }) => {
+      updateFromSession(data.session)
       setGlobalAuthState({ loading: false, authChecked: true })
-    }
+    }).catch((err) => {
+      logger.error('[useAuthSession] Failed to get initial session:', err)
+      setGlobalAuthState({ loading: false, authChecked: true })
+    })
+
+    // Subscribe to auth state changes
+    sb.auth.onAuthStateChange((event, session) => {
+      if (event === 'SIGNED_OUT') {
+        setGlobalAuthState({
+          user: null,
+          userId: null,
+          email: null,
+          accessToken: null,
+          isLoggedIn: false,
+          authChecked: true,
+          loading: false,
+        })
+      } else if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED' || event === 'INITIAL_SESSION') {
+        updateFromSession(session)
+        setGlobalAuthState({ loading: false, authChecked: true })
+      }
+    })
+  }).catch((err) => {
+    logger.error('[useAuthSession] Failed to load Supabase:', err)
+    setGlobalAuthState({ loading: false, authChecked: true })
   })
 }
 
@@ -159,7 +187,8 @@ export function useAuthSession(): AuthSessionReturn {
     }
 
     try {
-      const { data: { session } } = await supabase.auth.getSession()
+      const sb = await getSupabase()
+      const { data: { session } } = await sb.auth.getSession()
       if (session?.access_token) {
         // Check if token is close to expiry (within 60s)
         const expiresAt = session.expires_at
@@ -168,7 +197,7 @@ export function useAuthSession(): AuthSessionReturn {
           // Token about to expire, refresh
           refreshingRef.current = true
           try {
-            const { data: { session: refreshed } } = await supabase.auth.refreshSession()
+            const { data: { session: refreshed } } = await sb.auth.refreshSession()
             if (refreshed) {
               updateFromSession(refreshed)
               setGlobalAuthState({ loading: false, authChecked: true })
@@ -225,7 +254,8 @@ export function useAuthSession(): AuthSessionReturn {
 
   const refreshSession = useCallback(async (): Promise<boolean> => {
     try {
-      const { data, error } = await supabase.auth.refreshSession()
+      const sb = await getSupabase()
+      const { data, error } = await sb.auth.refreshSession()
       if (error || !data.session) return false
       updateFromSession(data.session)
       setGlobalAuthState({ loading: false, authChecked: true })
@@ -250,7 +280,8 @@ export function useAuthSession(): AuthSessionReturn {
   }, [])
 
   const signOut = useCallback(async () => {
-    await supabase.auth.signOut()
+    const sb = await getSupabase()
+    await sb.auth.signOut()
     setGlobalAuthState({
       user: null,
       userId: null,
@@ -285,7 +316,8 @@ export async function authFetch(
   const { requireAuth: needsAuth = true, ...fetchOptions } = options
 
   // Get current access token
-  const { data: { session } } = await supabase.auth.getSession()
+  const sb = await getSupabase()
+  const { data: { session } } = await sb.auth.getSession()
 
   if (needsAuth && !session?.access_token) {
     throw Object.assign(new Error('Not authenticated'), { authError: { type: 'NOT_AUTHENTICATED' as const, message: '请先登录' } })
@@ -300,7 +332,7 @@ export async function authFetch(
 
   // Handle token expiry: try to refresh and retry once
   if (response.status === 401 && session) {
-    const { data: refreshData } = await supabase.auth.refreshSession()
+    const { data: refreshData } = await sb.auth.refreshSession()
     if (refreshData.session) {
       headers.set('Authorization', `Bearer ${refreshData.session.access_token}`)
       return fetch(url, { ...fetchOptions, headers })
