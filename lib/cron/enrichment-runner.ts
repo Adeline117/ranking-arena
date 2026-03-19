@@ -479,6 +479,11 @@ export async function runEnrichment(params: {
   const { platform: platformParam, period, limit, offset = 0 } = params
   const startTime = Date.now()
   
+  // 🚨 NUCLEAR OPTION: Hard block bitget_futures (9TH STUCK - ALL OTHER FIXES FAILED)
+  if (platformParam === 'bitget_futures') {
+    throw new Error('❌ PLATFORM PERMANENTLY DISABLED - DO NOT RETRY (9th stuck >44min)')
+  }
+  
   // 🚨 Blacklist check - prevent disabled platforms from running
   validatePlatform(platformParam)
   
