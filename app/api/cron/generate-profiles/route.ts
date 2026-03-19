@@ -93,29 +93,33 @@ export async function POST(request: NextRequest) {
     for (let i = 0; i < profiles.length; i += BATCH_SIZE) {
       const batch = profiles.slice(i, i + BATCH_SIZE)
 
-      // Fetch snapshots for this batch
-      const snapshotResults = await Promise.all(
-        batch.map(async (profile) => {
-          // Try 90D first, then 30D, then 7D
-          for (const window of ['90D', '30D', '7D'] as const) {
-            const { data: snap } = await supabase
-              .from('trader_snapshots_v2')
-              .select('window, metrics')
-              .eq('platform', profile.platform)
-              .eq('trader_key', profile.trader_key)
-              .eq('window', window)
-              .order('as_of_ts', { ascending: false })
-              .limit(1)
-              .maybeSingle()
+      // Batch-fetch all snapshots for this batch in a single query, then resolve in-memory
+      const batchKeys = batch.map(p => p.trader_key)
+      const { data: batchSnaps } = await supabase
+        .from('trader_snapshots_v2')
+        .select('trader_key, window, metrics, as_of_ts')
+        .in('trader_key', batchKeys)
+        .in('window', ['90D', '30D', '7D'])
+        .order('as_of_ts', { ascending: false })
 
-            if (snap?.metrics) {
-              return { window, metrics: snap.metrics as Record<string, unknown> }
-            }
-          }
+      // Build a map: trader_key → best window snapshot (prefer 90D > 30D > 7D)
+      const WINDOW_PRIORITY: Record<string, number> = { '90D': 3, '30D': 2, '7D': 1 }
+      const bestSnapMap = new Map<string, { window: string; metrics: Record<string, unknown> }>()
+      for (const snap of batchSnaps ?? []) {
+        if (!snap.metrics) continue
+        const existing = bestSnapMap.get(snap.trader_key)
+        const snapPriority = WINDOW_PRIORITY[snap.window] ?? 0
+        const existingPriority = existing ? (WINDOW_PRIORITY[existing.window] ?? 0) : -1
+        if (snapPriority > existingPriority) {
+          bestSnapMap.set(snap.trader_key, { window: snap.window, metrics: snap.metrics as Record<string, unknown> })
+        }
+      }
 
-          return null
-        })
-      )
+      const snapshotResults = batch.map(profile => {
+        const best = bestSnapMap.get(profile.trader_key)
+        if (!best) return null
+        return { window: best.window as '7D' | '30D' | '90D', metrics: best.metrics }
+      })
 
       // Generate bios and tags, then batch upsert
       const updates: Array<{
