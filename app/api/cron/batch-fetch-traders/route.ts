@@ -75,14 +75,11 @@ const GROUPS: Record<string, string[]> = {
   // Group G1: DEX (every 6h)
   g1: ['drift', 'jupiter_perps', 'aevo'],
   // Group G2: DEX+CEX+scraper (every 6h)
-  g2: ['web3_bot', 'toobit', 'xt', 'crypto_com'],
-  // Group J: REMOVED — weex dead (521 server down, 0 traders) — 2026-03-18
+  g2: ['web3_bot', 'toobit', 'xt'],
+  // crypto_com: REMOVED — copy-trading feature shut down, /exchange/copy-trading redirects to /exchange/ — 2026-03-19
   // Group I: Social trading + restored platforms (every 6h)
-  // dYdX restored via Copin API (2026-03-15)
-  // blofin/phemex: Mac Mini feeds data, connector as backup
   i: ['etoro', 'dydx'],
-  // Group K: Restored platforms via VPS scraper (every 6h)
-  k: ['kucoin'],
+  // kucoin: REMOVED — all copy-trade APIs return 404, SPA shell only — 2026-03-19
 }
 
 interface BatchResult {

@@ -157,6 +157,8 @@ export const DEAD_BLOCKED_PLATFORMS: TraderSource[] = [
   // 'lbank' — VPS scraper working (42 traders)
   // 'blofin' — VPS/Mac Mini working (429 traders)
   // 'kucoin' — Mac Mini fetch-kucoin-v2.mjs (12 traders, browser-only API)
+  'kucoin' as TraderSource, // DEAD: /_api/copy-trade 404, SPA shell returns HTML for all routes, no JSON API — confirmed 2026-03-19
+  'crypto_com' as TraderSource, // DEAD: /exchange/copy-trading redirects to /exchange/, feature removed — confirmed 2026-03-19
   'weex',         // DEAD: returns 521 (server down), janapw.com domain needs dynamic auth, 0 traders in leaderboard — 2026-03-18
 
   // ═══════════════════════════════════════════════════════════════
