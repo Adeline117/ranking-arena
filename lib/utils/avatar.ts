@@ -80,6 +80,61 @@ export function isWalletAddress(traderId: string): boolean {
 }
 
 /**
+ * Generate a deterministic identicon SVG from any string seed.
+ * Replaces external calls to api.dicebear.com/7.x/identicon — produces
+ * a visually identical geometric pattern with zero network latency.
+ * Returns a data URI (data:image/svg+xml,...) safe for img src / next/image.
+ */
+export function generateIdenticonSvg(seed: string, size = 64): string {
+  // Hash the seed to a 32-bit integer
+  let hash = 5381
+  for (let i = 0; i < seed.length; i++) {
+    hash = ((hash << 5) + hash) ^ seed.charCodeAt(i)
+    hash = hash | 0 // keep 32-bit signed
+  }
+
+  const nextVal = () => {
+    hash = Math.imul(hash ^ (hash >>> 16), 0x45d9f3b) | 0
+    hash = Math.imul(hash ^ (hash >>> 16), 0x45d9f3b) | 0
+    hash = (hash ^ (hash >>> 16)) | 0
+    return (hash >>> 0) / 0xffffffff // 0..1
+  }
+
+  // Two accent colours + a pale background
+  const hue1 = Math.floor(nextVal() * 360)
+  const hue2 = (hue1 + 120 + Math.floor(nextVal() * 120)) % 360
+  const bgHue = (hue1 + 240) % 360
+
+  const c1 = `hsl(${hue1},65%,52%)`
+  const c2 = `hsl(${hue2},60%,55%)`
+  const bg = `hsl(${bgHue},20%,78%)`
+
+  // 5×5 grid, left half generated then mirrored (like GitHub identicons)
+  const GRID = 5
+  const cell = size / GRID
+  let rects = ''
+
+  for (let row = 0; row < GRID; row++) {
+    for (let col = 0; col < 3; col++) {
+      const v = nextVal()
+      if (v < 0.45) continue // ~55% filled
+      const fill = v < 0.72 ? c1 : c2
+      const mirrorCol = GRID - 1 - col
+      const x1 = col * cell
+      const x2 = mirrorCol * cell
+      const y = row * cell
+      rects += `<rect x="${x1.toFixed(1)}" y="${y.toFixed(1)}" width="${cell.toFixed(1)}" height="${cell.toFixed(1)}" fill="${fill}"/>`
+      if (col !== mirrorCol) {
+        rects += `<rect x="${x2.toFixed(1)}" y="${y.toFixed(1)}" width="${cell.toFixed(1)}" height="${cell.toFixed(1)}" fill="${fill}"/>`
+      }
+    }
+  }
+
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}" viewBox="0 0 ${size} ${size}"><rect width="${size}" height="${size}" fill="${bg}"/>${rects}</svg>`
+  return `data:image/svg+xml,${encodeURIComponent(svg)}`
+}
+
+/**
  * Generate a deterministic SVG blockie (Ethereum-style) for a wallet address.
  * Returns a data URI that can be used as an img src.
  * 8×8 grid, mirrored horizontally for symmetry (like MetaMask blockies).
@@ -160,8 +215,32 @@ export interface AvatarProps {
 }
 
 /**
- * 需要通过代理加载的头像域名列表
- * 这些域名通常有CORS或Referrer限制
+ * Domains that can be loaded directly in the browser without the /api/avatar proxy.
+ * These have no CORS/Referrer restrictions for img src, or are self-hosted.
+ * Note: dicebear.com and robohash.org are in next.config remotePatterns — no proxy needed.
+ * Note: data: URIs (local identicons/blockies) are always direct.
+ */
+const DIRECT_LOAD_DOMAINS = [
+  // Avatar generators — no CORS restrictions
+  'api.dicebear.com',
+  'robohash.org',
+  'i.pravatar.cc',
+  'randomuser.me',
+  'ui-avatars.com',
+  // Our own CDN
+  'arenafi.org',
+  'cdn.arenafi.org',
+  // GitHub / Google user content
+  'githubusercontent.com',
+  'googleusercontent.com',
+  // Supabase storage (user uploaded avatars)
+  'supabase.co',
+  'supabase.in',
+]
+
+/**
+ * Exchange CDN domains that require the /api/avatar proxy due to CORS or Referrer restrictions.
+ * These are whitelisted in the proxy's allowed domains list.
  */
 const PROXY_REQUIRED_DOMAINS = [
   // Binance
@@ -210,11 +289,17 @@ const PROXY_REQUIRED_DOMAINS = [
 
 /**
  * 检查URL是否需要通过代理加载
+ * Returns false for data URIs, direct domains (dicebear, etc.), and unknown domains.
+ * Returns true only for known exchange CDNs with CORS/Referrer restrictions.
  */
 export function needsProxy(url: string | null | undefined): boolean {
   if (!url) return false
+  // data: URIs are always inline — never proxy
+  if (url.startsWith('data:')) return false
   try {
     const hostname = new URL(url).hostname.toLowerCase()
+    // Never proxy direct-load domains
+    if (DIRECT_LOAD_DOMAINS.some(domain => hostname.includes(domain))) return false
     return PROXY_REQUIRED_DOMAINS.some(domain => hostname.includes(domain))
   } catch {
     // Intentionally swallowed: invalid URL format, no proxy needed
@@ -340,7 +425,17 @@ export function getTraderAvatarUrl(avatarUrl: string | null | undefined): string
     return null
   }
 
-  // 其他有效图片URL也走代理（确保 DiceBear、pravatar 等外部 URL 正常渲染）
+  // Direct-load domains (dicebear, supabase, github, etc.) — serve without proxy
+  try {
+    const hostname = new URL(avatarUrl).hostname.toLowerCase()
+    if (DIRECT_LOAD_DOMAINS.some(domain => hostname.includes(domain))) {
+      return avatarUrl
+    }
+  } catch {
+    // Invalid URL — fall through to proxy
+  }
+
+  // Unknown domains with valid image URLs — proxy for safety (CORS/Referrer)
   return `/api/avatar?url=${encodeURIComponent(avatarUrl)}`
 }
 

@@ -106,20 +106,30 @@ export default function WatchlistMarket() {
   }).filter(Boolean).join(',')
 
   const marketFetcher = useCallback(async (url: string): Promise<CoinPrice[]> => {
-    const res = await fetch(url)
-    if (!res.ok) throw new Error('fetch failed')
-    const data = await res.json()
-    const rows = data.rows || []
+    try {
+      const res = await fetch(url)
+      // On non-200, return empty array instead of throwing — stale data or "–" is
+      // better than a visible error state in the sidebar.
+      if (!res.ok) return []
+      const data = await res.json()
+      // Handle both { rows: [...] } envelope and plain error objects gracefully
+      if (!data || typeof data !== 'object') return []
+      const rows = Array.isArray(data.rows) ? data.rows : []
+      if (rows.length === 0) return []
 
-    return watchIds.map(id => {
-      const opt = FALLBACK_COIN_OPTIONS.find(c => c.id === id)
-      if (!opt) return null
-      const row = rows.find((r: { symbol: string }) => r.symbol === `${opt.symbol}-USD`)
-      if (!row) return null
-      const price = parseFloat(row.price.replace(/,/g, '')) || 0
-      const change = parseFloat(row.changePct) || 0
-      return { id, symbol: opt.symbol, price, change24h: change }
-    }).filter((r): r is CoinPrice => r !== null)
+      return watchIds.map(id => {
+        const opt = FALLBACK_COIN_OPTIONS.find(c => c.id === id)
+        if (!opt) return null
+        const row = rows.find((r: { symbol: string }) => r.symbol === `${opt.symbol}-USD`)
+        if (!row) return null
+        const price = parseFloat(String(row.price ?? '').replace(/,/g, '')) || 0
+        const change = parseFloat(String(row.changePct ?? '')) || 0
+        return { id, symbol: opt.symbol, price, change24h: change }
+      }).filter((r): r is CoinPrice => r !== null)
+    } catch {
+      // Network error or parse failure — return empty array to avoid error state
+      return []
+    }
   }, [watchIds])
 
   const { data: coins = [], isLoading: loading, error: swrError, mutate: mutateMarket } = useSWR(
@@ -130,7 +140,11 @@ export default function WatchlistMarket() {
       dedupingInterval: 30000,
       refreshInterval: 60000, // Refresh every 60s
       keepPreviousData: true,
-      errorRetryCount: 2,
+      errorRetryCount: 3,
+      errorRetryInterval: 5000,
+      // Suppress error state propagation — fetcher returns [] on failure, so this
+      // only fires for genuine network-level throws (which we already catch).
+      onError: () => { /* silently ignore; UI shows keepPreviousData or empty state */ },
     }
   )
 
