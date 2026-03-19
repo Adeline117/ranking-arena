@@ -102,10 +102,11 @@
       "path": "/api/cron/batch-fetch-traders?group=a3",
       "schedule": "20 */3 * * *"
     },
-    {
-      "path": "/api/cron/batch-fetch-traders?group=a4",
-      "schedule": "25 */3 * * *"
-    },
+    // Group a4 (bitget_futures) PERMANENTLY DISABLED 2026-03-19 (8th stuck >44min)
+    // {
+    //   "path": "/api/cron/batch-fetch-traders?group=a4",
+    //   "schedule": "25 */3 * * *"
+    // },
 {
       "path": "/api/cron/batch-fetch-traders?group=b",
       "schedule": "0 */4 * * *"
