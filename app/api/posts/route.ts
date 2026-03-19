@@ -296,6 +296,44 @@ export async function POST(request: NextRequest) {
       'Sync hashtags for post'
     )
 
+    // Parse @mentions from content and send notifications (fire-and-forget)
+    const mentionRegex = /@(\w+)/g
+    const mentionHandles = [...new Set([...content.matchAll(mentionRegex)].map((m: RegExpExecArray) => m[1]))]
+    if (mentionHandles.length > 0) {
+      fireAndForget(
+        (async () => {
+          const { data: mentionedUsers } = await supabase
+            .from('user_profiles')
+            .select('id, handle')
+            .in('handle', mentionHandles)
+
+          if (mentionedUsers && mentionedUsers.length > 0) {
+            // Store resolved mentions on the post
+            await supabase
+              .from('posts')
+              .update({ mentions: mentionedUsers.map((u: { id: string; handle: string }) => u.handle) })
+              .eq('id', post.id)
+
+            // Send mention notifications
+            for (const mentioned of mentionedUsers) {
+              if (mentioned.id === user.id) continue
+              await supabase.from('notifications').insert({
+                user_id: mentioned.id,
+                type: 'mention',
+                title: `${userHandle} mentioned you in a post`,
+                message: (title || content).slice(0, 100),
+                actor_id: user.id,
+                link: `/post/${post.id}`,
+                reference_id: post.id,
+                read: false,
+              })
+            }
+          }
+        })(),
+        'Parse mentions and send notifications'
+      )
+    }
+
     // 创建帖子后清除相关缓存
     deleteServerCacheByPrefix(POSTS_CACHE_PREFIX)
 
