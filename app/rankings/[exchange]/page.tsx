@@ -9,6 +9,7 @@ import MobileBottomNav from '@/app/components/layout/MobileBottomNav'
 import { Box } from '@/app/components/base'
 import { RankingSkeleton } from '@/app/components/ui/Skeleton'
 import ExchangeRankingClient from './ExchangeRankingClient'
+import { ErrorBoundary } from '@/app/components/ui/ErrorBoundary'
 import { logger } from '@/lib/logger'
 
 export const revalidate = 600 // ISR: 10 min (aligned with compute-leaderboard on-demand revalidation)
@@ -260,9 +261,11 @@ export default async function ExchangeRankingPage({
           {displayName} {labels.en} Trader Rankings
         </h1>
 
-        <Suspense fallback={<RankingSkeleton rows={20} />}>
-          <RankingsContent exchange={exchange} />
-        </Suspense>
+        <ErrorBoundary name="exchange-rankings">
+          <Suspense fallback={<RankingSkeleton rows={20} />}>
+            <RankingsContent exchange={exchange} />
+          </Suspense>
+        </ErrorBoundary>
       </div>
       <MobileBottomNav />
     </Box>

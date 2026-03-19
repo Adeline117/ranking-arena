@@ -4,6 +4,7 @@ import { getInitialTraders } from '@/lib/getInitialTraders'
 import SSRRankingTable from './components/home/SSRRankingTable'
 import { JsonLd } from './components/Providers/JsonLd'
 import { HomePage } from './components/home'
+import { ErrorBoundary } from './components/ui/ErrorBoundary'
 
 const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://www.arenafi.org'
 
@@ -36,7 +37,7 @@ export const revalidate = 300
 
 /**
  * 首页 - Two-phase rendering for LCP:
- * 
+ *
  * Phase 1: SSRRankingTable renders as static HTML — instant LCP, no JS needed.
  * Phase 2: HomePage client component hydrates. CSS :has() hides SSR table
  *          the moment .home-ranking-section appears in DOM. Zero CLS.
@@ -75,9 +76,11 @@ export default async function Page() {
         <SSRRankingTable traders={initialTraders} />
       </div>
 
-      <Suspense fallback={null}>
-        <HomePage initialTraders={initialTraders} initialLastUpdated={lastUpdated} />
-      </Suspense>
+      <ErrorBoundary name="homepage">
+        <Suspense fallback={null}>
+          <HomePage initialTraders={initialTraders} initialLastUpdated={lastUpdated} />
+        </Suspense>
+      </ErrorBoundary>
     </>
   )
 }

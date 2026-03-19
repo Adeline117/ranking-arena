@@ -17,6 +17,7 @@ import { getOrSetWithLock } from '@/lib/cache'
 import type { Period } from '@/lib/utils/arena-score'
 import { createLogger } from '@/lib/utils/logger'
 import { sanitizeDisplayName } from '@/lib/utils/profanity'
+import { validateTradersResponse } from '@/lib/api/traders-response-schema'
 
 const logger = createLogger('traders-api')
 
@@ -73,6 +74,9 @@ export const GET = withPublic(
       },
       { ttl: 60, lockTtl: 10 }
     )
+
+    // Dev-only: validate output shape to catch response drift early (no-op in prod)
+    validateTradersResponse(cachedData, logger)
 
     // Data is already sanitized before caching (in the fetcher below)
     const response = NextResponse.json(cachedData)

@@ -67,3 +67,65 @@ export function socialFeatureGuard() {
   }
   return null
 }
+
+// ============================================
+// Percentage-based rollout (server-side only)
+// ============================================
+
+/**
+ * Feature flag configuration supporting percentage-based rollout.
+ */
+interface FeatureFlagConfig {
+  /** Whether the feature is enabled at all */
+  enabled: boolean
+  /** Rollout percentage (0-100). 100 = fully enabled, 0 = disabled. */
+  rolloutPct: number
+}
+
+/**
+ * Registry of feature flags with rollout configuration.
+ * Add new flags here. Defaults to fully enabled.
+ */
+const FEATURE_FLAGS: Record<string, FeatureFlagConfig> = {
+  social: { enabled: features.social, rolloutPct: 100 },
+  // Add new flags here:
+  // new_ranking_ui: { enabled: true, rolloutPct: 10 },
+  // ai_insights: { enabled: true, rolloutPct: 50 },
+}
+
+/**
+ * Simple deterministic hash for consistent user assignment.
+ * Uses FNV-1a-like hash for speed and uniform distribution.
+ */
+function hashCode(str: string): number {
+  let hash = 2166136261
+  for (let i = 0; i < str.length; i++) {
+    hash ^= str.charCodeAt(i)
+    hash = (hash * 16777619) >>> 0
+  }
+  return hash
+}
+
+/**
+ * Check if a feature is enabled for a specific user (percentage-based rollout).
+ *
+ * Deterministic: same userId always gets the same result for the same feature,
+ * so users don't see features flicker on/off between requests.
+ *
+ * Usage:
+ *   if (isFeatureEnabledForUser('new_ranking_ui', user.id)) { ... }
+ */
+export function isFeatureEnabledForUser(feature: string, userId?: string): boolean {
+  const config = FEATURE_FLAGS[feature]
+  if (!config) return false
+  if (!config.enabled) return false
+  if (config.rolloutPct >= 100) return true
+  if (config.rolloutPct <= 0) return false
+
+  // Without a userId, we can't do consistent hashing
+  if (!userId) return false
+
+  // Hash userId + feature name for per-feature consistent assignment
+  const hash = hashCode(`${feature}:${userId}`) % 100
+  return hash < config.rolloutPct
+}

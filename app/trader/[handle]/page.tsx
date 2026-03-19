@@ -4,6 +4,7 @@ import { getSupabaseAdmin } from '@/lib/supabase/server'
 import { JsonLd } from '@/app/components/Providers/JsonLd'
 import { EXCHANGE_CONFIG } from '@/lib/constants/exchanges'
 import TraderProfileClient, { type UnregisteredTraderData } from './TraderProfileClient'
+import { ErrorBoundary } from '@/app/components/ui/ErrorBoundary'
 import { resolveTrader, getTraderDetail, toTraderPageData } from '@/lib/data/unified'
 
 // Derive display names from central config
@@ -270,8 +271,10 @@ export default async function TraderPage({ params, searchParams }: { params: Pro
   return (
     <>
       <JsonLd data={jsonLd} />
-      {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
-      <TraderProfileClient data={traderData} serverTraderData={serverTraderData as any} claimedUser={claimedUserProfile} />
+      <ErrorBoundary name="trader-profile">
+        {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
+        <TraderProfileClient data={traderData} serverTraderData={serverTraderData as any} claimedUser={claimedUserProfile} />
+      </ErrorBoundary>
     </>
   )
 }
