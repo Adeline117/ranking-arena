@@ -764,3 +764,150 @@ input:focus + .input-label-float {
     transform: none;
   }
 }
+
+/* ============================================
+   Migrated from globals.css (2026-03-19)
+   Non-critical interaction animations
+   ============================================ */
+
+@keyframes pageSlideIn {
+  from {
+    opacity: 0;
+    transform: translateX(-12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes modalFadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes modalSlideUp {
+  from { opacity: 0; transform: translateY(20px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes shareDropdownIn {
+  from { opacity: 0; transform: translateY(-4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes ripple {
+  from {
+    transform: scale(0);
+    opacity: 0.5;
+  }
+  to {
+    transform: scale(4);
+    opacity: 0;
+  }
+}
+
+@keyframes toastSlideIn {
+  from {
+    transform: translateX(100%);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+
+@keyframes toastSlideInTop {
+  from {
+    transform: translateY(-100%) scale(0.95);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0) scale(1);
+    opacity: 1;
+  }
+}
+
+@keyframes modalOverlayIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes modalContentIn {
+  from {
+    opacity: 0;
+    transform: scale(0.95) translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+@keyframes modalContentOut {
+  from {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+  to {
+    opacity: 0;
+    transform: scale(0.95) translateY(8px);
+  }
+}
+
+/* Page transition classes */
+.page-slide-in {
+  animation: pageSlideIn 0.25s ease-out forwards;
+}
+
+/* Toast slide-in from top with spring easing */
+.toast-slide-in-top {
+  animation: toastSlideInTop 300ms cubic-bezier(0.175, 0.885, 0.32, 1.275) both;
+}
+
+/* Modal overlay + content animations */
+.modal-overlay-anim {
+  animation: modalOverlayIn 200ms ease both;
+}
+
+.modal-content-anim {
+  animation: modalContentIn 250ms cubic-bezier(0.175, 0.885, 0.32, 1.275) both;
+}
+
+/* Component mount fade-in */
+.fade-in {
+  animation: fadeIn 0.25s ease-out both;
+}
+
+/* Stagger children fade-in with nth-child delay */
+@media (prefers-reduced-motion: no-preference) {
+  .stagger-enter > * {
+    opacity: 0;
+    animation: pageEnter 0.3s ease-out both;
+    animation-delay: calc(var(--stagger-index, 0) * 20ms);
+  }
+
+  .stagger-fade > *:nth-child(1) { animation: pageEnter 0.3s ease-out 0ms both; }
+  .stagger-fade > *:nth-child(2) { animation: pageEnter 0.3s ease-out 40ms both; }
+  .stagger-fade > *:nth-child(3) { animation: pageEnter 0.3s ease-out 80ms both; }
+  .stagger-fade > *:nth-child(4) { animation: pageEnter 0.3s ease-out 120ms both; }
+  .stagger-fade > *:nth-child(5) { animation: pageEnter 0.3s ease-out 160ms both; }
+  .stagger-fade > *:nth-child(6) { animation: pageEnter 0.3s ease-out 200ms both; }
+  .stagger-fade > *:nth-child(7) { animation: pageEnter 0.3s ease-out 240ms both; }
+  .stagger-fade > *:nth-child(8) { animation: pageEnter 0.3s ease-out 280ms both; }
+  .stagger-fade > *:nth-child(n+9) { animation: pageEnter 0.3s ease-out 300ms both; }
+  .stagger-fade > * { opacity: 0; }
+}
+
+/* No stagger animation for reduced motion */
+@media (prefers-reduced-motion: reduce) {
+  .stagger-enter > *,
+  .stagger-fade > * {
+    opacity: 1;
+    animation: none;
+  }
+  .fade-in {
+    animation: none;
+  }
+}
