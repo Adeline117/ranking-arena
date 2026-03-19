@@ -30,7 +30,7 @@ const PLATFORM_LIMITS: Record<string, { limit90: number; limit30: number; limit7
   // binance_spot: PERMANENTLY REMOVED (2026-03-14) - repeatedly hangs 45-76min, blocks entire pipeline
   // bybit/bybit_spot removed: api2.bybit.com endpoints return 404 globally (2026-03-10)
   okx_futures: { limit90: 60, limit30: 60, limit7: 50 }, // Reduced from 80/80/60
-  // bitget_futures: PERMANENTLY REMOVED (2026-03-18 EMERGENCY) - VPS scraper repeatedly hangs 44+ min (5TH STUCK), blocks entire pipeline
+  bitget_futures: { limit90: 30, limit30: 25, limit7: 15 }, // Equity curve only (detail/position APIs disabled)
   // bitget_spot removed: no public API exists (all endpoints 404)
   // ONCHAIN PLATFORMS: AGGRESSIVE REDUCTION Round 4 (2026-03-13 09:00)
   // 30D/7D still timing out - matched 90D and more aggressive 7D
@@ -63,7 +63,7 @@ const HIGH_PRIORITY = ['binance_futures', 'okx_futures', 'hyperliquid', 'jupiter
 // bybit_spot removed: api2.bybit.com endpoints return 404 globally (2026-03-10)
 // kwenta removed: Copin API stopped serving Kwenta data (2026-03-11)
 // binance_spot moved to end: repeatedly hangs 45-76min, process last to avoid blocking (2026-03-14)
-const MEDIUM_PRIORITY = ['htx_futures', 'gateio', 'mexc', 'drift', 'gains', 'btcc', 'etoro', 'coinex', 'bitunix', 'xt']
+const MEDIUM_PRIORITY = ['htx_futures', 'gateio', 'mexc', 'drift', 'gains', 'bitget_futures', 'btcc', 'etoro', 'coinex', 'bitunix', 'xt']
 
 // Low priority - platforms that frequently timeout or hang
 // Moved here to prevent blocking high/medium priority platforms
