@@ -39,19 +39,7 @@ import { SOURCE_TO_CONNECTOR_MAP } from '@/lib/constants/exchanges'
 import * as cache from '@/lib/cache'
 import { sendAlert } from '@/lib/alerts/send-alert'
 import { env } from '@/lib/env'
-
-// 🚨 DISABLED PLATFORMS - permanently blocked from fetch-traders
-const DISABLED_PLATFORMS = [
-  'bitget_futures',  // 7th stuck >44min (2026-03-18) - VPS scraper repeatedly hangs
-  'bitget_spot',     // No public API (all endpoints 404)
-  'binance_spot',    // Repeatedly hangs 45-76min (2026-03-14)
-]
-
-function validatePlatform(platform: string): void {
-  if (DISABLED_PLATFORMS.includes(platform)) {
-    throw new Error(`❌ Platform ${platform} is permanently disabled (see DISABLED_PLATFORMS blacklist)`)
-  }
-}
+import { validatePlatform } from '@/lib/config/platforms'
 
 const DEAD_COUNTER_PREFIX = 'dead:consecutive:'
 const DEAD_COUNTER_TTL = 7 * 24 * 60 * 60 // 7 days in seconds
