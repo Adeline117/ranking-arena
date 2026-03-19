@@ -3,11 +3,27 @@
 > Auto-read by Claude Code at session start. Keep concise — archive completed items weekly.
 
 ## Current Sprint Focus
-- Pipeline 100% healthy: 0 warnings, 0 failures, 25 active platforms all fresh.
-- Data completeness: win_rate 94.5%, max_drawdown 95.1%, sharpe_ratio 83.8%.
-- Daily snapshots: 377K rows (142 days history), sharpe computation has full depth.
-- 26 platforms with enrichment configs. Bitunix: 200 traders enriched (was 0).
-- Frontend audit complete: all display bugs fixed, all periods/exchanges verified.
+- **35 active platforms**, all fresh (was 25). Recovered: okx_spot, bybit_spot, weex, kucoin, bingx_spot, bitget_futures.
+- Enrichment: 30 platforms with enrichment configs (was 26). Added okx_spot, okx_web3, weex, bitget_futures (curve only).
+- Equity curves: 32 platforms have curve data (was ~25). KuCoin 30-day PnL, Weex daily returns, OKX Web3 pnlRatios.
+- Frontend: copiers/copiersPnl removed (Arena 无跟单功能). All 35 platforms trader pages accessible.
+- VPS scraper v16 deployed, Mac Mini scripts for kucoin + bingx_spot.
+
+## IN PROGRESS: Data Completeness Gaps (2026-03-19)
+Must fix — every trader page field must have data, no "—" allowed:
+
+| Platform | Gap | Fix Needed |
+|----------|-----|-----------|
+| bitget_futures | ROI 14% (old snapshots) | Re-fetch to overwrite null-ROI rows |
+| bitfinex | ROI 24% | Check leaderboard API for ROI field |
+| okx_web3 | ROI 10% | Fix normalize to compute period ROI from pnlRatios |
+| gains | ROI 20% | Check subgraph for ROI data |
+| bybit/bybit_spot | PnL 0-29% | VPS scraper metricValues has % only |
+| kucoin | WR/MDD/Sharpe 0% | Compute from totalPnlDate equity curve |
+| okx_spot | Curve 0 | Enrichment configured, waiting for cron |
+| bingx_spot | Curve 0 | No original platform curve API |
+
+Trader profile page 3 tabs require: ROI, PnL, WR, MDD, Sharpe, Trades, Equity Curve (5+ pts), Arena Score, Sortino, Calmar, Position History, Asset Breakdown.
 
 ## Recently Completed (2026-03-18) — Frontend Data Display Audit + Fixes
 
