@@ -10,6 +10,11 @@ export const dynamic = 'force-dynamic'
 const VALID_TYPES = ['post', 'comment', 'profile']
 const VALID_REASONS = ['spam', 'scam', 'harassment', 'misinformation', 'nsfw', 'other']
 
+// Auto-hide thresholds: when a piece of content receives this many reports,
+// it is automatically hidden pending moderator review.
+const POST_REPORT_THRESHOLD = 5
+const COMMENT_REPORT_THRESHOLD = 3
+
 export async function POST(req: NextRequest) {
   const rateLimitResp = await checkRateLimit(req, RateLimitPresets.write)
   if (rateLimitResp) return rateLimitResp
@@ -64,6 +69,37 @@ export async function POST(req: NextRequest) {
 
     if (error) {
       return NextResponse.json({ error: 'Submission failed' }, { status: 500 })
+    }
+
+    // Auto-hide: check total report count and hide if threshold reached
+    try {
+      const { count } = await supabase
+        .from('content_reports')
+        .select('id', { count: 'exact', head: true })
+        .eq('content_type', content_type)
+        .eq('content_id', content_id)
+
+      if (content_type === 'post' && count && count >= POST_REPORT_THRESHOLD) {
+        await supabase
+          .from('posts')
+          .update({
+            deleted_at: new Date().toISOString(),
+            deleted_by: null,
+            delete_reason: `Auto-hidden: ${count} reports received`,
+          })
+          .eq('id', content_id)
+          .is('deleted_at', null)
+        logger.info(`Auto-hidden post ${content_id} after ${count} reports`)
+      } else if (content_type === 'comment' && count && count >= COMMENT_REPORT_THRESHOLD) {
+        await supabase
+          .from('comments')
+          .delete()
+          .eq('id', content_id)
+        logger.info(`Auto-deleted comment ${content_id} after ${count} reports`)
+      }
+    } catch (autoHideErr) {
+      // Non-blocking: report was saved successfully, auto-hide is best-effort
+      logger.warn('Auto-hide check failed', { error: autoHideErr instanceof Error ? autoHideErr.message : String(autoHideErr) })
     }
 
     return NextResponse.json({ success: true })

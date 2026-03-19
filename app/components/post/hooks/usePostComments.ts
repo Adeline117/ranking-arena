@@ -63,6 +63,9 @@ export function usePostComments({
   const [commentLikeLoading, setCommentLikeLoading] = useState<Record<string, boolean>>({})
   const [expandedReplies, setExpandedReplies] = useState<Record<string, boolean>>({})
   const [deletingCommentId, setDeletingCommentId] = useState<string | null>(null)
+  const [editingComment, setEditingComment] = useState<{ id: string; content: string } | null>(null)
+  const [editContent, setEditContent] = useState('')
+  const [submittingEdit, setSubmittingEdit] = useState(false)
 
   // Ref-based guards to prevent double submissions
   const submittingCommentRef = useRef(false)
@@ -77,11 +80,11 @@ export function usePostComments({
     return true
   }, [accessToken, showToast, t])
 
-  const loadComments = useCallback(async (postId: string): Promise<void> => {
+  const loadComments = useCallback(async (postId: string, sort: 'best' | 'time' = 'best'): Promise<void> => {
     setLoadingComments(true)
     try {
       const { ok, data } = await authedFetch<{ success: boolean; data?: { comments: Comment[] } }>(
-        `/api/posts/${postId}/comments`,
+        `/api/posts/${postId}/comments?sort=${sort}`,
         'GET',
         accessToken
       )
@@ -245,6 +248,52 @@ export function usePostComments({
     }
   }, [accessToken, replyContent, requireAuth, showToast, onCommentCountChange, t])
 
+  const startEditComment = useCallback((comment: Comment) => {
+    setEditingComment({ id: comment.id, content: comment.content })
+    setEditContent(comment.content)
+  }, [])
+
+  const cancelEditComment = useCallback(() => {
+    setEditingComment(null)
+    setEditContent('')
+  }, [])
+
+  const submitEditComment = useCallback(async (postId: string): Promise<void> => {
+    if (!editingComment || !editContent.trim() || !requireAuth()) return
+
+    setSubmittingEdit(true)
+    try {
+      const { ok, data } = await authedFetch<{ success: boolean; error?: string; data?: { comment: Comment } }>(
+        `/api/posts/${postId}/comments`,
+        'PUT',
+        accessToken,
+        { comment_id: editingComment.id, content: editContent.trim() }
+      )
+
+      if (ok && data?.success) {
+        const updateInList = (c: Comment): Comment => {
+          if (c.id === editingComment.id) {
+            return { ...c, content: editContent.trim() }
+          }
+          if (c.replies) {
+            return { ...c, replies: c.replies.map(updateInList) }
+          }
+          return c
+        }
+        setComments(prev => prev.map(updateInList))
+        setEditingComment(null)
+        setEditContent('')
+        showToast(t('saved'), 'success')
+      } else {
+        showToast(data?.error || t('operationFailed'), 'error')
+      }
+    } catch {
+      showToast(t('networkError'), 'error')
+    } finally {
+      setSubmittingEdit(false)
+    }
+  }, [accessToken, editingComment, editContent, requireAuth, showToast, t])
+
   const deleteComment = useCallback(async (postId: string, commentId: string): Promise<void> => {
     if (!requireAuth()) return
 
@@ -299,6 +348,13 @@ export function usePostComments({
     expandedReplies,
     setExpandedReplies,
     deletingCommentId,
+    editingComment,
+    editContent,
+    setEditContent,
+    submittingEdit,
+    startEditComment,
+    cancelEditComment,
+    submitEditComment,
     loadComments,
     submitComment,
     toggleCommentLike,

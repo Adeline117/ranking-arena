@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useRef, type CSSProperties } from 'react'
+import { useState, useEffect, useRef, useMemo, type CSSProperties } from 'react'
 import Link from 'next/link'
 import Image from 'next/image'
 import { tokens } from '@/lib/design-tokens'
@@ -74,6 +74,8 @@ const styles = {
   }) satisfies CSSProperties,
 }
 
+export type CommentSortMode = 'best' | 'time'
+
 interface CommentsModalProps {
   postId: string
   comments: Comment[]
@@ -98,11 +100,22 @@ interface CommentsModalProps {
   // Delete
   deletingCommentId: string | null
   onDeleteComment: (postId: string, commentId: string) => void
+  // Edit
+  editingComment?: { id: string; content: string } | null
+  editContent?: string
+  setEditContent?: (val: string) => void
+  submittingEdit?: boolean
+  onStartEdit?: (comment: Comment) => void
+  onCancelEdit?: () => void
+  onSubmitEdit?: (postId: string) => void
   // Expand replies
   expandedReplies: Record<string, boolean>
   setExpandedReplies: (updater: (prev: Record<string, boolean>) => Record<string, boolean>) => void
   // Translation
   translatedComments?: Record<string, string>
+  // Sort
+  commentSort?: CommentSortMode
+  onSortChange?: (sort: CommentSortMode) => void
 }
 
 function SkeletonBlock({ width, height }: { width: string; height: number }): React.ReactNode {
@@ -214,13 +227,54 @@ export default function CommentsModal({
   onToggleCommentDislike,
   deletingCommentId,
   onDeleteComment,
+  editingComment,
+  editContent,
+  setEditContent,
+  submittingEdit,
+  onStartEdit,
+  onCancelEdit,
+  onSubmitEdit,
   expandedReplies,
   setExpandedReplies,
   translatedComments = {},
+  commentSort: externalSort,
+  onSortChange: externalOnSortChange,
 }: CommentsModalProps) {
   const { language, t } = useLanguage()
   const [showEmojiPicker, setShowEmojiPicker] = useState(false)
+  const [internalSort, setInternalSort] = useState<CommentSortMode>('best')
   const { showToast } = useToast()
+
+  const commentSort = externalSort ?? internalSort
+  const handleSortChange = (sort: CommentSortMode) => {
+    if (externalOnSortChange) externalOnSortChange(sort)
+    else setInternalSort(sort)
+  }
+
+  // Client-side sort: Wilson score or newest
+  const sortedComments = useMemo(() => {
+    if (comments.length <= 1) return comments
+    const sorted = [...comments]
+    if (commentSort === 'time') {
+      sorted.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+    } else {
+      // Wilson score lower bound (95% confidence)
+      const wilson = (ups: number, downs: number) => {
+        const n = ups + downs
+        if (n === 0) return 0
+        const z = 1.96
+        const p = ups / n
+        return (p + z * z / (2 * n) - z * Math.sqrt((p * (1 - p) + z * z / (4 * n)) / n)) / (1 + z * z / n)
+      }
+      sorted.sort((a, b) => {
+        const sa = wilson(a.like_count || 0, a.dislike_count || 0)
+        const sb = wilson(b.like_count || 0, b.dislike_count || 0)
+        if (sb !== sa) return sb - sa
+        return new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+      })
+    }
+    return sorted
+  }, [comments, commentSort])
 
   // Close emoji picker on outside click
   useEffect(() => {
@@ -355,6 +409,15 @@ export default function CommentsModal({
                 </button>
               )}
 
+              {isOwn && onStartEdit && (
+                <button
+                  onClick={(e) => { e.stopPropagation(); onStartEdit(comment) }}
+                  style={styles.actionButton}
+                >
+                  {t('edit')}
+                </button>
+              )}
+
               {isOwn && (
                 <button
                   onClick={(e) => { e.stopPropagation(); onDeleteComment(postId, comment.id) }}
@@ -365,6 +428,71 @@ export default function CommentsModal({
                 </button>
               )}
             </div>
+
+            {/* Edit input */}
+            {editingComment?.id === comment.id && setEditContent && onSubmitEdit && onCancelEdit && (
+              <div style={{ marginTop: 8, position: 'relative' }}>
+                <textarea
+                  value={editContent || ''}
+                  onChange={(e) => {
+                    setEditContent(e.target.value)
+                    const ta = e.target
+                    ta.style.height = 'auto'
+                    ta.style.height = Math.min(ta.scrollHeight, 100) + 'px'
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && !e.shiftKey) {
+                      e.preventDefault()
+                      if (!submittingEdit && editContent?.trim()) onSubmitEdit(postId)
+                    }
+                    if (e.key === 'Escape') onCancelEdit()
+                  }}
+                  rows={2}
+                  style={{
+                    ...styles.input,
+                    width: '100%',
+                    resize: 'none',
+                    minHeight: 48,
+                    maxHeight: 100,
+                    paddingRight: 80,
+                    overflow: 'hidden',
+                    fontFamily: 'inherit',
+                  }}
+                />
+                <div style={{ position: 'absolute', right: 6, bottom: 6, display: 'flex', gap: 4 }}>
+                  <button
+                    onClick={onCancelEdit}
+                    style={{
+                      padding: '3px 8px',
+                      borderRadius: tokens.radius.sm,
+                      border: `1px solid ${tokens.colors.border.primary}`,
+                      background: 'transparent',
+                      color: tokens.colors.text.tertiary,
+                      fontSize: 12,
+                      cursor: 'pointer',
+                    }}
+                  >
+                    {t('cancel')}
+                  </button>
+                  <button
+                    onClick={() => onSubmitEdit(postId)}
+                    disabled={submittingEdit || !editContent?.trim()}
+                    style={{
+                      padding: '3px 10px',
+                      borderRadius: tokens.radius.sm,
+                      border: 'none',
+                      background: editContent?.trim() ? ARENA_PURPLE : `${ARENA_PURPLE}40`,
+                      color: tokens.colors.white,
+                      fontSize: 12,
+                      fontWeight: 700,
+                      cursor: submittingEdit || !editContent?.trim() ? 'default' : 'pointer',
+                    }}
+                  >
+                    {submittingEdit ? '...' : t('save')}
+                  </button>
+                </div>
+              </div>
+            )}
 
             {/* Reply input */}
             {replyingTo?.commentId === comment.id && (
@@ -661,15 +789,40 @@ export default function CommentsModal({
         </div>
       </div>
 
+      {/* Sort toggle */}
+      {comments.length > 1 && (
+        <div style={{ display: 'flex', gap: 4, marginBottom: 12 }}>
+          {(['best', 'time'] as const).map(mode => (
+            <button
+              key={mode}
+              onClick={() => handleSortChange(mode)}
+              style={{
+                padding: '4px 12px',
+                borderRadius: tokens.radius.md,
+                border: 'none',
+                background: commentSort === mode ? `${ARENA_PURPLE}20` : 'transparent',
+                color: commentSort === mode ? ARENA_PURPLE : tokens.colors.text.tertiary,
+                fontSize: 12,
+                fontWeight: commentSort === mode ? 700 : 500,
+                cursor: 'pointer',
+                transition: 'all 0.15s',
+              }}
+            >
+              {mode === 'best' ? t('sortBest') : t('sortNewest')}
+            </button>
+          ))}
+        </div>
+      )}
+
       {/* Comments list */}
       <CompactErrorBoundary>
         {loadingComments ? (
           <CommentSkeleton />
-        ) : comments.length === 0 ? (
+        ) : sortedComments.length === 0 ? (
           <EmptyComments t={t} />
         ) : (
           <div>
-            {comments.map(comment => renderComment(comment))}
+            {sortedComments.map(comment => renderComment(comment))}
             <div ref={commentsEndRef} />
           </div>
         )}
