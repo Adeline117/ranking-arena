@@ -223,16 +223,27 @@ export async function getTraderDetail(supabase: SupabaseClient, params: {
   const primaryPeriod: TradingPeriod = periods['90D'] ? '90D' : periods['30D'] ? '30D' : '7D'
   const primaryData = periods[primaryPeriod]!
 
-  // Get profile info from traders table for avatar, profile_url, handle
-  const sourceProfile = await safeQuery(() =>
-    supabase
-      .from('traders')
-      .select('trader_key, handle, profile_url, avatar_url, market_type')
-      .eq('platform', platform)
-      .eq('trader_key', traderKey)
-      .limit(1)
-      .maybeSingle()
-  ) as Record<string, unknown> | null
+  // Get profile info from traders table + bio from trader_profiles_v2
+  const [sourceProfile, profileV2] = await Promise.all([
+    safeQuery(() =>
+      supabase
+        .from('traders')
+        .select('trader_key, handle, profile_url, avatar_url, market_type')
+        .eq('platform', platform)
+        .eq('trader_key', traderKey)
+        .limit(1)
+        .maybeSingle()
+    ) as Promise<Record<string, unknown> | null>,
+    safeQuery(() =>
+      supabase
+        .from('trader_profiles_v2')
+        .select('bio')
+        .eq('platform', platform)
+        .eq('trader_key', traderKey)
+        .limit(1)
+        .maybeSingle()
+    ) as Promise<Record<string, unknown> | null>,
+  ])
 
   const trader: UnifiedTrader = {
     platform,
@@ -448,6 +459,7 @@ export async function getTraderDetail(supabase: SupabaseClient, params: {
     positionHistory,
     similarTraders: similarTradersResult || [],
     trackedSince,
+    bio: (profileV2?.bio as string) || null,
   }
 }
 
