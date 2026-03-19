@@ -118,7 +118,9 @@ export async function GET(request: NextRequest) {
         }
 
         // Cache the response for subsequent requests (hot tier = 60s memory, 300s Redis)
-        tieredSet(cacheKey, responseBody, 'hot', ['rankings', `live:${period}`]).catch(() => {})
+        tieredSet(cacheKey, responseBody, 'hot', ['rankings', `live:${period}`]).catch(err =>
+          logger.warn('[rankings/live] cache write failed:', err instanceof Error ? err.message : String(err))
+        )
 
         const response = NextResponse.json(responseBody)
         response.headers.set('Cache-Control', 'no-cache, no-store, must-revalidate')
