@@ -82,7 +82,13 @@ export async function GET(request: NextRequest) {
       const allData: Record<string, unknown>[] = []
       let offset = 0
       const pageSize = 1000
+      const MAX_PAGES = 100
+      let pageCount = 0
       while (true) {
+        if (++pageCount > MAX_PAGES) {
+          console.warn(`[sync-meilisearch] Reached MAX_PAGES (${MAX_PAGES}) for season ${season}, breaking`)
+          break
+        }
         let query = supabase
           .from('leaderboard_ranks')
           .select('source, source_trader_id, handle, avatar_url, roi, pnl, arena_score, win_rate, max_drawdown, followers, rank, trader_type, computed_at')
