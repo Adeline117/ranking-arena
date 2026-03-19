@@ -817,7 +817,13 @@ async function computeSeason(
     // Fetch in pages of 1000 to handle large leaderboards
     let offset = 0
     const PAGE = 1000
+    const MAX_PAGES = 100
+    let pageCount = 0
     while (true) {
+      if (++pageCount > MAX_PAGES) {
+        console.warn(`[compute-leaderboard] Reached MAX_PAGES (${MAX_PAGES}) for season ${season}, breaking`)
+        break
+      }
       const { data: currentScores } = await supabase
         .from('leaderboard_ranks')
         .select('source, source_trader_id, arena_score, rank, handle, avatar_url')
@@ -941,62 +947,108 @@ async function deriveWinRateMDD(supabase: ReturnType<typeof getSupabaseAdmin>): 
     traderMap.get(key)!.push(row)
   }
 
+  // Batch fetch ALL needed trader_snapshots_v2 rows in one query
+  const allTraderKeys = [...traderMap.keys()].map(k => {
+    const [platform, ...parts] = k.split(':')
+    return { platform, trader_key: parts.join(':') }
+  })
+
+  // Fetch snapshots for all traders at once, grouped by platform
+  const platformGroups = new Map<string, string[]>()
+  for (const t of allTraderKeys) {
+    if (!platformGroups.has(t.platform)) platformGroups.set(t.platform, [])
+    platformGroups.get(t.platform)!.push(t.trader_key)
+  }
+
+  // Single batch fetch per platform (much fewer queries than per-trader)
+  const allSnapshots: Array<{ platform: string; trader_key: string; roi_pct: number; created_at: string }> = []
+  await Promise.all(
+    Array.from(platformGroups.entries()).map(async ([platform, traderKeys]) => {
+      for (let i = 0; i < traderKeys.length; i += 500) {
+        const chunk = traderKeys.slice(i, i + 500)
+        const { data: snaps } = await supabase.from('trader_snapshots_v2')
+          .select('platform, trader_key, roi_pct, created_at')
+          .eq('platform', platform)
+          .in('trader_key', chunk)
+          .not('roi_pct', 'is', null)
+          .order('created_at', { ascending: true })
+          .limit(50000)
+
+        if (snaps) allSnapshots.push(...(snaps as typeof allSnapshots))
+      }
+    })
+  )
+
+  // Group snapshots by trader key
+  const snapshotsByTrader = new Map<string, Array<{ roi_pct: number; created_at: string }>>()
+  for (const snap of allSnapshots) {
+    const key = `${snap.platform}:${snap.trader_key}`
+    if (!snapshotsByTrader.has(key)) snapshotsByTrader.set(key, [])
+    snapshotsByTrader.get(key)!.push(snap)
+  }
+
+  // Compute WR/MDD in memory and collect all updates
+  const leaderboardUpdates: Array<{
+    source: string; source_trader_id: string; season_id: string;
+    win_rate?: number; max_drawdown?: number;
+  }> = []
+
+  for (const [compositeKey, rows] of traderMap) {
+    const snapshots = snapshotsByTrader.get(compositeKey) || []
+    if (snapshots.length < 2) continue
+
+    // Deduplicate by day, keep latest per day
+    const daily = new Map<string, number>()
+    for (const snap of snapshots) {
+      const day = snap.created_at?.slice(0, 10)
+      if (day) daily.set(day, snap.roi_pct)
+    }
+    const rois = [...daily.entries()].sort((a, b) => a[0].localeCompare(b[0])).map(e => e[1])
+    if (rois.length < 2) continue
+
+    // Win Rate: days where ROI increased
+    let wins = 0, days = 0
+    for (let j = 1; j < rois.length; j++) { if (rois[j] > rois[j - 1]) wins++; days++ }
+    const wr = days > 0 ? parseFloat(((wins / days) * 100).toFixed(2)) : null
+
+    // MDD from equity curve
+    const eq = rois.map(r => 1 + r / 100)
+    let peak = eq[0], maxDD = 0
+    for (const e of eq) { if (e > peak) peak = e; const dd = peak > 0 ? (peak - e) / peak : 0; if (dd > maxDD) maxDD = dd }
+    const mdd = parseFloat((maxDD * 100).toFixed(2))
+
+    for (const row of rows) {
+      const upd: Record<string, number> = {}
+      if (row.win_rate == null && wr != null) upd.win_rate = wr
+      if (row.max_drawdown == null && mdd > 0) upd.max_drawdown = Math.min(mdd, 100)
+      if (Object.keys(upd).length > 0) {
+        leaderboardUpdates.push({
+          source: rows[0].source,
+          source_trader_id: rows[0].source_trader_id,
+          season_id: row.season_id,
+          ...upd,
+        })
+      }
+    }
+  }
+
+  // Batch upsert all leaderboard_ranks updates (single query per batch of 500)
   let derived = 0
-  const BATCH = 20
-  const entries = [...traderMap.entries()]
-
-  for (let i = 0; i < entries.length; i += BATCH) {
-    const batch = entries.slice(i, i + BATCH)
-    await Promise.all(batch.map(async ([compositeKey, rows]) => {
-      const [platform, traderId] = [rows[0].source, rows[0].source_trader_id]
-
-      // Get historical snapshots from v2
-      const { data: snaps } = await supabase.from('trader_snapshots_v2')
-        .select('roi_pct, created_at')
-        .eq('platform', platform).eq('trader_key', traderId)
-        .not('roi_pct', 'is', null)
-        .order('created_at', { ascending: true }).limit(100)
-
-      const snapshots = (snaps || []) as Array<{ roi_pct: number; created_at: string }>
-      if (snapshots.length < 2) return
-
-      // Deduplicate by day, keep latest per day
-      const daily = new Map<string, number>()
-      for (const snap of snapshots) {
-        const day = snap.created_at?.slice(0, 10)
-        if (day) daily.set(day, snap.roi_pct)
-      }
-      const rois = [...daily.entries()].sort((a, b) => a[0].localeCompare(b[0])).map(e => e[1])
-      if (rois.length < 2) return
-
-      // Win Rate: days where ROI increased
-      let wins = 0, days = 0
-      for (let j = 1; j < rois.length; j++) { if (rois[j] > rois[j - 1]) wins++; days++ }
-      const wr = days > 0 ? parseFloat(((wins / days) * 100).toFixed(2)) : null
-
-      // MDD from equity curve
-      const eq = rois.map(r => 1 + r / 100)
-      let peak = eq[0], maxDD = 0
-      for (const e of eq) { if (e > peak) peak = e; const dd = peak > 0 ? (peak - e) / peak : 0; if (dd > maxDD) maxDD = dd }
-      const mdd = parseFloat((maxDD * 100).toFixed(2))
-
-      // Batch update all season rows for this trader
-      const batchUpdates: Promise<void>[] = []
-      for (const row of rows) {
-        const upd: Record<string, number> = {}
-        if (row.win_rate == null && wr != null) upd.win_rate = wr
-        if (row.max_drawdown == null && mdd > 0) upd.max_drawdown = Math.min(mdd, 100)
-        if (Object.keys(upd).length > 0) {
-          batchUpdates.push(
-            Promise.resolve(
-              supabase.from('leaderboard_ranks').update(upd)
-                .eq('source', platform).eq('source_trader_id', traderId).eq('season_id', row.season_id)
-            ).then(() => { derived++ })
-          )
-        }
-      }
-      await Promise.all(batchUpdates)
-    }))
+  const UPSERT_BATCH = 500
+  for (let i = 0; i < leaderboardUpdates.length; i += UPSERT_BATCH) {
+    const batch = leaderboardUpdates.slice(i, i + UPSERT_BATCH)
+    // Use individual updates grouped in Promise.all with larger batches
+    // (leaderboard_ranks has composite PK so we need per-row updates, but we batch them)
+    const results = await Promise.all(
+      batch.map(upd => {
+        const updateFields: Record<string, number> = {}
+        if (upd.win_rate != null) updateFields.win_rate = upd.win_rate
+        if (upd.max_drawdown != null) updateFields.max_drawdown = upd.max_drawdown
+        return supabase.from('leaderboard_ranks').update(updateFields)
+          .eq('source', upd.source).eq('source_trader_id', upd.source_trader_id).eq('season_id', upd.season_id)
+      })
+    )
+    derived += results.filter(r => !r.error).length
   }
 
   return derived

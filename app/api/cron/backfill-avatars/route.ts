@@ -441,7 +441,13 @@ export async function GET(request: Request) {
   // Get traders with missing avatars
   const traders: Array<{ id: string; source_trader_id: string; handle: string }> = []
   let from = 0
+  const MAX_PAGES = 100
+  let pageCount = 0
   while (traders.length < limit) {
+    if (++pageCount > MAX_PAGES) {
+      console.warn(`[backfill-avatars] Reached MAX_PAGES (${MAX_PAGES}) for ${platform}, breaking`)
+      break
+    }
     const { data } = await supabase
       .from('trader_sources')
       .select('id, source_trader_id, handle')
