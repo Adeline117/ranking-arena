@@ -2,7 +2,7 @@ import { Metadata } from 'next'
 import { Suspense } from 'react'
 import { notFound } from 'next/navigation'
 import { getSupabaseAdmin } from '@/lib/supabase/server'
-import { EXCHANGE_NAMES, SOURCE_TYPE_MAP, EXCHANGE_CONFIG, DEAD_BLOCKED_PLATFORMS, resolveExchangeSlug } from '@/lib/constants/exchanges'
+import { EXCHANGE_NAMES, SOURCE_TYPE_MAP, EXCHANGE_CONFIG, DEAD_BLOCKED_PLATFORMS, EXCHANGE_SLUG_ALIASES, resolveExchangeSlug } from '@/lib/constants/exchanges'
 import type { TraderSource } from '@/lib/constants/exchanges'
 import { tokens } from '@/lib/design-tokens'
 import MobileBottomNav from '@/app/components/layout/MobileBottomNav'
@@ -14,13 +14,18 @@ import { logger } from '@/lib/logger'
 export const revalidate = 600 // ISR: 10 min (aligned with compute-leaderboard on-demand revalidation)
 
 // Pre-render pages for active exchanges at build time
+// Include both canonical source keys AND slug aliases for SEO-friendly URLs
 const deadSet = new Set(DEAD_BLOCKED_PLATFORMS)
 const ACTIVE_EXCHANGES = Object.keys(EXCHANGE_CONFIG).filter(
   (k) => !deadSet.has(k as TraderSource) && !k.startsWith('dune_') && k !== 'okx_wallet'
 )
+// Also pre-render alias slugs (e.g. "binance" → binance_futures)
+const ALIAS_SLUGS = Object.keys(EXCHANGE_SLUG_ALIASES)
 
 export async function generateStaticParams() {
-  return ACTIVE_EXCHANGES.map((exchange) => ({ exchange }))
+  const all = [...ACTIVE_EXCHANGES, ...ALIAS_SLUGS]
+  // Deduplicate
+  return [...new Set(all)].map((exchange) => ({ exchange }))
 }
 
 export const dynamicParams = true
@@ -30,6 +35,45 @@ const TYPE_LABELS: Record<string, { en: string; zh: string }> = {
   spot: { en: 'Spot', zh: '现货' },
   web3: { en: 'On-Chain', zh: '链上' },
 }
+
+// ---------------------------------------------------------------------------
+// SEO: Exchange intro blurbs for programmatic landing pages
+// Short 2-3 sentence descriptions targeting long-tail keywords like
+// "best Bybit traders 2026", "top Binance futures traders"
+// ---------------------------------------------------------------------------
+const EXCHANGE_INTROS: Record<string, string> = {
+  binance_futures: 'Binance is the world\'s largest crypto exchange by trading volume, offering futures contracts on hundreds of pairs. Discover the best-performing Binance futures copy traders and compare their risk-adjusted returns.',
+  bybit: 'Bybit is a leading derivatives exchange known for its deep liquidity and copy trading features. Browse the top Bybit traders ranked by Arena Score to find consistent performers.',
+  bitget_futures: 'Bitget is a top copy-trading platform with millions of users worldwide. See which Bitget futures traders deliver the best ROI and risk management over 90-day windows.',
+  okx_futures: 'OKX is one of the most trusted crypto exchanges, offering advanced futures trading tools. Explore the highest-ranked OKX futures traders by Arena Score.',
+  mexc: 'MEXC offers a wide selection of futures trading pairs with competitive fees. Find the top MEXC traders ranked by performance, drawdown, and consistency.',
+  htx_futures: 'HTX (formerly Huobi) is a veteran crypto exchange with a robust futures market. Review the top HTX futures traders and their verified performance metrics.',
+  coinex: 'CoinEx provides accessible futures trading for a global audience. Discover CoinEx\'s top-performing traders ranked by Arena\'s risk-adjusted scoring system.',
+  bingx: 'BingX specializes in social and copy trading across futures markets. See the best BingX traders by ROI, win rate, and Arena Score.',
+  gateio: 'Gate.io offers one of the widest selections of crypto futures markets. Browse top Gate.io traders and compare their performance across multiple timeframes.',
+  xt: 'XT.COM is a growing crypto exchange with an active futures trading community. Explore top XT.COM traders ranked by Arena Score.',
+  blofin: 'BloFin is a newer exchange focused on copy trading and derivatives. Find the best BloFin traders by risk-adjusted performance.',
+  btcc: 'BTCC is one of the oldest Bitcoin exchanges, now offering futures trading. See how BTCC\'s top traders rank by Arena Score.',
+  bitfinex: 'Bitfinex is a professional-grade exchange offering margin and derivatives trading. Discover Bitfinex\'s highest-performing traders.',
+  bitunix: 'Bitunix offers futures copy trading with a growing user base. Compare the top Bitunix traders by ROI, PnL, and consistency.',
+  toobit: 'Toobit is an emerging exchange offering futures and copy trading features. Browse top Toobit traders ranked by Arena Score.',
+  etoro: 'eToro is a leading social trading platform supporting stocks and crypto. Explore the best eToro crypto traders by risk-adjusted returns.',
+  binance_spot: 'Binance Spot is the world\'s most liquid crypto spot market. Discover top Binance spot traders ranked by Arena Score.',
+  bybit_spot: 'Bybit Spot offers a growing selection of crypto spot trading pairs. See the best Bybit spot traders and their performance metrics.',
+  binance_web3: 'Binance Web3 integrates on-chain DeFi access through the Binance ecosystem. Explore the top Binance Web3 traders by Arena Score.',
+  okx_web3: 'OKX Web3 provides seamless access to decentralized trading across multiple chains. Discover the best OKX Web3 traders.',
+  gmx: 'GMX is a decentralized perpetual exchange on Arbitrum and Avalanche. Browse top GMX traders ranked by on-chain verified performance.',
+  dydx: 'dYdX is a leading decentralized derivatives exchange with full on-chain transparency. See the best dYdX traders by Arena Score.',
+  hyperliquid: 'Hyperliquid is a high-performance on-chain perpetuals DEX with order book matching. Explore the top Hyperliquid traders.',
+  gains: 'Gains Network (gTrade) offers decentralized leveraged trading on Arbitrum and Polygon. Discover top Gains traders by risk-adjusted returns.',
+  jupiter_perps: 'Jupiter Perps is a Solana-based perpetual trading platform. Browse the best Jupiter Perps traders ranked by Arena Score.',
+  aevo: 'Aevo is a decentralized options and perpetuals exchange. See top Aevo traders and their performance metrics.',
+  drift: 'Drift is a Solana-based decentralized perpetual exchange with deep liquidity. Explore the highest-ranked Drift traders.',
+  web3_bot: 'Web3 trading bots and AI agents compete alongside human traders. Discover the best-performing automated trading strategies across DeFi protocols.',
+}
+
+/** Get current year for SEO metadata */
+const CURRENT_YEAR = new Date().getFullYear()
 
 export async function generateMetadata({
   params,
@@ -46,14 +90,15 @@ export async function generateMetadata({
       description: 'The requested exchange ranking page does not exist.',
     }
   }
-  
+
   const displayName = EXCHANGE_NAMES[exchange]
   const sourceType = SOURCE_TYPE_MAP[exchange] || 'futures'
   const labels = TYPE_LABELS[sourceType] || TYPE_LABELS.futures
   const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://www.arenafi.org'
 
-  const title = `${displayName} ${labels.en} Trader Rankings`
-  const description = `Top ${displayName} ${labels.en.toLowerCase()} traders ranked by Arena Score. Compare ROI, win rate, max drawdown, and PnL across 90-day windows. Updated every 3 hours.`
+  // SEO-optimized title targeting long-tail keywords
+  const title = `Top ${displayName} Traders ${CURRENT_YEAR} — Live ${labels.en} Rankings | Arena`
+  const description = `Best ${displayName} ${labels.en.toLowerCase()} traders in ${CURRENT_YEAR}, ranked by Arena Score. Compare ROI, win rate, max drawdown, and PnL across 90-day windows. Updated every 30 minutes from live exchange data.`
 
   return {
     title,
@@ -62,9 +107,11 @@ export async function generateMetadata({
       canonical: `${baseUrl}/rankings/${exchange}`,
     },
     keywords: [
-      displayName,
-      `${displayName} trader ranking`,
-      `${displayName} copy trading`,
+      `best ${displayName.toLowerCase()} traders ${CURRENT_YEAR}`,
+      `top ${displayName.toLowerCase()} ${labels.en.toLowerCase()} traders`,
+      `${displayName.toLowerCase()} trader ranking`,
+      `${displayName.toLowerCase()} copy trading`,
+      `${displayName.toLowerCase()} leaderboard`,
       'crypto trader leaderboard',
       'ROI',
       'Arena Score',
@@ -183,14 +230,15 @@ async function RankingsContent({ exchange }: { exchange: string }) {
   const traders = await fetchExchangeTraders(exchange)
   const sourceType = SOURCE_TYPE_MAP[exchange] || 'futures'
   const labels = TYPE_LABELS[sourceType] || TYPE_LABELS.futures
+  const baseUrl = 'https://www.arenafi.org'
 
   // JSON-LD ItemList for top traders (SEO structured data)
   const top100 = traders.slice(0, 100)
-  const jsonLd = {
+  const itemListJsonLd = {
     '@context': 'https://schema.org',
     '@type': 'ItemList',
-    name: `${displayName} ${labels.en} Trader Rankings`,
-    description: `Top ${displayName} ${labels.en.toLowerCase()} traders ranked by Arena Score`,
+    name: `Top ${displayName} ${labels.en} Traders ${CURRENT_YEAR}`,
+    description: `Best ${displayName} ${labels.en.toLowerCase()} traders ranked by Arena Score in ${CURRENT_YEAR}`,
     numberOfItems: top100.length,
     itemListElement: top100.map((t, i) => ({
       '@type': 'ListItem',
@@ -198,26 +246,72 @@ async function RankingsContent({ exchange }: { exchange: string }) {
       item: {
         '@type': 'Person',
         name: t.display_name || t.trader_key,
-        url: `https://www.arenafi.org/trader/${encodeURIComponent(t.trader_key)}`,
+        url: `${baseUrl}/trader/${encodeURIComponent(t.trader_key)}`,
         ...(t.avatar_url ? { image: t.avatar_url } : {}),
       },
     })),
   }
 
+  // BreadcrumbList JSON-LD for search engine navigation
+  const breadcrumbJsonLd = {
+    '@context': 'https://schema.org',
+    '@type': 'BreadcrumbList',
+    itemListElement: [
+      {
+        '@type': 'ListItem',
+        position: 1,
+        name: 'Arena',
+        item: baseUrl,
+      },
+      {
+        '@type': 'ListItem',
+        position: 2,
+        name: 'Rankings',
+        item: `${baseUrl}/rankings`,
+      },
+      {
+        '@type': 'ListItem',
+        position: 3,
+        name: `${displayName} ${labels.en}`,
+        item: `${baseUrl}/rankings/${exchange}`,
+      },
+    ],
+  }
+
+  const introText = EXCHANGE_INTROS[exchange]
+
   return (
     <>
       <script
         type="application/ld+json"
-        dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(itemListJsonLd) }}
       />
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(breadcrumbJsonLd) }}
+      />
+      {/* SEO intro paragraph — crawlable, above the fold */}
+      {introText && (
+        <p
+          style={{
+            fontSize: tokens.typography.fontSize.sm,
+            color: tokens.colors.text.secondary,
+            lineHeight: 1.6,
+            marginBottom: tokens.spacing[4],
+            maxWidth: '720px',
+          }}
+        >
+          {introText}
+        </p>
+      )}
       <p
         style={{
-          fontSize: tokens.typography.fontSize.sm,
-          color: tokens.colors.text.secondary,
+          fontSize: tokens.typography.fontSize.xs,
+          color: tokens.colors.text.tertiary,
           marginBottom: tokens.spacing[6],
         }}
       >
-        {traders.length} traders | Ranked by Arena Score | 90-day window
+        {traders.length.toLocaleString()} traders | Ranked by Arena Score | 90-day window | Updated {new Date().toLocaleDateString('en-US', { month: 'short', year: 'numeric' })}
       </p>
       <ExchangeRankingClient traders={traders} exchange={exchange} />
     </>
@@ -257,7 +351,7 @@ export default async function ExchangeRankingPage({
             marginBottom: tokens.spacing[2],
           }}
         >
-          {displayName} {labels.en} Trader Rankings
+          Top {displayName} Traders — Live {labels.en} Rankings
         </h1>
 
         <Suspense fallback={<RankingSkeleton rows={20} />}>
