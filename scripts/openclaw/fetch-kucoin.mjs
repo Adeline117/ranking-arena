@@ -142,19 +142,21 @@ async function writeToSupabase(traders) {
   now.setMinutes(0, 0, 0)
   const dateBucket = now.toISOString()
 
-  // Write to trader_sources
-  const sources = traders.map(t => ({
-    source: PLATFORM,
-    source_trader_id: String(t.leadConfigId || t.uid || t.id || ''),
-    handle: t.nickName || null,
-    profile_url: `https://www.kucoin.com/copy-trading/leader/${t.leadConfigId || t.uid || t.id}`,
-    is_active: true,
-  }))
-
-  const { error: srcErr } = await supabase
-    .from('trader_sources')
-    .upsert(sources, { onConflict: 'source,source_trader_id', ignoreDuplicates: true })
-  if (srcErr) console.error('[kucoin] trader_sources error:', srcErr.message)
+  // Write to trader_profiles_v2 — frontend API reads display_name from this table
+  const profileRows = traders.map(t => {
+    const key = String(t.leadConfigId || t.uid || t.id || '')
+    return {
+      platform: PLATFORM, market_type: MARKET_TYPE, trader_key: key,
+      display_name: t.nickName || null, avatar_url: t.avatarUrl || null,
+      profile_url: `https://www.kucoin.com/copy-trading/leader/${key}`,
+      followers: t.maxCopyUserCount != null ? Number(t.maxCopyUserCount) : 0,
+      copiers: t.currentCopyUserCount != null ? Number(t.currentCopyUserCount) : 0,
+      updated_at: new Date().toISOString(),
+    }
+  })
+  const { error: profErr } = await supabase
+    .from('trader_profiles_v2').upsert(profileRows, { onConflict: 'platform,trader_key' })
+  if (profErr) console.error('[kucoin] profiles error:', profErr.message)
 
   // Write to trader_snapshots_v2
   const snapshots = traders.map(t => {

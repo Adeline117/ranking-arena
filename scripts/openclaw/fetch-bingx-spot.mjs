@@ -150,17 +150,18 @@ async function writeToSupabase(traders) {
   now.setMinutes(0, 0, 0)
   const dateBucket = now.toISOString()
 
-  const sources = traders.filter(t => t.uid).map(t => ({
-    source: PLATFORM,
-    source_trader_id: t.uid,
-    handle: t.name || null,
-    is_active: true,
+  // Write to trader_profiles_v2 — frontend API reads display_name from this table
+  const profileRows = traders.filter(t => t.uid).map(t => ({
+    platform: PLATFORM, market_type: 'spot', trader_key: t.uid,
+    display_name: t.name || null, avatar_url: t.avatar || null,
+    profile_url: `https://bingx.com/en/copy-trading/trader/${t.uid}`,
+    followers: t.followers != null ? Number(t.followers) : 0,
+    copiers: t.copiers != null ? Number(t.copiers) : 0,
+    updated_at: new Date().toISOString(),
   }))
-
-  const { error: srcErr } = await supabase
-    .from('trader_sources')
-    .upsert(sources, { onConflict: 'source,source_trader_id', ignoreDuplicates: true })
-  if (srcErr) console.error('[bingx_spot] trader_sources error:', srcErr.message)
+  const { error: profErr } = await supabase
+    .from('trader_profiles_v2').upsert(profileRows, { onConflict: 'platform,trader_key' })
+  if (profErr) console.error('[bingx_spot] profiles error:', profErr.message)
 
   const snapshots = traders.filter(t => t.uid).map(t => ({
     platform: PLATFORM,
