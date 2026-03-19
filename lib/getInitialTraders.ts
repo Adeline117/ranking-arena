@@ -176,7 +176,7 @@ async function fetchLeaderboardLegacy(
     limit: Math.min(limit, 50),
     minScore: 10,
     excludeOutliers: true,
-    sortBy: 'score',
+    sortBy: 'arena_score',
   })
 
   const initialTraders = unifiedTraders.map(mapUnifiedToInitial)

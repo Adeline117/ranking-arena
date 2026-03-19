@@ -1,5 +1,3 @@
-'use client'
-
 import Link from 'next/link'
 import { tokens } from '@/lib/design-tokens'
 import ExchangeLogo from '../ui/ExchangeLogo'
