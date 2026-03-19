@@ -68,7 +68,7 @@ export const GET = withPublic(async ({ supabase, request }) => {
 
   const { window, platform, market_type: marketType, limit, offset, sort } = parsed.data
   const tradingStyle = parsed.data.trading_style || null
-  const minAlpha = parsed.data.min_alpha ?? null
+  const _minAlpha = parsed.data.min_alpha ?? null
   const minSortino = parsed.data.min_sortino ?? null
   const minRoi = parsed.data.min_roi ?? null
   const minPnl = parsed.data.min_pnl ?? null

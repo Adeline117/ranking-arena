@@ -66,11 +66,50 @@ function createResponse(data: unknown, status = 200) {
 }
 
 /**
+ * Map of safe, public-facing error messages by status code.
+ * Prevents leaking internal details (stack traces, DB errors, etc.) to clients.
+ */
+const PUBLIC_ERROR_MESSAGES: Record<number, string> = {
+  400: 'Bad request',
+  401: 'Unauthorized',
+  403: 'Forbidden',
+  404: 'Not found',
+  405: 'Method not allowed',
+  409: 'Conflict',
+  422: 'Unprocessable entity',
+  429: 'Too many requests',
+  500: 'Internal server error',
+  502: 'Bad gateway',
+  503: 'Service unavailable',
+  504: 'Gateway timeout',
+}
+
+/**
+ * Get a safe, public-facing error message for a given status code.
+ * For 5xx errors, always returns a generic message regardless of input.
+ * For 4xx errors, uses the provided message if it's considered safe, otherwise falls back to a generic message.
+ */
+function getSafeErrorMessage(message: string, status: number): string {
+  // 5xx: always generic — never expose internal details
+  if (status >= 500) {
+    return PUBLIC_ERROR_MESSAGES[status] || 'Internal server error'
+  }
+  // 4xx: use provided message only if short and doesn't contain suspicious patterns
+  // (stack traces, file paths, SQL fragments, etc.)
+  const suspicious = /\b(at |Error:|ENOENT|ECONNREFUSED|\.ts:|\.js:|SELECT |INSERT |UPDATE |DELETE |FROM |WHERE |supabase|postgres|redis|node_modules)\b/i
+  if (suspicious.test(message)) {
+    return PUBLIC_ERROR_MESSAGES[status] || 'Request error'
+  }
+  return message
+}
+
+/**
  * 创建错误响应
  */
 export function createErrorResponse(message: string, status = 500) {
+  const safeMessage = getSafeErrorMessage(message, status)
   return NextResponse.json(
-    { success: false, error: message },
+    { success: false, error: safeMessage },
     { status }
   )
 }
@@ -243,9 +282,8 @@ export function withApiMiddleware<T>(
         logger.warn(`${name} client error: ${internalMessage}`, { duration, correlationId })
       }
 
-      // Don't expose internal error details to clients for 5xx errors
-      const clientMessage = statusCode >= 500 ? '服务器内部错误' : internalMessage
-      const errorResponse = createErrorResponse(clientMessage, statusCode)
+      // Sanitize error messages — createErrorResponse applies safe message filtering
+      const errorResponse = createErrorResponse(internalMessage, statusCode)
       if (versioning) {
         addVersionHeaders(errorResponse, versionContext)
       }

@@ -16,6 +16,7 @@
  * - "Did you mean" suggestions for low-result queries
  */
 
+import { z } from 'zod'
 import { withPublic } from '@/lib/api/middleware'
 import { success } from '@/lib/api/response'
 import { get as cacheGet, set as cacheSet } from '@/lib/cache'
@@ -322,12 +323,35 @@ async function handleClickTracking(
   return success({ ok: true })
 }
 
+// ---------- Input validation schema ----------
+
+const searchQuerySchema = z.object({
+  q: z.string().max(200).optional(),
+  limit: z.coerce.number().int().min(1).max(50).catch(5),
+  type: z.enum(['trending', 'hot', 'click']).optional(),
+  platform: z.string().max(50).optional(),
+  // Click tracking params
+  id: z.string().max(200).optional(),
+  rtype: z.string().max(20).optional(),
+})
+
 // ---------- Main unified search ----------
 
 export const GET = withPublic(
   async ({ supabase, request }) => {
     const searchParams = request.nextUrl.searchParams
-    const searchType = searchParams.get('type')
+    const rawParams = Object.fromEntries(searchParams)
+    const parsed = searchQuerySchema.safeParse(rawParams)
+    if (!parsed.success) {
+      return success({
+        query: '',
+        results: { traders: [], posts: [], library: [], users: [], groups: [] },
+        total: 0,
+        error: 'Invalid parameters',
+      } as UnifiedSearchResponse & { error: string })
+    }
+
+    const searchType = parsed.data.type
 
     if (searchType === 'trending') {
       return handleTrendingSearch(supabase)
@@ -339,12 +363,9 @@ export const GET = withPublic(
       return handleClickTracking(supabase, searchParams)
     }
 
-    const query = searchParams.get('q')?.trim()
-    const limitPerCategory = Math.min(
-      parseInt(searchParams.get('limit') || '5'),
-      10
-    )
-    const platformFilter = searchParams.get('platform') || undefined
+    const query = parsed.data.q?.trim()
+    const limitPerCategory = Math.min(parsed.data.limit, 10)
+    const platformFilter = parsed.data.platform || undefined
 
     if (!query || query.length < 1) {
       return success({

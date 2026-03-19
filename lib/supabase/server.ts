@@ -12,6 +12,22 @@ import { createClient, SupabaseClient, User } from '@supabase/supabase-js'
 import { NextRequest } from 'next/server'
 import { logger } from '@/lib/logger'
 
+// Lazy-loaded correlation ID getter (avoids importing node:async_hooks in client bundles)
+let _getCorrelationId: (() => string | undefined) | null = null
+function correlationId(): string | undefined {
+  if (typeof window !== 'undefined') return undefined
+  if (!_getCorrelationId) {
+    try {
+      const mod = '@/lib/api/' + 'correlation'
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      _getCorrelationId = require(mod).getCorrelationId
+    } catch {
+      _getCorrelationId = () => undefined
+    }
+  }
+  return _getCorrelationId!()
+}
+
 // 构建时使用占位符，运行时使用真实环境变量
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://placeholder.supabase.co'
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || 'placeholder-service-key'
@@ -25,6 +41,9 @@ let adminClientInstance: SupabaseClient | null = null
  *
  * 注意：Supabase JS 使用 REST API (PostgREST)，不是直接 PostgreSQL 连接
  * PostgREST 服务端已内置连接池，无需客户端配置 PgBouncer
+ *
+ * Correlation ID is automatically injected into headers from AsyncLocalStorage context
+ * when available, enabling distributed tracing across Supabase queries.
  */
 export function getSupabaseAdmin(): SupabaseClient {
   if (!adminClientInstance) {
@@ -39,6 +58,16 @@ export function getSupabaseAdmin(): SupabaseClient {
       },
       // Edge Runtime 优化
       global: {
+        // Use a custom fetch wrapper that injects Correlation ID into every request
+        fetch: (input: RequestInfo | URL, init?: RequestInit) => {
+          const cid = correlationId()
+          if (cid) {
+            const headers = new Headers(init?.headers)
+            headers.set('X-Correlation-ID', cid)
+            return globalThis.fetch(input, { ...init, headers })
+          }
+          return globalThis.fetch(input, init)
+        },
         headers: {
           'x-client-info': 'ranking-arena-server',
         },

@@ -19,8 +19,20 @@ import { z } from 'zod'
 const CriticalEnvSchema = z.object({
   NEXT_PUBLIC_SUPABASE_URL: z.string().url('NEXT_PUBLIC_SUPABASE_URL must be a valid URL'),
   NEXT_PUBLIC_SUPABASE_ANON_KEY: z.string().min(1, 'NEXT_PUBLIC_SUPABASE_ANON_KEY is required'),
+  SUPABASE_SERVICE_ROLE_KEY: z.string().min(1, 'SUPABASE_SERVICE_ROLE_KEY is required').optional(),
   NODE_ENV: z.enum(['development', 'production', 'test']).optional().default('development'),
-  CRON_SECRET: z.string().optional(),
+  CRON_SECRET: z.string().min(1, 'CRON_SECRET is required').optional(),
+  // Redis / Upstash
+  UPSTASH_REDIS_REST_URL: z.string().url('UPSTASH_REDIS_REST_URL must be a valid URL').optional(),
+  UPSTASH_REDIS_REST_TOKEN: z.string().min(1).optional(),
+  // Meilisearch
+  MEILISEARCH_URL: z.string().url('MEILISEARCH_URL must be a valid URL').optional(),
+  MEILISEARCH_ADMIN_KEY: z.string().min(1).optional(),
+  MEILISEARCH_SEARCH_KEY: z.string().min(1).optional(),
+  // Stripe
+  STRIPE_SECRET_KEY: z.string().min(1).optional(),
+  // ClickHouse
+  CLICKHOUSE_URL: z.string().url('CLICKHOUSE_URL must be a valid URL').optional(),
 })
 
 /** Parsed & typed critical environment variables */
@@ -198,6 +210,14 @@ export const env = {
   SMART_SCHEDULER_NORMAL_INTERVAL_MINUTES: getEnvNumber('SMART_SCHEDULER_NORMAL_INTERVAL_MINUTES', 240),
   SMART_SCHEDULER_DORMANT_INTERVAL_MINUTES: getEnvNumber('SMART_SCHEDULER_DORMANT_INTERVAL_MINUTES', 720),
   SMART_SCHEDULER_MAX_BATCH_SIZE: getEnvNumber('SMART_SCHEDULER_MAX_BATCH_SIZE', 50),
+
+  // ── Meilisearch ──
+  MEILISEARCH_URL: isServer ? getEnv('MEILISEARCH_URL', false) : undefined,
+  MEILISEARCH_ADMIN_KEY: isServer ? getEnv('MEILISEARCH_ADMIN_KEY', false) : undefined,
+  MEILISEARCH_SEARCH_KEY: isServer ? getEnv('MEILISEARCH_SEARCH_KEY', false) : undefined,
+
+  // ── ClickHouse ──
+  CLICKHOUSE_URL: isServer ? getEnv('CLICKHOUSE_URL', false) : undefined,
 
   // ── Sentry ──
   NEXT_PUBLIC_SENTRY_DSN: getEnv('NEXT_PUBLIC_SENTRY_DSN', false),
