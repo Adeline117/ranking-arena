@@ -442,16 +442,16 @@ export function usePostsRealtime(callbacks: {
  * 订阅交易员快照更新
  */
 export function useTraderSnapshotsRealtime(
-  source?: string,
+  platform?: string,
   callbacks?: {
     onInsert?: (snapshot: Record<string, unknown>) => void
     onUpdate?: (payload: { old: Record<string, unknown>; new: Record<string, unknown> }) => void
   }
 ) {
   return useRealtime({
-    table: 'trader_snapshots',
+    table: 'trader_snapshots_v2',
     event: '*',
-    filter: source ? `source=eq.${source}` : undefined,
+    filter: platform ? `platform=eq.${platform}` : undefined,
     ...callbacks,
   })
 }
