@@ -304,6 +304,28 @@ const zh = {
     maxImages: '最多上传9张图片',
     formatNotSupported: '格式不支持',
     fileTooLarge: '超过5MB',
+    // 可见性级别
+    visibilityPublic: '公开',
+    visibilityPublicDesc: '所有人可见',
+    visibilityFollowers: '仅关注者',
+    visibilityFollowersDesc: '仅您的关注者可见',
+    visibilityGroup: '仅小组',
+    visibilityGroupDesc: '仅小组成员可见',
+    visibility: '可见性',
+    // 内容警告
+    contentWarning: '内容警告',
+    contentWarningPlaceholder: '描述此内容可能敏感的原因...',
+    markSensitive: '标记为敏感内容',
+    sensitiveContent: '敏感内容',
+    showContent: '显示内容',
+    hideContent: '隐藏内容',
+    // 语言筛选
+    allLanguages: '所有语言',
+    languageZh: '中文',
+    languageEn: '英文',
+    languageJa: '日文',
+    languageKo: '韩文',
+    filterByLanguage: '按语言筛选',
     // API Key 绑定相关
     apiKeyBindTitle: '使用 API Key 绑定交易所',
     apiKeyBindDesc: '按照以下步骤创建只读 API Key，安全地同步您的交易数据',

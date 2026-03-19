@@ -304,6 +304,28 @@ const en = {
     maxImages: 'Maximum 9 images allowed',
     formatNotSupported: 'Format not supported',
     fileTooLarge: 'File exceeds 5MB',
+    // Visibility levels
+    visibilityPublic: 'Public',
+    visibilityPublicDesc: 'Visible to everyone',
+    visibilityFollowers: 'Followers only',
+    visibilityFollowersDesc: 'Only your followers can see this',
+    visibilityGroup: 'Group only',
+    visibilityGroupDesc: 'Only group members can see this',
+    visibility: 'Visibility',
+    // Content warning
+    contentWarning: 'Content Warning',
+    contentWarningPlaceholder: 'Describe why this content may be sensitive...',
+    markSensitive: 'Mark as sensitive',
+    sensitiveContent: 'Sensitive Content',
+    showContent: 'Show Content',
+    hideContent: 'Hide Content',
+    // Language filter
+    allLanguages: 'All Languages',
+    languageZh: 'Chinese',
+    languageEn: 'English',
+    languageJa: 'Japanese',
+    languageKo: 'Korean',
+    filterByLanguage: 'Filter by language',
     // API Key binding related
     apiKeyBindTitle: 'Bind Exchange with API Key',
     apiKeyBindDesc: 'Follow the steps below to create a read-only API Key and sync your trading data securely',
