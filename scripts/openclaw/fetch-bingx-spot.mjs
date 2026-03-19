@@ -99,13 +99,21 @@ async function fetchBingXSpot() {
       if (acct.includes('SPOT') || !acct || spotData) {
         const trader = t.trader || {}
         const stat = t.rankStat || {}
+        // Parse profitRate from string (e.g. "+12.34%" or "12.34")
+        const parseNum = (v) => { if (v == null || v === '') return null; const n = Number(String(v).replace(/[+,%\s]/g, '')); return isNaN(n) ? null : n }
+        const parsePercent = (v) => { if (v == null || v === '') return null; const s = String(v).replace(/[+%\s]/g, ''); const n = Number(s); return isNaN(n) ? null : n }
         traders.push({
           uid: String(stat.apiIdentity || trader.uid || ''),
-          name: trader.nickName || trader.realNickName || '',
+          name: trader.nickName || trader.realNickName || stat.disPlayName || '',
           avatar: trader.avatar || '',
-          roi: stat.profitRate30Days != null ? Number(stat.profitRate30Days) : null,
-          pnl: stat.profit30Days != null ? Number(stat.profit30Days) : null,
-          copiers: stat.followerNum != null ? Number(stat.followerNum) : null,
+          roi: parsePercent(stat.strRecent30DaysRate),
+          pnl: parseNum(stat.totalEarnings),
+          win_rate: stat.winRate30d != null ? Number(stat.winRate30d) * 100 : parsePercent(stat.winRate),
+          max_drawdown: parsePercent(stat.maxDrawDown30dV2),
+          sharpe_ratio: parseNum(stat.sharpe30d),
+          copiers: parseNum(stat.strFollowerNum),
+          followers: parseNum(stat.maxFollowerNum),
+          trades_count: parseNum(stat.totalTransactions),
           accountEnum: acct,
         })
       }
@@ -162,7 +170,12 @@ async function writeToSupabase(traders) {
     as_of_ts: dateBucket,
     roi_pct: t.roi,
     pnl_usd: t.pnl,
+    win_rate: t.win_rate,
+    max_drawdown: t.max_drawdown,
+    sharpe_ratio: t.sharpe_ratio,
+    trades_count: t.trades_count,
     copiers: t.copiers,
+    followers: t.followers,
     metrics: { display_name: t.name, avatar_url: t.avatar, accountEnum: t.accountEnum },
   }))
 
