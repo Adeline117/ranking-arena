@@ -25,6 +25,7 @@ import {
 import { createLogger, fireAndForget } from '@/lib/utils/logger'
 import { PipelineLogger } from '@/lib/services/pipeline-logger'
 import { sanitizeDisplayName } from '@/lib/utils/profanity'
+import { generateBlockieSvg } from '@/lib/utils/avatar'
 import { tieredGet, tieredSet, tieredDel } from '@/lib/cache/redis-layer'
 import { env } from '@/lib/env'
 
@@ -772,7 +773,7 @@ async function computeSeason(
       followers: t.followers ?? 0,
       trades_count: t.trades_count,
       handle: displayHandle,
-      avatar_url: info.avatar_url || `https://api.dicebear.com/7.x/identicon/svg?seed=${encodeURIComponent(t.source + '_' + t.source_trader_id)}`,
+      avatar_url: info.avatar_url || generateBlockieSvg(t.source + '_' + t.source_trader_id, 64),
       // Score sub-components (returnScore/drawdownScore/stabilityScore/pnlScore)
       profitability_score: Math.round(scoreResult.returnScore * 100) / 100,
       risk_control_score: Math.round(scoreResult.drawdownScore * 100) / 100,
