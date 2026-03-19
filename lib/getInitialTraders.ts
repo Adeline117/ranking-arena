@@ -13,6 +13,7 @@ import { getLeaderboard } from '@/lib/data/unified'
 import { mapLeaderboardRow } from '@/lib/data/trader/mappers'
 import { logger } from '@/lib/logger'
 import { sanitizeDisplayName } from '@/lib/utils/profanity'
+import * as cache from '@/lib/cache'
 
 /** @deprecated Use UnifiedTrader from lib/types/unified-trader.ts */
 export interface InitialTrader {
@@ -64,11 +65,25 @@ export async function getInitialTraders(
     return { traders: [], lastUpdated: null }
   }
 
-  // Skip Redis cache for SSR -- Upstash fetch uses cache:'no-store' which
-  // forces the entire page into dynamic rendering, breaking ISR.
-  // ISR (revalidate=60) handles page-level caching instead.
-  // Redis cache is still used by API routes (/api/traders) which are dynamic anyway.
-  return fetchLeaderboardFromDB(timeRange, limit)
+  // Try Redis cache first (2-minute TTL) — avoids DB roundtrip on cache hit
+  const cacheKey = `home-initial-traders:${timeRange}`
+  try {
+    const cached = await cache.get<{ traders: InitialTrader[]; lastUpdated: string | null }>(cacheKey)
+    if (cached && cached.traders && cached.traders.length > 0) {
+      return cached
+    }
+  } catch {
+    // Redis unavailable — fall through to DB
+  }
+
+  const result = await fetchLeaderboardFromDB(timeRange, limit)
+
+  // Cache the result asynchronously (2-minute TTL)
+  if (result.traders.length > 0) {
+    cache.set(cacheKey, result, { ttl: 120 }).catch(() => {})
+  }
+
+  return result
 }
 
 /**
@@ -85,16 +100,16 @@ export async function fetchLeaderboardFromDB(
 ): Promise<{ traders: InitialTrader[]; lastUpdated: string | null }> {
   const supabase = getSupabaseAdmin()
 
-  // 15s timeout -- prevents build-time static generation from hanging (Vercel kills at 60s)
+  // 5s timeout -- prevents SSR from blocking LCP (was 15s, reduced for faster fallback)
   const controller = new AbortController()
-  const timer = setTimeout(() => controller.abort(), 15_000)
+  const timer = setTimeout(() => controller.abort(), 5_000)
 
   try {
     const result = await Promise.race([
       fetchViaDiverseRPC(supabase, timeRange, limit),
       new Promise<never>((_, reject) => {
         controller.signal.addEventListener('abort', () =>
-          reject(new Error('Query timeout after 15000ms'))
+          reject(new Error('Query timeout after 5000ms'))
         )
       }),
     ])
@@ -148,8 +163,8 @@ async function fetchViaDiverseRPC(
 }
 
 /**
- * Legacy fallback: fetch 2000 rows and apply JS-side diversity filter.
- * Kept for backward compatibility until the RPC migration is applied.
+ * Lightweight fallback: fetch only 50 rows sorted by arena_score DESC.
+ * Avoids the expensive 2000-row fetch + JS-side filtering that caused LCP spikes.
  */
 async function fetchLeaderboardLegacy(
   supabase: ReturnType<typeof getSupabaseAdmin>,
@@ -158,41 +173,17 @@ async function fetchLeaderboardLegacy(
 ): Promise<{ traders: InitialTrader[]; lastUpdated: string | null }> {
   const { traders: unifiedTraders } = await getLeaderboard(supabase, {
     period: timeRange as '7D' | '30D' | '90D',
-    limit: 2000,
+    limit: Math.min(limit, 50),
     minScore: 10,
     excludeOutliers: true,
-    sortBy: 'rank',
+    sortBy: 'score',
   })
 
-  // Dedupe by platform + trader_key (keep first occurrence, which has best rank)
-  const seen = new Set<string>()
-  const uniqueTraders = unifiedTraders.filter(t => {
-    const key = `${t.platform}:${t.traderKey}`
-    if (seen.has(key)) return false
-    seen.add(key)
-    return true
-  })
-
-  // Map UnifiedTrader -> InitialTrader
-  const initialTraders = uniqueTraders.map(mapUnifiedToInitial)
-
-  // Platform diversity: cap max traders per platform to ensure cross-platform mix
-  const MAX_PER_PLATFORM = 5
-  const platformCounts = new Map<string, number>()
-  const diverseTraders: InitialTrader[] = []
-  for (const t of initialTraders) {
-    const count = platformCounts.get(t.source) || 0
-    if (count >= MAX_PER_PLATFORM) continue
-    platformCounts.set(t.source, count + 1)
-    diverseTraders.push(t)
-    if (diverseTraders.length >= limit) break
-  }
-
-  // Extract lastUpdated from first trader (they're sorted by rank, all from same computation)
+  const initialTraders = unifiedTraders.map(mapUnifiedToInitial)
   const lastUpdated = unifiedTraders.length > 0 ? unifiedTraders[0].lastUpdated : null
 
   return {
-    traders: diverseTraders,
+    traders: initialTraders,
     lastUpdated,
   }
 }
