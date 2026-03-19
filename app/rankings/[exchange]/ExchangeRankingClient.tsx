@@ -394,9 +394,13 @@ const SortHeader = React.memo(function SortHeader({
 export default function ExchangeRankingClient({
   traders: initialTraders,
   exchange,
+  totalCount,
 }: {
   traders: TraderData[]
   exchange?: string
+  /** Total trader count from the server. When > initialTraders.length, the client
+   *  will fetch the full list after hydration to keep SSR payload small. */
+  totalCount?: number
 }) {
   const { language, t } = useLanguage()
   const [viewMode, setViewMode] = useState<ViewMode>(
@@ -409,6 +413,38 @@ export default function ExchangeRankingClient({
   // Live-updating traders state (starts from server props, updates via Realtime)
   const [traders, setTraders] = useState(initialTraders)
   useEffect(() => { setTraders(initialTraders) }, [initialTraders])
+
+  // Hydrate full trader list after mount when SSR only sent the first 20 for payload size
+  useEffect(() => {
+    if (!exchange || !totalCount || initialTraders.length >= totalCount) return
+    let cancelled = false
+    fetch(`/api/rankings?window=90d&platform=${encodeURIComponent(exchange)}&limit=5000`)
+      .then(r => r.ok ? r.json() : null)
+      .then(json => {
+        if (cancelled || !json?.data?.length) return
+        // Map API response shape to TraderData shape
+        const full: TraderData[] = json.data.map((row: Record<string, unknown>) => ({
+          trader_key: String(row.handle || row.source_trader_id || ''),
+          display_name: row.handle ? String(row.handle) : null,
+          avatar_url: (row.avatar_url as string | null) ?? null,
+          platform: String(row.source || exchange),
+          roi: row.roi != null ? Number(row.roi) : null,
+          pnl: row.pnl != null ? Number(row.pnl) : null,
+          win_rate: row.win_rate as number | null,
+          max_drawdown: row.max_drawdown as number | null,
+          arena_score: row.arena_score as number | null,
+          followers: row.followers as number | null,
+          trader_type: (row.trader_type as string) || null,
+          is_bot: row.source === 'web3_bot' || row.trader_type === 'bot',
+          captured_at: (row.computed_at as string) || null,
+          _source_id: String(row.source_trader_id || ''),
+        }))
+        setTraders(full)
+      })
+      .catch(() => { /* silently keep SSR preview data */ })
+    return () => { cancelled = true }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [exchange])
 
   const handleRealtimeUpdate = useCallback((updates: Array<{ id: string; source: string; roi: number; pnl: number | null; win_rate: number | null; max_drawdown: number | null; arena_score: number | null; [key: string]: unknown }>) => {
     setTraders(prev => {
@@ -502,11 +538,27 @@ export default function ExchangeRankingClient({
   const router = useRouter()
   const handleRefresh = useCallback(async () => {
     try {
-      const res = await fetch(`/api/rankings/exchange?exchange=${encodeURIComponent(exchange || '')}`)
+      const res = await fetch(`/api/rankings?window=90d&platform=${encodeURIComponent(exchange || '')}&limit=5000`)
       if (res.ok) {
         const json = await res.json()
         if (Array.isArray(json.data) && json.data.length > 0) {
-          setTraders(json.data)
+          const mapped: TraderData[] = json.data.map((row: Record<string, unknown>) => ({
+            trader_key: String(row.handle || row.source_trader_id || ''),
+            display_name: row.handle ? String(row.handle) : null,
+            avatar_url: (row.avatar_url as string | null) ?? null,
+            platform: String(row.source || exchange),
+            roi: row.roi != null ? Number(row.roi) : null,
+            pnl: row.pnl != null ? Number(row.pnl) : null,
+            win_rate: row.win_rate as number | null,
+            max_drawdown: row.max_drawdown as number | null,
+            arena_score: row.arena_score as number | null,
+            followers: row.followers as number | null,
+            trader_type: (row.trader_type as string) || null,
+            is_bot: row.source === 'web3_bot' || row.trader_type === 'bot',
+            captured_at: (row.computed_at as string) || null,
+            _source_id: String(row.source_trader_id || ''),
+          }))
+          setTraders(mapped)
           return
         }
       }

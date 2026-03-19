@@ -244,14 +244,15 @@ async function RankingsContent({ exchange }: { exchange: string }) {
   const baseUrl = 'https://www.arenafi.org'
 
   // JSON-LD ItemList for top traders (SEO structured data)
-  const top100 = traders.slice(0, 100)
+  // Limit to 20 to keep the ISR HTML payload small (~50KB vs 1MB for 5000 traders).
+  const top20 = traders.slice(0, 20)
   const itemListJsonLd = {
     '@context': 'https://schema.org',
     '@type': 'ItemList',
     name: `Top ${displayName} ${labels.en} Traders ${CURRENT_YEAR}`,
     description: `Best ${displayName} ${labels.en.toLowerCase()} traders ranked by Arena Score in ${CURRENT_YEAR}`,
-    numberOfItems: top100.length,
-    itemListElement: top100.map((t, i) => ({
+    numberOfItems: top20.length,
+    itemListElement: top20.map((t, i) => ({
       '@type': 'ListItem',
       position: i + 1,
       item: {
@@ -324,7 +325,8 @@ async function RankingsContent({ exchange }: { exchange: string }) {
       >
         {traders.length.toLocaleString()} traders | Ranked by Arena Score | 90-day window | Updated {new Date().toLocaleDateString('en-US', { month: 'short', year: 'numeric' })}
       </p>
-      <ExchangeRankingClient traders={traders} exchange={exchange} />
+      {/* SSR only passes first 20 traders to keep ISR HTML small. Client hydrates the full list. */}
+      <ExchangeRankingClient traders={traders.slice(0, 20)} exchange={exchange} totalCount={traders.length} />
     </>
   )
 }
