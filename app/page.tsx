@@ -60,18 +60,14 @@ const organizationJsonLd = {
 async function getHeroStats(): Promise<{ traderCount: number; exchangeCount: number }> {
   try {
     const supabase = getSupabaseAdmin()
-    const [tradersRes, platformsRes] = await Promise.all([
-      supabase.from('traders').select('id', { count: 'exact', head: true }),
-      supabase.from('leaderboard_ranks').select('source').eq('season_id', '90D').limit(200),
-    ])
+    // Only fetch trader count — exchange count is static (changes at most once a month)
+    // Use trader_sources for a fast index-only count scan
+    const tradersRes = await supabase
+      .from('trader_sources')
+      .select('id', { count: 'exact', head: true })
     const traderCount = tradersRes.count ?? 34000
-    let exchangeCount = 27
-    if (platformsRes.data) {
-      const platforms = new Set(platformsRes.data.map((r: { source: string }) =>
-        r.source.replace(/_(futures|spot|web3|perps|network)$/, '')
-      ))
-      exchangeCount = Math.max(platforms.size, 27)
-    }
+    // Exchange count is updated manually when new exchanges go live
+    const exchangeCount = 27
     return { traderCount, exchangeCount }
   } catch {
     return { traderCount: 34000, exchangeCount: 27 }

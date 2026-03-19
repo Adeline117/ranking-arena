@@ -12,7 +12,8 @@ import HomeSubNav from './HomeSubNav'
 import FoundingMemberBanner from './FoundingMemberBanner'
 const ExchangePartners = lazy(() => import('./ExchangePartners'))
 const GuestSignupPrompt = lazy(() => import('./GuestSignupPrompt'))
-const HomeHero = lazy(() => import('./HomeHero'))
+// HomeHero is above-fold (LCP element) — must NOT be lazy-loaded
+import HomeHero from './HomeHero'
 const WelcomeModal = lazy(() => import('../onboarding/WelcomeModal'))
 import HomePageClient from './HomePageClient'
 import { SectionErrorBoundary } from '../utils/ErrorBoundary'
@@ -69,7 +70,8 @@ export default function HomePage({ initialTraders, initialLastUpdated, heroStats
         }}
       >
         <h1 className="sr-only">Arena</h1>
-        <Suspense fallback={<div style={{ minHeight: 160, maxHeight: 200, borderRadius: tokens.radius.xl, border: '1px solid var(--color-border-primary)', background: 'var(--color-bg-secondary)', contain: 'layout style' }} className="skeleton" />}><HomeHero traderCount={heroStats?.traderCount} exchangeCount={heroStats?.exchangeCount} /></Suspense>
+        {/* HomeHero is eagerly imported — renders immediately. Suspense is for lazy NumberTicker inside it. */}
+        <Suspense fallback={null}><HomeHero traderCount={heroStats?.traderCount} exchangeCount={heroStats?.exchangeCount} /></Suspense>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
           <HomeSubNav />
           <FoundingMemberBanner />
