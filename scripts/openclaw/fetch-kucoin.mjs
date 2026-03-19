@@ -132,6 +132,46 @@ async function fetchKuCoinLeaderboard() {
   return traders
 }
 
+/** Compute derived metrics from totalPnlDate equity curve */
+function computeDerivedMetrics(pnlDates) {
+  if (!Array.isArray(pnlDates) || pnlDates.length < 2) return {}
+
+  const values = pnlDates.map(Number).filter(v => !isNaN(v))
+  if (values.length < 2) return {}
+
+  // Daily returns (differences)
+  const returns = []
+  for (let i = 1; i < values.length; i++) {
+    returns.push(values[i] - values[i - 1])
+  }
+
+  // Win rate: % of positive daily returns
+  const wins = returns.filter(r => r > 0).length
+  const winRate = returns.length > 0 ? (wins / returns.length) * 100 : null
+
+  // Max drawdown from cumulative PnL curve
+  let peak = -Infinity
+  let maxDD = 0
+  for (const v of values) {
+    if (v > peak) peak = v
+    const dd = peak > 0 ? ((peak - v) / peak) * 100 : 0
+    if (dd > maxDD) maxDD = dd
+  }
+
+  // Sharpe ratio (annualized from daily returns)
+  const mean = returns.reduce((a, b) => a + b, 0) / returns.length
+  const variance = returns.reduce((a, r) => a + (r - mean) ** 2, 0) / returns.length
+  const stdDev = Math.sqrt(variance)
+  const sharpe = stdDev > 0 ? (mean / stdDev) * Math.sqrt(365) : null
+
+  return {
+    win_rate: winRate != null ? Math.round(winRate * 100) / 100 : null,
+    max_drawdown: maxDD > 0 ? Math.round(maxDD * 100) / 100 : null,
+    sharpe_ratio: sharpe != null ? Math.round(sharpe * 100) / 100 : null,
+    trades_count: returns.length,
+  }
+}
+
 async function writeToSupabase(traders) {
   if (!traders.length) {
     console.log('[kucoin] No traders to write')
@@ -142,7 +182,26 @@ async function writeToSupabase(traders) {
   now.setMinutes(0, 0, 0)
   const dateBucket = now.toISOString()
 
-  // Write to trader_profiles_v2 — frontend API reads display_name from this table
+  // 1. Write to traders table (required for resolveTrader step 1)
+  const traderRows = traders.map(t => {
+    const key = String(t.leadConfigId || t.uid || t.id || '')
+    return {
+      platform: PLATFORM, trader_key: key,
+      handle: t.nickName || key,
+      avatar_url: t.avatarUrl || null,
+      profile_url: `https://www.kucoin.com/copy-trading/leader/${key}`,
+      market_type: MARKET_TYPE,
+    }
+  })
+  for (let i = 0; i < traderRows.length; i += 500) {
+    const batch = traderRows.slice(i, i + 500)
+    const { error } = await supabase
+      .from('traders').upsert(batch, { onConflict: 'platform,trader_key' })
+    if (error) console.error('[kucoin] traders error:', error.message)
+  }
+  console.log(`[kucoin] Wrote ${traderRows.length} traders`)
+
+  // 2. Write to trader_profiles_v2 — frontend API reads display_name from this table
   const profileRows = traders.map(t => {
     const key = String(t.leadConfigId || t.uid || t.id || '')
     return {
@@ -158,19 +217,25 @@ async function writeToSupabase(traders) {
     .from('trader_profiles_v2').upsert(profileRows, { onConflict: 'platform,trader_key' })
   if (profErr) console.error('[kucoin] profiles error:', profErr.message)
 
-  // Write to trader_snapshots_v2
-  const snapshots = traders.map(t => {
+  // 3. Write to trader_snapshots_v2 — 30D + 7D windows with derived metrics
+  const allSnapshots = []
+  for (const t of traders) {
     const traderKey = String(t.leadConfigId || t.uid || t.id || '')
     const roi = t.totalPnlRatio != null ? Number(t.totalPnlRatio) : null
     const pnl = t.totalPnl != null ? Number(t.totalPnl) : null
-    return {
+    const derived = computeDerivedMetrics(t.totalPnlDate)
+
+    const baseRow = {
       platform: PLATFORM,
       market_type: MARKET_TYPE,
       trader_key: traderKey,
-      window: '30D',
       as_of_ts: dateBucket,
       roi_pct: roi,
       pnl_usd: pnl,
+      win_rate: derived.win_rate ?? null,
+      max_drawdown: derived.max_drawdown ?? null,
+      sharpe_ratio: derived.sharpe_ratio ?? null,
+      trades_count: derived.trades_count ?? null,
       copiers: t.currentCopyUserCount != null ? Number(t.currentCopyUserCount) : null,
       followers: t.maxCopyUserCount != null ? Number(t.maxCopyUserCount) : null,
       metrics: {
@@ -181,37 +246,73 @@ async function writeToSupabase(traders) {
         aum: t.leadPrincipal != null ? Number(t.leadPrincipal) : null,
       },
     }
-  })
 
-  const { error: snapErr } = await supabase
-    .from('trader_snapshots_v2')
-    .upsert(snapshots, { onConflict: 'platform,market_type,trader_key,window' })
+    // 30D snapshot
+    allSnapshots.push({ ...baseRow, window: '30D' })
 
-  // Write equity curves from totalPnlDate (30-day daily PnL array)
+    // 7D snapshot — derive from last 7 days of totalPnlDate
+    if (Array.isArray(t.totalPnlDate) && t.totalPnlDate.length >= 7) {
+      const last7 = t.totalPnlDate.slice(-7)
+      const derived7d = computeDerivedMetrics(last7)
+      const first = Number(last7[0]) || 0
+      const last = Number(last7[last7.length - 1]) || 0
+      const roi7d = first !== 0 ? ((last - first) / Math.abs(first)) * 100 : null
+      const pnl7d = last - first
+      allSnapshots.push({
+        ...baseRow,
+        window: '7D',
+        roi_pct: roi7d,
+        pnl_usd: pnl7d,
+        win_rate: derived7d.win_rate ?? null,
+        max_drawdown: derived7d.max_drawdown ?? null,
+        sharpe_ratio: derived7d.sharpe_ratio ?? null,
+        trades_count: derived7d.trades_count ?? null,
+      })
+    }
+  }
+
+  for (let i = 0; i < allSnapshots.length; i += 500) {
+    const batch = allSnapshots.slice(i, i + 500)
+    const { error: snapErr } = await supabase
+      .from('trader_snapshots_v2')
+      .upsert(batch, { onConflict: 'platform,market_type,trader_key,window' })
+    if (snapErr) console.error('[kucoin] snapshots error:', snapErr.message)
+  }
+  console.log(`[kucoin] Wrote ${allSnapshots.length} snapshots (30D + 7D)`)
+
+  // 4. Write equity curves from totalPnlDate — both 30D and 7D periods
   const now2 = new Date()
   const equityCurveRows = []
   for (const t of traders) {
     const traderKey = String(t.leadConfigId || t.uid || t.id || '')
     const pnlDates = t.totalPnlDate
     if (!traderKey || !Array.isArray(pnlDates) || pnlDates.length === 0) continue
-    // totalPnlDate is 30 items, newest last. Generate dates backwards from today.
+
     for (let i = 0; i < pnlDates.length; i++) {
       const date = new Date(now2)
       date.setDate(date.getDate() - (pnlDates.length - 1 - i))
       const pnlVal = Number(pnlDates[i])
       if (isNaN(pnlVal)) continue
+      const dateStr = date.toISOString().split('T')[0]
+
+      // 30D period — all days
       equityCurveRows.push({
-        source: PLATFORM,
-        source_trader_id: traderKey,
-        period: '30d',
-        data_date: date.toISOString().split('T')[0],
-        pnl_usd: pnlVal,
-        captured_at: now2.toISOString(),
+        source: PLATFORM, source_trader_id: traderKey,
+        period: '30D', data_date: dateStr,
+        pnl_usd: pnlVal, captured_at: now2.toISOString(),
       })
+
+      // 7D period — last 7 days only
+      if (i >= pnlDates.length - 7) {
+        equityCurveRows.push({
+          source: PLATFORM, source_trader_id: traderKey,
+          period: '7D', data_date: dateStr,
+          pnl_usd: pnlVal, captured_at: now2.toISOString(),
+        })
+      }
     }
   }
   if (equityCurveRows.length > 0) {
-    // Batch insert (no upsert — append new data points)
     for (let i = 0; i < equityCurveRows.length; i += 500) {
       const batch = equityCurveRows.slice(i, i + 500)
       const { error: ecErr } = await supabase
@@ -219,10 +320,8 @@ async function writeToSupabase(traders) {
         .upsert(batch, { onConflict: 'source,source_trader_id,period,data_date', ignoreDuplicates: true })
       if (ecErr) console.error('[kucoin] equity curve error:', ecErr.message)
     }
-    console.log(`[kucoin] Wrote ${equityCurveRows.length} equity curve points`)
+    console.log(`[kucoin] Wrote ${equityCurveRows.length} equity curve points (30D + 7D)`)
   }
-  if (snapErr) console.error('[kucoin] snapshots error:', snapErr.message)
-  else console.log(`[kucoin] Wrote ${snapshots.length} snapshots`)
 }
 
 // Main

@@ -237,7 +237,7 @@ export async function getTraderDetail(supabase: SupabaseClient, params: {
     safeQuery(() =>
       supabase
         .from('trader_profiles_v2')
-        .select('bio')
+        .select('bio, display_name, avatar_url')
         .eq('platform', platform)
         .eq('trader_key', traderKey)
         .limit(1)
@@ -248,8 +248,8 @@ export async function getTraderDetail(supabase: SupabaseClient, params: {
   const trader: UnifiedTrader = {
     platform,
     traderKey,
-    handle: (sourceProfile?.handle as string) || primaryData.handle || null,
-    avatarUrl: (sourceProfile?.avatar_url as string) || primaryData.avatarUrl || null,
+    handle: (sourceProfile?.handle as string) || (profileV2?.display_name as string) || primaryData.handle || null,
+    avatarUrl: (sourceProfile?.avatar_url as string) || (profileV2?.avatar_url as string) || primaryData.avatarUrl || null,
     profileUrl: (sourceProfile?.profile_url as string) || null,
     marketType: (sourceProfile?.market_type as string) || primaryData.marketType || SOURCE_TYPE_MAP[platform] || null,
     sourceType: SOURCE_TYPE_MAP[platform] || null,
