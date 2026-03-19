@@ -261,8 +261,15 @@ export class PipelineLogger {
 function createNoOpHandle(): PipelineLogHandle {
   return {
     id: -1,
-    async success() {},
-    async error() {},
-    async timeout() {},
+    async success(recordsProcessed = 0) {
+      console.log(`[PipelineLogger:no-op] success — ${recordsProcessed} records processed`)
+    },
+    async error(err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err)
+      console.error(`[PipelineLogger:no-op] error — ${msg}`)
+    },
+    async timeout() {
+      console.warn('[PipelineLogger:no-op] timeout')
+    },
   }
 }
