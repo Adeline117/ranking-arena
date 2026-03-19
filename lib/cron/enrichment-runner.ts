@@ -691,7 +691,7 @@ export async function runEnrichment(params: {
                         await upsertPortfolio(supabase, platformKey, traderId, walletPortfolio)
                       }
                     } catch {
-                      // Wallet portfolio is optional
+                      walletEnrichFailCount++
                     }
                   }
                 }
@@ -749,6 +749,10 @@ export async function runEnrichment(params: {
     } finally {
       clearTimeout(platformTimer)
       platformController.abort() // Clean up any lingering trader work on platform completion/timeout
+    }
+
+    if (walletEnrichFailCount > 0) {
+      logger.warn(`[Enrichment] ${walletEnrichFailCount} wallet enrichments failed for ${platformKey}`)
     }
   }
 
