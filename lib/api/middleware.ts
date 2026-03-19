@@ -6,7 +6,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { User } from '@supabase/supabase-js'
 import { getAuthUser, getSupabaseAdmin } from '@/lib/supabase/server'
-import { checkRateLimit, RateLimitPresets, type RateLimitConfig } from '@/lib/utils/rate-limit'
+import { checkRateLimit, addRateLimitHeaders, RateLimitPresets, type RateLimitConfig, type RateLimitResult } from '@/lib/utils/rate-limit'
 import { createLogger } from '@/lib/utils/logger'
 import { validateCsrfToken, CSRF_COOKIE_NAME, CSRF_HEADER_NAME } from '@/lib/utils/csrf'
 import {
@@ -66,11 +66,50 @@ function createResponse(data: unknown, status = 200) {
 }
 
 /**
+ * Map of safe, public-facing error messages by status code.
+ * Prevents leaking internal details (stack traces, DB errors, etc.) to clients.
+ */
+const PUBLIC_ERROR_MESSAGES: Record<number, string> = {
+  400: 'Bad request',
+  401: 'Unauthorized',
+  403: 'Forbidden',
+  404: 'Not found',
+  405: 'Method not allowed',
+  409: 'Conflict',
+  422: 'Unprocessable entity',
+  429: 'Too many requests',
+  500: 'Internal server error',
+  502: 'Bad gateway',
+  503: 'Service unavailable',
+  504: 'Gateway timeout',
+}
+
+/**
+ * Get a safe, public-facing error message for a given status code.
+ * For 5xx errors, always returns a generic message regardless of input.
+ * For 4xx errors, uses the provided message if it's considered safe, otherwise falls back to a generic message.
+ */
+function getSafeErrorMessage(message: string, status: number): string {
+  // 5xx: always generic — never expose internal details
+  if (status >= 500) {
+    return PUBLIC_ERROR_MESSAGES[status] || 'Internal server error'
+  }
+  // 4xx: use provided message only if short and doesn't contain suspicious patterns
+  // (stack traces, file paths, SQL fragments, etc.)
+  const suspicious = /\b(at |Error:|ENOENT|ECONNREFUSED|\.ts:|\.js:|SELECT |INSERT |UPDATE |DELETE |FROM |WHERE |supabase|postgres|redis|node_modules)\b/i
+  if (suspicious.test(message)) {
+    return PUBLIC_ERROR_MESSAGES[status] || 'Request error'
+  }
+  return message
+}
+
+/**
  * 创建错误响应
  */
 export function createErrorResponse(message: string, status = 500) {
+  const safeMessage = getSafeErrorMessage(message, status)
   return NextResponse.json(
-    { success: false, error: message },
+    { success: false, error: safeMessage },
     { status }
   )
 }
@@ -132,6 +171,9 @@ export function withApiMiddleware<T>(
     // 解析 API 版本
     const versionContext = parseApiVersion(request)
 
+    // Track rate limit metadata for injecting headers on successful responses
+    let rateLimitMeta: RateLimitResult['meta'] = null
+
     try {
       // 1. 限流检查
       if (rateLimit !== false) {
@@ -139,7 +181,9 @@ export function withApiMiddleware<T>(
           ? RateLimitPresets[rateLimit]
           : rateLimit
 
-        const rateLimitResponse = await checkRateLimit(request, config)
+        const rateLimitResult = await checkRateLimit(request, config)
+        rateLimitMeta = rateLimitResult.meta
+        const rateLimitResponse = rateLimitResult.response
         if (rateLimitResponse) {
           logger.warn(`Rate limit exceeded for ${name}`, { correlationId })
           // 添加版本头到限流响应
@@ -205,7 +249,12 @@ export function withApiMiddleware<T>(
         addDeprecationHeaders(response, versionContext)
       }
 
-      // 8. 添加响应时间头 & 慢查询日志
+      // 8. 添加限流响应头到所有成功响应
+      if (rateLimitMeta) {
+        addRateLimitHeaders(response, rateLimitMeta.limit, rateLimitMeta.remaining, rateLimitMeta.reset)
+      }
+
+      // 9. 添加响应时间头 & 慢查询日志
       const duration = Date.now() - startTime
       response.headers.set('X-Response-Time', `${duration}ms`)
       response.headers.set('X-Correlation-ID', correlationId)
@@ -233,9 +282,8 @@ export function withApiMiddleware<T>(
         logger.warn(`${name} client error: ${internalMessage}`, { duration, correlationId })
       }
 
-      // Don't expose internal error details to clients for 5xx errors
-      const clientMessage = statusCode >= 500 ? '服务器内部错误' : internalMessage
-      const errorResponse = createErrorResponse(clientMessage, statusCode)
+      // Sanitize error messages — createErrorResponse applies safe message filtering
+      const errorResponse = createErrorResponse(internalMessage, statusCode)
       if (versioning) {
         addVersionHeaders(errorResponse, versionContext)
       }

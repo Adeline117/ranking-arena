@@ -48,6 +48,15 @@ jest.mock('@/lib/services/pipeline-logger', () => ({
   },
 }))
 
+jest.mock('@/lib/cron/metrics-backfill', () => ({
+  refreshComputedMetrics: jest.fn().mockResolvedValue({
+    sharpeUpdated: 0,
+    winRateUpdated: 0,
+    maxDrawdownUpdated: 0,
+    arenaScoreUpdated: 0,
+  }),
+}))
+
 import { NextRequest } from 'next/server'
 import { GET } from '../route'
 const POST = GET // Route was changed from POST to GET
@@ -160,7 +169,7 @@ describe('POST /api/cron/aggregate-daily-snapshots', () => {
     mockRpc.mockResolvedValue({ data: null, error: { message: 'function not found' } })
 
     mockFrom.mockImplementation((table: string) => {
-      if (table === 'trader_snapshots') {
+      if (table === 'trader_snapshots_v2') {
         return {
           select: jest.fn().mockReturnValue({
             eq: jest.fn().mockReturnValue({
@@ -172,6 +181,22 @@ describe('POST /api/cron/aggregate-daily-snapshots', () => {
                 }),
               }),
             }),
+            is: jest.fn().mockReturnValue({
+              gte: jest.fn().mockReturnValue({
+                limit: jest.fn().mockResolvedValue({ data: [], error: null }),
+              }),
+            }),
+          }),
+          update: jest.fn().mockReturnValue({
+            eq: jest.fn().mockReturnValue({
+              eq: jest.fn().mockResolvedValue({ error: null }),
+            }),
+          }),
+          upsert: jest.fn().mockResolvedValue({ error: null }),
+          delete: jest.fn().mockReturnValue({
+            lt: jest.fn().mockReturnValue({
+              limit: jest.fn().mockResolvedValue({ count: 0, error: null }),
+            }),
           }),
         }
       }
@@ -180,6 +205,11 @@ describe('POST /api/cron/aggregate-daily-snapshots', () => {
           select: jest.fn().mockReturnValue({
             in: jest.fn().mockReturnValue({
               lt: jest.fn().mockReturnValue({
+                order: jest.fn().mockReturnValue({
+                  limit: jest.fn().mockResolvedValue({ data: [], error: null }),
+                }),
+              }),
+              gte: jest.fn().mockReturnValue({
                 order: jest.fn().mockReturnValue({
                   limit: jest.fn().mockResolvedValue({ data: [], error: null }),
                 }),

@@ -15,6 +15,22 @@
 import { dataLogger } from '@/lib/utils/logger'
 import { getMemoryCache } from './memory-fallback'
 
+// Correlation ID support — logs cache operations with the current request's correlation ID
+let _getCorrelationId: (() => string | undefined) | null = null
+function correlationId(): string | undefined {
+  if (typeof window !== 'undefined') return undefined
+  if (!_getCorrelationId) {
+    try {
+      const mod = '@/lib/api/' + 'correlation'
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      _getCorrelationId = require(mod).getCorrelationId
+    } catch {
+      _getCorrelationId = () => undefined
+    }
+  }
+  return _getCorrelationId!()
+}
+
 // ============================================
 // 类型定义
 // ============================================
@@ -217,7 +233,7 @@ export async function tieredGet<T>(
       }
       layerStats.redis.misses++
     } catch (error) {
-      dataLogger.warn('[RedisLayer] Redis 读取失败:', { key, error })
+      dataLogger.warn('[RedisLayer] Redis 读取失败:', { key, error, correlationId: correlationId() })
     }
   }
   
@@ -266,7 +282,7 @@ export async function tieredSet<T>(
 
       return true
     } catch (error) {
-      dataLogger.warn('[RedisLayer] Redis 写入失败:', { key, error })
+      dataLogger.warn('[RedisLayer] Redis 写入失败:', { key, error, correlationId: correlationId() })
     }
   }
   

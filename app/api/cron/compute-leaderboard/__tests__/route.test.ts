@@ -55,6 +55,7 @@ jest.mock('@/lib/utils/logger', () => ({
   dataLogger: { info: jest.fn(), warn: jest.fn(), error: jest.fn(), debug: jest.fn(), apiError: jest.fn(), dbError: jest.fn() },
   captureError: jest.fn(),
   captureMessage: jest.fn(),
+  fireAndForget: jest.fn(),
 }))
 
 jest.mock('@/lib/utils/arena-score', () => ({
@@ -69,6 +70,30 @@ jest.mock('@/lib/utils/arena-score', () => ({
   ARENA_CONFIG: {
     CONFIDENCE_MULTIPLIER: { high: 1.0, medium: 0.8, low: 0.6 },
   },
+}))
+
+jest.mock('@/lib/utils/profanity', () => ({
+  sanitizeDisplayName: jest.fn((name: string) => name),
+}))
+
+jest.mock('@/lib/notifications/telegram', () => ({
+  sendTelegramAlert: jest.fn().mockResolvedValue(undefined),
+}))
+
+jest.mock('@/lib/db', () => ({
+  query: jest.fn().mockResolvedValue({ rows: [] }),
+}))
+
+jest.mock('@/lib/cache/redis-layer', () => ({
+  tieredSet: jest.fn().mockResolvedValue(undefined),
+}))
+
+jest.mock('@/lib/realtime/ranking-store', () => ({
+  syncSortedSetFromLeaderboard: jest.fn().mockResolvedValue(undefined),
+}))
+
+jest.mock('next/cache', () => ({
+  revalidatePath: jest.fn(),
 }))
 
 jest.mock('@/lib/constants/exchanges', () => ({
@@ -159,113 +184,64 @@ describe.skip('GET /api/cron/compute-leaderboard', () => {
   it('computes leaderboard for all seasons and returns stats', async () => {
     const now = new Date().toISOString()
 
-    // Snapshot rows returned by trader_snapshots query
-    const snapshotRows = [
+    // V2 snapshot rows (new column names: platform, trader_key, roi_pct, pnl_usd, updated_at)
+    const v2SnapshotRows = [
       {
-        source: 'binance-futures',
-        source_trader_id: 'trader1',
-        roi: 50,
-        pnl: 10000,
-        win_rate: 0.65,
+        platform: 'binance-futures',
+        trader_key: 'trader1',
+        roi_pct: 50,
+        pnl_usd: 10000,
+        win_rate: 65,
         max_drawdown: -15,
         trades_count: 20,
         followers: 100,
         arena_score: 85,
-        captured_at: now,
-        full_confidence_at: null,
-        profitability_score: null,
-        risk_control_score: null,
-        execution_score: null,
-        score_completeness: null,
-        trading_style: null,
-        avg_holding_hours: null,
-        style_confidence: null,
+        updated_at: now,
         sharpe_ratio: null,
       },
       {
-        source: 'binance-futures',
-        source_trader_id: 'trader2',
-        roi: 30,
-        pnl: 5000,
-        win_rate: 0.55,
+        platform: 'binance-futures',
+        trader_key: 'trader2',
+        roi_pct: 30,
+        pnl_usd: 5000,
+        win_rate: 55,
         max_drawdown: -20,
         trades_count: 15,
         followers: 50,
         arena_score: 70,
-        captured_at: now,
-        full_confidence_at: null,
-        profitability_score: null,
-        risk_control_score: null,
-        execution_score: null,
-        score_completeness: null,
-        trading_style: null,
-        avg_holding_hours: null,
-        style_confidence: null,
+        updated_at: now,
         sharpe_ratio: null,
       },
     ]
 
-    // Each from() call creates a fresh chain to avoid shared mock state issues.
+    // Use chainable for all tables — it handles any chain pattern
     mockSupabaseFrom.mockImplementation((table: string) => {
+      if (table === 'trader_snapshots_v2') {
+        return chainable({ data: v2SnapshotRows, error: null })
+      }
+
       if (table === 'leaderboard_ranks') {
-        // This mock serves count queries, upsert, stale-row select, and delete.
-        // The route calls:
-        //   count: .select('id', {count:'exact',head:true}).eq('season_id',...)
-        //   upsert: .upsert(batch, ...)
-        //   stale select: .select('id').eq('season_id',...).lt('updated_at',...).limit(5000)
-        //   stale delete: .delete().in('id', ...)
-        return {
-          select: jest.fn().mockReturnValue({
-            eq: jest.fn().mockImplementation(() => ({
-              // For the count query (head:true returns {count})
-              then: (resolve: (v: unknown) => void) =>
-                resolve({ count: 2, data: null, error: null }),
-              // For stale-row select chain
-              lt: jest.fn().mockReturnValue({
-                limit: jest.fn().mockResolvedValue({ data: [], error: null }),
-              }),
-            })),
-          }),
-          upsert: jest.fn().mockResolvedValue({ error: null }),
-          delete: jest.fn().mockReturnValue({
-            in: jest.fn().mockResolvedValue({ error: null }),
-          }),
-        }
+        return chainable({ count: 2, data: [], error: null })
       }
 
-      if (table === 'trader_snapshots') {
-        // Each source gets its own paginated query.
-        // .select(...).eq(source).eq(season).gte(freshness).order(...).range(...)
-        // Return snapshotRows on first page, empty on next (2 rows < 1000 page size).
-        return {
-          select: jest.fn().mockReturnValue({
-            eq: jest.fn().mockReturnValue({
-              eq: jest.fn().mockReturnValue({
-                gte: jest.fn().mockReturnValue({
-                  order: jest.fn().mockReturnValue({
-                    range: jest.fn().mockResolvedValue({ data: snapshotRows, error: null }),
-                  }),
-                }),
-              }),
-            }),
-          }),
-        }
+      if (table === 'trader_profiles_v2') {
+        return chainable({
+          data: [
+            { trader_key: 'trader1', display_name: 'CryptoKing', avatar_url: 'https://img/1.png' },
+            { trader_key: 'trader2', display_name: 'TraderJoe', avatar_url: null },
+          ],
+          error: null,
+        })
       }
 
-      if (table === 'trader_sources') {
-        return {
-          select: jest.fn().mockReturnValue({
-            eq: jest.fn().mockReturnValue({
-              in: jest.fn().mockResolvedValue({
-                data: [
-                  { source_trader_id: 'trader1', handle: 'CryptoKing', avatar_url: 'https://img/1.png' },
-                  { source_trader_id: 'trader2', handle: 'TraderJoe', avatar_url: null },
-                ],
-                error: null,
-              }),
-            }),
-          }),
-        }
+      if (table === 'traders') {
+        return chainable({
+          data: [
+            { trader_key: 'trader1', handle: 'CryptoKing', avatar_url: 'https://img/1.png' },
+            { trader_key: 'trader2', handle: 'TraderJoe', avatar_url: null },
+          ],
+          error: null,
+        })
       }
 
       return chainable({ data: null, error: null })
@@ -283,47 +259,18 @@ describe.skip('GET /api/cron/compute-leaderboard', () => {
     for (const count of Object.values(body.stats.seasons) as number[]) {
       expect(count).toBeGreaterThan(0)
     }
-    // Should have called from('trader_snapshots') for snapshot fetches
-    expect(mockSupabaseFrom).toHaveBeenCalledWith('trader_snapshots')
+    // Should have called from('trader_snapshots_v2') for snapshot fetches (v1 removed)
+    expect(mockSupabaseFrom).toHaveBeenCalledWith('trader_snapshots_v2')
     expect(mockSupabaseFrom).toHaveBeenCalledWith('leaderboard_ranks')
   })
 
   // ---- Empty data ----------------------------------------------------------
 
   it('handles empty snapshot data gracefully (returns 0 for all seasons)', async () => {
-    const countQuery = {
-      select: jest.fn().mockReturnValue({
-        eq: jest.fn().mockResolvedValue({ count: 0, data: null, error: null }),
-      }),
-    }
-
-    const emptySnapshotQuery = {
-      select: jest.fn().mockReturnValue({
-        eq: jest.fn().mockReturnValue({
-          eq: jest.fn().mockReturnValue({
-            gte: jest.fn().mockReturnValue({
-              order: jest.fn().mockReturnValue({
-                range: jest.fn().mockResolvedValue({ data: [], error: null }),
-              }),
-            }),
-          }),
-        }),
-      }),
-    }
-
-    const staleSelectQuery = {
-      select: jest.fn().mockReturnValue({
-        eq: jest.fn().mockReturnValue({
-          lt: jest.fn().mockReturnValue({
-            limit: jest.fn().mockResolvedValue({ data: [], error: null }),
-          }),
-        }),
-      }),
-    }
-
+    // All tables return empty data via chainable proxy
     mockSupabaseFrom.mockImplementation((table: string) => {
-      if (table === 'leaderboard_ranks') return { ...countQuery, ...staleSelectQuery }
-      if (table === 'trader_snapshots') return emptySnapshotQuery
+      if (table === 'leaderboard_ranks') return chainable({ count: 0, data: [], error: null })
+      if (table === 'trader_snapshots_v2') return chainable({ data: [], error: null })
       return chainable({ data: null, error: null })
     })
 

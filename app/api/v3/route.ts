@@ -11,10 +11,12 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server'
+import { z } from 'zod'
 import { getSupabaseAdmin } from '@/lib/supabase/server'
 import { getLeaderboard, getTraderDetail, searchTraders } from '@/lib/data/unified'
 import type { TradingPeriod } from '@/lib/data/unified'
 import { getIdentifier } from '@/lib/utils/rate-limit'
+import { apiSuccess, apiError } from '@/lib/api/response'
 
 // ---------------------------------------------------------------------------
 // API Key validation
@@ -76,51 +78,76 @@ function checkDailyLimit(identifier: string): { allowed: boolean; remaining: num
 }
 
 // ---------------------------------------------------------------------------
-// Response helpers
+// Response helpers (use standard apiSuccess/apiError + CORS headers)
 // ---------------------------------------------------------------------------
 
+const CORS_HEADERS = {
+  'Access-Control-Allow-Origin': '*',
+}
+
 function jsonResponse(data: unknown, meta: Record<string, unknown>, status = 200) {
-  return NextResponse.json({ data, meta }, {
-    status,
-    headers: {
-      'Cache-Control': 'public, s-maxage=60, stale-while-revalidate=120',
-      'Access-Control-Allow-Origin': '*',
-    },
-  })
+  const res = apiSuccess(data, meta, status)
+  res.headers.set('Cache-Control', 'public, s-maxage=60, stale-while-revalidate=120')
+  res.headers.set('Access-Control-Allow-Origin', '*')
+  return res
 }
 
 function errorResponse(message: string, status: number) {
-  return NextResponse.json(
-    { data: null, meta: { error: message } },
-    { status, headers: { 'Access-Control-Allow-Origin': '*' } }
-  )
+  const res = apiError('API_ERROR', message, status)
+  res.headers.set('Access-Control-Allow-Origin', '*')
+  return res
 }
+
+// ---------------------------------------------------------------------------
+// Input validation schemas
+// ---------------------------------------------------------------------------
+
+const v3RankingsSchema = z.object({
+  platform: z.string().max(50).optional(),
+  period: z.string().toUpperCase().pipe(z.enum(['7D', '30D', '90D'])).catch('90D'),
+  limit: z.coerce.number().int().min(1).max(200).catch(50),
+  offset: z.coerce.number().int().min(0).catch(0),
+})
+
+const v3TraderSchema = z.object({
+  platform: z.string().min(1).max(50),
+  trader_key: z.string().min(1).max(200),
+})
+
+const v3SearchSchema = z.object({
+  q: z.string().min(2, 'Query param "q" must be at least 2 characters').max(200),
+  limit: z.coerce.number().int().min(1).max(100).catch(20),
+  platform: z.string().max(50).optional(),
+})
+
+const v3MainSchema = z.object({
+  endpoint: z.enum(['rankings', 'trader', 'search']),
+})
 
 // ---------------------------------------------------------------------------
 // Endpoint handlers
 // ---------------------------------------------------------------------------
 
 async function handleRankings(params: URLSearchParams) {
-  const supabase = getSupabaseAdmin()
-  const platform = params.get('platform') || undefined
-  const rawPeriod = (params.get('period') || '90D').toUpperCase()
-  const period = (['7D', '30D', '90D'].includes(rawPeriod) ? rawPeriod : '90D') as TradingPeriod
-  const limit = Math.min(Math.max(parseInt(params.get('limit') || '50', 10) || 50, 1), 200)
-  const offset = Math.max(parseInt(params.get('offset') || '0', 10) || 0, 0)
+  const parsed = v3RankingsSchema.safeParse(Object.fromEntries(params))
+  if (!parsed.success) {
+    return { error: 'Invalid parameters', status: 400 }
+  }
 
-  const result = await getLeaderboard(supabase, { platform, period, limit, offset })
+  const supabase = getSupabaseAdmin()
+  const { platform, period, limit, offset } = parsed.data
+  const result = await getLeaderboard(supabase, { platform, period: period as TradingPeriod, limit, offset })
   return { data: result.traders, total: result.total }
 }
 
 async function handleTrader(params: URLSearchParams) {
-  const platform = params.get('platform')
-  const traderKey = params.get('trader_key')
-  if (!platform || !traderKey) {
+  const parsed = v3TraderSchema.safeParse(Object.fromEntries(params))
+  if (!parsed.success) {
     return { error: 'Missing required params: platform, trader_key', status: 400 }
   }
 
   const supabase = getSupabaseAdmin()
-  const detail = await getTraderDetail(supabase, { platform, traderKey })
+  const detail = await getTraderDetail(supabase, { platform: parsed.data.platform, traderKey: parsed.data.trader_key })
   if (!detail) {
     return { error: 'Trader not found', status: 404 }
   }
@@ -128,14 +155,13 @@ async function handleTrader(params: URLSearchParams) {
 }
 
 async function handleSearch(params: URLSearchParams) {
-  const q = params.get('q')
-  if (!q || q.length < 2) {
-    return { error: 'Query param "q" must be at least 2 characters', status: 400 }
+  const parsed = v3SearchSchema.safeParse(Object.fromEntries(params))
+  if (!parsed.success) {
+    return { error: parsed.error.issues[0]?.message || 'Invalid search parameters', status: 400 }
   }
 
   const supabase = getSupabaseAdmin()
-  const limit = Math.min(Math.max(parseInt(params.get('limit') || '20', 10) || 20, 1), 100)
-  const platform = params.get('platform') || undefined
+  const { q, limit, platform } = parsed.data
   const traders = await searchTraders(supabase, { query: q, limit, platform })
   return { data: traders, total: traders.length }
 }
@@ -146,11 +172,13 @@ async function handleSearch(params: URLSearchParams) {
 
 export async function GET(request: NextRequest) {
   const params = request.nextUrl.searchParams
-  const endpoint = params.get('endpoint')
+  const endpointParsed = v3MainSchema.safeParse(Object.fromEntries(params))
 
-  if (!endpoint) {
-    return errorResponse('Missing "endpoint" param. Valid values: rankings, trader, search', 400)
+  if (!endpointParsed.success) {
+    return errorResponse('Missing or invalid "endpoint" param. Valid values: rankings, trader, search', 400)
   }
+
+  const endpoint = endpointParsed.data.endpoint
 
   // --- Auth & rate limiting ---
   const apiKey = request.headers.get('x-api-key')
@@ -225,8 +253,11 @@ export async function GET(request: NextRequest) {
       version: 'v3',
     })
   } catch (err) {
-    const message = err instanceof Error ? err.message : 'Internal server error'
-    return errorResponse(message, 500)
+    // Never expose internal error details to API consumers
+    if (err instanceof Error) {
+      console.error(`[v3] ${endpoint} error:`, err.message)
+    }
+    return errorResponse('Internal server error', 500)
   }
 }
 

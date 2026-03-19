@@ -193,30 +193,22 @@ describe('GET /api/cron/batch-fetch-traders', () => {
     expect(res.status).toBe(200)
     expect(body.group).toBe('a')
     expect(body.platforms).toBe(2) // Group a: binance_futures, binance_spot
-    expect(body.succeeded).toBe(2)
-    expect(body.failed).toBe(0)
-    expect(body.ok).toBe(true)
-    expect(mockRunConnectorBatch).toHaveBeenCalledTimes(2)
+    // binance_spot is in DISABLED_PLATFORMS, so only binance_futures succeeds
+    expect(body.succeeded).toBe(1)
+    expect(body.failed).toBe(1)
+    expect(body.ok).toBe(false)
+    expect(mockRunConnectorBatch).toHaveBeenCalledTimes(1)
   })
 
   // ---- Partial failure -----------------------------------------------------
 
   it('reports partial failures when some platforms fail', async () => {
-    let callCount = 0
-    mockRunConnectorBatch.mockImplementation(() => {
-      callCount++
-      if (callCount === 1) {
-        return Promise.resolve({
-          source: 'test',
-          periods: { '7d': { saved: 0, error: 'API error' } },
-          duration: 100,
-        })
-      }
-      return Promise.resolve({
-        source: 'test',
-        periods: { '7d': { saved: 10 }, '30d': { saved: 10 }, '90d': { saved: 10 } },
-        duration: 100,
-      })
+    // binance_futures will use the connector (binance_spot is disabled by DISABLED_PLATFORMS)
+    // Make the connector return an error for binance_futures too
+    mockRunConnectorBatch.mockResolvedValue({
+      source: 'test',
+      periods: { '7d': { saved: 0, error: 'API error' } },
+      duration: 100,
     })
 
     const res = await GET(createCronRequest(CRON_SECRET, 'a'))
@@ -224,8 +216,8 @@ describe('GET /api/cron/batch-fetch-traders', () => {
 
     expect(res.status).toBe(200)
     expect(body.ok).toBe(false)
-    expect(body.succeeded).toBe(1)
-    expect(body.failed).toBe(1)
+    // Both fail: binance_spot (disabled) + binance_futures (API error with 0 saved)
+    expect(body.failed).toBe(2)
     expect(body.results.find((r: { status: string }) => r.status === 'error')).toBeDefined()
   })
 
@@ -240,6 +232,8 @@ describe('GET /api/cron/batch-fetch-traders', () => {
     expect(res.status).toBe(200)
     expect(body.ok).toBe(false)
     expect(body.failed).toBe(2)
-    expect(body.results.every((r: { error?: string }) => r.error?.includes('Network error'))).toBe(true)
+    // binance_spot fails with "permanently disabled", binance_futures fails with "Network error"
+    expect(body.results.some((r: { error?: string }) => r.error?.includes('Network error'))).toBe(true)
+    expect(body.results.some((r: { error?: string }) => r.error?.includes('permanently disabled'))).toBe(true)
   })
 })

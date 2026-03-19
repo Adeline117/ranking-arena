@@ -25,6 +25,7 @@ import {
 import { createLogger, fireAndForget } from '@/lib/utils/logger'
 import { PipelineLogger } from '@/lib/services/pipeline-logger'
 import { sanitizeDisplayName } from '@/lib/utils/profanity'
+import { tieredGet, tieredSet, tieredDel } from '@/lib/cache/redis-layer'
 import { env } from '@/lib/env'
 
 export const dynamic = 'force-dynamic'
@@ -93,6 +94,14 @@ export async function GET(request: NextRequest) {
   } else if (authHeader !== `Bearer ${env.CRON_SECRET}`) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
+
+  // Idempotency: prevent duplicate runs within 5 minutes
+  const IDEMPOTENCY_KEY = 'cron:compute-leaderboard:running'
+  const cached = await tieredGet(IDEMPOTENCY_KEY, 'hot')
+  if (cached.data) {
+    return NextResponse.json({ ok: true, message: 'Already running, skipped', cached: true })
+  }
+  await tieredSet(IDEMPOTENCY_KEY, { startedAt: new Date().toISOString() }, 'hot', [])
 
   const supabase = getSupabaseAdmin()
   const startTime = Date.now()
@@ -248,6 +257,9 @@ export async function GET(request: NextRequest) {
       revalidatePath('/') // homepage
     })(), 'revalidate-ranking-pages')
 
+    // Release idempotency lock
+    await tieredDel(IDEMPOTENCY_KEY)
+
     const totalRanked = Object.values(stats.seasons).reduce((a, b) => a + b, 0)
     if (warnings.length > 0) {
       await plog.error(new Error(warnings.join('; ')), { stats, rolledBack })
@@ -265,6 +277,8 @@ export async function GET(request: NextRequest) {
       wr_mdd_derived: wrMddDerived,
     })
   } catch (error: unknown) {
+    // Release idempotency lock on failure
+    await tieredDel(IDEMPOTENCY_KEY).catch(() => {})
     logger.error('Failed to compute leaderboard', error)
     await plog.error(error)
     return NextResponse.json(
@@ -759,15 +773,42 @@ async function computeSeason(
 
   // Pre-upsert degradation check: block if new count drops below DEGRADATION_THRESHOLD (85%) of previous
   // Also enforce absolute minimum of 500 traders for a viable leaderboard
+  // FALLBACK: After 3 consecutive skips, force-compute anyway to prevent indefinite stale data
+  const MAX_CONSECUTIVE_SKIPS = 3
   if (previousCount && previousCount > 500 && !forceWrite) {
     const ratio = scored.length / previousCount
     if (scored.length < 500 || ratio < DEGRADATION_THRESHOLD) {
-      logger.error(`${season}: computed ${scored.length} traders (previous: ${previousCount}, ratio: ${(ratio * 100).toFixed(1)}%). SKIPPING — below ${DEGRADATION_THRESHOLD * 100}% threshold.`)
-      return -1
+      // Check consecutive skip counter from Redis
+      let consecutiveSkips = 0
+      try {
+        const { tieredGet: tGet, tieredSet: tSet } = await import('@/lib/cache/redis-layer')
+        const skipKey = `leaderboard:degradation-skips:${season}`
+        const cached = await tGet(skipKey, 'hot')
+        consecutiveSkips = (cached?.data as number) || 0
+        consecutiveSkips++
+        await tSet(skipKey, consecutiveSkips, 'warm', [])
+      } catch { /* Redis failure — proceed with skip */ }
+
+      if (consecutiveSkips >= MAX_CONSECUTIVE_SKIPS) {
+        logger.warn(`${season}: degradation detected (${scored.length}/${previousCount}, ${(ratio * 100).toFixed(1)}%) but FORCE-COMPUTING after ${consecutiveSkips} consecutive skips to prevent stale data`)
+        // Reset counter and fall through to upsert
+        try {
+          const { tieredDel: tDel } = await import('@/lib/cache/redis-layer')
+          await tDel(`leaderboard:degradation-skips:${season}`)
+        } catch { /* non-critical */ }
+      } else {
+        logger.error(`${season}: computed ${scored.length} traders (previous: ${previousCount}, ratio: ${(ratio * 100).toFixed(1)}%). SKIPPING — below ${DEGRADATION_THRESHOLD * 100}% threshold (skip ${consecutiveSkips}/${MAX_CONSECUTIVE_SKIPS}).`)
+        return -1
+      }
     }
   } else if (forceWrite) {
     logger.warn(`${season}: force write enabled, skipping degradation check (scored: ${scored.length}, previous: ${previousCount})`)
   }
+  // Reset consecutive skip counter on successful computation
+  try {
+    const { tieredDel: tDel } = await import('@/lib/cache/redis-layer')
+    await tDel(`leaderboard:degradation-skips:${season}`)
+  } catch { /* non-critical */ }
 
   // Phase 2: Incremental upsert — only update changed rows to reduce write volume ~40%
   // Fetch current arena_scores to diff against

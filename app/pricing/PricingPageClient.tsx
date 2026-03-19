@@ -1,12 +1,13 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import TopNav from '@/app/components/layout/TopNav'
 import MobileBottomNav from '@/app/components/layout/MobileBottomNav'
 import { tokens } from '@/lib/design-tokens'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import { useAuthSession } from '@/lib/hooks/useAuthSession'
+import { trackEvent } from '@/lib/analytics/track'
 
 const CheckIcon = ({ size = 16, color }: { size?: number; color?: string }) => (
   <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color || 'currentColor'} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
@@ -51,6 +52,10 @@ export default function PricingPageClient({ lifetimeCount = 0 }: PricingPageClie
     sessionStorage.setItem('pricing-billing', b)
     setBillingRaw(b)
   }
+
+  useEffect(() => {
+    trackEvent('view_pricing')
+  }, [])
 
   const features = [
     resolved(t('featureCategoryRanking'), 'featureCategoryRanking', 'Category Rankings'),

@@ -12,6 +12,7 @@ import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import { useLoginModal } from '@/lib/hooks/useLoginModal'
 import { logger } from '@/lib/logger'
 import { haptic } from '@/lib/utils/haptics'
+import { trackEvent } from '@/lib/analytics/track'
 
 type TraderFollowButtonProps = {
   traderId: string
@@ -139,6 +140,11 @@ export default function TraderFollowButton({ traderId, userId, initialFollowing 
 
       setFollowing(data.following)
       onFollowChange?.(data.following)
+
+      // Analytics tracking
+      if (data.following) {
+        trackEvent('follow_trader', { trader_id: traderId })
+      }
 
       // Haptic feedback + success toast
       haptic('success')

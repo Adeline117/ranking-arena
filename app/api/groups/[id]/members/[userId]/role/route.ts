@@ -7,7 +7,7 @@ import { getSupabaseAdmin } from '@/lib/supabase/server'
 
 // 检查用户是否是小组组长
 async function isGroupOwner(
-  supabase: SupabaseClient<any>, 
+  supabase: SupabaseClient,
   groupId: string, 
   userId: string
 ): Promise<boolean> {
