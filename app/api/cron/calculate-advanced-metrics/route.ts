@@ -98,6 +98,30 @@ export async function POST(request: NextRequest) {
       processingMap.get(key)!.push(trader)
     }
 
+    // Batch-fetch all daily snapshots for every trader key in one query
+    // (avoids 1 DB call per trader per window — up to 150 calls saved per run)
+    const allTraderKeys = [...new Set((traders || []).map(t => t.trader_key))]
+    const earliestStart = new Date()
+    earliestStart.setDate(earliestStart.getDate() - 90) // widest window
+    const dailySnapshotMap = new Map<string, Array<{ date: string; daily_return_pct: string | null }>>()
+    try {
+      const { data: allDailySnaps } = await supabase
+        .from('trader_daily_snapshots')
+        .select('trader_key, date, daily_return_pct')
+        .in('trader_key', allTraderKeys)
+        .gte('date', earliestStart.toISOString().split('T')[0])
+        .order('date', { ascending: true })
+
+      for (const row of allDailySnaps ?? []) {
+        if (!dailySnapshotMap.has(row.trader_key)) {
+          dailySnapshotMap.set(row.trader_key, [])
+        }
+        dailySnapshotMap.get(row.trader_key)!.push({ date: row.date, daily_return_pct: row.daily_return_pct })
+      }
+    } catch {
+      // Table may not exist yet — dailySnapshotMap stays empty, metrics skip gracefully
+    }
+
     // Process each trader
     for (const [_key, snapshots] of processingMap) {
       if (processed >= BATCH_SIZE) break
@@ -117,26 +141,17 @@ export async function POST(request: NextRequest) {
           const maxDrawdown = parseFloat(snapshot.max_drawdown || '0')
           const winRate = parseFloat(snapshot.win_rate || '0')
 
-          // Fetch real daily returns from trader_daily_snapshots
+          // Resolve daily returns from the pre-fetched batch map
           const startDate = new Date()
           startDate.setDate(startDate.getDate() - periodDays)
+          const startDateStr = startDate.toISOString().split('T')[0]
 
           let dailyReturns: number[] = []
-          try {
-            const { data: dailySnapshots } = await supabase
-              .from('trader_daily_snapshots')
-              .select('date, daily_return_pct')
-              .eq('platform', snapshot.platform)
-              .eq('trader_key', snapshot.trader_key)
-              .gte('date', startDate.toISOString().split('T')[0])
-              .order('date', { ascending: true })
-
-            dailyReturns = dailySnapshots
-              ?.map(s => parseFloat(s.daily_return_pct || '0'))
-              .filter(r => !isNaN(r)) || []
-          } catch {
-            // Table may not exist yet - use empty returns
-          }
+          const traderDailyRows = dailySnapshotMap.get(snapshot.trader_key) ?? []
+          dailyReturns = traderDailyRows
+            .filter(s => s.date >= startDateStr)
+            .map(s => parseFloat(s.daily_return_pct || '0'))
+            .filter(r => !isNaN(r))
 
           // Determine metrics quality based on data availability
           let metricsQuality: 'high' | 'medium' | 'low' | 'insufficient'
