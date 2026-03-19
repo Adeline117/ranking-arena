@@ -213,6 +213,7 @@ export interface TraderData {
   win_rate: number | null
   max_drawdown: number | null
   followers?: number | null
+  copiers?: number | null
   trades_count?: number | null
   arena_score: number | null
   captured_at: string
@@ -238,6 +239,7 @@ export const TraderDataSchema = z.object({
   win_rate: z.number().finite().min(0).max(100).nullable(),
   max_drawdown: z.number().finite().min(0).max(100).nullable(),
   followers: z.number().finite().nonnegative().nullable().optional(),
+  copiers: z.number().finite().nonnegative().nullable().optional(),
   trades_count: z.number().finite().nonnegative().nullable().optional(),
   arena_score: z.number().finite().nullable(),
   captured_at: z.string().min(1),
@@ -472,7 +474,7 @@ export async function upsertTraders(
         sharpe_ratio: sharpeRatio,
         trades_count: tradesCount,
         followers: t.followers ?? 0,
-        copiers: null,
+        copiers: t.copiers ?? null,
         // JSONB metrics — full data for detail views and future use
         metrics: {
           roi: t.roi ?? null,
@@ -481,7 +483,7 @@ export async function upsertTraders(
           max_drawdown: maxDrawdown,
           trades_count: tradesCount,
           followers: t.followers ?? 0,
-          copiers: null,
+          copiers: t.copiers ?? null,
           sharpe_ratio: sharpeRatio,
           arena_score: t.arena_score ?? null,
           aum: t.aum || null,

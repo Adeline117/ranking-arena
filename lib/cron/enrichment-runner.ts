@@ -439,7 +439,7 @@ export const NO_ENRICHMENT_PLATFORMS = new Set([
   // 'bybit' re-enabled (2026-03-18) — VPS scraper bypasses Akamai WAF
   'bybit_spot',  // Enrichment TBD — VPS scraper supports leaderboard but no detail endpoint yet
   'bitmart', 'paradex',  // Dead
-  'bitget_futures',  // Detail API hangs >44min repeatedly — leaderboard fetch works, enrichment skipped
+  // bitget_futures: enrichment via leaderboard normalize() — detail API hangs, but all metrics from leaderboard
   // okx_spot: RE-ENABLED 2026-03-19 — same v5 API as futures with instType=SPOT
   // kucoin: Mac Mini only — no enrichment API accessible from datacenter
   'kucoin',
