@@ -78,6 +78,7 @@ export async function POST(req: NextRequest) {
         .select('id', { count: 'exact', head: true })
         .eq('content_type', content_type)
         .eq('content_id', content_id)
+        .eq('status', 'pending')
 
       if (content_type === 'post' && count && count >= POST_REPORT_THRESHOLD) {
         await supabase

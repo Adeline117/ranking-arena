@@ -21,6 +21,7 @@ import { features } from '@/lib/features'
 const HotDiscussions = lazy(() => import('../sidebar/HotDiscussions'))
 const WatchlistMarket = lazy(() => import('../sidebar/WatchlistMarket'))
 const NewsFlash = lazy(() => import('../sidebar/NewsFlash'))
+const TrendingHashtags = lazy(() => import('../sidebar/TrendingHashtags'))
 
 import type { InitialTrader } from '@/lib/getInitialTraders'
 
@@ -73,6 +74,15 @@ export default function HomePage({ initialTraders, initialLastUpdated, heroStats
                   </Suspense>
                 </SectionErrorBoundary>
               </div>
+              {features.social && (
+                <div style={{ flexShrink: 0 }}>
+                  <SectionErrorBoundary>
+                    <Suspense fallback={null}>
+                      <TrendingHashtags />
+                    </Suspense>
+                  </SectionErrorBoundary>
+                </div>
+              )}
               <div style={{ flex: 1, minHeight: 0 }}>
                 <SectionErrorBoundary>
                   <Suspense fallback={<div className="skeleton contain-layout-style" style={{ minHeight: 300, height: 300, borderRadius: tokens.radius.lg }} />}>
