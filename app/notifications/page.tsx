@@ -305,14 +305,22 @@ export default function NotificationsPage() {
     }
   }
 
-  // 标记单条为已读并跳转
-  const handleNotificationClick = async (notification: Notification) => {
+  // 标记单条（或分组内所有）为已读并跳转
+  const handleNotificationClick = async (notification: GroupedNotification) => {
     if (!notification.read && accessToken) {
+      // Determine all IDs to mark as read
+      const idsToMark = notification.isGrouped && notification.groupedIds.length > 1
+        ? notification.groupedIds
+        : [notification.id]
       // 乐观更新
+      const idSet = new Set(idsToMark)
       setNotifications((prev) =>
-        prev.map((n) => (n.id === notification.id ? { ...n, read: true } : n))
+        prev.map((n) => (idSet.has(n.id) ? { ...n, read: true } : n))
       )
       // 异步标为已读
+      const body = idsToMark.length > 1
+        ? { notification_ids: idsToMark }
+        : { notification_id: notification.id }
       fetch('/api/notifications', {
         method: 'PUT',
         headers: {
@@ -320,10 +328,10 @@ export default function NotificationsPage() {
           Authorization: `Bearer ${accessToken}`,
           ...getCsrfHeaders(),
         },
-        body: JSON.stringify({ notification_id: notification.id }),
+        body: JSON.stringify(body),
       }).catch(() => {
         setNotifications((prev) =>
-          prev.map((n) => (n.id === notification.id ? { ...n, read: false } : n))
+          prev.map((n) => (idSet.has(n.id) ? { ...n, read: false } : n))
         )
       })
     }

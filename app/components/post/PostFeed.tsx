@@ -49,6 +49,7 @@ function buildPostQueryParams(
   if (opts.sortBy) params.set('sort_by', opts.sortBy)
   else if (opts.sortType === 'personalized') params.set('sort_by', 'personalized')
   else if (opts.sortType === 'likes') params.set('sort_by', 'like_count')
+  else if (opts.sortType === 'time') params.set('sort_by', 'created_at')
   else if (opts.authorHandle) params.set('sort_by', 'created_at')
   else if (opts.groupId || opts.groupIds) params.set('sort_by', 'created_at')
   else params.set('sort_by', 'hot_score')

@@ -68,16 +68,25 @@ export async function PUT(request: NextRequest) {
     const body = await request.json()
 
     const notification_id = validateString(body.notification_id)
+    const notification_ids: string[] | undefined = Array.isArray(body.notification_ids) ? body.notification_ids.filter((id: unknown) => typeof id === 'string') : undefined
     const mark_all = body.mark_all === true
 
     if (mark_all) {
       await markAllNotificationsAsRead(supabase, user.id)
       return success({ message: 'All notifications marked as read' })
+    } else if (notification_ids && notification_ids.length > 0) {
+      // Batch mark-read: update all IDs belonging to this user
+      await supabase
+        .from('notifications')
+        .update({ read: true })
+        .in('id', notification_ids)
+        .eq('user_id', user.id)
+      return success({ message: `${notification_ids.length} notifications marked as read` })
     } else if (notification_id) {
       await markNotificationAsRead(supabase, notification_id, user.id)
       return success({ message: 'Marked as read' })
     } else {
-      return handleError(new Error('Please provide notification_id or set mark_all to true'), 'notifications PUT')
+      return handleError(new Error('Please provide notification_id, notification_ids, or set mark_all to true'), 'notifications PUT')
     }
   } catch (error: unknown) {
     return handleError(error, 'notifications PUT')

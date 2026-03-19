@@ -529,7 +529,7 @@ export async function createPost(
     // Intentionally swallowed: reputation score lookup failed, post will be created with default score 0
   }
 
-  const detectedLanguage = input.language || detectPostLanguage(input.content)
+  const detectedLanguage = input.language || detectPostLanguage((input.title ? input.title + ' ' : '') + input.content)
 
   const { data, error } = await supabase
     .from('posts')
