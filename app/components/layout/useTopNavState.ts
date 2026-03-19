@@ -4,6 +4,7 @@ import { useEffect, useState, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase/client'
 import { useAuthSession } from '@/lib/hooks/useAuthSession'
+import { trackEvent } from '@/lib/analytics/track'
 
 export function useTopNavState() {
   const router = useRouter()
@@ -237,6 +238,7 @@ export function useTopNavState() {
           }
         }
       }
+      trackEvent('search', { query: trimmedQuery })
       router.push(`/search?q=${encodeURIComponent(trimmedQuery)}`)
     }
   }
