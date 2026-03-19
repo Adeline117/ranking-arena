@@ -1,11 +1,11 @@
 /**
  * 内部通知发送 API
- * 
+ *
  * POST /api/notifications/send
- * 
- * 用于其他功能模块创建通知（关注、点赞、评论、跟单等）
- * 需要 service role 或已认证用户调用
- * 
+ *
+ * 仅供系统内部使用（cron jobs、服务端触发等）。
+ * 需要 CRON_SECRET 或 INTERNAL_API_KEY 认证，不接受普通用户调用。
+ *
  * Body: {
  *   user_id: string        // 接收通知的用户
  *   type: string           // follow/like/comment/mention/system/copy_trade/trader_alert/...
@@ -20,7 +20,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import {
   getSupabaseAdmin,
-  requireAuth,
   handleError,
 } from '@/lib/api'
 import { checkRateLimit, RateLimitPresets } from '@/lib/utils/rate-limit'
@@ -34,24 +33,40 @@ const VALID_TYPES = [
   'new_follower', 'group_update',
 ]
 
+/**
+ * Verify caller is an internal/service caller.
+ * Accepts either CRON_SECRET (Bearer) or INTERNAL_API_KEY (x-internal-key).
+ * Regular user JWT tokens are NOT accepted — notifications must be system-generated.
+ */
+function verifyServiceAuth(request: NextRequest): boolean {
+  // Check x-internal-key header
+  const internalKey = request.headers.get('x-internal-key')
+  const configuredInternalKey = process.env.INTERNAL_API_KEY
+  if (configuredInternalKey && internalKey && internalKey === configuredInternalKey) {
+    return true
+  }
+
+  // Check Authorization: Bearer <CRON_SECRET>
+  const authHeader = request.headers.get('authorization')
+  const cronSecret = process.env.CRON_SECRET
+  if (cronSecret && authHeader === `Bearer ${cronSecret}`) {
+    return true
+  }
+
+  return false
+}
+
 export async function POST(request: NextRequest) {
   const rateLimitResp = await checkRateLimit(request, RateLimitPresets.write)
   if (rateLimitResp) return rateLimitResp
 
   try {
-    // 支持两种认证方式：
-    // 1. 普通用户 Bearer token（用于用户触发的通知如关注、点赞）
-    // 2. 内部 service key（用于系统通知、cron 等）
-    const internalKey = request.headers.get('x-internal-key')
-    const configuredKey = process.env.INTERNAL_API_KEY
-    // Require INTERNAL_API_KEY to be set and non-empty to prevent undefined === undefined bypass
-    const isInternal = !!(configuredKey && internalKey && internalKey === configuredKey)
-
-    let authenticatedUserId: string | null = null
-    if (!isInternal) {
-      // 非内部调用需要用户认证
-      const user = await requireAuth(request)
-      authenticatedUserId = user.id
+    // Service-role only: reject any regular user JWT calls
+    if (!verifyServiceAuth(request)) {
+      return NextResponse.json(
+        { error: 'Forbidden: notifications must be sent by internal services only' },
+        { status: 403 }
+      )
     }
 
     const body = await request.json()
@@ -72,13 +87,6 @@ export async function POST(request: NextRequest) {
     }
     if (!message || typeof message !== 'string') {
       return NextResponse.json({ error: 'Missing message' }, { status: 400 })
-    }
-
-    // 非内部调用：actor_id 必须是当前认证用户（防止伪造通知）
-    if (authenticatedUserId) {
-      if (actor_id && actor_id !== authenticatedUserId) {
-        return NextResponse.json({ error: 'actor_id must match authenticated user' }, { status: 403 })
-      }
     }
 
     // 防止给自己发通知
