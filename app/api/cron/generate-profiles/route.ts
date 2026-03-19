@@ -113,34 +113,6 @@ export async function POST(request: NextRequest) {
             }
           }
 
-          // Fallback to v1 snapshots
-          for (const seasonId of ['90D', '30D', '7D'] as const) {
-            const { data: snap } = await supabase
-              .from('trader_snapshots')
-              .select('roi, pnl, win_rate, max_drawdown, trades_count, arena_score')
-              .eq('source', profile.platform)
-              .eq('source_trader_id', profile.trader_key)
-              .eq('season_id', seasonId)
-              .order('captured_at', { ascending: false })
-              .limit(1)
-              .maybeSingle()
-
-            if (snap) {
-              return {
-                window: seasonId,
-                metrics: {
-                  roi: snap.roi ?? 0,
-                  pnl: snap.pnl ?? 0,
-                  win_rate: snap.win_rate,
-                  max_drawdown: snap.max_drawdown,
-                  trades_count: snap.trades_count,
-                  arena_score: snap.arena_score,
-                  rank: null,
-                },
-              }
-            }
-          }
-
           return null
         })
       )
