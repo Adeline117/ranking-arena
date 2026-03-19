@@ -65,9 +65,47 @@ export async function GET() {
     message: 'Responding',
   }
 
+  // Data freshness check: verify that leaderboard data is recent (< 2 hours)
+  let freshness: { status: 'pass' | 'fail' | 'skip'; latency?: number; message?: string }
+  try {
+    const supabaseFresh = getSupabaseAdmin()
+    const t1 = Date.now()
+    const { data: latestRow, error: freshErr } = await supabaseFresh
+      .from('leaderboard_ranks')
+      .select('computed_at')
+      .order('computed_at', { ascending: false })
+      .limit(1)
+      .maybeSingle()
+    const latency = Date.now() - t1
+    if (freshErr) {
+      freshness = { status: 'fail', message: freshErr.message, latency }
+    } else if (!latestRow?.computed_at) {
+      freshness = { status: 'fail', message: 'No leaderboard data found', latency }
+    } else {
+      const ageMs = Date.now() - new Date(latestRow.computed_at).getTime()
+      const ageHours = ageMs / (1000 * 60 * 60)
+      freshness = ageHours <= 2
+        ? { status: 'pass', latency, message: `${ageHours.toFixed(1)}h old` }
+        : { status: 'fail', latency, message: `Data is ${ageHours.toFixed(1)}h old (threshold: 2h)` }
+    }
+  } catch (e: unknown) {
+    freshness = { status: 'skip', message: e instanceof Error ? e.message : 'Unknown' }
+  }
+
+  const checks = { api, database, redis, freshness }
+
+  // Determine overall status:
+  // - All pass → healthy (200)
+  // - DB fail → unhealthy (503)
+  // - Redis or freshness fail → degraded (202)
   let status: 'healthy' | 'degraded' | 'unhealthy' = 'healthy'
-  if (database.status === 'fail') status = 'unhealthy'
-  else if (redis.status === 'fail') status = 'degraded'
+  if (database.status === 'fail') {
+    status = 'unhealthy'
+  } else if (redis.status === 'fail' || freshness.status === 'fail') {
+    status = 'degraded'
+  }
+
+  const httpStatus = status === 'unhealthy' ? 503 : status === 'degraded' ? 202 : 200
 
   // Use deploy time for more stable uptime calculation
   const uptimeSeconds = Math.max(1, Math.round((Date.now() - deployTime) / 1000))
@@ -78,10 +116,10 @@ export async function GET() {
     version,
     uptime: uptimeSeconds,
     responseTimeMs: Date.now() - t0,
-    checks: { api, database, redis },
+    checks,
     _detail: '/api/health/detailed',
   }, {
-    status: status === 'unhealthy' ? 503 : 200,
+    status: httpStatus,
     headers: { 'Cache-Control': 'no-store, no-cache, must-revalidate' },
   })
 }

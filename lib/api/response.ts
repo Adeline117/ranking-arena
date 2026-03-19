@@ -311,6 +311,30 @@ export function withCache(
 
 
 // ============================================
+// Convenience aliases (enterprise standard format)
+// ============================================
+
+/**
+ * Quick success response with optional meta. Alias for `success()` with meta support.
+ */
+export function apiSuccess<T>(data: T, meta?: Record<string, unknown>, status = 200): NextResponse {
+  return NextResponse.json(
+    { success: true, data, ...(meta ? { meta } : {}) },
+    { status }
+  )
+}
+
+/**
+ * Quick error response with code + message. Alias for `error()` with simpler signature.
+ */
+export function apiError(code: string, message: string, status = 400): NextResponse {
+  return NextResponse.json(
+    { success: false, error: { code, message } },
+    { status }
+  )
+}
+
+// ============================================
 // 导出所有错误相关类型
 // ============================================
 
