@@ -31,6 +31,19 @@ export const GET = withPublic(
     ])
 
     if (dataResult.error) {
+      // Table may not exist yet in this environment — return empty list gracefully
+      const isMissingTable =
+        dataResult.error.code === '42P01' ||
+        dataResult.error.message?.includes('does not exist')
+      if (isMissingTable) {
+        return NextResponse.json({
+          success: true,
+          data: {
+            competitions: [],
+            pagination: { limit, offset, total: 0, has_more: false },
+          },
+        })
+      }
       return NextResponse.json(
         { success: false, error: 'Failed to fetch competitions' },
         { status: 500 }

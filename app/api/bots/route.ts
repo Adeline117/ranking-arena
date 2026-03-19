@@ -103,6 +103,16 @@ export async function GET(request: NextRequest) {
     const { data: rows, count, error } = await query
 
     if (error) {
+      // Table may not exist yet in this environment — return empty list gracefully
+      const isMissingTable =
+        error.code === '42P01' ||
+        error.message?.includes('does not exist')
+      if (isMissingTable) {
+        return NextResponse.json(
+          { bots: [], window, total_count: 0, as_of: new Date().toISOString() },
+          { headers: { 'Cache-Control': 'public, s-maxage=60, stale-while-revalidate=300' } }
+        )
+      }
       logger.error('Bots query failed', { error: error.message })
       return NextResponse.json({ error: 'Failed to fetch bots' }, { status: 500 })
     }

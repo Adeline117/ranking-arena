@@ -59,6 +59,13 @@ export async function GET(request: NextRequest) {
     const { data, error } = await query
 
     if (error) {
+      // Table may not exist yet — return empty feed gracefully
+      const isMissingTable =
+        (error as { code?: string }).code === '42P01' ||
+        error.message?.includes('does not exist')
+      if (isMissingTable) {
+        return success({ activities: [], pagination: { limit, hasMore: false, nextCursor: null } })
+      }
       return handleError(error)
     }
 
