@@ -25,6 +25,12 @@ export interface UseMarketFeedOptions {
   exchanges?: ExchangeId[]
   maxTrades?: number
   enabled?: boolean
+  /**
+   * Delay in ms before opening the SSE connection after mount.
+   * Defaults to 2000ms so the page can reach networkidle before
+   * a persistent SSE connection is established (fixes 30s timeout).
+   */
+  initialDelayMs?: number
 }
 
 const DEFAULT_SYMBOLS = ['BTC-USDT', 'ETH-USDT', 'SOL-USDT']
@@ -36,6 +42,7 @@ export function useMarketFeed(options: UseMarketFeedOptions = {}): MarketFeedSta
     exchanges = DEFAULT_EXCHANGES,
     maxTrades = 100,
     enabled = true,
+    initialDelayMs = 2000,
   } = options
 
   const [state, setState] = useState<MarketFeedState>({
@@ -112,12 +119,19 @@ export function useMarketFeed(options: UseMarketFeedOptions = {}): MarketFeedSta
   }, [enabled, symbols, exchanges, maxTrades])
 
   useEffect(() => {
-    connect()
+    // Defer the SSE connection so the page can finish loading and reach
+    // networkidle before a persistent connection is opened. This prevents
+    // Playwright / browser timeouts caused by the SSE stream blocking idle.
+    const startTimer = setTimeout(() => {
+      connect()
+    }, initialDelayMs)
+
     return () => {
+      clearTimeout(startTimer)
       eventSourceRef.current?.close()
       if (reconnectTimerRef.current) clearTimeout(reconnectTimerRef.current)
     }
-  }, [connect])
+  }, [connect, initialDelayMs])
 
   return state
 }

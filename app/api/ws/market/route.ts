@@ -33,6 +33,11 @@ export async function GET(request: NextRequest) {
   const encoder = new TextEncoder()
   let unsubscribe: (() => void) | null = null
   let keepAliveTimer: ReturnType<typeof setInterval> | null = null
+  // Close the SSE stream after 55 seconds to stay within Vercel's 60s
+  // serverless function limit and allow the client to reconnect cleanly.
+  // The client (useMarketFeed) will automatically reconnect on close.
+  let maxAgeTimer: ReturnType<typeof setTimeout> | null = null
+  const MAX_CONNECTION_AGE_MS = 55_000
 
   const stream = new ReadableStream({
     start(controller) {
@@ -69,10 +74,22 @@ export async function GET(request: NextRequest) {
           // Intentionally swallowed: keepalive write fails when client disconnects, cleanup handled by cancel()
         }
       }, 30000)
+
+      // Close stream after max age to stay within Vercel serverless limits.
+      // Client (useMarketFeed) will reconnect automatically via its onerror handler.
+      maxAgeTimer = setTimeout(() => {
+        try {
+          controller.enqueue(encoder.encode('data: {"type":"reconnect"}\n\n'))
+          controller.close()
+        } catch {
+          // Intentionally swallowed: stream already closed
+        }
+      }, MAX_CONNECTION_AGE_MS)
     },
     cancel() {
       if (unsubscribe) unsubscribe()
       if (keepAliveTimer) clearInterval(keepAliveTimer)
+      if (maxAgeTimer) clearTimeout(maxAgeTimer)
     },
   })
 
