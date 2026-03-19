@@ -9,6 +9,7 @@ import { tokens } from '@/lib/design-tokens'
 import { logger } from '@/lib/logger'
 import { useMultiAccountStore } from '@/lib/stores/multiAccountStore'
 import { injectStyles, validateEmail } from './components/loginHelpers'
+import { trackEvent } from '@/lib/analytics/track'
 import SocialLogin, { WalletLogin } from './components/SocialLogin'
 import RegisterForm from './components/RegisterForm'
 import LoginForm from './components/LoginForm'
@@ -197,6 +198,7 @@ export default function LoginPage() {
         if (isRegister) {
           setCodeVerified(true)
           await createUserProfile(data.user.id, email)
+          trackEvent('signup')
           showToast(t('loginCodeVerified'), 'success')
         } else {
           await saveNewAccountToStore()
@@ -239,6 +241,19 @@ export default function LoginPage() {
       if (utmSource) updateData.utm_source = utmSource
       if (utmMedium) updateData.utm_medium = utmMedium
       if (utmCampaign) updateData.utm_campaign = utmCampaign
+      // Capture referral code
+      const refCode = searchParams.get('ref')
+      if (refCode) {
+        // Look up referrer by referral_code or handle
+        const { data: referrer } = await supabase
+          .from('user_profiles')
+          .select('id')
+          .or(`referral_code.eq.${refCode},handle.eq.${refCode}`)
+          .maybeSingle()
+        if (referrer && referrer.id !== userId) {
+          updateData.referred_by = referrer.id
+        }
+      }
       await supabase.from('user_profiles').upsert(updateData, { onConflict: 'id' })
     } catch (err) { logger.error('Error creating profile:', err) }
   }

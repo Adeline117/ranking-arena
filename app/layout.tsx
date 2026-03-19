@@ -28,6 +28,7 @@ const Analytics = dynamic(() => import("@vercel/analytics/next").then(m => ({ de
 const NetworkStatusBanner = dynamic(() => import("./components/ui/NetworkStatusBanner"));
 const BetaBanner = dynamic(() => import("./components/layout/BetaBanner"));
 const FeedbackWidget = dynamic(() => import("./components/common/FeedbackWidget"));
+const PlausibleAnalytics = dynamic(() => import("./components/PlausibleAnalytics"));
 import { getCriticalCss, getResourceHints } from "@/lib/performance/critical-css";
 import { AsyncStylesheets } from "./components/Providers/AsyncStylesheets";
 
@@ -228,6 +229,7 @@ export default function RootLayout({
             <CompareFloatingBar />
             <ScrollToTop />
             <FeedbackWidget />
+            <PlausibleAnalytics />
             <ScrollRestoration />
             <Suspense fallback={null}>
               <CookieConsent />
