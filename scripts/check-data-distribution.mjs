@@ -121,19 +121,19 @@ async function main() {
     })
   }
 
-  // 5. trader_snapshots sharpe_ratio 填充率
-  console.log('\n📉 trader_snapshots sharpe_ratio 填充率:')
-  const snapshotsData = await queryTable('trader_snapshots', 'source,sharpe_ratio', { limit: 10000 })
+  // 5. trader_snapshots_v2 sharpe_ratio 填充率
+  console.log('\n📉 trader_snapshots_v2 sharpe_ratio 填充率:')
+  const snapshotsData = await queryTable('trader_snapshots_v2', 'platform,sharpe_ratio', { limit: 10000 })
   if (Array.isArray(snapshotsData)) {
     const stats = {}
     snapshotsData.forEach(r => {
-      if (!stats[r.source]) stats[r.source] = { total: 0, has_sharpe: 0 }
-      stats[r.source].total++
-      if (r.sharpe_ratio != null) stats[r.source].has_sharpe++
+      if (!stats[r.platform]) stats[r.platform] = { total: 0, has_sharpe: 0 }
+      stats[r.platform].total++
+      if (r.sharpe_ratio != null) stats[r.platform].has_sharpe++
     })
-    Object.entries(stats).sort().forEach(([source, s]) => {
+    Object.entries(stats).sort().forEach(([platform, s]) => {
       const pct = s.total > 0 ? (s.has_sharpe / s.total * 100).toFixed(0) : 0
-      console.log(`  ${source.padEnd(18)}: ${s.has_sharpe}/${s.total} (${pct}%)`)
+      console.log(`  ${platform.padEnd(18)}: ${s.has_sharpe}/${s.total} (${pct}%)`)
     })
   }
 

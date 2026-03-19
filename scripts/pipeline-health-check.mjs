@@ -164,7 +164,7 @@ async function checkDataFreshness() {
     if (!res.ok) {
       // Fallback: Direct query
       const platforms = await fetch(
-        `${SUPABASE_URL}/rest/v1/trader_snapshots?select=source,captured_at&order=captured_at.desc&limit=500`,
+        `${SUPABASE_URL}/rest/v1/trader_snapshots_v2?select=platform,as_of_ts&order=as_of_ts.desc&limit=500`,
         {
           headers: {
             'apikey': SUPABASE_KEY,
@@ -176,8 +176,8 @@ async function checkDataFreshness() {
       // Group by platform
       const latestByPlatform = {}
       for (const row of platforms) {
-        if (!latestByPlatform[row.source]) {
-          latestByPlatform[row.source] = row.captured_at
+        if (!latestByPlatform[row.platform]) {
+          latestByPlatform[row.platform] = row.as_of_ts
         }
       }
 
