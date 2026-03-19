@@ -406,6 +406,10 @@ export default function PostFeed(props: PostFeedProps = {}): React.ReactNode {
           commentLikeLoading={commentsHook.commentLikeLoading} onToggleCommentLike={commentsHook.toggleCommentLike}
           onToggleCommentDislike={commentsHook.toggleCommentDislike}
           deletingCommentId={commentsHook.deletingCommentId} onDeleteComment={commentsHook.deleteComment}
+          editingComment={commentsHook.editingComment} editContent={commentsHook.editContent}
+          setEditContent={commentsHook.setEditContent} submittingEdit={commentsHook.submittingEdit}
+          onStartEdit={commentsHook.startEditComment} onCancelEdit={commentsHook.cancelEditComment}
+          onSubmitEdit={commentsHook.submitEditComment}
           expandedReplies={commentsHook.expandedReplies} setExpandedReplies={commentsHook.setExpandedReplies}
           translatedComments={translatedComments} t={t} />
       )}
