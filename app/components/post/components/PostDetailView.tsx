@@ -65,6 +65,14 @@ interface PostDetailViewProps {
   onToggleCommentDislike: (postId: string, commentId: string) => Promise<void>
   deletingCommentId: string | null
   onDeleteComment: (postId: string, commentId: string) => Promise<void>
+  // Edit comment
+  editingComment?: { id: string; content: string } | null
+  editContent?: string
+  setEditContent?: (val: string) => void
+  submittingEdit?: boolean
+  onStartEdit?: (comment: Comment) => void
+  onCancelEdit?: () => void
+  onSubmitEdit?: (postId: string) => void
   expandedReplies: Record<string, boolean>
   setExpandedReplies: React.Dispatch<React.SetStateAction<Record<string, boolean>>>
   translatedComments: Record<string, string>
@@ -81,7 +89,9 @@ export default function PostDetailView({
   comments, loadingComments, newComment, setNewComment, submittingComment, onSubmitComment,
   replyingTo, setReplyingTo, replyContent, setReplyContent, submittingReply, onSubmitReply,
   commentLikeLoading, onToggleCommentLike, onToggleCommentDislike,
-  deletingCommentId, onDeleteComment, expandedReplies, setExpandedReplies, translatedComments, t,
+  deletingCommentId, onDeleteComment,
+  editingComment, editContent, setEditContent, submittingEdit, onStartEdit, onCancelEdit, onSubmitEdit,
+  expandedReplies, setExpandedReplies, translatedComments, t,
 }: PostDetailViewProps) {
   return (
     <PostModal onClose={onClose}>
@@ -177,6 +187,8 @@ export default function PostDetailView({
           submittingReply={submittingReply} onSubmitReply={onSubmitReply}
           commentLikeLoading={commentLikeLoading} onToggleCommentLike={onToggleCommentLike} onToggleCommentDislike={onToggleCommentDislike}
           deletingCommentId={deletingCommentId} onDeleteComment={onDeleteComment}
+          editingComment={editingComment} editContent={editContent} setEditContent={setEditContent}
+          submittingEdit={submittingEdit} onStartEdit={onStartEdit} onCancelEdit={onCancelEdit} onSubmitEdit={onSubmitEdit}
           expandedReplies={expandedReplies} setExpandedReplies={setExpandedReplies}
           translatedComments={translatedComments} />
       </div>
