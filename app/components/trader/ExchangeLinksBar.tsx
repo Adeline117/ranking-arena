@@ -7,41 +7,6 @@ import ExchangeLogo from '@/app/components/ui/ExchangeLogo'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import { getCopyTradeUrl, getDexUrl } from '@/lib/utils/copy-trade'
 
-/** Copy-trade URL map (CEX) */
-function getCopyTradeUrl(source: string, traderId: string, traderHandle?: string): string | null {
-  const urlMap: Record<string, string> = {
-    binance_futures: `https://www.binance.com/zh-CN/copy-trading/lead-details/${traderId}?type=um`,
-    binance_spot: `https://www.binance.com/zh-CN/copy-trading/lead-details/${traderId}`,
-    binance_web3: `https://www.binance.com/zh-CN/copy-trading/lead-details/${traderId}`,
-    binance: `https://www.binance.com/zh-CN/copy-trading/lead-details/${traderId}`,
-    bybit: `https://www.bybit.com/copyTrade/trade-center/detail?leaderMark=${traderId}`,
-    bitget_futures: `https://www.bitget.com/zh-CN/copy-trading/trader?id=${traderId}`,
-    bitget_spot: `https://www.bitget.com/zh-CN/copy-trading/trader?id=${traderId}`,
-    bitget: `https://www.bitget.com/zh-CN/copy-trading/trader?id=${traderId}`,
-    okx: `https://www.okx.com/copy-trading/trader/${traderId}`,
-    htx: `https://futures.htx.com/en-us/copytrading/futures/detail/${traderId}`,
-    htx_futures: `https://futures.htx.com/en-us/copytrading/futures/detail/${traderId}`,
-    weex: `https://www.weex.com/zh-CN/copy-trading/trader/${traderId}`,
-    etoro: `https://www.etoro.com/people/${traderHandle || traderId}/portfolio`,
-  }
-  return urlMap[source.toLowerCase()] || null
-}
-
-/** DEX explorer/profile URL */
-function getDexUrl(source: string, traderId: string): string | null {
-  const urlMap: Record<string, string> = {
-    hyperliquid: `https://app.hyperliquid.xyz/explorer/address/${traderId}`,
-    dydx: `https://trade.dydx.exchange/portfolio/${traderId}`,
-    gmx: `https://app.gmx.io/#/actions/v2/${traderId}`,
-    jupiter_perps: `https://www.jup.ag/perps/${traderId}`,
-    drift: `https://app.drift.trade/overview?userAccount=${traderId}`,
-    aevo: `https://app.aevo.xyz/portfolio/${traderId}`,
-    gains: `https://gains.trade`,
-    vertex: `https://app.vertexprotocol.com/portfolio/${traderId}`,
-  }
-  return urlMap[source.toLowerCase()] || null
-}
-
 /** Referral config per exchange */
 const REFERRAL_LINKS: Record<string, { url: string; code: string; color: string }> = {
   binance: { url: 'https://www.bsmkweb.cc/register?ref=ARENA', code: 'ARENA', color: '#F0B90B' },

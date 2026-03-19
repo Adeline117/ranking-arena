@@ -1,6 +1,6 @@
 // Metadata is generated in page.tsx — no duplicate generateMetadata here
-// ISR: revalidate every hour
-export const revalidate = 3600
+// ISR: match page.tsx revalidate (5 min) — layout revalidate must be <= page
+export const revalidate = 300
 
 export default function TraderLayout({
   children,
@@ -9,4 +9,3 @@ export default function TraderLayout({
 }) {
   return <>{children}</>
 }
-

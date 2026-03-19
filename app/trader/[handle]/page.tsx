@@ -1,5 +1,6 @@
 import type { Metadata } from 'next'
 import { cache } from 'react'
+import { unstable_cache } from 'next/cache'
 import { redirect, notFound } from 'next/navigation'
 import { getSupabaseAdmin } from '@/lib/supabase/server'
 import { JsonLd } from '@/app/components/Providers/JsonLd'
@@ -7,17 +8,97 @@ import { EXCHANGE_CONFIG } from '@/lib/constants/exchanges'
 import TraderProfileClient, { type UnregisteredTraderData } from './TraderProfileClient'
 import { ErrorBoundary } from '@/app/components/ui/ErrorBoundary'
 import { resolveTrader, getTraderDetail, toTraderPageData } from '@/lib/data/unified'
-
-// Deduplicate resolveTrader calls — both generateMetadata and the page component
-// call resolveTrader with the same handle. React cache() ensures the DB query
-// runs once per request, halving the number of round-trips to Supabase.
-const cachedResolveTrader = cache(
-  (handle: string, platform?: string) => resolveTrader(getSupabaseAdmin(), { handle, platform })
-)
+import { LR } from '@/lib/types/schema-mapping'
 
 // Derive display names from central config
 const EXCHANGE_DISPLAY: Record<string, string> = Object.fromEntries(
   Object.entries(EXCHANGE_CONFIG).map(([k, v]) => [k, v.name])
+)
+
+// ---------------------------------------------------------------------------
+// unstable_cache wrappers — use Next.js data cache instead of Redis.
+// Upstash SDK uses cache: 'no-store' internally which breaks ISR entirely.
+// These functions populate the Next.js data cache (revalidated every 5 min).
+// ---------------------------------------------------------------------------
+
+const cachedResolveTraderISR = unstable_cache(
+  async (handle: string, platform: string | undefined) => {
+    return resolveTrader(getSupabaseAdmin(), { handle, platform })
+  },
+  ['trader-resolve'],
+  { revalidate: 300, tags: ['trader-profile'] }
+)
+
+// React cache() deduplicates the ISR-cached call within a single request.
+// Both generateMetadata and the page component call this — one DB round-trip.
+const cachedResolveTrader = cache(
+  (handle: string, platform?: string) => cachedResolveTraderISR(handle, platform)
+)
+
+// Heavy query (~11 parallel DB queries). Caching this eliminates the dominant
+// TTFB contribution on repeat requests (expected: 973ms -> <200ms on cache hit).
+const cachedGetTraderDetail = unstable_cache(
+  async (platform: string, traderKey: string) => {
+    return getTraderDetail(getSupabaseAdmin(), { platform, traderKey })
+  },
+  ['trader-detail'],
+  { revalidate: 300, tags: ['trader-profile'] }
+)
+
+// Cached leaderboard query for OG metadata.
+// Avoids a duplicate DB query between generateMetadata and the page render.
+const cachedLeaderboardMeta = unstable_cache(
+  async (platform: string, traderKey: string) => {
+    const { data } = await getSupabaseAdmin()
+      .from('leaderboard_ranks')
+      .select('rank, arena_score, roi, pnl')
+      .eq(LR.source, platform)
+      .eq(LR.source_trader_id, traderKey)
+      .eq(LR.season_id, '90D')
+      .maybeSingle()
+    return data
+  },
+  ['trader-lb-meta'],
+  { revalidate: 300, tags: ['trader-profile'] }
+)
+
+// Cached user handle lookup for claimed trader pages.
+const cachedFindUserHandleByTrader = unstable_cache(
+  async (traderHandle: string): Promise<string | null> => {
+    try {
+      const supabase = getSupabaseAdmin()
+      const { data: trader } = await supabase
+        .from('traders')
+        .select('id, trader_authorizations!inner(user_id, user_profiles:user_id(handle))')
+        .eq('handle', traderHandle)
+        .eq('trader_authorizations.status', 'active')
+        .maybeSingle()
+
+      if (!trader) return null
+
+      const auths = trader.trader_authorizations as unknown as Array<{ user_id: string; user_profiles: { handle: string | null } | null }>
+      return auths?.[0]?.user_profiles?.handle || null
+    } catch {
+      // Fallback: query via trader_authorizations table
+      try {
+        const supabase = getSupabaseAdmin()
+        const { data: auth } = await supabase
+          .from('trader_authorizations')
+          .select('user_id, traders!inner(handle), user_profiles:user_id(handle)')
+          .eq('traders.handle', traderHandle)
+          .eq('status', 'active')
+          .maybeSingle()
+
+        if (!auth) return null
+        const profile = auth.user_profiles as unknown as { handle: string | null } | null
+        return profile?.handle || null
+      } catch {
+        return null
+      }
+    }
+  },
+  ['trader-user-handle'],
+  { revalidate: 300, tags: ['trader-profile'] }
 )
 
 export async function generateMetadata({ params }: { params: Promise<{ handle: string }> }): Promise<Metadata> {
@@ -30,14 +111,8 @@ export async function generateMetadata({ params }: { params: Promise<{ handle: s
     const resolved = await cachedResolveTrader(decoded)
 
     if (resolved) {
-      // Fetch leaderboard data for OG meta
-      const { data: lr } = await getSupabaseAdmin()
-        .from('leaderboard_ranks')
-        .select('rank, arena_score, roi, pnl')
-        .eq('source', resolved.platform)
-        .eq('source_trader_id', resolved.traderKey)
-        .eq('season_id', '90D')
-        .maybeSingle()
+      // Use cached leaderboard fetch — avoids duplicate query with page render
+      const lr = await cachedLeaderboardMeta(resolved.platform, resolved.traderKey)
 
       const name = resolved.handle || decoded
       const exchange = EXCHANGE_DISPLAY[resolved.platform] || resolved.platform || 'Crypto'
@@ -118,46 +193,6 @@ export const dynamicParams = true
 // Sidebar widgets are client components using SWR (no server-side Redis dependency)
 export const revalidate = 300
 
-// Find the user profile associated with this trader handle
-// Uses chained query: traders -> trader_authorizations -> user_profiles
-async function findUserProfileByTraderHandle(traderHandle: string): Promise<string | null> {
-  try {
-    const supabase = getSupabaseAdmin()
-    
-    // Single query: find trader, then get active authorization with user profile
-    const { data: trader } = await supabase
-      .from('traders')
-      .select('id, trader_authorizations!inner(user_id, user_profiles:user_id(handle))')
-      .eq('handle', traderHandle)
-      .eq('trader_authorizations.status', 'active')
-      .maybeSingle()
-    
-    if (!trader) return null
-    
-    const auths = trader.trader_authorizations as unknown as Array<{ user_id: string; user_profiles: { handle: string | null } | null }>
-    return auths?.[0]?.user_profiles?.handle || null
-  } catch {
-    // Fallback: single RPC-style query using trader_authorizations as the base
-    // Joins trader_id→traders and user_id→user_profiles in one round-trip
-    try {
-      const supabase = getSupabaseAdmin()
-
-      const { data: auth } = await supabase
-        .from('trader_authorizations')
-        .select('user_id, traders!inner(handle), user_profiles:user_id(handle)')
-        .eq('traders.handle', traderHandle)
-        .eq('status', 'active')
-        .maybeSingle()
-
-      if (!auth) return null
-      const profile = auth.user_profiles as unknown as { handle: string | null } | null
-      return profile?.handle || null
-    } catch {
-      return null
-    }
-  }
-}
-
 export default async function TraderPage({ params, searchParams }: { params: Promise<{ handle: string }>; searchParams: Promise<Record<string, string | undefined>> }) {
   const { handle } = await params
   const allSearchParams = await searchParams
@@ -170,27 +205,14 @@ export default async function TraderPage({ params, searchParams }: { params: Pro
     // Intentionally swallowed: malformed URI encoding, use raw handle string as-is
   }
 
-  const sb = getSupabaseAdmin()
-
-  // 并行查询注册用户和解析交易员身份
-  // cachedResolveTrader deduplicates the DB query shared with generateMetadata
+  // Phase 1: Resolve trader identity + find linked user account in parallel.
+  // cachedResolveTrader deduplicates the DB query shared with generateMetadata.
   const [userHandle, resolved] = await Promise.all([
-    findUserProfileByTraderHandle(decodedHandle),
+    cachedFindUserHandleByTrader(decodedHandle),
     cachedResolveTrader(decodedHandle, platform),
   ])
 
-  // 1. If claimed, fetch the user profile to pass to the client component
-  let claimedUserProfile: { id: string; handle: string; bio?: string | null; avatar_url?: string | null; cover_url?: string | null } | null = null
-  if (userHandle) {
-    const { data: userProfile } = await sb
-      .from('user_profiles')
-      .select('id, handle, bio, avatar_url, cover_url')
-      .eq('handle', userHandle)
-      .maybeSingle()
-    claimedUserProfile = userProfile as typeof claimedUserProfile
-  }
-
-  // 2. 如果未找到交易员
+  // If not found, 404
   if (!resolved) {
     notFound()
   }
@@ -205,19 +227,23 @@ export default async function TraderPage({ params, searchParams }: { params: Pro
     redirect(`/trader/${encodeURIComponent(resolved.handle)}?${redirectParams.toString()}`)
   }
 
-  // 3. 获取完整交易员数据（通过统一数据层 — 自动处理 v1/v2/leaderboard fallback）
-  let serverTraderData = null
-  try {
-    const detail = await getTraderDetail(sb, {
-      platform: resolved.platform,
-      traderKey: resolved.traderKey,
-    })
-    if (detail) {
-      serverTraderData = toTraderPageData(detail)
-    }
-  } catch {
-    // Intentionally swallowed: SSR trader detail fetch failed, client will retry via SWR
-  }
+  // Phase 2: Fetch trader detail + claimed user profile in parallel.
+  // cachedGetTraderDetail serves the ~11-query fetch from Next.js data cache.
+  const userProfilePromise = userHandle
+    ? getSupabaseAdmin()
+        .from('user_profiles')
+        .select('id, handle, bio, avatar_url, cover_url')
+        .eq('handle', userHandle)
+        .maybeSingle()
+        .then(({ data }) => data as { id: string; handle: string; bio?: string | null; avatar_url?: string | null; cover_url?: string | null } | null)
+    : Promise.resolve(null as null)
+
+  const [detailResult, claimedUserProfile] = await Promise.all([
+    cachedGetTraderDetail(resolved.platform, resolved.traderKey).catch(() => null),
+    userProfilePromise,
+  ])
+
+  const serverTraderData = detailResult ? toTraderPageData(detailResult) : null
 
   // Build UnregisteredTraderData for initial render
   const traderData: UnregisteredTraderData = {

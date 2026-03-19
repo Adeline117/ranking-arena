@@ -2603,7 +2603,7 @@ const ja = {
     heroCTASignUp: '無料登録',
     heroStatTraders: 'トレーダー',
     heroStatExchanges: '取引所',
-    heroStatUpdated: '30分ごとに更新',
+    heroStatUpdated: '更新頻度',
     heroProBadge: 'Proにアップグレード — 全トレーダーと高度なフィルターを解放',
 
     rankingsSearchPlaceholder: '名前でトレーダーを検索...',

@@ -2770,7 +2770,7 @@ const zh = {
     heroCTASignUp: '免费注册',
     heroStatTraders: '交易员',
     heroStatExchanges: '交易所',
-    heroStatUpdated: '每 30 分钟更新',
+    heroStatUpdated: '更新频率',
     heroProBadge: '升级 Pro — 解锁全部交易员和高级筛选',
 
     // Rankings search
