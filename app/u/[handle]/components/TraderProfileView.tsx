@@ -300,6 +300,7 @@ function TraderOverviewTab({
             <OverviewPerformanceCard
               performance={traderPerformance as ExtendedPerformance}
               equityCurve={traderEquityCurve?.['90D']}
+              allEquityCurves={traderEquityCurve as Partial<Record<'7D' | '30D' | '90D', Array<{ date: string; roi: number; pnl: number }>>> | undefined}
               source={traderProfile?.source}
             />
             {!email && traderEquityCurve?.['90D'] && (
