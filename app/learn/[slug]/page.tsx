@@ -109,7 +109,7 @@ export default async function LearnArticlePage({
   if (!article) notFound()
 
   return (
-    <main
+    <div
       style={{
         maxWidth: 720,
         margin: '0 auto',
@@ -132,6 +132,6 @@ export default async function LearnArticlePage({
       <article
         dangerouslySetInnerHTML={{ __html: renderMarkdown(article.content) }}
       />
-    </main>
+    </div>
   )
 }

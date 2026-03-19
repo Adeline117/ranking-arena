@@ -63,7 +63,7 @@ const calloutStyle: React.CSSProperties = {
 
 export default function PrivacyPolicyPage() {
   return (
-    <main style={containerStyle}>
+    <div style={containerStyle}>
       {/* ======================= ENGLISH ======================= */}
       <h1 style={h1Style}>Privacy Policy</h1>
       <p style={subtitleStyle}>Last updated: March 2026 &middot; Arena (arenafi.org)</p>
@@ -362,6 +362,6 @@ export default function PrivacyPolicyPage() {
           &larr; Back to Home
         </Link>
       </div>
-    </main>
+    </div>
   )
 }

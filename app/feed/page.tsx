@@ -96,7 +96,7 @@ export default async function FeedPage() {
     >
       <TopNav />
 
-      <main
+      <div
         style={{
           maxWidth: 720,
           margin: '0 auto',
@@ -136,7 +136,7 @@ export default async function FeedPage() {
             initialNextCursor={nextCursor}
           />
         </Suspense>
-      </main>
+      </div>
     </div>
   )
 }

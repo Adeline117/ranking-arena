@@ -12,7 +12,7 @@ export const metadata: Metadata = {
 
 export default function LearnPage() {
   return (
-    <main
+    <div
       style={{
         maxWidth: 800,
         margin: '0 auto',
@@ -79,6 +79,6 @@ export default function LearnPage() {
           </Link>
         ))}
       </div>
-    </main>
+    </div>
   )
 }

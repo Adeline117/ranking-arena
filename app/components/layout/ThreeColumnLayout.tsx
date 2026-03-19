@@ -43,7 +43,7 @@ export default function ThreeColumnLayout({
       )}
 
       {/* Center content — always visible, scrollable */}
-      <main className="three-col-center" style={{ minWidth: 0 }}>
+      <div className="three-col-center" style={{ minWidth: 0 }}>
         {children}
 
         {/* Mobile: collapsible sidebar widgets — CSS hides on desktop (no JS-based CLS) */}
@@ -123,7 +123,7 @@ export default function ThreeColumnLayout({
             </div>
           </div>
         )}
-      </main>
+      </div>
 
       {/* Right sidebar — CSS handles visibility via media queries to avoid CLS */}
       {rightSidebar && (
