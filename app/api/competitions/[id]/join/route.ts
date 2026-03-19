@@ -10,6 +10,7 @@ export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  try {
   // Rate limit
   const rateLimitResult = await checkRateLimitFull(request, RateLimitPresets.write)
   if (rateLimitResult.response) return rateLimitResult.response
@@ -21,8 +22,14 @@ export async function POST(
   }
 
   const { id: competitionId } = await params
-  const body = await request.json()
-  const { trader_id, platform } = body
+
+  let body: Record<string, unknown>
+  try {
+    body = await request.json()
+  } catch {
+    return NextResponse.json({ success: false, error: 'Invalid JSON body' }, { status: 400 })
+  }
+  const { trader_id, platform } = body as { trader_id?: string; platform?: string }
 
   if (!trader_id || !platform) {
     return NextResponse.json(
@@ -113,4 +120,8 @@ export async function POST(
   }
 
   return NextResponse.json({ success: true, data: entry })
+  } catch (error) {
+    console.error('[competitions/join] Unexpected error:', error instanceof Error ? error.message : String(error))
+    return NextResponse.json({ success: false, error: 'Internal server error' }, { status: 500 })
+  }
 }
