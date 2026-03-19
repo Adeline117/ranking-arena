@@ -153,10 +153,34 @@ export async function GET(request: NextRequest) {
     const platformLabel = PLATFORM_NAMES[platform] || platform.replace(/_/g, ' ').toUpperCase()
     const platformColor = PLATFORM_COLORS[platform] || C.purpleLight
 
-    // Build proxied avatar URL for edge compatibility
-    const avatarSrc = avatarUrl
-      ? (avatarUrl.startsWith('data:') ? avatarUrl : `https://www.arenafi.org/api/avatar?url=${encodeURIComponent(avatarUrl)}`)
-      : null
+    // Pre-fetch avatar as base64 data URL so Satori (next/og) doesn't have to
+    // make a network request itself — self-referential proxy calls from Edge
+    // runtime to the Node.js avatar proxy are unreliable and produce
+    // "Can't load <url>" errors in the OG image renderer.
+    let avatarSrc: string | null = null
+    if (avatarUrl) {
+      if (avatarUrl.startsWith('data:')) {
+        avatarSrc = avatarUrl
+      } else {
+        try {
+          const proxyUrl = `https://www.arenafi.org/api/avatar?url=${encodeURIComponent(avatarUrl)}`
+          const avatarRes = await fetch(proxyUrl, {
+            signal: AbortSignal.timeout(4000),
+          })
+          if (avatarRes.ok) {
+            const ct = avatarRes.headers.get('content-type') || 'image/png'
+            if (ct.startsWith('image/')) {
+              const buf = await avatarRes.arrayBuffer()
+              const b64 = Buffer.from(buf).toString('base64')
+              avatarSrc = `data:${ct};base64,${b64}`
+            }
+          }
+        } catch {
+          // Avatar failed to load — fall back to initials placeholder below
+          avatarSrc = null
+        }
+      }
+    }
 
     return new ImageResponse(
       (
