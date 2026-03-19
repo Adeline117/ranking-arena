@@ -78,6 +78,10 @@
       "schedule": "5 0 * * *"
     },
     {
+      "path": "/api/cron/snapshot-ranks",
+      "schedule": "15 0 * * *"
+    },
+    {
       "path": "/api/cron/fetch-funding-rates",
       "schedule": "40 */4 * * *"
     },
