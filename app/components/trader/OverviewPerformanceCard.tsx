@@ -67,6 +67,8 @@ export interface OverviewPerformanceCardProps {
   performance: ExtendedPerformance
   profitableWeeksPct?: number
   equityCurve?: Array<{ date: string; roi: number; pnl: number }>
+  /** Full equity curve data for all periods — used to switch sparkline on period change */
+  allEquityCurves?: Partial<Record<Period, Array<{ date: string; roi: number; pnl: number }>>>
   lastUpdated?: string
   // Data source for period mapping notes
   source?: string
@@ -80,6 +82,7 @@ export default function OverviewPerformanceCard({
   performance,
   profitableWeeksPct,
   equityCurve,
+  allEquityCurves,
   lastUpdated,
   source,
 }: OverviewPerformanceCardProps) {
@@ -189,8 +192,9 @@ export default function OverviewPerformanceCard({
   const { roi, pnl, winRate, maxDrawdown, sharpeRatio, winningPositions, totalPositions, returnScore: periodReturnScore, pnlScore: periodPnlScore, drawdownScore: periodDrawdownScore, stabilityScore: periodStabilityScore, sortinoRatio, calmarRatio, alpha, arenaScoreV3, tradesCount, copiersPnl, avgHoldingTimeHours } = data
   const periodArenaScore = data.arenaScore
 
-  // 生成 sparkline 数据 — 过滤掉 null/NaN 值，若全为 0 则不显示 sparkline（避免平线误导）
-  const sparklineRawData = (equityCurve?.map(d => d.roi) || []).filter(v => v != null && !isNaN(v as number)) as number[]
+  // 生成 sparkline 数据 — 使用当前 period 对应的 equity curve，过滤掉 null/NaN 值
+  const periodCurve = allEquityCurves?.[period] ?? (period === '90D' ? equityCurve : undefined)
+  const sparklineRawData = (periodCurve?.map(d => d.roi) || []).filter(v => v != null && !isNaN(v as number)) as number[]
   const hasNonZeroSparkline = sparklineRawData.some(v => v !== 0)
   const sparklineData = hasNonZeroSparkline ? sparklineRawData : []
 
