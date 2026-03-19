@@ -25,6 +25,7 @@ import {
   Badge, StatItem, ActionButton,
 } from './TraderHeaderHelpers'
 import { getScoreColor, getScoreColorHex } from '@/lib/utils/score-colors'
+import { useComparisonStore } from '@/lib/stores'
 
 // Lazy-load rarely-used components
 const ClaimTraderButton = dynamic(() => import('./ClaimTraderButton'), { ssr: false })
@@ -84,6 +85,54 @@ interface TraderHeaderProps {
 
 // Helpers extracted to ./TraderHeaderHelpers.tsx
 // Exchange links (copy-trade, DEX view, referral) moved to ExchangeLinksBar below header
+
+
+/** Reactive Compare toggle button (P0-4) */
+function CompareToggle({ traderId, handle, source, avatarUrl }: { traderId: string; handle: string; source: string; avatarUrl?: string }) {
+  const isSelected = useComparisonStore(s => s.isSelected(traderId))
+  const addTrader = useComparisonStore(s => s.addTrader)
+  const removeTrader = useComparisonStore(s => s.removeTrader)
+  const canAddMore = useComparisonStore(s => s.canAddMore())
+  const { t } = useLanguage()
+
+  const handleToggle = () => {
+    if (isSelected) {
+      removeTrader(traderId)
+    } else {
+      addTrader({ id: traderId, handle, source, avatarUrl })
+    }
+  }
+
+  const label = isSelected ? (t('comparing') || 'Comparing') : (t('compare') || 'Compare')
+  const titleText = isSelected
+    ? (t('removeFromCompare') || 'Remove from Compare')
+    : !canAddMore
+      ? (t('compareListFull') || 'Compare list full (max 5)')
+      : (t('addToCompare') || 'Add to Compare')
+
+  return (
+    <ActionButton
+      onClick={handleToggle}
+      variant={isSelected ? 'accent' : 'ghost'}
+      icon={
+        isSelected ? (
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <polyline points="20 6 9 17 4 12" />
+          </svg>
+        ) : (
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
+            <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+          </svg>
+        )
+      }
+    >
+      <span title={titleText} style={{ opacity: (!isSelected && !canAddMore) ? 0.5 : 1 }}>
+        {label}
+      </span>
+    </ActionButton>
+  )
+}
 
 export default function TraderHeader({
   handle,
@@ -496,6 +545,16 @@ export default function TraderHeader({
               }}
             />
           )
+        )}
+
+        {/* Compare toggle (P0-4) */}
+        {!isOwnProfile && (
+          <CompareToggle
+            traderId={traderId}
+            handle={handle}
+            source={source || ''}
+            avatarUrl={effectiveAvatarUrl}
+          />
         )}
 
         {/* Share rank card buttons (Copy Link + Share on X) */}
