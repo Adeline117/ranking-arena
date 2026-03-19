@@ -156,4 +156,6 @@ export interface TraderDetail {
   positionHistory: TraderPosition[]
   similarTraders: UnifiedTrader[]
   trackedSince: string | null
+  /** Exchange-level bio from trader_profiles_v2 */
+  bio: string | null
 }

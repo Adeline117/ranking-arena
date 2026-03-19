@@ -27,6 +27,7 @@ export function toTraderPageData(detail: TraderDetail): Record<string, unknown> 
     source: t.platform,
     market_type: t.marketType,
     profile_url: t.profileUrl,
+    bio: detail.bio || null,
   }
 
   // Performance (matches TraderPerformance interface)

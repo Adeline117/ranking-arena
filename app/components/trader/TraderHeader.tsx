@@ -446,8 +446,8 @@ export default function TraderHeader({
             </Box>
           )}
 
-          {/* Claimed user bio — condensed */}
-          {isVerifiedTrader && claimedBio && (
+          {/* Bio — from claimed user or exchange profile */}
+          {claimedBio && (
             <Text size="xs" color="secondary" style={{ marginTop: 2, maxWidth: 400, lineHeight: 1.4, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
               {claimedBio}
             </Text>
