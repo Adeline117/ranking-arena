@@ -449,7 +449,7 @@ export const TraderRow = memo(function TraderRow({
               )}
               {trader.also_on && trader.also_on.length > 0 && (
                 <Text size="xs" style={{ fontSize: tokens.typography.fontSize.xs, color: TRADER_TEXT_TERTIARY, lineHeight: 1.2 }}>
-                  also on: {trader.also_on.map(s => EXCHANGE_NAMES[s] || s.split('_')[0]).filter((v, i, a) => a.indexOf(v) === i).join(', ')}
+                  also on: {[...new Set(trader.also_on.map(s => EXCHANGE_NAMES[s] || s.split('_')[0]))].join(', ')}
                 </Text>
               )}
             </Box>
