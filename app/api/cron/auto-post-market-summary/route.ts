@@ -16,8 +16,7 @@ import { PipelineLogger } from '@/lib/services/pipeline-logger'
 import { env } from '@/lib/env'
 import { getSupabaseAdmin } from '@/lib/supabase/server'
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-type AnySupabase = SupabaseClient<any>
+type AnySupabase = SupabaseClient
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 60

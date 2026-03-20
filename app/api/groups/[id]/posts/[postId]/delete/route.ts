@@ -8,7 +8,7 @@ import { getSupabaseAdmin } from '@/lib/supabase/server'
 
 // 检查用户是否是小组管理员或组长
 async function canManageGroup(
-  supabase: SupabaseClient<any>, 
+  supabase: SupabaseClient,
   groupId: string, 
   userId: string
 ): Promise<boolean> {

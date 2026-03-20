@@ -136,8 +136,7 @@ export function useSubscription() {
     checkSubscription()
 
     // 监听登录状态变化 (lazy-load supabase)
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    let authSub: any = null
+    let authSub: { unsubscribe: () => void } | null = null
     getSupabase().then((supabase) => {
       if (!isMountedRef.current) return
       const { data } = supabase.auth.onAuthStateChange((event) => {
