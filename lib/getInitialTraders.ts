@@ -100,17 +100,18 @@ export async function fetchLeaderboardFromDB(
 ): Promise<{ traders: InitialTrader[]; lastUpdated: string | null }> {
   const supabase = getSupabaseAdmin()
 
-  // 2s timeout -- prevents SSR from blocking LCP (was 5s, reduced for faster fallback)
+  // 1s timeout -- aggressive cutoff for SSR LCP (was 2s)
   // Redis cache handles most requests; this timeout only applies to cache misses
+  // Phase 2 (client HomePage) will fetch fresh data anyway
   const controller = new AbortController()
-  const timer = setTimeout(() => controller.abort(), 2_000)
+  const timer = setTimeout(() => controller.abort(), 1_000)
 
   try {
     const result = await Promise.race([
       fetchViaDiverseRPC(supabase, timeRange, limit),
       new Promise<never>((_, reject) => {
         controller.signal.addEventListener('abort', () =>
-          reject(new Error('Query timeout after 2000ms'))
+          reject(new Error('Query timeout after 1000ms'))
         )
       }),
     ])

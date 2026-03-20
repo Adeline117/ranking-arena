@@ -32,14 +32,14 @@ const PlausibleAnalytics = dynamic(() => import("./components/PlausibleAnalytics
 import { getCriticalCss, getResourceHints } from "@/lib/performance/critical-css";
 import { AsyncStylesheets } from "./components/Providers/AsyncStylesheets";
 
-// Optimized font loading with next/font
+// Optimized font loading — 2 weights instead of 4 saves ~90KB, 'optional' avoids font-swap LCP delay
 const inter = Inter({
   subsets: ["latin"],
-  weight: ["400", "500", "600", "700"],  // Only load weights used by design-tokens.ts (saves ~180KB)
-  display: "swap",  // "swap" shows text immediately with fallback font, then swaps when Inter loads
+  weight: ["400", "600"],  // 400=normal, 600=semibold (covers all design-token needs, 500/700 unnecessary)
+  display: "optional",  // "optional" skips font if not loaded in ~100ms — avoids LCP delay from font swap
   variable: "--font-inter",
   preload: true,
-  adjustFontFallback: true,  // Next.js auto-generates size-adjust CSS to minimize CLS from font swap
+  adjustFontFallback: true,
 });
 
 
