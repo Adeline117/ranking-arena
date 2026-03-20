@@ -29,53 +29,15 @@ import { generateBlockieSvg } from '@/lib/utils/avatar'
 import { tieredGet, tieredSet, tieredDel } from '@/lib/cache/redis-layer'
 import { getSharedRedis } from '@/lib/cache/redis-client'
 import { env } from '@/lib/env'
+import { detectTraderType, getFreshnessHours, deriveWinRateMDD } from './helpers'
+import { warmupLeaderboardCache } from './cache'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 300
 
-// DEX sources where 0x addresses may be bots
-const DEX_SOURCES = new Set(['hyperliquid', 'gmx', 'dydx', 'drift', 'aevo', 'gains', 'jupiter_perps'])
-
-// Heuristic bot detection for DEX traders
-// Enhanced bot detection (freqtrade 47.8K★ trading frequency patterns)
-function detectTraderType(
-  source: string,
-  sourceId: string,
-  tradesCount: number | null,
-  existingType: string | null,
-  avgHoldingHours?: number | null,
-  winRate?: number | null,
-): 'human' | 'bot' | null {
-  // Explicit type always wins
-  if (existingType === 'human' || existingType === 'bot') return existingType
-  // web3_bot source is always bot
-  if (source === 'web3_bot') return 'bot'
-
-  if (DEX_SOURCES.has(source) && sourceId.startsWith('0x')) {
-    // High trade count → likely bot
-    if (tradesCount != null && tradesCount > 500) return 'bot'
-    // Extremely short hold times + high trade count → algorithmic trading
-    if (avgHoldingHours != null && avgHoldingHours < 0.5 && tradesCount != null && tradesCount > 100) return 'bot'
-    // Suspiciously perfect win rate with many trades → likely bot
-    if (winRate != null && winRate >= 95 && tradesCount != null && tradesCount > 50) return 'bot'
-  }
-
-  return null
-}
-
 const logger = createLogger('compute-leaderboard')
 
 const SEASONS: Period[] = ['7D', '30D', '90D']
-/** Per-platform freshness thresholds: CEX=48h, DEX=72h
- *  Tightened from 168h (7d) now that all fetcher groups run every 3-6h.
- *  If a platform's data is >2-3 days old, it's genuinely stale. */
-const DATA_FRESHNESS_HOURS_CEX = 48
-const DATA_FRESHNESS_HOURS_DEX = 72
-
-function getFreshnessHours(source: string): number {
-  const sourceType = SOURCE_TYPE_MAP[source]
-  return sourceType === 'web3' ? DATA_FRESHNESS_HOURS_DEX : DATA_FRESHNESS_HOURS_CEX
-}
 const MIN_TRADES_COUNT = 1 // Allow all traders with at least 1 trade (DEX traders may have 1-2 high-quality trades)
 const DEGRADATION_THRESHOLD = 0.85 // 85% — block catastrophic drops only; stale counts still inflated from pre-2026-03-15 accumulation
 
@@ -527,6 +489,79 @@ async function computeSeason(
     logger.info(`[${season}] Enriched ${tradersNeedingEnrichment.length} traders from stats_detail`)
   }
 
+  // Phase 3.5: Fill trades_count + avg_holding_hours from position_history for platforms that have it
+  const needingTradesOrHolding = Array.from(traderMap.values())
+    .filter(t => t.trades_count == null || t.avg_holding_hours == null)
+  if (needingTradesOrHolding.length > 0) {
+    const phBySource = new Map<string, string[]>()
+    for (const t of needingTradesOrHolding) {
+      const ids = phBySource.get(t.source) || []
+      ids.push(t.source_trader_id)
+      phBySource.set(t.source, ids)
+    }
+    let phase35Count = 0
+    await Promise.all(
+      Array.from(phBySource.entries()).map(async ([source, traderIds]) => {
+        for (let i = 0; i < traderIds.length; i += 200) {
+          const chunk = traderIds.slice(i, i + 200)
+          // Query position_history: count per trader + avg holding time
+          const { data: phRows } = await supabase
+            .from('trader_position_history')
+            .select('source_trader_id, open_time, close_time')
+            .eq('source', source)
+            .in('source_trader_id', chunk)
+            .limit(10000)
+          if (!phRows?.length) continue
+
+          // Group by trader
+          const byTrader = new Map<string, Array<{ open_time: string | null; close_time: string | null }>>()
+          for (const row of phRows) {
+            const tid = row.source_trader_id.startsWith('0x') ? row.source_trader_id.toLowerCase() : row.source_trader_id
+            const arr = byTrader.get(tid) || []
+            arr.push({ open_time: row.open_time, close_time: row.close_time })
+            byTrader.set(tid, arr)
+          }
+
+          for (const [tid, positions] of byTrader) {
+            const existing = traderMap.get(`${source}:${tid}`)
+            if (!existing) continue
+
+            // Fill trades_count
+            if (existing.trades_count == null && positions.length > 0) {
+              existing.trades_count = positions.length
+              phase35Count++
+            }
+
+            // Fill avg_holding_hours from position open/close times
+            if (existing.avg_holding_hours == null) {
+              let totalHours = 0, count = 0
+              for (const p of positions) {
+                if (p.open_time && p.close_time) {
+                  const open = new Date(p.open_time).getTime()
+                  const close = new Date(p.close_time).getTime()
+                  if (close > open && !isNaN(open) && !isNaN(close)) {
+                    totalHours += (close - open) / 3600000
+                    count++
+                  }
+                }
+              }
+              if (count >= 2) {
+                const avg = totalHours / count
+                if (avg > 0 && avg < 100000) {
+                  existing.avg_holding_hours = Math.round(avg * 100) / 100
+                  phase35Count++
+                }
+              }
+            }
+          }
+        }
+      })
+    )
+    if (phase35Count > 0) {
+      logger.info(`[${season}] Phase 3.5: derived ${phase35Count} trades_count/avg_holding from position_history`)
+    }
+  }
+
   // Phase 4: Derive win_rate/max_drawdown/sharpe from equity_curve (daily PnL) as universal fallback
   // This covers ALL platforms that have equity curve data but no native WR/MDD/Sharpe
   const stillNeedingData = Array.from(traderMap.values())
@@ -600,13 +635,13 @@ async function computeSeason(
             }
 
             // Derive sharpe_ratio from daily ROI returns (annualized, risk-free=0)
-            if (existing.sharpe_ratio == null && points.length >= 7) {
+            if (existing.sharpe_ratio == null && points.length >= 5) {
               const roiValues = points.map(p => p.roi ?? 0)
               const dailyReturns: number[] = []
               for (let j = 1; j < roiValues.length; j++) {
                 dailyReturns.push(roiValues[j] - roiValues[j - 1])
               }
-              if (dailyReturns.length >= 5) {
+              if (dailyReturns.length >= 4) {
                 const mean = dailyReturns.reduce((s, r) => s + r, 0) / dailyReturns.length
                 const variance = dailyReturns.reduce((s, r) => s + (r - mean) ** 2, 0) / dailyReturns.length
                 const stdDev = Math.sqrt(variance)
@@ -624,6 +659,68 @@ async function computeSeason(
       })
     )
     logger.info(`[${season}] Derived ${derived} WR/MDD values from equity curves`)
+  }
+
+  // Phase 4.5: Use daily_snapshots as fallback for sharpe (accumulated ROI over time)
+  const stillNeedingSharpe = Array.from(traderMap.values())
+    .filter(t => t.sharpe_ratio == null)
+  if (stillNeedingSharpe.length > 0) {
+    const dsBySource = new Map<string, string[]>()
+    for (const t of stillNeedingSharpe) {
+      const ids = dsBySource.get(t.source) || []
+      ids.push(t.source_trader_id)
+      dsBySource.set(t.source, ids)
+    }
+    let phase45Count = 0
+    await Promise.all(
+      Array.from(dsBySource.entries()).map(async ([source, traderIds]) => {
+        for (let i = 0; i < traderIds.length; i += 200) {
+          const chunk = traderIds.slice(i, i + 200)
+          const { data: dsRows } = await supabase
+            .from('trader_daily_snapshots')
+            .select('trader_key, roi, date')
+            .eq('platform', source)
+            .in('trader_key', chunk)
+            .not('roi', 'is', null)
+            .order('date', { ascending: true })
+            .limit(10000)
+          if (!dsRows?.length) continue
+
+          const byTrader = new Map<string, number[]>()
+          for (const row of dsRows) {
+            const tid = row.trader_key.startsWith('0x') ? row.trader_key.toLowerCase() : row.trader_key
+            const arr = byTrader.get(tid) || []
+            arr.push(row.roi)
+            byTrader.set(tid, arr)
+          }
+
+          for (const [tid, rois] of byTrader) {
+            if (rois.length < 5) continue
+            const existing = traderMap.get(`${source}:${tid}`)
+            if (!existing || existing.sharpe_ratio != null) continue
+
+            const dailyReturns: number[] = []
+            for (let j = 1; j < rois.length; j++) {
+              dailyReturns.push(rois[j] - rois[j - 1])
+            }
+            if (dailyReturns.length < 4) continue
+            const mean = dailyReturns.reduce((s, r) => s + r, 0) / dailyReturns.length
+            const variance = dailyReturns.reduce((s, r) => s + (r - mean) ** 2, 0) / dailyReturns.length
+            const stdDev = Math.sqrt(variance)
+            if (stdDev > 0) {
+              const sharpe = (mean / stdDev) * Math.sqrt(365)
+              if (sharpe > -10 && sharpe < 10) {
+                existing.sharpe_ratio = Math.round(sharpe * 100) / 100
+                phase45Count++
+              }
+            }
+          }
+        }
+      })
+    )
+    if (phase45Count > 0) {
+      logger.info(`[${season}] Phase 4.5: derived ${phase45Count} sharpe ratios from daily_snapshots`)
+    }
   }
 
   // Phase 5: For remaining nulls, estimate from ROI + trades_count
@@ -1018,170 +1115,4 @@ async function computeSeason(
   const actualUpserted = scored.length - upsertErrors
   logger.info(`${season}: ranked ${scored.length} traders (${upsertErrors} upsert errors)`)
   return actualUpserted
-}
-
-/**
- * Derive WR and MDD from historical ROI snapshots for traders missing these metrics.
- * Runs after leaderboard computation to fill gaps in platforms that don't provide WR/MDD natively.
- * WR = percentage of days where ROI increased (from v2 snapshots)
- * MDD = maximum peak-to-trough decline in equity curve
- */
-async function deriveWinRateMDD(supabase: ReturnType<typeof getSupabaseAdmin>): Promise<number> {
-  const { data: missing } = await supabase.from('leaderboard_ranks')
-    .select('source, source_trader_id, win_rate, max_drawdown, season_id')
-    .or('win_rate.is.null,max_drawdown.is.null')
-    .limit(2000) // Process up to 2000 per run to stay within timeout
-
-  if (!missing?.length) return 0
-
-  // Group by trader (source + source_trader_id)
-  const traderMap = new Map<string, typeof missing>()
-  for (const row of missing) {
-    const key = `${row.source}:${row.source_trader_id}`
-    if (!traderMap.has(key)) traderMap.set(key, [])
-    traderMap.get(key)!.push(row)
-  }
-
-  // Batch fetch ALL needed trader_snapshots_v2 rows in one query
-  const allTraderKeys = [...traderMap.keys()].map(k => {
-    const [platform, ...parts] = k.split(':')
-    return { platform, trader_key: parts.join(':') }
-  })
-
-  // Fetch snapshots for all traders at once, grouped by platform
-  const platformGroups = new Map<string, string[]>()
-  for (const t of allTraderKeys) {
-    if (!platformGroups.has(t.platform)) platformGroups.set(t.platform, [])
-    platformGroups.get(t.platform)!.push(t.trader_key)
-  }
-
-  // Single batch fetch per platform (much fewer queries than per-trader)
-  const allSnapshots: Array<{ platform: string; trader_key: string; roi_pct: number; created_at: string }> = []
-  await Promise.all(
-    Array.from(platformGroups.entries()).map(async ([platform, traderKeys]) => {
-      for (let i = 0; i < traderKeys.length; i += 500) {
-        const chunk = traderKeys.slice(i, i + 500)
-        const { data: snaps } = await supabase.from('trader_snapshots_v2')
-          .select('platform, trader_key, roi_pct, created_at')
-          .eq('platform', platform)
-          .in('trader_key', chunk)
-          .not('roi_pct', 'is', null)
-          .order('created_at', { ascending: true })
-          .limit(50000)
-
-        if (snaps) allSnapshots.push(...(snaps as typeof allSnapshots))
-      }
-    })
-  )
-
-  // Group snapshots by trader key
-  const snapshotsByTrader = new Map<string, Array<{ roi_pct: number; created_at: string }>>()
-  for (const snap of allSnapshots) {
-    const key = `${snap.platform}:${snap.trader_key}`
-    if (!snapshotsByTrader.has(key)) snapshotsByTrader.set(key, [])
-    snapshotsByTrader.get(key)!.push(snap)
-  }
-
-  // Compute WR/MDD in memory and collect all updates
-  const leaderboardUpdates: Array<{
-    source: string; source_trader_id: string; season_id: string;
-    win_rate?: number; max_drawdown?: number;
-  }> = []
-
-  for (const [compositeKey, rows] of traderMap) {
-    const snapshots = snapshotsByTrader.get(compositeKey) || []
-    if (snapshots.length < 2) continue
-
-    // Deduplicate by day, keep latest per day
-    const daily = new Map<string, number>()
-    for (const snap of snapshots) {
-      const day = snap.created_at?.slice(0, 10)
-      if (day) daily.set(day, snap.roi_pct)
-    }
-    const rois = [...daily.entries()].sort((a, b) => a[0].localeCompare(b[0])).map(e => e[1])
-    if (rois.length < 2) continue
-
-    // Win Rate: days where ROI increased
-    let wins = 0, days = 0
-    for (let j = 1; j < rois.length; j++) { if (rois[j] > rois[j - 1]) wins++; days++ }
-    const wr = days > 0 ? parseFloat(((wins / days) * 100).toFixed(2)) : null
-
-    // MDD from equity curve
-    const eq = rois.map(r => 1 + r / 100)
-    let peak = eq[0], maxDD = 0
-    for (const e of eq) { if (e > peak) peak = e; const dd = peak > 0 ? (peak - e) / peak : 0; if (dd > maxDD) maxDD = dd }
-    const mdd = parseFloat((maxDD * 100).toFixed(2))
-
-    for (const row of rows) {
-      const upd: Record<string, number> = {}
-      if (row.win_rate == null && wr != null) upd.win_rate = wr
-      if (row.max_drawdown == null && mdd > 0) upd.max_drawdown = Math.min(mdd, 100)
-      if (Object.keys(upd).length > 0) {
-        leaderboardUpdates.push({
-          source: rows[0].source,
-          source_trader_id: rows[0].source_trader_id,
-          season_id: row.season_id,
-          ...upd,
-        })
-      }
-    }
-  }
-
-  // Batch upsert all leaderboard_ranks updates (single query per batch of 500)
-  let derived = 0
-  const UPSERT_BATCH = 500
-  for (let i = 0; i < leaderboardUpdates.length; i += UPSERT_BATCH) {
-    const batch = leaderboardUpdates.slice(i, i + UPSERT_BATCH)
-    // Use individual updates grouped in Promise.all with larger batches
-    // (leaderboard_ranks has composite PK so we need per-row updates, but we batch them)
-    const results = await Promise.all(
-      batch.map(upd => {
-        const updateFields: Record<string, number> = {}
-        if (upd.win_rate != null) updateFields.win_rate = upd.win_rate
-        if (upd.max_drawdown != null) updateFields.max_drawdown = upd.max_drawdown
-        return supabase.from('leaderboard_ranks').update(updateFields)
-          .eq('source', upd.source).eq('source_trader_id', upd.source_trader_id).eq('season_id', upd.season_id)
-      })
-    )
-    derived += results.filter(r => !r.error).length
-  }
-
-  return derived
-}
-
-/**
- * Pre-populate Redis with top 100 leaderboard rows for each season.
- * Runs as fire-and-forget after leaderboard computation so it doesn't
- * block the cron response. TTL = 30 min (matches cron schedule).
- */
-async function warmupLeaderboardCache(
-  supabase: ReturnType<typeof getSupabaseAdmin>
-): Promise<void> {
-  const { tieredSet } = await import('@/lib/cache/redis-layer')
-
-  // Pre-populate the exact cache keys that /api/traders uses
-  // Key pattern: leaderboard:{season}:{exchange}:{sort}:{order}:{cursor}:{limit}
-  const defaultLimit = 50
-  const warmupTargets = SEASONS.map(season => ({
-    season,
-    key: `leaderboard:${season}:all:arena_score:desc:start:${defaultLimit}`,
-  }))
-
-  await Promise.all(
-    warmupTargets.map(async ({ season, key }) => {
-      const { data, error } = await supabase
-        .from('leaderboard_ranks')
-        .select('source, source_trader_id, rank, arena_score, roi, pnl, win_rate, max_drawdown, handle, avatar_url, followers, trades_count, sharpe_ratio, trader_type, market_type, season_id')
-        .eq('season_id', season)
-        .not('arena_score', 'is', null)
-        .gt('arena_score', 0)
-        .order('arena_score', { ascending: false })
-        .limit(defaultLimit)
-
-      if (error || !data?.length) return
-
-      await tieredSet(key, data, 'warm', ['rankings', `season:${season}`])
-      logger.info(`[warmup] Cached ${data.length} rows → ${key}`)
-    })
-  )
 }
