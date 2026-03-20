@@ -1152,6 +1152,10 @@ async function computeSeason(
       avg_holding_hours: t.avg_holding_hours,
       style_confidence: t.style_confidence,
       sharpe_ratio: t.sharpe_ratio,
+      sortino_ratio: t.sortino_ratio,
+      calmar_ratio: t.calmar_ratio,
+      profit_factor: t.profit_factor,
+      metrics_estimated: t.metrics_estimated,
       trader_type: t.trader_type || (t.source === 'web3_bot' ? 'bot' : null),
     }))
 
