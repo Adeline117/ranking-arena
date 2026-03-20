@@ -555,8 +555,6 @@
     padding: 8px 16px;
     background: var(--color-bg-primary);
     border-bottom: 1px solid var(--color-border-primary);
-    backdrop-filter: blur(16px);
-    -webkit-backdrop-filter: blur(16px);
     transform: translateY(-100%);
     transition: transform 0.25s ease;
   }
@@ -598,8 +596,6 @@
     top: 0;
     z-index: 50;
     background: var(--color-bg-primary);
-    backdrop-filter: blur(16px);
-    -webkit-backdrop-filter: blur(16px);
     margin-left: -12px;
     margin-right: -12px;
     padding-left: 12px !important;
@@ -984,10 +980,10 @@
     border-radius: 16px !important;
   }
   
-  /* 减少移动端的模糊效果以提升性能 */
+  /* 移动端完全禁用 backdrop-filter 以提升性能 */
   .glass {
-    backdrop-filter: blur(8px) !important;
-    -webkit-backdrop-filter: blur(8px) !important;
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
   }
 }
 
@@ -1282,9 +1278,9 @@
   color: var(--color-accent-primary, #8b6fa8);
 }
 
-/* Row sorting animation */
+/* Row sorting animation — simplified transition for performance */
 .ranking-row {
-  transition: transform 0.25s ease-out, opacity 0.2s ease-out, background 0.15s ease;
+  transition: background 0.15s ease;
 }
 
 /* Animate rows entering after sort */
@@ -1303,17 +1299,9 @@
   }
 }
 
-/* Staggered animation for rows */
-.ranking-row:nth-child(1) { animation-delay: 0ms; }
-.ranking-row:nth-child(2) { animation-delay: 15ms; }
-.ranking-row:nth-child(3) { animation-delay: 30ms; }
-.ranking-row:nth-child(4) { animation-delay: 45ms; }
-.ranking-row:nth-child(5) { animation-delay: 60ms; }
-.ranking-row:nth-child(6) { animation-delay: 75ms; }
-.ranking-row:nth-child(7) { animation-delay: 90ms; }
-.ranking-row:nth-child(8) { animation-delay: 105ms; }
-.ranking-row:nth-child(9) { animation-delay: 120ms; }
-.ranking-row:nth-child(10) { animation-delay: 135ms; }
+/* Staggered animation for rows — REMOVED for performance
+   10 simultaneous staggered animations block TBT on mobile.
+   Rows now appear instantly for better perceived performance. */
 
 /* Sort column highlight pulse */
 @keyframes sortPulse {

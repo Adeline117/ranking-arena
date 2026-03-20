@@ -19,7 +19,7 @@ html{-webkit-text-size-adjust:100%;tab-size:4;scroll-behavior:smooth}
 body{margin:0;font-family:var(--font-inter),system-ui,sans-serif;line-height:1.5;-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale;overflow-x:hidden}
 
 /* 关键布局样式 */
-.top-nav{position:sticky;top:0;z-index:100;background:var(--glass-bg,rgba(11,10,16,0.85));backdrop-filter:blur(12px);height:56px;border-bottom:1px solid var(--glass-border,rgba(255,255,255,0.08))}
+.top-nav{position:sticky;top:0;z-index:100;background:var(--bg-primary,#0B0A10);height:56px;border-bottom:1px solid var(--glass-border,rgba(255,255,255,0.08))}
 main{min-height:100vh;background:var(--bg-primary,#0B0A10)}
 
 /* 字体变量 */
@@ -108,10 +108,6 @@ main{min-height:100vh;background:var(--bg-primary,#0B0A10)}
   from{opacity:0;transform:translateY(-4px)}
   to{opacity:1;transform:translateY(0)}
 }
-@keyframes pageEnter{
-  from{opacity:0;transform:translateY(8px)}
-  to{opacity:1;transform:translateY(0)}
-}
 @keyframes spin{to{transform:rotate(360deg)}}
 
 /* 骨架屏 */
@@ -121,11 +117,8 @@ main{min-height:100vh;background:var(--bg-primary,#0B0A10)}
   animation:shimmer 2s infinite linear;
 }
 
-/* 基础动画类 */
-.page-enter{animation:pageEnter 0.3s ease-out forwards}
-
-/* GPU-加速的网格背景 */
-.mesh-gradient-bg{position:fixed;inset:0;opacity:0.5;pointer-events:none;z-index:0;transform:translateZ(0);backface-visibility:hidden;contain:strict layout paint}
+/* mesh-gradient-bg disabled for performance — expensive fixed-position compositor layer */
+.mesh-gradient-bg{display:none}
 
 /* ============================================
    Ranking Table Layout - LCP Element

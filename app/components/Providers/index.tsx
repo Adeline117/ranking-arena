@@ -23,10 +23,15 @@ function ErrorInterceptorInitializer({ children }: { children: ReactNode }) {
   const { showToast } = useToast()
   
   useEffect(() => {
-    // 初始化错误拦截器，传入 toast 函数
-    initializeErrorInterceptors((message, type = 'error') => {
+    // 初始化错误拦截器 — deferred to avoid blocking hydration
+    const init = () => initializeErrorInterceptors((message, type = 'error') => {
       showToast(message, type)
     })
+    if ('requestIdleCallback' in window) {
+      requestIdleCallback(init, { timeout: 3000 })
+    } else {
+      setTimeout(init, 1000)
+    }
   }, [showToast])
   
   return <>{children}</>
@@ -39,9 +44,13 @@ function GlobalLoginModal() {
 }
 
 export default function Providers({ children }: { children: ReactNode }) {
-  // 初始化 CSRF Token
+  // 初始化 CSRF Token — deferred to avoid blocking hydration
   useEffect(() => {
-    initCsrfToken()
+    if ('requestIdleCallback' in window) {
+      requestIdleCallback(() => initCsrfToken(), { timeout: 3000 })
+    } else {
+      setTimeout(() => initCsrfToken(), 1000)
+    }
   }, [])
 
   return (
