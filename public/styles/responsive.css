@@ -91,47 +91,8 @@
   }
 }
 
-/* ============================================
-   响应式排行榜网格
-   ============================================ */
-
-/* 移动端：只显示 Rank | Trader | ROI */
-.ranking-table-grid {
-  grid-template-columns: 36px 1fr 80px !important;
-}
-
-.ranking-table-grid .col-score,
-.ranking-table-grid .col-pnl,
-.ranking-table-grid .col-winrate,
-.ranking-table-grid .col-mdd {
-  display: none !important;
-}
-
-/* 平板 (640px): 显示 Rank | Trader | ROI | Score | PnL */
-@media (min-width: 640px) {
-  .ranking-table-grid {
-    grid-template-columns: 40px 1fr 80px 60px 80px !important;
-  }
-
-  .ranking-table-grid .col-score,
-  .ranking-table-grid .col-pnl {
-    display: flex !important;
-  }
-}
-
-/* 桌面 (768px+)：显示所有列 */
-@media (min-width: 768px) {
-  .ranking-table-grid {
-    grid-template-columns: 44px minmax(140px, 1.5fr) 80px 80px 70px 70px 64px !important;
-  }
-
-  .ranking-table-grid .col-score,
-  .ranking-table-grid .col-pnl,
-  .ranking-table-grid .col-winrate,
-  .ranking-table-grid .col-mdd {
-    display: flex !important;
-  }
-}
+/* Ranking table grid CSS moved to critical-css.ts (inlined in <head>)
+   to prevent CLS from async loading delay. See lib/performance/critical-css.ts */
 
 /* ============================================
    热榜 3列网格响应式
