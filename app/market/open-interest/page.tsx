@@ -1,29 +1,28 @@
 import { Metadata } from 'next'
 import { getSupabaseAdmin } from '@/lib/supabase/server'
 import OpenInterestClient from './OpenInterestClient'
-
-const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://www.arenafi.org'
+import { BASE_URL } from '@/lib/constants/urls'
 
 export const metadata: Metadata = {
   title: 'Open Interest | Arena',
   description:
     'Real-time open interest data across Binance, Bybit, OKX, and Bitget. Track total outstanding futures positions and market depth.',
   alternates: {
-    canonical: `${baseUrl}/market/open-interest`,
+    canonical: `${BASE_URL}/market/open-interest`,
   },
   openGraph: {
     title: 'Open Interest',
     description: 'Real-time open interest data across major crypto exchanges.',
-    url: `${baseUrl}/market/open-interest`,
+    url: `${BASE_URL}/market/open-interest`,
     siteName: 'Arena',
     type: 'website',
-    images: [{ url: `${baseUrl}/og-image.png`, width: 1200, height: 630, alt: 'Arena Open Interest' }],
+    images: [{ url: `${BASE_URL}/og-image.png`, width: 1200, height: 630, alt: 'Arena Open Interest' }],
   },
   twitter: {
     card: 'summary_large_image',
     title: 'Open Interest | Arena',
     description: 'Real-time open interest data across major crypto exchanges.',
-    images: [`${baseUrl}/og-image.png`],
+    images: [`${BASE_URL}/og-image.png`],
   },
 }
 

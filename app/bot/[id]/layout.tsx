@@ -8,7 +8,7 @@ const publicSupabase = supabaseUrl && supabaseKey
   ? createClient(supabaseUrl, supabaseKey, { auth: { persistSession: false } })
   : null
 
-const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://www.arenafi.org'
+import { BASE_URL } from '@/lib/constants/urls'
 
 export async function generateMetadata({ params }: { params: Promise<{ id: string }> }): Promise<Metadata> {
   const { id } = await params
@@ -30,11 +30,11 @@ export async function generateMetadata({ params }: { params: Promise<{ id: strin
         return {
           title,
           description,
-          alternates: { canonical: `${baseUrl}/bot/${id}` },
+          alternates: { canonical: `${BASE_URL}/bot/${id}` },
           openGraph: {
             title: `${title}`,
             description,
-            url: `${baseUrl}/bot/${id}`,
+            url: `${BASE_URL}/bot/${id}`,
             siteName: 'Arena',
             type: 'website',
           },

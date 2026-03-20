@@ -1,13 +1,12 @@
 import { Metadata } from 'next'
-
-const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://www.arenafi.org'
+import { BASE_URL } from '@/lib/constants/urls'
 
 export const metadata: Metadata = {
   title: 'Pro 会员',
   description:
     'Upgrade to Arena Pro for advanced trader alerts, unlimited comparison tools, enhanced filters, and 1-year historical performance data. Flexible plans starting from $4.99/month. Limited Founding Member Lifetime access available at $49.99.',
   alternates: {
-    canonical: `${baseUrl}/pricing`,
+    canonical: `${BASE_URL}/pricing`,
   },
   keywords: [
     'Arena Pro',
@@ -21,16 +20,16 @@ export const metadata: Metadata = {
     title: 'Pro 会员',
     description:
       'Upgrade to Arena Pro — trader alerts, advanced analytics, unlimited comparisons. Starting at $4.99/month.',
-    url: `${baseUrl}/pricing`,
+    url: `${BASE_URL}/pricing`,
     siteName: 'Arena',
     type: 'website',
-    images: [{ url: `${baseUrl}/og-image.png`, width: 1200, height: 630, alt: 'Arena Pro' }],
+    images: [{ url: `${BASE_URL}/og-image.png`, width: 1200, height: 630, alt: 'Arena Pro' }],
   },
   twitter: {
     card: 'summary_large_image',
     title: 'Pro 会员',
     description: 'Upgrade to Arena Pro — trader alerts, advanced analytics, unlimited comparisons. Starting at $4.99/month.',
-    images: [`${baseUrl}/og-image.png`],
+    images: [`${BASE_URL}/og-image.png`],
     creator: '@arenafi',
   },
 }

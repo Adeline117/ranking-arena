@@ -15,7 +15,7 @@ const pool = new Pool({
 
 export const revalidate = 300
 
-const BASE_URL = process.env.NEXT_PUBLIC_SITE_URL || 'https://www.arenafi.org'
+import { BASE_URL } from '@/lib/constants/urls'
 
 interface Props {
   params: Promise<{ handle: string }>

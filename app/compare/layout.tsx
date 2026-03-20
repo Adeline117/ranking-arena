@@ -1,6 +1,5 @@
 import type { Metadata } from 'next'
-
-const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://www.arenafi.org'
+import { BASE_URL } from '@/lib/constants/urls'
 
 export async function generateMetadata(
   props: {
@@ -13,8 +12,8 @@ export async function generateMetadata(
 
   // Build OG image URL (compare OG route handles data fetching)
   const ogUrl = idList.length > 0
-    ? `${baseUrl}/api/og/compare?ids=${idList.join(',')}`
-    : `${baseUrl}/og-image.png`
+    ? `${BASE_URL}/api/og/compare?ids=${idList.join(',')}`
+    : `${BASE_URL}/og-image.png`
 
   const title = 'Compare Traders'
   const description = idList.length > 0
@@ -25,12 +24,12 @@ export async function generateMetadata(
     title,
     description,
     alternates: {
-      canonical: `${baseUrl}/compare`,
+      canonical: `${BASE_URL}/compare`,
     },
     openGraph: {
       title,
       description,
-      url: `${baseUrl}/compare${ids ? '?ids=' + ids : ''}`,
+      url: `${BASE_URL}/compare${ids ? '?ids=' + ids : ''}`,
       siteName: 'Arena',
       type: 'website',
       images: [{ url: ogUrl, width: 1200, height: 630, alt: 'Arena Trader Comparison' }],

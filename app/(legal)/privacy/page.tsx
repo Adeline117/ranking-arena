@@ -1,7 +1,6 @@
 import React from 'react'
 import Link from 'next/link'
-
-const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://www.arenafi.org'
+import { BASE_URL } from '@/lib/constants/urls'
 
 /* ---------- styles ---------- */
 

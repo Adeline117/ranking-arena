@@ -1,4 +1,5 @@
 import type { Metadata } from 'next'
+import { BASE_URL } from '@/lib/constants/urls'
 
 export const metadata: Metadata = {
   title: 'System Status',
@@ -6,7 +7,7 @@ export const metadata: Metadata = {
   openGraph: {
     title: 'System Status',
     description: 'Arena platform system status - database, Redis, and data freshness monitoring.',
-    url: 'https://www.arenafi.org/status',
+    url: `${BASE_URL}/status`,
     siteName: 'Arena',
     type: 'website',
   },

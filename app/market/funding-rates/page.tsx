@@ -1,29 +1,28 @@
 import { Metadata } from 'next'
 import { getSupabaseAdmin } from '@/lib/supabase/server'
 import FundingRatesClient from './FundingRatesClient'
-
-const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://www.arenafi.org'
+import { BASE_URL } from '@/lib/constants/urls'
 
 export const metadata: Metadata = {
   title: 'Funding Rates | Arena',
   description:
     'Real-time perpetual futures funding rates across Binance, Bybit, OKX, and Bitget. Track market sentiment through funding rate data.',
   alternates: {
-    canonical: `${baseUrl}/market/funding-rates`,
+    canonical: `${BASE_URL}/market/funding-rates`,
   },
   openGraph: {
     title: 'Funding Rates',
     description: 'Real-time perpetual futures funding rates across major exchanges.',
-    url: `${baseUrl}/market/funding-rates`,
+    url: `${BASE_URL}/market/funding-rates`,
     siteName: 'Arena',
     type: 'website',
-    images: [{ url: `${baseUrl}/og-image.png`, width: 1200, height: 630, alt: 'Arena Funding Rates' }],
+    images: [{ url: `${BASE_URL}/og-image.png`, width: 1200, height: 630, alt: 'Arena Funding Rates' }],
   },
   twitter: {
     card: 'summary_large_image',
     title: 'Funding Rates | Arena',
     description: 'Real-time perpetual futures funding rates across major exchanges.',
-    images: [`${baseUrl}/og-image.png`],
+    images: [`${BASE_URL}/og-image.png`],
   },
 }
 

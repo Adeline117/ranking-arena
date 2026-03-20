@@ -14,28 +14,27 @@ import type { TraderActivity } from '@/lib/types/activities'
 import TopNav from '@/app/components/layout/TopNav'
 import { tokens } from '@/lib/design-tokens'
 import { RankingSkeleton } from '@/app/components/ui/Skeleton'
+import { BASE_URL } from '@/lib/constants/urls'
 
 export const revalidate = 60 // ISR: 1 minute
-
-const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://www.arenafi.org'
 
 export const metadata: Metadata = {
   title: 'Trader Activity Feed',
   description: 'Live auto-generated feed of trader milestones: rank surges, ROI breakthroughs, win streaks, and large profits.',
-  alternates: { canonical: `${baseUrl}/feed` },
+  alternates: { canonical: `${BASE_URL}/feed` },
   openGraph: {
     title: 'Trader Activity Feed',
     description: 'Live auto-generated feed of trader milestones: rank surges, ROI breakthroughs, win streaks, and large profits.',
-    url: `${baseUrl}/feed`,
+    url: `${BASE_URL}/feed`,
     siteName: 'Arena',
     type: 'website',
-    images: [{ url: `${baseUrl}/og-image.png`, width: 1200, height: 630, alt: 'Arena Trader Activity Feed' }],
+    images: [{ url: `${BASE_URL}/og-image.png`, width: 1200, height: 630, alt: 'Arena Trader Activity Feed' }],
   },
   twitter: {
     card: 'summary_large_image',
     title: 'Trader Activity Feed',
     description: 'Live auto-generated feed of trader milestones: rank surges, ROI breakthroughs, win streaks, and large profits.',
-    images: [`${baseUrl}/og-image.png`],
+    images: [`${BASE_URL}/og-image.png`],
     creator: '@arenafi',
   },
 }

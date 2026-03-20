@@ -15,10 +15,9 @@ import type { TraderActivity, ActivityType } from '@/lib/types/activities'
 import { ACTIVITY_META } from '@/lib/types/activities'
 import TopNav from '@/app/components/layout/TopNav'
 import { tokens } from '@/lib/design-tokens'
+import { BASE_URL } from '@/lib/constants/urls'
 
 export const revalidate = 300 // ISR: 5 minutes
-
-const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://www.arenafi.org'
 
 // ---------------------------------------------------------------------------
 // Server data fetch
@@ -67,7 +66,7 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
     openGraph: {
       title,
       description,
-      url: `${baseUrl}/feed/${id}`,
+      url: `${BASE_URL}/feed/${id}`,
       siteName: 'Arena',
       type: 'article',
     },

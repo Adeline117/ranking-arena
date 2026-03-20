@@ -1,6 +1,7 @@
 import { Metadata } from 'next'
 import { logger } from '@/lib/logger'
 import { getSupabaseAdmin } from '@/lib/supabase/server'
+import { BASE_URL } from '@/lib/constants/urls'
 
 export async function generateMetadata({ params }: { params: Promise<{ handle: string }> }): Promise<Metadata> {
   const resolvedParams = await params
@@ -16,8 +17,7 @@ export async function generateMetadata({ params }: { params: Promise<{ handle: s
 
     if (profile) {
       const title = `${profile.handle}`
-      const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://www.arenafi.org'
-      const canonicalUrl = `${baseUrl}/u/${encodeURIComponent(handle)}`
+      const canonicalUrl = `${BASE_URL}/u/${encodeURIComponent(handle)}`
       const description = profile.bio
         ? `${profile.bio.substring(0, 150)}${profile.bio.length > 150 ? '...' : ''}`
         : `查看 ${profile.handle} 的个人资料和交易动态。`
@@ -32,7 +32,7 @@ export async function generateMetadata({ params }: { params: Promise<{ handle: s
           title,
           description,
           type: 'profile',
-          url: `${process.env.NEXT_PUBLIC_APP_URL || 'https://www.arenafi.org'}/u/${encodeURIComponent(handle)}`,
+          url: `${BASE_URL}/u/${encodeURIComponent(handle)}`,
           images: profile.avatar_url ? [profile.avatar_url] : undefined,
         },
         twitter: {
@@ -52,7 +52,7 @@ export async function generateMetadata({ params }: { params: Promise<{ handle: s
     title: handle,
     description: `View ${handle}'s profile and trading activity on Arena.`,
     alternates: {
-      canonical: `${process.env.NEXT_PUBLIC_APP_URL || 'https://www.arenafi.org'}/u/${encodeURIComponent(handle)}`,
+      canonical: `${BASE_URL}/u/${encodeURIComponent(handle)}`,
     },
   }
 }

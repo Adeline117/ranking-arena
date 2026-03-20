@@ -12,6 +12,7 @@ import ExchangeRankingClient from './ExchangeRankingClient'
 import { SectionErrorBoundary } from '@/app/components/utils/ErrorBoundary'
 import { logger } from '@/lib/logger'
 import { unstable_cache } from 'next/cache'
+import { BASE_URL } from '@/lib/constants/urls'
 
 export const revalidate = 600 // ISR: 10 min (aligned with compute-leaderboard on-demand revalidation)
 
@@ -96,7 +97,7 @@ export async function generateMetadata({
   const displayName = EXCHANGE_NAMES[exchange]
   const sourceType = SOURCE_TYPE_MAP[exchange] || 'futures'
   const labels = TYPE_LABELS[sourceType] || TYPE_LABELS.futures
-  const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://www.arenafi.org'
+  const baseUrl = BASE_URL
 
   // SEO-optimized title targeting long-tail keywords
   const title = `Top ${displayName} Traders ${CURRENT_YEAR} — Live ${labels.en} Rankings | Arena`
@@ -269,7 +270,7 @@ async function RankingsContent({ exchange }: { exchange: string }) {
   const { traders, totalCount, top10ForJsonLd } = await fetchExchangeTradersSSR(exchange)
   const sourceType = SOURCE_TYPE_MAP[exchange] || 'futures'
   const labels = TYPE_LABELS[sourceType] || TYPE_LABELS.futures
-  const baseUrl = 'https://www.arenafi.org'
+  const baseUrl = BASE_URL
 
   // JSON-LD ItemList — top 10 only to keep HTML lean.
   // avatar_url is in a separate query result and NOT passed as RSC props.

@@ -1,4 +1,5 @@
 import type { Metadata } from 'next'
+import { BASE_URL } from '@/lib/constants/urls'
 
 export const metadata: Metadata = {
   title: 'Claim Your Crypto Trader Profile',
@@ -6,7 +7,7 @@ export const metadata: Metadata = {
   openGraph: {
     title: 'Claim Your Crypto Trader Profile',
     description: 'Verify your identity and take ownership of your trader profile on Arena. Get a verified badge and customize your profile.',
-    url: 'https://www.arenafi.org/claim',
+    url: `${BASE_URL}/claim`,
     siteName: 'Arena',
     type: 'website',
     images: [
@@ -24,7 +25,7 @@ export const metadata: Metadata = {
     description: 'Verify your identity and take ownership of your trader profile on Arena.',
   },
   alternates: {
-    canonical: 'https://www.arenafi.org/claim',
+    canonical: `${BASE_URL}/claim`,
   },
 }
 

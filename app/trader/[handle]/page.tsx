@@ -9,6 +9,7 @@ import TraderProfileClient, { type UnregisteredTraderData } from './TraderProfil
 import { ErrorBoundary } from '@/app/components/utils/ErrorBoundary'
 import { resolveTrader, getTraderDetail, toTraderPageData } from '@/lib/data/unified'
 import { LR } from '@/lib/types/schema-mapping'
+import { BASE_URL } from '@/lib/constants/urls'
 
 // Derive display names from central config
 const EXCHANGE_DISPLAY: Record<string, string> = Object.fromEntries(
@@ -104,7 +105,7 @@ const cachedFindUserHandleByTrader = unstable_cache(
 export async function generateMetadata({ params }: { params: Promise<{ handle: string }> }): Promise<Metadata> {
   const { handle } = await params
   const decoded = decodeURIComponent(handle)
-  const BASE = 'https://www.arenafi.org'
+  const BASE = BASE_URL
 
   try {
     // Use cached resolver — deduplicates with the page component's resolveTrader call
@@ -277,7 +278,7 @@ export default async function TraderPage({ params, searchParams }: { params: Pro
     '@context': 'https://schema.org',
     '@type': 'Person',
     name: traderData.handle,
-    url: `https://www.arenafi.org/trader/${encodeURIComponent(traderData.handle)}`,
+    url: `${BASE_URL}/trader/${encodeURIComponent(traderData.handle)}`,
     ...(traderData.avatar_url ? { image: traderData.avatar_url } : {}),
     description: [
       `${exchange} crypto trader`,
@@ -286,7 +287,7 @@ export default async function TraderPage({ params, searchParams }: { params: Pro
       rank != null ? `Ranked ${rank} on Arena` : null,
     ].filter(Boolean).join('. '),
     memberOf: { '@type': 'Organization', name: exchange },
-    sameAs: [`https://www.arenafi.org/trader/${encodeURIComponent(traderData.handle)}`],
+    sameAs: [`${BASE_URL}/trader/${encodeURIComponent(traderData.handle)}`],
   }
 
   return (

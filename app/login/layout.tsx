@@ -1,4 +1,5 @@
 import type { Metadata } from 'next'
+import { BASE_URL } from '@/lib/constants/urls'
 
 export const metadata: Metadata = {
   title: 'Login',
@@ -6,7 +7,7 @@ export const metadata: Metadata = {
   openGraph: {
     title: 'Login',
     description: 'Sign in to Arena - access crypto trader rankings, follow top traders, and join the community.',
-    url: 'https://www.arenafi.org/login',
+    url: `${BASE_URL}/login`,
     siteName: 'Arena',
     type: 'website',
   },

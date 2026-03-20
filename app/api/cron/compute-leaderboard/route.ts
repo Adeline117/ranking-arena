@@ -458,10 +458,10 @@ async function computeSeason(
   // If v2 coverage drops below expectations, run the backfill migration again.
   logger.info(`[${season}] ${traderMap.size} unique traders from v2`)
 
-  // Phase 3: Fill missing win_rate/max_drawdown from trader_stats_detail (enrichment table)
-  // This catches data from enrichment runs that wrote to stats_detail but not back to snapshots
+  // Phase 3: Fill missing metrics from trader_stats_detail (enrichment table)
+  // Now fills ALL available fields: win_rate, max_drawdown, sharpe, trades_count, avg_holding_hours
   const tradersNeedingEnrichment = Array.from(traderMap.values())
-    .filter(t => t.win_rate == null || t.max_drawdown == null)
+    .filter(t => t.win_rate == null || t.max_drawdown == null || t.sharpe_ratio == null || t.trades_count == null || t.avg_holding_hours == null)
   if (tradersNeedingEnrichment.length > 0) {
     const enrichBySource = new Map<string, string[]>()
     for (const t of tradersNeedingEnrichment) {
@@ -473,16 +473,14 @@ async function computeSeason(
       Array.from(enrichBySource.entries()).map(async ([source, traderIds]) => {
         for (let i = 0; i < traderIds.length; i += 100) {
           const chunk = traderIds.slice(i, i + 100)
-          // Small chunks (100 traders) × ~10 period rows each = ~1000 rows max
           const { data: statsRows } = await supabase
             .from('trader_stats_detail')
-            .select('source_trader_id, profitable_trades_pct, max_drawdown, sharpe_ratio, winning_positions, total_positions, period')
+            .select('source_trader_id, profitable_trades_pct, max_drawdown, sharpe_ratio, winning_positions, total_positions, total_trades, avg_holding_time_hours, period')
             .eq('source', source)
             .in('source_trader_id', chunk)
             .order('captured_at', { ascending: false })
             .limit(2000)
           if (!statsRows) continue
-          // Dedup: keep the best row per trader (prefer matching season, then most recent)
           const bestPerTrader = new Map<string, typeof statsRows[0]>()
           for (const sr of statsRows) {
             const tid = sr.source_trader_id.startsWith('0x') ? sr.source_trader_id.toLowerCase() : sr.source_trader_id
@@ -503,6 +501,15 @@ async function computeSeason(
             if (sr.sharpe_ratio != null && existing.sharpe_ratio == null) {
               existing.sharpe_ratio = sr.sharpe_ratio
             }
+            // NEW: Fill trades_count from total_trades or total_positions
+            if (existing.trades_count == null) {
+              const tc = sr.total_trades ?? sr.total_positions
+              if (tc != null && tc > 0) existing.trades_count = tc
+            }
+            // NEW: Fill avg_holding_hours
+            if (sr.avg_holding_time_hours != null && existing.avg_holding_hours == null) {
+              existing.avg_holding_hours = sr.avg_holding_time_hours
+            }
           }
         }
       })
@@ -510,10 +517,10 @@ async function computeSeason(
     logger.info(`[${season}] Enriched ${tradersNeedingEnrichment.length} traders from stats_detail`)
   }
 
-  // Phase 4: Derive win_rate/max_drawdown from equity_curve (daily PnL) as universal fallback
-  // This covers ALL platforms that have equity curve data but no native WR/MDD
+  // Phase 4: Derive win_rate/max_drawdown/sharpe from equity_curve (daily PnL) as universal fallback
+  // This covers ALL platforms that have equity curve data but no native WR/MDD/Sharpe
   const stillNeedingData = Array.from(traderMap.values())
-    .filter(t => t.win_rate == null || t.max_drawdown == null)
+    .filter(t => t.win_rate == null || t.max_drawdown == null || t.sharpe_ratio == null)
   if (stillNeedingData.length > 0) {
     const eqBySource = new Map<string, string[]>()
     for (const t of stillNeedingData) {
@@ -568,7 +575,6 @@ async function computeSeason(
             // Derive max_drawdown from cumulative PnL or ROI curve (lowered from 3 to 2 points)
             if (existing.max_drawdown == null && points.length >= 2) {
               let peak = 0, maxDD = 0
-              // Try ROI first, fall back to PnL
               const values = points.map(p => p.roi ?? p.pnl ?? 0)
               for (const v of values) {
                 if (v > peak) peak = v
@@ -580,6 +586,27 @@ async function computeSeason(
               if (maxDD > 0.01 && maxDD <= 100) {
                 existing.max_drawdown = Math.round(maxDD * 100) / 100
                 derived++
+              }
+            }
+
+            // Derive sharpe_ratio from daily ROI returns (annualized, risk-free=0)
+            if (existing.sharpe_ratio == null && points.length >= 7) {
+              const roiValues = points.map(p => p.roi ?? 0)
+              const dailyReturns: number[] = []
+              for (let j = 1; j < roiValues.length; j++) {
+                dailyReturns.push(roiValues[j] - roiValues[j - 1])
+              }
+              if (dailyReturns.length >= 5) {
+                const mean = dailyReturns.reduce((s, r) => s + r, 0) / dailyReturns.length
+                const variance = dailyReturns.reduce((s, r) => s + (r - mean) ** 2, 0) / dailyReturns.length
+                const stdDev = Math.sqrt(variance)
+                if (stdDev > 0) {
+                  const sharpe = (mean / stdDev) * Math.sqrt(365)
+                  if (sharpe > -10 && sharpe < 10) {
+                    existing.sharpe_ratio = Math.round(sharpe * 100) / 100
+                    derived++
+                  }
+                }
               }
             }
           }

@@ -1,12 +1,11 @@
 import type { Metadata } from 'next'
-
-const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://www.arenafi.org'
+import { BASE_URL } from '@/lib/constants/urls'
 
 export const metadata: Metadata = {
   title: '免责声明',
   description: 'Arena risk disclaimer — important information about crypto trading risks and data accuracy.',
   alternates: {
-    canonical: `${baseUrl}/disclaimer`,
+    canonical: `${BASE_URL}/disclaimer`,
   },
 }
 
