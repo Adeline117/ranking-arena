@@ -104,24 +104,14 @@ const getHeroStats = unstable_cache(
 
 export default async function Page() {
   const [{ traders: initialTraders, lastUpdated }, heroStats] = await Promise.all([
-    getInitialTraders('90D', 20),
+    getInitialTraders('90D', 10),
     getHeroStats(),
   ])
-
-  // Preload top 3 trader avatars — use direct CDN URLs (avoids /api/avatar proxy roundtrip)
-  const top3Avatars = initialTraders
-    .slice(0, 3)
-    .filter(t => t.avatar_url && !t.avatar_url.startsWith('/'))
-    .map(t => t.avatar_url!)
 
   const ssrTable = <SSRRankingTable traders={initialTraders} />
 
   return (
     <>
-      {/* Preload top 3 avatars — fetchpriority=auto to avoid competing with LCP text */}
-      {top3Avatars.map(url => (
-        <link key={url} rel="preload" as="image" href={url} crossOrigin="anonymous" />
-      ))}
       {/* REMOVED: <link rel="preload" as="fetch" href="/api/traders?timeRange=90D&limit=200">
           This was forcing the browser to download ranking data before any JS initialized.
           The SSR table already shows data — the client fetch can happen lazily. */}
