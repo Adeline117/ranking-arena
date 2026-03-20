@@ -150,14 +150,54 @@ export async function fetchGainsPositionHistory(_addr: string): Promise<Position
   return []
 }
 
-// Aevo
+// Aevo — native API provides stats directly (better than Copin)
 export async function fetchAevoEquityCurve(_addr: string, _days: number): Promise<EquityCurvePoint[]> {
-  // Aevo API only provides leaderboard with aggregate PnL/volume.
+  // Aevo API only provides aggregate stats, no per-day equity data.
+  // Falls back to buildEquityCurveFromSnapshots in enrichment-runner.
   return []
 }
+
 export async function fetchAevoStatsDetail(addr: string): Promise<StatsDetail | null> {
+  // Primary: Aevo native /account/{address}/statistics API (richer data)
+  try {
+    const nativeStats = await fetchJson<{
+      win_rate?: number
+      max_drawdown?: number
+      sharpe_ratio?: number
+      total_trades?: number
+      total_volume?: number
+      pnl?: number
+    }>(`https://api.aevo.xyz/account/${addr}/statistics`, { timeoutMs: 10000 })
+
+    if (nativeStats && (nativeStats.win_rate != null || nativeStats.max_drawdown != null)) {
+      return {
+        totalTrades: nativeStats.total_trades ?? null,
+        profitableTradesPct: nativeStats.win_rate != null ? nativeStats.win_rate * 100 : null,
+        avgHoldingTimeHours: null,
+        avgProfit: null,
+        avgLoss: null,
+        largestWin: null,
+        largestLoss: null,
+        sharpeRatio: nativeStats.sharpe_ratio ?? null,
+        maxDrawdown: nativeStats.max_drawdown != null ? Math.abs(nativeStats.max_drawdown) * 100 : null,
+        currentDrawdown: null,
+        volatility: null,
+        copiersCount: null,
+        copiersPnl: null,
+        aum: null,
+        winningPositions: null,
+        totalPositions: nativeStats.total_trades ?? null,
+      }
+    }
+  } catch (err) {
+    logger.warn(`[aevo] Native stats failed for ${addr}: ${err instanceof Error ? err.message : String(err)}`)
+  }
+
+  // Fallback: Copin leaderboard stats
   return buildCopinStatsDetail('aevo', addr)
 }
+
 export async function fetchAevoPositionHistory(_addr: string): Promise<PositionHistoryItem[]> {
+  // Aevo does not expose per-trade history via public API
   return []
 }

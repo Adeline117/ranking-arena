@@ -245,6 +245,7 @@ async function fetchBlockscoutLogs(params: {
   address: string
   topic0: string
   topic1?: string
+  topic2?: string
   fromBlock: number
   toBlock: string | number
   page?: number
@@ -261,6 +262,10 @@ async function fetchBlockscoutLogs(params: {
   if (params.topic1) {
     url.searchParams.set('topic1', params.topic1)
     url.searchParams.set('topic0_1_opr', 'and')
+  }
+  if (params.topic2) {
+    url.searchParams.set('topic2', params.topic2)
+    url.searchParams.set('topic0_2_opr', 'and')
   }
   url.searchParams.set('fromBlock', String(params.fromBlock))
   url.searchParams.set('toBlock', String(params.toBlock))
@@ -317,11 +322,13 @@ export async function fetchKwentaOnchainPositionHistory(
     // Kwenta accountIds are uint128 — pad to 32 bytes for topic2
     const paddedId = '0x' + BigInt(traderAccountId).toString(16).padStart(64, '0')
 
+    // OrderSettled(uint128 indexed marketId, uint128 indexed accountId, ...)
+    // topic0 = event hash, topic1 = marketId, topic2 = accountId
     const events = await fetchBlockscoutLogs({
       chainId: BASE_CHAIN_ID,
       address: SYNTHETIX_PERPS_PROXY_BASE,
       topic0: ORDER_SETTLED_TOPIC,
-      topic1: paddedId, // topic2 = accountId, but Blockscout uses topic1 param for any indexed topic
+      topic2: paddedId, // accountId is the 2nd indexed param (topic2)
       fromBlock: 10000000, // ~Jan 2024 when Synthetix V3 launched on Base
       toBlock: 'latest',
       offset: limit,
