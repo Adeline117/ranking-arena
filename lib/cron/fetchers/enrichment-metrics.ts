@@ -97,13 +97,62 @@ export function calculateSharpeRatio(curve: EquityCurvePoint[], _period: string)
 }
 
 /**
- * Enhance stats detail with derived metrics from equity curve
+ * Calculate average holding time from position history.
+ * Returns hours (e.g. 24.5 for 1 day, 0.5 for 30 min).
+ */
+export function calculateAvgHoldingHours(positions: PositionHistoryItem[]): number | null {
+  const withTimes = positions.filter(p => p.openTime && p.closeTime)
+  if (withTimes.length < 2) return null
+
+  let totalHours = 0
+  let count = 0
+  for (const p of withTimes) {
+    const open = new Date(p.openTime!).getTime()
+    const close = new Date(p.closeTime!).getTime()
+    if (close > open) {
+      totalHours += (close - open) / 3600000
+      count++
+    }
+  }
+
+  if (count === 0) return null
+  const avg = totalHours / count
+  return avg > 0 && avg < 100000 ? Math.round(avg * 100) / 100 : null
+}
+
+/**
+ * Calculate avg profit and avg loss from position history
+ */
+export function calculateAvgProfitLoss(positions: PositionHistoryItem[]): {
+  avgProfit: number | null
+  avgLoss: number | null
+  largestWin: number | null
+  largestLoss: number | null
+} {
+  const withPnl = positions.filter(p => p.pnlUsd != null)
+  if (withPnl.length < 2) return { avgProfit: null, avgLoss: null, largestWin: null, largestLoss: null }
+
+  const profits = withPnl.filter(p => (p.pnlUsd ?? 0) > 0).map(p => p.pnlUsd!)
+  const losses = withPnl.filter(p => (p.pnlUsd ?? 0) < 0).map(p => p.pnlUsd!)
+
+  return {
+    avgProfit: profits.length > 0 ? profits.reduce((a, b) => a + b, 0) / profits.length : null,
+    avgLoss: losses.length > 0 ? losses.reduce((a, b) => a + b, 0) / losses.length : null,
+    largestWin: profits.length > 0 ? Math.max(...profits) : null,
+    largestLoss: losses.length > 0 ? Math.min(...losses) : null,
+  }
+}
+
+/**
+ * Enhance stats detail with derived metrics from equity curve AND position history
  */
 export function enhanceStatsWithDerivedMetrics(
   stats: StatsDetail,
   curve: EquityCurvePoint[],
-  period: string
+  period: string,
+  positions?: PositionHistoryItem[]
 ): StatsDetail {
+  // From equity curve
   if (!stats.volatility && curve.length >= 3) {
     stats.volatility = calculateVolatility(curve)
   }
@@ -121,6 +170,47 @@ export function enhanceStatsWithDerivedMetrics(
 
   if (!stats.sharpeRatio && curve.length >= 7) {
     stats.sharpeRatio = calculateSharpeRatio(curve, period)
+  }
+
+  // Derive win_rate from equity curve daily returns if not available
+  if (stats.profitableTradesPct == null && curve.length >= 5) {
+    let wins = 0, total = 0
+    for (let i = 1; i < curve.length; i++) {
+      const dailyReturn = curve[i].roi - curve[i - 1].roi
+      if (dailyReturn > 0.01) wins++
+      if (Math.abs(dailyReturn) > 0.01) total++
+    }
+    if (total >= 3) {
+      stats.profitableTradesPct = Math.round((wins / total) * 10000) / 100
+    }
+  }
+
+  // From position history
+  if (positions && positions.length > 0) {
+    if (stats.avgHoldingTimeHours == null) {
+      stats.avgHoldingTimeHours = calculateAvgHoldingHours(positions)
+    }
+
+    // Fill avg profit/loss and largest win/loss from positions
+    const { avgProfit, avgLoss, largestWin, largestLoss } = calculateAvgProfitLoss(positions)
+    if (stats.avgProfit == null && avgProfit != null) stats.avgProfit = avgProfit
+    if (stats.avgLoss == null && avgLoss != null) stats.avgLoss = avgLoss
+    if (stats.largestWin == null && largestWin != null) stats.largestWin = largestWin
+    if (stats.largestLoss == null && largestLoss != null) stats.largestLoss = largestLoss
+
+    // Fill winning/total positions count
+    if (stats.winningPositions == null) {
+      const withPnl = positions.filter(p => p.pnlUsd != null)
+      if (withPnl.length > 0) {
+        stats.winningPositions = withPnl.filter(p => (p.pnlUsd ?? 0) > 0).length
+        stats.totalPositions = withPnl.length
+      }
+    }
+
+    // Fill totalTrades from position count
+    if (stats.totalTrades == null && positions.length > 0) {
+      stats.totalTrades = positions.length
+    }
   }
 
   return stats
