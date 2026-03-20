@@ -45,10 +45,10 @@ export function AsyncStylesheets() {
     }
 
     if ('requestIdleCallback' in window) {
-      requestIdleCallback(loadStyles, { timeout: 2000 })
+      requestIdleCallback(loadStyles, { timeout: 4000 })
     } else {
-      // Fallback for Safari
-      setTimeout(loadStyles, 100)
+      // Fallback for Safari — delay to avoid competing with LCP
+      setTimeout(loadStyles, 1000)
     }
   }, [])
 

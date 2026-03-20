@@ -401,13 +401,14 @@ export function useTraderData(options: UseTraderDataOptions = {}) {
         }
       }
 
-      // Use requestIdleCallback to defer fetch, with 3s timeout fallback
+      // Use requestIdleCallback to defer fetch, with 5s timeout fallback
+      // Increased from 3s to 5s to avoid competing with LCP/TBT budget
       if ('requestIdleCallback' in window) {
-        const idleId = requestIdleCallback(deferredFetch, { timeout: 3000 })
+        const idleId = requestIdleCallback(deferredFetch, { timeout: 5000 })
         return () => cancelIdleCallback(idleId)
       } else {
-        // Safari fallback: wait 2s after page load
-        const timerId = setTimeout(deferredFetch, 2000)
+        // Safari fallback: wait 3s after page load
+        const timerId = setTimeout(deferredFetch, 3000)
         return () => clearTimeout(timerId)
       }
     }

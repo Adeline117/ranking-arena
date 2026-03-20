@@ -38,11 +38,9 @@ export default function HomePage({ initialTraders, initialLastUpdated, heroStats
       suppressHydrationWarning
       className="home-page-root"
     >
-      <div className="mesh-gradient-bg home-mesh-bg" />
-
       <TopNav email={null} />
 
-      <div className="container-padding page-enter has-mobile-nav home-page-container">
+      <div className="container-padding has-mobile-nav home-page-container">
         <h1 className="sr-only">Arena</h1>
         {/* HomeHero is eagerly imported — renders immediately. Suspense is for lazy NumberTicker inside it. */}
         <div className="contain-content">
