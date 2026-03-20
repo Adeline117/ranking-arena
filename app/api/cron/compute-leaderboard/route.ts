@@ -793,6 +793,42 @@ async function computeSeason(
     logger.info(`[${season}] Phase 5: estimated ${phase5Count} WR/MDD/sharpe values from ROI`)
   }
 
+  // Phase 5.6: Derive calmar_ratio from ROI/MDD, sortino from equity curve or sharpe
+  let phase56Count = 0
+  for (const snap of Array.from(traderMap.values())) {
+    // Calmar = annualized ROI / max_drawdown
+    if (snap.calmar_ratio == null && snap.roi != null && snap.max_drawdown != null && snap.max_drawdown > 0) {
+      // Annualize based on season window
+      const daysMap: Record<string, number> = { '7D': 7, '30D': 30, '90D': 90 }
+      const windowDays = daysMap[season] || 30
+      const annualizedRoi = snap.roi * (365 / windowDays)
+      const calmar = annualizedRoi / snap.max_drawdown
+      if (calmar > -100 && calmar < 100) {
+        snap.calmar_ratio = Math.round(calmar * 100) / 100
+        phase56Count++
+      }
+    }
+    // Sortino ≈ sharpe * sqrt(2) for normal distributions (conservative estimate)
+    if (snap.sortino_ratio == null && snap.sharpe_ratio != null) {
+      snap.sortino_ratio = Math.round(snap.sharpe_ratio * 1.41 * 100) / 100
+      phase56Count++
+    }
+    // Profit factor from win_rate and avg profit/loss estimates
+    if (snap.profit_factor == null && snap.win_rate != null && snap.win_rate > 0 && snap.win_rate < 100) {
+      // PF = (WR * avg_win) / ((1-WR) * avg_loss) — estimate avg_win/avg_loss ratio from WR
+      const wr = snap.win_rate / 100
+      // Simple model: PF = WR / (1-WR) * adjustment (1.0-1.5 typical)
+      const pf = (wr / (1 - wr))
+      if (pf > 0 && pf < 50) {
+        snap.profit_factor = Math.round(pf * 100) / 100
+        phase56Count++
+      }
+    }
+  }
+  if (phase56Count > 0) {
+    logger.info(`[${season}] Phase 5.6: derived ${phase56Count} calmar/sortino/profit_factor values`)
+  }
+
   // Phase 6: Classify trading_style for all traders missing it
   let styleCount = 0
   for (const snap of traderMap.values()) {
@@ -1026,7 +1062,7 @@ async function computeSeason(
 
   // Phase 2: Incremental upsert — only update changed rows to reduce write volume ~40%
   // Fetch current arena_scores to diff against
-  const currentScoreMap = new Map<string, { arena_score: number; rank: number; handle: string | null; avatar_url: string | null; sharpe_ratio: number | null; trading_style: string | null; trades_count: number | null }>()
+  const currentScoreMap = new Map<string, { arena_score: number; rank: number; handle: string | null; avatar_url: string | null; sharpe_ratio: number | null; trading_style: string | null; trades_count: number | null; calmar_ratio: number | null; sortino_ratio: number | null; profit_factor: number | null }>()
   {
     // Fetch in pages of 1000 to handle large leaderboards
     let offset = 0
@@ -1040,7 +1076,7 @@ async function computeSeason(
       }
       const { data: currentScores } = await supabase
         .from('leaderboard_ranks')
-        .select('source, source_trader_id, arena_score, rank, handle, avatar_url, sharpe_ratio, trading_style, trades_count')
+        .select('source, source_trader_id, arena_score, rank, handle, avatar_url, sharpe_ratio, trading_style, trades_count, calmar_ratio, sortino_ratio, profit_factor')
         .eq('season_id', season)
         .range(offset, offset + PAGE - 1)
       if (!currentScores?.length) break
@@ -1053,6 +1089,9 @@ async function computeSeason(
           sharpe_ratio: r.sharpe_ratio,
           trading_style: r.trading_style,
           trades_count: r.trades_count,
+          calmar_ratio: r.calmar_ratio,
+          sortino_ratio: r.sortino_ratio,
+          profit_factor: r.profit_factor,
         })
       }
       if (currentScores.length < PAGE) break
@@ -1070,6 +1109,9 @@ async function computeSeason(
     if (t.sharpe_ratio != null && current.sharpe_ratio == null) return true
     if (t.trading_style != null && current.trading_style == null) return true
     if (t.trades_count != null && current.trades_count == null) return true
+    if (t.calmar_ratio != null && current.calmar_ratio == null) return true
+    if (t.sortino_ratio != null && current.sortino_ratio == null) return true
+    if (t.profit_factor != null && current.profit_factor == null) return true
     const newRank = idx + 1
     if (current.rank !== newRank) return true // rank changed
     if (current.arena_score === 0) return t.arena_score !== 0 // was zero, check if now non-zero
@@ -1123,10 +1165,9 @@ async function computeSeason(
     }
   }
 
-  // Clean up rows not updated in 14 days (truly abandoned data)
-  // Previously used 2-minute cutoff which aggressively deleted data from
-  // platforms with broken fetchers, causing 70%+ count drops.
-  const cutoff = new Date(Date.now() - 14 * 24 * 60 * 60 * 1000).toISOString()
+  // Clean up rows not updated in 3 days (stale data from dropped traders)
+  // Previously used 14-day cutoff which left too many stale null-metric rows.
+  const cutoff = new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString()
   const { data: staleRows, error: staleErr } = await supabase
     .from('leaderboard_ranks')
     .select('id')
