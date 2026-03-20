@@ -796,33 +796,35 @@ async function computeSeason(
   // Phase 5.6: Derive calmar_ratio from ROI/MDD, sortino from equity curve or sharpe
   let phase56Count = 0
   for (const snap of Array.from(traderMap.values())) {
-    // Calmar = annualized ROI / max_drawdown
-    if (snap.calmar_ratio == null && snap.roi != null && snap.max_drawdown != null && snap.max_drawdown > 0) {
-      // Annualize based on season window
-      const daysMap: Record<string, number> = { '7D': 7, '30D': 30, '90D': 90 }
-      const windowDays = daysMap[season] || 30
-      const annualizedRoi = snap.roi * (365 / windowDays)
-      const calmar = annualizedRoi / snap.max_drawdown
-      if (calmar > -100 && calmar < 100) {
-        snap.calmar_ratio = Math.round(calmar * 100) / 100
-        phase56Count++
+    // Calmar = ROI / max_drawdown (non-annualized, more meaningful for short windows)
+    if (snap.calmar_ratio == null && snap.roi != null && snap.max_drawdown != null) {
+      if (snap.max_drawdown > 0) {
+        const calmar = snap.roi / snap.max_drawdown
+        snap.calmar_ratio = Math.round(Math.max(-50, Math.min(50, calmar)) * 100) / 100
+      } else {
+        // MDD=0: infinite calmar, cap at ±10 based on ROI sign
+        snap.calmar_ratio = snap.roi > 0 ? 10 : snap.roi < 0 ? -10 : 0
       }
+      phase56Count++
     }
     // Sortino ≈ sharpe * sqrt(2) for normal distributions (conservative estimate)
     if (snap.sortino_ratio == null && snap.sharpe_ratio != null) {
       snap.sortino_ratio = Math.round(snap.sharpe_ratio * 1.41 * 100) / 100
       phase56Count++
     }
-    // Profit factor from win_rate and avg profit/loss estimates
-    if (snap.profit_factor == null && snap.win_rate != null && snap.win_rate > 0 && snap.win_rate < 100) {
-      // PF = (WR * avg_win) / ((1-WR) * avg_loss) — estimate avg_win/avg_loss ratio from WR
+    // Profit factor from win_rate
+    if (snap.profit_factor == null && snap.win_rate != null) {
       const wr = snap.win_rate / 100
-      // Simple model: PF = WR / (1-WR) * adjustment (1.0-1.5 typical)
-      const pf = (wr / (1 - wr))
-      if (pf > 0 && pf < 50) {
-        snap.profit_factor = Math.round(pf * 100) / 100
-        phase56Count++
+      if (wr <= 0) {
+        snap.profit_factor = 0 // All losses
+      } else if (wr >= 1) {
+        snap.profit_factor = 10 // All wins, cap at 10
+      } else {
+        // PF = WR / (1-WR) — odds ratio
+        const pf = wr / (1 - wr)
+        snap.profit_factor = Math.round(Math.min(pf, 50) * 100) / 100
       }
+      phase56Count++
     }
   }
   if (phase56Count > 0) {
