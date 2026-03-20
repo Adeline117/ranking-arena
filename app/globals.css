@@ -7,21 +7,8 @@
 /* Two-phase rendering: Hide SSR shell once the interactive HomePage mounts.
    #homepage-interactive is added by HomePage.tsx (loaded via ssr:false dynamic import).
    When it exists in the DOM, the SSR table shell is no longer needed. */
-/* Two-phase rendering: Stack SSR shell and interactive page in the same
-   grid cell using CSS Grid. Both children overlap at row 1 / col 1.
-   When the interactive page mounts, the SSR shell fades out IN PLACE
-   without causing layout shift (no height collapse, no reflow). */
-.homepage-phase-container {
-  display: grid;
-  grid-template-columns: 1fr;
-}
-.homepage-phase-container > * {
-  grid-row: 1;
-  grid-column: 1;
-}
 body:has(#homepage-interactive) #ssr-homepage-shell {
-  visibility: hidden;
-  pointer-events: none;
+  display: none;
 }
 
 /*
