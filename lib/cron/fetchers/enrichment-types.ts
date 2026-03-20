@@ -39,10 +39,9 @@ export async function fetchWithProxyFallback<T>(
       try {
         logger.warn(`[enrichment] Blocked, retrying via CF proxy: ${url.slice(0, 80)}...`)
         const proxyTarget = `${PROXY_URL}?url=${encodeURIComponent(url)}`
+        // Use GET (proxy fetches via query param, not POST body)
         return await fetchJson<T>(proxyTarget, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: opts.body,
+          method: 'GET',
           timeoutMs: opts.timeoutMs,
         })
       } catch (cfErr) {
