@@ -86,12 +86,11 @@ function convertProfitListToEquityCurve(
   const relevantData = profitList.slice(-days)
   if (relevantData.length === 0) return []
 
-  const today = new Date()
+  const todayMs = Date.now()
   const points: EquityCurvePoint[] = []
 
   for (let i = 0; i < relevantData.length; i++) {
-    const date = new Date(today)
-    date.setDate(date.getDate() - (relevantData.length - 1 - i))
+    const date = new Date(todayMs - (relevantData.length - 1 - i) * 86400000)
     points.push({
       date: date.toISOString().split('T')[0],
       roi: relevantData[i] * 100, // Convert decimal to percentage

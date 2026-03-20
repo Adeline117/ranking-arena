@@ -51,12 +51,11 @@ export async function fetchWeexEquityCurve(
     if (!ndaysReturnRates?.length) return []
 
     // Convert daily return rates to cumulative equity curve
-    const now = new Date()
+    const nowMs = Date.now()
     let cumulativeRoi = 0
     return ndaysReturnRates.map((rate, i) => {
       cumulativeRoi += Number(rate) || 0
-      const date = new Date(now)
-      date.setDate(date.getDate() - (ndaysReturnRates!.length - 1 - i))
+      const date = new Date(nowMs - (ndaysReturnRates!.length - 1 - i) * 86400000)
       return {
         date: date.toISOString().split('T')[0],
         roi: cumulativeRoi,

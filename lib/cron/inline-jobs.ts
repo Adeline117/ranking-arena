@@ -91,7 +91,7 @@ export async function runWorkerInline(): Promise<InlineJobResult> {
           .from('platform_health')
           .select('status')
           .eq('platform', job.platform)
-          .single()
+          .maybeSingle()
 
         if (health?.status === 'circuit_open') {
           await supabase

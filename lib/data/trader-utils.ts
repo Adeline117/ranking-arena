@@ -141,7 +141,9 @@ export async function findTradersAcrossSources(
       const decoded = decodeURIComponent(h)
       if (decoded !== h) allHandles.add(decoded)
     })
-    const handleList = Array.from(allHandles)
+    // Sanitize handles to prevent PostgREST filter injection via special chars
+    const handleList = Array.from(allHandles).filter(h => !/[(),"]/.test(h))
+    if (handleList.length === 0) return result
 
     const { data, error } = await client
       .from('trader_sources')

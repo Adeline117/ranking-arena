@@ -649,7 +649,8 @@ export async function resolveTrader(supabase: SupabaseClient, params: {
   handle: string
   platform?: string
 }): Promise<{ platform: string; traderKey: string; handle: string | null; avatarUrl: string | null } | null> {
-  const decodedHandle = decodeURIComponent(params.handle)
+  // Sanitize handle for PostgREST .or() filter safety — reject chars that break filter syntax
+  const decodedHandle = decodeURIComponent(params.handle).replace(/[(),]/g, '')
   const platformFilter = params.platform
 
   // Steps 1+2 combined: Try traders table by handle OR trader_key (single query)
