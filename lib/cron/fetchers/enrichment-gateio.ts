@@ -25,16 +25,23 @@ const HEADERS: Record<string, string> = {
 interface GateLeaderDetail {
   leader_id?: string | number
   nickname?: string
-  profit_rate?: number
-  profit?: number
-  win_rate?: number
-  mdd?: number
+  profit_rate?: number | string
+  profit?: number | string
+  win_rate?: number | string
+  mdd?: number | string
+  max_drawdown?: number | string
   copier_num?: number
+  curr_follow_num?: number
   aum?: number | string
   trade_days?: number
+  leading_days?: number
   profit_list?: number[]
   total_order_num?: number
   win_order_num?: number
+  sharp_ratio?: number | string
+  pl_ratio?: number | string
+  label_info?: { text?: Array<{ label_name?: string }> }
+  style_label?: string
 }
 
 /**
@@ -60,8 +67,10 @@ export async function fetchGateioStatsDetail(
   if (!detail) return null
 
   const winRate = detail.win_rate != null ? Number(detail.win_rate) * 100 : null
-  const maxDrawdown = detail.mdd != null ? Number(detail.mdd) * 100 : null
+  const mdd = detail.max_drawdown ?? detail.mdd
+  const maxDrawdown = mdd != null ? Number(mdd) * 100 : null
   const aum = detail.aum != null ? Number(detail.aum) : null
+  const sharpe = detail.sharp_ratio != null ? Number(detail.sharp_ratio) : null
 
   return {
     totalTrades: detail.total_order_num ?? null,
@@ -71,11 +80,11 @@ export async function fetchGateioStatsDetail(
     avgLoss: null,
     largestWin: null,
     largestLoss: null,
-    sharpeRatio: null,
+    sharpeRatio: sharpe != null && sharpe > -10 && sharpe < 10 ? Math.round(sharpe * 100) / 100 : null,
     maxDrawdown,
     currentDrawdown: null,
     volatility: null,
-    copiersCount: detail.copier_num ?? null,
+    copiersCount: detail.curr_follow_num ?? detail.copier_num ?? null,
     copiersPnl: null,
     aum: aum && aum > 0 ? aum : null,
     winningPositions: detail.win_order_num ?? null,
