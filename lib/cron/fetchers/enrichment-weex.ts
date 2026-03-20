@@ -8,6 +8,12 @@
 import { logger } from '@/lib/logger'
 import type { EquityCurvePoint, StatsDetail } from './enrichment-types'
 
+function safeNum(val: unknown): number | null {
+  if (val === null || val === undefined) return null
+  const n = Number(val)
+  return isNaN(n) ? null : n
+}
+
 const VPS_SCRAPER_URL = () => (process.env.VPS_SCRAPER_SG || process.env.VPS_PROXY_SG || '').replace(/\n$/, '').trim()
 const VPS_PROXY_KEY = () => (process.env.VPS_PROXY_KEY || '').trim()
 
@@ -89,19 +95,25 @@ export async function fetchWeexStatsDetail(
     }
     if (!trader) return null
 
+    // Extract win rate and max drawdown from leaderboard data
+    // Weex leaderboard response contains these in various field names
+    const winRate = safeNum(trader.winRate ?? trader.win_rate ?? trader.winningRate)
+    const maxDrawdown = safeNum(trader.maxDrawdown ?? trader.max_drawdown ?? trader.maxBackRate)
+    const tradeCount = safeNum(trader.tradeCount ?? trader.totalOrderNum ?? trader.orderCount)
+
     return {
-      totalTrades: null,
-      profitableTradesPct: null,
+      totalTrades: tradeCount,
+      profitableTradesPct: winRate != null ? (Math.abs(winRate) <= 1 ? winRate * 100 : winRate) : null,
       avgHoldingTimeHours: null,
       avgProfit: null, avgLoss: null,
       largestWin: null, largestLoss: null,
       sharpeRatio: null,
-      maxDrawdown: null,
+      maxDrawdown: maxDrawdown != null ? Math.abs(maxDrawdown <= 1 ? maxDrawdown * 100 : maxDrawdown) : null,
       currentDrawdown: null, volatility: null,
       copiersCount: trader.followCount != null ? Number(trader.followCount) : null,
       copiersPnl: null,
       aum: null,
-      winningPositions: null, totalPositions: null,
+      winningPositions: null, totalPositions: tradeCount,
     }
   } catch (err) {
     logger.warn(`[enrichment] Weex stats detail failed: ${err}`)
