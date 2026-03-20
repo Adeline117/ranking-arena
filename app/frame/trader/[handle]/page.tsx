@@ -128,7 +128,7 @@ export default async function FrameTraderPage({ params, searchParams }: Props) {
       <h1 style={{ fontSize: 24, fontWeight: 700, margin: 0 }}>{decodedHandle}</h1>
       <p style={{ color: '#9A9A9A', margin: '8px 0 24px' }}>Trader Ranking Card on Arena</p>
       <a
-        href={`https://www.arenafi.org/trader/${encodeURIComponent(source || '')}/${encodeURIComponent(decodedHandle)}`}
+        href={`${BASE_URL}/trader/${encodeURIComponent(source || '')}/${encodeURIComponent(decodedHandle)}`}
         style={{
           background: '#8b6fa8',
           color: '#fff',

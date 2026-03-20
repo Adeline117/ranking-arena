@@ -4,8 +4,7 @@
  */
 
 import type { Metadata } from 'next'
-
-const BASE_URL = process.env.NEXT_PUBLIC_APP_URL || 'https://www.arenafi.org'
+import { BASE_URL } from '@/lib/constants/urls'
 const SITE_NAME = 'Arena'
 const DEFAULT_OG_IMAGE = `${BASE_URL}/og.png`
 const TWITTER_HANDLE = '@arenafi'

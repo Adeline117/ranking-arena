@@ -32,6 +32,7 @@ import {
   generateBreadcrumbSchema,
   combineSchemas,
 } from '@/lib/seo'
+import { BASE_URL } from '@/lib/constants/urls'
 
 const DailyReturnsChart = dynamic(() => import('@/app/components/trader/charts/DailyReturnsChart').then(m => ({ default: m.DailyReturnsChart })), { ssr: false })
 const DrawdownChart = dynamic(() => import('@/app/components/trader/charts/DrawdownChart').then(m => ({ default: m.DrawdownChart })), { ssr: false })
@@ -321,8 +322,8 @@ export default function TraderProfileClient({ data, serverTraderData, claimedUse
       avatarUrl: data.avatar_url ?? undefined,
     }),
     generateBreadcrumbSchema([
-      { name: 'Home', url: process.env.NEXT_PUBLIC_APP_URL || 'https://www.arenafi.org' },
-      { name: 'Ranking', url: `${process.env.NEXT_PUBLIC_APP_URL || 'https://www.arenafi.org'}/rankings` },
+      { name: 'Home', url: BASE_URL },
+      { name: 'Ranking', url: `${BASE_URL}/rankings` },
       { name: data.handle },
     ])
   )

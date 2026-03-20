@@ -14,10 +14,9 @@ import { getSupabaseAdmin } from '@/lib/supabase/server'
 import { resolveTrader as resolveTraderUnified } from '@/lib/data/unified'
 import WrappedCardClient from '@/app/wrapped/[handle]/WrappedCardClient'
 import type { WrappedTraderData } from '@/app/wrapped/[handle]/page'
+import { BASE_URL } from '@/lib/constants/urls'
 
 export const revalidate = 300
-
-const BASE_URL = process.env.NEXT_PUBLIC_APP_URL || process.env.NEXT_PUBLIC_SITE_URL || 'https://www.arenafi.org'
 
 const PLATFORM_LABELS: Record<string, string> = {
   binance_futures: 'Binance', binance_spot: 'Binance Spot', binance_web3: 'Binance Web3',

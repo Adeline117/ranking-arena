@@ -7,12 +7,13 @@
 
 import webpush from 'web-push'
 import { logger } from '@/lib/logger'
+import { BASE_URL } from '@/lib/constants/urls'
 
 // ── VAPID configuration ──
 
 const VAPID_PUBLIC_KEY = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY || ''
 const VAPID_PRIVATE_KEY = process.env.VAPID_PRIVATE_KEY || ''
-const VAPID_SUBJECT = process.env.NEXT_PUBLIC_APP_URL || 'https://www.arenafi.org'
+const VAPID_SUBJECT = BASE_URL
 
 if (VAPID_PUBLIC_KEY && VAPID_PRIVATE_KEY) {
   webpush.setVapidDetails(VAPID_SUBJECT, VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY)

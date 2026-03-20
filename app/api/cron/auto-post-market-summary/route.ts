@@ -15,6 +15,7 @@ import { type SupabaseClient } from '@supabase/supabase-js'
 import { PipelineLogger } from '@/lib/services/pipeline-logger'
 import { env } from '@/lib/env'
 import { getSupabaseAdmin } from '@/lib/supabase/server'
+import { BASE_URL } from '@/lib/constants/urls'
 
 type AnySupabase = SupabaseClient
 
@@ -91,7 +92,7 @@ export async function GET(request: NextRequest) {
         content,
         author_id: SYSTEM_USER_ID,
         author_handle: SYSTEM_HANDLE,
-        author_avatar_url: 'https://www.arenafi.org/logo-symbol.png',
+        author_avatar_url: `${BASE_URL}/logo-symbol.png`,
         poll_enabled: false,
         hot_score: 50, // Give system posts a baseline hot score
       })
@@ -132,7 +133,7 @@ async function ensureSystemUser(supabase: AnySupabase) {
       id: SYSTEM_USER_ID,
       handle: SYSTEM_HANDLE,
       display_name: SYSTEM_DISPLAY_NAME,
-      avatar_url: 'https://www.arenafi.org/logo-symbol.png',
+      avatar_url: `${BASE_URL}/logo-symbol.png`,
       bio: 'Automated market analysis by Arena',
       role: 'official',
     }, { onConflict: 'id' })

@@ -7,6 +7,7 @@
 
 import { Resend } from 'resend'
 import { createLogger } from '@/lib/utils/logger'
+import { BASE_URL } from '@/lib/constants/urls'
 
 const logger = createLogger('email-service')
 
@@ -56,7 +57,7 @@ export function buildTraderAlertEmail(alerts: Array<{ title: string; message: st
       <td style="padding: 12px 16px; border-bottom: 1px solid #2a2a3e;">
         <strong style="color: #e2e8f0;">${a.title}</strong>
         <p style="margin: 4px 0 0; color: #94a3b8; font-size: 14px;">${a.message}</p>
-        ${a.link ? `<a href="https://www.arenafi.org${a.link}" style="color: #6366f1; font-size: 13px;">View details &rarr;</a>` : ''}
+        ${a.link ? `<a href="${BASE_URL}${a.link}" style="color: #6366f1; font-size: 13px;">View details &rarr;</a>` : ''}
       </td>
     </tr>
   `).join('')
@@ -69,7 +70,7 @@ export function buildTraderAlertEmail(alerts: Array<{ title: string; message: st
         ${alertRows}
       </table>
       <p style="margin: 24px 0 0; font-size: 12px; color: #64748b;">
-        <a href="https://www.arenafi.org/settings" style="color: #6366f1;">Manage notification preferences</a>
+        <a href="${BASE_URL}/settings" style="color: #6366f1;">Manage notification preferences</a>
       </p>
     </div>
   `
@@ -84,7 +85,7 @@ export function buildWeeklyDigestEmail(stats: {
   const moverRows = stats.topMovers.map(m => `
     <tr>
       <td style="padding: 8px 16px; border-bottom: 1px solid #2a2a3e;">
-        <a href="https://www.arenafi.org${m.link}" style="color: #e2e8f0; text-decoration: none; font-weight: 500;">${m.name}</a>
+        <a href="${BASE_URL}${m.link}" style="color: #e2e8f0; text-decoration: none; font-weight: 500;">${m.name}</a>
         <span style="float: right; color: ${m.change.startsWith('+') ? '#22c55e' : '#ef4444'}; font-size: 14px;">${m.change}</span>
       </td>
     </tr>
@@ -110,11 +111,11 @@ export function buildWeeklyDigestEmail(stats: {
       ` : ''}
 
       <p style="margin: 24px 0 0; text-align: center;">
-        <a href="https://www.arenafi.org/rankings" style="display: inline-block; background: #6366f1; color: #fff; padding: 10px 24px; border-radius: 6px; text-decoration: none; font-size: 14px;">View Full Rankings</a>
+        <a href="${BASE_URL}/rankings" style="display: inline-block; background: #6366f1; color: #fff; padding: 10px 24px; border-radius: 6px; text-decoration: none; font-size: 14px;">View Full Rankings</a>
       </p>
 
       <p style="margin: 24px 0 0; font-size: 12px; color: #64748b; text-align: center;">
-        <a href="https://www.arenafi.org/settings" style="color: #6366f1;">Manage notification preferences</a>
+        <a href="${BASE_URL}/settings" style="color: #6366f1;">Manage notification preferences</a>
       </p>
     </div>
   `
