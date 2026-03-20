@@ -128,12 +128,9 @@ export function useTopNavState() {
   useEffect(() => {
     if (!myId) return
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    let notifChannel: any = null
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    let msgChannel: any = null
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    let sbRef: any = null
+    let notifChannel: ReturnType<Awaited<ReturnType<typeof getSupabase>>['channel']> | null = null
+    let msgChannel: ReturnType<Awaited<ReturnType<typeof getSupabase>>['channel']> | null = null
+    let sbRef: Awaited<ReturnType<typeof getSupabase>> | null = null
 
     const setupSubscriptions = async () => {
       const supabase = await getSupabase()

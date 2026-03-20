@@ -29,6 +29,7 @@ import { exchangeLogger } from '../utils/logger'
 import { PLATFORM_RATE_LIMITS } from '../types/leaderboard'
 import * as cache from '../cache'
 import type { PlatformConnector, ConnectorConfig, RateLimiter } from './types'
+import type { RouteType } from './route-config'
 import { ConnectorError, DEFAULT_CONNECTOR_CONFIG, getConnectorConfigForPlatform } from './types'
 export { ConnectorError, DEFAULT_CONNECTOR_CONFIG, getConnectorConfigForPlatform }
 import {
@@ -634,8 +635,8 @@ export abstract class BaseConnector implements PlatformConnector {
     }
 
     // Proxy routes: vps_sg, vps_jp, scraper_sg, mac_mini
-    const proxyUrl = resolveRouteUrl(route as any)
-    const proxyKey = resolveRouteKey(route as any)
+    const proxyUrl = resolveRouteUrl(route as RouteType)
+    const proxyKey = resolveRouteKey(route as RouteType)
     if (!proxyUrl) return null // Route not configured
 
     // For scraper routes, use named endpoints if available

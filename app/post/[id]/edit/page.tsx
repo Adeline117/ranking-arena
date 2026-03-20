@@ -252,7 +252,7 @@ export default function EditPostPage() {
   const [images, setImages] = useState<UploadedImage[]>([])
   const [uploading, setUploading] = useState(false)
   const [showPreview, setShowPreview] = useState(false)
-  const [originalPost, setOriginalPost] = useState<any>(null)
+  const [originalPost, setOriginalPost] = useState<Record<string, unknown> | null>(null)
   const [cursorPosition, setCursorPosition] = useState<number | null>(null)
   const [draggedImageIndex, setDraggedImageIndex] = useState<number | null>(null)
 

@@ -41,8 +41,7 @@ interface OkxLeadTrader {
 interface OkxResponse {
   code: string
   // New format: data[0].ranks[...], old format: data[...]
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  data?: any[]
+  data?: Array<OkxLeadTrader | { ranks: OkxLeadTrader[] }>
   msg?: string
 }
 
@@ -85,7 +84,8 @@ export class OkxWeb3Connector extends BaseConnector {
 
           if (data?.code !== '0') break
           // OKX API wraps traders in data[0].ranks[] (changed ~2026-03)
-          const traders: OkxLeadTrader[] = data.data?.[0]?.ranks ?? data.data ?? []
+          const firstItem = data.data?.[0]
+          const traders: OkxLeadTrader[] = (firstItem && 'ranks' in firstItem ? (firstItem as { ranks: OkxLeadTrader[] }).ranks : data.data as OkxLeadTrader[]) ?? []
           if (!traders.length) break
 
           for (const entry of traders) {

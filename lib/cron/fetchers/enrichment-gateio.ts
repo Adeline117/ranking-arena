@@ -98,9 +98,9 @@ export async function fetchGateioCurrentPositions(
     const positions = json?.data || []
     if (!Array.isArray(positions) || positions.length === 0) return []
 
-    return positions.map((p: any) => ({
-      symbol: p.market || 'UNKNOWN',
-      direction: (p.side || 'long').toLowerCase() === 'short' ? 'short' as const : 'long' as const,
+    return positions.map((p: Record<string, unknown>) => ({
+      symbol: String(p.market || 'UNKNOWN'),
+      direction: String(p.side || 'long').toLowerCase() === 'short' ? 'short' as const : 'long' as const,
       investedPct: null,
       entryPrice: p.entry_price ? Number(p.entry_price) : null,
       pnl: p.unrealised_pnl ? Number(p.unrealised_pnl) : null,

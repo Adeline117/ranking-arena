@@ -6,7 +6,7 @@ import { getSupabaseAdmin } from '@/lib/supabase/server'
 
 // 检查是否是管理员
  
-async function isAdmin(supabase: SupabaseClient<any>, userId: string): Promise<boolean> {
+async function isAdmin(supabase: SupabaseClient, userId: string): Promise<boolean> {
   const { data: profile } = await supabase
     .from('user_profiles')
     .select('role')

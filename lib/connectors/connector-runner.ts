@@ -266,24 +266,24 @@ export class ConnectorRunner<T = unknown> {
    */
   protected async executeConnector(params?: ExecuteParams): Promise<{ recordsProcessed: number }> {
     // Try to detect connector type and call appropriate method
-    const connector = this.connector as any
+    const connector = this.connector as Record<string, unknown>
 
     // UnifiedPlatformConnector interface (new architecture 2026-03-11)
     if (typeof connector.execute === 'function') {
-      const result = await connector.execute(params)
+      const result = await (connector.execute as (p?: ExecuteParams) => Promise<{ recordsProcessed: number }>)(params)
       return { recordsProcessed: result.recordsProcessed || 0 }
     }
 
     // Legacy PlatformConnector interface
     if (typeof connector.discoverLeaderboard === 'function') {
       const window = params?.window || '90d'
-      const traders = await connector.discoverLeaderboard(window)
+      const traders = await (connector.discoverLeaderboard as (w: string) => Promise<unknown[] | null>)(window)
       return { recordsProcessed: traders?.length || 0 }
     }
 
     // Newer getTraderList interface
     if (typeof connector.getTraderList === 'function') {
-      const traders = await connector.getTraderList(params)
+      const traders = await (connector.getTraderList as (p?: ExecuteParams) => Promise<unknown[] | null>)(params)
       return { recordsProcessed: traders?.length || 0 }
     }
 

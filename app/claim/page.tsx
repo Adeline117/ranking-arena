@@ -1,5 +1,18 @@
 'use client'
 
+declare global {
+  interface Window {
+    phantom?: { solana?: SolanaProvider }
+    solana?: SolanaProvider
+  }
+}
+
+interface SolanaProvider {
+  isPhantom?: boolean
+  signMessage?: (message: Uint8Array, encoding?: string) => Promise<{ signature: Uint8Array }>
+  connect: () => Promise<{ publicKey: { toString: () => string } }>
+}
+
 /**
  * /claim - Landing page for traders to claim their profiles.
  * Includes:
@@ -595,8 +608,8 @@ function DexVerifyForm({
 
       if (isSolana) {
         // Solana wallet signing (Phantom, Solflare, etc.)
-        const solanaProvider = (window as any).phantom?.solana || (window as any).solana
-        if (!solanaProvider?.isPhantom && !solanaProvider?.signMessage) {
+        const solanaProvider = window.phantom?.solana ?? window.solana
+        if (!solanaProvider?.signMessage) {
           showToast(t('claimSolanaWalletRequired'), 'warning')
           return
         }
@@ -865,7 +878,7 @@ export default function ClaimPage() {
   const searchParams = useSearchParams()
   const { showToast } = useToast()
 
-  const [user, setUser] = useState<any>(null)
+  const [user, setUser] = useState<import('@supabase/supabase-js').User | null>(null)
   const [selectedTrader, setSelectedTrader] = useState<SearchResult | null>(null)
   const [step, setStep] = useState<'search' | 'verify' | 'done'>('search')
   const [linkedTraders, setLinkedTraders] = useState<LinkedTrader[]>([])
