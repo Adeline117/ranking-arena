@@ -59,13 +59,13 @@ export const CacheKey = {
     /** 排行榜列表 */
     list: (params: { timeRange: string; exchange?: string; limit?: number; page?: number }) => {
       const { timeRange, exchange = 'all', limit = 20, page = 0 } = params
-      return `${CACHE_PREFIX.TRADERS}:list:${exchange}:${timeRange}:${limit}:${page}`
+      return `${CACHE_PREFIX.TRADERS}:list:${exchange}:${timeRange.toUpperCase()}:${limit}:${page}`
     },
     /** 交易员详情 */
     detail: (handle: string) => `${CACHE_PREFIX.TRADER}:detail:${handle}`,
     /** 交易员性能数据 */
-    performance: (handle: string, period: string) => 
-      `${CACHE_PREFIX.TRADER}:performance:${handle}:${period}`,
+    performance: (handle: string, period: string) =>
+      `${CACHE_PREFIX.TRADER}:performance:${handle}:${period.toUpperCase()}`,
     /** 交易员资金曲线 */
     equity: (handle: string) => `${CACHE_PREFIX.TRADER}:equity:${handle}`,
     /** 交易员持仓 */

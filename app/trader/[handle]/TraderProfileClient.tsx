@@ -167,12 +167,9 @@ export default function TraderProfileClient({ data, serverTraderData, claimedUse
 
   // Derive verified/owner state from SWR claim data
   useEffect(() => {
-    if (claimData?.data?.is_verified) {
-      setIsVerifiedTrader(true)
-      if (currentUserId && claimData.data.owner_id === currentUserId) {
-        setIsOwner(true)
-      }
-    }
+    const isVerified = !!claimData?.data?.is_verified
+    setIsVerifiedTrader(isVerified)
+    setIsOwner(isVerified && !!currentUserId && claimData?.data?.owner_id === currentUserId)
   }, [claimData, currentUserId])
 
   const displayName = formatDisplayName(data.handle, data.source)
