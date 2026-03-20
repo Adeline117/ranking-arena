@@ -187,15 +187,20 @@ export default function NewGroupPostPage(): React.ReactElement {
   useEffect(() => {
     if (typeof window === 'undefined' || !groupId) return
 
+    let draftResetTimer: ReturnType<typeof setTimeout> | null = null
+
     const saveTimer = setTimeout(() => {
       if (title.trim() || content.trim()) {
         localStorage.setItem(draftKey, JSON.stringify({ title, content, images, pollEnabled }))
         setDraftSaved(true)
-        setTimeout(() => setDraftSaved(false), 2000)
+        draftResetTimer = setTimeout(() => setDraftSaved(false), 2000)
       }
     }, 1000)
 
-    return () => clearTimeout(saveTimer)
+    return () => {
+      clearTimeout(saveTimer)
+      if (draftResetTimer !== null) clearTimeout(draftResetTimer)
+    }
   }, [title, content, images, pollEnabled, groupId, draftKey])
 
   // UF15: Detect URLs in content and fetch link preview
@@ -205,7 +210,10 @@ export default function NewGroupPostPage(): React.ReactElement {
     if (url && url !== linkPreviewUrlRef.current) {
       linkPreviewUrlRef.current = url
       setLinkPreviewLoading(true)
-      fetch(`/api/posts/link-preview?url=${encodeURIComponent(url)}`)
+      const abortController = new AbortController()
+      fetch(`/api/posts/link-preview?url=${encodeURIComponent(url)}`, {
+        signal: abortController.signal,
+      })
         .then(r => r.ok ? r.json() : null)
         .then(data => {
           if (data && (data.title || data.description)) {
@@ -214,8 +222,11 @@ export default function NewGroupPostPage(): React.ReactElement {
             setLinkPreview(null)
           }
         })
-        .catch(() => setLinkPreview(null))
+        .catch((err) => {
+          if (err.name !== 'AbortError') setLinkPreview(null)
+        })
         .finally(() => setLinkPreviewLoading(false))
+      return () => { abortController.abort() }
     } else if (!url) {
       linkPreviewUrlRef.current = null
       setLinkPreview(null)
