@@ -87,8 +87,7 @@ export async function fetchEtoroEquityCurve(
     }
 
     // Filter to relevant period and non-simulation data
-    const cutoffDate = new Date()
-    cutoffDate.setDate(cutoffDate.getDate() - days)
+    const cutoffDate = new Date(Date.now() - days * 86400000)
 
     const relevantMonths = data.monthly
       .filter(m => !m.isSimulation && new Date(m.start) >= cutoffDate)
