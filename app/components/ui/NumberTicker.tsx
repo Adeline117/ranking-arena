@@ -43,6 +43,9 @@ export default function NumberTicker({
     // Show final value immediately to avoid blank content during idle wait
     el.textContent = formatNumber(direction === 'down' ? 0 : value) + suffix
 
+    let delayTimer: ReturnType<typeof setTimeout> | null = null
+    let rafId: number | null = null
+
     const observer = new IntersectionObserver(
       ([entry]) => {
         if (!entry.isIntersecting || animatedRef.current) return
@@ -61,7 +64,7 @@ export default function NumberTicker({
           // Reset to start value for animation
           if (el) el.textContent = formatNumber(startValue) + suffix
 
-          const delayTimer = setTimeout(() => {
+          delayTimer = setTimeout(() => {
             const duration = 800 // ms
             const startTime = performance.now()
 
@@ -77,21 +80,23 @@ export default function NumberTicker({
               }
 
               if (progress < 1) {
-                requestAnimationFrame(tick)
+                rafId = requestAnimationFrame(tick)
               }
             }
 
-            requestAnimationFrame(tick)
+            rafId = requestAnimationFrame(tick)
           }, delay * 1000)
-
-          return () => clearTimeout(delayTimer)
         })
       },
       { threshold: 0.1 }
     )
 
     observer.observe(el)
-    return () => observer.disconnect()
+    return () => {
+      observer.disconnect()
+      if (delayTimer !== null) clearTimeout(delayTimer)
+      if (rafId !== null) cancelAnimationFrame(rafId)
+    }
   }, [value, direction, delay, suffix, formatNumber])
 
   return (

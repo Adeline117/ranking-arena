@@ -56,11 +56,13 @@ export default function FavoritesPage() {
   useEffect(() => {
     // 等待认证检查完成
     if (!authChecked) return
-    
+
     if (!accessToken) {
       setLoading(false)
       return
     }
+
+    const abortController = new AbortController()
 
     const load = async () => {
       setLoading(true)
@@ -69,15 +71,17 @@ export default function FavoritesPage() {
         const [foldersResponse, subscribedResponse] = await Promise.all([
           fetch('/api/bookmark-folders', {
             headers: { 'Authorization': `Bearer ${accessToken}` },
+            signal: abortController.signal,
           }),
           fetch('/api/bookmark-folders/subscribed', {
             headers: { 'Authorization': `Bearer ${accessToken}` },
+            signal: abortController.signal,
           }),
         ])
-        
+
         const foldersData = await foldersResponse.json()
         const subscribedData = await subscribedResponse.json()
-        
+
         if (foldersResponse.ok) {
           setFolders(foldersData.data?.folders || [])
         } else {
@@ -85,7 +89,7 @@ export default function FavoritesPage() {
           setFolders([])
           showToast(t('loadFoldersFailed'), 'error')
         }
-        
+
         if (subscribedResponse.ok) {
           setSubscribedFolders(subscribedData.data?.folders || [])
         } else {
@@ -96,16 +100,23 @@ export default function FavoritesPage() {
           setSubscribedFolders([])
         }
       } catch (error) {
+        if ((error as Error).name === 'AbortError') return
         logger.error('Error loading folders:', error)
         setFolders([])
         setSubscribedFolders([])
         showToast(t('loadFoldersFailedRetry'), 'error')
       } finally {
-        setLoading(false)
+        if (!abortController.signal.aborted) {
+          setLoading(false)
+        }
       }
     }
 
     load()
+
+    return () => {
+      abortController.abort()
+    }
   // eslint-disable-next-line react-hooks/exhaustive-deps -- load is defined inside effect; showToast/t are stable refs
   }, [accessToken, authChecked])
 
