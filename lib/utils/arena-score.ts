@@ -237,8 +237,9 @@ export function calculateRoiIntensity(roi: number, period: Period): number {
  * @param period 时间段
  */
 export function calculateReturnScore(roi: number, period: Period): number {
+  if (!Number.isFinite(roi)) return 0
   const params = ARENA_CONFIG.PARAMS[period]
-  
+
   // Cap ROI to prevent extreme values from dominating
   const cappedRoi = Math.min(roi, ARENA_CONFIG.ROI_CAP)
   
@@ -314,7 +315,7 @@ export function calculateStabilityScore(winRate: number | null, period: Period):
  * @param period 时间段
  */
 export function calculatePnlScore(pnl: number | null, period: Period): number {
-  if (pnl === null || pnl === undefined || pnl <= 0) return 0
+  if (pnl === null || pnl === undefined || !Number.isFinite(pnl) || pnl <= 0) return 0
 
   const params = ARENA_CONFIG.PNL_PARAMS[period]
   const logArg = 1 + pnl / params.base

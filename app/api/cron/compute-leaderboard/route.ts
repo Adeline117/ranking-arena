@@ -27,6 +27,7 @@ import { PipelineLogger } from '@/lib/services/pipeline-logger'
 import { sanitizeDisplayName } from '@/lib/utils/profanity'
 import { generateBlockieSvg } from '@/lib/utils/avatar'
 import { tieredGet, tieredSet, tieredDel } from '@/lib/cache/redis-layer'
+import { getSharedRedis } from '@/lib/cache/redis-client'
 import { env } from '@/lib/env'
 
 export const dynamic = 'force-dynamic'
@@ -96,13 +97,22 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
-  // Idempotency: prevent duplicate runs within 5 minutes
+  // Idempotency: atomic lock to prevent duplicate concurrent runs
   const IDEMPOTENCY_KEY = 'cron:compute-leaderboard:running'
-  const cached = await tieredGet(IDEMPOTENCY_KEY, 'hot')
-  if (cached.data) {
-    return NextResponse.json({ ok: true, message: 'Already running, skipped', cached: true })
+  const redis = await getSharedRedis()
+  if (redis) {
+    const lockAcquired = await redis.set(IDEMPOTENCY_KEY, new Date().toISOString(), { ex: 300, nx: true })
+    if (!lockAcquired) {
+      return NextResponse.json({ ok: true, message: 'Already running, skipped', cached: true })
+    }
+  } else {
+    // Fallback to non-atomic check when Redis unavailable
+    const cached = await tieredGet(IDEMPOTENCY_KEY, 'hot')
+    if (cached.data) {
+      return NextResponse.json({ ok: true, message: 'Already running, skipped', cached: true })
+    }
+    await tieredSet(IDEMPOTENCY_KEY, { startedAt: new Date().toISOString() }, 'hot', [])
   }
-  await tieredSet(IDEMPOTENCY_KEY, { startedAt: new Date().toISOString() }, 'hot', [])
 
   const supabase = getSupabaseAdmin()
   const startTime = Date.now()
