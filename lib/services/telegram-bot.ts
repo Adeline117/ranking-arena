@@ -19,6 +19,7 @@ import { getLeaderboard, searchTraders } from '@/lib/data/unified'
 import { EXCHANGE_CONFIG, EXCHANGE_NAMES } from '@/lib/constants/exchanges'
 import { logger } from '@/lib/logger'
 import { botMessages, type BotLang } from '@/lib/i18n/bot'
+import { BASE_URL } from '@/lib/constants/urls'
 
 // ============================================
 // Types
@@ -124,7 +125,7 @@ async function handleRank(chatId: number, args: string, lang: BotLang): Promise<
       `  ${botMessages(lang, 'rank')}: ${rank} | ${botMessages(lang, 'score')}: ${score}`,
       `  ROI: ${roi} | PnL: ${pnl}`,
       `  ${botMessages(lang, 'period')}: ${period}`,
-      `  ${botMessages(lang, 'viewProfile')}: https://www.arenafi.org/trader/${t.platform}/${t.traderKey}`,
+      `  ${botMessages(lang, 'viewProfile')}: ${BASE_URL}/trader/${t.platform}/${t.traderKey}`,
       ''
     )
   }
@@ -196,7 +197,7 @@ async function handleTop(chatId: number, args: string, lang: BotLang): Promise<v
     )
   }
 
-  lines.push(`\n${botMessages(lang, 'viewMore')}: https://www.arenafi.org/rankings${platform ? `/${platform}` : ''}`)
+  lines.push(`\n${botMessages(lang, 'viewMore')}: ${BASE_URL}/rankings${platform ? `/${platform}` : ''}`)
 
   await sendMessage({ chat_id: chatId, text: lines.join('\n') })
 }
@@ -387,7 +388,7 @@ async function handleStats(chatId: number, lang: BotLang): Promise<void> {
     `${botMessages(lang, 'scoringPeriods')}: 7D / 30D / 90D`,
     `\n${botMessages(lang, 'exchangeList')}:`,
     activeExchanges.map((e) => `  ${e}`).join('\n'),
-    `\n${botMessages(lang, 'website')}: https://www.arenafi.org`,
+    `\n${botMessages(lang, 'website')}: ${BASE_URL}`,
   ]
 
   await sendMessage({ chat_id: chatId, text: lines.join('\n') })
@@ -403,7 +404,7 @@ async function handleHelp(chatId: number, lang: BotLang): Promise<void> {
     `/price &lt;symbol&gt; — ${botMessages(lang, 'helpPrice')}`,
     `/stats — ${botMessages(lang, 'helpStats')}`,
     `/help — ${botMessages(lang, 'helpHelp')}`,
-    `\n${botMessages(lang, 'website')}: https://www.arenafi.org`,
+    `\n${botMessages(lang, 'website')}: ${BASE_URL}`,
   ].join('\n')
 
   await sendMessage({ chat_id: chatId, text })

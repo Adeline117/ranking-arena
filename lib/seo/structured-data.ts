@@ -5,7 +5,7 @@
  * @see https://developers.google.com/search/docs/appearance/structured-data
  */
 
-const BASE_URL = process.env.NEXT_PUBLIC_APP_URL || 'https://www.arenafi.org'
+import { BASE_URL } from '@/lib/constants/urls'
 const SITE_NAME = 'Arena'
 const SITE_DESCRIPTION = '加密万物排行榜'
 

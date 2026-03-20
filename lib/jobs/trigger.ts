@@ -20,6 +20,7 @@
  */
 
 import { schedules, logger as triggerLogger } from '@trigger.dev/sdk/v3'
+import { BASE_URL } from '@/lib/constants/urls'
 
 /**
  * Build a minimal NextRequest with CRON_SECRET auth header.
@@ -27,8 +28,7 @@ import { schedules, logger as triggerLogger } from '@trigger.dev/sdk/v3'
  * that by constructing a real NextRequest with the correct header.
  */
 function buildCronRequest(path: string, method = 'GET'): Request {
-  const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://www.arenafi.org'
-  return new Request(`${baseUrl}${path}`, {
+  return new Request(`${BASE_URL}${path}`, {
     method,
     headers: {
       Authorization: `Bearer ${process.env.CRON_SECRET || ''}`,

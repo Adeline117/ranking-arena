@@ -1,5 +1,6 @@
 import { ImageResponse } from 'next/og'
 import { NextRequest } from 'next/server'
+import { BASE_URL } from '@/lib/constants/urls'
 
 export const runtime = 'edge'
 
@@ -29,7 +30,7 @@ export async function GET(request: NextRequest) {
       avatarUrl = avatarUrlParam
     } else {
       try {
-        const proxyUrl = 'https://www.arenafi.org/api/avatar?url=' + encodeURIComponent(avatarUrlParam)
+        const proxyUrl = `${BASE_URL}/api/avatar?url=${encodeURIComponent(avatarUrlParam)}`
         const res = await fetch(proxyUrl, { signal: AbortSignal.timeout(4000) })
         if (res.ok) {
           const ct = res.headers.get('content-type') || 'image/png'
@@ -74,7 +75,7 @@ export async function GET(request: NextRequest) {
           <div style={{ display: 'flex', alignItems: 'center', gap: 20, marginBottom: 16 }}>
             {avatarUrl && (
               <img
-                src={avatarUrl.startsWith('data:') ? avatarUrl : 'https://www.arenafi.org/api/avatar?url=' + encodeURIComponent(avatarUrl)}
+                src={avatarUrl.startsWith('data:') ? avatarUrl : `${BASE_URL}/api/avatar?url=${encodeURIComponent(avatarUrl)}`}
                 alt=""
                 width={80}
                 height={80}

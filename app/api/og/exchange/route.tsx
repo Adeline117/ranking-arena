@@ -11,6 +11,7 @@ import { ImageResponse } from 'next/og'
 import { NextRequest } from 'next/server'
 import { getSupabaseAdmin } from '@/lib/supabase/server'
 import logger from '@/lib/logger'
+import { BASE_URL } from '@/lib/constants/urls'
 
 export const runtime = 'edge'
 
@@ -139,7 +140,7 @@ export async function GET(request: NextRequest) {
         if (!trader.avatar_url) return null
         if (trader.avatar_url.startsWith('data:')) return trader.avatar_url
         try {
-          const proxyUrl = `https://www.arenafi.org/api/avatar?url=${encodeURIComponent(trader.avatar_url)}`
+          const proxyUrl = `${BASE_URL}/api/avatar?url=${encodeURIComponent(trader.avatar_url)}`
           const res = await fetch(proxyUrl, { signal: AbortSignal.timeout(4000) })
           if (!res.ok) return null
           const ct = res.headers.get('content-type') || 'image/png'

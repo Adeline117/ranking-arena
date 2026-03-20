@@ -9,10 +9,9 @@
 import type { MetadataRoute } from "next"
 import { getSupabaseAdmin } from "@/lib/supabase/server"
 import { dataLogger } from "@/lib/utils/logger"
+import { BASE_URL } from '@/lib/constants/urls'
 
 export const maxDuration = 60
-
-const BASE_URL = process.env.NEXT_PUBLIC_APP_URL || "https://www.arenafi.org"
 
 const TRADERS_PER_SITEMAP = 5000
 const MAX_OTHER_URLS = 500

@@ -1,7 +1,8 @@
 import type { MetadataRoute } from "next"
+import { BASE_URL } from '@/lib/constants/urls'
 
 export default function robots(): MetadataRoute.Robots {
-  const base = process.env.NEXT_PUBLIC_APP_URL || "https://www.arenafi.org"
+  const base = BASE_URL
   return {
     rules: [
       {

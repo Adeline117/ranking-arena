@@ -8,6 +8,7 @@
 
 import { logger } from '@/lib/logger'
 import { EXCHANGE_CONFIG } from '@/lib/constants/exchanges'
+import { BASE_URL } from '@/lib/constants/urls'
 
 // ---------------------------------------------------------------------------
 // Types
@@ -85,10 +86,10 @@ export function formatDailyTopMovers(movers: TopMover[], date: Date = new Date()
     ...lines,
     '',
     `Ranked by Arena Score across 27+ exchanges`,
-    'https://www.arenafi.org/rankings',
+    `${BASE_URL}/rankings`,
   ].join('\n')
 
-  const ogImageUrl = `https://www.arenafi.org/api/og/daily-top?date=${date.toISOString().split('T')[0]}`
+  const ogImageUrl = `${BASE_URL}/api/og/daily-top?date=${date.toISOString().split('T')[0]}`
 
   return { text, ogImageUrl }
 }
@@ -113,7 +114,7 @@ export function formatWeeklyRecap(stats: {
     topLine,
     `${profitablePct.toFixed(0)}% of ${totalTraders.toLocaleString()} tracked traders were profitable`,
     '',
-    'Full rankings: https://www.arenafi.org/rankings',
+    `Full rankings: ${BASE_URL}/rankings`,
   ].join('\n')
 
   return { text }
@@ -123,14 +124,14 @@ export function formatWeeklyRecap(stats: {
  * Generate OG image URL for a specific exchange.
  */
 export function getExchangeOgUrl(exchange: string): string {
-  return `https://www.arenafi.org/api/og/exchange?exchange=${encodeURIComponent(exchange)}`
+  return `${BASE_URL}/api/og/exchange?exchange=${encodeURIComponent(exchange)}`
 }
 
 /**
  * Generate OG image URL for daily top movers.
  */
 export function getDailyTopOgUrl(date: Date = new Date()): string {
-  return `https://www.arenafi.org/api/og/daily-top?date=${date.toISOString().split('T')[0]}`
+  return `${BASE_URL}/api/og/daily-top?date=${date.toISOString().split('T')[0]}`
 }
 
 // ---------------------------------------------------------------------------

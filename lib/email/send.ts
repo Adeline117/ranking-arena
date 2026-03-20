@@ -7,6 +7,8 @@
  * TODO: integrate with Resend (https://resend.com) or SendGrid for production use.
  */
 
+import { BASE_URL } from '@/lib/constants/urls'
+
 export async function sendEmail(to: string, subject: string, html: string): Promise<void> {
   // Stub: log email for now, integrate Resend/SendGrid later
   // eslint-disable-next-line no-console
@@ -32,7 +34,7 @@ export async function sendWeeklyDigest(
     <ul>
       ${data.topTraders.map(t => `<li>${t.name}: ${t.roi > 0 ? '+' : ''}${t.roi.toFixed(1)}% ROI</li>`).join('')}
     </ul>
-    <p><a href="https://www.arenafi.org/rankings">View Full Rankings</a></p>
+    <p><a href="${BASE_URL}/rankings">View Full Rankings</a></p>
   `
   await sendEmail(to, 'Your Weekly Arena Digest', html)
 }

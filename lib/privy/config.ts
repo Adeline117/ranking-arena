@@ -6,6 +6,8 @@
  * Install: npm install @privy-io/react-auth
  */
 
+import { BASE_URL } from '@/lib/constants/urls'
+
 export const PRIVY_APP_ID = process.env.NEXT_PUBLIC_PRIVY_APP_ID || '';
 
 export const privyConfig: Record<string, unknown> = {
@@ -13,7 +15,7 @@ export const privyConfig: Record<string, unknown> = {
   appearance: {
     theme: 'dark',
     accentColor: '#7C3AED',
-    logo: 'https://www.arenafi.org/logo-symbol.png',
+    logo: `${BASE_URL}/logo-symbol.png`,
   },
   embeddedWallets: {
     createOnLogin: 'users-without-wallets',

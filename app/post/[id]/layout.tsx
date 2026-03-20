@@ -1,8 +1,7 @@
 import { Metadata } from 'next'
 import { getSupabaseAdmin } from '@/lib/supabase/server'
 import { logger } from '@/lib/logger'
-
-const BASE_URL = process.env.NEXT_PUBLIC_APP_URL || 'https://www.arenafi.org'
+import { BASE_URL } from '@/lib/constants/urls'
 
 export async function generateMetadata({ params }: { params: Promise<{ id: string }> }): Promise<Metadata> {
   const resolvedParams = await params
