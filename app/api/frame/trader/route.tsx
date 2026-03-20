@@ -8,6 +8,7 @@
 import { ImageResponse } from 'next/og'
 import { NextRequest } from 'next/server'
 import { Pool } from 'pg'
+import { BASE_URL } from '@/lib/constants/urls'
 
 export const dynamic = 'force-dynamic'
 

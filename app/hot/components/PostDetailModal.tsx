@@ -192,6 +192,7 @@ export function PostDetailModal({
         <div style={{ marginTop: 14, paddingTop: 12, borderTop: `1px solid var(--color-border-secondary)`, display: 'flex', gap: 14, flexWrap: 'wrap' }}>
           <button
             onClick={() => onToggleReaction(post.id, 'up')}
+            aria-label={`Like (${post.likes})`}
             style={{
               display: 'flex',
               alignItems: 'center',
@@ -210,6 +211,7 @@ export function PostDetailModal({
           </button>
           <button
             onClick={() => onToggleReaction(post.id, 'down')}
+            aria-label={`Dislike${(post.dislikes ?? 0) > 0 ? ` (${post.dislikes})` : ''}`}
             style={{
               display: 'flex',
               alignItems: 'center',
