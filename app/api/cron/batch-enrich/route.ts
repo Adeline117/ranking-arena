@@ -25,65 +25,57 @@ export const maxDuration = 800 // Vercel Pro max
 // EMERGENCY REDUCTION (2026-03-13 Round 2): batch-enrich STILL hitting 600s timeout
 // Onchain platforms: 50/40/30 → 30/25/20 (more aggressive)
 // CEX platforms: slightly reduced to balance load
+// 2026-03-20: FULL COVERAGE — limits sized to actual leaderboard counts
+// With offset rotation, each run processes a different slice. Over 6 runs/day = full coverage.
 const PLATFORM_LIMITS: Record<string, { limit90: number; limit30: number; limit7: number }> = {
-  binance_futures: { limit90: 150, limit30: 120, limit7: 80 }, // Reduced from 200/150/100
-  // binance_spot: PERMANENTLY REMOVED (2026-03-14) - repeatedly hangs 45-76min, blocks entire pipeline
-  // bybit/bybit_spot removed: api2.bybit.com endpoints return 404 globally (2026-03-10)
-  okx_futures: { limit90: 60, limit30: 60, limit7: 50 }, // Reduced from 80/80/60
-  bitget_futures: { limit90: 30, limit30: 25, limit7: 15 }, // Equity curve only (detail/position APIs disabled)
-  // bitget_spot removed: no public API exists (all endpoints 404)
-  // ONCHAIN PLATFORMS: AGGRESSIVE REDUCTION Round 4 (2026-03-13 09:00)
-  // 30D/7D still timing out - matched 90D and more aggressive 7D
-  hyperliquid: { limit90: 50, limit30: 40, limit7: 20 }, // Increased: HL API is fast, no rate limit
-  gmx: { limit90: 20, limit30: 20, limit7: 10 }, // 30D: 25→20 (match 90D), 7D: 15→10
-  htx_futures: { limit90: 25, limit30: 25, limit7: 15 }, // 30D: 30→25 (match 90D), 7D: 20→15
-  gateio: { limit90: 30, limit30: 30, limit7: 20 }, // 30D: 35→30 (match 90D), 7D: 25→20
-  mexc: { limit90: 30, limit30: 30, limit7: 20 }, // 30D: 35→30 (match 90D), 7D: 25→20
-  drift: { limit90: 30, limit30: 25, limit7: 15 }, // Increased: public API, fast
-  // dydx: REMOVED — dead since 2026-03, indexer API 404 globally
-  // aevo: REMOVED — no fetch group, enriching stale data is wasted work
-  gains: { limit90: 30, limit30: 25, limit7: 15 }, // Increased: public API, computes MDD
-  // kwenta removed: Copin API stopped serving Kwenta data (2026-03-11)
-  jupiter_perps: { limit90: 20, limit30: 20, limit7: 10 }, // 30D: 25→20 (match 90D), 7D: 15→10
-  btcc: { limit90: 20, limit30: 15, limit7: 10 }, // New: ranking-based enrichment, conservative
-  etoro: { limit90: 20, limit30: 15, limit7: 10 }, // New: gain history + portfolio API
-  coinex: { limit90: 15, limit30: 10, limit7: 5 }, // New: ranking-based, geo-blocked, conservative
-  bitunix: { limit90: 100, limit30: 80, limit7: 50 }, // Fast: batch-cached list API, no per-trader calls
-  xt: { limit90: 80, limit30: 60, limit7: 40 }, // Fast: batch-cached internal list API, no per-trader calls
-  // Added 2026-03-19: platforms with enrichment configs but missing from batch-enrich
-  okx_spot: { limit90: 30, limit30: 25, limit7: 15 }, // OKX spot API — same as okx_futures pattern
-  okx_web3: { limit90: 15, limit30: 10, limit7: 5 }, // Wallet-based, limited stats available
-  bitfinex: { limit90: 30, limit30: 25, limit7: 15 }, // Public API, generous rate limits
-  blofin: { limit90: 20, limit30: 15, limit7: 10 }, // Public API
-  phemex: { limit90: 20, limit30: 15, limit7: 10 }, // Public API
-  bingx: { limit90: 20, limit30: 15, limit7: 10 }, // CF-protected, VPS scraper
-  toobit: { limit90: 20, limit30: 15, limit7: 10 }, // CF-protected, VPS scraper
-  bybit: { limit90: 15, limit30: 10, limit7: 5 }, // VPS Playwright scraper, go slow
-  weex: { limit90: 10, limit30: 5, limit7: 3 }, // VPS scraper, dynamic auth, conservative
-  kucoin: { limit90: 15, limit30: 10, limit7: 5 }, // VPS scraper, serial Playwright
-  bingx_spot: { limit90: 15, limit30: 10, limit7: 5 }, // Daily snapshot fallback, lightweight
+  // Batch-cached (no per-trader API calls, instant)
+  bitunix: { limit90: 500, limit30: 500, limit7: 500 },
+  xt: { limit90: 100, limit30: 100, limit7: 100 },
+  blofin: { limit90: 300, limit30: 300, limit7: 300 },
+  bitfinex: { limit90: 120, limit30: 120, limit7: 120 },
+  toobit: { limit90: 100, limit30: 100, limit7: 100 },
+  coinex: { limit90: 200, limit30: 200, limit7: 200 },
+  // Large CEX — API per trader, need offset rotation for full coverage
+  binance_futures: { limit90: 300, limit30: 300, limit7: 300 },
+  okx_futures: { limit90: 300, limit30: 300, limit7: 300 },
+  hyperliquid: { limit90: 200, limit30: 200, limit7: 200 },
+  htx_futures: { limit90: 200, limit30: 200, limit7: 200 },
+  etoro: { limit90: 200, limit30: 200, limit7: 200 },
+  drift: { limit90: 300, limit30: 300, limit7: 300 },
+  gmx: { limit90: 200, limit30: 200, limit7: 200 },
+  gateio: { limit90: 200, limit30: 200, limit7: 200 },
+  // Medium CEX
+  bitget_futures: { limit90: 50, limit30: 50, limit7: 50 },
+  mexc: { limit90: 150, limit30: 150, limit7: 150 },
+  btcc: { limit90: 50, limit30: 50, limit7: 50 },
+  phemex: { limit90: 80, limit30: 80, limit7: 80 },
+  bingx: { limit90: 40, limit30: 40, limit7: 40 },
+  okx_spot: { limit90: 40, limit30: 40, limit7: 40 },
+  okx_web3: { limit90: 400, limit30: 400, limit7: 400 },
+  // DEX on-chain
+  jupiter_perps: { limit90: 100, limit30: 100, limit7: 100 },
+  gains: { limit90: 30, limit30: 25, limit7: 15 },
+  // Re-enabled platforms
+  dydx: { limit90: 200, limit30: 200, limit7: 200 },
+  aevo: { limit90: 200, limit30: 200, limit7: 200 },
+  // VPS scrapers (slow)
+  bybit: { limit90: 100, limit30: 100, limit7: 100 },
+  weex: { limit90: 30, limit30: 30, limit7: 30 },
+  kucoin: { limit90: 25, limit30: 25, limit7: 25 },
+  bingx_spot: { limit90: 20, limit30: 20, limit7: 20 },
 }
 
-// High priority platforms (always enriched)
-// bybit removed: api2.bybit.com endpoints return 404 globally (2026-03-10)
-// gmx removed from batch: runs in dedicated job due to >360s enrichment time (2026-03-11)
-// dydx moved to end: consistently times out at 360s, blocking other platforms (2026-03-13)
-// bitget_futures removed: EMERGENCY 5TH STUCK - VPS scraper repeatedly hangs 44+ min (2026-03-18)
-const HIGH_PRIORITY = ['binance_futures', 'okx_futures', 'hyperliquid', 'jupiter_perps']
-
-// Medium priority (enriched with all=true or period=90D)
-// bybit_spot removed: api2.bybit.com endpoints return 404 globally (2026-03-10)
-// kwenta removed: Copin API stopped serving Kwenta data (2026-03-11)
-// binance_spot moved to end: repeatedly hangs 45-76min, process last to avoid blocking (2026-03-14)
-const MEDIUM_PRIORITY = ['htx_futures', 'gateio', 'mexc', 'drift', 'gains', 'bitget_futures', 'btcc', 'etoro', 'coinex', 'bitunix', 'xt', 'okx_spot', 'bitfinex', 'blofin', 'phemex', 'bingx', 'toobit']
-
-// Low priority - platforms that frequently timeout or hang
-// Moved here to prevent blocking high/medium priority platforms
-// dydx: consistent 360s timeout
-// binance_spot: COMPLETELY DISABLED (2026-03-14 Round 6) - see PLATFORM_LIMITS comment
-const LOW_PRIORITY = ['okx_web3', 'bybit', 'weex', 'kucoin', 'bingx_spot'] // Slow/unreliable scrapers + lightweight, enrich last
-
-// Lower priority (enriched only with all=true)
+// 2026-03-20: Full coverage — batch-cached first (instant), then API-per-trader
+const HIGH_PRIORITY = [
+  'bitunix', 'xt', 'blofin', 'bitfinex', 'toobit', 'coinex', // batch-cached: instant
+  'binance_futures', 'okx_futures', 'hyperliquid', 'jupiter_perps', // fast APIs
+]
+const MEDIUM_PRIORITY = [
+  'htx_futures', 'gateio', 'mexc', 'drift', 'gmx', 'gains',
+  'bitget_futures', 'btcc', 'etoro', 'phemex', 'bingx', 'okx_spot', 'okx_web3',
+  'dydx', 'aevo', // re-enabled via Copin + indexer
+]
+const LOW_PRIORITY = ['bybit', 'weex', 'kucoin', 'bingx_spot'] // VPS scrapers, run last
 const LOWER_PRIORITY: string[] = []
 
 interface BatchResult {
