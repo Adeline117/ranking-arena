@@ -217,6 +217,50 @@ export function enhanceStatsWithDerivedMetrics(
 }
 
 /**
+ * Classify trading style based on available metrics.
+ * Returns style name + confidence score.
+ */
+export function classifyTradingStyle(stats: StatsDetail, avgHoldingHours?: number | null): {
+  style: string | null
+  confidence: number
+} {
+  const holding = avgHoldingHours ?? stats.avgHoldingTimeHours
+  const winRate = stats.profitableTradesPct
+  const totalTrades = stats.totalTrades ?? stats.totalPositions
+  const mdd = stats.maxDrawdown
+
+  if (holding == null && totalTrades == null) return { style: null, confidence: 0 }
+
+  // Classify by holding time first (most reliable indicator)
+  if (holding != null) {
+    if (holding < 1) return { style: 'Scalper', confidence: 0.9 }
+    if (holding < 8) return { style: 'Day Trader', confidence: 0.85 }
+    if (holding < 72) return { style: 'Swing Trader', confidence: 0.8 }
+    if (holding < 720) return { style: 'Position Trader', confidence: 0.75 }
+    return { style: 'Long-Term', confidence: 0.7 }
+  }
+
+  // Fallback: classify by trade frequency (if we have total trades but not holding time)
+  if (totalTrades != null && totalTrades > 0) {
+    // Estimate daily trades (90D window)
+    const dailyTrades = totalTrades / 90
+    if (dailyTrades > 20) return { style: 'Scalper', confidence: 0.6 }
+    if (dailyTrades > 5) return { style: 'Day Trader', confidence: 0.55 }
+    if (dailyTrades > 1) return { style: 'Swing Trader', confidence: 0.5 }
+    if (dailyTrades > 0.1) return { style: 'Position Trader', confidence: 0.45 }
+    return { style: 'Long-Term', confidence: 0.4 }
+  }
+
+  // Last resort: classify by risk profile
+  if (winRate != null && mdd != null) {
+    if (winRate > 70 && mdd < 10) return { style: 'Conservative', confidence: 0.35 }
+    if (winRate < 40 && mdd > 30) return { style: 'Aggressive', confidence: 0.35 }
+  }
+
+  return { style: null, confidence: 0 }
+}
+
+/**
  * Calculate asset breakdown from position history
  */
 export function calculateAssetBreakdown(positions: PositionHistoryItem[]): AssetBreakdown[] {
