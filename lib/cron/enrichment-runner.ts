@@ -502,6 +502,7 @@ const ONCHAIN_SET = new Set(['gmx', 'dydx', 'jupiter_perps', 'hyperliquid', 'dri
 // Per-trader timeout: aggressive timeout for platforms that hang
 const PER_TRADER_TIMEOUT_MS: Record<string, number> = {
   'bitget_futures': 25_000,  // 25s per trader - aggressive to prevent 44min hangs
+  'binance_futures': 20_000, // 20s per trader - strict timeout to prevent CF Worker hangs
 }
 
 function getPlatformTimeout(platform: string): number {

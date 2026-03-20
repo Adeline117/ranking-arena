@@ -27,9 +27,10 @@ export async function fetchBinanceEquityCurve(
 ): Promise<EquityCurvePoint[]> {
   try {
     // GET chart-data endpoint returns daily ROI values
+    // Aggressive 6s timeout to prevent CF Worker hangs (root cause of 46min freezes)
     const data = await fetchWithProxyFallback<Record<string, unknown>>(
       `${BINANCE_PUBLIC}/lead-portfolio/chart-data?dataType=ROI&portfolioId=${traderId}&timeRange=${timeRange}`,
-      { method: 'GET', timeoutMs: 10000 }
+      { method: 'GET', timeoutMs: 6000 }
     )
 
     // Response: { code: "000000", data: [{ value, dataType, dateTime }] }
@@ -57,9 +58,10 @@ export async function fetchBinancePositionHistory(
 ): Promise<PositionHistoryItem[]> {
   try {
     // GET positions endpoint
+    // Aggressive 6s timeout to prevent CF Worker hangs
     const data = await fetchWithProxyFallback<Record<string, unknown>>(
       `${BINANCE_FRIENDLY}/lead-data/positions?portfolioId=${traderId}`,
-      { method: 'GET', timeoutMs: 10000 }
+      { method: 'GET', timeoutMs: 6000 }
     )
 
     const list = Array.isArray(data?.data) ? data.data as Array<Record<string, unknown>> :
@@ -108,9 +110,10 @@ export async function fetchBinanceStatsDetail(
 ): Promise<StatsDetail | null> {
   try {
     // GET performance endpoint (has winRate, mdd, tradeCount, copierPnl)
+    // Aggressive 6s timeout to prevent CF Worker hangs
     const perfData = await fetchWithProxyFallback<BinancePerformanceResponse>(
       `${BINANCE_PUBLIC}/lead-portfolio/performance?portfolioId=${traderId}&timeRange=90D`,
-      { method: 'GET', timeoutMs: 10000 }
+      { method: 'GET', timeoutMs: 6000 }
     )
 
     if (!perfData?.data) return null
@@ -122,7 +125,7 @@ export async function fetchBinanceStatsDetail(
     try {
       const detailData = await fetchWithProxyFallback<Record<string, unknown>>(
         `${BINANCE_FRIENDLY}/lead-portfolio/detail?portfolioId=${traderId}`,
-        { method: 'GET', timeoutMs: 8000 }
+        { method: 'GET', timeoutMs: 6000 }
       )
       const dd = detailData?.data as Record<string, unknown> | null
       if (dd) {
