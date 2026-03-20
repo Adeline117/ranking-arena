@@ -1,12 +1,11 @@
 import type { Metadata } from 'next'
-
-const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://www.arenafi.org'
+import { BASE_URL } from '@/lib/constants/urls'
 
 export const metadata: Metadata = {
   title: 'User Center',
   description: 'Manage your Arena account, membership, badges, and bookmarks.',
   alternates: {
-    canonical: `${baseUrl}/user-center`,
+    canonical: `${BASE_URL}/user-center`,
   },
   robots: {
     index: false,

@@ -8,6 +8,7 @@ import CapacitorProvider from "./components/Providers/CapacitorProvider";
 import { SkipLink } from "./components/Providers/Accessibility";
 import { PageErrorBoundary } from "./components/utils/ErrorBoundary";
 import { JsonLd } from "./components/Providers/JsonLd";
+import { BASE_URL } from "@/lib/constants/urls";
 
 // Defer non-critical layout components via dynamic import (code-split)
 // Note: ssr:false not allowed in Server Components (layout.tsx is a Server Component)
@@ -61,7 +62,7 @@ export const metadata: Metadata = {
   },
   description:
     "All rankings in crypto. Arena tracks top traders from Binance, Bybit, OKX, Hyperliquid, and 30+ exchanges — ranked by ROI, Arena Score, and PnL.",
-  metadataBase: new URL(process.env.NEXT_PUBLIC_APP_URL || "https://www.arenafi.org"),
+  metadataBase: new URL(BASE_URL),
   verification: {
     google: 'nnTiBxpNMeCgo9rCLyUbZV9Z-OE8Nr-BLh7E-o2T1R8',
   },
@@ -104,7 +105,7 @@ export const metadata: Metadata = {
     telephone: false,
   },
   alternates: {
-    canonical: process.env.NEXT_PUBLIC_APP_URL || "https://www.arenafi.org",
+    canonical: BASE_URL,
     // No per-language URLs — language is client-side only (localStorage)
     // Removed invalid /en hreflang (no /en route exists)
   },
@@ -113,12 +114,12 @@ export const metadata: Metadata = {
     title: "Arena ranks everything in crypto",
     description:
       "All rankings in crypto. Arena tracks top traders from Binance, Bybit, OKX, Hyperliquid, and 30+ exchanges — ranked by ROI, Arena Score, and PnL.",
-    url: process.env.NEXT_PUBLIC_APP_URL || "https://www.arenafi.org",
+    url: BASE_URL,
     siteName: "Arena",
     locale: "en_US",
     images: [
       {
-        url: `${process.env.NEXT_PUBLIC_APP_URL || "https://www.arenafi.org"}/api/og?title=Arena&subtitle=All+rankings+in+crypto`,
+        url: `${BASE_URL}/api/og?title=Arena&subtitle=All+rankings+in+crypto`,
         width: 1200,
         height: 630,
         alt: "Arena — All Rankings in Crypto",
@@ -131,7 +132,7 @@ export const metadata: Metadata = {
     description:
       "All rankings in crypto. Arena tracks top traders from Binance, Bybit, OKX, Hyperliquid, and 30+ exchanges — ranked by ROI, Arena Score, and PnL.",
     images: [
-      `${process.env.NEXT_PUBLIC_APP_URL || "https://www.arenafi.org"}/api/og?title=Arena&subtitle=All+rankings+in+crypto`,
+      `${BASE_URL}/api/og?title=Arena&subtitle=All+rankings+in+crypto`,
     ],
     creator: '@arenafi',
   },
@@ -188,11 +189,11 @@ export default function RootLayout({
           '@context': 'https://schema.org',
           '@type': 'WebSite',
           name: 'Arena',
-          url: 'https://www.arenafi.org',
+          url: BASE_URL,
           description: 'Crypto trader rankings across 30+ exchanges — Binance, Bybit, OKX, Hyperliquid and more.',
           potentialAction: {
             '@type': 'SearchAction',
-            target: { '@type': 'EntryPoint', urlTemplate: 'https://www.arenafi.org/?q={search_term_string}' },
+            target: { '@type': 'EntryPoint', urlTemplate: `${BASE_URL}/?q={search_term_string}` },
             'query-input': 'required name=search_term_string',
           },
         }} />

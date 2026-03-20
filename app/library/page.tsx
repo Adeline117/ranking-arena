@@ -1,29 +1,28 @@
 import { Metadata } from 'next'
 import { getSupabaseAdmin } from '@/lib/supabase/server'
 import LibraryBrowseClient from './LibraryBrowseClient'
-
-const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://www.arenafi.org'
+import { BASE_URL } from '@/lib/constants/urls'
 
 export const metadata: Metadata = {
   title: 'Library | Arena',
   description:
     'Browse 60,000+ crypto trading resources. Books, research papers, guides, and educational content for traders.',
   alternates: {
-    canonical: `${baseUrl}/library`,
+    canonical: `${BASE_URL}/library`,
   },
   openGraph: {
     title: 'Trading Library',
     description: 'Browse 60,000+ crypto trading resources — books, papers, and educational content.',
-    url: `${baseUrl}/library`,
+    url: `${BASE_URL}/library`,
     siteName: 'Arena',
     type: 'website',
-    images: [{ url: `${baseUrl}/og-image.png`, width: 1200, height: 630, alt: 'Arena Library' }],
+    images: [{ url: `${BASE_URL}/og-image.png`, width: 1200, height: 630, alt: 'Arena Library' }],
   },
   twitter: {
     card: 'summary_large_image',
     title: 'Trading Library | Arena',
     description: 'Browse 60,000+ crypto trading resources — books, papers, and educational content.',
-    images: [`${baseUrl}/og-image.png`],
+    images: [`${BASE_URL}/og-image.png`],
   },
 }
 

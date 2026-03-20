@@ -3,6 +3,7 @@ import { getAuthUser, getSupabaseAdmin } from '@/lib/supabase/server'
 import { createLogger } from '@/lib/utils/logger'
 import { checkRateLimit, RateLimitPresets } from '@/lib/utils/rate-limit'
 import crypto from 'crypto'
+import { BASE_URL } from '@/lib/constants/urls'
 
 const logger = createLogger('referral-api')
 
@@ -47,7 +48,7 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({
       referral_code: profile.referral_code || profile.handle,
       referral_count: referralCount ?? 0,
-      referral_link: `https://www.arenafi.org/?ref=${encodeURIComponent(profile.referral_code || profile.handle || '')}`,
+      referral_link: `${BASE_URL}/?ref=${encodeURIComponent(profile.referral_code || profile.handle || '')}`,
     })
   } catch (error) {
     logger.error('Referral GET error:', error)
@@ -85,7 +86,7 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({
       referral_code: code,
-      referral_link: `https://www.arenafi.org/?ref=${encodeURIComponent(code)}`,
+      referral_link: `${BASE_URL}/?ref=${encodeURIComponent(code)}`,
     })
   } catch (error) {
     logger.error('Referral POST error:', error)

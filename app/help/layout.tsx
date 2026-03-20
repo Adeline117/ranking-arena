@@ -1,27 +1,26 @@
 import type { Metadata } from 'next'
-
-const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://www.arenafi.org'
+import { BASE_URL } from '@/lib/constants/urls'
 
 export const metadata: Metadata = {
   title: 'Help Center | FAQs & Support',
   description:
     'Get help with Arena — Find answers to frequently asked questions about subscriptions, platform features, account settings, trading data, rankings methodology, and more. Complete support documentation.',
   alternates: {
-    canonical: `${baseUrl}/help`,
+    canonical: `${BASE_URL}/help`,
   },
   openGraph: {
     title: 'Help Center | FAQs & Support',
     description: 'Find answers to frequently asked questions about Arena — subscriptions, features, account settings, trading data, and rankings methodology.',
-    url: `${baseUrl}/help`,
+    url: `${BASE_URL}/help`,
     siteName: 'Arena',
     type: 'website',
-    images: [{ url: `${baseUrl}/og-image.png`, width: 1200, height: 630, alt: 'Arena Help Center' }],
+    images: [{ url: `${BASE_URL}/og-image.png`, width: 1200, height: 630, alt: 'Arena Help Center' }],
   },
   twitter: {
     card: 'summary_large_image',
     title: 'Help Center | FAQs & Support',
     description: 'Find answers to frequently asked questions about Arena platform features and account settings.',
-    images: [`${baseUrl}/og-image.png`],
+    images: [`${BASE_URL}/og-image.png`],
     creator: '@arenafi',
   },
 }

@@ -1,5 +1,6 @@
 import type { Metadata } from 'next'
 import { createClient } from '@supabase/supabase-js'
+import { BASE_URL } from '@/lib/constants/urls'
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || ''
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || ''
@@ -30,19 +31,18 @@ export async function generateMetadata({
     // Intentionally swallowed: metadata generation failure is non-critical, default metadata used
   }
 
-  const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://www.arenafi.org'
   const title = `${groupName} · Arena`
 
   return {
     title,
     description: groupDescription,
     alternates: {
-      canonical: `${baseUrl}/groups/${id}`,
+      canonical: `${BASE_URL}/groups/${id}`,
     },
     openGraph: {
       title,
       description: groupDescription,
-      url: `${baseUrl}/groups/${id}`,
+      url: `${BASE_URL}/groups/${id}`,
       siteName: 'Arena',
       type: 'website',
     },

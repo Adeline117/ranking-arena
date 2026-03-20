@@ -1,21 +1,20 @@
 import type { Metadata } from 'next'
-
-const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://www.arenafi.org'
+import { BASE_URL } from '@/lib/constants/urls'
 
 export const metadata: Metadata = {
   title: 'About Arena — Crypto Trader Rankings & Community Platform',
   description: 'Arena aggregates trader rankings from 30+ exchanges including Binance, Bitget, and Bybit. Discover top crypto traders, compare performance metrics, and join our trading community.',
   alternates: {
-    canonical: `${baseUrl}/about`,
+    canonical: `${BASE_URL}/about`,
   },
   openGraph: {
     title: 'About Arena — Crypto Trader Rankings Platform',
     description: 'Arena aggregates trader rankings from 30+ exchanges including Binance, Bitget, and Bybit. Discover top crypto traders, compare performance metrics, and join our trading community.',
-    url: `${baseUrl}/about`,
+    url: `${BASE_URL}/about`,
     siteName: 'Arena',
     type: 'website',
     images: [{ 
-      url: `${baseUrl}/og-image.png`, 
+      url: `${BASE_URL}/og-image.png`, 
       width: 1200, 
       height: 630, 
       alt: 'Arena - Crypto Trader Rankings' 
@@ -25,7 +24,7 @@ export const metadata: Metadata = {
     card: 'summary_large_image',
     title: 'About Arena — Crypto Trader Rankings Platform',
     description: 'Arena aggregates trader rankings from 30+ exchanges including Binance, Bitget, and Bybit.',
-    images: [`${baseUrl}/og-image.png`],
+    images: [`${BASE_URL}/og-image.png`],
     creator: '@arenafi',
   },
 }

@@ -3,30 +3,29 @@ import { getSupabaseAdmin } from '@/lib/supabase/server'
 import { createLogger } from '@/lib/utils/logger'
 import { JsonLd } from '@/app/components/Providers/JsonLd'
 import PricingPageClient from './PricingPageClient'
+import { BASE_URL } from '@/lib/constants/urls'
 
 const logger = createLogger('pricing-page')
-
-const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://www.arenafi.org'
 
 export const metadata: Metadata = {
   title: 'Pricing',
   description: 'Arena Pro membership plans - unlock advanced trading analytics, alerts, and exclusive features.',
   alternates: {
-    canonical: `${baseUrl}/pricing`,
+    canonical: `${BASE_URL}/pricing`,
   },
   openGraph: {
     title: 'Pricing — Arena Pro',
     description: 'Unlock advanced trading analytics, alerts, and exclusive features with Arena Pro membership.',
-    url: `${baseUrl}/pricing`,
+    url: `${BASE_URL}/pricing`,
     siteName: 'Arena',
     type: 'website',
-    images: [{ url: `${baseUrl}/og-image.png`, width: 1200, height: 630, alt: 'Arena Pro Pricing' }],
+    images: [{ url: `${BASE_URL}/og-image.png`, width: 1200, height: 630, alt: 'Arena Pro Pricing' }],
   },
   twitter: {
     card: 'summary_large_image',
     title: 'Pricing — Arena Pro',
     description: 'Unlock advanced trading analytics, alerts, and exclusive features with Arena Pro membership.',
-    images: [`${baseUrl}/og-image.png`],
+    images: [`${BASE_URL}/og-image.png`],
     creator: '@arenafi',
   },
 }
@@ -64,11 +63,11 @@ export default async function PricingPage() {
     '@type': 'Product',
     name: 'Arena Pro',
     description: 'Professional crypto trader analytics and ranking platform with advanced filters, alerts, and score breakdowns.',
-    url: `${baseUrl}/pricing`,
+    url: `${BASE_URL}/pricing`,
     brand: {
       '@type': 'Organization',
       name: 'Arena',
-      url: baseUrl,
+      url: BASE_URL,
     },
     offers: [
       {
@@ -78,7 +77,7 @@ export default async function PricingPage() {
         priceCurrency: 'USD',
         priceValidUntil: new Date(Date.now() + 365 * 86400000).toISOString().split('T')[0],
         availability: 'https://schema.org/InStock',
-        url: `${baseUrl}/pricing`,
+        url: `${BASE_URL}/pricing`,
       },
       {
         '@type': 'Offer',
@@ -87,7 +86,7 @@ export default async function PricingPage() {
         priceCurrency: 'USD',
         priceValidUntil: new Date(Date.now() + 365 * 86400000).toISOString().split('T')[0],
         availability: 'https://schema.org/InStock',
-        url: `${baseUrl}/pricing`,
+        url: `${BASE_URL}/pricing`,
       },
       {
         '@type': 'Offer',
@@ -96,7 +95,7 @@ export default async function PricingPage() {
         priceCurrency: 'USD',
         priceValidUntil: new Date(Date.now() + 365 * 86400000).toISOString().split('T')[0],
         availability: 'https://schema.org/LimitedAvailability',
-        url: `${baseUrl}/pricing`,
+        url: `${BASE_URL}/pricing`,
       },
     ],
   }

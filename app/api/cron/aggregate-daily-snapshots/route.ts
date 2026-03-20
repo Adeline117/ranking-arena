@@ -102,6 +102,44 @@ export async function GET(request: NextRequest) {
       }
     }
 
+    // Step 1.5: Fill gaps from leaderboard_ranks (always has 100% roi/pnl coverage)
+    // Many traders in LR don't have v2 snapshots yet, but we need their daily data points
+    {
+      const { data: lrRows } = await supabase
+        .from('leaderboard_ranks')
+        .select('source, source_trader_id, roi, pnl, win_rate, max_drawdown, followers, trades_count')
+        .eq('season_id', '90D')
+        .not('arena_score', 'is', null)
+        .limit(50000)
+      if (lrRows) {
+        let filled = 0
+        for (const lr of lrRows) {
+          const key = `${lr.source}:${lr.source_trader_id}`
+          if (!snapshotMap.has(key)) {
+            snapshotMap.set(key, {
+              source: lr.source,
+              source_trader_id: lr.source_trader_id,
+              roi: lr.roi,
+              pnl: lr.pnl,
+              win_rate: lr.win_rate,
+              max_drawdown: lr.max_drawdown,
+              followers: lr.followers,
+              trades_count: lr.trades_count,
+            })
+            filled++
+          } else {
+            // Fill null roi/pnl from LR if v2 had nulls
+            const existing = snapshotMap.get(key)!
+            if (existing.roi == null && lr.roi != null) existing.roi = lr.roi
+            if (existing.pnl == null && lr.pnl != null) existing.pnl = lr.pnl
+          }
+        }
+        if (filled > 0) {
+          logger.info(`[aggregate] Filled ${filled} traders from leaderboard_ranks (not in v2)`)
+        }
+      }
+    }
+
     if (snapshotMap.size === 0) {
       await plog.success(0)
       return NextResponse.json({

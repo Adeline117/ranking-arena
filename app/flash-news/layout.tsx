@@ -1,27 +1,26 @@
 import type { Metadata } from 'next'
-
-const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://www.arenafi.org'
+import { BASE_URL } from '@/lib/constants/urls'
 
 export const metadata: Metadata = {
   title: 'Flash News - Arena',
   description:
     'Real-time crypto market news, DeFi updates, macro events, and regulatory changes curated for traders.',
   alternates: {
-    canonical: `${baseUrl}/flash-news`,
+    canonical: `${BASE_URL}/flash-news`,
   },
   openGraph: {
     title: 'Flash News - Arena',
     description: 'Real-time crypto market news and updates curated for traders.',
-    url: `${baseUrl}/flash-news`,
+    url: `${BASE_URL}/flash-news`,
     siteName: 'Arena',
     type: 'website',
-    images: [{ url: `${baseUrl}/og-image.png`, width: 1200, height: 630, alt: 'Arena Flash News' }],
+    images: [{ url: `${BASE_URL}/og-image.png`, width: 1200, height: 630, alt: 'Arena Flash News' }],
   },
   twitter: {
     card: 'summary_large_image',
     title: 'Flash News - Arena',
     description: 'Real-time crypto market news curated for traders.',
-    images: [`${baseUrl}/og-image.png`],
+    images: [`${BASE_URL}/og-image.png`],
   },
 }
 

@@ -3,6 +3,7 @@ import { Suspense } from 'react'
 import { getSupabaseAdmin } from '@/lib/supabase/server'
 import UserProfileClient from './UserProfileClient'
 import { logger } from '@/lib/logger'
+import { BASE_URL } from '@/lib/constants/urls'
 
 export const revalidate = 60
 
@@ -15,7 +16,7 @@ export async function generateMetadata({ params }: { params: Promise<{ handle: s
     openGraph: {
       title: `@${decoded}`,
       description: `View @${decoded}'s profile, trading stats, and activity on Arena.`,
-      url: `https://www.arenafi.org/u/${encodeURIComponent(decoded)}`,
+      url: `${BASE_URL}/u/${encodeURIComponent(decoded)}`,
       siteName: 'Arena',
       type: 'profile',
     },

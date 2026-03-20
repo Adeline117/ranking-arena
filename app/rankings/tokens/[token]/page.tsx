@@ -1,7 +1,6 @@
 import type { Metadata } from 'next'
 import TokenRankingClient from './TokenRankingClient'
-
-const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://www.arenafi.org'
+import { BASE_URL } from '@/lib/constants/urls'
 const CURRENT_YEAR = new Date().getFullYear()
 
 export async function generateMetadata({
@@ -19,7 +18,7 @@ export async function generateMetadata({
     title,
     description,
     alternates: {
-      canonical: `${baseUrl}/rankings/tokens/${token}`,
+      canonical: `${BASE_URL}/rankings/tokens/${token}`,
     },
     keywords: [
       `best ${token} traders`,
@@ -32,16 +31,16 @@ export async function generateMetadata({
     openGraph: {
       title,
       description,
-      url: `${baseUrl}/rankings/tokens/${token}`,
+      url: `${BASE_URL}/rankings/tokens/${token}`,
       siteName: 'Arena',
       type: 'website',
-      images: [{ url: `${baseUrl}/og-image.png`, width: 1200, height: 630, alt: `Arena ${token} Rankings` }],
+      images: [{ url: `${BASE_URL}/og-image.png`, width: 1200, height: 630, alt: `Arena ${token} Rankings` }],
     },
     twitter: {
       card: 'summary_large_image',
       title,
       description,
-      images: [`${baseUrl}/og-image.png`],
+      images: [`${BASE_URL}/og-image.png`],
       creator: '@arenafi',
     },
     robots: { index: true, follow: true },
