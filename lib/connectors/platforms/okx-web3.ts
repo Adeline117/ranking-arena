@@ -210,14 +210,23 @@ export class OkxWeb3Connector extends BaseConnector {
     ratios: Array<{ ts: string; ratio: string }> | undefined,
     days: number
   ): number | null {
-    if (!ratios || ratios.length < 2) return null
+    if (!ratios || ratios.length === 0) return null
 
     const cutoff = Date.now() - days * 24 * 60 * 60 * 1000
-    const values = ratios
+    let values = ratios
       .map(r => ({ ts: parseInt(r.ts, 10), ratio: parseFloat(r.ratio) }))
       .filter(r => r.ts >= cutoff && !isNaN(r.ratio))
       .sort((a, b) => a.ts - b.ts)
       .map(r => 1 + r.ratio)
+
+    // If no data within window, use all data
+    if (values.length < 2) {
+      values = ratios
+        .map(r => ({ ts: parseInt(r.ts, 10), ratio: parseFloat(r.ratio) }))
+        .filter(r => !isNaN(r.ratio))
+        .sort((a, b) => a.ts - b.ts)
+        .map(r => 1 + r.ratio)
+    }
 
     if (values.length < 2) return null
 
