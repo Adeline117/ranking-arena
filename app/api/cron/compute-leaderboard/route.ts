@@ -664,6 +664,34 @@ async function computeSeason(
     logger.info(`[${season}] Phase 5: estimated ${phase5Count} WR/MDD values from ROI`)
   }
 
+  // Phase 6: Classify trading_style for all traders missing it
+  let styleCount = 0
+  for (const snap of traderMap.values()) {
+    if (snap.trading_style != null) continue
+    // Simple classification from available metrics
+    const holding = snap.avg_holding_hours
+    const trades = snap.trades_count
+    if (holding != null) {
+      if (holding < 1) { snap.trading_style = 'Scalper'; snap.style_confidence = 0.9 }
+      else if (holding < 8) { snap.trading_style = 'Day Trader'; snap.style_confidence = 0.85 }
+      else if (holding < 72) { snap.trading_style = 'Swing Trader'; snap.style_confidence = 0.8 }
+      else if (holding < 720) { snap.trading_style = 'Position Trader'; snap.style_confidence = 0.75 }
+      else { snap.trading_style = 'Long-Term'; snap.style_confidence = 0.7 }
+      styleCount++
+    } else if (trades != null && trades > 0) {
+      const dailyTrades = trades / 90
+      if (dailyTrades > 20) { snap.trading_style = 'Scalper'; snap.style_confidence = 0.6 }
+      else if (dailyTrades > 5) { snap.trading_style = 'Day Trader'; snap.style_confidence = 0.55 }
+      else if (dailyTrades > 1) { snap.trading_style = 'Swing Trader'; snap.style_confidence = 0.5 }
+      else if (dailyTrades > 0.1) { snap.trading_style = 'Position Trader'; snap.style_confidence = 0.45 }
+      else { snap.trading_style = 'Long-Term'; snap.style_confidence = 0.4 }
+      styleCount++
+    }
+  }
+  if (styleCount > 0) {
+    logger.info(`[${season}] Phase 6: classified ${styleCount} trading styles`)
+  }
+
   const roiThreshold = ROI_ANOMALY_THRESHOLDS[season]
   const uniqueTraders = Array.from(traderMap.values())
     .filter(t => t.roi != null)

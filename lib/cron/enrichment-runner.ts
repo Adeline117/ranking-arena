@@ -91,6 +91,7 @@ import {
   upsertPortfolio,
   enhanceStatsWithDerivedMetrics,
   calculateAssetBreakdown,
+  classifyTradingStyle,
   type StatsDetail,
   type EquityCurvePoint,
   type PositionHistoryItem,

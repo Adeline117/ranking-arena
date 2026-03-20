@@ -225,4 +225,7 @@ export {
   calculateSharpeRatio,
   enhanceStatsWithDerivedMetrics,
   calculateAssetBreakdown,
+  classifyTradingStyle,
+  calculateAvgHoldingHours,
+  calculateAvgProfitLoss,
 } from './enrichment-metrics'
