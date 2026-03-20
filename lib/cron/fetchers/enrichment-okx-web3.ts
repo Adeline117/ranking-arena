@@ -76,14 +76,48 @@ export async function fetchOkxWeb3StatsDetail(
     }
     const winRate = n(d.winRatio)
 
+    // Compute MDD + Sharpe from pnlRatios time series
+    let maxDrawdown: number | null = null
+    let sharpeRatio: number | null = null
+    if (d.pnlRatios && d.pnlRatios.length >= 2) {
+      const sorted = d.pnlRatios
+        .map(r => ({ ts: Number(r.ts), ratio: parseFloat(r.ratio) }))
+        .filter(r => !isNaN(r.ratio))
+        .sort((a, b) => a.ts - b.ts)
+
+      // MDD from cumulative ratio curve
+      const values = sorted.map(r => 1 + r.ratio)
+      let peak = values[0]
+      let maxDD = 0
+      for (const v of values) {
+        if (v > peak) peak = v
+        if (peak > 0) {
+          const dd = (peak - v) / peak * 100
+          if (dd > maxDD) maxDD = dd
+        }
+      }
+      if (maxDD > 0 && maxDD <= 100) maxDrawdown = Math.round(maxDD * 100) / 100
+
+      // Sharpe from daily ratio returns
+      if (sorted.length >= 5) {
+        const returns: number[] = []
+        for (let i = 1; i < sorted.length; i++) {
+          returns.push(sorted[i].ratio - sorted[i - 1].ratio)
+        }
+        const mean = returns.reduce((a, b) => a + b, 0) / returns.length
+        const std = Math.sqrt(returns.reduce((a, r) => a + (r - mean) ** 2, 0) / returns.length)
+        if (std > 0) sharpeRatio = Math.round((mean / std) * Math.sqrt(365) * 100) / 100
+      }
+    }
+
     return {
       totalTrades: null,
       profitableTradesPct: winRate != null ? winRate * 100 : null,
       avgHoldingTimeHours: null,
       avgProfit: null, avgLoss: null,
       largestWin: null, largestLoss: null,
-      sharpeRatio: null,
-      maxDrawdown: null,
+      sharpeRatio,
+      maxDrawdown,
       currentDrawdown: null, volatility: null,
       copiersCount: d.copyTraderNum ? parseInt(d.copyTraderNum) : null,
       copiersPnl: null, aum: n(d.aum),

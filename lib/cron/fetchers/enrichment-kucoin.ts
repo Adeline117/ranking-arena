@@ -1,12 +1,12 @@
 /**
  * KuCoin enrichment — equity curve from totalPnlDate in leaderboard API
  *
- * KuCoin copy-trade API returns totalPnlDate (array of cumulative PnL values)
- * for each trader. We convert this into an equity curve and compute
- * WR/MDD/Sharpe from daily PnL deltas.
+ * Strategy: Fetch leaderboard page (contains totalPnlDate for each trader),
+ * cache the full page, then extract per-trader data.
+ * VPS scraper only has /kucoin/leaderboard (no /trader-detail route).
  *
- * Primary: VPS Playwright scraper /kucoin/trader-detail
- * Fallback: Direct KuCoin ct-copy-trade API
+ * totalPnlDate is an array of cumulative PnL values (one per day, ~30 entries).
+ * WR/MDD/Sharpe are computed from daily PnL deltas by enrichment-runner.
  */
 
 import { fetchJson } from './shared'
@@ -16,18 +16,84 @@ import type { EquityCurvePoint, StatsDetail } from './enrichment-types'
 const VPS_BASE = process.env.VPS_SCRAPER_URL || 'http://45.76.152.169:3457'
 const VPS_KEY = (process.env.VPS_PROXY_KEY || '').trim()
 
-interface KucoinTraderDetail {
-  data?: {
-    totalPnlDate?: number[] | string[]
-    totalPnl?: number | string
-    roi?: number | string
-    winRate?: number | string
-    maxDrawdown?: number | string
-    followerCount?: number | string
-    currentCopyCount?: number | string
-    tradeCount?: number | string
-    nickName?: string
+// Cache leaderboard data to avoid re-fetching per trader
+let cachedLeaderboard: Map<string, KucoinTrader> | null = null
+let cacheExpiry = 0
+
+interface KucoinTrader {
+  leadConfigId?: string
+  uid?: string
+  nickName?: string
+  totalPnlDate?: number[] | string[]
+  totalPnl?: number | string
+  totalPnlRatio?: number | string
+  currentCopyUserCount?: number | string
+  maxCopyUserCount?: number | string
+  leadPrincipal?: number | string
+  [key: string]: unknown
+}
+
+async function getLeaderboardCache(): Promise<Map<string, KucoinTrader>> {
+  if (cachedLeaderboard && Date.now() < cacheExpiry) return cachedLeaderboard
+
+  const traders = new Map<string, KucoinTrader>()
+
+  // Fetch multiple pages to cover more traders
+  for (let page = 1; page <= 5; page++) {
+    try {
+      // Strategy 1: VPS scraper (primary)
+      const data = await fetchJson<Record<string, unknown>>(
+        `${VPS_BASE}/kucoin/leaderboard?pageNo=${page}&pageSize=50`,
+        {
+          timeoutMs: 60000,
+          headers: VPS_KEY ? { 'x-proxy-key': VPS_KEY } : undefined,
+        }
+      )
+
+      const dataObj = (data?.data ?? data) as Record<string, unknown>
+      const items = (dataObj?.items || dataObj?.list || dataObj?.rows ||
+        (Array.isArray(dataObj) ? dataObj : [])) as KucoinTrader[]
+
+      if (!items.length) break
+
+      for (const item of items) {
+        const id = String(item.leadConfigId || item.uid || '')
+        if (id) traders.set(id, item)
+      }
+
+      if (items.length < 50) break
+    } catch (err) {
+      logger.warn(`[enrichment] KuCoin leaderboard page ${page} failed: ${err}`)
+      if (page === 1 && traders.size === 0) {
+        // Try direct API fallback
+        try {
+          const data = await fetchJson<Record<string, unknown>>(
+            `https://www.kucoin.com/_api/ct-copy-trade/v1/copyTrading/rn/leaderboard/query?lang=en_US&pageNo=${page}&pageSize=50`,
+            { timeoutMs: 15000 }
+          )
+          const items = ((data?.data as Record<string, unknown>)?.items ||
+            (data?.data as unknown[])) as KucoinTrader[] | undefined
+          if (Array.isArray(items)) {
+            for (const item of items) {
+              const id = String(item.leadConfigId || item.uid || '')
+              if (id) traders.set(id, item)
+            }
+          }
+        } catch {
+          // Direct API also failed — expected from datacenter
+        }
+      }
+      break
+    }
   }
+
+  if (traders.size > 0) {
+    cachedLeaderboard = traders
+    cacheExpiry = Date.now() + 30 * 60 * 1000 // Cache for 30 min
+    logger.info(`[enrichment] KuCoin leaderboard cached: ${traders.size} traders`)
+  }
+
+  return traders
 }
 
 /**
@@ -38,14 +104,15 @@ export async function fetchKucoinEquityCurve(
   traderId: string,
   days = 90
 ): Promise<EquityCurvePoint[]> {
-  const detail = await fetchKucoinDetail(traderId)
-  const pnlDates = detail?.data?.totalPnlDate
+  const cache = await getLeaderboardCache()
+  const trader = cache.get(traderId)
+  const pnlDates = trader?.totalPnlDate
+
   if (!Array.isArray(pnlDates) || pnlDates.length < 2) return []
 
   const values = pnlDates.map(Number).filter(v => !isNaN(v))
   if (values.length < 2) return []
 
-  // Take last N days
   const slice = values.slice(-days)
   const baseValue = slice[0]
   const today = new Date()
@@ -54,7 +121,6 @@ export async function fetchKucoinEquityCurve(
     const date = new Date(today.getTime() - (slice.length - 1 - i) * 86400000)
     return {
       date: date.toISOString().split('T')[0],
-      // ROI as % change from first point
       roi: baseValue !== 0 ? ((v - baseValue) / Math.abs(baseValue)) * 100 : 0,
       pnl: v,
     }
@@ -62,16 +128,56 @@ export async function fetchKucoinEquityCurve(
 }
 
 /**
- * Fetch stats from KuCoin trader detail.
- * Metrics from API: winRate, maxDrawdown, tradeCount.
- * Sharpe/WR/MDD also computed from equity curve by enrichment-runner.
+ * Fetch stats from KuCoin leaderboard cache.
+ * Compute WR/MDD from totalPnlDate daily deltas.
  */
 export async function fetchKucoinStatsDetail(
   traderId: string
 ): Promise<StatsDetail | null> {
-  const detail = await fetchKucoinDetail(traderId)
-  const d = detail?.data
+  const cache = await getLeaderboardCache()
+  const d = cache.get(traderId)
   if (!d) return null
+
+  // Compute derived metrics from totalPnlDate
+  const pnlDates = d.totalPnlDate
+  let winRate: number | null = null
+  let maxDrawdown: number | null = null
+  let sharpeRatio: number | null = null
+  let tradesCount: number | null = null
+
+  if (Array.isArray(pnlDates) && pnlDates.length >= 3) {
+    const values = pnlDates.map(Number).filter(v => !isNaN(v))
+
+    // Daily returns (deltas)
+    const returns: number[] = []
+    for (let i = 1; i < values.length; i++) {
+      returns.push(values[i] - values[i - 1])
+    }
+    tradesCount = returns.length
+
+    // Win rate: % of positive daily returns
+    if (returns.length >= 3) {
+      const wins = returns.filter(r => r > 0).length
+      winRate = Math.round((wins / returns.length) * 10000) / 100
+    }
+
+    // Max drawdown from cumulative PnL curve
+    let peak = -Infinity
+    let maxDD = 0
+    for (const v of values) {
+      if (v > peak) peak = v
+      const dd = peak > 0 ? ((peak - v) / peak) * 100 : 0
+      if (dd > maxDD) maxDD = dd
+    }
+    if (maxDD > 0 && maxDD <= 100) maxDrawdown = Math.round(maxDD * 100) / 100
+
+    // Sharpe ratio (annualized)
+    if (returns.length >= 5) {
+      const mean = returns.reduce((a, b) => a + b, 0) / returns.length
+      const std = Math.sqrt(returns.reduce((a, r) => a + (r - mean) ** 2, 0) / returns.length)
+      if (std > 0) sharpeRatio = Math.round((mean / std) * Math.sqrt(365) * 100) / 100
+    }
+  }
 
   const n = (v: unknown): number | null => {
     if (v == null) return null
@@ -79,54 +185,22 @@ export async function fetchKucoinStatsDetail(
     return isNaN(x) ? null : x
   }
 
-  const winRate = n(d.winRate)
-  const maxDrawdown = n(d.maxDrawdown)
-
   return {
-    totalTrades: d.tradeCount != null ? Math.round(Number(d.tradeCount)) : null,
-    profitableTradesPct: winRate != null ? (Math.abs(winRate) <= 1 ? winRate * 100 : winRate) : null,
+    totalTrades: tradesCount,
+    profitableTradesPct: winRate,
     avgHoldingTimeHours: null,
     avgProfit: null,
     avgLoss: null,
     largestWin: null,
     largestLoss: null,
-    sharpeRatio: null, // Computed from equity curve by enrichment-runner
-    maxDrawdown: maxDrawdown != null ? (Math.abs(maxDrawdown) <= 1 ? maxDrawdown * 100 : maxDrawdown) : null,
+    sharpeRatio,
+    maxDrawdown,
     currentDrawdown: null,
     volatility: null,
-    copiersCount: n(d.currentCopyCount),
+    copiersCount: n(d.currentCopyUserCount),
     copiersPnl: null,
-    aum: null,
+    aum: n(d.leadPrincipal),
     winningPositions: null,
     totalPositions: null,
   }
-}
-
-async function fetchKucoinDetail(traderId: string): Promise<KucoinTraderDetail | null> {
-  // Strategy 1: VPS Playwright scraper
-  try {
-    const data = await fetchJson<KucoinTraderDetail>(
-      `${VPS_BASE}/kucoin/trader-detail?id=${encodeURIComponent(traderId)}`,
-      {
-        timeoutMs: 30000,
-        headers: VPS_KEY ? { 'x-api-key': VPS_KEY } : undefined,
-      }
-    )
-    if (data?.data?.totalPnlDate) return data
-  } catch (err) {
-    logger.warn(`[enrichment] KuCoin VPS detail failed for ${traderId}: ${err}`)
-  }
-
-  // Strategy 2: Direct API (may work from residential IPs)
-  try {
-    const data = await fetchJson<KucoinTraderDetail>(
-      `https://www.kucoin.com/_api/ct-copy-trade/v1/copyTrading/rn/leaderboard/detail?leadConfigId=${encodeURIComponent(traderId)}`,
-      { timeoutMs: 15000 }
-    )
-    if (data?.data) return data
-  } catch (err) {
-    logger.warn(`[enrichment] KuCoin direct detail failed for ${traderId}: ${err}`)
-  }
-
-  return null
 }

@@ -285,14 +285,20 @@ export class GainsPerpConnector extends BaseConnector {
         roi = Math.max(-100, Math.min(10000, (pnl / (avgPos * total)) * 100))
       }
     }
-    // Fallback 2: estimate from avg_win/avg_loss weighted by count
-    if (roi === null && wins + losses > 0) {
-      const avgWinVal = this.num(raw.avg_win) ?? 0
-      const avgLossVal = this.num(raw.avg_loss) ?? 0
-      const avgCol = this.num(raw.avgCollateral ?? raw.avgPositionSize)
-      if (avgCol != null && avgCol > 0) {
-        const netPnlPerTrade = (avgWinVal * wins + avgLossVal * losses) / (wins + losses)
-        roi = Math.max(-100, Math.min(10000, (netPnlPerTrade / avgCol) * 100))
+    // Fallback 2: estimate ROI using abs(avg_loss) as capital proxy per trade
+    // Rationale: avg_loss represents average risk per trade, approximating position size
+    if (roi === null && pnl != null && total > 0) {
+      const avgLossVal = this.num(raw.avg_loss)
+      const avgWinVal = this.num(raw.avg_win)
+      // Use max(abs(avg_loss), avg_win) as proxy for average position size
+      const capitalProxy = Math.max(
+        avgLossVal != null ? Math.abs(avgLossVal) : 0,
+        avgWinVal != null ? avgWinVal : 0
+      )
+      if (capitalProxy > 0) {
+        // ROI = totalPnL / (estimated total capital deployed)
+        const totalCapital = capitalProxy * total
+        roi = Math.max(-500, Math.min(10000, (pnl / totalCapital) * 100))
       }
     }
 
