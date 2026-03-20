@@ -142,8 +142,15 @@ export async function fetchBitunixStatsDetail(
       const mddRaw = toNum(entry.mdd)
       const maxDrawdown = mddRaw != null ? Math.abs(mddRaw * 100) : null
 
+      // Derive totalTrades from winCount / winRate (both are real API data)
+      const winCount = entry.winCount ?? null
+      let totalTrades: number | null = null
+      if (winCount != null && winCount > 0 && winRate != null && winRate > 0 && winRate <= 1) {
+        totalTrades = Math.round(winCount / winRate)
+      }
+
       return {
-        totalTrades: null,
+        totalTrades,
         profitableTradesPct: profitableTradesPct != null ? Math.round(profitableTradesPct * 10) / 10 : null,
         avgHoldingTimeHours: null,
         avgProfit: null,
