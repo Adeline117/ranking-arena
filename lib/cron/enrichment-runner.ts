@@ -703,9 +703,8 @@ export async function runEnrichment(params: {
                 }
 
                 if (config.fetchStatsDetail && stats) {
-                  if (curve.length > 0) {
-                    stats = enhanceStatsWithDerivedMetrics(stats, curve, period)
-                  }
+                  // Pass position history to derive avg_holding_hours, avg_profit/loss, etc.
+                  stats = enhanceStatsWithDerivedMetrics(stats, curve, period, positions.length > 0 ? positions : undefined)
                   await withRetry(() => upsertStatsDetail(supabase, platformKey, traderId, period, stats!), `${platformKey}:${traderId} save stats detail`)
                 }
 
