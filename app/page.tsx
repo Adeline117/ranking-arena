@@ -6,7 +6,7 @@ import SSRRankingTable from './components/home/SSRRankingTable'
 import HomeHeroSSR from './components/home/HomeHeroSSR'
 import { JsonLd } from './components/Providers/JsonLd'
 import HomePageLoader from './components/home/HomePageLoader'
-import { ErrorBoundary } from './components/ui/ErrorBoundary'
+import { PageErrorBoundary } from './components/utils/ErrorBoundary'
 
 const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://www.arenafi.org'
 
@@ -128,7 +128,7 @@ export default async function Page() {
           The SSR table already shows data — the client fetch can happen lazily. */}
       <JsonLd data={organizationJsonLd} />
 
-      <ErrorBoundary name="homepage">
+      <PageErrorBoundary>
         {/* Phase 1: SSR hero + ranking table — pure HTML, 0 JS, visible immediately.
             HomeHeroSSR contains the LCP headline "Track the World's Best Crypto Traders".
             Hidden via CSS once the interactive HomePage mounts (see globals.css).
@@ -158,7 +158,7 @@ export default async function Page() {
           initialLastUpdated={lastUpdated}
           heroStats={heroStats}
         />
-      </ErrorBoundary>
+      </PageErrorBoundary>
     </>
   )
 }
