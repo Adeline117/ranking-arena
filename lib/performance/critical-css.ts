@@ -152,6 +152,44 @@ iframe{display:block;max-width:100%}
    Dramatically reduces initial rendering work (TBT) and improves Speed Index. */
 .three-col-left,.three-col-right{content-visibility:auto;contain-intrinsic-size:auto 600px}
 
+/* ============================================
+   Ranking Table Grid — CRITICAL for CLS
+   Without these, the grid renders with wrong columns
+   until responsive.css loads async (causes 0.1+ CLS).
+   ============================================ */
+/* Mobile: Rank | Trader | ROI only */
+.ranking-table-grid{grid-template-columns:36px 1fr 80px !important}
+.ranking-table-grid .col-score,.ranking-table-grid .col-pnl,.ranking-table-grid .col-winrate,.ranking-table-grid .col-mdd{display:none !important}
+@media(min-width:640px){.ranking-table-grid{grid-template-columns:40px 1fr 80px 60px 80px !important}.ranking-table-grid .col-score,.ranking-table-grid .col-pnl{display:flex !important}}
+@media(min-width:768px){.ranking-table-grid{grid-template-columns:44px minmax(140px,1.5fr) 80px 80px 70px 70px 64px !important}.ranking-table-grid .col-score,.ranking-table-grid .col-pnl,.ranking-table-grid .col-winrate,.ranking-table-grid .col-mdd{display:flex !important}}
+
+/* SSR ranking table — inline compact layout to prevent CLS before Phase 2 */
+.ssr-t{display:flex;flex-direction:column;gap:0}
+.ssr-hdr{display:grid;grid-template-columns:36px 1fr 50px 70px;gap:8px;padding:8px 12px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;color:var(--text-tertiary,#6B6B7B);border-bottom:1px solid var(--border-primary,#2A2836)}
+.ssr-row{display:grid;grid-template-columns:36px 1fr 50px 70px;gap:8px;padding:8px 12px;align-items:center;text-decoration:none;color:inherit;border-bottom:1px solid var(--border-primary,rgba(42,40,54,0.5));min-height:52px;contain:layout style}
+.ssr-r{text-align:right}
+.ssr-rank{text-align:center;font-weight:700;font-size:13px;color:var(--text-secondary)}
+.ssr-info{display:flex;align-items:center;gap:8px;min-width:0}
+.ssr-av{width:36px;height:36px;border-radius:50%;overflow:hidden;flex-shrink:0;position:relative;display:flex;align-items:center;justify-content:center;background:var(--bg-tertiary,#1C1926);font-weight:700;font-size:14px;color:var(--text-tertiary)}
+.ssr-name{font-weight:600;font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:var(--text-primary)}
+.ssr-src{font-size:11px;color:var(--text-tertiary);text-transform:capitalize}
+.ssr-score{font-weight:800;font-size:14px;text-align:center;font-variant-numeric:tabular-nums}
+.ssr-roi-val{font-weight:700;font-size:13px;text-align:right;font-variant-numeric:tabular-nums}
+.ssr-roi-pos{color:var(--color-success,#2fe57d)}
+.ssr-roi-neg{color:var(--color-error,#ff7c7c)}
+.ssr-pnl{font-size:11px;color:var(--text-tertiary);text-align:right}
+.ssr-wr,.ssr-mdd{font-size:12px;color:var(--text-secondary);text-align:right;font-variant-numeric:tabular-nums}
+.ssr-score-s{color:#2fe57d}
+.ssr-score-a{color:#7dd87d}
+.ssr-score-b{color:#d4c952}
+.ssr-score-c{color:#e8a83e}
+.ssr-score-d{color:#ff7c7c}
+.ssr-rank-circle{display:inline-flex;align-items:center;justify-content:center;width:24px;height:24px;border-radius:50%;color:#000;font-weight:900;font-size:12px}
+.ssr-rank-default{color:var(--text-tertiary)}
+.ssr-row-gold{background:linear-gradient(90deg,rgba(255,215,0,0.06) 0%,transparent 60%)}
+.ssr-row-silver{background:linear-gradient(90deg,rgba(192,192,192,0.05) 0%,transparent 60%)}
+.ssr-row-bronze{background:linear-gradient(90deg,rgba(205,127,50,0.04) 0%,transparent 60%)}
+
 /* 预留空间 - 防止字体加载导致的CLS */
 .font-loading body{letter-spacing:-0.011em}
 
