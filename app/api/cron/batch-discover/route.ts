@@ -92,7 +92,7 @@ async function discoverRankingsInline(): Promise<BatchResult> {
       if (error.message.includes('does not exist') || error.message.includes('relation')) {
         return { name, status: 'success', durationMs: Date.now() - start, detail: { skipped: true, reason: 'refresh_jobs table not available' } }
       }
-      return { name, status: 'error', durationMs: Date.now() - start, error: error.message }
+      return { name, status: 'error', durationMs: Date.now() - start, error: 'Database insert failed' }
     }
 
     // Release stale locks if RPC exists
@@ -104,7 +104,7 @@ async function discoverRankingsInline(): Promise<BatchResult> {
 
     return { name, status: 'success', durationMs: Date.now() - start, detail: { jobs_created: jobs.length, blocked: Array.from(blockedPlatforms) } }
   } catch (err) {
-    return { name, status: 'error', durationMs: Date.now() - start, error: err instanceof Error ? err.message : String(err) }
+    return { name, status: 'error', durationMs: Date.now() - start, error: 'Discovery task failed' }
   }
 }
 
