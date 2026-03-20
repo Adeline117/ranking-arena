@@ -76,11 +76,15 @@ export async function runWorkerInline(): Promise<InlineJobResult> {
 
     for (let i = 0; i < MAX_JOBS; i++) {
       if (i > 0) {
-        const { data: jobs } = await supabase.rpc('claim_refresh_job', {
+        const { data: jobs, error: claimErr } = await supabase.rpc('claim_refresh_job', {
           p_worker_id: workerId,
           p_platforms: null,
           p_job_types: null,
         })
+        if (claimErr) {
+          logger.warn(`[inline-jobs] claim_refresh_job RPC failed on iteration ${i}: ${claimErr.message}`)
+          break
+        }
         job = jobs?.[0] ?? null
       }
       if (!job) break
@@ -396,7 +400,7 @@ export async function syncTradersInline(): Promise<InlineJobResult> {
         const arenaScoreResult = calculateArenaScore({ roi: traderData.roi, pnl: traderData.pnl, maxDrawdown: traderData.maxDrawdown, winRate: traderData.winRate }, period)
 
         // Write to v2 only (v1 writes removed 2026-03-18)
-        await supabase.from('trader_snapshots_v2').upsert({
+        const { error: snapErr } = await supabase.from('trader_snapshots_v2').upsert({
           platform: auth.platform, market_type: 'futures', trader_key: auth.trader_id, window: period,
           roi_pct: traderData.roi, pnl_usd: traderData.pnl, followers: traderData.followers,
           trades_count: traderData.tradesCount,
@@ -404,21 +408,24 @@ export async function syncTradersInline(): Promise<InlineJobResult> {
           arena_score: arenaScoreResult.totalScore,
           updated_at: new Date().toISOString(),
         }, { onConflict: 'platform,market_type,trader_key,window' })
+        if (snapErr) logger.warn(`[Sync] snapshot upsert failed for ${auth.platform}/${auth.trader_id}: ${snapErr.message}`)
 
-        await supabase.from('trader_sources').upsert({
+        const { error: srcErr } = await supabase.from('trader_sources').upsert({
           source: auth.platform, source_trader_id: auth.trader_id,
           nickname: traderData.nickname, avatar_url: traderData.avatar,
           description: traderData.description, verified: traderData.verified,
           last_updated: new Date().toISOString(),
         }, { onConflict: 'source,source_trader_id' })
+        if (srcErr) logger.warn(`[Sync] source upsert failed for ${auth.platform}/${auth.trader_id}: ${srcErr.message}`)
 
         await supabase.from('authorization_sync_logs').insert({
           authorization_id: auth.id, sync_status: 'success', records_synced: 1, synced_data: traderData,
         })
 
-        await supabase.from('trader_authorizations').update({
+        const { error: authErr } = await supabase.from('trader_authorizations').update({
           last_verified_at: new Date().toISOString(), verification_error: null,
         }).eq('id', auth.id)
+        if (authErr) logger.warn(`[Sync] authorization update failed for ${auth.id}: ${authErr.message}`)
 
         synced++
       } catch (error) {

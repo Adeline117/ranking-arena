@@ -223,8 +223,9 @@ export async function upsertAssetBreakdown(
       })
     
     if (error) {
-      console.error(`Batch ${i} failed:`, error)
-      return { saved, error: error.message }
+      console.error(`Asset breakdown batch ${i} failed:`, error)
+      // Continue inserting remaining batches instead of losing data
+      continue
     }
     saved += batch.length
   }
@@ -291,8 +292,9 @@ export async function upsertPortfolio(
       .insert(batch)
 
     if (error) {
-      console.error(`Batch ${i} failed:`, error)
-      return { saved, error: error.message }
+      console.error(`Portfolio batch ${i} failed for ${source}/${traderId}:`, error)
+      // Continue inserting remaining batches instead of losing data
+      continue
     }
     saved += batch.length
   }

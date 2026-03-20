@@ -19,6 +19,7 @@ const MIN_DATA_POINTS = 7
 const SHARPE_CAP = 5
 const BATCH_SIZE = 50
 const PAGE_SIZE = 5000
+const MAX_SNAPSHOTS = 50000 // Cap to prevent OOM on large datasets
 
 const DEX_PLATFORMS = [
   'hyperliquid', 'gmx', 'dydx', 'drift', 'aevo',
@@ -212,6 +213,10 @@ export async function refreshComputedMetrics(
     }
     if (!data || data.length === 0) break
     nullSnapshots.push(...data)
+    if (nullSnapshots.length >= MAX_SNAPSHOTS) {
+      logger.warn(`[metrics-backfill] Hit ${MAX_SNAPSHOTS} snapshot cap, processing in chunks`)
+      break
+    }
     offset += PAGE_SIZE
     if (data.length < PAGE_SIZE) break
   }
@@ -248,8 +253,10 @@ export async function refreshComputedMetrics(
         .range(offset, offset + PAGE_SIZE - 1)
 
       if (error) {
-        logger.error(`[metrics-backfill] Error fetching equity curves: ${error.message}`)
-        break
+        logger.error(`[metrics-backfill] Error fetching equity curves page ${offset / PAGE_SIZE}: ${error.message}`)
+        // Continue to next page instead of discarding all data collected so far
+        offset += PAGE_SIZE
+        continue
       }
       if (!data || data.length === 0) break
 
@@ -337,8 +344,13 @@ export async function refreshComputedMetrics(
           .eq('id', upd.id)
       )
     )
-    for (const r of results) {
-      if (r.error) result.errors++
+    for (let j = 0; j < results.length; j++) {
+      if (results[j].error) {
+        result.errors++
+        if (result.errors <= 5) {
+          logger.warn(`[metrics-backfill] Update failed for ${batch[j].id}: ${results[j].error!.message}`)
+        }
+      }
     }
   }
 
