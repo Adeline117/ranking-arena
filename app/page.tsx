@@ -118,35 +118,22 @@ export default async function Page() {
       <JsonLd data={organizationJsonLd} />
 
       <PageErrorBoundary>
-        {/* Phase 1: SSR hero + ranking table — pure HTML, 0 JS, visible immediately.
-            HomeHeroSSR contains the LCP headline "Track the World's Best Crypto Traders".
-            Hidden via CSS once the interactive HomePage mounts (see globals.css).
-            NOTE: ssrTable is intentionally NOT passed to HomePageLoader — the Phase 1
-            shell already provides the fallback. Passing it to the client caused duplicate
-            DOM nodes (SSR shell + inline copy) inflating DOM size by ~200 nodes. */}
-        <div id="ssr-homepage-shell" style={{ maxWidth: 1400, margin: '0 auto', padding: '8px 16px' }}>
-          {/* CLS fix: reserve space for elements in Phase 2 (interactive HomePage) that
-              are NOT present in Phase 1 SSR shell. Without these spacers, the Phase 1→2
-              transition shifts visible content (hero, ranking table) by the missing heights.
-              - 56px: TopNav (sticky header rendered by HomePage, not in SSR shell)
-              - 40px: HomeSubNav + FoundingMemberBanner row
-              - 47px: ExchangePartners lazy-loaded strip
-              Total: ~143px extra before the ranking table in Phase 2. */}
-          <div aria-hidden="true" style={{ height: 56 }} />
-          <HomeHeroSSR traderCount={heroStats.traderCount} exchangeCount={heroStats.exchangeCount} />
-          <div aria-hidden="true" style={{ height: 40 }} />
-          <div aria-hidden="true" style={{ height: 47, borderBottom: '1px solid var(--color-border-primary, rgba(255,255,255,0.1))' }} />
-          {ssrTable}
-        </div>
+        {/* CSS Grid stacking: SSR shell and interactive page overlap in the same
+            grid cell. When HomePage mounts (Phase 2), the SSR shell becomes
+            visibility:hidden WITHOUT changing layout — zero CLS from the transition.
+            Both phases render at grid-row:1/grid-column:1 via .homepage-phase-container. */}
+        <div className="homepage-phase-container">
+          <div id="ssr-homepage-shell" style={{ maxWidth: 1400, margin: '0 auto', padding: '8px 16px' }}>
+            <HomeHeroSSR traderCount={heroStats.traderCount} exchangeCount={heroStats.exchangeCount} />
+            {ssrTable}
+          </div>
 
-        {/* Phase 2: Full interactive homepage — loaded with ssr:false via HomePageLoader.
-            No JS chunks are included in the initial HTML. The browser downloads them
-            only after HTML parsing completes. On mount, CSS hides the SSR shell above. */}
-        <HomePageLoader
-          initialTraders={initialTraders}
-          initialLastUpdated={lastUpdated}
-          heroStats={heroStats}
-        />
+          <HomePageLoader
+            initialTraders={initialTraders}
+            initialLastUpdated={lastUpdated}
+            heroStats={heroStats}
+          />
+        </div>
       </PageErrorBoundary>
     </>
   )
