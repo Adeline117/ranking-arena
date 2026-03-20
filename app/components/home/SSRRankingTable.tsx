@@ -1,15 +1,10 @@
 /**
- * SSRRankingTable - Optimized Version
- * Performance improvements:
- * 1. Use next/image for optimized image loading (AVIF/WebP)
- * 2. Direct CDN URLs instead of /api/avatar proxy
- * 3. Priority loading for top 3 traders
- * 4. Better CLS prevention with explicit dimensions
+ * SSRRankingTable - LCP-optimized SSR shell
+ * Uses CSS letter avatars only — no <Image> tags that block LCP.
+ * Full avatars load in Phase 2 (client HomePage).
  */
 
 import type { InitialTrader } from '@/lib/getInitialTraders'
-import Image from 'next/image'
-import { isWalletAddress, generateBlockieSvg } from '@/lib/utils/avatar'
 import { formatROI, formatPnL } from '@/lib/utils/format'
 
 // Score color logic (server-side, no hooks)
@@ -32,8 +27,6 @@ interface Props {
   traders: InitialTrader[]
 }
 
-const RANK_COLORS = ['var(--color-rank-gold, #FFD700)', 'var(--color-rank-silver, #C0C0C0)', 'var(--color-rank-bronze, #CD7F32)']
-
 export default function SSRRankingTable({ traders }: Props) {
   if (!traders.length) return null
 
@@ -51,13 +44,6 @@ export default function SSRRankingTable({ traders }: Props) {
         {traders.slice(0, 10).map((trader, idx) => {
           const rank = idx + 1
           const isTop3 = rank <= 3
-          // SSR: always use direct CDN URLs — no CORS issue for server-rendered <img>
-          // The /api/avatar proxy is only needed for client-side fetch() where CORS applies
-          const avatarUrl = trader.avatar_url && !trader.avatar_url.startsWith('/')
-            ? trader.avatar_url
-            : trader.avatar_url
-              ? `/api/avatar?url=${encodeURIComponent(trader.avatar_url)}`
-              : null
 
           return (
             <a
@@ -83,29 +69,10 @@ export default function SSRRankingTable({ traders }: Props) {
               </span>
 
               <div className="ssr-info">
+                {/* Letter avatar only — no <Image> in SSR to avoid blocking LCP.
+                    Full avatars load in Phase 2 (client HomePage). */}
                 <div className="ssr-av">
                   {getInitial(trader.handle)}
-                  {avatarUrl ? (
-                    <Image
-                      src={avatarUrl}
-                      alt={trader.handle || 'Trader'}
-                      width={36}
-                      height={36}
-                      priority={isTop3}
-                      loading={isTop3 ? undefined : 'lazy'}
-                      sizes="36px"
-                      style={{ borderRadius: '50%' }}
-                    />
-                  ) : isWalletAddress(trader.id) ? (
-                    /* eslint-disable-next-line @next/next/no-img-element */
-                    <img
-                      src={generateBlockieSvg(trader.id, 72)}
-                      alt={trader.handle || 'Trader'}
-                      width={36}
-                      height={36}
-                      style={{ width: 36, height: 36, objectFit: 'cover', borderRadius: '50%', position: 'absolute', inset: 0, imageRendering: 'pixelated' }}
-                    />
-                  ) : null}
                 </div>
                 <div style={{ minWidth: 0 }}>
                   <div className="ssr-name">{trader.handle}</div>

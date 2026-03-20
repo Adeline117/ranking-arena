@@ -1,7 +1,5 @@
 import type { Metadata } from 'next'
 import { getInitialTraders } from '@/lib/getInitialTraders'
-import { getSupabaseAdmin } from '@/lib/supabase/server'
-import { unstable_cache } from 'next/cache'
 import SSRRankingTable from './components/home/SSRRankingTable'
 import HomeHeroSSR from './components/home/HomeHeroSSR'
 import { JsonLd } from './components/Providers/JsonLd'
@@ -64,49 +62,13 @@ const organizationJsonLd = {
 
 // WebSite JSON-LD is in layout.tsx (site-wide, with potentialAction)
 
-/** Fetch hero stats (trader count + exchange count) server-side to avoid client waterfall.
- *  Cached in Redis for 1 hour — the COUNT query scans 34K+ rows and runs on every ISR
- *  revalidation. The count only meaningfully changes when new exchanges go live. */
-// Use unstable_cache (ISR-compatible) instead of tieredGetOrSet (Redis, breaks ISR via no-store fetch)
-const getHeroStats = unstable_cache(
-  async (): Promise<{ traderCount: number; exchangeCount: number }> => {
-    try {
-      const supabase = getSupabaseAdmin()
-      const tradersRes = await supabase
-        .from('trader_sources')
-        .select('id', { count: 'exact', head: true })
-      const traderCount = tradersRes.count ?? 34000
-      // Count distinct active exchanges — use RPC or efficient distinct query
-      let exchangeCount = 27 // fallback
-      try {
-        // Use PostgreSQL DISTINCT to count unique sources without fetching 10K rows
-        const { data: sources } = await supabase
-          .from('leaderboard_ranks')
-          .select('source')
-          .eq('season_id', '90D')
-          .gt('arena_score', 0)
-          .limit(1000)  // Reduced from 10K — 1000 rows is enough to cover all ~35 platforms
-        if (sources && sources.length > 0) {
-          const uniqueSources = new Set(sources.map((r: { source: string }) => r.source))
-          if (uniqueSources.size > 0) exchangeCount = uniqueSources.size
-        }
-      } catch {
-        // fallback to 27
-      }
-      return { traderCount, exchangeCount }
-    } catch {
-      return { traderCount: 34000, exchangeCount: 27 }
-    }
-  },
-  ['hero-stats-count'],
-  { revalidate: 3600, tags: ['hero-stats'] }
-)
+/** Hero stats — hardcoded to eliminate expensive COUNT(*) query on 34K+ rows.
+ *  These numbers change only when new exchanges launch (rare).
+ *  Saves ~1-2s on SSR cache miss by removing 2 DB queries from critical path. */
+const heroStats = { traderCount: 34000, exchangeCount: 27 }
 
 export default async function Page() {
-  const [{ traders: initialTraders, lastUpdated }, heroStats] = await Promise.all([
-    getInitialTraders('90D', 10),
-    getHeroStats(),
-  ])
+  const { traders: initialTraders, lastUpdated } = await getInitialTraders('90D', 10)
 
   const ssrTable = <SSRRankingTable traders={initialTraders} />
 
