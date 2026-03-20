@@ -64,6 +64,8 @@ export default function ExchangePartners() {
       padding: '10px 0',
       borderBottom: `1px solid var(--color-border-primary)`,
       position: 'relative',
+      contain: 'layout style paint',  // Prevent internal animation from causing external CLS
+      height: 47,  // Fixed height prevents CLS when component lazy-loads
     }}>
       {/* Fade edges */}
       <div style={{
@@ -83,6 +85,7 @@ export default function ExchangePartners() {
         gap: 20,
         animation: 'exchange-scroll 35s linear infinite',
         width: 'max-content',
+        willChange: 'transform',  // Promote to compositor layer — prevents layout recalc during animation
       }}>
         {DOUBLED_EXCHANGES.map((ex, i) => {
           const source = EXCHANGE_SOURCE_MAP[ex.key] || ''

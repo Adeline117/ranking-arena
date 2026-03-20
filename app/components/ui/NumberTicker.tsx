@@ -40,6 +40,9 @@ export default function NumberTicker({
     const el = ref.current
     if (!el) return
 
+    // Show final value immediately to avoid blank content during idle wait
+    el.textContent = formatNumber(direction === 'down' ? 0 : value) + suffix
+
     const observer = new IntersectionObserver(
       ([entry]) => {
         if (!entry.isIntersecting || animatedRef.current) return
@@ -49,30 +52,40 @@ export default function NumberTicker({
         const startValue = direction === 'down' ? value : 0
         const endValue = direction === 'down' ? 0 : value
 
-        const delayTimer = setTimeout(() => {
-          const duration = 800 // ms
-          const startTime = performance.now()
+        // Defer animation until browser is idle — avoids blocking TBT during LCP window
+        const scheduleAnimation = typeof requestIdleCallback !== 'undefined'
+          ? requestIdleCallback
+          : (cb: () => void) => setTimeout(cb, 50)
 
-          const tick = (now: number) => {
-            const elapsed = now - startTime
-            const progress = Math.min(elapsed / duration, 1)
-            // Exponential ease-out for spring-like feel
-            const eased = 1 - Math.pow(1 - progress, 3)
-            const current = startValue + (endValue - startValue) * eased
+        scheduleAnimation(() => {
+          // Reset to start value for animation
+          if (el) el.textContent = formatNumber(startValue) + suffix
 
-            if (ref.current) {
-              ref.current.textContent = formatNumber(current) + suffix
+          const delayTimer = setTimeout(() => {
+            const duration = 800 // ms
+            const startTime = performance.now()
+
+            const tick = (now: number) => {
+              const elapsed = now - startTime
+              const progress = Math.min(elapsed / duration, 1)
+              // Exponential ease-out for spring-like feel
+              const eased = 1 - Math.pow(1 - progress, 3)
+              const current = startValue + (endValue - startValue) * eased
+
+              if (ref.current) {
+                ref.current.textContent = formatNumber(current) + suffix
+              }
+
+              if (progress < 1) {
+                requestAnimationFrame(tick)
+              }
             }
 
-            if (progress < 1) {
-              requestAnimationFrame(tick)
-            }
-          }
+            requestAnimationFrame(tick)
+          }, delay * 1000)
 
-          requestAnimationFrame(tick)
-        }, delay * 1000)
-
-        return () => clearTimeout(delayTimer)
+          return () => clearTimeout(delayTimer)
+        })
       },
       { threshold: 0.1 }
     )
@@ -91,7 +104,11 @@ export default function NumberTicker({
         ...style,
       }}
     >
-      0{suffix}
+      {/* Show final value in SSR to avoid "0" flash — useEffect will animate from 0 */}
+      {Intl.NumberFormat('en-US', {
+        minimumFractionDigits: decimalPlaces,
+        maximumFractionDigits: decimalPlaces,
+      }).format(direction === 'down' ? 0 : value)}{suffix}
     </span>
   )
 }
