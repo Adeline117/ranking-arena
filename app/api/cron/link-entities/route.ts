@@ -51,7 +51,7 @@ export async function GET(request: NextRequest) {
     if (error) {
       logger.error('Failed to fetch traders:', error.message)
       await plog.error(error)
-      return NextResponse.json({ error: error.message }, { status: 500 })
+      return NextResponse.json({ error: 'Failed to fetch traders' }, { status: 500 })
     }
 
     if (!data || data.length === 0) {
@@ -128,6 +128,6 @@ export async function GET(request: NextRequest) {
     const err = error instanceof Error ? error : new Error(String(error))
     logger.error('Entity linking failed:', err.message)
     await plog.error(err)
-    return NextResponse.json({ error: err.message }, { status: 500 })
+    return NextResponse.json({ error: 'Entity linking failed' }, { status: 500 })
   }
 }

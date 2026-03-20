@@ -183,7 +183,7 @@ export async function joinProOfficialGroup(userId: string): Promise<{
         return await joinProOfficialGroupFallback(userId)
       }
       logger.error('Failed to join group', { error, userId })
-      return { success: false, message: error.message }
+      return { success: false, message: 'Failed to join group' }
     }
     
     if (data?.success) {
