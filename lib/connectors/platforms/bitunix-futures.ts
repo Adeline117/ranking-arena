@@ -147,7 +147,7 @@ export class BitunixFuturesConnector extends BaseConnector {
     const toNum = (v: string | number | null | undefined): number | null => {
       if (v == null) return null
       const n = typeof v === 'string' ? parseFloat(v) : v
-      return isNaN(n) ? null : n
+      return !Number.isFinite(n) ? null : n
     }
 
     // Bitunix API always returns ratio format: roi=8.53 means 853%, winRate=0.78 means 78%

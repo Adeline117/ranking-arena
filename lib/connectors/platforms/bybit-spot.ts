@@ -115,12 +115,12 @@ export class BybitSpotConnector extends BaseConnector {
     const cleaned = val.replace(/[+%]/g, '').trim()
     if (!cleaned || cleaned === '--') return null
     const num = Number(cleaned)
-    return isNaN(num) ? null : num
+    return !Number.isFinite(num) ? null : num
   }
 
   private parseNumber(val: unknown): number | null {
     if (val === null || val === undefined) return null
     const num = Number(val)
-    return isNaN(num) ? null : num
+    return !Number.isFinite(num) ? null : num
   }
 }

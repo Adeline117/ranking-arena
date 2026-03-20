@@ -32,7 +32,7 @@ import { socialFeatureGuard } from '@/lib/features'
 import { getPosts, createPost, getUserPostReactions, getUserPostVotes } from '@/lib/data/posts'
 import { getWeightedPosts } from '@/lib/data/posts-weighted'
 import { getServerCache, setServerCache, deleteServerCacheByPrefix, CacheTTL } from '@/lib/utils/server-cache'
-import { get as cacheGet, set as cacheSet } from '@/lib/cache'
+import { get as cacheGet, set as cacheSet, del as cacheDel } from '@/lib/cache'
 import { fireAndForget } from '@/lib/utils/logger'
 import { extractAndSyncHashtags } from '@/lib/data/hashtags'
 
@@ -346,6 +346,7 @@ export async function POST(request: NextRequest) {
 
     // 创建帖子后清除相关缓存
     deleteServerCacheByPrefix(POSTS_CACHE_PREFIX)
+    fireAndForget(cacheDel('hot_posts:top50'), 'Invalidate hot posts Redis cache')
 
     return success({ post }, 201)
   } catch (error: unknown) {

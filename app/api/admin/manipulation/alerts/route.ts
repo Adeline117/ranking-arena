@@ -63,8 +63,8 @@ export async function GET(request: NextRequest) {
     const status = searchParams.get('status') || 'active'
     const severity = searchParams.get('severity')
     const alertType = searchParams.get('alert_type')
-    const limit = parseInt(searchParams.get('limit') || '100', 10)
-    const offset = parseInt(searchParams.get('offset') || '0', 10)
+    const limit = Math.min(parseInt(searchParams.get('limit') || '100', 10) || 100, 500)
+    const offset = Math.max(0, parseInt(searchParams.get('offset') || '0', 10) || 0)
 
     // Build query
     let query = supabase
