@@ -778,6 +778,9 @@ async function computeSeason(
         // MDD=0 or null: use ROI sign/magnitude directly
         // Positive ROI with 0 drawdown → high sharpe, negative ROI → low sharpe
         estimatedSharpe = Math.tanh(snap.roi / 100) * 2
+      } else {
+        // roi=0 AND mdd=0: no return, no risk → neutral sharpe
+        estimatedSharpe = 0
       }
       if (estimatedSharpe != null && estimatedSharpe > -10 && estimatedSharpe < 10) {
         snap.sharpe_ratio = Math.round(estimatedSharpe * 100) / 100
@@ -1023,7 +1026,7 @@ async function computeSeason(
 
   // Phase 2: Incremental upsert — only update changed rows to reduce write volume ~40%
   // Fetch current arena_scores to diff against
-  const currentScoreMap = new Map<string, { arena_score: number; rank: number; handle: string | null; avatar_url: string | null }>()
+  const currentScoreMap = new Map<string, { arena_score: number; rank: number; handle: string | null; avatar_url: string | null; sharpe_ratio: number | null; trading_style: string | null; trades_count: number | null }>()
   {
     // Fetch in pages of 1000 to handle large leaderboards
     let offset = 0
@@ -1037,7 +1040,7 @@ async function computeSeason(
       }
       const { data: currentScores } = await supabase
         .from('leaderboard_ranks')
-        .select('source, source_trader_id, arena_score, rank, handle, avatar_url')
+        .select('source, source_trader_id, arena_score, rank, handle, avatar_url, sharpe_ratio, trading_style, trades_count')
         .eq('season_id', season)
         .range(offset, offset + PAGE - 1)
       if (!currentScores?.length) break
@@ -1047,6 +1050,9 @@ async function computeSeason(
           rank: r.rank,
           handle: r.handle,
           avatar_url: r.avatar_url,
+          sharpe_ratio: r.sharpe_ratio,
+          trading_style: r.trading_style,
+          trades_count: r.trades_count,
         })
       }
       if (currentScores.length < PAGE) break
@@ -1060,6 +1066,10 @@ async function computeSeason(
     if (current == null) return true // new trader
     // Always update if handle/avatar changed (backfill)
     if (t.handle !== current.handle || t.avatar_url !== current.avatar_url) return true
+    // Always update if derived metrics were newly filled
+    if (t.sharpe_ratio != null && current.sharpe_ratio == null) return true
+    if (t.trading_style != null && current.trading_style == null) return true
+    if (t.trades_count != null && current.trades_count == null) return true
     const newRank = idx + 1
     if (current.rank !== newRank) return true // rank changed
     if (current.arena_score === 0) return t.arena_score !== 0 // was zero, check if now non-zero
