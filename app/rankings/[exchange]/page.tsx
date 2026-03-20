@@ -151,10 +151,13 @@ export async function generateMetadata({
 interface TraderSSR {
   trader_key: string
   display_name: string | null
+  avatar_url: string | null
   roi: number | null
+  pnl: number | null
   win_rate: number | null
   max_drawdown: number | null
   arena_score: number | null
+  sharpe_ratio: number | null
   captured_at?: string | null
 }
 
@@ -200,7 +203,7 @@ const fetchExchangeTradersSSR = unstable_cache(
       const [{ data, error }, { count }, { data: top10Data }] = await Promise.all([
         supabase
           .from('leaderboard_ranks')
-          .select('source_trader_id, handle, roi, win_rate, max_drawdown, arena_score, computed_at')
+          .select('source_trader_id, handle, avatar_url, roi, pnl, win_rate, max_drawdown, arena_score, sharpe_ratio, computed_at')
           .eq('source', exchange)
           .eq('season_id', '90D')
           .not('arena_score', 'is', null)
@@ -233,10 +236,13 @@ const fetchExchangeTradersSSR = unstable_cache(
       const traders: TraderSSR[] = (data || []).map((row: Record<string, unknown>) => ({
         trader_key: String(row.handle || row.source_trader_id || ''),
         display_name: row.handle ? String(row.handle) : null,
+        avatar_url: (row.avatar_url as string | null) ?? null,
         roi: row.roi != null ? Number(row.roi) : null,
+        pnl: row.pnl != null ? Number(row.pnl) : null,
         win_rate: row.win_rate as number | null,
         max_drawdown: row.max_drawdown as number | null,
         arena_score: row.arena_score as number | null,
+        sharpe_ratio: row.sharpe_ratio != null ? Number(row.sharpe_ratio) : null,
         captured_at: (row.computed_at as string) || null,
       }))
 
@@ -361,10 +367,8 @@ async function RankingsContent({ exchange }: { exchange: string }) {
       <ExchangeRankingClient
         traders={traders.map((t) => ({
           ...t,
-          avatar_url: null,
           platform: exchange,
-          pnl: null,
-          followers: null, sharpe_ratio: null, trades_count: null,
+          followers: null, trades_count: null,
           is_bot: false,
         }))}
         exchange={exchange}
