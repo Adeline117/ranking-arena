@@ -200,16 +200,13 @@ export const ENRICHMENT_PLATFORM_CONFIGS: Record<string, EnrichmentConfig> = {
   binance_futures: {
     platform: 'binance_futures',
     fetchEquityCurve: async (traderId, days) => {
-      // New Binance /friendly/ API uses 7D/30D/90D format (not WEEKLY/MONTHLY/QUARTERLY)
       const timeRangeMap: Record<number, string> = { 7: '7D', 30: '30D', 90: '90D' }
       return fetchBinanceEquityCurve(traderId, timeRangeMap[days] || '90D')
     },
     fetchStatsDetail: fetchBinanceStatsDetail,
-    // Binance positions endpoint returns CURRENT open positions (not closed history)
-    // Wire as both: currentPositions saves to trader_portfolio, positionHistory to trader_position_history
     fetchCurrentPositions: fetchBinancePositionHistory,
     fetchPositionHistory: fetchBinancePositionHistory,
-    concurrency: 5, delayMs: 1000,
+    concurrency: 10, delayMs: 500, // Increased from 5/1000 for higher throughput
   },
   // binance_spot: PERMANENTLY REMOVED (2026-03-14) - repeatedly hangs 45-76min, blocks entire pipeline
   // Bybit enrichment re-enabled (2026-03-18) — routes through VPS scraper
@@ -225,7 +222,7 @@ export const ENRICHMENT_PLATFORM_CONFIGS: Record<string, EnrichmentConfig> = {
     fetchStatsDetail: fetchOkxStatsDetail,
     fetchPositionHistory: fetchOkxPositionHistory,
     fetchCurrentPositions: fetchOkxCurrentPositions,
-    concurrency: 3, delayMs: 1500,
+    concurrency: 8, delayMs: 500, // Increased: direct API, not geo-blocked
   },
   okx_spot: {
     platform: 'okx_spot',
@@ -269,34 +266,33 @@ export const ENRICHMENT_PLATFORM_CONFIGS: Record<string, EnrichmentConfig> = {
     fetchEquityCurve: fetchHyperliquidEquityCurve,
     fetchStatsDetail: fetchHyperliquidStatsDetail,
     fetchPositionHistory: fetchHyperliquidPositionHistory,
-    concurrency: 3, delayMs: 500,
+    concurrency: 10, delayMs: 200, // No rate limit, fast API
   },
   gmx: {
     platform: 'gmx',
     fetchEquityCurve: fetchGmxEquityCurve,
     fetchStatsDetail: fetchGmxStatsDetail,
     fetchPositionHistory: fetchGmxPositionHistory,
-    concurrency: 5, // Reduced from 15 — Squids API intermittently fails at high concurrency
-    delayMs: 500, // Increased from 200ms for stability
+    concurrency: 8, delayMs: 300,
   },
   htx_futures: {
     platform: 'htx_futures',
     fetchEquityCurve: fetchHtxEquityCurve,
     fetchStatsDetail: fetchHtxStatsDetail,
-    concurrency: 2, delayMs: 2000,
+    concurrency: 5, delayMs: 800,
   },
   gateio: {
     platform: 'gateio',
     fetchEquityCurve: fetchGateioEquityCurve,
     fetchStatsDetail: fetchGateioStatsDetail,
     fetchCurrentPositions: fetchGateioCurrentPositions,
-    concurrency: 2, delayMs: 2000,
+    concurrency: 5, delayMs: 800,
   },
   mexc: {
     platform: 'mexc',
     fetchEquityCurve: fetchMexcEquityCurve,
     fetchStatsDetail: fetchMexcStatsDetail,
-    concurrency: 2, delayMs: 2000,
+    concurrency: 5, delayMs: 800,
   },
   bingx_spot: {
     platform: 'bingx_spot',
@@ -310,27 +306,25 @@ export const ENRICHMENT_PLATFORM_CONFIGS: Record<string, EnrichmentConfig> = {
     fetchEquityCurve: fetchDriftEquityCurve,
     fetchStatsDetail: fetchDriftStatsDetail,
     fetchPositionHistory: async (traderId: string) => {
-      // Primary: S3 historical trade data (richer, covers 90 days)
       const s3Positions = await fetchDriftPositionHistoryFromS3(traderId, 90)
       if (s3Positions.length > 0) return s3Positions
-      // Fallback: data.api.drift.trade fills endpoint
       return fetchDriftPositionHistory(traderId)
     },
-    concurrency: 2, delayMs: 1000,
+    concurrency: 8, delayMs: 300, // Increased: public API, fast
   },
   dydx: {
     platform: 'dydx',
     fetchEquityCurve: fetchDydxEquityCurve,
     fetchStatsDetail: fetchDydxStatsDetail,
     fetchPositionHistory: fetchDydxV4PositionHistory,
-    concurrency: 3, delayMs: 500,
+    concurrency: 8, delayMs: 300, // Increased: indexer API is fast
   },
   aevo: {
     platform: 'aevo',
     fetchEquityCurve: fetchAevoEquityCurve,
     fetchStatsDetail: fetchAevoStatsDetail,
     fetchPositionHistory: fetchAevoPositionHistory,
-    concurrency: 2, delayMs: 1000,
+    concurrency: 8, delayMs: 300, // Native API + Copin fallback
   },
   gains: {
     platform: 'gains',
@@ -398,40 +392,37 @@ export const ENRICHMENT_PLATFORM_CONFIGS: Record<string, EnrichmentConfig> = {
     fetchEquityCurve: fetchEtoroEquityCurve,
     fetchStatsDetail: fetchEtoroStatsDetail,
     fetchCurrentPositions: fetchEtoroPortfolio,
-    concurrency: 2, delayMs: 2000,
+    concurrency: 5, delayMs: 800,
   },
   coinex: {
     platform: 'coinex',
     fetchEquityCurve: fetchCoinexEquityCurve,
     fetchStatsDetail: fetchCoinexStatsDetail,
-    concurrency: 2, delayMs: 2000,
+    concurrency: 20, delayMs: 0, // Batch-cached from public traders list
   },
   bitunix: {
     platform: 'bitunix',
     fetchEquityCurve: fetchBitunixEquityCurve,
     fetchStatsDetail: fetchBitunixStatsDetail,
-    // Position endpoints (/trader/positions, /trader/history) return 404 since 2026-03
-    // Stats + equity curve come from batch-cached leaderboard list API
-    concurrency: 5, delayMs: 200, // Fast: lookups from in-memory cache, no per-trader API calls
+    concurrency: 50, delayMs: 0, // Batch-cached: all lookups from memory, no API calls
   },
   xt: {
     platform: 'xt',
     fetchEquityCurve: fetchXtEquityCurve,
     fetchStatsDetail: fetchXtStatsDetail,
-    // Stats + equity curve come from batch-cached internal list API
-    concurrency: 5, delayMs: 200, // Fast: lookups from in-memory cache, no per-trader API calls
+    concurrency: 50, delayMs: 0, // Batch-cached: all lookups from memory, no API calls
   },
   bitfinex: {
     platform: 'bitfinex',
     fetchEquityCurve: fetchBitfinexEquityCurve,
     fetchStatsDetail: fetchBitfinexStatsDetail,
-    concurrency: 3, delayMs: 500, // Public API, generous rate limits
+    concurrency: 20, delayMs: 0, // Batch-cached from rankings, no per-trader API
   },
   blofin: {
     platform: 'blofin',
     fetchEquityCurve: fetchBlofinEquityCurve,
     fetchStatsDetail: fetchBlofinStatsDetail,
-    concurrency: 2, delayMs: 2000,
+    concurrency: 20, delayMs: 0, // Batch-cached from public traders list
   },
   phemex: {
     platform: 'phemex',
@@ -450,7 +441,7 @@ export const ENRICHMENT_PLATFORM_CONFIGS: Record<string, EnrichmentConfig> = {
     platform: 'toobit',
     fetchEquityCurve: fetchToobitEquityCurve,
     fetchStatsDetail: fetchToobitStatsDetail,
-    concurrency: 3, delayMs: 500, // Cached rankings, fast lookups
+    concurrency: 20, delayMs: 0, // Batch-cached from rankings list
   },
   binance_spot: {
     platform: 'binance_spot',
@@ -494,13 +485,17 @@ export const NO_ENRICHMENT_PLATFORMS = new Set([
 ])
 
 // Per-platform timeout: prevents any single platform from burning the entire batch budget
-// CEX platforms get 45s, onchain platforms get 90s (GraphQL/RPC calls are slower)
+// 2026-03-20: Increased timeouts for full coverage (was 45s/90s, now 120s/180s)
+// Batch-cached platforms (bitunix, xt, etc.) finish in <5s regardless
 const PLATFORM_TIMEOUT_MS: Record<string, number> = {
   'bitget_futures': 120_000,  // 2min total - CF Worker proxy can be slow
   'binance_spot': 60_000,  // RE-ENABLED 2026-03-19 — 60s per-platform timeout
+  // Batch-cached: instant, but set generous limit
+  'bitunix': 30_000, 'xt': 30_000, 'blofin': 60_000,
+  'bitfinex': 60_000, 'toobit': 60_000, 'coinex': 60_000,
 }
-const DEFAULT_PLATFORM_TIMEOUT_MS = 45_000
-const ONCHAIN_PLATFORM_TIMEOUT_MS = 90_000
+const DEFAULT_PLATFORM_TIMEOUT_MS = 120_000  // 2min for CEX (was 45s)
+const ONCHAIN_PLATFORM_TIMEOUT_MS = 180_000  // 3min for onchain (was 90s)
 const ONCHAIN_SET = new Set(['gmx', 'dydx', 'jupiter_perps', 'hyperliquid', 'drift', 'aevo', 'gains', 'kwenta'])
 
 // Per-trader timeout: aggressive timeout for platforms that hang
