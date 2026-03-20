@@ -121,10 +121,14 @@ import { logger } from '@/lib/logger'
 import { PipelineLogger } from '@/lib/services/pipeline-logger'
 import { LR, V2 } from '@/lib/types/schema-mapping'
 
+// EMERGENCY FIX (2026-03-20): Reduce retries to prevent timeout bypass
+// Root cause of 44min hangs: withRetry creates new fetch+AbortController on each retry,
+// bypassing per-trader/platform timeouts. 3 retries × 6s timeout × N APIs = >54s per trader.
+// Solution: 1 retry max → total time ≤ 12s per API, respects per-trader timeout.
 const RETRY_CONFIG = {
-  maxAttempts: 3,
-  baseDelayMs: 1000,
-  maxDelayMs: 10000,
+  maxAttempts: 1, // Was 3 — NO retries, fail fast
+  baseDelayMs: 500, // Reduced from 1000
+  maxDelayMs: 2000, // Reduced from 10000
 }
 
 async function withRetry<T>(
@@ -605,11 +609,17 @@ export async function runEnrichment(params: {
       const batchResults = await Promise.allSettled(
         batch.map(async (trader) => {
           const traderId = trader.source_trader_id
-          // Per-trader timeout: platform-specific > onchain (60s) > CEX (30s)
+          // EMERGENCY FIX (2026-03-20): Aggressive per-trader timeout to prevent 44min hangs
+          // Was: 25-60s. Now: 15-30s. Batch-cached platforms (bitunix/xt) finish in <2s anyway.
+          // CEX with per-trader API: strict 15s limit forces fail-fast on slow responses.
+          // Onchain: 30s (RPC/GraphQL need slightly more time).
           const traderTimeoutMs = PER_TRADER_TIMEOUT_MS[platformKey] 
-            ?? (ONCHAIN_SET.has(platformKey) ? 60_000 : 30_000)
+            ?? (ONCHAIN_SET.has(platformKey) ? 30_000 : 15_000) // Reduced from 60s/30s
           const traderController = new AbortController()
-          const traderTimer = setTimeout(() => traderController.abort(), traderTimeoutMs)
+          const traderTimer = setTimeout(() => {
+            logger.warn(`[enrich] ${platformKey}/${traderId} timeout after ${traderTimeoutMs / 1000}s`)
+            traderController.abort()
+          }, traderTimeoutMs)
           // Cascade: if platform aborts, abort all its traders
           const onPlatformAbort = () => traderController.abort()
           platformController.signal.addEventListener('abort', onPlatformAbort, { once: true })
