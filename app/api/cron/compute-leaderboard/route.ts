@@ -522,7 +522,7 @@ async function computeSeason(
             byTrader.set(tid, arr)
           }
 
-          for (const [tid, positions] of byTrader) {
+          for (const [tid, positions] of Array.from(byTrader.entries())) {
             const existing = traderMap.get(`${source}:${tid}`)
             if (!existing) continue
 
@@ -694,7 +694,7 @@ async function computeSeason(
             byTrader.set(tid, arr)
           }
 
-          for (const [tid, rois] of byTrader) {
+          for (const [tid, rois] of Array.from(byTrader.entries())) {
             if (rois.length < 5) continue
             const existing = traderMap.get(`${source}:${tid}`)
             if (!existing || existing.sharpe_ratio != null) continue
@@ -766,9 +766,20 @@ async function computeSeason(
       snap.metrics_estimated = true
       phase5Count++
     }
+
+    // Phase 5.5: Estimate sharpe from ROI + MDD as last resort
+    if (snap.sharpe_ratio == null && snap.roi != null && snap.max_drawdown != null && snap.max_drawdown > 0) {
+      const rawRatio = snap.roi / snap.max_drawdown
+      const estimatedSharpe = Math.tanh(rawRatio / 3) * 3
+      if (estimatedSharpe > -10 && estimatedSharpe < 10) {
+        snap.sharpe_ratio = Math.round(estimatedSharpe * 100) / 100
+        snap.metrics_estimated = true
+        phase5Count++
+      }
+    }
   }
   if (phase5Count > 0) {
-    logger.info(`[${season}] Phase 5: estimated ${phase5Count} WR/MDD values from ROI`)
+    logger.info(`[${season}] Phase 5: estimated ${phase5Count} WR/MDD/sharpe values from ROI`)
   }
 
   // Phase 6: Classify trading_style for all traders missing it
