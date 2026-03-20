@@ -118,22 +118,24 @@ export default async function Page() {
       <JsonLd data={organizationJsonLd} />
 
       <PageErrorBoundary>
-        {/* CSS Grid stacking: SSR shell and interactive page overlap in the same
-            grid cell. When HomePage mounts (Phase 2), the SSR shell becomes
-            visibility:hidden WITHOUT changing layout — zero CLS from the transition.
-            Both phases render at grid-row:1/grid-column:1 via .homepage-phase-container. */}
-        <div className="homepage-phase-container">
-          <div id="ssr-homepage-shell" style={{ maxWidth: 1400, margin: '0 auto', padding: '8px 16px' }}>
-            <HomeHeroSSR traderCount={heroStats.traderCount} exchangeCount={heroStats.exchangeCount} />
-            {ssrTable}
-          </div>
-
-          <HomePageLoader
-            initialTraders={initialTraders}
-            initialLastUpdated={lastUpdated}
-            heroStats={heroStats}
-          />
+        {/* Phase 1: SSR hero + ranking table — pure HTML, 0 JS, visible immediately.
+            Hidden via CSS (display:none) once the interactive HomePage mounts.
+            Spacers match Phase 2 element heights to minimize CLS on transition. */}
+        <div id="ssr-homepage-shell" style={{ maxWidth: 1400, margin: '0 auto', padding: '8px 16px' }}>
+          {/* Spacers for Phase 2 elements not in SSR: TopNav(56) + SubNav(40) + ExchangePartners(47) */}
+          <div aria-hidden="true" style={{ height: 56 }} />
+          <HomeHeroSSR traderCount={heroStats.traderCount} exchangeCount={heroStats.exchangeCount} />
+          <div aria-hidden="true" style={{ height: 40 }} />
+          <div aria-hidden="true" style={{ height: 47, borderBottom: '1px solid var(--color-border-primary, rgba(255,255,255,0.1))' }} />
+          {ssrTable}
         </div>
+
+        {/* Phase 2: Full interactive homepage — loaded with ssr:false via HomePageLoader. */}
+        <HomePageLoader
+          initialTraders={initialTraders}
+          initialLastUpdated={lastUpdated}
+          heroStats={heroStats}
+        />
       </PageErrorBoundary>
     </>
   )
