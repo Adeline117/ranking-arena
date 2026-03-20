@@ -17,8 +17,8 @@ export const dynamic = 'force-dynamic'
 export const GET = withAdminAuth(
   async ({ supabase, request }) => {
     const { searchParams } = new URL(request.url)
-    const page = parseInt(searchParams.get('page') || '1')
-    const limit = Math.min(parseInt(searchParams.get('limit') || '20'), 200)
+    const page = Math.max(1, parseInt(searchParams.get('page') || '1', 10) || 1)
+    const limit = Math.min(parseInt(searchParams.get('limit') || '20', 10) || 20, 200)
     const search = searchParams.get('search') || ''
     const filter = searchParams.get('filter') || 'all' // all, banned, active
 

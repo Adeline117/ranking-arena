@@ -252,12 +252,12 @@ export class BitgetFuturesConnector extends BaseConnector {
   private parseNumber(val: unknown): number | null {
     if (val === null || val === undefined) return null
     const num = Number(val)
-    return isNaN(num) ? null : num
+    return !Number.isFinite(num) ? null : num
   }
 
   private toInt(val: unknown): number | null {
     if (val === null || val === undefined) return null
     const num = parseInt(String(val), 10)
-    return isNaN(num) ? null : num
+    return !Number.isFinite(num) ? null : num
   }
 }

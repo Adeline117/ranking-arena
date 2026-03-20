@@ -354,13 +354,13 @@ export class KwentaPerpConnector extends BaseConnector {
   protected num(val: unknown): number | null {
     if (val === null || val === undefined) return null
     const n = Number(val)
-    return isNaN(n) ? null : n
+    return !Number.isFinite(n) ? null : n
   }
 
   private parseDecimal(val: string | null | undefined): number | null {
     if (!val) return null
     // Subgraph returns values in wei (18 decimals)
     const n = Number(val) / 1e18
-    return isNaN(n) ? null : n
+    return !Number.isFinite(n) ? null : n
   }
 }

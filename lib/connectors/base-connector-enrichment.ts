@@ -119,7 +119,7 @@ export abstract class BaseExchangeConnector {
   protected parseNum(v: unknown): number | null {
     if (v == null || v === '') return null
     const n = parseFloat(String(v).replace('%', '').trim())
-    return isNaN(n) ? null : n
+    return !Number.isFinite(n) ? null : n
   }
 
   /**

@@ -140,6 +140,6 @@ export class LbankFuturesConnector extends BaseConnector {
   protected num(val: unknown): number | null {
     if (val === null || val === undefined) return null
     const n = Number(val)
-    return isNaN(n) ? null : n
+    return !Number.isFinite(n) ? null : n
   }
 }
