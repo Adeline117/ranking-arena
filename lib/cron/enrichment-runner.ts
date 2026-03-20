@@ -778,23 +778,29 @@ export async function runEnrichment(params: {
                     Object.entries(snapshotUpdate).filter(([, v]) => v != null)
                   )
                   if (Object.keys(updates).length > 0) {
-                    await supabase
+                    const { error: snapUpdateErr } = await supabase
                       .from('trader_snapshots_v2')
                       .update(updates)
                       .eq(V2.platform, platformKey)
                       .eq(V2.trader_key, traderId)
                       .eq(V2.window, period)
+                    if (snapUpdateErr) {
+                      logger.warn(`[enrich] Snapshot update failed for ${platformKey}/${traderId}: ${snapUpdateErr.message}`)
+                    }
                   }
                 }
 
                 // On-chain wallet enrichment DB writes (AUM + portfolio)
                 if (isDexPlatform(platformKey) && walletAum != null && walletAum > 10) {
-                  await supabase
+                  const { error: aumErr } = await supabase
                     .from('trader_stats_detail')
                     .update({ aum: walletAum })
                     .eq('source', platformKey)
                     .eq('source_trader_id', traderId)
                     .eq('season_id', period)
+                  if (aumErr) {
+                    logger.warn(`[enrich] AUM update failed for ${platformKey}/${traderId}: ${aumErr.message}`)
+                  }
 
                   if (!config.fetchCurrentPositions) {
                     try {
