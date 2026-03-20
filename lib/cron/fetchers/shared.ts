@@ -458,7 +458,7 @@ export async function upsertTraders(
         pnl_usd: t.pnl ?? null,
         win_rate: t.win_rate ?? null,
         max_drawdown: t.max_drawdown ?? null,
-        arena_score: t.arena_score ?? (t.roi != null ? 0 : null),
+        arena_score: t.arena_score ?? null,  // computed by compute-leaderboard, don't overwrite with placeholder
         sharpe_ratio: t.sharpe_ratio ?? null,
         trades_count: t.trades_count ?? null,
         followers: null, // Arena internal only — do NOT write exchange follower counts
