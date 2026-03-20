@@ -148,6 +148,10 @@ iframe{display:block;max-width:100%}
 .trader-card-contained{contain:layout style paint}
 .sidebar-contained{contain:layout style}
 
+/* content-visibility:auto skips rendering of off-screen content until scrolled into view.
+   Dramatically reduces initial rendering work (TBT) and improves Speed Index. */
+.three-col-left,.three-col-right{content-visibility:auto;contain-intrinsic-size:auto 600px}
+
 /* 预留空间 - 防止字体加载导致的CLS */
 .font-loading body{letter-spacing:-0.011em}
 

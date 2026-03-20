@@ -7,7 +7,6 @@
 /* Two-phase rendering: Hide SSR shell once the interactive HomePage mounts.
    #homepage-interactive is added by HomePage.tsx (loaded via ssr:false dynamic import).
    When it exists in the DOM, the SSR table shell is no longer needed. */
-#ssr-homepage-shell:has(~ #homepage-interactive),
 body:has(#homepage-interactive) #ssr-homepage-shell {
   display: none;
 }

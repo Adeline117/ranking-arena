@@ -103,7 +103,7 @@ export default function SSRRankingTable({ traders }: Props) {
                       alt={trader.handle || 'Trader'}
                       width={36}
                       height={36}
-                      style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: '50%', position: 'absolute', inset: 0, imageRendering: 'pixelated' }}
+                      style={{ width: 36, height: 36, objectFit: 'cover', borderRadius: '50%', position: 'absolute', inset: 0, imageRendering: 'pixelated' }}
                     />
                   ) : null}
                 </div>

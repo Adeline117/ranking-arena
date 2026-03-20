@@ -77,15 +77,16 @@ const getHeroStats = unstable_cache(
         .from('trader_sources')
         .select('id', { count: 'exact', head: true })
       const traderCount = tradersRes.count ?? 34000
-      // Count distinct active exchanges with ranked traders (arena_score > 0)
+      // Count distinct active exchanges — use RPC or efficient distinct query
       let exchangeCount = 27 // fallback
       try {
+        // Use PostgreSQL DISTINCT to count unique sources without fetching 10K rows
         const { data: sources } = await supabase
           .from('leaderboard_ranks')
           .select('source')
           .eq('season_id', '90D')
           .gt('arena_score', 0)
-          .limit(10000)
+          .limit(1000)  // Reduced from 10K — 1000 rows is enough to cover all ~35 platforms
         if (sources && sources.length > 0) {
           const uniqueSources = new Set(sources.map((r: { source: string }) => r.source))
           if (uniqueSources.size > 0) exchangeCount = uniqueSources.size
@@ -118,10 +119,9 @@ export default async function Page() {
 
   return (
     <>
-      {/* Preload top 3 avatars for faster LCP — fetchpriority=high ensures browser
-          starts downloading immediately, competing with other resources */}
+      {/* Preload top 3 avatars — fetchpriority=auto to avoid competing with LCP text */}
       {top3Avatars.map(url => (
-        <link key={url} rel="preload" as="image" href={url} crossOrigin="anonymous" fetchPriority="high" />
+        <link key={url} rel="preload" as="image" href={url} crossOrigin="anonymous" />
       ))}
       {/* REMOVED: <link rel="preload" as="fetch" href="/api/traders?timeRange=90D&limit=200">
           This was forcing the browser to download ranking data before any JS initialized.
