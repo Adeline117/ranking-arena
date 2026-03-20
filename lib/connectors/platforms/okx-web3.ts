@@ -158,7 +158,9 @@ export class OkxWeb3Connector extends BaseConnector {
       trader_key: e.uniqueCode || null,
       display_name: safeStr(e.nickName),
       avatar_url: safeStr(e.portLink),
-      roi: e._computed_roi != null ? safeNumber(e._computed_roi) : null,
+      roi: e._computed_roi != null ? safeNumber(e._computed_roi)
+        // Fallback: use overall pnlRatio (cumulative) as ROI approximation
+        : (e.pnlRatio != null ? safeNumber(Number(e.pnlRatio) * 100) : null),
       pnl: safeNumber(e.pnl ?? e.totalPnl ?? e.accPnl),
       win_rate: safePercent(e.winRatio, { isRatio: true }),
       max_drawdown: e._computed_mdd != null ? safeNumber(e._computed_mdd) : null,
@@ -179,7 +181,7 @@ export class OkxWeb3Connector extends BaseConnector {
     ratios: Array<{ ts: string; ratio: string }> | undefined,
     days: number
   ): number | null {
-    if (!ratios || ratios.length < 2) return null
+    if (!ratios || ratios.length === 0) return null
 
     const cutoff = Date.now() - days * 24 * 60 * 60 * 1000
     const sorted = ratios
@@ -187,9 +189,13 @@ export class OkxWeb3Connector extends BaseConnector {
       .filter(r => !isNaN(r.ts) && !isNaN(r.ratio))
       .sort((a, b) => a.ts - b.ts)
 
-    if (sorted.length < 2) return null
+    if (sorted.length === 0) return null
 
     const last = sorted[sorted.length - 1]
+
+    // If only 1 data point, use it as cumulative ROI directly
+    if (sorted.length === 1) return last.ratio * 100
+
     const startIdx = sorted.findIndex(r => r.ts >= cutoff)
     const first = startIdx >= 0 ? sorted[startIdx] : sorted[0]
 

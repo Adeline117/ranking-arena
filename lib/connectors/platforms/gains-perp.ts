@@ -274,11 +274,26 @@ export class GainsPerpConnector extends BaseConnector {
     const losses = this.num(raw.count_loss) ?? 0
     const total = this.num(raw.count ?? raw.totalTrades) ?? 0
     const winRate = total > 0 ? (wins / total) * 100 : null
-    // Estimate ROI: pnl / (avgPositionSize × totalTrades)
-    const avgPos = this.num(raw.avgPositionSize)
-    let roi: number | null = null
-    if (pnl != null && avgPos != null && total > 0 && avgPos > 0) {
-      roi = Math.max(-100, Math.min(10000, (pnl / (avgPos * total)) * 100))
+    // ROI from API fields (may be returned directly)
+    let roi = this.num(raw.roi ?? raw.pnlPercent ?? raw.returnRate ?? raw.profitPercent)
+    // Convert from decimal ratio (0.15 = 15%) if needed
+    if (roi != null && Math.abs(roi) < 10 && total > 10) roi = roi * 100
+    // Fallback: estimate ROI from PnL / (avgPositionSize × totalTrades)
+    if (roi === null) {
+      const avgPos = this.num(raw.avgPositionSize)
+      if (pnl != null && avgPos != null && total > 0 && avgPos > 0) {
+        roi = Math.max(-100, Math.min(10000, (pnl / (avgPos * total)) * 100))
+      }
+    }
+    // Fallback 2: estimate from avg_win/avg_loss weighted by count
+    if (roi === null && wins + losses > 0) {
+      const avgWinVal = this.num(raw.avg_win) ?? 0
+      const avgLossVal = this.num(raw.avg_loss) ?? 0
+      const avgCol = this.num(raw.avgCollateral ?? raw.avgPositionSize)
+      if (avgCol != null && avgCol > 0) {
+        const netPnlPerTrade = (avgWinVal * wins + avgLossVal * losses) / (wins + losses)
+        roi = Math.max(-100, Math.min(10000, (netPnlPerTrade / avgCol) * 100))
+      }
     }
 
     // MDD approximation from avg_loss, count_loss, avg_win, count_win

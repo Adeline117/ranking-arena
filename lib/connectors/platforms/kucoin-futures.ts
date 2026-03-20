@@ -138,7 +138,17 @@ export class KucoinFuturesConnector extends BaseConnector {
   }
 
   normalize(raw: Record<string, unknown>): Record<string, unknown> {
-    return { trader_key: raw.uid, display_name: raw.nickName, roi: this.num(raw.roi), pnl: this.num(raw.totalPnl) }
+    return {
+      trader_key: raw.leadConfigId || raw.uid,
+      display_name: raw.nickName || raw.name,
+      roi: this.num(raw.roi) ?? this.num(raw.returnRate),
+      pnl: this.num(raw.totalPnl) ?? this.num(raw.pnl),
+      win_rate: this.num(raw.winRate),
+      max_drawdown: this.num(raw.maxDrawdown) ?? this.num(raw.mdd),
+      followers: this.num(raw.followerCount),
+      copiers: this.num(raw.currentCopyCount),
+      trades_count: this.num(raw.tradeCount),
+    }
   }
 
   private num(val: unknown): number | null {
