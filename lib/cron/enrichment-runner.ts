@@ -109,6 +109,10 @@ import {
   fetchWeexEquityCurve,
   fetchWeexStatsDetail,
 } from '@/lib/cron/fetchers/enrichment-weex'
+import {
+  fetchKucoinEquityCurve,
+  fetchKucoinStatsDetail,
+} from '@/lib/cron/fetchers/enrichment-kucoin'
 import { sleep } from '@/lib/cron/fetchers/shared'
 import { captureMessage } from '@/lib/utils/logger'
 import { sendRateLimitedAlert } from '@/lib/alerts/send-alert'
@@ -242,6 +246,12 @@ export const ENRICHMENT_PLATFORM_CONFIGS: Record<string, EnrichmentConfig> = {
     fetchStatsDetail: fetchWeexStatsDetail,
     concurrency: 1, delayMs: 3000, // VPS scraper is slow, one at a time
   },
+  kucoin: {
+    platform: 'kucoin',
+    fetchEquityCurve: fetchKucoinEquityCurve,
+    fetchStatsDetail: fetchKucoinStatsDetail,
+    concurrency: 1, delayMs: 3000, // VPS scraper is serial (Playwright)
+  },
   // bitget_futures: RE-ENABLED stats+positions (2026-03-19)
   // Root cause of 44min hang: fetchStatsDetail internally called fetchPositionHistory,
   // doubling request time (2x20s timeout). Fix: standalone stats, strict 10s timeouts.
@@ -287,6 +297,13 @@ export const ENRICHMENT_PLATFORM_CONFIGS: Record<string, EnrichmentConfig> = {
     fetchEquityCurve: fetchMexcEquityCurve,
     fetchStatsDetail: fetchMexcStatsDetail,
     concurrency: 2, delayMs: 2000,
+  },
+  bingx_spot: {
+    platform: 'bingx_spot',
+    // No equity curve API — relies on daily snapshot fallback (buildEquityCurveFromSnapshots)
+    fetchEquityCurve: async () => [],
+    fetchStatsDetail: fetchBingxStatsDetail,
+    concurrency: 3, delayMs: 1000,
   },
   drift: {
     platform: 'drift',
@@ -471,9 +488,9 @@ export const NO_ENRICHMENT_PLATFORMS = new Set([
   'bybit_spot',   // metricValues has ROI/WR/MDD/Sharpe, VPS trader-detail doesn't support spot leaderMark
   'binance_web3', // wallet-based, no per-trader detail API, all metrics from leaderboard
   'web3_bot',     // small platform (19 traders), all metrics from leaderboard
-  'kucoin',       // Mac Mini script provides ROI/PnL/copiers + totalPnlDate equity curve
+  // kucoin: REMOVED — now has dedicated enrichment module (2026-03-19)
   // weex: RE-ENABLED — ndaysReturnRates from VPS scraper leaderboard = equity curve
-  'bingx_spot',   // Mac Mini script provides full rankStat data
+  // bingx_spot: REMOVED — now uses daily snapshot fallback for equity curves (2026-03-19)
 ])
 
 // Per-platform timeout: prevents any single platform from burning the entire batch budget

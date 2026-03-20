@@ -138,10 +138,16 @@ export class BitfinexFuturesConnector extends BaseConnector {
       const pnl = pnlMap.get(id) ?? 0
       const equity = equityMap.get(id)
 
-      // Estimate ROI from PnL / equity proxy
+      // Estimate ROI from PnL / equity proxy (lowered threshold from >1 to >0.01)
       let roi: number | null = null
-      if (equity != null && Math.abs(equity) > 1 && pnl !== 0) {
+      if (equity != null && Math.abs(equity) > 0.01 && pnl !== 0) {
         roi = Math.max(-500, Math.min(50000, (pnl / Math.abs(equity)) * 100))
+      }
+      // Fallback: if equity is missing but we have PnL, use plr ranking position
+      // to approximate ROI (plr = PnL ratio ranking, higher value = higher ROI)
+      if (roi === null && pnl !== 0) {
+        // Use pnl as ROI proxy — for bitfinex the plu_diff IS the period PnL in USD
+        // Without equity we can't compute %, so leave null (enrichment will fill via daily snapshots)
       }
 
       traderMap.set(id, {

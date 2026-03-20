@@ -60,6 +60,8 @@ const PLATFORM_LIMITS: Record<string, { limit90: number; limit30: number; limit7
   toobit: { limit90: 20, limit30: 15, limit7: 10 }, // CF-protected, VPS scraper
   bybit: { limit90: 15, limit30: 10, limit7: 5 }, // VPS Playwright scraper, go slow
   weex: { limit90: 10, limit30: 5, limit7: 3 }, // VPS scraper, dynamic auth, conservative
+  kucoin: { limit90: 15, limit30: 10, limit7: 5 }, // VPS scraper, serial Playwright
+  bingx_spot: { limit90: 15, limit30: 10, limit7: 5 }, // Daily snapshot fallback, lightweight
 }
 
 // High priority platforms (always enriched)
@@ -79,7 +81,7 @@ const MEDIUM_PRIORITY = ['htx_futures', 'gateio', 'mexc', 'drift', 'gains', 'bit
 // Moved here to prevent blocking high/medium priority platforms
 // dydx: consistent 360s timeout
 // binance_spot: COMPLETELY DISABLED (2026-03-14 Round 6) - see PLATFORM_LIMITS comment
-const LOW_PRIORITY = ['okx_web3', 'bybit', 'weex'] // Slow/unreliable scrapers, enrich last
+const LOW_PRIORITY = ['okx_web3', 'bybit', 'weex', 'kucoin', 'bingx_spot'] // Slow/unreliable scrapers + lightweight, enrich last
 
 // Lower priority (enriched only with all=true)
 const LOWER_PRIORITY: string[] = []
