@@ -450,41 +450,34 @@
    6. 玻璃质感效果 - Theme-aware
    ============================================ */
 
+/* backdrop-filter removed from all glass classes for performance.
+   Each blur() creates a separate compositor layer (~3-5ms per element on mobile).
+   Solid backgrounds with opacity achieve the same visual effect at zero GPU cost. */
 .glass {
   background: var(--glass-bg-primary);
-  backdrop-filter: blur(20px);
-  -webkit-backdrop-filter: blur(20px);
   border: 1px solid var(--glass-border-light);
 }
 
 .glass-light {
   background: var(--glass-bg-light);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
   border: 1px solid var(--glass-border-medium);
 }
 
 .glass-dark {
-  background: rgba(0, 0, 0, 0.6);
-  backdrop-filter: blur(24px);
-  -webkit-backdrop-filter: blur(24px);
+  background: rgba(0, 0, 0, 0.85);
   border: 1px solid rgba(255, 255, 255, 0.05);
 }
 
 .glass-card {
   background: var(--glass-bg-secondary);
-  backdrop-filter: blur(20px);
-  -webkit-backdrop-filter: blur(20px);
   border: 1px solid var(--glass-border-light);
   box-shadow: 0 8px 32px rgba(0, 0, 0, 0.12);
 }
 
 .glass-card-hover {
   background: var(--glass-bg-secondary);
-  backdrop-filter: blur(20px);
-  -webkit-backdrop-filter: blur(20px);
   border: 1px solid var(--glass-border-light);
-  transition: background-color 0.3s cubic-bezier(0.4, 0, 0.2, 1), border-color 0.3s cubic-bezier(0.4, 0, 0.2, 1), transform 0.3s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  transition: background-color 0.2s ease, border-color 0.2s ease, transform 0.2s ease, box-shadow 0.2s ease;
 }
 
 .glass-card-hover:hover {
