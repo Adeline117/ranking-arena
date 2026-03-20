@@ -768,10 +768,18 @@ async function computeSeason(
     }
 
     // Phase 5.5: Estimate sharpe from ROI + MDD as last resort
-    if (snap.sharpe_ratio == null && snap.roi != null && snap.max_drawdown != null && snap.max_drawdown > 0) {
-      const rawRatio = snap.roi / snap.max_drawdown
-      const estimatedSharpe = Math.tanh(rawRatio / 3) * 3
-      if (estimatedSharpe > -10 && estimatedSharpe < 10) {
+    if (snap.sharpe_ratio == null && snap.roi != null) {
+      let estimatedSharpe: number | null = null
+      if (snap.max_drawdown != null && snap.max_drawdown > 0) {
+        // ROI/MDD ratio scaled via tanh to [-3, 3]
+        const rawRatio = snap.roi / snap.max_drawdown
+        estimatedSharpe = Math.tanh(rawRatio / 3) * 3
+      } else if (snap.roi !== 0) {
+        // MDD=0 or null: use ROI sign/magnitude directly
+        // Positive ROI with 0 drawdown → high sharpe, negative ROI → low sharpe
+        estimatedSharpe = Math.tanh(snap.roi / 100) * 2
+      }
+      if (estimatedSharpe != null && estimatedSharpe > -10 && estimatedSharpe < 10) {
         snap.sharpe_ratio = Math.round(estimatedSharpe * 100) / 100
         snap.metrics_estimated = true
         phase5Count++
