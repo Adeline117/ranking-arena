@@ -9,7 +9,7 @@ import MobileBottomNav from '@/app/components/layout/MobileBottomNav'
 import { Box } from '@/app/components/base'
 import { RankingSkeleton } from '@/app/components/ui/Skeleton'
 import ExchangeRankingClient from './ExchangeRankingClient'
-import { ErrorBoundary } from '@/app/components/ui/ErrorBoundary'
+import { SectionErrorBoundary } from '@/app/components/utils/ErrorBoundary'
 import { logger } from '@/lib/logger'
 import { unstable_cache } from 'next/cache'
 
@@ -409,11 +409,11 @@ export default async function ExchangeRankingPage({
           Top {displayName} Traders — Live {labels.en} Rankings
         </h1>
 
-        <ErrorBoundary name="exchange-rankings">
+        <SectionErrorBoundary>
           <Suspense fallback={<RankingSkeleton rows={20} />}>
             <RankingsContent exchange={exchange} />
           </Suspense>
-        </ErrorBoundary>
+        </SectionErrorBoundary>
       </div>
       <MobileBottomNav />
     </Box>
