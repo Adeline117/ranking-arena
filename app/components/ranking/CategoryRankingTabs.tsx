@@ -188,16 +188,16 @@ export function getSourcesForCategory(category: CategoryType): string[] {
       return [
         'binance_futures', 'bybit', 'bitget_futures', 'mexc', 'htx_futures',
         'coinex', 'kucoin', 'weex', 'okx_futures', 'phemex', 'bitmart',
-        'bingx', 'gateio', 'xt', 'lbank', 'blofin'
+        'bingx', 'gateio', 'xt', 'lbank', 'blofin', 'toobit', 'btcc', 'bitunix', 'etoro'
       ]
     case 'spot':
-      return ['binance_spot', 'bitget_spot', 'dune_uniswap']
+      return ['binance_spot', 'bybit_spot', 'okx_spot', 'bitget_spot', 'bingx_spot', 'dune_uniswap']
     case 'web3':
       return [
         // CEX Web3 钱包
         'binance_web3', 'okx_web3', 'okx_wallet',
         // DEX/链上永续合约
-        'gmx', 'dydx', 'hyperliquid', 'gains',
+        'gmx', 'dydx', 'hyperliquid', 'gains', 'kwenta', 'aevo', 'drift', 'jupiter_perps',
         // Dune 链上数据
         'dune_gmx', 'dune_hyperliquid', 'dune_uniswap', 'dune_defi'
       ]
