@@ -101,6 +101,16 @@ async function buildCopinStatsDetail(
     maxDrawdown = Math.round(maxDrawdown * 100) / 100
   }
 
+  // Compute ROI from totalPnl / totalVolume (Copin provides both)
+  let roi: number | null = null
+  const totalPnl = copinStats.totalPnl
+  const totalVolume = copinStats.totalVolume
+  if (totalPnl != null && totalVolume != null && totalVolume > 0) {
+    roi = Math.round((totalPnl / totalVolume) * 100 * 100) / 100 // percentage, 2 decimals
+    // Sanity bounds: -500% to 10000%
+    roi = Math.max(-500, Math.min(10000, roi))
+  }
+
   return {
     totalTrades: totalTrades > 0 ? totalTrades : null,
     profitableTradesPct,
@@ -113,6 +123,8 @@ async function buildCopinStatsDetail(
     maxDrawdown,
     currentDrawdown: null,
     volatility: null,
+    roi,
+    pnl: totalPnl != null ? totalPnl : null,
     copiersCount: null,
     copiersPnl: null,
     aum: null,
@@ -143,9 +155,129 @@ export async function fetchGainsEquityCurve(_addr: string, _days: number): Promi
   // Gains leaderboard API only returns aggregate stats, no trade-level history.
   return []
 }
+
+/**
+ * Fetch Gains stats — primary: native Gains stats API, fallback: Copin.
+ * The native API (backend-global.gains.trade) returns per-trader stats
+ * including totalPnl, totalVolume, trades, wins — enabling ROI computation.
+ */
 export async function fetchGainsStatsDetail(addr: string): Promise<StatsDetail | null> {
+  // Primary: Gains native per-trader stats API
+  try {
+    const nativeStats = await fetchGainsNativeStats(addr)
+    if (nativeStats) return nativeStats
+  } catch (err) {
+    logger.warn(`[gains] Native stats failed for ${addr}: ${err instanceof Error ? err.message : String(err)}`)
+  }
+
+  // Fallback: Copin leaderboard stats (also computes ROI from totalPnl/totalVolume)
   return buildCopinStatsDetail('gains', addr)
 }
+
+/**
+ * Fetch per-trader stats from Gains Network native API.
+ * Endpoint: https://backend-global.gains.trade/api/personal-trading-history/{address}/stats?chainId=42161
+ *
+ * Returns aggregate stats including totalPnl, totalVolume, win/loss counts.
+ * ROI is computed as (totalPnl / totalVolume) * 100.
+ */
+async function fetchGainsNativeStats(addr: string): Promise<StatsDetail | null> {
+  // Try all chains (Arbitrum first as most active)
+  const chains = [
+    { chainId: '42161', name: 'arbitrum' },
+    { chainId: '137', name: 'polygon' },
+    { chainId: '8453', name: 'base' },
+  ]
+
+  for (const chain of chains) {
+    try {
+      const url = `https://backend-global.gains.trade/api/personal-trading-history/${addr}/stats?chainId=${chain.chainId}`
+      const data = await fetchJson<GainsNativeStatsResponse>(url, { timeoutMs: 10000 })
+      if (!data) continue
+
+      // The API may return an object with stats fields or nested data
+      const totalTrades = data.totalTrades ?? data.total_trades ?? data.nbTrades ?? 0
+      const totalWin = data.totalWin ?? data.wins ?? data.nbWins ?? 0
+      const totalPnl = data.totalPnl ?? data.pnl ?? data.totalPnlCollateral ?? null
+      const totalVolume = data.totalVolume ?? data.volume ?? data.totalCollateral ?? null
+
+      // Skip empty responses
+      if (totalTrades === 0 && totalPnl == null) continue
+
+      const profitableTradesPct = totalTrades > 0
+        ? Math.round((totalWin / totalTrades) * 1000) / 10
+        : null
+
+      // Compute ROI from totalPnl / totalVolume
+      let roi: number | null = null
+      if (totalPnl != null && totalVolume != null && totalVolume > 0) {
+        roi = Math.round((totalPnl / totalVolume) * 100 * 100) / 100
+        roi = Math.max(-500, Math.min(10000, roi))
+      }
+
+      // Max drawdown from API if available
+      let maxDrawdown: number | null = null
+      const rawMdd = data.maxDrawdown ?? data.max_drawdown ?? null
+      if (rawMdd != null && rawMdd !== 0) {
+        maxDrawdown = Math.min(Math.abs(rawMdd), 100)
+        maxDrawdown = Math.round(maxDrawdown * 100) / 100
+      }
+
+      return {
+        totalTrades: totalTrades > 0 ? totalTrades : null,
+        profitableTradesPct,
+        avgHoldingTimeHours: null,
+        avgProfit: data.avgWin ?? data.avg_win ?? null,
+        avgLoss: data.avgLoss ?? data.avg_loss ?? null,
+        largestWin: data.largestWin ?? data.bestPnl ?? null,
+        largestLoss: data.largestLoss ?? data.worstPnl ?? null,
+        sharpeRatio: null,
+        maxDrawdown,
+        currentDrawdown: null,
+        volatility: null,
+        roi,
+        pnl: totalPnl,
+        copiersCount: null,
+        copiersPnl: null,
+        aum: null,
+        winningPositions: totalWin > 0 ? totalWin : null,
+        totalPositions: totalTrades > 0 ? totalTrades : null,
+      }
+    } catch {
+      // Try next chain
+      continue
+    }
+  }
+
+  return null
+}
+
+// Gains native stats API response shape (flexible — fields vary by version)
+interface GainsNativeStatsResponse {
+  totalTrades?: number
+  total_trades?: number
+  nbTrades?: number
+  totalWin?: number
+  wins?: number
+  nbWins?: number
+  totalPnl?: number
+  pnl?: number
+  totalPnlCollateral?: number
+  totalVolume?: number
+  volume?: number
+  totalCollateral?: number
+  maxDrawdown?: number
+  max_drawdown?: number
+  avgWin?: number
+  avg_win?: number
+  avgLoss?: number
+  avg_loss?: number
+  largestWin?: number
+  bestPnl?: number
+  largestLoss?: number
+  worstPnl?: number
+}
+
 export async function fetchGainsPositionHistory(_addr: string): Promise<PositionHistoryItem[]> {
   return []
 }

@@ -110,6 +110,40 @@ export async function fetchBitfinexEquityCurve(
   return []
 }
 
+/**
+ * Compute ROI for a Bitfinex trader from rankings data.
+ * Uses plu_diff (PnL USD) / plu (equity proxy), with plr (PnL ratio) as fallback.
+ * Returns ROI as a percentage (e.g., 15.0 for 15%).
+ */
+export async function fetchBitfinexRoi(
+  traderId: string,
+  window: '7d' | '30d' = '30d'
+): Promise<number | null> {
+  try {
+    const cache = await ensureRankingsCache()
+    const id = traderId.toLowerCase()
+
+    const pnlData = window === '7d' ? cache.pluDiff7d.get(id) : cache.pluDiff1m.get(id)
+    const equity = cache.plu1m.get(id)
+
+    // Primary: ROI = plu_diff / plu (PnL / equity proxy)
+    if (pnlData && equity && Math.abs(equity.value) > 0.01 && pnlData.value !== 0) {
+      return Math.max(-500, Math.min(50000, (pnlData.value / Math.abs(equity.value)) * 100))
+    }
+
+    // Fallback: plr value IS the profit/loss ratio (e.g., 0.15 = 15% return)
+    const plrData = window === '7d' ? cache.plr7d.get(id) : cache.plr1m.get(id)
+    if (plrData && plrData.value !== 0) {
+      return Math.max(-500, Math.min(50000, plrData.value * 100))
+    }
+
+    return null
+  } catch (err) {
+    logger.warn(`[enrichment] Bitfinex ROI computation failed for ${traderId}: ${err}`)
+    return null
+  }
+}
+
 // ============================================
 // Stats Detail
 // ============================================
