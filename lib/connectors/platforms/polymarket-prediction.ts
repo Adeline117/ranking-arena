@@ -37,7 +37,7 @@ export class PolymarketPredictionConnector extends BaseConnector {
     ],
   }
 
-  async discoverLeaderboard(window: Window, limit = 50, offset = 0): Promise<DiscoverResult> {
+  async discoverLeaderboard(window: Window, limit = 200, offset = 0): Promise<DiscoverResult> {
     const periodMap: Record<Window, string> = {
       '7d': 'WEEK',
       '30d': 'MONTH',
@@ -47,9 +47,9 @@ export class PolymarketPredictionConnector extends BaseConnector {
     const allTraders: TraderSource[] = []
     let currentOffset = offset
     const maxOffset = 1000
-    const pageSize = Math.min(limit, 50)
+    const pageSize = Math.min(limit, 50) // Keep batches small to avoid DB write timeout
 
-    while (currentOffset <= maxOffset) {
+    while (currentOffset <= maxOffset && allTraders.length < limit) {
       const batchLimit = Math.min(pageSize, limit - allTraders.length)
       if (batchLimit <= 0) break
 
