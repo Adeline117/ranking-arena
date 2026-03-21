@@ -213,26 +213,27 @@ export default function RootLayout({
               <SpeedInsights />
               <Analytics />
             </Suspense>
-            <BetaBanner />
-            <NetworkStatusBanner />
             <SkipLink targetId="main-content" />
-            <ServiceWorkerRegistration />
             <Suspense fallback={null}>
               <GlobalProgress />
             </Suspense>
-            <KeyboardShortcuts />
             <PageErrorBoundary>
               <main id="main-content" tabIndex={-1}>
                 {children}
               </main>
             </PageErrorBoundary>
             <MobileBottomNav />
-            <CompareFloatingBar />
-            <ScrollToTop />
-            <FeedbackWidget />
-            <PlausibleAnalytics />
-            <ScrollRestoration />
+            {/* Deferred: components that don't affect initial render or LCP */}
             <Suspense fallback={null}>
+              <BetaBanner />
+              <NetworkStatusBanner />
+              <ServiceWorkerRegistration />
+              <KeyboardShortcuts />
+              <CompareFloatingBar />
+              <ScrollToTop />
+              <FeedbackWidget />
+              <PlausibleAnalytics />
+              <ScrollRestoration />
               <CookieConsent />
             </Suspense>
           </CapacitorProvider>

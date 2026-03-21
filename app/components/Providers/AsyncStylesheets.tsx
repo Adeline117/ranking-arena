@@ -12,10 +12,10 @@ import { useEffect } from 'react'
  * 3. Uses requestIdleCallback to avoid blocking the main thread
  */
 
-const NON_CRITICAL_STYLESHEETS = [
-  '/styles/responsive.css',
-  '/styles/animations.css',
-]
+// responsive.css loads first (layout-critical breakpoints not in critical-css.ts)
+// animations.css deferred further — purely decorative, never affects LCP
+const PRIORITY_STYLESHEETS = ['/styles/responsive.css']
+const DEFERRED_STYLESHEETS = ['/styles/animations.css']
 
 function loadStylesheet(href: string): Promise<void> {
   return new Promise((resolve, reject) => {
@@ -36,19 +36,30 @@ function loadStylesheet(href: string): Promise<void> {
 
 export function AsyncStylesheets() {
   useEffect(() => {
-    // Use requestIdleCallback to load CSS during browser idle time
-    const loadStyles = () => {
-      NON_CRITICAL_STYLESHEETS.forEach(href => {
+    // Priority: responsive.css (layout breakpoints) — load ASAP after hydration
+    const loadPriority = () => {
+      PRIORITY_STYLESHEETS.forEach(href => {
+        loadStylesheet(href).catch(_err => { // eslint-disable-line no-restricted-syntax -- intentional fire-and-forget
+        })
+      })
+    }
+
+    // Deferred: animations.css (purely decorative) — load well after LCP
+    const loadDeferred = () => {
+      DEFERRED_STYLESHEETS.forEach(href => {
         loadStylesheet(href).catch(_err => { // eslint-disable-line no-restricted-syntax -- intentional fire-and-forget
         })
       })
     }
 
     if ('requestIdleCallback' in window) {
-      requestIdleCallback(loadStyles, { timeout: 4000 })
+      requestIdleCallback(loadPriority, { timeout: 2000 })
+      // Animations after 5s — well past LCP window, avoids TBT contribution
+      requestIdleCallback(loadDeferred, { timeout: 8000 })
     } else {
-      // Fallback for Safari — delay to avoid competing with LCP
-      setTimeout(loadStyles, 1000)
+      // Safari fallback
+      setTimeout(loadPriority, 500)
+      setTimeout(loadDeferred, 3000)
     }
   }, [])
 

@@ -4,11 +4,14 @@
    No CSS hiding needed — React state removes it when client table mounts.
    This eliminates CLS because the swap happens at the same DOM position. */
 
-/* Two-phase rendering: Hide SSR shell once the interactive HomePage mounts.
-   #homepage-interactive is added by HomePage.tsx (loaded via ssr:false dynamic import).
-   When it exists in the DOM, the SSR table shell is no longer needed. */
+/* Two-phase rendering: Collapse SSR shell once the interactive HomePage mounts.
+   Uses height:0 + overflow:hidden instead of display:none to avoid layout shift (CLS).
+   The SSR content becomes invisible without removing it from flow abruptly. */
 body:has(#homepage-interactive) #ssr-homepage-shell {
-  display: none;
+  height: 0;
+  overflow: hidden;
+  visibility: hidden;
+  /* No transition — instant collapse when client mounts, matching position */
 }
 
 /*
@@ -19,19 +22,14 @@ body:has(#homepage-interactive) #ssr-homepage-shell {
  */
 
 /* Theme transition - smooth color crossfade.
-   Scoped to direct children of key layout containers to avoid
-   triggering non-composited animations on hundreds of elements. */
+   Only target html/body and specific layout landmarks (NOT generic tags like
+   section/nav/header which match hundreds of elements → 80 non-composited animations). */
 html.theme-transition,
 html.theme-transition > body,
-html.theme-transition header,
-html.theme-transition main,
-html.theme-transition footer,
-html.theme-transition nav,
-html.theme-transition section,
 html.theme-transition .top-nav,
 html.theme-transition .mobile-bottom-nav,
-html.theme-transition [data-theme-transition] {
-  transition: background-color 0.4s ease, color 0.3s ease, border-color 0.3s ease !important;
+html.theme-transition #main-content {
+  transition: background-color 0.3s ease, color 0.2s ease, border-color 0.2s ease !important;
 }
 
 /* View Transition API — circular reveal for theme switch */
@@ -569,11 +567,6 @@ a:hover {
   color: var(--color-accent-primary);
 }
 
-/* HomeSubNav pill hover */
-.home-subnav-pill:hover {
-  background: var(--color-bg-hover) !important;
-  color: var(--color-text-primary) !important;
-}
 
 /* Unified input focus ring */
 input:focus-visible,
@@ -2969,10 +2962,6 @@ td[data-numeric],
   color: var(--color-accent-error) !important;
 }
 
-/* Hide scrollbar for home subnav horizontal scroll */
-.home-subnav-scroll::-webkit-scrollbar {
-  display: none;
-}
 
 /* Flash animation for ranking value changes */
 @keyframes flash-green-bg {
