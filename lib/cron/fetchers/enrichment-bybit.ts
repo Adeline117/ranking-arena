@@ -144,6 +144,9 @@ export async function fetchBybitStatsDetail(
       maxDrawdown: parseNum(d.maxDrawdown),
       currentDrawdown: null,
       volatility: null,
+      // PnL from VPS scraper detail — key fix for bybit PnL 0% coverage
+      pnl: parseNum(d.pnl),
+      roi: parseNum(d.roi),
       copiersCount: d.followerCount ?? d.currentFollowerCount ?? null,
       copiersPnl: parseNum(d.copierPnl),
       aum: parseNum(d.aum),
@@ -161,20 +164,54 @@ async function enrichSingleBybitTrader(
   traderId: string,
 ): Promise<Result<string>> {
   try {
-    const curve = await withRetry(
-      () => fetchBybitEquityCurve(traderId, 90),
+    // Single VPS call — extract both equity curve AND PnL/stats
+    const data = await withRetry(
+      () => fetchBybitViaVPS(traderId),
       { maxRetries: 2, initialDelay: 2000, isRetryable: (e) => {
         const msg = e instanceof Error ? e.message : ''
         return msg.includes('timeout') || msg.includes('429') || msg.includes('ECONNRESET')
       }}
     )
-    if (curve.length > 0) {
-      await upsertEquityCurve(supabase, 'bybit', traderId, '90D', curve)
+
+    if (!data) return Ok(traderId)
+
+    // 1. Equity curve from pnlHistory
+    if (data.pnlHistory?.result?.pnlList) {
+      const curve: EquityCurvePoint[] = data.pnlHistory.result.pnlList
+        .filter((d) => d.timestamp)
+        .map((d) => ({
+          date: new Date(Number(d.timestamp) || Date.now()).toISOString().split('T')[0],
+          roi: d.roi != null ? Number(d.roi) : 0,
+          pnl: d.pnl != null ? Number(d.pnl) : null,
+        }))
+      if (curve.length > 0) {
+        await upsertEquityCurve(supabase, 'bybit', traderId, '90D', curve)
+      }
     }
+
+    // 2. Write PnL from detail.result back to trader_snapshots_v2
+    const detail = data.detail?.result
+    if (detail) {
+      const pnl = parseNum(detail.pnl)
+      if (pnl != null) {
+        // Update PnL for all windows — Bybit detail returns total PnL
+        const windows = ['7D', '30D', '90D']
+        for (const window of windows) {
+          await supabase
+            .from('trader_snapshots_v2')
+            .update({ pnl_usd: pnl })
+            .eq('platform', 'bybit')
+            .eq('trader_key', traderId)
+            .eq('window', window)
+            .is('pnl_usd', null) // Only fill where PnL is missing
+        }
+      }
+    }
+
     return Ok(traderId)
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err)
-    logger.warn(`[bybit] Equity curve fetch failed for ${traderId}: ${msg}`)
+    logger.warn(`[bybit] Enrichment failed for ${traderId}: ${msg}`)
     return Err(err instanceof Error ? err : new Error(msg))
   }
 }
