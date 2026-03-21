@@ -223,93 +223,12 @@
       "schedule": "15 * * * *"
     },
 {
-      "path": "/api/cron/fetch-traders/binance_web3",
-      "schedule": "10 */6 * * *"
-    },
-    {
-      "path": "/api/cron/fetch-traders/okx_web3",
-      "schedule": "20 */6 * * *"
-    },
-
-    {
-      "path": "/api/cron/fetch-traders/xt",
-      "schedule": "34 */6 * * *"
-    },
-    {
-      "path": "/api/cron/fetch-traders/bingx",
-      "schedule": "38 */6 * * *"
-    },
-    {
-      "path": "/api/cron/fetch-traders/gateio",
-      "schedule": "3 1,7,13,19 * * *"
-    },
-{
-      "path": "/api/cron/fetch-traders/coinex",
-      "schedule": "25 1,7,13,19 * * *"
-    },
-    {
       "path": "/api/cron/fetch-traders/phemex",
       "schedule": "35 1,7,13,19 * * *"
     },
     {
-      "path": "/api/cron/fetch-traders/bybit",
-      "schedule": "45 1,7,13,19 * * *"
-    },
-    {
       "path": "/api/cron/fetch-traders/blofin",
       "schedule": "55 1,7,13,19 * * *"
-    },
-    {
-      "path": "/api/cron/fetch-traders/bitfinex",
-      "schedule": "5 2,8,14,20 * * *"
-    },
-    {
-      "path": "/api/cron/fetch-traders/toobit",
-      "schedule": "15 2,8,14,20 * * *"
-    },
-    {
-      "path": "/api/cron/fetch-traders/drift",
-      "schedule": "25 2,8,14,20 * * *"
-    },
-    {
-      "path": "/api/cron/fetch-traders/bitunix",
-      "schedule": "35 2,8,14,20 * * *"
-    },
-    {
-      "path": "/api/cron/fetch-traders/btcc",
-      "schedule": "45 2,8,14,20 * * *"
-    },
-    {
-      "path": "/api/cron/fetch-traders/web3_bot",
-      "schedule": "55 2,8,14,20 * * *"
-    },
-    {
-      "path": "/api/cron/fetch-traders/etoro",
-      "schedule": "5 3,9,15,21 * * *"
-    },
-    {
-      "path": "/api/cron/fetch-traders/hyperliquid",
-      "schedule": "15 3,9,15,21 * * *"
-    },
-    {
-      "path": "/api/cron/fetch-traders/gmx",
-      "schedule": "25 3,9,15,21 * * *"
-    },
-    {
-      "path": "/api/cron/fetch-traders/gains",
-      "schedule": "35 3,9,15,21 * * *"
-    },
-    {
-      "path": "/api/cron/fetch-traders/jupiter_perps",
-      "schedule": "45 3,9,15,21 * * *"
-    },
-    {
-      "path": "/api/cron/fetch-traders/aevo",
-      "schedule": "55 3,9,15,21 * * *"
-    },
-    {
-      "path": "/api/cron/fetch-traders/dydx",
-      "schedule": "5 4,10,16,22 * * *"
     },
     {
       "path": "/api/cron/update-competitions",
