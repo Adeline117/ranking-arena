@@ -570,7 +570,7 @@ export default function GroupDetailPage({ params }: { params: Promise<{ id: stri
         <Box>
           <Breadcrumb items={[
             { label: t('groups'), href: '/groups' },
-            { label: (language !== 'zh' && group?.name_en ? group?.name_en : group?.name) || '...' },
+            { label: (language !== 'zh' && group?.name_en ? group?.name_en : group?.name) || t('loading') },
           ]} />
           <GroupHeader
             group={group}

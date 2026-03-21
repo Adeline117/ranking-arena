@@ -457,7 +457,7 @@ export default function FollowingPage() {
                 label={t('avgRoi')}
                 value={stats.traderCount > 0
                   ? `${stats.avgRoi >= 0 ? '+' : ''}${stats.avgRoi.toFixed(2)}%`
-                  : '--'
+                  : '—'
                 }
                 color={stats.avgRoi >= 0 ? tokens.colors.accent.success : tokens.colors.accent.error}
               />
@@ -465,7 +465,7 @@ export default function FollowingPage() {
                 label={t('bestPerformer')}
                 value={stats.bestPerformer
                   ? `${(stats.bestPerformer.roi || 0) >= 0 ? '+' : ''}${(stats.bestPerformer.roi || 0).toFixed(2)}%`
-                  : '--'
+                  : '—'
                 }
                 color={tokens.colors.accent.success}
                 subText={stats.bestPerformer?.handle}
@@ -474,7 +474,7 @@ export default function FollowingPage() {
                 label={t('worstPerformer')}
                 value={stats.worstPerformer
                   ? `${(stats.worstPerformer.roi || 0) >= 0 ? '+' : ''}${(stats.worstPerformer.roi || 0).toFixed(2)}%`
-                  : '--'
+                  : '—'
                 }
                 color={tokens.colors.accent.error}
                 subText={stats.worstPerformer?.handle}

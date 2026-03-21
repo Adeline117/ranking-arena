@@ -234,7 +234,7 @@ function BotDetailContent({ id }: { id: string }) {
               <StatCard label={t('botRevenue')} value={formatLargeNumber(snap.revenue)} />
               <StatCard
                 label={t('botMaxDrawdown')}
-                value={snap.max_drawdown != null ? `-${Number(snap.max_drawdown).toFixed(1)}%` : '--'}
+                value={snap.max_drawdown != null ? `-${Number(snap.max_drawdown).toFixed(1)}%` : '—'}
                 color={snap.max_drawdown != null ? 'var(--color-accent-error)' : undefined}
               />
               {snap.token_price != null && (
@@ -280,13 +280,13 @@ function BotDetailContent({ id }: { id: string }) {
                   <div className="text-right text-sm tabular-nums" style={{
                     color: ((s.apy as number) ?? (s.roi as number) ?? 0) >= 0 ? 'var(--color-accent-success)' : 'var(--color-accent-error)',
                   }}>
-                    {s.apy != null ? formatPercent(s.apy as number) : s.roi != null ? formatPercent(s.roi as number) : '--'}
+                    {s.apy != null ? formatPercent(s.apy as number) : s.roi != null ? formatPercent(s.roi as number) : '—'}
                   </div>
                   <div className="text-right text-sm font-bold tabular-nums" style={{
                     color: s.arena_score != null ? getScoreColor(Number(s.arena_score)) : 'var(--color-text-tertiary)',
                     fontFamily: tokens.typography.fontFamily.mono.join(','),
                   }}>
-                    {s.arena_score != null ? Number(s.arena_score).toFixed(1) : '--'}
+                    {s.arena_score != null ? Number(s.arena_score).toFixed(1) : '—'}
                   </div>
                 </div>
               ))}
