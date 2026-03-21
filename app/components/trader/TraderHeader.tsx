@@ -194,11 +194,11 @@ export default function TraderHeader({
     const diff = Date.now() - new Date(iso).getTime()
     const mins = Math.floor(diff / 60000)
     if (mins < 1) return t('justNow') || 'just now'
-    if (mins < 60) return `${mins}m ago`
+    if (mins < 60) return t('minutesAgoShort').replace('{n}', String(mins))
     const hours = Math.floor(mins / 60)
-    if (hours < 24) return `${hours}h ago`
+    if (hours < 24) return t('hoursAgoShort').replace('{n}', String(hours))
     const days = Math.floor(hours / 24)
-    return `${days}d ago`
+    return t('daysAgoShort').replace('{n}', String(days))
   }
 
   const copyHandle = useCallback(() => {
@@ -240,11 +240,11 @@ export default function TraderHeader({
   // Build subtitle parts for the second line
   const subtitleParts: string[] = []
   if (linkedAccountCount && linkedAccountCount >= 2) {
-    subtitleParts.push(`${linkedAccountCount} verified accounts`)
+    subtitleParts.push(`${linkedAccountCount} ${t('verifiedAccounts') || 'verified accounts'}`)
   }
   if (followerCount > 0) subtitleParts.push(`${followerCount.toLocaleString()} ${t('arenaFollowers') || 'followers'}`)
   // copiers removed — only show platform internal followers
-  if (aum !== undefined && aum > 0) subtitleParts.push(`AUM ${formatAum(aum)}`)
+  if (aum !== undefined && aum > 0) subtitleParts.push(`${t('aumLabel') || 'AUM'} ${formatAum(aum)}`)
   if (activeDays !== null && activeDays >= 7) subtitleParts.push(formatActiveDays(activeDays, t))
   if (rank != null && rank > 0 && source && EXCHANGE_NAMES[source.toLowerCase()]) {
     subtitleParts.push(t('rankedOnExchange')
