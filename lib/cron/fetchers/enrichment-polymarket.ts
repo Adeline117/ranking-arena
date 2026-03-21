@@ -23,14 +23,78 @@ import { logger } from '@/lib/logger'
 const DATA_API = 'https://data-api.polymarket.com'
 
 /**
- * Polymarket has no equity curve API — return empty.
- * Equity curves will be built from daily snapshot diffs.
+ * Build equity curve from Polymarket on-chain activity (trades + redemptions).
+ * Aggregates daily USDC flows into cumulative PnL curve.
  */
 export async function fetchPolymarketEquityCurve(
-  _traderId: string,
-  _days: number
+  traderId: string,
+  days: number
 ): Promise<EquityCurvePoint[]> {
-  return []
+  try {
+    const startTs = Math.floor((Date.now() - days * 86400000) / 1000)
+
+    // Fetch all activity (trades, redemptions, rewards) in the period
+    const allActivity: Array<Record<string, unknown>> = []
+    let offset = 0
+    const pageSize = 500
+
+    while (offset < 5000) { // Safety cap
+      const data = await fetchJson<Array<Record<string, unknown>>>(
+        `${DATA_API}/activity?user=${traderId}&limit=${pageSize}&offset=${offset}&start=${startTs}`,
+        { timeoutMs: 15000 }
+      )
+      if (!Array.isArray(data) || data.length === 0) break
+      allActivity.push(...data)
+      if (data.length < pageSize) break
+      offset += pageSize
+    }
+
+    if (allActivity.length === 0) return []
+
+    // Group by day and compute daily net PnL
+    const dailyPnl = new Map<string, number>()
+
+    for (const act of allActivity) {
+      const ts = num(act.timestamp)
+      if (ts == null) continue
+      const date = new Date(ts * 1000).toISOString().split('T')[0]
+      const usdcSize = num(act.usdcSize) ?? 0
+      const side = String(act.side || '')
+      const type = String(act.type || '')
+
+      // Net flow: SELL/REDEEM = money in (+), BUY = money out (-)
+      let flow = 0
+      if (type === 'TRADE') {
+        flow = side === 'SELL' ? usdcSize : -usdcSize
+      } else if (type === 'REDEEM' || type === 'REWARD' || type === 'MAKER_REBATE') {
+        flow = usdcSize
+      } else if (type === 'SPLIT' || type === 'MERGE') {
+        // Neutral operations
+        flow = 0
+      }
+
+      dailyPnl.set(date, (dailyPnl.get(date) || 0) + flow)
+    }
+
+    // Sort by date and build cumulative curve
+    const sortedDates = Array.from(dailyPnl.keys()).sort()
+    let cumPnl = 0
+    const points: EquityCurvePoint[] = []
+
+    for (const date of sortedDates) {
+      cumPnl += dailyPnl.get(date)!
+      points.push({
+        date,
+        roi: 0, // Cannot compute ROI without initial capital — set in enrichment-runner
+        pnl: Math.round(cumPnl * 100) / 100,
+      })
+    }
+
+    return points
+  } catch (err) {
+    logger.warn(`[polymarket] Equity curve failed for ${traderId}: ${err instanceof Error ? err.message : String(err)}`)
+    return []
+  }
 }
 
 /**

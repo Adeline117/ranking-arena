@@ -2,8 +2,12 @@
  * Copin.io On-Chain Perpetual DEX Aggregator Connector
  *
  * Aggregates trader data from 51+ perpetual DEX protocols.
- * Uses the public statistics filter endpoint (no API key needed).
- * Rich data: PnL, ROI, win rate, max drawdown, leverage, duration, etc.
+ * Uses the position/filter endpoint (no auth needed) to get closed positions,
+ * then aggregates top traders by PnL.
+ *
+ * Key API: POST /PROTOCOL/position/filter (NOT /public/ — that returns empty)
+ * Returns individual closed positions with account, pnl, roi, pair, etc.
+ * We aggregate these into per-trader stats.
  */
 
 import { BaseConnector } from '../base'
@@ -15,19 +19,43 @@ import type {
 
 const BASE = 'https://api.copin.io'
 
-// Top protocols to aggregate from — highest volume DEX perps
+// Top protocols — highest volume DEX perps
 const PROTOCOLS = [
   'HYPERLIQUID',
   'GMX_V2',
-  'GNS_V8',
+  'GNS',
   'DYDX',
   'KWENTA',
   'SYNTHETIX_V3',
-  'BSX_BASE',
-  'VERTEX_ARB',
-  'KILOEX_OPBNB',
-  'POLYNOMIAL',
 ] as const
+
+interface CopinPosition {
+  account: string
+  pnl: number
+  roi: number
+  isWin: boolean
+  isLiquidate: boolean
+  pair: string
+  leverage: number
+  size: number
+  durationInSecond: number
+  closeBlockTime: string
+  protocol: string
+}
+
+interface TraderAgg {
+  account: string
+  protocol: string
+  totalPnl: number
+  totalTrades: number
+  wins: number
+  losses: number
+  liquidations: number
+  totalVolume: number
+  avgRoi: number
+  rois: number[]
+  maxDrawdown: number
+}
 
 export class CopinPerpConnector extends BaseConnector {
   readonly platform = 'copin' as const
@@ -42,28 +70,23 @@ export class CopinPerpConnector extends BaseConnector {
     scraping_difficulty: 1,
     rate_limit: { rpm: 30, concurrency: 2 },
     notes: [
-      'Public filter endpoint returns empty — API key likely required',
-      'Aggregates 51+ perp DEX protocols',
+      'Uses /PROTOCOL/position/filter (not /public/ which returns empty)',
+      'Aggregates individual positions into per-trader stats',
       'trader_key = protocol:walletAddress',
-      'No 90d window (max D60)',
-      'TODO: obtain Copin API key or scrape explorer page',
     ],
   }
 
-  async discoverLeaderboard(window: Window, limit = 2000, _offset = 0): Promise<DiscoverResult> {
-    const periodMap: Record<Window, string> = {
-      '7d': 'D7',
-      '30d': 'D30',
-      '90d': 'D60', // Copin max is D60
-    }
+  async discoverLeaderboard(window: Window, limit = 500, _offset = 0): Promise<DiscoverResult> {
+    const daysMap: Record<Window, number> = { '7d': 7, '30d': 30, '90d': 60 }
+    const cutoff = new Date(Date.now() - daysMap[window] * 86400000).toISOString()
 
     const allTraders: TraderSource[] = []
 
-    // Fetch from top protocols in parallel (2 at a time)
+    // Fetch top traders from each protocol
     for (let i = 0; i < PROTOCOLS.length; i += 2) {
       const batch = PROTOCOLS.slice(i, i + 2)
       const results = await Promise.allSettled(
-        batch.map((protocol) => this.fetchProtocolTraders(protocol, periodMap[window], limit))
+        batch.map((protocol) => this.fetchTopTraders(protocol, cutoff, 200))
       )
 
       for (const result of results) {
@@ -72,48 +95,42 @@ export class CopinPerpConnector extends BaseConnector {
         }
       }
 
-      if (i + 2 < PROTOCOLS.length) {
-        await this.sleep(500)
+      if (i + 2 < PROTOCOLS.length) await this.sleep(500)
+    }
+
+    // Deduplicate by wallet address (keep highest PnL)
+    const byKey = new Map<string, TraderSource>()
+    for (const t of allTraders) {
+      const existing = byKey.get(t.trader_key)
+      if (!existing || (this.num(t.raw?.totalPnl) ?? 0) > (this.num(existing.raw?.totalPnl) ?? 0)) {
+        byKey.set(t.trader_key, t)
       }
     }
 
-    // Deduplicate by wallet address (trader can appear on multiple protocols)
-    const seen = new Set<string>()
-    const deduped = allTraders.filter((t) => {
-      if (seen.has(t.trader_key)) return false
-      seen.add(t.trader_key)
-      return true
-    })
-
-    // Sort by PnL descending
-    deduped.sort((a, b) => {
-      const pnlA = this.num(a.raw?.pnl) ?? 0
-      const pnlB = this.num(b.raw?.pnl) ?? 0
-      return pnlB - pnlA
-    })
+    const deduped = Array.from(byKey.values())
+    deduped.sort((a, b) => (this.num(b.raw?.totalPnl) ?? 0) - (this.num(a.raw?.totalPnl) ?? 0))
 
     return {
-      traders: deduped.slice(0, limit * PROTOCOLS.length),
+      traders: deduped.slice(0, limit),
       total_available: deduped.length,
       window,
       fetched_at: new Date().toISOString(),
     }
   }
 
-  private async fetchProtocolTraders(protocol: string, period: string, limit: number): Promise<TraderSource[]> {
+  private async fetchTopTraders(protocol: string, cutoff: string, positionLimit: number): Promise<TraderSource[]> {
+    // Fetch recent closed positions sorted by PnL
     const body = {
-      pagination: { limit, offset: 0 },
-      queries: [{ fieldName: 'type', value: period }],
-      ranges: [
-        { fieldName: 'pnl', gte: 100 },
-        { fieldName: 'totalTrade', gte: 5 },
+      pagination: { limit: positionLimit, offset: 0 },
+      queries: [
+        { fieldName: 'status', value: 'CLOSE' },
       ],
       sortBy: 'pnl',
       sortType: 'desc',
     }
 
-    const raw = await this.request<Record<string, unknown>>(
-      `${BASE}/public/${protocol}/position/statistic/filter`,
+    const raw = await this.request<{ data?: CopinPosition[]; meta?: Record<string, unknown> }>(
+      `${BASE}/${protocol}/position/filter`,
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -121,28 +138,81 @@ export class CopinPerpConnector extends BaseConnector {
       }
     )
 
-    const data = (raw?.data ?? raw) as Record<string, unknown>[]
-    if (!Array.isArray(data)) return []
+    const positions = raw?.data
+    if (!Array.isArray(positions) || positions.length === 0) return []
 
-    return data.map((item) => {
-      const account = String(item.account || '')
-      return {
-        platform: 'copin' as const,
-        market_type: 'perp' as const,
-        trader_key: `${protocol.toLowerCase()}:${account}`,
-        display_name: null,
-        profile_url: `https://app.copin.io/${protocol}/trader/${account}`,
-        discovered_at: new Date().toISOString(),
-        last_seen_at: new Date().toISOString(),
-        is_active: true,
-        raw: { ...item, _protocol: protocol },
+    // Aggregate by trader
+    const traders = new Map<string, TraderAgg>()
+
+    for (const pos of positions) {
+      if (!pos.account || new Date(pos.closeBlockTime) < new Date(cutoff)) continue
+
+      const key = pos.account.toLowerCase()
+      let agg = traders.get(key)
+      if (!agg) {
+        agg = {
+          account: pos.account,
+          protocol,
+          totalPnl: 0,
+          totalTrades: 0,
+          wins: 0,
+          losses: 0,
+          liquidations: 0,
+          totalVolume: 0,
+          avgRoi: 0,
+          rois: [],
+          maxDrawdown: 0,
+        }
+        traders.set(key, agg)
       }
-    })
+
+      agg.totalPnl += pos.pnl ?? 0
+      agg.totalTrades++
+      if (pos.isWin) agg.wins++
+      else agg.losses++
+      if (pos.isLiquidate) agg.liquidations++
+      agg.totalVolume += Math.abs(pos.size ?? 0)
+      if (pos.roi != null) agg.rois.push(pos.roi)
+    }
+
+    // Convert to TraderSource[]
+    return Array.from(traders.values())
+      .filter((t) => t.totalTrades >= 3 && t.totalPnl > 0) // Min 3 trades, profitable
+      .sort((a, b) => b.totalPnl - a.totalPnl)
+      .slice(0, 100)
+      .map((agg) => {
+        const avgRoi = agg.rois.length > 0
+          ? agg.rois.reduce((s, r) => s + r, 0) / agg.rois.length * 100
+          : null
+        const winRate = agg.totalTrades > 0 ? (agg.wins / agg.totalTrades) * 100 : null
+
+        return {
+          platform: 'copin' as const,
+          market_type: 'perp' as const,
+          trader_key: `${protocol.toLowerCase()}:${agg.account}`,
+          display_name: null,
+          profile_url: `https://app.copin.io/${protocol}/trader/${agg.account}`,
+          discovered_at: new Date().toISOString(),
+          last_seen_at: new Date().toISOString(),
+          is_active: true,
+          raw: {
+            account: agg.account,
+            _protocol: protocol,
+            totalPnl: agg.totalPnl,
+            totalTrade: agg.totalTrades,
+            totalWin: agg.wins,
+            totalLose: agg.losses,
+            totalLiquidation: agg.liquidations,
+            totalVolume: agg.totalVolume,
+            avgRoi,
+            winRate,
+          },
+        }
+      })
   }
 
   async fetchTraderProfile(traderKey: string): Promise<ProfileResult | null> {
-    // traderKey format: protocol:walletAddress
-    const [protocol, address] = traderKey.includes(':') ? traderKey.split(':') : ['HYPERLIQUID', traderKey]
+    const [protocol, address] = traderKey.includes(':') ? traderKey.split(':') : ['hyperliquid', traderKey]
 
     const profile: TraderProfile = {
       platform: 'copin',
@@ -164,26 +234,24 @@ export class CopinPerpConnector extends BaseConnector {
   }
 
   async fetchTraderSnapshot(traderKey: string, window: Window): Promise<SnapshotResult | null> {
-    const [protocol, address] = traderKey.includes(':') ? traderKey.split(':') : ['HYPERLIQUID', traderKey]
-    const periodMap: Record<Window, string> = {
-      '7d': 'D7',
-      '30d': 'D30',
-      '90d': 'D60',
-    }
-
-    const body = {
-      pagination: { limit: 1, offset: 0 },
-      queries: [
-        { fieldName: 'type', value: periodMap[window] },
-        { fieldName: 'account', value: address },
-      ],
-      sortBy: 'pnl',
-      sortType: 'desc',
-    }
+    const [protocol, address] = traderKey.includes(':') ? traderKey.split(':') : ['hyperliquid', traderKey]
+    const daysMap: Record<Window, number> = { '7d': 7, '30d': 30, '90d': 60 }
+    const cutoff = new Date(Date.now() - daysMap[window] * 86400000).toISOString()
 
     try {
-      const raw = await this.request<Record<string, unknown>>(
-        `${BASE}/public/${protocol.toUpperCase()}/position/statistic/filter`,
+      // Fetch this trader's recent closed positions
+      const body = {
+        pagination: { limit: 500, offset: 0 },
+        queries: [
+          { fieldName: 'status', value: 'CLOSE' },
+          { fieldName: 'account', value: address },
+        ],
+        sortBy: 'closeBlockTime',
+        sortType: 'desc',
+      }
+
+      const raw = await this.request<{ data?: CopinPosition[] }>(
+        `${BASE}/${protocol.toUpperCase()}/position/filter`,
         {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -191,23 +259,39 @@ export class CopinPerpConnector extends BaseConnector {
         }
       )
 
-      const data = (raw?.data ?? raw) as Record<string, unknown>[]
-      if (!Array.isArray(data) || data.length === 0) return null
+      const positions = (raw?.data || []).filter(
+        (p) => new Date(p.closeBlockTime) >= new Date(cutoff)
+      )
 
-      const item = data[0]
-      const totalWin = this.num(item.totalWin) ?? 0
-      const totalLose = this.num(item.totalLose) ?? 0
-      const totalTrades = totalWin + totalLose
-      const winRate = totalTrades > 0 ? (totalWin / totalTrades) * 100 : null
+      if (positions.length === 0) return null
+
+      // Aggregate stats
+      let totalPnl = 0
+      let wins = 0
+      let losses = 0
+      let totalVolume = 0
+      const rois: number[] = []
+
+      for (const pos of positions) {
+        totalPnl += pos.pnl ?? 0
+        if (pos.isWin) wins++
+        else losses++
+        totalVolume += Math.abs(pos.size ?? 0)
+        if (pos.roi != null) rois.push(pos.roi)
+      }
+
+      const totalTrades = wins + losses
+      const winRate = totalTrades > 0 ? (wins / totalTrades) * 100 : null
+      const avgRoi = rois.length > 0 ? rois.reduce((s, r) => s + r, 0) / rois.length * 100 : null
 
       const metrics: SnapshotMetrics = {
-        roi: this.num(item.avgRoi) ?? this.num(item.realisedAvgRoi),
-        pnl: this.num(item.pnl) ?? this.num(item.realisedPnl),
+        roi: avgRoi,
+        pnl: totalPnl,
         win_rate: winRate,
-        max_drawdown: this.num(item.maxDrawdown) != null ? Math.abs(this.num(item.maxDrawdown)!) : null,
+        max_drawdown: null,
         sharpe_ratio: null,
         sortino_ratio: null,
-        trades_count: this.num(item.totalTrade),
+        trades_count: totalTrades,
         followers: null,
         copiers: null,
         aum: null,
@@ -219,9 +303,6 @@ export class CopinPerpConnector extends BaseConnector {
       }
 
       const quality_flags = this.buildQualityFlags(metrics, window, window !== '90d')
-      if (window === '90d') {
-        quality_flags.notes.push('Using D60 period as proxy for 90d')
-      }
       return { metrics, quality_flags, fetched_at: new Date().toISOString() }
     } catch {
       return null
@@ -233,22 +314,14 @@ export class CopinPerpConnector extends BaseConnector {
   }
 
   normalize(raw: Record<string, unknown>): Record<string, unknown> {
-    const totalWin = this.num(raw.totalWin) ?? 0
-    const totalLose = this.num(raw.totalLose) ?? 0
-    const totalTrades = totalWin + totalLose
-    const winRate = totalTrades > 0 ? (totalWin / totalTrades) * 100 : null
-
-    const rawMdd = this.num(raw.maxDrawdown ?? raw.realisedMaxDrawdown)
-    const maxDrawdown = rawMdd != null ? Math.abs(rawMdd) : null
-
     return {
-      trader_key: raw.account ? `${String(raw._protocol || 'HYPERLIQUID').toLowerCase()}:${raw.account}` : null,
+      trader_key: raw.account ? `${String(raw._protocol || 'hyperliquid').toLowerCase()}:${raw.account}` : null,
       display_name: null,
       avatar_url: null,
-      roi: this.num(raw.avgRoi) ?? this.num(raw.realisedAvgRoi),
-      pnl: this.num(raw.pnl) ?? this.num(raw.realisedPnl),
-      win_rate: winRate,
-      max_drawdown: maxDrawdown,
+      roi: this.num(raw.avgRoi),
+      pnl: this.num(raw.totalPnl) ?? this.num(raw.pnl),
+      win_rate: this.num(raw.winRate),
+      max_drawdown: null,
       sharpe_ratio: null,
       trades_count: this.num(raw.totalTrade),
       followers: null,

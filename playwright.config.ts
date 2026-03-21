@@ -24,8 +24,8 @@ export default defineConfig({
   /* Retry flaky tests (cookie consent, rate limiting, parallel timing) */
   retries: process.env.CI ? 2 : 1,
 
-  /* Opt out of parallel tests on CI. */
-  workers: process.env.CI ? 1 : undefined,
+  /* Limit workers: CI=1, dev=2 (dev server can't handle many parallel compilations) */
+  workers: process.env.CI ? 1 : 2,
 
   /* Reporter to use */
   reporter: [
