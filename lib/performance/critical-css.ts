@@ -144,6 +144,8 @@ iframe{display:block;max-width:100%}
 /* content-visibility:auto skips rendering of off-screen content until scrolled into view.
    Dramatically reduces initial rendering work (TBT) and improves Speed Index. */
 .three-col-left,.three-col-right{content-visibility:auto;contain-intrinsic-size:auto 600px}
+/* Below-fold content: defer rendering until scrolled into view */
+footer,.sidebar-contained{content-visibility:auto;contain-intrinsic-size:auto 300px}
 
 /* ============================================
    Ranking Table Grid — CRITICAL for CLS
@@ -244,15 +246,13 @@ export function getResourceHints(): Array<{ rel: string; href: string; crossOrig
     // Google Fonts preconnect not needed — next/font inlines font CSS and self-hosts woff2 files.
     // Supabase -- API calls on every page (rankings, auth, etc.)
     { rel: 'preconnect', href: supabaseUrl, crossOrigin: 'anonymous' },
-    // CDN -- images, assets (critical for LCP — trader avatars)
-    { rel: 'preconnect', href: 'https://cdn.arenafi.org', crossOrigin: 'anonymous' },
+    // cdn.arenafi.org preconnect REMOVED — only used via /api/cdn-proxy for PDFs,
+    // never fetched from browser on initial page load. Wasted connection.
     // Removed non-critical hints to reduce connection overhead on slow networks:
-    // - dns-prefetch duplicates of preconnect origins (browser already resolves them)
-    // - Exchange avatar CDNs (bin.bnbstatic.com, static.bitget.com, okx.com) — loaded lazily
-    // - DiceBear (api.dicebear.com) — fallback only, rarely used
-    // - CoinGecko (api.coingecko.com) — fetched server-side via API routes
-    // - Sentry (ingest.us.sentry.io) — deferred, non-critical for page load
-    // - Upstash (server-side only, browser never connects)
+    // - Exchange avatar CDNs — loaded lazily
+    // - CoinGecko — fetched server-side
+    // - Sentry — deferred, non-critical for page load
+    // - Upstash — server-side only
   ]
 
   return hints
