@@ -78,6 +78,14 @@
       "schedule": "5 0 * * *"
     },
     {
+      "path": "/api/cron/compute-derived-metrics",
+      "schedule": "20 0 * * *"
+    },
+    {
+      "path": "/api/cron/cleanup-data",
+      "schedule": "0 1 * * *"
+    },
+    {
       "path": "/api/cron/snapshot-ranks",
       "schedule": "15 0 * * *"
     },
