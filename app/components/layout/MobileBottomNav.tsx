@@ -384,7 +384,7 @@ function NavItemLink({ item, active, onClick, t }: NavItemLinkProps): React.Reac
         padding: `${tokens.spacing[1]} ${tokens.spacing[3]}`,
         textDecoration: 'none',
         color: active ? 'var(--color-brand)' : 'var(--color-text-secondary)',
-        transition: `all ${tokens.transition.base}`,
+        transition: `color ${tokens.transition.base}, background-color ${tokens.transition.base}`,
         borderRadius: tokens.radius.lg,
         position: 'relative',
         minWidth: 60,
@@ -399,7 +399,7 @@ function NavItemLink({ item, active, onClick, t }: NavItemLinkProps): React.Reac
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
-          transition: `all ${tokens.transition.fast}`,
+          transition: `opacity ${tokens.transition.fast}, transform ${tokens.transition.fast}`,
           opacity: active ? 1 : 0.85,
           transform: active ? 'scale(1.1)' : 'scale(1)',
         }}
@@ -419,7 +419,7 @@ function NavItemLink({ item, active, onClick, t }: NavItemLinkProps): React.Reac
           fontSize: 12,
           fontWeight: active ? 800 : 600,
           letterSpacing: '0.3px',
-          transition: `all ${tokens.transition.fast}`,
+          transition: `color ${tokens.transition.fast}`,
         }}
       >
         {t(item.labelKey)}
