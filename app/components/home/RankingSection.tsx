@@ -104,7 +104,7 @@ export default function RankingSection({
       fetch('/api/rankings/movers')
         .then(r => r.ok ? r.json() : null)
         .then(data => { if (data?.risers || data?.fallers) setMovers({ risers: data.risers || [], fallers: data.fallers || [] }) })
-        .catch(() => {})
+        .catch((err) => { console.warn('[RankingSection] movers fetch failed:', err) })
     }
     // Defer movers fetch — it's below-fold, non-critical data
     if ('requestIdleCallback' in window) {
