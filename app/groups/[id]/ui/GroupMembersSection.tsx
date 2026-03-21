@@ -1,5 +1,6 @@
 'use client'
 
+import { useEffect } from 'react'
 import Link from 'next/link'
 import Image from 'next/image'
 import { getLocaleFromLanguage } from '@/lib/utils/format'
@@ -7,6 +8,21 @@ import { tokens } from '@/lib/design-tokens'
 import { Box, Text, Button } from '@/app/components/base'
 import { ListSkeleton } from '@/app/components/ui/Skeleton'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
+
+/** Shared hook for modal behavior: scroll lock + Escape key */
+function useModalBehavior(onClose: () => void) {
+  useEffect(() => {
+    document.body.style.overflow = 'hidden'
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose()
+    }
+    window.addEventListener('keydown', handler)
+    return () => {
+      document.body.style.overflow = ''
+      window.removeEventListener('keydown', handler)
+    }
+  }, [onClose])
+}
 
 interface Group {
   id: string
@@ -60,6 +76,12 @@ function CloseButton({ onClick }: { onClick: () => void }): React.ReactElement {
         fontSize: 20,
         cursor: 'pointer',
         color: tokens.colors.text.tertiary,
+        width: 44,
+        height: 44,
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        borderRadius: tokens.radius.md,
       }}
     >
       ×
@@ -174,6 +196,7 @@ function RoleBadge({ role }: RoleBadgeProps): React.ReactElement {
 
 export function GroupInfoModal({ group, language, onClose, onShowMembers }: GroupInfoModalProps): React.ReactElement {
   const { t } = useLanguage()
+  useModalBehavior(onClose)
   const description = (language === 'en' && group.description_en) ? group.description_en : group.description
   // Use rules_json for bilingual rules, fallback to rules
   const rules = group.rules_json
@@ -188,7 +211,7 @@ export function GroupInfoModal({ group, language, onClose, onShowMembers }: Grou
     : t('unknown')
 
   return (
-    <Box style={modalBackdropStyle} onClick={onClose}>
+    <Box role="dialog" aria-modal="true" aria-label={t('groupInfo')} style={modalBackdropStyle} onClick={onClose}>
       <Box
         style={{
           background: tokens.colors.bg.primary,
@@ -305,6 +328,7 @@ function MemberRow({ member }: MemberRowProps): React.ReactElement {
 
 export function MembersListModal({ members, memberCount, loading, language: _language, onClose }: MembersListModalProps): React.ReactElement {
   const { t } = useLanguage()
+  useModalBehavior(onClose)
   const title = `${t('groupMembers')} (${memberCount})`
 
   function renderContent(): React.ReactElement {
@@ -328,7 +352,7 @@ export function MembersListModal({ members, memberCount, loading, language: _lan
   }
 
   return (
-    <Box style={modalBackdropStyle} onClick={onClose}>
+    <Box role="dialog" aria-modal="true" aria-label={title} style={modalBackdropStyle} onClick={onClose}>
       <Box
         style={{
           background: tokens.colors.bg.primary,
