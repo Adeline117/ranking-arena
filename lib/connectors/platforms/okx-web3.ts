@@ -73,13 +73,15 @@ export class OkxWeb3Connector extends BaseConnector {
     const seen = new Set<string>()
     const allTraders: TraderSource[] = []
     const days = window === '7d' ? 7 : window === '30d' ? 30 : 90
+    const dataRange = window // '7d', '30d', '90d' — matches OKX v5 API format
+    const pageSize = 20
 
     // MARGIN instType removed (returns 51000 error since ~2026-03)
     for (const instType of ['SWAP']) {
-      const maxPages = 50
+      const maxPages = Math.min(Math.ceil(limit / pageSize), 50)
       for (let page = 1; page <= maxPages; page++) {
         try {
-          const url = `https://www.okx.com/api/v5/copytrading/public-lead-traders?instType=${instType}&page=${page}`
+          const url = `https://www.okx.com/api/v5/copytrading/public-lead-traders?instType=${instType}&sortType=pnl&dataRange=${dataRange}&pageNo=${page}&limit=${pageSize}`
           const data = await this.request<OkxResponse>(url)
 
           if (data?.code !== '0') break
@@ -114,7 +116,7 @@ export class OkxWeb3Connector extends BaseConnector {
             })
           }
 
-          if (traders.length < 10) break
+          if (traders.length < pageSize) break
           if (allTraders.length >= limit) break
         } catch (err) {
           if (page === 1 && allTraders.length === 0) throw err
@@ -159,8 +161,8 @@ export class OkxWeb3Connector extends BaseConnector {
       display_name: safeStr(e.nickName),
       avatar_url: safeStr(e.portLink),
       roi: e._computed_roi != null ? safeNumber(e._computed_roi)
-        // Fallback: use overall pnlRatio (cumulative) as ROI approximation
-        : (e.pnlRatio != null ? safeNumber(Number(e.pnlRatio) * 100) : null),
+        // Fallback: use period pnlRatio (decimal → %) from v5 API with dataRange
+        : ((e.pnlRatio ?? e.profitRatio) != null ? safeNumber(Number(e.pnlRatio ?? e.profitRatio) * 100) : null),
       pnl: safeNumber(e.pnl ?? e.totalPnl ?? e.accPnl),
       win_rate: safePercent(e.winRatio, { isRatio: true }),
       max_drawdown: e._computed_mdd != null ? safeNumber(e._computed_mdd) : null,
