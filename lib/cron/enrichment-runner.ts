@@ -301,8 +301,7 @@ export const ENRICHMENT_PLATFORM_CONFIGS: Record<string, EnrichmentConfig> = {
   },
   bingx_spot: {
     platform: 'bingx_spot',
-    // No equity curve API — relies on daily snapshot fallback (buildEquityCurveFromSnapshots)
-    fetchEquityCurve: async () => [],
+    fetchEquityCurve: fetchBingxEquityCurve,
     fetchStatsDetail: fetchBingxStatsDetail,
     concurrency: 3, delayMs: 1000,
   },

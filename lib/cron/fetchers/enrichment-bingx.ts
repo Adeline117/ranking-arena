@@ -14,6 +14,7 @@
 
 import { fetchJson } from './shared'
 import { logger } from '@/lib/logger'
+import { getSupabaseAdmin } from '@/lib/supabase/server'
 import type { EquityCurvePoint, StatsDetail, PortfolioPosition } from './enrichment-types'
 
 const PROXY_URL = process.env.CLOUDFLARE_PROXY_URL || 'https://ranking-arena-proxy.broosbook.workers.dev'
@@ -24,13 +25,48 @@ const PROXY_URL = process.env.CLOUDFLARE_PROXY_URL || 'https://ranking-arena-pro
 
 /**
  * BingX doesn't provide per-trader equity curve via public API.
- * Returns empty — enrichment-runner fallback to daily snapshots.
+ * Build equity curve directly from trader_daily_snapshots (populated by aggregate-daily-snapshots cron).
+ * This replaces the previous no-op that relied on the enrichment-runner fallback path.
  */
 export async function fetchBingxEquityCurve(
-  _traderId: string,
-  _days: number = 90
+  traderId: string,
+  days: number = 90
 ): Promise<EquityCurvePoint[]> {
-  return []
+  return buildEquityCurveFromDailySnapshots('bingx_spot', traderId, days)
+}
+
+/**
+ * Query trader_daily_snapshots to build an equity curve for platforms without a native API.
+ * Reusable for any platform that accumulates daily snapshots but lacks an equity curve endpoint.
+ */
+async function buildEquityCurveFromDailySnapshots(
+  platform: string,
+  traderId: string,
+  days: number
+): Promise<EquityCurvePoint[]> {
+  try {
+    const supabase = getSupabaseAdmin()
+    const cutoff = new Date(Date.now() - days * 86400000).toISOString().split('T')[0]
+    const { data, error } = await supabase
+      .from('trader_daily_snapshots')
+      .select('date, roi, pnl')
+      .eq('platform', platform)
+      .eq('trader_key', traderId)
+      .gte('date', cutoff)
+      .order('date', { ascending: true })
+      .limit(days)
+
+    if (error || !data || data.length < 2) return []
+
+    return data.map((row: { date: string; roi: number | null; pnl: number | null }) => ({
+      date: row.date,
+      roi: row.roi ?? 0,
+      pnl: row.pnl ?? null,
+    }))
+  } catch (err) {
+    logger.warn(`[enrichment] BingX equity curve from snapshots failed for ${traderId}: ${err}`)
+    return []
+  }
 }
 
 // ============================================
