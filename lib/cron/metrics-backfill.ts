@@ -14,6 +14,7 @@
 
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { logger } from '@/lib/logger'
+import { calculateArenaScore, clip, type Period } from '@/lib/utils/arena-score'
 
 const MIN_DATA_POINTS = 7
 const SHARPE_CAP = 5
@@ -27,57 +28,6 @@ const DEX_PLATFORMS = [
   // kwenta: dead (Copin API stopped serving, 2026-03-11)
   // vertex: never had active connector, not in TraderSource type
 ]
-
-// ============================================
-// Arena Score (V3 simplified: ROI + PnL only)
-// ============================================
-
-function clip(value: number, min: number, max: number): number {
-  return Math.max(min, Math.min(max, value))
-}
-
-const ARENA_PARAMS: Record<string, { tanhCoeff: number; roiExponent: number }> = {
-  '7D':  { tanhCoeff: 0.08, roiExponent: 1.8 },
-  '30D': { tanhCoeff: 0.15, roiExponent: 1.6 },
-  '90D': { tanhCoeff: 0.18, roiExponent: 1.6 },
-}
-
-const PNL_PARAMS: Record<string, { base: number; coeff: number }> = {
-  '7D':  { base: 300,  coeff: 0.42 },
-  '30D': { base: 600,  coeff: 0.30 },
-  '90D': { base: 650,  coeff: 0.27 },
-}
-
-function getPeriodDays(period: string): number {
-  switch (period) {
-    case '7D': return 7
-    case '30D': return 30
-    case '90D': return 90
-    default: return 30
-  }
-}
-
-function computeArenaScore(roi: number, pnl: number, period: string): number {
-  const params = ARENA_PARAMS[period] ?? ARENA_PARAMS['30D']
-  const pnlP = PNL_PARAMS[period] ?? PNL_PARAMS['30D']
-
-  const cappedRoi = Math.min(roi, 10000)
-  const days = getPeriodDays(period)
-  const roiDecimal = cappedRoi / 100
-  const intensity = (365 / days) * (roiDecimal <= -1 ? 0 : Math.log(1 + roiDecimal))
-  const r0 = Math.tanh(params.tanhCoeff * intensity)
-  const returnScore = r0 <= 0 ? 0 : clip(60 * Math.pow(r0, params.roiExponent), 0, 60)
-
-  let pnlScore = 0
-  if (pnl > 0) {
-    const logArg = 1 + pnl / pnlP.base
-    if (logArg > 0) {
-      pnlScore = clip(40 * Math.tanh(pnlP.coeff * Math.log(logArg)), 0, 40)
-    }
-  }
-
-  return Math.round(clip(returnScore + pnlScore, 0, 100) * 100) / 100
-}
 
 // ============================================
 // Core metric computation
@@ -317,7 +267,11 @@ export async function refreshComputedMetrics(
       const roi = parseFloat(String(snap.roi_pct))
       const pnl = snap.pnl_usd != null ? parseFloat(String(snap.pnl_usd)) : 0
       if (!isNaN(roi)) {
-        fields.arena_score = computeArenaScore(roi, pnl, snap.window)
+        const scoreResult = calculateArenaScore(
+          { roi, pnl, maxDrawdown: null, winRate: null },
+          snap.window as Period
+        )
+        fields.arena_score = scoreResult.totalScore
         result.arenaScoreUpdated++
       }
     }
