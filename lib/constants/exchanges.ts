@@ -79,6 +79,10 @@ export type TraderSource =
   | 'etoro'
   // Web3 bots / AI agents
   | 'web3_bot'
+  // New platforms (Wave 2)
+  | 'woox'
+  | 'polymarket'
+  | 'copin'
 
 // ---------------------------------------------------------------------------
 // ALL_SOURCES – exhaustive list of every source the system can query
@@ -129,6 +133,10 @@ export const ALL_SOURCES: TraderSource[] = [
   'etoro',
   // Web3 bots
   'web3_bot',
+  // New platforms (Wave 2)
+  'woox',
+  'polymarket',
+  'copin',
 ]
 
 // ---------------------------------------------------------------------------
@@ -330,6 +338,10 @@ export const EXCHANGE_CONFIG: Record<TraderSource, ExchangeConfig> = {
   toobit: { name: 'Toobit', sourceType: 'futures', reliability: 50, trustWeight: 0.65, roiType: 'mixed' },
   etoro: { name: 'eToro', sourceType: 'spot', reliability: 90, trustWeight: 0.85, roiType: 'realized' },
   web3_bot: { name: 'Web3 Bot', sourceType: 'web3', reliability: 75, trustWeight: 0.70, roiType: 'mixed' },
+  // New platforms (Wave 2)
+  woox: { name: 'WOO X', sourceType: 'futures', reliability: 80, trustWeight: 0.85, roiType: 'mixed' },
+  polymarket: { name: 'Polymarket', sourceType: 'web3', reliability: 90, trustWeight: 0.80, roiType: 'realized' },
+  copin: { name: 'Copin', sourceType: 'web3', reliability: 85, trustWeight: 0.90, roiType: 'realized' },
   kwenta: { name: 'Kwenta', sourceType: 'web3', reliability: 70, trustWeight: 0.75, roiType: 'realized' },
   synthetix: { name: 'Synthetix', sourceType: 'futures', reliability: 70, trustWeight: 0.75, roiType: 'mixed' },
   mux: { name: 'MUX Protocol', sourceType: 'futures', reliability: 60, trustWeight: 0.70, roiType: 'mixed' },
@@ -438,4 +450,8 @@ export const SOURCE_TO_CONNECTOR_MAP: Record<string, { platform: string; marketT
   lbank: { platform: 'lbank', marketType: 'futures' },
   kucoin: { platform: 'kucoin', marketType: 'futures' },
   kwenta: { platform: 'kwenta', marketType: 'perp' },
+  // New platforms (Wave 2)
+  woox: { platform: 'woox', marketType: 'copy' },
+  polymarket: { platform: 'polymarket', marketType: 'copy' },
+  copin: { platform: 'copin', marketType: 'perp' },
 }

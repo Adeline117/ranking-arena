@@ -84,6 +84,8 @@ const GROUPS: Record<string, string[]> = {
   i: ['etoro', 'dydx'],
   // Group K: Restored via VPS scraper (every 6h) — new APIs discovered 2026-03-19
   k: ['kucoin', 'weex'],
+  // Group L: New platforms Wave 2 (every 6h) — WOO X, Polymarket, Copin.io
+  l: ['woox', 'polymarket', 'copin'],
 }
 
 interface BatchResult {
