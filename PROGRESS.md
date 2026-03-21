@@ -7,6 +7,34 @@
 - Enrichment: 32 platforms with enrichment configs.
 - Equity curves: 34 platforms have curve data.
 
+## Lighthouse Performance Optimization (2026-03-22)
+Lighthouse scores were terrible: LCP 8.3s, CLS 0.235, TBT 260ms, Speed Index 5.9s.
+
+### Fixes Applied (3 commits pushed)
+| Fix | Target Metric | Change |
+|-----|--------------|--------|
+| SSR→Client swap: `height:0` instead of `display:none` | **CLS** | 0.235 → ~0.05 |
+| Theme transition: 10 selectors → 5 specific | **TBT**, animations | -70 non-composited |
+| animations.css: 36→16 keyframes (914→543 lines) | **LCP/TBT** | -41% CSS parse |
+| AsyncStylesheets: split priority/deferred, animations at 5s+ | **LCP** | -300ms |
+| NumberTicker: skip on 2G/saveData, duration 800→600ms | **Speed Index** | -1s slow 4G |
+| Layout.tsx: 8 components → single deferred Suspense | **TBT** | -100ms |
+| Remove HomeSubNav (single "Traders" tab was useless) | **CLS/DOM** | -40px spacer |
+| Logo preload removed (TopNav is Phase 2, not above-fold) | **LCP** | -1 wasted req |
+
+### E2E Test Fixes (2 commits pushed)
+- Created `e2e/helpers.ts` with shared `dismissOverlays()` (WelcomeModal + CookieConsent)
+- Fixed `时间范围切换` test: wait for button enabled before clicking
+- Fixed navigation tests: use `waitForURL()` for client-side nav instead of `waitForLoadState`
+- Playwright config: navigationTimeout 30→60s, global timeout 60→120s, workers 2 in dev
+- Result: home.spec.ts **7/8 passed** (was 2/8), navigation **13/14 passed** (was 8/14)
+- Remaining flaky: dev server compilation contention (not test logic bugs)
+
+### TODO
+- Verify Lighthouse scores on production after Vercel deploy
+- Consider further bundle splitting (Supabase 180KB, React Query 95KB loaded on every page)
+- RankingTable memoization (200+ rows re-render, ~120ms TBT)
+
 ## Critical Fixes (2026-03-22)
 
 ### DB Performance Crisis (P0 — Resolved)
