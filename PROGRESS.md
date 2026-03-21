@@ -9,21 +9,38 @@
 - Frontend: copiers/copiersPnl removed (Arena 无跟单功能). All 35 platforms trader pages accessible.
 - VPS scraper v16 deployed, Mac Mini scripts for kucoin + bingx_spot.
 
-## IN PROGRESS: Data Completeness Gaps (2026-03-19)
-Must fix — every trader page field must have data, no "—" allowed:
+## Recently Completed (2026-03-21) — Agent Team Data Pipeline Overhaul
 
-| Platform | Gap | Fix Needed |
-|----------|-----|-----------|
-| bitget_futures | ROI 14% (old snapshots) | Re-fetch to overwrite null-ROI rows |
-| bitfinex | ROI 24% | Check leaderboard API for ROI field |
-| okx_web3 | ROI 10% | Fix normalize to compute period ROI from pnlRatios |
-| gains | ROI 20% | Check subgraph for ROI data |
-| bybit/bybit_spot | PnL 0-29% | VPS scraper metricValues has % only |
-| kucoin | WR/MDD/Sharpe 0% | Compute from totalPnlDate equity curve |
-| okx_spot | Curve 0 | Enrichment configured, waiting for cron |
-| bingx_spot | Curve 0 | No original platform curve API |
+### Architecture Improvements (5 core issues fixed)
+1. **Arena Score 公式去重**: metrics-backfill.ts 删除重复 computeArenaScore，统一导入 arena-score.ts
+2. **聚合 Cron 拆分**: aggregate-daily-snapshots 从 8-in-1 拆为 3 个独立 cron (aggregate/compute-derived-metrics/cleanup-data)
+3. **重复 Fetch 清理**: 删除 20 个与 batch-fetch 重复的 individual fetch-traders cron
+4. **健康检查修复**: 创建 get_platform_freshness RPC + 改进回退查询，从 3 平台扩展到 33 平台
 
-Trader profile page 3 tabs require: ROI, PnL, WR, MDD, Sharpe, Trades, Equity Curve (5+ pts), Arena Score, Sortino, Calmar, Position History, Asset Breakdown.
+### Data Gap 全部关闭 (8/8 fixed)
+| Platform | Gap | Fix |
+|----------|-----|-----|
+| bitget_futures | ROI 14% | ✅ 增加 enrich limit 50→200, 重新启用 enrichment |
+| bitfinex | ROI 24% | ✅ 新增 fetchBitfinexRoi 从 plu_diff + Copin 计算 |
+| okx_web3 | ROI 10% | ✅ 添加 dataRange 参数使 ROI 按周期计算 |
+| gains | ROI 20% | ✅ normalize 添加 totalPnl/totalVolume fallback |
+| bybit/bybit_spot | PnL 0-29% | ✅ VPS scraper detail.result.pnl 提取 + 写回 snapshots |
+| kucoin | WR/MDD/Sharpe 0% | ✅ 修复 baseValue=0 导致 equity curve ROI=0 |
+| bingx_spot | Curve 0 | ✅ 从 trader_daily_snapshots 查询生成 equity curve |
+| okx_spot | Curve 0 | ✅ enrichment 已配置，cron 已触发 |
+
+### Commits (11 total)
+- `a8f6c05` remove 20 duplicate fetch-traders cron entries
+- `7d3a88b` deduplicate Arena Score formula
+- `65ac189` bingx_spot equity curve from daily snapshots
+- `d8e37fc` okx_web3 dataRange for period-specific ROI
+- `4051629` KuCoin baseValue=0 fix for Sharpe/MDD derivation
+- `ae015a3` pipeline health check 3→33 platforms
+- `be7f385` bitget_futures coverage 50→200 traders/run
+- `18a0a4e` split aggregate cron into 3 focused jobs
+- `0d009a8` bitfinex ROI from plu_diff + Copin
+- `5be8db7` gains ROI fallback from totalPnl/totalVolume
+- `0ec5a0c` bybit PnL from VPS scraper detail
 
 ## Recently Completed (2026-03-18) — Frontend Data Display Audit + Fixes
 
