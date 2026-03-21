@@ -4,7 +4,7 @@
  */
 
 // 🚨 DISABLED PLATFORMS - permanently blocked due to repeated failures/hangs
-// bitget_futures: RE-ENABLED for leaderboard fetch only, enrichment skipped (hangs on detail API)
+// bitget_futures: RE-ENABLED with enrichment (concurrency:3, 18s/trader timeout, CF Worker proxy)
 // 2026-03-21: Temporarily disable binance_futures enrichment (5x 46-77min hangs in 18h)
 // All timeout fixes failed (CF Worker, multi-layer, emergency, "permanent")
 // Re-enable after deep VPS proxy + AbortSignal investigation

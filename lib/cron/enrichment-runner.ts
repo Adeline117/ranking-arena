@@ -263,7 +263,7 @@ export const ENRICHMENT_PLATFORM_CONFIGS: Record<string, EnrichmentConfig> = {
     fetchEquityCurve: fetchBitgetEquityCurve,
     fetchStatsDetail: fetchBitgetStatsDetail,
     fetchPositionHistory: fetchBitgetPositionHistory,
-    concurrency: 1, delayMs: 2000, // Serial: 1 trader at a time to prevent CF rate limits
+    concurrency: 3, delayMs: 1000, // Increased from 1/2000: CF Worker proxy handles 3 concurrent fine
   },
   // bitget_spot: enrichment not yet configured — spot-specific enrichment endpoints TBD
   hyperliquid: {
@@ -492,7 +492,7 @@ export const NO_ENRICHMENT_PLATFORMS = new Set([
 // 2026-03-20: Increased timeouts for full coverage (was 45s/90s, now 120s/180s)
 // Batch-cached platforms (bitunix, xt, etc.) finish in <5s regardless
 const PLATFORM_TIMEOUT_MS: Record<string, number> = {
-  'bitget_futures': 120_000,  // 2min total - CF Worker proxy can be slow
+  'bitget_futures': 180_000,  // 3min total - increased for 200 trader limit at concurrency 3
   'binance_spot': 60_000,  // RE-ENABLED 2026-03-19 — 60s per-platform timeout
   // Batch-cached: instant, but set generous limit
   'bitunix': 30_000, 'xt': 30_000, 'blofin': 60_000,
@@ -505,7 +505,7 @@ const ONCHAIN_SET = new Set(['gmx', 'dydx', 'jupiter_perps', 'hyperliquid', 'dri
 // Per-trader timeout: ultra-aggressive timeout for platforms that hang
 // 2026-03-21: Reduced binance_futures from 20s→12s after VPS proxy testing showed <500ms responses
 const PER_TRADER_TIMEOUT_MS: Record<string, number> = {
-  'bitget_futures': 25_000,  // 25s per trader - aggressive to prevent 44min hangs
+  'bitget_futures': 18_000,  // 18s per trader - equity 15s + detail 10s run in parallel, 18s is generous
   'binance_futures': 12_000, // 12s per trader - ultra-short (VPS proxy tested <500ms, 3-8s API timeouts)
 }
 
