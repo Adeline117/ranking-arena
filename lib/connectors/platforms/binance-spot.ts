@@ -183,7 +183,8 @@ export class BinanceSpotConnector extends BaseConnector {
       followers: e.currentCopyCount != null ? Number(e.currentCopyCount) : null,
       copiers: e.currentCopyCount != null ? Number(e.currentCopyCount) : null,
       aum: e.aum != null ? Number(e.aum) : null,
-      sharpe_ratio: e.sharpRatio != null ? Number(e.sharpRatio) : null,
+      // Binance API sharpRatio can return extreme values; reject outside [-10, 10]
+      sharpe_ratio: e.sharpRatio != null && Math.abs(Number(e.sharpRatio)) <= 10 ? Number(e.sharpRatio) : null,
       platform_rank: null,
     }
   }
