@@ -76,7 +76,7 @@ export class CopinPerpConnector extends BaseConnector {
     ],
   }
 
-  async discoverLeaderboard(window: Window, limit = 500, _offset = 0): Promise<DiscoverResult> {
+  async discoverLeaderboard(window: Window, limit = 200, _offset = 0): Promise<DiscoverResult> {
     const daysMap: Record<Window, number> = { '7d': 7, '30d': 30, '90d': 60 }
     const cutoff = new Date(Date.now() - daysMap[window] * 86400000).toISOString()
 
@@ -118,10 +118,11 @@ export class CopinPerpConnector extends BaseConnector {
     }
   }
 
-  private async fetchTopTraders(protocol: string, cutoff: string, positionLimit: number): Promise<TraderSource[]> {
-    // Fetch recent closed positions sorted by PnL
+  private async fetchTopTraders(protocol: string, cutoff: string, _positionLimit: number): Promise<TraderSource[]> {
+    // Fetch recent closed positions sorted by PnL (top profitable trades)
+    // Use 500 positions to catch enough unique traders
     const body = {
-      pagination: { limit: positionLimit, offset: 0 },
+      pagination: { limit: 500, offset: 0 },
       queries: [
         { fieldName: 'status', value: 'CLOSE' },
       ],
@@ -177,9 +178,9 @@ export class CopinPerpConnector extends BaseConnector {
 
     // Convert to TraderSource[]
     return Array.from(traders.values())
-      .filter((t) => t.totalTrades >= 3 && t.totalPnl > 0) // Min 3 trades, profitable
+      .filter((t) => t.totalTrades >= 1) // Any trader with at least 1 closed position
       .sort((a, b) => b.totalPnl - a.totalPnl)
-      .slice(0, 100)
+      .slice(0, 200)
       .map((agg) => {
         const avgRoi = agg.rois.length > 0
           ? agg.rois.reduce((s, r) => s + r, 0) / agg.rois.length * 100
