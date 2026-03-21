@@ -80,7 +80,6 @@ export async function GET(request: Request, { params }: Params) {
     const result = await runConnectorBatch(connector, {
       supabase,
       windows: ['7d', '30d', '90d'],
-      limit: 500,
       sourceOverride: platform,
     })
 
