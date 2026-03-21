@@ -7,8 +7,8 @@ import { defineConfig, devices } from '@playwright/test'
 export default defineConfig({
   testDir: './e2e',
 
-  /* Global timeout per test */
-  timeout: 60_000,
+  /* Global timeout per test — dev server needs more time for compilation */
+  timeout: 120_000,
 
   /* Expect timeout */
   expect: {
@@ -38,8 +38,8 @@ export default defineConfig({
     /* Base URL to use in actions like `await page.goto('/')`. */
     baseURL: process.env.PLAYWRIGHT_BASE_URL || 'http://localhost:3000',
 
-    /* Navigation timeout */
-    navigationTimeout: 30_000,
+    /* Navigation timeout — dev server compilation can exceed 30s on first hit */
+    navigationTimeout: 60_000,
 
     /* Action timeout */
     actionTimeout: 15_000,

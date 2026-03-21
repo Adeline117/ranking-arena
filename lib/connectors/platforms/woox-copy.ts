@@ -32,12 +32,13 @@ export class WooxCopyConnector extends BaseConnector {
 
   async discoverLeaderboard(window: Window, _limit = 50, _offset = 0): Promise<DiscoverResult> {
     // WOO X has a single leaderboard across all periods, but metrics vary by period
+    // Use leaderboard-metrics endpoint (sorting-strategy-list returns 500)
     const raw = await this.request<Record<string, unknown>>(
-      `${BASE}/lead-trader-dashboard/sorting-strategy-list?page=1&pageSize=50`,
+      `${BASE}/lead-trader-dashboard/leaderboard-metrics`,
       { method: 'GET' }
     )
 
-    const rows = (raw?.data as Record<string, unknown>)?.rows as Record<string, unknown>[] || []
+    const rows = (raw?.data as Record<string, unknown>)?.metrics as Record<string, unknown>[] || []
 
     const traders: TraderSource[] = rows.map((item) => ({
       platform: 'woox' as const,
@@ -64,10 +65,10 @@ export class WooxCopyConnector extends BaseConnector {
   async fetchTraderProfile(traderKey: string): Promise<ProfileResult | null> {
     // Use the listing endpoint to find the trader
     const raw = await this.request<Record<string, unknown>>(
-      `${BASE}/lead-trader-dashboard/sorting-strategy-list?page=1&pageSize=50`,
+      `${BASE}/lead-trader-dashboard/leaderboard-metrics`,
       { method: 'GET' }
     )
-    const rows = (raw?.data as Record<string, unknown>)?.rows as Record<string, unknown>[] || []
+    const rows = (raw?.data as Record<string, unknown>)?.metrics as Record<string, unknown>[] || []
     const item = rows.find((r) => String(r.strategyId) === traderKey || String(r.leadTraderId) === traderKey)
     if (!item) return null
 
@@ -142,10 +143,10 @@ export class WooxCopyConnector extends BaseConnector {
   async fetchTimeseries(traderKey: string): Promise<TimeseriesResult> {
     // metricCharts is embedded in the leaderboard listing response
     const raw = await this.request<Record<string, unknown>>(
-      `${BASE}/lead-trader-dashboard/sorting-strategy-list?page=1&pageSize=50`,
+      `${BASE}/lead-trader-dashboard/leaderboard-metrics`,
       { method: 'GET' }
     )
-    const rows = (raw?.data as Record<string, unknown>)?.rows as Record<string, unknown>[] || []
+    const rows = (raw?.data as Record<string, unknown>)?.metrics as Record<string, unknown>[] || []
     const item = rows.find((r) => String(r.strategyId) === traderKey || String(r.leadTraderId) === traderKey)
 
     if (!item?.metricCharts || !Array.isArray(item.metricCharts)) {
