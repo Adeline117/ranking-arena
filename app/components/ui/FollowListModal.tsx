@@ -61,6 +61,16 @@ export default function FollowListModal({
     // eslint-disable-next-line react-hooks/exhaustive-deps -- loadUsers is defined in closure, not a stable ref
   }, [isOpen, handle, type])
 
+  // Scroll lock when modal is open
+  useEffect(() => {
+    if (isOpen) {
+      document.body.style.overflow = 'hidden'
+    } else {
+      document.body.style.overflow = ''
+    }
+    return () => { document.body.style.overflow = '' }
+  }, [isOpen])
+
   // Focus trap + escape key
   useEffect(() => {
     if (!isOpen) return

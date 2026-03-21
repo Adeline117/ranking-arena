@@ -62,6 +62,16 @@ export default function ReportModal({
 
   const contentTypeLabel = t(CONTENT_TYPE_KEYS[contentType] as keyof typeof import('@/lib/i18n/en').default)
 
+  // Scroll lock when modal is open
+  useEffect(() => {
+    if (isOpen) {
+      document.body.style.overflow = 'hidden'
+    } else {
+      document.body.style.overflow = ''
+    }
+    return () => { document.body.style.overflow = '' }
+  }, [isOpen])
+
   // Focus trap + escape key for modal
   useEffect(() => {
     if (!isOpen) return

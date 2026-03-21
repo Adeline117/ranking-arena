@@ -74,11 +74,21 @@ export default function GuestSignupPrompt() {
     }
   }, [session, loading, dismissed, trigger])
 
-  const handleDismiss = () => {
+  const handleDismiss = useCallback(() => {
     setShow(false)
     setDismissed(true)
     sessionStorage.setItem('guest-signup-dismissed', '1')
-  }
+  }, [])
+
+  // Escape key dismisses the prompt
+  useEffect(() => {
+    if (!show) return
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') handleDismiss()
+    }
+    window.addEventListener('keydown', handler)
+    return () => window.removeEventListener('keydown', handler)
+  }, [show, handleDismiss])
 
   if (!show || session || loading) return null
 
@@ -119,6 +129,7 @@ export default function GuestSignupPrompt() {
           border: 'none',
           cursor: 'pointer',
           whiteSpace: 'nowrap',
+          minHeight: 44,
         }}
       >
         {t('guestSignupButton')}
@@ -131,7 +142,11 @@ export default function GuestSignupPrompt() {
           color: tokens.colors.text.tertiary,
           fontSize: 18,
           cursor: 'pointer',
-          padding: 8,
+          width: 44,
+          height: 44,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
           lineHeight: 1,
         }}
         aria-label="Close"
