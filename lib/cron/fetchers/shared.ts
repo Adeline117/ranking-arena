@@ -390,7 +390,7 @@ export async function upsertTraders(
     dataLogger.warn(`[upsert] Deduped ${validated.length - deduped.length} duplicate traders for ${validated[0]?.source}`)
   }
 
-  const BATCH = 500
+  const BATCH = 200 // Reduced from 500 to avoid Supabase statement timeout on large upserts
 
   let saved = 0
   const writeErrors: string[] = []
