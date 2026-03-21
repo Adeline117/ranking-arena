@@ -161,22 +161,72 @@ async function checkDataFreshness() {
       }
     )
 
-    if (!res.ok) {
-      // Fallback: Direct query
-      const platforms = await fetch(
-        `${SUPABASE_URL}/rest/v1/trader_snapshots_v2?select=platform,as_of_ts&order=as_of_ts.desc&limit=500`,
-        {
-          headers: {
-            'apikey': SUPABASE_KEY,
-            'Authorization': `Bearer ${SUPABASE_KEY}`,
-          }
-        }
-      ).then(r => r.json())
+    if (res.ok) {
+      // RPC success — use the structured response
+      const rpcData = await res.json()
+      const now = Date.now()
+      let freshCount = 0, staleCount = 0, criticalCount = 0
 
-      // Group by platform
+      for (const row of rpcData) {
+        const ageHours = (now - new Date(row.latest_snapshot).getTime()) / (1000 * 60 * 60)
+        let status = 'FRESH'
+        let icon = '🟢'
+
+        if (ageHours >= CRITICAL_HOURS) {
+          status = 'CRITICAL'
+          icon = '🔴'
+          criticalCount++
+          results.dataFreshness.push({ platform: row.platform, status, ageHours: Math.round(ageHours) })
+        } else if (ageHours >= STALE_HOURS) {
+          status = 'STALE'
+          icon = '🟡'
+          staleCount++
+          results.dataFreshness.push({ platform: row.platform, status, ageHours: Math.round(ageHours) })
+        } else {
+          freshCount++
+        }
+
+        console.log(`${icon} ${row.platform.padEnd(20)} ${Math.round(ageHours)}h ago  (${row.trader_count} traders)`)
+      }
+
+      console.log(`\n总计: ${freshCount} 新鲜, ${staleCount} 陈旧, ${criticalCount} 严重`)
+      return { freshCount, staleCount, criticalCount }
+    } else {
+      // Fallback: Query each known platform's latest snapshot individually
+      // The old limit=500 approach only captured 2-3 platforms
+      const KNOWN_PLATFORMS = [
+        'binance_futures', 'binance_spot', 'binance_web3',
+        'bybit', 'bybit_spot', 'okx_futures', 'okx_spot', 'okx_web3',
+        'bitget_futures', 'hyperliquid', 'gmx', 'bitunix',
+        'gains', 'htx_futures', 'bitfinex', 'coinex',
+        'mexc', 'bingx', 'bingx_spot', 'gateio', 'btcc',
+        'drift', 'jupiter_perps', 'aevo', 'dydx',
+        'web3_bot', 'toobit', 'xt', 'etoro',
+        'kucoin', 'weex', 'blofin', 'phemex'
+      ]
+
+      // Fetch latest timestamp per platform in parallel (one row each)
+      const platformResults = await Promise.all(
+        KNOWN_PLATFORMS.map(async (p) => {
+          try {
+            const r = await fetch(
+              `${SUPABASE_URL}/rest/v1/trader_snapshots_v2?select=platform,as_of_ts&platform=eq.${p}&order=as_of_ts.desc&limit=1`,
+              {
+                headers: {
+                  'apikey': SUPABASE_KEY,
+                  'Authorization': `Bearer ${SUPABASE_KEY}`,
+                }
+              }
+            )
+            const rows = await r.json()
+            return rows[0] || null
+          } catch { return null }
+        })
+      )
+
       const latestByPlatform = {}
-      for (const row of platforms) {
-        if (!latestByPlatform[row.platform]) {
+      for (const row of platformResults) {
+        if (row) {
           latestByPlatform[row.platform] = row.as_of_ts
         }
       }
