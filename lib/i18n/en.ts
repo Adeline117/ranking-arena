@@ -1153,6 +1153,8 @@ const en = {
     compareRemoved: 'Removed from comparison',
     addToCompare: 'Add to compare',
     removeFromCompare: 'Remove from compare',
+    comparing: 'Comparing',
+    compareListFull: 'Compare list full (max 5)',
     inCompare: 'In Compare',
     viewComparison: 'View Comparison',
     rankTrendTooltip: 'Arena Score trend (30D)',
@@ -2342,8 +2344,13 @@ const en = {
 
     // Trader page i18n - TraderPageV2, TraderRefreshButton, TraderFeed, etc.
     aumLabel: 'AUM',
+    verifiedAccounts: 'verified accounts',
     mddLabel: 'MDD',
     tradesLabel: 'Trades',
+    dataOutdatedBanner: 'Data may be outdated. Refresh to get the latest.',
+    rankTrend: 'Rank trend (7d)',
+    drawdownChart: 'Drawdown',
+    dailyReturnsDistribution: 'Daily Returns Distribution',
 
     // PortfolioTable
     unlockFullPortfolio: 'Unlock Full Portfolio',
