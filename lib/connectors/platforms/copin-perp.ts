@@ -42,10 +42,11 @@ export class CopinPerpConnector extends BaseConnector {
     scraping_difficulty: 1,
     rate_limit: { rpm: 30, concurrency: 2 },
     notes: [
-      'Public API (POST filter), no auth for statistics',
+      'Public filter endpoint returns empty — API key likely required',
       'Aggregates 51+ perp DEX protocols',
       'trader_key = protocol:walletAddress',
       'No 90d window (max D60)',
+      'TODO: obtain Copin API key or scrape explorer page',
     ],
   }
 
