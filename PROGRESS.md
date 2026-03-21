@@ -3,9 +3,26 @@
 > Auto-read by Claude Code at session start. Keep concise — archive completed items weekly.
 
 ## Current Sprint Focus
-- **35 active platforms**, all fresh (was 25). Recovered: okx_spot, bybit_spot, weex, kucoin, bingx_spot, bitget_futures.
-- Enrichment: 30 platforms with enrichment configs (was 26). Added okx_spot, okx_web3, weex, bitget_futures (curve only).
-- Equity curves: 32 platforms have curve data (was ~25). KuCoin 30-day PnL, Weex daily returns, OKX Web3 pnlRatios.
+- **38 active platforms**, all fresh (was 35). Added: WOO X, Polymarket, Copin.io (Wave 2).
+- Enrichment: 32 platforms with enrichment configs (was 30). Added woox, polymarket.
+- Equity curves: 34 platforms have curve data (was ~32). WOO X 30-point inline, Polymarket from on-chain activity.
+
+## Wave 2 New Platforms (2026-03-21)
+### Completed
+- **WOO X** (`woox`): 8 curated lead traders, full data (ROI/PnL/MDD/Sharpe/WR/equity curve/positions/history)
+- **Polymarket** (`polymarket`): 500+ prediction market traders, PnL/Volume rankings, positions/history from data-api
+- **Copin.io** (`copin`): On-chain perp DEX aggregator, 6 protocols (Hyperliquid/GMX/GNS/dYdX/Kwenta/Synthetix), 60M+ positions
+- All 3 platforms: data confirmed in DB, cron group L (every 6h), enrichment modules ready
+
+### Key Fixes During Integration
+- DB upsert batch 500→50 (Supabase statement timeout)
+- Window writes parallel→sequential (deadlock 40P01 prevention)
+- Polymarket limit capped at 100 (DB write timeout on 500)
+- Copin: `/public/` statistic filter returns empty → use `/PROTOCOL/position/filter` (no auth needed, 60M+ real positions)
+- WOO X: sorting-strategy-list returns 500 → use leaderboard-metrics endpoint
+
+### Not Viable (researched but no public API)
+BitMart (dead), Pionex (bot-focused), KCEX (403), OrangeX (private only), Backpack (no leaderboard), Kolscan (scrape only)
 - Frontend: copiers/copiersPnl removed (Arena 无跟单功能). All 35 platforms trader pages accessible.
 - VPS scraper v16 deployed, Mac Mini scripts for kucoin + bingx_spot.
 
