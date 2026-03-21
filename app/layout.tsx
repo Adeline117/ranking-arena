@@ -165,8 +165,8 @@ export default function RootLayout({
           />
         ))}
 
-        {/* Preload critical above-fold resources for LCP */}
-        <link rel="preload" href="/logo-symbol-56.png" as="image" type="image/png" />
+        {/* logo-symbol-56.png preload REMOVED — TopNav is loaded via dynamic import (Phase 2),
+            so the logo is NOT above-fold during SSR. Preloading it wastes a connection. */}
         {/* Removed redundant preconnect/dns-prefetch hints:
             - Supabase preconnect already in getResourceHints()
             - CoinGecko assets fetched server-side, not from browser
