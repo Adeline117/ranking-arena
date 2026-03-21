@@ -93,17 +93,7 @@
    2. Page transitions
    ============================================ */
 
-.page-enter {
-  animation: fadeInUp 0.4s cubic-bezier(0.4, 0, 0.2, 1) forwards;
-}
-
-.page-enter-fast {
-  animation: fadeInUp 0.25s cubic-bezier(0.4, 0, 0.2, 1) forwards;
-}
-
-.page-enter-scale {
-  animation: scaleIn 0.35s cubic-bezier(0.4, 0, 0.2, 1) forwards;
-}
+/* page-enter, page-enter-fast, page-enter-scale: removed (unused in codebase) */
 
 /* ============================================
    3. Card effects
@@ -120,13 +110,7 @@
               0 0 0 1px rgba(139, 111, 168, 0.1);
 }
 
-.card-hover-scale {
-  transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-}
-
-.card-hover-scale:hover {
-  transform: scale(1.02);
-}
+/* card-hover-scale: removed (unused in codebase) */
 
 .card-hover-glow {
   transition: box-shadow 0.3s cubic-bezier(0.4, 0, 0.2, 1), border-color 0.3s cubic-bezier(0.4, 0, 0.2, 1);
@@ -157,31 +141,7 @@
   box-shadow: 0 0 20px rgba(139, 111, 168, 0.4);
 }
 
-/* Ripple effect */
-.ripple-container {
-  position: relative;
-  overflow: hidden;
-}
-
-.ripple-container::after {
-  content: '';
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  width: 100%;
-  height: 100%;
-  background: rgba(255, 255, 255, 0.2);
-  border-radius: 50%;
-  transform: translate(-50%, -50%) scale(0);
-  transition: transform 0.5s, opacity 0.5s;
-  pointer-events: none;
-  opacity: 0;
-}
-
-.ripple-container:active::after {
-  transform: translate(-50%, -50%) scale(3);
-  opacity: 1;
-}
+/* ripple-container: removed (unused in codebase) */
 
 /* ============================================
    5. List animations
@@ -196,31 +156,7 @@
   transform: translateX(4px);
 }
 
-.list-item-indicator {
-  position: relative;
-  transition: background-color 0.25s cubic-bezier(0.4, 0, 0.2, 1), color 0.25s cubic-bezier(0.4, 0, 0.2, 1);
-}
-
-.list-item-indicator::before {
-  content: '';
-  position: absolute;
-  left: 0;
-  top: 0;
-  bottom: 0;
-  width: 3px;
-  background: linear-gradient(180deg, var(--color-brand), var(--color-pro-gradient-end));
-  transform: scaleY(0);
-  transition: transform 0.25s cubic-bezier(0.4, 0, 0.2, 1);
-}
-
-.list-item-indicator:hover::before {
-  transform: scaleY(1);
-}
-
-.list-item-indicator:hover {
-  transform: translateX(6px);
-  background: rgba(139, 111, 168, 0.03);
-}
+/* list-item-indicator: removed (unused in codebase) */
 
 /* Stagger children */
 .stagger-children > * {
@@ -238,17 +174,7 @@
 .stagger-children > *:nth-child(8) { animation-delay: 0.4s; }
 .stagger-children > *:nth-child(n+9) { animation-delay: 0.45s; }
 
-.stagger-fast > * {
-  opacity: 0;
-  animation: fadeInUp 0.3s cubic-bezier(0.4, 0, 0.2, 1) forwards;
-}
-
-.stagger-fast > *:nth-child(1) { animation-delay: 0.03s; }
-.stagger-fast > *:nth-child(2) { animation-delay: 0.06s; }
-.stagger-fast > *:nth-child(3) { animation-delay: 0.09s; }
-.stagger-fast > *:nth-child(4) { animation-delay: 0.12s; }
-.stagger-fast > *:nth-child(5) { animation-delay: 0.15s; }
-.stagger-fast > *:nth-child(n+6) { animation-delay: 0.18s; }
+/* stagger-fast: removed (unused in codebase) */
 
 /* ============================================
    6. Glass effects (theme-aware)
@@ -259,15 +185,7 @@
   border: 1px solid var(--glass-border-light);
 }
 
-.glass-light {
-  background: var(--glass-bg-light);
-  border: 1px solid var(--glass-border-medium);
-}
-
-.glass-dark {
-  background: rgba(0, 0, 0, 0.85);
-  border: 1px solid rgba(255, 255, 255, 0.05);
-}
+/* glass-light, glass-dark: removed (unused in codebase) */
 
 .glass-card {
   background: var(--glass-bg-secondary);
@@ -437,24 +355,7 @@
   box-shadow: 0 0 0 3px rgba(139, 111, 168, 0.15);
 }
 
-.input-label-float {
-  position: absolute;
-  left: 12px;
-  top: 50%;
-  transform: translateY(-50%) scale(1);
-  transform-origin: left center;
-  transition: transform 0.2s ease, color 0.2s ease, opacity 0.2s ease;
-  pointer-events: none;
-  color: var(--color-text-tertiary);
-}
-
-.input-label-float.active,
-input:focus + .input-label-float {
-  transform: translateY(-180%) scale(0.75);
-  background: var(--color-bg-primary);
-  padding: 0 4px;
-  color: var(--color-brand);
-}
+/* input-label-float: removed (unused in codebase) */
 
 /* ============================================
    14. Tooltip
