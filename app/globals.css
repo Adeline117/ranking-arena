@@ -684,6 +684,8 @@ select:focus-visible {
   margin: 0 auto;
   padding: 0 16px;
   min-height: calc(100vh - 120px);
+  /* Fixed height prevents CLS 0.233 from layout shift when data loads */
+  contain: layout style;
 }
 
 /* Between 1024-1280: hide right sidebar, give more space to center */
@@ -930,7 +932,13 @@ select:focus-visible {
 /* Firefox scrollbar */
 * {
   scrollbar-width: thin;
-  scrollbar-color: var(--color-border-secondary) var(--color-bg-secondary);
+}
+
+/* scrollbar-color causes uncomposited animations in some browsers — wrap in @supports */
+@supports (scrollbar-color: auto) {
+  * {
+    scrollbar-color: var(--color-border-secondary) var(--color-bg-secondary);
+  }
 }
 
 ::-webkit-scrollbar {
@@ -2473,7 +2481,7 @@ th * {
   font-variant-numeric: tabular-nums;
 }
 
-/* Apply tabular-nums and monospace to common data contexts */
+/* Apply tabular-nums to ALL numeric data contexts — prevents CLS from digit width shifts */
 td[data-numeric],
 .stat-value,
 .price-value,
@@ -2485,7 +2493,15 @@ td[data-numeric],
 .col-winrate,
 .col-roi,
 .col-pnl,
-.mobile-score-badge {
+.col-mdd,
+.mobile-score-badge,
+.trader-roi,
+.trader-pnl,
+.arena-score,
+.metric-value,
+.number-display,
+[data-value],
+.ranking-row [class*="col-"] {
   font-variant-numeric: tabular-nums;
   font-family: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Monaco, Consolas, monospace;
 }

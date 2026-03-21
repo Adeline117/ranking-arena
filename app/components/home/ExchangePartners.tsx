@@ -107,7 +107,9 @@ export default function ExchangePartners() {
             textDecoration: 'none',
             padding: '4px 10px',
             borderRadius: tokens.radius.md,
-            transition: `all ${tokens.transition.base}`,
+            // Only transition compositable properties — avoid 'all' which triggers uncomposited animations
+            transition: `background-color ${tokens.transition.base}, color ${tokens.transition.base}`,
+            contain: 'layout style',
           }
           return source ? (
             <Link
