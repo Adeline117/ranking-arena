@@ -68,9 +68,8 @@ export class BinanceSpotConnector extends BaseConnector {
     offset: number = 0
   ): Promise<DiscoverResult> {
     const periodType = WINDOW_MAP[window]
-    const pageSize = Math.min(limit, 20)
-    // Cap at 30 pages (600 traders) to prevent runaway pagination
-    const maxPages = Math.min(Math.ceil(Math.min(limit, 600) / pageSize), 30)
+    const pageSize = 20
+    const maxPages = Math.ceil(Math.min(limit, 2000) / pageSize)
     const allTraders: TraderSource[] = []
     // Total timeout: 4 minutes — hard cap to prevent cron hangs
     const totalDeadline = Date.now() + 4 * 60 * 1000

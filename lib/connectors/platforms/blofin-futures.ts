@@ -73,7 +73,7 @@ export class BlofinFuturesConnector extends BaseConnector {
     }
   }
 
-  async discoverLeaderboard(window: Window, limit = 500, _offset = 0): Promise<DiscoverResult> {
+  async discoverLeaderboard(window: Window, limit = 2000, _offset = 0): Promise<DiscoverResult> {
     const periodMap: Record<Window, string> = { '7d': '7', '30d': '30', '90d': '90' }
     const period = periodMap[window] || '30'
 

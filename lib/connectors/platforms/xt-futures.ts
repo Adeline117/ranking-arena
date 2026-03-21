@@ -64,7 +64,7 @@ export class XtFuturesConnector extends BaseConnector {
     }
   }
 
-  async discoverLeaderboard(window: Window, limit = 100, _offset = 0): Promise<DiscoverResult> {
+  async discoverLeaderboard(window: Window, limit = 2000, _offset = 0): Promise<DiscoverResult> {
     // XT.com API (/sapi/v1/copy-trading) returns 404 since ~2026-03.
     // Real API is /fapi/user/v1/public/copy-trade/elite-leader-list-v2 (Cloudflare-protected).
     // Strategy 1: VPS Playwright scraper (page.evaluate fetches the API with browser context)

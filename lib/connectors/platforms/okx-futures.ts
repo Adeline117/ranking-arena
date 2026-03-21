@@ -38,12 +38,11 @@ export class OkxFuturesConnector extends BaseConnector {
     notes: ['priapi endpoints, CF protected'],
   }
 
-  async discoverLeaderboard(window: Window, limit = 100, offset = 0): Promise<DiscoverResult> {
+  async discoverLeaderboard(window: Window, limit = 2000, offset = 0): Promise<DiscoverResult> {
     // v5 copytrading public API (priapi removed 2026-03-14)
-    // OKX returns max 20 per page. Cap at 5 pages (100 traders) to stay within CF 100s proxy timeout.
-    // 5 pages × 3 windows × ~3s = ~45s total, safely under limit.
+    // OKX returns max 20 per page.
     const pageSize = 20
-    const maxPages = Math.min(Math.ceil(limit / pageSize), 5)
+    const maxPages = Math.min(Math.ceil(limit / pageSize), 100)
     const allTraders: TraderSource[] = []
 
     for (let page = Math.floor(offset / pageSize) + 1; page <= maxPages + Math.floor(offset / pageSize); page++) {

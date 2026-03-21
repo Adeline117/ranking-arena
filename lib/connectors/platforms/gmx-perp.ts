@@ -53,7 +53,7 @@ export class GmxPerpConnector extends BaseConnector {
     return 'total'
   }
 
-  async discoverLeaderboard(window: Window, limit = 100, _offset = 0): Promise<DiscoverResult> {
+  async discoverLeaderboard(window: Window, limit = 2000, _offset = 0): Promise<DiscoverResult> {
     // Satsuma subgraph DNS dead since ~2026-03-15, switched to Subsquid (gmx.squids.live)
     // Subsquid uses accountStats with limit/orderBy instead of periodAccountStats with first/where
     const query = `{

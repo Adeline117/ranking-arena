@@ -69,8 +69,7 @@ export class GateioFuturesConnector extends BaseConnector {
     // Use month for all windows — better than no data
     const cycle = 'month'
     const pageSize = 50
-    // Cap at 5 pages (250 traders) — VPS scraper is serial queue, 30 pages = 750s+ timeout
-    const maxPages = Math.ceil(Math.min(limit, 250) / pageSize)
+    const maxPages = Math.ceil(Math.min(limit, 2000) / pageSize)
     const allTraders: TraderSource[] = []
 
     for (let page = 1; page <= maxPages; page++) {

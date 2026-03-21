@@ -55,13 +55,13 @@ export class BitgetFuturesConnector extends BaseConnector {
     notes: ['CF protected but API accessible', 'Good field coverage'],
   }
 
-  async discoverLeaderboard(window: Window, limit = 100, offset = 0): Promise<DiscoverResult> {
+  async discoverLeaderboard(window: Window, limit = 2000, offset = 0): Promise<DiscoverResult> {
     const timeRange = WINDOW_MAP[window]
 
-    // Auto-paginate: fetch all pages (Bitget has 100+ traders per timeRange)
+    // Auto-paginate: fetch all pages
     const allTraders: TraderSource[] = []
-    let currentPage = Math.floor(offset / limit) + 1
-    const maxPages = 5 // Safety: 5 pages × 100 = 500 max (reduced from 10 to prevent hangs)
+    let currentPage = Math.floor(offset / 100) + 1
+    const maxPages = Math.ceil(Math.min(limit, 2000) / 100)
     let totalAvailable: number | null = null
     // Total timeout: 4 minutes — hard cap to prevent cron hangs
     const totalDeadline = Date.now() + 4 * 60 * 1000

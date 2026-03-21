@@ -27,13 +27,10 @@ export class HtxFuturesConnector extends BaseConnector {
     notes: ['Frequent API/DOM changes', 'CF protected', 'All 3 windows supported'],
   }
 
-  async discoverLeaderboard(window: Window, limit = 200, offset = 0): Promise<DiscoverResult> {
+  async discoverLeaderboard(window: Window, limit = 2000, offset = 0): Promise<DiscoverResult> {
     // /bapi/ endpoint returns 405 since ~2026-03. Use futures.htx.com ranking API instead.
-    // This is the same endpoint used by enrichment-htx.ts and confirmed working.
-    // Cap at 100 traders (2 pages) to avoid Vercel 504 — HTX API is slow and we run 3 windows.
-    const effectiveLimit = Math.min(limit, 100)
     const pageSize = 50 // API max 50 per page
-    const maxPages = Math.ceil(effectiveLimit / pageSize) // At most 2 pages
+    const maxPages = Math.ceil(Math.min(limit, 2000) / pageSize)
     const allTraders: TraderSource[] = []
 
     // Overall timeout guard: abort pagination if we're taking too long
@@ -75,10 +72,10 @@ export class HtxFuturesConnector extends BaseConnector {
       }
 
       if (items.length < pageSize) break // No more pages
-      if (allTraders.length >= effectiveLimit) break
+      if (allTraders.length >= limit) break
     }
 
-    return { traders: allTraders.slice(0, effectiveLimit), total_available: null, window, fetched_at: new Date().toISOString() }
+    return { traders: allTraders.slice(0, limit), total_available: null, window, fetched_at: new Date().toISOString() }
   }
 
   async fetchTraderProfile(traderKey: string): Promise<ProfileResult | null> {

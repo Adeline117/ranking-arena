@@ -54,52 +54,67 @@ export class BybitFuturesConnector extends BaseConnector {
     notes: ['Public REST API', 'No CF challenges on API endpoints'],
   }
 
-  async discoverLeaderboard(window: Window, limit = 100, offset = 0): Promise<DiscoverResult> {
+  async discoverLeaderboard(window: Window, limit = 2000, offset = 0): Promise<DiscoverResult> {
     const timeRange = WINDOW_MAP[window]
-    const page = Math.floor(offset / limit) + 1
+    const pageSize = 100
+    const maxPages = Math.ceil(Math.min(limit, 2000) / pageSize)
+    const allTraders: TraderSource[] = []
+    let totalAvailable: number | null = null
 
-    // Bybit API is geo-blocked from datacenter IPs and returns empty data even via proxy.
-    // Go directly to VPS Playwright scraper which renders the real page.
-    const vpsData = await this.fetchViaVPS<Record<string, unknown>>('/bybit/leaderboard', {
-      dataDuration: SCRAPER_DURATION_MAP[window],
-      pageNo: String(page),
-      pageSize: String(limit),
-    }, 120000)
+    for (let page = Math.floor(offset / pageSize) + 1; page <= maxPages; page++) {
+      // Bybit API is geo-blocked from datacenter IPs — use VPS Playwright scraper.
+      const vpsData = await this.fetchViaVPS<Record<string, unknown>>('/bybit/leaderboard', {
+        dataDuration: SCRAPER_DURATION_MAP[window],
+        pageNo: String(page),
+        pageSize: String(pageSize),
+      }, 120000)
 
-    let _rawLb: Record<string, unknown>
-    if (vpsData) {
-      _rawLb = vpsData
-    } else {
-      // Fallback: try direct API (rarely works from datacenter IPs)
-      _rawLb = await this.request<Record<string, unknown>>(
-        `https://api2.bybit.com/fapi/beehive/public/v1/common/dynamic-leader-list?timeRange=${timeRange}&dataType=DATA_ROI&page=${page}&pageSize=${limit}`,
-        { method: 'GET' }
-      )
+      let _rawLb: Record<string, unknown>
+      if (vpsData) {
+        _rawLb = vpsData
+      } else {
+        // Fallback: try direct API (rarely works from datacenter IPs)
+        try {
+          _rawLb = await this.request<Record<string, unknown>>(
+            `https://api2.bybit.com/fapi/beehive/public/v1/common/dynamic-leader-list?timeRange=${timeRange}&dataType=DATA_ROI&page=${page}&pageSize=${pageSize}`,
+            { method: 'GET' }
+          )
+        } catch {
+          break
+        }
+      }
+
+      const resultObj = (_rawLb as Record<string, unknown>)?.result as Record<string, unknown> | undefined
+      const leaderDetails = resultObj?.leaderDetails as unknown[] | undefined
+      const dataArr = resultObj?.data as unknown[] | undefined
+      const rawList = (leaderDetails?.length ? leaderDetails : null)
+        || (dataArr?.length ? dataArr : null)
+        || []
+      const list = (Array.isArray(rawList) ? rawList : []) as Record<string, unknown>[]
+
+      if (totalAvailable == null && resultObj?.total) totalAvailable = Number(resultObj.total)
+      if (list.length === 0) break
+
+      for (const item of list) {
+        allTraders.push({
+          platform: 'bybit' as const,
+          market_type: 'futures' as const,
+          trader_key: String(item.leaderMark || ''),
+          display_name: (item.nickName as string) || null,
+          profile_url: `https://www.bybit.com/copyTrade/trade-center/detail?leaderMark=${item.leaderMark}`,
+          discovered_at: new Date().toISOString(),
+          last_seen_at: new Date().toISOString(),
+          is_active: true,
+          raw: item as Record<string, unknown>,
+        })
+      }
+
+      if (list.length < pageSize) break
     }
-    // Parse directly from raw response — skip Zod which defaults result.data=[] and hides leaderDetails
-    const resultObj = (_rawLb as Record<string, unknown>)?.result as Record<string, unknown> | undefined
-    const leaderDetails = resultObj?.leaderDetails as unknown[] | undefined
-    const dataArr = resultObj?.data as unknown[] | undefined
-    const rawList = (leaderDetails?.length ? leaderDetails : null)
-      || (dataArr?.length ? dataArr : null)
-      || []
-    const list = (Array.isArray(rawList) ? rawList : []) as Record<string, unknown>[]
-
-    const traders: TraderSource[] = list.map((item) => ({
-      platform: 'bybit' as const,
-      market_type: 'futures' as const,
-      trader_key: String(item.leaderMark || ''),
-      display_name: (item.nickName as string) || null,
-      profile_url: `https://www.bybit.com/copyTrade/trade-center/detail?leaderMark=${item.leaderMark}`,
-      discovered_at: new Date().toISOString(),
-      last_seen_at: new Date().toISOString(),
-      is_active: true,
-      raw: item as Record<string, unknown>,
-    }))
 
     return {
-      traders,
-      total_available: (resultObj?.total as number) || null,
+      traders: allTraders.slice(0, limit),
+      total_available: totalAvailable,
       window,
       fetched_at: new Date().toISOString(),
     }

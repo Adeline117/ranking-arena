@@ -38,7 +38,7 @@ export class BybitSpotConnector extends BaseConnector {
     notes: ['Uses VPS Playwright scraper with leaderTag=LEADER_TAG_SPOT'],
   }
 
-  async discoverLeaderboard(window: Window, limit = 100, offset = 0): Promise<DiscoverResult> {
+  async discoverLeaderboard(window: Window, limit = 2000, offset = 0): Promise<DiscoverResult> {
     const page = Math.floor(offset / limit) + 1
     const totalDeadline = Date.now() + 4 * 60 * 1000
 
