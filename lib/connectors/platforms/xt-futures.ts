@@ -224,7 +224,7 @@ export class XtFuturesConnector extends BaseConnector {
     return {
       trader_key: safeStr(raw.accountId ?? raw.uid),
       display_name: safeStr(raw.nickName ?? raw.nickname),
-      avatar_url: null,
+      avatar_url: safeStr(raw.avatar ?? raw.avatarUrl ?? raw.headUrl ?? raw.headPic),
       roi,
       pnl: safeNumber(raw.income ?? raw.pnl),
       win_rate: winRate,

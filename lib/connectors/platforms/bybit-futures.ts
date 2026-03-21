@@ -253,6 +253,7 @@ export class BybitFuturesConnector extends BaseConnector {
     return {
       trader_key: raw.leaderMark || raw.leaderUserId,
       display_name: raw.nickName,
+      avatar_url: raw.avatar ?? raw.avatarUrl ?? raw.headUrl ?? null,
       roi,
       pnl: this.parseNumber(raw.pnl) ?? this.parseNumber(raw.totalPnl) ?? this.parseNumber(raw.profit),
       win_rate: winRate,

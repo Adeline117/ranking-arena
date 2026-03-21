@@ -85,32 +85,61 @@ export async function writeDiscoverResult(
 
   const traderDataArray: TraderData[] = []
   let skipped = 0
+  let boundaryWarnings = 0
 
   for (const trader of result.traders) {
     try {
       // Use connector's normalize() to extract metrics from raw data
       const normalized = trader.raw ? connector.normalize(trader.raw) : {}
 
-      // Extract metrics with fallbacks
-      const roi = safeNum(normalized.roi)
-      const pnl = safeNum(normalized.pnl)
-      const winRate = clampOpt(safeNum(normalized.win_rate), 0, 100)
-      const maxDrawdown = clampOpt(safeNum(normalized.max_drawdown), 0, 100)
+      // Extract metrics with boundary validation
+      const rawRoi = safeNum(normalized.roi)
+      const rawPnl = safeNum(normalized.pnl)
+      const rawWinRate = safeNum(normalized.win_rate)
+      const rawMaxDrawdown = safeNum(normalized.max_drawdown)
+      const rawSharpe = safeNum(normalized.sharpe_ratio)
+
+      // --- Boundary validation with warning logging ---
+      // ROI: reject values outside [-100%, 100000%] (null out, not clamp — bad data)
+      const roi = validateBound(rawRoi, -100, 100000, 'roi', platform, trader.trader_key, boundaryWarnings)
+      if (roi === BOUNDARY_VIOLATED) { boundaryWarnings++; }
+      const roiVal = roi === BOUNDARY_VIOLATED ? null : roi
+
+      // PnL: keep all values but warn on extreme (|PnL| > $10M)
+      if (rawPnl != null && Math.abs(rawPnl) > 10_000_000 && boundaryWarnings < 10) {
+        console.warn(`[adapter][${platform}] Extreme PnL $${rawPnl.toFixed(0)} for trader ${trader.trader_key} (kept)`)
+      }
+      const pnl = rawPnl
+
+      // Win Rate: must be 0-100%, null out if outside
+      const winRate = validateBound(rawWinRate, 0, 100, 'win_rate', platform, trader.trader_key, boundaryWarnings)
+      if (winRate === BOUNDARY_VIOLATED) { boundaryWarnings++; }
+      const winRateVal = winRate === BOUNDARY_VIOLATED ? null : winRate
+
+      // Max Drawdown: must be 0-100%, null out if outside
+      const mdd = validateBound(rawMaxDrawdown, 0, 100, 'max_drawdown', platform, trader.trader_key, boundaryWarnings)
+      if (mdd === BOUNDARY_VIOLATED) { boundaryWarnings++; }
+      const maxDrawdown = mdd === BOUNDARY_VIOLATED ? null : mdd
+
+      // Sharpe Ratio: reject if |sharpe| > 20 (unreasonable)
+      const sharpe = validateBound(rawSharpe, -20, 20, 'sharpe_ratio', platform, trader.trader_key, boundaryWarnings)
+      if (sharpe === BOUNDARY_VIOLATED) { boundaryWarnings++; }
+      const sharpeRatio = sharpe === BOUNDARY_VIOLATED ? null : sharpe
+
       const followers = nonNegOpt(safeNum(normalized.followers))
       const copiers = nonNegOpt(safeNum(normalized.copiers))
       const tradesCount = nonNegOpt(safeNum(normalized.trades_count))
       const aum = nonNegOpt(safeNum(normalized.aum))
-      const sharpeRatio = safeNum(normalized.sharpe_ratio)
       const rank = safeInt(normalized.platform_rank ?? normalized.rank)
 
       // Calculate Arena Score: use ROI if available, PnL-only fallback otherwise
       let arenaScore: number | null = null
       if (calculateScore) {
-        if (roi != null) {
-          arenaScore = calculateArenaScore(roi, pnl, maxDrawdown, winRate, window)
+        if (roiVal != null) {
+          arenaScore = calculateArenaScore(roiVal, pnl, maxDrawdown, winRateVal, window)
         } else if (pnl != null && pnl > 0) {
           // PnL-only score (max 40 points) — better than null
-          arenaScore = calculateArenaScore(0, pnl, maxDrawdown, winRate, window)
+          arenaScore = calculateArenaScore(0, pnl, maxDrawdown, winRateVal, window)
         }
       }
 
@@ -122,9 +151,9 @@ export async function writeDiscoverResult(
         avatar_url: safeStr(normalized.avatar_url) || null,
         season_id: window,
         rank: rank,
-        roi,
+        roi: roiVal,
         pnl,
-        win_rate: winRate,
+        win_rate: winRateVal,
         max_drawdown: maxDrawdown,
         followers,
         copiers,
@@ -326,6 +355,38 @@ export async function runConnectorBatch(
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
+
+// ---------------------------------------------------------------------------
+// Boundary Validation
+// ---------------------------------------------------------------------------
+
+/** Sentinel value indicating a boundary violation (value nulled out) */
+const BOUNDARY_VIOLATED = Symbol('BOUNDARY_VIOLATED')
+
+/**
+ * Validate a numeric value is within expected bounds.
+ * Returns the value if valid, null if input is null, or BOUNDARY_VIOLATED if out of range.
+ * Logs a warning (up to 10 per batch) for violations.
+ */
+function validateBound(
+  value: number | null,
+  min: number,
+  max: number,
+  field: string,
+  platform: string,
+  traderKey: string,
+  warningCount: number,
+): number | null | typeof BOUNDARY_VIOLATED {
+  if (value == null) return null
+  if (value >= min && value <= max) return value
+  // Out of bounds — log warning and return sentinel
+  if (warningCount < 10) {
+    console.warn(
+      `[adapter][${platform}] ${field} out of bounds: ${value} (expected ${min}..${max}) for trader ${traderKey} — set to null`
+    )
+  }
+  return BOUNDARY_VIOLATED
+}
 
 function safeNum(v: unknown): number | null {
   if (v == null) return null

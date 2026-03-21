@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import Image from 'next/image'
 import { useRouter } from 'next/navigation'
@@ -54,6 +54,19 @@ export default function UserMenuDropdown({
   const router = useRouter()
   // myId is used to confirm the user is logged in (required by parent)
   void myId
+
+  // Close dropdown on Escape key (works even when focus is inside menu items)
+  useEffect(() => {
+    if (!showUserMenu) return
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        e.preventDefault()
+        setShowUserMenu(false)
+      }
+    }
+    window.addEventListener('keydown', handler)
+    return () => window.removeEventListener('keydown', handler)
+  }, [showUserMenu, setShowUserMenu])
 
   return (
     <>

@@ -65,12 +65,35 @@ export default function WelcomeModal() {
     }
   }, [currentStep])
 
+  // Escape key closes modal
+  useEffect(() => {
+    if (!visible) return
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') handleClose()
+    }
+    window.addEventListener('keydown', handler)
+    return () => window.removeEventListener('keydown', handler)
+  }, [visible, handleClose])
+
+  // Scroll lock when modal is open
+  useEffect(() => {
+    if (visible) {
+      document.body.style.overflow = 'hidden'
+    } else {
+      document.body.style.overflow = ''
+    }
+    return () => { document.body.style.overflow = '' }
+  }, [visible])
+
   if (!visible) return null
 
   const step = STEPS[currentStep]
 
   return (
     <div
+      role="dialog"
+      aria-modal="true"
+      aria-label="Welcome to Arena"
       style={{
         position: 'fixed',
         inset: 0,
@@ -97,21 +120,25 @@ export default function WelcomeModal() {
         }}
         onClick={e => e.stopPropagation()}
       >
-        {/* Close button */}
+        {/* Close button — 44px touch target */}
         <button
           onClick={handleClose}
           aria-label="Close"
           style={{
             position: 'absolute',
-            top: 12,
-            right: 12,
+            top: 8,
+            right: 8,
             background: 'none',
             border: 'none',
             color: 'var(--color-text-tertiary, #888)',
             fontSize: 20,
             cursor: 'pointer',
             lineHeight: 1,
-            padding: 4,
+            width: 44,
+            height: 44,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
           }}
         >
           \u2715
@@ -142,13 +169,13 @@ export default function WelcomeModal() {
           </p>
         </div>
 
-        {/* Navigation buttons */}
+        {/* Navigation buttons — min 44px touch targets */}
         <div style={{ display: 'flex', gap: 8, justifyContent: 'center' }}>
           {currentStep > 0 && (
             <button
               onClick={handleBack}
               style={{
-                padding: '10px 20px',
+                padding: '12px 20px',
                 borderRadius: 10,
                 border: '1px solid var(--color-border-primary, rgba(255,255,255,0.15))',
                 background: 'transparent',
@@ -156,6 +183,7 @@ export default function WelcomeModal() {
                 fontSize: 14,
                 fontWeight: 600,
                 cursor: 'pointer',
+                minHeight: 44,
               }}
             >
               \u2190 Back
@@ -164,7 +192,7 @@ export default function WelcomeModal() {
           <button
             onClick={handleNext}
             style={{
-              padding: '10px 24px',
+              padding: '12px 24px',
               borderRadius: 10,
               border: 'none',
               background: 'var(--color-accent-primary, #8B6FA8)',
@@ -174,6 +202,7 @@ export default function WelcomeModal() {
               cursor: 'pointer',
               flex: currentStep > 0 ? undefined : 1,
               maxWidth: 240,
+              minHeight: 44,
             }}
           >
             {step.cta}
