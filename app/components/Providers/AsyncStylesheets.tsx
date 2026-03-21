@@ -36,13 +36,13 @@ function loadStylesheet(href: string): Promise<void> {
 
 export function AsyncStylesheets() {
   useEffect(() => {
-    // Priority: responsive.css (layout breakpoints) — load ASAP after hydration
-    const loadPriority = () => {
-      PRIORITY_STYLESHEETS.forEach(href => {
-        loadStylesheet(href).catch(_err => { // eslint-disable-line no-restricted-syntax -- intentional fire-and-forget
-        })
+    // Priority: responsive.css (layout breakpoints) — load immediately after hydration.
+    // Critical grid columns are in critical-css.ts but responsive.css has mobile overrides
+    // that prevent CLS on small screens.
+    PRIORITY_STYLESHEETS.forEach(href => {
+      loadStylesheet(href).catch(_err => { // eslint-disable-line no-restricted-syntax -- intentional fire-and-forget
       })
-    }
+    })
 
     // Deferred: animations.css (purely decorative) — load well after LCP
     const loadDeferred = () => {
@@ -53,13 +53,11 @@ export function AsyncStylesheets() {
     }
 
     if ('requestIdleCallback' in window) {
-      requestIdleCallback(loadPriority, { timeout: 2000 })
-      // Animations after 5s — well past LCP window, avoids TBT contribution
-      requestIdleCallback(loadDeferred, { timeout: 8000 })
+      // Animations after idle — well past LCP window, avoids TBT contribution
+      requestIdleCallback(loadDeferred, { timeout: 5000 })
     } else {
       // Safari fallback
-      setTimeout(loadPriority, 500)
-      setTimeout(loadDeferred, 3000)
+      setTimeout(loadDeferred, 2000)
     }
   }, [])
 
