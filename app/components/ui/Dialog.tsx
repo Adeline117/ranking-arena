@@ -69,6 +69,16 @@ export function DialogProvider({ children }: { children: ReactNode }) {
   // Forward declaration ref for handleCancel (used in useEffect before declaration)
   const handleCancelRef = useRef<() => void>(() => {})
 
+  // Scroll lock when dialog is open
+  useEffect(() => {
+    if (state.isOpen) {
+      document.body.style.overflow = 'hidden'
+    } else {
+      document.body.style.overflow = ''
+    }
+    return () => { document.body.style.overflow = '' }
+  }, [state.isOpen])
+
   // Focus trap + escape key
   useEffect(() => {
     if (!state.isOpen) return
