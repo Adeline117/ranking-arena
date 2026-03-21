@@ -63,6 +63,22 @@ const nextConfig: NextConfig = {
             priority: 30,
             enforce: true,
           },
+          // Chart libraries: isolated — only loaded on trader detail & market pages
+          charts: {
+            test: /[\\/]node_modules[\\/](lightweight-charts|fancy-canvas)[\\/]/,
+            name: 'charts',
+            chunks: 'async',
+            priority: 25,
+            enforce: true,
+          },
+          // Stripe: only loaded on pricing/checkout pages
+          stripe: {
+            test: /[\\/]node_modules[\\/](@stripe|stripe)[\\/]/,
+            name: 'stripe',
+            chunks: 'async',
+            priority: 25,
+            enforce: true,
+          },
           vendor: {
             test: /[\\/]node_modules[\\/]/,
             name: 'vendor',
