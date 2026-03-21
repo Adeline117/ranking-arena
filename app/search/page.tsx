@@ -458,7 +458,8 @@ function SearchContent() {
                     onClick={() => { clearSearchHistory(); setSearchHistory([]) }}
                     style={{
                       fontSize: 11, color: tokens.colors.text.tertiary, background: 'none',
-                      border: 'none', cursor: 'pointer', padding: '2px 6px',
+                      border: 'none', cursor: 'pointer', padding: '8px 12px',
+                      minHeight: 44, display: 'inline-flex', alignItems: 'center',
                     }}
                   >
                     {t('searchClearHistory')}

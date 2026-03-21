@@ -57,6 +57,16 @@ export default function MobileSearchOverlay({ open, onClose }: MobileSearchOverl
     }
   }, [open])
 
+  // Close on Escape key
+  useEffect(() => {
+    if (!open) return
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose()
+    }
+    window.addEventListener('keydown', handler)
+    return () => window.removeEventListener('keydown', handler)
+  }, [open, onClose])
+
   // Prevent body scrolling when overlay is open
   useEffect(() => {
     if (open) {

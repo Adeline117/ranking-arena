@@ -295,14 +295,20 @@ function MarketPageContent() {
                 {t('filter')}: {sectorFilter}
                 <button
                   onClick={() => setSectorFilter(null)}
+                  aria-label="Clear filter"
                   style={{
                     background: 'none',
                     border: 'none',
                     cursor: 'pointer',
-                    padding: 0,
+                    width: 44,
+                    height: 44,
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
                     color: tokens.colors.text.tertiary,
                     fontSize: 14,
                     lineHeight: 1.2,
+                    margin: '-14px -16px -14px 0',
                   }}
                 >
                   <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">

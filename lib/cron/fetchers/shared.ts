@@ -234,7 +234,7 @@ export const TraderDataSchema = z.object({
   profile_url: z.string().nullable().optional(),
   season_id: z.string().min(1),
   rank: z.number().int().positive().nullable().optional(),
-  roi: z.number().finite().nullable(),
+  roi: z.number().finite().min(-100).max(100000).nullable(),
   pnl: z.number().finite().nullable(),
   win_rate: z.number().finite().min(0).max(100).nullable(),
   max_drawdown: z.number().finite().min(0).max(100).nullable(),
@@ -243,7 +243,7 @@ export const TraderDataSchema = z.object({
   trades_count: z.number().finite().nonnegative().nullable().optional(),
   arena_score: z.number().finite().nullable(),
   captured_at: z.string().min(1),
-  sharpe_ratio: z.number().finite().nullable().optional(),
+  sharpe_ratio: z.number().finite().min(-20).max(20).nullable().optional(),
   aum: z.number().finite().nonnegative().nullable().optional(),
   avatar_url: z.string().nullable().optional(),
 })

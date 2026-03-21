@@ -129,6 +129,7 @@ export default function RankingsIndexClient() {
             color: tab === key ? tokens.colors.accent.primary : tokens.colors.text.secondary,
             fontWeight: tab === key ? 600 : 400, fontSize: 14, cursor: 'pointer',
             transition: 'all 0.2s', display: 'flex', alignItems: 'center', gap: 6,
+            minHeight: 44,
           }}>
             {label}
             <span style={{ fontSize: 12, opacity: 0.7,

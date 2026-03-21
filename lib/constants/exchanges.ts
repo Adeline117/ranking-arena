@@ -230,6 +230,10 @@ export const PRIORITY_SOURCES: TraderSource[] = [
   'binance_spot',
   'bybit_spot',
   'binance_web3',
+  // New platforms (Wave 2)
+  'woox',
+  'polymarket',
+  'copin',
 ]
 
 // ---------------------------------------------------------------------------
@@ -270,6 +274,10 @@ export const SOURCES_WITH_DATA: TraderSource[] = [
   'binance_web3',
   'drift',
   'web3_bot',
+  // New platforms (Wave 2)
+  'woox',
+  'polymarket',
+  'copin',
 ]
 
 // ---------------------------------------------------------------------------
@@ -369,6 +377,8 @@ export const EXCHANGE_SLUG_ALIASES: Record<string, string> = {
   gate: 'gateio',
   'gate.io': 'gateio',
   jupiter: 'jupiter_perps',
+  woo: 'woox',
+  'woo_x': 'woox',
 }
 
 /** Resolve a URL slug to the canonical exchange source key */

@@ -100,6 +100,7 @@ export class BybitSpotConnector extends BaseConnector {
     return {
       trader_key: e.leaderMark || e.leaderUserId,
       display_name: e.nickName,
+      avatar_url: e.avatar ?? e.avatarUrl ?? e.headUrl ?? null,
       roi: this.parseNumber(e.roi) ?? this.parsePercent(mv?.[0]),
       pnl: this.parseNumber(e.pnl) ?? this.parseNumber(e.totalPnl) ?? this.parseNumber(e.profit),
       win_rate: this.parseNumber(e.winRate) ?? this.parsePercent(mv?.[3]),

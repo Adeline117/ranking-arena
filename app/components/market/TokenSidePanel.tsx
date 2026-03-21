@@ -158,6 +158,16 @@ export default function TokenSidePanel({ token, onClose }: {
     return () => window.removeEventListener('keydown', handler)
   }, [onClose])
 
+  // Scroll lock when panel is open
+  useEffect(() => {
+    if (token) {
+      document.body.style.overflow = 'hidden'
+    } else {
+      document.body.style.overflow = ''
+    }
+    return () => { document.body.style.overflow = '' }
+  }, [token])
+
   // Fetch coin detail
   useEffect(() => {
     if (!token) return
@@ -225,6 +235,9 @@ export default function TokenSidePanel({ token, onClose }: {
           }}>
           <div
             ref={panelRef}
+            role="dialog"
+            aria-modal="true"
+            aria-label={`${token.symbol} token details`}
             style={{
               animation: 'fadeInScale 0.2s ease-out',
               width: 'min(95vw, 900px)',
@@ -273,12 +286,18 @@ export default function TokenSidePanel({ token, onClose }: {
               </div>
               <button
                 onClick={onClose}
+                aria-label="Close panel"
                 style={{
                   background: 'none',
                   border: 'none',
                   cursor: 'pointer',
-                  padding: 4,
+                  width: 44,
+                  height: 44,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
                   color: tokens.colors.text.tertiary,
+                  borderRadius: tokens.radius.md,
                 }}
               >
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">

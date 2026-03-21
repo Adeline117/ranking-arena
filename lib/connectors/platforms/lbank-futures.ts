@@ -133,8 +133,35 @@ export class LbankFuturesConnector extends BaseConnector {
     return { series: [], fetched_at: new Date().toISOString() }
   }
 
+  /**
+   * Normalize raw LBank leaderboard entry.
+   * Raw fields: uid, nickname, avatar/avatarUrl/headUrl, roi/returnRate (decimal),
+   * pnl/profit/totalPnl, winRate (decimal), maxDrawdown/mdd,
+   * followers/followerCount/copierCount.
+   */
   normalize(raw: Record<string, unknown>): Record<string, unknown> {
-    return { trader_key: raw.uid, display_name: raw.nickname }
+    const rawRoi = this.num(raw.roi ?? raw.returnRate ?? raw.profitRate)
+    const roi = rawRoi != null ? (Math.abs(rawRoi) <= 1 ? rawRoi * 100 : rawRoi) : null
+    const rawWr = this.num(raw.winRate)
+    const winRate = rawWr != null ? (rawWr <= 1 ? rawWr * 100 : rawWr) : null
+    const rawMdd = this.num(raw.maxDrawdown ?? raw.mdd)
+    const maxDrawdown = rawMdd != null ? Math.abs(rawMdd <= 1 ? rawMdd * 100 : rawMdd) : null
+
+    return {
+      trader_key: raw.uid ?? raw.traderId ?? raw.id ?? null,
+      display_name: raw.nickname ?? raw.nickName ?? raw.name ?? null,
+      avatar_url: raw.avatar ?? raw.avatarUrl ?? raw.headUrl ?? null,
+      roi,
+      pnl: this.num(raw.pnl ?? raw.profit ?? raw.totalPnl),
+      win_rate: winRate,
+      max_drawdown: maxDrawdown,
+      trades_count: null,
+      followers: this.num(raw.followers ?? raw.followerCount ?? raw.copierCount),
+      copiers: null,
+      aum: null,
+      sharpe_ratio: null,
+      platform_rank: null,
+    }
   }
 
   protected num(val: unknown): number | null {
