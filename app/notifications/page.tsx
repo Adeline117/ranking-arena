@@ -407,6 +407,8 @@ export default function NotificationsPage() {
                 cursor: 'pointer',
                 fontSize: tokens.typography.fontSize.xs,
                 fontWeight: 500,
+                padding: '8px 12px',
+                minHeight: 44,
               }}
             >
               {t('markAllRead')}
@@ -652,7 +654,7 @@ function FilterTab({ label, count, active, onClick }: {
         display: 'flex',
         alignItems: 'center',
         gap: 6,
-        padding: `${tokens.spacing[1]} ${tokens.spacing[3]}`,
+        padding: `${tokens.spacing[2]} ${tokens.spacing[3]}`,
         borderRadius: tokens.radius.full,
         border: 'none',
         cursor: 'pointer',
@@ -661,6 +663,7 @@ function FilterTab({ label, count, active, onClick }: {
         background: active ? tokens.colors.accent.brand + '20' : tokens.colors.bg.secondary,
         color: active ? tokens.colors.accent.brand : tokens.colors.text.secondary,
         transition: `all ${tokens.transition.base}`,
+        minHeight: 36,
       }}
     >
       {label}
