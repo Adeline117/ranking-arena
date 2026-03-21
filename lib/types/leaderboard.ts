@@ -59,6 +59,8 @@ export const LEADERBOARD_PLATFORMS = [
   'bitget_spot', 'okx_wallet',
   // Dune on-chain leaderboards
   'dune_gmx', 'dune_hyperliquid', 'dune_uniswap', 'dune_defi',
+  // New platforms (Wave 2)
+  'woox', 'polymarket', 'copin',
   // Legacy short names (backward compat for v2 API callers)
   'binance', 'bitget', 'okx', 'htx',
 ] as const
@@ -145,6 +147,10 @@ export const GRANULAR_PLATFORMS = [
   'dune_hyperliquid',
   'dune_uniswap',
   'dune_defi',
+  // New platforms (Wave 2)
+  'woox',
+  'polymarket',
+  'copin',
 ] as const
 
 export type GranularPlatform = (typeof GRANULAR_PLATFORMS)[number]
@@ -197,6 +203,10 @@ export const PLATFORM_CATEGORY: Record<GranularPlatform, TradingCategory> = {
   dune_hyperliquid: 'onchain',
   dune_uniswap: 'spot',
   dune_defi: 'onchain',
+  // New platforms (Wave 2)
+  woox: 'futures',
+  polymarket: 'onchain',
+  copin: 'onchain',
 }
 
 // ============================================
@@ -529,6 +539,10 @@ export const PLATFORM_RATE_LIMITS: Record<GranularPlatform, RateLimiterConfig> =
   dune_hyperliquid: { max_requests: 5, window_ms: 60_000, min_delay_ms: 12000, max_delay_ms: 20000, max_concurrent: 1 },
   dune_uniswap: { max_requests: 5, window_ms: 60_000, min_delay_ms: 12000, max_delay_ms: 20000, max_concurrent: 1 },
   dune_defi: { max_requests: 5, window_ms: 60_000, min_delay_ms: 12000, max_delay_ms: 20000, max_concurrent: 1 },
+  // New platforms (Wave 2)
+  woox: { max_requests: 30, window_ms: 60_000, min_delay_ms: 2000, max_delay_ms: 5000, max_concurrent: 3 },
+  polymarket: { max_requests: 60, window_ms: 60_000, min_delay_ms: 1000, max_delay_ms: 3000, max_concurrent: 5 },
+  copin: { max_requests: 30, window_ms: 60_000, min_delay_ms: 2000, max_delay_ms: 5000, max_concurrent: 2 },
 }
 
 // ============================================

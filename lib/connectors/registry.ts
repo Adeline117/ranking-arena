@@ -251,6 +251,11 @@ export async function initializeConnectors(): Promise<void> {
   lazy('jupiter_perps:perp', () => import('./platforms/jupiter-perps-perp'), 'JupiterPerpsPerpConnector', 'jupiter_perps')
   lazy('drift:perp', () => import('./platforms/drift-perp'), 'DriftPerpConnector', 'drift')
 
+  // New platforms (Wave 2)
+  lazy('woox:copy', () => import('./platforms/woox-copy'), 'WooxCopyConnector', 'woox')
+  lazy('polymarket:copy', () => import('./platforms/polymarket-prediction'), 'PolymarketPredictionConnector', 'polymarket')
+  lazy('copin:perp', () => import('./platforms/copin-perp'), 'CopinPerpConnector', 'copin')
+
   // Web3 Connectors
   lazy('okx_web3:web3', () => import('./platforms/okx-web3'), 'OkxWeb3Connector', 'okx_web3')
   lazy('binance_web3:web3', () => import('./platforms/binance-web3'), 'BinanceWeb3Connector', 'binance_web3')

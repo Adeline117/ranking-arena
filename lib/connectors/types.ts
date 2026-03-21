@@ -137,6 +137,8 @@ export const PLATFORM_TIER: Record<string, ConnectorTier> = {
   // Slow: heavy WAF, scraper required
   bingx: 'slow', xt: 'slow', blofin: 'slow', toobit: 'slow',
   weex: 'slow', phemex: 'slow', lbank: 'slow', kwenta: 'slow',
+  // New platforms (Wave 2)
+  woox: 'fast', polymarket: 'fast', copin: 'fast',
 }
 
 /** Get ConnectorConfig for a platform based on its tier */
