@@ -234,11 +234,12 @@ export class JupiterPerpsPerpConnector extends BaseConnector {
   normalize(raw: unknown): Record<string, unknown> {
     const e = raw as { owner: string; pnl: number; volume: number; wins?: number; losses?: number; trades?: number; _computed_win_rate?: number | null }
     // ROI estimated: pnl / (volume / 5) × 100
+    // Require minimum $1000 estimated capital to avoid extreme ROI from low-volume traders
     let roi: number | null = null
     if (e.pnl != null && e.volume != null && e.volume > 0) {
       const estimatedCapital = e.volume / 5
-      if (estimatedCapital > 0) {
-        roi = Math.max(-100, Math.min(10000, (e.pnl / estimatedCapital) * 100))
+      if (estimatedCapital >= 1000) {
+        roi = (e.pnl / estimatedCapital) * 100
       }
     }
 

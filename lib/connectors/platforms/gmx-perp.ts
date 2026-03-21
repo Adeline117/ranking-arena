@@ -238,16 +238,14 @@ export class GmxPerpConnector extends BaseConnector {
   /**
    * Normalize raw GMX leaderboard entry.
    * Raw fields: account/id, realizedPnl (BigInt scale 1e30 or USD),
-   * maxCapital, netCapital, wins, losses, closedCount.
+   * maxCapital, wins, losses, closedCount.
    * ROI computed as realizedPnl / maxCapital × 100.
    * win_rate computed as wins / (wins + losses) × 100.
-   * max_drawdown approximated as (maxCapital - netCapital) / maxCapital × 100.
-   * Note: max_capital mapped to aum (closest semantic match).
+   * max_drawdown: null (GMX API lacks historical equity data for true MDD).
    */
   normalize(raw: Record<string, unknown>): Record<string, unknown> {
     const pnl = this.fromGmxDecimals(raw.realizedPnl)
     const maxCapital = this.fromGmxDecimals(raw.maxCapital)
-    const netCapital = this.fromGmxDecimals(raw.netCapital)
     // ROI = realizedPnl / maxCapital × 100
     let roi: number | null = null
     if (pnl != null && maxCapital != null && maxCapital > 100) {
@@ -260,18 +258,10 @@ export class GmxPerpConnector extends BaseConnector {
     const winRate = totalTrades > 0 ? (wins / totalTrades) * 100 : null
     const tradesCount = safeNumber(raw.closedCount) ?? (totalTrades > 0 ? totalTrades : null)
 
-    // MDD approximation from netCapital vs maxCapital
-    // netCapital = current capital after all PnL; maxCapital = peak capital deployed
-    // If netCapital < maxCapital, the difference is the drawdown from peak
-    // netCapital can be negative (losses > initial capital), so clamp to 0-100%
-    let maxDrawdown: number | null = null
-    if (maxCapital != null && maxCapital > 0 && netCapital != null) {
-      const drawdown = ((maxCapital - Math.min(netCapital, maxCapital)) / maxCapital) * 100
-      // Clamp to 0-100% range (MDD cannot logically exceed 100%)
-      if (drawdown > 0.01) {
-        maxDrawdown = Math.round(Math.min(drawdown, 100) * 100) / 100
-      }
-    }
+    // GMX subgraph does not provide historical equity curve data needed to compute true MDD.
+    // netCapital (current capital) vs maxCapital (peak) is not the same as max drawdown.
+    // Leave as null — enrichment can derive MDD from equity curve if available.
+    const maxDrawdown: number | null = null
 
     return {
       trader_key: String(raw.account || raw.id || '').toLowerCase(),

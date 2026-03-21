@@ -87,7 +87,9 @@ export class HyperliquidPerpConnector extends BaseConnector {
       }
       const rawRoi = perf?.roi != null ? Number(perf.roi) : null
       const rawPnl = perf?.pnl != null ? Number(perf.pnl) : null
-      const roi = rawRoi != null ? rawRoi * 100 : null // decimal → percentage
+      // Hyperliquid API returns ROI as decimal (0.35 = 35%) but occasionally as percentage (35 = 35%)
+      // Smart detection: if |roi| <= 10, treat as decimal and multiply; otherwise already percentage
+      const roi = rawRoi != null ? (Math.abs(rawRoi) <= 10 ? rawRoi * 100 : rawRoi) : null
       // Anomaly fix: if roi ≈ pnl (wrong scale), recalculate
       const accountValue = item.accountValue != null ? Number(item.accountValue) : null
       let correctedRoi = (roi != null && rawPnl != null && accountValue != null
@@ -173,8 +175,9 @@ export class HyperliquidPerpConnector extends BaseConnector {
 
     let roi: number | null = null
     if (lbEntry && lbEntry.roi != null) {
-      // Leaderboard ROI is a decimal (e.g. 0.35 = 35%), convert to percentage
-      roi = Number(lbEntry.roi) * 100
+      // Hyperliquid API returns ROI as decimal (0.35 = 35%) or occasionally as percentage
+      const rawRoi = Number(lbEntry.roi)
+      roi = Math.abs(rawRoi) <= 10 ? rawRoi * 100 : rawRoi
     } else if (accountValue > 0 && totalRawPnl !== 0) {
       // Fallback: approximate ROI from clearinghouse state
       roi = (totalRawPnl / (accountValue - totalRawPnl)) * 100
