@@ -4,14 +4,17 @@
    No CSS hiding needed — React state removes it when client table mounts.
    This eliminates CLS because the swap happens at the same DOM position. */
 
-/* Two-phase rendering: Collapse SSR shell once the interactive HomePage mounts.
-   Uses height:0 + overflow:hidden instead of display:none to avoid layout shift (CLS).
-   The SSR content becomes invisible without removing it from flow abruptly. */
+/* Two-phase rendering: Hide SSR shell once the interactive HomePage mounts.
+   Uses visibility:hidden + position:absolute to avoid CLS.
+   The SSR shell is instantly removed from flow while the interactive content
+   renders in the same position. */
 body:has(#homepage-interactive) #ssr-homepage-shell {
+  visibility: hidden;
+  position: absolute;
+  width: 0;
   height: 0;
   overflow: hidden;
-  visibility: hidden;
-  /* No transition — instant collapse when client mounts, matching position */
+  pointer-events: none;
 }
 
 /*
