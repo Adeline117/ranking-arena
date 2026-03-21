@@ -2351,6 +2351,7 @@ const en = {
     rankTrend: 'Rank trend (7d)',
     drawdownChart: 'Drawdown',
     dailyReturnsDistribution: 'Daily Returns Distribution',
+    estimatedFromRoi: 'Estimated from ROI',
 
     // PortfolioTable
     unlockFullPortfolio: 'Unlock Full Portfolio',
