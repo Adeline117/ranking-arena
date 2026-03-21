@@ -115,6 +115,18 @@ import {
   fetchKucoinEquityCurve,
   fetchKucoinStatsDetail,
 } from '@/lib/cron/fetchers/enrichment-kucoin'
+import {
+  fetchWooxEquityCurve,
+  fetchWooxStatsDetail,
+  fetchWooxCurrentPositions,
+  fetchWooxPositionHistory,
+} from '@/lib/cron/fetchers/enrichment-woox'
+import {
+  fetchPolymarketEquityCurve,
+  fetchPolymarketStatsDetail,
+  fetchPolymarketCurrentPositions,
+  fetchPolymarketPositionHistory,
+} from '@/lib/cron/fetchers/enrichment-polymarket'
 import { sleep } from '@/lib/cron/fetchers/shared'
 import { captureMessage } from '@/lib/utils/logger'
 import { sendRateLimitedAlert } from '@/lib/alerts/send-alert'
@@ -456,6 +468,23 @@ export const ENRICHMENT_PLATFORM_CONFIGS: Record<string, EnrichmentConfig> = {
     },
     fetchStatsDetail: fetchBinanceSpotStatsDetail,
     concurrency: 3, delayMs: 1500,
+  },
+  // New platforms (Wave 2)
+  woox: {
+    platform: 'woox',
+    fetchEquityCurve: fetchWooxEquityCurve,
+    fetchStatsDetail: fetchWooxStatsDetail,
+    fetchCurrentPositions: fetchWooxCurrentPositions,
+    fetchPositionHistory: fetchWooxPositionHistory,
+    concurrency: 3, delayMs: 1000,
+  },
+  polymarket: {
+    platform: 'polymarket',
+    fetchEquityCurve: fetchPolymarketEquityCurve,
+    fetchStatsDetail: fetchPolymarketStatsDetail,
+    fetchCurrentPositions: fetchPolymarketCurrentPositions,
+    fetchPositionHistory: fetchPolymarketPositionHistory,
+    concurrency: 5, delayMs: 500,
   },
 }
 
