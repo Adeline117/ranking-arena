@@ -99,6 +99,10 @@ async function getLeaderboardCache(): Promise<Map<string, KucoinTrader>> {
 /**
  * Build equity curve from KuCoin's totalPnlDate array.
  * totalPnlDate is an array of cumulative PnL values (one per day).
+ *
+ * ROI is computed relative to the first point. When the first PnL is 0,
+ * we use the cumulative PnL directly as the ROI proxy so that downstream
+ * metric derivation (Sharpe, MDD) still works instead of getting all-zero ROI.
  */
 export async function fetchKucoinEquityCurve(
   traderId: string,
@@ -119,9 +123,14 @@ export async function fetchKucoinEquityCurve(
 
   return slice.map((v, i) => {
     const date = new Date(today.getTime() - (slice.length - 1 - i) * 86400000)
+    // When baseValue is 0, use cumulative PnL delta from first point as ROI proxy.
+    // This ensures downstream Sharpe/MDD computations see non-zero daily returns.
+    const roi = baseValue !== 0
+      ? ((v - baseValue) / Math.abs(baseValue)) * 100
+      : (v - slice[0])
     return {
       date: date.toISOString().split('T')[0],
-      roi: baseValue !== 0 ? ((v - baseValue) / Math.abs(baseValue)) * 100 : 0,
+      roi,
       pnl: v,
     }
   })
