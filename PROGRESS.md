@@ -3,9 +3,33 @@
 > Auto-read by Claude Code at session start. Keep concise — archive completed items weekly.
 
 ## Current Sprint Focus
-- **38 active platforms**, all fresh (was 35). Added: WOO X, Polymarket, Copin.io (Wave 2).
-- Enrichment: 32 platforms with enrichment configs (was 30). Added woox, polymarket.
-- Equity curves: 34 platforms have curve data (was ~32). WOO X 30-point inline, Polymarket from on-chain activity.
+- **37 active platforms**, all fresh. Trader counts growing after limit increases.
+- Enrichment: 32 platforms with enrichment configs.
+- Equity curves: 34 platforms have curve data.
+
+## Critical Fixes (2026-03-22)
+
+### DB Performance Crisis (P0 — Resolved)
+- **Root cause**: `leaderboard_ranks` had 914K dead rows (37.8x dead ratio), causing all API/cron timeouts
+- **Secondary**: Stuck COPY transaction on `eligible` table (33h idle in transaction)
+- **Fix**: REINDEX CONCURRENTLY all 7 indexes (565MB → 22MB, 96% reduction) + VACUUM
+- **Prevention**: Aggressive autovacuum (scale_factor=0.01, cost_delay=2ms) + computed_at index
+- **Result**: API 24.8s → 1.0s, health 503 → 200
+
+### Data Quality Bugs (P1 — Fixed, 4 connector bugs)
+| Bug | Platform | Root Cause | Fix |
+|-----|----------|------------|-----|
+| ROI 33M% | Hyperliquid | `roi * 100` but API returns percentage | Smart detection: `\|roi\| <= 10` → multiply |
+| MDD=100% (1175人) | GMX | `netCapital` field not in API response | Removed broken formula, return null |
+| ROI ±800K% | Jupiter | `volume/5` estimate → tiny capital → explosion | $1000 minimum capital threshold |
+| Sharpe -219 | Binance Spot/Futures | API sharpRatio no validation | Added `\|sharpe\| <= 10` bounds |
+
+### Trader Count Limits (P1 — Fixed, awaiting cron cycle)
+- **Root cause**: Global default limit=500 + per-connector hardcoded caps (100-500)
+- **Also**: Cron route handlers overriding with `limit: 500` (found late, fixed separately)
+- **Fix**: All 21 connectors raised to limit=2000, route handlers use global default
+- Added pagination loops for Bybit and MEXC (were single-page only)
+- Early results: drift 1254→1638, binance_web3 2178→2258 (still running)
 
 ## Wave 2 New Platforms (2026-03-21)
 ### Completed
