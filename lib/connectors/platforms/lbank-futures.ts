@@ -53,7 +53,7 @@ export class LbankFuturesConnector extends BaseConnector {
     }
   }
 
-  async discoverLeaderboard(window: Window, limit = 100, _offset = 0): Promise<DiscoverResult> {
+  async discoverLeaderboard(window: Window, limit = 2000, _offset = 0): Promise<DiscoverResult> {
     try {
       // Try VPS scraper first
       let _rawLb = await this.fetchViaVPS<{ data?: { list?: LBankLeaderboardEntry[] } }>('/lbank/leaderboard', {

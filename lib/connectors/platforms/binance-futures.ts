@@ -220,12 +220,12 @@ export class BinanceFuturesConnector extends BaseConnector {
 
   async discoverLeaderboard(
     window: Window,
-    limit: number = 100,
+    limit: number = 2000,
     offset: number = 0
   ): Promise<DiscoverResult> {
     const periodType = this.mapWindowToPlatform(window)
-    const pageSize = Math.min(limit, 20) // Binance returns max 20 per page
-    const maxPages = Math.ceil(Math.min(limit, 500) / pageSize)
+    const pageSize = 20 // Binance returns max 20 per page
+    const maxPages = Math.ceil(Math.min(limit, 2000) / pageSize)
     const allTraders: TraderSource[] = []
 
     for (let page = Math.floor(offset / pageSize) + 1; page <= maxPages + Math.floor(offset / pageSize); page++) {

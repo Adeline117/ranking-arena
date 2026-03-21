@@ -75,7 +75,7 @@ export class GainsPerpConnector extends BaseConnector {
    * Uses /leaderboard endpoint (ranked by performance) instead of /open-trades
    * to match inline fetcher behavior.
    */
-  async discoverLeaderboard(window: Window, limit = 100, _offset = 0): Promise<DiscoverResult> {
+  async discoverLeaderboard(window: Window, limit = 2000, _offset = 0): Promise<DiscoverResult> {
     const chains = ['arbitrum', 'polygon', 'base']
     const seen = new Set<string>()
     const allTraders: TraderSource[] = []

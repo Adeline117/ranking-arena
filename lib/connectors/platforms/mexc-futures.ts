@@ -31,36 +31,40 @@ export class MexcFuturesConnector extends BaseConnector {
     notes: ['CF protected', 'No timeseries endpoint available'],
   }
 
-  async discoverLeaderboard(window: Window, limit = 100, offset = 0): Promise<DiscoverResult> {
+  async discoverLeaderboard(window: Window, limit = 2000, offset = 0): Promise<DiscoverResult> {
     // MEXC is CF-protected; VPS scraper opens a real browser per request.
-    // Single scraper call with large pageSize to avoid multiple browser launches.
+    // Paginate: fetch 100 per page up to limit.
+    const pageSize = 100
+    const maxPages = Math.ceil(Math.min(limit, 2000) / pageSize)
     const allTraders: TraderSource[] = []
     let totalAvailable: number | null = null
 
-    let _rawLb: Record<string, unknown> | null = null
-    // Increase timeout to 300s (5min) - VPS Playwright scraper is slow for MEXC
-    const vpsData = await this.fetchViaVPS<Record<string, unknown>>('/mexc/leaderboard', {
-      periodType: String(WINDOW_MAP[window]), pageSize: String(Math.min(limit, 100)),
-    }, 300000)
-    if (vpsData) {
-      _rawLb = vpsData
-    } else {
-      // Fallback: direct API (rarely works from datacenter IPs)
-      try {
-        _rawLb = await this.request<Record<string, unknown>>(
-          `https://futures.mexc.com/api/v1/private/account/assets/copy-trading/trader/list?page=1&pageSize=${Math.min(limit, 100)}&sortField=yield&sortType=DESC&timeType=${WINDOW_MAP[window]}`,
-          { method: 'GET' }
-        )
-      } catch {
-        // Direct API blocked (403), expected
+    for (let page = 1; page <= maxPages; page++) {
+      let _rawLb: Record<string, unknown> | null = null
+      const vpsData = await this.fetchViaVPS<Record<string, unknown>>('/mexc/leaderboard', {
+        periodType: String(WINDOW_MAP[window]), pageSize: String(pageSize), page: String(page),
+      }, 300000)
+      if (vpsData) {
+        _rawLb = vpsData
+      } else {
+        // Fallback: direct API (rarely works from datacenter IPs)
+        try {
+          _rawLb = await this.request<Record<string, unknown>>(
+            `https://futures.mexc.com/api/v1/private/account/assets/copy-trading/trader/list?page=${page}&pageSize=${pageSize}&sortField=yield&sortType=DESC&timeType=${WINDOW_MAP[window]}`,
+            { method: 'GET' }
+          )
+        } catch {
+          break // Direct API blocked, stop pagination
+        }
       }
-    }
 
-    if (_rawLb) {
-      // Parse directly — scraper returns data.comprehensives or data.resultList, not data.list
+      if (!_rawLb) break
+
       const dataObj = (_rawLb.data ?? {}) as Record<string, unknown>
       const list = (dataObj?.list || dataObj?.comprehensives || dataObj?.resultList || []) as unknown[]
-      if (dataObj?.total) totalAvailable = Number(dataObj.total)
+      if (dataObj?.total && totalAvailable == null) totalAvailable = Number(dataObj.total)
+
+      if (list.length === 0) break
 
       for (const item of list) {
         allTraders.push({
@@ -75,6 +79,8 @@ export class MexcFuturesConnector extends BaseConnector {
           raw: item as Record<string, unknown>,
         })
       }
+
+      if (list.length < pageSize) break // Last page
     }
 
     return { traders: allTraders.slice(0, limit), total_available: totalAvailable, window, fetched_at: new Date().toISOString() }

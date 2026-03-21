@@ -77,7 +77,7 @@ export class BtccFuturesConnector extends BaseConnector {
     _offset: number = 0
   ): Promise<DiscoverResult> {
     const pageSize = 50
-    const maxPages = Math.ceil(Math.min(limit, 1000) / pageSize)
+    const maxPages = Math.ceil(Math.min(limit, 2000) / pageSize)
     const allTraders: TraderSource[] = []
 
     for (let page = 1; page <= maxPages; page++) {

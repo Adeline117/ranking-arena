@@ -224,7 +224,7 @@ export async function runConnectorBatch(
   connector: PlatformConnector,
   options: BatchRunOptions = {}
 ): Promise<FetchResult> {
-  const { windows = ['7d', '30d', '90d'], limit = 500, sourceOverride, inlineEnrich = false } = options
+  const { windows = ['7d', '30d', '90d'], limit = 2000, sourceOverride, inlineEnrich = false } = options
   const startTime = Date.now()
   const platform = sourceOverride || connector.platform
   const periods: FetchResult['periods'] = {}

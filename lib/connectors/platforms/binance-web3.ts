@@ -80,7 +80,7 @@ export class BinanceWeb3Connector extends BaseConnector {
     const allTraders: TraderSource[] = []
 
     for (const chain of CHAINS) {
-      const maxPages = 6
+      const maxPages = 40
       for (let page = 1; page <= maxPages; page++) {
         try {
           const url = `https://web3.binance.com/bapi/defi/v1/public/wallet-direct/market/leaderboard/query?chainId=${chain.id}&period=${period}&tag=ALL&pageNo=${page}&pageSize=25`

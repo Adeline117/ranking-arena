@@ -96,7 +96,7 @@ export class DydxPerpConnector extends BaseConnector {
     return `https://indexer.dydx.trade${path}${query}`
   }
 
-  async discoverLeaderboard(window: Window, limit = 100, _offset = 0): Promise<DiscoverResult> {
+  async discoverLeaderboard(window: Window, limit = 2000, _offset = 0): Promise<DiscoverResult> {
     // dYdX indexer /v4/leaderboard/pnl returns 404 globally since ~2026-03.
     // Use Copin API as primary data source for trader discovery.
     const statisticType = window === '7d' ? 'WEEK' : 'MONTH'

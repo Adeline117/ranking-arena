@@ -32,7 +32,7 @@ export class CoinexFuturesConnector extends BaseConnector {
     notes: ['No 90d window', 'No timeseries endpoint'],
   }
 
-  async discoverLeaderboard(window: Window, limit = 50, offset = 0): Promise<DiscoverResult> {
+  async discoverLeaderboard(window: Window, limit = 2000, offset = 0): Promise<DiscoverResult> {
     // CoinEx does not support 90d
     if (window === '90d') {
       return {

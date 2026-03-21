@@ -64,7 +64,7 @@ export class DriftPerpConnector extends BaseConnector {
     _offset: number = 0
   ): Promise<DiscoverResult> {
     const pageSize = 100
-    const maxPages = Math.ceil(Math.min(limit, 500) / pageSize)
+    const maxPages = Math.ceil(Math.min(limit, 2000) / pageSize)
     const allTraders: TraderSource[] = []
 
     // Build date range for 7D/30D
