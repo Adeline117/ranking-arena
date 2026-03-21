@@ -301,6 +301,13 @@ export class GainsPerpConnector extends BaseConnector {
         roi = Math.max(-500, Math.min(10000, (pnl / totalCapital) * 100))
       }
     }
+    // Fallback 3: ROI from totalPnl / totalVolume (Gains leaderboard may include volume)
+    if (roi === null && pnl != null) {
+      const volume = this.num(raw.totalVolume ?? raw.total_volume ?? raw.volume ?? raw.totalCollateral)
+      if (volume != null && volume > 0) {
+        roi = Math.max(-500, Math.min(10000, (pnl / volume) * 100))
+      }
+    }
 
     // MDD approximation from avg_loss, count_loss, avg_win, count_win
     // Estimated peak equity = total winnings = avg_win * count_win
