@@ -37,19 +37,22 @@ export class PolymarketPredictionConnector extends BaseConnector {
     ],
   }
 
-  async discoverLeaderboard(window: Window, limit = 200, offset = 0): Promise<DiscoverResult> {
+  async discoverLeaderboard(window: Window, limit = 100, offset = 0): Promise<DiscoverResult> {
     const periodMap: Record<Window, string> = {
       '7d': 'WEEK',
       '30d': 'MONTH',
       '90d': 'ALL', // No 90d, use ALL as closest
     }
 
+    // Cap at 100 to avoid DB write timeout (global default is 2000 but Polymarket
+    // has complex upserts that timeout on Supabase with >200 rows)
+    const effectiveLimit = Math.min(limit, 100)
     const allTraders: TraderSource[] = []
     let currentOffset = offset
     const maxOffset = 1000
-    const pageSize = Math.min(limit, 50) // Keep batches small to avoid DB write timeout
+    const pageSize = Math.min(effectiveLimit, 50)
 
-    while (currentOffset <= maxOffset && allTraders.length < limit) {
+    while (currentOffset <= maxOffset && allTraders.length < effectiveLimit) {
       const batchLimit = Math.min(pageSize, limit - allTraders.length)
       if (batchLimit <= 0) break
 
