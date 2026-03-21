@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState, useEffect, useRef, memo, useCallback, useTransition, useMemo, useDeferredValue } from 'react'
+import React, { useState, useEffect, useRef, memo, useCallback, useMemo, useDeferredValue } from 'react'
 import Link from 'next/link'
 import { useLoginModal } from '@/lib/hooks/useLoginModal'
 import { tokens } from '@/lib/design-tokens'
@@ -118,7 +118,6 @@ function RankingTableInner(props: {
   // Load ranking-table.css asynchronously (animations, hover effects)
   useRankingTableStyles()
 
-  const [isSortPending, startTransition] = useTransition()
 
   const [internalPage, setInternalPage] = useState(1)
   const [showRules, setShowRules] = useState(false)
@@ -263,17 +262,15 @@ function RankingTableInner(props: {
     setJustSortedColumn(col)
     setSortAnimationKey(prev => prev + 1)
     setTimeout(() => setJustSortedColumn(null), 400)
-    startTransition(() => {
-      if (onSortChange) { onSortChange(col, newDir) }
-      else { setInternalSortColumn(col); setInternalSortDir(newDir) }
-      setCurrentPage(1)
-    })
+    if (onSortChange) { onSortChange(col, newDir) }
+    else { setInternalSortColumn(col); setInternalSortDir(newDir) }
+    setCurrentPage(1)
   }
 
   const _handleSearchInput = (value: string) => {
     if (onSearchChange) onSearchChange(value)
     else setInternalSearchQuery(value)
-    startTransition(() => { setCurrentPage(1) })
+    setCurrentPage(1)
   }
 
   const hasStyleData = React.useMemo(
@@ -619,21 +616,6 @@ function RankingTableInner(props: {
               display: 'flex', flexDirection: 'column', gap: 0, position: 'relative', contain: 'layout style paint',
             }}
           >
-            {isSortPending && (
-              <Box style={{
-                position: 'absolute', inset: 0, zIndex: 10,
-                background: 'var(--color-bg-overlay, rgba(11,10,16,0.7))',
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                borderRadius: tokens.radius.md,
-                pointerEvents: 'none',
-              }}>
-                <Box style={{
-                  width: 24, height: 24, border: `2px solid ${tokens.colors.accent.primary}`,
-                  borderTopColor: 'transparent', borderRadius: '50%',
-                  animation: 'spin 0.6s linear infinite',
-                }} />
-              </Box>
-            )}
             {paginatedTraders.map((trader, idx) => {
               const rank = startIndex + idx + 1
               return (

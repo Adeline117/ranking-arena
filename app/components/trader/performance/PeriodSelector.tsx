@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useRef, useState, useCallback, useTransition } from 'react'
+import { useEffect, useRef, useState, useCallback } from 'react'
 import { getLocaleFromLanguage } from '@/lib/utils/format'
 import { tokens } from '@/lib/design-tokens'
 import { Box, Text } from '../../base'
@@ -39,7 +39,6 @@ export function PeriodSelector({ period, onPeriodChange, source, lastUpdated }: 
   const setGlobalPeriod = usePeriodStore(s => s.setPeriod)
   const containerRef = useRef<HTMLDivElement>(null)
   const [indicatorStyle, setIndicatorStyle] = useState<{ left: number; width: number } | null>(null)
-  const [isPending, startTransition] = useTransition()
 
   // Sliding indicator: measure active button position.
   // Use rAF to defer the layout read (offsetLeft/offsetWidth) out of the commit phase.
@@ -184,7 +183,7 @@ export function PeriodSelector({ period, onPeriodChange, source, lastUpdated }: 
             return (
               <button
                 key={p}
-                onClick={() => { if (!isDisabled) startTransition(() => onPeriodChange(p)) }}
+                onClick={() => { if (!isDisabled) onPeriodChange(p) }}
                 disabled={isDisabled}
                 style={{
                   padding: `${tokens.spacing[2]} ${tokens.spacing[4]}`,
