@@ -1,13 +1,12 @@
 /* ============================================
-   Arena UI - Global Animation System
-   全局动画系统 - 玻璃质感 + 渐变风格
+   Arena UI - Animation System (pruned)
+   16 used keyframes only — 20 unused removed
    ============================================ */
 
 /* ============================================
-   1. 基础关键帧动画
+   1. Keyframes — USED ONLY
    ============================================ */
 
-/* Fade 系列 */
 @keyframes fadeIn {
   from { opacity: 0; }
   to { opacity: 1; }
@@ -19,188 +18,43 @@
 }
 
 @keyframes fadeInUp {
-  from {
-    opacity: 0;
-    transform: translateY(20px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
+  from { opacity: 0; transform: translateY(20px); }
+  to { opacity: 1; transform: translateY(0); }
 }
 
 @keyframes fadeInDown {
-  from {
-    opacity: 0;
-    transform: translateY(-20px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
+  from { opacity: 0; transform: translateY(-20px); }
+  to { opacity: 1; transform: translateY(0); }
 }
 
-@keyframes fadeInLeft {
-  from {
-    opacity: 0;
-    transform: translateX(-20px);
-  }
-  to {
-    opacity: 1;
-    transform: translateX(0);
-  }
-}
-
-@keyframes fadeInRight {
-  from {
-    opacity: 0;
-    transform: translateX(20px);
-  }
-  to {
-    opacity: 1;
-    transform: translateX(0);
-  }
-}
-
-/* Scale 系列 */
 @keyframes scaleIn {
-  from {
-    opacity: 0;
-    transform: scale(0.9);
-  }
-  to {
-    opacity: 1;
-    transform: scale(1);
-  }
+  from { opacity: 0; transform: scale(0.9); }
+  to { opacity: 1; transform: scale(1); }
 }
 
 @keyframes scaleOut {
-  from {
-    opacity: 1;
-    transform: scale(1);
-  }
-  to {
-    opacity: 0;
-    transform: scale(0.9);
-  }
-}
-
-@keyframes scaleInBounce {
-  0% {
-    opacity: 0;
-    transform: scale(0.3);
-  }
-  50% {
-    opacity: 1;
-    transform: scale(1.05);
-  }
-  70% {
-    transform: scale(0.95);
-  }
-  100% {
-    transform: scale(1);
-  }
-}
-
-/* Slide 系列 */
-@keyframes slideInUp {
-  from {
-    opacity: 0;
-    transform: translateY(100%);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
-@keyframes slideInDown {
-  from {
-    opacity: 0;
-    transform: translateY(-100%);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
-@keyframes slideInLeft {
-  from {
-    opacity: 0;
-    transform: translateX(-100%);
-  }
-  to {
-    opacity: 1;
-    transform: translateX(0);
-  }
+  from { opacity: 1; transform: scale(1); }
+  to { opacity: 0; transform: scale(0.9); }
 }
 
 @keyframes slideInRight {
-  from {
-    opacity: 0;
-    transform: translateX(100%);
-  }
-  to {
-    opacity: 1;
-    transform: translateX(0);
-  }
+  from { opacity: 0; transform: translateX(100%); }
+  to { opacity: 1; transform: translateX(0); }
 }
 
 @keyframes slideOutUp {
-  from {
-    opacity: 1;
-    transform: translateY(0);
-  }
-  to {
-    opacity: 0;
-    transform: translateY(-100%);
-  }
+  from { opacity: 1; transform: translateY(0); }
+  to { opacity: 0; transform: translateY(-100%); }
 }
 
-@keyframes slideOutDown {
-  from {
-    opacity: 1;
-    transform: translateY(0);
-  }
-  to {
-    opacity: 0;
-    transform: translateY(100%);
-  }
-}
-
-/* 特效动画 */
 @keyframes pulse {
   0%, 100% { transform: scale(1); }
   50% { transform: scale(1.03); }
 }
 
-@keyframes pulseSoft {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.7; }
-}
-
 @keyframes spin {
   from { transform: rotate(0deg); }
   to { transform: rotate(360deg); }
-}
-
-@keyframes bounce {
-  0%, 20%, 53%, 100% {
-    animation-timing-function: cubic-bezier(0.215, 0.61, 0.355, 1);
-    transform: translateY(0);
-  }
-  40%, 43% {
-    animation-timing-function: cubic-bezier(0.755, 0.05, 0.855, 0.06);
-    transform: translateY(-15px);
-  }
-  70% {
-    animation-timing-function: cubic-bezier(0.755, 0.05, 0.855, 0.06);
-    transform: translateY(-7px);
-  }
-  90% {
-    transform: translateY(-3px);
-  }
 }
 
 @keyframes shake {
@@ -209,63 +63,34 @@
   20%, 40%, 60%, 80% { transform: translateX(5px); }
 }
 
-/* Removed unused keyframe: wiggle */
-
-/* 光泽效果 */
 @keyframes shimmer {
   0% { background-position: -200% 0; }
   100% { background-position: 200% 0; }
 }
 
-@keyframes shimmerFast {
-  0% { background-position: -100% 0; }
-  100% { background-position: 100% 0; }
-}
-
-/* 发光效果 — uses opacity + filter (GPU-composited, no paint layer).
-   box-shadow removed from keyframes: box-shadow triggers paint on every frame,
-   causing non-composited animations (Lighthouse "80 non-composited animations"). */
-@keyframes glow {
-  0%, 100% {
-    filter: drop-shadow(0 0 4px rgba(139, 111, 168, 0.4));
-    opacity: 0.85;
-  }
-  50% {
-    filter: drop-shadow(0 0 8px rgba(139, 111, 168, 0.6));
-    opacity: 1;
-  }
-}
-
-@keyframes glowPulse {
-  0%, 100% {
-    opacity: 0.7;
-    transform: scale(1);
-  }
-  50% {
-    opacity: 1;
-    transform: scale(1.02);
-  }
-}
-
-/* 进度条填充 */
-@keyframes progressFill {
-  from { transform: scaleX(0); transform-origin: left; }
-  to { transform: scaleX(1); transform-origin: left; }
-}
-
-/* Removed unused keyframe: progressStripe */
-
-/* Removed unused keyframes: float, floatSoft, countUp, typing, breathe, borderRotate */
-
-/* 骨架屏闪烁 */
 @keyframes skeletonPulse {
   0% { background-color: rgba(255, 255, 255, 0.05); }
   50% { background-color: rgba(255, 255, 255, 0.1); }
   100% { background-color: rgba(255, 255, 255, 0.05); }
 }
 
+@keyframes modalSlideUp {
+  from { opacity: 0; transform: translateY(20px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes shareDropdownIn {
+  from { opacity: 0; transform: translateY(-4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes ripple {
+  from { transform: scale(0); opacity: 0.5; }
+  to { transform: scale(4); opacity: 0; }
+}
+
 /* ============================================
-   2. 页面过渡动画类
+   2. Page transitions
    ============================================ */
 
 .page-enter {
@@ -280,16 +105,8 @@
   animation: scaleIn 0.35s cubic-bezier(0.4, 0, 0.2, 1) forwards;
 }
 
-.page-slide-in {
-  animation: slideInRight 0.35s cubic-bezier(0.4, 0, 0.2, 1) forwards;
-}
-
-.page-slide-in-left {
-  animation: slideInLeft 0.35s cubic-bezier(0.4, 0, 0.2, 1) forwards;
-}
-
 /* ============================================
-   3. 卡片效果类
+   3. Card effects
    ============================================ */
 
 .card-hover-lift {
@@ -320,14 +137,8 @@
   border-color: rgba(139, 111, 168, 0.3);
 }
 
-.card-enter {
-  animation: fadeInScale 0.4s cubic-bezier(0.4, 0, 0.2, 1) forwards;
-}
-
-/* Removed unused class: .card-float (floatSoft keyframe removed) */
-
 /* ============================================
-   4. 按钮交互类
+   4. Button interactions
    ============================================ */
 
 .btn-press {
@@ -338,10 +149,6 @@
   transform: scale(0.96);
 }
 
-.btn-bounce:active {
-  animation: scaleInBounce 0.4s cubic-bezier(0.4, 0, 0.2, 1);
-}
-
 .btn-glow {
   transition: box-shadow 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
@@ -350,7 +157,7 @@
   box-shadow: 0 0 20px rgba(139, 111, 168, 0.4);
 }
 
-/* 涟漪效果 */
+/* Ripple effect */
 .ripple-container {
   position: relative;
   overflow: hidden;
@@ -377,10 +184,9 @@
 }
 
 /* ============================================
-   5. 列表动画类
+   5. List animations
    ============================================ */
 
-/* 列表项悬停 */
 .list-item-hover {
   transition: background-color 0.25s cubic-bezier(0.4, 0, 0.2, 1), transform 0.25s cubic-bezier(0.4, 0, 0.2, 1);
 }
@@ -390,7 +196,6 @@
   transform: translateX(4px);
 }
 
-/* 列表项带边框指示器 */
 .list-item-indicator {
   position: relative;
   transition: background-color 0.25s cubic-bezier(0.4, 0, 0.2, 1), color 0.25s cubic-bezier(0.4, 0, 0.2, 1);
@@ -417,7 +222,7 @@
   background: rgba(139, 111, 168, 0.03);
 }
 
-/* 交错入场 */
+/* Stagger children */
 .stagger-children > * {
   opacity: 0;
   animation: fadeInUp 0.4s cubic-bezier(0.4, 0, 0.2, 1) forwards;
@@ -433,7 +238,6 @@
 .stagger-children > *:nth-child(8) { animation-delay: 0.4s; }
 .stagger-children > *:nth-child(n+9) { animation-delay: 0.45s; }
 
-/* 快速交错 */
 .stagger-fast > * {
   opacity: 0;
   animation: fadeInUp 0.3s cubic-bezier(0.4, 0, 0.2, 1) forwards;
@@ -447,12 +251,9 @@
 .stagger-fast > *:nth-child(n+6) { animation-delay: 0.18s; }
 
 /* ============================================
-   6. 玻璃质感效果 - Theme-aware
+   6. Glass effects (theme-aware)
    ============================================ */
 
-/* backdrop-filter removed from all glass classes for performance.
-   Each blur() creates a separate compositor layer (~3-5ms per element on mobile).
-   Solid backgrounds with opacity achieve the same visual effect at zero GPU cost. */
 .glass {
   background: var(--glass-bg-primary);
   border: 1px solid var(--glass-border-light);
@@ -487,13 +288,12 @@
   box-shadow: 0 20px 40px rgba(0, 0, 0, 0.2);
 }
 
-/* Light mode specific overrides for glass effects */
 [data-theme='light'] .glass-card-hover:hover {
   box-shadow: 0 20px 40px rgba(0, 0, 0, 0.08);
 }
 
 /* ============================================
-   7. 渐变效果
+   7. Gradient text
    ============================================ */
 
 .gradient-text {
@@ -503,14 +303,10 @@
   background-clip: text;
 }
 
-/* Removed unused gradient classes: .gradient-text-success, .gradient-text-error,
-   .gradient-border, .gradient-bg-mesh (no TSX references found) */
-
 /* ============================================
-   8. 骨架屏效果
+   8. Skeleton loading
    ============================================ */
 
-/* 背景样式由组件内联样式控制，避免 background 简写与 backgroundSize 冲突 */
 .skeleton {
   animation: shimmer 1.5s infinite;
   border-radius: 4px;
@@ -542,7 +338,7 @@
 }
 
 /* ============================================
-   9. 加载动画
+   9. Loading spinners
    ============================================ */
 
 .spinner {
@@ -566,26 +362,8 @@
   border-width: 4px;
 }
 
-/* 三点加载 */
-.dots-loading {
-  display: flex;
-  gap: 4px;
-}
-
-.dots-loading span {
-  width: 6px;
-  height: 6px;
-  background: var(--color-brand);
-  border-radius: 50%;
-  animation: bounce 1.4s ease-in-out infinite;
-}
-
-.dots-loading span:nth-child(1) { animation-delay: 0s; }
-.dots-loading span:nth-child(2) { animation-delay: 0.2s; }
-.dots-loading span:nth-child(3) { animation-delay: 0.4s; }
-
 /* ============================================
-   10. Toast 通知动画
+   10. Toast notifications
    ============================================ */
 
 .toast-enter {
@@ -596,15 +374,8 @@
   animation: slideOutUp 0.25s cubic-bezier(0.4, 0, 0.2, 1) forwards;
 }
 
-.toast-progress {
-  height: 3px;
-  background: linear-gradient(90deg, var(--color-brand), var(--color-pro-gradient-end));
-  animation: progressFill 3s linear forwards;
-  transform-origin: left;
-}
-
 /* ============================================
-   11. Modal 弹窗动画
+   11. Modal animations
    ============================================ */
 
 .modal-overlay-enter {
@@ -632,7 +403,7 @@
 }
 
 /* ============================================
-   12. 下拉菜单动画
+   12. Dropdown animations
    ============================================ */
 
 .dropdown-enter {
@@ -654,7 +425,7 @@
 }
 
 /* ============================================
-   13. 输入框动画
+   13. Input animations
    ============================================ */
 
 .input-focus-glow {
@@ -666,8 +437,6 @@
   box-shadow: 0 0 0 3px rgba(139, 111, 168, 0.15);
 }
 
-/* Floating label: use transform instead of top/left/font-size.
-   top, left, font-size all trigger layout (non-composited). transform is GPU-composited. */
 .input-label-float {
   position: absolute;
   left: 12px;
@@ -681,7 +450,6 @@
 
 .input-label-float.active,
 input:focus + .input-label-float {
-  /* Move label up using transform (composited) instead of top/left/font-size changes */
   transform: translateY(-180%) scale(0.75);
   background: var(--color-bg-primary);
   padding: 0 4px;
@@ -689,7 +457,7 @@ input:focus + .input-label-float {
 }
 
 /* ============================================
-   14. Tooltip 动画
+   14. Tooltip
    ============================================ */
 
 .tooltip-enter {
@@ -701,30 +469,20 @@ input:focus + .input-label-float {
 }
 
 /* ============================================
-   15. 特殊效果
+   15. Special effects
    ============================================ */
 
-/* 闪烁提示 */
-.blink {
-  animation: pulseSoft 1s ease-in-out infinite;
-}
-
-/* Removed unused: .number-change (countUp removed), .success-check (no references) */
-
-/* 错误摇晃 */
 .error-shake {
   animation: shake 0.5s ease-in-out;
 }
 
-/* 高亮效果 */
-.highlight-pulse {
-  animation: glowPulse 2s ease-in-out infinite;
+/* Component mount fade-in */
+.fade-in {
+  animation: fadeIn 0.25s ease-out both;
 }
 
-/* Removed unused: .price-up, .price-down (no TSX references) */
-
 /* ============================================
-   16. 无障碍：减少动效
+   16. Accessibility: reduced motion
    ============================================ */
 
 @media (prefers-reduced-motion: reduce) {
@@ -736,30 +494,22 @@ input:focus + .input-label-float {
     transition-duration: 0.01ms !important;
     scroll-behavior: auto !important;
   }
-  
-  .card-float,
-  .highlight-pulse,
-  .blink {
-    animation: none !important;
-  }
 }
 
 /* ============================================
-   17. 响应式动画调整
+   17. Responsive animation adjustments
    ============================================ */
 
 @media (max-width: 768px) {
-  /* 移动端使用更快的动画 */
   .page-enter,
   .card-enter {
     animation-duration: 0.25s;
   }
-  
+
   .stagger-children > * {
     animation-duration: 0.25s;
   }
-  
-  /* 禁用复杂悬停效果 */
+
   .card-hover-lift:hover,
   .card-hover-scale:hover {
     transform: none;
@@ -767,143 +517,22 @@ input:focus + .input-label-float {
 }
 
 /* ============================================
-   Migrated from globals.css (2026-03-19)
-   Non-critical interaction animations
+   Stagger fade (prefers-reduced-motion aware)
    ============================================ */
-
-@keyframes pageSlideIn {
-  from {
-    opacity: 0;
-    transform: translateX(-12px);
-  }
-  to {
-    opacity: 1;
-    transform: translateX(0);
-  }
-}
-
-@keyframes modalFadeIn {
-  from { opacity: 0; }
-  to { opacity: 1; }
-}
-
-@keyframes modalSlideUp {
-  from { opacity: 0; transform: translateY(20px); }
-  to { opacity: 1; transform: translateY(0); }
-}
-
-@keyframes shareDropdownIn {
-  from { opacity: 0; transform: translateY(-4px); }
-  to { opacity: 1; transform: translateY(0); }
-}
-
-@keyframes ripple {
-  from {
-    transform: scale(0);
-    opacity: 0.5;
-  }
-  to {
-    transform: scale(4);
-    opacity: 0;
-  }
-}
-
-@keyframes toastSlideIn {
-  from {
-    transform: translateX(100%);
-    opacity: 0;
-  }
-  to {
-    transform: translateX(0);
-    opacity: 1;
-  }
-}
-
-@keyframes toastSlideInTop {
-  from {
-    transform: translateY(-100%) scale(0.95);
-    opacity: 0;
-  }
-  to {
-    transform: translateY(0) scale(1);
-    opacity: 1;
-  }
-}
-
-@keyframes modalOverlayIn {
-  from { opacity: 0; }
-  to { opacity: 1; }
-}
-
-@keyframes modalContentIn {
-  from {
-    opacity: 0;
-    transform: scale(0.95) translateY(8px);
-  }
-  to {
-    opacity: 1;
-    transform: scale(1) translateY(0);
-  }
-}
-
-@keyframes modalContentOut {
-  from {
-    opacity: 1;
-    transform: scale(1) translateY(0);
-  }
-  to {
-    opacity: 0;
-    transform: scale(0.95) translateY(8px);
-  }
-}
-
-/* Page transition classes */
-.page-slide-in {
-  animation: pageSlideIn 0.25s ease-out forwards;
-}
-
-/* Toast slide-in from top with spring easing */
-.toast-slide-in-top {
-  animation: toastSlideInTop 300ms cubic-bezier(0.175, 0.885, 0.32, 1.275) both;
-}
-
-/* Modal overlay + content animations */
-.modal-overlay-anim {
-  animation: modalOverlayIn 200ms ease both;
-}
-
-.modal-content-anim {
-  animation: modalContentIn 250ms cubic-bezier(0.175, 0.885, 0.32, 1.275) both;
-}
-
-/* Component mount fade-in */
-.fade-in {
-  animation: fadeIn 0.25s ease-out both;
-}
-
-/* Stagger children fade-in with nth-child delay */
 @media (prefers-reduced-motion: no-preference) {
-  .stagger-enter > * {
-    opacity: 0;
-    animation: pageEnter 0.3s ease-out both;
-    animation-delay: calc(var(--stagger-index, 0) * 20ms);
-  }
-
-  .stagger-fade > *:nth-child(1) { animation: pageEnter 0.3s ease-out 0ms both; }
-  .stagger-fade > *:nth-child(2) { animation: pageEnter 0.3s ease-out 40ms both; }
-  .stagger-fade > *:nth-child(3) { animation: pageEnter 0.3s ease-out 80ms both; }
-  .stagger-fade > *:nth-child(4) { animation: pageEnter 0.3s ease-out 120ms both; }
-  .stagger-fade > *:nth-child(5) { animation: pageEnter 0.3s ease-out 160ms both; }
-  .stagger-fade > *:nth-child(6) { animation: pageEnter 0.3s ease-out 200ms both; }
-  .stagger-fade > *:nth-child(7) { animation: pageEnter 0.3s ease-out 240ms both; }
-  .stagger-fade > *:nth-child(8) { animation: pageEnter 0.3s ease-out 280ms both; }
-  .stagger-fade > *:nth-child(n+9) { animation: pageEnter 0.3s ease-out 300ms both; }
   .stagger-fade > * { opacity: 0; }
+  .stagger-fade > *:nth-child(1) { animation: fadeInUp 0.3s ease-out 0ms both; }
+  .stagger-fade > *:nth-child(2) { animation: fadeInUp 0.3s ease-out 40ms both; }
+  .stagger-fade > *:nth-child(3) { animation: fadeInUp 0.3s ease-out 80ms both; }
+  .stagger-fade > *:nth-child(4) { animation: fadeInUp 0.3s ease-out 120ms both; }
+  .stagger-fade > *:nth-child(5) { animation: fadeInUp 0.3s ease-out 160ms both; }
+  .stagger-fade > *:nth-child(6) { animation: fadeInUp 0.3s ease-out 200ms both; }
+  .stagger-fade > *:nth-child(7) { animation: fadeInUp 0.3s ease-out 240ms both; }
+  .stagger-fade > *:nth-child(8) { animation: fadeInUp 0.3s ease-out 280ms both; }
+  .stagger-fade > *:nth-child(n+9) { animation: fadeInUp 0.3s ease-out 300ms both; }
 }
 
-/* No stagger animation for reduced motion */
 @media (prefers-reduced-motion: reduce) {
-  .stagger-enter > *,
   .stagger-fade > * {
     opacity: 1;
     animation: none;
