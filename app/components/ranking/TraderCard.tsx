@@ -1,4 +1,4 @@
-import React, { memo } from 'react'
+import React, { memo, useCallback } from 'react'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import Link from 'next/link'
 import { tokens } from '@/lib/design-tokens'
@@ -48,8 +48,8 @@ export const TraderCard = memo(function TraderCard({
   const displayName = trader.display_name || formatDisplayName(traderHandle, trader.source || source)
   const sourceInfo = parseSourceInfo(trader.source || source || '')
 
-  const isSelected = useComparisonStore(s => s.isSelected(trader.id))
-  const canAddMore = useComparisonStore(s => s.selectedTraders.length < 5)
+  const isSelected = useComparisonStore(useCallback(s => s.isSelected(trader.id), [trader.id]))
+  const canAddMore = useComparisonStore(useCallback(s => s.selectedTraders.length < 5, []))
 
   const handleCompareToggle = (e: React.MouseEvent) => {
     e.preventDefault()
