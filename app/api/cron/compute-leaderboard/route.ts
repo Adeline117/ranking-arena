@@ -39,7 +39,11 @@ const logger = createLogger('compute-leaderboard')
 
 const SEASONS: Period[] = ['7D', '30D', '90D']
 const MIN_TRADES_COUNT = 1 // Allow all traders with at least 1 trade (DEX traders may have 1-2 high-quality trades)
-const DEGRADATION_THRESHOLD = 0.85 // 85% — block catastrophic drops only; stale counts still inflated from pre-2026-03-15 accumulation
+// P1-4: Temporarily lowered to 30% to allow data rebuild after VPS import reset (2026-03-21)
+// Previous: 0.85 (85%) — blocked catastrophic drops only
+// Current: 0.30 (30%) — allows leaderboard updates during data rebuild period
+// TODO: Restore to 0.70-0.85 once data stabilizes (estimated: 2026-03-25)
+const DEGRADATION_THRESHOLD = 0.30
 
 // P1-3: ROI anomaly thresholds per period
 const ROI_ANOMALY_THRESHOLDS: Record<Period, number> = {
