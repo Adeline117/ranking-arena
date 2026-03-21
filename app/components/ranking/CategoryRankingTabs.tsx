@@ -5,6 +5,7 @@ import { tokens } from '@/lib/design-tokens'
 import { Box } from '../base'
 import { useLanguage } from '../Providers/LanguageProvider'
 import { useToast } from '../ui/Toast'
+import { PLATFORM_CATEGORY } from '@/lib/types/leaderboard'
 
 export type CategoryType = 'all' | 'futures' | 'spot' | 'web3'
 
@@ -139,70 +140,34 @@ export default function CategoryRankingTabs({
   )
 }
 
-// Onchain 平台列表（与 PLATFORM_CATEGORY 保持同步）
-const ONCHAIN_PLATFORMS = [
-  'gmx', 'dydx', 'hyperliquid', 'gains',
-  'aevo', 'jupiter_perps',
-  'binance_web3', 'okx_web3', 'okx_wallet',
-  'dune_gmx', 'dune_hyperliquid', 'dune_uniswap', 'dune_defi',
-]
-
-// 过滤函数
-export function filterByCategory(source: string, category: CategoryType): boolean {
-  if (category === 'all') return true
-
-  const sourceLower = source.toLowerCase()
-
-  switch (category) {
-    case 'futures':
-      return sourceLower.includes('futures') ||
-             sourceLower === 'bybit' ||
-             sourceLower === 'mexc' ||
-             sourceLower === 'coinex' ||
-             sourceLower === 'kucoin' ||
-             sourceLower === 'weex' ||
-             sourceLower === 'bingx' ||
-             sourceLower === 'gateio' ||
-             sourceLower === 'xt' ||
-             sourceLower === 'lbank' ||
-             sourceLower === 'blofin' ||
-             sourceLower === 'bitmart' ||
-             sourceLower === 'phemex'
-    case 'spot':
-      return sourceLower.includes('spot') ||
-             sourceLower === 'dune_uniswap'
-    case 'web3':
-      return sourceLower.includes('web3') ||
-             sourceLower.includes('wallet') ||
-             sourceLower.startsWith('dune_') ||
-             ONCHAIN_PLATFORMS.includes(sourceLower)
-    default:
-      return true
-  }
+// CategoryType → TradingCategory 映射
+const CATEGORY_TO_TRADING: Record<Exclude<CategoryType, 'all'>, string> = {
+  futures: 'futures',
+  spot: 'spot',
+  web3: 'onchain',
 }
 
-// 获取分类的来源列表
-export function getSourcesForCategory(category: CategoryType): string[] {
-  switch (category) {
-    case 'futures':
-      return [
-        'binance_futures', 'bybit', 'bitget_futures', 'mexc', 'htx_futures',
-        'coinex', 'kucoin', 'weex', 'okx_futures', 'phemex', 'bitmart',
-        'bingx', 'gateio', 'xt', 'lbank', 'blofin', 'toobit', 'btcc', 'bitunix', 'etoro'
-      ]
-    case 'spot':
-      return ['binance_spot', 'bybit_spot', 'okx_spot', 'bitget_spot', 'bingx_spot', 'dune_uniswap']
-    case 'web3':
-      return [
-        // CEX Web3 钱包
-        'binance_web3', 'okx_web3', 'okx_wallet',
-        // DEX/链上永续合约
-        'gmx', 'dydx', 'hyperliquid', 'gains', 'kwenta', 'aevo', 'drift', 'jupiter_perps',
-        // Dune 链上数据
-        'dune_gmx', 'dune_hyperliquid', 'dune_uniswap', 'dune_defi'
-      ]
-    case 'all':
-    default:
-      return []
+// 从 PLATFORM_CATEGORY 构建分类平台集合（唯一真实来源）
+const _categoryPlatformSets = (() => {
+  const sets: Record<string, Set<string>> = { futures: new Set(), spot: new Set(), onchain: new Set() }
+  for (const [platform, cat] of Object.entries(PLATFORM_CATEGORY)) {
+    sets[cat]?.add(platform)
   }
+  return sets
+})()
+
+// 过滤函数 — 使用 PLATFORM_CATEGORY 作为唯一真实来源
+export function filterByCategory(source: string, category: CategoryType): boolean {
+  if (category === 'all') return true
+  const tradingCat = CATEGORY_TO_TRADING[category]
+  if (!tradingCat) return true
+  return _categoryPlatformSets[tradingCat]?.has(source.toLowerCase()) ?? false
+}
+
+// 获取分类的来源列表 — 从 PLATFORM_CATEGORY 动态生成
+export function getSourcesForCategory(category: CategoryType): string[] {
+  if (category === 'all') return []
+  const tradingCat = CATEGORY_TO_TRADING[category]
+  if (!tradingCat) return []
+  return Array.from(_categoryPlatformSets[tradingCat] ?? [])
 }
