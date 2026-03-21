@@ -45,7 +45,7 @@ const PLATFORM_LIMITS: Record<string, { limit90: number; limit30: number; limit7
   gmx: { limit90: 200, limit30: 200, limit7: 200 },
   gateio: { limit90: 200, limit30: 200, limit7: 200 },
   // Medium CEX
-  bitget_futures: { limit90: 50, limit30: 50, limit7: 50 },
+  bitget_futures: { limit90: 200, limit30: 200, limit7: 200 },
   mexc: { limit90: 150, limit30: 150, limit7: 150 },
   btcc: { limit90: 50, limit30: 50, limit7: 50 },
   phemex: { limit90: 80, limit30: 80, limit7: 80 },
