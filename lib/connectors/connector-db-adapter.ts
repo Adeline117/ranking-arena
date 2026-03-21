@@ -269,33 +269,33 @@ export async function runConnectorBatch(
 
   let anySaved = false
 
-  // Fetch all windows in parallel — rate limiter handles per-platform concurrency
-  const windowResults = await Promise.allSettled(
-    windows.map(async (window) => {
-      const windowUpper = window.toUpperCase()
-      try {
-        // Fetch leaderboard for this window
-        const result = await connector.discoverLeaderboard(
-          window as '7d' | '30d' | '90d',
-          limit
-        )
+  // Fetch windows sequentially to avoid concurrent upsert deadlocks (40P01)
+  // and statement timeouts (57014) on shared tables (traders, trader_snapshots_v2)
+  const windowResults: Array<PromiseSettledResult<{ windowUpper: string; writeResult?: AdapterResult; error?: string }>> = []
+  for (const window of windows) {
+    const windowUpper = window.toUpperCase()
+    try {
+      // Fetch leaderboard for this window
+      const result = await connector.discoverLeaderboard(
+        window as '7d' | '30d' | '90d',
+        limit
+      )
 
-        // Write to DB
-        const writeResult = await writeDiscoverResult(connector, result, {
-          ...options,
-          supabase: supabase || undefined,
-        })
+      // Write to DB
+      const writeResult = await writeDiscoverResult(connector, result, {
+        ...options,
+        supabase: supabase || undefined,
+      })
 
-        return { windowUpper, writeResult }
-      } catch (err) {
-        const errMsg = err instanceof Error ? err.message : String(err)
-        dataLogger.error(`[${platform}] Failed to fetch ${windowUpper}: ${errMsg}`)
-        return { windowUpper, error: errMsg }
-      }
-    })
-  )
+      windowResults.push({ status: 'fulfilled', value: { windowUpper, writeResult } })
+    } catch (err) {
+      const errMsg = err instanceof Error ? err.message : String(err)
+      dataLogger.error(`[${platform}] Failed to fetch ${windowUpper}: ${errMsg}`)
+      windowResults.push({ status: 'fulfilled', value: { windowUpper, error: errMsg } })
+    }
+  }
 
-  // Collect results from parallel execution
+  // Collect results from sequential execution
   for (const settled of windowResults) {
     if (settled.status === 'rejected') continue
     const { windowUpper, writeResult, error } = settled.value as {
