@@ -184,6 +184,7 @@ export {
 export {
   fetchBitfinexEquityCurve,
   fetchBitfinexStatsDetail,
+  fetchBitfinexRoi,
 } from './enrichment-bitfinex'
 
 // BloFin

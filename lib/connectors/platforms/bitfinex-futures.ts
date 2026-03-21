@@ -44,7 +44,7 @@ export class BitfinexFuturesConnector extends BaseConnector {
     platform: 'bitfinex',
     market_types: ['futures'],
     native_windows: ['7d', '30d'],
-    available_fields: ['pnl', 'platform_rank'],
+    available_fields: ['roi', 'pnl', 'platform_rank'],
     has_timeseries: false,
     has_profiles: false,
     scraping_difficulty: 1,
@@ -72,7 +72,7 @@ export class BitfinexFuturesConnector extends BaseConnector {
     // Step 1: Fetch all ranking data into lookup maps
     // plu = inception unrealized profit (equity proxy for ROI estimation)
     // plu_diff = PnL change in USD (per period)
-    // plr = PnL ratio ranking (proprietary scoring metric, NOT usable as ROI%)
+    // plr = PnL ratio (profit/loss ratio, used as ROI% fallback when equity unavailable)
     const equityMap = new Map<string, number>()
     const pnlMap = new Map<string, number>()
     const rankMap = new Map<string, { username: string; rank: number; key: string }>()
@@ -114,7 +114,9 @@ export class BitfinexFuturesConnector extends BaseConnector {
       if (equityMap.size === 0) throw err
     }
 
-    // Fetch plr (PnL ratio ranking) — used only for discovery of additional traders
+    // Fetch plr (PnL ratio) — value is the actual profit/loss ratio (e.g., 0.15 = 15% ROI)
+    // Used for discovery of additional traders AND as ROI fallback when equity is unavailable
+    const plrMap = new Map<string, number>()
     try {
       const plrRows = await this.request<BitfinexRow[]>(
         `https://api-pub.bitfinex.com/v2/rankings/plr:${timeframe}:tGLOBAL:USD/hist`
@@ -123,6 +125,9 @@ export class BitfinexFuturesConnector extends BaseConnector {
         for (const row of plrRows) {
           if (Array.isArray(row) && row[2]) {
             const id = String(row[2]).toLowerCase()
+            if (row[6] != null) {
+              plrMap.set(id, Number(row[6]))
+            }
             if (!rankMap.has(id)) {
               rankMap.set(id, { username: String(row[2]), rank: Number(row[3]) || 0, key: 'plr' })
             }
@@ -137,17 +142,17 @@ export class BitfinexFuturesConnector extends BaseConnector {
     for (const [id, info] of rankMap) {
       const pnl = pnlMap.get(id) ?? 0
       const equity = equityMap.get(id)
+      const plrValue = plrMap.get(id)
 
       // Estimate ROI from PnL / equity proxy (lowered threshold from >1 to >0.01)
       let roi: number | null = null
       if (equity != null && Math.abs(equity) > 0.01 && pnl !== 0) {
         roi = Math.max(-500, Math.min(50000, (pnl / Math.abs(equity)) * 100))
       }
-      // Fallback: if equity is missing but we have PnL, use plr ranking position
-      // to approximate ROI (plr = PnL ratio ranking, higher value = higher ROI)
-      if (roi === null && pnl !== 0) {
-        // Use pnl as ROI proxy — for bitfinex the plu_diff IS the period PnL in USD
-        // Without equity we can't compute %, so leave null (enrichment will fill via daily snapshots)
+      // Fallback: use plr (PnL ratio) as ROI — plr value IS the profit/loss ratio
+      // e.g., plr=0.15 means 15% return, plr=-0.05 means -5% return
+      if (roi === null && plrValue != null && plrValue !== 0) {
+        roi = Math.max(-500, Math.min(50000, plrValue * 100))
       }
 
       traderMap.set(id, {
@@ -166,6 +171,7 @@ export class BitfinexFuturesConnector extends BaseConnector {
           key: info.key,
           timeframe,
           equity: equity ?? null,
+          plr: plrValue ?? null,
           roi,
         },
       })
@@ -195,10 +201,18 @@ export class BitfinexFuturesConnector extends BaseConnector {
 
   normalize(raw: unknown): Record<string, unknown> {
     const e = raw as Record<string, unknown>
+
+    // ROI priority: pre-computed roi > derive from plr (PnL ratio)
+    let roi: number | null = e.roi != null ? Number(e.roi) : null
+    if (roi === null && e.plr != null && Number(e.plr) !== 0) {
+      // plr value is the profit/loss ratio (e.g., 0.15 = 15% ROI)
+      roi = Math.max(-500, Math.min(50000, Number(e.plr) * 100))
+    }
+
     return {
       trader_key: e.username ? String(e.username).toLowerCase() : null,
       display_name: e.username ? String(e.username) : null,
-      roi: e.roi != null ? Number(e.roi) : null,
+      roi,
       pnl: e.pnl != null ? Number(e.pnl) : null,
       platform_rank: e.rank != null ? Number(e.rank) : null,
       win_rate: null,

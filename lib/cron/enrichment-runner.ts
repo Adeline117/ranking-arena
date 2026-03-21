@@ -70,6 +70,7 @@ import {
   fetchXtStatsDetail,
   fetchBitfinexEquityCurve,
   fetchBitfinexStatsDetail,
+  fetchBitfinexRoi,
   fetchBlofinEquityCurve,
   fetchBlofinStatsDetail,
   fetchPhemexEquityCurve,
@@ -728,6 +729,9 @@ export async function runEnrichment(params: {
                   if (stats?.maxDrawdown != null) snapshotUpdate.max_drawdown = stats.maxDrawdown
                   if (stats?.totalTrades != null) snapshotUpdate.trades_count = stats.totalTrades
                   if (stats?.sharpeRatio != null) snapshotUpdate.sharpe_ratio = stats.sharpeRatio
+                  // ROI from stats (e.g. Gains native API, Copin totalPnl/totalVolume)
+                  if (stats?.roi != null) snapshotUpdate.roi_pct = stats.roi
+                  if (stats?.pnl != null) snapshotUpdate.pnl_usd ??= stats.pnl
 
                   // Compute from equity curve if stats didn't provide
                   if (curve.length >= 2) {
@@ -781,6 +785,15 @@ export async function runEnrichment(params: {
                         }
                       }
                       if (maxDD > 0) snapshotUpdate.max_drawdown = Math.round(maxDD * 100) / 100
+                    }
+                  }
+
+                  // Bitfinex ROI fallback: compute from rankings data when equity curve is empty
+                  if (platformKey === 'bitfinex' && !snapshotUpdate.roi_pct) {
+                    const windowArg = period === '7D' ? '7d' as const : '30d' as const
+                    const roiFromRankings = await fetchBitfinexRoi(traderId, windowArg)
+                    if (roiFromRankings != null) {
+                      snapshotUpdate.roi_pct = Math.round(roiFromRankings * 100) / 100
                     }
                   }
 

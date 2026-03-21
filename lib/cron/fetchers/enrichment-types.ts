@@ -128,6 +128,9 @@ export interface StatsDetail {
   maxDrawdown: number | null
   currentDrawdown: number | null
   volatility: number | null
+  // ROI (optional, computed from totalPnl / totalVolume when available)
+  roi?: number | null
+  pnl?: number | null
   // 跟单数据
   copiersCount: number | null
   copiersPnl: number | null
