@@ -112,7 +112,7 @@ export default function TopNav({ email = null }: { email?: string | null }) {
                 display: 'flex',
                 alignItems: 'center',
                 gap: '6px',
-                transition: `all ${tokens.transition.base}`,
+                transition: `opacity ${tokens.transition.base}`,
               }}
             >
               <Image

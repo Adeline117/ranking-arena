@@ -26,13 +26,15 @@ body:has(#homepage-interactive) #ssr-homepage-shell {
 
 /* Theme transition - smooth color crossfade.
    Only target html/body and specific layout landmarks (NOT generic tags like
-   section/nav/header which match hundreds of elements → 80 non-composited animations). */
+   section/nav/header which match hundreds of elements → 80 non-composited animations).
+   Note: border-color transition removed — it's a non-composited animation that
+   triggers layout recalculation on every frame. */
 html.theme-transition,
 html.theme-transition > body,
 html.theme-transition .top-nav,
 html.theme-transition .mobile-bottom-nav,
 html.theme-transition #main-content {
-  transition: background-color 0.3s ease, color 0.2s ease, border-color 0.2s ease !important;
+  transition: background-color 0.3s ease, color 0.2s ease !important;
 }
 
 /* View Transition API — circular reveal for theme switch */

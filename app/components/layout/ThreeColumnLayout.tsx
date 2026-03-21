@@ -68,7 +68,7 @@ export default function ThreeColumnLayout({
                 justifyContent: 'center',
                 gap: tokens.spacing[2],
                 minHeight: 44,
-                transition: `all ${tokens.transition.base}`,
+                transition: `background-color ${tokens.transition.base}, color ${tokens.transition.base}, border-color ${tokens.transition.base}`,
               }}
               onMouseEnter={(e) => {
                 if (!widgetsExpanded) {
