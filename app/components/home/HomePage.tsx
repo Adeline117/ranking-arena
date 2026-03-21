@@ -7,7 +7,6 @@ import TopNav from '../layout/TopNav'
 // MobileBottomNav is rendered in root layout.tsx -- do not duplicate here
 import ThreeColumnLayout from '../layout/ThreeColumnLayout'
 const Footer = lazy(() => import('../layout/Footer'))
-import HomeSubNav from './HomeSubNav'
 import FoundingMemberBanner from './FoundingMemberBanner'
 const ExchangePartners = lazy(() => import('./ExchangePartners'))
 const GuestSignupPrompt = lazy(() => import('./GuestSignupPrompt'))
@@ -46,8 +45,7 @@ export default function HomePage({ initialTraders, initialLastUpdated, heroStats
         <div className="contain-content">
           <Suspense fallback={null}><HomeHero traderCount={heroStats?.traderCount} exchangeCount={heroStats?.exchangeCount} /></Suspense>
         </div>
-        <div className="flex-between contain-content" style={{ gap: 8 }}>
-          <HomeSubNav />
+        <div className="contain-content">
           <FoundingMemberBanner />
         </div>
         {/* ExchangePartners fallback: padding:10px*2 + content~26px + border:1px = 47px.

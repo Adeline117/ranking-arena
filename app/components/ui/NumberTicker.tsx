@@ -40,8 +40,20 @@ export default function NumberTicker({
     const el = ref.current
     if (!el) return
 
+    const finalValue = direction === 'down' ? 0 : value
+
+    // Skip animation on slow connections or reduced motion preference — show final value immediately
+    const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches
+    const isSlow = (navigator as { connection?: { effectiveType?: string } }).connection?.effectiveType === '2g'
+      || (navigator as { connection?: { saveData?: boolean } }).connection?.saveData
+
+    if (prefersReducedMotion || isSlow) {
+      el.textContent = formatNumber(finalValue) + suffix
+      return
+    }
+
     // Show final value immediately to avoid blank content during idle wait
-    el.textContent = formatNumber(direction === 'down' ? 0 : value) + suffix
+    el.textContent = formatNumber(finalValue) + suffix
 
     let delayTimer: ReturnType<typeof setTimeout> | null = null
     let rafId: number | null = null
@@ -53,7 +65,7 @@ export default function NumberTicker({
         observer.disconnect()
 
         const startValue = direction === 'down' ? value : 0
-        const endValue = direction === 'down' ? 0 : value
+        const endValue = finalValue
 
         // Defer animation until browser is idle — avoids blocking TBT during LCP window
         const scheduleAnimation = typeof requestIdleCallback !== 'undefined'
@@ -65,7 +77,7 @@ export default function NumberTicker({
           if (el) el.textContent = formatNumber(startValue) + suffix
 
           delayTimer = setTimeout(() => {
-            const duration = 800 // ms
+            const duration = 600 // ms (reduced from 800 to lower TBT)
             const startTime = performance.now()
 
             const tick = (now: number) => {
