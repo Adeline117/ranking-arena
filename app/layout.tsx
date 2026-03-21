@@ -176,7 +176,10 @@ export default function RootLayout({
             Removed hardcoded preload link — the hashed filename (e.g. be2afef9-s.woff2)
             never matched the static path, so this was a wasted network request. */}
 
-        {/* Non-critical CSS loaded via AsyncStylesheets component after hydration */}
+        {/* Non-critical CSS loaded via AsyncStylesheets component after hydration.
+            Inline script below loads responsive.css with media="print" trick for
+            browsers that parse HTML before JS hydrates (faster than requestIdleCallback). */}
+        <script dangerouslySetInnerHTML={{ __html: `(function(){var a=document.createElement('link');a.rel='stylesheet';a.href='/styles/responsive.css';a.media='print';a.onload=function(){a.media='all'};document.head.appendChild(a)})()` }} />
         <noscript>
           {/* eslint-disable-next-line @next/next/no-css-tags -- noscript fallback requires static CSS link tags */}
           <link rel="stylesheet" href="/styles/responsive.css" />
