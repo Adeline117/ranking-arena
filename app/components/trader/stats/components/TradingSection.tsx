@@ -133,7 +133,7 @@ export function TradingSection({
           <Box className="trading-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: tokens.spacing[4] }}>
             <MiniKpi
               label={t('avgHoldingTime')}
-              value={additionalStats?.avgHoldingTime || '--'}
+              value={additionalStats?.avgHoldingTime || NULL_DISPLAY}
             />
             <MiniKpi
               label={t('maxDrawdown')}
@@ -143,7 +143,7 @@ export function TradingSection({
             />
             <MiniKpi
               label={i18nT('trackedSinceLabel')}
-              value={additionalStats?.activeSince || '--'}
+              value={additionalStats?.activeSince || NULL_DISPLAY}
             />
           </Box>
         </Box>

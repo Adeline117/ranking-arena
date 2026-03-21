@@ -169,7 +169,7 @@ function MarketTableInner<T>({
                       borderBottom: `1px solid ${tokens.colors.border.primary}`,
                     }}
                   >
-                    {col.render ? col.render(row, i) : (row as Record<string, unknown>)[col.key] as React.ReactNode ?? '--'}
+                    {col.render ? col.render(row, i) : (row as Record<string, unknown>)[col.key] as React.ReactNode ?? '—'}
                   </td>
                 ))}
               </tr>

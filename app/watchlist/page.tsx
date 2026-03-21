@@ -1,4 +1,5 @@
 import { Metadata } from 'next'
+import { BASE_URL } from '@/lib/constants/urls'
 
 export const metadata: Metadata = {
   title: 'Watchlist | Arena',
@@ -17,7 +18,6 @@ export const metadata: Metadata = {
 
 // Client component handles auth + data fetching
 import WatchlistClient from './WatchlistClient'
-import { BASE_URL } from '@/lib/constants/urls'
 
 export default function WatchlistPage() {
   return <WatchlistClient />

@@ -218,7 +218,7 @@ function BotRow({ bot }: { bot: BotEntry }) {
       <div className="text-right text-sm font-bold tabular-nums" style={{
         color: (m.apy ?? m.roi ?? 0) >= 0 ? 'var(--color-accent-success)' : 'var(--color-accent-error)',
       }}>
-        {m.apy != null ? formatPercent(m.apy) : m.roi != null ? formatPercent(m.roi) : '--'}
+        {m.apy != null ? formatPercent(m.apy) : m.roi != null ? formatPercent(m.roi) : '—'}
       </div>
 
       {/* Volume */}

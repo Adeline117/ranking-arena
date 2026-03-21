@@ -54,7 +54,7 @@ function ScoreBar({ label, score, maxScore, color }: BarProps) {
           color: pct > 60 ? 'white' : (score != null ? color : tokens.colors.text.tertiary),
           textShadow: pct > 60 ? 'var(--text-shadow-sm)' : 'none',
         }}>
-          {score != null ? `${score.toFixed(1)}` : '--'} / {maxScore}
+          {score != null ? `${score.toFixed(1)}` : '—'} / {maxScore}
         </Text>
       </Box>
     </Box>
