@@ -77,6 +77,7 @@ export default function InboxPage() {
                   cursor: 'pointer',
                   transition: `all ${tokens.transition.fast}`,
                   marginBottom: -1,
+                  minHeight: 44,
                 }}
               >
                 {tab.label}

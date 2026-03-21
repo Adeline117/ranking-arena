@@ -516,9 +516,9 @@ export default function LoginPage() {
         {/* Terms */}
         <p style={{ textAlign: 'center', fontSize: 11, color: 'var(--color-text-tertiary)', marginTop: 16, lineHeight: 1.6 }}>
           {t('loginTermsNote')}{' '}
-          <a href="/terms" style={{ color: 'var(--color-brand)', textDecoration: 'none' }}>{t('termsOfService')}</a>
+          <a href="/terms" target="_blank" rel="noopener noreferrer" style={{ color: 'var(--color-brand)', textDecoration: 'none' }}>{t('termsOfService')}</a>
           {' '}{t('loginTermsAnd')}{' '}
-          <a href="/privacy" style={{ color: 'var(--color-brand)', textDecoration: 'none' }}>{t('privacyPolicy')}</a>
+          <a href="/privacy" target="_blank" rel="noopener noreferrer" style={{ color: 'var(--color-brand)', textDecoration: 'none' }}>{t('privacyPolicy')}</a>
         </p>
 
         {/* Error message */}

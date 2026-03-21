@@ -39,6 +39,9 @@ export default function RankingsSubNav() {
               borderBottom: isActive ? '2px solid var(--color-brand)' : '2px solid transparent',
               whiteSpace: 'nowrap',
               transition: `all ${tokens.transition.fast}`,
+              minHeight: 44,
+              display: 'inline-flex',
+              alignItems: 'center',
             }}
           >
             {t(tab.key)}
