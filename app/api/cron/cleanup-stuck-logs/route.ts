@@ -44,6 +44,7 @@ export async function GET(request: NextRequest) {
       .select('id, job_name, started_at')
       .eq('status', 'running')
       .lt('started_at', thirtyMinutesAgo)
+      .is('ended_at', null) // Only fetch truly stuck jobs (not already ended)
       .order('started_at', { ascending: false })
 
     if (fetchError) {
@@ -78,6 +79,7 @@ export async function GET(request: NextRequest) {
       })
       .eq('status', 'running')
       .lt('started_at', thirtyMinutesAgo)
+      .is('ended_at', null) // Only update jobs that haven't ended yet
 
     if (updateError) {
       logger.error('[cleanup-stuck-logs] Failed to update stuck logs', {}, updateError)
