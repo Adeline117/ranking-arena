@@ -4,18 +4,19 @@
  * 防止任务累积影响pipeline健康度
  */
 
-import { createClient } from '@/lib/supabase/client'
+import { getSupabaseAdmin } from '@/lib/supabase/server'
 import { captureMessage } from '@sentry/nextjs'
+import { logger } from '@/lib/logger'
 
 const STUCK_THRESHOLD_HOURS = 2
 const MAX_STUCK_WARNING = 50 // 超过50个stuck任务发送告警
 
 export async function autoCleanupStuckJobs() {
   const startTime = Date.now()
-  console.log('[auto-cleanup-stuck] Starting cleanup...')
+  logger.info('[auto-cleanup-stuck] Starting cleanup...')
   
   try {
-    const supabase = createClient()
+    const supabase = getSupabaseAdmin()
     const thresholdTime = new Date(Date.now() - STUCK_THRESHOLD_HOURS * 60 * 60 * 1000).toISOString()
     
     // 1. 查询stuck任务数量
@@ -30,12 +31,12 @@ export async function autoCleanupStuckJobs() {
       throw new Error(`Count query failed: ${countError.message}`)
     }
     
-    if (stuckCount === 0) {
-      console.log('[auto-cleanup-stuck] ✅ No stuck jobs')
+    if (!stuckCount || stuckCount === 0) {
+      logger.info('[auto-cleanup-stuck] ✅ No stuck jobs')
       return { cleaned: 0, duration: Date.now() - startTime }
     }
     
-    console.log(`[auto-cleanup-stuck] Found ${stuckCount} stuck jobs`)
+    logger.warn(`[auto-cleanup-stuck] Found ${stuckCount} stuck jobs`)
     
     // 2. 如果超过阈值，发送告警
     if (stuckCount > MAX_STUCK_WARNING) {
@@ -80,21 +81,22 @@ export async function autoCleanupStuckJobs() {
     const cleaned = data?.length || 0
     const duration = Date.now() - startTime
     
-    console.log(`[auto-cleanup-stuck] ✅ Cleaned ${cleaned} jobs in ${duration}ms`)
+    logger.info(`[auto-cleanup-stuck] ✅ Cleaned ${cleaned} jobs in ${duration}ms`)
     
     // 4. 如果清理数量与预期不符，发送警告
-    if (cleaned < stuckCount) {
+    if (stuckCount && cleaned < stuckCount) {
       captureMessage(`⚠️  Cleanup mismatch: found ${stuckCount}, cleaned ${cleaned}`, {
         level: 'warning',
         tags: { component: 'auto-cleanup' },
       })
     }
     
-    return { cleaned, duration, stuckCount }
+    return { cleaned, duration, stuckCount: stuckCount || 0 }
     
   } catch (error) {
-    console.error('[auto-cleanup-stuck] ❌ Error:', error)
-    captureMessage(`Auto-cleanup failed: ${error.message}`, {
+    logger.error('[auto-cleanup-stuck] ❌ Error:', {}, error)
+    const errorMessage = error instanceof Error ? error.message : String(error)
+    captureMessage(`Auto-cleanup failed: ${errorMessage}`, {
       level: 'error',
       tags: { component: 'auto-cleanup' },
     })
