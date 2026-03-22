@@ -5,10 +5,12 @@
 
 // 🚨 DISABLED PLATFORMS - permanently blocked due to repeated failures/hangs
 // bitget_futures: RE-ENABLED with enrichment (concurrency:3, 18s/trader timeout, CF Worker proxy)
-// 2026-03-21: Temporarily disable binance_futures enrichment (5x 46-77min hangs in 18h)
-// All timeout fixes failed (CF Worker, multi-layer, emergency, "permanent")
-// Re-enable after deep VPS proxy + AbortSignal investigation
-export const DISABLED_PLATFORMS = ['bitget_spot', 'binance_futures'] as const
+// 2026-03-21: Temporarily disable enrichment for repeatedly stuck platforms
+// binance_futures: 5x hangs (12:30, 14:30, 01:00, 02:30, 06:30)
+// bybit/kucoin/weex/okx_web3: 3x hangs (10:30, 11:00, 22:30) - 45min each
+// All timeout fixes failed, cleanup cron not catching them
+// Re-enable after deep investigation of timeout root cause
+export const DISABLED_PLATFORMS = ['bitget_spot', 'binance_futures', 'bybit', 'kucoin', 'weex', 'okx_web3'] as const
 export type DisabledPlatform = typeof DISABLED_PLATFORMS[number]
 
 export function isPlatformDisabled(platform: string): boolean {
