@@ -61,7 +61,7 @@ const PLATFORM_LIMITS: Record<string, { limit90: number; limit30: number; limit7
   // VPS scrapers (slow)
   bybit: { limit90: 100, limit30: 100, limit7: 100 },
   weex: { limit90: 30, limit30: 30, limit7: 30 },
-  kucoin: { limit90: 25, limit30: 25, limit7: 25 },
+  // kucoin: DEAD — copy trading discontinued, all APIs 404 (2026-03-23)
   bingx_spot: { limit90: 20, limit30: 20, limit7: 20 },
 }
 
@@ -75,7 +75,7 @@ const MEDIUM_PRIORITY = [
   'bitget_futures', 'btcc', 'etoro', 'phemex', 'bingx', 'okx_spot', 'okx_web3',
   'dydx', 'aevo', // re-enabled via Copin + indexer
 ]
-const LOW_PRIORITY = ['bybit', 'weex', 'kucoin', 'bingx_spot'] // VPS scrapers, run last
+const LOW_PRIORITY = ['bybit', 'weex', 'bingx_spot'] // VPS scrapers, run last
 const LOWER_PRIORITY: string[] = []
 
 interface BatchResult {
