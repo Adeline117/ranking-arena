@@ -153,9 +153,31 @@ export class WooxCopyConnector extends BaseConnector {
       return { series: [], fetched_at: new Date().toISOString() }
     }
 
-    // metricCharts contains 30-point ROI curve but TimeseriesResult expects TraderTimeseries[]
-    // For now return empty — enrichment can extract this later
-    return { series: [], fetched_at: new Date().toISOString() }
+    // metricCharts contains ROI data points — extract as equity curve
+    const charts = item.metricCharts as Array<Record<string, unknown>>
+    const roiPoints = charts
+      .filter(c => c.timestamp != null && c.roi != null)
+      .map(c => ({
+        ts: new Date(Number(c.timestamp) || Date.now()).toISOString(),
+        value: Number(c.roi) * 100, // decimal → percentage
+      }))
+
+    if (roiPoints.length === 0) {
+      return { series: [], fetched_at: new Date().toISOString() }
+    }
+
+    return {
+      series: [{
+        platform: 'woox',
+        market_type: 'copy',
+        trader_key: traderKey,
+        series_type: 'equity_curve',
+        as_of_ts: new Date().toISOString(),
+        data: roiPoints,
+        updated_at: new Date().toISOString(),
+      }],
+      fetched_at: new Date().toISOString(),
+    }
   }
 
   normalize(raw: Record<string, unknown>): Record<string, unknown> {

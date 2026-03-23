@@ -390,7 +390,7 @@ export default function TraderProfileClient({ data, serverTraderData, claimedUse
           avatarUrl={traderProfile?.avatar_url || data.avatar_url || undefined}
           isRegistered={!!claimedUser}
           isOwnProfile={isOwner}
-          followers={traderProfile?.followers ?? 0}
+          followers={traderProfile?.followers ?? undefined}
           profileUrl={traderProfile?.profile_url || data.profile_url || undefined}
           source={traderProfile?.source || data.source}
           isPro={isPro}

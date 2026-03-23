@@ -106,8 +106,11 @@ export class BybitSpotConnector extends BaseConnector {
       win_rate: this.parseNumber(e.winRate) ?? this.parsePercent(mv?.[3]),
       max_drawdown: this.parseNumber(e.maxDrawdown) ?? this.parsePercent(mv?.[1]),
       sharpe_ratio: this.parseNumber(e.sharpeRatio) ?? this.parsePercent(mv?.[5]),
+      trades_count: null,
       followers: this.parseNumber(e.followerCount) ?? this.parseNumber(e.maxFollowerCount),
       copiers: this.parseNumber(e.currentFollowerCount),
+      aum: this.parseNumber(e.aum),
+      platform_rank: null,
     }
   }
 
