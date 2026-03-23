@@ -102,13 +102,17 @@ export class OkxSpotConnector extends BaseConnector {
     return {
       trader_key: e.uniqueCode || e.uniqueName,
       display_name: e.nickName,
+      avatar_url: e.portLink ?? null,
       roi: pnlRatio != null ? pnlRatio * 100 : null, // OKX returns ratio (0.15 = 15%)
       pnl: e.pnl != null ? Number(e.pnl) : null,
       win_rate: e.winRatio != null ? Number(e.winRatio) * 100 : null,
       max_drawdown: null,
+      trades_count: null,
       followers: e.copyTraderNum != null ? Number(e.copyTraderNum) : null,
       copiers: e.copyTraderNum != null ? Number(e.copyTraderNum) : null,
       aum: e.aum != null ? Number(e.aum) : null,
+      sharpe_ratio: e.sharpeRatio != null ? Number(e.sharpeRatio) : null,
+      platform_rank: null,
     }
   }
 }
