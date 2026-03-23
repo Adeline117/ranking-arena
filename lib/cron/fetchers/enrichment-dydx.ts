@@ -55,7 +55,7 @@ export async function fetchDydxEquityCurve(
     // Try proxy first (geo-blocking)
     try {
       const proxyUrl = `${PROXY_URL}/dydx/historical-pnl?address=${address}&subaccountNumber=0&limit=${days}`
-      const data = await fetchJson<DydxHistoricalPnlResponse>(proxyUrl, { timeoutMs: 10000 })
+      const data = await fetchJson<DydxHistoricalPnlResponse>(proxyUrl, { timeoutMs: 5000 })
       historicalPnl = data?.historicalPnl
     } catch {
       // Intentionally swallowed: VPS proxy for dYdX historical PnL failed, fall through to direct indexer
@@ -63,7 +63,7 @@ export async function fetchDydxEquityCurve(
 
     if (!historicalPnl || historicalPnl.length === 0) {
       const directUrl = `${INDEXER_URL}/v4/historical-pnl?address=${address}&subaccountNumber=0&limit=${days}`
-      const directData = await fetchJson<DydxHistoricalPnlResponse>(directUrl, { timeoutMs: 10000 })
+      const directData = await fetchJson<DydxHistoricalPnlResponse>(directUrl, { timeoutMs: 5000 })
       historicalPnl = directData?.historicalPnl
     }
 
@@ -161,7 +161,7 @@ export async function fetchDydxStatsDetail(
 async function fetchSubaccountEquity(address: string): Promise<number | null> {
   try {
     const proxyUrl = `${PROXY_URL}/dydx/subaccount?address=${address}&subaccountNumber=0`
-    const data = await fetchJson<DydxSubaccountResponse>(proxyUrl, { timeoutMs: 10000 })
+    const data = await fetchJson<DydxSubaccountResponse>(proxyUrl, { timeoutMs: 5000 })
     if (data?.subaccount?.equity) {
       return parseFloat(data.subaccount.equity)
     }
@@ -171,7 +171,7 @@ async function fetchSubaccountEquity(address: string): Promise<number | null> {
 
   try {
     const directUrl = `${INDEXER_URL}/v4/addresses/${address}/subaccounts/0`
-    const data = await fetchJson<DydxSubaccountResponse>(directUrl, { timeoutMs: 10000 })
+    const data = await fetchJson<DydxSubaccountResponse>(directUrl, { timeoutMs: 5000 })
     if (data?.subaccount?.equity) {
       return parseFloat(data.subaccount.equity)
     }
@@ -185,7 +185,7 @@ async function fetchCopinTraderStats(address: string): Promise<CopinTraderDetail
   try {
     // Copin provides aggregated stats for dYdX traders
     const url = `https://api.copin.io/DYDX/position/statistic/filter?accounts=${address}&statisticType=MONTH`
-    const data = await fetchJson<{ data?: CopinTraderDetail[] }>(url, { timeoutMs: 10000 })
+    const data = await fetchJson<{ data?: CopinTraderDetail[] }>(url, { timeoutMs: 5000 })
     if (data?.data && data.data.length > 0) {
       return data.data[0]
     }
@@ -228,7 +228,7 @@ export async function fetchDydxV4PositionHistory(
 ): Promise<PositionHistoryItem[]> {
   try {
     const url = `${INDEXER_URL}/v4/fills?address=${address}&subaccountNumber=0&limit=100`
-    const data = await fetchWithProxyFallback<DydxFillsResponse>(url, { timeoutMs: 15000 })
+    const data = await fetchWithProxyFallback<DydxFillsResponse>(url, { timeoutMs: 6000 })
 
     if (!data?.fills || data.fills.length === 0) return []
 
