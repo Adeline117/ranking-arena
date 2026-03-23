@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react'
 import { tokens } from '@/lib/design-tokens'
 import TopNav from '@/app/components/layout/TopNav'
-import MobileBottomNav from '@/app/components/layout/MobileBottomNav'
+// MobileBottomNav is rendered by root layout — do not duplicate here
 import { Box, Text } from '@/app/components/base'
 import PostFeed from '@/app/components/post/PostFeed'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
@@ -37,7 +37,7 @@ export default function HashtagClient({ tag }: HashtagClientProps) {
         {/* Post feed filtered by hashtag */}
         <HashtagPostFeed tag={tag} />
       </Box>
-      <MobileBottomNav />
+      {/* MobileBottomNav rendered in root layout */}
     </Box>
   )
 }

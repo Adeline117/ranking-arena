@@ -17,7 +17,7 @@ import { tokens } from '@/lib/design-tokens'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import { supabase } from '@/lib/supabase/client'
 import TopNav from '@/app/components/layout/TopNav'
-import MobileBottomNav from '@/app/components/layout/MobileBottomNav'
+// MobileBottomNav is rendered by root layout — do not duplicate here
 import { Box, Text } from '@/app/components/base'
 import { useToast } from '@/app/components/ui/Toast'
 
@@ -274,7 +274,7 @@ export default function ClaimPage() {
         )}
       </Box>
 
-      <MobileBottomNav />
+      {/* MobileBottomNav rendered in root layout */}
     </div>
   )
 }

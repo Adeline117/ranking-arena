@@ -5,7 +5,7 @@ import { getSupabaseAdmin } from '@/lib/supabase/server'
 import { EXCHANGE_NAMES, SOURCE_TYPE_MAP, EXCHANGE_CONFIG, DEAD_BLOCKED_PLATFORMS, EXCHANGE_SLUG_ALIASES, resolveExchangeSlug } from '@/lib/constants/exchanges'
 import type { TraderSource } from '@/lib/constants/exchanges'
 import { tokens } from '@/lib/design-tokens'
-import MobileBottomNav from '@/app/components/layout/MobileBottomNav'
+// MobileBottomNav is rendered by root layout — do not duplicate here
 import { Box } from '@/app/components/base'
 import { RankingSkeleton } from '@/app/components/ui/Skeleton'
 import ExchangeRankingClient from './ExchangeRankingClient'
@@ -420,7 +420,7 @@ export default async function ExchangeRankingPage({
           </Suspense>
         </SectionErrorBoundary>
       </div>
-      <MobileBottomNav />
+      {/* MobileBottomNav rendered in root layout */}
     </Box>
   )
 }

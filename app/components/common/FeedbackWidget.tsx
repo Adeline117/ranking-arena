@@ -62,8 +62,8 @@ export default function FeedbackWidget() {
         aria-label="Feedback"
         style={{
           position: 'fixed',
-          bottom: 24,
-          right: 24,
+          bottom: 'calc(var(--mobile-nav-height, 60px) + 16px)',
+          right: 16,
           width: 44,
           height: 44,
           borderRadius: tokens.radius.full,
@@ -87,9 +87,9 @@ export default function FeedbackWidget() {
         <div
           style={{
             position: 'fixed',
-            bottom: 80,
-            right: 24,
-            width: 320,
+            bottom: 'calc(var(--mobile-nav-height, 60px) + 72px)',
+            right: 16,
+            width: 'min(320px, calc(100vw - 32px))',
             background: 'var(--color-bg-secondary)',
             border: '1px solid var(--color-border-primary)',
             borderRadius: tokens.radius.xl,
@@ -107,7 +107,7 @@ export default function FeedbackWidget() {
             </span>
             <button
               onClick={() => setOpen(false)}
-              style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--color-text-tertiary)', padding: 4 }}
+              style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--color-text-tertiary)', padding: 8, minWidth: 44, minHeight: 44, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
             >
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                 <line x1="18" y1="6" x2="6" y2="18" />
