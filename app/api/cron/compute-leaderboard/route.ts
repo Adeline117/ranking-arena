@@ -329,19 +329,19 @@ async function computeSeason(
     // --- Boundary sanitization (safety net for all data sources) ---
     // ROI: null out extreme values (> 100,000% or < -100%)
     if (snap.roi != null && (snap.roi > 100000 || snap.roi < -100)) {
-      snap.roi = null
+      snap.roi = null as unknown as number
     }
     // Win rate: must be 0-100%
     if (snap.win_rate != null && (snap.win_rate > 100 || snap.win_rate < 0)) {
-      snap.win_rate = null
+      snap.win_rate = null as unknown as number
     }
     // Max drawdown: must be 0-100%
     if (snap.max_drawdown != null && (snap.max_drawdown > 100 || snap.max_drawdown < 0)) {
-      snap.max_drawdown = null
+      snap.max_drawdown = null as unknown as number
     }
     // Sharpe ratio: must be -20 to 20
     if (snap.sharpe_ratio != null && (snap.sharpe_ratio > 20 || snap.sharpe_ratio < -20)) {
-      snap.sharpe_ratio = null
+      snap.sharpe_ratio = null as unknown as number
     }
 
     const key = `${snap.source}:${snap.source_trader_id}`

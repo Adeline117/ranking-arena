@@ -4,18 +4,11 @@
    No CSS hiding needed — React state removes it when client table mounts.
    This eliminates CLS because the swap happens at the same DOM position. */
 
-/* Two-phase rendering: Hide SSR shell once the interactive HomePage mounts.
-   Uses visibility:hidden + position:absolute to avoid CLS.
-   The SSR shell is instantly removed from flow while the interactive content
-   renders in the same position. */
-body:has(#homepage-interactive) #ssr-homepage-shell {
-  visibility: hidden;
-  position: absolute;
-  width: 0;
-  height: 0;
-  overflow: hidden;
-  pointer-events: none;
-}
+/* Two-phase rendering: SSR shell is removed via JS (useEffect) in HomePage.tsx
+   AFTER React has painted. This preserves the SSR content as the LCP element.
+   Previously used CSS :has() to hide immediately — but that kills LCP because
+   the SSR hero disappears before the client hero paints, forcing Lighthouse to
+   wait for the full JS bundle to load (~8.9s on slow 4G). */
 
 /*
  * Performance Optimization: CSS files moved to async loading

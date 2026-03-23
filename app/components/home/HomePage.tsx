@@ -1,7 +1,7 @@
 
 'use client'
 
-import { Suspense, lazy } from 'react'
+import { Suspense, lazy, useEffect } from 'react'
 import { tokens } from '@/lib/design-tokens'
 import TopNav from '../layout/TopNav'
 // MobileBottomNav is rendered in root layout.tsx -- do not duplicate here
@@ -31,6 +31,14 @@ interface HomePageProps {
 }
 
 export default function HomePage({ initialTraders, initialLastUpdated, heroStats }: HomePageProps) {
+  // Remove SSR shell AFTER React has painted — preserves SSR content as LCP element.
+  // Previously CSS :has(#homepage-interactive) hid it instantly on mount, killing LCP
+  // because the hero text disappeared before client hero painted (~8.9s on slow 4G).
+  useEffect(() => {
+    const shell = document.getElementById('ssr-homepage-shell')
+    if (shell) shell.remove()
+  }, [])
+
   return (
     <div
       id="homepage-interactive"
