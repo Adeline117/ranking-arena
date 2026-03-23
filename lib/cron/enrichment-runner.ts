@@ -334,7 +334,7 @@ export const ENRICHMENT_PLATFORM_CONFIGS: Record<string, EnrichmentConfig> = {
     fetchEquityCurve: fetchDydxEquityCurve,
     fetchStatsDetail: fetchDydxStatsDetail,
     fetchPositionHistory: fetchDydxV4PositionHistory,
-    concurrency: 8, delayMs: 300, // Increased: indexer API is fast
+    concurrency: 3, delayMs: 1000, // Reduced from 8/300: prevent timeout amplification
   },
   aevo: {
     platform: 'aevo',
@@ -534,9 +534,11 @@ const ONCHAIN_SET = new Set(['gmx', 'dydx', 'jupiter_perps', 'hyperliquid', 'dri
 
 // Per-trader timeout: ultra-aggressive timeout for platforms that hang
 // 2026-03-21: Reduced binance_futures from 20s→12s after VPS proxy testing showed <500ms responses
+// 2026-03-22: Added dydx 15s timeout (similar to bitget_futures pattern)
 const PER_TRADER_TIMEOUT_MS: Record<string, number> = {
   'bitget_futures': 18_000,  // 18s per trader - equity 15s + detail 10s run in parallel, 18s is generous
   'binance_futures': 12_000, // 12s per trader - ultra-short (VPS proxy tested <500ms, 3-8s API timeouts)
+  'dydx': 15_000, // 15s per trader - 3 APIs × 5-6s timeout + fallback buffer
 }
 
 function getPlatformTimeout(platform: string): number {
