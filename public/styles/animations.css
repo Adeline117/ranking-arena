@@ -7,10 +7,8 @@
    1. Keyframes — USED ONLY
    ============================================ */
 
-@keyframes fadeIn {
-  from { opacity: 0; }
-  to { opacity: 1; }
-}
+/* fadeIn, spin, shimmer keyframes are in critical-css.ts (inlined in <head>).
+   Only define keyframes NOT already in the critical path. */
 
 @keyframes fadeOut {
   from { opacity: 1; }
@@ -47,27 +45,6 @@
   to { opacity: 0; transform: translateY(-100%); }
 }
 
-@keyframes pulse {
-  0%, 100% { transform: scale(1); }
-  50% { transform: scale(1.03); }
-}
-
-@keyframes spin {
-  from { transform: rotate(0deg); }
-  to { transform: rotate(360deg); }
-}
-
-@keyframes shake {
-  0%, 100% { transform: translateX(0); }
-  10%, 30%, 50%, 70%, 90% { transform: translateX(-5px); }
-  20%, 40%, 60%, 80% { transform: translateX(5px); }
-}
-
-@keyframes shimmer {
-  0% { background-position: -200% 0; }
-  100% { background-position: 200% 0; }
-}
-
 @keyframes skeletonPulse {
   0% { background-color: rgba(255, 255, 255, 0.05); }
   50% { background-color: rgba(255, 255, 255, 0.1); }
@@ -77,16 +54,6 @@
 @keyframes modalSlideUp {
   from { opacity: 0; transform: translateY(20px); }
   to { opacity: 1; transform: translateY(0); }
-}
-
-@keyframes shareDropdownIn {
-  from { opacity: 0; transform: translateY(-4px); }
-  to { opacity: 1; transform: translateY(0); }
-}
-
-@keyframes ripple {
-  from { transform: scale(0); opacity: 0.5; }
-  to { transform: scale(4); opacity: 0; }
 }
 
 /* ============================================
@@ -402,17 +369,11 @@
    ============================================ */
 
 @media (max-width: 768px) {
-  .page-enter,
-  .card-enter {
-    animation-duration: 0.25s;
-  }
-
   .stagger-children > * {
     animation-duration: 0.25s;
   }
 
-  .card-hover-lift:hover,
-  .card-hover-scale:hover {
+  .card-hover-lift:hover {
     transform: none;
   }
 }

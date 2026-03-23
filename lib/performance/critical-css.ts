@@ -68,6 +68,14 @@ main{min-height:100vh;background:var(--bg-primary,#0B0A10)}
 @media(min-width:1280px){.main-grid{grid-template-columns:220px 1fr 240px;gap:20px}}
 @media(min-width:1440px){.main-grid{grid-template-columns:240px 1fr 260px;gap:24px}}
 
+/* Three-column layout — Critical for CLS prevention.
+   min-height reserves space before the grid content loads. */
+.three-col-layout{display:grid;grid-template-columns:1fr;gap:20px;align-items:start;max-width:1400px;margin:0 auto;padding:0 16px;min-height:calc(100vh - 120px);contain:layout style}
+@media(min-width:1024px){.three-col-layout{grid-template-columns:200px 1fr}}
+@media(min-width:1280px){.three-col-layout{grid-template-columns:240px 1fr 260px}}
+@media(max-width:1023px){.three-col-layout{display:block;padding:0 12px}.three-col-left,.three-col-right{display:none !important}}
+.three-col-center{min-height:calc(100vh - 60px);min-width:0;overflow-x:hidden}
+
 /* Safe Area (iPhone 刘海屏) */
 .safe-area-inset-bottom{padding-bottom:env(safe-area-inset-bottom,0)}
 .safe-area-inset-top{padding-top:env(safe-area-inset-top,0)}
@@ -184,6 +192,9 @@ footer,.sidebar-contained{content-visibility:auto;contain-intrinsic-size:auto 30
 .ssr-row-gold{background:linear-gradient(90deg,rgba(255,215,0,0.06) 0%,transparent 60%)}
 .ssr-row-silver{background:linear-gradient(90deg,rgba(192,192,192,0.05) 0%,transparent 60%)}
 .ssr-row-bronze{background:linear-gradient(90deg,rgba(205,127,50,0.04) 0%,transparent 60%)}
+
+/* Global tabular-nums for all number displays — prevents CLS from digit width shifts */
+td,th,.ranking-row,.ssr-row,.ssr-score,.ssr-roi-val,.ssr-wr,.ssr-mdd,.col-score,.col-pnl,.col-roi,.col-winrate,.col-mdd,.stat-value,.price-value,.pnl-value,.percentage-value,.rank-number,.roi-value,.metric-value,.number-display,[data-value]{font-variant-numeric:tabular-nums}
 
 /* 预留空间 - 防止字体加载导致的CLS */
 .font-loading body{letter-spacing:-0.011em}
