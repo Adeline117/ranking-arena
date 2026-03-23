@@ -3,9 +3,10 @@
 > Auto-read by Claude Code at session start. Keep concise — archive completed items weekly.
 
 ## Current Sprint Focus
-- **37 active platforms**, all fresh. Trader counts growing after limit increases.
-- Enrichment: 32 platforms with enrichment configs.
+- **36 active platforms** (KuCoin confirmed dead — copy trading discontinued, all APIs 404).
+- Enrichment: 33 platforms with enrichment configs.
 - Equity curves: 34 platforms have curve data.
+- Cron jobs: 60 active.
 
 ## Lighthouse Performance Optimization (2026-03-22)
 Lighthouse scores were terrible: LCP 8.3s, CLS 0.235, TBT 260ms, Speed Index 5.9s.
@@ -35,6 +36,29 @@ Lighthouse scores were terrible: LCP 8.3s, CLS 0.235, TBT 260ms, Speed Index 5.9
 - Verify Lighthouse scores on production after Vercel deploy
 - ~~Consider further bundle splitting~~ — Already optimized: Supabase lazy-loaded, React Query Web3-only, SWR (16KB) is main data layer
 - ~~RankingTable memoization~~ — Done: startTransition + useMemo slices + stabilized Zustand selectors
+
+## Enrichment Timeout Fix (2026-03-22) — P0
+
+### Problem
+5 enrichment platforms repeatedly hanging 45+ minutes, killing pipeline health (56.3%):
+- `binance_futures` (5x hangs), `bybit/kucoin/weex/okx_web3` (3x hangs each)
+- Cleanup cron couldn't catch them (query bug fixed in b464456a, but underlying cause remained)
+
+### Root Cause
+`AbortSignal.timeout()` doesn't reliably cancel stuck TCP connections in Node.js.
+VPS scraper Playwright hangs and CF Worker proxy stuck requests linger in socket pool.
+
+### Fix: `raceWithTimeout()` Hard Deadline
+- `Promise.race` with hard rejection timer — guarantees unblock within deadline
+- Applied at **per-trader** (15-30s) and **per-platform** (90-180s) levels
+- CF Worker proxy: hard 15s deadline (was: no timeout)
+- VPS proxy: hard deadline matching `timeoutMs + 2s` grace
+- **Re-enabled**: binance_futures, bybit, weex, okx_web3
+- **KuCoin**: confirmed dead (copy trading discontinued, all APIs 404) → DEAD_BLOCKED_PLATFORMS
+
+### TODO
+- Monitor next cron cycles to confirm no more 45-min hangs
+- If stable, consider increasing bybit/weex concurrency from 1
 
 ## Critical Fixes (2026-03-22)
 
@@ -415,12 +439,12 @@ Branch: `feature/desoc-platform`, 23 files, +1310 lines
 
 ## Key Metrics
 - Total Traders: 34,000+
-- Exchanges Supported: 27 active (+ 8 dead/blocked)
-- Cron Jobs: 42 active (with PipelineLogger)
-- Pipeline Health: 27/27 platforms fresh, 0 warnings, 0 failures
+- Exchanges Supported: 36 active (+ 9 dead/blocked)
+- Enrichment: 33 platforms in ENRICHMENT_PLATFORM_CONFIGS
+- Cron Jobs: 60 active (with PipelineLogger)
 - Tests: 139 suites, 2271 tests, ALL GREEN
 - Languages: 4 (en, zh, ja, ko — all 100%)
-- Lighthouse: Performance ~65+, Accessibility 97, Best Practices 96, SEO 100
+- Lighthouse: Performance optimized (9 fixes applied), Accessibility 97, Best Practices 96, SEO 100
 - VPS scraper: v16 (pool of 3 contexts, PM2 on port 3457)
 
 ## Platform Coverage
@@ -431,12 +455,12 @@ Branch: `feature/desoc-platform`, 23 files, +1310 lines
 | Bybit, OKX, Bitget, MEXC, KuCoin, Gate.io, HTX, CoinEx, Hyperliquid | All done | All done | - |
 
 ## Session Handoff Notes
-- Last updated: 2026-03-18
-- **Pipeline 100% healthy**: `node scripts/pipeline-health-check.mjs` → 0 warnings, 0 failures
+- Last updated: 2026-03-22
+- **Enrichment**: 4 platforms re-enabled with `raceWithTimeout()` hard deadlines. Monitor for hangs.
 - **VPS scraper v16**: PM2 `arena-scraper-3457` on port 3457, proxy on 3456. Pool of 3 browser contexts.
 - **WAF platforms** (bybit/bitget/bingx/mexc/xt/toobit): use `fetchViaVPS()` FIRST — proxy returns 200 with empty data
 - **OKX**: direct API works (v5 public, not WAF-blocked). Don't use proxy — pagination causes timeout.
-- **Dead**: KuCoin, LBank, BitMart, Synthetix, MUX, WhiteBit, BTSE, Bitget Spot, okx_spot, paradex
+- **Dead**: KuCoin (copy trading discontinued), LBank, BitMart, Synthetix, MUX, WhiteBit, BTSE, Bitget Spot, paradex
 - ESLint: no-console error, no-empty error, no-explicit-any warn
 - DEGRADATION.md documents all service failure strategies
 
