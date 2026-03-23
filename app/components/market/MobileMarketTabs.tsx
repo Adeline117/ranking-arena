@@ -78,7 +78,7 @@ export default function MobileMarketTabs({ children }: {
         background: tokens.colors.bg.secondary,
         position: 'sticky',
         top: 48, // below SentimentBar
-        zIndex: 50,
+        zIndex: tokens.zIndex.dropdown,
       }}>
         {TAB_KEYS.map(tab => (
           <button

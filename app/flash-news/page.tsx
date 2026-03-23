@@ -5,7 +5,7 @@ import { tokens } from '@/lib/design-tokens'
 import { formatTimeAgo } from '@/lib/utils/date'
 import TopNav from '@/app/components/layout/TopNav'
 import { Box, Text } from '@/app/components/base'
-import MobileBottomNav from '@/app/components/layout/MobileBottomNav'
+// MobileBottomNav is rendered by root layout — do not duplicate here
 import { useToast } from '@/app/components/ui/Toast'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import { getCsrfHeaders } from '@/lib/api/client'
@@ -362,7 +362,7 @@ export default function FlashNewsPage() {
           )}
         </div>
       </Box>
-      <MobileBottomNav />
+      {/* MobileBottomNav rendered in root layout */}
     </Box>
   )
 }

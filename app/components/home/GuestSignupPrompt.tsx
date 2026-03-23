@@ -96,7 +96,7 @@ export default function GuestSignupPrompt() {
     <div
       style={{
         position: 'fixed',
-        bottom: 60,
+        bottom: 'var(--mobile-nav-height, 60px)',
         left: 0,
         right: 0,
         zIndex: tokens.zIndex.sticky + 1,

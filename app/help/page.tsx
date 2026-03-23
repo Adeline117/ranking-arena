@@ -5,7 +5,7 @@ import Link from 'next/link'
 import { supabase } from '@/lib/supabase/client'
 import { tokens } from '@/lib/design-tokens'
 import TopNav from '@/app/components/layout/TopNav'
-import MobileBottomNav from '@/app/components/layout/MobileBottomNav'
+// MobileBottomNav is rendered by root layout — do not duplicate here
 import { Box, Text } from '@/app/components/base'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import ContactSupportButton from '@/app/components/ui/ContactSupportButton'
@@ -391,7 +391,7 @@ export default function HelpPage() {
           to { opacity: 1; transform: translateY(0); }
         }
       `}</style>
-      <MobileBottomNav />
+      {/* MobileBottomNav rendered in root layout */}
     </Box>
   )
 }

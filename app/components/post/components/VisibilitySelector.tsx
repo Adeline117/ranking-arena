@@ -126,7 +126,7 @@ export function VisibilitySelector({ value, onChange, isGroupPost }: VisibilityS
           border: `1px solid ${tokens.colors.border.primary}`,
           borderRadius: tokens.radius.lg,
           boxShadow: tokens.shadow.lg,
-          zIndex: 50,
+          zIndex: tokens.zIndex.dropdown,
           overflow: 'hidden',
         }}>
           {VISIBILITY_OPTIONS.filter(o => o.value !== 'group').map((option) => (
