@@ -4,6 +4,7 @@
 
 import { fetchJson } from './shared'
 import { logger } from '@/lib/logger'
+import { raceWithTimeout } from '@/lib/cron/enrichment-runner'
 
 // ============================================
 // Proxy Configuration for Geo-blocked APIs
@@ -34,44 +35,52 @@ export async function fetchWithProxyFallback<T>(
     const isBlocked = msg.includes('451') || msg.includes('403') || msg.includes('Access Denied') || msg.includes('timeout') || msg.includes('ETIMEDOUT') || msg.includes('ECONNREFUSED') || msg.includes('geo-blocked') || msg.includes('restricted location')
     if (!isBlocked) throw err
 
-    // Strategy 2: CF Worker proxy
+    // Strategy 2: CF Worker proxy (hard 15s deadline — CF Worker has 30s limit anyway)
     if (PROXY_URL) {
       try {
         logger.warn(`[enrichment] Blocked, retrying via CF proxy: ${url.slice(0, 80)}...`)
         const proxyTarget = `${PROXY_URL}?url=${encodeURIComponent(url)}`
-        // Use GET (proxy fetches via query param, not POST body)
-        return await fetchJson<T>(proxyTarget, {
-          method: 'GET',
-          timeoutMs: opts.timeoutMs,
-        })
+        const cfTimeoutMs = Math.min(opts.timeoutMs || 15_000, 15_000)
+        return await raceWithTimeout(
+          fetchJson<T>(proxyTarget, { method: 'GET', timeoutMs: cfTimeoutMs }),
+          cfTimeoutMs + 2000, // +2s grace for JSON parse
+          `CF-proxy:${url.slice(0, 60)}`
+        )
       } catch (cfErr) {
         logger.warn(`[enrichment] CF proxy also failed: ${cfErr instanceof Error ? cfErr.message : String(cfErr)}`)
       }
     }
 
     // Strategy 3: VPS proxy (bypasses WAF for Bybit, Bitget, etc.)
+    // Hard deadline via raceWithTimeout — AbortSignal alone can't kill stuck TCP
     const vpsUrl = process.env.VPS_PROXY_SG || process.env.VPS_PROXY_URL
     if (vpsUrl) {
+      const vpsTimeoutMs = opts.timeoutMs || 10_000
       try {
         logger.warn(`[enrichment] Trying VPS proxy: ${url.slice(0, 80)}...`)
-        const res = await fetch(vpsUrl, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'X-Proxy-Key': (process.env.VPS_PROXY_KEY || '').trim(),
-          },
-          body: JSON.stringify({
-            url,
-            method: opts.method || 'GET',
-            headers: opts.headers || {},
-            body: opts.body ? JSON.stringify(opts.body) : undefined,
-          }),
-          signal: AbortSignal.timeout(opts.timeoutMs || 10_000),
-        })
-        if (res.ok) {
-          return (await res.json()) as T
-        }
-        logger.warn(`[enrichment] VPS proxy returned ${res.status}`)
+        const result = await raceWithTimeout(
+          (async () => {
+            const res = await fetch(vpsUrl, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'X-Proxy-Key': (process.env.VPS_PROXY_KEY || '').trim(),
+              },
+              body: JSON.stringify({
+                url,
+                method: opts.method || 'GET',
+                headers: opts.headers || {},
+                body: opts.body ? JSON.stringify(opts.body) : undefined,
+              }),
+              signal: AbortSignal.timeout(vpsTimeoutMs),
+            })
+            if (!res.ok) throw new Error(`VPS proxy returned ${res.status}`)
+            return (await res.json()) as T
+          })(),
+          vpsTimeoutMs + 2000,
+          `VPS-proxy:${url.slice(0, 60)}`
+        )
+        return result
       } catch (vpsErr) {
         logger.warn(`[enrichment] VPS proxy failed: ${vpsErr instanceof Error ? vpsErr.message : String(vpsErr)}`)
       }

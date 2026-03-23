@@ -144,6 +144,20 @@ const RETRY_CONFIG = {
   maxDelayMs: 2000, // Reduced from 10000
 }
 
+/**
+ * Hard deadline wrapper using Promise.race.
+ * Unlike AbortSignal.timeout(), this GUARANTEES the promise resolves/rejects
+ * within `ms` milliseconds — even if the underlying fetch is stuck on a TCP connection.
+ * The stuck fetch may linger as a zombie, but the caller is unblocked.
+ */
+export function raceWithTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
+  let timer: ReturnType<typeof setTimeout>
+  const deadline = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => reject(new Error(`[deadline] ${label} exceeded ${ms}ms`)), ms)
+  })
+  return Promise.race([promise, deadline]).finally(() => clearTimeout(timer))
+}
+
 async function withRetry<T>(
   fn: () => Promise<T>,
   context: string,
@@ -261,12 +275,7 @@ export const ENRICHMENT_PLATFORM_CONFIGS: Record<string, EnrichmentConfig> = {
     fetchStatsDetail: fetchWeexStatsDetail,
     concurrency: 1, delayMs: 3000, // VPS scraper is slow, one at a time
   },
-  kucoin: {
-    platform: 'kucoin',
-    fetchEquityCurve: fetchKucoinEquityCurve,
-    fetchStatsDetail: fetchKucoinStatsDetail,
-    concurrency: 1, delayMs: 3000, // VPS scraper is serial (Playwright)
-  },
+  // kucoin: DEAD — copy trading feature discontinued, all APIs 404 since 2026-03 (confirmed 2026-03-23)
   // bitget_futures: RE-ENABLED stats+positions (2026-03-19)
   // Root cause of 44min hang: fetchStatsDetail internally called fetchPositionHistory,
   // doubling request time (2x20s timeout). Fix: standalone stats, strict 10s timeouts.
@@ -604,8 +613,7 @@ export async function runEnrichment(params: {
     const platformTimer = setTimeout(() => platformController.abort(), platformTimeoutMs)
 
     try {
-      await Promise.race([
-        (async () => {
+      await raceWithTimeout((async () => {
     // Read from leaderboard_ranks (canonical, has latest trader keys)
     // Previously read from trader_snapshots v1, which has stale keys
     // (e.g., Binance migrated from encryptedUid to leadPortfolioId)
@@ -647,18 +655,17 @@ export async function runEnrichment(params: {
           // Onchain: 30s (RPC/GraphQL need slightly more time).
           const traderTimeoutMs = PER_TRADER_TIMEOUT_MS[platformKey] 
             ?? (ONCHAIN_SET.has(platformKey) ? 30_000 : 15_000) // Reduced from 60s/30s
+          // Hard deadline via Promise.race — guarantees unblock even if fetch hangs.
+          // AbortController is kept as a best-effort signal to clean up resources.
           const traderController = new AbortController()
           const traderTimer = setTimeout(() => {
-            logger.warn(`[enrich] ${platformKey}/${traderId} timeout after ${traderTimeoutMs / 1000}s`)
             traderController.abort()
           }, traderTimeoutMs)
-          // Cascade: if platform aborts, abort all its traders
           const onPlatformAbort = () => traderController.abort()
           platformController.signal.addEventListener('abort', onPlatformAbort, { once: true })
 
           try {
-            await Promise.race([
-              (async () => {
+            await raceWithTimeout((async () => {
                 // --- Phase 1: Parallel API fetches (independent network calls) ---
                 const fetchPromises: Record<string, Promise<unknown>> = {}
 
@@ -870,13 +877,7 @@ export async function runEnrichment(params: {
                 }
 
                 results[platformKey].enriched++
-              })(),
-              new Promise<void>((_, reject) => {
-                if (traderController.signal.aborted) return reject(new Error(`Trader ${traderId} timed out after ${traderTimeoutMs / 1000}s`))
-                traderController.signal.addEventListener('abort', () =>
-                  reject(new Error(`Trader ${traderId} timed out after ${traderTimeoutMs / 1000}s`)), { once: true })
-              })
-            ])
+              })(), traderTimeoutMs, `${platformKey}/${traderId}`)
           } catch (err) {
             results[platformKey].failed++
             const errMsg = err instanceof Error ? err.message : String(err)
@@ -907,13 +908,7 @@ export async function runEnrichment(params: {
         await sleep(config.delayMs)
       }
     }
-        })(),
-        new Promise<void>((_, reject) => {
-          if (platformController.signal.aborted) return reject(new Error(`Platform ${platformKey} timed out after ${platformTimeoutMs / 1000}s`))
-          platformController.signal.addEventListener('abort', () =>
-            reject(new Error(`Platform ${platformKey} timed out after ${platformTimeoutMs / 1000}s`)), { once: true })
-        }),
-      ])
+        })(), platformTimeoutMs, `platform:${platformKey}`)
     } catch (err) {
       const errMsg = err instanceof Error ? err.message : String(err)
       logger.error(`[enrich] Platform ${platformKey} failed/timed out: ${errMsg}`)
