@@ -8,7 +8,7 @@
 // Root cause: AbortSignal.timeout() doesn't reliably kill stuck TCP connections.
 // Fix: raceWithTimeout() hard deadline via Promise.race at per-trader + per-platform level.
 // Also added hard deadlines to CF Worker proxy + VPS proxy calls in enrichment-types.ts.
-export const DISABLED_PLATFORMS = ['bitget_spot'] as const
+export const DISABLED_PLATFORMS = ['bitget_spot', 'kucoin'] as const
 export type DisabledPlatform = typeof DISABLED_PLATFORMS[number]
 
 export function isPlatformDisabled(platform: string): boolean {
