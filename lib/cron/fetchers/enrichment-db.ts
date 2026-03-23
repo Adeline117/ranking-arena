@@ -169,22 +169,32 @@ export async function upsertStatsDetail(
 
   // Sync enriched stats (win_rate, max_drawdown) to trader_snapshots_v2 flat columns
   // This propagates enrichment data to the v2 table for consistent querying
+  // Boundary validation: only sync values within valid ranges
   if (stats.profitableTradesPct != null || stats.maxDrawdown != null) {
     const v2Update: Record<string, unknown> = {}
-    if (stats.profitableTradesPct != null) v2Update.win_rate = stats.profitableTradesPct
-    if (stats.maxDrawdown != null) v2Update.max_drawdown = stats.maxDrawdown
-    if (stats.totalTrades != null) v2Update.trades_count = stats.totalTrades
+    if (stats.profitableTradesPct != null && stats.profitableTradesPct >= 0 && stats.profitableTradesPct <= 100) {
+      v2Update.win_rate = stats.profitableTradesPct
+    }
+    if (stats.maxDrawdown != null && stats.maxDrawdown >= 0 && stats.maxDrawdown <= 100) {
+      v2Update.max_drawdown = stats.maxDrawdown
+    }
+    if (stats.totalTrades != null && stats.totalTrades >= 0) {
+      v2Update.trades_count = stats.totalTrades
+    }
 
     // Update all matching v2 rows (removed .is('win_rate', null) guard
     // so stale win_rate values get refreshed with latest enrichment data)
-    await supabase
-      .from('trader_snapshots_v2')
-      .update(v2Update)
-      .eq('platform', source)
-      .eq('trader_key', traderId)
-      .then(({ error: v2Err }) => {
-        if (v2Err) console.warn(`[enrichment-db] v2 sync failed for ${source}/${traderId}:`, v2Err.message)
-      })
+    // Only run update if there are valid fields to sync
+    if (Object.keys(v2Update).length > 0) {
+      await supabase
+        .from('trader_snapshots_v2')
+        .update(v2Update)
+        .eq('platform', source)
+        .eq('trader_key', traderId)
+        .then(({ error: v2Err }) => {
+          if (v2Err) console.warn(`[enrichment-db] v2 sync failed for ${source}/${traderId}:`, v2Err.message)
+        })
+    }
   }
 
   return { saved: true }
