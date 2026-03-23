@@ -124,7 +124,7 @@ export const TraderRow = memo(function TraderRow({
   // Compare checkbox state — use individual selectors to avoid new object on every getSnapshot call
   // (returning an object from a Zustand selector causes useSyncExternalStore infinite loop)
   const isSelected = useComparisonStore(useCallback(s => s.isSelected(trader.id), [trader.id]))
-  const canAddMore = useComparisonStore(s => s.selectedTraders.length < 5)
+  const canAddMore = useComparisonStore(useCallback(s => s.selectedTraders.length < 5, []))
 
   // Memoize trading style classification to avoid recomputing on every render
   const tradingStyleInfo = useMemo(() => {

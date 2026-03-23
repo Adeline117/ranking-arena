@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState, useEffect, useRef, memo, useCallback, useMemo, useDeferredValue } from 'react'
+import React, { useState, useEffect, useRef, memo, useCallback, useMemo, useDeferredValue, startTransition } from 'react'
 import Link from 'next/link'
 import { useLoginModal } from '@/lib/hooks/useLoginModal'
 import { tokens } from '@/lib/design-tokens'
@@ -262,9 +262,12 @@ function RankingTableInner(props: {
     setJustSortedColumn(col)
     setSortAnimationKey(prev => prev + 1)
     setTimeout(() => setJustSortedColumn(null), 400)
-    if (onSortChange) { onSortChange(col, newDir) }
-    else { setInternalSortColumn(col); setInternalSortDir(newDir) }
-    setCurrentPage(1)
+    // startTransition: defer the expensive sort+re-render so the UI indicator updates immediately
+    startTransition(() => {
+      if (onSortChange) { onSortChange(col, newDir) }
+      else { setInternalSortColumn(col); setInternalSortDir(newDir) }
+      setCurrentPage(1)
+    })
   }
 
   const _handleSearchInput = (value: string) => {
@@ -329,7 +332,10 @@ function RankingTableInner(props: {
   const totalPages = Math.ceil(sortedTraders.length / itemsPerPage)
   const startIndex = (currentPage - 1) * itemsPerPage
   const endIndex = startIndex + itemsPerPage
-  const paginatedTraders = sortedTraders.slice(startIndex, endIndex)
+  const paginatedTraders = useMemo(() => sortedTraders.slice(startIndex, endIndex), [sortedTraders, startIndex, endIndex])
+
+  // Memoize card view slice to avoid re-creating array on unrelated re-renders
+  const cardTraders = useMemo(() => sortedTraders.slice(0, cardVisibleCount), [sortedTraders, cardVisibleCount])
 
   // Reset scroll position on page/sort/filter changes
   const tableScrollRef = useRef<HTMLDivElement>(null)
@@ -346,7 +352,7 @@ function RankingTableInner(props: {
   }, [])
 
   const handlePaginationChange = useCallback((page: number) => {
-    setCurrentPage(page)
+    startTransition(() => { setCurrentPage(page) })
   }, [setCurrentPage])
 
   return (
@@ -388,10 +394,10 @@ function RankingTableInner(props: {
           onToggleColumn={toggleColumn}
           onResetColumns={resetColumns}
           styleFilter={styleFilter}
-          onStyleFilterChange={(s) => { setStyleFilter(s); setCurrentPage(1) }}
+          onStyleFilterChange={(s) => { startTransition(() => { setStyleFilter(s); setCurrentPage(1) }) }}
           hasStyleData={hasStyleData}
           traderTypeFilter={traderTypeFilter}
-          onTraderTypeFilterChange={(type) => { setTraderTypeFilter(type); setCurrentPage(1) }}
+          onTraderTypeFilterChange={(type) => { startTransition(() => { setTraderTypeFilter(type); setCurrentPage(1) }) }}
           traders={traders}
           source={source}
           timeRange={timeRange}
@@ -572,7 +578,7 @@ function RankingTableInner(props: {
               display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(min(280px, 100%), 1fr))', gap: tokens.spacing[3], padding: tokens.spacing[4],
             }}
           >
-            {sortedTraders.slice(0, cardVisibleCount).map((trader, idx) => {
+            {cardTraders.map((trader, idx) => {
               const rank = idx + 1
               return (
                 <TraderCard key={`${trader.id}-${trader.source || 'unknown'}`}
