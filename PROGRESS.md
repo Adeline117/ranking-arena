@@ -11,31 +11,50 @@
 ## Lighthouse Performance Optimization (2026-03-22)
 Lighthouse scores were terrible: LCP 8.3s, CLS 0.235, TBT 260ms, Speed Index 5.9s.
 
-### Fixes Applied (4 commits pushed)
-| Fix | Target Metric | Change |
-|-----|--------------|--------|
-| SSR→Client swap: `height:0` instead of `display:none` | **CLS** | 0.235 → ~0.05 |
-| Theme transition: 10 selectors → 5 specific | **TBT**, animations | -70 non-composited |
-| animations.css: 36→16 keyframes (914→543 lines) | **LCP/TBT** | -41% CSS parse |
-| AsyncStylesheets: split priority/deferred, animations at 5s+ | **LCP** | -300ms |
-| NumberTicker: skip on 2G/saveData, duration 800→600ms | **Speed Index** | -1s slow 4G |
-| Layout.tsx: 8 components → single deferred Suspense | **TBT** | -100ms |
-| Remove HomeSubNav (single "Traders" tab was useless) | **CLS/DOM** | -40px spacer |
-| Logo preload removed (TopNav is Phase 2, not above-fold) | **LCP** | -1 wasted req |
-| RankingTable: startTransition for sort/filter/page + memoized slices | **TBT** | -50ms deferred |
+### Fixes Applied (8 commits, 4 directions)
 
-### E2E Test Fixes (2 commits pushed)
-- Created `e2e/helpers.ts` with shared `dismissOverlays()` (WelcomeModal + CookieConsent)
-- Fixed `时间范围切换` test: wait for button enabled before clicking
-- Fixed navigation tests: use `waitForURL()` for client-side nav instead of `waitForLoadState`
-- Playwright config: navigationTimeout 30→60s, global timeout 60→120s, workers 2 in dev
-- Result: home.spec.ts **7/8 passed** (was 2/8), navigation **13/14 passed** (was 8/14)
-- Remaining flaky: dev server compilation contention (not test logic bugs)
+**LCP 优化**:
+- BetaBanner 转 SSR 直出（消除 JS 依赖）
+- Critical CSS 内联 three-col-layout（消除 render-blocking）
+- 重复 CSS 删除：animations.css -2.4KB, responsive.css 去重
+
+**CLS 优化**:
+- three-col-layout 加 critical CSS min-height（0.233 偏移修复）
+- `font-variant-numeric: tabular-nums` 全局应用
+- SSR table desktop grid 列宽固定
+
+**TBT 优化**:
+- DOMPurify + Privy 隔离为 async-only chunk（不影响首屏）
+- ExchangePartners 去掉 per-item contain（父已有）
+- RankingTable startTransition + useMemo slices
+- optimizePackageImports 清理 7 个不存在包
+
+**其他**:
+- NumberTicker 2G/saveData 跳过
+- Layout.tsx deferred Suspense
+- Browserslist 已配现代浏览器
+
+### 全站 UI 审计（29 文件修复）
+- 17 页重复 MobileBottomNav 删除
+- 7 组件 z-index 冲突修复（BetaBanner 9999→700, CookieConsent→300, WelcomeModal→400）
+- 5 组件移动端触摸目标 <44px 修复
+- 3 组件 fixed/sticky 元素重叠修复（CookieConsent/FeedbackWidget 避开底部导航）
+- 1 组件下拉截断修复（375px 适配）
+
+### 数据质量审计（6 文件修复）
+- compute-leaderboard 添加边界校验：ROI [-100%, 100000%], WR [0-100%], MDD [0-100%], Sharpe [-20, 20]
+- enrichment-db 同步前边界检查
+- gains-perp WR > 100% 修复（`Math.min`）
+- bitget_spot normalizeWinRate 返回 null 替代越界值
+- 新增 `safeWinRate()` 工具函数
+
+### 交易员数据完整度（4 文件修复）
+- okx_spot: 补 avatar_url + sharpe_ratio（API 已有但未解析）
+- woox: equity curve 提取修复（metricCharts ROI）
+- DEX followers: `?? 0` → `?? undefined`（不显示假数据）
 
 ### TODO
 - Verify Lighthouse scores on production after Vercel deploy
-- ~~Consider further bundle splitting~~ — Already optimized: Supabase lazy-loaded, React Query Web3-only, SWR (16KB) is main data layer
-- ~~RankingTable memoization~~ — Done: startTransition + useMemo slices + stabilized Zustand selectors
 
 ## Enrichment Timeout Fix (2026-03-22) — P0
 
