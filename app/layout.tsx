@@ -26,7 +26,7 @@ const WebVitals = dynamic(() => import("./components/Providers/WebVitals").then(
 const SpeedInsights = dynamic(() => import("@vercel/speed-insights/next").then(m => ({ default: m.SpeedInsights })));
 const Analytics = dynamic(() => import("@vercel/analytics/next").then(m => ({ default: m.Analytics })));
 const NetworkStatusBanner = dynamic(() => import("./components/ui/NetworkStatusBanner"));
-const BetaBanner = dynamic(() => import("./components/layout/BetaBanner"));
+import BetaBanner from "./components/layout/BetaBanner";
 const FeedbackWidget = dynamic(() => import("./components/common/FeedbackWidget"));
 const PlausibleAnalytics = dynamic(() => import("./components/PlausibleAnalytics"));
 import { getCriticalCss, getResourceHints } from "@/lib/performance/critical-css";
@@ -226,9 +226,10 @@ export default function RootLayout({
               </main>
             </PageErrorBoundary>
             <MobileBottomNav />
+            {/* BetaBanner: server-rendered (SSR) for LCP — not deferred */}
+            <BetaBanner />
             {/* Deferred: components that don't affect initial render or LCP */}
             <Suspense fallback={null}>
-              <BetaBanner />
               <NetworkStatusBanner />
               <ServiceWorkerRegistration />
               <KeyboardShortcuts />

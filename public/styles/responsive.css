@@ -35,24 +35,7 @@
   }
 }
 
-/* Flex 版本 */
-.hide-mobile-flex {
-  display: none;
-}
-
-.show-mobile-flex {
-  display: flex;
-}
-
-@media (min-width: 768px) {
-  .hide-mobile-flex {
-    display: flex;
-  }
-  
-  .show-mobile-flex {
-    display: none;
-  }
-}
+/* hide-mobile-flex / show-mobile-flex: defined in critical-css.ts */
 
 /* ============================================
    移动端排行榜表格
