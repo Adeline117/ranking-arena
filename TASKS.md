@@ -13,7 +13,7 @@
 
 ## 🔴 P0 - Critical
 
-_No critical issues currently_
+- [ ] Monitor enrichment after raceWithTimeout fix — confirm no more 45-min hangs (check next 3 cron cycles)
 
 ---
 
@@ -23,6 +23,7 @@ _No critical issues currently_
 - [x] Run pipeline_logs migration on Supabase production (verified present)
 - [x] Set up Telegram bot + chat ID for alerts (bot @Adeline07bot, chat 5646617467, token in Vercel env)
 - [x] Configure OpenClaw skills on Mac Mini (crontab + dotenv + Telegram alerts verified)
+- [ ] Verify Lighthouse scores on production after Vercel deploy (9 perf fixes shipped)
 
 ---
 
