@@ -21,8 +21,8 @@
  *   group=g2 → web3_bot, toobit, xt, crypto_com (every 6h)
  *   group=i  → etoro, dydx (every 6h)
  * Dead/blocked platforms:
- *   kucoin, mux, synthetix, bitmart, weex,
- *   whitebit, btse, pionex, vertex, okx_spot, paradex
+ *   kucoin (discontinued 2026-03), mux, synthetix, bitmart,
+ *   whitebit, btse, pionex, vertex, paradex
  * Mac Mini only (crontab feeds data directly):
  *   phemex (CloudFront blocks VPS), lbank (browser crashes on VPS), blofin (API needs auth)
  * Restored 2026-03-15:
@@ -83,7 +83,8 @@ const GROUPS: Record<string, string[]> = {
   // Group I: Social trading + restored platforms (every 6h)
   i: ['etoro', 'dydx'],
   // Group K: Restored via VPS scraper (every 6h) — new APIs discovered 2026-03-19
-  k: ['kucoin', 'weex'],
+  // kucoin: DEAD — copy trading feature discontinued, all APIs 404 (2026-03-23)
+  k: ['weex'],
   // Group L: New platforms Wave 2 (every 6h) — WOO X, Polymarket, Copin.io
   l: ['woox', 'polymarket', 'copin'],
 }

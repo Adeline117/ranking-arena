@@ -40,9 +40,9 @@ const fixAttempts = new Map() // platform -> last attempt timestamp
 // Dead: perpetual_protocol, whitebit, bitmart, btse
 const DEAD_PLATFORMS = new Set([
   'perpetual_protocol', 'whitebit', 'bitmart', 'btse',
-  // kucoin, weex — RECOVERED via Mac Mini (2026-03-13)
+  'kucoin',   // Copy trading discontinued — all APIs 404 since 2026-03
   'kwenta', 'mux', 'synthetix', 'paradex',
-  'okx_spot', 'bitget_spot',
+  'bitget_spot',
 ])
 
 if (!CRON_SECRET) {
