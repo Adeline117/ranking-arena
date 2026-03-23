@@ -159,11 +159,12 @@ export const DEAD_BLOCKED_PLATFORMS: TraderSource[] = [
   // MAC MINI ONLY — geo-blocked from VPS, needs residential IP
   // Data confirmed visible on user's browser, Mac Mini scripts deployed
   // ═══════════════════════════════════════════════════════════════
-  'kucoin',       // Copy trading feature discontinued — all APIs 404 since 2026-03 (confirmed by verify-kucoin 2026-03-23)
   // RECOVERED via Mac Mini scrapers (2026-03-13):
   // 'phemex' — Mac Mini fetch-phemex.mjs (183 traders)
   // 'lbank' — VPS scraper working (42 traders)
   // 'blofin' — VPS/Mac Mini working (429 traders)
+  // 'kucoin' — Mac Mini fetch-kucoin-v2.mjs (12 traders, browser-only API)
+  // 'kucoin' — RECOVERED: new API /_api/ct-copy-trade/v1/copyTrading/rn/leaderboard/query (775 traders) — 2026-03-19
   // crypto_com: DELETED — confirmed no copy trading feature on web (2026-03-19)
   // 'weex' — RECOVERED: new API http-gateway1.weex.com/api/v1/public/trace/traderListView (417 traders) — 2026-03-19
 

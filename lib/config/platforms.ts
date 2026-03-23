@@ -4,11 +4,15 @@
  */
 
 // 🚨 DISABLED PLATFORMS - permanently blocked due to repeated failures/hangs
-// 2026-03-22: RE-ENABLED binance_futures, bybit, kucoin, weex, okx_web3
-// Root cause: AbortSignal.timeout() doesn't reliably kill stuck TCP connections.
-// Fix: raceWithTimeout() hard deadline via Promise.race at per-trader + per-platform level.
-// Also added hard deadlines to CF Worker proxy + VPS proxy calls in enrichment-types.ts.
-export const DISABLED_PLATFORMS = ['bitget_spot', 'kucoin'] as const
+// bitget_futures: RE-ENABLED with enrichment (concurrency:3, 18s/trader timeout, CF Worker proxy)
+// 2026-03-21: Temporarily disable enrichment for repeatedly stuck platforms
+// binance_futures: 5x hangs (12:30, 14:30, 01:00, 02:30, 06:30)
+// bybit/kucoin/weex/okx_web3: 3x hangs (10:30, 11:00, 22:30) - 45min each
+// 2026-03-22: dydx RE-ENABLED with timeout controls (concurrency:3, 15s/trader, 5s API timeouts)
+// 2026-03-23 03:40: RE-DISABLED binance_futures/bybit/weex/okx_web3 - catastrophic 75% failure rate after ec2af671
+// All timeout fixes failed, cleanup cron not catching them
+// Re-enable after deep investigation of timeout root cause
+export const DISABLED_PLATFORMS = ['bitget_spot', 'binance_futures', 'bybit', 'kucoin', 'weex', 'okx_web3'] as const
 export type DisabledPlatform = typeof DISABLED_PLATFORMS[number]
 
 export function isPlatformDisabled(platform: string): boolean {

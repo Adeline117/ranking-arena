@@ -19,7 +19,7 @@ export class OkxSpotConnector extends BaseConnector {
   readonly marketType = 'spot' as const
 
   constructor(config?: Partial<import('../types').ConnectorConfig>) {
-    super({ timeout: 10000, maxRetries: 1, ...config })
+    super({ timeout: 10000, maxRetries: 0, ...config })
   }
 
   readonly capabilities: PlatformCapabilities = {
