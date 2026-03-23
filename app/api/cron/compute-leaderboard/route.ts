@@ -325,6 +325,25 @@ async function computeSeason(
     }
     // Ensure metrics_estimated is initialized (v1 snapshots don't have this field)
     if (snap.metrics_estimated == null) snap.metrics_estimated = false
+
+    // --- Boundary sanitization (safety net for all data sources) ---
+    // ROI: null out extreme values (> 100,000% or < -100%)
+    if (snap.roi != null && (snap.roi > 100000 || snap.roi < -100)) {
+      snap.roi = null
+    }
+    // Win rate: must be 0-100%
+    if (snap.win_rate != null && (snap.win_rate > 100 || snap.win_rate < 0)) {
+      snap.win_rate = null
+    }
+    // Max drawdown: must be 0-100%
+    if (snap.max_drawdown != null && (snap.max_drawdown > 100 || snap.max_drawdown < 0)) {
+      snap.max_drawdown = null
+    }
+    // Sharpe ratio: must be -20 to 20
+    if (snap.sharpe_ratio != null && (snap.sharpe_ratio > 20 || snap.sharpe_ratio < -20)) {
+      snap.sharpe_ratio = null
+    }
+
     const key = `${snap.source}:${snap.source_trader_id}`
     if (!traderMap.has(key)) {
       traderMap.set(key, snap)
@@ -468,13 +487,17 @@ async function computeSeason(
           for (const [tid, sr] of bestPerTrader) {
             const existing = traderMap.get(`${source}:${tid}`)
             if (!existing) continue
-            if (sr.profitable_trades_pct != null && existing.win_rate == null) {
+            // Validate enrichment values before applying (stats_detail may have bad data)
+            if (sr.profitable_trades_pct != null && existing.win_rate == null &&
+                sr.profitable_trades_pct >= 0 && sr.profitable_trades_pct <= 100) {
               existing.win_rate = sr.profitable_trades_pct
             }
-            if (sr.max_drawdown != null && existing.max_drawdown == null) {
+            if (sr.max_drawdown != null && existing.max_drawdown == null &&
+                sr.max_drawdown >= 0 && sr.max_drawdown <= 100) {
               existing.max_drawdown = sr.max_drawdown
             }
-            if (sr.sharpe_ratio != null && existing.sharpe_ratio == null) {
+            if (sr.sharpe_ratio != null && existing.sharpe_ratio == null &&
+                sr.sharpe_ratio >= -20 && sr.sharpe_ratio <= 20) {
               existing.sharpe_ratio = sr.sharpe_ratio
             }
             // NEW: Fill trades_count from total_trades or total_positions

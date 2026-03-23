@@ -335,11 +335,13 @@ export class BitgetSpotConnector extends BaseConnector {
     }
   }
 
-  /** Normalize win rate: values <= 1 are ratios, multiply by 100 */
+  /** Normalize win rate: values <= 1 are ratios, multiply by 100. Clamp to 0-100%. */
   private normalizeWinRate(val: unknown): number | null {
     const n = safeNumber(val)
     if (n === null) return null
-    if (n > 0 && n <= 1) return n * 100
-    return n
+    const pct = (n > 0 && n <= 1) ? n * 100 : n
+    // Clamp to valid range 0-100%
+    if (pct < 0 || pct > 100) return null
+    return pct
   }
 }
