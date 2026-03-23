@@ -170,6 +170,7 @@ footer,.sidebar-contained{content-visibility:auto;contain-intrinsic-size:auto 30
 .ssr-t{display:flex;flex-direction:column;gap:0}
 .ssr-hdr{display:grid;grid-template-columns:36px 1fr 50px 70px;gap:8px;padding:8px 12px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;color:var(--text-tertiary,#6B6B7B);border-bottom:1px solid var(--border-primary,#2A2836)}
 .ssr-row{display:grid;grid-template-columns:36px 1fr 50px 70px;gap:8px;padding:8px 12px;align-items:center;text-decoration:none;color:inherit;border-bottom:1px solid var(--border-primary,rgba(42,40,54,0.5));min-height:52px;contain:layout style}
+@media(min-width:768px){.ssr-hdr,.ssr-row{grid-template-columns:36px 1fr 50px 70px 50px 50px}}
 .ssr-r{text-align:right}
 .ssr-rank{text-align:center;font-weight:700;font-size:13px;color:var(--text-secondary)}
 .ssr-info{display:flex;align-items:center;gap:8px;min-width:0}
