@@ -48,22 +48,29 @@ export async function GET(request: NextRequest) {
     const pipelineSuccessRate = totalRuns > 0 ? (successRuns / totalRuns) * 100 : 0
     const alertCount24h = logs?.filter(l => l.status === 'error' || l.status === 'timeout').length || 0
 
-    // Platform freshness
-    const { data: freshness } = await supabase
-      .from('trader_snapshots_v2')
-      .select('platform, as_of_ts')
-      .order('as_of_ts', { ascending: false })
-
+    // Platform freshness — query latest updated_at per platform efficiently
+    // Previous approach scanned entire table (millions of rows) which often timed out,
+    // causing all platforms to show 999.0h in the daily report.
     const latestByPlatform = new Map<string, string>()
-    for (const row of freshness || []) {
-      if (!latestByPlatform.has(row.platform)) {
-        latestByPlatform.set(row.platform, row.as_of_ts)
+    const freshnessChecks = activePlatforms.map(async (platform) => {
+      const { data } = await supabase
+        .from('trader_snapshots_v2')
+        .select('updated_at')
+        .eq('platform', platform)
+        .order('updated_at', { ascending: false })
+        .limit(1)
+        .maybeSingle()
+      if (data?.updated_at) {
+        latestByPlatform.set(platform, data.updated_at)
       }
-    }
+    })
+    await Promise.all(freshnessChecks)
 
     const platformFreshness: DailyDigestData['platformFreshness'] = activePlatforms.map(p => {
       const latest = latestByPlatform.get(p)
-      const hoursAgo = latest ? (Date.now() - new Date(latest).getTime()) / (60 * 60 * 1000) : 999
+      const hoursAgo = latest
+        ? Math.round(((Date.now() - new Date(latest).getTime()) / (60 * 60 * 1000)) * 10) / 10
+        : 999
       return {
         name: p,
         hoursAgo,
