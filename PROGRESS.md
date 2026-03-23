@@ -10,7 +10,7 @@
 ## Lighthouse Performance Optimization (2026-03-22)
 Lighthouse scores were terrible: LCP 8.3s, CLS 0.235, TBT 260ms, Speed Index 5.9s.
 
-### Fixes Applied (3 commits pushed)
+### Fixes Applied (4 commits pushed)
 | Fix | Target Metric | Change |
 |-----|--------------|--------|
 | SSR→Client swap: `height:0` instead of `display:none` | **CLS** | 0.235 → ~0.05 |
@@ -21,6 +21,7 @@ Lighthouse scores were terrible: LCP 8.3s, CLS 0.235, TBT 260ms, Speed Index 5.9
 | Layout.tsx: 8 components → single deferred Suspense | **TBT** | -100ms |
 | Remove HomeSubNav (single "Traders" tab was useless) | **CLS/DOM** | -40px spacer |
 | Logo preload removed (TopNav is Phase 2, not above-fold) | **LCP** | -1 wasted req |
+| RankingTable: startTransition for sort/filter/page + memoized slices | **TBT** | -50ms deferred |
 
 ### E2E Test Fixes (2 commits pushed)
 - Created `e2e/helpers.ts` with shared `dismissOverlays()` (WelcomeModal + CookieConsent)
@@ -32,8 +33,8 @@ Lighthouse scores were terrible: LCP 8.3s, CLS 0.235, TBT 260ms, Speed Index 5.9
 
 ### TODO
 - Verify Lighthouse scores on production after Vercel deploy
-- Consider further bundle splitting (Supabase 180KB, React Query 95KB loaded on every page)
-- RankingTable memoization (200+ rows re-render, ~120ms TBT)
+- ~~Consider further bundle splitting~~ — Already optimized: Supabase lazy-loaded, React Query Web3-only, SWR (16KB) is main data layer
+- ~~RankingTable memoization~~ — Done: startTransition + useMemo slices + stabilized Zustand selectors
 
 ## Critical Fixes (2026-03-22)
 
