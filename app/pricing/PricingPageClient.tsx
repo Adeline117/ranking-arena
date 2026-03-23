@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import TopNav from '@/app/components/layout/TopNav'
-import MobileBottomNav from '@/app/components/layout/MobileBottomNav'
+// MobileBottomNav is rendered by root layout — do not duplicate here
 import { tokens } from '@/lib/design-tokens'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import { useAuthSession } from '@/lib/hooks/useAuthSession'
@@ -562,7 +562,7 @@ export default function PricingPageClient({ lifetimeCount = 0 }: PricingPageClie
           ))}
         </div>
       </div>
-      <MobileBottomNav />
+      {/* MobileBottomNav rendered in root layout */}
     </div>
   )
 }

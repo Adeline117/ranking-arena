@@ -4,7 +4,7 @@ import React, { useEffect, useState, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase/client'
 import TopNav from '@/app/components/layout/TopNav'
-import MobileBottomNav from '@/app/components/layout/MobileBottomNav'
+// MobileBottomNav is rendered by root layout — do not duplicate here
 import PortfolioOverview from '@/app/components/portfolio/PortfolioOverview'
 import PositionList from '@/app/components/portfolio/PositionList'
 import AddExchangeModal from '@/app/components/portfolio/AddExchangeModal'
@@ -235,7 +235,7 @@ export default function PortfolioPage() {
           </div>
         </div>
       </div>
-      <MobileBottomNav />
+      {/* MobileBottomNav rendered in root layout */}
 
       <AddExchangeModal
         open={showAddModal}

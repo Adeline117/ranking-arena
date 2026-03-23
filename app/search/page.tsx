@@ -4,7 +4,7 @@ import { useEffect, useState, Suspense, useCallback, useRef } from 'react'
 import { useSearchParams, useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase/client'
 import TopNav from '@/app/components/layout/TopNav'
-import MobileBottomNav from '@/app/components/layout/MobileBottomNav'
+// MobileBottomNav is rendered by root layout — do not duplicate here
 import { useToast } from '@/app/components/ui/Toast'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import Link from 'next/link'
@@ -633,7 +633,7 @@ function SearchContent() {
           </div>
         )}
       </div>
-      <MobileBottomNav />
+      {/* MobileBottomNav rendered in root layout */}
     </div>
   )
 }

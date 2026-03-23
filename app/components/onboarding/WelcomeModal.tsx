@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
+import { tokens } from '@/lib/design-tokens'
 
 const STORAGE_KEY = 'onboarding_complete'
 
@@ -97,7 +98,7 @@ export default function WelcomeModal() {
       style={{
         position: 'fixed',
         inset: 0,
-        zIndex: 9999,
+        zIndex: tokens.zIndex.modal,
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',

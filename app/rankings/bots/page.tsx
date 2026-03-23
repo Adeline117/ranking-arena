@@ -12,7 +12,7 @@ import { Suspense } from 'react'
 import { tokens } from '@/lib/design-tokens'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import { useBotRankings, type BotEntry } from '@/lib/hooks/useBotRankings'
-import MobileBottomNav from '@/app/components/layout/MobileBottomNav'
+// MobileBottomNav is rendered by root layout — do not duplicate here
 import DataStateWrapper from '@/app/components/ui/DataStateWrapper'
 import ErrorBoundary from '@/app/components/utils/ErrorBoundary'
 import { RankingSkeleton } from '@/app/components/ui/Skeleton'
@@ -415,7 +415,7 @@ function BotsContent() {
           </div>
         </DataStateWrapper>
       </div>
-      <MobileBottomNav />
+      {/* MobileBottomNav rendered in root layout */}
     </Box>
   )
 }

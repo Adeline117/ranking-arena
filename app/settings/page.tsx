@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase/client'
 import { tokens } from '@/lib/design-tokens'
 import TopNav from '@/app/components/layout/TopNav'
-import MobileBottomNav from '@/app/components/layout/MobileBottomNav'
+// MobileBottomNav is rendered in root layout.tsx — do not duplicate here
 import { Box, Text, Button } from '@/app/components/base'
 import dynamic from 'next/dynamic'
 const ExchangeConnectionManager = dynamic(() => import('@/app/components/exchange/ExchangeConnection'), { ssr: false })
@@ -303,7 +303,7 @@ function SettingsContent() {
               position: 'sticky', bottom: tokens.spacing[4],
               padding: `${tokens.spacing[3]} ${tokens.spacing[5]}`, borderRadius: tokens.radius.xl,
               background: tokens.colors.bg.secondary, border: `1px solid ${tokens.colors.accent.warning}40`,
-              boxShadow: tokens.shadow.lg, display: 'flex', alignItems: 'center', justifyContent: 'space-between', zIndex: 50,
+              boxShadow: tokens.shadow.lg, display: 'flex', alignItems: 'center', justifyContent: 'space-between', zIndex: tokens.zIndex.sticky,
             }}>
               <Text size="sm" style={{ color: tokens.colors.accent.warning }}>{t('unsavedChanges')}</Text>
               <Box style={{ display: 'flex', gap: tokens.spacing[3] }}>
@@ -351,7 +351,7 @@ function SettingsContent() {
           .settings-mobile-nav { gap: ${tokens.spacing[1]} !important; }
         }
       `}</style>
-      <MobileBottomNav />
+      {/* MobileBottomNav rendered in root layout.tsx */}
     </Box>
   )
 }

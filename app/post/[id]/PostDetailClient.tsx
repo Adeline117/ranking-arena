@@ -11,7 +11,7 @@ import { JsonLd } from '@/app/components/Providers/JsonLd'
 import { generatePostArticleSchema, generateBreadcrumbSchema, combineSchemas } from '@/lib/seo'
 import { useAuthSession } from '@/lib/hooks/useAuthSession'
 import ShareButton from '@/app/components/common/ShareButton'
-import MobileBottomNav from '@/app/components/layout/MobileBottomNav'
+// MobileBottomNav is rendered by root layout — do not duplicate here
 import { trackInteraction } from '@/lib/tracking'
 import { BASE_URL } from '@/lib/constants/urls'
 
@@ -99,7 +99,7 @@ export default function PostDetailClient({ postId }: { postId: string }) {
         </div>
         <PostFeed initialPostId={postId} variant="full" />
       </div>
-      <MobileBottomNav />
+      {/* MobileBottomNav rendered in root layout */}
     </div>
   )
 }
