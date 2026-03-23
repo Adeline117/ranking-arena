@@ -14,7 +14,7 @@ import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import { useToast } from '@/app/components/ui/Toast'
 import { useAuthSession } from '@/lib/hooks/useAuthSession'
 import ExportButton from '@/app/components/common/ExportButton'
-import MobileBottomNav from '@/app/components/layout/MobileBottomNav'
+// MobileBottomNav is rendered by root layout — do not duplicate here
 import { logger } from '@/lib/logger'
 import { BETA_PRO_FEATURES_FREE } from '@/lib/premium/hooks'
 
@@ -451,7 +451,7 @@ function CompareContent() {
           />
         )}
       </Box>
-      <MobileBottomNav />
+      {/* MobileBottomNav rendered in root layout */}
     </Box>
   )
 }

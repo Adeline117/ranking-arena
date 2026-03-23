@@ -34,10 +34,10 @@ export default function CookieConsent() {
     <div
       style={{
         position: 'fixed',
-        bottom: 0,
+        bottom: 'var(--mobile-nav-height, 60px)',
         left: 0,
         right: 0,
-        zIndex: 9999,
+        zIndex: tokens.zIndex.overlay,
         padding: tokens.spacing[4],
         background: tokens.glass.bg.darkHeavy,
         backdropFilter: tokens.glass.blur.lg,

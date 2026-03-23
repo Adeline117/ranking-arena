@@ -5,7 +5,7 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { tokens } from '@/lib/design-tokens'
 import TopNav from '@/app/components/layout/TopNav'
-import MobileBottomNav from '@/app/components/layout/MobileBottomNav'
+// MobileBottomNav is rendered by root layout — do not duplicate here
 import Breadcrumb from '@/app/components/ui/Breadcrumb'
 import { Box, Text, Button } from '@/app/components/base'
 import { RankingSkeleton } from '@/app/components/ui/Skeleton'
@@ -709,7 +709,7 @@ export default function FolderDetailPage({ params }: { params: Promise<{ folderI
         t={t}
         onClose={handleClosePost}
       />
-      <MobileBottomNav />
+      {/* MobileBottomNav rendered in root layout */}
     </Box>
   )
 }

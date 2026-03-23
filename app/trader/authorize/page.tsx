@@ -9,7 +9,7 @@
 import { useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import TopNav from '@/app/components/layout/TopNav'
-import MobileBottomNav from '@/app/components/layout/MobileBottomNav'
+// MobileBottomNav is rendered by root layout — do not duplicate here
 import { Box } from '@/app/components/base'
 import { tokens } from '@/lib/design-tokens'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
@@ -45,7 +45,7 @@ export default function TraderAuthorizePage() {
           Redirecting to the unified Claim flow...
         </p>
       </Box>
-      <MobileBottomNav />
+      {/* MobileBottomNav rendered in root layout */}
     </div>
   )
 }

@@ -159,8 +159,8 @@ function CompareFloatingBar() {
                   }}
                   className="btn-press"
                   style={{
-                    width: 24,
-                    height: 24,
+                    width: 36,
+                    height: 36,
                     borderRadius: tokens.radius.sm,
                     border: 'none',
                     background: 'transparent',

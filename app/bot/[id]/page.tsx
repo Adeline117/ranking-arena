@@ -13,7 +13,7 @@ import { tokens } from '@/lib/design-tokens'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import { useBotDetail } from '@/lib/hooks/useBotRankings'
 import TopNav from '@/app/components/layout/TopNav'
-import MobileBottomNav from '@/app/components/layout/MobileBottomNav'
+// MobileBottomNav is rendered by root layout — do not duplicate here
 import ErrorBoundary from '@/app/components/utils/ErrorBoundary'
 import { Box } from '@/app/components/base'
 import { getScoreColor, getScoreColorHex } from '@/lib/utils/score-colors'
@@ -321,7 +321,7 @@ function BotDetailContent({ id }: { id: string }) {
           </>
         )}
       </div>
-      <MobileBottomNav />
+      {/* MobileBottomNav rendered in root layout */}
     </Box>
   )
 }

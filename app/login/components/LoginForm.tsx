@@ -96,10 +96,12 @@ export default function LoginForm({
                 transform: 'translateY(-50%)',
                 background: 'transparent',
                 border: 'none',
-                padding: 4,
+                padding: '10px 8px',
                 cursor: 'pointer',
                 color: 'var(--color-text-tertiary)',
                 fontSize: 12,
+                minWidth: 44,
+                minHeight: 44,
               }}
               tabIndex={-1}
             >

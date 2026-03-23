@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback, memo } from 'react'
 import { usePathname } from 'next/navigation'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
+import { tokens } from '@/lib/design-tokens'
 import { features } from '@/lib/features'
 
 export default memo(function ScrollToTop() {
@@ -36,7 +37,7 @@ export default memo(function ScrollToTop() {
         position: 'fixed',
         bottom: hasFab ? 'calc(var(--mobile-nav-height, 60px) + 80px)' : 'calc(var(--mobile-nav-height, 60px) + 16px)',
         right: 16,
-        zIndex: 50,
+        zIndex: tokens.zIndex.sticky + 1,
         width: 44,
         height: 44,
         borderRadius: '50%',
