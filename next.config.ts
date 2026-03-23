@@ -79,6 +79,22 @@ const nextConfig: NextConfig = {
             priority: 25,
             enforce: true,
           },
+          // DOMPurify: only used in social features (posts, comments) — not on homepage
+          sanitize: {
+            test: /[\\/]node_modules[\\/](isomorphic-dompurify|dompurify)[\\/]/,
+            name: 'sanitize',
+            chunks: 'async',
+            priority: 25,
+            enforce: true,
+          },
+          // Privy/Auth: loaded lazily via dynamic() in Providers
+          auth: {
+            test: /[\\/]node_modules[\\/](@privy-io)[\\/]/,
+            name: 'auth',
+            chunks: 'async',
+            priority: 25,
+            enforce: true,
+          },
           vendor: {
             test: /[\\/]node_modules[\\/]/,
             name: 'vendor',

@@ -273,7 +273,7 @@ export class GainsPerpConnector extends BaseConnector {
     const wins = this.num(raw.count_win) ?? 0
     const losses = this.num(raw.count_loss) ?? 0
     const total = this.num(raw.count ?? raw.totalTrades) ?? 0
-    const winRate = total > 0 ? (wins / total) * 100 : null
+    const winRate = total > 0 ? Math.min((wins / total) * 100, 100) : null
     // ROI from API fields (may be returned directly)
     let roi = this.num(raw.roi ?? raw.pnlPercent ?? raw.returnRate ?? raw.profitPercent)
     // Convert from decimal ratio (0.15 = 15%) if needed

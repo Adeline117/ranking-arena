@@ -74,6 +74,21 @@ export function safeMdd(val: unknown, isRatio: boolean = false): number | null {
   return abs
 }
 
+/**
+ * Safely convert win rate to percentage (0-100).
+ * Handles both ratio (0.65 → 65%) and percent (65.0%) formats.
+ * Returns null for out-of-range values.
+ */
+export function safeWinRate(val: unknown): number | null {
+  const n = safeNumber(val)
+  if (n === null) return null
+  // Auto-detect ratio vs percentage: values in (0, 1] are likely ratios
+  const pct = (n > 0 && n <= 1) ? n * 100 : n
+  // Must be 0-100%
+  if (pct < 0 || pct > 100) return null
+  return Math.round(pct * 100) / 100
+}
+
 export function sleep(ms: number): Promise<void> {
   return new Promise(resolve => setTimeout(resolve, ms))
 }
