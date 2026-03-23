@@ -79,18 +79,26 @@ async function getLibraryData(): Promise<{
       .select('id', { count: 'exact', head: true }),
   ])
 
-  // Get category distribution
-  const { data: allCategories } = await supabase
-    .from('library_items')
-    .select('category')
-
-  const categoryMap = new Map<string, number>()
-  for (const row of allCategories || []) {
-    categoryMap.set(row.category, (categoryMap.get(row.category) || 0) + 1)
+  // Get category distribution — use DB-side aggregation via RPC
+  // Previous approach fetched ALL rows (60k+) just to count categories in memory
+  let categories: CategoryCount[] = []
+  try {
+    const { data: catData } = await supabase.rpc('get_library_category_counts')
+    if (catData && Array.isArray(catData)) {
+      categories = (catData as Array<{ category: string; count: number }>)
+        .sort((a, b) => b.count - a.count)
+    }
+  } catch {
+    // Fallback: derive from recent+popular results (no extra query)
+    const categoryMap = new Map<string, number>()
+    for (const item of [...(recentResult.data || []), ...(popularResult.data || [])]) {
+      const cat = (item as LibraryItem).category
+      if (cat) categoryMap.set(cat, (categoryMap.get(cat) || 0) + 1)
+    }
+    categories = Array.from(categoryMap.entries())
+      .map(([category, count]) => ({ category, count }))
+      .sort((a, b) => b.count - a.count)
   }
-  const categories: CategoryCount[] = Array.from(categoryMap.entries())
-    .map(([category, count]) => ({ category, count }))
-    .sort((a, b) => b.count - a.count)
 
   return {
     recent: (recentResult.data as LibraryItem[]) || [],

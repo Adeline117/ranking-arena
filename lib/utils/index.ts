@@ -38,7 +38,8 @@ export * from './circuit-breaker'
 export * from './validation'
 export * from './content'
 export * from './server-cache'
-export * from './sanitize'
+// sanitize: import directly from '@/lib/utils/sanitize' — isomorphic-dompurify is heavy (~40KB)
+// export * from './sanitize'
 export * from './csrf'
 export * from './currency'
 // 缓存功能请使用 @/lib/cache

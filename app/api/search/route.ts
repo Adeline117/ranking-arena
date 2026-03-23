@@ -26,7 +26,8 @@ import { searchTraders as unifiedSearchTraders, getSearchSuggestions } from '@/l
 import { EXCHANGE_CONFIG } from '@/lib/constants/exchanges'
 import { searchTradersMeili, isMeilisearchAvailable } from '@/lib/search/meilisearch'
 
-export const dynamic = 'force-dynamic'
+// Removed force-dynamic: search results are cacheable via Redis + HTTP cache headers
+// Previous force-dynamic blocked Vercel CDN caching entirely
 
 export interface UnifiedSearchResult {
   id: string

@@ -13,6 +13,7 @@ import { hasFeatureAccess, getFeatureLimits } from '@/lib/types/premium'
 import logger from '@/lib/logger'
 import { resolveTrader, getTraderDetail, toTraderPageData } from '@/lib/data/unified'
 import { withPublic } from '@/lib/api/middleware'
+import { tieredGetOrSet } from '@/lib/cache/redis-layer'
 
 export const runtime = 'nodejs'
 export const preferredRegion = ['sfo1', 'hnd1']
@@ -85,14 +86,11 @@ export const GET = withPublic(async ({ supabase, request }) => {
     // ── Unified data layer: resolve + fetch detail for each trader ──
     const includeEquity = searchParams.get('include_equity') === '1'
 
-    // Resolve all traders in parallel (max 5)
-    const resolvedTraders = await Promise.all(
-      traderIds.map(id => resolveTrader(supabase, { handle: id }))
-    )
-
-    // Fetch details for resolved traders in parallel
-    const detailResults = await Promise.all(
-      resolvedTraders.map(async (resolved, i) => {
+    // Cache per-trader compare data (60s) to avoid 25-55 queries on repeated comparisons
+    async function fetchTraderCompare(traderId: string): Promise<TraderCompareData | null> {
+      const cacheKey = `compare:trader:${traderId}:eq=${includeEquity ? 1 : 0}`
+      return tieredGetOrSet(cacheKey, async () => {
+        const resolved = await resolveTrader(supabase, { handle: traderId })
         if (!resolved) return null
         try {
           const detail = await getTraderDetail(supabase, {
@@ -107,9 +105,9 @@ export const GET = withPublic(async ({ supabase, request }) => {
             ? ((pageData.equityCurve as Record<string, Array<{ date: string; roi: number }>>)?.['90D'] || [])
             : undefined
 
-          const result: TraderCompareData = {
-            id: traderIds[i],
-            handle: (profile?.handle as string) || traderIds[i],
+          return {
+            id: traderId,
+            handle: (profile?.handle as string) || traderId,
             source: (profile?.source as string) || resolved.platform,
             roi: (perf?.roi_90d as number) ?? 0,
             roi_7d: perf?.roi_7d as number | undefined,
@@ -125,25 +123,25 @@ export const GET = withPublic(async ({ supabase, request }) => {
             avatar_url: (profile?.avatar_url as string) || undefined,
             followers: (profile?.followers as number) || 0,
             ...(includeEquity ? { equity_curve: equityCurve } : {}),
-          }
-          return result
+          } as TraderCompareData
         } catch (err) {
-          logger.warn(`[compare] Failed to fetch detail for ${traderIds[i]}:`, err)
+          logger.warn(`[compare] Failed to fetch detail for ${traderId}:`, err)
           return null
         }
-      })
-    )
+      }, 'warm') // 60s TTL — trader data changes infrequently
+    }
 
-    const compareData = detailResults.filter(Boolean) as TraderCompareData[]
+    // Fetch all traders in parallel with per-trader caching
+    const detailResults = await Promise.all(traderIds.map(fetchTraderCompare))
 
     // 按请求的 ID 顺序排序
     const sortedData = traderIds
-      .map(id => compareData.find(t => t.id === id))
+      .map((id, i) => detailResults[i])
       .filter(Boolean) as TraderCompareData[]
 
     return success({
       traders: sortedData,
       requestedIds: traderIds,
       foundCount: sortedData.length,
-    })
+    }, 200, { 'Cache-Control': 'private, s-maxage=60, stale-while-revalidate=120' })
 }, { name: 'compare', rateLimit: 'authenticated' })
