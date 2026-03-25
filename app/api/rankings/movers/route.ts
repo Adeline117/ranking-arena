@@ -22,7 +22,7 @@ interface Mover {
   trader_key: string
   rank: number
   arena_score: number | null
-  rankChange: number
+  roiDelta: number
   handle: string | null
   avatar_url: string | null
 }
@@ -126,15 +126,15 @@ export async function GET() {
         trader_key: r.source_trader_id,
         rank: r.rank ?? 0,
         arena_score: r.arena_score,
-        rankChange: Math.round(roiDelta * 100) / 100, // ROI point change, positive = riser
+        roiDelta: Math.round(roiDelta * 100) / 100, // ROI point change, positive = riser
         handle: r.handle,
         avatar_url: r.avatar_url,
       })
     }
 
-    movers.sort((a, b) => b.rankChange - a.rankChange)
-    const risers = movers.filter((m) => m.rankChange > 0).slice(0, 5)
-    const fallers = movers.filter((m) => m.rankChange < 0).slice(0, 5)
+    movers.sort((a, b) => b.roiDelta - a.roiDelta)
+    const risers = movers.filter((m) => m.roiDelta > 0).slice(0, 5)
+    const fallers = movers.filter((m) => m.roiDelta < 0).slice(0, 5)
 
     return NextResponse.json(
       { risers, fallers, period: '90D', snapshotDate: latestSnapDate },

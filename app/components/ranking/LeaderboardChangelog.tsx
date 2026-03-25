@@ -9,7 +9,7 @@ export interface Mover {
   trader_key: string
   rank: number
   arena_score: number | null
-  rankChange: number
+  roiDelta: number
   handle: string | null
   avatar_url: string | null
 }
@@ -23,7 +23,7 @@ function MoverRow({ mover, type }: { mover: Mover; type: 'riser' | 'faller' }) {
   const isRiser = type === 'riser'
   const changeColor = isRiser ? '#22c55e' : '#ef4444'
   const arrow = isRiser ? '\u2191' : '\u2193'
-  const absChange = Math.abs(mover.rankChange)
+  const absChange = Math.abs(mover.roiDelta)
   const displayName = mover.handle || mover.trader_key.slice(0, 10)
 
   return (

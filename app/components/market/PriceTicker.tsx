@@ -24,8 +24,12 @@ function getCryptoIcon(symbol: string, fallbackImage: string): string {
   return localPath || fallbackImage
 }
 
-const spotFetcher = (url: string) =>
-  fetch(url).then(r => r.json()).then((data: unknown) => {
+const spotFetcher = async (url: string): Promise<TickerCoin[]> => {
+  try {
+    const res = await fetch(url)
+    // Non-2xx → return empty array so ticker shows "–" instead of crashing
+    if (!res.ok) return []
+    const data: unknown = await res.json()
     if (!Array.isArray(data)) return []
     return data.slice(0, 20).map((c: Record<string, unknown>) => ({
       symbol: c.symbol as string,
@@ -33,7 +37,11 @@ const spotFetcher = (url: string) =>
       change24h: c.change24h as number,
       image: c.image as string,
     }))
-  })
+  } catch {
+    // Network error — return empty, let SWR retry
+    return []
+  }
+}
 
 export default function PriceTicker() {
   const { data: coins = [], error: swrError, isLoading: loading } = useSWR<TickerCoin[]>(
