@@ -16,6 +16,7 @@ import { getCorsOrigin } from '@/lib/utils/cors'
 export const preferredRegion = 'hnd1'
 
 // Browser cache: 1 year immutable. Avatars are deterministic — same URL = same image forever.
+// This prevents repeat requests to the serverless function for the same avatar.
 const CACHE_MAX_AGE = 60 * 60 * 24 * 365
 
 export async function GET(request: Request) {
@@ -166,10 +167,10 @@ export async function GET(request: Request) {
           return new NextResponse(buf, {
             headers: {
               'Content-Type': ct,
-              // Browser cache: 7d. CDN edge cache: 7d so repeated avatar loads hit edge, not serverless.
+              // 1-year immutable cache — avatars for a given seed/URL never change.
               'Cache-Control': `public, max-age=${CACHE_MAX_AGE}, immutable`,
               'Surrogate-Control': `max-age=${CACHE_MAX_AGE}`,
-              'CDN-Cache-Control': `public, max-age=${CACHE_MAX_AGE}`,
+              'CDN-Cache-Control': `public, max-age=${CACHE_MAX_AGE}, immutable`,
               'Access-Control-Allow-Origin': getCorsOrigin(origin2),
             },
           })
@@ -190,10 +191,10 @@ export async function GET(request: Request) {
     return new NextResponse(buffer, {
       headers: {
         'Content-Type': contentType,
-        // Browser cache: 7d. CDN edge cache: 7d so repeated avatar loads hit edge, not serverless.
+        // 1-year immutable cache — avatars for a given seed/URL never change.
         'Cache-Control': `public, max-age=${CACHE_MAX_AGE}, immutable`,
         'Surrogate-Control': `max-age=${CACHE_MAX_AGE}`,
-        'CDN-Cache-Control': `public, max-age=${CACHE_MAX_AGE}`,
+        'CDN-Cache-Control': `public, max-age=${CACHE_MAX_AGE}, immutable`,
         'Access-Control-Allow-Origin': getCorsOrigin(origin),
       },
     })

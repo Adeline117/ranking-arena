@@ -51,6 +51,10 @@ const PAIRS: Pair[] = [
 ]
 
 // ---- 内存缓存（按 pairs key 缓存）----
+// Note: on Edge runtime this Map lives only for the duration of the isolate lifetime
+// (typically a single request). It still provides intra-request deduplication and is
+// used as a last-resort stale fallback across back-to-back requests when the isolate
+// happens to be reused. The primary shared cache is Redis (getOrSetWithLock).
 const cacheMap = new Map<string, { ts: number; rows: MarketRow[]; source: string }>()
 
 function formatRow(symbol: string, priceNum: number, pctNum: number, rawPrice?: number | null): MarketRow {
@@ -77,6 +81,35 @@ function formatRow(symbol: string, priceNum: number, pctNum: number, rawPrice?: 
 
 // 说明：早期版本有 “默认 pairs” 的 CoinGecko/Coinbase 抓取函数。
 // 现在统一使用 *ForPairs 版本，支持自定义 pairs，因此移除旧函数以避免未使用告警。
+
+// Binance symbol → arena symbol mapping (USDT → USD normalisation)
+const BINANCE_PAIR_MAP: Record<string, string> = {
+  'BTC-USD': 'BTCUSDT',
+  'ETH-USD': 'ETHUSDT',
+  'SOL-USD': 'SOLUSDT',
+  'ARB-USD': 'ARBUSDT',
+  'BNB-USD': 'BNBUSDT',
+  'XRP-USD': 'XRPUSDT',
+  'ADA-USD': 'ADAUSDT',
+  'DOGE-USD': 'DOGEUSDT',
+  'AVAX-USD': 'AVAXUSDT',
+  'LINK-USD': 'LINKUSDT',
+  'MATIC-USD': 'MATICUSDT',
+  'DOT-USD': 'DOTUSDT',
+  'UNI-USD': 'UNIUSDT',
+  'ATOM-USD': 'ATOMUSDT',
+  'FIL-USD': 'FILUSDT',
+  'APT-USD': 'APTUSDT',
+  'OP-USD': 'OPUSDT',
+  'SUI-USD': 'SUIUSDT',
+  'NEAR-USD': 'NEARUSDT',
+  'PEPE-USD': 'PEPEUSDT',
+  'WIF-USD': 'WIFUSDT',
+  'SHIB-USD': 'SHIBUSDT',
+  'TRX-USD': 'TRXUSDT',
+  'RENDER-USD': 'RENDERUSDT',
+  'INJ-USD': 'INJUSDT',
+}
 
 // Next.js 缓存配置：revalidate 60秒（1分钟）
 export const revalidate = 60
@@ -136,8 +169,15 @@ export async function GET(request: NextRequest) {
               return { rows: cached.rows, source: cached.source }
             }
 
-            const rows = await fetchFromCoinbaseForPairs(targetPairs)
-            return { rows, source: 'coinbase' }
+            try {
+              const rows = await fetchFromCoinbaseForPairs(targetPairs)
+              return { rows, source: 'coinbase' }
+            } catch (e2) {
+              const e2msg = e2 instanceof Error ? e2.message : String(e2)
+              logger.warn('Coinbase failed, trying Binance', { error: e2msg })
+              const rows = await fetchFromBinanceForPairs(targetPairs)
+              return { rows, source: 'binance' }
+            }
           }
         },
         { ttl: 120, lockTtl: 10 }
@@ -278,4 +318,60 @@ async function fetchFromCoinbaseForPairs(pairs: Pair[]): Promise<MarketRow[]> {
     throw new Error('Coinbase: all requests failed or timed out')
   }
   return validRows
+}
+
+async function fetchFromBinanceForPairs(pairs: Pair[]): Promise<MarketRow[]> {
+  // Map arena pairs → Binance symbols (USDT quoted)
+  const binanceSymbols = pairs
+    .map(p => BINANCE_PAIR_MAP[p.symbol])
+    .filter((s): s is string => Boolean(s))
+
+  if (binanceSymbols.length === 0) {
+    throw new Error('Binance: no matching symbols for requested pairs')
+  }
+
+  const symbolsParam = JSON.stringify(binanceSymbols)
+  const url = `https://api.binance.com/api/v3/ticker/24hr?symbols=${encodeURIComponent(symbolsParam)}`
+
+  const controller = new AbortController()
+  const timeoutId = setTimeout(() => controller.abort(), 8000)
+
+  try {
+    const res = await fetch(url, {
+      headers: { accept: 'application/json' },
+      signal: controller.signal,
+    })
+    clearTimeout(timeoutId)
+
+    if (!res.ok) {
+      throw new Error(`Binance HTTP ${res.status}`)
+    }
+
+    interface BinanceTicker {
+      symbol: string
+      lastPrice: string
+      priceChangePercent: string
+    }
+
+    const tickers = await res.json() as BinanceTicker[]
+
+    const rows: MarketRow[] = []
+    for (const t of tickers) {
+      // Find which arena pair maps to this Binance symbol
+      const arenaPair = pairs.find(p => BINANCE_PAIR_MAP[p.symbol] === t.symbol)
+      if (!arenaPair) continue
+      const price = parseFloat(t.lastPrice)
+      const pct = parseFloat(t.priceChangePercent)
+      if (!Number.isFinite(price) || price <= 0) continue
+      rows.push(formatRow(arenaPair.symbol, price, Number.isFinite(pct) ? pct : 0, price))
+    }
+
+    if (rows.length === 0) {
+      throw new Error('Binance: no valid rows returned')
+    }
+    return rows
+  } catch (e) {
+    clearTimeout(timeoutId)
+    throw e
+  }
 }
