@@ -248,6 +248,114 @@ const BITUNIX: PlatformCapabilities = {
     proxy_required: false,
   },
   format: {
+    roi_format: 'decimal', // returns 0.05 for 5%
+    pnl_unit: 'usd',
+  },
+}
+
+const KUCOIN: PlatformCapabilities = {
+  supported_windows: ['7d', '30d', '90d'],
+  fields: {
+    roi: true,
+    pnl: true,
+    win_rate: true,
+    max_drawdown: false,
+    followers: true,
+    copiers: true,
+    aum: false,
+    trades_count: true,
+    equity_curve: false,
+    position_history: false,
+  },
+  api: {
+    rate_limit_rpm: 20,
+    timeout_ms: 15000,
+    requires_auth: false,
+    geo_restricted: false,
+    proxy_required: true, // CF protected
+  },
+  format: {
+    roi_format: 'percentage',
+    pnl_unit: 'usd',
+  },
+}
+
+const PHEMEX: PlatformCapabilities = {
+  supported_windows: ['7d', '30d', '90d'],
+  fields: {
+    roi: true,
+    pnl: true,
+    win_rate: true,
+    max_drawdown: true,
+    followers: true,
+    copiers: true,
+    aum: true,
+    trades_count: true,
+    equity_curve: false,
+    position_history: false,
+  },
+  api: {
+    rate_limit_rpm: 30,
+    timeout_ms: 15000,
+    requires_auth: false,
+    geo_restricted: false,
+    proxy_required: false,
+  },
+  format: {
+    roi_format: 'percentage',
+    pnl_unit: 'usd',
+  },
+}
+
+const BINGX: PlatformCapabilities = {
+  supported_windows: ['7d', '30d', '90d'],
+  fields: {
+    roi: true,
+    pnl: true,
+    win_rate: true,
+    max_drawdown: true,
+    followers: true,
+    copiers: true,
+    aum: true,
+    trades_count: false,
+    equity_curve: false,
+    position_history: false,
+  },
+  api: {
+    rate_limit_rpm: 20,
+    timeout_ms: 15000,
+    requires_auth: false,
+    geo_restricted: false,
+    proxy_required: true, // CF protected
+  },
+  format: {
+    roi_format: 'decimal', // returns 0.25 for 25%
+    pnl_unit: 'usd',
+  },
+}
+
+const BLOFIN: PlatformCapabilities = {
+  supported_windows: ['7d', '30d', '90d'],
+  fields: {
+    roi: true,
+    pnl: true,
+    win_rate: true,
+    max_drawdown: true,
+    followers: true,
+    copiers: false,
+    aum: false,
+    trades_count: false,
+    equity_curve: false,
+    position_history: false,
+  },
+  api: {
+    rate_limit_rpm: 30,
+    timeout_ms: 15000,
+    requires_auth: false,
+    geo_restricted: false,
+    proxy_required: false,
+  },
+  format: {
     roi_format: 'percentage',
     pnl_unit: 'usd',
   },
@@ -610,6 +718,15 @@ export const PLATFORM_CAPABILITIES: Record<string, PlatformCapabilities> = {
   coinex: COINEX,
   gateio: GATEIO,
   bitunix: BITUNIX,
+  bitunix_futures: BITUNIX,  // alias
+  kucoin: KUCOIN,
+  kucoin_futures: KUCOIN,  // alias
+  phemex: PHEMEX,
+  phemex_futures: PHEMEX,  // alias
+  bingx: BINGX,
+  bingx_futures: BINGX,  // alias
+  blofin: BLOFIN,
+  blofin_futures: BLOFIN,  // alias
 
   // DEX / Perp
   hyperliquid: HYPERLIQUID,
