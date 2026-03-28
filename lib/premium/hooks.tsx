@@ -42,8 +42,11 @@ export const FEATURE_LIMITS = {
 /**
  * Beta mode: unlock all Pro features for everyone during early launch.
  * Set to false when paywalls should be enforced.
+ *
+ * ⚠️ SECURITY: This flag was set to true, unlocking all Pro features for everyone.
+ * Changed to false on 2026-03-28 to enforce the paywall.
  */
-export const BETA_PRO_FEATURES_FREE = true
+export const BETA_PRO_FEATURES_FREE = false
 
 interface PremiumContextValue {
   /** 当前订阅 */
