@@ -14,6 +14,11 @@ export * from './mexc-futures'
 export * from './htx-futures'
 export * from './coinex-futures'
 export * from './gateio-futures'
+export * from './kucoin-futures'
+export * from './phemex-futures'
+export * from './bingx-futures'
+export * from './bitunix-futures'
+export * from './blofin-futures'
 
 // DEX / Perp
 export * from './hyperliquid'
@@ -23,6 +28,7 @@ export * from './drift'
 export * from './aevo'
 export * from './jupiter-perps'
 export * from './gains'
+export * from './kwenta'
 
 // Social Trading
 export * from './etoro'

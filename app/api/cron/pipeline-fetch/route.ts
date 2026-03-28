@@ -37,6 +37,11 @@ const SUPPORTED_PLATFORMS = [
   'htx_futures',
   'coinex',
   'gateio',
+  'kucoin',
+  'phemex',
+  'bingx',
+  'bitunix',
+  'blofin',
   // DEX / Perp
   'hyperliquid',
   'gmx',
@@ -45,6 +50,7 @@ const SUPPORTED_PLATFORMS = [
   'aevo',
   'jupiter_perps',
   'gains',
+  'kwenta',
   // Social Trading
   'etoro',
 ]
