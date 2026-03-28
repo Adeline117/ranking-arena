@@ -1,11 +1,12 @@
 /**
  * HTX (Huobi) Futures Scraper
+ *
+ * Uses HTX's copy trading ranking API.
+ * API: https://futures.htx.com/-/x/hbg/v1/futures/copytrading/rank
  */
 
 import { RawFetchResult, RawTraderEntry, TimeWindow } from '../types'
 import { PlatformScraper, registerScraper } from '../runner'
-
-const WINDOW_MAP: Record<TimeWindow, number> = { '7d': 7, '30d': 30, '90d': 90 }
 
 export class HtxFuturesScraper implements PlatformScraper {
   readonly platform = 'htx_futures'
@@ -36,26 +37,34 @@ export class HtxFuturesScraper implements PlatformScraper {
 
   private async fetchWindow(window: TimeWindow): Promise<RawFetchResult> {
     const startTime = Date.now()
-    const days = WINDOW_MAP[window]
-    const pageSize = 20
-    const maxPages = 50
+    const pageSize = 50
+    const maxPages = 20
     const allTraders: RawTraderEntry[] = []
 
     for (let page = 1; page <= maxPages; page++) {
-      const url = `https://futures.htx.com/-/x/hbg/v1/copy/public/trader/list?pageNum=${page}&pageSize=${pageSize}&sort=profit&direction=desc&days=${days}`
+      const url = `https://futures.htx.com/-/x/hbg/v1/futures/copytrading/rank?rankType=1&pageNo=${page}&pageSize=${pageSize}`
 
       try {
-        const response = await fetch(url, { method: 'GET' })
+        const controller = new AbortController()
+        const timer = setTimeout(() => controller.abort(), 15000)
+
+        const response = await fetch(url, {
+          method: 'GET',
+          signal: controller.signal,
+        })
+
+        clearTimeout(timer)
+
         if (!response.ok) break
 
         const data = await response.json()
-        const list = data?.data?.list || []
+        const list = data?.data?.itemList || data?.data?.list || []
 
         if (!Array.isArray(list) || list.length === 0) break
 
         for (const item of list) {
           allTraders.push({
-            trader_id: item.accountId || item.uid || '',
+            trader_id: String(item.uid || ''),
             raw_data: item,
           })
         }

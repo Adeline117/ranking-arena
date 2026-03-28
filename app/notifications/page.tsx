@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useCallback, useMemo } from 'react'
 import { useRouter } from 'next/navigation'
+import Image from 'next/image'
 import { tokens } from '@/lib/design-tokens'
 import TopNav from '@/app/components/layout/TopNav'
 // MobileBottomNav is rendered by root layout — do not duplicate here
@@ -543,7 +544,7 @@ export default function NotificationsPage() {
                           zIndex: 3 - i,
                         }}>
                           {actor.avatar_url ? (
-                            <img src={actor.avatar_url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                            <Image src={actor.avatar_url} alt="" fill sizes="20px" style={{ objectFit: 'cover' }} unoptimized />
                           ) : (
                             (actor.handle || '?')[0].toUpperCase()
                           )}

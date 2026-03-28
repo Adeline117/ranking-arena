@@ -86,3 +86,4 @@ export class MexcFuturesScraper implements PlatformScraper {
 }
 
 registerScraper('mexc', async () => new MexcFuturesScraper())
+registerScraper('mexc_futures', async () => new MexcFuturesScraper())
