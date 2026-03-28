@@ -15,16 +15,19 @@ import {
 import type { ColumnKey, ViewMode } from './RankingTable'
 import { getFilterableStyles, type TradingStyle } from '@/lib/utils/trading-style'
 
-const ALL_TOGGLEABLE_COLUMNS: ColumnKey[] = ['score', 'roi', 'pnl', 'winrate', 'mdd']
+const ALL_TOGGLEABLE_COLUMNS: ColumnKey[] = ['score', 'roi', 'pnl', 'winrate', 'mdd', 'sharpe', 'followers', 'trades']
 const COLUMN_LABELS: Record<ColumnKey, { zh: string; en: string }> = {
   score: { zh: 'Arena Score', en: 'Arena Score' },
   roi: { zh: 'ROI', en: 'ROI' },
   pnl: { zh: 'PnL', en: 'PnL' },
   winrate: { zh: '胜率', en: 'Win Rate' },
   mdd: { zh: '最大回撤', en: 'Max Drawdown' },
+  sharpe: { zh: 'Sharpe', en: 'Sharpe' },
   sortino: { zh: 'Sortino', en: 'Sortino' },
   alpha: { zh: 'Alpha', en: 'Alpha' },
   style: { zh: '交易风格', en: 'Style' },
+  followers: { zh: '跟单人数', en: 'Followers' },
+  trades: { zh: '交易次数', en: 'Trades' },
 }
 
 interface ExportRankingButtonProps {

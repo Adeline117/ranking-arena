@@ -229,9 +229,12 @@ function RankingTableInner(props: {
     if (visibleColumns.includes('pnl')) template += ' 80px'
     if (visibleColumns.includes('winrate')) template += ' 64px'
     if (visibleColumns.includes('mdd')) template += ' 64px'
+    if (visibleColumns.includes('sharpe')) template += ' 64px'
     if (visibleColumns.includes('sortino')) template += ' 70px'
     if (visibleColumns.includes('alpha')) template += ' 70px'
     if (visibleColumns.includes('style')) template += ' 80px'
+    if (visibleColumns.includes('followers')) template += ' 70px'
+    if (visibleColumns.includes('trades')) template += ' 70px'
     return template
   }, [visibleColumns])
 
@@ -243,9 +246,12 @@ function RankingTableInner(props: {
       !visibleColumns.includes('mdd') && '.ranking-table-grid-custom .col-mdd { display: none !important; }',
       !visibleColumns.includes('roi') && '.ranking-table-grid-custom .roi-cell { display: none !important; }',
       !visibleColumns.includes('pnl') && '.ranking-table-grid-custom .col-pnl { display: none !important; }',
+      !visibleColumns.includes('sharpe') && '.ranking-table-grid-custom .col-sharpe { display: none !important; }',
       !visibleColumns.includes('sortino') && '.ranking-table-grid-custom .col-sortino { display: none !important; }',
       !visibleColumns.includes('alpha') && '.ranking-table-grid-custom .col-alpha { display: none !important; }',
       !visibleColumns.includes('style') && '.ranking-table-grid-custom .col-style { display: none !important; }',
+      !visibleColumns.includes('followers') && '.ranking-table-grid-custom .col-followers { display: none !important; }',
+      !visibleColumns.includes('trades') && '.ranking-table-grid-custom .col-trades { display: none !important; }',
     ].filter(Boolean).join('\n        ')
     return `
       @media (min-width: 768px) {
@@ -464,6 +470,14 @@ function RankingTableInner(props: {
           <span title={t('mddTooltip') || 'Largest peak-to-trough decline. Lower is better.'} style={{ cursor: 'help', opacity: 0.6, fontSize: 11, flexShrink: 0 }} aria-label={t('mddTooltip') || 'Largest peak-to-trough decline. Lower is better.'}>&#9432;</span>
           <SortIndicator active={sortColumn === 'mdd'} dir={sortDir} />
         </Box>
+        {visibleColumns.includes('sharpe') && (
+          <Box className="col-sharpe sort-header sort-header-end" style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 2 }}>
+            <Text size="xs" weight="bold" color="tertiary" style={{ textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+              Sharpe
+            </Text>
+            <span title={t('sharpeTooltip') || 'Risk-adjusted return ratio. Higher = better risk/reward.'} style={{ cursor: 'help', opacity: 0.6, fontSize: 11, flexShrink: 0 }}>&#9432;</span>
+          </Box>
+        )}
         {visibleColumns.includes('sortino') && (
           <Box className={`col-sortino sort-header sort-header-end${sortColumn === 'sortino' ? ' sort-header-active' : ''} ${justSortedColumn === 'sortino' ? 'just-sorted' : ''}`} as="button" onClick={() => handleSort('sortino')} title={t('sortinoTooltip') || 'Risk-adjusted return. Higher = better risk/reward.'} role="columnheader" aria-label={`${t('sortinoRatio')} — click to sort`} aria-sort={sortColumn === 'sortino' ? (sortDir === 'asc' ? 'ascending' : 'descending') : 'none'} data-sortable
             style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 2 }}
@@ -482,6 +496,20 @@ function RankingTableInner(props: {
           <Box className="col-style" style={{ textAlign: 'center' }}>
             <Text size="sm" weight="bold" color="tertiary" style={{ textTransform: 'uppercase', letterSpacing: '0.5px', fontSize: tokens.typography.fontSize.sm }}>
               {t('tradingStyle') || 'Style'}
+            </Text>
+          </Box>
+        )}
+        {visibleColumns.includes('followers') && (
+          <Box className="col-followers" style={{ textAlign: 'right' }}>
+            <Text size="xs" weight="bold" color="tertiary" style={{ textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+              {t('followers') || 'Followers'}
+            </Text>
+          </Box>
+        )}
+        {visibleColumns.includes('trades') && (
+          <Box className="col-trades" style={{ textAlign: 'right' }}>
+            <Text size="xs" weight="bold" color="tertiary" style={{ textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+              {t('trades') || 'Trades'}
             </Text>
           </Box>
         )}
