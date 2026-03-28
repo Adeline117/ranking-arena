@@ -15,6 +15,7 @@
 
 - [x] Monitor enrichment after raceWithTimeout fix — dydx disabled (30+ min hangs), other platforms stable
 - [x] Remove dead platforms from pipeline — kucoin, weex, okx_web3 removed from batch-fetch groups
+- [x] Fix compute-leaderboard 3-day stale — cache tier bug fixed, SOURCES_WITH_DATA used (2026-03-28)
 
 ---
 
