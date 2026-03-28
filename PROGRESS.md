@@ -2,9 +2,39 @@
 
 > Auto-read by Claude Code at session start. Keep concise — archive completed items weekly.
 
+## Critical Fix: Leaderboard 3-Day Stale (2026-03-28)
+
+**Root cause**: `compute-leaderboard` wasn't updating `leaderboard_ranks` since 2026-03-25 (3 days).
+
+**Issues found and fixed**:
+
+1. **Cache tier mismatch bug** (compute-leaderboard/route.ts:839-843):
+   - Degradation skip counter read from `'hot'` tier but wrote to `'warm'` tier
+   - Counter never incremented → force-compute after 3 skips never triggered
+   - Fix: Both read and write now use `'warm'` tier
+
+2. **Dead platforms inflating expected count**:
+   - compute-leaderboard used `ALL_SOURCES` (includes dead platforms)
+   - New count from v2 was lower → 85% degradation threshold blocked writes
+   - Fix: Switched to `SOURCES_WITH_DATA` (excludes dead platforms)
+
+3. **Added newly dead platforms to `DEAD_BLOCKED_PLATFORMS`**:
+   - `kucoin`: copy trading discontinued 2026-03
+   - `weex`: 521 server down
+   - `okx_web3`: API broken since 2026-03-18 (10 days no data)
+
+4. **VPS scraper updates** (bingx-futures.ts, mexc-futures.ts):
+   - Switched from direct API to VPS Playwright scraper to bypass CloudFlare
+
+**Verification**: Data pipeline is healthy (41K snapshots/24h to `trader_snapshots_v2`). Next `compute-leaderboard` run at :00 or :30 should succeed.
+
+**Commits**: `1f30c853`
+
+---
+
 ## Current Sprint Focus
-- **36 active platforms** (KuCoin confirmed dead — copy trading discontinued, all APIs 404).
-- Enrichment: 33 platforms with enrichment configs.
+- **33 active platforms** (kucoin, weex, okx_web3 moved to DEAD_BLOCKED_PLATFORMS)
+- Enrichment: 33 platforms with enrichment configs (dydx disabled due to 30+ min hangs)
 - Equity curves: 34 platforms have curve data.
 - Cron jobs: 60 active.
 
