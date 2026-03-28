@@ -1,8 +1,8 @@
 /**
  * BloFin Futures Scraper
  *
- * Uses BloFin's copy trading API.
- * API: https://openapi.blofin.com/api/v1/copy-trading/public/current-lead-traders
+ * BloFin copy trading API requires authentication (returns 401/403).
+ * This scraper is a placeholder until we implement authenticated access.
  */
 
 import { RawFetchResult, RawTraderEntry, TimeWindow } from '../types'
@@ -14,27 +14,17 @@ export class BlofinFuturesScraper implements PlatformScraper {
   readonly platform = 'blofin'
 
   async fetch(windows: TimeWindow[]): Promise<RawFetchResult[]> {
-    const results: RawFetchResult[] = []
-
-    for (const window of windows) {
-      try {
-        const result = await this.fetchWindow(window)
-        results.push(result)
-      } catch (error) {
-        results.push({
-          platform: this.platform,
-          market_type: 'futures',
-          window,
-          raw_traders: [],
-          total_available: 0,
-          fetched_at: new Date(),
-          api_latency_ms: 0,
-          error: error instanceof Error ? error.message : String(error),
-        })
-      }
-    }
-
-    return results
+    // BloFin API requires authentication - returns 401/403 for public endpoints
+    return windows.map((window) => ({
+      platform: this.platform,
+      market_type: 'futures' as const,
+      window,
+      raw_traders: [],
+      total_available: 0,
+      fetched_at: new Date(),
+      api_latency_ms: 0,
+      error: 'BloFin copy trading API requires authentication - no public endpoint available',
+    }))
   }
 
   private async fetchWindow(window: TimeWindow): Promise<RawFetchResult> {
