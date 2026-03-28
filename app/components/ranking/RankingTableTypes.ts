@@ -1,8 +1,8 @@
 // Column customization types
-export type ColumnKey = 'score' | 'roi' | 'pnl' | 'winrate' | 'mdd' | 'sortino' | 'alpha' | 'style'
+export type ColumnKey = 'score' | 'roi' | 'pnl' | 'winrate' | 'mdd' | 'sharpe' | 'sortino' | 'alpha' | 'style' | 'followers' | 'trades'
 
-// sortino, alpha, style removed — no data in DB yet
-export const ALL_TOGGLEABLE_COLUMNS: ColumnKey[] = ['score', 'roi', 'pnl', 'winrate', 'mdd']
+// All columns users can toggle (sharpe, followers, trades added per P1-2/3/4)
+export const ALL_TOGGLEABLE_COLUMNS: ColumnKey[] = ['score', 'roi', 'pnl', 'winrate', 'mdd', 'sharpe', 'followers', 'trades']
 export const DEFAULT_VISIBLE_COLUMNS: ColumnKey[] = ['score', 'roi', 'pnl', 'winrate', 'mdd']
 export const LS_KEY_COLUMNS = 'ranking-visible-columns'
 export const LS_KEY_VIEW_MODE = 'ranking-view-mode'

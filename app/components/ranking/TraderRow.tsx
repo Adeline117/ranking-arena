@@ -494,6 +494,39 @@ export const TraderRow = memo(function TraderRow({
             <NaIndicator source={trader.source || source} metricType="drawdown" />
           )}
         </Box>
+
+        {/* Sharpe Ratio (P1-3) */}
+        <Box className="col-sharpe" style={{ textAlign: 'right', alignItems: 'center', justifyContent: 'flex-end' }}>
+          {trader.sharpe_ratio != null ? (
+            <Text size="sm" weight="semibold" style={{ color: trader.sharpe_ratio >= 1 ? tokens.colors.accent.success : TRADER_TEXT_TERTIARY, lineHeight: 1.2, fontSize: tokens.typography.fontSize.sm, fontVariantNumeric: 'tabular-nums' }}>
+              {trader.sharpe_ratio.toFixed(2)}
+            </Text>
+          ) : (
+            <span style={{ fontSize: tokens.typography.fontSize.xs, color: TRADER_TEXT_TERTIARY, opacity: 0.4 }}>&mdash;</span>
+          )}
+        </Box>
+
+        {/* Followers (P1-2) */}
+        <Box className="col-followers" style={{ textAlign: 'right', alignItems: 'center', justifyContent: 'flex-end' }}>
+          {trader.followers > 0 ? (
+            <Text size="sm" weight="semibold" style={{ color: TRADER_TEXT_TERTIARY, lineHeight: 1.2, fontSize: tokens.typography.fontSize.sm, fontVariantNumeric: 'tabular-nums' }}>
+              {trader.followers >= 1000 ? `${(trader.followers / 1000).toFixed(1)}K` : trader.followers}
+            </Text>
+          ) : (
+            <span style={{ fontSize: tokens.typography.fontSize.xs, color: TRADER_TEXT_TERTIARY, opacity: 0.4 }}>&mdash;</span>
+          )}
+        </Box>
+
+        {/* Trades Count (P1-4) */}
+        <Box className="col-trades" style={{ textAlign: 'right', alignItems: 'center', justifyContent: 'flex-end' }}>
+          {trader.trades_count != null && trader.trades_count > 0 ? (
+            <Text size="sm" weight="semibold" style={{ color: TRADER_TEXT_TERTIARY, lineHeight: 1.2, fontSize: tokens.typography.fontSize.sm, fontVariantNumeric: 'tabular-nums' }}>
+              {trader.trades_count >= 1000 ? `${(trader.trades_count / 1000).toFixed(1)}K` : trader.trades_count}
+            </Text>
+          ) : (
+            <span style={{ fontSize: tokens.typography.fontSize.xs, color: TRADER_TEXT_TERTIARY, opacity: 0.4 }}>&mdash;</span>
+          )}
+        </Box>
       </Box>
 
       {/* Expand button overlay */}
