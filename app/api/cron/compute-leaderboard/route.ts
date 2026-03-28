@@ -18,7 +18,7 @@ import {
   type Period,
 } from '@/lib/utils/arena-score'
 import {
-  ALL_SOURCES,
+  SOURCES_WITH_DATA,
   SOURCE_TYPE_MAP,
   SOURCE_TRUST_WEIGHT,
 } from '@/lib/constants/exchanges'
@@ -399,8 +399,8 @@ async function computeSeason(
   // Minimum trader threshold: if a platform has fewer than this many traders
   // in the requested window, fall back to 30D data (most platforms fetch 30D)
   const FALLBACK_THRESHOLD = 50
-  for (let i = 0; i < ALL_SOURCES.length; i += batchSize) {
-    const batch = ALL_SOURCES.slice(i, i + batchSize)
+  for (let i = 0; i < SOURCES_WITH_DATA.length; i += batchSize) {
+    const batch = SOURCES_WITH_DATA.slice(i, i + batchSize)
     const results = await Promise.all(
       batch.map(async (source) => {
         const rows: TraderRow[] = []
@@ -837,7 +837,8 @@ async function computeSeason(
       try {
         const { tieredGet: tGet, tieredSet: tSet } = await import('@/lib/cache/redis-layer')
         const skipKey = `leaderboard:degradation-skips:${season}`
-        const cached = await tGet(skipKey, 'hot')
+        // FIX: Read and write from same tier ('warm') to ensure counter persists
+        const cached = await tGet(skipKey, 'warm')
         consecutiveSkips = (cached?.data as number) || 0
         consecutiveSkips++
         await tSet(skipKey, consecutiveSkips, 'warm', [])
