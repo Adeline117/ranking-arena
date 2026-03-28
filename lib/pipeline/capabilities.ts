@@ -601,7 +601,9 @@ export const PLATFORM_CAPABILITIES: Record<string, PlatformCapabilities> = {
   binance_futures: BINANCE_FUTURES,
   okx_futures: OKX_FUTURES,
   bybit: BYBIT,
+  bybit_futures: BYBIT,  // alias
   bitget: BITGET,
+  bitget_futures: BITGET,  // alias
   mexc: MEXC,
   htx_futures: HTX_FUTURES,
   coinex: COINEX,
