@@ -1,67 +1,89 @@
 /**
- * Gains Network Scraper (on-chain)
+ * Gains Network Scraper (Arbitrum/Polygon/Base)
+ *
+ * Uses Gains Network's REST API leaderboard endpoint.
+ * API: GET https://backend-{chain}.gains.trade/leaderboard
  */
 
 import { RawFetchResult, RawTraderEntry, TimeWindow } from '../types'
 import { PlatformScraper, registerScraper } from '../runner'
 
+const CHAINS = ['arbitrum', 'polygon', 'base']
+
 export class GainsScraper implements PlatformScraper {
   readonly platform = 'gains'
-
-  private readonly SUBGRAPH_URL =
-    'https://api.thegraph.com/subgraphs/name/gainsnetwork/gtrade-stats-arbitrum'
 
   async fetch(windows: TimeWindow[]): Promise<RawFetchResult[]> {
     const startTime = Date.now()
 
     try {
-      const query = `{
-        traders(
-          first: 500
-          orderBy: totalPnl
-          orderDirection: desc
-        ) {
-          id
-          totalPnl
-          totalVolume
-          tradesCount
-          wins
-          losses
+      const seen = new Set<string>()
+      const allTraders: RawTraderEntry[] = []
+
+      // Fetch from all chains in parallel
+      const chainResults = await Promise.allSettled(
+        CHAINS.map(async (chain) => {
+          const url = `https://backend-${chain}.gains.trade/leaderboard`
+          const response = await fetch(url, {
+            method: 'GET',
+            headers: {
+              'Accept': 'application/json',
+              'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+            },
+          })
+
+          if (!response.ok) {
+            throw new Error(`Gains ${chain} API returned ${response.status}`)
+          }
+
+          const data = await response.json()
+          return { chain, data }
+        })
+      )
+
+      for (const result of chainResults) {
+        if (result.status === 'rejected') continue
+
+        const { chain, data } = result.value
+        if (!Array.isArray(data)) continue
+
+        for (const entry of data) {
+          const address = String(entry.address || entry.trader || '').toLowerCase()
+          if (!address || seen.has(address)) continue
+          seen.add(address)
+
+          allTraders.push({
+            trader_id: address,
+            raw_data: {
+              address,
+              pnl: entry.total_pnl_usd ?? entry.total_pnl ?? entry.pnl,
+              roi: entry.roi ?? entry.pnlPercent ?? entry.returnRate,
+              count_win: entry.count_win,
+              count_loss: entry.count_loss,
+              count: entry.count ?? entry.totalTrades,
+              avg_win: entry.avg_win,
+              avg_loss: entry.avg_loss,
+              avgPositionSize: entry.avgPositionSize,
+              totalVolume: entry.totalVolume ?? entry.total_volume ?? entry.volume,
+              _chain: chain,
+            },
+          })
+
+          if (allTraders.length >= 2000) break
         }
-      }`
 
-      const response = await fetch(this.SUBGRAPH_URL, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ query }),
-      })
-
-      if (!response.ok) {
-        throw new Error(`Gains Subgraph returned ${response.status}`)
+        if (allTraders.length >= 2000) break
       }
 
-      const data = await response.json()
       const latency = Date.now() - startTime
-      const traders = data?.data?.traders || []
 
-      // Gains only has all_time data
+      // Gains provides all_time data, return same for all windows
       return windows.map((window) => ({
         platform: this.platform,
         market_type: 'perp' as const,
         window,
-        raw_traders: traders.map((item: Record<string, unknown>) => ({
-          trader_id: String(item.id || '').toLowerCase(),
-          raw_data: {
-            id: item.id,
-            totalPnl: item.totalPnl, // wei format
-            totalVolume: item.totalVolume,
-            tradesCount: item.tradesCount,
-            wins: item.wins,
-            losses: item.losses,
-            _decimals: 18,
-          },
-        })),
-        total_available: traders.length,
+        raw_traders: allTraders,
+        total_available: allTraders.length,
         fetched_at: new Date(),
         api_latency_ms: latency,
       }))
