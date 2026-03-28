@@ -1,18 +1,25 @@
 /**
  * BingX Futures Scraper
  *
- * Uses BingX's copy trading API.
- * API: https://bingx.com/api/uc/v1/public/copyTrade/traders
- * Note: CloudFlare protected - may need VPS proxy in production
+ * Uses VPS Playwright scraper to bypass CloudFlare protection.
+ * VPS Endpoint: /bingx/leaderboard on port 3457
  */
 
 import { RawFetchResult, RawTraderEntry, TimeWindow } from '../types'
 import { PlatformScraper, registerScraper } from '../runner'
 
-const WINDOW_MAP: Record<TimeWindow, string> = { '7d': '7', '30d': '30', '90d': '90' }
+const WINDOW_MAP: Record<TimeWindow, number> = { '7d': 7, '30d': 30, '90d': 90 }
 
 export class BingxFuturesScraper implements PlatformScraper {
   readonly platform = 'bingx'
+
+  private get VPS_SCRAPER_URL(): string | undefined {
+    return process.env.VPS_SCRAPER_SG || process.env.VPS_PROXY_SG?.replace(':3456', ':3457')
+  }
+
+  private get VPS_PROXY_KEY(): string | undefined {
+    return process.env.VPS_PROXY_KEY?.trim()
+  }
 
   async fetch(windows: TimeWindow[]): Promise<RawFetchResult[]> {
     const results: RawFetchResult[] = []
@@ -40,69 +47,77 @@ export class BingxFuturesScraper implements PlatformScraper {
 
   private async fetchWindow(window: TimeWindow): Promise<RawFetchResult> {
     const startTime = Date.now()
+
+    // Check VPS configuration
+    if (!this.VPS_SCRAPER_URL || !this.VPS_PROXY_KEY) {
+      return {
+        platform: this.platform,
+        market_type: 'futures',
+        window,
+        raw_traders: [],
+        total_available: 0,
+        fetched_at: new Date(),
+        api_latency_ms: 0,
+        error: 'BingX requires VPS scraper - VPS_SCRAPER_SG and VPS_PROXY_KEY not configured',
+      }
+    }
+
     const period = WINDOW_MAP[window]
-    const pageSize = 100
-    const maxPages = 20
     const allTraders: RawTraderEntry[] = []
 
-    for (let page = 1; page <= maxPages; page++) {
-      const url = `https://bingx.com/api/uc/v1/public/copyTrade/traders?page=${page}&pageSize=${pageSize}&period=${period}&sortBy=roi&sortOrder=desc`
+    try {
+      // Use VPS Playwright scraper
+      const url = `${this.VPS_SCRAPER_URL}/bingx/leaderboard?period=${period}&pageSize=100`
+      const response = await fetch(url, {
+        method: 'GET',
+        headers: {
+          'X-Proxy-Key': this.VPS_PROXY_KEY,
+          'Accept': 'application/json',
+        },
+        signal: AbortSignal.timeout(120000),
+      })
 
-      try {
-        const response = await fetch(url, {
-          method: 'GET',
-          headers: {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-            'Accept': 'application/json',
-            'Origin': 'https://bingx.com',
-            'Referer': 'https://bingx.com/en/CopyTrading/leaderBoard',
-          },
-        })
+      if (!response.ok) {
+        throw new Error(`VPS scraper returned ${response.status}`)
+      }
 
-        if (!response.ok) {
-          if (page === 1) {
-            return {
-              platform: this.platform,
-              market_type: 'futures',
-              window,
-              raw_traders: [],
-              total_available: 0,
-              fetched_at: new Date(),
-              api_latency_ms: Date.now() - startTime,
-              error: 'BingX API blocked (CF protection) - requires VPS proxy',
-            }
-          }
-          break
-        }
+      const data = await response.json()
 
-        const data = await response.json()
-        const list = data?.data?.list || []
+      // Handle nested format from VPS scraper
+      const globalResult = data?.data?.global?.result || data?.data?.list || []
 
-        if (!Array.isArray(list) || list.length === 0) break
-
-        for (const item of list) {
+      if (Array.isArray(globalResult)) {
+        for (const item of globalResult) {
+          // VPS scraper returns nested traderInfoVo format
+          const info = item.traderInfoVo || item
           allTraders.push({
-            trader_id: String(item.uniqueId || item.uid || item.traderId || ''),
+            trader_id: String(info.trader || info.apiIdentity || info.uniqueId || ''),
             raw_data: {
-              uniqueId: item.uniqueId,
-              traderName: item.traderName,
-              headUrl: item.headUrl,
-              roi: item.roi,
-              pnl: item.pnl,
-              winRate: item.winRate,
-              maxDrawdown: item.maxDrawdown,
-              followerNum: item.followerNum,
-              copyNum: item.copyNum,
-              aum: item.aum,
+              trader: info.trader,
+              apiIdentity: info.apiIdentity,
+              traderName: info.traderName,
+              avatar: info.avatar,
+              roi: item.cumulativePnlRate7Days || item.roi,
+              pnl: item.totalEarnings || item.pnl,
+              followerEarning: item.followerEarning,
+              winRate: info.winRate,
+              maxDrawdown: info.maxDrawdown,
+              followerNum: info.followerNum,
+              rank: item.rank,
             },
           })
         }
-
-        if (list.length < pageSize) break
-        if (allTraders.length >= 2000) break
-        await this.delay(200)
-      } catch {
-        break
+      }
+    } catch (error) {
+      return {
+        platform: this.platform,
+        market_type: 'futures',
+        window,
+        raw_traders: [],
+        total_available: 0,
+        fetched_at: new Date(),
+        api_latency_ms: Date.now() - startTime,
+        error: `VPS scraper error: ${error instanceof Error ? error.message : String(error)}`,
       }
     }
 
@@ -115,10 +130,6 @@ export class BingxFuturesScraper implements PlatformScraper {
       fetched_at: new Date(),
       api_latency_ms: Date.now() - startTime,
     }
-  }
-
-  private delay(ms: number): Promise<void> {
-    return new Promise((resolve) => setTimeout(resolve, ms))
   }
 }
 

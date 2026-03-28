@@ -1,14 +1,23 @@
 /**
  * MEXC Futures Scraper
+ *
+ * Uses VPS Playwright scraper to bypass CloudFlare protection.
+ * VPS Endpoint: /mexc/leaderboard on port 3457
  */
 
 import { RawFetchResult, RawTraderEntry, TimeWindow } from '../types'
 import { PlatformScraper, registerScraper } from '../runner'
 
-const WINDOW_MAP: Record<TimeWindow, number> = { '7d': 1, '30d': 2, '90d': 3 }
-
 export class MexcFuturesScraper implements PlatformScraper {
   readonly platform = 'mexc'
+
+  private get VPS_SCRAPER_URL(): string | undefined {
+    return process.env.VPS_SCRAPER_SG || process.env.VPS_PROXY_SG?.replace(':3456', ':3457')
+  }
+
+  private get VPS_PROXY_KEY(): string | undefined {
+    return process.env.VPS_PROXY_KEY?.trim()
+  }
 
   async fetch(windows: TimeWindow[]): Promise<RawFetchResult[]> {
     const results: RawFetchResult[] = []
@@ -36,36 +45,75 @@ export class MexcFuturesScraper implements PlatformScraper {
 
   private async fetchWindow(window: TimeWindow): Promise<RawFetchResult> {
     const startTime = Date.now()
-    const timeType = WINDOW_MAP[window]
-    const pageSize = 100
-    const maxPages = 20
+
+    // Check VPS configuration
+    if (!this.VPS_SCRAPER_URL || !this.VPS_PROXY_KEY) {
+      return {
+        platform: this.platform,
+        market_type: 'futures',
+        window,
+        raw_traders: [],
+        total_available: 0,
+        fetched_at: new Date(),
+        api_latency_ms: 0,
+        error: 'MEXC requires VPS scraper - VPS_SCRAPER_SG and VPS_PROXY_KEY not configured',
+      }
+    }
+
     const allTraders: RawTraderEntry[] = []
 
-    for (let page = 1; page <= maxPages; page++) {
-      const url = `https://futures.mexc.com/api/v1/private/account/assets/copy-trading/trader/list?page=${page}&pageSize=${pageSize}&sortField=yield&sortType=DESC&timeType=${timeType}`
+    try {
+      // Use VPS Playwright scraper
+      const url = `${this.VPS_SCRAPER_URL}/mexc/leaderboard?pageNo=1&pageSize=100`
+      const response = await fetch(url, {
+        method: 'GET',
+        headers: {
+          'X-Proxy-Key': this.VPS_PROXY_KEY,
+          'Accept': 'application/json',
+        },
+        signal: AbortSignal.timeout(120000),
+      })
 
-      try {
-        const response = await fetch(url, { method: 'GET' })
-        if (!response.ok) break
+      if (!response.ok) {
+        throw new Error(`VPS scraper returned ${response.status}`)
+      }
 
-        const data = await response.json()
-        const dataObj = data?.data || {}
-        const list = dataObj?.list || dataObj?.comprehensives || []
+      const data = await response.json()
 
-        if (!Array.isArray(list) || list.length === 0) break
+      // Handle MEXC response format
+      const list = data?.data?.comprehensives || data?.data?.list || []
 
+      if (Array.isArray(list)) {
         for (const item of list) {
           allTraders.push({
-            trader_id: item.uid || '',
-            raw_data: item,
+            trader_id: String(item.uid || ''),
+            raw_data: {
+              uid: item.uid,
+              nickname: item.nickname,
+              avatar: item.avatar,
+              roi: item.roi,
+              pnl: item.pnl || item.totalPnl,
+              winRate: item.winRate,
+              followers: item.followers,
+              followable: item.followable,
+              equity: item.equity,
+              totalRoi: item.totalRoi,
+              totalWinRate: item.totalWinRate,
+              order: item.order,
+            },
           })
         }
-
-        if (list.length < pageSize) break
-        if (allTraders.length >= 2000) break
-        await this.delay(300)
-      } catch {
-        break
+      }
+    } catch (error) {
+      return {
+        platform: this.platform,
+        market_type: 'futures',
+        window,
+        raw_traders: [],
+        total_available: 0,
+        fetched_at: new Date(),
+        api_latency_ms: Date.now() - startTime,
+        error: `VPS scraper error: ${error instanceof Error ? error.message : String(error)}`,
       }
     }
 
@@ -78,10 +126,6 @@ export class MexcFuturesScraper implements PlatformScraper {
       fetched_at: new Date(),
       api_latency_ms: Date.now() - startTime,
     }
-  }
-
-  private delay(ms: number): Promise<void> {
-    return new Promise((resolve) => setTimeout(resolve, ms))
   }
 }
 

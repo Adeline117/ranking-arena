@@ -164,9 +164,13 @@ export const DEAD_BLOCKED_PLATFORMS: TraderSource[] = [
   // 'lbank' — VPS scraper working (42 traders)
   // 'blofin' — VPS/Mac Mini working (429 traders)
   // 'kucoin' — Mac Mini fetch-kucoin-v2.mjs (12 traders, browser-only API)
-  // 'kucoin' — RECOVERED: new API /_api/ct-copy-trade/v1/copyTrading/rn/leaderboard/query (775 traders) — 2026-03-19
+  // 'kucoin' — was RECOVERED 2026-03-19, now DEAD again — copy trading discontinued 2026-03, all APIs 404
+  'kucoin',
   // crypto_com: DELETED — confirmed no copy trading feature on web (2026-03-19)
-  // 'weex' — RECOVERED: new API http-gateway1.weex.com/api/v1/public/trace/traderListView (417 traders) — 2026-03-19
+  // 'weex' — was RECOVERED 2026-03-19, now DEAD again — 521 server down 2026-03-28
+  'weex',
+  // okx_web3: API broken since 2026-03-18, no data for 10 days
+  'okx_web3',
 
   // ═══════════════════════════════════════════════════════════════
   // BLOCKED — needs API key or credentials to unlock
