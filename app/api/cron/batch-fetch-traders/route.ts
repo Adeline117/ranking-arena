@@ -21,7 +21,8 @@
  *   group=g2 → web3_bot, toobit, xt, crypto_com (every 6h)
  *   group=i  → etoro, dydx (every 6h)
  * Dead/blocked platforms:
- *   kucoin, mux, synthetix, bitmart, weex,
+ *   kucoin (copy trading discontinued 2026-03), weex (521 server down),
+ *   okx_web3 (API broken since 2026-03-18), mux, synthetix, bitmart,
  *   whitebit, btse, pionex, vertex, okx_spot, paradex
  * Mac Mini only (crontab feeds data directly):
  *   phemex (CloudFront blocks VPS), lbank (browser crashes on VPS), blofin (API needs auth)
@@ -67,8 +68,8 @@ const GROUPS: Record<string, string[]> = {
   d1: ['gains', 'htx_futures'],
   // Group E: Fast CEX+DEX (every 6h) — coinex URL fixed + VPS proxy
   e: ['bitfinex', 'coinex', 'binance_web3'],
-  // Group E2: OKX Web3 only (every 6h) — slow platform, separated to avoid timeout
-  e2: ['okx_web3'],
+  // Group E2: DISABLED 2026-03-28 — okx_web3 API broken since 2026-03-18 (no data 10 days)
+  // e2: ['okx_web3'],
   // Group F: MEXC only (every 6h) — VPS scraper, slow
   f: ['mexc'],
   // Group F2: BingX (every 6h) — VPS scraper
@@ -82,8 +83,8 @@ const GROUPS: Record<string, string[]> = {
   // crypto_com: REMOVED — copy-trading feature shut down, /exchange/copy-trading redirects to /exchange/ — 2026-03-19
   // Group I: Social trading + restored platforms (every 6h)
   i: ['etoro', 'dydx'],
-  // Group K: Restored via VPS scraper (every 6h) — new APIs discovered 2026-03-19
-  k: ['kucoin', 'weex'],
+  // Group K: DISABLED 2026-03-28 — kucoin (copy trading discontinued), weex (521 server down)
+  // k: ['kucoin', 'weex'],
   // Group L: New platforms Wave 2 (every 6h) — WOO X, Polymarket, Copin.io
   l: ['woox', 'polymarket', 'copin'],
 }
