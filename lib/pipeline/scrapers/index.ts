@@ -4,11 +4,13 @@
  * 所有平台采集器的统一入口
  */
 
-// Binance
+// CEX
 export * from './binance-futures'
 
+// DEX
+export * from './hyperliquid'
+
 // TODO: Add more scrapers as they are migrated
-// export * from './hyperliquid'
 // export * from './gmx'
 // export * from './okx-futures'
 // export * from './bybit'
