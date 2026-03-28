@@ -254,6 +254,10 @@
     {
       "path": "/api/cron/pipeline-fetch?platforms=jupiter_perps,gains,etoro",
       "schedule": "38 */3 * * *"
+    },
+    {
+      "path": "/api/cron/pipeline-fetch?platforms=kucoin,bingx,bitunix,kwenta",
+      "schedule": "48 */3 * * *"
     }
   ],
   "headers": [
