@@ -27,7 +27,19 @@ export const dynamic = 'force-dynamic'
 export const maxDuration = 300 // 5 minutes
 
 // 支持的平台（已迁移到新管道）
-const SUPPORTED_PLATFORMS = ['binance_futures', 'hyperliquid']
+const SUPPORTED_PLATFORMS = [
+  // CEX
+  'binance_futures',
+  'okx_futures',
+  'bybit',
+  'bitget_futures',
+  // DEX
+  'hyperliquid',
+  'gmx',
+  'dydx',
+  'drift',
+  'aevo',
+]
 
 export async function GET(request: NextRequest) {
   // 验证 cron secret
