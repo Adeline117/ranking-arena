@@ -1,11 +1,24 @@
 /**
  * eToro Scraper
+ *
+ * Uses eToro's public rankings API.
+ * API: https://www.etoro.com/sapi/rankings/rankings/
+ * Note: Filters to crypto traders only (excludes stocks/ETFs/etc)
  */
 
 import { RawFetchResult, RawTraderEntry, TimeWindow } from '../types'
 import { PlatformScraper, registerScraper } from '../runner'
 
-const WINDOW_MAP: Record<TimeWindow, string> = { '7d': 'OneWeek', '30d': 'OneMonth', '90d': 'ThreeMonths' }
+const WINDOW_MAP: Record<TimeWindow, string> = {
+  '7d': 'CurrMonth',
+  '30d': 'OneMonthAgo',
+  '90d': 'ThreeMonthsAgo',
+}
+
+// Non-crypto asset classes to filter out
+const EXCLUDED_ASSET_CLASSES = new Set([
+  'Stocks', 'ETFs', 'Currencies', 'Commodities', 'Indices',
+])
 
 export class EtoroScraper implements PlatformScraper {
   readonly platform = 'etoro'
@@ -42,7 +55,7 @@ export class EtoroScraper implements PlatformScraper {
     const allTraders: RawTraderEntry[] = []
 
     for (let page = 1; page <= maxPages; page++) {
-      const url = `https://www.etoro.com/sapi/rankings/cid/2/rankings/?Period=${period}&SortBy=Profit&PageNumber=${page}&ItemsPerPage=${pageSize}`
+      const url = `https://www.etoro.com/sapi/rankings/rankings/?Period=${period}&page=${page}&pagesize=${pageSize}`
 
       try {
         const response = await fetch(url, {
@@ -61,24 +74,23 @@ export class EtoroScraper implements PlatformScraper {
         if (!Array.isArray(items) || items.length === 0) break
 
         for (const item of items) {
+          // Filter crypto-only traders
+          if (EXCLUDED_ASSET_CLASSES.has(item.TopTradedAssetClassName)) continue
+
           allTraders.push({
-            trader_id: item.UserName || item.CustomerId || '',
+            trader_id: String(item.CustomerId || item.UserName || ''),
             raw_data: {
-              userName: item.UserName,
               customerId: item.CustomerId,
+              userName: item.UserName,
               gain: item.Gain,          // ROI percentage
-              profit: item.Profit,
-              copiers: item.Copiers,
-              copiersChange: item.CopiersChange,
-              riskScore: item.RiskScore,
-              maxDailyRiskScore: item.MaxDailyRiskScore,
-              maxMonthlyRiskScore: item.MaxMonthlyRiskScore,
-              trades: item.Trades,
-              profitableWeeks: item.ProfitableWeeks,
-              profitableMonths: item.ProfitableMonths,
-              avgProfitPct: item.AvgProfitPct,
-              avgLossPct: item.AvgLossPct,
               winRatio: item.WinRatio,
+              peakToValley: item.PeakToValley,  // Negative MDD
+              copiers: item.Copiers,
+              aumValue: item.AUMValue,
+              riskScore: item.RiskScore,
+              topTradedAssetClassName: item.TopTradedAssetClassName,
+              dailyDD: item.DailyDD,
+              weeklyDD: item.WeeklyDD,
             },
           })
         }

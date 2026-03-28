@@ -1,11 +1,13 @@
 /**
  * Gate.io Futures Scraper
+ *
+ * Uses Gate.io's copy trading leader list API.
+ * API: https://www.gate.com/apiw/v2/copy/leader/list
+ * Note: Only 'month' cycle works reliably (week/quarter return errors)
  */
 
 import { RawFetchResult, RawTraderEntry, TimeWindow } from '../types'
 import { PlatformScraper, registerScraper } from '../runner'
-
-const WINDOW_MAP: Record<TimeWindow, string> = { '7d': 'week', '30d': 'month', '90d': 'quarter' }
 
 export class GateioFuturesScraper implements PlatformScraper {
   readonly platform = 'gateio'
@@ -36,32 +38,42 @@ export class GateioFuturesScraper implements PlatformScraper {
 
   private async fetchWindow(window: TimeWindow): Promise<RawFetchResult> {
     const startTime = Date.now()
-    const period = WINDOW_MAP[window]
-    const pageSize = 100
-    const maxPages = 20
+    // Gate.io only supports cycle=month reliably
+    const cycle = 'month'
+    const pageSize = 50
+    const maxPages = 15
     const allTraders: RawTraderEntry[] = []
 
     for (let page = 1; page <= maxPages; page++) {
-      const url = `https://www.gate.io/api/copytrade/copy_trading/leader/list?page=${page}&limit=${pageSize}&period=${period}&sort_by=pnl&sort_type=desc`
+      const url = `https://www.gate.com/apiw/v2/copy/leader/list?page=${page}&page_size=${pageSize}&order_by=profit_rate&cycle=${cycle}`
 
       try {
-        const response = await fetch(url, { method: 'GET' })
+        const response = await fetch(url, {
+          method: 'GET',
+          headers: {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+            'Accept': 'application/json',
+            'Origin': 'https://www.gate.io',
+            'Referer': 'https://www.gate.io/strategybot',
+          },
+        })
+
         if (!response.ok) break
 
         const data = await response.json()
-        const list = data?.data?.list || data?.list || []
+        const list = data?.data?.list || []
 
         if (!Array.isArray(list) || list.length === 0) break
 
         for (const item of list) {
           allTraders.push({
-            trader_id: item.leader_id || item.uid || '',
+            trader_id: String(item.leader_id || item.uid || item.user_id || ''),
             raw_data: item,
           })
         }
 
         if (list.length < pageSize) break
-        if (allTraders.length >= 2000) break
+        if (allTraders.length >= 750) break
         await this.delay(200)
       } catch {
         break
