@@ -605,6 +605,7 @@ export const PLATFORM_CAPABILITIES: Record<string, PlatformCapabilities> = {
   bitget: BITGET,
   bitget_futures: BITGET,  // alias
   mexc: MEXC,
+  mexc_futures: MEXC,  // alias
   htx_futures: HTX_FUTURES,
   coinex: COINEX,
   gateio: GATEIO,

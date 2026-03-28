@@ -10,6 +10,10 @@ export * from './binance-futures'
 export * from './okx-futures'
 export * from './bybit-futures'
 export * from './bitget-futures'
+export * from './mexc-futures'
+export * from './htx-futures'
+export * from './coinex-futures'
+export * from './gateio-futures'
 
 // DEX / Perp
 export * from './hyperliquid'
@@ -17,12 +21,8 @@ export * from './gmx'
 export * from './dydx'
 export * from './drift'
 export * from './aevo'
+export * from './jupiter-perps'
+export * from './gains'
 
-// TODO: Add more scrapers as they are migrated
-// export * from './mexc-futures'
-// export * from './htx-futures'
-// export * from './coinex-futures'
-// export * from './gateio-futures'
-// export * from './jupiter-perps'
-// export * from './gains'
-// export * from './etoro'
+// Social Trading
+export * from './etoro'
