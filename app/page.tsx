@@ -1,5 +1,6 @@
 import type { Metadata } from 'next'
 import { getInitialTraders } from '@/lib/getInitialTraders'
+import { getHeroStats } from '@/lib/data/hero-stats'
 import SSRRankingTable from './components/home/SSRRankingTable'
 import HomeHeroSSR from './components/home/HomeHeroSSR'
 import { JsonLd } from './components/Providers/JsonLd'
@@ -62,13 +63,12 @@ const organizationJsonLd = {
 
 // WebSite JSON-LD is in layout.tsx (site-wide, with potentialAction)
 
-/** Hero stats — hardcoded to eliminate expensive COUNT(*) query on 34K+ rows.
- *  These numbers change only when new exchanges launch (rare).
- *  Saves ~1-2s on SSR cache miss by removing 2 DB queries from critical path. */
-const heroStats = { traderCount: 34000, exchangeCount: 27 }
-
 export default async function Page() {
-  const { traders: initialTraders, lastUpdated } = await getInitialTraders('90D', 10)
+  // Fetch data in parallel for optimal performance
+  const [{ traders: initialTraders, lastUpdated }, heroStats] = await Promise.all([
+    getInitialTraders('90D', 10),
+    getHeroStats(), // Cached in Redis (1hr TTL), falls back to defaults on error
+  ])
 
   const ssrTable = <SSRRankingTable traders={initialTraders} />
 
