@@ -1,8 +1,9 @@
 /**
  * Phemex Futures Scraper
  *
- * Uses Phemex's public copy trading API.
- * API: https://api.phemex.com/copy-trading/public/traders
+ * Phemex copy trading API requires authentication.
+ * This scraper is a placeholder until we implement authenticated access.
+ * Note: Public API endpoints return 404/10500 errors.
  */
 
 import { RawFetchResult, RawTraderEntry, TimeWindow } from '../types'
@@ -12,27 +13,17 @@ export class PhemexFuturesScraper implements PlatformScraper {
   readonly platform = 'phemex'
 
   async fetch(windows: TimeWindow[]): Promise<RawFetchResult[]> {
-    const results: RawFetchResult[] = []
-
-    for (const window of windows) {
-      try {
-        const result = await this.fetchWindow(window)
-        results.push(result)
-      } catch (error) {
-        results.push({
-          platform: this.platform,
-          market_type: 'futures',
-          window,
-          raw_traders: [],
-          total_available: 0,
-          fetched_at: new Date(),
-          api_latency_ms: 0,
-          error: error instanceof Error ? error.message : String(error),
-        })
-      }
-    }
-
-    return results
+    // Phemex API requires authentication - no public leaderboard endpoint
+    return windows.map((window) => ({
+      platform: this.platform,
+      market_type: 'futures' as const,
+      window,
+      raw_traders: [],
+      total_available: 0,
+      fetched_at: new Date(),
+      api_latency_ms: 0,
+      error: 'Phemex copy trading API requires authentication - no public endpoint available',
+    }))
   }
 
   private async fetchWindow(window: TimeWindow): Promise<RawFetchResult> {

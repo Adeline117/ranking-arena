@@ -2,19 +2,42 @@
  * Kwenta Perpetual Scraper (Optimism)
  *
  * Uses Kwenta's subgraph on The Graph for trader stats.
- * API: GraphQL subgraph on Optimism
+ * Requires THEGRAPH_API_KEY and KWENTA_SUBGRAPH_ID env vars.
+ * Note: Old hosted service (api.thegraph.com) is deprecated.
  */
 
 import { RawFetchResult, RawTraderEntry, TimeWindow } from '../types'
 import { PlatformScraper, registerScraper } from '../runner'
 
-const SUBGRAPH_URL = 'https://api.thegraph.com/subgraphs/name/kwenta/optimism-perps'
+function getSubgraphUrl(): string {
+  const apiKey = process.env.THEGRAPH_API_KEY
+  const subgraphId = process.env.KWENTA_SUBGRAPH_ID
+  if (apiKey && subgraphId) {
+    return `https://gateway.thegraph.com/api/${apiKey}/subgraphs/id/${subgraphId}`
+  }
+  // Fallback to old hosted service (deprecated)
+  return 'https://api.thegraph.com/subgraphs/name/kwenta/optimism-perps'
+}
 
 export class KwentaScraper implements PlatformScraper {
   readonly platform = 'kwenta'
 
   async fetch(windows: TimeWindow[]): Promise<RawFetchResult[]> {
     const startTime = Date.now()
+
+    // Check if env vars are set
+    if (!process.env.THEGRAPH_API_KEY || !process.env.KWENTA_SUBGRAPH_ID) {
+      return windows.map((window) => ({
+        platform: this.platform,
+        market_type: 'perp' as const,
+        window,
+        raw_traders: [],
+        total_available: 0,
+        fetched_at: new Date(),
+        api_latency_ms: 0,
+        error: 'Kwenta requires THEGRAPH_API_KEY and KWENTA_SUBGRAPH_ID env vars',
+      }))
+    }
 
     try {
       const query = `
@@ -38,7 +61,7 @@ export class KwentaScraper implements PlatformScraper {
         }
       `
 
-      const response = await fetch(SUBGRAPH_URL, {
+      const response = await fetch(getSubgraphUrl(), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
