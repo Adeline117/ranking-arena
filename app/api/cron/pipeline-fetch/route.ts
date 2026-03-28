@@ -28,17 +28,25 @@ export const maxDuration = 300 // 5 minutes
 
 // 支持的平台（已迁移到新管道）
 const SUPPORTED_PLATFORMS = [
-  // CEX
+  // CEX Futures
   'binance_futures',
   'okx_futures',
   'bybit',
   'bitget_futures',
-  // DEX
+  'mexc_futures',
+  'htx_futures',
+  'coinex',
+  'gateio',
+  // DEX / Perp
   'hyperliquid',
   'gmx',
   'dydx',
   'drift',
   'aevo',
+  'jupiter_perps',
+  'gains',
+  // Social Trading
+  'etoro',
 ]
 
 export async function GET(request: NextRequest) {

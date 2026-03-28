@@ -245,6 +245,23 @@
     {
       "path": "/api/cron/update-competitions",
       "schedule": "12,42 * * * *"
+    },
+
+    {
+      "path": "/api/cron/pipeline-fetch?platforms=binance_futures,okx_futures,bybit,bitget_futures",
+      "schedule": "8 */3 * * *"
+    },
+    {
+      "path": "/api/cron/pipeline-fetch?platforms=mexc_futures,htx_futures,coinex,gateio",
+      "schedule": "18 */3 * * *"
+    },
+    {
+      "path": "/api/cron/pipeline-fetch?platforms=hyperliquid,gmx,dydx,drift,aevo",
+      "schedule": "28 */3 * * *"
+    },
+    {
+      "path": "/api/cron/pipeline-fetch?platforms=jupiter_perps,gains,etoro",
+      "schedule": "38 */3 * * *"
     }
   ],
   "headers": [
