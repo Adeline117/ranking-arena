@@ -10,6 +10,7 @@ import { ErrorBoundary } from '@/app/components/utils/ErrorBoundary'
 import { resolveTrader, getTraderDetail, toTraderPageData } from '@/lib/data/unified'
 import { LR } from '@/lib/types/schema-mapping'
 import { BASE_URL } from '@/lib/constants/urls'
+import { generateTraderProfilePageSchema, type TraderSchemaInput } from '@/lib/seo/structured-data'
 
 // Derive display names from central config
 const EXCHANGE_DISPLAY: Record<string, string> = Object.fromEntries(
@@ -269,26 +270,18 @@ export default async function TraderPage({ params, searchParams }: { params: Pro
     } : {}),
   }
 
-  // JSON-LD structured data
-  const exchange = EXCHANGE_DISPLAY[resolved.platform] || resolved.platform || 'Crypto Exchange'
-  const roi = traderData.roi ?? null
-  const score = traderData.arena_score ?? null
-  const rank = traderData.rank ?? null
-  const jsonLd = {
-    '@context': 'https://schema.org',
-    '@type': 'Person',
-    name: traderData.handle,
-    url: `${BASE_URL}/trader/${encodeURIComponent(traderData.handle)}`,
-    ...(traderData.avatar_url ? { image: traderData.avatar_url } : {}),
-    description: [
-      `${exchange} crypto trader`,
-      roi != null ? `${roi >= 0 ? '+' : ''}${roi.toFixed(1)}% ROI` : null,
-      score != null ? `Arena Score ${score.toFixed(0)}` : null,
-      rank != null ? `Ranked ${rank} on Arena` : null,
-    ].filter(Boolean).join('. '),
-    memberOf: { '@type': 'Organization', name: exchange },
-    sameAs: [`${BASE_URL}/trader/${encodeURIComponent(traderData.handle)}`],
+  // JSON-LD structured data — use centralized schema generator
+  const traderSchemaInput: TraderSchemaInput = {
+    handle: traderData.handle,
+    id: traderData.source_trader_id ?? decodedHandle,
+    bio: undefined,
+    avatarUrl: traderData.avatar_url ?? undefined,
+    source: resolved.platform,
+    roi90d: traderData.roi ?? undefined,
+    winRate: traderData.win_rate ?? undefined,
+    arenaScore: traderData.arena_score ?? undefined,
   }
+  const jsonLd = generateTraderProfilePageSchema(traderSchemaInput)
 
   return (
     <>
