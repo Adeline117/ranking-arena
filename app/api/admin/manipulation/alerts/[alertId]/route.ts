@@ -66,7 +66,7 @@ export async function GET(
     if (error) {
       logger.dbError('fetch-alert-details', error, { alertId })
       return NextResponse.json(
-        { error: 'Failed to fetch alert', details: error.message },
+        { error: 'Failed to fetch alert', code: 'INTERNAL_ERROR' },
         { status: 500 }
       )
     }
@@ -89,7 +89,7 @@ export async function GET(
   } catch (error) {
     logger.apiError(`/api/admin/manipulation/alerts/${alertId}`, error, {})
     return NextResponse.json(
-      { error: 'Internal server error', details: error instanceof Error ? error.message : 'Unknown' },
+      { error: 'Internal server error', code: 'INTERNAL_ERROR' },
       { status: 500 }
     )
   }
@@ -182,7 +182,7 @@ export async function PATCH(
     if (updateError) {
       logger.dbError('update-alert', updateError, { alertId, update })
       return NextResponse.json(
-        { error: 'Failed to update alert', details: updateError.message },
+        { error: 'Failed to update alert', code: 'INTERNAL_ERROR' },
         { status: 500 }
       )
     }
@@ -213,7 +213,7 @@ export async function PATCH(
   } catch (error) {
     logger.apiError(`/api/admin/manipulation/alerts/${alertId}`, error, {})
     return NextResponse.json(
-      { error: 'Internal server error', details: error instanceof Error ? error.message : 'Unknown' },
+      { error: 'Internal server error', code: 'INTERNAL_ERROR' },
       { status: 500 }
     )
   }

@@ -206,7 +206,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json(
       {
         error: userFacingMessage,
-        details: process.env.NODE_ENV === 'development' && error instanceof Error ? error.stack : undefined
+        code: 'CHECKOUT_ERROR',
       },
       { status: statusCode }
     )

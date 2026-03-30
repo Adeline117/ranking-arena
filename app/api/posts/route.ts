@@ -8,7 +8,7 @@
  * - 并行获取用户反应和投票状态
  */
 
-export const runtime = 'edge'
+export const runtime = 'nodejs'
 
 import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'

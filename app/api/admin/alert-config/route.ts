@@ -48,7 +48,7 @@ export async function GET(req: Request) {
   } catch (error: unknown) {
     const errorMessage = error instanceof Error ? error.message : 'Unknown error'
     logger.error('Alert config API error', { error: errorMessage })
-    return NextResponse.json({ error: errorMessage }, { status: 500 })
+    return NextResponse.json({ error: 'Internal server error', code: 'INTERNAL_ERROR' }, { status: 500 })
   }
 }
 
@@ -106,6 +106,6 @@ export async function POST(req: Request) {
   } catch (error: unknown) {
     const errorMessage = error instanceof Error ? error.message : 'Unknown error'
     logger.error('Alert config API error', { error: errorMessage })
-    return NextResponse.json({ error: errorMessage }, { status: 500 })
+    return NextResponse.json({ error: 'Internal server error', code: 'INTERNAL_ERROR' }, { status: 500 })
   }
 }

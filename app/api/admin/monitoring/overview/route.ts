@@ -361,7 +361,6 @@ export async function GET(req: NextRequest) {
     })
   } catch (error: unknown) {
     logger.error('Monitoring overview API error', { error })
-    const errorMessage = error instanceof Error ? error.message : 'Internal server error'
-    return NextResponse.json({ error: errorMessage }, { status: 500 })
+    return NextResponse.json({ error: 'Internal server error', code: 'INTERNAL_ERROR' }, { status: 500 })
   }
 }

@@ -89,19 +89,33 @@ export async function isTraderClaimed(
   traderId: string,
   source: string
 ): Promise<boolean> {
-  const { data, error } = await supabase
-    .from('trader_claims')
-    .select('id')
-    .eq('trader_id', traderId)
-    .eq('source', source)
-    .in('status', ['pending', 'reviewing', 'verified'])
-    .maybeSingle()
+  // Claims older than 30 days in pending/reviewing status should not block new claims.
+  // Verified claims never expire.
+  const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000)
 
-  if (error) {
-    throw error
-  }
+  // Check for verified claims (never expire) and recent pending/reviewing claims in parallel
+  const [verifiedResult, pendingResult] = await Promise.all([
+    supabase
+      .from('trader_claims')
+      .select('id')
+      .eq('trader_id', traderId)
+      .eq('source', source)
+      .eq('status', 'verified')
+      .maybeSingle(),
+    supabase
+      .from('trader_claims')
+      .select('id')
+      .eq('trader_id', traderId)
+      .eq('source', source)
+      .in('status', ['pending', 'reviewing'])
+      .gte('created_at', thirtyDaysAgo.toISOString())
+      .maybeSingle(),
+  ])
 
-  return !!data
+  if (verifiedResult.error) throw verifiedResult.error
+  if (pendingResult.error) throw pendingResult.error
+
+  return !!(verifiedResult.data || pendingResult.data)
 }
 
 /**
