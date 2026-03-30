@@ -22,7 +22,6 @@ import { useComparisonStore } from '@/lib/stores'
 import { getPlatformNote } from '@/lib/constants/platform-metrics'
 import { EXCHANGE_NAMES } from '@/lib/constants/exchanges'
 
-/** @deprecated UI-specific. Will be replaced by UnifiedTrader adapter. */
 export interface TraderCardProps {
   trader: Trader
   rank: number

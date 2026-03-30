@@ -4,7 +4,8 @@ import { useEffect, useMemo, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import RankingSection from './RankingSection'
 import PullToRefresh from '../ui/PullToRefresh'
-import { useTraderData, useAuth } from './hooks'
+import { useTraderData } from './hooks'
+import { useAuthSession } from '@/lib/hooks/useAuthSession'
 import { useLanguage } from '../Providers/LanguageProvider'
 import type { TimeRange } from './hooks/useTraderData'
 import type { InitialTrader } from '@/lib/getInitialTraders'
@@ -23,7 +24,7 @@ interface HomePageClientProps {
  * Passing ssrTable to the client was causing duplicate DOM nodes.
  */
 export default function HomePageClient({ initialTraders, initialLastUpdated }: HomePageClientProps) {
-  const { isLoggedIn } = useAuth()
+  const { isLoggedIn } = useAuthSession()
   const { t } = useLanguage()
   const router = useRouter()
 

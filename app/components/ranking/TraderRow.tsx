@@ -86,7 +86,6 @@ function AnimatedROI({ roi, roiColor, animate }: { roi: number; roiColor: string
   )
 }
 
-/** @deprecated UI-specific. Will be replaced by UnifiedTrader adapter. */
 export interface TraderRowProps {
   trader: Trader
   rank: number
