@@ -47,7 +47,6 @@ export function getStoredColumns(): ColumnKey[] {
  * Uses snake_case field names to match the database/API response shape
  * that ranking components consume directly.
  *
- * @deprecated UI-specific. Will be replaced by UnifiedTrader adapter.
  * For server-side data access, use UnifiedTrader from lib/data/trader/types.
  */
 export interface Trader {

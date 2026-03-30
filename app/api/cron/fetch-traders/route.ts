@@ -1,18 +1,10 @@
 /**
- * 交易员数据抓取 Cron 主入口
- * 
+ * @deprecated Use /api/cron/batch-fetch-traders instead (primary production route).
+ * This legacy endpoint runs ALL platforms sequentially and is only kept for manual
+ * debugging. It is NOT scheduled in vercel.json crons.
+ *
  * GET /api/cron/fetch-traders - 健康检查
  * POST /api/cron/fetch-traders - 触发所有平台抓取（仅用于手动触发/调试）
- * 
- * 生产环境推荐使用各平台独立端点:
- * POST /api/cron/fetch-traders/[platform]
- * 
- * 支持的平台:
- * - binance_futures, binance_web3 (binance_spot REMOVED 2026-03-14)
- * - bybit
- * - bitget_futures, bitget_spot
- * - mexc, coinex
- * - okx_web3, kucoin, gmx
  */
 
 import { NextResponse } from 'next/server'
