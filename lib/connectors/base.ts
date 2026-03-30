@@ -436,8 +436,8 @@ export abstract class BaseConnector implements PlatformConnector {
         exchangeLogger.info(`[VPS] ${this.platform} cache hit for ${endpoint}`)
         return cached
       }
-    } catch {
-      // Cache read failed, proceed to scraper
+    } catch (err) {
+      exchangeLogger.warn(`[VPS] ${this.platform} cache read failed for ${cacheKey}: ${err instanceof Error ? err.message : String(err)}`)
     }
 
     const queryString = new URLSearchParams(
@@ -492,7 +492,9 @@ export abstract class BaseConnector implements PlatformConnector {
       // Cache successful scraper result for 90 min
       const dataObj = data as Record<string, unknown>
       if (!dataObj?.error) {
-        cache.set(cacheKey, data, { ttl: 90 * 60 }).catch(() => {})
+        cache.set(cacheKey, data, { ttl: 90 * 60 }).catch((err) => {
+          exchangeLogger.warn(`[VPS] ${this.platform} cache write failed for ${cacheKey}: ${err instanceof Error ? err.message : String(err)}`)
+        })
       }
       return data;
     } catch (error) {

@@ -30,17 +30,76 @@ export interface PipelineLogHandle {
 }
 
 export class PipelineLogger {
-  /** Critical cron jobs that should ping healthchecks.io dead man's switch */
-  private static readonly CRITICAL_JOBS = new Set([
-    'batch-fetch-traders', 'compute-leaderboard',
-    'aggregate-daily-snapshots', 'batch-enrich', 'check-data-freshness',
+  /**
+   * All cron job base names that should be monitored via healthchecks.io dead man's switch.
+   * Each entry is the base slug — jobs with group/period suffixes (e.g. batch-fetch-traders-a,
+   * batch-enrich-90D) are matched via prefix and roll up to the base slug.
+   */
+  private static readonly MONITORED_JOBS = new Set([
+    // Core data pipeline
+    'batch-fetch-traders',
+    'batch-enrich',
+    'compute-leaderboard',
+    'aggregate-daily-snapshots',
+    'check-data-freshness',
+    'pipeline-fetch',
+    'fetch-details',
+    'precompute-composite',
+    'compute-derived-metrics',
+    'calculate-advanced-metrics',
+    'backfill-data',
+
+    // Discovery & enrichment
+    'batch-discover',
+    'enrich-gmx',
+    'generate-profiles',
+    'backfill-avatars',
+    'link-entities',
+    'batch-5min',
+
+    // Market data
+    'fetch-market-data',
+    'fetch-funding-rates',
+    'fetch-open-interest',
+    'flash-news-fetch',
+
+    // Monitoring & health
+    'verify-fetchers',
+    'check-data-gaps',
+    'check-trader-alerts',
+    'cleanup-stuck-logs',
+    'cleanup-data',
+    'cleanup-deleted-accounts',
+
+    // Snapshots & ranks
+    'snapshot-positions',
+    'snapshot-ranks',
+
+    // Search & cache
+    'sync-meilisearch',
+
+    // Social & notifications
+    'auto-post-market-summary',
+    'auto-post-insights',
+    'auto-post-twitter',
+    'daily-digest',
+    'ranking-change-notifications',
+
+    // Subscriptions & competitions
+    'subscription-expiry',
+    'update-competitions',
   ])
 
   /** Derive healthcheck slug from job name (strip group suffixes like -a, -90D) */
   private static getHealthcheckSlug(jobName: string): string | null {
-    for (const critical of this.CRITICAL_JOBS) {
-      if (jobName === critical || jobName.startsWith(`${critical}-`)) {
-        return critical
+    // Exact match first
+    if (this.MONITORED_JOBS.has(jobName)) {
+      return jobName
+    }
+    // Prefix match: batch-fetch-traders-a -> batch-fetch-traders
+    for (const monitored of this.MONITORED_JOBS) {
+      if (jobName.startsWith(`${monitored}-`)) {
+        return monitored
       }
     }
     return null
@@ -52,7 +111,9 @@ export class PipelineLogger {
     // Ping healthchecks.io start signal for critical jobs
     const hcSlug = this.getHealthcheckSlug(jobName)
     if (hcSlug) {
-      pingHealthcheck(hcSlug, 'start').catch(() => {})
+      pingHealthcheck(hcSlug, 'start').catch((err) => {
+        logger.warn(`[PipelineLogger] Healthcheck start ping failed for ${hcSlug}: ${err instanceof Error ? err.message : String(err)}`)
+      })
     }
 
     const { data, error } = await client
@@ -96,7 +157,9 @@ export class PipelineLogger {
           })
           .eq('id', logId)
         // Ping healthchecks.io success (fire-and-forget)
-        if (hcSlug) pingHealthcheck(hcSlug, 'success').catch(() => {})
+        if (hcSlug) pingHealthcheck(hcSlug, 'success').catch((err) => {
+          logger.warn(`[PipelineLogger] Healthcheck success ping failed for ${hcSlug}: ${err instanceof Error ? err.message : String(err)}`)
+        })
         // Dual-write to ClickHouse (fire-and-forget)
         fireAndForget(
           syncPipelineLog({
@@ -122,7 +185,9 @@ export class PipelineLogger {
           })
           .eq('id', logId)
         // Ping healthchecks.io failure (fire-and-forget)
-        if (hcSlug) pingHealthcheck(hcSlug, 'fail').catch(() => {})
+        if (hcSlug) pingHealthcheck(hcSlug, 'fail').catch((err) => {
+          logger.warn(`[PipelineLogger] Healthcheck fail ping failed for ${hcSlug}: ${err instanceof Error ? err.message : String(err)}`)
+        })
         // Dual-write to ClickHouse (fire-and-forget)
         fireAndForget(
           syncPipelineLog({
@@ -146,7 +211,9 @@ export class PipelineLogger {
           })
           .eq('id', logId)
         // Ping healthchecks.io failure on timeout (fire-and-forget)
-        if (hcSlug) pingHealthcheck(hcSlug, 'fail').catch(() => {})
+        if (hcSlug) pingHealthcheck(hcSlug, 'fail').catch((err) => {
+          logger.warn(`[PipelineLogger] Healthcheck fail ping failed for ${hcSlug}: ${err instanceof Error ? err.message : String(err)}`)
+        })
         // Dual-write to ClickHouse (fire-and-forget)
         fireAndForget(
           syncPipelineLog({

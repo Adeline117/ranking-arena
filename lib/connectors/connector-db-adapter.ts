@@ -167,12 +167,18 @@ export async function writeDiscoverResult(
       traderDataArray.push(traderData)
     } catch (err) {
       skipped++
-      if (skipped <= 5) {
+      if (skipped <= 20) {
         dataLogger.warn(
           `[adapter] Failed to normalize trader ${trader.trader_key} from ${platform}: ${err instanceof Error ? err.message : String(err)}`
         )
       }
     }
+  }
+
+  if (skipped > 0) {
+    dataLogger.warn(
+      `[adapter] Normalization summary for ${platform}/${window}: ${skipped} of ${result.traders.length} traders skipped`
+    )
   }
 
   if (traderDataArray.length === 0) {
