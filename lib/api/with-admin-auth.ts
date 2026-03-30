@@ -8,6 +8,7 @@ import { getSupabaseAdmin, verifyAdmin } from '@/lib/admin/auth'
 import { handleError, error as errorResponse } from './response'
 import { ErrorCode } from './errors'
 import { createLogger } from '@/lib/utils/logger'
+import { checkRateLimit, RateLimitPresets } from '@/lib/utils/rate-limit'
 
 const logger = createLogger('admin-auth-middleware')
 
@@ -61,6 +62,12 @@ export function withAdminAuth(
           403,
           ErrorCode.FORBIDDEN
         )
+      }
+
+      // Rate limit authenticated admin requests
+      const rateLimitResponse = await checkRateLimit(request, RateLimitPresets.authenticated)
+      if (rateLimitResponse) {
+        return rateLimitResponse
       }
 
       const response = await handler({ admin, supabase, request })

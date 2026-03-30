@@ -186,7 +186,8 @@ export async function GET(_req: Request) {
     return NextResponse.json(
       {
         ok: false,
-        error: errorMessage,
+        error: 'Failed to get scheduler stats',
+        code: 'INTERNAL_ERROR',
       },
       { status: 500 }
     )

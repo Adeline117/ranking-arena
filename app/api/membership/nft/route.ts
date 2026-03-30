@@ -56,6 +56,22 @@ export async function GET(request: NextRequest) {
         .update({ subscription_tier: 'pro' })
         .eq('id', user.id)
         .eq('subscription_tier', 'free') // Only upgrade, never downgrade
+
+      // Also upsert into subscriptions table to keep it in sync as the single source of truth
+      await supabase
+        .from('subscriptions')
+        .upsert(
+          {
+            user_id: user.id,
+            tier: 'pro',
+            status: 'active',
+            plan: 'nft',
+            current_period_start: new Date().toISOString(),
+            current_period_end: expiresAt || null,
+            updated_at: new Date().toISOString(),
+          },
+          { onConflict: 'user_id' }
+        )
     }
 
     return NextResponse.json({

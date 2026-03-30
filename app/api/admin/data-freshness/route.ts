@@ -31,6 +31,7 @@ export async function GET(req: Request) {
   } catch (error: unknown) {
     const message =
       error instanceof Error ? error.message : 'Unknown error'
-    return NextResponse.json({ error: message }, { status: 500 })
+    console.error('[data-freshness]', message)
+    return NextResponse.json({ error: 'Internal server error', code: 'INTERNAL_ERROR' }, { status: 500 })
   }
 }

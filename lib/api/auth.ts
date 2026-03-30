@@ -31,21 +31,24 @@ export async function verifyAuth(
       return { error: '未授权', status: 401 }
     }
 
-    // 2. 获取用户的订阅等级
+    // 2. 获取用户的订阅等级 - subscriptions table is the single source of truth
     const supabase = getSupabaseAdmin()
-    const { data: profile, error } = await supabase
-      .from('user_profiles')
-      .select('subscription_tier')
-      .eq('id', user.id)
+    const { data: subscription, error: subError } = await supabase
+      .from('subscriptions')
+      .select('tier, status')
+      .eq('user_id', user.id)
+      .in('status', ['active', 'trialing'])
+      .order('created_at', { ascending: false })
+      .limit(1)
       .maybeSingle()
 
-    if (error) {
-      logger.error('[verifyAuth] 获取用户资料失败:', error)
+    if (subError) {
+      logger.error('[verifyAuth] 获取订阅信息失败:', subError)
       return { error: '获取用户信息失败', status: 500 }
     }
 
     // 3. 返回用户和订阅等级
-    const tier = (profile?.subscription_tier || 'free') as SubscriptionTier
+    const tier = (subscription?.tier || 'free') as SubscriptionTier
     return { user, tier }
   } catch (error: unknown) {
     logger.error('[verifyAuth] 验证失败:', error)

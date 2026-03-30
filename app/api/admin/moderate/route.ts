@@ -46,7 +46,7 @@ export async function POST(req: NextRequest) {
 
           if (error) {
             logger.error('Error deleting post', { error, postId: targetId })
-            throw ApiError.database(error.message)
+            throw ApiError.database('Database operation failed')
           }
 
           // Log the action
@@ -70,7 +70,7 @@ export async function POST(req: NextRequest) {
 
           if (error) {
             logger.error('Error deleting comment', { error, commentId: targetId })
-            throw ApiError.database(error.message)
+            throw ApiError.database('Database operation failed')
           }
 
           await supabase.from('admin_logs').insert({
