@@ -21,7 +21,7 @@ export const GET = withAdminAuth(
       .limit(100)
 
     if (error) {
-      throw ApiError.database(error.message)
+      throw ApiError.database('Database operation failed')
     }
 
     return apiSuccess(data || [])
@@ -48,7 +48,7 @@ export async function POST(req: NextRequest) {
         .eq('id', reportId)
 
       if (error) {
-        throw ApiError.database(error.message)
+        throw ApiError.database('Database operation failed')
       }
 
       return apiSuccess({ message: 'Report updated' })

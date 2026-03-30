@@ -184,7 +184,7 @@ export async function GET(req: NextRequest) {
   } catch (error) {
     console.error('[observability] Unexpected error:', error)
     return NextResponse.json(
-      { error: 'Internal server error', detail: error instanceof Error ? error.message : String(error) },
+      { error: 'Internal server error', code: 'INTERNAL_ERROR' },
       { status: 500 }
     )
   }

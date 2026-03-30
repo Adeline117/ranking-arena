@@ -53,7 +53,7 @@ export const GET = withAdminAuth(
 
     if (error) {
       logger.error('Error fetching users', { error, page, limit, search, filter })
-      throw ApiError.database(error.message)
+      throw ApiError.database('Database operation failed')
     }
 
     return successWithPagination(
