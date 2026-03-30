@@ -5,7 +5,7 @@
  * Returns recommended posts/content for authenticated users.
  */
 
-export const runtime = 'edge'
+export const runtime = 'nodejs'
 
 import { NextRequest } from 'next/server'
 import {

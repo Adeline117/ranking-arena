@@ -5,7 +5,7 @@
  * Falls back to member_count ordering for unauthenticated users.
  */
 
-export const runtime = 'edge'
+export const runtime = 'nodejs'
 
 import { NextRequest } from 'next/server'
 import {

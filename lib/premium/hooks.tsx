@@ -309,7 +309,7 @@ export function PremiumProvider({ children, initialSubscription }: PremiumProvid
       subscription,
       isLoading,
       isPremium: effectiveIsPremium,
-      isFeaturesUnlocked: true,
+      isFeaturesUnlocked: effectiveIsPremium,
       tier: (subscription?.tier || 'free') === 'free' && hasNFT ? 'pro' : (subscription?.tier || 'free'),
       source: hasNFT ? 'nft' : (subscription?.paymentMethod === 'stripe' ? 'stripe' : 'free'),
       hasNFT,

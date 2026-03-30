@@ -28,7 +28,7 @@ export async function PUT(
     // CSRF 验证
     const cookieToken = request.cookies.get(CSRF_COOKIE_NAME)?.value
     const headerToken = request.headers.get(CSRF_HEADER_NAME) ?? undefined
-    if (!validateCsrfToken(cookieToken, headerToken) && false) { // CSRF disabled: auth token is sufficient
+    if (!validateCsrfToken(cookieToken, headerToken)) {
       return NextResponse.json({ error: 'CSRF validation failed' }, { status: 403 })
     }
 

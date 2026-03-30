@@ -85,7 +85,8 @@ export async function GET(
     return NextResponse.json(
       {
         success: false,
-        error: error instanceof Error ? error.message : 'Failed to fetch anomaly',
+        error: 'Failed to fetch anomaly',
+        code: 'INTERNAL_ERROR',
       },
       { status: 500 }
     )
@@ -132,7 +133,8 @@ export async function PATCH(
     return NextResponse.json(
       {
         success: false,
-        error: error instanceof Error ? error.message : 'Failed to update anomaly',
+        error: 'Failed to update anomaly',
+        code: 'INTERNAL_ERROR',
       },
       { status: 500 }
     )
