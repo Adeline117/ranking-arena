@@ -1,346 +1,95 @@
-'use client'
+import type { Metadata } from 'next'
+import { unstable_cache } from 'next/cache'
+import MarketPageClient from './MarketPageClient'
+import { BASE_URL } from '@/lib/constants/urls'
 
-import { lazy, Suspense, useState, useCallback, useEffect, useMemo, memo } from 'react'
-import { useLanguage } from '@/app/components/Providers/LanguageProvider'
-import TopNav from '@/app/components/layout/TopNav'
-import FloatingActionButton from '@/app/components/layout/FloatingActionButton'
-// MobileBottomNav is rendered by root layout — do not duplicate here
-import { SectionErrorBoundary } from '@/app/components/utils/ErrorBoundary'
-import ErrorBoundary from '@/app/components/utils/ErrorBoundary'
-import { tokens } from '@/lib/design-tokens'
-import LoadingSkeleton from '@/app/components/ui/LoadingSkeleton'
-import ErrorState from '@/app/components/ui/ErrorState'
-import { supabase } from '@/lib/supabase/client'
+export const revalidate = 60 // ISR: 1 min
 
-// Core above-fold components: direct import for faster LCP
-import CoreCards from '@/app/components/market/CoreCards'
-import PriceTicker from '@/app/components/market/PriceTicker'
-import FearGreedGauge from '@/app/components/market/FearGreedGauge'
-
-// Below-fold components: lazy-loaded
-const SectorTreemap = lazy(() => import('@/app/components/market/SectorTreemap'))
-const SpotMarket = lazy(() => import('@/app/components/market/SpotMarket'))
-const TokenSidePanel = lazy(() => import('@/app/components/market/TokenSidePanel'))
-const MobileMarketTabs = lazy(() => import('@/app/components/market/MobileMarketTabs'))
-const ArbitrageOpportunities = lazy(() => import('@/app/components/market/ArbitrageOpportunities'))
-const LiveTradesFeed = lazy(() => import('@/app/components/market/LiveTradesFeed'))
-
-const LoadingCard = memo(function LoadingCard({ height = 64, lines }: { height?: number; lines?: number }) {
-  const skeletonItems = useMemo(() => {
-    if (!lines) return null
-    return Array.from({ length: lines }).map((_, i) => (
-      <div
-        key={i}
-        className="skeleton"
-        style={{
-          height: 14,
-          borderRadius: 6,
-          width: i === 0 ? '60%' : i === lines - 1 ? '40%' : '90%',
-        }}
-      />
-    ))
-  }, [lines])
-
-  if (lines) {
-    return (
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 8, padding: '16px 20px' }}>
-        {skeletonItems}
-      </div>
-    )
-  }
-  return <div className="skeleton" style={{ height, borderRadius: tokens.radius.md }} />
-})
-
-const useIsMobile = () => {
-  const [isMobile, setIsMobile] = useState(false)
-  
-  const handleResize = useCallback(() => {
-    setIsMobile(window.innerWidth < 768)
-  }, [])
-  
-  useEffect(() => {
-    handleResize()
-    window.addEventListener('resize', handleResize)
-    return () => window.removeEventListener('resize', handleResize)
-  }, [handleResize])
-  
-  return isMobile
+export const metadata: Metadata = {
+  title: 'Crypto Market Overview | Live Prices, Gainers & Losers',
+  description: 'Real-time crypto market data. Track top gainers, losers, prices, volume, and market cap across 100+ tokens. Updated every minute.',
+  alternates: {
+    canonical: `${BASE_URL}/market`,
+  },
+  openGraph: {
+    title: 'Crypto Market Overview',
+    description: 'Real-time crypto market data. Track top gainers, losers, prices, volume, and market cap across 100+ tokens.',
+    url: `${BASE_URL}/market`,
+    siteName: 'Arena',
+    type: 'website',
+    images: [{
+      url: `${BASE_URL}/og-image.png`,
+      width: 1200,
+      height: 630,
+      alt: 'Arena - Crypto Market Overview'
+    }],
+  },
+  twitter: {
+    card: 'summary_large_image',
+    title: 'Crypto Market Overview',
+    description: 'Real-time crypto market data. Track top gainers, losers, prices, volume, and market cap.',
+    images: [`${BASE_URL}/og-image.png`],
+    creator: '@arenafi',
+  },
 }
 
-// Mobile-specific components
-function MobileOverviewTab() {
-  return (
-    <SectionErrorBoundary fallbackMessage="Failed to load core metrics">
-      <Suspense fallback={<LoadingCard height={200} />}>
-        <CoreCards />
-      </Suspense>
-    </SectionErrorBoundary>
-  )
+interface SpotCoinSSR {
+  id: string
+  symbol: string
+  name: string
+  image: string
+  price: number
+  change24h: number
+  high24h: number
+  low24h: number
+  volume24h: number
+  marketCap: number
+  rank: number
 }
 
-function MobileMoversTab() {
-  return (
-    <SectionErrorBoundary fallbackMessage="Market data failed to load">
-      <Suspense fallback={<LoadingCard height={300} />}>
-        <SpotMarket />
-      </Suspense>
-    </SectionErrorBoundary>
-  )
-}
+// Prefetch spot market data server-side via CoinGecko
+const getSpotMarketData = unstable_cache(
+  async (): Promise<SpotCoinSSR[]> => {
+    try {
+      const url = 'https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&order=market_cap_desc&per_page=100&page=1&sparkline=false&price_change_percentage=24h'
 
-function MobileSectorsTab() {
-  const { t } = useLanguage()
-  const [sectors, setSectors] = useState<{ name: string; change: number }[]>([])
-  const [loading, setLoading] = useState(true)
-  const [fetchError, setFetchError] = useState(false)
+      const controller = new AbortController()
+      const timeoutId = setTimeout(() => controller.abort(), 8000)
 
-  useEffect(() => {
-    const CATEGORY_MAP: Record<string, string> = {
-      BTC: 'L1', ETH: 'L1', SOL: 'L1', BNB: 'L1', ADA: 'L1', AVAX: 'L1', DOT: 'L1', NEAR: 'L1', ATOM: 'L1', SUI: 'L1', APT: 'L1', TRX: 'L1', TON: 'L1', XRP: 'L1',
-      LINK: 'DeFi', UNI: 'DeFi', AAVE: 'DeFi', MKR: 'DeFi', CRV: 'DeFi', SNX: 'DeFi',
-      ARB: 'L2', OP: 'L2', MATIC: 'L2', STRK: 'L2', IMX: 'L2',
-      DOGE: 'Meme', SHIB: 'Meme', PEPE: 'Meme', WIF: 'Meme', FLOKI: 'Meme', BONK: 'Meme',
-      RNDR: 'AI', FET: 'AI', TAO: 'AI', WLD: 'AI',
-      AXS: 'GameFi', GALA: 'GameFi', SAND: 'GameFi', MANA: 'GameFi',
+      const res = await fetch(url, {
+        headers: { Accept: 'application/json' },
+        signal: controller.signal,
+      })
+      clearTimeout(timeoutId)
+
+      if (!res.ok) return []
+
+      const raw = await res.json()
+      if (!Array.isArray(raw)) return []
+
+      return raw.map((c: Record<string, unknown>) => ({
+        id: String(c.id ?? ''),
+        symbol: String(c.symbol ?? '').toUpperCase(),
+        name: String(c.name ?? ''),
+        image: typeof c.image === 'string' ? c.image.replace('/large/', '/small/') : '',
+        price: Number(c.current_price) || 0,
+        change24h: Number(c.price_change_percentage_24h) || 0,
+        high24h: Number(c.high_24h) || 0,
+        low24h: Number(c.low_24h) || 0,
+        volume24h: Number(c.total_volume) || 0,
+        marketCap: Number(c.market_cap) || 0,
+        rank: Number(c.market_cap_rank) || 0,
+      }))
+    } catch {
+      return []
     }
-    fetch('/api/market/spot')
-      .then(r => r.json())
-      .then((data: { symbol: string; change24h: number | null; marketCap: number }[]) => {
-        if (!Array.isArray(data)) return
-        const grouped: Record<string, { totalCap: number; weightedChange: number }> = {}
-        for (const c of data) {
-          const cat = CATEGORY_MAP[c.symbol]
-          if (!cat || c.change24h == null || c.marketCap <= 0) continue
-          if (!grouped[cat]) grouped[cat] = { totalCap: 0, weightedChange: 0 }
-          grouped[cat].totalCap += c.marketCap
-          grouped[cat].weightedChange += c.change24h * c.marketCap
-        }
-        const result = Object.entries(grouped)
-          .map(([name, v]) => ({ name, change: v.weightedChange / v.totalCap }))
-          .sort((a, b) => b.change - a.change)
-        setSectors(result)
-      })
-      .catch(err => {
-        console.warn('[MarketPage] fetch failed', err)
-        setFetchError(true)
-      })
-      .finally(() => setLoading(false))
-  }, [])
+  },
+  ['market-spot-ssr'],
+  { revalidate: 60, tags: ['market'] }
+)
 
-  if (loading) return <LoadingSkeleton variant="list" count={4} />
-  if (fetchError) return <ErrorState title={t('loadFailed')} variant="compact" />
+export default async function MarketPage() {
+  const initialSpotData = await getSpotMarketData()
 
-  return (
-    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 10, padding: '4px 16px' }}>
-      {sectors.map(s => {
-        const color = s.change >= 0 ? tokens.colors.accent.success : tokens.colors.accent.error
-        return (
-          <div key={s.name} style={{
-            padding: '14px 16px',
-            background: tokens.glass.bg.secondary,
-            borderRadius: tokens.radius.lg,
-            border: tokens.glass.border.light,
-            borderLeft: `3px solid ${color}`,
-          }}>
-            <div style={{ fontSize: 12, fontWeight: 600, color: tokens.colors.text.tertiary, marginBottom: 6, letterSpacing: '0.3px', textTransform: 'uppercase' }}>
-              {s.name}
-            </div>
-            <div style={{
-              fontSize: 18,
-              fontWeight: 800,
-              color,
-              fontFamily: 'var(--font-mono, monospace)',
-              fontVariantNumeric: 'tabular-nums',
-              letterSpacing: '-0.5px',
-            } as React.CSSProperties}>
-              {s.change >= 0 ? '+' : ''}{s.change.toFixed(2)}%
-            </div>
-          </div>
-        )
-      })}
-    </div>
-  )
-}
-
-function WatchlistPlaceholder() {
-  const { t } = useLanguage()
-  return (
-    <div style={{
-      display: 'flex',
-      flexDirection: 'column',
-      alignItems: 'center',
-      justifyContent: 'center',
-      height: 200,
-      color: tokens.colors.text.tertiary,
-      fontSize: 14,
-      gap: 8,
-    }}>
-      <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" style={{ opacity: 0.5 }}>
-        <polygon points="12,2 15.09,8.26 22,9.27 17,14.14 18.18,21.02 12,17.77 5.82,21.02 7,14.14 2,9.27 8.91,8.26" />
-      </svg>
-      <span>{t('watchlistComingSoon')}</span>
-    </div>
-  )
-}
-
-function MarketPageContent() {
-  const { t } = useLanguage()
-  const [email, setEmail] = useState<string | null>(null)
-  const [selectedToken, setSelectedToken] = useState<{ id: string; symbol: string; name: string; image: string; price: number; change24h: number; marketCap: number; volume24h: number; high24h: number; low24h: number; rank: number } | null>(null)
-  const [sectorFilter, setSectorFilter] = useState<string | null>(null)
-  const isMobile = useIsMobile()
-
-  useEffect(() => {
-    supabase.auth.getUser().then(({ data }) => setEmail(data.user?.email ?? null))
-  }, [])
-
-  const handleSectorClick = useCallback((category: string) => {
-    setSectorFilter(prev => prev === category ? null : category)
-  }, [])
-
-  const handleTokenClick = useCallback((token: { id: string; symbol: string; name: string; image: string; price: number; change24h: number; marketCap: number; volume24h: number; high24h: number; low24h: number; rank: number }) => {
-    setSelectedToken(token)
-  }, [])
-
-  const handleClosePanel = useCallback(() => {
-    setSelectedToken(null)
-  }, [])
-
-  return (
-    <div style={{ minHeight: '100vh', background: tokens.colors.bg.primary, color: tokens.colors.text.primary, overflowX: 'hidden' }}>
-      <TopNav email={email} />
-
-      {/* L0: Scrolling Price Ticker */}
-      <SectionErrorBoundary fallbackMessage="Failed to load price ticker">
-        <Suspense fallback={<div style={{ height: 48 }} />}>
-          <PriceTicker />
-        </Suspense>
-      </SectionErrorBoundary>
-
-      {isMobile ? (
-        /* Mobile: Tab Layout */
-        <Suspense fallback={<LoadingCard height={400} />}>
-          <MobileMarketTabs>
-            {{
-              overview: <MobileOverviewTab />,
-              movers: <MobileMoversTab />,
-              sectors: <MobileSectorsTab />,
-              watchlist: <WatchlistPlaceholder />,
-            }}
-          </MobileMarketTabs>
-        </Suspense>
-      ) : (
-        /* Desktop: Full-width 4-layer layout */
-        <div style={{
-          maxWidth: 1400,
-          margin: '0 auto',
-          padding: '20px 24px 40px',
-        }}>
-          {/* L1: Core Cards */}
-          <section style={{ marginBottom: 20 }}>
-            <SectionErrorBoundary fallbackMessage="Failed to load core metrics">
-              <Suspense fallback={<LoadingCard height={160} />}>
-                <CoreCards />
-              </Suspense>
-            </SectionErrorBoundary>
-          </section>
-
-          {/* Widgets row: Fear&Greed + Arbitrage + Live Trades */}
-          <section style={{ marginBottom: 16, display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12, height: 200 }}>
-            <SectionErrorBoundary fallbackMessage="Failed to load Fear &amp; Greed index">
-              <Suspense fallback={<LoadingCard height={160} />}>
-                <FearGreedGauge />
-              </Suspense>
-            </SectionErrorBoundary>
-            <SectionErrorBoundary fallbackMessage="Failed to load arbitrage">
-              <Suspense fallback={<LoadingCard height={160} />}>
-                <ArbitrageOpportunities />
-              </Suspense>
-            </SectionErrorBoundary>
-            <SectionErrorBoundary fallbackMessage="Failed to load live trades">
-              <Suspense fallback={<LoadingCard height={160} />}>
-                <LiveTradesFeed />
-              </Suspense>
-            </SectionErrorBoundary>
-          </section>
-
-          {/* L2: Data Table — ranking table immediately visible after dashboard */}
-          <section style={{ marginBottom: 24 }}>
-            <SectionErrorBoundary fallbackMessage="Market data failed to load">
-              <Suspense fallback={<LoadingCard height={400} />}>
-                <SpotMarket onTokenClick={handleTokenClick} sectorFilter={sectorFilter} />
-              </Suspense>
-            </SectionErrorBoundary>
-          </section>
-
-          {/* L3: Sector Treemap — below table so it doesn't push ranking down */}
-          <section style={{ marginBottom: 24 }}>
-            <SectionErrorBoundary fallbackMessage="Failed to load sector heatmap">
-              <Suspense fallback={<LoadingCard height={300} />}>
-                <SectorTreemap onSectorClick={handleSectorClick} />
-              </Suspense>
-            </SectionErrorBoundary>
-            {sectorFilter && (
-              <div style={{
-                marginTop: 8,
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: 6,
-                padding: '4px 12px',
-                background: tokens.colors.bg.tertiary,
-                borderRadius: tokens.radius.md,
-                fontSize: 12,
-                color: tokens.colors.text.secondary,
-              }}>
-                {t('filter')}: {sectorFilter}
-                <button
-                  onClick={() => setSectorFilter(null)}
-                  aria-label="Clear filter"
-                  style={{
-                    background: 'none',
-                    border: 'none',
-                    cursor: 'pointer',
-                    width: 44,
-                    height: 44,
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    color: tokens.colors.text.tertiary,
-                    fontSize: 14,
-                    lineHeight: 1.2,
-                    margin: '-14px -16px -14px 0',
-                  }}
-                >
-                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                    <path d="M18 6L6 18M6 6l12 12" />
-                  </svg>
-                </button>
-              </div>
-            )}
-          </section>
-        </div>
-      )}
-
-      {/* Token Detail Modal */}
-      <Suspense fallback={null}>
-        <TokenSidePanel token={selectedToken} onClose={handleClosePanel} />
-      </Suspense>
-
-      <FloatingActionButton />
-    </div>
-  )
-}
-
-
-export default function MarketPage() {
-  return (
-    <ErrorBoundary 
-      pageType="market" 
-      onError={() => {
-        // Market page error handled by ErrorBoundary
-      }}
-    >
-      <MarketPageContent />
-    </ErrorBoundary>
-  )
+  return <MarketPageClient initialSpotData={initialSpotData} />
 }
