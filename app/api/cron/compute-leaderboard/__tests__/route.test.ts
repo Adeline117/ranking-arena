@@ -2,7 +2,7 @@
  * Cron: compute-leaderboard route tests
  * Tests auth, normal execution, empty data, and error handling.
  *
- * TODO: update mocks — route now uses tieredGet/tieredSet for idempotency,
+ * Note: mocks need updating — route now uses tieredGet/tieredSet for idempotency,
  * consecutive degradation skip counter, and deeper v2-only data path.
  * The chainable Supabase proxy causes stack overflow with the new code paths.
  *
@@ -153,7 +153,7 @@ function chainable(result: { data?: unknown; error?: unknown; count?: number | n
 // Test suite
 // ---------------------------------------------------------------------------
 
-// TODO: update mocks to match refactored route (idempotency cache, v2-only data, degradation counter)
+// Skipped: mocks need updating for idempotency cache, v2-only data, degradation counter
 describe.skip('GET /api/cron/compute-leaderboard', () => {
   const CRON_SECRET = 'test-secret'
 

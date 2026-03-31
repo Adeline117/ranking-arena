@@ -33,11 +33,11 @@ const CHANNEL_HANDLERS: Record<AlertChannel, (payload: AlertPayload) => Promise<
     })
   },
   slack: async (_payload) => {
-    // TODO: Implement Slack webhook
+    // Stub: Slack webhook integration not yet configured
     return false
   },
   email: async (_payload) => {
-    // TODO: Implement email via Resend (18.2K★)
+    // Stub: email integration not yet configured (planned: Resend)
     return false
   },
   webhook: async (payload) => {
