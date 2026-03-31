@@ -151,6 +151,34 @@ export async function GET(request: NextRequest) {
       logger.warn(`[cleanup-data] notifications cleanup failed: ${err}`)
     }
 
+    // Step 2e: Cleanup old trader_position_history (>30 days)
+    // This table grows ~2.5M rows/day (75M/month) from hourly position snapshots.
+    // Only recent positions are used for trader detail views. 30 days is sufficient.
+    let positionsCleaned = 0
+    try {
+      const positionsCutoff = new Date(Date.now() - 30 * 24 * 3600 * 1000).toISOString()
+      const MAX_POS_BATCHES = 50 // Up to 250K rows per run
+      for (let batch = 0; batch < MAX_POS_BATCHES; batch++) {
+        const { count, error: posErr } = await supabase
+          .from('trader_position_history')
+          .delete({ count: 'exact' })
+          .lt('created_at', positionsCutoff)
+          .limit(5000)
+        if (posErr) {
+          logger.warn(`[cleanup-data] position_history cleanup error: ${posErr.message}`)
+          break
+        }
+        const deleted = count ?? 0
+        positionsCleaned += deleted
+        if (deleted < 5000) break
+      }
+      if (positionsCleaned > 0) {
+        logger.info(`[cleanup-data] Cleaned up ${positionsCleaned} old position_history rows (>30d)`)
+      }
+    } catch (err) {
+      logger.warn(`[cleanup-data] position_history cleanup failed: ${err}`)
+    }
+
     // Step 3: Refresh computed metrics from equity curves
     let metricsResult = null
     try {
@@ -186,7 +214,7 @@ export async function GET(request: NextRequest) {
 
     const duration = Date.now() - startTime
 
-    const totalCleaned = snapshotsV2Cleaned + dailySnapshotsCleaned + hotTopicsCleaned + flashNewsCleaned + notificationsCleaned
+    const totalCleaned = snapshotsV2Cleaned + dailySnapshotsCleaned + hotTopicsCleaned + flashNewsCleaned + notificationsCleaned + positionsCleaned
 
     await plog.success(totalCleaned, {
       snapshotsV2Cleaned,
@@ -194,6 +222,7 @@ export async function GET(request: NextRequest) {
       hotTopicsCleaned,
       flashNewsCleaned,
       notificationsCleaned,
+      positionsCleaned,
       metricsRefresh: metricsResult,
       staleDataCleanup,
     })
