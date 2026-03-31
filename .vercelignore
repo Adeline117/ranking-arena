@@ -42,6 +42,15 @@ storybook-static/
 .gitignore
 .gitattributes
 
+# 备份 (SQL dumps, 数GB)
+backups/
+
+# 大型报告
+BITGET_REGRESSION_REPORT.md
+
+# Cloudflare Worker (独立部署)
+cloudflare-worker/
+
 # 其他
 .DS_Store
 *.log
