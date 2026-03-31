@@ -103,10 +103,10 @@ function FlashPrice({ value, flash }: { value: string; flash?: PriceFlashInfo })
   )
 }
 
-export default function SpotMarket({ onTokenClick, sectorFilter }: { onTokenClick?: (token: SpotCoin) => void; sectorFilter?: string | null } = {}) {
+export default function SpotMarket({ onTokenClick, sectorFilter, initialData }: { onTokenClick?: (token: SpotCoin) => void; sectorFilter?: string | null; initialData?: SpotCoin[] } = {}) {
   const { t } = useLanguage()
-  const [data, setData] = useState<SpotCoin[]>([])
-  const [loading, setLoading] = useState(true)
+  const [data, setData] = useState<SpotCoin[]>(initialData ?? [])
+  const [loading, setLoading] = useState(!initialData?.length)
   const [search, setSearch] = useState('')
   const [favorites, setFavorites] = useState<Set<string>>(new Set())
   const [showFavOnly, setShowFavOnly] = useState(false)
