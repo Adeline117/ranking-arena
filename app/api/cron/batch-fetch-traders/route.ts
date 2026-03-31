@@ -221,7 +221,12 @@ export async function GET(request: NextRequest) {
 
       logger.info(`[batch-fetch-traders-${group}] ${platform} (connector): saved=${totalSaved} duration=${Date.now() - start}ms`)
 
-      if (hasErrors && totalSaved === 0) {
+      // Detect broken connectors: success with 0 traders is suspicious
+      if (totalSaved === 0 && !hasErrors) {
+        logger.warn(`[batch-fetch-traders-${group}] ${platform}: connector returned SUCCESS but 0 traders — API may have changed`)
+      }
+
+      if ((hasErrors && totalSaved === 0) || (totalSaved === 0 && !hasErrors)) {
         // Track consecutive failure for dead platform detection
         try {
           const deadKey = `${DEAD_COUNTER_PREFIX}${platform}`
