@@ -665,7 +665,7 @@ async function computeSeason(
     .filter(t => t.roi != null)
     .filter(t => Math.abs(t.roi!) <= roiThreshold)
     .filter(t => t.roi! > -90) // 过滤已爆仓交易员（ROI < -90%），无参考价值
-    .filter(t => t.trades_count == null || t.trades_count >= MIN_TRADES_COUNT)
+    .filter(t => t.trades_count == null || t.trades_count === 0 || t.trades_count >= MIN_TRADES_COUNT) // 0 = unknown (API doesn't provide), treat same as null
 
   if (!uniqueTraders.length) {
     logger.warn(`[${season}] No traders passed filters! traderMap.size=${traderMap.size}, roiThreshold=${roiThreshold}`)
