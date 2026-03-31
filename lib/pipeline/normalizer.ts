@@ -15,7 +15,8 @@ import {
   Confidence,
   VALIDATION_BOUNDS,
 } from './types'
-import { getPlatformCapabilities, PlatformCapabilities } from './capabilities'
+import { getPlatformCapabilities } from './capabilities'
+import type { PlatformCapabilities } from './types'
 
 // =============================================================================
 // Main Normalizer Class

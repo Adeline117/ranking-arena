@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useRef } from 'react'
 import Link from 'next/link'
 import { tokens } from '@/lib/design-tokens'
 import TopNav from '@/app/components/layout/TopNav'
@@ -53,12 +53,20 @@ export default function FavoritesPage() {
   const [newFolderPublic, setNewFolderPublic] = useState(false)
   const [creating, setCreating] = useState(false)
 
+  // Cache ref to skip refetch within 60s (avoids redundant requests on remount)
+  const lastFetchRef = useRef<{ ts: number; token: string | null }>({ ts: 0, token: null })
+
   useEffect(() => {
     // 等待认证检查完成
     if (!authChecked) return
 
     if (!accessToken) {
       setLoading(false)
+      return
+    }
+
+    // Skip refetch if same token and data is fresh (<60s)
+    if (lastFetchRef.current.token === accessToken && Date.now() - lastFetchRef.current.ts < 60_000 && folders.length > 0) {
       return
     }
 
@@ -99,6 +107,8 @@ export default function FavoritesPage() {
           }
           setSubscribedFolders([])
         }
+
+        lastFetchRef.current = { ts: Date.now(), token: accessToken }
       } catch (error) {
         if ((error as Error).name === 'AbortError') return
         logger.error('Error loading folders:', error)

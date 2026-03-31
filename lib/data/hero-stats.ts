@@ -32,7 +32,7 @@ export interface HeroStats {
 export async function getHeroStats(): Promise<HeroStats> {
   try {
     // 1. 尝试从缓存读取
-    const cached = await tieredGet<HeroStats>(CACHE_KEY, 'warm')
+    const { data: cached } = await tieredGet<HeroStats>(CACHE_KEY, 'warm')
     if (cached) {
       return cached
     }
@@ -56,9 +56,9 @@ export async function getHeroStats(): Promise<HeroStats> {
     if (error) {
       // RPC 不存在时回退到直接查询
       if (error.code === 'PGRST202') {
-        const { data: countData, error: countError } = await supabase
+        const { count, error: countError } = await supabase
           .from('leaderboard_ranks')
-          .select('source', { count: 'exact', head: true })
+          .select('*', { count: 'exact', head: true })
 
         if (countError) {
           logger.warn('[getHeroStats] Count query failed, using defaults', countError)
@@ -75,11 +75,11 @@ export async function getHeroStats(): Promise<HeroStats> {
 
         const stats: HeroStats = {
           exchangeCount: uniqueSources.size || DEFAULT_STATS.exchangeCount,
-          traderCount: countData || DEFAULT_STATS.traderCount,
+          traderCount: count || DEFAULT_STATS.traderCount,
         }
 
         // 缓存结果
-        await tieredSet(CACHE_KEY, stats, 'warm', CACHE_TTL)
+        await tieredSet(CACHE_KEY, stats, 'warm', ['hero-stats'])
         return stats
       }
 
@@ -87,13 +87,14 @@ export async function getHeroStats(): Promise<HeroStats> {
       return DEFAULT_STATS
     }
 
+    const rpcData = data as { exchange_count?: number; trader_count?: number } | null
     const stats: HeroStats = {
-      exchangeCount: data?.exchange_count || DEFAULT_STATS.exchangeCount,
-      traderCount: data?.trader_count || DEFAULT_STATS.traderCount,
+      exchangeCount: rpcData?.exchange_count || DEFAULT_STATS.exchangeCount,
+      traderCount: rpcData?.trader_count || DEFAULT_STATS.traderCount,
     }
 
     // 3. 缓存结果
-    await tieredSet(CACHE_KEY, stats, 'warm', CACHE_TTL)
+    await tieredSet(CACHE_KEY, stats, 'warm', ['hero-stats'])
 
     return stats
   } catch (error) {

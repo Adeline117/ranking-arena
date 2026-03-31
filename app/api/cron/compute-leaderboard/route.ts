@@ -314,8 +314,8 @@ async function computeSeason(
   interface TraderRow {
     source: string
     source_trader_id: string
-    roi: number
-    pnl: number
+    roi: number | null
+    pnl: number | null
     win_rate: number | null
     max_drawdown: number | null
     trades_count: number | null

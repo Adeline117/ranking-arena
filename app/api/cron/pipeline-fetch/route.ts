@@ -84,6 +84,9 @@ export async function GET(request: NextRequest) {
 
   // 初始化
   const supabase = createSupabaseAdmin()
+  if (!supabase) {
+    return NextResponse.json({ error: 'Failed to initialize Supabase' }, { status: 500 })
+  }
   const plog = await PipelineLogger.start('pipeline-fetch')
   const startTime = Date.now()
 
@@ -111,7 +114,7 @@ export async function GET(request: NextRequest) {
 
         results.push(result)
 
-        console.log(
+        console.warn(
           `[pipeline-fetch] ${platform}: ${result.summary.total_traders} traders, ` +
             `${result.summary.total_upserted} upserted, ` +
             `${Date.now() - platformStart}ms`
