@@ -958,11 +958,14 @@ export async function runEnrichment(params: {
     )
   }
 
-  if (totalFailed === 0) {
-    await plog.success(totalEnriched, { period, duration })
+  // Only log as error if failure rate > 10%; individual trader failures are expected (rate limits, timeouts)
+  const totalAttempted = totalEnriched + totalFailed
+  const failRate = totalAttempted > 0 ? totalFailed / totalAttempted : 0
+  if (failRate < 0.10) {
+    await plog.success(totalEnriched, { period, duration, totalFailed })
   } else {
-    await plog.error(new Error(`${totalFailed}/${totalEnriched + totalFailed} enrichments failed`), { period, duration, totalEnriched, totalFailed })
+    await plog.error(new Error(`${totalFailed}/${totalAttempted} enrichments failed (${(failRate * 100).toFixed(1)}%)`), { period, duration, totalEnriched, totalFailed })
   }
 
-  return { ok: totalFailed === 0, duration, period, summary: { total, enriched: totalEnriched, failed: totalFailed }, results }
+  return { ok: failRate < 0.10, duration, period, summary: { total, enriched: totalEnriched, failed: totalFailed }, results }
 }
