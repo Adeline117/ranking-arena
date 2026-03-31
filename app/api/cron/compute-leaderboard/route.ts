@@ -287,7 +287,7 @@ export async function GET(request: NextRequest) {
     })
   } catch (error: unknown) {
     // Release idempotency lock on failure
-    await tieredDel(IDEMPOTENCY_KEY).catch(() => {})
+    await tieredDel(IDEMPOTENCY_KEY).catch(err => logger.warn('Failed to release idempotency lock on error', { error: err instanceof Error ? err.message : String(err) }))
     logger.error('Failed to compute leaderboard', error)
     await plog.error(error)
     return NextResponse.json(

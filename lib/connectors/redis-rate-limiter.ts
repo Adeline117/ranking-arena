@@ -161,7 +161,7 @@ export class RedisRateLimiter implements RateLimiter {
         return redis.decr(this.concurrencyKey).then(val => {
           // Don't let concurrency go negative
           if (val != null && val < 0) {
-            redis.set(this.concurrencyKey, 0, { ex: 30 }).catch(() => {})
+            redis.set(this.concurrencyKey, 0, { ex: 30 }).catch(err => console.warn(`[RedisRateLimiter] Failed to reset concurrency key ${this.concurrencyKey}:`, err instanceof Error ? err.message : String(err)))
           }
         })
       })
