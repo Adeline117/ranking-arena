@@ -14,6 +14,9 @@
 
 import { RawFetchResult, RawTraderEntry, TimeWindow } from '../types'
 import { PlatformScraper, registerScraper } from '../runner'
+import { createLogger } from '@/lib/utils/logger'
+
+const log = createLogger('scraper:dydx')
 
 const WINDOW_MAP: Record<TimeWindow, string> = {
   '7d': 'PERIOD_7D',
@@ -75,7 +78,7 @@ export class DydxScraper implements PlatformScraper {
         })
 
         if (!response.ok) {
-          console.warn(`[DydxScraper] HTTP ${response.status}`)
+          log.warn(`HTTP ${response.status}`)
           break
         }
 
@@ -105,7 +108,7 @@ export class DydxScraper implements PlatformScraper {
 
         await this.delay(100)
       } catch (error) {
-        console.warn(`[DydxScraper] Page ${page} failed:`, error)
+        log.warn(`Page ${page} failed`, { error: error instanceof Error ? error.message : String(error) })
         break
       }
     }

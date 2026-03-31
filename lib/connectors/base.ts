@@ -546,13 +546,13 @@ export abstract class BaseConnector implements PlatformConnector {
       });
 
       if (!response.ok) {
-        console.warn(`[VPS-proxy] ${this.platform} returned ${response.status}`);
+        exchangeLogger.warn(`[VPS-proxy] ${this.platform} returned ${response.status}`);
         return null;
       }
 
       return await response.json() as T;
     } catch (error) {
-      console.warn(`[VPS-proxy] ${this.platform} failed:`, toError(error).message);
+      exchangeLogger.warn(`[VPS-proxy] ${this.platform} failed: ${toError(error).message}`);
       return null;
     }
   }

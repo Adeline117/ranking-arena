@@ -396,10 +396,10 @@ export async function fetchHyperliquidStatsDetail(
     const fills = results[1].status === 'fulfilled' ? results[1].value : []
     
     if (results[0].status === 'rejected') {
-      console.error(`Hyperliquid state fetch failed for ${address}:`, results[0].reason)
+      logger.error(`Hyperliquid state fetch failed for ${address}`, { error: results[0].reason instanceof Error ? results[0].reason.message : String(results[0].reason) })
     }
     if (results[1].status === 'rejected') {
-      console.error(`Hyperliquid fills fetch failed for ${address}:`, results[1].reason)
+      logger.error(`Hyperliquid fills fetch failed for ${address}`, { error: results[1].reason instanceof Error ? results[1].reason.message : String(results[1].reason) })
     }
 
     const accountValue = state?.marginSummary

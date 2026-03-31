@@ -21,6 +21,9 @@ import type {
   TraderSource, TraderProfile, SnapshotMetrics, QualityFlags,
   PlatformCapabilities, Window,
 } from '../../types/leaderboard'
+import { createLogger } from '@/lib/utils/logger'
+
+const log = createLogger('connector:bingx')
 
 interface BingXLeaderboardEntry {
   uniqueId?: string
@@ -111,7 +114,7 @@ export class BingxFuturesConnector extends BaseConnector {
 
       return { traders, total_available: traders.length, window, fetched_at: new Date().toISOString() }
     } catch (err) {
-      console.error(`[bingx] discoverLeaderboard error: ${err instanceof Error ? err.message : String(err)}`)
+      log.error(`discoverLeaderboard error: ${err instanceof Error ? err.message : String(err)}`)
       // Return empty result if API fails (may need Puppeteer scraping)
       return { traders: [], total_available: 0, window, fetched_at: new Date().toISOString() }
     }

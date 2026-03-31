@@ -14,6 +14,9 @@
 
 import type { LeaderboardPlatform, MarketType, PlatformCapabilities, GranularPlatform } from '../types/leaderboard'
 import type { PlatformConnector } from './types'
+import { createLogger } from '@/lib/utils/logger'
+
+const log = createLogger('connectors:registry')
 
 /** Union type for both new-style and legacy connectors in the registry.
  * Uses any to support both BaseConnector and BaseConnectorLegacy subclasses
@@ -116,9 +119,9 @@ class ConnectorRegistry {
         this.register(connector) // This also removes the factory
         return connector
       } catch (err) {
-        console.error(
-          `[ConnectorRegistry] Failed to lazy-init ${key}:`,
-          err instanceof Error ? err.message : String(err)
+        log.error(
+          `Failed to lazy-init ${key}`,
+          { error: err instanceof Error ? err.message : String(err) }
         )
         // Remove the factory so we don't retry on every call
         this.factories.delete(key)

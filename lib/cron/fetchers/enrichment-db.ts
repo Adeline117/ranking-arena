@@ -4,6 +4,9 @@
 
 import type { SupabaseClient } from '@supabase/supabase-js'
 import type { EquityCurvePoint, PositionHistoryItem, StatsDetail, AssetBreakdown, PortfolioPosition } from './enrichment-types'
+import { createLogger } from '@/lib/utils/logger'
+
+const log = createLogger('enrichment-db')
 
 export async function upsertEquityCurve(
   supabase: SupabaseClient,
@@ -39,7 +42,7 @@ export async function upsertEquityCurve(
       })
 
     if (error) {
-      console.error(`Batch ${i} failed:`, error)
+      log.error(`Batch ${i} failed`, { error: error instanceof Error ? error.message : String(error) })
       return { saved, error: error.message }
     }
     saved += batch.length
@@ -74,7 +77,7 @@ export async function upsertEquityCurve(
           .eq('trader_key', traderId)
           .eq('window', v2Window)
           .then(({ error: v2Err }) => {
-            if (v2Err) console.warn(`[enrichment-db] equity ROI sync failed for ${source}/${traderId}/${v2Window}:`, v2Err.message)
+            if (v2Err) log.warn(`equity ROI sync failed for ${source}/${traderId}/${v2Window}`, { error: v2Err.message })
           })
       }
     }
@@ -192,7 +195,7 @@ export async function upsertStatsDetail(
         .eq('platform', source)
         .eq('trader_key', traderId)
         .then(({ error: v2Err }) => {
-          if (v2Err) console.warn(`[enrichment-db] v2 sync failed for ${source}/${traderId}:`, v2Err.message)
+          if (v2Err) log.warn(`v2 sync failed for ${source}/${traderId}`, { error: v2Err.message })
         })
     }
   }
@@ -233,7 +236,7 @@ export async function upsertAssetBreakdown(
       })
     
     if (error) {
-      console.error(`Asset breakdown batch ${i} failed:`, error)
+      log.error(`Asset breakdown batch ${i} failed`, { error: error instanceof Error ? error.message : String(error) })
       // Continue inserting remaining batches instead of losing data
       continue
     }
@@ -289,7 +292,7 @@ export async function upsertPortfolio(
     .eq('source_trader_id', traderId)
 
   if (delError) {
-    console.error(`Portfolio delete failed for ${source}/${traderId}:`, delError)
+    log.error(`Portfolio delete failed for ${source}/${traderId}`, { error: delError instanceof Error ? delError.message : String(delError) })
     return { saved: 0, error: delError.message }
   }
 
@@ -302,7 +305,7 @@ export async function upsertPortfolio(
       .insert(batch)
 
     if (error) {
-      console.error(`Portfolio batch ${i} failed for ${source}/${traderId}:`, error)
+      log.error(`Portfolio batch ${i} failed for ${source}/${traderId}`, { error: error instanceof Error ? error.message : String(error) })
       // Continue inserting remaining batches instead of losing data
       continue
     }

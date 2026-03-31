@@ -107,7 +107,7 @@ export async function writeDiscoverResult(
 
       // PnL: keep all values but warn on extreme (|PnL| > $10M)
       if (rawPnl != null && Math.abs(rawPnl) > 10_000_000 && boundaryWarnings < 10) {
-        console.warn(`[adapter][${platform}] Extreme PnL $${rawPnl.toFixed(0)} for trader ${trader.trader_key} (kept)`)
+        dataLogger.warn(`[adapter][${platform}] Extreme PnL $${rawPnl.toFixed(0)} for trader ${trader.trader_key} (kept)`)
       }
       const pnl = rawPnl
 
@@ -387,7 +387,7 @@ function validateBound(
   if (value >= min && value <= max) return value
   // Out of bounds — log warning and return sentinel
   if (warningCount < 10) {
-    console.warn(
+    dataLogger.warn(
       `[adapter][${platform}] ${field} out of bounds: ${value} (expected ${min}..${max}) for trader ${traderKey} — set to null`
     )
   }

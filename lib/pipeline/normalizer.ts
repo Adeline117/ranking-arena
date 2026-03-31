@@ -17,6 +17,9 @@ import {
 } from './types'
 import { getPlatformCapabilities } from './capabilities'
 import type { PlatformCapabilities } from './types'
+import { createLogger } from '@/lib/utils/logger'
+
+const log = createLogger('pipeline:normalizer')
 
 // =============================================================================
 // Main Normalizer Class
@@ -41,9 +44,9 @@ export class PipelineNormalizer {
             capabilities
           )
         } catch (error) {
-          console.warn(
-            `[Normalizer] Failed to normalize trader ${trader.trader_id} on ${raw.platform}:`,
-            error
+          log.warn(
+            `Failed to normalize trader ${trader.trader_id} on ${raw.platform}`,
+            { error: error instanceof Error ? error.message : String(error) }
           )
           return null
         }
@@ -244,10 +247,8 @@ export class PipelineNormalizer {
         return raw / Math.pow(10, decimals)
 
       case 'native_token':
-        // TODO: 需要价格转换，暂时返回原值
-        console.warn(
-          `[Normalizer] native_token PnL conversion not implemented for platform`
-        )
+        // Native token price conversion not implemented; returning raw value
+        log.warn('native_token PnL conversion not implemented for platform')
         return raw
 
       default:

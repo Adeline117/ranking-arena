@@ -13,6 +13,9 @@ import type {
   TraderSource, TraderProfile, SnapshotMetrics, QualityFlags, TraderTimeseries,
   PlatformCapabilities, Window,
 } from '../../types/leaderboard'
+import { createLogger } from '@/lib/utils/logger'
+
+const log = createLogger('connector:okx-futures')
 
 const WINDOW_MAP: Record<Window, string> = { '7d': '7', '30d': '30', '90d': '90' }
 // Mapping for v5 copytrading API
@@ -53,7 +56,7 @@ export class OkxFuturesConnector extends BaseConnector {
           { method: 'GET' }
         )
       } catch (err) {
-        console.warn(`[okx] Page ${page} failed: ${err instanceof Error ? err.message : String(err)}`)
+        log.warn(`Page ${page} failed: ${err instanceof Error ? err.message : String(err)}`)
         break // Stop pagination on error instead of hanging
       }
       const data = warnValidate(OkxFuturesLeaderboardResponseSchema, _rawLb, 'okx-futures/leaderboard')

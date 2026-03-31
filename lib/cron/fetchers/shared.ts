@@ -786,7 +786,7 @@ export function normalizeWinRate(wr: number | null, format?: DataFormat): number
   if (format === 'percentage') return wr
   // Legacy heuristic fallback — log warning in non-test environments
   if (typeof process !== 'undefined' && process.env.NODE_ENV !== 'test') {
-    console.warn(`[normalizeWinRate] No format specified for value ${wr}, using heuristic. Pass 'decimal' or 'percentage' explicitly.`)
+    dataLogger.warn(`[normalizeWinRate] No format specified for value ${wr}, using heuristic. Pass 'decimal' or 'percentage' explicitly.`)
   }
   return wr <= 1 ? wr * 100 : wr
 }
@@ -819,7 +819,7 @@ export function normalizeROI(rawRoi: number | null, platformOrFormat?: string | 
 
   // Legacy heuristic fallback — log warning in non-test environments
   if (typeof process !== 'undefined' && process.env.NODE_ENV !== 'test') {
-    console.warn(`[normalizeROI] No format resolved for platform="${platformOrFormat}", value=${rawRoi}. Using heuristic. Pass format explicitly.`)
+    dataLogger.warn(`[normalizeROI] No format resolved for platform="${platformOrFormat}", value=${rawRoi}. Using heuristic. Pass format explicitly.`)
   }
   return Math.abs(rawRoi) <= 1 ? rawRoi * 100 : rawRoi
 }

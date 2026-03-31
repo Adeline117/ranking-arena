@@ -23,6 +23,9 @@ import type {
   TraderSource, TraderProfile, SnapshotMetrics, QualityFlags,
   PlatformCapabilities, Window,
 } from '../../types/leaderboard'
+import { createLogger } from '@/lib/utils/logger'
+
+const log = createLogger('connector:xt')
 
 interface XTLeaderboardEntry {
   uid?: string
@@ -77,7 +80,7 @@ export class XtFuturesConnector extends BaseConnector {
         120000
       )
       if (!vpsData) {
-        console.warn('[xt] VPS scraper returned null — scraper may be busy or unreachable')
+        log.warn('VPS scraper returned null — scraper may be busy or unreachable')
       }
       // Scraper returns: { returnCode: 0, result: [{ sotType: "INCOME_RATE", items: [...] }] }
       // or legacy: { traders: [...] }
@@ -106,7 +109,7 @@ export class XtFuturesConnector extends BaseConnector {
         }
       }
     } catch (err) {
-      console.warn(`[xt] VPS scraper error: ${err instanceof Error ? err.message : String(err)}`)
+      log.warn(`VPS scraper error: ${err instanceof Error ? err.message : String(err)}`)
     }
 
     return { traders: allTraders.slice(0, limit), total_available: allTraders.length, window, fetched_at: new Date().toISOString() }

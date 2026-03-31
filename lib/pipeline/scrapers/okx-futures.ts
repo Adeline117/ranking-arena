@@ -14,6 +14,9 @@
 
 import { RawFetchResult, RawTraderEntry, TimeWindow } from '../types'
 import { PlatformScraper, registerScraper } from '../runner'
+import { createLogger } from '@/lib/utils/logger'
+
+const log = createLogger('scraper:okx-futures')
 
 // =============================================================================
 // Scraper Implementation
@@ -33,7 +36,7 @@ export class OkxFuturesScraper implements PlatformScraper {
         const result = await this.fetchWindow(window)
         results.push(result)
       } catch (error) {
-        console.error(`[OkxFuturesScraper] Error fetching ${window}:`, error)
+        log.error(`Error fetching ${window}`, { error: error instanceof Error ? error.message : String(error) })
         results.push({
           platform: this.platform,
           market_type: 'futures',
@@ -73,7 +76,7 @@ export class OkxFuturesScraper implements PlatformScraper {
         })
 
         if (!response.ok) {
-          console.warn(`[OkxFuturesScraper] HTTP ${response.status} on page ${page}`)
+          log.warn(`HTTP ${response.status} on page ${page}`)
           break
         }
 
@@ -81,7 +84,7 @@ export class OkxFuturesScraper implements PlatformScraper {
 
         // v5 response: { code: "0", data: [{ ranks: [...], totalPage }] }
         if (data.code !== '0') {
-          console.warn(`[OkxFuturesScraper] API error: ${data.msg}`)
+          log.warn(`API error: ${data.msg}`)
           break
         }
 
@@ -104,7 +107,7 @@ export class OkxFuturesScraper implements PlatformScraper {
         // 速率限制
         await this.delay(100)
       } catch (error) {
-        console.warn(`[OkxFuturesScraper] Page ${page} failed:`, error)
+        log.warn(`Page ${page} failed`, { error: error instanceof Error ? error.message : String(error) })
         break
       }
     }

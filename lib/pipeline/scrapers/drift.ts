@@ -14,6 +14,9 @@
 
 import { RawFetchResult, RawTraderEntry, TimeWindow } from '../types'
 import { PlatformScraper, registerScraper } from '../runner'
+import { createLogger } from '@/lib/utils/logger'
+
+const log = createLogger('scraper:drift')
 
 export class DriftScraper implements PlatformScraper {
   readonly platform = 'drift'
@@ -87,7 +90,7 @@ export class DriftScraper implements PlatformScraper {
         if (leaderboard.length < pageSize) break
         await this.delay(100)
       } catch (error) {
-        console.warn(`[DriftScraper] Page ${page} failed:`, error)
+        log.warn(`Page ${page} failed`, { error: error instanceof Error ? error.message : String(error) })
         break
       }
     }

@@ -13,6 +13,9 @@
 
 import { RawFetchResult, RawTraderEntry, TimeWindow } from '../types'
 import { PlatformScraper, registerScraper } from '../runner'
+import { createLogger } from '@/lib/utils/logger'
+
+const log = createLogger('scraper:bitget-futures')
 
 const WINDOW_MAP: Record<TimeWindow, number> = {
   '7d': 1,
@@ -87,7 +90,7 @@ export class BitgetFuturesScraper implements PlatformScraper {
 
         await this.delay(200)
       } catch (error) {
-        console.warn(`[BitgetFuturesScraper] Page ${page} failed:`, error)
+        log.warn(`Page ${page} failed`, { error: error instanceof Error ? error.message : String(error) })
         break
       }
     }
