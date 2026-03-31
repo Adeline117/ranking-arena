@@ -815,6 +815,30 @@ async function computeSeason(
     }
   })
 
+  // Pre-write validation: mark outliers to prevent data pollution
+  // These stay in the array (for count) but get is_outlier=true in DB
+  let outlierCount = 0
+  for (const t of scored) {
+    let isOutlier = false
+    // |ROI| > 50,000% is almost certainly data corruption
+    if (Math.abs(t.roi) > 50000) isOutlier = true
+    // PnL > $100M from non-whale sources
+    if (Math.abs(t.pnl) > 100_000_000 && !['hyperliquid'].includes(t.source)) isOutlier = true
+    // ROI and PnL sign mismatch (positive PnL with hugely negative ROI or vice versa)
+    if (t.pnl > 1000 && t.roi < -1000) isOutlier = true
+    if (t.pnl < -1000 && t.roi > 1000) isOutlier = true
+    // web3_bot entries are DeFi protocols, not traders
+    if (t.source === 'web3_bot') isOutlier = true
+
+    if (isOutlier) {
+      ;(t as Record<string, unknown>).is_outlier = true
+      outlierCount++
+    }
+  }
+  if (outlierCount > 0) {
+    logger.info(`[${season}] Marked ${outlierCount} outliers (kept in leaderboard with is_outlier=true)`)
+  }
+
   // Sort by arena_score desc, then by drawdown, then by id
   scored.sort((a, b) => {
     const diff = b.arena_score - a.arena_score
@@ -945,6 +969,7 @@ async function computeSeason(
       style_confidence: t.style_confidence,
       sharpe_ratio: t.sharpe_ratio,
       trader_type: t.trader_type || (t.source === 'web3_bot' ? 'bot' : null),
+      is_outlier: (t as Record<string, unknown>).is_outlier === true ? true : false,
     }))
 
     const { error } = await supabase
