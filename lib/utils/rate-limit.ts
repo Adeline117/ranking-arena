@@ -170,6 +170,9 @@ export async function checkRateLimitFull(
 
     // Redis 不可用时，使用内存限流作为后备（不再完全跳过）
     if (!redisClient) {
+      if (process.env.NODE_ENV === 'production') {
+        console.warn('[RATE-LIMIT] Falling back to in-memory rate limiting — not suitable for horizontal scaling')
+      }
       const memResult = checkMemoryRateLimit(identifier, finalConfig)
       if (!memResult.success) {
         const retryAfter = Math.ceil((memResult.reset - Date.now()) / 1000)
