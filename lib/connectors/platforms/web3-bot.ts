@@ -27,6 +27,9 @@ import type {
   TimeseriesResult,
   TraderSource,
 } from '../../types/leaderboard'
+import { createLogger } from '@/lib/utils/logger'
+
+const log = createLogger('connector:web3-bot')
 
 interface BotConfig {
   slug: string
@@ -118,7 +121,7 @@ export class Web3BotConnector extends BaseConnector {
         await this.sleep(delay)
       } catch (err) {
         // Log but continue — don't silently drop bots
-        console.warn(`[web3-bot] Failed to fetch ${bot.name}:`, err instanceof Error ? err.message : 'unknown')
+        log.warn(`Failed to fetch ${bot.name}`, { error: err instanceof Error ? err.message : 'unknown' })
       }
     }
 

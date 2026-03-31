@@ -17,6 +17,9 @@ import { PipelineNormalizer, getNormalizer } from './normalizer'
 import { PipelineCalculator, getCalculator } from './calculator'
 import { PipelineStorage, getStorage } from './storage'
 import { getPlatformCapabilities, getSupportedWindows } from './capabilities'
+import { createLogger } from '@/lib/utils/logger'
+
+const log = createLogger('pipeline:runner')
 
 // =============================================================================
 // Scraper Interface (采集层接口)
@@ -155,7 +158,7 @@ export class PipelineRunner {
     )
 
     if (validWindows.length === 0) {
-      console.warn(`[Pipeline] No valid windows for ${platform}`)
+      log.warn(`No valid windows for ${platform}`)
       return { tradersCount: 0, upserted: 0 }
     }
 

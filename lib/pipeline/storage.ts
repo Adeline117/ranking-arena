@@ -8,6 +8,9 @@
 
 import { SupabaseClient } from '@supabase/supabase-js'
 import { EnrichedTraderData, PersistResult } from './types'
+import { createLogger } from '@/lib/utils/logger'
+
+const log = createLogger('pipeline:storage')
 
 // =============================================================================
 // Main Storage Class
@@ -54,7 +57,7 @@ export class PipelineStorage {
         stats.details.snapshots_upserted += snapshotsResult.count
         stats.upserted += snapshotsResult.count
       } catch (error) {
-        console.error('[Storage] Batch persist failed:', error)
+        log.error('Batch persist failed', { error: error instanceof Error ? error.message : String(error) })
         stats.errors += batch.length
       }
     }
@@ -91,7 +94,7 @@ export class PipelineStorage {
       .select('id')
 
     if (error) {
-      console.error('[Storage] upsertSources error:', error)
+      log.error('upsertSources error', { error: error instanceof Error ? error.message : String(error) })
       // 不抛出，允许继续
     }
 
@@ -139,7 +142,7 @@ export class PipelineStorage {
       })
 
     if (error) {
-      console.error('[Storage] upsertSnapshots error:', error)
+      log.error('upsertSnapshots error', { error: error instanceof Error ? error.message : String(error) })
       throw error // 这个错误需要抛出
     }
 
@@ -179,7 +182,7 @@ export class PipelineStorage {
       })
 
     if (error) {
-      console.error('[Storage] persistLeaderboardRanks error:', error)
+      log.error('persistLeaderboardRanks error', { error: error instanceof Error ? error.message : String(error) })
       throw error
     }
 
@@ -216,7 +219,7 @@ export class PipelineStorage {
       })
 
     if (error) {
-      console.error('[Storage] persistDailySnapshots error:', error)
+      log.error('persistDailySnapshots error', { error: error instanceof Error ? error.message : String(error) })
       throw error
     }
 

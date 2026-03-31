@@ -57,7 +57,7 @@ export async function autoCleanupStuckJobs() {
             chat_id: process.env.TELEGRAM_ALERT_CHAT_ID,
             text: `🚨 Arena Pipeline Alert\n\n${stuckCount} jobs stuck >${STUCK_THRESHOLD_HOURS}h\n\nAuto-cleanup started.`,
           }),
-        }).catch(console.error)
+        }).catch((err: unknown) => logger.error('Telegram alert failed', { error: err instanceof Error ? err.message : String(err) }))
       }
     }
     

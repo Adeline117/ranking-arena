@@ -13,6 +13,9 @@
 
 import { RawFetchResult, RawTraderEntry, TimeWindow } from '../types'
 import { PlatformScraper, registerScraper } from '../runner'
+import { createLogger } from '@/lib/utils/logger'
+
+const log = createLogger('scraper:bybit-futures')
 
 const WINDOW_MAP: Record<TimeWindow, string> = {
   '7d': '7D',
@@ -68,14 +71,14 @@ export class BybitFuturesScraper implements PlatformScraper {
         })
 
         if (!response.ok) {
-          console.warn(`[BybitFuturesScraper] HTTP ${response.status}`)
+          log.warn(`HTTP ${response.status}`)
           break
         }
 
         const data = await response.json()
 
         if (data.retCode !== 0) {
-          console.warn(`[BybitFuturesScraper] API error: ${data.retMsg}`)
+          log.warn(`API error: ${data.retMsg}`)
           break
         }
 
@@ -96,7 +99,7 @@ export class BybitFuturesScraper implements PlatformScraper {
 
         await this.delay(200)
       } catch (error) {
-        console.warn(`[BybitFuturesScraper] Page ${page} failed:`, error)
+        log.warn(`Page ${page} failed`, { error: error instanceof Error ? error.message : String(error) })
         break
       }
     }

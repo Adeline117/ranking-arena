@@ -15,6 +15,9 @@
 
 import { RawFetchResult, RawTraderEntry, TimeWindow } from '../types'
 import { PlatformScraper, registerScraper } from '../runner'
+import { createLogger } from '@/lib/utils/logger'
+
+const log = createLogger('scraper:binance-futures')
 
 // =============================================================================
 // Types
@@ -68,7 +71,7 @@ export class BinanceFuturesScraper implements PlatformScraper {
         const result = await this.fetchWindow(window)
         results.push(result)
       } catch (error) {
-        console.error(`[BinanceFuturesScraper] Error fetching ${window}:`, error)
+        log.error(`Error fetching ${window}`, { error: error instanceof Error ? error.message : String(error) })
         results.push({
           platform: this.platform,
           market_type: 'futures',
@@ -181,7 +184,7 @@ export class BinanceFuturesScraper implements PlatformScraper {
           return (await proxyResponse.json()) as T
         }
       } catch (error) {
-        console.warn('[BinanceFuturesScraper] VPS proxy failed:', error)
+        log.warn('VPS proxy failed', { error: error instanceof Error ? error.message : String(error) })
       }
     }
 
@@ -197,13 +200,13 @@ export class BinanceFuturesScraper implements PlatformScraper {
       })
 
       if (!response.ok) {
-        console.warn(`[BinanceFuturesScraper] HTTP ${response.status}: ${url}`)
+        log.warn(`HTTP ${response.status}: ${url}`)
         return null
       }
 
       return (await response.json()) as T
     } catch (error) {
-      console.error('[BinanceFuturesScraper] Direct request failed:', error)
+      log.error('Direct request failed', { error: error instanceof Error ? error.message : String(error) })
       return null
     }
   }

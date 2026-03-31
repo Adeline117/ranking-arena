@@ -629,7 +629,7 @@ export async function checkCacheHealth(): Promise<{
       await redis.ping()
       redisLatency = Date.now() - start
     } catch (err) {
-      console.warn('[Redis] Health check failed:', err instanceof Error ? err.message : String(err))
+      dataLogger.warn('[Redis] Health check failed: ' + (err instanceof Error ? err.message : String(err)))
     }
   }
 

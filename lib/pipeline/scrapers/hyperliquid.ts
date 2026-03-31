@@ -16,6 +16,9 @@
 
 import { RawFetchResult, RawTraderEntry, TimeWindow } from '../types'
 import { PlatformScraper, registerScraper } from '../runner'
+import { createLogger } from '@/lib/utils/logger'
+
+const log = createLogger('scraper:hyperliquid')
 
 // =============================================================================
 // Types
@@ -95,7 +98,7 @@ export class HyperliquidScraper implements PlatformScraper {
         return data.leaderboardRows || data || []
       }
     } catch (error) {
-      console.warn('[HyperliquidScraper] stats-data endpoint failed:', error)
+      log.warn('stats-data endpoint failed', { error: error instanceof Error ? error.message : String(error) })
     }
 
     // Fallback: info POST endpoint
@@ -111,7 +114,7 @@ export class HyperliquidScraper implements PlatformScraper {
         return data.leaderboardRows || data || []
       }
     } catch (error) {
-      console.warn('[HyperliquidScraper] info POST endpoint failed:', error)
+      log.warn('info POST endpoint failed', { error: error instanceof Error ? error.message : String(error) })
     }
 
     throw new Error('All Hyperliquid endpoints failed')

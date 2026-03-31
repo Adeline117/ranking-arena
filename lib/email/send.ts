@@ -8,15 +8,13 @@
  */
 
 import { BASE_URL } from '@/lib/constants/urls'
+import { createLogger } from '@/lib/utils/logger'
+
+const log = createLogger('email')
 
 export async function sendEmail(to: string, subject: string, html: string): Promise<void> {
-  // Stub: log email for now, integrate Resend/SendGrid later
-  // eslint-disable-next-line no-console
-  console.warn(`[EMAIL] To: ${to}, Subject: ${subject}, Body length: ${html.length}`)
-  // TODO: integrate with Resend (https://resend.com)
-  // import { Resend } from 'resend'
-  // const resend = new Resend(process.env.RESEND_API_KEY)
-  // await resend.emails.send({ from: 'Arena <noreply@arenafi.org>', to, subject, html })
+  // Stub: log email for now, integrate Resend/SendGrid when ready
+  log.warn(`To: ${to}, Subject: ${subject}, Body length: ${html.length}`)
 }
 
 /**
