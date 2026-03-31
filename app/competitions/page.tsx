@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { tokens } from '@/lib/design-tokens'
 import TopNav from '@/app/components/layout/TopNav'
 import { Box, Text, Button } from '@/app/components/base'
@@ -54,14 +54,25 @@ export default function CompetitionsPage() {
   const [tab, setTab] = useState<TabStatus>('active')
   const [competitions, setCompetitions] = useState<Competition[]>([])
   const [loading, setLoading] = useState(true)
+  // Per-tab cache to avoid refetch on tab switch
+  const tabCacheRef = useRef<Record<string, { data: Competition[]; ts: number }>>({})
 
   const fetchCompetitions = useCallback(async (status: TabStatus) => {
+    // Serve from cache if fresh (<5 min)
+    const cached = tabCacheRef.current[status]
+    if (cached && Date.now() - cached.ts < 5 * 60 * 1000) {
+      setCompetitions(cached.data)
+      setLoading(false)
+      return
+    }
     setLoading(true)
     try {
       const res = await fetch(`/api/competitions?status=${status}&limit=20`)
       const json = await res.json()
       if (json.success) {
-        setCompetitions(json.data.competitions)
+        const data = json.data.competitions
+        tabCacheRef.current[status] = { data, ts: Date.now() }
+        setCompetitions(data)
       }
     } catch {
       // silent

@@ -204,8 +204,10 @@ export default function FollowingPage() {
 
   // userId now comes from useAuthSession directly
 
+  const fetchingRef = useRef(false)
   const fetchFollowing = useCallback(async (offset: number, append: boolean) => {
-    if (!userId) return
+    if (!userId || fetchingRef.current) return
+    fetchingRef.current = true
     try {
       const response = await fetch(`/api/following?userId=${userId}&limit=${PAGE_SIZE}&offset=${offset}`)
       const data = await response.json()
@@ -229,6 +231,8 @@ export default function FollowingPage() {
       logger.error('Error loading following:', error)
       if (!append) setItems([])
       showToast(t('loadFollowingFailed'), 'error')
+    } finally {
+      fetchingRef.current = false
     }
   }, [userId, showToast, t])
 

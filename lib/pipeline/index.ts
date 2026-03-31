@@ -32,4 +32,4 @@ export { PipelineCalculator, getCalculator, quickArenaScore } from './calculator
 export { PipelineStorage, getStorage } from './storage'
 
 // Runner
-export { PipelineRunner, runPipeline } from './runner'
+export { PipelineRunner, runPipeline, getScraper } from './runner'

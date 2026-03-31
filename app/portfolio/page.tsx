@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useEffect, useState, useCallback } from 'react'
+import React, { useEffect, useState, useCallback, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase/client'
 import TopNav from '@/app/components/layout/TopNav'
@@ -74,35 +74,37 @@ export default function PortfolioPage() {
     return { Authorization: `Bearer ${token}` }
   }, [token])
 
-  // Load portfolios
-  const loadPortfolios = useCallback(async () => {
+  // Load portfolios + positions in parallel with request dedup
+  const lastFetchRef = useRef<number>(0)
+  const loadAll = useCallback(async (force = false) => {
     if (!token) return
+    // Skip if fetched < 30s ago (dedup rapid remounts)
+    if (!force && Date.now() - lastFetchRef.current < 30_000) return
+    lastFetchRef.current = Date.now()
+    setLoading(true)
+    const headers = { Authorization: `Bearer ${token}` }
     try {
-      const res = await fetch('/api/portfolio', { headers: fetchHeaders() })
-      const json = await res.json()
-      if (json.data) setPortfolios(json.data)
+      const [pRes, posRes] = await Promise.all([
+        fetch('/api/portfolio', { headers }),
+        fetch('/api/portfolio/positions', { headers }),
+      ])
+      const [pJson, posJson] = await Promise.all([pRes.json(), posRes.json()])
+      if (pJson.data) setPortfolios(pJson.data)
+      if (posJson.data) setPositions(posJson.data)
     } catch {
-      // Intentionally swallowed: portfolio load failure is non-critical, empty state shown instead
+      // Intentionally swallowed: portfolio load failure is non-critical
+    } finally {
+      setLoading(false)
     }
-  }, [token, fetchHeaders])
-
-  // Load positions
-  const loadPositions = useCallback(async () => {
-    if (!token) return
-    try {
-      const res = await fetch('/api/portfolio/positions', { headers: fetchHeaders() })
-      const json = await res.json()
-      if (json.data) setPositions(json.data)
-    } catch {
-      // Intentionally swallowed: positions load failure is non-critical, empty state shown instead
-    }
-  }, [token, fetchHeaders])
+  }, [token])
 
   useEffect(() => {
-    if (!token) return
-    setLoading(true)
-    Promise.all([loadPortfolios(), loadPositions()]).finally(() => setLoading(false))
-  }, [token, loadPortfolios, loadPositions])
+    loadAll()
+  }, [loadAll])
+
+  // Keep references for sync handler
+  const loadPortfolios = loadAll
+  const loadPositions = loadAll
 
   const handleAddExchange = async (data: { exchange: string; api_key: string; api_secret: string; label: string }) => {
     const res = await fetch('/api/portfolio', {

@@ -261,12 +261,14 @@ export default function NotificationsPage() {
     }
   }, [authChecked, accessToken, router])
 
-  // 加载通知
-  const loadNotifications = useCallback(async () => {
+  // 加载通知 — 初始加载 30 条，滚动加载更多
+  const NOTIFICATION_PAGE_SIZE = 30
+  const [hasMoreNotifs, setHasMoreNotifs] = useState(true)
+  const loadNotifications = useCallback(async (offset = 0, append = false) => {
     if (!accessToken) return
-    setLoading(true)
+    if (!append) setLoading(true)
     try {
-      const res = await fetch('/api/notifications?limit=100', {
+      const res = await fetch(`/api/notifications?limit=${NOTIFICATION_PAGE_SIZE}&offset=${offset}`, {
         headers: { Authorization: `Bearer ${accessToken}` },
       })
       if (!res.ok) {
@@ -275,7 +277,9 @@ export default function NotificationsPage() {
       }
       const result = await res.json()
       const data = result.data || result
-      setNotifications(data.notifications || [])
+      const newNotifs = data.notifications || []
+      setNotifications(prev => append ? [...prev, ...newNotifs] : newNotifs)
+      setHasMoreNotifs(newNotifs.length >= NOTIFICATION_PAGE_SIZE)
     } catch {
       showToast(t('loadNotificationsFailed'), 'error')
     } finally {

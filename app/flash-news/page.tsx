@@ -153,12 +153,15 @@ export default function FlashNewsPage() {
     fetchNews(1, selectedCategory)
   }, [fetchNews, selectedCategory])
 
-  // Auto-refresh: poll for new news every 2 minutes
+  // Auto-refresh: poll only when page is visible (saves bandwidth when tab is hidden)
   useEffect(() => {
-    const interval = setInterval(() => {
-      fetchNews(1, selectedCategory)
-    }, 120000)
-    return () => clearInterval(interval)
+    let interval: ReturnType<typeof setInterval> | null = null
+    const start = () => { if (!interval) interval = setInterval(() => fetchNews(1, selectedCategory), 120000) }
+    const stop = () => { if (interval) { clearInterval(interval); interval = null } }
+    const onVisibility = () => { document.hidden ? stop() : start() }
+    if (!document.hidden) start()
+    document.addEventListener('visibilitychange', onVisibility)
+    return () => { stop(); document.removeEventListener('visibilitychange', onVisibility) }
   }, [fetchNews, selectedCategory])
 
   // Infinite scroll via IntersectionObserver
