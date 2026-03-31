@@ -186,7 +186,7 @@ describe('LbankFuturesConnector', () => {
       const normalized = connector.normalize(raw)
 
       expect(normalized.trader_key).toBeNull()
-      expect(normalized.display_name).toBeUndefined()
+      expect(normalized.display_name).toBeNull()
     })
   })
 

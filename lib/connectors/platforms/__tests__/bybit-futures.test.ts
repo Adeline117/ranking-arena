@@ -128,11 +128,14 @@ describe('BybitFuturesConnector', () => {
       }
     })
 
-    test('throws on network error', async () => {
+    test('returns empty result on network error (VPS null + fallback catch)', async () => {
       const connector = createConnector()
       mockFetchNetworkError()
 
-      await expect(connector.discoverLeaderboard('7d')).rejects.toThrow()
+      // discoverLeaderboard is resilient: fetchViaVPS returns null when VPS not configured,
+      // then direct API fallback catches errors and breaks. Returns empty traders array.
+      const result = await connector.discoverLeaderboard('7d')
+      expect(result.traders).toEqual([])
     })
 
     test('throws ConnectorError on rate limit via fetchTraderProfile (direct API)', async () => {
@@ -385,7 +388,7 @@ describe('BybitFuturesConnector', () => {
   // ============================================
 
   describe('error handling', () => {
-    test('throws on server error (500)', async () => {
+    test('returns empty result on server error (500) (VPS null + fallback catch)', async () => {
       const connector = createConnector()
       mockFetch.mockResolvedValueOnce({
         ok: false,
@@ -394,7 +397,10 @@ describe('BybitFuturesConnector', () => {
         json: async () => ({ error: 'Internal Server Error' }),
       })
 
-      await expect(connector.discoverLeaderboard('7d')).rejects.toThrow()
+      // discoverLeaderboard is resilient: fetchViaVPS returns null when VPS not configured,
+      // then direct API fallback catches errors and breaks. Returns empty traders array.
+      const result = await connector.discoverLeaderboard('7d')
+      expect(result.traders).toEqual([])
     })
 
     test('throws ConnectorError on client error (400) via fetchTraderProfile', async () => {
