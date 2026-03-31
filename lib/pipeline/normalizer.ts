@@ -70,6 +70,19 @@ export class PipelineNormalizer {
     const winRate = this.normalizeWinRate(data)
     const maxDrawdown = this.normalizeMaxDrawdown(data)
 
+    // Sanity check: if roi_pct ≈ pnl_usd and both are large, roi_pct is likely corrupted
+    // (e.g., Hyperliquid API sometimes returns PnL in both fields)
+    let sanitizedRoi = roi
+    if (roi != null && pnl != null && Math.abs(roi) > 1000 && Math.abs(roi - pnl) < 1) {
+      // roi_pct equals pnl_usd — roi is wrong, try to recompute from accountValue
+      const accountValue = this.extractNumber(data, 'accountValue', 'equity', 'totalEquity')
+      if (accountValue != null && accountValue > 0) {
+        sanitizedRoi = (pnl / accountValue) * 100
+      } else {
+        sanitizedRoi = null // Can't fix, null it out
+      }
+    }
+
     return {
       // Identity
       platform,
@@ -78,7 +91,7 @@ export class PipelineNormalizer {
       avatar_url: this.extractAvatarUrl(data),
 
       // Core Metrics (标准化后)
-      roi_pct: roi,
+      roi_pct: sanitizedRoi,
       pnl_usd: pnl,
       win_rate_pct: winRate,
       max_drawdown_pct: maxDrawdown,
