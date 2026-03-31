@@ -159,9 +159,9 @@ export async function POST(req: NextRequest) {
     })
   } catch (error: unknown) {
     logger.error('[verify-ownership] Error:', error)
-    const message = error instanceof Error ? error.message : 'Verification failed'
+    // SECURITY: Do not leak internal error details to client
     return NextResponse.json(
-      { error: message, verified: false },
+      { error: 'Verification failed', verified: false },
       { status: 500 }
     )
   }

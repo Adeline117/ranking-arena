@@ -85,11 +85,10 @@ export async function GET(request: NextRequest) {
       checked_at: new Date().toISOString(),
     })
   } catch (err) {
+    console.error('[supabase-pool] Error:', err instanceof Error ? err.message : String(err))
+    // SECURITY: Do not leak internal error details to client
     return NextResponse.json(
-      {
-        error: 'Internal server error',
-        details: err instanceof Error ? err.message : 'Unknown error',
-      },
+      { error: 'Internal server error' },
       { status: 500 }
     )
   }

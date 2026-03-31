@@ -48,7 +48,8 @@ export async function GET(
       headers: { 'X-Cache': 'MISS' },
     })
   } catch (error) {
-    const message = error instanceof Error ? error.message : 'Internal server error'
-    return NextResponse.json({ error: message }, { status: 500 })
+    console.error('[portfolio] Error:', error instanceof Error ? error.message : String(error))
+    // SECURITY: Do not leak internal error details to client
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
 }

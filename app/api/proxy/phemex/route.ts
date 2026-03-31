@@ -44,6 +44,8 @@ export async function GET(req: NextRequest) {
       headers: { 'Content-Type': resp.headers.get('Content-Type') || 'application/json' },
     })
   } catch (e) {
-    return NextResponse.json({ error: (e as Error).message }, { status: 502 })
+    console.error('[phemex-proxy] Error:', (e as Error).message)
+    // SECURITY: Do not leak internal error details to client
+    return NextResponse.json({ error: 'Upstream service error' }, { status: 502 })
   }
 }

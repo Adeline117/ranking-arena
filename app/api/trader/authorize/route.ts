@@ -225,11 +225,9 @@ export async function POST(request: NextRequest) {
     })
   } catch (error) {
     logger.apiError('/api/trader/authorize', error, {})
+    // SECURITY: Do not leak internal error details to client
     return NextResponse.json(
-      {
-        error: 'Internal server error',
-        details: error instanceof Error ? error.message : 'Unknown error',
-      },
+      { error: 'Internal server error' },
       { status: 500 }
     )
   }
