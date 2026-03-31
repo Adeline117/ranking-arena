@@ -88,8 +88,17 @@ const eslintConfig = defineConfig([
     "infra/**",
     // E2E tests (console.log for test output is acceptable)
     "e2e/**",
+    // Test files
+    "**/*.test.ts",
+    "**/*.test.tsx",
+    "**/*.spec.ts",
+    "**/*.spec.tsx",
     // Claude skills (external, not part of project)
     ".claude/**",
+    // Build artifacts (Vercel output, Playwright reports)
+    ".vercel/**",
+    "playwright-report/**",
+    "dist/**",
     // Default ignores of eslint-config-next:
     ".next/**",
     "out/**",
