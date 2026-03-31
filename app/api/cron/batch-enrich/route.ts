@@ -226,10 +226,15 @@ export async function GET(request: NextRequest) {
   clearTimeout(safetyTimer)
   const succeeded = results.filter(r => r.status === 'success').length
   const failed = results.length - succeeded
+  const failedItems = results.filter(r => r.status === 'error').map(r => `${r.platform}/${r.period}: ${r.error || 'unknown'}`)
 
   if (failed === 0) {
     await plog.success(succeeded, { results })
+  } else if (succeeded > 0) {
+    // Partial success: some platforms failed (including budget-exhausted) but others worked
+    await plog.partialSuccess(succeeded, failedItems, { results })
   } else {
+    // Total failure: all platforms failed
     await plog.error(
       new Error(`${failed}/${results.length} enrichments failed`),
       { results }
@@ -237,12 +242,13 @@ export async function GET(request: NextRequest) {
   }
 
   return NextResponse.json({
-    ok: succeeded === results.length,
+    ok: failed === 0,
     period: periodParam,
     periodsRun: periodsToRun,
     platforms: platforms.length,
     succeeded,
     failed,
+    failedItems: failedItems.length > 0 ? failedItems : undefined,
     results,
   })
 }

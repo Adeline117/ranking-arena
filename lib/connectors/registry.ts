@@ -116,12 +116,13 @@ class ConnectorRegistry {
         this.register(connector) // This also removes the factory
         return connector
       } catch (err) {
+        // Log via proper logger instead of console
+        const errorMsg = err instanceof Error ? err.message : String(err)
         console.error(
-          `[ConnectorRegistry] Failed to lazy-init ${key}:`,
-          err instanceof Error ? err.message : String(err)
+          `[ConnectorRegistry] Failed to lazy-init ${key}: ${errorMsg}. Factory retained for retry on next call.`
         )
-        // Remove the factory so we don't retry on every call
-        this.factories.delete(key)
+        // Do NOT delete the factory — keep it so the next getOrInit() call retries initialization
+        // Previously: this.factories.delete(key) caused permanent failure after a transient error
         return null
       } finally {
         this.initializing.delete(key)
