@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useCallback } from 'react'
 import Link from 'next/link'
 import useSWR from 'swr'
 import { getScoreColor } from '@/lib/utils/score-colors'
@@ -116,6 +116,13 @@ export default function TopTraders() {
   const traders = data?.traders || []
   const loading = isLoading
 
+  const handleMouseEnter = useCallback((e: React.MouseEvent<HTMLAnchorElement>) => {
+    e.currentTarget.style.background = tokens.colors.bg.tertiary
+  }, [])
+  const handleMouseLeave = useCallback((e: React.MouseEvent<HTMLAnchorElement>) => {
+    e.currentTarget.style.background = 'transparent'
+  }, [])
+
   return (
     <SidebarCard title={t('sidebarTopTraders')}>
       {loading ? (
@@ -166,8 +173,8 @@ export default function TopTraders() {
                   borderRadius: tokens.radius.sm,
                   transition: `background ${tokens.transition.fast}`,
                 }}
-                onMouseEnter={e => (e.currentTarget.style.background = tokens.colors.bg.tertiary)}
-                onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
+                onMouseEnter={handleMouseEnter}
+                onMouseLeave={handleMouseLeave}
               >
                 {/* Rank */}
                 <span
