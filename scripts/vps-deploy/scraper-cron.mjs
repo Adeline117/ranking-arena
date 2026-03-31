@@ -174,6 +174,43 @@ const PLATFORMS = {
       }
     },
   },
+
+  coinex: {
+    source: 'coinex',
+    market_type: 'futures',
+    // CoinEx has no CF protection — direct API works from VPS (geo-blocked from Vercel hnd1)
+    directApi: 'https://www.coinex.com/res/copy-trading/public/traders?page=1&limit=50&sort_by=roi&period={period}',
+    endpoint: '/coinex/leaderboard', // VPS scraper fallback (currently broken/hanging)
+    periods: {
+      '7d': '7D',
+      '30d': '30D',
+      '90d': '90D',
+    },
+    pageSize: 50,
+    extractList: (data) => {
+      return data?.data?.data || data?.data?.items || []
+    },
+    normalize: (raw) => {
+      const rawRoi = num(raw.profit_rate)
+      // CoinEx returns ROI as decimal (1.33 = 133%)
+      const roi = rawRoi != null ? rawRoi * 100 : null
+      const rawWr = num(raw.winning_rate)
+      const winRate = rawWr != null ? rawWr * 100 : null
+      const rawMdd = num(raw.mdd)
+      const maxDrawdown = rawMdd != null ? Math.abs(rawMdd) * 100 : null
+      return {
+        trader_key: String(raw.trader_id ?? ''),
+        display_name: raw.nickname ?? null,
+        avatar_url: raw.avatar ?? null,
+        roi,
+        pnl: num(raw.profit_amount ?? raw.total_profit_amount),
+        win_rate: winRate,
+        max_drawdown: maxDrawdown,
+        sharpe_ratio: null,
+        followers: num(raw.cur_follower_num),
+      }
+    },
+  },
 }
 
 // ============================================
@@ -403,7 +440,9 @@ async function fetchPlatform(platformKey) {
         const controller = new AbortController()
         const timeout = setTimeout(() => controller.abort(), 30000)
         try {
-          const res = await fetch(config.directApi, {
+          // Substitute {period} placeholder with actual period key (e.g., 90d for CoinEx)
+          const apiUrl = config.directApi.replace('{period}', periodKey)
+          const res = await fetch(apiUrl, {
             headers: config.directHeaders || {},
             signal: controller.signal,
           })
