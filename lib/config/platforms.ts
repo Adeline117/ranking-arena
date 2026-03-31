@@ -12,7 +12,10 @@
 // 2026-03-23 03:40: RE-DISABLED binance_futures/bybit/weex/okx_web3 - catastrophic 75% failure rate after ec2af671
 // All timeout fixes failed, cleanup cron not catching them
 // Re-enable after deep investigation of timeout root cause
-export const DISABLED_PLATFORMS = ['bitget_spot', 'binance_futures', 'bybit', 'kucoin', 'weex', 'okx_web3'] as const
+// 2026-03-31: Re-enabled binance_futures and bybit — too critical to leave disabled.
+// kucoin/weex/okx_web3 stay disabled (already in DEAD_BLOCKED_PLATFORMS).
+// dydx enrichment disabled separately in NO_ENRICHMENT_PLATFORMS.
+export const DISABLED_PLATFORMS = ['bitget_spot', 'kucoin', 'weex', 'okx_web3'] as const
 export type DisabledPlatform = typeof DISABLED_PLATFORMS[number]
 
 export function isPlatformDisabled(platform: string): boolean {
