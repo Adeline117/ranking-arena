@@ -122,11 +122,12 @@ export async function POST(request: NextRequest) {
     })
   } catch (error: unknown) {
     logger.error('[Checkout] Error:', error)
-    
-    const message = error instanceof Error ? error.message : 'Internal server error'
+
+    // SECURITY: Never leak internal error details to client
+    const internalMessage = error instanceof Error ? error.message : 'Unknown error'
 
     // 特殊处理 Stripe 未配置的情况
-    if (message.includes('STRIPE_SECRET_KEY')) {
+    if (internalMessage.includes('STRIPE_SECRET_KEY')) {
       return NextResponse.json(
         { error: 'Payment system not configured. Please contact support.' },
         { status: 503 }
