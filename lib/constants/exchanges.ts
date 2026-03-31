@@ -171,6 +171,8 @@ export const DEAD_BLOCKED_PLATFORMS: TraderSource[] = [
   'weex',
   // okx_web3: API broken since 2026-03-18, no data for 10 days
   'okx_web3',
+  // bingx_spot: No spot leaderboard API, no dedicated fetcher — 2026-03-31
+  'bingx_spot',
 
   // ═══════════════════════════════════════════════════════════════
   // BLOCKED — needs API key or credentials to unlock
