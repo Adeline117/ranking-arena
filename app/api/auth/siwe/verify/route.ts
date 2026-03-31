@@ -65,6 +65,10 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Invalid wallet address' }, { status: 400 })
     }
 
+    // SECURITY: Clear nonce immediately after successful verification to prevent replay attacks.
+    // If the request crashes mid-transaction, the nonce cannot be reused.
+    cookieStore.delete('siwe-nonce')
+
     const supabase = getSupabaseAdmin()
 
     // Check if a user_profile already has this wallet address
@@ -86,8 +90,7 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ error: 'Failed to create session' }, { status: 500 })
       }
 
-      // Clear nonce only after successful DB operations
-      cookieStore.delete('siwe-nonce')
+      // Nonce already cleared above after verification succeeded
 
       return NextResponse.json({
         action: 'existing_user',
@@ -136,7 +139,7 @@ export async function POST(request: NextRequest) {
             email: walletEmail,
           })
 
-          cookieStore.delete('siwe-nonce')
+          // Nonce already cleared above after verification succeeded
 
           return NextResponse.json({
             action: 'existing_user',
@@ -178,8 +181,7 @@ export async function POST(request: NextRequest) {
       email: walletEmail,
     })
 
-    // Clear nonce only after successful user creation
-    cookieStore.delete('siwe-nonce')
+    // Nonce already cleared above after verification succeeded
 
     return NextResponse.json({
       action: 'new_user',
