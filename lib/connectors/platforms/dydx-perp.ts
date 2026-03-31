@@ -100,8 +100,10 @@ export class DydxPerpConnector extends BaseConnector {
     // dYdX indexer /v4/leaderboard/pnl returns 404 globally since ~2026-03.
     // Use Copin API as primary data source for trader discovery.
     // Copin API max limit is 500 per page — paginate to reach desired limit.
+    // NOTE: Copin leaderboard data has ~2 day processing delay.
+    // Using Date.now() returns 0 results. Use 3 days ago as queryDate.
     const statisticType = window === '7d' ? 'WEEK' : 'MONTH'
-    const queryDate = Date.now()
+    const queryDate = Date.now() - 3 * 24 * 60 * 60 * 1000
     const COPIN_PAGE_SIZE = 500
 
     let traders: TraderSource[] = []
@@ -177,48 +179,86 @@ export class DydxPerpConnector extends BaseConnector {
   }
 
   async fetchTraderSnapshot(traderKey: string, window: Window): Promise<SnapshotResult | null> {
-    // Get subaccount for equity (through proxy if configured)
-    const subUrl = this.buildUrl(`/v4/addresses/${traderKey}/subaccounts/0`)
-    const _rawSub = await this.request<Record<string, unknown>>(subUrl, { method: 'GET' })
-    const subData = warnValidate(DydxSubaccountResponseSchema, _rawSub, 'dydx-perp/subaccount')
-    const equity = Number(subData?.subaccount?.equity) || 0
+    // Primary: Use Copin API for trader stats (indexer leaderboard endpoint is dead since 2026-03)
+    const statisticType = window === '7d' ? 'WEEK' : 'MONTH'
+    let pnl: number | null = null
+    let roi: number | null = null
+    let winRate: number | null = null
+    let tradesCount: number | null = null
+    let platformRank: number | null = null
+    let equity: number | null = null
 
-    // Get PnL from leaderboard for this address (through proxy if configured)
-    const period = WINDOW_MAP[window]
-    const lbUrl = this.buildUrl('/v4/leaderboard/pnl', { period, limit: '1000' })
-    const _rawLb2 = await this.request<Record<string, unknown>>(lbUrl, { method: 'GET' })
-    const lbData = warnValidate(DydxLeaderboardResponseSchema, _rawLb2, 'dydx-perp/snapshot-leaderboard')
-    const rankings = lbData?.pnlRanking || []
-    const entry = rankings.find((r: Record<string, unknown>) => String(r.address) === traderKey)
+    try {
+      // Fetch from Copin position stats for this trader
+      // Copin has ~2 day processing delay — use 3 days ago
+      const queryDate = Date.now() - 3 * 24 * 60 * 60 * 1000
+      const copinUrl = `https://api.copin.io/leaderboards/page?protocol=DYDX&statisticType=${statisticType}&queryDate=${queryDate}&limit=1000&offset=0&sort_by=ranking&sort_type=asc`
+      const copinData = await this.request<Record<string, unknown>>(copinUrl, { method: 'GET' })
+      const copinList = (copinData?.data || []) as Record<string, unknown>[]
+      const entry = copinList.find((item: Record<string, unknown>) => String(item.account) === traderKey)
 
-    const pnl = entry ? Number(entry.pnl) || null : null
-    // Approximate ROI: PnL / (equity - pnl) if possible
-    const startEquity = equity - (pnl || 0)
-    const roi = startEquity > 0 && pnl !== null ? (pnl / startEquity) * 100 : null
+      if (entry) {
+        pnl = Number(entry.totalPnl ?? entry.totalRealisedPnl) || null
+        const totalWin = Number(entry.totalWin) || 0
+        const totalLose = Number(entry.totalLose) || 0
+        const totalTrade = Number(entry.totalTrade) || (totalWin + totalLose)
+        winRate = totalTrade > 0 ? (totalWin / totalTrade) * 100 : null
+        tradesCount = totalTrade > 0 ? totalTrade : null
+        platformRank = entry.ranking != null ? Number(entry.ranking) : null
+
+        // Estimate ROI from volume with assumed leverage
+        const volume = Number(entry.totalVolume) || null
+        roi = pnl != null && volume != null && volume > 0
+          ? (pnl / (volume / 5)) * 100  // Assume ~5x average leverage
+          : null
+      }
+    } catch {
+      // Copin failed, try to get equity from indexer subaccount endpoint
+    }
+
+    // Try to get equity from indexer subaccount (may still work)
+    try {
+      const subUrl = this.buildUrl(`/v4/addresses/${traderKey}/subaccounts/0`)
+      const _rawSub = await this.request<Record<string, unknown>>(subUrl, { method: 'GET' })
+      const subData = warnValidate(DydxSubaccountResponseSchema, _rawSub, 'dydx-perp/subaccount')
+      equity = Number(subData?.subaccount?.equity) || null
+
+      // If we have equity and PnL but no ROI, compute it
+      if (roi === null && pnl !== null && equity != null) {
+        const startEquity = equity - pnl
+        if (startEquity > 0) roi = (pnl / startEquity) * 100
+      }
+    } catch {
+      // Subaccount endpoint also unavailable — continue with Copin data only
+    }
 
     const metrics: SnapshotMetrics = {
       roi,
       pnl,
-      win_rate: null,
+      win_rate: winRate,
       max_drawdown: null,
       sharpe_ratio: null, sortino_ratio: null,
-      trades_count: null,
+      trades_count: tradesCount,
       followers: null, copiers: null,
-      aum: equity || null,
-      platform_rank: entry ? Number(entry.rank) || null : null,
+      aum: equity,
+      platform_rank: platformRank,
       arena_score: null, return_score: null, drawdown_score: null, stability_score: null,
     }
 
+    const missingFields = ['max_drawdown', 'followers', 'copiers', 'sharpe_ratio', 'sortino_ratio']
+    if (winRate === null) missingFields.push('win_rate')
+    if (tradesCount === null) missingFields.push('trades_count')
+
     const quality_flags: QualityFlags = {
-      missing_fields: ['win_rate', 'max_drawdown', 'followers', 'copiers', 'sharpe_ratio', 'sortino_ratio', 'trades_count'],
+      missing_fields: missingFields,
       non_standard_fields: {
-        roi: 'Computed from PnL / starting equity. dYdX only provides absolute PnL in leaderboard.',
+        roi: 'Computed from PnL / volume with assumed leverage. dYdX does not provide ROI directly.',
       },
       window_native: true,
       notes: [
         'dYdX is a DEX - no copy trading',
-        'ROI is derived (PnL/equity), not platform-provided',
-        'Win rate requires trade-level fill analysis',
+        'Data sourced from Copin.io indexer (dYdX native leaderboard API is dead)',
+        'ROI is derived, not platform-provided',
       ],
     }
     return { metrics, quality_flags, fetched_at: new Date().toISOString() }
