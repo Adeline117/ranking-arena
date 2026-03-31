@@ -185,7 +185,7 @@ export async function postTweet(content: TweetContent): Promise<string | null> {
     return null
   }
 
-  // TODO: Implement actual Twitter API v2 posting with OAuth 1.0a
+  // Stub: Twitter API v2 posting not yet implemented (requires OAuth 1.0a setup)
   // When twitter-api-v2 package is installed:
   //
   // import { TwitterApi } from 'twitter-api-v2'

@@ -4,7 +4,8 @@
  * Supabase Auth handles transactional emails (confirmation, password reset).
  * This module is for application emails (weekly digest, notifications, etc.).
  *
- * TODO: integrate with Resend (https://resend.com) or SendGrid for production use.
+ * Currently a stub — logs emails instead of sending.
+ * When ready, integrate Resend (https://resend.com) or SendGrid.
  */
 
 import { BASE_URL } from '@/lib/constants/urls'
