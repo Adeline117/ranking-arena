@@ -147,14 +147,22 @@ const RETRY_CONFIG = {
 async function withRetry<T>(
   fn: () => Promise<T>,
   context: string,
-  options = RETRY_CONFIG
+  options = RETRY_CONFIG,
+  signal?: AbortSignal,
 ): Promise<T> {
   let lastError: Error | undefined
   for (let attempt = 1; attempt <= options.maxAttempts; attempt++) {
+    // Check if the shared timeout has already been exceeded
+    if (signal?.aborted) {
+      throw new Error(`Timeout before attempt ${attempt} in ${context}`)
+    }
     try {
       return await fn()
     } catch (error) {
       lastError = error instanceof Error ? error : new Error(String(error))
+      if (signal?.aborted) {
+        throw new Error(`Timeout during attempt ${attempt} in ${context}: ${lastError.message}`)
+      }
       if (attempt === options.maxAttempts) {
         logger.error(`Enrichment ${context} failed after retries`, { attempts: attempt }, lastError)
         throw lastError
@@ -652,7 +660,7 @@ export async function runEnrichment(params: {
             ?? (ONCHAIN_SET.has(platformKey) ? 30_000 : 15_000) // Reduced from 60s/30s
           const traderController = new AbortController()
           const traderTimer = setTimeout(() => {
-            logger.warn(`[enrich] ${platformKey}/${traderId} timeout after ${traderTimeoutMs / 1000}s`)
+            logger.warn(`Timeout in enrichTrader for trader ${traderId} on ${platformKey} (${traderTimeoutMs}ms)`)
             traderController.abort()
           }, traderTimeoutMs)
           // Cascade: if platform aborts, abort all its traders
@@ -665,11 +673,16 @@ export async function runEnrichment(params: {
                 // --- Phase 1: Parallel API fetches (independent network calls) ---
                 const fetchPromises: Record<string, Promise<unknown>> = {}
 
+                // All API fetches share the trader's AbortSignal for wall-clock enforcement
+                const traderSignal = traderController.signal
+
                 // Equity curve fetch
                 if (config.fetchEquityCurve) {
                   fetchPromises.equityCurve = withRetry(
                     () => config.fetchEquityCurve!(traderId, days),
-                    `${platformKey}:${traderId} equity curve`
+                    `${platformKey}:${traderId} equity curve`,
+                    RETRY_CONFIG,
+                    traderSignal,
                   ).catch(() => [] as EquityCurvePoint[])
                 }
 
@@ -677,7 +690,9 @@ export async function runEnrichment(params: {
                 if (config.fetchPositionHistory) {
                   fetchPromises.positions = withRetry(
                     () => config.fetchPositionHistory!(traderId),
-                    `${platformKey}:${traderId} position history`
+                    `${platformKey}:${traderId} position history`,
+                    RETRY_CONFIG,
+                    traderSignal,
                   ).catch(() => [] as PositionHistoryItem[])
                 }
 
@@ -685,7 +700,9 @@ export async function runEnrichment(params: {
                 if (config.fetchCurrentPositions) {
                   fetchPromises.currentPositions = withRetry(
                     () => config.fetchCurrentPositions!(traderId),
-                    `${platformKey}:${traderId} current positions`
+                    `${platformKey}:${traderId} current positions`,
+                    RETRY_CONFIG,
+                    traderSignal,
                   ).catch(() => [] as (PortfolioPosition | PositionHistoryItem)[])
                 }
 
@@ -693,13 +710,18 @@ export async function runEnrichment(params: {
                 if (config.fetchStatsDetail) {
                   fetchPromises.stats = withRetry(
                     () => config.fetchStatsDetail!(traderId),
-                    `${platformKey}:${traderId} stats detail`
+                    `${platformKey}:${traderId} stats detail`,
+                    RETRY_CONFIG,
+                    traderSignal,
                   ).catch(() => null as StatsDetail | null)
                 }
 
-                // DEX wallet AUM fetch (optional, failures swallowed)
+                // DEX wallet AUM fetch (optional, failures logged)
                 if (isDexPlatform(platformKey)) {
-                  fetchPromises.walletAum = fetchWalletAUM(platformKey, traderId).catch(() => null)
+                  fetchPromises.walletAum = fetchWalletAUM(platformKey, traderId).catch(err => {
+                    logger.warn(`[enrich] ${platformKey}/${traderId} wallet AUM fetch failed: ${err instanceof Error ? err.message : String(err)}`)
+                    return null
+                  })
                 }
 
                 // Await all API fetches in parallel
@@ -724,14 +746,14 @@ export async function runEnrichment(params: {
 
                 // --- Phase 3: Sequential DB writes (depend on fetch results) ---
                 if (curve.length > 0) {
-                  await withRetry(() => upsertEquityCurve(supabase, platformKey, traderId, period, curve), `${platformKey}:${traderId} save equity curve`)
+                  await withRetry(() => upsertEquityCurve(supabase, platformKey, traderId, period, curve), `${platformKey}:${traderId} save equity curve`, RETRY_CONFIG, traderSignal)
                 }
 
                 if (config.fetchPositionHistory && positions.length > 0) {
-                  await withRetry(() => upsertPositionHistory(supabase, platformKey, traderId, positions), `${platformKey}:${traderId} save position history`)
+                  await withRetry(() => upsertPositionHistory(supabase, platformKey, traderId, positions), `${platformKey}:${traderId} save position history`, RETRY_CONFIG, traderSignal)
                   const breakdown = calculateAssetBreakdown(positions)
                   if (breakdown.length > 0) {
-                    await withRetry(() => upsertAssetBreakdown(supabase, platformKey, traderId, period, breakdown), `${platformKey}:${traderId} save asset breakdown`)
+                    await withRetry(() => upsertAssetBreakdown(supabase, platformKey, traderId, period, breakdown), `${platformKey}:${traderId} save asset breakdown`, RETRY_CONFIG, traderSignal)
                   }
                 }
 
@@ -745,14 +767,16 @@ export async function runEnrichment(params: {
                         entryPrice: p.entryPrice,
                         pnl: 'pnl' in p ? p.pnl : ('pnlUsd' in p ? (p as PositionHistoryItem).pnlUsd : null),
                       }))),
-                    `${platformKey}:${traderId} save current positions`
+                    `${platformKey}:${traderId} save current positions`,
+                    RETRY_CONFIG,
+                    traderSignal,
                   )
                 }
 
                 if (config.fetchStatsDetail && stats) {
                   // Pass position history to derive avg_holding_hours, avg_profit/loss, etc.
                   stats = enhanceStatsWithDerivedMetrics(stats, curve, period, positions.length > 0 ? positions : undefined)
-                  await withRetry(() => upsertStatsDetail(supabase, platformKey, traderId, period, stats!), `${platformKey}:${traderId} save stats detail`)
+                  await withRetry(() => upsertStatsDetail(supabase, platformKey, traderId, period, stats!), `${platformKey}:${traderId} save stats detail`, RETRY_CONFIG, traderSignal)
                 }
 
                 // Always sync key metrics back to trader_snapshots_v2 from stats + equity curve.
