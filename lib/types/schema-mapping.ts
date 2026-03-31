@@ -112,6 +112,7 @@ export const LR = {
   rank: 'rank',
   handle: 'handle',
   avatar_url: 'avatar_url',
+  computed_at: 'computed_at',
 } as const
 
 /**

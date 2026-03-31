@@ -52,6 +52,13 @@ export async function GET(request: NextRequest) {
       }
       if (snapshotsV2Cleaned > 0) {
         logger.info(`[cleanup-data] Cleaned up ${snapshotsV2Cleaned} old snapshots_v2 rows (>180d)`)
+        // P1-3: Run ANALYZE after bulk deletes to update planner statistics
+        try {
+          await supabase.rpc('exec_sql', { sql: 'ANALYZE trader_snapshots_v2' })
+          logger.info('[cleanup-data] ANALYZE trader_snapshots_v2 completed')
+        } catch (analyzeErr) {
+          logger.warn(`[cleanup-data] ANALYZE trader_snapshots_v2 failed: ${analyzeErr}`)
+        }
       }
     } catch (err) {
       logger.warn(`[cleanup-data] snapshots_v2 cleanup failed: ${err}`)
@@ -81,6 +88,67 @@ export async function GET(request: NextRequest) {
       }
     } catch (err) {
       logger.warn(`[cleanup-data] daily_snapshots cleanup failed: ${err}`)
+    }
+
+    // Step 2b: Cleanup old hot_topics (>180 days)
+    let hotTopicsCleaned = 0
+    try {
+      const hotTopicsCutoff = new Date(Date.now() - 180 * 24 * 3600 * 1000).toISOString()
+      const { count, error: htErr } = await supabase
+        .from('hot_topics')
+        .delete({ count: 'exact' })
+        .lt('created_at', hotTopicsCutoff)
+      if (htErr) {
+        logger.warn(`[cleanup-data] hot_topics cleanup error: ${htErr.message}`)
+      } else {
+        hotTopicsCleaned = count ?? 0
+        if (hotTopicsCleaned > 0) {
+          logger.info(`[cleanup-data] Cleaned up ${hotTopicsCleaned} old hot_topics rows (>180d)`)
+        }
+      }
+    } catch (err) {
+      logger.warn(`[cleanup-data] hot_topics cleanup failed: ${err}`)
+    }
+
+    // Step 2c: Cleanup old flash_news (>365 days)
+    let flashNewsCleaned = 0
+    try {
+      const flashNewsCutoff = new Date(Date.now() - 365 * 24 * 3600 * 1000).toISOString()
+      const { count, error: fnErr } = await supabase
+        .from('flash_news')
+        .delete({ count: 'exact' })
+        .lt('created_at', flashNewsCutoff)
+      if (fnErr) {
+        logger.warn(`[cleanup-data] flash_news cleanup error: ${fnErr.message}`)
+      } else {
+        flashNewsCleaned = count ?? 0
+        if (flashNewsCleaned > 0) {
+          logger.info(`[cleanup-data] Cleaned up ${flashNewsCleaned} old flash_news rows (>365d)`)
+        }
+      }
+    } catch (err) {
+      logger.warn(`[cleanup-data] flash_news cleanup failed: ${err}`)
+    }
+
+    // Step 2d: Cleanup read notifications (>90 days)
+    let notificationsCleaned = 0
+    try {
+      const notifCutoff = new Date(Date.now() - 90 * 24 * 3600 * 1000).toISOString()
+      const { count, error: notifErr } = await supabase
+        .from('notifications')
+        .delete({ count: 'exact' })
+        .eq('read', true)
+        .lt('created_at', notifCutoff)
+      if (notifErr) {
+        logger.warn(`[cleanup-data] notifications cleanup error: ${notifErr.message}`)
+      } else {
+        notificationsCleaned = count ?? 0
+        if (notificationsCleaned > 0) {
+          logger.info(`[cleanup-data] Cleaned up ${notificationsCleaned} old read notifications (>90d)`)
+        }
+      }
+    } catch (err) {
+      logger.warn(`[cleanup-data] notifications cleanup failed: ${err}`)
     }
 
     // Step 3: Refresh computed metrics from equity curves
@@ -118,9 +186,14 @@ export async function GET(request: NextRequest) {
 
     const duration = Date.now() - startTime
 
-    await plog.success(snapshotsV2Cleaned + dailySnapshotsCleaned, {
+    const totalCleaned = snapshotsV2Cleaned + dailySnapshotsCleaned + hotTopicsCleaned + flashNewsCleaned + notificationsCleaned
+
+    await plog.success(totalCleaned, {
       snapshotsV2Cleaned,
       dailySnapshotsCleaned,
+      hotTopicsCleaned,
+      flashNewsCleaned,
+      notificationsCleaned,
       metricsRefresh: metricsResult,
       staleDataCleanup,
     })
@@ -129,6 +202,9 @@ export async function GET(request: NextRequest) {
       success: true,
       snapshotsV2Cleaned,
       dailySnapshotsCleaned,
+      hotTopicsCleaned,
+      flashNewsCleaned,
+      notificationsCleaned,
       metricsRefresh: metricsResult,
       staleDataCleanup,
       duration: `${duration}ms`,
