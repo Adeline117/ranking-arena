@@ -444,6 +444,46 @@ describe('BitgetFuturesConnector', () => {
       expect(normalized.pnl).toBe(50000)
       expect(normalized.win_rate).toBe(70)
     })
+
+    test('converts traderList format (decimal ratios) to percentage', () => {
+      // The VPS traderList POST endpoint returns profitRate/returnRate as decimal ratios
+      const connector = createConnector()
+      const raw = {
+        traderUid: 'BG_VPS_1',
+        traderNickName: 'VPSTrader',
+        profitRate: 0.885,       // 88.5% as decimal
+        totalProfit: 25000,
+        winningRate: 0.63,       // 63% as decimal
+        maxDrawdown: 0.145,      // 14.5% as decimal
+        followerCount: 600,
+      }
+
+      const normalized = connector.normalize(raw)
+
+      expect(normalized.trader_key).toBe('BG_VPS_1')
+      expect(normalized.display_name).toBe('VPSTrader')
+      expect(normalized.roi).toBeCloseTo(88.5)
+      expect(normalized.pnl).toBe(25000)
+      expect(normalized.win_rate).toBeCloseTo(63)
+      expect(normalized.max_drawdown).toBeCloseTo(14.5)
+    })
+
+    test('handles extreme negative profitRate (garbage API data)', () => {
+      // Real case: profitRate = -25194.5514 → should become -2519455.14% (caught by boundary validation later)
+      const connector = createConnector()
+      const raw = {
+        traderUid: 'BG_BAD_1',
+        profitRate: -25194.5514,
+        totalProfit: 7059.99,
+        winningRate: 0.0263,
+      }
+
+      const normalized = connector.normalize(raw)
+
+      // Still converts × 100, but boundary validation in adapter will null this out
+      expect(normalized.roi).toBeCloseTo(-2519455.14)
+      expect(normalized.win_rate).toBeCloseTo(2.63)
+    })
   })
 
   // ============================================
