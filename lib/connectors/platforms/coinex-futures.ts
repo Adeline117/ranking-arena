@@ -42,21 +42,23 @@ export class CoinexFuturesConnector extends BaseConnector {
     }
 
     // Auto-paginate: fetch all pages (CoinEx has ~176 traders across 4 pages)
+    // CoinEx API rejects limit > 50 with "Invalid Parameter" — use 50 per page
+    const pageSize = 50
     const allTraders: TraderSource[] = []
-    let currentPage = Math.floor(offset / limit) + 1
-    const maxPages = 10 // Safety limit
+    let currentPage = Math.floor(offset / pageSize) + 1
+    const maxPages = Math.ceil(limit / pageSize)
 
     while (currentPage <= maxPages) {
       let _rawLb: Record<string, unknown>
       try {
         _rawLb = await this.request<Record<string, unknown>>(
-          `https://www.coinex.com/res/copy-trading/public/traders?page=${currentPage}&limit=${limit}&sort_by=roi&period=${window}`,
+          `https://www.coinex.com/res/copy-trading/public/traders?page=${currentPage}&limit=${pageSize}&sort_by=roi&period=${window}`,
           { method: 'GET' }
         )
       } catch {
         // Fallback: VPS Playwright scraper (CoinEx has geo-blocking)
         const vpsData = await this.fetchViaVPS<Record<string, unknown>>('/coinex/leaderboard', {
-          period: window, page: String(currentPage), limit: String(limit),
+          period: window, page: String(currentPage), limit: String(pageSize),
         })
         if (!vpsData) throw new Error('Both direct API and VPS scraper failed for coinex')
         _rawLb = vpsData
@@ -76,8 +78,8 @@ export class CoinexFuturesConnector extends BaseConnector {
       allTraders.push(...traders)
 
       // Check if there are more pages
-      const hasNext = data?.data?.has_next ?? (list.length >= limit)
-      if (!hasNext) break
+      const hasNext = data?.data?.has_next ?? (list.length >= pageSize)
+      if (!hasNext || allTraders.length >= limit) break
       currentPage++
       await new Promise(r => setTimeout(r, 500)) // Rate limit between pages
     }
