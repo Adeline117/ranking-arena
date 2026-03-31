@@ -476,7 +476,13 @@ async function computeSeason(
   // V1 fetch removed — v2 backfill (migration 20260319b) ensures v2 has full coverage.
   // upsertTraders() writes to both v1 and v2 on every cron run, so v2 stays current.
   // If v2 coverage drops below expectations, run the backfill migration again.
-  logger.info(`[${season}] ${traderMap.size} unique traders from v2`)
+  // Debug: log per-source counts to diagnose missing platforms
+  const sourceCounts = new Map<string, number>()
+  for (const t of traderMap.values()) {
+    sourceCounts.set(t.source, (sourceCounts.get(t.source) || 0) + 1)
+  }
+  const jupiterCount = sourceCounts.get('jupiter_perps') || 0
+  logger.info(`[${season}] ${traderMap.size} unique traders from v2 (jupiter_perps: ${jupiterCount}, sources: ${sourceCounts.size})`)
 
   // Phase 3: Fill missing win_rate/max_drawdown from trader_stats_detail (enrichment table)
   // This catches data from enrichment runs that wrote to stats_detail but not back to snapshots
@@ -667,6 +673,18 @@ async function computeSeason(
     .filter(t => Math.abs(t.roi!) <= roiThreshold)
     .filter(t => t.roi! > -90) // 过滤已爆仓交易员（ROI < -90%），无参考价值
     .filter(t => t.trades_count == null || t.trades_count === 0 || t.trades_count >= MIN_TRADES_COUNT) // 0 = unknown (API doesn't provide), treat same as null
+
+  // Debug: jupiter_perps filter analysis
+  const jupiterInMap = Array.from(traderMap.values()).filter(t => t.source === 'jupiter_perps')
+  const jupiterWithRoi = jupiterInMap.filter(t => t.roi != null)
+  const jupiterPassAll = uniqueTraders.filter(t => t.source === 'jupiter_perps')
+  if (jupiterInMap.length > 0 || jupiterPassAll.length > 0) {
+    logger.info(`[${season}] jupiter_perps filter: inMap=${jupiterInMap.length}, hasRoi=${jupiterWithRoi.length}, passAll=${jupiterPassAll.length}, roiThreshold=${roiThreshold}`)
+    if (jupiterInMap.length > 0 && jupiterPassAll.length === 0) {
+      const sample = jupiterInMap[0]
+      logger.warn(`[${season}] jupiter_perps SAMPLE: roi=${sample.roi} (type=${typeof sample.roi}), trades=${sample.trades_count} (type=${typeof sample.trades_count})`)
+    }
+  }
 
   if (!uniqueTraders.length) {
     logger.warn(`[${season}] No traders passed filters! traderMap.size=${traderMap.size}, roiThreshold=${roiThreshold}`)
