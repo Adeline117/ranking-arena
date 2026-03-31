@@ -1,6 +1,7 @@
 /**
- * One-time seed: Insert welcome-back posts to bootstrap the social feed.
- * Run once manually via:
+ * One-time seed script (manual use only, NOT cron-scheduled).
+ *
+ * NOT in vercel.json crons — run once manually to bootstrap the social feed.
  *   curl -X POST https://www.arenafi.org/api/cron/seed-social-posts \
  *     -H "Authorization: Bearer $CRON_SECRET"
  *
