@@ -777,6 +777,10 @@ const ko = {
     groupApplications: '그룹 신청',
     groupEdits: '그룹 수정',
     alertConfig: '알림 설정',
+    traderClaims: '트레이더 인증 신청',
+    noClaims: '인증 신청이 없습니다',
+    approve: '승인',
+    reject: '거부',
     // Account data
     accountRequiredStats: '계정 필수 통계',
     totalTrades: '총 거래',
