@@ -129,7 +129,7 @@ export async function POST(req: NextRequest) {
     const encryptedPassphrase = passphrase ? encrypt(passphrase) : null
 
     // Upsert exchange connection for this user
-    await supabase
+    const { error: upsertError } = await supabase
       .from('user_exchange_connections')
       .upsert(
         {
@@ -144,6 +144,14 @@ export async function POST(req: NextRequest) {
         },
         { onConflict: 'user_id,exchange' }
       )
+
+    if (upsertError) {
+      logger.error('[verify-ownership] Failed to store exchange connection', upsertError)
+      return NextResponse.json(
+        { error: 'Verification succeeded but failed to store credentials. Please try again.', verified: false },
+        { status: 500 }
+      )
+    }
 
     logger.info('[verify-ownership] Verification passed', {
       userId: user.id,
