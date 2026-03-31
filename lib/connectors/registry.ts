@@ -19,7 +19,7 @@ import type { PlatformConnector } from './types'
  * Uses any to support both BaseConnector and BaseConnectorLegacy subclasses
  * without requiring type assertions at every call site in job-runner.ts. */
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
+ 
 type AnyConnector = any
 import { TokenBucketRateLimiter } from './rate-limiter'
 import { RedisRateLimiter } from './redis-rate-limiter'
@@ -199,7 +199,7 @@ export async function initializeConnectors(): Promise<void> {
   const proxyFor = (platform: string) => requiresProxy(platform) ? { proxyUrl } : {}
 
   // Helper: register a lazy factory for a standard connector
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+   
   const lazy = (key: string, importFn: () => Promise<Record<string, any>>, connectorName: string, platform: string) => {
     connectorRegistry.registerLazy(key as RegistryKey, async () => {
       const mod = await importFn()

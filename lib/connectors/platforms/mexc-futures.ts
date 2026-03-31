@@ -28,79 +28,83 @@ export class MexcFuturesConnector extends BaseConnector {
     has_profiles: true,
     scraping_difficulty: 2,
     rate_limit: { rpm: 15, concurrency: 1 },
-    notes: ['CF protected', 'No timeseries endpoint available'],
+    notes: ['CF protected — mobile UA bypass', 'No timeseries endpoint available'],
   }
 
-  async discoverLeaderboard(window: Window, limit = 2000, offset = 0): Promise<DiscoverResult> {
-    // MEXC is CF-protected; VPS scraper opens a real browser per request.
-    // The scraper is slow (~30-90s per request) so minimize calls.
-    // The MEXC API response contains multiple category lists (comprehensives, rois,
-    // pnls, followers, newTraders, etc.) — merge all to maximize unique traders.
-    // Use pageSize=50 and limit to 2 pages max to stay within timeout.
-    const pageSize = 50
-    const maxPages = Math.min(2, Math.ceil(Math.min(limit, 200) / pageSize))
+  async discoverLeaderboard(window: Window, limit = 2000, _offset = 0): Promise<DiscoverResult> {
+    // 2026-03-31: MEXC CloudFlare WAF blocks browser UAs but allows mobile app UAs.
+    // Direct API with mobile UA returns 734+ unique traders across 13 categories in a single request.
+    // No VPS scraper needed — eliminates 30-90s latency and CF WAF bypass issues.
+    const MOBILE_UA = 'MEXC/1.0 (iPhone; iOS 17.0)'
     const seenUids = new Set<string>()
     const allTraders: TraderSource[] = []
 
-    for (let page = 1; page <= maxPages; page++) {
-      let _rawLb: Record<string, unknown> | null = null
-      // VPS scraper timeout: 180s per page (scraper takes 30-90s)
+    // Primary: Direct API with mobile UA (returns all categories in one request)
+    let _rawLb: Record<string, unknown> | null = null
+    try {
+      const controller = new AbortController()
+      const timeout = setTimeout(() => controller.abort(), 30000)
+      const res = await fetch(
+        `https://www.mexc.com/api/platform/futures/copyFutures/api/v1/traders/top?limit=100`,
+        {
+          method: 'GET',
+          headers: {
+            'User-Agent': MOBILE_UA,
+            'Accept': 'application/json',
+          },
+          signal: controller.signal,
+        }
+      )
+      clearTimeout(timeout)
+      if (res.ok) {
+        _rawLb = await res.json() as Record<string, unknown>
+      }
+    } catch {
+      // Mobile UA blocked or network error — try VPS scraper as fallback
+    }
+
+    // Fallback: VPS Playwright scraper (slow, may timeout with CF WAF)
+    if (!_rawLb) {
       const vpsData = await this.fetchViaVPS<Record<string, unknown>>('/mexc/leaderboard', {
-        periodType: String(WINDOW_MAP[window]), pageSize: String(pageSize), page: String(page),
+        periodType: String(WINDOW_MAP[window]), pageSize: '50', page: '1',
       }, 180000)
-      if (vpsData) {
-        _rawLb = vpsData
-      } else {
-        // Fallback: direct API (rarely works from datacenter IPs)
-        try {
-          _rawLb = await this.request<Record<string, unknown>>(
-            `https://futures.mexc.com/api/v1/private/account/assets/copy-trading/trader/list?page=${page}&pageSize=${pageSize}&sortField=yield&sortType=DESC&timeType=${WINDOW_MAP[window]}`,
-            { method: 'GET' }
-          )
-        } catch {
-          break // Direct API blocked, stop pagination
-        }
+      if (vpsData) _rawLb = vpsData
+    }
+
+    if (!_rawLb) {
+      return { traders: [], total_available: 0, window, fetched_at: new Date().toISOString() }
+    }
+
+    const dataObj = (_rawLb.data ?? {}) as Record<string, unknown>
+
+    // Merge traders from ALL category lists in the response
+    const categoryKeys = [
+      'comprehensives', 'rois', 'pnls', 'followers', 'newTraders',
+      'highPressureTraders', 'lowPressureTraders', 'bullsTraders', 'bearsTraders',
+      'intradayTraders', 'longTermTraders', 'goldTraders', 'silverTraders',
+      'list', 'resultList',
+    ]
+
+    for (const key of categoryKeys) {
+      const list = dataObj[key]
+      if (!Array.isArray(list)) continue
+      for (const item of list) {
+        const raw = item as Record<string, unknown>
+        const uid = String(raw.uid || '')
+        if (!uid || seenUids.has(uid)) continue
+        seenUids.add(uid)
+        allTraders.push({
+          platform: 'mexc' as const,
+          market_type: 'futures' as const,
+          trader_key: uid,
+          display_name: (raw.nickname as string) || null,
+          profile_url: `https://futures.mexc.com/copy-trading/trader/${uid}`,
+          discovered_at: new Date().toISOString(),
+          last_seen_at: new Date().toISOString(),
+          is_active: true,
+          raw,
+        })
       }
-
-      if (!_rawLb) break
-
-      const dataObj = (_rawLb.data ?? {}) as Record<string, unknown>
-
-      // Merge traders from ALL category lists in the response
-      // Categories: comprehensives, rois, pnls, followers, newTraders,
-      //   highPressureTraders, lowPressureTraders, bullsTraders, bearsTraders,
-      //   intradayTraders, longTermTraders, goldTraders, silverTraders
-      const categoryKeys = [
-        'comprehensives', 'rois', 'pnls', 'followers', 'newTraders',
-        'highPressureTraders', 'lowPressureTraders', 'bullsTraders', 'bearsTraders',
-        'intradayTraders', 'longTermTraders', 'goldTraders', 'silverTraders',
-        'list', 'resultList',
-      ]
-
-      for (const key of categoryKeys) {
-        const list = dataObj[key]
-        if (!Array.isArray(list)) continue
-        for (const item of list) {
-          const raw = item as Record<string, unknown>
-          const uid = String(raw.uid || '')
-          if (!uid || seenUids.has(uid)) continue
-          seenUids.add(uid)
-          allTraders.push({
-            platform: 'mexc' as const,
-            market_type: 'futures' as const,
-            trader_key: uid,
-            display_name: (raw.nickname as string) || null,
-            profile_url: `https://futures.mexc.com/copy-trading/trader/${uid}`,
-            discovered_at: new Date().toISOString(),
-            last_seen_at: new Date().toISOString(),
-            is_active: true,
-            raw,
-          })
-        }
-      }
-
-      // If we got enough traders from category merging, skip further pages
-      if (allTraders.length >= limit) break
     }
 
     return { traders: allTraders.slice(0, limit), total_available: allTraders.length, window, fetched_at: new Date().toISOString() }

@@ -83,7 +83,10 @@ const PLATFORMS = {
   mexc: {
     source: 'mexc',
     market_type: 'futures',
-    endpoint: '/mexc/leaderboard',
+    // 2026-03-31: Direct API with mobile UA bypasses CF WAF (no scraper needed)
+    directApi: 'https://www.mexc.com/api/platform/futures/copyFutures/api/v1/traders/top?limit=100',
+    directHeaders: { 'User-Agent': 'MEXC/1.0 (iPhone; iOS 17.0)', 'Accept': 'application/json' },
+    endpoint: '/mexc/leaderboard', // VPS scraper fallback
     periods: {
       '1': '7D',
       '2': '30D',
@@ -394,18 +397,44 @@ async function fetchPlatform(platformKey) {
     log('  Fetching ' + window + ' (param=' + periodKey + ')...')
 
     try {
-      const params = { pageSize: config.pageSize }
-      if (platformKey === 'bitget_futures') {
-        params.period = periodKey
-      } else if (platformKey === 'mexc') {
-        params.periodType = periodKey
-      } else if (platformKey === 'bingx') {
-        params.timeType = periodKey
+      let data
+      // Direct API bypass: use mobile UA instead of VPS scraper (faster, no CF WAF issues)
+      if (config.directApi) {
+        const controller = new AbortController()
+        const timeout = setTimeout(() => controller.abort(), 30000)
+        try {
+          const res = await fetch(config.directApi, {
+            headers: config.directHeaders || {},
+            signal: controller.signal,
+          })
+          clearTimeout(timeout)
+          if (res.ok) {
+            data = await res.json()
+            log('  Direct API success (status ' + res.status + ')')
+          } else {
+            log('  Direct API failed (status ' + res.status + '), falling back to scraper')
+            data = null
+          }
+        } catch (directErr) {
+          clearTimeout(timeout)
+          log('  Direct API error: ' + directErr.message + ', falling back to scraper')
+          data = null
+        }
       }
 
-      // MEXC scraper is slow (30-90s per request due to CF challenge solving)
-      const scraperTimeout = platformKey === 'mexc' ? 180000 : 120000
-      const data = await callScraper(config.endpoint, params, scraperTimeout)
+      // Fallback: VPS Playwright scraper
+      if (!data) {
+        const params = { pageSize: config.pageSize }
+        if (platformKey === 'bitget_futures') {
+          params.period = periodKey
+        } else if (platformKey === 'mexc') {
+          params.periodType = periodKey
+        } else if (platformKey === 'bingx') {
+          params.timeType = periodKey
+        }
+        const scraperTimeout = platformKey === 'mexc' ? 300000 : 120000
+        data = await callScraper(config.endpoint, params, scraperTimeout)
+      }
       const rawList = config.extractList(data)
 
       if (!rawList.length) {
