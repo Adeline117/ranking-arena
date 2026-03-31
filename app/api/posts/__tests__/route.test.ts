@@ -84,6 +84,16 @@ jest.mock('@/lib/utils/server-cache', () => ({
 jest.mock('@/lib/cache', () => ({
   get: jest.fn().mockResolvedValue(null),
   set: jest.fn().mockResolvedValue(undefined),
+  del: jest.fn().mockResolvedValue(undefined),
+}))
+
+jest.mock('@/lib/features', () => ({
+  features: { social: true },
+  socialFeatureGuard: jest.fn().mockReturnValue(null),
+}))
+
+jest.mock('@/lib/data/hashtags', () => ({
+  extractAndSyncHashtags: jest.fn().mockResolvedValue(undefined),
 }))
 
 jest.mock('@/lib/utils/logger', () => ({

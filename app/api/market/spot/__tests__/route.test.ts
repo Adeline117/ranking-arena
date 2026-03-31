@@ -50,14 +50,15 @@ describe('GET /api/market/spot', () => {
     expect(body).toEqual(mockData)
   })
 
-  it('returns 500 on error', async () => {
+  it('returns 200 with empty array on error (graceful degradation)', async () => {
     mockedTiered.mockRejectedValue(new Error('CoinGecko down'))
 
     const req = new NextRequest('http://localhost/api/market/spot')
     const res = await GET(req)
     const body = await res.json()
 
-    expect(res.status).toBe(500)
-    expect(body.error).toBe('CoinGecko down')
+    // Route returns 200 with empty array so the ticker shows "–" instead of crashing
+    expect(res.status).toBe(200)
+    expect(body).toEqual([])
   })
 })

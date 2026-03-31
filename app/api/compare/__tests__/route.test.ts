@@ -129,6 +129,11 @@ jest.mock('@/lib/api/versioning', () => ({
   addDeprecationHeaders: jest.fn(),
 }))
 
+// Mock tieredGetOrSet to pass through to the fetcher function
+jest.mock('@/lib/cache/redis-layer', () => ({
+  tieredGetOrSet: jest.fn((_key: string, fn: () => unknown) => fn()),
+}))
+
 import { NextRequest } from 'next/server'
 import { GET } from '../route'
 import { hasFeatureAccess } from '@/lib/types/premium'

@@ -19,14 +19,13 @@ jest.mock('@/lib/env', () => ({
   }),
 }))
 
-
 const mockRpc = jest.fn()
 const mockFrom = jest.fn()
 
-jest.mock('@supabase/supabase-js', () => ({
-  createClient: jest.fn(() => ({
-    rpc: mockRpc,
-    from: mockFrom,
+jest.mock('@/lib/supabase/server', () => ({
+  getSupabaseAdmin: jest.fn(() => ({
+    rpc: (...args: unknown[]) => mockRpc(...args),
+    from: (...args: unknown[]) => mockFrom(...args),
   })),
 }))
 
@@ -74,6 +73,23 @@ function createCronRequest(secret?: string): NextRequest {
   })
 }
 
+/**
+ * Build a chainable Supabase mock that resolves to the given result.
+ * Every method returns a new proxy so any chain like .select().eq().gte()... works.
+ */
+function buildChainProxy(resolvedValue: unknown = { data: [], error: null }) {
+  const handler: ProxyHandler<object> = {
+    get(_target, prop) {
+      if (prop === 'then') {
+        return (resolve: (v: unknown) => void) => resolve(resolvedValue)
+      }
+      if (prop === 'catch' || prop === 'finally') return undefined
+      return jest.fn(() => new Proxy({}, handler))
+    },
+  }
+  return new Proxy({}, handler)
+}
+
 // ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
@@ -111,34 +127,22 @@ describe('POST /api/cron/aggregate-daily-snapshots', () => {
       { source: 'bybit', source_trader_id: 't2', roi: 30, pnl: 500, win_rate: 0.5, max_drawdown: -15, followers: 50, trades_count: 10 },
     ]
 
-    mockRpc.mockResolvedValue({ data: snapshots, error: null })
+    // First RPC: get_latest_snapshots_for_date → returns snapshots
+    // Second RPC: get_latest_prev_snapshots → returns empty (no previous data)
+    mockRpc
+      .mockResolvedValueOnce({ data: snapshots, error: null })
+      .mockResolvedValueOnce({ data: [], error: null })
 
     mockFrom.mockImplementation((table: string) => {
+      if (table === 'leaderboard_ranks') {
+        return buildChainProxy({ data: [], error: null })
+      }
       if (table === 'trader_daily_snapshots') {
         return {
-          select: jest.fn().mockReturnValue({
-            in: jest.fn().mockReturnValue({
-              lt: jest.fn().mockReturnValue({
-                order: jest.fn().mockReturnValue({
-                  limit: jest.fn().mockResolvedValue({ data: [], error: null }),
-                }),
-              }),
-            }),
-          }),
           upsert: jest.fn().mockResolvedValue({ error: null }),
         }
       }
-      return {
-        select: jest.fn().mockReturnValue({
-          in: jest.fn().mockReturnValue({
-            lt: jest.fn().mockReturnValue({
-              order: jest.fn().mockReturnValue({
-                limit: jest.fn().mockResolvedValue({ data: [], error: null }),
-              }),
-            }),
-          }),
-        }),
-      }
+      return buildChainProxy({ data: [], error: null })
     })
 
     const res = await POST(createCronRequest(CRON_SECRET))
@@ -153,7 +157,11 @@ describe('POST /api/cron/aggregate-daily-snapshots', () => {
   // ---- Empty data ----------------------------------------------------------
 
   it('handles no snapshots gracefully', async () => {
-    mockRpc.mockResolvedValue({ data: [], error: null })
+    // First RPC: get_latest_snapshots_for_date → returns empty
+    mockRpc.mockResolvedValueOnce({ data: [], error: null })
+
+    // leaderboard_ranks gap-fill also returns empty
+    mockFrom.mockImplementation(() => buildChainProxy({ data: [], error: null }))
 
     const res = await POST(createCronRequest(CRON_SECRET))
     const body = await res.json()
@@ -166,60 +174,23 @@ describe('POST /api/cron/aggregate-daily-snapshots', () => {
   // ---- RPC fallback --------------------------------------------------------
 
   it('falls back to direct query when RPC is not available', async () => {
-    mockRpc.mockResolvedValue({ data: null, error: { message: 'function not found' } })
+    // First RPC: get_latest_snapshots_for_date fails → triggers fallback
+    mockRpc.mockResolvedValueOnce({ data: null, error: { message: 'function not found' } })
 
     mockFrom.mockImplementation((table: string) => {
       if (table === 'trader_snapshots_v2') {
-        return {
-          select: jest.fn().mockReturnValue({
-            eq: jest.fn().mockReturnValue({
-              gte: jest.fn().mockReturnValue({
-                lt: jest.fn().mockReturnValue({
-                  order: jest.fn().mockReturnValue({
-                    limit: jest.fn().mockResolvedValue({ data: [], error: null }),
-                  }),
-                }),
-              }),
-            }),
-            is: jest.fn().mockReturnValue({
-              gte: jest.fn().mockReturnValue({
-                limit: jest.fn().mockResolvedValue({ data: [], error: null }),
-              }),
-            }),
-          }),
-          update: jest.fn().mockReturnValue({
-            eq: jest.fn().mockReturnValue({
-              eq: jest.fn().mockResolvedValue({ error: null }),
-            }),
-          }),
-          upsert: jest.fn().mockResolvedValue({ error: null }),
-          delete: jest.fn().mockReturnValue({
-            lt: jest.fn().mockReturnValue({
-              limit: jest.fn().mockResolvedValue({ count: 0, error: null }),
-            }),
-          }),
-        }
+        return buildChainProxy({ data: [], error: null })
+      }
+      if (table === 'leaderboard_ranks') {
+        return buildChainProxy({ data: [], error: null })
       }
       if (table === 'trader_daily_snapshots') {
         return {
-          select: jest.fn().mockReturnValue({
-            in: jest.fn().mockReturnValue({
-              lt: jest.fn().mockReturnValue({
-                order: jest.fn().mockReturnValue({
-                  limit: jest.fn().mockResolvedValue({ data: [], error: null }),
-                }),
-              }),
-              gte: jest.fn().mockReturnValue({
-                order: jest.fn().mockReturnValue({
-                  limit: jest.fn().mockResolvedValue({ data: [], error: null }),
-                }),
-              }),
-            }),
-          }),
           upsert: jest.fn().mockResolvedValue({ error: null }),
+          ...buildChainProxy({ data: [], error: null }),
         }
       }
-      return {}
+      return buildChainProxy({ data: [], error: null })
     })
 
     const res = await POST(createCronRequest(CRON_SECRET))
@@ -241,23 +212,15 @@ describe('POST /api/cron/aggregate-daily-snapshots', () => {
   })
 
   it('returns 500 when fallback query also fails', async () => {
+    // RPC fails → triggers fallback
     mockRpc.mockResolvedValue({ data: null, error: { message: 'function not found' } })
 
+    // Fallback query also returns error
     mockFrom.mockImplementation((table: string) => {
-      if (table === 'trader_snapshots') {
-        return {
-          select: jest.fn().mockReturnValue({
-            gte: jest.fn().mockReturnValue({
-              lt: jest.fn().mockReturnValue({
-                order: jest.fn().mockReturnValue({
-                  limit: jest.fn().mockResolvedValue({ data: null, error: { message: 'Query failed' } }),
-                }),
-              }),
-            }),
-          }),
-        }
+      if (table === 'trader_snapshots_v2') {
+        return buildChainProxy({ data: null, error: { message: 'Query failed' } })
       }
-      return {}
+      return buildChainProxy({ data: [], error: null })
     })
 
     const res = await POST(createCronRequest(CRON_SECRET))
