@@ -782,6 +782,10 @@ const en = {
     groupApplications: 'Group Applications',
     groupEdits: 'Group Edits',
     alertConfig: 'Alert Config',
+    traderClaims: 'Trader Claims',
+    noClaims: 'No claims found',
+    approve: 'Approve',
+    reject: 'Reject',
     // Account data
     accountRequiredStats: 'Account Required Stats',
     totalTrades: 'Total Trades',
