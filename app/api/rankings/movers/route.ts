@@ -100,6 +100,7 @@ export async function GET() {
           .eq('source', platform)
           .in('source_trader_id', traderKeys.slice(0, 500))
           .not('arena_score', 'is', null)
+          .or('is_outlier.is.null,is_outlier.eq.false')
           .limit(500)
         if (data) allCurrentRanks.push(...data)
       })

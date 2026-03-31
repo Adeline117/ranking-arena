@@ -59,6 +59,7 @@ export async function GET() {
           .eq('season_id', '90D')
           .not('arena_score', 'is', null)
           .gt('arena_score', 0)
+          .or('is_outlier.is.null,is_outlier.eq.false')
 
         if (error) {
           throw new Error(error.message)

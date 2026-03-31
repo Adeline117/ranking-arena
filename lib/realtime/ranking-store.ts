@@ -222,6 +222,7 @@ export async function syncSortedSetFromLeaderboard(
         .select('source, source_trader_id, arena_score')
         .eq('season_id', period.toUpperCase())
         .gt('arena_score', 0)
+        .or('is_outlier.is.null,is_outlier.eq.false')
         .order('arena_score', { ascending: false })
         .range(offset, offset + PAGE_SIZE - 1)
 

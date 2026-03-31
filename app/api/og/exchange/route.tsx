@@ -85,6 +85,7 @@ async function fetchExchangeData(exchange: string): Promise<{ traders: TopTrader
     .eq('season_id', '90D')
     .not('arena_score', 'is', null)
     .gt('arena_score', 0)
+    .or('is_outlier.is.null,is_outlier.eq.false')
     .order('arena_score', { ascending: false, nullsFirst: false })
     .limit(3)
 
@@ -99,6 +100,7 @@ async function fetchExchangeData(exchange: string): Promise<{ traders: TopTrader
     .eq('season_id', '90D')
     .not('arena_score', 'is', null)
     .gt('arena_score', 0)
+    .or('is_outlier.is.null,is_outlier.eq.false')
 
   if (countErr) {
     logger.error('[OG Exchange] Error fetching count:', countErr)

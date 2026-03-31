@@ -34,6 +34,7 @@ async function fetchTopRankings(period: string): Promise<RankingRow[]> {
     .select('source, source_trader_id, arena_score, rank, roi, handle, avatar_url, trader_type')
     .eq('season_id', period)
     .gt('arena_score', 0)
+    .or('is_outlier.is.null,is_outlier.eq.false')
     .order('rank', { ascending: true })
     .limit(50)
 

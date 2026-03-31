@@ -95,6 +95,7 @@ export async function GET(request: NextRequest) {
           .eq('season_id', season)
           .not('arena_score', 'is', null)
           .gt('arena_score', 0)
+          .or('is_outlier.is.null,is_outlier.eq.false')
 
         // Incremental: only fetch traders updated since last sync
         if (!isFull) {

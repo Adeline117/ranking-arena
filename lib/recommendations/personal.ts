@@ -188,6 +188,7 @@ async function findSimilarTraders(
     .lte('roi', roiMax)
     .neq('source_trader_id', baseTrader.source_trader_id)
     .not('arena_score', 'is', null)
+    .or('is_outlier.is.null,is_outlier.eq.false')
     .order('arena_score', { ascending: false })
     .limit(limit)
 
@@ -207,6 +208,7 @@ async function getTopFromExchanges(
     .eq('season_id', '90D')
     .in('source', exchanges)
     .not('arena_score', 'is', null)
+    .or('is_outlier.is.null,is_outlier.eq.false')
     .order('arena_score', { ascending: false })
     .limit(limit)
 
@@ -222,6 +224,7 @@ async function getTopPerformersFallback(
     .select('source, source_trader_id, handle, avatar_url, arena_score, roi, pnl, win_rate')
     .eq('season_id', '90D')
     .not('arena_score', 'is', null)
+    .or('is_outlier.is.null,is_outlier.eq.false')
     .order('arena_score', { ascending: false })
     .limit(limit)
 

@@ -21,6 +21,7 @@ export const GET = withPublic(
           .eq('season_id', '90D')
           .not('arena_score', 'is', null)
           .gt('arena_score', 50)
+          .or('is_outlier.is.null,is_outlier.eq.false')
           .order('arena_score', { ascending: false })
           .limit(10)
 

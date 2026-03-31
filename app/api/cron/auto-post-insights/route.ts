@@ -132,6 +132,7 @@ async function generateRankChanges(supabase: AnySupabase): Promise<{ title: stri
     .from('leaderboard_ranks')
     .select('handle, source, source_trader_id, arena_score, roi')
     .eq('season_id', '7D')
+    .or('is_outlier.is.null,is_outlier.eq.false')
     .order('arena_score', { ascending: false })
     .limit(5)
 
@@ -160,6 +161,7 @@ async function generateExchangeCompare(supabase: AnySupabase): Promise<{ title: 
       .eq('source', ex)
       .eq('season_id', '30D')
       .not('arena_score', 'is', null)
+      .or('is_outlier.is.null,is_outlier.eq.false')
       .order('arena_score', { ascending: false })
       .limit(20)
 
@@ -221,6 +223,7 @@ async function generateWeeklyRecap(supabase: AnySupabase): Promise<{ title: stri
     .from('leaderboard_ranks')
     .select('handle, source, source_trader_id, arena_score, roi')
     .eq('season_id', '7D')
+    .or('is_outlier.is.null,is_outlier.eq.false')
     .order('arena_score', { ascending: false })
     .limit(1)
 
