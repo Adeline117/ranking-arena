@@ -33,17 +33,21 @@ export class MexcFuturesConnector extends BaseConnector {
 
   async discoverLeaderboard(window: Window, limit = 2000, offset = 0): Promise<DiscoverResult> {
     // MEXC is CF-protected; VPS scraper opens a real browser per request.
-    // Paginate: fetch 100 per page up to limit.
-    const pageSize = 100
-    const maxPages = Math.ceil(Math.min(limit, 2000) / pageSize)
+    // The scraper is slow (~30-90s per request) so minimize calls.
+    // The MEXC API response contains multiple category lists (comprehensives, rois,
+    // pnls, followers, newTraders, etc.) — merge all to maximize unique traders.
+    // Use pageSize=50 and limit to 2 pages max to stay within timeout.
+    const pageSize = 50
+    const maxPages = Math.min(2, Math.ceil(Math.min(limit, 200) / pageSize))
+    const seenUids = new Set<string>()
     const allTraders: TraderSource[] = []
-    let totalAvailable: number | null = null
 
     for (let page = 1; page <= maxPages; page++) {
       let _rawLb: Record<string, unknown> | null = null
+      // VPS scraper timeout: 180s per page (scraper takes 30-90s)
       const vpsData = await this.fetchViaVPS<Record<string, unknown>>('/mexc/leaderboard', {
         periodType: String(WINDOW_MAP[window]), pageSize: String(pageSize), page: String(page),
-      }, 300000)
+      }, 180000)
       if (vpsData) {
         _rawLb = vpsData
       } else {
@@ -61,29 +65,45 @@ export class MexcFuturesConnector extends BaseConnector {
       if (!_rawLb) break
 
       const dataObj = (_rawLb.data ?? {}) as Record<string, unknown>
-      const list = (dataObj?.list || dataObj?.comprehensives || dataObj?.resultList || []) as unknown[]
-      if (dataObj?.total && totalAvailable == null) totalAvailable = Number(dataObj.total)
 
-      if (list.length === 0) break
+      // Merge traders from ALL category lists in the response
+      // Categories: comprehensives, rois, pnls, followers, newTraders,
+      //   highPressureTraders, lowPressureTraders, bullsTraders, bearsTraders,
+      //   intradayTraders, longTermTraders, goldTraders, silverTraders
+      const categoryKeys = [
+        'comprehensives', 'rois', 'pnls', 'followers', 'newTraders',
+        'highPressureTraders', 'lowPressureTraders', 'bullsTraders', 'bearsTraders',
+        'intradayTraders', 'longTermTraders', 'goldTraders', 'silverTraders',
+        'list', 'resultList',
+      ]
 
-      for (const item of list) {
-        allTraders.push({
-          platform: 'mexc' as const,
-          market_type: 'futures' as const,
-          trader_key: String((item as Record<string, unknown>).uid || ''),
-          display_name: ((item as Record<string, unknown>).nickname as string) || null,
-          profile_url: `https://futures.mexc.com/copy-trading/trader/${(item as Record<string, unknown>).uid}`,
-          discovered_at: new Date().toISOString(),
-          last_seen_at: new Date().toISOString(),
-          is_active: true,
-          raw: item as Record<string, unknown>,
-        })
+      for (const key of categoryKeys) {
+        const list = dataObj[key]
+        if (!Array.isArray(list)) continue
+        for (const item of list) {
+          const raw = item as Record<string, unknown>
+          const uid = String(raw.uid || '')
+          if (!uid || seenUids.has(uid)) continue
+          seenUids.add(uid)
+          allTraders.push({
+            platform: 'mexc' as const,
+            market_type: 'futures' as const,
+            trader_key: uid,
+            display_name: (raw.nickname as string) || null,
+            profile_url: `https://futures.mexc.com/copy-trading/trader/${uid}`,
+            discovered_at: new Date().toISOString(),
+            last_seen_at: new Date().toISOString(),
+            is_active: true,
+            raw,
+          })
+        }
       }
 
-      if (list.length < pageSize) break // Last page
+      // If we got enough traders from category merging, skip further pages
+      if (allTraders.length >= limit) break
     }
 
-    return { traders: allTraders.slice(0, limit), total_available: totalAvailable, window, fetched_at: new Date().toISOString() }
+    return { traders: allTraders.slice(0, limit), total_available: allTraders.length, window, fetched_at: new Date().toISOString() }
   }
 
   async fetchTraderProfile(traderKey: string): Promise<ProfileResult | null> {
@@ -148,9 +168,10 @@ export class MexcFuturesConnector extends BaseConnector {
   normalize(raw: Record<string, unknown>): Record<string, unknown> {
     const rawRoi = this.num(raw.yield ?? raw.roi ?? raw.totalRoi ?? raw.pnlRate)
     const roi = rawRoi != null ? (Math.abs(rawRoi) <= 1 ? rawRoi * 100 : rawRoi) : null
-    const rawWr = this.num(raw.winRate)
+    const rawWr = this.num(raw.winRate ?? raw.totalWinRate)
     const winRate = rawWr != null ? (rawWr <= 1 ? rawWr * 100 : rawWr) : null
-    const rawMdd = this.num(raw.maxRetrace ?? raw.mdd ?? raw.maxDrawdown)
+    // Current MEXC API uses maxDrawdown7 (7-day MDD), maxRetrace, or mdd
+    const rawMdd = this.num(raw.maxRetrace ?? raw.maxDrawdown7 ?? raw.mdd ?? raw.maxDrawdown)
     const maxDrawdown = rawMdd != null ? Math.abs(rawMdd <= 1 ? rawMdd * 100 : rawMdd) : null
 
     return {
@@ -162,11 +183,11 @@ export class MexcFuturesConnector extends BaseConnector {
       win_rate: winRate,
       max_drawdown: maxDrawdown,
       trades_count: null,
-      followers: this.num(raw.followerCount ?? raw.copierCount ?? raw.followers),
+      followers: this.num(raw.followers ?? raw.followerCount ?? raw.copierCount),
       copiers: null,
-      aum: null,
+      aum: this.num(raw.equity),
       sharpe_ratio: null,
-      platform_rank: null,
+      platform_rank: this.num(raw.order),
     }
   }
 

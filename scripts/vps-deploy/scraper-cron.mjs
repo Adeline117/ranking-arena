@@ -85,28 +85,53 @@ const PLATFORMS = {
     market_type: 'futures',
     endpoint: '/mexc/leaderboard',
     periods: {
+      '1': '7D',
       '2': '30D',
+      '3': '90D',
     },
     pageSize: 50,
     extractList: (data) => {
-      return data?.data?.comprehensives || data?.data?.resultList || data?.data?.list || []
+      // MEXC API returns multiple category lists — merge all unique traders
+      const dataObj = data?.data ?? {}
+      const categories = [
+        'comprehensives', 'rois', 'pnls', 'followers', 'newTraders',
+        'highPressureTraders', 'lowPressureTraders', 'bullsTraders', 'bearsTraders',
+        'intradayTraders', 'longTermTraders', 'goldTraders', 'silverTraders',
+        'list', 'resultList',
+      ]
+      const seen = new Set()
+      const merged = []
+      for (const key of categories) {
+        const list = dataObj[key]
+        if (!Array.isArray(list)) continue
+        for (const item of list) {
+          const uid = String(item.uid || '')
+          if (!uid || seen.has(uid)) continue
+          seen.add(uid)
+          merged.push(item)
+        }
+      }
+      return merged
     },
     normalize: (raw) => {
       const rawRoi = num(raw.yield ?? raw.roi ?? raw.totalRoi ?? raw.pnlRate)
       const roi = rawRoi != null ? (Math.abs(rawRoi) <= 1 ? rawRoi * 100 : rawRoi) : null
-      const rawWr = num(raw.winRate)
+      const rawWr = num(raw.winRate ?? raw.totalWinRate)
       const winRate = rawWr != null ? (rawWr <= 1 ? rawWr * 100 : rawWr) : null
-      const rawMdd = num(raw.maxRetrace ?? raw.mdd ?? raw.maxDrawdown)
+      const rawMdd = num(raw.maxRetrace ?? raw.maxDrawdown7 ?? raw.mdd ?? raw.maxDrawdown)
       const maxDrawdown = rawMdd != null ? Math.abs(rawMdd <= 1 ? rawMdd * 100 : rawMdd) : null
       return {
         trader_key: String(raw.uid ?? raw.traderId ?? raw.id ?? raw.userId ?? ''),
         display_name: raw.nickname ?? raw.nickName ?? raw.name ?? null,
+        avatar_url: raw.avatar ?? null,
         roi,
         pnl: num(raw.pnl ?? raw.totalPnl ?? raw.profit),
         win_rate: winRate,
         max_drawdown: maxDrawdown,
         sharpe_ratio: null,
-        followers: num(raw.followerCount ?? raw.copierCount ?? raw.followers),
+        followers: num(raw.followers ?? raw.followerCount ?? raw.copierCount),
+        aum: num(raw.equity),
+        platform_rank: num(raw.order),
       }
     },
   },
