@@ -498,19 +498,25 @@ export async function searchTraders(supabase: SupabaseClient, params: {
       platform_filter: platform || null,
     })
     if (!fuzzyErr && fuzzyData && fuzzyData.length > 0) {
-      // Filter out false positives: require either a substring match OR a high
-      // relevance score (>= 50 means meaningful trigram similarity beyond just
-      // the arena_score/followers boost which maxes ~250 for popular traders).
+      // Filter out false positives: require a substring match OR meaningful
+      // trigram similarity. The RPC adds arena_score*2 + followers*0.1 as
+      // popularity boost (up to ~250 points), which inflates relevance_score
+      // for popular traders even with zero text similarity. We must isolate
+      // the text-matching portion to avoid false positives.
       const qLower = sanitizedQuery.toLowerCase()
       type FuzzyResult = { source_trader_id: string; handle: string | null; source: string; avatar_url: string | null; relevance_score?: number }
       const filtered = (fuzzyData as FuzzyResult[]).filter(t => {
         const handle = (t.handle || '').toLowerCase()
         const id = t.source_trader_id.toLowerCase()
         const hasSubstringMatch = handle.includes(qLower) || id.includes(qLower)
-        // relevance_score >= 50 means real trigram similarity (similarity * 50 alone can give ~25 max)
-        // so 50+ means a decent fuzzy match plus some other signal
-        const hasHighRelevance = (t.relevance_score ?? 0) >= 50
-        return hasSubstringMatch || hasHighRelevance
+        if (hasSubstringMatch) return true
+        // For fuzzy-only matches (no substring), require relevance_score high
+        // enough that text similarity alone (max 50 points from similarity*50)
+        // contributed meaningfully. Arena_score boost can add up to ~200, so
+        // we need score > 250 to ensure real text similarity was present,
+        // OR the query must be short (< 5 chars) where trigram matching is inherently weak.
+        const score = t.relevance_score ?? 0
+        return score >= 250 && qLower.length >= 3
       })
       if (filtered.length > 0) {
         sourcesData = filtered
