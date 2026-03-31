@@ -27,6 +27,7 @@ import { PipelineLogger } from '@/lib/services/pipeline-logger'
 import { sanitizeDisplayName } from '@/lib/utils/profanity'
 import { generateIdenticonSvg } from '@/lib/utils/avatar'
 import { tieredGet, tieredSet, tieredDel } from '@/lib/cache/redis-layer'
+import { getSharedRedis } from '@/lib/cache/redis-client'
 import { env } from '@/lib/env'
 
 export const dynamic = 'force-dynamic'
@@ -850,15 +851,29 @@ async function computeSeason(
   })
 
   // Pre-upsert degradation check: block if new count drops below DEGRADATION_THRESHOLD of previous
-  // Also enforce absolute minimum of 500 traders for a viable leaderboard
-  // FALLBACK: After MAX_CONSECUTIVE_SKIPS, force-compute to prevent indefinite stale data
-  // BUG FIX 2026-03-31: Counter was stored in 'warm' tier (TTL 15min) but cron runs every 30min,
-  // so counter always expired before next run. Changed to 'cold' (TTL 1h).
-  const MAX_CONSECUTIVE_SKIPS = 2
-  const ratio = previousCount ? scored.length / previousCount : 1
-  logger.info(`[${season}] Degradation check: scored=${scored.length}, previous=${previousCount}, ratio=${(ratio * 100).toFixed(1)}%, threshold=${DEGRADATION_THRESHOLD * 100}%`)
+  // BUG FIX 2026-03-31: previousCount was the total rows in leaderboard_ranks (including zombie rows
+  // from incremental upsert not deleting old entries). The table accumulated 14-17K rows but compute
+  // only produces ~8K, causing ratio=47% < 70% threshold on EVERY run. Fix: use the last scored count
+  // from Redis (i.e., what the compute actually produced last time) as the baseline.
+  const LAST_SCORED_KEY = `leaderboard:last-scored-count:${season}`
+  const LAST_SCORED_TTL = 6 * 3600 // 6 hours — survives multiple cron intervals + force-compute cycles
+  let baselineCount = previousCount || 0
+  try {
+    const redis = await getSharedRedis()
+    if (redis) {
+      const cached = await redis.get<number>(LAST_SCORED_KEY)
+      if (cached && typeof cached === 'number' && cached > 0) {
+        baselineCount = cached
+        logger.info(`[${season}] Using Redis baseline (last scored count): ${baselineCount} (table count: ${previousCount})`)
+      }
+    }
+  } catch { /* Redis miss — fall back to previousCount */ }
 
-  if (previousCount && previousCount > 500 && !forceWrite) {
+  const MAX_CONSECUTIVE_SKIPS = 2
+  const ratio = baselineCount ? scored.length / baselineCount : 1
+  logger.info(`[${season}] Degradation check: scored=${scored.length}, baseline=${baselineCount}, tableCount=${previousCount}, ratio=${(ratio * 100).toFixed(1)}%, threshold=${DEGRADATION_THRESHOLD * 100}%`)
+
+  if (baselineCount && baselineCount > 500 && !forceWrite) {
     if (scored.length < 500 || ratio < DEGRADATION_THRESHOLD) {
       // Check consecutive skip counter from Redis — use 'cold' tier (TTL 1h) to survive 30min cron interval
       let consecutiveSkips = 0
@@ -871,18 +886,18 @@ async function computeSeason(
       } catch { /* Redis failure — proceed with skip */ }
 
       if (consecutiveSkips >= MAX_CONSECUTIVE_SKIPS) {
-        logger.warn(`${season}: degradation detected (${scored.length}/${previousCount}, ${(ratio * 100).toFixed(1)}%) but FORCE-COMPUTING after ${consecutiveSkips} consecutive skips to prevent stale data`)
+        logger.warn(`${season}: degradation detected (${scored.length}/${baselineCount}, ${(ratio * 100).toFixed(1)}%) but FORCE-COMPUTING after ${consecutiveSkips} consecutive skips to prevent stale data`)
         // Reset counter and fall through to upsert
         try {
           await tieredDel(skipKey)
         } catch { /* non-critical */ }
       } else {
-        logger.error(`${season}: computed ${scored.length} traders (previous: ${previousCount}, ratio: ${(ratio * 100).toFixed(1)}%). SKIPPING — below ${DEGRADATION_THRESHOLD * 100}% threshold (skip ${consecutiveSkips}/${MAX_CONSECUTIVE_SKIPS}).`)
+        logger.error(`${season}: computed ${scored.length} traders (baseline: ${baselineCount}, ratio: ${(ratio * 100).toFixed(1)}%). SKIPPING — below ${DEGRADATION_THRESHOLD * 100}% threshold (skip ${consecutiveSkips}/${MAX_CONSECUTIVE_SKIPS}).`)
         return -1
       }
     }
   } else if (forceWrite) {
-    logger.warn(`${season}: force write enabled, skipping degradation check (scored: ${scored.length}, previous: ${previousCount})`)
+    logger.warn(`${season}: force write enabled, skipping degradation check (scored: ${scored.length}, baseline: ${baselineCount})`)
   }
   // Reset consecutive skip counter on successful computation
   try {
@@ -983,8 +998,6 @@ async function computeSeason(
   }
 
   // Clean up rows not updated in 14 days (truly abandoned data)
-  // Previously used 2-minute cutoff which aggressively deleted data from
-  // platforms with broken fetchers, causing 70%+ count drops.
   const cutoff = new Date(Date.now() - 14 * 24 * 60 * 60 * 1000).toISOString()
   const { data: staleRows, error: staleErr } = await supabase
     .from('leaderboard_ranks')
@@ -999,6 +1012,16 @@ async function computeSeason(
     }
     logger.info(`${season}: cleaned ${staleIds.length} stale rows (>14d old)`)
   }
+
+  // Store the last scored count in Redis so the degradation check uses a realistic baseline
+  // instead of the inflated table count (which includes zombie rows from incremental upserts).
+  // TTL = 6h to survive multiple cron intervals + force-compute cycles.
+  try {
+    const redis = await getSharedRedis()
+    if (redis) {
+      await redis.set(LAST_SCORED_KEY, scored.length, { ex: LAST_SCORED_TTL })
+    }
+  } catch { /* non-critical */ }
 
   const actualUpserted = scored.length - upsertErrors
   logger.info(`${season}: ranked ${scored.length} traders (${upsertErrors} upsert errors)`)
