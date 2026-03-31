@@ -96,12 +96,13 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
-  // Idempotency: prevent duplicate runs within 5 minutes
+  // Idempotency: prevent duplicate runs within 5 minutes using atomic SET NX EX
   const IDEMPOTENCY_KEY = 'cron:compute-leaderboard:running'
   const cached = await tieredGet(IDEMPOTENCY_KEY, 'hot')
   if (cached.data) {
     return NextResponse.json({ ok: true, message: 'Already running, skipped', cached: true })
   }
+  // Set idempotency lock (hot tier has short TTL, auto-expires)
   await tieredSet(IDEMPOTENCY_KEY, { startedAt: new Date().toISOString() }, 'hot', [])
 
   const supabase = getSupabaseAdmin()
@@ -476,6 +477,34 @@ async function computeSeason(
   // upsertTraders() writes to both v1 and v2 on every cron run, so v2 stays current.
   // If v2 coverage drops below expectations, run the backfill migration again.
   logger.info(`[${season}] ${traderMap.size} unique traders from v2`)
+
+  // Data freshness check: if ALL platforms are stale (>48h), skip computation
+  const staleThresholdMs = 48 * 3600 * 1000
+  const now = Date.now()
+  const stalePlatforms: string[] = []
+  const freshPlatforms: string[] = []
+  for (const source of SOURCES_WITH_DATA) {
+    const sourceTraders = Array.from(traderMap.values()).filter(t => t.source === source)
+    if (sourceTraders.length === 0) {
+      stalePlatforms.push(source)
+      continue
+    }
+    const latestCaptured = Math.max(...sourceTraders.map(t => new Date(t.captured_at).getTime()))
+    if (now - latestCaptured > staleThresholdMs) {
+      stalePlatforms.push(source)
+    } else {
+      freshPlatforms.push(source)
+    }
+  }
+
+  if (freshPlatforms.length === 0 && SOURCES_WITH_DATA.length > 0) {
+    logger.error(`[${season}] ALL platforms are stale (>48h). Skipping computation to prevent stale leaderboard.`, { stalePlatforms })
+    throw new Error(`All ${stalePlatforms.length} platforms are stale (>48h). Blocking computation.`)
+  }
+
+  if (stalePlatforms.length > 0) {
+    logger.warn(`[${season}] ${stalePlatforms.length} platforms have stale data (>48h): ${stalePlatforms.join(', ')}. Computing with ${freshPlatforms.length} fresh platforms.`)
+  }
 
   // Phase 3: Fill missing win_rate/max_drawdown from trader_stats_detail (enrichment table)
   // This catches data from enrichment runs that wrote to stats_detail but not back to snapshots
