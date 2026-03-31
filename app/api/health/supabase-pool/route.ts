@@ -23,8 +23,14 @@ const WARNING_THRESHOLD = 0.70 // 70%
 const CRITICAL_THRESHOLD = 0.85 // 85%
 
 export async function GET(request: NextRequest) {
+  // SECURITY: Reject if CRON_SECRET not configured in production
+  if (!env.CRON_SECRET && process.env.NODE_ENV === 'production') {
+    console.error('[supabase-pool] CRON_SECRET not configured')
+    return NextResponse.json({ error: 'Server misconfigured' }, { status: 503 })
+  }
+
   const authHeader = request.headers.get('authorization')
-  if (authHeader !== `Bearer ${env.CRON_SECRET}`) {
+  if (!env.CRON_SECRET || authHeader !== `Bearer ${env.CRON_SECRET}`) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 

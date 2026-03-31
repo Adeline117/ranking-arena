@@ -33,7 +33,7 @@ const tradersQuerySchema = z.object({
   sortBy: z.enum(['arena_score', 'roi', 'win_rate', 'max_drawdown']).catch('arena_score'),
   order: z.enum(['asc', 'desc']).catch('desc'),
   cursor: z.coerce.number().int().min(0).optional(),
-  limit: z.coerce.number().int().min(1).max(1000).catch(50),
+  limit: z.coerce.number().int().min(1).max(100).catch(50),
   page: z.coerce.number().int().min(0).optional(),
 })
 

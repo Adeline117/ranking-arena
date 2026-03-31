@@ -137,44 +137,32 @@ import { LR, V2 } from '@/lib/types/schema-mapping'
 // EMERGENCY FIX (2026-03-20): Reduce retries to prevent timeout bypass
 // Root cause of 44min hangs: withRetry creates new fetch+AbortController on each retry,
 // bypassing per-trader/platform timeouts. 3 retries × 6s timeout × N APIs = >54s per trader.
-// Solution: 1 retry max for problematic platforms, 3 retries for stable platforms.
-const RETRY_CONFIG_FAST = {
-  maxAttempts: 1, // NO retries, fail fast — for platforms with timeout history
-  baseDelayMs: 500,
-  maxDelayMs: 2000,
+// Solution: 1 retry max → total time ≤ 12s per API, respects per-trader timeout.
+const RETRY_CONFIG = {
+  maxAttempts: 1, // Was 3 — NO retries, fail fast
+  baseDelayMs: 500, // Reduced from 1000
+  maxDelayMs: 2000, // Reduced from 10000
 }
-
-const RETRY_CONFIG_STANDARD = {
-  maxAttempts: 3, // 3 attempts with exponential backoff (1s/2s/4s)
-  baseDelayMs: 1000,
-  maxDelayMs: 4000,
-}
-
-// Platforms that are stable enough to support retries without timeout amplification
-const RETRY_ENABLED_PLATFORMS = new Set([
-  'okx_spot', 'polymarket', 'woox',
-  // Batch-cached platforms are instant, retries are safe
-  'bitunix', 'xt', 'blofin', 'bitfinex', 'toobit', 'coinex',
-])
-
-function getRetryConfig(platform: string) {
-  return RETRY_ENABLED_PLATFORMS.has(platform) ? RETRY_CONFIG_STANDARD : RETRY_CONFIG_FAST
-}
-
-// Circuit breaker: if N consecutive traders fail, skip remaining in that batch
-const CIRCUIT_BREAKER_THRESHOLD = 5
 
 async function withRetry<T>(
   fn: () => Promise<T>,
   context: string,
-  options = RETRY_CONFIG_FAST
+  options = RETRY_CONFIG,
+  signal?: AbortSignal,
 ): Promise<T> {
   let lastError: Error | undefined
   for (let attempt = 1; attempt <= options.maxAttempts; attempt++) {
+    // Check if the shared timeout has already been exceeded
+    if (signal?.aborted) {
+      throw new Error(`Timeout before attempt ${attempt} in ${context}`)
+    }
     try {
       return await fn()
     } catch (error) {
       lastError = error instanceof Error ? error : new Error(String(error))
+      if (signal?.aborted) {
+        throw new Error(`Timeout during attempt ${attempt} in ${context}: ${lastError.message}`)
+      }
       if (attempt === options.maxAttempts) {
         logger.error(`Enrichment ${context} failed after retries`, { attempts: attempt }, lastError)
         throw lastError
@@ -533,8 +521,9 @@ export const NO_ENRICHMENT_PLATFORMS = new Set([
   'bybit_spot',   // metricValues has ROI/WR/MDD/Sharpe, VPS trader-detail doesn't support spot leaderMark
   'binance_web3', // wallet-based, no per-trader detail API, all metrics from leaderboard
   'web3_bot',     // small platform (19 traders), all metrics from leaderboard
-  // 2026-03-31: dydx RE-ENABLED — rewrote enrichment to use Copin API only (no indexer calls)
-  // Root cause was TCP-level hangs on indexer.dydx.trade that bypass fetch timeouts
+  // 2026-03-28: dydx disabled — indexer API causes 30+ minute hangs despite 5s fetch timeouts
+  // Root cause unknown (possibly DNS/TCP level hang). Re-enable after investigation.
+  'dydx',
   // kucoin: REMOVED — now has dedicated enrichment module (2026-03-19)
   // weex: RE-ENABLED — ndaysReturnRates from VPS scraper leaderboard = equity curve
   // bingx_spot: REMOVED — now uses daily snapshot fallback for equity curves (2026-03-19)
@@ -561,9 +550,6 @@ const PER_TRADER_TIMEOUT_MS: Record<string, number> = {
   'bitget_futures': 18_000,  // 18s per trader - equity 15s + detail 10s run in parallel, 18s is generous
   'binance_futures': 12_000, // 12s per trader - ultra-short (VPS proxy tested <500ms, 3-8s API timeouts)
   'dydx': 15_000, // 15s per trader - 3 APIs × 5-6s timeout + fallback buffer
-  'okx_spot': 15_000, // 15s per trader - 3 APIs (equity+stats+positions) × 15s timeout, run in parallel
-  'polymarket': 15_000, // 15s per trader - activity pagination can be slow, but 15s is generous
-  'woox': 15_000, // 15s per trader - 4 APIs (equity+stats+positions+history) × 10s timeout, parallel
 }
 
 function getPlatformTimeout(platform: string): number {
@@ -620,8 +606,6 @@ export async function runEnrichment(params: {
 
     results[platformKey] = { enriched: 0, failed: 0, errors: [] }
     let walletEnrichFailCount = 0
-    let consecutiveFailures = 0 // Circuit breaker counter
-    const retryConfig = getRetryConfig(platformKey)
 
     // Per-platform timeout: isolate each platform so one hanging platform
     // doesn't burn the entire batch's time budget
@@ -663,14 +647,6 @@ export async function runEnrichment(params: {
         break
       }
 
-      // Circuit breaker: if N consecutive traders failed, the platform API is likely down
-      if (consecutiveFailures >= CIRCUIT_BREAKER_THRESHOLD) {
-        const remaining = traders.length - i
-        logger.warn(`[enrich] ${platformKey} circuit breaker tripped after ${CIRCUIT_BREAKER_THRESHOLD} consecutive failures, skipping ${remaining} remaining traders`)
-        results[platformKey].errors.push(`Circuit breaker: ${remaining} traders skipped after ${CIRCUIT_BREAKER_THRESHOLD} consecutive failures`)
-        break
-      }
-
       const batch = traders.slice(i, i + config.concurrency)
 
       const batchResults = await Promise.allSettled(
@@ -684,7 +660,7 @@ export async function runEnrichment(params: {
             ?? (ONCHAIN_SET.has(platformKey) ? 30_000 : 15_000) // Reduced from 60s/30s
           const traderController = new AbortController()
           const traderTimer = setTimeout(() => {
-            logger.warn(`[enrich] ${platformKey}/${traderId} timeout after ${traderTimeoutMs / 1000}s`)
+            logger.warn(`Timeout in enrichTrader for trader ${traderId} on ${platformKey} (${traderTimeoutMs}ms)`)
             traderController.abort()
           }, traderTimeoutMs)
           // Cascade: if platform aborts, abort all its traders
@@ -697,12 +673,16 @@ export async function runEnrichment(params: {
                 // --- Phase 1: Parallel API fetches (independent network calls) ---
                 const fetchPromises: Record<string, Promise<unknown>> = {}
 
+                // All API fetches share the trader's AbortSignal for wall-clock enforcement
+                const traderSignal = traderController.signal
+
                 // Equity curve fetch
                 if (config.fetchEquityCurve) {
                   fetchPromises.equityCurve = withRetry(
                     () => config.fetchEquityCurve!(traderId, days),
                     `${platformKey}:${traderId} equity curve`,
-                    retryConfig
+                    RETRY_CONFIG,
+                    traderSignal,
                   ).catch(() => [] as EquityCurvePoint[])
                 }
 
@@ -711,7 +691,8 @@ export async function runEnrichment(params: {
                   fetchPromises.positions = withRetry(
                     () => config.fetchPositionHistory!(traderId),
                     `${platformKey}:${traderId} position history`,
-                    retryConfig
+                    RETRY_CONFIG,
+                    traderSignal,
                   ).catch(() => [] as PositionHistoryItem[])
                 }
 
@@ -720,7 +701,8 @@ export async function runEnrichment(params: {
                   fetchPromises.currentPositions = withRetry(
                     () => config.fetchCurrentPositions!(traderId),
                     `${platformKey}:${traderId} current positions`,
-                    retryConfig
+                    RETRY_CONFIG,
+                    traderSignal,
                   ).catch(() => [] as (PortfolioPosition | PositionHistoryItem)[])
                 }
 
@@ -729,13 +711,17 @@ export async function runEnrichment(params: {
                   fetchPromises.stats = withRetry(
                     () => config.fetchStatsDetail!(traderId),
                     `${platformKey}:${traderId} stats detail`,
-                    retryConfig
+                    RETRY_CONFIG,
+                    traderSignal,
                   ).catch(() => null as StatsDetail | null)
                 }
 
-                // DEX wallet AUM fetch (optional, failures swallowed)
+                // DEX wallet AUM fetch (optional, failures logged)
                 if (isDexPlatform(platformKey)) {
-                  fetchPromises.walletAum = fetchWalletAUM(platformKey, traderId).catch(() => null)
+                  fetchPromises.walletAum = fetchWalletAUM(platformKey, traderId).catch(err => {
+                    logger.warn(`[enrich] ${platformKey}/${traderId} wallet AUM fetch failed: ${err instanceof Error ? err.message : String(err)}`)
+                    return null
+                  })
                 }
 
                 // Await all API fetches in parallel
@@ -760,14 +746,14 @@ export async function runEnrichment(params: {
 
                 // --- Phase 3: Sequential DB writes (depend on fetch results) ---
                 if (curve.length > 0) {
-                  await withRetry(() => upsertEquityCurve(supabase, platformKey, traderId, period, curve), `${platformKey}:${traderId} save equity curve`)
+                  await withRetry(() => upsertEquityCurve(supabase, platformKey, traderId, period, curve), `${platformKey}:${traderId} save equity curve`, RETRY_CONFIG, traderSignal)
                 }
 
                 if (config.fetchPositionHistory && positions.length > 0) {
-                  await withRetry(() => upsertPositionHistory(supabase, platformKey, traderId, positions), `${platformKey}:${traderId} save position history`)
+                  await withRetry(() => upsertPositionHistory(supabase, platformKey, traderId, positions), `${platformKey}:${traderId} save position history`, RETRY_CONFIG, traderSignal)
                   const breakdown = calculateAssetBreakdown(positions)
                   if (breakdown.length > 0) {
-                    await withRetry(() => upsertAssetBreakdown(supabase, platformKey, traderId, period, breakdown), `${platformKey}:${traderId} save asset breakdown`)
+                    await withRetry(() => upsertAssetBreakdown(supabase, platformKey, traderId, period, breakdown), `${platformKey}:${traderId} save asset breakdown`, RETRY_CONFIG, traderSignal)
                   }
                 }
 
@@ -781,14 +767,16 @@ export async function runEnrichment(params: {
                         entryPrice: p.entryPrice,
                         pnl: 'pnl' in p ? p.pnl : ('pnlUsd' in p ? (p as PositionHistoryItem).pnlUsd : null),
                       }))),
-                    `${platformKey}:${traderId} save current positions`
+                    `${platformKey}:${traderId} save current positions`,
+                    RETRY_CONFIG,
+                    traderSignal,
                   )
                 }
 
                 if (config.fetchStatsDetail && stats) {
                   // Pass position history to derive avg_holding_hours, avg_profit/loss, etc.
                   stats = enhanceStatsWithDerivedMetrics(stats, curve, period, positions.length > 0 ? positions : undefined)
-                  await withRetry(() => upsertStatsDetail(supabase, platformKey, traderId, period, stats!), `${platformKey}:${traderId} save stats detail`)
+                  await withRetry(() => upsertStatsDetail(supabase, platformKey, traderId, period, stats!), `${platformKey}:${traderId} save stats detail`, RETRY_CONFIG, traderSignal)
                 }
 
                 // Always sync key metrics back to trader_snapshots_v2 from stats + equity curve.
@@ -930,7 +918,7 @@ export async function runEnrichment(params: {
         })
       )
 
-      // Process allSettled results + circuit breaker tracking
+      // Process allSettled results
       const successful = batchResults.filter(r => r.status === 'fulfilled')
       const failed = batchResults.filter(r => r.status === 'rejected')
 
@@ -940,14 +928,6 @@ export async function runEnrichment(params: {
           const reason = result.reason instanceof Error ? result.reason.message : String(result.reason)
           logger.error(`[enrich] Failed trader ${idx}: ${reason}`)
         })
-      }
-
-      // Circuit breaker: track consecutive failures across batches
-      if (successful.length > 0) {
-        consecutiveFailures = 0 // Any success resets the counter
-      }
-      if (failed.length > 0 && successful.length === 0) {
-        consecutiveFailures += failed.length // Entire batch failed
       }
 
       if (i + config.concurrency < traders.length) {
@@ -1003,14 +983,11 @@ export async function runEnrichment(params: {
     )
   }
 
-  // Only log as error if failure rate > 10%; individual trader failures are expected (rate limits, timeouts)
-  const totalAttempted = totalEnriched + totalFailed
-  const failRate = totalAttempted > 0 ? totalFailed / totalAttempted : 0
-  if (failRate < 0.10) {
-    await plog.success(totalEnriched, { period, duration, totalFailed })
+  if (totalFailed === 0) {
+    await plog.success(totalEnriched, { period, duration })
   } else {
-    await plog.error(new Error(`${totalFailed}/${totalAttempted} enrichments failed (${(failRate * 100).toFixed(1)}%)`), { period, duration, totalEnriched, totalFailed })
+    await plog.error(new Error(`${totalFailed}/${totalEnriched + totalFailed} enrichments failed`), { period, duration, totalEnriched, totalFailed })
   }
 
-  return { ok: failRate < 0.10, duration, period, summary: { total, enriched: totalEnriched, failed: totalFailed }, results }
+  return { ok: totalFailed === 0, duration, period, summary: { total, enriched: totalEnriched, failed: totalFailed }, results }
 }

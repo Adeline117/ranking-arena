@@ -18,7 +18,7 @@ import { PipelineLogger } from '@/lib/services/pipeline-logger'
 import { env } from '@/lib/env'
 
 export const dynamic = 'force-dynamic'
-export const maxDuration = 600
+export const maxDuration = 300
 
 const UPSERT_BATCH = 500
 
@@ -37,15 +37,15 @@ export async function GET(request: NextRequest) {
     const yesterday = new Date()
     yesterday.setUTCDate(yesterday.getUTCDate() - 1)
     const dateStr = yesterday.toISOString().split('T')[0]
+    const today = new Date()
+    const todayStr = today.toISOString().split('T')[0]
 
-    // Step 1: Fetch ALL current snapshots from trader_snapshots_v2
-    // The v2 table has exactly ONE row per (platform, market_type, trader_key, window).
-    // as_of_ts is updated on every fetch, so date-range filtering is unreliable
-    // (a fetch at 00:01 UTC today overwrites yesterday's as_of_ts).
-    // Instead, read ALL current v2 data — it represents the latest known state.
-    // Prefer 90D > 30D > 7D window for each trader (longest window = most representative).
+    // Step 1: Fetch ALL yesterday's snapshots in one query using RPC or direct query
+    // Use distinct on (source, source_trader_id) ordered by captured_at desc to get latest per trader
+    const { data: snapshots, error: snapshotError } = await supabase
+      .rpc('get_latest_snapshots_for_date', { target_date: dateStr })
 
-    const snapshotMap = new Map<string, {
+    let snapshotMap: Map<string, {
       source: string
       source_trader_id: string
       roi: number | null
@@ -54,44 +54,39 @@ export async function GET(request: NextRequest) {
       max_drawdown: number | null
       followers: number | null
       trades_count: number | null
-    }>()
+    }>
 
-    // Freshness threshold: only include data updated in the last 7 days
-    const freshnessThreshold = new Date()
-    freshnessThreshold.setUTCDate(freshnessThreshold.getUTCDate() - 7)
-    const freshnessStr = freshnessThreshold.toISOString()
+    if (snapshotError || !snapshots) {
+      // Fallback: fetch with regular query (less optimal but works without RPC)
+      logger.warn('[aggregate] RPC not available, falling back to v2 paginated query')
 
-    // Window priority: prefer longer windows (more stable metrics)
-    const WINDOW_PRIORITY: Record<string, number> = { '90D': 3, '30D': 2, '7D': 1 }
-    const windowTracker = new Map<string, number>() // key → current window priority
+      // Use date-range filter instead of hardcoded window='90D'
+      // This captures snapshots from any window that were captured recently
+      const recentCutoff = new Date()
+      recentCutoff.setUTCDate(recentCutoff.getUTCDate() - 2)
+      const recentCutoffStr = recentCutoff.toISOString()
 
-    // Fetch in pages of 10,000 to handle 30+ platforms × 500+ traders
-    const PAGE_SIZE = 10000
-    let offset = 0
-    let totalFetched = 0
-
-    while (true) {
-      const { data: pageData, error: pageError } = await supabase
+      const { data: fallbackData, error: fallbackError } = await supabase
         .from('trader_snapshots_v2')
         .select('platform, trader_key, window, roi_pct, pnl_usd, win_rate, max_drawdown, followers, trades_count, as_of_ts')
-        .gte('as_of_ts', freshnessStr)
-        .order('platform', { ascending: true })
-        .range(offset, offset + PAGE_SIZE - 1)
+        .gte('as_of_ts', recentCutoffStr)
+        .lt('as_of_ts', `${todayStr}T00:00:00Z`)
+        .order('as_of_ts', { ascending: false })
+        .limit(50000)
 
-      if (pageError) {
-        logger.error(`[aggregate] v2 query error at offset ${offset}: ${pageError.message}`)
-        break
+      if (fallbackError || !fallbackData) {
+        await plog.error(fallbackError || new Error('No snapshot data returned'))
+        return NextResponse.json(
+          { error: 'Failed to fetch snapshots', details: fallbackError?.message },
+          { status: 500 }
+        )
       }
 
-      if (!pageData || pageData.length === 0) break
-
-      for (const s of pageData) {
+      // Deduplicate: keep latest per (platform, trader_key)
+      snapshotMap = new Map()
+      for (const s of fallbackData) {
         const key = `${s.platform}:${s.trader_key}`
-        const currentPriority = WINDOW_PRIORITY[s.window] || 0
-        const existingPriority = windowTracker.get(key) || 0
-
-        if (currentPriority > existingPriority) {
-          windowTracker.set(key, currentPriority)
+        if (!snapshotMap.has(key)) {
           snapshotMap.set(key, {
             source: s.platform,
             source_trader_id: s.trader_key,
@@ -104,50 +99,37 @@ export async function GET(request: NextRequest) {
           })
         }
       }
-
-      totalFetched += pageData.length
-      offset += PAGE_SIZE
-      if (pageData.length < PAGE_SIZE) break // last page
+    } else {
+      snapshotMap = new Map()
+      for (const s of snapshots) {
+        snapshotMap.set(`${s.source}:${s.source_trader_id}`, s)
+      }
     }
 
-    logger.info(`[aggregate] Fetched ${totalFetched} v2 rows → ${snapshotMap.size} unique traders`)
-
     // Step 2: Fill gaps from leaderboard_ranks (always has 100% roi/pnl coverage)
-    // Query all season_ids (90D, 30D, 7D) — some platforms may only have shorter windows
     {
-      let filled = 0
-      const lrWindowTracker = new Map<string, number>() // track best window per trader
-
-      for (const seasonId of ['90D', '30D', '7D']) {
-        const priority = WINDOW_PRIORITY[seasonId] || 0
-        const { data: lrRows } = await supabase
-          .from('leaderboard_ranks')
-          .select('source, source_trader_id, roi, pnl, win_rate, max_drawdown, followers, trades_count')
-          .eq('season_id', seasonId)
-          .not('arena_score', 'is', null)
-          .limit(50000)
-
-        if (!lrRows) continue
-
+      const { data: lrRows } = await supabase
+        .from('leaderboard_ranks')
+        .select('source, source_trader_id, roi, pnl, win_rate, max_drawdown, followers, trades_count')
+        .eq('season_id', '90D')
+        .not('arena_score', 'is', null)
+        .limit(50000)
+      if (lrRows) {
+        let filled = 0
         for (const lr of lrRows) {
           const key = `${lr.source}:${lr.source_trader_id}`
           if (!snapshotMap.has(key)) {
-            // Not in v2 — add from LR if this is the best window we've seen
-            const existingPriority = lrWindowTracker.get(key) || 0
-            if (priority > existingPriority) {
-              lrWindowTracker.set(key, priority)
-              snapshotMap.set(key, {
-                source: lr.source,
-                source_trader_id: lr.source_trader_id,
-                roi: lr.roi,
-                pnl: lr.pnl,
-                win_rate: lr.win_rate,
-                max_drawdown: lr.max_drawdown,
-                followers: lr.followers,
-                trades_count: lr.trades_count,
-              })
-              filled++
-            }
+            snapshotMap.set(key, {
+              source: lr.source,
+              source_trader_id: lr.source_trader_id,
+              roi: lr.roi,
+              pnl: lr.pnl,
+              win_rate: lr.win_rate,
+              max_drawdown: lr.max_drawdown,
+              followers: lr.followers,
+              trades_count: lr.trades_count,
+            })
+            filled++
           } else {
             // Fill null roi/pnl from LR if v2 had nulls
             const existing = snapshotMap.get(key)!
@@ -155,10 +137,9 @@ export async function GET(request: NextRequest) {
             if (existing.pnl == null && lr.pnl != null) existing.pnl = lr.pnl
           }
         }
-      }
-
-      if (filled > 0) {
-        logger.info(`[aggregate] Filled ${filled} traders from leaderboard_ranks (not in v2)`)
+        if (filled > 0) {
+          logger.info(`[aggregate] Filled ${filled} traders from leaderboard_ranks (not in v2)`)
+        }
       }
     }
 
@@ -173,43 +154,29 @@ export async function GET(request: NextRequest) {
       })
     }
 
-    // Step 3: Fetch previous daily snapshots for daily_return_pct computation
-    // Query the most recent daily snapshot before today for each trader
+    // Step 3: Fetch ALL previous daily snapshots in one query
     const platforms = [...new Set(Array.from(snapshotMap.values()).map(s => s.source))]
 
-    const prevDataMap = new Map<string, { pnl: number | null; roi: number | null }>()
+    const { data: prevSnapshots, error: prevError } = await supabase
+      .rpc('get_latest_prev_snapshots', {
+        target_platforms: platforms,
+        before_date: dateStr,
+      })
 
-    // Fetch previous day's snapshots directly from trader_daily_snapshots
-    // Use paginated queries per platform to avoid hitting row limits
-    for (const platform of platforms) {
-      const { data: prevRows, error: prevError } = await supabase
-        .from('trader_daily_snapshots')
-        .select('platform, trader_key, roi, pnl')
-        .eq('platform', platform)
-        .lt('date', dateStr)
-        .order('date', { ascending: false })
-        .limit(5000)
-
-      if (prevError) {
-        logger.warn(`[aggregate] prev snapshot query error for ${platform}: ${prevError.message}`)
-        continue
-      }
-
-      if (prevRows) {
-        // Deduplicate: keep only the most recent (first) row per trader_key
-        for (const ps of prevRows) {
-          const key = `${ps.platform}:${ps.trader_key}`
-          if (!prevDataMap.has(key)) {
-            prevDataMap.set(key, {
-              pnl: ps.pnl != null ? parseFloat(String(ps.pnl)) : null,
-              roi: ps.roi != null ? parseFloat(String(ps.roi)) : null,
-            })
-          }
-        }
-      }
+    if (prevError) {
+      logger.warn(`[aggregate] get_latest_prev_snapshots RPC error: ${prevError.message}`)
     }
 
-    logger.info(`[aggregate] Loaded ${prevDataMap.size} previous snapshots for daily_return_pct`)
+    const prevDataMap = new Map<string, { pnl: number | null; roi: number | null }>()
+    if (prevSnapshots) {
+      for (const ps of prevSnapshots) {
+        const key = `${ps.platform}:${ps.trader_key}`
+        prevDataMap.set(key, {
+          pnl: ps.pnl != null ? parseFloat(String(ps.pnl)) : null,
+          roi: ps.roi != null ? parseFloat(String(ps.roi)) : null,
+        })
+      }
+    }
 
     // Step 4: Build upsert records with daily_return_pct
     const records: Array<{
@@ -299,7 +266,7 @@ export async function GET(request: NextRequest) {
       processed: snapshotMap.size,
       inserted,
       errors,
-      platforms: platforms.length,
+      queries: 3,
       duration: `${duration}ms`,
     })
   } catch (error) {
