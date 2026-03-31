@@ -17,6 +17,9 @@ import { getLeaderboard, getTraderDetail, searchTraders } from '@/lib/data/unifi
 import type { TradingPeriod } from '@/lib/data/unified'
 import { checkRateLimitFull } from '@/lib/utils/rate-limit'
 import { apiSuccess, apiError } from '@/lib/api/response'
+import { createLogger } from '@/lib/utils/logger'
+
+const log = createLogger('api:v3')
 
 // ---------------------------------------------------------------------------
 // API Key validation
@@ -251,7 +254,7 @@ export async function GET(request: NextRequest) {
   } catch (err) {
     // Never expose internal error details to API consumers
     if (err instanceof Error) {
-      console.error(`[v3] ${endpoint} error:`, err.message)
+      log.error(`${endpoint} error`, { error: err.message })
     }
     return errorResponse('Internal server error', 500)
   }

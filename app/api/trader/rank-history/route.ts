@@ -1,5 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getSupabaseAdmin } from '@/lib/api'
+import { createLogger } from '@/lib/utils/logger'
+
+const log = createLogger('api:rank-history')
 
 export const dynamic = 'force-dynamic'
 
@@ -41,7 +44,7 @@ export async function GET(request: NextRequest) {
       .limit(days)
 
     if (error) {
-      console.error('[rank-history] Query error:', error.message)
+      log.error('Query error', { error: error.message })
       return NextResponse.json(
         { error: 'Failed to fetch rank history', detail: error.message },
         { status: 500 }
@@ -63,7 +66,7 @@ export async function GET(request: NextRequest) {
       }
     )
   } catch (err) {
-    console.error('[rank-history] Unexpected error:', err)
+    log.error('Unexpected error', { error: err instanceof Error ? err.message : String(err) })
     return NextResponse.json(
       { error: 'Internal server error', detail: err instanceof Error ? err.message : 'Unknown error' },
       { status: 500 }

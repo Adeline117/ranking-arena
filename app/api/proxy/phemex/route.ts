@@ -10,6 +10,9 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { env } from '@/lib/env'
+import { createLogger } from '@/lib/utils/logger'
+
+const log = createLogger('api:phemex-proxy')
 
 export const runtime = 'edge'
 export const preferredRegion = ['iad1'] // US East — different from default hnd1
@@ -44,7 +47,7 @@ export async function GET(req: NextRequest) {
       headers: { 'Content-Type': resp.headers.get('Content-Type') || 'application/json' },
     })
   } catch (e) {
-    console.error('[phemex-proxy] Error:', (e as Error).message)
+    log.error('Upstream error', { error: (e as Error).message })
     // SECURITY: Do not leak internal error details to client
     return NextResponse.json({ error: 'Upstream service error' }, { status: 502 })
   }

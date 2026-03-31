@@ -22,6 +22,9 @@ import type { TimeWindow, PipelineRunResult } from '@/lib/pipeline'
 
 // Import scrapers to register them
 import '@/lib/pipeline/scrapers'
+import { createLogger } from '@/lib/utils/logger'
+
+const log = createLogger('cron:pipeline-fetch')
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 300 // 5 minutes
@@ -101,7 +104,7 @@ export async function GET(request: NextRequest) {
         // 检查 scraper 是否已注册
         const scraper = await getScraper(platform)
         if (!scraper) {
-          console.warn(`[pipeline-fetch] No scraper for ${platform}, skipping`)
+          log.warn(`No scraper for ${platform}, skipping`)
           continue
         }
 
@@ -114,13 +117,13 @@ export async function GET(request: NextRequest) {
 
         results.push(result)
 
-        console.warn(
-          `[pipeline-fetch] ${platform}: ${result.summary.total_traders} traders, ` +
+        log.info(
+          `${platform}: ${result.summary.total_traders} traders, ` +
             `${result.summary.total_upserted} upserted, ` +
             `${Date.now() - platformStart}ms`
         )
       } catch (error) {
-        console.error(`[pipeline-fetch] ${platform} failed:`, error)
+        log.error(`${platform} failed`, { error: error instanceof Error ? error.message : String(error) })
         results.push({
           run_id: `error_${platform}_${Date.now()}`,
           started_at: new Date(platformStart),

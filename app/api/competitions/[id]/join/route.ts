@@ -5,6 +5,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getSupabaseAdmin, getAuthUser } from '@/lib/supabase/server'
 import { checkRateLimitFull, RateLimitPresets } from '@/lib/utils/rate-limit'
+import { createLogger } from '@/lib/utils/logger'
+
+const log = createLogger('api:competitions/join')
 
 export async function POST(
   request: NextRequest,
@@ -121,7 +124,7 @@ export async function POST(
 
   return NextResponse.json({ success: true, data: entry })
   } catch (error) {
-    console.error('[competitions/join] Unexpected error:', error instanceof Error ? error.message : String(error))
+    log.error('Unexpected error', { error: error instanceof Error ? error.message : String(error) })
     return NextResponse.json({ success: false, error: 'Internal server error' }, { status: 500 })
   }
 }

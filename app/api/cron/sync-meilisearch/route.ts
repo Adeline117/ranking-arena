@@ -86,7 +86,7 @@ export async function GET(request: NextRequest) {
       let pageCount = 0
       while (true) {
         if (++pageCount > MAX_PAGES) {
-          console.warn(`[sync-meilisearch] Reached MAX_PAGES (${MAX_PAGES}) for season ${season}, breaking`)
+          logger.warn(`Reached MAX_PAGES (${MAX_PAGES}) for season ${season}, breaking`)
           break
         }
         let query = supabase

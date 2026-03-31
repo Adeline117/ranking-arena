@@ -900,7 +900,7 @@ async function computeSeason(
     let pageCount = 0
     while (true) {
       if (++pageCount > MAX_PAGES) {
-        console.warn(`[compute-leaderboard] Reached MAX_PAGES (${MAX_PAGES}) for season ${season}, breaking`)
+        logger.warn(`Reached MAX_PAGES (${MAX_PAGES}) for season ${season}, breaking`)
         break
       }
       const { data: currentScores } = await supabase

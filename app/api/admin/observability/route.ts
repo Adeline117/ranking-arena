@@ -11,6 +11,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { env } from '@/lib/env'
 import { getSupabaseAdmin } from '@/lib/supabase/server'
+import { createLogger } from '@/lib/utils/logger'
+
+const logger = createLogger('api:observability')
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -182,7 +185,7 @@ export async function GET(req: NextRequest) {
     headers: { 'Cache-Control': 'no-store' },
   })
   } catch (error) {
-    console.error('[observability] Unexpected error:', error)
+    logger.error('Unexpected error', { error: error instanceof Error ? error.message : String(error) })
     return NextResponse.json(
       { error: 'Internal server error', code: 'INTERNAL_ERROR' },
       { status: 500 }

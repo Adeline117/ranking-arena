@@ -23,6 +23,9 @@ import {
   checkRateLimit,
   RateLimitPresets,
 } from '@/lib/api'
+import { createLogger } from '@/lib/utils/logger'
+
+const log = createLogger('api:feed')
 
 export async function GET(request: NextRequest) {
   const rateLimitResponse = await checkRateLimit(request, RateLimitPresets.public)
@@ -72,7 +75,7 @@ export async function GET(request: NextRequest) {
       if (isMissingTable) {
         return success({ activities: [], pagination: { limit, hasMore: false, nextCursor: null } })
       }
-      console.error('[/api/feed] Supabase error:', { code: errCode, message: errMsg, details: error })
+      log.error('Supabase error', { code: errCode, message: errMsg })
       return handleError(error)
     }
 
