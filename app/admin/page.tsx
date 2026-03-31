@@ -21,8 +21,9 @@ import ReportsTab from './components/ReportsTab'
 import GroupApplicationsTab from './components/GroupApplicationsTab'
 import GroupEditTab from './components/GroupEditTab'
 import AlertConfigTab from './components/AlertConfigTab'
+import TraderClaimsTab from './components/TraderClaimsTab'
 
-type AdminTab = 'dashboard' | 'scraperStatus' | 'users' | 'reports' | 'applications' | 'editApplications' | 'alertConfig'
+type AdminTab = 'dashboard' | 'scraperStatus' | 'users' | 'reports' | 'applications' | 'editApplications' | 'alertConfig' | 'traderClaims'
 
 export default function AdminPage() {
   const router = useRouter()
@@ -137,6 +138,12 @@ export default function AdminPage() {
             {t('groupEdits')} {pendingEditApplicationsCount > 0 && `(${pendingEditApplicationsCount})`}
           </Button>
           <Button
+            variant={activeTab === 'traderClaims' ? 'primary' : 'secondary'}
+            onClick={() => setActiveTab('traderClaims')}
+          >
+            {t('traderClaims') || 'Trader Claims'}
+          </Button>
+          <Button
             variant={activeTab === 'alertConfig' ? 'primary' : 'secondary'}
             onClick={() => setActiveTab('alertConfig')}
           >
@@ -167,6 +174,10 @@ export default function AdminPage() {
 
         {activeTab === 'editApplications' && (
           <GroupEditTab accessToken={accessToken} />
+        )}
+
+        {activeTab === 'traderClaims' && (
+          <TraderClaimsTab accessToken={accessToken} />
         )}
 
         {activeTab === 'alertConfig' && (

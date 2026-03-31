@@ -782,6 +782,10 @@ const zh = {
     groupApplications: '小组申请',
     groupEdits: '小组修改',
     alertConfig: '报警配置',
+    traderClaims: '交易员认领',
+    noClaims: '暂无认领申请',
+    approve: '批准',
+    reject: '拒绝',
     // 账户数据
     accountRequiredStats: '账户必需数据',
     totalTrades: '总交易次数',
