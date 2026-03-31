@@ -11,8 +11,9 @@
  * Cache: 1 hour (s-maxage=3600)
  */
 
-import { NextResponse } from 'next/server'
+import { NextRequest, NextResponse } from 'next/server'
 import { getSupabaseAdmin } from '@/lib/api'
+import { checkRateLimit, RateLimitPresets } from '@/lib/utils/rate-limit'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -27,7 +28,10 @@ interface Mover {
   avatar_url: string | null
 }
 
-export async function GET() {
+export async function GET(request: NextRequest) {
+  const rateLimitResponse = await checkRateLimit(request, RateLimitPresets.public)
+  if (rateLimitResponse) return rateLimitResponse
+
   try {
     const supabase = getSupabaseAdmin()
 
