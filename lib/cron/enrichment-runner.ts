@@ -137,17 +137,37 @@ import { LR, V2 } from '@/lib/types/schema-mapping'
 // EMERGENCY FIX (2026-03-20): Reduce retries to prevent timeout bypass
 // Root cause of 44min hangs: withRetry creates new fetch+AbortController on each retry,
 // bypassing per-trader/platform timeouts. 3 retries × 6s timeout × N APIs = >54s per trader.
-// Solution: 1 retry max → total time ≤ 12s per API, respects per-trader timeout.
-const RETRY_CONFIG = {
-  maxAttempts: 1, // Was 3 — NO retries, fail fast
-  baseDelayMs: 500, // Reduced from 1000
-  maxDelayMs: 2000, // Reduced from 10000
+// Solution: 1 retry max for problematic platforms, 3 retries for stable platforms.
+const RETRY_CONFIG_FAST = {
+  maxAttempts: 1, // NO retries, fail fast — for platforms with timeout history
+  baseDelayMs: 500,
+  maxDelayMs: 2000,
 }
+
+const RETRY_CONFIG_STANDARD = {
+  maxAttempts: 3, // 3 attempts with exponential backoff (1s/2s/4s)
+  baseDelayMs: 1000,
+  maxDelayMs: 4000,
+}
+
+// Platforms that are stable enough to support retries without timeout amplification
+const RETRY_ENABLED_PLATFORMS = new Set([
+  'okx_spot', 'polymarket', 'woox',
+  // Batch-cached platforms are instant, retries are safe
+  'bitunix', 'xt', 'blofin', 'bitfinex', 'toobit', 'coinex',
+])
+
+function getRetryConfig(platform: string) {
+  return RETRY_ENABLED_PLATFORMS.has(platform) ? RETRY_CONFIG_STANDARD : RETRY_CONFIG_FAST
+}
+
+// Circuit breaker: if N consecutive traders fail, skip remaining in that batch
+const CIRCUIT_BREAKER_THRESHOLD = 5
 
 async function withRetry<T>(
   fn: () => Promise<T>,
   context: string,
-  options = RETRY_CONFIG
+  options = RETRY_CONFIG_FAST
 ): Promise<T> {
   let lastError: Error | undefined
   for (let attempt = 1; attempt <= options.maxAttempts; attempt++) {
@@ -541,6 +561,9 @@ const PER_TRADER_TIMEOUT_MS: Record<string, number> = {
   'bitget_futures': 18_000,  // 18s per trader - equity 15s + detail 10s run in parallel, 18s is generous
   'binance_futures': 12_000, // 12s per trader - ultra-short (VPS proxy tested <500ms, 3-8s API timeouts)
   'dydx': 15_000, // 15s per trader - 3 APIs × 5-6s timeout + fallback buffer
+  'okx_spot': 15_000, // 15s per trader - 3 APIs (equity+stats+positions) × 15s timeout, run in parallel
+  'polymarket': 15_000, // 15s per trader - activity pagination can be slow, but 15s is generous
+  'woox': 15_000, // 15s per trader - 4 APIs (equity+stats+positions+history) × 10s timeout, parallel
 }
 
 function getPlatformTimeout(platform: string): number {
@@ -597,6 +620,8 @@ export async function runEnrichment(params: {
 
     results[platformKey] = { enriched: 0, failed: 0, errors: [] }
     let walletEnrichFailCount = 0
+    let consecutiveFailures = 0 // Circuit breaker counter
+    const retryConfig = getRetryConfig(platformKey)
 
     // Per-platform timeout: isolate each platform so one hanging platform
     // doesn't burn the entire batch's time budget
@@ -638,6 +663,14 @@ export async function runEnrichment(params: {
         break
       }
 
+      // Circuit breaker: if N consecutive traders failed, the platform API is likely down
+      if (consecutiveFailures >= CIRCUIT_BREAKER_THRESHOLD) {
+        const remaining = traders.length - i
+        logger.warn(`[enrich] ${platformKey} circuit breaker tripped after ${CIRCUIT_BREAKER_THRESHOLD} consecutive failures, skipping ${remaining} remaining traders`)
+        results[platformKey].errors.push(`Circuit breaker: ${remaining} traders skipped after ${CIRCUIT_BREAKER_THRESHOLD} consecutive failures`)
+        break
+      }
+
       const batch = traders.slice(i, i + config.concurrency)
 
       const batchResults = await Promise.allSettled(
@@ -668,7 +701,8 @@ export async function runEnrichment(params: {
                 if (config.fetchEquityCurve) {
                   fetchPromises.equityCurve = withRetry(
                     () => config.fetchEquityCurve!(traderId, days),
-                    `${platformKey}:${traderId} equity curve`
+                    `${platformKey}:${traderId} equity curve`,
+                    retryConfig
                   ).catch(() => [] as EquityCurvePoint[])
                 }
 
@@ -676,7 +710,8 @@ export async function runEnrichment(params: {
                 if (config.fetchPositionHistory) {
                   fetchPromises.positions = withRetry(
                     () => config.fetchPositionHistory!(traderId),
-                    `${platformKey}:${traderId} position history`
+                    `${platformKey}:${traderId} position history`,
+                    retryConfig
                   ).catch(() => [] as PositionHistoryItem[])
                 }
 
@@ -684,7 +719,8 @@ export async function runEnrichment(params: {
                 if (config.fetchCurrentPositions) {
                   fetchPromises.currentPositions = withRetry(
                     () => config.fetchCurrentPositions!(traderId),
-                    `${platformKey}:${traderId} current positions`
+                    `${platformKey}:${traderId} current positions`,
+                    retryConfig
                   ).catch(() => [] as (PortfolioPosition | PositionHistoryItem)[])
                 }
 
@@ -692,7 +728,8 @@ export async function runEnrichment(params: {
                 if (config.fetchStatsDetail) {
                   fetchPromises.stats = withRetry(
                     () => config.fetchStatsDetail!(traderId),
-                    `${platformKey}:${traderId} stats detail`
+                    `${platformKey}:${traderId} stats detail`,
+                    retryConfig
                   ).catch(() => null as StatsDetail | null)
                 }
 
@@ -893,7 +930,7 @@ export async function runEnrichment(params: {
         })
       )
 
-      // Process allSettled results
+      // Process allSettled results + circuit breaker tracking
       const successful = batchResults.filter(r => r.status === 'fulfilled')
       const failed = batchResults.filter(r => r.status === 'rejected')
 
@@ -903,6 +940,14 @@ export async function runEnrichment(params: {
           const reason = result.reason instanceof Error ? result.reason.message : String(result.reason)
           logger.error(`[enrich] Failed trader ${idx}: ${reason}`)
         })
+      }
+
+      // Circuit breaker: track consecutive failures across batches
+      if (successful.length > 0) {
+        consecutiveFailures = 0 // Any success resets the counter
+      }
+      if (failed.length > 0 && successful.length === 0) {
+        consecutiveFailures += failed.length // Entire batch failed
       }
 
       if (i + config.concurrency < traders.length) {
