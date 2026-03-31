@@ -76,7 +76,7 @@ function getFreshnessHours(source: string): number {
   return sourceType === 'web3' ? DATA_FRESHNESS_HOURS_DEX : DATA_FRESHNESS_HOURS_CEX
 }
 const MIN_TRADES_COUNT = 1 // Allow all traders with at least 1 trade (DEX traders may have 1-2 high-quality trades)
-const DEGRADATION_THRESHOLD = 0.85 // 85% — block catastrophic drops only; stale counts still inflated from pre-2026-03-15 accumulation
+const DEGRADATION_THRESHOLD = 0.70 // 70% — block catastrophic drops only; 85% was too tight (7D hovers at 84% due to ROI filters)
 
 // P1-3: ROI anomaly thresholds per period
 const ROI_ANOMALY_THRESHOLDS: Record<Period, number> = {
@@ -825,31 +825,32 @@ async function computeSeason(
     return a.source_trader_id.localeCompare(b.source_trader_id)
   })
 
-  // Pre-upsert degradation check: block if new count drops below DEGRADATION_THRESHOLD (85%) of previous
+  // Pre-upsert degradation check: block if new count drops below DEGRADATION_THRESHOLD of previous
   // Also enforce absolute minimum of 500 traders for a viable leaderboard
-  // FALLBACK: After 3 consecutive skips, force-compute anyway to prevent indefinite stale data
-  const MAX_CONSECUTIVE_SKIPS = 3
+  // FALLBACK: After MAX_CONSECUTIVE_SKIPS, force-compute to prevent indefinite stale data
+  // BUG FIX 2026-03-31: Counter was stored in 'warm' tier (TTL 15min) but cron runs every 30min,
+  // so counter always expired before next run. Changed to 'cold' (TTL 1h).
+  const MAX_CONSECUTIVE_SKIPS = 2
+  const ratio = previousCount ? scored.length / previousCount : 1
+  logger.info(`[${season}] Degradation check: scored=${scored.length}, previous=${previousCount}, ratio=${(ratio * 100).toFixed(1)}%, threshold=${DEGRADATION_THRESHOLD * 100}%`)
+
   if (previousCount && previousCount > 500 && !forceWrite) {
-    const ratio = scored.length / previousCount
     if (scored.length < 500 || ratio < DEGRADATION_THRESHOLD) {
-      // Check consecutive skip counter from Redis
+      // Check consecutive skip counter from Redis — use 'cold' tier (TTL 1h) to survive 30min cron interval
       let consecutiveSkips = 0
+      const skipKey = `leaderboard:degradation-skips:${season}`
       try {
-        const { tieredGet: tGet, tieredSet: tSet } = await import('@/lib/cache/redis-layer')
-        const skipKey = `leaderboard:degradation-skips:${season}`
-        // FIX: Read and write from same tier ('warm') to ensure counter persists
-        const cached = await tGet(skipKey, 'warm')
+        const cached = await tieredGet<number>(skipKey, 'cold')
         consecutiveSkips = (cached?.data as number) || 0
         consecutiveSkips++
-        await tSet(skipKey, consecutiveSkips, 'warm', [])
+        await tieredSet(skipKey, consecutiveSkips, 'cold', ['leaderboard'])
       } catch { /* Redis failure — proceed with skip */ }
 
       if (consecutiveSkips >= MAX_CONSECUTIVE_SKIPS) {
         logger.warn(`${season}: degradation detected (${scored.length}/${previousCount}, ${(ratio * 100).toFixed(1)}%) but FORCE-COMPUTING after ${consecutiveSkips} consecutive skips to prevent stale data`)
         // Reset counter and fall through to upsert
         try {
-          const { tieredDel: tDel } = await import('@/lib/cache/redis-layer')
-          await tDel(`leaderboard:degradation-skips:${season}`)
+          await tieredDel(skipKey)
         } catch { /* non-critical */ }
       } else {
         logger.error(`${season}: computed ${scored.length} traders (previous: ${previousCount}, ratio: ${(ratio * 100).toFixed(1)}%). SKIPPING — below ${DEGRADATION_THRESHOLD * 100}% threshold (skip ${consecutiveSkips}/${MAX_CONSECUTIVE_SKIPS}).`)
@@ -861,8 +862,7 @@ async function computeSeason(
   }
   // Reset consecutive skip counter on successful computation
   try {
-    const { tieredDel: tDel } = await import('@/lib/cache/redis-layer')
-    await tDel(`leaderboard:degradation-skips:${season}`)
+    await tieredDel(`leaderboard:degradation-skips:${season}`)
   } catch { /* non-critical */ }
 
   // Phase 2: Incremental upsert — only update changed rows to reduce write volume ~40%
