@@ -230,16 +230,56 @@ export class BitgetFuturesConnector extends BaseConnector {
    * followerNum, copyTraderNum, totalFollowAssets (AUM), headUrl (avatar).
    */
   normalize(raw: Record<string, unknown>): Record<string, unknown> {
-    // traderList API uses: traderUid, traderNickName, returnRate, winningRate, headPic
-    // currentTrader/list uses: traderId, traderName, roi, winRate, drawDown, headUrl
+    // Two API response formats:
+    //   currentTrader/list (GET):  roi (%), winRate (%), drawDown (%), traderId, traderName, headUrl
+    //   traderList (POST, VPS):    profitRate/returnRate (decimal), winningRate (decimal), traderUid, traderNickName, headPic
+    //
+    // The traderList API returns ratios as decimals (0.155 = 15.5%).
+    // The currentTrader/list API returns already-percentage values (15.5 = 15.5%).
+    // We detect which format by checking which field is present.
+
+    const isTraderListFormat = raw.profitRate != null || raw.returnRate != null
+
+    // ROI: currentTrader/list "roi" is percentage; traderList "profitRate"/"returnRate" is decimal
+    let roi: number | null = null
+    if (raw.roi != null) {
+      roi = this.parseNumber(raw.roi)
+    } else {
+      const rawRate = this.parseNumber(raw.returnRate ?? raw.profitRate ?? raw.yieldRate)
+      roi = rawRate != null ? rawRate * 100 : null
+    }
+
+    // Win rate: currentTrader/list "winRate" is percentage; traderList "winningRate" is decimal
+    let winRate: number | null = null
+    if (raw.winRate != null) {
+      winRate = this.parseNumber(raw.winRate)
+    } else if (raw.winningRate != null) {
+      const rawWr = this.parseNumber(raw.winningRate)
+      winRate = rawWr != null ? rawWr * 100 : null
+    }
+
+    // Max drawdown: currentTrader/list "drawDown" is percentage; traderList "maxDrawdown" may be decimal
+    let maxDrawdown: number | null = null
+    if (raw.drawDown != null) {
+      maxDrawdown = this.parseNumber(raw.drawDown)
+    } else {
+      const rawMdd = this.parseNumber(raw.maxDrawdown ?? raw.mdd)
+      // If from traderList and looks like a decimal (< 1), convert to percentage
+      if (rawMdd != null && isTraderListFormat && Math.abs(rawMdd) <= 1) {
+        maxDrawdown = rawMdd * 100
+      } else {
+        maxDrawdown = rawMdd
+      }
+    }
+
     return {
       trader_key: raw.traderId ?? raw.traderUid ?? raw.uid ?? null,
       display_name: raw.traderName ?? raw.traderNickName ?? raw.nickName ?? null,
       avatar_url: raw.headUrl ?? raw.headPic ?? raw.avatar ?? null,
-      roi: this.parseNumber(raw.roi ?? raw.returnRate ?? raw.profitRate ?? raw.yieldRate),
+      roi,
       pnl: this.parseNumber(raw.profit ?? raw.totalProfit ?? raw.totalFollowProfit ?? raw.allTotalRevenue),
-      win_rate: this.parseNumber(raw.winRate ?? raw.winningRate),
-      max_drawdown: this.parseNumber(raw.drawDown ?? raw.maxDrawdown ?? raw.mdd),
+      win_rate: winRate,
+      max_drawdown: maxDrawdown,
       trades_count: this.parseNumber(raw.tradeTimes) ?? null,
       followers: this.parseNumber(raw.followerNum ?? raw.followerCount ?? raw.copyUserNum ?? raw.traceNum),
       copiers: this.parseNumber(raw.copyTraderNum),
