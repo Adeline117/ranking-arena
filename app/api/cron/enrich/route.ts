@@ -1,7 +1,8 @@
 /**
- * Independent Enrichment Cron Job
+ * Independent Enrichment Endpoint (manual use only)
  *
- * Thin wrapper around runEnrichment() for direct API access.
+ * NOT scheduled in vercel.json — use /api/cron/batch-enrich for production.
+ * Thin wrapper around runEnrichment() for direct API access / debugging.
  * Core logic lives in lib/cron/enrichment-runner.ts (shared with batch-enrich).
  *
  * Query params:

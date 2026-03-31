@@ -1,6 +1,7 @@
 /**
- * Health check endpoint for monitoring.
- * 
+ * Health check endpoint for monitoring (callable, not cron-scheduled).
+ *
+ * NOT in vercel.json crons — invoked by external uptime monitors (e.g., OpenClaw).
  * Returns 200 OK with basic system status.
  * No authentication required - public health check.
  */

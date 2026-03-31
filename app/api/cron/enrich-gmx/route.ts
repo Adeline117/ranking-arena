@@ -1,11 +1,11 @@
 /**
- * Dedicated GMX enrichment endpoint
+ * Dedicated GMX enrichment endpoint (DEPRECATED)
+ *
+ * NOT scheduled in vercel.json — GMX enrichment now handled by batch-enrich.
+ * Kept for manual re-enrichment if needed.
  *
  * GMX requires >360s to enrich 500 traders for 90D period,
- * so it's split from batch-enrich to avoid timeout issues.
- *
- * Runs all periods (90D, 30D, 7D) sequentially.
- * Re-enabled 2026-03-17: Squids API stable, concurrency reduced 15→5
+ * so it was originally split from batch-enrich to avoid timeout issues.
  */
 
 import { NextRequest, NextResponse } from 'next/server'
