@@ -96,9 +96,9 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({ success: true, link })
   } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : 'Unknown error'
-    logger.error('[trader-link] POST error:', message)
-    return NextResponse.json({ error: message }, { status: 500 })
+    logger.error('[trader-link] POST error:', error instanceof Error ? error.message : String(error))
+    // SECURITY: Do not leak internal error details to client
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
 }
 
@@ -127,9 +127,9 @@ export async function GET(req: NextRequest) {
 
     return NextResponse.json({ links: links || [] })
   } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : 'Unknown error'
-    logger.error('[trader-link] GET error:', message)
-    return NextResponse.json({ error: message }, { status: 500 })
+    logger.error('[trader-link] GET error:', error instanceof Error ? error.message : String(error))
+    // SECURITY: Do not leak internal error details to client
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
 }
 
@@ -182,8 +182,8 @@ export async function DELETE(req: NextRequest) {
 
     return NextResponse.json({ success: true })
   } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : 'Unknown error'
-    logger.error('[trader-link] DELETE error:', message)
-    return NextResponse.json({ error: message }, { status: 500 })
+    logger.error('[trader-link] DELETE error:', error instanceof Error ? error.message : String(error))
+    // SECURITY: Do not leak internal error details to client
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
 }

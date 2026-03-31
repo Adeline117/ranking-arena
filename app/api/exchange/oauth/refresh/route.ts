@@ -186,8 +186,8 @@ export async function POST(request: NextRequest) {
     })
   } catch (error: unknown) {
     logger.error('Error refreshing token:', error)
-    const message = error instanceof Error ? error.message : 'Failed to refresh token'
-    return NextResponse.json({ error: message }, { status: 500 })
+    // SECURITY: Do not leak internal error details to client
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
 }
 

@@ -141,12 +141,13 @@ export async function GET() {
       { headers: { 'Cache-Control': 'public, s-maxage=3600, stale-while-revalidate=1800' } }
     )
   } catch (err) {
+    console.error('[movers] Error:', err instanceof Error ? err.message : String(err))
+    // SECURITY: Do not leak internal error details to client
     return NextResponse.json(
       {
         risers: [],
         fallers: [],
         period: '90D',
-        error: err instanceof Error ? err.message : 'Unknown error',
       },
       { status: 200, headers: { 'Cache-Control': 'public, s-maxage=300' } }
     )
