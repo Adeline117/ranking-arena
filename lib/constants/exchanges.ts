@@ -173,8 +173,8 @@ export const DEAD_BLOCKED_PLATFORMS: TraderSource[] = [
   'okx_web3',
   // bingx_spot: No spot leaderboard API, no dedicated fetcher — 2026-03-31
   'bingx_spot',
-  // dydx: v4 indexer dead (404), Copin returns 500 traders but ALL PnL=0 — 2026-03-31
-  'dydx',
+  // dydx: RECOVERED 2026-03-31 — Copin API needs queryDate = now-3days (2-day processing delay)
+  // Was wrongly marked dead because queryDate=now returned 0 PnL. Fixed in dydx-perp.ts.
 
   // ═══════════════════════════════════════════════════════════════
   // BLOCKED — needs API key or credentials to unlock
