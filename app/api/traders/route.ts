@@ -130,8 +130,9 @@ async function fetchFromLeaderboard(
   }
 
   // Include all scored traders (score > 0 means valid ROI data)
-  // Note: outlier filtering already done in compute-leaderboard (ROI anomaly thresholds)
+  // Filter out outlier traders from rankings display
   query = query.gt('arena_score', 0)
+    .or('is_outlier.is.null,is_outlier.eq.false')
 
   // Cursor-based: filter by rank
   if (cursor != null) {

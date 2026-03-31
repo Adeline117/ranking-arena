@@ -69,6 +69,7 @@ export function useHotPageData() {
           .select('source, source_trader_id, handle, roi, arena_score, followers, win_rate')
           .not('arena_score', 'is', null)
           .gt('arena_score', 0)
+          .or('is_outlier.is.null,is_outlier.eq.false')
           .order('arena_score', { ascending: false })
           .limit(30)
 

@@ -181,6 +181,7 @@ async function fetchTopPerformers(supabase: AnySupabase): Promise<TopTrader[]> {
     .from('leaderboard_ranks')
     .select('display_name, handle, source, source_trader_id, arena_score, roi_pct')
     .eq('season_id', '7D')
+    .or('is_outlier.is.null,is_outlier.eq.false')
     .order('arena_score', { ascending: false })
     .limit(3)
 
@@ -200,6 +201,7 @@ async function fetchTrendingTraders(supabase: AnySupabase): Promise<TopTrader[]>
     .from('leaderboard_ranks')
     .select('display_name, handle, source, source_trader_id, arena_score, roi_pct')
     .eq('season_id', '30D')
+    .or('is_outlier.is.null,is_outlier.eq.false')
     .order('arena_score', { ascending: false })
     .range(3, 5) // offset to get different traders from top performers
 

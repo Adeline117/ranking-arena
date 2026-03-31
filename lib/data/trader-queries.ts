@@ -620,6 +620,7 @@ export async function getSimilarTraders(handle: string, limit: number = 6): Prom
       .eq('source', source.source)
       .eq('season_id', '90D')
       .neq('source_trader_id', source.source_trader_id)
+      .or('is_outlier.is.null,is_outlier.eq.false')
       .gte('roi', minRoi)
       .lte('roi', maxRoi)
       .limit(50)
@@ -631,6 +632,7 @@ export async function getSimilarTraders(handle: string, limit: number = 6): Prom
         .eq('source', source.source)
         .eq('season_id', '90D')
         .neq('source_trader_id', source.source_trader_id)
+        .or('is_outlier.is.null,is_outlier.eq.false')
         .order('roi', { ascending: false })
         .limit(limit)
 

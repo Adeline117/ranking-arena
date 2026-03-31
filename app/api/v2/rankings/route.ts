@@ -109,6 +109,7 @@ export const GET = withPublic(async ({ supabase, request }) => {
     .eq('source', platform)
     .eq('season_id', seasonId)
     .not('arena_score', 'is', null)
+    .or('is_outlier.is.null,is_outlier.eq.false')
 
   // V3 Filters
   if (normalizedStyle) {

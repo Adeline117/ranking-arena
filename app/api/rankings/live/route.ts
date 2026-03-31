@@ -138,6 +138,7 @@ export async function GET(request: NextRequest) {
       .select('source_trader_id, handle, roi, pnl, win_rate, max_drawdown, trades_count, followers, source, source_type, avatar_url, arena_score, rank, profitability_score, risk_control_score, execution_score, trading_style, sharpe_ratio, trader_type', { count: 'estimated' })
       .eq('season_id', period)
       .gt('arena_score', 0)
+      .or('is_outlier.is.null,is_outlier.eq.false')
       .order('rank', { ascending: true })
       .range(offset, offset + limit - 1)
 

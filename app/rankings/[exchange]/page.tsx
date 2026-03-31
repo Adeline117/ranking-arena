@@ -208,6 +208,7 @@ const fetchExchangeTradersSSR = unstable_cache(
           .eq('season_id', '90D')
           .not('arena_score', 'is', null)
           .gt('arena_score', 0)
+          .or('is_outlier.is.null,is_outlier.eq.false')
           .order('arena_score', { ascending: false, nullsFirst: false })
           .limit(20),
         supabase
@@ -216,7 +217,8 @@ const fetchExchangeTradersSSR = unstable_cache(
           .eq('source', exchange)
           .eq('season_id', '90D')
           .not('arena_score', 'is', null)
-          .gt('arena_score', 0),
+          .gt('arena_score', 0)
+          .or('is_outlier.is.null,is_outlier.eq.false'),
         supabase
           .from('leaderboard_ranks')
           .select('source_trader_id, handle, avatar_url')
@@ -224,6 +226,7 @@ const fetchExchangeTradersSSR = unstable_cache(
           .eq('season_id', '90D')
           .not('arena_score', 'is', null)
           .gt('arena_score', 0)
+          .or('is_outlier.is.null,is_outlier.eq.false')
           .order('arena_score', { ascending: false, nullsFirst: false })
           .limit(10),
       ])

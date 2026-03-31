@@ -41,6 +41,7 @@ export async function GET(request: Request) {
     let query = supabase
       .from('leaderboard_ranks')
       .select('rank, trader_id, handle, source, arena_score, roi, pnl, win_rate, max_drawdown, followers, trades_count')
+      .or('is_outlier.is.null,is_outlier.eq.false')
       .order('rank', { ascending: true })
       .limit(limit)
 
