@@ -10,6 +10,9 @@ import { NextResponse } from 'next/server'
 import { PipelineLogger } from '@/lib/services/pipeline-logger'
 import { getSupabaseAdmin } from '@/lib/supabase/server'
 import { env } from '@/lib/env'
+import { createLogger } from '@/lib/utils/logger'
+
+const log = createLogger('cron:backfill-avatars')
 
 export const runtime = 'nodejs'
 export const preferredRegion = 'sfo1'
@@ -46,7 +49,7 @@ async function fetchJSON(url: string, options: RequestInit = {}): Promise<unknow
     if (!resp.ok) return null
     return await resp.json()
   } catch (err) {
-    console.warn('[backfill-avatars] fetchJSON failed for', url, '-', err instanceof Error ? err.message : String(err))
+    log.warn(`fetchJSON failed for ${url}`, { error: err instanceof Error ? err.message : String(err) })
     return null
   }
 }
@@ -446,7 +449,7 @@ export async function GET(request: Request) {
   let pageCount = 0
   while (traders.length < limit) {
     if (++pageCount > MAX_PAGES) {
-      console.warn(`[backfill-avatars] Reached MAX_PAGES (${MAX_PAGES}) for ${platform}, breaking`)
+      log.warn(`Reached MAX_PAGES (${MAX_PAGES}) for ${platform}, breaking`)
       break
     }
     const { data } = await supabase
@@ -522,7 +525,7 @@ export async function GET(request: Request) {
           else result.errors++
         }
       } catch (err) {
-        console.warn(`[backfill-avatars] Individual fetch failed for ${platform}/${t.source_trader_id}:`, err instanceof Error ? err.message : String(err))
+        log.warn(`Individual fetch failed for ${platform}/${t.source_trader_id}`, { error: err instanceof Error ? err.message : String(err) })
         result.errors++
       }
 

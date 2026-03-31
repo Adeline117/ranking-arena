@@ -10,6 +10,9 @@
 import { NextResponse } from 'next/server'
 import { buildFreshnessReport } from '@/app/api/cron/check-data-freshness/route'
 import { env } from '@/lib/env'
+import { createLogger } from '@/lib/utils/logger'
+
+const log = createLogger('api:data-freshness')
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -31,7 +34,7 @@ export async function GET(req: Request) {
   } catch (error: unknown) {
     const message =
       error instanceof Error ? error.message : 'Unknown error'
-    console.error('[data-freshness]', message)
+    log.error(message)
     return NextResponse.json({ error: 'Internal server error', code: 'INTERNAL_ERROR' }, { status: 500 })
   }
 }

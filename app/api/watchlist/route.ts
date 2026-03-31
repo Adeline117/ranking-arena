@@ -8,6 +8,9 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import { createLogger } from '@/lib/utils/logger'
+
+const log = createLogger('api:watchlist')
 
 function getAuthenticatedUser(request: NextRequest) {
   const authHeader = request.headers.get('authorization')
@@ -49,7 +52,7 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json({ watchlist: data || [] })
   } catch (error) {
-    console.error('[watchlist] GET failed:', error instanceof Error ? error.message : String(error))
+    log.error('GET failed', { error: error instanceof Error ? error.message : String(error) })
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
 }
@@ -108,7 +111,7 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({ ok: true })
   } catch (error) {
-    console.error('[watchlist] POST failed:', error instanceof Error ? error.message : String(error))
+    log.error('POST failed', { error: error instanceof Error ? error.message : String(error) })
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
 }
@@ -151,7 +154,7 @@ export async function DELETE(request: NextRequest) {
 
     return NextResponse.json({ ok: true })
   } catch (error) {
-    console.error('[watchlist] DELETE failed:', error instanceof Error ? error.message : String(error))
+    log.error('DELETE failed', { error: error instanceof Error ? error.message : String(error) })
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
 }

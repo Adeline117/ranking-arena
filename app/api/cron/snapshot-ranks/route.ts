@@ -11,6 +11,9 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getSupabaseAdmin } from '@/lib/api'
 import { PipelineLogger } from '@/lib/services/pipeline-logger'
 import { env } from '@/lib/env'
+import { createLogger } from '@/lib/utils/logger'
+
+const log = createLogger('cron:snapshot-ranks')
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 60
@@ -44,12 +47,12 @@ export async function GET(request: NextRequest) {
         .limit(TOP_N)
 
       if (fetchError) {
-        console.error(`[snapshot-ranks] Failed to fetch leaderboard_ranks for ${period}:`, fetchError.message)
+        log.error(`Failed to fetch leaderboard_ranks for ${period}`, { error: fetchError.message })
         continue
       }
 
       if (!rows || rows.length === 0) {
-        console.warn(`[snapshot-ranks] No rows found for period ${period}`)
+        log.warn(`No rows found for period ${period}`)
         continue
       }
 
@@ -71,13 +74,13 @@ export async function GET(request: NextRequest) {
           .upsert(batch, { onConflict: 'platform,trader_key,period,snapshot_date' })
 
         if (upsertError) {
-          console.error(`[snapshot-ranks] Upsert error for ${period} batch ${i}:`, upsertError.message)
+          log.error(`Upsert error for ${period} batch ${i}`, { error: upsertError.message })
         } else {
           totalInserted += batch.length
         }
       }
 
-      console.warn(`[snapshot-ranks] Snapshotted ${records.length} traders for ${period}`)
+      log.info(`Snapshotted ${records.length} traders for ${period}`)
     }
 
     // Cleanup old rows (>30 days)
@@ -91,7 +94,7 @@ export async function GET(request: NextRequest) {
       .lt('snapshot_date', cutoffDate)
 
     if (cleanupError) {
-      console.warn('[snapshot-ranks] Cleanup error:', cleanupError.message)
+      log.warn('Cleanup error', { error: cleanupError.message })
     }
 
     await plog.success(totalInserted, { date: today, periods: PERIODS.length })
@@ -103,7 +106,7 @@ export async function GET(request: NextRequest) {
       periods: PERIODS,
     })
   } catch (err) {
-    console.error('[snapshot-ranks] Unexpected error:', err)
+    log.error('Unexpected error', { error: err instanceof Error ? err.message : String(err) })
     await plog.error(err)
     return NextResponse.json(
       { error: 'Internal server error', detail: err instanceof Error ? err.message : 'Unknown error' },

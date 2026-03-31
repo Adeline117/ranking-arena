@@ -11,6 +11,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { env } from '@/lib/env'
 import { getSupabaseAdmin } from '@/lib/supabase/server'
+import { createLogger } from '@/lib/utils/logger'
+
+const log = createLogger('api:supabase-pool')
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -85,7 +88,7 @@ export async function GET(request: NextRequest) {
       checked_at: new Date().toISOString(),
     })
   } catch (err) {
-    console.error('[supabase-pool] Error:', err instanceof Error ? err.message : String(err))
+    log.error('Error', { error: err instanceof Error ? err.message : String(err) })
     // SECURITY: Do not leak internal error details to client
     return NextResponse.json(
       { error: 'Internal server error' },

@@ -16,6 +16,9 @@ import { PipelineLogger } from '@/lib/services/pipeline-logger'
 import { env } from '@/lib/env'
 import { getSupabaseAdmin } from '@/lib/supabase/server'
 import { BASE_URL } from '@/lib/constants/urls'
+import { createLogger } from '@/lib/utils/logger'
+
+const log = createLogger('cron:auto-post-market-summary')
 
 type AnySupabase = SupabaseClient
 
@@ -139,7 +142,7 @@ async function ensureSystemUser(supabase: AnySupabase) {
     }, { onConflict: 'id' })
 
   if (error) {
-    console.warn('Could not create system user profile:', error.message)
+    log.warn('Could not create system user profile', { error: error.message })
   }
 }
 

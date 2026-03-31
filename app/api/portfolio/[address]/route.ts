@@ -7,6 +7,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getPortfolio } from '@/lib/chains/evm-adapter'
 import * as cache from '@/lib/cache'
+import { createLogger } from '@/lib/utils/logger'
+
+const log = createLogger('api:portfolio')
 
 export const dynamic = 'force-dynamic'
 
@@ -48,7 +51,7 @@ export async function GET(
       headers: { 'X-Cache': 'MISS' },
     })
   } catch (error) {
-    console.error('[portfolio] Error:', error instanceof Error ? error.message : String(error))
+    log.error('Error', { error: error instanceof Error ? error.message : String(error) })
     // SECURITY: Do not leak internal error details to client
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
