@@ -12,6 +12,11 @@ const ADMIN_EMAILS: string[] = process.env.ADMIN_EMAILS
   ? process.env.ADMIN_EMAILS.split(',').map(e => e.trim()).filter(e => e.length > 0)
   : [] // 安全默认值：空数组，不允许任何未配置的管理员
 
+// SECURITY: Warn if no admin emails configured in production
+if (ADMIN_EMAILS.length === 0 && process.env.NODE_ENV === 'production') {
+  console.warn('[SECURITY] ADMIN_EMAILS not configured — no admin access available')
+}
+
 export { getSupabaseAdmin }
 
 /**

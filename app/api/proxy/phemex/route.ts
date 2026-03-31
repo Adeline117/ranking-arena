@@ -15,8 +15,14 @@ export const runtime = 'edge'
 export const preferredRegion = ['iad1'] // US East — different from default hnd1
 
 export async function GET(req: NextRequest) {
+  // SECURITY: Reject if CRON_SECRET not configured in production
+  if (!env.CRON_SECRET && process.env.NODE_ENV === 'production') {
+    console.error('[phemex-proxy] CRON_SECRET not configured')
+    return NextResponse.json({ error: 'Server misconfigured' }, { status: 503 })
+  }
+
   const auth = req.headers.get('Authorization')
-  if (auth !== `Bearer ${env.CRON_SECRET}`) {
+  if (!env.CRON_SECRET || auth !== `Bearer ${env.CRON_SECRET}`) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 

@@ -129,6 +129,9 @@ export async function POST(request: NextRequest) {
     // Execute all cleanup in parallel, don't fail the deletion if some cleanup fails
     await Promise.allSettled(cleanupPromises.map(p => Promise.resolve(p)))
 
+    // SECURITY: Invalidate all active sessions before banning
+    await supabase.auth.admin.signOut(user.id, 'global')
+
     // Ban the user (876000h ~ 100 years)
     await supabase.auth.admin.updateUserById(user.id, {
       ban_duration: '876000h',

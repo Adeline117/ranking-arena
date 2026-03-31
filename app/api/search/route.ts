@@ -298,6 +298,9 @@ async function handleHotSearch(supabase: Parameters<Parameters<typeof withPublic
 
 // ---------- Click-through tracking ----------
 
+// GDPR: Click tracking stores user behavior data in search_analytics.
+// Only tracked for aggregate analytics (no PII stored). The search_analytics
+// table is restricted to service_role access via RLS.
 async function handleClickTracking(
   supabase: Parameters<Parameters<typeof withPublic>[0]>[0]['supabase'],
   searchParams: URLSearchParams,
