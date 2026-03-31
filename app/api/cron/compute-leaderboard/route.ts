@@ -435,16 +435,18 @@ async function computeSeason(
         if (error || !data?.length) return rows
 
         for (const d of data) {
+          // Supabase returns `numeric` columns as strings for high-precision values.
+          // Must use Number() to convert, not `as number` (which is just a TS type assertion).
           rows.push({
             source: d.platform as string,
             source_trader_id: d.trader_key as string,
-            roi: d.roi_pct as number,
-            pnl: d.pnl_usd as number,
-            win_rate: d.win_rate as number | null,
-            max_drawdown: d.max_drawdown as number | null,
-            trades_count: d.trades_count as number | null,
-            followers: d.followers as number | null,
-            arena_score: d.arena_score as number | null,
+            roi: d.roi_pct != null ? Number(d.roi_pct) : null,
+            pnl: d.pnl_usd != null ? Number(d.pnl_usd) : null,
+            win_rate: d.win_rate != null ? Number(d.win_rate) : null,
+            max_drawdown: d.max_drawdown != null ? Number(d.max_drawdown) : null,
+            trades_count: d.trades_count != null ? Number(d.trades_count) : null,
+            followers: d.followers != null ? Number(d.followers) : null,
+            arena_score: d.arena_score != null ? Number(d.arena_score) : null,
             captured_at: d.updated_at as string,
             full_confidence_at: null,
             profitability_score: null,
@@ -454,7 +456,7 @@ async function computeSeason(
             trading_style: null,
             avg_holding_hours: null,
             style_confidence: null,
-            sharpe_ratio: d.sharpe_ratio as number | null,
+            sharpe_ratio: d.sharpe_ratio != null ? Number(d.sharpe_ratio) : null,
             sortino_ratio: null,
             profit_factor: null,
             calmar_ratio: null,
