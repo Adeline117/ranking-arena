@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, type MouseEvent as ReactMouseEvent } from 'react'
 import useSWR from 'swr'
 import { tokens } from '@/lib/design-tokens'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
@@ -168,6 +168,13 @@ export default function WatchlistMarket() {
     c.name.toLowerCase().includes(search.toLowerCase())
   )
 
+  const handleRowEnter = useCallback((e: ReactMouseEvent<HTMLDivElement>) => {
+    e.currentTarget.style.background = tokens.colors.bg.tertiary
+  }, [])
+  const handleRowLeave = useCallback((e: ReactMouseEvent<HTMLDivElement>) => {
+    e.currentTarget.style.background = 'transparent'
+  }, [])
+
   return (
     <SidebarCard title={t('sidebarWatchlist')}>
       {loading ? (
@@ -203,8 +210,8 @@ export default function WatchlistMarket() {
                   borderRadius: tokens.radius.sm,
                   transition: `background ${tokens.transition.fast}`,
                 }}
-                onMouseEnter={e => (e.currentTarget.style.background = tokens.colors.bg.tertiary)}
-                onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
+                onMouseEnter={handleRowEnter}
+                onMouseLeave={handleRowLeave}
               >
                 <span style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: tokens.typography.fontSize.sm, fontWeight: tokens.typography.fontWeight.semibold, color: tokens.colors.text.primary }}>
                   <CryptoIcon symbol={coin.symbol} size={18} />

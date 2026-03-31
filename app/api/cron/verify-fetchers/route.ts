@@ -96,10 +96,13 @@ export async function GET(request: Request) {
 
       // Error classification: permanent errors (auth) trigger faster, transient (timeout/5xx) slower
       const isPermanentError = result.failureReason === 'auth_required' ||
+        result.failureReason === 'auth_failure' ||
         result.failureReason === 'endpoint_gone' ||
+        result.failureReason === 'forbidden' ||
         (result.details && /401|403/.test(result.details))
       const isTransientError = result.failureReason === 'timeout' ||
         result.failureReason === 'rate_limited' ||
+        result.failureReason === 'server_error' ||
         (result.details && /50[0-9]|timeout/i.test(result.details))
 
       // Permanent errors alert faster (2 failures), transient need more evidence

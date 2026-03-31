@@ -4,7 +4,7 @@ import React from 'react'
 import { tokens } from '@/lib/design-tokens'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import { getErrorMessage, isRetryableError } from '@/lib/utils/error-handling'
-import LoadingSkeleton from '@/app/components/error/LoadingSkeleton'
+import LoadingSkeleton from '@/app/components/ui/LoadingSkeleton'
 
 interface EmptyAction {
   label: string

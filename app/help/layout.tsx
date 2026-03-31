@@ -1,6 +1,8 @@
 import type { Metadata } from 'next'
 import { BASE_URL } from '@/lib/constants/urls'
 
+export const revalidate = 3600 // ISR: 1 hour (static content)
+
 export const metadata: Metadata = {
   title: 'Help Center | FAQs & Support',
   description:
