@@ -50,17 +50,13 @@ export class CoinexFuturesConnector extends BaseConnector {
 
     while (currentPage <= maxPages) {
       let _rawLb: Record<string, unknown>
+      const apiUrl = `https://www.coinex.com/res/copy-trading/public/traders?page=${currentPage}&limit=${pageSize}&sort_by=roi&period=${window}`
       try {
-        _rawLb = await this.request<Record<string, unknown>>(
-          `https://www.coinex.com/res/copy-trading/public/traders?page=${currentPage}&limit=${pageSize}&sort_by=roi&period=${window}`,
-          { method: 'GET' }
-        )
+        _rawLb = await this.request<Record<string, unknown>>(apiUrl, { method: 'GET' })
       } catch {
-        // Fallback: VPS Playwright scraper (CoinEx has geo-blocking)
-        const vpsData = await this.fetchViaVPS<Record<string, unknown>>('/coinex/leaderboard', {
-          period: window, page: String(currentPage), limit: String(pageSize),
-        })
-        if (!vpsData) throw new Error('Both direct API and VPS scraper failed for coinex')
+        // Fallback: proxy the actual API URL through VPS (CoinEx blocks datacenter IPs)
+        const vpsData = await this.proxyViaVPS<Record<string, unknown>>(apiUrl)
+        if (!vpsData) throw new Error('Both direct API and VPS proxy failed for coinex')
         _rawLb = vpsData
       }
       const data = warnValidate(CoinexFuturesLeaderboardResponseSchema, _rawLb, 'coinex-futures/leaderboard')
@@ -88,10 +84,15 @@ export class CoinexFuturesConnector extends BaseConnector {
   }
 
   async fetchTraderProfile(traderKey: string): Promise<ProfileResult | null> {
-    const _rawProfile = await this.request<Record<string, unknown>>(
-      `https://www.coinex.com/res/copy-trading/trader/${traderKey}/detail`,
-      { method: 'GET' }
-    )
+    const profileUrl = `https://www.coinex.com/res/copy-trading/trader/${traderKey}/detail`
+    let _rawProfile: Record<string, unknown>
+    try {
+      _rawProfile = await this.request<Record<string, unknown>>(profileUrl, { method: 'GET' })
+    } catch {
+      const vpsData = await this.proxyViaVPS<Record<string, unknown>>(profileUrl)
+      if (!vpsData) return null
+      _rawProfile = vpsData
+    }
     const data = warnValidate(CoinexFuturesDetailResponseSchema, _rawProfile, 'coinex-futures/profile')
     const info = data?.data
     if (!info) return null
@@ -128,10 +129,15 @@ export class CoinexFuturesConnector extends BaseConnector {
       return { metrics, quality_flags, fetched_at: new Date().toISOString() }
     }
 
-    const _rawSnap = await this.request<Record<string, unknown>>(
-      `https://www.coinex.com/res/copy-trading/trader/${traderKey}/detail?period=${window}`,
-      { method: 'GET' }
-    )
+    const snapUrl = `https://www.coinex.com/res/copy-trading/trader/${traderKey}/detail?period=${window}`
+    let _rawSnap: Record<string, unknown>
+    try {
+      _rawSnap = await this.request<Record<string, unknown>>(snapUrl, { method: 'GET' })
+    } catch {
+      const vpsData = await this.proxyViaVPS<Record<string, unknown>>(snapUrl)
+      if (!vpsData) return null
+      _rawSnap = vpsData
+    }
     const data = warnValidate(CoinexFuturesDetailResponseSchema, _rawSnap, 'coinex-futures/snapshot')
     const info = data?.data
     if (!info) return null
@@ -163,12 +169,14 @@ export class CoinexFuturesConnector extends BaseConnector {
    * follower_count/followerCount/copier_num, avatar/avatar_url.
    */
   normalize(raw: Record<string, unknown>): Record<string, unknown> {
+    // CoinEx returns profit_rate/winning_rate/mdd as decimals (1.0 = 100%)
+    // Always multiply by 100 to get percentage values
     const rawRoi = this.num(raw.roi ?? raw.roi_rate ?? raw.return_rate ?? raw.profit_rate)
-    const roi = rawRoi != null ? (Math.abs(rawRoi) <= 1 ? rawRoi * 100 : rawRoi) : null
+    const roi = rawRoi != null ? rawRoi * 100 : null
     const rawWr = this.num(raw.win_rate ?? raw.winRate ?? raw.winning_rate)
-    const winRate = rawWr != null ? (rawWr <= 1 ? rawWr * 100 : rawWr) : null
+    const winRate = rawWr != null ? rawWr * 100 : null
     const rawMdd = this.num(raw.max_drawdown ?? raw.maxDrawdown ?? raw.mdd)
-    const maxDrawdown = rawMdd != null ? Math.abs(rawMdd <= 1 ? rawMdd * 100 : rawMdd) : null
+    const maxDrawdown = rawMdd != null ? Math.abs(rawMdd * 100) : null
 
     return {
       trader_key: raw.trader_id ?? raw.traderId ?? raw.uid ?? raw.id ?? null,
@@ -178,10 +186,10 @@ export class CoinexFuturesConnector extends BaseConnector {
       pnl: this.num(raw.profit_amount ?? raw.pnl ?? raw.profit ?? raw.total_pnl_amount),
       win_rate: winRate,
       max_drawdown: maxDrawdown,
-      trades_count: null,
+      trades_count: this.num(raw.trade_count ?? raw.tradeCount ?? raw.trades_count),
       followers: this.num(raw.follower_count ?? raw.followerCount ?? raw.copier_num ?? raw.cur_follower_num),
       copiers: null,
-      aum: null,
+      aum: this.num(raw.aum),
       sharpe_ratio: null,
       platform_rank: null,
     }
