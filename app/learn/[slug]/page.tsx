@@ -129,6 +129,8 @@ export default async function LearnArticlePage({
         \u2190 Back to Learn
       </Link>
 
+      {/* SAFETY: article.content is static markdown from lib/data/learn-articles.ts (not user input).
+         renderMarkdown() is a simple markdown-to-HTML converter with no external content injection. */}
       <article
         dangerouslySetInnerHTML={{ __html: renderMarkdown(article.content) }}
       />
