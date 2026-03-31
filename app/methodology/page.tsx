@@ -3,6 +3,8 @@ import { Metadata } from 'next'
 import Link from 'next/link'
 import { BASE_URL } from '@/lib/constants/urls'
 
+export const revalidate = 3600 // ISR: 1 hour (static content)
+
 export const metadata: Metadata = {
   title: 'Arena Score Methodology — How We Rank Traders',
   description:

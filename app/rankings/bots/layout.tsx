@@ -1,6 +1,8 @@
 import type { Metadata } from 'next'
 import { BASE_URL } from '@/lib/constants/urls'
 
+export const revalidate = 600 // ISR: 10 min
+
 export const metadata: Metadata = {
   title: 'Crypto Trading Bot Rankings | AI Agents, DeFi Vaults & TG Bots',
   description:
