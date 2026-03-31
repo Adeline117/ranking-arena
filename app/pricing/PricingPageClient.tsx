@@ -285,6 +285,7 @@ export default function PricingPageClient({ lifetimeCount = 0 }: PricingPageClie
                 : resolved(t('signUpForPro'), 'signUpForPro', 'Sign Up for Pro')}
             </Link>
 
+            {process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY?.startsWith('pk_test') && (
             <div style={{
               marginTop: tokens.spacing[4],
               padding: `${tokens.spacing[3]} ${tokens.spacing[4]}`,
@@ -299,6 +300,7 @@ export default function PricingPageClient({ lifetimeCount = 0 }: PricingPageClie
                 ? '当前为测试环境（Sandbox），支付功能尚未正式上线，请勿使用真实信用卡。'
                 : 'Currently in Sandbox mode. Payment is not live yet — do not use real credit cards.'}
             </div>
+            )}
           </div>
         </div>
 
