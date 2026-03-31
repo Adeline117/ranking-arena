@@ -92,6 +92,23 @@ export async function writeDiscoverResult(
       // Use connector's normalize() to extract metrics from raw data
       const normalized = trader.raw ? connector.normalize(trader.raw) : {}
 
+      // Output validation: ensure trader_key is present and metrics are valid types
+      if (!trader.trader_key || typeof trader.trader_key !== 'string' || trader.trader_key.trim() === '') {
+        dataLogger.warn(`[adapter] Skipping trader with invalid trader_key from ${platform}: ${JSON.stringify(trader.trader_key)}`)
+        skipped++
+        continue
+      }
+      if (normalized.roi !== undefined && normalized.roi !== null && typeof normalized.roi !== 'number') {
+        dataLogger.warn(`[adapter] Skipping trader ${trader.trader_key} from ${platform}: roi is not a number (${typeof normalized.roi})`)
+        skipped++
+        continue
+      }
+      if (normalized.pnl !== undefined && normalized.pnl !== null && typeof normalized.pnl !== 'number') {
+        dataLogger.warn(`[adapter] Skipping trader ${trader.trader_key} from ${platform}: pnl is not a number (${typeof normalized.pnl})`)
+        skipped++
+        continue
+      }
+
       // Extract metrics with boundary validation
       const rawRoi = safeNum(normalized.roi)
       const rawPnl = safeNum(normalized.pnl)

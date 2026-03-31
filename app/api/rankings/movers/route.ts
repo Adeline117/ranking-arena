@@ -11,11 +11,9 @@
  * Cache: 1 hour (s-maxage=3600)
  */
 
-import { NextResponse } from 'next/server'
+import { NextRequest, NextResponse } from 'next/server'
 import { getSupabaseAdmin } from '@/lib/api'
-import { createLogger } from '@/lib/utils/logger'
-
-const log = createLogger('api:movers')
+import { checkRateLimit, RateLimitPresets } from '@/lib/utils/rate-limit'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -30,7 +28,10 @@ interface Mover {
   avatar_url: string | null
 }
 
-export async function GET() {
+export async function GET(request: NextRequest) {
+  const rateLimitResponse = await checkRateLimit(request, RateLimitPresets.public)
+  if (rateLimitResponse) return rateLimitResponse
+
   try {
     const supabase = getSupabaseAdmin()
 
@@ -100,7 +101,6 @@ export async function GET() {
           .eq('source', platform)
           .in('source_trader_id', traderKeys.slice(0, 500))
           .not('arena_score', 'is', null)
-          .or('is_outlier.is.null,is_outlier.eq.false')
           .limit(500)
         if (data) allCurrentRanks.push(...data)
       })
@@ -145,7 +145,7 @@ export async function GET() {
       { headers: { 'Cache-Control': 'public, s-maxage=3600, stale-while-revalidate=1800' } }
     )
   } catch (err) {
-    log.error('Error', { error: err instanceof Error ? err.message : String(err) })
+    console.error('[movers] Error:', err instanceof Error ? err.message : String(err))
     // SECURITY: Do not leak internal error details to client
     return NextResponse.json(
       {

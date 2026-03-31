@@ -26,6 +26,7 @@ export interface PipelineLogHandle {
   id: number
   success(recordsProcessed?: number, metadata?: Record<string, unknown>): Promise<void>
   error(err: unknown, metadata?: Record<string, unknown>): Promise<void>
+  partialSuccess(recordsProcessed: number, failedItems: string[], metadata?: Record<string, unknown>): Promise<void>
   timeout(metadata?: Record<string, unknown>): Promise<void>
 }
 
@@ -169,6 +170,35 @@ export class PipelineLogger {
             metadata: { ...metadata, ...meta, duration_ms: durationMs },
           }),
           'clickhouse-pipeline-log-success'
+        )
+      },
+      async partialSuccess(recordsProcessed = 0, failedItems: string[] = [], meta?: Record<string, unknown>) {
+        const durationMs = Date.now() - startedAt
+        const endedAt = new Date().toISOString()
+        await client
+          .from('pipeline_logs')
+          .update({
+            status: 'partial_success',
+            ended_at: endedAt,
+            records_processed: recordsProcessed,
+            error_message: failedItems.length > 0 ? `${failedItems.length} items failed: ${failedItems.slice(0, 20).join(', ')}` : null,
+            metadata: { ...metadata, ...meta, duration_ms: durationMs, failed_items: failedItems.slice(0, 50) },
+          })
+          .eq('id', logId)
+        // Ping healthchecks.io success (partial is still considered alive)
+        if (hcSlug) pingHealthcheck(hcSlug, 'success').catch((err) => {
+          logger.warn(`[PipelineLogger] Healthcheck success ping failed for ${hcSlug}: ${err instanceof Error ? err.message : String(err)}`)
+        })
+        // Dual-write to ClickHouse (fire-and-forget)
+        fireAndForget(
+          syncPipelineLog({
+            id: logId, job_name: jobName, status: 'partial_success',
+            started_at: new Date(startedAt).toISOString(), ended_at: endedAt,
+            duration_ms: durationMs, records_processed: recordsProcessed,
+            error_message: failedItems.length > 0 ? `${failedItems.length} items failed` : null,
+            metadata: { ...metadata, ...meta, duration_ms: durationMs, failed_items: failedItems.slice(0, 50) },
+          }),
+          'clickhouse-pipeline-log-partial-success'
         )
       },
       async error(err, meta) {
@@ -334,6 +364,9 @@ function createNoOpHandle(): PipelineLogHandle {
     async error(err: unknown) {
       const msg = err instanceof Error ? err.message : String(err)
       logger.error(`[PipelineLogger:no-op] error — ${msg}`)
+    },
+    async partialSuccess(recordsProcessed = 0, failedItems: string[] = []) {
+      console.warn(`[PipelineLogger:no-op] partial_success — ${recordsProcessed} processed, ${failedItems.length} failed`)
     },
     async timeout() {
       logger.warn('[PipelineLogger:no-op] timeout')

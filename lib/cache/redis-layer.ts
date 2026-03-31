@@ -370,8 +370,8 @@ export async function tieredGetOrSet<T>(
     if (staleEntry?.data !== undefined) {
       // Serve stale, refresh in background
       fetcher().then(fresh => {
-        tieredSet(key, fresh, tier, tags).catch(() => {})
-      }).catch(() => {})
+        tieredSet(key, fresh, tier, tags).catch(err => console.warn(`[redis-layer] SWR set failed for ${key}:`, err instanceof Error ? err.message : String(err)))
+      }).catch(err => console.warn(`[redis-layer] SWR fetch failed for ${key}:`, err instanceof Error ? err.message : String(err)))
       return staleEntry.data
     }
   }

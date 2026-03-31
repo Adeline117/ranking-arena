@@ -45,7 +45,7 @@ import { validatePlatform } from '@/lib/config/platforms'
 
 const DEAD_COUNTER_PREFIX = 'dead:consecutive:'
 const DEAD_COUNTER_TTL = 7 * 24 * 60 * 60 // 7 days in seconds
-const DEAD_THRESHOLD = 10 // consecutive failures before alerting
+const DEAD_THRESHOLD = 3 // consecutive failures before alerting (reduced from 10 for ~12h detection)
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 800 // Vercel Pro max: 10 minutes (was 300s = 5min)
@@ -159,7 +159,7 @@ export async function GET(request: NextRequest) {
   // Run a single platform via Connector
   async function runPlatform(platform: string): Promise<BatchResult> {
     const start = Date.now()
-    
+
     // 🚨 Blacklist check - prevent disabled platforms
     try {
       validatePlatform(platform)
@@ -167,6 +167,19 @@ export async function GET(request: NextRequest) {
       const errMsg = err instanceof Error ? err.message : String(err)
       logger.error(`[${platform}] ${errMsg}`)
       return { platform, status: 'error', error: errMsg, durationMs: 0 }
+    }
+
+    // Circuit breaker: skip platforms with recent consecutive failures
+    try {
+      const deadKey = `${DEAD_COUNTER_PREFIX}${platform}`
+      const countStr = await cache.get<number>(deadKey)
+      const recentFailures = typeof countStr === 'number' ? countStr : parseInt(String(countStr || '0'), 10)
+      if (recentFailures >= DEAD_THRESHOLD) {
+        logger.warn(`[batch-fetch-traders-${group}] Skipping ${platform}: ${recentFailures} consecutive failures (threshold: ${DEAD_THRESHOLD})`)
+        return { platform, status: 'error', durationMs: 0, error: `Skipped: ${recentFailures} consecutive failures (circuit breaker)` }
+      }
+    } catch (err) {
+      logger.warn(`[batch-fetch-traders-${group}] Failed to check dead counter for ${platform}`, { error: err instanceof Error ? err.message : String(err) })
     }
 
     const mapping = SOURCE_TO_CONNECTOR_MAP[platform]
@@ -210,18 +223,23 @@ export async function GET(request: NextRequest) {
 
       if (hasErrors && totalSaved === 0) {
         // Track consecutive failure for dead platform detection
-        const deadKey = `${DEAD_COUNTER_PREFIX}${platform}`
-        const count = await cache.incr(deadKey) ?? 0
-        if (count === 1) await cache.set(deadKey, count, { ttl: DEAD_COUNTER_TTL, skipMemory: true })
-        if (count >= DEAD_THRESHOLD) {
-          sendAlert({ title: `Dead platform detected: ${platform}`, message: `${platform} has failed ${count} consecutive times. Consider adding to DEAD_BLOCKED_PLATFORMS.`, level: 'critical', details: { platform, consecutiveFailures: count, group } }).catch(() => {})
+        try {
+          const deadKey = `${DEAD_COUNTER_PREFIX}${platform}`
+          const rawCount = await cache.incr(deadKey)
+          const count = typeof rawCount === 'number' ? rawCount : parseInt(String(rawCount || '0'), 10)
+          if (count === 1) await cache.set(deadKey, count, { ttl: DEAD_COUNTER_TTL, skipMemory: true })
+          if (count >= DEAD_THRESHOLD) {
+            sendAlert({ title: `Dead platform detected: ${platform}`, message: `${platform} has failed ${count} consecutive times. Consider adding to DEAD_BLOCKED_PLATFORMS.`, level: 'critical', details: { platform, consecutiveFailures: count, group } }).catch(err => logger.warn(`[batch-fetch-traders-${group}] Failed to send dead platform alert for ${platform}`, { error: err instanceof Error ? err.message : String(err) }))
+          }
+        } catch (counterErr) {
+          logger.warn(`[batch-fetch-traders-${group}] Failed to update dead counter for ${platform}`, { error: counterErr instanceof Error ? counterErr.message : String(counterErr) })
         }
         const errDetail = Object.entries(result.periods).filter(([, p]) => p.error).map(([k, p]) => `${k}: ${p.error}`).join('; ')
         return { platform, status: 'error', durationMs: Date.now() - start, totalSaved, error: errDetail, via: 'connector' }
       }
 
       // Success: reset dead platform counter
-      cache.del(`${DEAD_COUNTER_PREFIX}${platform}`).catch(() => {})
+      cache.del(`${DEAD_COUNTER_PREFIX}${platform}`).catch(err => logger.warn(`[batch-fetch-traders-${group}] Cache del failed for ${platform}`, { error: err instanceof Error ? err.message : String(err) }))
 
       return { platform, status: 'success', durationMs: Date.now() - start, totalSaved, via: 'connector' }
     } catch (err) {
@@ -237,11 +255,16 @@ export async function GET(request: NextRequest) {
       }
 
       // Track consecutive failure for dead platform detection
-      const deadKey = `${DEAD_COUNTER_PREFIX}${platform}`
-      const count = await cache.incr(deadKey) ?? 0
-      if (count === 1) await cache.set(deadKey, count, { ttl: DEAD_COUNTER_TTL, skipMemory: true })
-      if (count >= DEAD_THRESHOLD) {
-        sendAlert({ title: `Dead platform detected: ${platform}`, message: `${platform} has failed ${count} consecutive times. Consider adding to DEAD_BLOCKED_PLATFORMS.\nLast error: ${errMsg.substring(0, 200)}`, level: 'critical', details: { platform, consecutiveFailures: count, group } }).catch(() => {})
+      try {
+        const deadKey = `${DEAD_COUNTER_PREFIX}${platform}`
+        const rawCount = await cache.incr(deadKey)
+        const count = typeof rawCount === 'number' ? rawCount : parseInt(String(rawCount || '0'), 10)
+        if (count === 1) await cache.set(deadKey, count, { ttl: DEAD_COUNTER_TTL, skipMemory: true })
+        if (count >= DEAD_THRESHOLD) {
+          sendAlert({ title: `Dead platform detected: ${platform}`, message: `${platform} has failed ${count} consecutive times. Consider adding to DEAD_BLOCKED_PLATFORMS.\nLast error: ${errMsg.substring(0, 200)}`, level: 'critical', details: { platform, consecutiveFailures: count, group } }).catch(err => logger.warn(`[batch-fetch-traders-${group}] Failed to send dead platform alert for ${platform}`, { error: err instanceof Error ? err.message : String(err) }))
+        }
+      } catch (counterErr) {
+        logger.warn(`[batch-fetch-traders-${group}] Failed to update dead counter for ${platform}`, { error: counterErr instanceof Error ? counterErr.message : String(counterErr) })
       }
 
       return { platform, status: 'error', durationMs: Date.now() - start, error: errMsg, via: 'connector' }

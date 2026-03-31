@@ -31,6 +31,8 @@ export async function GET(request: NextRequest) {
   const plog = await PipelineLogger.start('cleanup-data')
 
   try {
+    const stepErrors: string[] = []
+
     // Step 1: Cleanup old trader_snapshots_v2 rows (keep 180 days)
     let snapshotsV2Cleaned = 0
     try {
@@ -62,6 +64,7 @@ export async function GET(request: NextRequest) {
       }
     } catch (err) {
       logger.warn(`[cleanup-data] snapshots_v2 cleanup failed: ${err}`)
+      stepErrors.push(`snapshots_v2: ${err instanceof Error ? err.message : String(err)}`)
     }
 
     // Step 2: Cleanup old trader_daily_snapshots rows (keep 365 days)
@@ -88,6 +91,7 @@ export async function GET(request: NextRequest) {
       }
     } catch (err) {
       logger.warn(`[cleanup-data] daily_snapshots cleanup failed: ${err}`)
+      stepErrors.push(`daily_snapshots: ${err instanceof Error ? err.message : String(err)}`)
     }
 
     // Step 2b: Cleanup old hot_topics (>180 days)
@@ -186,6 +190,7 @@ export async function GET(request: NextRequest) {
       logger.info(`[cleanup-data] Metrics refresh: sharpe=${metricsResult.sharpeUpdated}, wr=${metricsResult.winRateUpdated}, mdd=${metricsResult.maxDrawdownUpdated}, score=${metricsResult.arenaScoreUpdated}`)
     } catch (err) {
       logger.warn(`[cleanup-data] Metrics refresh failed: ${err}`)
+      stepErrors.push(`metrics_refresh: ${err instanceof Error ? err.message : String(err)}`)
     }
 
     // Step 4: Run orphaned/stale data cleanup via RPC
@@ -210,13 +215,15 @@ export async function GET(request: NextRequest) {
       }
     } catch (err) {
       logger.warn(`[cleanup-data] cleanup_stale_data failed: ${err}`)
+      stepErrors.push(`stale_data_cleanup: ${err instanceof Error ? err.message : String(err)}`)
     }
 
     const duration = Date.now() - startTime
+    const hasErrors = stepErrors.length > 0
 
     const totalCleaned = snapshotsV2Cleaned + dailySnapshotsCleaned + hotTopicsCleaned + flashNewsCleaned + notificationsCleaned + positionsCleaned
 
-    await plog.success(totalCleaned, {
+    const resultMeta = {
       snapshotsV2Cleaned,
       dailySnapshotsCleaned,
       hotTopicsCleaned,
@@ -225,17 +232,18 @@ export async function GET(request: NextRequest) {
       positionsCleaned,
       metricsRefresh: metricsResult,
       staleDataCleanup,
-    })
+      stepErrors: hasErrors ? stepErrors : undefined,
+    }
+
+    if (hasErrors) {
+      await plog.partialSuccess(totalCleaned, stepErrors, resultMeta)
+    } else {
+      await plog.success(totalCleaned, resultMeta)
+    }
 
     return NextResponse.json({
-      success: true,
-      snapshotsV2Cleaned,
-      dailySnapshotsCleaned,
-      hotTopicsCleaned,
-      flashNewsCleaned,
-      notificationsCleaned,
-      metricsRefresh: metricsResult,
-      staleDataCleanup,
+      success: !hasErrors,
+      ...resultMeta,
       duration: `${duration}ms`,
     })
   } catch (error) {

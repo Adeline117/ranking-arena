@@ -273,7 +273,7 @@ export async function getOrSet<T>(
           errors: result.error.issues.slice(0, 3),
         })
         // Evict invalid cache entry
-        del(key).catch(() => {})
+        del(key).catch(err => dataLogger.warn(`[Cache] Failed to evict invalid cache entry for ${key}`, { error: String(err) }))
       } else {
         return result.data
       }
@@ -290,9 +290,9 @@ export async function getOrSet<T>(
     if (staleData !== null) {
       // Serve stale, refresh in background
       fetcher().then(fresh => {
-        set(key, fresh, options).catch(() => {})
+        set(key, fresh, options).catch(err => dataLogger.warn(`[Cache] Stale revalidation set failed for ${key}`, { error: String(err) }))
         memoryCache.set(`stale:${key}`, fresh, (options.ttl || 120) + options.staleTtl!)
-      }).catch(() => {})
+      }).catch(err => dataLogger.warn(`[Cache] Stale revalidation fetch failed for ${key}`, { error: String(err) }))
       return staleData
     }
   }
@@ -386,7 +386,7 @@ export async function getOrSetWithLock<T>(
           return data
         } finally {
           // 释放锁
-          await redis.del(lockKey).catch(() => {}) // eslint-disable-line no-restricted-syntax -- lock release, non-critical
+          await redis.del(lockKey).catch(err => dataLogger.warn(`[Cache] Lock release failed for ${lockKey}`, { error: String(err) }))
         }
       }
 
