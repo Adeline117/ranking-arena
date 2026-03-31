@@ -1,35 +1,42 @@
 /**
  * dYdX v4 Enrichment Module
  *
- * Uses dYdX indexer for equity curves (historical PnL) and subaccount data.
- * Also fetches win_rate + trade counts from Copin API.
+ * 2026-03-31: Rewrote to use Copin API as sole data source.
+ * The dYdX indexer (indexer.dydx.trade) has been dead/TCP-hanging since ~2026-03,
+ * causing 30+ minute hangs that bypass fetch timeouts at the TCP level.
+ * All indexer calls removed. Copin provides stats, equity curve, and position data.
+ *
+ * Hard 8s AbortSignal.timeout() on every fetch to guarantee fail-fast.
  */
 
 import type { EquityCurvePoint, StatsDetail, PositionHistoryItem } from './enrichment-types'
-import { fetchWithProxyFallback } from './enrichment-types'
-import { fetchJson } from './shared'
 import { logger } from '@/lib/logger'
 
-const INDEXER_URL = 'https://indexer.dydx.trade'
-const PROXY_URL = process.env.CLOUDFLARE_PROXY_URL || 'https://ranking-arena-proxy.broosbook.workers.dev'
+// Hard timeout for ALL fetch calls — uses AbortSignal.timeout() which works at runtime level
+// even when TCP hangs (unlike setTimeout + AbortController which can fail on TCP stalls)
+const FETCH_TIMEOUT_MS = 8_000
 
-interface DydxHistoricalPnl {
-  equity: string
-  totalPnl: string
-  netTransfers: string
-  createdAt: string
+// Copin API — reliable, fast, covers dYdX traders
+const COPIN_BASE = 'https://api.copin.io'
+
+const DEFAULT_HEADERS: Record<string, string> = {
+  'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36',
+  'Accept': 'application/json',
 }
 
-interface DydxHistoricalPnlResponse {
-  historicalPnl?: DydxHistoricalPnl[]
-}
-
-interface DydxSubaccountResponse {
-  subaccount?: {
-    equity?: string
-    freeCollateral?: string
-    openPerpetualPositions?: Record<string, unknown>
+/**
+ * Hard-timeout fetch wrapper using AbortSignal.timeout().
+ * This is more reliable than setTimeout + AbortController for TCP-level hangs.
+ */
+async function hardFetch<T>(url: string, timeoutMs = FETCH_TIMEOUT_MS): Promise<T> {
+  const res = await fetch(url, {
+    headers: DEFAULT_HEADERS,
+    signal: AbortSignal.timeout(timeoutMs),
+  })
+  if (!res.ok) {
+    throw new Error(`HTTP ${res.status} from ${url.slice(0, 100)}`)
   }
+  return (await res.json()) as T
 }
 
 // Copin trader detail API for win/loss stats
@@ -39,62 +46,85 @@ interface CopinTraderDetail {
   totalLose?: number
   totalVolume?: number
   totalPnl?: number
+  totalRealisedPnl?: number
   maxDrawdown?: number
+  account?: string
+}
+
+interface CopinPositionDetail {
+  account?: string
+  openBlockTime?: string
+  closeBlockTime?: string
+  pair?: string
+  isLong?: boolean
+  size?: number
+  collateral?: number
+  leverage?: number
+  pnl?: number
+  roi?: number
+  fee?: number
+  status?: string
+  averagePrice?: number
+  entryPrice?: number
+  closePrice?: number
 }
 
 /**
- * Fetch equity curve from dYdX indexer historical PnL endpoint.
+ * Fetch equity curve from Copin position history.
+ * Builds daily PnL curve from closed positions.
  */
 export async function fetchDydxEquityCurve(
   address: string,
   days: number
 ): Promise<EquityCurvePoint[]> {
   try {
-    let historicalPnl: DydxHistoricalPnl[] | undefined
+    // Copin position list — get closed positions for this trader
+    const url = `${COPIN_BASE}/DYDX/position/filter?accounts=${address}&status=CLOSE&limit=500&sort_by=closeBlockTime&sort_type=desc`
+    const data = await hardFetch<{ data?: CopinPositionDetail[] }>(url)
 
-    // Try proxy first (geo-blocking)
-    try {
-      const proxyUrl = `${PROXY_URL}/dydx/historical-pnl?address=${address}&subaccountNumber=0&limit=${days}`
-      const data = await fetchJson<DydxHistoricalPnlResponse>(proxyUrl, { timeoutMs: 5000 })
-      historicalPnl = data?.historicalPnl
-    } catch {
-      // Intentionally swallowed: VPS proxy for dYdX historical PnL failed, fall through to direct indexer
+    if (!data?.data || data.data.length === 0) {
+      // Fallback: try stats endpoint for at least a 2-point curve
+      return await fetchEquityCurveFromStats(address, days)
     }
 
-    if (!historicalPnl || historicalPnl.length === 0) {
-      const directUrl = `${INDEXER_URL}/v4/historical-pnl?address=${address}&subaccountNumber=0&limit=${days}`
-      const directData = await fetchJson<DydxHistoricalPnlResponse>(directUrl, { timeoutMs: 5000 })
-      historicalPnl = directData?.historicalPnl
+    const positions = data.data
+
+    // Build daily cumulative PnL from closed positions
+    const cutoffDate = new Date()
+    cutoffDate.setDate(cutoffDate.getDate() - days)
+    const cutoff = cutoffDate.toISOString()
+
+    const dailyPnl = new Map<string, number>()
+    for (const pos of positions) {
+      const closeTime = pos.closeBlockTime
+      if (!closeTime || closeTime < cutoff) continue
+      const date = closeTime.split('T')[0]
+      const pnl = pos.pnl ?? 0
+      dailyPnl.set(date, (dailyPnl.get(date) ?? 0) + pnl)
     }
 
-    if (!historicalPnl || historicalPnl.length === 0) return []
-
-    // Convert to equity curve format (API returns newest first, reverse for ascending)
-    const points = historicalPnl
-      .map((h) => ({
-        date: h.createdAt.split('T')[0],
-        roi: 0,
-        pnl: parseFloat(h.totalPnl) || 0,
-      }))
-      .reverse()
-
-    // Deduplicate by date (keep last per day)
-    const dateMap = new Map<string, EquityCurvePoint>()
-    for (const p of points) {
-      dateMap.set(p.date, p)
+    if (dailyPnl.size === 0) {
+      return await fetchEquityCurveFromStats(address, days)
     }
-    const deduped = [...dateMap.values()].sort((a, b) => a.date.localeCompare(b.date))
+
+    // Sort by date and compute cumulative
+    const sortedDates = [...dailyPnl.entries()].sort((a, b) => a[0].localeCompare(b[0]))
+    let cumPnl = 0
+    const points: EquityCurvePoint[] = sortedDates.map(([date, pnl]) => {
+      cumPnl += pnl
+      return { date, roi: 0, pnl: cumPnl }
+    })
 
     // Compute ROI relative to first point
-    if (deduped.length >= 2) {
-      const initialPnl = deduped[0].pnl ?? 0
-      for (const point of deduped) {
+    if (points.length >= 2) {
+      const initialPnl = points[0].pnl ?? 0
+      for (const point of points) {
         const pnlDiff = (point.pnl ?? 0) - initialPnl
         point.roi = initialPnl !== 0 ? (pnlDiff / Math.abs(initialPnl)) * 100 : 0
       }
     }
 
-    return deduped
+    return points
   } catch (err) {
     logger.warn(`[dydx] Equity curve failed for ${address}: ${err instanceof Error ? err.message : String(err)}`)
     return []
@@ -102,36 +132,54 @@ export async function fetchDydxEquityCurve(
 }
 
 /**
- * Fetch stats for a dYdX trader.
- * Combines:
- * - dYdX indexer subaccount for AUM
- * - Copin API for win/loss/trade counts
+ * Fallback: build a minimal equity curve from Copin stats (2-point: start and current).
+ */
+async function fetchEquityCurveFromStats(address: string, days: number): Promise<EquityCurvePoint[]> {
+  try {
+    const statisticType = days <= 7 ? 'WEEK' : 'MONTH'
+    const url = `${COPIN_BASE}/DYDX/position/statistic/filter?accounts=${address}&statisticType=${statisticType}`
+    const data = await hardFetch<{ data?: CopinTraderDetail[] }>(url)
+
+    if (!data?.data || data.data.length === 0) return []
+
+    const stats = data.data[0]
+    const totalPnl = stats.totalPnl ?? stats.totalRealisedPnl ?? 0
+    if (totalPnl === 0) return []
+
+    const today = new Date().toISOString().split('T')[0]
+    const startDate = new Date()
+    startDate.setDate(startDate.getDate() - days)
+    const start = startDate.toISOString().split('T')[0]
+
+    return [
+      { date: start, roi: 0, pnl: 0 },
+      { date: today, roi: 0, pnl: totalPnl },
+    ]
+  } catch {
+    return []
+  }
+}
+
+/**
+ * Fetch stats for a dYdX trader from Copin API.
+ * No indexer calls — Copin provides all needed stats.
  */
 export async function fetchDydxStatsDetail(
   address: string
 ): Promise<StatsDetail | null> {
   try {
-    // Fetch subaccount and Copin stats in parallel (with error tolerance)
-    const results = await Promise.allSettled([
-      fetchSubaccountEquity(address),
-      fetchCopinTraderStats(address),
-    ])
-    
-    const equity = results[0].status === 'fulfilled' ? results[0].value : null
-    const copinStats = results[1].status === 'fulfilled' ? results[1].value : null
-    
-    if (results[0].status === 'rejected') {
-      console.error(`dYdX equity fetch failed for ${address}:`, results[0].reason)
-    }
-    if (results[1].status === 'rejected') {
-      console.error(`dYdX Copin stats fetch failed for ${address}:`, results[1].reason)
-    }
+    const copinStats = await fetchCopinTraderStats(address)
+    if (!copinStats) return null
 
-    const totalTrades = copinStats?.totalTrade ?? null
-    const totalWin = copinStats?.totalWin ?? null
-    const totalLose = copinStats?.totalLose ?? null
+    const totalTrades = copinStats.totalTrade ?? null
+    const totalWin = copinStats.totalWin ?? null
     const profitableTradesPct = totalTrades && totalTrades > 0 && totalWin != null
       ? (totalWin / totalTrades) * 100
+      : null
+
+    // Estimate AUM from totalVolume / assumed leverage
+    const aum = copinStats.totalVolume && copinStats.totalVolume > 0
+      ? Math.round(copinStats.totalVolume / 5) // ~5x avg leverage estimate
       : null
 
     return {
@@ -143,12 +191,12 @@ export async function fetchDydxStatsDetail(
       largestWin: null,
       largestLoss: null,
       sharpeRatio: null, // Computed from equity curve
-      maxDrawdown: copinStats?.maxDrawdown != null ? Math.abs(copinStats.maxDrawdown) : null,
+      maxDrawdown: copinStats.maxDrawdown != null ? Math.abs(copinStats.maxDrawdown) : null,
       currentDrawdown: null,
       volatility: null,
       copiersCount: null,
       copiersPnl: null,
-      aum: equity,
+      aum,
       winningPositions: totalWin,
       totalPositions: totalTrades,
     }
@@ -158,34 +206,10 @@ export async function fetchDydxStatsDetail(
   }
 }
 
-async function fetchSubaccountEquity(address: string): Promise<number | null> {
-  try {
-    const proxyUrl = `${PROXY_URL}/dydx/subaccount?address=${address}&subaccountNumber=0`
-    const data = await fetchJson<DydxSubaccountResponse>(proxyUrl, { timeoutMs: 5000 })
-    if (data?.subaccount?.equity) {
-      return parseFloat(data.subaccount.equity)
-    }
-  } catch {
-    // Intentionally swallowed: VPS proxy for dYdX equity failed, fall through to direct indexer
-  }
-
-  try {
-    const directUrl = `${INDEXER_URL}/v4/addresses/${address}/subaccounts/0`
-    const data = await fetchJson<DydxSubaccountResponse>(directUrl, { timeoutMs: 5000 })
-    if (data?.subaccount?.equity) {
-      return parseFloat(data.subaccount.equity)
-    }
-  } catch (err) {
-    logger.warn(`[dydx] Subaccount equity failed: ${err instanceof Error ? err.message : String(err)}`)
-  }
-  return null
-}
-
 async function fetchCopinTraderStats(address: string): Promise<CopinTraderDetail | null> {
   try {
-    // Copin provides aggregated stats for dYdX traders
-    const url = `https://api.copin.io/DYDX/position/statistic/filter?accounts=${address}&statisticType=MONTH`
-    const data = await fetchJson<{ data?: CopinTraderDetail[] }>(url, { timeoutMs: 5000 })
+    const url = `${COPIN_BASE}/DYDX/position/statistic/filter?accounts=${address}&statisticType=MONTH`
+    const data = await hardFetch<{ data?: CopinTraderDetail[] }>(url)
     if (data?.data && data.data.length > 0) {
       return data.data[0]
     }
@@ -196,66 +220,39 @@ async function fetchCopinTraderStats(address: string): Promise<CopinTraderDetail
 }
 
 // ============================================
-// dYdX v4 Fills API — Position History
+// dYdX Position History via Copin
 // ============================================
 
-interface DydxFill {
-  id: string
-  side: 'BUY' | 'SELL'
-  type: string
-  market: string
-  marketType: string
-  price: string
-  size: string
-  fee: string
-  createdAt: string
-}
-
-interface DydxFillsResponse {
-  fills?: DydxFill[]
-}
-
 /**
- * Fetch position history from dYdX v4 fills API.
- *
- * Endpoint: GET /v4/fills?address={dydx_address}&subaccountNumber=0&limit=100
- * Geo-blocked — uses fetchWithProxyFallback (VPS/CF proxy).
- *
- * Each fill is mapped as an individual position entry (BUY=long, SELL=short).
+ * Fetch position history from Copin API.
+ * Replaces dYdX indexer fills API which TCP-hangs.
  */
 export async function fetchDydxV4PositionHistory(
   address: string
 ): Promise<PositionHistoryItem[]> {
   try {
-    const url = `${INDEXER_URL}/v4/fills?address=${address}&subaccountNumber=0&limit=100`
-    const data = await fetchWithProxyFallback<DydxFillsResponse>(url, { timeoutMs: 6000 })
+    const url = `${COPIN_BASE}/DYDX/position/filter?accounts=${address}&limit=100&sort_by=closeBlockTime&sort_type=desc`
+    const data = await hardFetch<{ data?: CopinPositionDetail[] }>(url)
 
-    if (!data?.fills || data.fills.length === 0) return []
+    if (!data?.data || data.data.length === 0) return []
 
-    return data.fills.map((fill) => {
-      const price = parseFloat(fill.price) || null
-      const size = parseFloat(fill.size) || null
-      const fee = parseFloat(fill.fee) || 0
-      const notional = price && size ? price * size : null
-
-      return {
-        symbol: fill.market || 'UNKNOWN',
-        direction: fill.side === 'BUY' ? 'long' as const : 'short' as const,
-        positionType: fill.marketType === 'PERPETUAL' ? 'perpetual' : fill.marketType?.toLowerCase() || 'perpetual',
-        marginMode: 'cross',
-        openTime: fill.createdAt || null,
-        closeTime: null, // Fills don't have a close time — each fill is a single event
-        entryPrice: price,
-        exitPrice: null,
-        maxPositionSize: notional,
-        closedSize: size,
-        pnlUsd: fee !== 0 ? -fee : null, // Fee is the only PnL indicator per fill
-        pnlPct: null,
-        status: 'filled',
-      }
-    })
+    return data.data.map((pos) => ({
+      symbol: pos.pair || 'UNKNOWN',
+      direction: pos.isLong ? 'long' as const : 'short' as const,
+      positionType: 'perpetual',
+      marginMode: 'cross',
+      openTime: pos.openBlockTime || null,
+      closeTime: pos.closeBlockTime || null,
+      entryPrice: pos.entryPrice ?? pos.averagePrice ?? null,
+      exitPrice: pos.closePrice ?? null,
+      maxPositionSize: pos.size ?? null,
+      closedSize: pos.size ?? null,
+      pnlUsd: pos.pnl ?? null,
+      pnlPct: pos.roi != null ? pos.roi * 100 : null,
+      status: pos.status === 'CLOSE' ? 'closed' : (pos.status?.toLowerCase() || 'filled'),
+    }))
   } catch (err) {
-    logger.warn(`[dydx] V4 fills failed for ${address}: ${err instanceof Error ? err.message : String(err)}`)
+    logger.warn(`[dydx] Position history failed for ${address}: ${err instanceof Error ? err.message : String(err)}`)
     return []
   }
 }

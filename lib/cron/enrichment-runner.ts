@@ -513,9 +513,8 @@ export const NO_ENRICHMENT_PLATFORMS = new Set([
   'bybit_spot',   // metricValues has ROI/WR/MDD/Sharpe, VPS trader-detail doesn't support spot leaderMark
   'binance_web3', // wallet-based, no per-trader detail API, all metrics from leaderboard
   'web3_bot',     // small platform (19 traders), all metrics from leaderboard
-  // 2026-03-28: dydx disabled — indexer API causes 30+ minute hangs despite 5s fetch timeouts
-  // Root cause unknown (possibly DNS/TCP level hang). Re-enable after investigation.
-  'dydx',
+  // 2026-03-31: dydx RE-ENABLED — rewrote enrichment to use Copin API only (no indexer calls)
+  // Root cause was TCP-level hangs on indexer.dydx.trade that bypass fetch timeouts
   // kucoin: REMOVED — now has dedicated enrichment module (2026-03-19)
   // weex: RE-ENABLED — ndaysReturnRates from VPS scraper leaderboard = equity curve
   // bingx_spot: REMOVED — now uses daily snapshot fallback for equity curves (2026-03-19)
