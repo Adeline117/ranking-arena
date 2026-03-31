@@ -498,8 +498,24 @@ export async function searchTraders(supabase: SupabaseClient, params: {
       platform_filter: platform || null,
     })
     if (!fuzzyErr && fuzzyData && fuzzyData.length > 0) {
-      sourcesData = fuzzyData
-      usedFuzzy = true
+      // Filter out false positives: require either a substring match OR a high
+      // relevance score (>= 50 means meaningful trigram similarity beyond just
+      // the arena_score/followers boost which maxes ~250 for popular traders).
+      const qLower = sanitizedQuery.toLowerCase()
+      type FuzzyResult = { source_trader_id: string; handle: string | null; source: string; avatar_url: string | null; relevance_score?: number }
+      const filtered = (fuzzyData as FuzzyResult[]).filter(t => {
+        const handle = (t.handle || '').toLowerCase()
+        const id = t.source_trader_id.toLowerCase()
+        const hasSubstringMatch = handle.includes(qLower) || id.includes(qLower)
+        // relevance_score >= 50 means real trigram similarity (similarity * 50 alone can give ~25 max)
+        // so 50+ means a decent fuzzy match plus some other signal
+        const hasHighRelevance = (t.relevance_score ?? 0) >= 50
+        return hasSubstringMatch || hasHighRelevance
+      })
+      if (filtered.length > 0) {
+        sourcesData = filtered
+        usedFuzzy = true
+      }
     }
   } catch {
     // RPC not available (migration not applied), fall through to ILIKE
@@ -560,16 +576,20 @@ export async function searchTraders(supabase: SupabaseClient, params: {
       const idLower = t.source_trader_id.toLowerCase()
 
       // Multi-tier relevance scoring
-      let relevance = 0
-      if (handleLower === queryLower || idLower === queryLower) relevance += 10000
-      if (handleLower.startsWith(queryLower) || idLower.startsWith(queryLower)) relevance += 1000
-      if (handleLower.includes(queryLower) || idLower.includes(queryLower)) relevance += 100
-      if (usedFuzzy && t.relevance_score != null) relevance += t.relevance_score
+      let textRelevance = 0
+      if (handleLower === queryLower || idLower === queryLower) textRelevance += 10000
+      if (handleLower.startsWith(queryLower) || idLower.startsWith(queryLower)) textRelevance += 1000
+      if (handleLower.includes(queryLower) || idLower.includes(queryLower)) textRelevance += 100
+      if (usedFuzzy && t.relevance_score != null) textRelevance += t.relevance_score
       const arenaScore = scoreRow ? Number(scoreRow.arena_score) : 0
-      relevance += arenaScore * 0.1
+      const relevance = textRelevance + arenaScore * 0.1
 
-      return { source: t, scoreRow, relevance }
+      return { source: t, scoreRow, relevance, textRelevance }
     })
+    // Filter out results with no meaningful text relevance — prevents false positives
+    // from low trigram similarity matches that only rank due to arena score boost.
+    // A textRelevance of 0 means no substring match AND no fuzzy score at all.
+    .filter(r => r.textRelevance > 0)
     .sort((a, b) => b.relevance - a.relevance)
     .slice(0, limit)
 
