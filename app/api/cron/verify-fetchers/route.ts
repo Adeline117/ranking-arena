@@ -91,10 +91,22 @@ export async function GET(request: Request) {
         { verifyResult: result as unknown as Record<string, unknown> }
       )
 
-      // Check consecutive failures
+      // Check consecutive failures with error classification
       const consecutiveFails = await PipelineLogger.getConsecutiveFailures(jobKey)
 
-      if (consecutiveFails >= CONSECUTIVE_FAIL_THRESHOLD) {
+      // Error classification: permanent errors (auth) trigger faster, transient (timeout/5xx) slower
+      const isPermanentError = result.failureReason === 'auth_required' ||
+        result.failureReason === 'endpoint_gone' ||
+        (result.details && /401|403/.test(result.details))
+      const isTransientError = result.failureReason === 'timeout' ||
+        result.failureReason === 'rate_limited' ||
+        (result.details && /50[0-9]|timeout/i.test(result.details))
+
+      // Permanent errors alert faster (2 failures), transient need more evidence
+      const effectiveThreshold = isPermanentError ? 2 :
+        isTransientError ? CONSECUTIVE_FAIL_THRESHOLD + 1 : CONSECUTIVE_FAIL_THRESHOLD
+
+      if (consecutiveFails >= effectiveThreshold) {
         alertsPlatforms.push(result.platform)
 
         const isCritical = CRITICAL_PLATFORMS.has(result.platform)
