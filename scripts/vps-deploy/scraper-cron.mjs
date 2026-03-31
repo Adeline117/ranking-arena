@@ -61,16 +61,23 @@ const PLATFORMS = {
     },
     pageSize: 100,
     extractList: (data) => data?.data?.traderList || [],
-    normalize: (raw) => ({
-      trader_key: String(raw.traderUid || raw.traderId || ''),
-      display_name: raw.nickName || raw.traderName || null,
-      roi: num(raw.profitRate ?? raw.returnRate),
-      pnl: num(raw.totalProfit ?? raw.allTotalRevenue),
-      win_rate: num(raw.winRate ?? raw.winningRate),
-      max_drawdown: num(raw.maxDrawdown),
-      sharpe_ratio: null,
-      followers: num(raw.followerCount ?? raw.traceNum),
-    }),
+    normalize: (raw) => {
+      // traderList API returns profitRate/returnRate as decimal ratios (0.155 = 15.5%)
+      // and winningRate as decimal (0.72 = 72%). Must convert to percentage.
+      const rawRoi = num(raw.profitRate ?? raw.returnRate)
+      const rawWr = num(raw.winningRate)
+      const rawMdd = num(raw.maxDrawdown)
+      return {
+        trader_key: String(raw.traderUid || raw.traderId || ''),
+        display_name: raw.nickName || raw.traderName || null,
+        roi: rawRoi != null ? rawRoi * 100 : null,
+        pnl: num(raw.totalProfit ?? raw.allTotalRevenue),
+        win_rate: raw.winRate != null ? num(raw.winRate) : (rawWr != null ? rawWr * 100 : null),
+        max_drawdown: rawMdd != null && Math.abs(rawMdd) <= 1 ? rawMdd * 100 : rawMdd,
+        sharpe_ratio: null,
+        followers: num(raw.followerCount ?? raw.traceNum),
+      }
+    },
   },
 
   mexc: {
