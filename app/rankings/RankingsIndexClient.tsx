@@ -32,13 +32,14 @@ function isCex(source: string): boolean {
   return config.sourceType === 'futures' || config.sourceType === 'spot'
 }
 
-export default function RankingsIndexClient() {
+export default function RankingsIndexClient({ initialPlatforms = [] }: { initialPlatforms?: PlatformStat[] }) {
   const { t } = useLanguage()
-  const [platforms, setPlatforms] = useState<PlatformStat[]>([])
-  const [loading, setLoading] = useState(true)
+  const [platforms, setPlatforms] = useState<PlatformStat[]>(initialPlatforms)
+  const [loading, setLoading] = useState(initialPlatforms.length === 0)
   const [tab, setTab] = useState<TabType>('all')
 
   useEffect(() => {
+    // Refresh client-side (non-blocking) even when SSR data exists
     fetch('/api/rankings/platform-stats')
       .then(r => r.json())
       .then(data => { if (data.platforms) setPlatforms(data.platforms) })
