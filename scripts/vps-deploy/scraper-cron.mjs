@@ -203,14 +203,14 @@ function log(msg) {
 // Scraper client
 // ============================================
 
-async function callScraper(endpoint, params = {}) {
+async function callScraper(endpoint, params = {}, timeoutMs = 180000) {
   const url = new URL(endpoint, SCRAPER_URL)
   for (const [k, v] of Object.entries(params)) {
     url.searchParams.set(k, String(v))
   }
 
   const controller = new AbortController()
-  const timeout = setTimeout(() => controller.abort(), 120000)
+  const timeout = setTimeout(() => controller.abort(), timeoutMs)
 
   try {
     const res = await fetch(url.toString(), {
@@ -403,7 +403,9 @@ async function fetchPlatform(platformKey) {
         params.timeType = periodKey
       }
 
-      const data = await callScraper(config.endpoint, params)
+      // MEXC scraper is slow (30-90s per request due to CF challenge solving)
+      const scraperTimeout = platformKey === 'mexc' ? 180000 : 120000
+      const data = await callScraper(config.endpoint, params, scraperTimeout)
       const rawList = config.extractList(data)
 
       if (!rawList.length) {
