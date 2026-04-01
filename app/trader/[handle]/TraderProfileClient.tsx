@@ -607,7 +607,11 @@ export default function TraderProfileClient({ data, serverTraderData, claimedUse
                   const calmar = (perf?.calmar_ratio as number | null) ?? data.calmar_ratio ?? null
                   const profitFactor = (perf?.profit_factor as number | null) ?? data.profit_factor ?? null
                   const avgHolding = (perf?.avg_holding_time_hours as number | null) ?? data.avg_holding_hours ?? null
-                  if (sortino == null && calmar == null && profitFactor == null) return null
+                  const avgProfitVal = (perf?.avg_profit as number | null) ?? null
+                  const avgLossVal = (perf?.avg_loss as number | null) ?? null
+                  const lWin = (perf?.largest_win as number | null) ?? null
+                  const lLoss = (perf?.largest_loss as number | null) ?? null
+                  if (sortino == null && calmar == null && profitFactor == null && avgProfitVal == null && lWin == null) return null
                   return (
                     <AdvancedMetricsCard
                       metrics={{
@@ -621,6 +625,10 @@ export default function TraderProfileClient({ data, serverTraderData, claimedUse
                         volatility_pct: null,
                         downside_volatility_pct: null,
                       }}
+                      avgProfit={avgProfitVal}
+                      avgLoss={avgLossVal}
+                      largestWin={lWin}
+                      largestLoss={lLoss}
                     />
                   )
                 })()}

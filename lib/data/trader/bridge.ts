@@ -101,6 +101,12 @@ export function toTraderPageData(detail: TraderDetail): Record<string, unknown> 
     execution_score: t.executionScore ?? null,
     // Avg holding time
     avg_holding_time_hours: t.avgHoldingHours ?? detail.stats?.avgHoldingHours ?? null,
+    // Largest win/loss
+    largest_win: detail.stats?.largestWin ?? null,
+    largest_loss: detail.stats?.largestLoss ?? null,
+    // Avg profit/loss for risk/reward ratio
+    avg_profit: detail.stats?.avgProfit ?? null,
+    avg_loss: detail.stats?.avgLoss ?? null,
   }
 
   // Stats (matches TraderStats interface)

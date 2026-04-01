@@ -10,6 +10,14 @@ import type { TraderAdvancedMetrics } from '@/lib/types/unified-trader'
 export interface AdvancedMetricsCardProps {
   metrics: TraderAdvancedMetrics
   isLoading?: boolean
+  /** Average profit per trade (percentage) for risk/reward ratio */
+  avgProfit?: number | null
+  /** Average loss per trade (percentage) for risk/reward ratio */
+  avgLoss?: number | null
+  /** Largest single trade win (USD) */
+  largestWin?: number | null
+  /** Largest single trade loss (USD) */
+  largestLoss?: number | null
 }
 
 /**
@@ -27,6 +35,10 @@ export interface AdvancedMetricsCardProps {
 export default function AdvancedMetricsCard({
   metrics,
   isLoading = false,
+  avgProfit,
+  avgLoss,
+  largestWin,
+  largestLoss,
 }: AdvancedMetricsCardProps) {
   const { t } = useLanguage()
   const [isVisible, setIsVisible] = useState(false)
@@ -196,6 +208,29 @@ export default function AdvancedMetricsCard({
             </svg>
           }
         />
+
+        {/* Risk/Reward Ratio */}
+        {avgProfit != null && avgLoss != null && Math.abs(avgLoss) > 0 && (
+          <MetricCard
+            label={t('riskReward') || 'Risk/Reward'}
+            value={`1:${(avgProfit / Math.abs(avgLoss)).toFixed(1)}`}
+            color={
+              avgProfit / Math.abs(avgLoss) >= 1.5
+                ? tokens.colors.accent.success
+                : avgProfit / Math.abs(avgLoss) >= 1
+                  ? tokens.colors.accent.warning
+                  : tokens.colors.accent.error
+            }
+            tooltip={t('riskRewardTooltip') || 'Average win / average loss ratio. Above 1.5 is good.'}
+            icon={
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M12 2L2 7l10 5 10-5-10-5z" />
+                <path d="M2 17l10 5 10-5" />
+                <path d="M2 12l10 5 10-5" />
+              </svg>
+            }
+          />
+        )}
       </Box>
 
       {/* Insufficient data note */}
@@ -257,6 +292,88 @@ export default function AdvancedMetricsCard({
           negative={metrics.downside_volatility_pct !== null && metrics.downside_volatility_pct > 30}
         />
       </Box>
+
+      {/* Largest Win / Loss */}
+      {(largestWin != null || largestLoss != null) && (
+        <Box
+          style={{
+            display: 'grid',
+            gridTemplateColumns: '1fr 1fr',
+            gap: tokens.spacing[3],
+            paddingTop: tokens.spacing[3],
+            borderTop: `1px solid ${tokens.colors.border.primary}40`,
+          }}
+        >
+          {largestWin != null && (
+            <Box
+              style={{
+                padding: tokens.spacing[3],
+                background: `${tokens.colors.accent.success}08`,
+                borderRadius: tokens.radius.lg,
+                border: `1px solid ${tokens.colors.accent.success}15`,
+              }}
+            >
+              <Text
+                size="xs"
+                style={{
+                  color: tokens.colors.text.tertiary,
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.5px',
+                  fontSize: 10,
+                  fontWeight: 500,
+                  marginBottom: 4,
+                }}
+              >
+                {t('largestWin') || 'Largest Win'}
+              </Text>
+              <Text
+                style={{
+                  fontSize: 18,
+                  fontWeight: 700,
+                  color: tokens.colors.accent.success,
+                  fontFamily: tokens.typography.fontFamily.mono.join(', '),
+                }}
+              >
+                +${largestWin.toLocaleString(undefined, { maximumFractionDigits: largestWin < 1000 ? 2 : 0 })}
+              </Text>
+            </Box>
+          )}
+          {largestLoss != null && (
+            <Box
+              style={{
+                padding: tokens.spacing[3],
+                background: `${tokens.colors.accent.error}08`,
+                borderRadius: tokens.radius.lg,
+                border: `1px solid ${tokens.colors.accent.error}15`,
+              }}
+            >
+              <Text
+                size="xs"
+                style={{
+                  color: tokens.colors.text.tertiary,
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.5px',
+                  fontSize: 10,
+                  fontWeight: 500,
+                  marginBottom: 4,
+                }}
+              >
+                {t('largestLoss') || 'Largest Loss'}
+              </Text>
+              <Text
+                style={{
+                  fontSize: 18,
+                  fontWeight: 700,
+                  color: tokens.colors.accent.error,
+                  fontFamily: tokens.typography.fontFamily.mono.join(', '),
+                }}
+              >
+                -${Math.abs(largestLoss).toLocaleString(undefined, { maximumFractionDigits: Math.abs(largestLoss) < 1000 ? 2 : 0 })}
+              </Text>
+            </Box>
+          )}
+        </Box>
+      )}
     </div>
   )
 }
