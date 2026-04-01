@@ -251,6 +251,9 @@ export async function initializeConnectors(): Promise<void> {
   lazy('aevo:perp', () => import('./platforms/aevo-perp'), 'AevoPerpConnector', 'aevo')
   lazy('jupiter_perps:perp', () => import('./platforms/jupiter-perps-perp'), 'JupiterPerpsPerpConnector', 'jupiter_perps')
   lazy('drift:perp', () => import('./platforms/drift-perp'), 'DriftPerpConnector', 'drift')
+  lazy('vertex:perp', () => import('./platforms/vertex-perp'), 'VertexPerpConnector', 'vertex')
+  lazy('apex_pro:perp', () => import('./platforms/apex-pro-perp'), 'ApexProPerpConnector', 'apex_pro')
+  lazy('rabbitx:perp', () => import('./platforms/rabbitx-perp'), 'RabbitXPerpConnector', 'rabbitx')
 
   // New platforms (Wave 2)
   lazy('woox:copy', () => import('./platforms/woox-copy'), 'WooxCopyConnector', 'woox')

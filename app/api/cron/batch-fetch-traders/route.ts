@@ -50,8 +50,8 @@ const GROUPS: Record<string, string[]> = {
   c: ['hyperliquid', 'gmx', 'bitunix'],
   // Group D: Fast CEX/DEX mix (every 6h) — direct APIs, low latency
   d: ['gains', 'htx_futures', 'bitfinex', 'coinex', 'binance_web3', 'okx_web3', 'gateio', 'btcc'],
-  // Group E: DEX + social trading (every 6h) — Solana DEX, dYdX (Copin), eToro
-  e: ['drift', 'jupiter_perps', 'aevo', 'web3_bot', 'toobit', 'xt', 'etoro', 'dydx'],
+  // Group E: DEX + social trading (every 6h) — Solana DEX, dYdX (Copin), eToro, new DEX
+  e: ['drift', 'jupiter_perps', 'aevo', 'web3_bot', 'toobit', 'xt', 'etoro', 'dydx', 'vertex', 'apex_pro', 'rabbitx'],
   // Group F: VPS scraper slow platforms (every 6h) — MEXC, BingX, WEEX + new platforms
   f: ['mexc', 'bingx', 'weex', 'woox', 'polymarket', 'copin'],
   // Group G: Recovered platforms (every 6h)
