@@ -13,6 +13,9 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { getSupabaseAdmin, checkRateLimit, RateLimitPresets } from '@/lib/api'
+import { createLogger } from '@/lib/utils/logger'
+
+const log = createLogger('api:movers')
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -144,7 +147,7 @@ export async function GET(request: NextRequest) {
       { headers: { 'Cache-Control': 'public, s-maxage=3600, stale-while-revalidate=1800' } }
     )
   } catch (err) {
-    console.error('[movers] Error:', err instanceof Error ? err.message : String(err))
+    log.error('Error computing movers', { error: err instanceof Error ? err.message : String(err) })
     // SECURITY: Do not leak internal error details to client
     return NextResponse.json(
       {

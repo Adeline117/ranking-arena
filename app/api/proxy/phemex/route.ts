@@ -20,7 +20,7 @@ export const preferredRegion = ['iad1'] // US East — different from default hn
 export async function GET(req: NextRequest) {
   // SECURITY: Reject if CRON_SECRET not configured in production
   if (!env.CRON_SECRET && process.env.NODE_ENV === 'production') {
-    console.error('[phemex-proxy] CRON_SECRET not configured')
+    log.error('CRON_SECRET not configured')
     return NextResponse.json({ error: 'Server misconfigured' }, { status: 503 })
   }
 

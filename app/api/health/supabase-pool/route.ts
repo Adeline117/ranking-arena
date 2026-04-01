@@ -25,7 +25,7 @@ const CRITICAL_THRESHOLD = 0.85 // 85%
 export async function GET(request: NextRequest) {
   // SECURITY: Reject if CRON_SECRET not configured in production
   if (!env.CRON_SECRET && process.env.NODE_ENV === 'production') {
-    console.error('[supabase-pool] CRON_SECRET not configured')
+    log.error('CRON_SECRET not configured')
     return NextResponse.json({ error: 'Server misconfigured' }, { status: 503 })
   }
 
