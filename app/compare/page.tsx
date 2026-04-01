@@ -174,8 +174,8 @@ function CompareContent() {
 
   // Add trader
   const handleAddTrader = async (traderId: string) => {
-    if (traders.length >= 5) {
-      showToast(t('compareMax5'), 'warning')
+    if (traders.length >= 10) {
+      showToast(t('compareMax10'), 'warning')
       return
     }
     if (traders.some(t => t.id === traderId)) {
