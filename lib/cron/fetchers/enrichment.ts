@@ -98,6 +98,7 @@ export {
   fetchHyperliquidEquityCurve,
   fetchHyperliquidStatsDetail,
   fetchGmxPositionHistory,
+  fetchGmxPortfolio,
   fetchGmxEquityCurve,
   fetchGmxStatsDetail,
   computeStatsFromPositions,
