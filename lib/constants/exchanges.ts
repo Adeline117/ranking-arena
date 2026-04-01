@@ -153,6 +153,9 @@ export const DEAD_BLOCKED_PLATFORMS: TraderSource[] = [
   'whitebit' as TraderSource, // No copy-trading feature or API — confirmed 2026-03-13
   'bitmart',      // CF 403 on API, Playwright found zero API calls — confirmed dead 2026-03-13
   'btse' as TraderSource, // SPA page 200 but zero API calls intercepted — no real data 2026-03-13
+  'vertex' as TraderSource,    // No public leaderboard API — competition backend DNS dead, SDK has 0 leaderboard endpoints (2026-04-01)
+  'apex_pro' as TraderSource,  // No public leaderboard API — tested 8+ endpoint patterns all 404, docs have 0 leaderboard endpoints (2026-04-01)
+  'rabbitx' as TraderSource,   // ALL domains DNS dead — rabbitx.io, api.rabbitx.com, api.prod.rabbitx.io all NXDOMAIN (2026-04-01)
   // 'dydx' — RECOVERED: Heroku + Copin API fallback, 3339 traders in leaderboard_ranks (2026-03-15)
 
   // ═══════════════════════════════════════════════════════════════

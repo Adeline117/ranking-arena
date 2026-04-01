@@ -525,9 +525,9 @@ export const NO_ENRICHMENT_PLATFORMS = new Set([
   'bybit_spot',   // metricValues has ROI/WR/MDD/Sharpe, VPS trader-detail doesn't support spot leaderMark
   'binance_web3', // wallet-based, no per-trader detail API, all metrics from leaderboard
   'web3_bot',     // small platform (19 traders), all metrics from leaderboard
-  'vertex',       // TODO: leaderboard API endpoint needs discovery, no enrichment API yet
-  'apex_pro',     // TODO: leaderboard API endpoint needs discovery, no enrichment API yet
-  'rabbitx',      // TODO: leaderboard API endpoint needs discovery, no enrichment API yet
+  'vertex',       // DEAD: No public leaderboard API — competition backend DNS dead, SDK has 0 leaderboard endpoints (2026-04-01)
+  'apex_pro',     // DEAD: No public leaderboard API — tested 8+ endpoint patterns all 404, docs have 0 leaderboard endpoints (2026-04-01)
+  'rabbitx',      // DEAD: All domains DNS dead — platform shut down, all infrastructure offline (2026-04-01)
   // 2026-03-31: dydx re-enabled — rewritten to use Copin API with AbortSignal.timeout(8s).
   // Original indexer (TCP hang) removed. All fetch calls use hardFetch() with runtime-level timeouts.
   // kucoin: REMOVED — now has dedicated enrichment module (2026-03-19)

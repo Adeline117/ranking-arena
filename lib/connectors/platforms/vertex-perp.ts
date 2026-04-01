@@ -1,22 +1,23 @@
 /**
- * Vertex Protocol Perp Connector
+ * Vertex Protocol Perp Connector — DEAD (2026-04)
  *
- * Vertex is a DEX on Arbitrum offering spot, perp, and money markets.
- * Leaderboard: leaderboard.vertexprotocol.com
+ * Status: NO PUBLIC LEADERBOARD API
  *
- * TODO: The leaderboard API endpoint needs to be discovered by inspecting
- * network requests on leaderboard.vertexprotocol.com. The Vertex indexer
- * (archive.vertexprotocol.com) provides historical data per-subaccount
- * but there is no documented public leaderboard API endpoint yet.
+ * Investigation (2026-04-01):
+ * - leaderboard.vertexprotocol.com is a competition-specific React SPA
+ * - Its backend (prod.vertexprotocol-backend.com) no longer resolves (DNS dead)
+ * - The backend used POST /indexer with {leaderboard: {start, limit}} body
+ *   Response fields: subaccount, pnl (wei/1e18), percent_pnl (wei/1e16), rank
+ * - archive.prod.vertexprotocol.com resolves but TLS handshake fails
+ * - Official Vertex SDK (Python/TS/Rust) has ZERO leaderboard endpoints
+ * - Vertex indexer API only has per-subaccount queries, no ranking/aggregation
+ * - The leaderboard was a one-off trading competition, not a permanent feature
  *
- * Current approach:
- * - Uses the Vertex indexer API to query subaccount summaries
- * - Leaderboard discovery uses the leaderboard.vertexprotocol.com backend
- * - trader_key is a hex subaccount address (bytes32)
+ * Conclusion: No public leaderboard API exists. The competition backend is dead.
+ * Platform should remain in DEAD_BLOCKED_PLATFORMS and NO_ENRICHMENT_PLATFORMS.
  */
 
 import { BaseConnector } from '../base'
-import { safeNumber } from '../utils'
 import type {
   LeaderboardPlatform,
   MarketType,
@@ -26,23 +27,7 @@ import type {
   ProfileResult,
   SnapshotResult,
   TimeseriesResult,
-  TraderSource,
 } from '../../types/leaderboard'
-
-interface VertexLeaderboardEntry {
-  subaccount: string
-  pnl: number | string
-  roi: number | string
-  volume: number | string
-  rank?: number
-  display_name?: string
-}
-
-interface VertexLeaderboardResponse {
-  leaderboard?: VertexLeaderboardEntry[]
-  traders?: VertexLeaderboardEntry[]
-  data?: VertexLeaderboardEntry[]
-}
 
 export class VertexPerpConnector extends BaseConnector {
   readonly platform: LeaderboardPlatform = 'vertex'
@@ -51,85 +36,41 @@ export class VertexPerpConnector extends BaseConnector {
   readonly capabilities: PlatformCapabilities = {
     platform: 'vertex',
     market_types: ['perp'],
-    native_windows: ['7d', '30d', '90d'],
-    available_fields: ['roi', 'pnl'],
+    native_windows: [],
+    available_fields: [],
     has_timeseries: false,
     has_profiles: false,
-    scraping_difficulty: 2,
-    rate_limit: { rpm: 30, concurrency: 3 },
+    scraping_difficulty: 5,
+    rate_limit: { rpm: 0, concurrency: 0 },
     notes: [
-      'DEX on Arbitrum — no copy trading features',
-      'trader_key is a bytes32 subaccount address',
-      'TODO: Leaderboard API endpoint needs to be confirmed via network inspection',
+      'DEAD: No public leaderboard API — competition backend (prod.vertexprotocol-backend.com) DNS dead',
+      'Official SDK has zero leaderboard/ranking endpoints',
+      'Indexer only supports per-subaccount queries, no aggregation/ranking',
+      'leaderboard.vertexprotocol.com was a one-off competition SPA, not permanent',
     ],
   }
 
-  private mapWindowToParam(window: Window): string {
-    const m: Record<Window, string> = {
-      '7d': 'week',
-      '30d': 'month',
-      '90d': 'all',
-    }
-    return m[window]
-  }
-
   async discoverLeaderboard(
-    window: Window,
-    limit: number = 500,
+    _window: Window,
+    _limit: number = 500,
     _offset: number = 0
   ): Promise<DiscoverResult> {
-    // TODO: Replace with actual API endpoint once discovered.
-    // The leaderboard.vertexprotocol.com frontend likely calls a backend API.
-    // Candidate endpoints to try:
-    //   - https://leaderboard.vertexprotocol.com/api/leaderboard?period=week&limit=500
-    //   - https://archive.vertexprotocol.com/v2/leaderboard?window=week
-    const period = this.mapWindowToParam(window)
-    const data = await this.request<VertexLeaderboardResponse>(
-      `https://leaderboard.vertexprotocol.com/api/leaderboard?period=${period}&limit=${limit}`
-    )
-
-    const entries = data?.leaderboard || data?.traders || data?.data || []
-
-    const traders: TraderSource[] = entries.slice(0, limit).map((entry, idx) => {
-      const subaccount = String(entry.subaccount || '')
-      // Vertex subaccount addresses are bytes32 hex strings
-      const shortAddr = subaccount.length > 10
-        ? `${subaccount.slice(0, 6)}...${subaccount.slice(-4)}`
-        : subaccount
-
-      return {
-        platform: this.platform,
-        market_type: this.marketType,
-        trader_key: subaccount.toLowerCase(),
-        display_name: entry.display_name || shortAddr || null,
-        profile_url: `https://app.vertexprotocol.com/portfolio/${subaccount}`,
-        discovered_at: new Date().toISOString(),
-        last_seen_at: new Date().toISOString(),
-        is_active: true,
-        raw: {
-          ...entry as unknown as Record<string, unknown>,
-          _window: window,
-          _rank: entry.rank ?? idx + 1,
-        },
-      }
-    })
-
+    // DEAD: No public leaderboard API exists.
+    // The competition backend (prod.vertexprotocol-backend.com) is DNS dead.
+    // The official Vertex SDK/indexer has no leaderboard endpoints.
     return {
-      traders,
-      total_available: entries.length,
-      window,
+      traders: [],
+      total_available: 0,
+      window: _window,
       fetched_at: new Date().toISOString(),
     }
   }
 
   async fetchTraderProfile(_traderKey: string): Promise<ProfileResult | null> {
-    // Vertex is a DEX — no user profiles, only subaccount addresses
     return null
   }
 
   async fetchTraderSnapshot(_traderKey: string, _window: Window): Promise<SnapshotResult | null> {
-    // TODO: Implement using Vertex indexer API (archive.vertexprotocol.com)
-    // to fetch per-subaccount PnL and portfolio data
     return null
   }
 
@@ -137,25 +78,13 @@ export class VertexPerpConnector extends BaseConnector {
     return { series: [], fetched_at: new Date().toISOString() }
   }
 
-  /**
-   * Normalize raw Vertex leaderboard entry.
-   * ROI comes as decimal (0.35 = 35%) from the API.
-   */
-  normalize(raw: unknown): Record<string, unknown> {
-    const e = raw as VertexLeaderboardEntry
-    const rawRoi = safeNumber(e.roi)
-    // Vertex API likely returns ROI as decimal; convert to percentage
-    const roi = rawRoi != null
-      ? (Math.abs(rawRoi) <= 10 ? rawRoi * 100 : rawRoi)
-      : null
-    const pnl = safeNumber(e.pnl)
-
+  normalize(_raw: unknown): Record<string, unknown> {
     return {
-      trader_key: (e.subaccount || '').toLowerCase(),
-      display_name: e.display_name || null,
-      roi,
-      pnl,
-      platform_rank: e.rank ?? null,
+      trader_key: null,
+      display_name: null,
+      roi: null,
+      pnl: null,
+      platform_rank: null,
       win_rate: null,
       max_drawdown: null,
       followers: null,
