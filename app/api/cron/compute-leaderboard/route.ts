@@ -385,7 +385,11 @@ async function computeSeason(
       if (snap.profitability_score != null && existing.profitability_score == null) existing.profitability_score = snap.profitability_score
       if (snap.risk_control_score != null && existing.risk_control_score == null) existing.risk_control_score = snap.risk_control_score
       if (snap.execution_score != null && existing.execution_score == null) existing.execution_score = snap.execution_score
+      if (snap.sortino_ratio != null && existing.sortino_ratio == null) existing.sortino_ratio = snap.sortino_ratio
+      if (snap.profit_factor != null && existing.profit_factor == null) existing.profit_factor = snap.profit_factor
+      if (snap.calmar_ratio != null && existing.calmar_ratio == null) existing.calmar_ratio = snap.calmar_ratio
       if (snap.trading_style != null && existing.trading_style == null) existing.trading_style = snap.trading_style
+      if (snap.avg_holding_hours != null && existing.avg_holding_hours == null) existing.avg_holding_hours = snap.avg_holding_hours
       if (snap.trader_type != null && existing.trader_type == null) existing.trader_type = snap.trader_type
       if (snap.full_confidence_at &&
           (!existing.full_confidence_at || snap.full_confidence_at > existing.full_confidence_at)) {
@@ -410,7 +414,7 @@ async function computeSeason(
         const freshnessISO = freshnessISOBySource(source)
         let { data, error } = await supabase
           .from('trader_snapshots_v2')
-          .select('platform, trader_key, roi_pct, pnl_usd, win_rate, max_drawdown, trades_count, followers, arena_score, updated_at, sharpe_ratio')
+          .select('platform, trader_key, roi_pct, pnl_usd, win_rate, max_drawdown, trades_count, followers, arena_score, updated_at, sharpe_ratio, sortino_ratio, calmar_ratio, volatility_pct, downside_volatility_pct')
           .eq('platform', source)
           .eq('window', v2Window)
           .gte('updated_at', freshnessISO)
@@ -422,7 +426,7 @@ async function computeSeason(
         if ((!data || data.length < FALLBACK_THRESHOLD) && v2Window !== '30D') {
           const fallback = await supabase
             .from('trader_snapshots_v2')
-            .select('platform, trader_key, roi_pct, pnl_usd, win_rate, max_drawdown, trades_count, followers, arena_score, updated_at, sharpe_ratio')
+            .select('platform, trader_key, roi_pct, pnl_usd, win_rate, max_drawdown, trades_count, followers, arena_score, updated_at, sharpe_ratio, sortino_ratio, calmar_ratio, volatility_pct, downside_volatility_pct')
             .eq('platform', source)
             .eq('window', '30D')
             .gte('updated_at', freshnessISO)
@@ -459,9 +463,9 @@ async function computeSeason(
             avg_holding_hours: null,
             style_confidence: null,
             sharpe_ratio: d.sharpe_ratio != null ? Number(d.sharpe_ratio) : null,
-            sortino_ratio: null,
+            sortino_ratio: d.sortino_ratio != null ? Number(d.sortino_ratio) : null,
             profit_factor: null,
-            calmar_ratio: null,
+            calmar_ratio: d.calmar_ratio != null ? Number(d.calmar_ratio) : null,
             trader_type: null,
             metrics_estimated: false,
           })
@@ -516,10 +520,12 @@ async function computeSeason(
     logger.warn(`[${season}] ${stalePlatforms.length} platforms have stale data (>48h): ${stalePlatforms.join(', ')}. Computing with ${freshPlatforms.length} fresh platforms.`)
   }
 
-  // Phase 3: Fill missing win_rate/max_drawdown from trader_stats_detail (enrichment table)
+  // Phase 3: Fill missing metrics from trader_stats_detail (enrichment table)
   // This catches data from enrichment runs that wrote to stats_detail but not back to snapshots
+  // Now also fills: sharpe, sortino, calmar, trades_count, avg_holding_hours
   const tradersNeedingEnrichment = Array.from(traderMap.values())
-    .filter(t => t.win_rate == null || t.max_drawdown == null)
+    .filter(t => t.win_rate == null || t.max_drawdown == null || t.sharpe_ratio == null ||
+                 t.sortino_ratio == null || t.calmar_ratio == null || t.trades_count == null)
   if (tradersNeedingEnrichment.length > 0) {
     const enrichBySource = new Map<string, string[]>()
     for (const t of tradersNeedingEnrichment) {
@@ -531,10 +537,9 @@ async function computeSeason(
       Array.from(enrichBySource.entries()).map(async ([source, traderIds]) => {
         for (let i = 0; i < traderIds.length; i += 100) {
           const chunk = traderIds.slice(i, i + 100)
-          // Small chunks (100 traders) × ~10 period rows each = ~1000 rows max
           const { data: statsRows } = await supabase
             .from('trader_stats_detail')
-            .select('source_trader_id, profitable_trades_pct, max_drawdown, sharpe_ratio, winning_positions, total_positions, period')
+            .select('source_trader_id, profitable_trades_pct, max_drawdown, sharpe_ratio, winning_positions, total_positions, total_trades, avg_holding_time_hours, volatility, period')
             .eq('source', source)
             .in('source_trader_id', chunk)
             .order('captured_at', { ascending: false })
@@ -564,6 +569,15 @@ async function computeSeason(
             if (sr.sharpe_ratio != null && existing.sharpe_ratio == null &&
                 sr.sharpe_ratio >= -20 && sr.sharpe_ratio <= 20) {
               existing.sharpe_ratio = sr.sharpe_ratio
+            }
+            // Fill trades_count from total_trades or total_positions
+            if (existing.trades_count == null) {
+              const tc = sr.total_trades ?? sr.total_positions
+              if (tc != null && tc > 0) existing.trades_count = tc
+            }
+            // Fill avg_holding_hours (used for trading_style classification)
+            if (existing.avg_holding_hours == null && sr.avg_holding_time_hours != null) {
+              existing.avg_holding_hours = sr.avg_holding_time_hours
             }
           }
         }
@@ -649,6 +663,117 @@ async function computeSeason(
       })
     )
     logger.info(`[${season}] Derived ${derived} WR/MDD values from equity curves`)
+  }
+
+  // Phase 4b: Compute sortino/calmar/profit_factor from equity_curve for traders still missing them
+  // Also compute trading_style from avg_holding_hours
+  {
+    const needAdvanced = Array.from(traderMap.values())
+      .filter(t => t.roi != null && (t.sortino_ratio == null || t.calmar_ratio == null || t.profit_factor == null))
+    if (needAdvanced.length > 0) {
+      const advBySource = new Map<string, string[]>()
+      for (const t of needAdvanced) {
+        const ids = advBySource.get(t.source) || []
+        ids.push(t.source_trader_id)
+        advBySource.set(t.source, ids)
+      }
+      let advancedDerived = 0
+      await Promise.all(
+        Array.from(advBySource.entries()).map(async ([source, traderIds]) => {
+          for (let i = 0; i < traderIds.length; i += 50) {
+            const chunk = traderIds.slice(i, i + 50)
+            const { data: eqRows } = await supabase
+              .from('trader_equity_curve')
+              .select('source_trader_id, roi_pct, data_date')
+              .eq('source', source)
+              .in('source_trader_id', chunk)
+              .order('data_date', { ascending: true })
+              .limit(5000)
+            if (!eqRows?.length) continue
+
+            // Group by trader
+            const byTrader = new Map<string, Array<{ roi: number; date: string }>>()
+            for (const row of eqRows) {
+              const tid = row.source_trader_id.startsWith('0x') ? row.source_trader_id.toLowerCase() : row.source_trader_id
+              const arr = byTrader.get(tid) || []
+              if (row.roi_pct != null) arr.push({ roi: Number(row.roi_pct), date: row.data_date })
+              byTrader.set(tid, arr)
+            }
+
+            for (const [tid, points] of byTrader) {
+              const existing = traderMap.get(`${source}:${tid}`)
+              if (!existing || points.length < 7) continue
+
+              // Compute daily returns from cumulative ROI
+              const dailyReturns: number[] = []
+              for (let j = 1; j < points.length; j++) {
+                dailyReturns.push(points[j].roi - points[j - 1].roi)
+              }
+
+              // Sortino ratio
+              if (existing.sortino_ratio == null && dailyReturns.length >= 7) {
+                const decimalReturns = dailyReturns.map(r => r / 100)
+                const negReturns = decimalReturns.filter(r => r < 0)
+                if (negReturns.length > 0) {
+                  const avgReturn = decimalReturns.reduce((a, b) => a + b, 0) / decimalReturns.length
+                  const downsideDev = Math.sqrt(negReturns.reduce((s, r) => s + r * r, 0) / decimalReturns.length)
+                  if (downsideDev > 0) {
+                    const sortino = Math.max(-10, Math.min(10, (avgReturn / downsideDev) * Math.sqrt(365)))
+                    existing.sortino_ratio = Math.round(sortino * 10000) / 10000
+                    advancedDerived++
+                  }
+                } else {
+                  existing.sortino_ratio = 10 // No negative returns
+                  advancedDerived++
+                }
+              }
+
+              // Calmar ratio = annualized ROI / |MDD|
+              if (existing.calmar_ratio == null && existing.roi != null && existing.max_drawdown != null && existing.max_drawdown > 0) {
+                const periodDays = season === '7D' ? 7 : season === '30D' ? 30 : 90
+                const annualizedRoi = existing.roi * (365 / periodDays)
+                const calmar = annualizedRoi / Math.abs(existing.max_drawdown)
+                existing.calmar_ratio = Math.round(Math.max(-10, Math.min(10, calmar)) * 10000) / 10000
+                advancedDerived++
+              }
+
+              // Profit factor from daily returns (gross wins / gross losses)
+              if (existing.profit_factor == null && dailyReturns.length >= 7) {
+                const grossWin = dailyReturns.filter(r => r > 0).reduce((s, r) => s + r, 0)
+                const grossLoss = Math.abs(dailyReturns.filter(r => r < 0).reduce((s, r) => s + r, 0))
+                if (grossLoss > 0) {
+                  existing.profit_factor = Math.round(Math.min(10, grossWin / grossLoss) * 10000) / 10000
+                } else if (grossWin > 0) {
+                  existing.profit_factor = 10
+                }
+                advancedDerived++
+              }
+            }
+          }
+        })
+      )
+      logger.info(`[${season}] Derived ${advancedDerived} sortino/calmar/PF values from equity curves`)
+    }
+  }
+
+  // Phase 4c: Classify trading_style from avg_holding_hours
+  for (const snap of Array.from(traderMap.values())) {
+    if (snap.trading_style != null) continue
+    if (snap.avg_holding_hours != null) {
+      const h = snap.avg_holding_hours
+      if (h < 1) { snap.trading_style = 'scalper'; snap.style_confidence = 0.8 }
+      else if (h < 24) { snap.trading_style = 'day_trader'; snap.style_confidence = 0.7 }
+      else if (h < 168) { snap.trading_style = 'swing'; snap.style_confidence = 0.6 }
+      else { snap.trading_style = 'position'; snap.style_confidence = 0.5 }
+    } else if (snap.trades_count != null && snap.roi != null) {
+      // Heuristic: high trade count relative to period → likely scalper/day trader
+      const periodDays = season === '7D' ? 7 : season === '30D' ? 30 : 90
+      const tradesPerDay = snap.trades_count / periodDays
+      if (tradesPerDay > 10) { snap.trading_style = 'scalper'; snap.style_confidence = 0.4 }
+      else if (tradesPerDay > 2) { snap.trading_style = 'day_trader'; snap.style_confidence = 0.3 }
+      else if (tradesPerDay > 0.3) { snap.trading_style = 'swing'; snap.style_confidence = 0.3 }
+      else if (snap.trades_count > 0) { snap.trading_style = 'position'; snap.style_confidence = 0.3 }
+    }
   }
 
   // Phase 5: For remaining nulls, estimate from ROI + trades_count
@@ -951,7 +1076,7 @@ async function computeSeason(
 
   // Phase 2: Incremental upsert — only update changed rows to reduce write volume ~40%
   // Fetch current arena_scores to diff against
-  const currentScoreMap = new Map<string, { arena_score: number; rank: number; handle: string | null; avatar_url: string | null }>()
+  const currentScoreMap = new Map<string, { arena_score: number; rank: number; handle: string | null; avatar_url: string | null; sortino_ratio: number | null; calmar_ratio: number | null; profit_factor: number | null; trading_style: string | null }>()
   {
     // Fetch in pages of 1000 to handle large leaderboards
     let offset = 0
@@ -965,7 +1090,7 @@ async function computeSeason(
       }
       const { data: currentScores } = await supabase
         .from('leaderboard_ranks')
-        .select('source, source_trader_id, arena_score, rank, handle, avatar_url')
+        .select('source, source_trader_id, arena_score, rank, handle, avatar_url, sortino_ratio, calmar_ratio, profit_factor, trading_style')
         .eq('season_id', season)
         .range(offset, offset + PAGE - 1)
       if (!currentScores?.length) break
@@ -975,6 +1100,10 @@ async function computeSeason(
           rank: r.rank,
           handle: r.handle,
           avatar_url: r.avatar_url,
+          sortino_ratio: r.sortino_ratio,
+          calmar_ratio: r.calmar_ratio,
+          profit_factor: r.profit_factor,
+          trading_style: r.trading_style,
         })
       }
       if (currentScores.length < PAGE) break
@@ -991,6 +1120,11 @@ async function computeSeason(
     const newRank = idx + 1
     if (current.rank !== newRank) return true // rank changed
     if (current.arena_score === 0) return t.arena_score !== 0 // was zero, check if now non-zero
+    // Force update if new advanced metrics available (first-time backfill)
+    if (t.sortino_ratio != null && !current.sortino_ratio) return true
+    if (t.calmar_ratio != null && !current.calmar_ratio) return true
+    if (t.profit_factor != null && !current.profit_factor) return true
+    if (t.trading_style != null && !current.trading_style) return true
     return Math.abs(t.arena_score - current.arena_score) > current.arena_score * 0.005 // >0.5% score change
   })
 
@@ -1028,6 +1162,9 @@ async function computeSeason(
       avg_holding_hours: t.avg_holding_hours,
       style_confidence: t.style_confidence,
       sharpe_ratio: t.sharpe_ratio,
+      sortino_ratio: t.sortino_ratio ?? null,
+      profit_factor: t.profit_factor ?? null,
+      calmar_ratio: t.calmar_ratio ?? null,
       trader_type: t.trader_type || (t.source === 'web3_bot' ? 'bot' : null),
       is_outlier: (t as Record<string, unknown>).is_outlier === true ? true : false,
     }))
