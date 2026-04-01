@@ -461,21 +461,30 @@ export async function fetchDriftStatsDetail(
 
       try {
         const snapUrl = `${DATA_API}/authority/${authority}/snapshots/trading?days=90`
-        const snapResp = await fetchJson<{ accounts?: Array<{ snapshots?: Array<{ ts: number; cumulativeRealizedPnl: string }> }> }>(snapUrl, { timeoutMs: 15000 })
-        const snaps = snapResp?.accounts?.[0]?.snapshots?.sort((a, b) => a.ts - b.ts) || []
+        // The snapshots/trading API returns a flat array of DriftSnapshot objects
+        // (same format used by fetchDriftEquityCurve)
+        const snapshots = await fetchJson<DriftSnapshot[]>(snapUrl, { timeoutMs: 15000 })
+
+        const snaps = (Array.isArray(snapshots) ? snapshots : [])
+          .filter((s) => s.epochTs != null)
+          .map((s) => {
+            const rawPnl = s.cumulativeRealizedPnl ?? s.allTimeTotalPnl ?? s.cumulativePerpPnl ?? 0
+            // Drift values may be in USDC base units (divide by 1e6 if very large)
+            const pnl = Math.abs(rawPnl) > 1e10 ? rawPnl / 1e6 : rawPnl
+            return { ts: s.epochTs!, pnl }
+          })
+          .sort((a, b) => a.ts - b.ts)
 
         if (snaps.length >= 3) {
           let wins = 0, losses = 0, peak = 0, mdd = 0
           for (let i = 1; i < snaps.length; i++) {
-            const prevPnl = parseFloat(String(snaps[i - 1].cumulativeRealizedPnl))
-            const currPnl = parseFloat(String(snaps[i].cumulativeRealizedPnl))
-            const delta = currPnl - prevPnl
+            const delta = snaps[i].pnl - snaps[i - 1].pnl
             if (delta > 0.01) wins++
             else if (delta < -0.01) losses++
             // MDD from cumulative PnL
-            if (currPnl > peak) peak = currPnl
+            if (snaps[i].pnl > peak) peak = snaps[i].pnl
             if (peak > 0) {
-              const dd = ((peak - currPnl) / Math.abs(peak)) * 100
+              const dd = ((peak - snaps[i].pnl) / Math.abs(peak)) * 100
               if (dd > mdd) mdd = dd
             }
           }
