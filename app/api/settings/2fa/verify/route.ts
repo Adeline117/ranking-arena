@@ -47,23 +47,25 @@ export async function POST(request: NextRequest) {
     }
     const { code } = parsed.data
 
-    // Get the stored TOTP secret
-    const { data: profile, error: profileError } = await supabase
+    // Check if already enabled
+    const { data: profile } = await supabase
       .from('user_profiles')
-      .select('totp_secret, totp_enabled')
+      .select('totp_enabled')
       .eq('id', user.id)
       .single()
 
-    if (profileError || !profile) {
-      logger.error('[2FA Verify] Profile fetch error:', profileError)
-      return NextResponse.json({ error: 'Failed to fetch user profile' }, { status: 500 })
-    }
-
-    if (profile.totp_enabled) {
+    if (profile?.totp_enabled) {
       return NextResponse.json({ error: '2FA is already enabled' }, { status: 400 })
     }
 
-    if (!profile.totp_secret) {
+    // Get the stored TOTP secret from secure table
+    const { data: secretRow, error: secretError } = await supabase
+      .from('user_2fa_secrets')
+      .select('totp_secret')
+      .eq('user_id', user.id)
+      .single()
+
+    if (secretError || !secretRow?.totp_secret) {
       return NextResponse.json(
         { error: 'No TOTP secret found. Please run setup first.' },
         { status: 400 }
@@ -71,7 +73,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Verify the code
-    const isValid = verifyTotpCode(profile.totp_secret, code)
+    const isValid = verifyTotpCode(secretRow.totp_secret, code)
     if (!isValid) {
       return NextResponse.json({ error: 'Invalid verification code' }, { status: 400 })
     }
