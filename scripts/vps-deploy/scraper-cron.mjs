@@ -612,6 +612,7 @@ async function fetchPlatform(platformKey) {
       log('  Fetching ' + window + ' via OKX v5 API (dataRange=' + dataRange + ')...')
       try {
         const allTraders = []
+        const seen = new Set()
         const pageSize = 20
         const maxPages = 50
         for (let page = 1; page <= maxPages; page++) {
@@ -625,7 +626,14 @@ async function fetchPlatform(platformKey) {
           if (json?.code !== '0') { log('  OKX API error: ' + json?.msg); break }
           const ranks = json?.data?.[0]?.ranks || []
           if (!ranks.length) break
-          allTraders.push(...ranks)
+          // Deduplicate by uniqueCode to avoid ON CONFLICT errors
+          for (const r of ranks) {
+            const key = String(r.uniqueCode || r.uniqueName || '')
+            if (key && !seen.has(key)) {
+              seen.add(key)
+              allTraders.push(r)
+            }
+          }
           if (ranks.length < pageSize) break
           await new Promise(r => setTimeout(r, 200))
         }
