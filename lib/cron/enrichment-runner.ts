@@ -1001,7 +1001,14 @@ export async function runEnrichment(params: {
   if (totalFailed === 0) {
     await plog.success(totalEnriched, { period, duration })
   } else {
-    await plog.error(new Error(`${totalFailed}/${totalEnriched + totalFailed} enrichments failed`), { period, duration, totalEnriched, totalFailed })
+    // Collect all error details for debugging
+    const errorDetails = Object.entries(results)
+      .filter(([, r]) => r.errors.length > 0)
+      .map(([platform, r]) => ({ platform, failed: r.failed, errors: r.errors.slice(0, 10) }))
+    await plog.error(
+      new Error(`${totalFailed}/${totalEnriched + totalFailed} enrichments failed`), 
+      { period, duration, totalEnriched, totalFailed, errorDetails }
+    )
   }
 
   return { ok: totalFailed === 0, duration, period, summary: { total, enriched: totalEnriched, failed: totalFailed, suppressedErrors: totalSuppressedErrors }, results }
