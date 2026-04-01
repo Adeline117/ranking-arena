@@ -60,8 +60,9 @@ export async function GET(request: NextRequest) {
       // Fallback: fetch with regular query (less optimal but works without RPC)
       logger.warn('[aggregate] RPC not available, falling back to v2 paginated query')
 
-      // Use date-range filter instead of hardcoded window='90D'
-      // This captures snapshots from any window that were captured recently
+      // Fetch ALL current snapshots (v2 is a latest-per-trader table, not append-only).
+      // Use updated_at > 2 days ago to only get recently-refreshed traders.
+      // No upper time bound — cron runs at 00:05 UTC but many platforms refresh after midnight.
       const recentCutoff = new Date()
       recentCutoff.setUTCDate(recentCutoff.getUTCDate() - 2)
       const recentCutoffStr = recentCutoff.toISOString()
@@ -69,9 +70,8 @@ export async function GET(request: NextRequest) {
       const { data: fallbackData, error: fallbackError } = await supabase
         .from('trader_snapshots_v2')
         .select('platform, trader_key, window, roi_pct, pnl_usd, win_rate, max_drawdown, followers, trades_count, as_of_ts')
-        .gte('as_of_ts', recentCutoffStr)
-        .lt('as_of_ts', `${todayStr}T00:00:00Z`)
-        .order('as_of_ts', { ascending: false })
+        .gte('updated_at', recentCutoffStr)
+        .order('updated_at', { ascending: false })
         .limit(50000)
 
       if (fallbackError || !fallbackData) {
