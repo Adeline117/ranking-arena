@@ -13,6 +13,7 @@ import TraderComparison from '@/app/components/premium/TraderComparison'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import { useToast } from '@/app/components/ui/Toast'
 import { useAuthSession } from '@/lib/hooks/useAuthSession'
+import { useAchievements } from '@/lib/hooks/useAchievements'
 import ExportButton from '@/app/components/common/ExportButton'
 // MobileBottomNav is rendered by root layout — do not duplicate here
 import { logger } from '@/lib/logger'
@@ -44,6 +45,7 @@ function CompareContent() {
   const { t } = useLanguage()
   const { showToast } = useToast()
   const { accessToken, authChecked, email } = useAuthSession()
+  const { tryUnlock } = useAchievements()
 
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -161,6 +163,9 @@ function CompareContent() {
       const data = await res.json()
       setTraders(data.traders || [])
       setError(null)
+      if ((data.traders || []).length >= 2) {
+        tryUnlock('first_comparison')
+      }
     } catch (err) {
       logger.error('Load traders failed:', err)
       setError(t('errorOccurred'))

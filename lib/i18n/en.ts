@@ -4821,6 +4821,15 @@ compShareTitle: 'Check out this competition on Arena',
     tokenRankingNext: 'Next',
     rankingsSubNavTokens: 'Tokens',
 
+    // Achievements
+    achievementUnlocked: 'Achievement Unlocked',
+    achievementFirstWatchlist: 'Watchlist Pioneer',
+    achievementFirstComparison: 'Analyst',
+    achievementFirstPost: 'Voice of Arena',
+    achievementExplorer5: 'Explorer',
+    achievementProSubscriber: 'Pro Member',
+    achievementSocialButterfly: 'Social Butterfly',
+
 } as const
 
 export default en

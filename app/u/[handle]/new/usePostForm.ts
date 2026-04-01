@@ -7,6 +7,7 @@ import { useToast } from '@/app/components/ui/Toast'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import { getCsrfHeaders } from '@/lib/api/client'
 import { logger } from '@/lib/logger'
+import { checkAndUnlock } from '@/lib/services/achievements'
 import type { UploadedImage, UploadedVideo, PollOption } from './types'
 import {
   DRAFT_KEY_PREFIX,
@@ -500,6 +501,10 @@ export function usePostForm() {
 
       clearDraft()
       showToast(t('publishSuccess'), 'success')
+      // Achievement: first post
+      if (userId) {
+        checkAndUnlock(userId, 'first_post')
+      }
       router.push(`/u/${encodeURIComponent(decodedHandle)}`)
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : t('publishFailed')
