@@ -9,6 +9,7 @@ import { z } from 'zod'
 import { dataLogger, fireAndForget } from '@/lib/utils/logger'
 import { SOURCE_TYPE_MAP } from '@/lib/constants/exchanges'
 import { syncToClickHouse } from '@/lib/analytics/dual-write'
+import { retryUpsert } from '@/lib/utils/supabase-retry'
 
 /** Resolve market_type from SOURCE_TYPE_MAP for trader_profiles_v2 */
 function getMarketType(source: string): string {
@@ -421,9 +422,14 @@ export async function upsertTraders(
         updated_at: new Date().toISOString(),
       }))
 
-      const { error: traderErr } = await supabase
-        .from('traders')
-        .upsert(traderRows, { onConflict: 'platform,trader_key' })
+      // Emergency fix 2026-04-01: Add retry logic for Supabase 502 errors
+      const { error: traderErr } = await retryUpsert(
+        supabase,
+        'traders',
+        traderRows,
+        { onConflict: 'platform,trader_key' },
+        { maxAttempts: 3, initialDelayMs: 2000 }
+      )
 
       if (traderErr) {
         consistency.trader_sources = 'failed'
@@ -488,9 +494,14 @@ export async function upsertTraders(
       }})
 
       // Upsert snapshots — update metrics on conflict so re-runs refresh data
-      const { error: snapErr } = await supabase
-        .from('trader_snapshots_v2')
-        .upsert(snapshots, { onConflict: 'platform,market_type,trader_key,window' })
+      // Emergency fix 2026-04-01: Add retry logic for Supabase 502 errors
+      const { error: snapErr } = await retryUpsert(
+        supabase,
+        'trader_snapshots_v2',
+        snapshots,
+        { onConflict: 'platform,market_type,trader_key,window' },
+        { maxAttempts: 3, initialDelayMs: 2000 }
+      )
 
       if (snapErr) {
         consistency.trader_snapshots_v2 = 'failed'
