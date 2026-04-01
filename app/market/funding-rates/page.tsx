@@ -38,20 +38,27 @@ interface FundingRateRow {
 async function getFundingRates(): Promise<FundingRateRow[]> {
   const supabase = getSupabaseAdmin()
 
-  // Get the latest funding rate for each platform+symbol combination
-  // by selecting distinct on platform, symbol ordered by funding_time desc
+  // Use DB-side deduplication via RPC (DISTINCT ON is far more efficient than
+  // fetching 200 rows and deduplicating in memory)
+  try {
+    const { data, error } = await supabase.rpc('get_latest_funding_rates')
+    if (!error && data) return data as FundingRateRow[]
+  } catch {
+    // RPC not available, fall back to client-side dedup
+  }
+
+  // Fallback: fetch and deduplicate in memory
   const { data, error } = await supabase
     .from('funding_rates')
     .select('platform, symbol, funding_rate, funding_time')
     .order('funding_time', { ascending: false })
-    .limit(200)
+    .limit(500)
 
   if (error) {
     console.error('[funding-rates] fetch error:', error.message)
     return []
   }
 
-  // Deduplicate: keep only the latest entry per platform+symbol
   const seen = new Set<string>()
   const deduped: FundingRateRow[] = []
   for (const row of data || []) {
@@ -61,7 +68,6 @@ async function getFundingRates(): Promise<FundingRateRow[]> {
       deduped.push(row)
     }
   }
-
   return deduped
 }
 
