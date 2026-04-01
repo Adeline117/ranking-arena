@@ -10,6 +10,7 @@ import { dataLogger, fireAndForget } from '@/lib/utils/logger'
 import { SOURCE_TYPE_MAP } from '@/lib/constants/exchanges'
 import { syncToClickHouse } from '@/lib/analytics/dual-write'
 import { retryUpsert } from '@/lib/utils/supabase-retry'
+import { validateSnapshot } from '@/lib/pipeline/validate-snapshot'
 
 /** Resolve market_type from SOURCE_TYPE_MAP for trader_profiles_v2 */
 function getMarketType(source: string): string {
@@ -391,6 +392,32 @@ export async function upsertTraders(
     dataLogger.warn(`[upsert] Deduped ${validated.length - deduped.length} duplicate traders for ${validated[0]?.source}`)
   }
 
+  // Validate snapshots before DB writes — catch ROI/PnL confusion, extreme outliers, missing fields
+  let snapshotRejected = 0
+  const snapshotValidated = deduped.filter(t => {
+    const { valid, reasons } = validateSnapshot({
+      platform: t.source,
+      trader_key: t.source_trader_id,
+      roi_pct: t.roi,
+      pnl_usd: t.pnl,
+      win_rate: t.win_rate,
+      max_drawdown: t.max_drawdown,
+    })
+    if (!valid) {
+      snapshotRejected++
+      if (snapshotRejected <= 10) {
+        dataLogger.warn(`[upsert] Skipping invalid snapshot for ${t.source}/${t.source_trader_id}: ${reasons.join(', ')}`)
+      }
+    }
+    return valid
+  })
+  if (snapshotRejected > 0) {
+    dataLogger.warn(`[upsert] Snapshot validation rejected ${snapshotRejected}/${deduped.length} traders for ${deduped[0]?.source}`)
+  }
+  if (snapshotValidated.length === 0) {
+    return { saved: 0, error: `All ${deduped.length} traders failed snapshot validation` }
+  }
+
   const BATCH = 50 // Reduced from 500→200→50 to avoid Supabase statement timeout (57014) + deadlock (40P01)
 
   let saved = 0
@@ -402,8 +429,8 @@ export async function upsertTraders(
     trader_snapshots_v2: 'ok',
   }
 
-  for (let i = 0; i < deduped.length; i += BATCH) {
-    const batch = deduped.slice(i, i + BATCH)
+  for (let i = 0; i < snapshotValidated.length; i += BATCH) {
+    const batch = snapshotValidated.slice(i, i + BATCH)
 
     // --- 1. traders (unified identity table) ---
     // Replaces both trader_sources and trader_profiles_v2 (merged 2026-03-18)
