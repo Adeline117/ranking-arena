@@ -12,6 +12,7 @@ const ExchangeConnectionManager = dynamic(() => import('@/app/components/exchang
 import { useToast } from '@/app/components/ui/Toast'
 import { useDialog } from '@/app/components/ui/Dialog'
 const AdvancedAlerts = dynamic(() => import('@/app/components/pro/AdvancedAlerts'), { ssr: false })
+const ReferralCard = dynamic(() => import('@/app/components/profile/ReferralCard'), { ssr: false })
 const WalletSection = dynamic(() => import('@/lib/web3/wallet-components').then(m => ({ default: m.WalletSection })), { ssr: false })
 const LazyWeb3Boundary = dynamic(() => import('@/lib/web3/wallet-components').then(m => ({ default: m.Web3Boundary })), { ssr: false })
 const ImageCropper = dynamic(() => import('@/app/components/ui/ImageCropper').then(m => ({ default: m.ImageCropper })), { ssr: false })
@@ -287,6 +288,11 @@ function SettingsContent() {
             blockedUsers={h.blockedUsers} loadingBlockedUsers={h.loadingBlockedUsers}
             unblockingId={h.unblockingId} onUnblock={h.handleUnblock}
           />
+
+          {/* Referral Section */}
+          <SectionCard id="referral" title={t('referralTitle') || 'Referral Program'} description={t('referralDesc') || 'Invite friends and earn Pro rewards'}>
+            <ReferralCard />
+          </SectionCard>
 
           <AccountSection onLogout={h.handleLogout} onDeleteAccount={() => h.setShowDeleteAccountModal(true)} />
 
