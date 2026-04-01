@@ -190,6 +190,10 @@ export async function upsertStatsDetail(
     if (stats.sharpeRatio != null && Math.abs(stats.sharpeRatio) <= 20) {
       v2Update.sharpe_ratio = stats.sharpeRatio
     }
+    // Sync followers/copiers from enrichment detail APIs
+    if (stats.copiersCount != null && stats.copiersCount > 0) {
+      v2Update.followers = stats.copiersCount
+    }
 
     // Update all matching v2 rows (removed .is('win_rate', null) guard
     // so stale win_rate values get refreshed with latest enrichment data)

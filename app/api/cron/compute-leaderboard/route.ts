@@ -539,7 +539,7 @@ async function computeSeason(
           const chunk = traderIds.slice(i, i + 100)
           const { data: statsRows } = await supabase
             .from('trader_stats_detail')
-            .select('source_trader_id, profitable_trades_pct, max_drawdown, sharpe_ratio, winning_positions, total_positions, total_trades, avg_holding_time_hours, volatility, period')
+            .select('source_trader_id, profitable_trades_pct, max_drawdown, sharpe_ratio, winning_positions, total_positions, total_trades, avg_holding_time_hours, volatility, copiers_count, aum, period')
             .eq('source', source)
             .in('source_trader_id', chunk)
             .order('captured_at', { ascending: false })
@@ -578,6 +578,10 @@ async function computeSeason(
             // Fill avg_holding_hours (used for trading_style classification)
             if (existing.avg_holding_hours == null && sr.avg_holding_time_hours != null) {
               existing.avg_holding_hours = sr.avg_holding_time_hours
+            }
+            // Fill followers from copiers_count in enrichment data
+            if ((existing.followers == null || existing.followers === 0) && sr.copiers_count != null && sr.copiers_count > 0) {
+              existing.followers = sr.copiers_count
             }
           }
         }
