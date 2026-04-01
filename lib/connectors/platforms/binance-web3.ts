@@ -169,6 +169,26 @@ export class BinanceWeb3Connector extends BaseConnector {
    */
   normalize(raw: unknown): Record<string, unknown> {
     const e = raw as BinanceWeb3Entry
+
+    // Compute Sharpe ratio from dailyPNL array (daily realized PnL values)
+    let sharpe: number | null = null
+    if (Array.isArray(e.dailyPNL) && e.dailyPNL.length >= 5) {
+      const dailyValues = e.dailyPNL
+        .map((d) => Number(d.realizedPnl))
+        .filter((v) => Number.isFinite(v))
+      if (dailyValues.length >= 5) {
+        const returns: number[] = []
+        for (let i = 1; i < dailyValues.length; i++) {
+          returns.push(dailyValues[i] - dailyValues[i - 1])
+        }
+        if (returns.length >= 4) {
+          const mean = returns.reduce((a, b) => a + b, 0) / returns.length
+          const std = Math.sqrt(returns.reduce((a, r) => a + (r - mean) ** 2, 0) / returns.length)
+          if (std > 0) sharpe = Math.round((mean / std) * Math.sqrt(365) * 100) / 100
+        }
+      }
+    }
+
     return {
       trader_key: e.address ? e.address.toLowerCase() : null,
       display_name: safeStr(e.addressLabel) || (e.address ? `${e.address.slice(0, 6)}...${e.address.slice(-4)}` : null),
@@ -180,7 +200,7 @@ export class BinanceWeb3Connector extends BaseConnector {
       max_drawdown: null,
       followers: null,
       trades_count: safeNumber(e.totalTxCnt),
-      sharpe_ratio: null,
+      sharpe_ratio: sharpe,
       aum: safeNumber(e.balance),
       copiers: null,
       platform_rank: null,
