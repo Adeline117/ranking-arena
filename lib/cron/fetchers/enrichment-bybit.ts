@@ -43,6 +43,14 @@ interface VpsTraderDetailResponse {
       avgHoldingPeriod?: number // seconds
       avgProfit?: string
       avgLoss?: string
+      sortinoRatio?: string
+      // v17: per-period PnL from leader-income API
+      pnl7d?: string
+      pnl30d?: string
+      pnl90d?: string
+      roi7d?: string
+      roi30d?: string
+      roi90d?: string
     }
   }
   pnlHistory?: {
@@ -190,14 +198,15 @@ async function enrichSingleBybitTrader(
       }
     }
 
-    // 2. Write per-period PnL back to trader_snapshots_v2
-    // v17: VPS scraper returns pnl7d/pnl30d/pnl90d from leader-income API
+    // 2. Write PnL from detail API back to trader_snapshots_v2
+    // VPS scraper returns a single pnl field — write to all period windows
     const detail = data.detail?.result
     if (detail) {
+      const pnlValue = parseNum(detail.pnl)
       const periodPnl: Record<string, number | null> = {
-        '7D': parseNum(detail.pnl7d) ?? parseNum(detail.pnl),
-        '30D': parseNum(detail.pnl30d) ?? parseNum(detail.pnl),
-        '90D': parseNum(detail.pnl90d) ?? parseNum(detail.pnl),
+        '7D': pnlValue,
+        '30D': pnlValue,
+        '90D': pnlValue,
       }
       for (const [window, pnl] of Object.entries(periodPnl)) {
         if (pnl != null) {

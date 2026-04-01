@@ -125,6 +125,7 @@ export interface StatsDetail {
   largestLoss: number | null
   // 风险指标
   sharpeRatio: number | null
+  sortinoRatio?: number | null
   maxDrawdown: number | null
   currentDrawdown: number | null
   volatility: number | null
