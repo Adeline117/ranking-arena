@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { useLoginModal } from '@/lib/hooks/useLoginModal'
 import { tokens } from '@/lib/design-tokens'
 import { RankingSkeleton } from '../ui/Skeleton'
+import EmptyState from '../ui/EmptyState'
 import { Box, Text } from '../base'
 import { useLanguage } from '../Providers/LanguageProvider'
 import dynamic from 'next/dynamic'
@@ -554,45 +555,27 @@ function RankingTableInner(props: {
           )}
         </Box>
       ) : sortedTraders.length === 0 ? (
-        <Box style={{ padding: `${tokens.spacing[12]} ${tokens.spacing[4]}`, textAlign: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: tokens.spacing[4] }}>
-          <svg width={48} height={48} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" style={{ opacity: 0.3, color: tokens.colors.text.tertiary }}>
-            <circle cx="11" cy="11" r="8" />
-            <path d="M21 21l-4.35-4.35" strokeLinecap="round" />
-          </svg>
-          <Text size="md" weight="semibold" style={{ color: tokens.colors.text.secondary }}>
-            {debouncedSearch.trim() || hasActiveFilters
-              ? t('rankingNoMatchCriteria')
-              : t('noTraderData')}
-          </Text>
-          {(debouncedSearch.trim() || hasActiveFilters) && (
-            <>
-              <Text size="sm" style={{ color: tokens.colors.text.tertiary }}>
-                {t('rankingBroadenFilters')}
-              </Text>
-              <button
-                onClick={() => {
-                  if (debouncedSearch.trim()) {
-                    if (onSearchChange) onSearchChange('')
-                    else setInternalSearchQuery('')
-                  }
-                }}
-                style={{
-                  padding: `${tokens.spacing[2]} ${tokens.spacing[5]}`,
-                  background: `${tokens.colors.accent.primary}20`,
-                  border: `1px solid ${tokens.colors.accent.primary}40`,
-                  borderRadius: tokens.radius.md,
-                  color: tokens.colors.accent.primary,
-                  cursor: 'pointer',
-                  fontSize: tokens.typography.fontSize.sm,
-                  fontWeight: tokens.typography.fontWeight.bold,
-                  transition: `all ${tokens.transition.base}`,
-                }}
-              >
-                {t('clearSearch')}
-              </button>
-            </>
-          )}
-        </Box>
+        <EmptyState
+          icon={
+            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+              <circle cx="11" cy="11" r="8" />
+              <path d="M21 21l-4.35-4.35" strokeLinecap="round" />
+            </svg>
+          }
+          title={debouncedSearch.trim() || hasActiveFilters
+            ? t('rankingNoMatchCriteria')
+            : t('noTraderData')}
+          description={(debouncedSearch.trim() || hasActiveFilters) ? t('rankingBroadenFilters') : undefined}
+          action={(debouncedSearch.trim() || hasActiveFilters) ? {
+            label: t('clearSearch'),
+            onClick: () => {
+              if (debouncedSearch.trim()) {
+                if (onSearchChange) onSearchChange('')
+                else setInternalSearchQuery('')
+              }
+            },
+          } : undefined}
+        />
       ) : viewMode === 'card' ? (
         <>
           <Box
