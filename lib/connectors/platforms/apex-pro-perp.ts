@@ -1,23 +1,32 @@
 /**
- * ApeX Pro (Apex Protocol) Perp Connector
+ * ApeX Pro (Apex Omni) Perp Connector — DEAD (2026-04)
  *
- * ApeX Pro is a decentralized derivatives DEX (formerly on StarkEx, now Omni/multi-chain).
- * Website: pro.apex.exchange
- * API Docs: api-docs.pro.apex.exchange
+ * Status: NO PUBLIC LEADERBOARD API
  *
- * TODO: The public leaderboard API endpoint is not documented in the official API docs.
- * The ApeX Pro website has a leaderboard feature, but the API endpoint needs to be
- * discovered by inspecting network requests on the leaderboard page.
+ * Investigation (2026-04-01):
+ * - omni.apex.exchange/leaderboard exists as a client-side page
+ * - Official API docs (api-docs.pro.apex.exchange) only expose:
+ *   trading, account, market data, WebSocket endpoints
+ * - ZERO leaderboard/ranking/vault-list/copy-trading endpoints documented
+ * - Tested endpoints (all 404):
+ *   - omni.apex.exchange/api/v3/leaderboard
+ *   - omni.apex.exchange/api/v3/vaults
+ *   - omni.apex.exchange/api/v3/vault/list
+ *   - omni.apex.exchange/api/v3/vault/rankings
+ *   - omni.apex.exchange/api/v3/competition/ranking
+ *   - omni.apex.exchange/api/v3/copy-trading/leaderboard
+ *   - omni.apex.exchange/api/v3/ranking
+ *   - omni.apex.exchange/api/v3/competition
+ * - Python SDK (apexpro-openapi) only has trading/account methods
+ * - The leaderboard page loads data via client-side JS with no discoverable
+ *   public API endpoint (likely uses authenticated internal API or GraphQL)
  *
- * Candidate endpoints (need verification):
- * - https://pro.apex.exchange/api/v3/leaderboard (based on v3 API pattern)
- * - https://pro.apex.exchange/api/v3/competition/ranking
- *
- * trader_key is an ApeX account ID or Ethereum address.
+ * Conclusion: No public leaderboard API. The leaderboard data is only
+ * accessible through the web UI with no documented API endpoints.
+ * Platform should remain in DEAD_BLOCKED_PLATFORMS and NO_ENRICHMENT_PLATFORMS.
  */
 
 import { BaseConnector } from '../base'
-import { safeNumber } from '../utils'
 import type {
   LeaderboardPlatform,
   MarketType,
@@ -27,32 +36,7 @@ import type {
   ProfileResult,
   SnapshotResult,
   TimeseriesResult,
-  TraderSource,
 } from '../../types/leaderboard'
-
-interface ApexLeaderboardEntry {
-  userId?: string
-  accountId?: string
-  ethAddress?: string
-  nickname?: string
-  username?: string
-  pnl: number | string
-  roi: number | string
-  volume?: number | string
-  rank?: number
-  winRate?: number | string
-  tradeCount?: number
-}
-
-interface ApexLeaderboardResponse {
-  data?: {
-    list?: ApexLeaderboardEntry[]
-    leaderboard?: ApexLeaderboardEntry[]
-    rankings?: ApexLeaderboardEntry[]
-  }
-  list?: ApexLeaderboardEntry[]
-  leaderboard?: ApexLeaderboardEntry[]
-}
 
 export class ApexProPerpConnector extends BaseConnector {
   readonly platform: LeaderboardPlatform = 'apex_pro'
@@ -61,74 +45,32 @@ export class ApexProPerpConnector extends BaseConnector {
   readonly capabilities: PlatformCapabilities = {
     platform: 'apex_pro',
     market_types: ['perp'],
-    native_windows: ['7d', '30d', '90d'],
-    available_fields: ['roi', 'pnl'],
+    native_windows: [],
+    available_fields: [],
     has_timeseries: false,
     has_profiles: false,
-    scraping_difficulty: 2,
-    rate_limit: { rpm: 30, concurrency: 3 },
+    scraping_difficulty: 5,
+    rate_limit: { rpm: 0, concurrency: 0 },
     notes: [
-      'Decentralized derivatives DEX (StarkEx / Omni)',
-      'TODO: Leaderboard API endpoint needs to be confirmed',
-      'API docs at api-docs.pro.apex.exchange do not document leaderboard endpoints',
+      'DEAD: No public leaderboard API — tested 8+ endpoint patterns, all 404',
+      'Official API docs only cover trading/account/market endpoints',
+      'Leaderboard page uses internal/authenticated API not publicly accessible',
+      'Vault/copy-trading features exist on web UI but no public API',
     ],
   }
 
-  private mapWindowToParam(window: Window): string {
-    const m: Record<Window, string> = {
-      '7d': 'WEEKLY',
-      '30d': 'MONTHLY',
-      '90d': 'ALL_TIME',
-    }
-    return m[window]
-  }
-
   async discoverLeaderboard(
-    window: Window,
-    limit: number = 500,
+    _window: Window,
+    _limit: number = 500,
     _offset: number = 0
   ): Promise<DiscoverResult> {
-    // TODO: Replace with actual API endpoint once discovered.
-    // The leaderboard page on pro.apex.exchange likely calls a backend API.
-    // Candidate endpoints:
-    //   - https://pro.apex.exchange/api/v3/leaderboard?period=WEEKLY&limit=500
-    //   - https://api.pro.apex.exchange/api/v3/competition/ranking
-    const period = this.mapWindowToParam(window)
-    const data = await this.request<ApexLeaderboardResponse>(
-      `https://pro.apex.exchange/api/v3/leaderboard?period=${period}&limit=${limit}`
-    )
-
-    const entries = data?.data?.list
-      || data?.data?.leaderboard
-      || data?.data?.rankings
-      || data?.list
-      || data?.leaderboard
-      || []
-
-    const traders: TraderSource[] = entries.slice(0, limit).map((entry, idx) => {
-      const traderKey = String(entry.userId || entry.accountId || entry.ethAddress || '')
-
-      return {
-        platform: this.platform,
-        market_type: this.marketType,
-        trader_key: traderKey.toLowerCase(),
-        display_name: entry.nickname || entry.username || null,
-        profile_url: `https://pro.apex.exchange/trade/BTCUSDT/portfolio/${traderKey}`,
-        discovered_at: new Date().toISOString(),
-        last_seen_at: new Date().toISOString(),
-        is_active: true,
-        raw: {
-          ...entry as unknown as Record<string, unknown>,
-          _window: window,
-          _rank: entry.rank ?? idx + 1,
-        },
-      }
-    })
-
+    // DEAD: No public leaderboard API exists.
+    // Tested 8+ API endpoint patterns — all return 404.
+    // Official API docs have zero leaderboard/ranking endpoints.
     return {
-      traders,
-      total_available: entries.length,
-      window,
+      traders: [],
+      total_available: 0,
+      window: _window,
       fetched_at: new Date().toISOString(),
     }
   }
@@ -138,7 +80,6 @@ export class ApexProPerpConnector extends BaseConnector {
   }
 
   async fetchTraderSnapshot(_traderKey: string, _window: Window): Promise<SnapshotResult | null> {
-    // TODO: Implement using ApeX Pro API v3 account endpoints if available
     return null
   }
 
@@ -146,28 +87,17 @@ export class ApexProPerpConnector extends BaseConnector {
     return { series: [], fetched_at: new Date().toISOString() }
   }
 
-  /**
-   * Normalize raw ApeX Pro leaderboard entry.
-   * ROI format needs to be verified — may be percentage or decimal.
-   */
-  normalize(raw: unknown): Record<string, unknown> {
-    const e = raw as ApexLeaderboardEntry
-    const rawRoi = safeNumber(e.roi)
-    // ApeX likely returns ROI as percentage (35 = 35%) based on CEX-like patterns
-    const roi = rawRoi != null ? Math.max(-100, Math.min(10000, rawRoi)) : null
-    const pnl = safeNumber(e.pnl)
-    const winRate = safeNumber(e.winRate)
-
+  normalize(_raw: unknown): Record<string, unknown> {
     return {
-      trader_key: String(e.userId || e.accountId || e.ethAddress || '').toLowerCase(),
-      display_name: e.nickname || e.username || null,
-      roi,
-      pnl,
-      platform_rank: e.rank ?? null,
-      win_rate: winRate,
+      trader_key: null,
+      display_name: null,
+      roi: null,
+      pnl: null,
+      platform_rank: null,
+      win_rate: null,
       max_drawdown: null,
       followers: null,
-      trades_count: e.tradeCount ?? null,
+      trades_count: null,
       sharpe_ratio: null,
       aum: null,
       copiers: null,
