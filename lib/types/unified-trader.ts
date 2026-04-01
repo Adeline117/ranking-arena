@@ -150,6 +150,8 @@ export interface TraderDetail {
     avgHoldingHours: number | null
     avgProfit: number | null
     avgLoss: number | null
+    largestWin: number | null
+    largestLoss: number | null
     aum: number | null
   } | null
   portfolio: TraderPosition[]

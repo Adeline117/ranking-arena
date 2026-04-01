@@ -97,13 +97,27 @@ export function buildEquityCurveFromPositions(
 
   if (dailyPnl.size === 0) return []
 
+  // Build sparse cumulative PnL first
   const sortedDates = [...dailyPnl.keys()].sort()
   let cumPnl = 0
-  const points: EquityCurvePoint[] = []
-
+  const sparseCum = new Map<string, number>()
   for (const date of sortedDates) {
     cumPnl += dailyPnl.get(date) || 0
-    points.push({ date, roi: 0, pnl: cumPnl })
+    sparseCum.set(date, cumPnl)
+  }
+
+  // Gap-fill: iterate day-by-day from first to last, carry forward on empty days
+  const firstDate = new Date(sortedDates[0])
+  const lastDate = new Date(sortedDates[sortedDates.length - 1])
+  const points: EquityCurvePoint[] = []
+  let prevCumPnl = 0
+  for (let d = new Date(firstDate); d <= lastDate; d.setDate(d.getDate() + 1)) {
+    const dateStr = d.toISOString().split('T')[0]
+    const val = sparseCum.get(dateStr)
+    if (val !== undefined) {
+      prevCumPnl = val
+    }
+    points.push({ date: dateStr, roi: 0, pnl: prevCumPnl })
   }
 
   // Estimate ROI from cumulative PnL

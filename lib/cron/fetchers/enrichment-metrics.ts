@@ -97,6 +97,75 @@ export function calculateSharpeRatio(curve: EquityCurvePoint[], _period: string)
 }
 
 /**
+ * Calculate Sortino ratio from equity curve (like Sharpe but only penalizes downside volatility)
+ */
+export function calculateSortinoRatio(curve: EquityCurvePoint[], _period: string): number | null {
+  if (curve.length < 5) return null
+
+  const returns: number[] = []
+  for (let i = 1; i < curve.length; i++) {
+    returns.push(curve[i].roi - curve[i - 1].roi)
+  }
+
+  if (returns.length < 3) return null
+
+  const meanReturn = returns.reduce((sum, r) => sum + r, 0) / returns.length
+  const downsideReturns = returns.filter(r => r < 0)
+  if (downsideReturns.length === 0) return null // No downside = infinite sortino, skip
+
+  const downsideVariance = downsideReturns.reduce((sum, r) => sum + r * r, 0) / returns.length
+  const downsideDev = Math.sqrt(downsideVariance)
+
+  if (downsideDev === 0) return null
+
+  const annualizationFactor = Math.sqrt(365)
+  const sortino = (meanReturn / downsideDev) * annualizationFactor
+
+  return sortino > -20 && sortino < 20 ? Math.round(sortino * 100) / 100 : null
+}
+
+/**
+ * Calculate Calmar ratio from equity curve (annualized return / max drawdown)
+ */
+export function calculateCalmarRatio(curve: EquityCurvePoint[], _period: string): number | null {
+  if (curve.length < 5) return null
+
+  const totalReturn = curve[curve.length - 1].roi - curve[0].roi
+  const maxDD = calculateMaxDrawdown(curve)
+
+  if (!maxDD || maxDD === 0) return null
+
+  // Annualize: estimate days from curve length, then scale to 365
+  const days = curve.length
+  const annualizedReturn = days > 0 ? (totalReturn / days) * 365 : totalReturn
+
+  const calmar = annualizedReturn / maxDD
+
+  return calmar > -50 && calmar < 50 ? Math.round(calmar * 100) / 100 : null
+}
+
+/**
+ * Calculate Profit Factor from position history (gross profit / gross loss)
+ */
+export function calculateProfitFactor(positions: PositionHistoryItem[]): number | null {
+  const withPnl = positions.filter(p => p.pnlUsd != null)
+  if (withPnl.length < 3) return null
+
+  let grossProfit = 0
+  let grossLoss = 0
+  for (const p of withPnl) {
+    const pnl = p.pnlUsd ?? 0
+    if (pnl > 0) grossProfit += pnl
+    if (pnl < 0) grossLoss += Math.abs(pnl)
+  }
+
+  if (grossLoss === 0) return null // Infinite PF, skip
+
+  const pf = grossProfit / grossLoss
+  return pf > 0 && pf < 100 ? Math.round(pf * 100) / 100 : null
+}
+
+/**
  * Calculate average holding time from position history.
  * Returns hours (e.g. 24.5 for 1 day, 0.5 for 30 min).
  */
@@ -172,6 +241,14 @@ export function enhanceStatsWithDerivedMetrics(
     stats.sharpeRatio = calculateSharpeRatio(curve, period)
   }
 
+  if (!stats.sortinoRatio && curve.length >= 5) {
+    stats.sortinoRatio = calculateSortinoRatio(curve, period)
+  }
+
+  if (!stats.calmarRatio && curve.length >= 5) {
+    stats.calmarRatio = calculateCalmarRatio(curve, period)
+  }
+
   // Derive win_rate from equity curve daily returns if not available
   if (stats.profitableTradesPct == null && curve.length >= 5) {
     let wins = 0, total = 0
@@ -210,6 +287,11 @@ export function enhanceStatsWithDerivedMetrics(
     // Fill totalTrades from position count
     if (stats.totalTrades == null && positions.length > 0) {
       stats.totalTrades = positions.length
+    }
+
+    // Compute profit factor from positions
+    if (!stats.profitFactor) {
+      stats.profitFactor = calculateProfitFactor(positions)
     }
   }
 
