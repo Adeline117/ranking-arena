@@ -8,7 +8,7 @@
 
 import { fetchJson } from './shared'
 import { logger } from '@/lib/logger'
-import type { EquityCurvePoint, PositionHistoryItem, StatsDetail } from './enrichment-types'
+import type { EquityCurvePoint, PositionHistoryItem, PortfolioPosition, StatsDetail } from './enrichment-types'
 
 // ============================================
 // Shared: compute stats from position history
@@ -195,6 +195,56 @@ export async function fetchHyperliquidPositionHistory(
     return parseFillsToPositions(fills, limit)
   } catch (err) {
     logger.warn(`[enrichment] Hyperliquid position history failed: ${err}`)
+    return []
+  }
+}
+
+/**
+ * Fetch current portfolio (open positions) from Hyperliquid clearinghouse state.
+ */
+export async function fetchHyperliquidPortfolio(
+  address: string,
+): Promise<PortfolioPosition[]> {
+  try {
+    const res = await fetch('https://api.hyperliquid.xyz/info', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ type: 'clearinghouseState', user: address }),
+    })
+    if (!res.ok) return []
+    const state = await res.json() as Record<string, unknown>
+    const assetPositions = state.assetPositions as Array<{
+      type: string
+      position: {
+        coin: string
+        szi: string
+        leverage: { type: string; value: number }
+        entryPx: string
+        positionValue: string
+        unrealizedPnl: string
+        returnOnEquity: string
+        marginUsed: string
+      }
+    }> | undefined
+
+    if (!assetPositions || assetPositions.length === 0) return []
+
+    const accountValue = Number((state.marginSummary as Record<string, unknown>)?.accountValue) || 1
+    return assetPositions
+      .filter(ap => ap.position && Number(ap.position.szi) !== 0)
+      .map(ap => {
+        const pos = ap.position
+        const posValue = Math.abs(Number(pos.positionValue) || 0)
+        return {
+          symbol: pos.coin,
+          direction: Number(pos.szi) > 0 ? 'long' as const : 'short' as const,
+          investedPct: accountValue > 0 ? (posValue / accountValue) * 100 : 0,
+          entryPrice: Number(pos.entryPx) || null,
+          pnl: Number(pos.unrealizedPnl) || null,
+        }
+      })
+  } catch (err) {
+    logger.warn(`[enrichment] Hyperliquid portfolio failed: ${err}`)
     return []
   }
 }

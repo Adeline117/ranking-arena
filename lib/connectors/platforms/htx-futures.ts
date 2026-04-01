@@ -20,7 +20,7 @@ export class HtxFuturesConnector extends BaseConnector {
     market_types: ['futures'],
     native_windows: ['7d', '30d', '90d'],
     available_fields: ['roi', 'pnl', 'win_rate', 'max_drawdown', 'followers', 'copiers'],
-    has_timeseries: false,
+    has_timeseries: true,
     has_profiles: true,
     scraping_difficulty: 3,
     rate_limit: { rpm: 10, concurrency: 1 },
@@ -153,7 +153,9 @@ export class HtxFuturesConnector extends BaseConnector {
       copiers: null,
       aum: safeNumber(raw.aum),
       sharpe_ratio: null,
-      platform_rank: null,
+      platform_rank: safeNumber(raw.no ?? raw.order ?? raw.rank),
+      // Extra: equity curve from profitList (30-day daily cumulative returns)
+      _profit_list: raw.profitList,
     }
   }
 
