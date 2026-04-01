@@ -204,8 +204,11 @@ export async function fetchGainsStatsDetail(addr: string): Promise<StatsDetail |
  * Fetch per-trader stats from Gains Network native API.
  * Endpoint: https://backend-global.gains.trade/api/personal-trading-history/{address}/stats?chainId=42161
  *
- * Returns aggregate stats including totalPnl, totalVolume, win/loss counts.
- * ROI is computed as (totalPnl / totalVolume) * 100.
+ * Returns: { totalVolume, totalTrades, winRate (string pct like "80.00000"), thirtyDayVolume }
+ * Note: totalPnl/totalWin are NOT returned by this API — winRate is used to derive totalWin.
+ * PnL comes from the leaderboard data (via Copin fallback or connector normalize()).
+ *
+ * Also tries the leaderboard endpoint to find this trader's aggregate PnL data.
  */
 async function fetchGainsNativeStats(addr: string): Promise<StatsDetail | null> {
   // Try all chains (Arbitrum first as most active)
@@ -221,20 +224,30 @@ async function fetchGainsNativeStats(addr: string): Promise<StatsDetail | null> 
       const data = await fetchJson<GainsNativeStatsResponse>(url, { timeoutMs: 10000 })
       if (!data) continue
 
-      // The API may return an object with stats fields or nested data
       const totalTrades = data.totalTrades ?? data.total_trades ?? data.nbTrades ?? 0
-      const totalWin = data.totalWin ?? data.wins ?? data.nbWins ?? 0
+
+      // Skip empty responses
+      if (totalTrades === 0) continue
+
+      // winRate from API is a string percentage like "80.00000" or a number
+      let profitableTradesPct: number | null = null
+      if (data.winRate != null) {
+        const wr = typeof data.winRate === 'string' ? parseFloat(data.winRate) : Number(data.winRate)
+        if (!isNaN(wr)) {
+          // If value is <= 1, it's a ratio; otherwise it's already a percentage
+          profitableTradesPct = wr <= 1 ? Math.round(wr * 1000) / 10 : Math.round(wr * 10) / 10
+        }
+      }
+
+      // Derive totalWin from winRate
+      const totalWin = profitableTradesPct != null
+        ? Math.round(totalTrades * profitableTradesPct / 100)
+        : (data.totalWin ?? data.wins ?? data.nbWins ?? null)
+
       const totalPnl = data.totalPnl ?? data.pnl ?? data.totalPnlCollateral ?? null
       const totalVolume = data.totalVolume ?? data.volume ?? data.totalCollateral ?? null
 
-      // Skip empty responses
-      if (totalTrades === 0 && totalPnl == null) continue
-
-      const profitableTradesPct = totalTrades > 0
-        ? Math.round((totalWin / totalTrades) * 1000) / 10
-        : null
-
-      // Compute ROI from totalPnl / totalVolume
+      // Compute ROI from totalPnl / totalVolume if available
       let roi: number | null = null
       if (totalPnl != null && totalVolume != null && totalVolume > 0) {
         roi = Math.round((totalPnl / totalVolume) * 100 * 100) / 100
@@ -266,11 +279,70 @@ async function fetchGainsNativeStats(addr: string): Promise<StatsDetail | null> 
         copiersCount: null,
         copiersPnl: null,
         aum: null,
-        winningPositions: totalWin > 0 ? totalWin : null,
+        winningPositions: totalWin != null && totalWin > 0 ? totalWin : null,
         totalPositions: totalTrades > 0 ? totalTrades : null,
       }
     } catch {
       // Try next chain
+      continue
+    }
+  }
+
+  // Fallback: try leaderboard endpoint to find this trader's PnL data
+  const chainNames = ['arbitrum', 'polygon', 'base']
+  for (const chain of chainNames) {
+    try {
+      const leaderboardUrl = `https://backend-${chain}.gains.trade/leaderboard`
+      const leaderboard = await fetchJson<GainsLeaderboardEntry[]>(leaderboardUrl, { timeoutMs: 10000 })
+      if (!Array.isArray(leaderboard)) continue
+      const addrLower = addr.toLowerCase()
+      const found = leaderboard.find(e =>
+        String(e.address || e.trader || '').toLowerCase() === addrLower
+      )
+      if (!found) continue
+
+      const totalTrades = found.count ?? 0
+      const wins = Number(found.count_win) || 0
+      const losses = Number(found.count_loss) || 0
+      const pnl = found.total_pnl_usd ?? found.total_pnl ?? found.pnl ?? null
+      const profitableTradesPct = totalTrades > 0
+        ? Math.round((wins / totalTrades) * 1000) / 10
+        : null
+
+      // MDD approximation from avg_loss/avg_win
+      let maxDrawdown: number | null = null
+      const avgWin = found.avg_win
+      const avgLoss = found.avg_loss
+      if (avgLoss != null && losses > 0 && avgWin != null && wins > 0) {
+        const totalLosses = Math.abs(avgLoss) * losses
+        const totalWins = avgWin * wins
+        const peakEquity = totalWins + totalLosses
+        if (peakEquity > 0) {
+          const mdd = (totalLosses / peakEquity) * 100
+          if (mdd > 0.01 && mdd <= 100) maxDrawdown = Math.round(mdd * 100) / 100
+        }
+      }
+
+      return {
+        totalTrades: totalTrades > 0 ? totalTrades : null,
+        profitableTradesPct,
+        avgHoldingTimeHours: null,
+        avgProfit: avgWin ?? null,
+        avgLoss: avgLoss ?? null,
+        largestWin: null,
+        largestLoss: null,
+        sharpeRatio: null,
+        maxDrawdown,
+        currentDrawdown: null,
+        volatility: null,
+        pnl,
+        copiersCount: null,
+        copiersPnl: null,
+        aum: null,
+        winningPositions: wins > 0 ? wins : null,
+        totalPositions: totalTrades > 0 ? totalTrades : null,
+      }
+    } catch {
       continue
     }
   }
@@ -286,6 +358,7 @@ interface GainsNativeStatsResponse {
   totalWin?: number
   wins?: number
   nbWins?: number
+  winRate?: string | number  // String percentage like "80.00000" or number
   totalPnl?: number
   pnl?: number
   totalPnlCollateral?: number
@@ -302,6 +375,20 @@ interface GainsNativeStatsResponse {
   bestPnl?: number
   largestLoss?: number
   worstPnl?: number
+}
+
+// Gains leaderboard entry for PnL lookup fallback
+interface GainsLeaderboardEntry {
+  address?: string
+  trader?: string
+  count?: number
+  count_win?: string | number
+  count_loss?: string | number
+  avg_win?: number
+  avg_loss?: number
+  total_pnl?: number
+  total_pnl_usd?: number
+  pnl?: number
 }
 
 export async function fetchGainsPositionHistory(_addr: string): Promise<PositionHistoryItem[]> {

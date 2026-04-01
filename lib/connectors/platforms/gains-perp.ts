@@ -5,45 +5,18 @@
  *
  * Key notes:
  * - trader_key is wallet address on Arbitrum
- * - Has REST API: /open-trades, /personal-trading-history-table/<address>
- * - Also has GraphQL subgraph on Arbitrum
+ * - Has REST API: /leaderboard (aggregate stats per trader)
+ * - personal-trading-history-table endpoint removed (404 since 2026-04)
+ * - Stats computed from leaderboard data: count, count_win, count_loss, avg_win, avg_loss, total_pnl
  * - No followers/copiers (DEX - no copy trading)
  */
 
 import { BaseConnector } from '../base'
-import { warnValidate } from '../schemas'
-import {
-  GainsOpenTradesResponseSchema,
-  GainsTradeHistoryResponseSchema,
-} from './schemas'
 import type {
   DiscoverResult, ProfileResult, SnapshotResult, TimeseriesResult,
   TraderSource, TraderProfile, SnapshotMetrics, QualityFlags,
   PlatformCapabilities, Window,
 } from '../../types/leaderboard'
-
-interface GainsTrade {
-  trader?: string
-  pairIndex?: number
-  index?: number
-  leverage?: number
-  collateralAmount?: number
-  openPrice?: number
-  tp?: number
-  sl?: number
-  timestamp?: number
-}
-
-interface GainsTradeHistory {
-  address?: string
-  pnl?: number
-  pnlPercent?: number
-  action?: string
-  pair?: string
-  leverage?: number
-  collateral?: number
-  date?: string
-}
 
 export class GainsPerpConnector extends BaseConnector {
   readonly platform = 'gains' as const
@@ -150,82 +123,46 @@ export class GainsPerpConnector extends BaseConnector {
 
   async fetchTraderSnapshot(traderKey: string, window: Window): Promise<SnapshotResult | null> {
     try {
-      // Get trader's open positions
-      const _rawOpenTrades = await this.request<GainsTrade[]>(
-        `${this.API_BASE}/open-trades/${traderKey}`,
-        { method: 'GET', headers: this.getHeaders() }
-      )
-      const openTrades = warnValidate(GainsOpenTradesResponseSchema, _rawOpenTrades, 'gains-perp/open-trades')
+      // Compute stats from leaderboard data (which contains aggregate fields).
+      // The personal-trading-history-table endpoint was removed (404 since 2026-04).
+      // Instead, search the leaderboard for this trader's aggregate stats.
+      const chains = ['arbitrum', 'polygon', 'base']
+      let traderData: Record<string, unknown> | null = null
 
-      // Get trading history
-      const _rawHistory = await this.request<GainsTradeHistory[]>(
-        `${this.API_BASE}/personal-trading-history-table/${traderKey}`,
-        { method: 'GET', headers: this.getHeaders() }
-      )
-      const history = warnValidate(GainsTradeHistoryResponseSchema, _rawHistory, 'gains-perp/history')
-
-      // Calculate stats from history within the window
-      let totalPnl = 0
-      let totalCollateral = 0
-      let totalTrades = 0
-      let winningTrades = 0
-      let maxEquity = 0
-      let minEquityFromPeak = 0
-      let runningEquity = 0
-
-      const now = new Date()
-      const windowDays = window === '7d' ? 7 : window === '30d' ? 30 : 90
-
-      // Sort history by date ascending for drawdown calculation
-      const sortedHistory = (history || [])
-        .filter(trade => {
-          if (!trade.date) return false
-          const tradeDate = new Date(trade.date)
-          const daysDiff = (now.getTime() - tradeDate.getTime()) / (1000 * 60 * 60 * 24)
-          return daysDiff <= windowDays
-        })
-        .sort((a, b) => new Date(a.date!).getTime() - new Date(b.date!).getTime())
-
-      for (const trade of sortedHistory) {
-        const pnl = trade.pnl || 0
-        const collateral = trade.collateral || 0
-
-        totalPnl += pnl
-        totalCollateral += collateral
-        totalTrades++
-
-        if (pnl > 0) {
-          winningTrades++
-        }
-
-        // Track equity curve for drawdown calculation
-        runningEquity += pnl
-        if (runningEquity > maxEquity) {
-          maxEquity = runningEquity
-        }
-        const drawdownFromPeak = maxEquity - runningEquity
-        if (drawdownFromPeak > minEquityFromPeak) {
-          minEquityFromPeak = drawdownFromPeak
+      for (const chain of chains) {
+        try {
+          const data = await this.request<Array<Record<string, unknown>>>(
+            `https://backend-${chain}.gains.trade/leaderboard`,
+            { method: 'GET', headers: this.getHeaders() }
+          )
+          if (!Array.isArray(data)) continue
+          const found = data.find(
+            (e) => String(e.address || e.trader || '').toLowerCase() === traderKey.toLowerCase()
+          )
+          if (found) {
+            traderData = found
+            break
+          }
+        } catch {
+          continue
         }
       }
 
-      // Calculate ROI: totalPnl / totalCollateral * 100
-      const roi = totalCollateral > 0 ? (totalPnl / totalCollateral) * 100 : null
+      if (!traderData) {
+        return null
+      }
 
-      // Calculate win rate
-      const winRate = totalTrades > 0 ? (winningTrades / totalTrades) * 100 : null
-
-      // Calculate max drawdown as percentage of peak equity
-      const maxDrawdown = maxEquity > 0 ? (minEquityFromPeak / maxEquity) * 100 : null
+      // Use normalize() to extract standard fields
+      const normalized = this.normalize(traderData)
 
       const metrics: SnapshotMetrics = {
-        roi,
-        pnl: totalPnl || null,
-        win_rate: winRate,
-        max_drawdown: maxDrawdown,
+        roi: normalized.roi as number | null,
+        pnl: normalized.pnl as number | null,
+        win_rate: normalized.win_rate as number | null,
+        max_drawdown: normalized.max_drawdown as number | null,
         sharpe_ratio: null,
         sortino_ratio: null,
-        trades_count: totalTrades || null,
+        trades_count: normalized.trades_count as number | null,
         followers: null,
         copiers: null,
         aum: null,
@@ -237,24 +174,20 @@ export class GainsPerpConnector extends BaseConnector {
       }
 
       const missingFields: string[] = ['sharpe_ratio', 'sortino_ratio', 'followers', 'copiers', 'aum']
-      if (roi === null) missingFields.push('roi')
-      if (winRate === null) missingFields.push('win_rate')
-      if (maxDrawdown === null) missingFields.push('max_drawdown')
+      if (metrics.roi === null) missingFields.push('roi')
+      if (metrics.win_rate === null) missingFields.push('win_rate')
+      if (metrics.max_drawdown === null) missingFields.push('max_drawdown')
 
       const quality_flags: QualityFlags = {
         missing_fields: missingFields,
-        non_standard_fields: { open_positions: String(openTrades?.length || 0) },
-        window_native: true,
-        notes: ['Gains Network Arbitrum DEX', `${openTrades?.length || 0} open positions`, 'ROI/WinRate/MDD calculated from trade history'],
+        non_standard_fields: {},
+        window_native: false,
+        notes: ['Gains Network DEX', 'Stats from leaderboard aggregate data'],
       }
 
       return { metrics, quality_flags, fetched_at: new Date().toISOString() }
     } catch {
-      return {
-        metrics: this.emptyMetrics(),
-        quality_flags: { missing_fields: ['all'], non_standard_fields: {}, window_native: false, notes: ['API error or trader not found'] },
-        fetched_at: new Date().toISOString(),
-      }
+      return null
     }
   }
 

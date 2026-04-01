@@ -292,7 +292,15 @@ export const ENRICHMENT_PLATFORM_CONFIGS: Record<string, EnrichmentConfig> = {
     fetchPositionHistory: fetchBitgetPositionHistory,
     concurrency: 3, delayMs: 1000, // Increased from 1/2000: CF Worker proxy handles 3 concurrent fine
   },
-  // bitget_spot: enrichment not yet configured — spot-specific enrichment endpoints TBD
+  // bybit_spot: VPS trader-detail may or may not support spot leaderMarks.
+  // Even if VPS fails, the enrichment runner's buildEquityCurveFromSnapshots
+  // fallback + derived metrics computation will still compute PnL from equity curves.
+  bybit_spot: {
+    platform: 'bybit_spot',
+    fetchEquityCurve: fetchBybitEquityCurve,
+    fetchStatsDetail: fetchBybitStatsDetail,
+    concurrency: 3, delayMs: 1500, limit: 50,
+  },
   hyperliquid: {
     platform: 'hyperliquid',
     fetchEquityCurve: fetchHyperliquidEquityCurve,
@@ -454,14 +462,9 @@ export const ENRICHMENT_PLATFORM_CONFIGS: Record<string, EnrichmentConfig> = {
     platform: 'blofin',
     fetchEquityCurve: fetchBlofinEquityCurve,
     fetchStatsDetail: fetchBlofinStatsDetail,
-    concurrency: 20, delayMs: 0, // Batch-cached from public traders list
+    concurrency: 2, delayMs: 1500, // Direct API returns 401, relies on CF proxy fallback
   },
-  phemex: {
-    platform: 'phemex',
-    fetchEquityCurve: fetchPhemexEquityCurve,
-    fetchStatsDetail: fetchPhemexStatsDetail,
-    concurrency: 1, delayMs: 3000, // Phemex has strict rate limits
-  },
+  // phemex: REMOVED 2026-04-01 — API returns 404 (confirmed dead), removed from fetch groups too
   bingx: {
     platform: 'bingx',
     fetchEquityCurve: fetchBingxEquityCurve,
@@ -521,11 +524,11 @@ export interface EnrichmentResult {
 // 2. Leaderboard normalize() → connector-db-adapter writes copiers/metrics
 // 3. Daily snapshot accumulation → computed equity curve
 export const NO_ENRICHMENT_PLATFORMS = new Set([
-  // Dead platforms — 0 traders, no data to enrich
-  'bitmart', 'paradex', 'lbank',
+  // Dead platforms — 0 traders or API 404, no data to enrich
+  'bitmart', 'paradex', 'lbank', 'phemex',
   // Leaderboard-only platforms — all metrics already from normalize(), no separate detail API
   // Equity curves auto-generated from daily snapshots by aggregate-daily-snapshots cron
-  'bybit_spot',   // metricValues has ROI/WR/MDD/Sharpe, VPS trader-detail doesn't support spot leaderMark
+  // bybit_spot: REMOVED — now has enrichment config (2026-04-01), VPS trader-detail reuses same leaderMark format
   'binance_web3', // wallet-based, no per-trader detail API, all metrics from leaderboard
   'web3_bot',     // small platform (19 traders), all metrics from leaderboard
   'vertex',       // DEAD: No public leaderboard API — competition backend DNS dead, SDK has 0 leaderboard endpoints (2026-04-01)

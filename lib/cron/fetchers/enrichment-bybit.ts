@@ -171,6 +171,7 @@ export async function fetchBybitStatsDetail(
 async function enrichSingleBybitTrader(
   supabase: SupabaseClient,
   traderId: string,
+  platformOverride: string = 'bybit',
 ): Promise<Result<string>> {
   try {
     // Single VPS call — extract both equity curve AND PnL/stats
@@ -194,7 +195,7 @@ async function enrichSingleBybitTrader(
           pnl: d.pnl != null ? Number(d.pnl) : null,
         }))
       if (curve.length > 0) {
-        await upsertEquityCurve(supabase, 'bybit', traderId, '90D', curve)
+        await upsertEquityCurve(supabase, platformOverride, traderId, '90D', curve)
       }
     }
 
@@ -213,7 +214,7 @@ async function enrichSingleBybitTrader(
           await supabase
             .from('trader_snapshots_v2')
             .update({ pnl_usd: pnl })
-            .eq('platform', 'bybit')
+            .eq('platform', platformOverride)
             .eq('trader_key', traderId)
             .eq('window', window)
         }
