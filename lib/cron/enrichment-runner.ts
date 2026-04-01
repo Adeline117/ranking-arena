@@ -881,6 +881,8 @@ export async function runEnrichment(params: {
                   }
 
                   // Only write non-null updates, and only overwrite NULL fields in snapshot
+                  // Always touch updated_at so freshness checks pass for platforms without leaderboard API
+                  snapshotUpdate.updated_at = new Date().toISOString()
                   const updates = Object.fromEntries(
                     Object.entries(snapshotUpdate).filter(([, v]) => v != null)
                   )
@@ -974,6 +976,7 @@ export async function runEnrichment(params: {
     if (suppressedErrors > 0) {
       logger.warn(`[enrich] ${platformKey}: ${suppressedErrors} API calls failed silently (data returned as empty)`)
     }
+
   }
 
   const duration = Date.now() - startTime
