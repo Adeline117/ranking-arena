@@ -130,9 +130,9 @@ export async function retryInsert<T>(
   table: string,
   data: T | T[],
   options: RetryOptions = {}
-) {
-  return retrySupabaseQuery(
-    () => client.from(table).insert(data as any),
+): Promise<PostgrestResponse<T>> {
+  return retrySupabaseQuery<T>(
+    async () => await client.from(table).insert(data as any) as PostgrestResponse<T>,
     options
   )
 }
@@ -146,9 +146,9 @@ export async function retryUpsert<T>(
   data: T | T[],
   upsertOptions?: { onConflict?: string },
   retryOptions: RetryOptions = {}
-) {
-  return retrySupabaseQuery(
-    () => client.from(table).upsert(data as any, upsertOptions),
+): Promise<PostgrestResponse<T>> {
+  return retrySupabaseQuery<T>(
+    async () => await client.from(table).upsert(data as any, upsertOptions) as PostgrestResponse<T>,
     retryOptions
   )
 }
