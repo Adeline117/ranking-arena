@@ -18,7 +18,298 @@ import { formatTimeAgo, type Locale } from '@/lib/utils/date'
 import dynamic from 'next/dynamic'
 import { useVirtualizer } from '@tanstack/react-virtual'
 import PullToRefresh from '@/app/components/ui/PullToRefresh'
+import { useProStatus } from '@/lib/hooks/useProStatus'
+import { exportToCSV, exportToJSON } from '@/lib/utils/export'
 const ShareLeaderboardButton = dynamic(() => import('./ShareLeaderboardButton'), { ssr: false })
+
+// ── Advanced Filters (Pro-gated) ────────────────────────────
+
+interface AdvancedFilterState {
+  roi_min: number | null
+  roi_max: number | null
+  win_rate_min: number | null
+  win_rate_max: number | null
+  mdd_min: number | null
+  mdd_max: number | null
+  sharpe_min: number | null
+  sharpe_max: number | null
+  min_trades: number | null
+}
+
+const EMPTY_FILTERS: AdvancedFilterState = {
+  roi_min: null, roi_max: null,
+  win_rate_min: null, win_rate_max: null,
+  mdd_min: null, mdd_max: null,
+  sharpe_min: null, sharpe_max: null,
+  min_trades: null,
+}
+
+function hasActiveAdvancedFilters(f: AdvancedFilterState): boolean {
+  return Object.values(f).some(v => v != null)
+}
+
+function applyAdvancedFilters(traders: TraderData[], f: AdvancedFilterState): TraderData[] {
+  return traders.filter(tr => {
+    if (f.roi_min != null && (tr.roi == null || tr.roi < f.roi_min)) return false
+    if (f.roi_max != null && (tr.roi == null || tr.roi > f.roi_max)) return false
+    if (f.win_rate_min != null && (tr.win_rate == null || tr.win_rate < f.win_rate_min)) return false
+    if (f.win_rate_max != null && (tr.win_rate == null || tr.win_rate > f.win_rate_max)) return false
+    if (f.mdd_min != null && (tr.max_drawdown == null || Math.abs(tr.max_drawdown) < f.mdd_min)) return false
+    if (f.mdd_max != null && (tr.max_drawdown == null || Math.abs(tr.max_drawdown) > f.mdd_max)) return false
+    if (f.sharpe_min != null && (tr.sharpe_ratio == null || tr.sharpe_ratio < f.sharpe_min)) return false
+    if (f.sharpe_max != null && (tr.sharpe_ratio == null || tr.sharpe_ratio > f.sharpe_max)) return false
+    if (f.min_trades != null && (tr.trades_count == null || tr.trades_count < f.min_trades)) return false
+    return true
+  })
+}
+
+function parseFilterParams(searchParams: URLSearchParams): AdvancedFilterState {
+  const n = (key: string) => { const v = searchParams.get(key); return v != null ? Number(v) : null }
+  return {
+    roi_min: n('roi_min'), roi_max: n('roi_max'),
+    win_rate_min: n('wr_min'), win_rate_max: n('wr_max'),
+    mdd_min: n('mdd_min'), mdd_max: n('mdd_max'),
+    sharpe_min: n('sharpe_min'), sharpe_max: n('sharpe_max'),
+    min_trades: n('min_trades'),
+  }
+}
+
+function serializeFilterParams(f: AdvancedFilterState, params: URLSearchParams): void {
+  const map: Record<string, number | null> = {
+    roi_min: f.roi_min, roi_max: f.roi_max,
+    wr_min: f.win_rate_min, wr_max: f.win_rate_max,
+    mdd_min: f.mdd_min, mdd_max: f.mdd_max,
+    sharpe_min: f.sharpe_min, sharpe_max: f.sharpe_max,
+    min_trades: f.min_trades,
+  }
+  for (const [key, val] of Object.entries(map)) {
+    if (val != null) params.set(key, String(val))
+    else params.delete(key)
+  }
+}
+
+function RangeInput({ label, min, max, onMinChange, onMaxChange, step = 1, unit = '', disabled }: {
+  label: string; min: number | null; max: number | null
+  onMinChange: (v: number | null) => void; onMaxChange: (v: number | null) => void
+  step?: number; unit?: string; disabled?: boolean
+}) {
+  const inputStyle: React.CSSProperties = {
+    width: 80, padding: '4px 8px', borderRadius: 6,
+    border: `1px solid ${tokens.colors.border.primary}`,
+    background: disabled ? tokens.colors.bg.tertiary : tokens.colors.bg.secondary,
+    color: disabled ? tokens.colors.text.tertiary : tokens.colors.text.primary,
+    fontSize: 12, textAlign: 'center' as const, outline: 'none',
+    opacity: disabled ? 0.5 : 1,
+  }
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+      <span style={{ fontSize: 12, color: tokens.colors.text.secondary, minWidth: 80 }}>{label}{unit ? ` (${unit})` : ''}</span>
+      <input type="number" placeholder="Min" step={step} value={min ?? ''} disabled={disabled}
+        onChange={e => onMinChange(e.target.value ? Number(e.target.value) : null)} style={inputStyle} />
+      <span style={{ fontSize: 11, color: tokens.colors.text.tertiary }}>-</span>
+      <input type="number" placeholder="Max" step={step} value={max ?? ''} disabled={disabled}
+        onChange={e => onMaxChange(e.target.value ? Number(e.target.value) : null)} style={inputStyle} />
+    </div>
+  )
+}
+
+function AdvancedFiltersPanel({ filters, onChange, isPro, expanded, onToggle, onReset, t }: {
+  filters: AdvancedFilterState; onChange: (f: AdvancedFilterState) => void
+  isPro: boolean; expanded: boolean; onToggle: () => void; onReset: () => void
+  t: (key: string) => string
+}) {
+  const hasFilters = hasActiveAdvancedFilters(filters)
+  const update = (patch: Partial<AdvancedFilterState>) => onChange({ ...filters, ...patch })
+
+  return (
+    <div style={{
+      marginBottom: tokens.spacing[3],
+      borderRadius: tokens.radius.lg,
+      border: `1px solid ${hasFilters ? tokens.colors.accent.primary + '40' : 'var(--glass-border-light)'}`,
+      background: 'var(--overlay-hover)',
+      overflow: 'hidden',
+    }}>
+      <button onClick={onToggle} style={{
+        width: '100%', padding: '8px 16px', background: 'transparent', border: 'none',
+        color: tokens.colors.text.primary, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8,
+        fontSize: 13, fontWeight: 600,
+      }}>
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3" />
+        </svg>
+        {t('advancedFilter') || 'Advanced Filters'}
+        {!isPro && (
+          <span style={{
+            fontSize: 10, fontWeight: 700, padding: '1px 6px', borderRadius: 4,
+            background: 'linear-gradient(135deg, rgba(167,139,250,0.2), rgba(139,92,246,0.2))',
+            color: '#a78bfa', border: '1px solid rgba(167,139,250,0.4)',
+          }}>Pro</span>
+        )}
+        {hasFilters && (
+          <span style={{
+            fontSize: 10, fontWeight: 700, padding: '1px 6px', borderRadius: 10,
+            background: tokens.colors.accent.primary + '20', color: tokens.colors.accent.primary,
+          }}>Active</span>
+        )}
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
+          style={{ marginLeft: 'auto', transform: expanded ? 'rotate(180deg)' : 'rotate(0deg)', transition: 'transform 0.2s' }}>
+          <polyline points="6 9 12 15 18 9" />
+        </svg>
+      </button>
+
+      {expanded && (
+        <div style={{
+          padding: '12px 16px', borderTop: '1px solid var(--glass-border-light)',
+          position: 'relative',
+          ...(isPro ? {} : { filter: 'blur(1px)', pointerEvents: 'none' as const, opacity: 0.5 }),
+        }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 12 }}>
+            <RangeInput label="ROI" unit="%" min={filters.roi_min} max={filters.roi_max}
+              onMinChange={v => update({ roi_min: v })} onMaxChange={v => update({ roi_max: v })} step={1} disabled={!isPro} />
+            <RangeInput label={t('rankingWinRate') || 'Win Rate'} unit="%" min={filters.win_rate_min} max={filters.win_rate_max}
+              onMinChange={v => update({ win_rate_min: v })} onMaxChange={v => update({ win_rate_max: v })} step={1} disabled={!isPro} />
+            <RangeInput label={t('rankingMdd') || 'Max Drawdown'} unit="%" min={filters.mdd_min} max={filters.mdd_max}
+              onMinChange={v => update({ mdd_min: v })} onMaxChange={v => update({ mdd_max: v })} step={1} disabled={!isPro} />
+            <RangeInput label="Sharpe Ratio" min={filters.sharpe_min} max={filters.sharpe_max}
+              onMinChange={v => update({ sharpe_min: v })} onMaxChange={v => update({ sharpe_max: v })} step={0.1} disabled={!isPro} />
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+              <span style={{ fontSize: 12, color: tokens.colors.text.secondary, minWidth: 80 }}>{t('rankingTradesCount') || 'Min Trades'}</span>
+              <input type="number" placeholder="Min" value={filters.min_trades ?? ''} disabled={!isPro}
+                onChange={e => update({ min_trades: e.target.value ? Number(e.target.value) : null })}
+                style={{
+                  width: 80, padding: '4px 8px', borderRadius: 6,
+                  border: `1px solid ${tokens.colors.border.primary}`,
+                  background: !isPro ? tokens.colors.bg.tertiary : tokens.colors.bg.secondary,
+                  color: !isPro ? tokens.colors.text.tertiary : tokens.colors.text.primary,
+                  fontSize: 12, textAlign: 'center', outline: 'none', opacity: !isPro ? 0.5 : 1,
+                }} />
+            </div>
+          </div>
+          {hasFilters && isPro && (
+            <button onClick={onReset} style={{
+              marginTop: 8, padding: '4px 12px', fontSize: 11, fontWeight: 600,
+              color: tokens.colors.accent.primary, background: 'transparent',
+              border: `1px solid ${tokens.colors.accent.primary}40`, borderRadius: 6, cursor: 'pointer',
+            }}>{t('resetToDefault') || 'Reset Filters'}</button>
+          )}
+        </div>
+      )}
+
+      {expanded && !isPro && (
+        <div style={{
+          position: 'relative', padding: '12px 16px', borderTop: '1px solid var(--glass-border-light)',
+          textAlign: 'center',
+        }}>
+          <a href="/pricing" style={{
+            display: 'inline-flex', alignItems: 'center', gap: 6,
+            padding: '8px 20px', borderRadius: 8,
+            background: 'linear-gradient(135deg, #a78bfa, #8b5cf6)',
+            color: '#fff', fontSize: 13, fontWeight: 700, textDecoration: 'none',
+          }}>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M12 1C8.676 1 6 3.676 6 7V8H4V21H20V8H18V7C18 3.676 15.324 1 12 1ZM12 3C14.276 3 16 4.724 16 7V8H8V7C8 4.724 9.724 3 12 3Z" /></svg>
+            Upgrade to Pro
+          </a>
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ── Pro CSV Export Button ────────────────────────────────────
+
+function ProExportButton({ traders, exchange, period, isPro, t }: {
+  traders: TraderData[]; exchange?: string; period: Period; isPro: boolean
+  t: (key: string) => string
+}) {
+  const [showMenu, setShowMenu] = React.useState(false)
+  const ref = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (!showMenu) return
+    const handler = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setShowMenu(false)
+    }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [showMenu])
+
+  const doExport = (format: 'csv' | 'json') => {
+    setShowMenu(false)
+    const rows = traders.map((tr, i) => ({
+      Rank: i + 1,
+      Trader: getDisplayName(tr),
+      Platform: EXCHANGE_NAMES[tr.platform] || tr.platform,
+      ROI: tr.roi != null ? `${tr.roi.toFixed(2)}%` : '',
+      PnL: tr.pnl != null ? `$${tr.pnl.toFixed(2)}` : '',
+      'Win Rate': tr.win_rate != null ? `${tr.win_rate.toFixed(2)}%` : '',
+      MDD: tr.max_drawdown != null ? `${tr.max_drawdown.toFixed(2)}%` : '',
+      Sharpe: tr.sharpe_ratio != null ? tr.sharpe_ratio.toFixed(2) : '',
+      'Arena Score': tr.arena_score != null ? tr.arena_score.toFixed(1) : '',
+    }))
+    const filename = `arena-ranking-${exchange || 'all'}-${period}`
+    if (format === 'json') exportToJSON(rows, filename)
+    else exportToCSV(rows as unknown as Record<string, unknown>[], filename)
+  }
+
+  if (!isPro) {
+    return (
+      <a href="/pricing" title="Pro feature" style={{
+        display: 'flex', alignItems: 'center', gap: 4,
+        padding: '6px 12px', borderRadius: tokens.radius.md,
+        border: '1px solid var(--glass-border-light)',
+        background: 'var(--overlay-hover)', color: tokens.colors.text.tertiary,
+        fontSize: 12, fontWeight: 600, cursor: 'pointer', textDecoration: 'none', opacity: 0.7,
+      }}>
+        <svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor"><path d="M12 1C8.676 1 6 3.676 6 7V8H4V21H20V8H18V7C18 3.676 15.324 1 12 1ZM12 3C14.276 3 16 4.724 16 7V8H8V7C8 4.724 9.724 3 12 3Z" /></svg>
+        {t('export') || 'Export'}
+      </a>
+    )
+  }
+
+  return (
+    <div ref={ref} style={{ position: 'relative' }}>
+      <button onClick={() => setShowMenu(o => !o)} style={{
+        display: 'flex', alignItems: 'center', gap: 4,
+        padding: '6px 12px', borderRadius: tokens.radius.md,
+        border: '1px solid var(--glass-border-light)',
+        background: 'var(--overlay-hover)', color: tokens.colors.text.primary,
+        fontSize: 12, fontWeight: 600, cursor: 'pointer',
+      }}>
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3" />
+        </svg>
+        {t('export') || 'Export'}
+      </button>
+      {showMenu && (
+        <div style={{
+          position: 'absolute', top: '100%', right: 0, marginTop: 4,
+          background: tokens.colors.bg.secondary, border: `1px solid ${tokens.colors.border.primary}`,
+          borderRadius: tokens.radius.md, padding: 4, zIndex: 100, minWidth: 120,
+          boxShadow: tokens.shadow.md,
+        }}>
+          <button onClick={() => doExport('csv')} style={{
+            display: 'block', width: '100%', padding: '6px 12px', background: 'transparent',
+            border: 'none', color: tokens.colors.text.primary, fontSize: 13, cursor: 'pointer', textAlign: 'left',
+            borderRadius: tokens.radius.sm,
+          }}
+            onMouseEnter={e => { e.currentTarget.style.background = tokens.colors.bg.tertiary || 'var(--overlay-hover)' }}
+            onMouseLeave={e => { e.currentTarget.style.background = 'transparent' }}>
+            CSV
+          </button>
+          <button onClick={() => doExport('json')} style={{
+            display: 'block', width: '100%', padding: '6px 12px', background: 'transparent',
+            border: 'none', color: tokens.colors.text.primary, fontSize: 13, cursor: 'pointer', textAlign: 'left',
+            borderRadius: tokens.radius.sm,
+          }}
+            onMouseEnter={e => { e.currentTarget.style.background = tokens.colors.bg.tertiary || 'var(--overlay-hover)' }}
+            onMouseLeave={e => { e.currentTarget.style.background = 'transparent' }}>
+            JSON
+          </button>
+        </div>
+      )}
+    </div>
+  )
+}
 
 interface TraderData {
   trader_key: string
@@ -146,6 +437,9 @@ export default function ExchangeRankingClient({ traders: initialTraders, exchang
   const validPeriod = (['7D', '30D', '90D'] as const).includes(urlPeriod as Period) ? urlPeriod : '90D'
   const [period, setPeriod] = useState<Period>(validPeriod)
   const [periodLoading, setPeriodLoading] = useState(false)
+  const { isPro } = useProStatus()
+  const [advancedFilters, setAdvancedFilters] = useState<AdvancedFilterState>(() => parseFilterParams(searchParams))
+  const [showAdvancedFilters, setShowAdvancedFilters] = useState(() => hasActiveAdvancedFilters(parseFilterParams(searchParams)))
   const [searchQuery, setSearchQuery] = useState('')
   const [debouncedSearch, setDebouncedSearch] = useState('')
   const searchTimerRef = useRef<ReturnType<typeof setTimeout>>(undefined)
@@ -162,11 +456,28 @@ export default function ExchangeRankingClient({ traders: initialTraders, exchang
   const [traders, setTraders] = useState(initialTraders)
   useEffect(() => { setTraders(initialTraders) }, [initialTraders])
   useEffect(() => { if (searchTimerRef.current) clearTimeout(searchTimerRef.current); searchTimerRef.current = setTimeout(() => setDebouncedSearch(searchQuery), 300); return () => { if (searchTimerRef.current) clearTimeout(searchTimerRef.current) } }, [searchQuery])
+  const handleAdvancedFilterChange = useCallback((f: AdvancedFilterState) => {
+    setAdvancedFilters(f)
+    const params = new URLSearchParams(searchParams.toString())
+    serializeFilterParams(f, params)
+    const qs = params.toString()
+    router.replace(`${pathname}${qs ? '?' + qs : ''}`, { scroll: false })
+  }, [pathname, router, searchParams])
   const handlePeriodChange = useCallback((newPeriod: Period) => { setPeriod(newPeriod); const params = new URLSearchParams(searchParams.toString()); if (newPeriod === '90D') { params.delete('period') } else { params.set('period', newPeriod) }; const qs = params.toString(); router.replace(`${pathname}${qs ? '?' + qs : ''}`, { scroll: false }) }, [pathname, router, searchParams])
   useEffect(() => { if (!exchange) return; let cancelled = false; setPeriodLoading(true); const win = PERIOD_TO_WINDOW[period]; fetch('/api/rankings?window=' + win + '&platform=' + encodeURIComponent(exchange) + '&limit=5000').then(r => r.ok ? r.json() : null).then(json => { const rows = Array.isArray(json?.data) ? json.data : json?.data?.traders; if (cancelled || !rows?.length) { setPeriodLoading(false); return }; setTraders(rows.map((row: Record<string, unknown>) => mapApiRow(row, exchange))); setPeriodLoading(false) }).catch(() => setPeriodLoading(false)); return () => { cancelled = true } }, [exchange, period]) // eslint-disable-line react-hooks/exhaustive-deps
   const handleRealtimeUpdate = useCallback((updates: Array<{ id: string; source: string; roi: number; pnl: number | null; win_rate: number | null; max_drawdown: number | null; arena_score: number | null; [key: string]: unknown }>) => { setTraders(prev => { const updateMap = new Map(updates.map(u => [u.id, u])); let changed = false; const next = prev.map(tr => { const u = updateMap.get(tr._source_id || '') || updateMap.get(tr.trader_key); if (!u) return tr; changed = true; return { ...tr, roi: u.roi, pnl: u.pnl ?? tr.pnl, win_rate: u.win_rate, max_drawdown: u.max_drawdown, arena_score: u.arena_score } }); return changed ? next : prev }) }, [])
   useRealtimeRankings({ onUpdate: handleRealtimeUpdate })
-  const filteredTraders = useMemo(() => { if (!debouncedSearch.trim()) return traders; const q = debouncedSearch.toLowerCase().trim(); return traders.filter(tr => getDisplayName(tr).toLowerCase().includes(q) || tr.trader_key.toLowerCase().includes(q)) }, [traders, debouncedSearch])
+  const filteredTraders = useMemo(() => {
+    let result = traders
+    if (debouncedSearch.trim()) {
+      const q = debouncedSearch.toLowerCase().trim()
+      result = result.filter(tr => getDisplayName(tr).toLowerCase().includes(q) || tr.trader_key.toLowerCase().includes(q))
+    }
+    if (isPro && hasActiveAdvancedFilters(advancedFilters)) {
+      result = applyAdvancedFilters(result, advancedFilters)
+    }
+    return result
+  }, [traders, debouncedSearch, advancedFilters, isPro])
   const { lastUpdatedText, isStale } = useMemo(() => { let latestTs: string | null = null; for (const tr of traders) { if (tr.captured_at && (!latestTs || tr.captured_at > latestTs)) latestTs = tr.captured_at }; if (!latestTs) return { lastUpdatedText: null, isStale: false }; const diffHours = (Date.now() - new Date(latestTs).getTime()) / (1000 * 60 * 60); const locale: Locale = language === 'zh' ? 'zh' : language === 'ja' ? 'ja' : language === 'ko' ? 'ko' : 'en'; return { lastUpdatedText: formatTimeAgo(latestTs, locale), isStale: diffHours > 6 } }, [traders, language])
   const rankMap = useMemo(() => { const m = new Map<TraderData, number>(); filteredTraders.forEach((tr, i) => m.set(tr, i + 1)); return m }, [filteredTraders])
   const handleSort = (key: SortKey) => { if (sortKey === key) { setSortDir(d => d === 'asc' ? 'desc' : 'asc') } else { setSortKey(key); setSortDir(key === 'rank' ? 'asc' : 'desc') } }
@@ -189,7 +500,8 @@ export default function ExchangeRankingClient({ traders: initialTraders, exchang
   if (traders.length === 0) return (<div style={{ textAlign: 'center', padding: tokens.spacing[8], color: tokens.colors.text.tertiary }}><div style={{ marginBottom: tokens.spacing[3] }}><svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" style={{ opacity: 0.4, color: tokens.colors.text.tertiary, margin: '0 auto' }}><path d="M3 3v18h18" /><path d="M7 16l4-8 4 4 4-6" /></svg></div><div style={{ fontSize: tokens.typography.fontSize.base, fontWeight: 600, color: tokens.colors.text.secondary, marginBottom: tokens.spacing[2] }}>{t('rankingNoData')}</div><div style={{ fontSize: tokens.typography.fontSize.sm }}>{t('rankingNoDataDesc')}</div></div>)
   return (
     <PullToRefresh onRefresh={handleRefresh}><div>
-      <div style={{ display: 'flex', gap: 8, marginBottom: tokens.spacing[4], justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap' }}><div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}><PeriodSelector period={period} onChange={handlePeriodChange} loading={periodLoading} /><button onClick={() => setViewMode('table')} aria-label="Switch to table view" aria-pressed={viewMode === 'table'} style={{ padding: '6px 16px', minHeight: 36, borderRadius: tokens.radius.md, border: 'none', fontSize: 13, fontWeight: viewMode === 'table' ? 700 : 500, background: viewMode === 'table' ? tokens.colors.accent.brand + '30' : 'var(--glass-border-light)', color: viewMode === 'table' ? tokens.colors.accent.brand : tokens.colors.text.secondary, cursor: 'pointer' }}>{t('rankingTableView')}</button><button onClick={() => setViewMode('card')} aria-label="Switch to card view" aria-pressed={viewMode === 'card'} style={{ padding: '6px 16px', minHeight: 36, borderRadius: tokens.radius.md, border: 'none', fontSize: 13, fontWeight: viewMode === 'card' ? 700 : 500, background: viewMode === 'card' ? tokens.colors.accent.brand + '30' : 'var(--glass-border-light)', color: viewMode === 'card' ? tokens.colors.accent.brand : tokens.colors.text.secondary, cursor: 'pointer' }}>{t('rankingCardView')}</button></div><div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>{viewMode === 'table' && <ColumnToggle columns={optionalColumns} onToggle={handleColumnToggle} label={t('rankingColumns')} />}<ShareLeaderboardButton traders={traders} exchange={exchange} /></div></div>
+      <div style={{ display: 'flex', gap: 8, marginBottom: tokens.spacing[4], justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap' }}><div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}><PeriodSelector period={period} onChange={handlePeriodChange} loading={periodLoading} /><button onClick={() => setViewMode('table')} aria-label="Switch to table view" aria-pressed={viewMode === 'table'} style={{ padding: '6px 16px', minHeight: 36, borderRadius: tokens.radius.md, border: 'none', fontSize: 13, fontWeight: viewMode === 'table' ? 700 : 500, background: viewMode === 'table' ? tokens.colors.accent.brand + '30' : 'var(--glass-border-light)', color: viewMode === 'table' ? tokens.colors.accent.brand : tokens.colors.text.secondary, cursor: 'pointer' }}>{t('rankingTableView')}</button><button onClick={() => setViewMode('card')} aria-label="Switch to card view" aria-pressed={viewMode === 'card'} style={{ padding: '6px 16px', minHeight: 36, borderRadius: tokens.radius.md, border: 'none', fontSize: 13, fontWeight: viewMode === 'card' ? 700 : 500, background: viewMode === 'card' ? tokens.colors.accent.brand + '30' : 'var(--glass-border-light)', color: viewMode === 'card' ? tokens.colors.accent.brand : tokens.colors.text.secondary, cursor: 'pointer' }}>{t('rankingCardView')}</button></div><div style={{ display: 'flex', gap: 8, alignItems: 'center' }}><ProExportButton traders={activeTraders} exchange={exchange} period={period} isPro={isPro} t={t} />{viewMode === 'table' && <ColumnToggle columns={optionalColumns} onToggle={handleColumnToggle} label={t('rankingColumns')} />}<ShareLeaderboardButton traders={traders} exchange={exchange} /></div></div>
+      <AdvancedFiltersPanel filters={advancedFilters} onChange={handleAdvancedFilterChange} isPro={isPro} expanded={showAdvancedFilters} onToggle={() => setShowAdvancedFilters(v => !v)} onReset={() => handleAdvancedFilterChange(EMPTY_FILTERS)} t={t} />
       <div style={{ marginBottom: tokens.spacing[3], position: 'relative' }}><div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={tokens.colors.text.tertiary} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ position: 'absolute', left: 12, pointerEvents: 'none' }}><circle cx="11" cy="11" r="8" /><path d="M21 21l-4.35-4.35" /></svg><input type="text" value={searchQuery} onChange={e => setSearchQuery(e.target.value)} placeholder={t('rankingSearch')} aria-label="Search traders" style={{ width: '100%', padding: '8px 12px 8px 36px', borderRadius: tokens.radius.md, border: '1px solid var(--glass-border-light)', background: 'var(--overlay-hover)', color: tokens.colors.text.primary, fontSize: 13, outline: 'none' }} />{searchQuery && <button onClick={() => setSearchQuery('')} aria-label="Clear search" style={{ position: 'absolute', right: 8, padding: '4px 8px', borderRadius: tokens.radius.sm, border: 'none', background: 'var(--glass-border-light)', color: tokens.colors.text.secondary, fontSize: 11, cursor: 'pointer' }}>{t('rankingClearSearch')}</button>}</div>{debouncedSearch.trim() && <div aria-live="polite" style={{ fontSize: 12, color: tokens.colors.text.tertiary, marginTop: 4 }}>{t('rankingSearchResults').replace('{count}', String(filteredTraders.length))}</div>}</div>
       {lastUpdatedText && (<div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: 6, marginBottom: tokens.spacing[3], padding: isStale ? '4px 10px' : undefined, borderRadius: isStale ? tokens.radius.md : undefined, background: isStale ? 'rgba(202, 138, 4, 0.08)' : undefined, border: isStale ? '1px solid rgba(202, 138, 4, 0.20)' : undefined, fontSize: 12, color: isStale ? '#ca8a04' : tokens.colors.text.tertiary }}>{isStale ? <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" /><line x1="12" y1="9" x2="12" y2="13" /><line x1="12" y1="17" x2="12.01" y2="17" /></svg> : <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ opacity: 0.6 }}><circle cx="12" cy="12" r="10" /><polyline points="12 6 12 12 16 14" /></svg>}<span suppressHydrationWarning>{isStale ? `${t('dataStaleWarning')} \u00b7 ` : ''}{t('lastUpdated')} {lastUpdatedText}</span></div>)}
       {periodLoading && <div style={{ display: 'flex', justifyContent: 'center', padding: tokens.spacing[4] }}><div style={{ width: 24, height: 24, border: `2px solid ${tokens.colors.accent.brand}30`, borderTopColor: tokens.colors.accent.brand, borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} /><style>{'@keyframes spin { to { transform: rotate(360deg) } }'}</style></div>}
