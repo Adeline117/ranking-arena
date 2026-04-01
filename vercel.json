@@ -167,6 +167,10 @@
       "schedule": "0 8 * * 1"
     },
     {
+      "path": "/api/cron/weekly-digest",
+      "schedule": "0 9 * * 1"
+    },
+    {
       "path": "/api/cron/precompute-composite",
       "schedule": "12 */2 * * *"
     },
