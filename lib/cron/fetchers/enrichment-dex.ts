@@ -206,6 +206,11 @@ export async function fetchHyperliquidPositionHistory(
 const GMX_SUBSQUID_URL = 'https://gmx.squids.live/gmx-synthetics-arbitrum:prod/api/graphql'
 const GMX_VALUE_SCALE = 1e30
 
+function safeBigIntToNum(val: string | number | null | undefined, scale: number): number {
+  if (val == null || val === '') return 0
+  try { return Number(BigInt(String(val).split('.')[0])) / scale } catch { return 0 }
+}
+
 // Common GMX v2 market address → symbol mapping (Arbitrum)
 const GMX_MARKET_SYMBOLS: Record<string, string> = {
   '0x70d95587d40a2caf56bd97485ab3eec10bee6336': 'ETH/USD',
@@ -285,9 +290,9 @@ export async function fetchGmxPositionHistory(
     })
 
     return closingActions.map((a) => {
-      const pnlUsd = a.basePnlUsd ? Number(BigInt(a.basePnlUsd)) / GMX_VALUE_SCALE : null
-      const sizeUsd = a.sizeDeltaUsd ? Number(BigInt(a.sizeDeltaUsd)) / GMX_VALUE_SCALE : null
-      const price = a.executionPrice ? Number(BigInt(a.executionPrice)) / 1e24 : null
+      const pnlUsd = a.basePnlUsd ? safeBigIntToNum(a.basePnlUsd, GMX_VALUE_SCALE) : null
+      const sizeUsd = a.sizeDeltaUsd ? safeBigIntToNum(a.sizeDeltaUsd, GMX_VALUE_SCALE) : null
+      const price = a.executionPrice ? safeBigIntToNum(a.executionPrice, 1e24) : null
 
       return {
         symbol: resolveGmxMarketSymbol(a.marketAddress),

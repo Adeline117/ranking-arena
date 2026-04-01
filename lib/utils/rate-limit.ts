@@ -34,7 +34,15 @@ function getUpstashRedis(): Redis | null {
   }
 
   try {
-    redis = new Redis({ url, token })
+    // ISR-safe fetch: Upstash SDK defaults to cache:'no-store' which breaks Next.js static pages
+    const isrSafeFetch: typeof fetch = (input, init) => {
+      if (init?.cache === 'no-store') {
+        const { cache: _, ...rest } = init
+        return fetch(input, { ...rest, next: { revalidate: 60 } })
+      }
+      return fetch(input, init)
+    }
+    redis = new Redis({ url, token, fetch: isrSafeFetch } as ConstructorParameters<typeof Redis>[0])
     rateLimitLogger.info('Upstash Redis 连接成功')
     return redis
   } catch (error) {

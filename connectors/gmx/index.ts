@@ -23,6 +23,18 @@ const GMX_APP = 'https://app.gmx.io';
 // Subsquid uses 1e30 scale for values
 const VALUE_SCALE = 1e30;
 
+/** Safely convert a subgraph BigInt string to Number. Handles null, undefined, empty, decimal strings. */
+function safeBigIntToNum(val: string | number | null | undefined, scale: number): number {
+  if (val == null || val === '') return 0;
+  try {
+    // Remove decimal portion if present (subgraph sometimes returns "123.0")
+    const str = String(val).split('.')[0];
+    return Number(BigInt(str)) / scale;
+  } catch {
+    return 0;
+  }
+}
+
 export class GmxConnector extends BaseConnector {
   platform: Platform = 'gmx';
   market_type: MarketType = 'perp';
@@ -62,10 +74,10 @@ export class GmxConnector extends BaseConnector {
       const entries: LeaderboardEntry[] = response.data.accountStats
         .map((item, idx) => {
           // Values are in wei (1e30 scale)
-          const pnl = Number(BigInt(item.realizedPnl || '0')) / VALUE_SCALE;
-          const volume = Number(BigInt(item.volume || '0')) / VALUE_SCALE;
-          const netCapital = Number(BigInt(item.netCapital || '0')) / VALUE_SCALE;
-          const maxCapital = Number(BigInt(item.maxCapital || '0')) / VALUE_SCALE;
+          const pnl = safeBigIntToNum(item.realizedPnl, VALUE_SCALE);
+          const volume = safeBigIntToNum(item.volume, VALUE_SCALE);
+          const netCapital = safeBigIntToNum(item.netCapital, VALUE_SCALE);
+          const maxCapital = safeBigIntToNum(item.maxCapital, VALUE_SCALE);
 
           // Calculate ROI based on max capital deployed
           // Avoid division by zero and unrealistic ROI from tiny positions
@@ -189,10 +201,10 @@ export class GmxConnector extends BaseConnector {
       if (!stats) return this.failure('No on-chain stats found for this trader');
 
       // Values are in wei (1e30 scale)
-      const pnl = Number(BigInt(stats.realizedPnl || '0')) / VALUE_SCALE;
-      const _volume = Number(BigInt(stats.volume || '0')) / VALUE_SCALE;
-      const netCapital = Number(BigInt(stats.netCapital || '0')) / VALUE_SCALE;
-      const maxCapital = Number(BigInt(stats.maxCapital || '0')) / VALUE_SCALE;
+      const pnl = safeBigIntToNum(stats.realizedPnl, VALUE_SCALE);
+      const _volume = safeBigIntToNum(stats.volume, VALUE_SCALE);
+      const netCapital = safeBigIntToNum(stats.netCapital, VALUE_SCALE);
+      const maxCapital = safeBigIntToNum(stats.maxCapital, VALUE_SCALE);
 
       // Calculate ROI based on max capital deployed
       const roi = maxCapital > 100 ? (pnl / maxCapital) * 100 : 0;
