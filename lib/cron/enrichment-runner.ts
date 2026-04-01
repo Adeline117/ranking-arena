@@ -265,18 +265,20 @@ export const ENRICHMENT_PLATFORM_CONFIGS: Record<string, EnrichmentConfig> = {
     fetchStatsDetail: fetchOkxWeb3StatsDetail,
     concurrency: 2, delayMs: 2000,
   },
-  weex: {
-    platform: 'weex',
-    fetchEquityCurve: fetchWeexEquityCurve,
-    fetchStatsDetail: fetchWeexStatsDetail,
-    concurrency: 1, delayMs: 3000, // VPS scraper is slow, one at a time
-  },
-  kucoin: {
-    platform: 'kucoin',
-    fetchEquityCurve: fetchKucoinEquityCurve,
-    fetchStatsDetail: fetchKucoinStatsDetail,
-    concurrency: 1, delayMs: 3000, // VPS scraper is serial (Playwright)
-  },
+  // weex: DISABLED 2026-04-01 — 75% timeout rate, VPS scraper unreliable, platform removed from fetch groups
+  // weex: {
+  //   platform: 'weex',
+  //   fetchEquityCurve: fetchWeexEquityCurve,
+  //   fetchStatsDetail: fetchWeexStatsDetail,
+  //   concurrency: 1, delayMs: 3000,
+  // },
+  // kucoin: DISABLED 2026-04-01 — copy trading discontinued, removed from fetch groups
+  // kucoin: {
+  //   platform: 'kucoin',
+  //   fetchEquityCurve: fetchKucoinEquityCurve,
+  //   fetchStatsDetail: fetchKucoinStatsDetail,
+  //   concurrency: 1, delayMs: 3000,
+  // },
   // bitget_futures: RE-ENABLED stats+positions (2026-03-19)
   // Root cause of 44min hang: fetchStatsDetail internally called fetchPositionHistory,
   // doubling request time (2x20s timeout). Fix: standalone stats, strict 10s timeouts.
@@ -1000,15 +1002,18 @@ export async function runEnrichment(params: {
 
   if (totalFailed === 0) {
     await plog.success(totalEnriched, { period, duration })
-  } else {
-    // Collect all error details for debugging
+  } else if (failureRate > 0.5) {
+    // >50% failure → real error
     const errorDetails = Object.entries(results)
       .filter(([, r]) => r.errors.length > 0)
       .map(([platform, r]) => ({ platform, failed: r.failed, errors: r.errors.slice(0, 10) }))
     await plog.error(
-      new Error(`${totalFailed}/${totalEnriched + totalFailed} enrichments failed`), 
+      new Error(`${totalFailed}/${totalEnriched + totalFailed} enrichments failed`),
       { period, duration, totalEnriched, totalFailed, errorDetails }
     )
+  } else {
+    // <50% failure → log as success with warning metadata
+    await plog.success(totalEnriched, { period, duration, totalFailed, note: `${totalFailed} partial failures (acceptable)` })
   }
 
   return { ok: totalFailed === 0, duration, period, summary: { total, enriched: totalEnriched, failed: totalFailed, suppressedErrors: totalSuppressedErrors }, results }
