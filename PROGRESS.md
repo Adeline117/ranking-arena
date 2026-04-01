@@ -32,11 +32,48 @@
 
 ---
 
+## Full Optimization + Feature Sprint (2026-03-31)
+
+### Phase 1: Pipeline Reliability ✅
+- Enrichment retry restored to 3 (shared AbortSignal bounds total time)
+- Silent .catch(() => []) replaced with logged warnings + suppressedErrors counter
+- dydx enrichment re-enabled (Copin API + AbortSignal.timeout 8s)
+- batch-fetch-traders crons consolidated 18→6 super-groups
+- warm-cache frequency reduced 5min→15min
+- VPS scraper rate limiting added (30rpm + per-platform sequential)
+
+### Phase 2: Frontend Resilience ✅
+- 3 giant components split: CommentsModal 832→201, EquityCurve 766→299, SearchDropdown 698→233
+- error.tsx + loading.tsx added to library/learn pages
+- Ranking table ARIA labels + keyboard navigation
+- System theme detection (dark/light/system 3-way)
+- Watchlist UI page built (enriched trader data)
+- Empty states unified across core path
+
+### Phase 3: Performance + Cache ✅
+- SWR cache: softExpiresAt eliminates duplicate swr: bucket (~50% memory reduction)
+- snapshots_v2 monthly partitioning migration prepared (swap needs maintenance window)
+- Edge cache headers: platform-stats 5min, movers 1min, prices 30s
+- OG social cards: dynamic trader profile images already implemented
+
+### Phase 4: Social + Retention ✅
+- Email consolidated to Resend, weekly digest cron wired (Monday 09:00 UTC)
+- 6 achievement toasts (first_watchlist, first_comparison, first_post, explorer_5, pro_subscriber, social_butterfly)
+- Trader comparison enhanced: equity curve overlay SVG, limit 5→10
+- Competitions completed: live standings, podium, share + OG meta
+
+### Phase 5: New Platforms + Pro Monetization ✅
+- Pro advanced ranking filters (ROI/WR/MDD/Sharpe ranges, URL-persisted)
+- Pro CSV export from rankings page
+- Trading signal alerts (position change detection → notifications)
+- Referral system (codes, tracking, Pro reward after 3 referrals)
+- Vertex/Apex/RabbitX DEX connectors (in progress)
+
 ## Current Sprint Focus
-- **33 active platforms** (kucoin, weex, okx_web3 moved to DEAD_BLOCKED_PLATFORMS)
-- Enrichment: 33 platforms with enrichment configs (dydx disabled due to 30+ min hangs)
-- Equity curves: 34 platforms have curve data.
-- Cron jobs: 60 active.
+- **33+ active platforms** (+ Vertex, Apex, RabbitX pending)
+- Enrichment: 33 platforms with enrichment configs (dydx re-enabled)
+- Cron jobs: consolidated to ~45 active
+- Code quality: type-check ✅, lint 0 errors
 
 ## Lighthouse Performance Optimization (2026-03-22)
 Lighthouse scores were terrible: LCP 8.3s, CLS 0.235, TBT 260ms, Speed Index 5.9s.
