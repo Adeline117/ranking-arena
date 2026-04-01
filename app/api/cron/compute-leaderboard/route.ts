@@ -760,6 +760,108 @@ async function computeSeason(
     }
   }
 
+  // Phase 4b2: Fallback — compute from trader_daily_snapshots for traders still missing
+  // This covers traders not reached by enrichment (which only processes top N by score)
+  {
+    const stillNeedAdvanced = Array.from(traderMap.values())
+      .filter(t => t.roi != null && (t.sortino_ratio == null || t.calmar_ratio == null || t.profit_factor == null))
+    if (stillNeedAdvanced.length > 0) {
+      const dsBySource = new Map<string, string[]>()
+      for (const t of stillNeedAdvanced) {
+        const ids = dsBySource.get(t.source) || []
+        ids.push(t.source_trader_id)
+        dsBySource.set(t.source, ids)
+      }
+      let dailyDerived = 0
+      await Promise.all(
+        Array.from(dsBySource.entries()).map(async ([source, traderIds]) => {
+          for (let i = 0; i < traderIds.length; i += 100) {
+            const chunk = traderIds.slice(i, i + 100)
+            const { data: dsRows } = await supabase
+              .from('trader_daily_snapshots')
+              .select('trader_key, date, daily_return_pct, roi')
+              .eq('platform', source)
+              .in('trader_key', chunk)
+              .order('date', { ascending: true })
+              .limit(10000)
+            if (!dsRows?.length) continue
+
+            // Group by trader
+            const byTrader = new Map<string, number[]>()
+            for (const row of dsRows) {
+              const tid = row.trader_key.startsWith('0x') ? row.trader_key.toLowerCase() : row.trader_key
+              if (!byTrader.has(tid)) byTrader.set(tid, [])
+              // Prefer daily_return_pct; fallback to ROI diff
+              const ret = row.daily_return_pct != null ? Number(row.daily_return_pct) : null
+              if (ret != null && !isNaN(ret)) byTrader.get(tid)!.push(ret)
+            }
+
+            for (const [tid, dailyReturns] of byTrader) {
+              const existing = traderMap.get(`${source}:${tid}`)
+              if (!existing || dailyReturns.length < 3) continue
+
+              // Sortino
+              if (existing.sortino_ratio == null && dailyReturns.length >= 3) {
+                const decReturns = dailyReturns.map(r => r / 100)
+                const negReturns = decReturns.filter(r => r < 0)
+                if (negReturns.length > 0) {
+                  const avg = decReturns.reduce((a, b) => a + b, 0) / decReturns.length
+                  const dsd = Math.sqrt(negReturns.reduce((s, r) => s + r * r, 0) / decReturns.length)
+                  if (dsd > 0) {
+                    existing.sortino_ratio = Math.round(Math.max(-10, Math.min(10, (avg / dsd) * Math.sqrt(365))) * 10000) / 10000
+                    dailyDerived++
+                  }
+                } else {
+                  existing.sortino_ratio = 10
+                  dailyDerived++
+                }
+              }
+
+              // Calmar
+              if (existing.calmar_ratio == null && existing.roi != null && existing.max_drawdown != null && existing.max_drawdown > 0) {
+                const periodDays = season === '7D' ? 7 : season === '30D' ? 30 : 90
+                const annRoi = existing.roi * (365 / periodDays)
+                existing.calmar_ratio = Math.round(Math.max(-10, Math.min(10, annRoi / Math.abs(existing.max_drawdown))) * 10000) / 10000
+                dailyDerived++
+              }
+
+              // Profit factor
+              if (existing.profit_factor == null && dailyReturns.length >= 3) {
+                const gw = dailyReturns.filter(r => r > 0).reduce((s, r) => s + r, 0)
+                const gl = Math.abs(dailyReturns.filter(r => r < 0).reduce((s, r) => s + r, 0))
+                if (gl > 0) {
+                  existing.profit_factor = Math.round(Math.min(10, gw / gl) * 10000) / 10000
+                  dailyDerived++
+                } else if (gw > 0) {
+                  existing.profit_factor = 10
+                  dailyDerived++
+                }
+              }
+            }
+          }
+        })
+      )
+      logger.info(`[${season}] Derived ${dailyDerived} sortino/calmar/PF values from daily_snapshots (fallback)`)
+    }
+  }
+
+  // Phase 4b3: Last resort — compute calmar from ROI + MDD for ALL traders still missing
+  // Calmar = annualized_ROI / |MDD| — doesn't require daily returns, just total ROI and MDD
+  {
+    let calmarOnly = 0
+    for (const snap of Array.from(traderMap.values())) {
+      if (snap.calmar_ratio != null) continue
+      if (snap.roi == null || snap.max_drawdown == null || snap.max_drawdown <= 0) continue
+      const periodDays = season === '7D' ? 7 : season === '30D' ? 30 : 90
+      const annRoi = snap.roi * (365 / periodDays)
+      snap.calmar_ratio = Math.round(Math.max(-10, Math.min(10, annRoi / Math.abs(snap.max_drawdown))) * 10000) / 10000
+      calmarOnly++
+    }
+    if (calmarOnly > 0) {
+      logger.info(`[${season}] Computed ${calmarOnly} calmar ratios from ROI/MDD (no daily returns needed)`)
+    }
+  }
+
   // Phase 4c: Classify trading_style from avg_holding_hours
   for (const snap of Array.from(traderMap.values())) {
     if (snap.trading_style != null) continue
