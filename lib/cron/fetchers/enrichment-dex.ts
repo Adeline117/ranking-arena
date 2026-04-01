@@ -505,6 +505,90 @@ export async function fetchHyperliquidStatsDetail(
 }
 
 // ============================================
+// GMX Portfolio (open positions from Subsquid)
+// ============================================
+
+/**
+ * Fetch current open positions for a GMX trader from Subsquid GraphQL.
+ * Uses the positions query with isSnapshot_eq: false to get live positions.
+ * sizeInUsd and collateralAmount are in 1e30 scale.
+ */
+export async function fetchGmxPortfolio(
+  address: string,
+): Promise<PortfolioPosition[]> {
+  try {
+    const query = `{
+      positions(
+        where: { account_eq: "${address.toLowerCase()}", isSnapshot_eq: false },
+        limit: 50
+      ) {
+        market
+        isLong
+        sizeInUsd
+        collateralAmount
+        entryPrice
+        leverage
+        unrealizedPnl
+        openedAt
+      }
+    }`
+
+    const result = await fetchJson<{
+      data?: {
+        positions?: Array<{
+          market?: string
+          isLong: boolean
+          sizeInUsd?: string
+          collateralAmount?: string
+          entryPrice?: string
+          leverage?: string
+          unrealizedPnl?: string
+          openedAt?: number
+        }>
+      }
+    }>(GMX_SUBSQUID_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: { query },
+      timeoutMs: 15000,
+    })
+
+    const positions = result?.data?.positions
+    if (!positions || positions.length === 0) return []
+
+    // Filter out positions with zero size (already closed)
+    const openPositions = positions.filter((p) => {
+      const size = p.sizeInUsd ? safeBigIntToNum(p.sizeInUsd, GMX_VALUE_SCALE) : 0
+      return size > 0
+    })
+
+    if (openPositions.length === 0) return []
+
+    // Compute total position value for investedPct calculation
+    const totalValue = openPositions.reduce((sum, p) => {
+      return sum + (p.sizeInUsd ? safeBigIntToNum(p.sizeInUsd, GMX_VALUE_SCALE) : 0)
+    }, 0)
+
+    return openPositions.map((p) => {
+      const sizeUsd = p.sizeInUsd ? safeBigIntToNum(p.sizeInUsd, GMX_VALUE_SCALE) : 0
+      const entry = p.entryPrice ? safeBigIntToNum(p.entryPrice, GMX_VALUE_SCALE) : null
+      const pnl = p.unrealizedPnl ? safeBigIntToNum(p.unrealizedPnl, GMX_VALUE_SCALE) : null
+
+      return {
+        symbol: resolveGmxMarketSymbol(p.market),
+        direction: p.isLong ? 'long' as const : 'short' as const,
+        investedPct: totalValue > 0 ? (sizeUsd / totalValue) * 100 : null,
+        entryPrice: entry,
+        pnl,
+      }
+    })
+  } catch (err) {
+    logger.warn(`[enrichment] GMX portfolio failed: ${err}`)
+    return []
+  }
+}
+
+// ============================================
 // GMX Equity Curve + Stats
 // ============================================
 
