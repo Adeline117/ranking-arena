@@ -4,24 +4,13 @@
  * Calls fetcher functions DIRECTLY (in-process) instead of via HTTP,
  * avoiding Cloudflare timeouts and Vercel deployment protection issues.
  *
- * Query params:
- *   group=a  → binance_futures, binance_spot (every 3h)
- *   group=a2 → okx_futures (every 3h, via VPS proxy)
- *   group=a3 → bybit (every 3h, VPS scraper)
- *   group=a4 → bitget_futures (every 3h, VPS scraper)
- *   group=b  → hyperliquid, gmx (every 4h)
- *   group=c  → bitunix (every 4h)
- *   group=d1 → gains, htx_futures (every 6h)
- *   group=e  → bitfinex, coinex, binance_web3 (every 6h)
- *   group=e2 → okx_web3 (every 6h, slow platform, separated to avoid timeout)
- *   group=f  → mexc (every 6h, VPS scraper)
- *   group=f2 → bingx (every 6h, VPS scraper)
- *   group=h  → gateio, btcc (every 6h)
- *   group=g1 → drift, jupiter_perps, aevo (every 6h)
- *   group=g2 → web3_bot, toobit, xt, crypto_com (every 6h)
- *   group=i  → etoro (every 6h)
- *   group=j  → dydx (every 6h, separated to avoid timeout with etoro)
- *   group=k  → weex (every 6h, VPS scraper — re-enabled 2026-03-31)
+ * Consolidated from 18 groups → 6 super-groups (2026-03-31):
+ *   group=a → binance_futures, binance_spot, okx_futures, okx_spot (every 3h, fast direct APIs)
+ *   group=b → bybit, bybit_spot, bitget_futures (every 3h, VPS scraper)
+ *   group=c → hyperliquid, gmx, bitunix (every 4h, DEX + fast CEX)
+ *   group=d → gains, htx_futures, bitfinex, coinex, binance_web3, okx_web3, gateio, btcc (every 6h)
+ *   group=e → drift, jupiter_perps, aevo, web3_bot, toobit, xt, etoro, dydx (every 6h)
+ *   group=f → mexc, bingx, weex, woox, polymarket, copin (every 6h, VPS scraper slow)
  * Dead/blocked platforms:
  *   kucoin (copy trading discontinued 2026-03, APIs 404), bingx_spot (no spot leaderboard),
  *   mux, synthetix, bitmart, whitebit, btse, pionex, vertex, paradex
@@ -53,44 +42,20 @@ export const maxDuration = 800 // Vercel Pro max: 10 minutes (was 300s = 5min)
 export const preferredRegion = 'hnd1' // Tokyo — avoids Binance/OKX/Bybit geo-blocking
 
 const GROUPS: Record<string, string[]> = {
-  // Group A: Binance (every 3h) — new /friendly/ API via VPS proxy (2026-03-15)
-  a: ['binance_futures', 'binance_spot'],
-  // Group A2: OKX futures + spot (every 3h) — direct API works
-  a2: ['okx_futures', 'okx_spot'],
-  // Group A3: Bybit futures + spot (every 3h) — VPS scraper
-  a3: ['bybit', 'bybit_spot'],
-  // Group A4: Bitget (every 3h) — leaderboard fetch only, enrichment disabled (detail API hangs)
-  a4: ['bitget_futures'],
-  // Group B: Top DEX (every 4h) + GMX (switched to subgraph 2026-03-15)
-  b: ['hyperliquid', 'gmx'],
-  // Group C: Mid-priority (every 4h) — okx_futures moved to a2, bitunix re-enabled
-  c: ['bitunix'],
-  // Group D1: CEX (every 6h) — VPS proxy enabled
-  d1: ['gains', 'htx_futures'],
-  // Group E: Fast CEX+DEX (every 6h) — coinex URL fixed + VPS proxy
-  e: ['bitfinex', 'coinex', 'binance_web3'],
-  // Group E2: OKX Web3 — RE-ENABLED 2026-03-31, same v5 copytrading API as okx_futures (confirmed working)
-  e2: ['okx_web3'],
-  // Group F: MEXC only (every 6h) — VPS scraper, slow
-  f: ['mexc'],
-  // Group F2: BingX (every 6h) — VPS scraper
-  f2: ['bingx'],
-  // Group H: CEX (every 6h) — VPS proxy enabled 2026-03-15
-  h: ['gateio', 'btcc'],
-  // Group G1: DEX (every 6h)
-  g1: ['drift', 'jupiter_perps', 'aevo'],
-  // Group G2: DEX+CEX+scraper (every 6h)
-  g2: ['web3_bot', 'toobit', 'xt'],
-  // crypto_com: REMOVED — copy-trading feature shut down, /exchange/copy-trading redirects to /exchange/ — 2026-03-19
-  // Group I: Social trading (every 6h)
-  i: ['etoro'],
-  // Group J: dYdX (every 6h) — separated from etoro to avoid timeout (Copin API paginates slowly)
-  j: ['dydx'],
-  // Group K: WEEX — RE-ENABLED 2026-03-31, VPS scraper works (server back from 521)
-  k: ['weex'],
+  // Group A: Fast direct APIs (every 3h) — Binance + OKX
+  a: ['binance_futures', 'binance_spot', 'okx_futures', 'okx_spot'],
+  // Group B: VPS scraper CEX (every 3h) — Bybit + Bitget
+  b: ['bybit', 'bybit_spot', 'bitget_futures'],
+  // Group C: DEX + fast CEX (every 4h) — Hyperliquid, GMX (subgraph), Bitunix
+  c: ['hyperliquid', 'gmx', 'bitunix'],
+  // Group D: Fast CEX/DEX mix (every 6h) — direct APIs, low latency
+  d: ['gains', 'htx_futures', 'bitfinex', 'coinex', 'binance_web3', 'okx_web3', 'gateio', 'btcc'],
+  // Group E: DEX + social trading (every 6h) — Solana DEX, dYdX (Copin), eToro
+  e: ['drift', 'jupiter_perps', 'aevo', 'web3_bot', 'toobit', 'xt', 'etoro', 'dydx'],
+  // Group F: VPS scraper slow platforms (every 6h) — MEXC, BingX, WEEX + new platforms
+  f: ['mexc', 'bingx', 'weex', 'woox', 'polymarket', 'copin'],
+  // crypto_com: REMOVED — copy-trading feature shut down 2026-03-19
   // kucoin: PERMANENTLY DEAD — copy trading APIs 404 since 2026-03
-  // Group L: New platforms Wave 2 (every 6h) — WOO X, Polymarket, Copin.io
-  l: ['woox', 'polymarket', 'copin'],
 }
 
 interface BatchResult {

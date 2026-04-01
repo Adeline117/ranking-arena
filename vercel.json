@@ -50,7 +50,7 @@
     },
     {
       "path": "/api/cron/warm-cache",
-      "schedule": "1,6,11,16,21,26,31,36,41,46,51,56 * * * *"
+      "schedule": "1,16,31,46 * * * *"
     },
     {
       "path": "/api/cron/cleanup-deleted-accounts",
@@ -107,72 +107,24 @@
       "schedule": "2 */3 * * *"
     },
     {
-      "path": "/api/cron/batch-fetch-traders?group=a2",
-      "schedule": "10 */3 * * *"
-    },
-    {
-      "path": "/api/cron/batch-fetch-traders?group=a3",
-      "schedule": "20 */3 * * *"
-    },
-    {
-      "path": "/api/cron/batch-fetch-traders?group=a4",
-      "schedule": "25 */3 * * *"
-    },
-    {
       "path": "/api/cron/batch-fetch-traders?group=b",
-      "schedule": "4 */4 * * *"
+      "schedule": "12 */3 * * *"
     },
     {
       "path": "/api/cron/batch-fetch-traders?group=c",
-      "schedule": "15 */4 * * *"
+      "schedule": "4 */4 * * *"
     },
     {
-      "path": "/api/cron/batch-fetch-traders?group=d1",
+      "path": "/api/cron/batch-fetch-traders?group=d",
       "schedule": "20 */6 * * *"
-    },
-    {
-      "path": "/api/cron/batch-fetch-traders?group=f",
-      "schedule": "42 */6 * * *"
-    },
-    {
-      "path": "/api/cron/batch-fetch-traders?group=f2",
-      "schedule": "48 */6 * * *"
-    },
-    {
-      "path": "/api/cron/batch-fetch-traders?group=h",
-      "schedule": "54 */6 * * *"
     },
     {
       "path": "/api/cron/batch-fetch-traders?group=e",
       "schedule": "36 */6 * * *"
     },
     {
-      "path": "/api/cron/batch-fetch-traders?group=g1",
-      "schedule": "8 1,7,13,19 * * *"
-    },
-    {
-      "path": "/api/cron/batch-fetch-traders?group=g2",
-      "schedule": "16 1,7,13,19 * * *"
-    },
-    {
-      "path": "/api/cron/batch-fetch-traders?group=i",
-      "schedule": "24 2,8,14,20 * * *"
-    },
-    {
-      "path": "/api/cron/batch-fetch-traders?group=j",
-      "schedule": "32 2,8,14,20 * * *"
-    },
-    {
-      "path": "/api/cron/batch-fetch-traders?group=k",
-      "schedule": "38 3,9,15,21 * * *"
-    },
-    {
-      "path": "/api/cron/batch-fetch-traders?group=e2",
-      "schedule": "30 */6 * * *"
-    },
-    {
-      "path": "/api/cron/batch-fetch-traders?group=l",
-      "schedule": "42 3,9,15,21 * * *"
+      "path": "/api/cron/batch-fetch-traders?group=f",
+      "schedule": "48 */6 * * *"
     },
     {
       "path": "/api/cron/batch-enrich?period=90D",
