@@ -115,7 +115,7 @@ const v3TraderSchema = z.object({
 })
 
 const v3SearchSchema = z.object({
-  q: z.string().min(2, 'Query param "q" must be at least 2 characters').max(200),
+  q: z.string({ error: "Missing required query parameter 'q'" }).min(2, 'Query param "q" must be at least 2 characters').max(200),
   limit: z.coerce.number().int().min(1).max(100).catch(20),
   platform: z.string().max(50).optional(),
 })
