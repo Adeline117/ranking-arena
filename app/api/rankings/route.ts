@@ -207,7 +207,7 @@ async function getRankingsFallback(rankingsQuery: RankingsQuery, _cursor?: strin
       `source_trader_id, handle, source, source_type, roi, pnl, win_rate, max_drawdown,
        trades_count, followers, arena_score, avatar_url, rank, computed_at,
        profitability_score, risk_control_score, execution_score, score_completeness,
-       trading_style, avg_holding_hours, sharpe_ratio, sortino_ratio, trader_type, is_outlier, metrics_estimated`,
+       trading_style, avg_holding_hours, sharpe_ratio, sortino_ratio, calmar_ratio, profit_factor, trader_type, is_outlier, metrics_estimated`,
       { count: 'exact' }
     )
     .eq('season_id', seasonId)
@@ -312,6 +312,8 @@ async function getRankingsFallback(rankingsQuery: RankingsQuery, _cursor?: strin
         stability_score: null,
         sharpe_ratio: row.sharpe_ratio != null ? Number(row.sharpe_ratio) : null,
         sortino_ratio: row.sortino_ratio != null ? Number(row.sortino_ratio) : null,
+        calmar_ratio: row.calmar_ratio != null ? Number(row.calmar_ratio) : null,
+        profit_factor: row.profit_factor != null ? Number(row.profit_factor) : null,
         platform_rank: (row.rank as number) ?? offset + idx + 1,
       },
       quality_flags: { is_suspicious: false, suspicion_reasons: [], data_completeness: 1.0 },
