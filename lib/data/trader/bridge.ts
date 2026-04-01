@@ -99,6 +99,8 @@ export function toTraderPageData(detail: TraderDetail): Record<string, unknown> 
     profitability_score: t.profitabilityScore ?? null,
     risk_control_score: t.riskControlScore ?? null,
     execution_score: t.executionScore ?? null,
+    // Trading style classification
+    tradingStyle: t.tradingStyle ?? null,
     // Avg holding time
     avg_holding_time_hours: t.avgHoldingHours ?? detail.stats?.avgHoldingHours ?? null,
     // Largest win/loss
