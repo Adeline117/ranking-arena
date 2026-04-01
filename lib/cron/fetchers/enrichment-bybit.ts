@@ -149,7 +149,7 @@ export async function fetchBybitStatsDetail(
       largestWin: null,
       largestLoss: null,
       sharpeRatio: parseNum(d.sharpeRatio),
-      sortinoRatio: null, // Not available from Bybit VPS scraper
+      sortinoRatio: parseNum(d.sortinoRatio),
       maxDrawdown: parseNum(d.maxDrawdown),
       currentDrawdown: null,
       volatility: null,
@@ -198,15 +198,15 @@ async function enrichSingleBybitTrader(
       }
     }
 
-    // 2. Write PnL from detail API back to trader_snapshots_v2
-    // VPS scraper returns a single pnl field — write to all period windows
+    // 2. Write per-period PnL back to trader_snapshots_v2
+    // v17: VPS scraper now returns pnl7d/pnl30d/pnl90d from leader-income API
     const detail = data.detail?.result
     if (detail) {
-      const pnlValue = parseNum(detail.pnl)
+      const fallbackPnl = parseNum(detail.pnl)
       const periodPnl: Record<string, number | null> = {
-        '7D': pnlValue,
-        '30D': pnlValue,
-        '90D': pnlValue,
+        '7D': parseNum(detail.pnl7d) ?? fallbackPnl,
+        '30D': parseNum(detail.pnl30d) ?? fallbackPnl,
+        '90D': parseNum(detail.pnl90d) ?? fallbackPnl,
       }
       for (const [window, pnl] of Object.entries(periodPnl)) {
         if (pnl != null) {
