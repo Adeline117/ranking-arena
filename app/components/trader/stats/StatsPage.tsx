@@ -12,6 +12,7 @@ import {
   BreakdownSection,
 } from './components'
 import { SectionErrorBoundary } from '../../utils/ErrorBoundary'
+import { PnlCalendarHeatmap } from '../charts/PnlCalendarHeatmap'
 
 // 扩展类型以支持新数据
 interface AssetBreakdownData {
@@ -200,6 +201,22 @@ export default function StatsPage({
           fallbackData={frequentlyTraded}
           delay={0}
         />
+
+        {/* PnL Calendar Heatmap — daily profit/loss visualization */}
+        {equityCurve?.['90D'] && equityCurve['90D'].length > 3 && (
+          <Box
+            className="glass-card"
+            style={{
+              padding: tokens.spacing[5],
+              background: `linear-gradient(145deg, ${tokens.colors.bg.secondary}F8 0%, ${tokens.colors.bg.primary}F0 100%)`,
+              borderRadius: tokens.radius.xl,
+              border: `1px solid ${tokens.colors.border.primary}60`,
+              marginTop: tokens.spacing[6],
+            }}
+          >
+            <PnlCalendarHeatmap data={equityCurve['90D']} days={90} />
+          </Box>
+        )}
 
         {/* Chart + Compare Two Columns - 没数据时各自隐藏 */}
         <Box className="stats-two-col" style={{ display: 'grid', gap: tokens.spacing[6], marginTop: tokens.spacing[6] }}>
