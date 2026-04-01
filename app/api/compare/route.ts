@@ -18,7 +18,7 @@ import { tieredGetOrSet } from '@/lib/cache/redis-layer'
 export const runtime = 'nodejs'
 export const preferredRegion = ['sfo1', 'hnd1']
 
-const MAX_TRADERS_TO_COMPARE = 5
+const MAX_TRADERS_TO_COMPARE = 10
 
 interface TraderCompareData {
   id: string
@@ -42,7 +42,7 @@ interface TraderCompareData {
 
 /**
  * GET - 获取多traders allowed for comparison的对比数据
- * Query params: ids=trader1,trader2,trader3 (最多5个)
+ * Query params: ids=trader1,trader2,trader3 (最多10个)
  */
 export const GET = withPublic(async ({ supabase, request }) => {
     const user = await requireAuth(request)
@@ -70,7 +70,7 @@ export const GET = withPublic(async ({ supabase, request }) => {
     const idsParam = searchParams.get('ids')
 
     if (!idsParam) {
-      return error('Missing ids parameter. Usage: GET /api/compare?ids=trader1,trader2 (max 5, Pro required)', 400)
+      return error('Missing ids parameter. Usage: GET /api/compare?ids=trader1,trader2 (max 10, Pro required)', 400)
     }
 
     const traderIds = idsParam.split(',').map(id => id.trim()).filter(Boolean)
