@@ -523,6 +523,9 @@ export const NO_ENRICHMENT_PLATFORMS = new Set([
   'bybit_spot',   // metricValues has ROI/WR/MDD/Sharpe, VPS trader-detail doesn't support spot leaderMark
   'binance_web3', // wallet-based, no per-trader detail API, all metrics from leaderboard
   'web3_bot',     // small platform (19 traders), all metrics from leaderboard
+  'vertex',       // TODO: leaderboard API endpoint needs discovery, no enrichment API yet
+  'apex_pro',     // TODO: leaderboard API endpoint needs discovery, no enrichment API yet
+  'rabbitx',      // TODO: leaderboard API endpoint needs discovery, no enrichment API yet
   // 2026-03-31: dydx re-enabled — rewritten to use Copin API with AbortSignal.timeout(8s).
   // Original indexer (TCP hang) removed. All fetch calls use hardFetch() with runtime-level timeouts.
   // kucoin: REMOVED — now has dedicated enrichment module (2026-03-19)
