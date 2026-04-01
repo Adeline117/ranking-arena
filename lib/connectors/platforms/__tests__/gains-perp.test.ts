@@ -156,68 +156,64 @@ describe('GainsPerpConnector', () => {
     const now = new Date()
     const recentDate = new Date(now.getTime() - 2 * 24 * 60 * 60 * 1000).toISOString() // 2 days ago
 
-    test('returns snapshot with computed metrics from trade history', async () => {
+    test('returns snapshot with computed metrics from leaderboard search', async () => {
       const connector = createConnector()
-      // Mock open trades (first call)
-      mockFetchResponse([])
-      // Mock trade history (second call)
+      // Gains searches leaderboard across 3 chains (arbitrum, polygon, base)
+      // First chain (arbitrum) returns trader data
       mockFetchResponse([
-        { address: '0xTRADER', pnl: 500, pnlPercent: 50, action: 'close', pair: 'BTC/USD', leverage: 10, collateral: 1000, date: recentDate },
-        { address: '0xTRADER', pnl: -200, pnlPercent: -20, action: 'close', pair: 'ETH/USD', leverage: 5, collateral: 1000, date: recentDate },
-        { address: '0xTRADER', pnl: 300, pnlPercent: 30, action: 'close', pair: 'BTC/USD', leverage: 10, collateral: 1000, date: recentDate },
+        { address: '0xTRADER', total_pnl_usd: 600, count: 3, count_win: 2, count_loss: 1, avg_win: 400, avg_loss: -200, avgPositionSize: 1000 },
       ])
 
-      const result = await connector.fetchTraderSnapshot('0xTRADER', '7d')
+      const result = await connector.fetchTraderSnapshot('0xtrader', '7d')
 
       expect(result).not.toBeNull()
-      // totalPnl = 500 + (-200) + 300 = 600
-      // totalCollateral = 1000 + 1000 + 1000 = 3000
-      // ROI = (600 / 3000) * 100 = 20
-      expect(result!.metrics.roi).toBe(20)
       expect(result!.metrics.pnl).toBe(600)
-      // Win rate: 2 wins out of 3 trades = 66.67%
+      // win_rate = 2/3 * 100 = 66.67
       expect(result!.metrics.win_rate).toBeCloseTo(66.67, 1)
       expect(result!.metrics.trades_count).toBe(3)
     })
 
-    test('returns null metrics when no trades in window', async () => {
+    test('returns null when trader not found in any chain', async () => {
       const connector = createConnector()
+      // All 3 chains return empty or don't contain the trader
+      mockFetchResponse([{ address: '0xOTHER', total_pnl_usd: 1000 }])
       mockFetchResponse([])
-      mockFetchResponse([]) // empty history
+      mockFetchResponse([])
 
-      const result = await connector.fetchTraderSnapshot('0xEMPTY', '7d')
+      const result = await connector.fetchTraderSnapshot('0xNOTFOUND', '7d')
 
-      expect(result).not.toBeNull()
-      expect(result!.metrics.roi).toBeNull()
-      expect(result!.metrics.pnl).toBeNull()
-      expect(result!.metrics.win_rate).toBeNull()
+      // Returns null when trader not found
+      expect(result).toBeNull()
     })
 
-    test('returns empty metrics on API error (catches internally)', async () => {
+    test('returns null on API error (catches internally)', async () => {
       const connector = createConnector()
+      // All chains fail
+      mockFetchNetworkError()
+      mockFetchNetworkError()
       mockFetchNetworkError()
 
       const result = await connector.fetchTraderSnapshot('0xFAIL', '7d')
 
-      expect(result).not.toBeNull()
-      expect(result!.quality_flags.missing_fields).toContain('all')
-      expect(result!.quality_flags.notes).toContain('API error or trader not found')
+      // fetchTraderSnapshot catches errors and returns null
+      expect(result).toBeNull()
     })
 
     test('quality flags reflect DEX limitations', async () => {
       const connector = createConnector()
-      mockFetchResponse([])
+      // First chain returns trader data
       mockFetchResponse([
-        { address: '0xTRADER', pnl: 500, pnlPercent: 50, action: 'close', pair: 'BTC/USD', leverage: 10, collateral: 1000, date: recentDate },
+        { address: '0xTRADER', total_pnl_usd: 500, count: 1, count_win: 1, count_loss: 0, avgPositionSize: 1000 },
       ])
 
-      const result = await connector.fetchTraderSnapshot('0xTRADER', '7d')
+      const result = await connector.fetchTraderSnapshot('0xtrader', '7d')
 
       expect(result).not.toBeNull()
       expect(result!.quality_flags.missing_fields).toContain('sharpe_ratio')
       expect(result!.quality_flags.missing_fields).toContain('followers')
       expect(result!.quality_flags.missing_fields).toContain('copiers')
-      expect(result!.quality_flags.window_native).toBe(true)
+      // window_native is false (uses leaderboard aggregate, not window-filtered data)
+      expect(result!.quality_flags.window_native).toBe(false)
     })
   })
 

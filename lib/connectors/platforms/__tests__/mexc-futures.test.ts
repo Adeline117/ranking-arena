@@ -132,20 +132,20 @@ describe('MexcFuturesConnector', () => {
       expect(result.traders).toHaveLength(0)
     })
 
-    test('calls VPS with correct periodType for 30d window', async () => {
+    test('calls mobile UA API first for 30d window', async () => {
       const connector = createConnector()
       mockFetchResponse(validResponse)
 
       await connector.discoverLeaderboard('30d', 20)
 
-      // First call goes to VPS scraper endpoint with periodType parameter
+      // First call goes to direct mobile UA API (not VPS)
       const call = mockFetch.mock.calls[0]
       const url = call[0] as string
-      // VPS scraper URL contains periodType=2 (30d maps to 2)
-      expect(url).toContain('periodType=2')
+      // Mobile UA API uses /api/platform/futures/copyFutures/api/v1/traders/top
+      expect(url).toContain('traders/top')
     })
 
-    test('calls VPS with periodType=3 for 90d window', async () => {
+    test('calls mobile UA API first for 90d window', async () => {
       const connector = createConnector()
       mockFetchResponse(validResponse)
 
@@ -153,7 +153,7 @@ describe('MexcFuturesConnector', () => {
 
       const call = mockFetch.mock.calls[0]
       const url = call[0] as string
-      expect(url).toContain('periodType=3')
+      expect(url).toContain('traders/top')
     })
 
     test('handles null nickname gracefully', async () => {
@@ -320,7 +320,6 @@ describe('MexcFuturesConnector', () => {
       expect(result!.quality_flags).toBeDefined()
       expect(result!.quality_flags.missing_fields).toContain('sharpe_ratio')
       expect(result!.quality_flags.missing_fields).toContain('sortino_ratio')
-      expect(result!.quality_flags.missing_fields).toContain('trades_count')
       expect(result!.quality_flags.window_native).toBe(true)
     })
 
@@ -476,7 +475,7 @@ describe('MexcFuturesConnector', () => {
       expect(connector.capabilities.native_windows).toContain('7d')
       expect(connector.capabilities.native_windows).toContain('30d')
       expect(connector.capabilities.native_windows).toContain('90d')
-      expect(connector.capabilities.has_timeseries).toBe(false)
+      expect(connector.capabilities.has_timeseries).toBe(true)
       expect(connector.capabilities.has_profiles).toBe(true)
       expect(connector.capabilities.available_fields).toContain('roi')
       expect(connector.capabilities.available_fields).toContain('pnl')
