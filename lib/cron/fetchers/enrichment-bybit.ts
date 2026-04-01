@@ -141,10 +141,11 @@ export async function fetchBybitStatsDetail(
       largestWin: null,
       largestLoss: null,
       sharpeRatio: parseNum(d.sharpeRatio),
+      sortinoRatio: null, // Not available from Bybit VPS scraper
       maxDrawdown: parseNum(d.maxDrawdown),
       currentDrawdown: null,
       volatility: null,
-      // PnL from VPS scraper detail — key fix for bybit PnL 0% coverage
+      // v17: per-period PnL from leader-income API
       pnl: parseNum(d.pnl),
       roi: parseNum(d.roi),
       copiersCount: d.followerCount ?? d.currentFollowerCount ?? null,
@@ -189,21 +190,23 @@ async function enrichSingleBybitTrader(
       }
     }
 
-    // 2. Write PnL from detail.result back to trader_snapshots_v2
+    // 2. Write per-period PnL back to trader_snapshots_v2
+    // v17: VPS scraper returns pnl7d/pnl30d/pnl90d from leader-income API
     const detail = data.detail?.result
     if (detail) {
-      const pnl = parseNum(detail.pnl)
-      if (pnl != null) {
-        // Update PnL for all windows — Bybit detail returns total PnL
-        const windows = ['7D', '30D', '90D']
-        for (const window of windows) {
+      const periodPnl: Record<string, number | null> = {
+        '7D': parseNum(detail.pnl7d) ?? parseNum(detail.pnl),
+        '30D': parseNum(detail.pnl30d) ?? parseNum(detail.pnl),
+        '90D': parseNum(detail.pnl90d) ?? parseNum(detail.pnl),
+      }
+      for (const [window, pnl] of Object.entries(periodPnl)) {
+        if (pnl != null) {
           await supabase
             .from('trader_snapshots_v2')
             .update({ pnl_usd: pnl })
             .eq('platform', 'bybit')
             .eq('trader_key', traderId)
             .eq('window', window)
-            .is('pnl_usd', null) // Only fill where PnL is missing
         }
       }
     }
