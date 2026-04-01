@@ -30,6 +30,11 @@ import {
   NO_ENRICHMENT_PLATFORMS,
   runEnrichment,
 } from '@/lib/cron/enrichment-runner'
+import {
+  upsertEquityCurve,
+  upsertAssetBreakdown,
+} from '@/lib/cron/fetchers/enrichment-db'
+import type { EquityCurvePoint, AssetBreakdown } from '@/lib/cron/fetchers/enrichment-types'
 
 // ---------------------------------------------------------------------------
 // Types
@@ -238,6 +243,16 @@ export async function writeDiscoverResult(
   // Write to DB via shared upsertTraders()
   const { saved, error, write_consistency } = await upsertTraders(supabase, traderDataArray)
 
+  // --- Inline enrichment: write timeseries & asset data from leaderboard API ---
+  // Some connectors return equity curve / asset breakdown data directly in the
+  // leaderboard response (via _ prefixed fields in normalize output). Write these
+  // to enrichment tables so traders get charts without needing a separate enrichment run.
+  try {
+    await writeInlineEnrichment(supabase, platform, window, result.traders, connector)
+  } catch (err) {
+    dataLogger.warn(`[adapter] Inline enrichment failed for ${platform}/${window}: ${err instanceof Error ? err.message : String(err)}`)
+  }
+
   return {
     source: platform,
     window,
@@ -246,6 +261,135 @@ export async function writeDiscoverResult(
     skipped,
     error,
     writeConsistency: write_consistency,
+  }
+}
+
+/**
+ * Write inline enrichment data (equity curves, asset breakdowns) extracted
+ * from leaderboard API responses. This avoids needing a separate enrichment
+ * run for platforms that include timeseries data in their leaderboard API.
+ */
+async function writeInlineEnrichment(
+  supabase: SupabaseClient,
+  platform: string,
+  window: string,
+  traders: DiscoverResult['traders'],
+  connector: PlatformConnector,
+) {
+  let equityCurveCount = 0
+  let assetBreakdownCount = 0
+
+  for (const trader of traders) {
+    if (!trader.raw) continue
+    const normalized = connector.normalize(trader.raw) as Record<string, unknown>
+    const traderKey = trader.trader_key
+
+    // --- Equity Curve from various platform formats ---
+
+    // binance_web3: dailyPNL array [{realizedPnl, dt}]
+    if (normalized._daily_pnl && Array.isArray(normalized._daily_pnl)) {
+      const dailyPnl = normalized._daily_pnl as Array<{ realizedPnl: number | string; dt: string }>
+      if (dailyPnl.length >= 2) {
+        let cumPnl = 0
+        const curve: EquityCurvePoint[] = dailyPnl.map(d => {
+          const dayPnl = Number(d.realizedPnl) || 0
+          cumPnl += dayPnl
+          return { date: d.dt, roi: 0, pnl: cumPnl }
+        })
+        await upsertEquityCurve(supabase, platform, traderKey, window, curve)
+        equityCurveCount++
+      }
+    }
+
+    // mexc: curveTime[] + curveValues[] (ROI) + pnlCurveValues[] (PnL)
+    if (normalized._curve_time && normalized._curve_values) {
+      const times = normalized._curve_time as number[]
+      const values = normalized._curve_values as number[]
+      const pnlValues = normalized._pnl_curve_values as number[] | undefined
+      if (Array.isArray(times) && Array.isArray(values) && times.length >= 2) {
+        const curve: EquityCurvePoint[] = times.map((ts, i) => ({
+          date: new Date(ts).toISOString().split('T')[0],
+          roi: values[i] ?? null,
+          pnl: pnlValues?.[i] ?? null,
+        }))
+        await upsertEquityCurve(supabase, platform, traderKey, window, curve)
+        equityCurveCount++
+      }
+    }
+
+    // coinex: profit_rate_series [[timestamp, "rate"], ...]
+    if (normalized._profit_rate_series && Array.isArray(normalized._profit_rate_series)) {
+      const series = normalized._profit_rate_series as Array<[number, string]>
+      if (series.length >= 2) {
+        const curve: EquityCurvePoint[] = series.map(([ts, rate]) => ({
+          date: new Date(ts * 1000).toISOString().split('T')[0],
+          roi: Number(rate) * 100, // decimal → percentage
+          pnl: null,
+        }))
+        await upsertEquityCurve(supabase, platform, traderKey, window, curve)
+        equityCurveCount++
+      }
+    }
+
+    // --- Asset Breakdown from various platform formats ---
+
+    // binance_web3: topEarningTokens [{tokenSymbol, realizedPnl, profitRate}]
+    if (normalized._top_earning_tokens && Array.isArray(normalized._top_earning_tokens)) {
+      const tokens = normalized._top_earning_tokens as Array<{ tokenSymbol: string; realizedPnl: number }>
+      if (tokens.length > 0) {
+        const totalPnl = tokens.reduce((sum, t) => sum + Math.abs(Number(t.realizedPnl) || 0), 0)
+        if (totalPnl > 0) {
+          const assets: AssetBreakdown[] = tokens.map(t => ({
+            symbol: t.tokenSymbol,
+            weightPct: (Math.abs(Number(t.realizedPnl) || 0) / totalPnl) * 100,
+          }))
+          await upsertAssetBreakdown(supabase, platform, traderKey, window, assets)
+          assetBreakdownCount++
+        }
+      }
+    }
+
+    // mexc: contractRateList [{contractId, symbol, rate, ...}]
+    if (normalized._contract_rate_list && Array.isArray(normalized._contract_rate_list)) {
+      const contracts = normalized._contract_rate_list as Array<{ symbol?: string; symbolDisplay?: string; rate?: number }>
+      if (contracts.length > 0) {
+        const assets: AssetBreakdown[] = contracts
+          .filter(c => (c.symbol || c.symbolDisplay) && c.rate != null)
+          .map(c => ({
+            symbol: (c.symbolDisplay || c.symbol || '').replace('_USDT', '').replace('USDT', ''),
+            weightPct: (Number(c.rate) || 0) * 100,
+          }))
+        if (assets.length > 0) {
+          await upsertAssetBreakdown(supabase, platform, traderKey, window, assets)
+          assetBreakdownCount++
+        }
+      }
+    }
+
+    // okx_web3: traderInsts [instrument strings like "BTC-USDT-SWAP"]
+    if (normalized._trader_insts && Array.isArray(normalized._trader_insts)) {
+      const insts = normalized._trader_insts as string[]
+      if (insts.length > 0) {
+        // Equal weight since OKX doesn't provide allocation percentages
+        const weightPer = 100 / insts.length
+        const assets: AssetBreakdown[] = insts.slice(0, 20).map(inst => ({
+          symbol: inst.split('-')[0] || inst,
+          weightPct: weightPer,
+        }))
+        // Deduplicate by symbol, summing weights
+        const deduped = new Map<string, number>()
+        for (const a of assets) {
+          deduped.set(a.symbol, (deduped.get(a.symbol) || 0) + a.weightPct)
+        }
+        const dedupedAssets: AssetBreakdown[] = Array.from(deduped.entries()).map(([symbol, weightPct]) => ({ symbol, weightPct }))
+        await upsertAssetBreakdown(supabase, platform, traderKey, window, dedupedAssets)
+        assetBreakdownCount++
+      }
+    }
+  }
+
+  if (equityCurveCount > 0 || assetBreakdownCount > 0) {
+    dataLogger.info(`[adapter] Inline enrichment for ${platform}/${window}: ${equityCurveCount} equity curves, ${assetBreakdownCount} asset breakdowns`)
   }
 }
 

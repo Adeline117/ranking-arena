@@ -24,7 +24,7 @@ export class MexcFuturesConnector extends BaseConnector {
     market_types: ['futures'],
     native_windows: ['7d', '30d', '90d'],
     available_fields: ['roi', 'pnl', 'win_rate', 'max_drawdown', 'followers', 'copiers', 'aum'],
-    has_timeseries: false,
+    has_timeseries: true,
     has_profiles: true,
     scraping_difficulty: 2,
     rate_limit: { rpm: 15, concurrency: 1 },
@@ -186,12 +186,20 @@ export class MexcFuturesConnector extends BaseConnector {
       pnl: this.num(raw.pnl ?? raw.totalPnl ?? raw.profit),
       win_rate: winRate,
       max_drawdown: maxDrawdown,
-      trades_count: null,
+      trades_count: this.num(raw.openTimes),
       followers: this.num(raw.followers ?? raw.followerCount ?? raw.copierCount),
-      copiers: null,
-      aum: this.num(raw.equity),
+      copiers: this.num(raw.historyFollowers),
+      aum: this.num(raw.followCopyFunds ?? raw.equity),
       sharpe_ratio: null,
       platform_rank: this.num(raw.order),
+      // Extra: equity curve data from leaderboard API
+      _curve_time: raw.curveTime,
+      _curve_values: raw.curveValues,
+      _pnl_curve_values: raw.pnlCurveValues,
+      // Extra: portfolio allocation
+      _contract_rate_list: raw.contractRateList,
+      // Extra: trading style tags
+      _tags: raw.tags,
     }
   }
 

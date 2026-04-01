@@ -25,7 +25,7 @@ export class CoinexFuturesConnector extends BaseConnector {
     market_types: ['futures'],
     native_windows: ['7d', '30d'],  // No 90d
     available_fields: ['roi', 'pnl', 'win_rate', 'max_drawdown', 'followers', 'copiers'],
-    has_timeseries: false,
+    has_timeseries: true,
     has_profiles: true,
     scraping_difficulty: 2,
     rate_limit: { rpm: 15, concurrency: 1 },
@@ -192,6 +192,10 @@ export class CoinexFuturesConnector extends BaseConnector {
       aum: this.num(raw.aum),
       sharpe_ratio: null,
       platform_rank: null,
+      // Extra: equity curve from profit_rate_series
+      _profit_rate_series: raw.profit_rate_series,
+      _trade_days: this.num(raw.trade_days),
+      _total_profit_amount: this.num(raw.total_profit_amount),
     }
   }
 

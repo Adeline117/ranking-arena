@@ -36,9 +36,23 @@ interface BinanceWeb3Entry {
   address: string
   addressLabel: string | null
   addressLogo: string | null
+  addressTwitterUrl?: string | null
   realizedPnl: number
   realizedPnlPercent: number    // Decimal (0.27 = 27%)
   winRate: number               // Decimal (0.65 = 65%)
+  balance?: string | number | null      // Wallet balance (AUM proxy)
+  totalTxCnt?: number | null            // Total transaction count
+  totalVolume?: string | number | null  // Total trading volume
+  totalTradedTokens?: number | null     // Unique tokens traded
+  topEarningTokens?: Array<{
+    tokenSymbol: string
+    realizedPnl: number
+    profitRate?: number
+  }> | null
+  dailyPNL?: Array<{
+    realizedPnl: number | string
+    dt: string
+  }> | null
 }
 
 interface BinanceWeb3Response {
@@ -57,8 +71,8 @@ export class BinanceWeb3Connector extends BaseConnector {
     platform: 'binance_web3',
     market_types: ['web3'],
     native_windows: ['7d', '30d', '90d'],
-    available_fields: ['roi', 'pnl', 'win_rate'],
-    has_timeseries: false,
+    available_fields: ['roi', 'pnl', 'win_rate', 'trades_count', 'aum'],
+    has_timeseries: true,
     has_profiles: false,
     scraping_difficulty: 1,
     rate_limit: { rpm: 30, concurrency: 3 },
@@ -165,11 +179,15 @@ export class BinanceWeb3Connector extends BaseConnector {
       win_rate: safePercent(e.winRate, { isRatio: true }),
       max_drawdown: null,
       followers: null,
-      trades_count: null,
+      trades_count: safeNumber(e.totalTxCnt),
       sharpe_ratio: null,
-      aum: null,
+      aum: safeNumber(e.balance),
       copiers: null,
       platform_rank: null,
+      // Extra fields for enrichment pipeline
+      _twitter_url: safeStr(e.addressTwitterUrl),
+      _daily_pnl: e.dailyPNL,
+      _top_earning_tokens: e.topEarningTokens,
     }
   }
 }

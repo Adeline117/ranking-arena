@@ -34,7 +34,11 @@ interface OkxLeadTrader {
   pnlRatio: string
   winRatio: string
   copyTraderNum: string
+  accCopyTraderNum?: string    // Accumulated total copiers ever
   followerCount?: string
+  aum?: string                 // Assets under management
+  leadDays?: string            // Days as lead trader
+  traderInsts?: string[]       // Traded instruments list
   pnlRatios?: Array<{ ts: string; ratio: string }>
 }
 
@@ -169,9 +173,12 @@ export class OkxWeb3Connector extends BaseConnector {
       followers: safeNonNeg(e.copyTraderNum ?? e.followerCount),
       trades_count: null,
       sharpe_ratio: null,
-      aum: null,
-      copiers: null,
+      aum: safeNumber(e.aum),
+      copiers: safeNonNeg(e.accCopyTraderNum),
       platform_rank: null,
+      // Extra fields for enrichment
+      _trader_insts: e.traderInsts,
+      _lead_days: safeNumber(e.leadDays),
     }
   }
 

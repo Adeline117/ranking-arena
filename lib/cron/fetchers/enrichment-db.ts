@@ -176,13 +176,19 @@ export async function upsertStatsDetail(
   if (stats.profitableTradesPct != null || stats.maxDrawdown != null) {
     const v2Update: Record<string, unknown> = {}
     if (stats.profitableTradesPct != null && stats.profitableTradesPct >= 0 && stats.profitableTradesPct <= 100) {
-      v2Update.win_rate = stats.profitableTradesPct
+      // Normalize: if value <= 1, treat as decimal and convert to percentage
+      v2Update.win_rate = stats.profitableTradesPct <= 1 ? stats.profitableTradesPct * 100 : stats.profitableTradesPct
     }
     if (stats.maxDrawdown != null && stats.maxDrawdown >= 0 && stats.maxDrawdown <= 100) {
-      v2Update.max_drawdown = stats.maxDrawdown
+      // Normalize: enrichment fetchers may return MDD as decimal (0-1) or percentage (0-100).
+      // If value <= 1, treat as decimal and convert to percentage for v2 consistency.
+      v2Update.max_drawdown = stats.maxDrawdown <= 1 ? stats.maxDrawdown * 100 : stats.maxDrawdown
     }
     if (stats.totalTrades != null && stats.totalTrades >= 0) {
       v2Update.trades_count = stats.totalTrades
+    }
+    if (stats.sharpeRatio != null && Math.abs(stats.sharpeRatio) <= 20) {
+      v2Update.sharpe_ratio = stats.sharpeRatio
     }
 
     // Update all matching v2 rows (removed .is('win_rate', null) guard
