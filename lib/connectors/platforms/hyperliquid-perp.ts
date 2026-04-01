@@ -183,8 +183,9 @@ export class HyperliquidPerpConnector extends BaseConnector {
       roi = (totalRawPnl / (accountValue - totalRawPnl)) * 100
     }
 
-    // Compute win_rate and max_drawdown from fills (closedPnl per trade)
+    // Compute win_rate, trades_count and max_drawdown from fills (closedPnl per trade)
     let winRate: number | null = null
+    let tradesCount: number | null = null
     let fillMDD: number | null = null
     try {
       const _rawFills = await this.request<Record<string, unknown>>(
@@ -199,7 +200,10 @@ export class HyperliquidPerpConnector extends BaseConnector {
       if (fills.length > 0) {
         const closedFills = fills.filter((f: Record<string, unknown>) => Number(f.closedPnl) !== 0)
         const wins = closedFills.filter((f: Record<string, unknown>) => Number(f.closedPnl) > 0).length
-        if (closedFills.length > 0) winRate = (wins / closedFills.length) * 100
+        if (closedFills.length > 0) {
+          winRate = (wins / closedFills.length) * 100
+          tradesCount = closedFills.length
+        }
 
         // MDD from cumulative PnL of closed fills
         let cumPnl = 0
@@ -225,7 +229,7 @@ export class HyperliquidPerpConnector extends BaseConnector {
       win_rate: winRate,
       max_drawdown: fillMDD,  // Computed from cumulative fills PnL
       sharpe_ratio: null, sortino_ratio: null,
-      trades_count: null,
+      trades_count: tradesCount,
       followers: null,  // DEX - no followers
       copiers: null,    // DEX - no copiers
       aum: accountValue || null,
