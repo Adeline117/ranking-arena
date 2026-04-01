@@ -59,6 +59,7 @@
     "@aws-sdk/client-s3": "^3.1010.0",
     "@aws-sdk/s3-request-presigner": "^3.1006.0",
     "@farcaster/mini-app-solana": "^2.0.0",
+    "@farcaster/miniapp-sdk": "^0.3.0",
     "@privy-io/react-auth": "^3.18.0",
     "@rainbow-me/rainbowkit": "^2.2.10",
     "@sentry/nextjs": "10.43.0",
