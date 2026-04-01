@@ -74,7 +74,7 @@ export function calculateMaxDrawdown(curve: EquityCurvePoint[]): number | null {
  * Calculate Sharpe ratio from equity curve (simplified, risk-free rate = 0)
  */
 export function calculateSharpeRatio(curve: EquityCurvePoint[], _period: string): number | null {
-  if (curve.length < 7) return null
+  if (curve.length < 5) return null
 
   const returns: number[] = []
   for (let i = 1; i < curve.length; i++) {
@@ -82,7 +82,7 @@ export function calculateSharpeRatio(curve: EquityCurvePoint[], _period: string)
     returns.push(dailyReturn)
   }
 
-  if (returns.length < 5) return null
+  if (returns.length < 3) return null
 
   const meanReturn = returns.reduce((sum, r) => sum + r, 0) / returns.length
   const variance = returns.reduce((sum, r) => sum + Math.pow(r - meanReturn, 2), 0) / returns.length
@@ -168,7 +168,7 @@ export function enhanceStatsWithDerivedMetrics(
     }
   }
 
-  if (!stats.sharpeRatio && curve.length >= 7) {
+  if (!stats.sharpeRatio && curve.length >= 5) {
     stats.sharpeRatio = calculateSharpeRatio(curve, period)
   }
 
