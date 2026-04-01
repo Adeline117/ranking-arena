@@ -10,6 +10,9 @@ import { env } from '@/lib/env'
 import { getSupabaseAdmin } from '@/lib/supabase/server'
 import { decrypt } from '@/lib/crypto/encryption'
 import { BybitAdapter } from '@/lib/adapters/bybit-adapter'
+import { BinanceAdapter } from '@/lib/adapters/binance-adapter'
+import { OkxAdapter } from '@/lib/adapters/okx-adapter'
+import { BitgetAdapter } from '@/lib/adapters/bitget-adapter'
 import { logger } from '@/lib/logger'
 import { calculateArenaScore } from '@/lib/utils/arena-score'
 import type { Period } from '@/lib/utils/arena-score'
@@ -49,10 +52,14 @@ export async function POST(request: NextRequest) {
       platform: string
       encrypted_api_key: string
       encrypted_api_secret: string
+      encrypted_passphrase: string | null
+      sync_frequency: string
       status: string
       last_verified_at: string | null
       verification_error: string | null
     }
+
+    const selectCols = 'id, user_id, trader_id, platform, encrypted_api_key, encrypted_api_secret, encrypted_passphrase, sync_frequency, status, last_verified_at, verification_error'
 
     let authorizations: TraderAuthorization[] = []
 
@@ -60,7 +67,7 @@ export async function POST(request: NextRequest) {
       // Sync specific authorization
       const { data, error } = await supabase
         .from('trader_authorizations')
-        .select('id, user_id, trader_id, platform, encrypted_api_key, encrypted_api_secret, status, last_verified_at, verification_error')
+        .select(selectCols)
         .eq('id', authorizationId)
         .eq('status', 'active')
         .single()
@@ -77,7 +84,7 @@ export async function POST(request: NextRequest) {
       // Sync all authorizations for user
       const { data, error } = await supabase
         .from('trader_authorizations')
-        .select('id, user_id, trader_id, platform, encrypted_api_key, encrypted_api_secret, status, last_verified_at, verification_error')
+        .select(selectCols)
         .eq('user_id', userId)
         .eq('status', 'active')
 
@@ -94,7 +101,7 @@ export async function POST(request: NextRequest) {
       // Sync all active authorizations (called by cron)
       const { data, error } = await supabase
         .from('trader_authorizations')
-        .select('id, user_id, trader_id, platform, encrypted_api_key, encrypted_api_secret, status, last_verified_at, verification_error')
+        .select(selectCols)
         .eq('status', 'active')
 
       if (error) {
@@ -108,6 +115,24 @@ export async function POST(request: NextRequest) {
       authorizations = data || []
     }
 
+    // Filter by sync_frequency — only sync auths that are due
+    if (!authorizationId && !userId) {
+      const now = Date.now()
+      authorizations = authorizations.filter(auth => {
+        if (!auth.last_verified_at) return true // Never synced → sync now
+        const lastSync = new Date(auth.last_verified_at).getTime()
+        const elapsed = now - lastSync
+        const freq = auth.sync_frequency || '15min'
+        const intervalMs: Record<string, number> = {
+          realtime: 5 * 60 * 1000,   // 5 min (practical minimum for cron)
+          '5min': 5 * 60 * 1000,
+          '15min': 15 * 60 * 1000,
+          '1hour': 60 * 60 * 1000,
+        }
+        return elapsed >= (intervalMs[freq] || intervalMs['15min'])
+      })
+    }
+
 
     let synced = 0
     let errors = 0
@@ -117,11 +142,13 @@ export async function POST(request: NextRequest) {
         // Decrypt credentials
         const apiKey = decrypt(auth.encrypted_api_key)
         const apiSecret = decrypt(auth.encrypted_api_secret)
+        const passphrase = auth.encrypted_passphrase ? decrypt(auth.encrypted_passphrase) : undefined
 
         // Sync data based on platform
         const result = await syncPlatformData(auth.platform, {
           apiKey,
           apiSecret,
+          passphrase,
           traderId: auth.trader_id,
         })
 
@@ -196,37 +223,66 @@ export async function POST(request: NextRequest) {
  */
 async function syncPlatformData(
   platform: string,
-  credentials: { apiKey: string; apiSecret: string; traderId: string }
+  credentials: { apiKey: string; apiSecret: string; passphrase?: string; traderId: string }
 ): Promise<{ success: boolean; data?: TraderData; error?: string; recordsCount?: number }> {
   const platformLower = platform.toLowerCase()
 
   try {
+    let trader: TraderData | null = null
+
     if (platformLower.includes('bybit')) {
-      // Use Bybit adapter to fetch trader detail
       const adapter = new BybitAdapter({
         apiKey: credentials.apiKey,
         apiSecret: credentials.apiSecret,
       })
-
-      const trader = await adapter.fetchTraderDetail({
+      trader = await adapter.fetchTraderDetail({
         platform: 'bybit',
         traderId: credentials.traderId,
       })
-
-      if (!trader) {
-        return { success: false, error: 'Trader not found' }
-      }
-
+    } else if (platformLower.includes('binance')) {
+      const adapter = new BinanceAdapter({
+        apiKey: credentials.apiKey,
+        apiSecret: credentials.apiSecret,
+      })
+      trader = await adapter.fetchTraderDetail({
+        platform: 'binance_futures',
+        traderId: credentials.traderId,
+      })
+    } else if (platformLower.startsWith('okx')) {
+      const adapter = new OkxAdapter({
+        apiKey: credentials.apiKey,
+        apiSecret: credentials.apiSecret,
+        passphrase: credentials.passphrase,
+      })
+      trader = await adapter.fetchTraderDetail({
+        platform: 'okx',
+        traderId: credentials.traderId,
+      })
+    } else if (platformLower.includes('bitget')) {
+      const adapter = new BitgetAdapter({
+        apiKey: credentials.apiKey,
+        apiSecret: credentials.apiSecret,
+        passphrase: credentials.passphrase,
+      })
+      trader = await adapter.fetchTraderDetail({
+        platform: 'bitget',
+        traderId: credentials.traderId,
+      })
+    } else {
       return {
-        success: true,
-        data: trader,
-        recordsCount: 1,
+        success: false,
+        error: `Platform ${platform} not yet supported for sync`,
       }
     }
 
+    if (!trader) {
+      return { success: false, error: 'Trader not found' }
+    }
+
     return {
-      success: false,
-      error: `Platform ${platform} not yet supported for sync`,
+      success: true,
+      data: trader,
+      recordsCount: 1,
     }
   } catch (error) {
     return {
