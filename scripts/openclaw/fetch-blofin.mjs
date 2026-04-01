@@ -350,7 +350,7 @@ async function saveTraders(traders) {
     quality_flags: { is_suspicious: false, suspicion_reasons: [], data_completeness: 0.8 },
     updated_at: new Date().toISOString(),
   }))
-  const { error: v2Err } = await supabase.from('trader_snapshots_v2').upsert(snapshotsV2, { onConflict: 'platform,market_type,trader_key,window' })
+  const { error: v2Err } = await supabase.from('trader_snapshots_v2').upsert(snapshotsV2, { onConflict: 'platform,market_type,trader_key,window,as_of_ts' })
   if (v2Err && !v2Err.message.includes('duplicate') && !v2Err.message.includes('unique')) console.error('v2 error:', v2Err.message)
 
   return { total: traders.length, saved: traders.length }
