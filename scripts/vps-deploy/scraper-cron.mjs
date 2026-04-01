@@ -212,6 +212,50 @@ const PLATFORMS = {
     },
   },
 
+  weex: {
+    source: 'weex',
+    market_type: 'futures',
+    endpoint: '/weex/leaderboard',
+    periods: {
+      'default': '30D',
+    },
+    pageSize: 50,
+    extractList: (data) => {
+      // VPS scraper response: { data: [{ tab, list: [...] }, ...] }
+      // Merge all unique traders across tabs
+      const dataObj = data?.data
+      if (!Array.isArray(dataObj)) return []
+      const seen = new Set()
+      const merged = []
+      for (const section of dataObj) {
+        const list = section?.list || []
+        if (!Array.isArray(list)) continue
+        for (const trader of list) {
+          const uid = String(trader.traderUserId || '')
+          if (uid && !seen.has(uid)) {
+            seen.add(uid)
+            merged.push(trader)
+          }
+        }
+      }
+      return merged
+    },
+    normalize: (raw) => {
+      const rawRoi = num(raw.totalReturnRate ?? raw.roi)
+      const roi = rawRoi != null ? (Math.abs(rawRoi) <= 1 ? rawRoi * 100 : rawRoi) : null
+      return {
+        trader_key: String(raw.traderUserId || raw.uid || ''),
+        display_name: raw.traderNickName || raw.nickName || null,
+        roi,
+        pnl: num(raw.threeWeeksPNL ?? raw.pnl),
+        win_rate: null,
+        max_drawdown: null,
+        sharpe_ratio: null,
+        followers: num(raw.followCount ?? raw.followers),
+      }
+    },
+  },
+
   dydx: {
     source: 'dydx',
     market_type: 'perp',
