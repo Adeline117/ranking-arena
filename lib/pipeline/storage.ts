@@ -66,32 +66,34 @@ export class PipelineStorage {
   }
 
   /**
-   * Upsert trader_sources
+   * Upsert traders (unified identity table, replaces trader_sources + trader_profiles_v2)
    */
   private async upsertSources(
     supabase: SupabaseClient,
     traders: EnrichedTraderData[]
   ): Promise<{ count: number }> {
-    // 准备数据
-    const sources = traders.map((t) => ({
-      source: t.platform,
-      source_trader_id: t.trader_id,
+    // 准备数据 — use `traders` table (merged identity table since 2026-03-18)
+    const traderRows = traders.map((t) => ({
+      platform: t.platform,
+      trader_key: t.trader_id,
+      market_type: 'futures' as string,  // EnrichedTraderData doesn't carry market_type; default to futures
       handle: t.display_name,
       avatar_url: t.avatar_url,
+      is_active: true,
+      last_seen_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
     }))
 
-    // 按 (source, source_trader_id) 去重
-    const unique = this.dedupeBy(sources, (s) => `${s.source}:${s.source_trader_id}`)
+    // 按 (platform, trader_key) 去重
+    const unique = this.dedupeBy(traderRows, (s) => `${s.platform}:${s.trader_key}`)
 
     // Upsert
     const { error, count } = await supabase
-      .from('trader_sources')
+      .from('traders')
       .upsert(unique, {
-        onConflict: 'source,source_trader_id',
+        onConflict: 'platform,trader_key',
         ignoreDuplicates: false,
       })
-      .select('id')
 
     if (error) {
       log.error('upsertSources error', { error: error instanceof Error ? error.message : String(error) })
