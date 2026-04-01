@@ -205,6 +205,10 @@
     {
       "path": "/api/cron/update-competitions",
       "schedule": "12,42 * * * *"
+    },
+    {
+      "path": "/api/cron/expire-mutes",
+      "schedule": "50 * * * *"
     }
   ],
   "headers": [
