@@ -5,6 +5,10 @@
   ],
   "crons": [
     {
+      "path": "/api/cron/sync-authorized-traders",
+      "schedule": "*/5 * * * *"
+    },
+    {
       "path": "/api/cron/compute-leaderboard",
       "schedule": "0,30 * * * *"
     },
