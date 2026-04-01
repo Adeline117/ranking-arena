@@ -42,7 +42,8 @@ function getUpstashRedis(): Redis | null {
       }
       return fetch(input, init)
     }
-    redis = new Redis({ url, token, fetch: isrSafeFetch } as ConstructorParameters<typeof Redis>[0])
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    redis = new Redis({ url, token, fetch: isrSafeFetch } as any)
     rateLimitLogger.info('Upstash Redis 连接成功')
     return redis
   } catch (error) {
