@@ -22,8 +22,9 @@ import GroupApplicationsTab from './components/GroupApplicationsTab'
 import GroupEditTab from './components/GroupEditTab'
 import AlertConfigTab from './components/AlertConfigTab'
 import TraderClaimsTab from './components/TraderClaimsTab'
+import AuditLogTab from './components/AuditLogTab'
 
-type AdminTab = 'dashboard' | 'scraperStatus' | 'users' | 'reports' | 'applications' | 'editApplications' | 'alertConfig' | 'traderClaims'
+type AdminTab = 'dashboard' | 'scraperStatus' | 'users' | 'reports' | 'applications' | 'editApplications' | 'alertConfig' | 'traderClaims' | 'auditLog'
 
 export default function AdminPage() {
   const router = useRouter()
@@ -149,6 +150,12 @@ export default function AdminPage() {
           >
             {t('alertConfig')}
           </Button>
+          <Button
+            variant={activeTab === 'auditLog' ? 'primary' : 'secondary'}
+            onClick={() => setActiveTab('auditLog')}
+          >
+            {t('auditLog') || 'Audit Log'}
+          </Button>
         </Box>
 
         {/* Tab Content */}
@@ -182,6 +189,10 @@ export default function AdminPage() {
 
         {activeTab === 'alertConfig' && (
           <AlertConfigTab accessToken={accessToken} />
+        )}
+
+        {activeTab === 'auditLog' && (
+          <AuditLogTab accessToken={accessToken} />
         )}
       </Box>
     </Box>
