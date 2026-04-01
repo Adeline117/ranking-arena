@@ -107,8 +107,12 @@
     },
 
     {
-      "path": "/api/cron/batch-fetch-traders?group=a",
+      "path": "/api/cron/batch-fetch-traders?group=a1",
       "schedule": "2 */3 * * *"
+    },
+    {
+      "path": "/api/cron/batch-fetch-traders?group=a2",
+      "schedule": "4 */3 * * *"
     },
     {
       "path": "/api/cron/batch-fetch-traders?group=b",

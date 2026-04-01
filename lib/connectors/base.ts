@@ -41,6 +41,7 @@ import {
   ConsecutiveBreaker,
   BrokenCircuitError,
 } from 'cockatiel'
+import { getPlatformPolicy, BrokenCircuitError as RegistryBrokenCircuitError } from './circuit-registry'
 
 // Scraper result cache TTL (30 minutes)
 const SCRAPER_CACHE_TTL = 30 * 60
@@ -197,13 +198,18 @@ export abstract class BaseConnector implements PlatformConnector {
   protected rateLimiter: RateLimiter | null = null
 
   /**
-   * Cockatiel policy for VPS requests: retry with exponential backoff + circuit breaker.
-   * Shared across all connector instances — a global VPS health signal.
+   * Get per-platform VPS policy (replaces global static policy).
+   * Each platform gets an independent circuit breaker so one failing
+   * platform doesn't block all others from using VPS.
    */
-  private static vpsPolicy = wrap(
-    retry(handleAll, { maxAttempts: 2, backoff: new ExponentialBackoff({ initialDelay: 3000 }) }),
-    circuitBreaker(handleAll, { halfOpenAfter: 60_000, breaker: new ConsecutiveBreaker(5) })
-  )
+  private getVpsPolicy() {
+    return getPlatformPolicy(`vps:${this.platform}`, {
+      maxAttempts: 2,
+      initialDelay: 3000,
+      breakerThreshold: 5,
+      halfOpenAfter: 60_000,
+    })
+  }
 
   constructor(config?: Partial<ConnectorConfig>) {
     this.config = { ...DEFAULT_CONNECTOR_CONFIG, ...config }
@@ -452,7 +458,7 @@ export abstract class BaseConnector implements PlatformConnector {
 
     // Use cockatiel policy: retry with exponential backoff + circuit breaker
     try {
-      const data = await BaseConnector.vpsPolicy.execute(async () => {
+      const data = await this.getVpsPolicy().execute(async () => {
         // Strategy 1: Direct to scraper port 3457
         let response: Response | null = null;
         try {
@@ -498,7 +504,7 @@ export abstract class BaseConnector implements PlatformConnector {
       }
       return data;
     } catch (error) {
-      if (error instanceof BrokenCircuitError) {
+      if (error instanceof BrokenCircuitError || error instanceof RegistryBrokenCircuitError) {
         exchangeLogger.warn(`[VPS] ${this.platform} circuit breaker open, skipping ${endpoint}`)
       } else {
         exchangeLogger.warn(`[VPS] ${this.platform} failed for ${endpoint}: ${toError(error).message}`)
