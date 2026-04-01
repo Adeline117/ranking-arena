@@ -4804,6 +4804,15 @@ compFieldMaxParticipants: '最大参与人数',
     tokenRankingNext: '下一页',
     rankingsSubNavTokens: '币种',
 
+    // Achievements
+    achievementUnlocked: '成就解锁',
+    achievementFirstWatchlist: '关注先锋',
+    achievementFirstComparison: '分析师',
+    achievementFirstPost: '发帖达人',
+    achievementExplorer5: '探索者',
+    achievementProSubscriber: 'Pro 会员',
+    achievementSocialButterfly: '社交达人',
+
 } as const
 
 export default zh

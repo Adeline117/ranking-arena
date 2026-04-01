@@ -3,6 +3,7 @@
 import useSWR from 'swr'
 import { useCallback, useMemo } from 'react'
 import { useAuthSession } from '@/lib/hooks/useAuthSession'
+import { useAchievements } from '@/lib/hooks/useAchievements'
 
 interface WatchlistItem {
   source: string
@@ -15,6 +16,7 @@ const WATCHLIST_KEY = '/api/watchlist'
 
 export function useWatchlist() {
   const { isLoggedIn, getAuthHeadersAsync } = useAuthSession()
+  const { tryUnlock } = useAchievements()
 
   const fetcher = useCallback(async (): Promise<WatchlistItem[]> => {
     if (!isLoggedIn) return []
@@ -55,8 +57,9 @@ export function useWatchlist() {
         body: JSON.stringify({ source, source_trader_id: sourceTraderID, handle }),
       })
       mutate()
+      tryUnlock('first_watchlist')
     },
-    [isLoggedIn, watchlist, mutate, getAuthHeadersAsync]
+    [isLoggedIn, watchlist, mutate, getAuthHeadersAsync, tryUnlock]
   )
 
   const removeFromWatchlist = useCallback(
