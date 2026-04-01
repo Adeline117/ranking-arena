@@ -15,7 +15,7 @@ import type { RankingWindow } from '@/lib/types/leaderboard'
 import { dataLogger } from '@/lib/utils/logger'
 import type { ExecuteResult } from './connector-runner'
 import { connectorRegistry, initializeConnectors } from './registry'
-import { runConnectorBatch } from './connector-db-adapter'
+import { runConnectorBatch } from '@/lib/pipeline/connector-db-adapter'
 import { createSupabaseAdmin } from '@/lib/cron/utils'
 
 export interface UnifiedConnectorConfig {

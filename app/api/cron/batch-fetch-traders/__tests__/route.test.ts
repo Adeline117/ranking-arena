@@ -52,7 +52,7 @@ const mockRunConnectorBatch = jest.fn().mockResolvedValue({
   duration: 100,
 })
 
-jest.mock('@/lib/connectors/connector-db-adapter', () => ({
+jest.mock('@/lib/pipeline/connector-db-adapter', () => ({
   runConnectorBatch: (...args: unknown[]) => mockRunConnectorBatch(...args),
 }))
 
