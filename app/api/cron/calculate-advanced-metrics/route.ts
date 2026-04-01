@@ -98,28 +98,71 @@ export async function POST(request: NextRequest) {
       processingMap.get(key)!.push(trader)
     }
 
-    // Batch-fetch all daily snapshots for every trader key in one query
-    // (avoids 1 DB call per trader per window — up to 150 calls saved per run)
+    // Batch-fetch equity curve data for every trader (much denser than daily_snapshots)
+    // equity_curve has 812K rows vs daily_snapshots 400K, and covers 25 platforms
     const allTraderKeys = [...new Set((traders || []).map(t => t.trader_key))]
-    const earliestStart = new Date()
-    earliestStart.setDate(earliestStart.getDate() - 90) // widest window
+    const allPlatforms = [...new Set((traders || []).map(t => t.platform))]
     const dailySnapshotMap = new Map<string, Array<{ date: string; daily_return_pct: string | null }>>()
     try {
-      const { data: allDailySnaps } = await supabase
-        .from('trader_daily_snapshots')
-        .select('trader_key, date, daily_return_pct')
-        .in('trader_key', allTraderKeys)
-        .gte('date', earliestStart.toISOString().split('T')[0])
-        .order('date', { ascending: true })
+      // Fetch equity curve data — daily ROI points that can be diffed for daily returns
+      for (let i = 0; i < allPlatforms.length; i++) {
+        const platform = allPlatforms[i]
+        const platformTraders = (traders || []).filter(t => t.platform === platform).map(t => t.trader_key)
+        if (platformTraders.length === 0) continue
 
-      for (const row of allDailySnaps ?? []) {
-        if (!dailySnapshotMap.has(row.trader_key)) {
-          dailySnapshotMap.set(row.trader_key, [])
+        const { data: eqRows } = await supabase
+          .from('trader_equity_curve')
+          .select('source_trader_id, data_date, roi_pct')
+          .eq('source', platform)
+          .in('source_trader_id', platformTraders)
+          .order('data_date', { ascending: true })
+          .limit(5000)
+
+        if (!eqRows?.length) continue
+
+        // Group by trader and compute daily returns from cumulative ROI
+        const byTrader = new Map<string, Array<{ date: string; roi: number }>>()
+        for (const row of eqRows) {
+          if (row.roi_pct == null) continue
+          const arr = byTrader.get(row.source_trader_id) || []
+          arr.push({ date: row.data_date, roi: Number(row.roi_pct) })
+          byTrader.set(row.source_trader_id, arr)
         }
-        dailySnapshotMap.get(row.trader_key)!.push({ date: row.date, daily_return_pct: row.daily_return_pct })
+
+        for (const [tid, points] of byTrader) {
+          if (points.length < 2) continue
+          const returns: Array<{ date: string; daily_return_pct: string | null }> = []
+          for (let j = 1; j < points.length; j++) {
+            returns.push({
+              date: points[j].date,
+              daily_return_pct: String(points[j].roi - points[j - 1].roi),
+            })
+          }
+          dailySnapshotMap.set(tid, returns)
+        }
+      }
+
+      // Fallback: also check trader_daily_snapshots for any traders not in equity_curve
+      const missingTraders = allTraderKeys.filter(k => !dailySnapshotMap.has(k))
+      if (missingTraders.length > 0) {
+        const earliestStart = new Date()
+        earliestStart.setDate(earliestStart.getDate() - 90)
+        const { data: allDailySnaps } = await supabase
+          .from('trader_daily_snapshots')
+          .select('trader_key, date, daily_return_pct')
+          .in('trader_key', missingTraders)
+          .gte('date', earliestStart.toISOString().split('T')[0])
+          .order('date', { ascending: true })
+
+        for (const row of allDailySnaps ?? []) {
+          if (!dailySnapshotMap.has(row.trader_key)) {
+            dailySnapshotMap.set(row.trader_key, [])
+          }
+          dailySnapshotMap.get(row.trader_key)!.push({ date: row.date, daily_return_pct: row.daily_return_pct })
+        }
       }
     } catch {
-      // Table may not exist yet — dailySnapshotMap stays empty, metrics skip gracefully
+      // Tables may not exist yet — dailySnapshotMap stays empty, metrics skip gracefully
     }
 
     // Process each trader
@@ -142,13 +185,14 @@ export async function POST(request: NextRequest) {
           const winRate = parseFloat(snapshot.win_rate || '0')
 
           // Resolve daily returns from the pre-fetched batch map
+          // Now uses equity_curve data first (812K rows, 25 platforms)
+          // with daily_snapshots as fallback
           const startDate = new Date()
           startDate.setDate(startDate.getDate() - periodDays)
           const startDateStr = startDate.toISOString().split('T')[0]
 
-          let dailyReturns: number[] = []
           const traderDailyRows = dailySnapshotMap.get(snapshot.trader_key) ?? []
-          dailyReturns = traderDailyRows
+          const dailyReturns = traderDailyRows
             .filter(s => s.date >= startDateStr)
             .map(s => parseFloat(s.daily_return_pct || '0'))
             .filter(r => !isNaN(r))
