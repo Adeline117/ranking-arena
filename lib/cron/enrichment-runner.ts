@@ -135,14 +135,15 @@ import { logger } from '@/lib/logger'
 import { PipelineLogger } from '@/lib/services/pipeline-logger'
 import { LR, V2 } from '@/lib/types/schema-mapping'
 
-// EMERGENCY FIX (2026-03-20): Reduce retries to prevent timeout bypass
-// Root cause of 44min hangs: withRetry creates new fetch+AbortController on each retry,
-// bypassing per-trader/platform timeouts. 3 retries × 6s timeout × N APIs = >54s per trader.
-// Solution: 1 retry max → total time ≤ 12s per API, respects per-trader timeout.
+// Retry config: 3 attempts with shared AbortSignal from per-trader timeout.
+// The withRetry function checks signal.aborted before each attempt, so total
+// wall-clock time is bounded by the per-trader AbortController regardless of retry count.
+// Previous emergency fix (maxAttempts=1) was overly conservative — the real fix was
+// passing the traderController.signal to withRetry, which is now done at every call site.
 const RETRY_CONFIG = {
-  maxAttempts: 1, // Was 3 — NO retries, fail fast
-  baseDelayMs: 500, // Reduced from 1000
-  maxDelayMs: 2000, // Reduced from 10000
+  maxAttempts: 3,
+  baseDelayMs: 300,
+  maxDelayMs: 2000,
 }
 
 async function withRetry<T>(
@@ -501,8 +502,8 @@ export interface EnrichmentResult {
   ok: boolean
   duration: number
   period: string
-  summary: { total: number; enriched: number; failed: number }
-  results: Record<string, { enriched: number; failed: number; errors: string[] }>
+  summary: { total: number; enriched: number; failed: number; suppressedErrors: number }
+  results: Record<string, { enriched: number; failed: number; errors: string[]; suppressedErrors: number }>
 }
 
 /**
@@ -522,9 +523,8 @@ export const NO_ENRICHMENT_PLATFORMS = new Set([
   'bybit_spot',   // metricValues has ROI/WR/MDD/Sharpe, VPS trader-detail doesn't support spot leaderMark
   'binance_web3', // wallet-based, no per-trader detail API, all metrics from leaderboard
   'web3_bot',     // small platform (19 traders), all metrics from leaderboard
-  // 2026-03-28: dydx disabled — indexer API causes 30+ minute hangs despite 5s fetch timeouts
-  // Root cause unknown (possibly DNS/TCP level hang). Re-enable after investigation.
-  'dydx',
+  // 2026-03-31: dydx re-enabled — rewritten to use Copin API with AbortSignal.timeout(8s).
+  // Original indexer (TCP hang) removed. All fetch calls use hardFetch() with runtime-level timeouts.
   // kucoin: REMOVED — now has dedicated enrichment module (2026-03-19)
   // weex: RE-ENABLED — ndaysReturnRates from VPS scraper leaderboard = equity curve
   // bingx_spot: REMOVED — now uses daily snapshot fallback for equity curves (2026-03-19)
@@ -585,7 +585,7 @@ export async function runEnrichment(params: {
   if (NO_ENRICHMENT_PLATFORMS.has(platformParam)) {
     logger.info(`[enrich] Skipping ${platformParam} - enrichment not supported`)
     await plog.success(0, { reason: 'platform does not support enrichment' })
-    return { ok: true, duration: 0, period, summary: { total: 0, enriched: 0, failed: 0 }, results: {} }
+    return { ok: true, duration: 0, period, summary: { total: 0, enriched: 0, failed: 0, suppressedErrors: 0 }, results: {} }
   }
 
   const supabase = getSupabaseAdmin()
@@ -593,19 +593,21 @@ export async function runEnrichment(params: {
   const platforms = [platformParam].filter((p) => p in ENRICHMENT_PLATFORM_CONFIGS)
   if (platforms.length === 0) {
     await plog.error(new Error(`Unknown platform: ${platformParam}`))
-    return { ok: false, duration: 0, period, summary: { total: 0, enriched: 0, failed: 0 }, results: {} }
+    return { ok: false, duration: 0, period, summary: { total: 0, enriched: 0, failed: 0, suppressedErrors: 0 }, results: {} }
   }
 
   const daysMap: Record<string, number> = { '7D': 7, '30D': 30, '90D': 90 }
   const days = daysMap[period] || 90
 
-  const results: Record<string, { enriched: number; failed: number; errors: string[] }> = {}
+  const results: Record<string, { enriched: number; failed: number; errors: string[]; suppressedErrors: number }> = {}
+  let totalSuppressedErrors = 0
 
   for (const platformKey of platforms) {
     const config = ENRICHMENT_PLATFORM_CONFIGS[platformKey]
     if (!config) continue
 
-    results[platformKey] = { enriched: 0, failed: 0, errors: [] }
+    results[platformKey] = { enriched: 0, failed: 0, errors: [], suppressedErrors: 0 }
+    let suppressedErrors = 0
     let walletEnrichFailCount = 0
 
     // Per-platform timeout: isolate each platform so one hanging platform
@@ -682,7 +684,11 @@ export async function runEnrichment(params: {
                     `${platformKey}:${traderId} equity curve`,
                     RETRY_CONFIG,
                     traderSignal,
-                  ).catch(() => [] as EquityCurvePoint[])
+                  ).catch((err) => {
+                    suppressedErrors++
+                    logger.warn(`[enrich] ${platformKey}/${traderId} equity curve failed`, { error: err instanceof Error ? err.message : String(err) })
+                    return [] as EquityCurvePoint[]
+                  })
                 }
 
                 // Position history fetch
@@ -692,7 +698,11 @@ export async function runEnrichment(params: {
                     `${platformKey}:${traderId} position history`,
                     RETRY_CONFIG,
                     traderSignal,
-                  ).catch(() => [] as PositionHistoryItem[])
+                  ).catch((err) => {
+                    suppressedErrors++
+                    logger.warn(`[enrich] ${platformKey}/${traderId} position history failed`, { error: err instanceof Error ? err.message : String(err) })
+                    return [] as PositionHistoryItem[]
+                  })
                 }
 
                 // Current positions fetch
@@ -702,7 +712,11 @@ export async function runEnrichment(params: {
                     `${platformKey}:${traderId} current positions`,
                     RETRY_CONFIG,
                     traderSignal,
-                  ).catch(() => [] as (PortfolioPosition | PositionHistoryItem)[])
+                  ).catch((err) => {
+                    suppressedErrors++
+                    logger.warn(`[enrich] ${platformKey}/${traderId} current positions failed`, { error: err instanceof Error ? err.message : String(err) })
+                    return [] as (PortfolioPosition | PositionHistoryItem)[]
+                  })
                 }
 
                 // Stats detail fetch
@@ -712,7 +726,11 @@ export async function runEnrichment(params: {
                     `${platformKey}:${traderId} stats detail`,
                     RETRY_CONFIG,
                     traderSignal,
-                  ).catch(() => null as StatsDetail | null)
+                  ).catch((err) => {
+                    suppressedErrors++
+                    logger.warn(`[enrich] ${platformKey}/${traderId} stats detail failed`, { error: err instanceof Error ? err.message : String(err) })
+                    return null as StatsDetail | null
+                  })
                 }
 
                 // DEX wallet AUM fetch (optional, failures logged)
@@ -938,8 +956,15 @@ export async function runEnrichment(params: {
       platformController.abort() // Clean up any lingering trader work on platform completion/timeout
     }
 
+    // Accumulate suppressed errors for this platform
+    results[platformKey].suppressedErrors = suppressedErrors
+    totalSuppressedErrors += suppressedErrors
+
     if (walletEnrichFailCount > 0) {
       logger.warn(`[Enrichment] ${walletEnrichFailCount} wallet enrichments failed for ${platformKey}`)
+    }
+    if (suppressedErrors > 0) {
+      logger.warn(`[enrich] ${platformKey}: ${suppressedErrors} API calls failed silently (data returned as empty)`)
     }
   }
 
@@ -947,7 +972,7 @@ export async function runEnrichment(params: {
   const totalEnriched = Object.values(results).reduce((sum, r) => sum + r.enriched, 0)
   const totalFailed = Object.values(results).reduce((sum, r) => sum + r.failed, 0)
 
-  logger.warn(`[enrich] Completed in ${duration}ms: ${totalEnriched} enriched, ${totalFailed} failed`)
+  logger.warn(`[enrich] Completed in ${duration}ms: ${totalEnriched} enriched, ${totalFailed} failed, ${totalSuppressedErrors} API errors suppressed`)
 
   // Alert on high failure rate
   const total = totalEnriched + totalFailed
@@ -976,5 +1001,5 @@ export async function runEnrichment(params: {
     await plog.error(new Error(`${totalFailed}/${totalEnriched + totalFailed} enrichments failed`), { period, duration, totalEnriched, totalFailed })
   }
 
-  return { ok: totalFailed === 0, duration, period, summary: { total, enriched: totalEnriched, failed: totalFailed }, results }
+  return { ok: totalFailed === 0, duration, period, summary: { total, enriched: totalEnriched, failed: totalFailed, suppressedErrors: totalSuppressedErrors }, results }
 }
