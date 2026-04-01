@@ -185,7 +185,11 @@ export class CopinPerpConnector extends BaseConnector {
         const avgRoi = agg.rois.length > 0
           ? agg.rois.reduce((s, r) => s + r, 0) / agg.rois.length * 100
           : null
-        const winRate = agg.totalTrades > 0 ? (agg.wins / agg.totalTrades) * 100 : null
+        // win_rate is NOT computed here because positions are fetched sorted by
+        // PnL desc, which biases the sample toward winning trades and produces
+        // artificially high (often 100%) win rates. Accurate win_rate comes
+        // from the Copin leaderboard stats during the enrichment phase.
+        const winRate = null
 
         return {
           platform: 'copin' as const,
