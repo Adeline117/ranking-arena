@@ -243,7 +243,7 @@ export const ENRICHMENT_PLATFORM_CONFIGS: Record<string, EnrichmentConfig> = {
     platform: 'bybit',
     fetchEquityCurve: fetchBybitEquityCurve,
     fetchStatsDetail: fetchBybitStatsDetail,
-    concurrency: 1, delayMs: 3000, limit: 6, // VPS scraper: ~18s/trader, max 6 in 120s timeout
+    concurrency: 2, delayMs: 2000, limit: 20, // VPS scraper: ~15s/trader, 2 concurrent = ~150s for 20 traders
   },
   okx_futures: {
     platform: 'okx_futures',

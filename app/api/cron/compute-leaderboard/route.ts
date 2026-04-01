@@ -809,7 +809,7 @@ async function computeSeason(
     const scoreResult = calculateArenaScore(
       {
         roi: t.roi!, // guaranteed non-null by filter above
-        pnl: t.pnl ?? 0,
+        pnl: t.pnl ?? null,
         maxDrawdown: t.max_drawdown,
         winRate: normalizedWinRate,
       },
@@ -841,7 +841,7 @@ async function computeSeason(
       source_trader_id: t.source_trader_id,
       arena_score: finalScore,
       roi: t.roi ?? 0,
-      pnl: t.pnl ?? 0,
+      pnl: t.pnl,
       win_rate: normalizedWinRate,
       max_drawdown: t.max_drawdown,
       followers: t.followers ?? 0,
@@ -874,10 +874,10 @@ async function computeSeason(
     // |ROI| > 50,000% is almost certainly data corruption
     if (Math.abs(t.roi) > 50000) isOutlier = true
     // PnL > $100M from non-whale sources
-    if (Math.abs(t.pnl) > 100_000_000 && !['hyperliquid'].includes(t.source)) isOutlier = true
+    if (t.pnl != null && Math.abs(t.pnl) > 100_000_000 && !['hyperliquid'].includes(t.source)) isOutlier = true
     // ROI and PnL sign mismatch (positive PnL with hugely negative ROI or vice versa)
-    if (t.pnl > 1000 && t.roi < -1000) isOutlier = true
-    if (t.pnl < -1000 && t.roi > 1000) isOutlier = true
+    if (t.pnl != null && t.pnl > 1000 && t.roi < -1000) isOutlier = true
+    if (t.pnl != null && t.pnl < -1000 && t.roi > 1000) isOutlier = true
     // web3_bot entries are DeFi protocols, not traders
     if (t.source === 'web3_bot') isOutlier = true
 

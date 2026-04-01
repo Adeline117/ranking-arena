@@ -32,7 +32,7 @@ export type ScoreConfidence = 'full' | 'partial' | 'minimal'
 /** @deprecated Use UnifiedTrader from '@/lib/types/unified-trader' for application code */
 export interface TraderScoreInput {
   roi: number          // ROI（百分比，如 25% = 25）
-  pnl: number          // 已实现盈亏（USD）
+  pnl: number | null   // 已实现盈亏（USD），null = 未知（得分按 0 处理）
   maxDrawdown: number | null  // 最大回撤（百分比，如 20% = 20）
   winRate: number | null      // 胜率（百分比，如 60% = 60）
   source?: string      // 数据来源（用于 trust weight）
