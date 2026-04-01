@@ -212,6 +212,42 @@ const PLATFORMS = {
     },
   },
 
+  okx_web3: {
+    source: 'okx_web3',
+    market_type: 'web3',
+    // OKX v5 copytrading API — same as okx_futures, direct HTTP (no scraper needed)
+    directApi: 'https://www.okx.com/api/v5/copytrading/public-lead-traders?instType=SWAP&sortType=pnl&dataRange={period}&pageNo=1&limit=20',
+    endpoint: null,
+    periods: {
+      '7d': '7D',
+      '30d': '30D',
+      '90d': '90D',
+    },
+    pageSize: 20,
+    extractList: (data) => {
+      // v5 response: { code: "0", data: [{ ranks: [...] }] }
+      const dataArr = Array.isArray(data?.data) ? data.data[0] : data?.data
+      return dataArr?.ranks || []
+    },
+    normalize: (raw) => {
+      const pnlRatio = num(raw.pnlRatio ?? raw.profitRatio)
+      const roi = pnlRatio != null ? (Math.abs(pnlRatio) < 10 ? pnlRatio * 100 : pnlRatio) : null
+      const winRatio = num(raw.winRatio)
+      const winRate = winRatio != null ? (winRatio <= 1 ? winRatio * 100 : winRatio) : null
+      return {
+        trader_key: String(raw.uniqueCode || raw.uniqueName || ''),
+        display_name: raw.nickName || null,
+        avatar_url: raw.portLink || null,
+        roi,
+        pnl: num(raw.pnl ?? raw.totalPnl ?? raw.accPnl),
+        win_rate: winRate,
+        max_drawdown: null,
+        sharpe_ratio: raw.sharpeRatio != null ? num(raw.sharpeRatio) : null,
+        followers: num(raw.copyTraderNum ?? raw.followerCount),
+      }
+    },
+  },
+
   weex: {
     source: 'weex',
     market_type: 'futures',
@@ -543,6 +579,59 @@ async function fetchPlatform(platformKey) {
 
         if (!allTraders.length) {
           log('  ' + window + ': 0 traders from Copin')
+          results[window] = { count: 0 }
+          continue
+        }
+
+        const normalized = allTraders.map(config.normalize)
+        const v2Rows = buildSnapshotRows(normalized, config.source, config.market_type, window)
+        const v1Rows = buildV1Rows(normalized, config.source, window)
+
+        const [v2Result, v1Result] = await Promise.all([
+          supabaseUpsert('trader_snapshots_v2', v2Rows, 'platform,trader_key,window').catch(e => ({ error: e.message })),
+          supabaseUpsert('trader_snapshots', v1Rows, 'source,source_trader_id,season_id').catch(e => ({ error: e.message })),
+        ])
+
+        log('  ' + window + ': ' + normalized.length + ' traders -> v2: ' + (v2Result.count ?? v2Result.error) + ', v1: ' + (v1Result.count ?? v1Result.error))
+        results[window] = { count: normalized.length }
+        totalTraders += normalized.length
+      } catch (err) {
+        log('  ' + window + ': ERROR - ' + err.message)
+        results[window] = { error: err.message }
+      }
+
+      await new Promise(r => setTimeout(r, 1000))
+    }
+
+    return { platform: platformKey, totalTraders, results }
+  }
+
+  // OKX Web3: paginate through v5 copytrading API (20 per page, up to 50 pages)
+  if (platformKey === 'okx_web3') {
+    for (const [dataRange, window] of Object.entries(config.periods)) {
+      log('  Fetching ' + window + ' via OKX v5 API (dataRange=' + dataRange + ')...')
+      try {
+        const allTraders = []
+        const pageSize = 20
+        const maxPages = 50
+        for (let page = 1; page <= maxPages; page++) {
+          const url = `https://www.okx.com/api/v5/copytrading/public-lead-traders?instType=SWAP&sortType=pnl&dataRange=${dataRange}&pageNo=${page}&limit=${pageSize}`
+          const controller = new AbortController()
+          const timeout = setTimeout(() => controller.abort(), 15000)
+          const res = await fetch(url, { signal: controller.signal })
+          clearTimeout(timeout)
+          if (!res.ok) { log('  OKX API returned ' + res.status); break }
+          const json = await res.json()
+          if (json?.code !== '0') { log('  OKX API error: ' + json?.msg); break }
+          const ranks = json?.data?.[0]?.ranks || []
+          if (!ranks.length) break
+          allTraders.push(...ranks)
+          if (ranks.length < pageSize) break
+          await new Promise(r => setTimeout(r, 200))
+        }
+
+        if (!allTraders.length) {
+          log('  ' + window + ': 0 traders from OKX')
           results[window] = { count: 0 }
           continue
         }
