@@ -239,14 +239,14 @@ describe('GET /api/compare', () => {
     expect(res.status).toBe(400)
   })
 
-  it('returns 400 when more than 5 trader IDs provided', async () => {
-    const ids = 't1,t2,t3,t4,t5,t6'
+  it('returns 400 when more than 10 trader IDs provided', async () => {
+    const ids = 't1,t2,t3,t4,t5,t6,t7,t8,t9,t10,t11'
     const req = new NextRequest(`http://localhost/api/compare?ids=${ids}`)
     const res = await GET(req)
     const body = await res.json()
 
     expect(res.status).toBe(400)
-    expect(body.error.message).toMatch(/Maximum 5/)
+    expect(body.error.message).toMatch(/Maximum 10/)
   })
 
   // --- Success Case ---

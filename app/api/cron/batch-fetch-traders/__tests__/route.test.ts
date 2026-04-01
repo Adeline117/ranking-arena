@@ -68,9 +68,12 @@ jest.mock('@/lib/constants/exchanges', () => ({
   SOURCE_TO_CONNECTOR_MAP: {
     binance_futures: { platform: 'binance', marketType: 'futures' },
     binance_spot: { platform: 'binance', marketType: 'spot' },
-    bybit: { platform: 'bybit', marketType: 'futures' },
-    bitget_futures: { platform: 'bitget', marketType: 'futures' },
     okx_futures: { platform: 'okx', marketType: 'futures' },
+    okx_spot: { platform: 'okx', marketType: 'spot' },
+    bybit: { platform: 'bybit', marketType: 'futures' },
+    bybit_spot: { platform: 'bybit', marketType: 'spot' },
+    bitget_futures: { platform: 'bitget', marketType: 'futures' },
+    bitget_spot: { platform: 'bitget', marketType: 'spot' },
     hyperliquid: { platform: 'hyperliquid', marketType: 'perp' },
     gmx: { platform: 'gmx', marketType: 'perp' },
     bitunix: { platform: 'bitunix', marketType: 'futures' },
@@ -79,15 +82,23 @@ jest.mock('@/lib/constants/exchanges', () => ({
     bitfinex: { platform: 'bitfinex', marketType: 'futures' },
     coinex: { platform: 'coinex', marketType: 'futures' },
     binance_web3: { platform: 'binance_web3', marketType: 'futures' },
+    okx_web3: { platform: 'okx_web3', marketType: 'futures' },
     mexc: { platform: 'mexc', marketType: 'futures' },
     bingx: { platform: 'bingx', marketType: 'futures' },
     gateio: { platform: 'gateio', marketType: 'futures' },
     btcc: { platform: 'btcc', marketType: 'futures' },
     drift: { platform: 'drift', marketType: 'perp' },
     jupiter_perps: { platform: 'jupiter_perps', marketType: 'perp' },
+    aevo: { platform: 'aevo', marketType: 'perp' },
     web3_bot: { platform: 'web3_bot', marketType: 'spot' },
     toobit: { platform: 'toobit', marketType: 'futures' },
+    xt: { platform: 'xt', marketType: 'futures' },
     etoro: { platform: 'etoro', marketType: 'spot' },
+    woox: { platform: 'woox', marketType: 'futures' },
+    polymarket: { platform: 'polymarket', marketType: 'spot' },
+    copin: { platform: 'copin', marketType: 'perp' },
+    lbank: { platform: 'lbank', marketType: 'futures' },
+    blofin: { platform: 'blofin', marketType: 'futures' },
   },
   DEAD_BLOCKED_PLATFORMS: [],
 }))
@@ -126,6 +137,18 @@ jest.mock('@/lib/cache', () => ({
 
 jest.mock('@/lib/alerts/send-alert', () => ({
   sendAlert: jest.fn().mockResolvedValue(undefined),
+}))
+
+jest.mock('@/lib/config/platforms', () => ({
+  validatePlatform: jest.fn(),
+}))
+
+jest.mock('@/lib/services/pipeline-state', () => ({
+  PipelineState: {
+    get: jest.fn().mockResolvedValue(0),
+    incr: jest.fn().mockResolvedValue(1),
+    del: jest.fn().mockResolvedValue(undefined),
+  },
 }))
 
 import { NextRequest } from 'next/server'
@@ -187,13 +210,13 @@ describe('GET /api/cron/batch-fetch-traders', () => {
   // ---- Successful execution ------------------------------------------------
 
   it('dispatches all platforms in group and returns stats', async () => {
-    const res = await GET(createCronRequest(CRON_SECRET, 'a'))
+    const res = await GET(createCronRequest(CRON_SECRET, 'a1'))
     const body = await res.json()
 
     expect(res.status).toBe(200)
-    expect(body.group).toBe('a')
-    expect(body.platforms).toBe(2) // Group a: binance_futures, binance_spot
-    // Both platforms have connectors and succeed (binance_spot is no longer disabled)
+    expect(body.group).toBe('a1')
+    expect(body.platforms).toBe(2) // Group a1: binance_futures, binance_spot
+    // Both platforms have connectors and succeed
     expect(body.succeeded).toBe(2)
     expect(body.failed).toBe(0)
     expect(body.ok).toBe(true)
@@ -210,7 +233,7 @@ describe('GET /api/cron/batch-fetch-traders', () => {
       duration: 100,
     })
 
-    const res = await GET(createCronRequest(CRON_SECRET, 'a'))
+    const res = await GET(createCronRequest(CRON_SECRET, 'a1'))
     const body = await res.json()
 
     expect(res.status).toBe(200)
@@ -225,7 +248,7 @@ describe('GET /api/cron/batch-fetch-traders', () => {
   it('handles fetcher errors gracefully', async () => {
     mockRunConnectorBatch.mockRejectedValue(new Error('Network error'))
 
-    const res = await GET(createCronRequest(CRON_SECRET, 'a'))
+    const res = await GET(createCronRequest(CRON_SECRET, 'a1'))
     const body = await res.json()
 
     expect(res.status).toBe(200)

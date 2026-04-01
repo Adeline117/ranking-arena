@@ -277,28 +277,35 @@ describe('DydxPerpConnector', () => {
 
     test('returns snapshot with correctly computed ROI and PnL', async () => {
       const connector = createConnector()
-      // First call: subaccount endpoint
+      // First call: Copin API returns leaderboard with trader entry
+      mockFetchResponse({
+        data: [
+          { account: 'dydx1traderA', totalPnl: '50000', totalVolume: '500000', totalWin: 30, totalLose: 10, totalTrade: 40, ranking: 1 },
+        ],
+      })
+      // Second call: subaccount endpoint
       mockFetchResponse(validSubaccountResponse)
-      // Second call: leaderboard endpoint
-      mockFetchResponse(validLeaderboardResponse)
 
       const result = await connector.fetchTraderSnapshot('dydx1traderA', '7d')
 
       expect(result).not.toBeNull()
-      // PnL from leaderboard entry
       expect(result!.metrics.pnl).toBe(50000)
-      // ROI = (pnl / startEquity) * 100 = (50000 / (150000 - 50000)) * 100 = 50
+      // ROI from Copin: pnl / (volume/5) * 100 = 50000 / 100000 * 100 = 50
       expect(result!.metrics.roi).toBe(50)
-      // AUM = equity
       expect(result!.metrics.aum).toBe(150000)
-      // Platform rank from leaderboard
       expect(result!.metrics.platform_rank).toBe(1)
     })
 
     test('returns null PnL and ROI when trader not found in leaderboard', async () => {
       const connector = createConnector()
+      // Copin returns data but trader not found
+      mockFetchResponse({
+        data: [
+          { account: 'dydx1other', totalPnl: '10000', ranking: 1 },
+        ],
+      })
+      // Subaccount endpoint
       mockFetchResponse(validSubaccountResponse)
-      mockFetchResponse(validLeaderboardResponse)
 
       const result = await connector.fetchTraderSnapshot('dydx1unknown', '7d')
 
@@ -312,54 +319,63 @@ describe('DydxPerpConnector', () => {
 
     test('handles zero equity gracefully (no ROI division by zero)', async () => {
       const connector = createConnector()
+      // Copin returns trader with PnL but no volume (so Copin ROI is null)
+      mockFetchResponse({
+        data: [
+          { account: 'dydx1zero', totalPnl: '1000', ranking: 1 },
+        ],
+      })
+      // Subaccount returns 0 equity
       mockFetchResponse({
         subaccount: { equity: '0', freeCollateral: '0' },
-      })
-      mockFetchResponse({
-        pnlRanking: [{ address: 'dydx1zero', pnl: '1000', rank: 1 }],
       })
 
       const result = await connector.fetchTraderSnapshot('dydx1zero', '7d')
 
       expect(result).not.toBeNull()
       expect(result!.metrics.pnl).toBe(1000)
-      // startEquity = 0 - 1000 = -1000, which is <= 0, so ROI should be null
+      // equity=0, startEquity = 0 - 1000 = -1000, which is <= 0, so ROI stays null
       expect(result!.metrics.roi).toBeNull()
-      // equity is 0, so aum should be null (0 || null = null)
+      // equity is 0, Number(0) || null = null
       expect(result!.metrics.aum).toBeNull()
     })
 
     test('handles negative PnL correctly for ROI calculation', async () => {
       const connector = createConnector()
+      // Copin returns trader with negative PnL but no volume
+      mockFetchResponse({
+        data: [
+          { account: 'dydx1loser', totalPnl: '-20000', ranking: 50 },
+        ],
+      })
+      // Subaccount with equity
       mockFetchResponse({
         subaccount: { equity: '80000.00', freeCollateral: '40000.00' },
-      })
-      mockFetchResponse({
-        pnlRanking: [{ address: 'dydx1loser', pnl: '-20000', rank: 50 }],
       })
 
       const result = await connector.fetchTraderSnapshot('dydx1loser', '30d')
 
       expect(result).not.toBeNull()
       expect(result!.metrics.pnl).toBe(-20000)
-      // startEquity = 80000 - (-20000) = 100000
-      // ROI = (-20000 / 100000) * 100 = -20
+      // startEquity = 80000 - (-20000) = 100000, ROI = -20000/100000 * 100 = -20
       expect(result!.metrics.roi).toBe(-20)
       expect(result!.metrics.aum).toBe(80000)
       expect(result!.metrics.platform_rank).toBe(50)
     })
 
-    test('sends correct period in leaderboard request for 30d', async () => {
+    test('sends correct statisticType in Copin request for 30d', async () => {
       const connector = createConnector()
+      // First call: Copin API
+      mockFetchResponse({ data: [{ account: 'dydx1traderA', totalPnl: '25000', ranking: 2 }] })
+      // Second call: subaccount
       mockFetchResponse(validSubaccountResponse)
-      mockFetchResponse(validLeaderboardResponse)
 
       await connector.fetchTraderSnapshot('dydx1traderA', '30d')
 
-      // Second fetch call is the leaderboard request
-      const lbCallUrl = mockFetch.mock.calls[1][0]
-      expect(lbCallUrl).toContain('period=PERIOD_30D')
-      expect(lbCallUrl).toContain('limit=1000')
+      // First fetch call is the Copin API request with statisticType=MONTH for 30d
+      const copinCallUrl = mockFetch.mock.calls[0][0]
+      expect(copinCallUrl).toContain('statisticType=MONTH')
+      expect(copinCallUrl).toContain('limit=1000')
     })
 
     test('returns null metrics fields that dYdX does not provide', async () => {
@@ -404,24 +420,34 @@ describe('DydxPerpConnector', () => {
 
     test('handles null subaccount gracefully', async () => {
       const connector = createConnector()
-      mockFetchResponse({ subaccount: null })
+      // First call: Copin API returns trader data
       mockFetchResponse({
-        pnlRanking: [{ address: 'dydx1nosub', pnl: '5000', rank: 10 }],
+        data: [{ account: 'dydx1nosub', totalPnl: '5000', ranking: 10 }],
       })
+      // Second call: subaccount returns null
+      mockFetchResponse({ subaccount: null })
 
       const result = await connector.fetchTraderSnapshot('dydx1nosub', '7d')
 
       expect(result).not.toBeNull()
-      // equity is 0 when subaccount is null
+      // equity is null when subaccount is null
       expect(result!.metrics.aum).toBeNull()
       expect(result!.metrics.pnl).toBe(5000)
     })
 
-    test('throws on network error in subaccount request', async () => {
+    test('returns snapshot with null metrics on network error (catches internally)', async () => {
       const connector = createConnector()
+      // Both Copin and subaccount fail
+      mockFetchNetworkError('Connection refused')
       mockFetchNetworkError('Connection refused')
 
-      await expect(connector.fetchTraderSnapshot('dydx1err', '7d')).rejects.toThrow()
+      const result = await connector.fetchTraderSnapshot('dydx1err', '7d')
+
+      // fetchTraderSnapshot catches errors and returns snapshot with null metrics
+      expect(result).not.toBeNull()
+      expect(result!.metrics.pnl).toBeNull()
+      expect(result!.metrics.roi).toBeNull()
+      expect(result!.metrics.aum).toBeNull()
     })
   })
 

@@ -135,7 +135,7 @@ describe('redis-layer', () => {
   describe('tieredSet', () => {
     it('should write to memory cache', async () => {
       const result = await tieredSet('key', { value: 1 }, 'hot')
-      
+
       expect(result).toBe(true)
       expect(mockMemoryCache.set).toHaveBeenCalledWith(
         'key',
@@ -143,7 +143,7 @@ describe('redis-layer', () => {
           data: { value: 1 },
           tier: 'hot',
         }),
-        CACHE_TIERS.hot.memoryTtlSeconds
+        CACHE_TIERS.hot.memoryTtlSeconds + CACHE_TIERS.hot.staleWhileRevalidate
       )
     })
 
@@ -155,7 +155,8 @@ describe('redis-layer', () => {
       const entry = mockMemoryCache.set.mock.calls[0][1]
       expect(entry.cachedAt).toBeGreaterThanOrEqual(before)
       expect(entry.cachedAt).toBeLessThanOrEqual(after)
-      expect(entry.expiresAt).toBe(entry.cachedAt + CACHE_TIERS.cold.redisTtlSeconds * 1000)
+      // expiresAt includes SWR window: (redisTtlSeconds + staleWhileRevalidate) * 1000
+      expect(entry.expiresAt).toBe(entry.cachedAt + (CACHE_TIERS.cold.redisTtlSeconds + CACHE_TIERS.cold.staleWhileRevalidate) * 1000)
     })
   })
 

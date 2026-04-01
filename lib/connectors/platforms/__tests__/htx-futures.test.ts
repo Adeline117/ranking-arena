@@ -352,7 +352,7 @@ describe('HtxFuturesConnector', () => {
     test('capabilities include all 3 windows', () => {
       const connector = createConnector()
       expect(connector.capabilities.native_windows).toEqual(['7d', '30d', '90d'])
-      expect(connector.capabilities.has_timeseries).toBe(false)
+      expect(connector.capabilities.has_timeseries).toBe(true)
       expect(connector.capabilities.has_profiles).toBe(true)
     })
   })

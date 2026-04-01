@@ -263,7 +263,7 @@ describe('CoinexFuturesConnector', () => {
       const raw = {
         trader_id: 'CE_123',
         nickname: 'NormalizeTest',
-        roi: 88.5,
+        roi: 0.885, // CoinEx returns decimals (0.885 = 88.5%)
         profit: 25000,
       }
 
@@ -271,7 +271,7 @@ describe('CoinexFuturesConnector', () => {
 
       expect(normalized.trader_key).toBe('CE_123')
       expect(normalized.display_name).toBe('NormalizeTest')
-      expect(normalized.roi).toBe(88.5)
+      expect(normalized.roi).toBe(88.5) // 0.885 * 100
       expect(normalized.pnl).toBe(25000)
     })
 
@@ -331,7 +331,7 @@ describe('CoinexFuturesConnector', () => {
     test('capabilities reflect no 90d window', () => {
       const connector = createConnector()
       expect(connector.capabilities.native_windows).toEqual(['7d', '30d'])
-      expect(connector.capabilities.has_timeseries).toBe(false)
+      expect(connector.capabilities.has_timeseries).toBe(true)
       expect(connector.capabilities.has_profiles).toBe(true)
     })
   })
