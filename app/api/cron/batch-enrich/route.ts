@@ -176,12 +176,24 @@ export async function GET(request: NextRequest) {
           const limit = period === '90D' ? config.limit90 : period === '30D' ? config.limit30 : config.limit7
           const start = Date.now()
 
+          // Offset rotation: each run enriches a different slice of the leaderboard
+          // Counter stored in PipelineState, incremented per platform per period
+          let offset = 0
+          try {
+            const { PipelineState } = await import('@/lib/services/pipeline-state')
+            const rotationKey = `enrich:offset:${platform}:${period}`
+            const prevOffset = await PipelineState.get<number>(rotationKey) ?? 0
+            offset = prevOffset
+            // Advance offset for next run; wrap around at 5000 (max reasonable leaderboard size)
+            await PipelineState.set(rotationKey, (prevOffset + limit) % 5000)
+          } catch { /* Redis miss — start at 0 */ }
+
           try {
             // Wrap enrichment in a timeout to prevent stuck jobs
             // Use longer timeout for onchain platforms (360s vs 240s)
             const timeoutMs = ONCHAIN_PLATFORMS.has(platform) ? ONCHAIN_TIMEOUT_MS : ENRICH_TIMEOUT_MS
             const result: EnrichmentResult = await Promise.race([
-              runEnrichment({ platform, period, limit }),
+              runEnrichment({ platform, period, limit, offset }),
               new Promise<never>((_, reject) =>
                 setTimeout(() => reject(new Error(`Enrichment ${platform}/${period} timed out after ${timeoutMs / 1000}s`)), timeoutMs)
               ),
