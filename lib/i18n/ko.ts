@@ -1155,6 +1155,8 @@ const ko = {
     addToCompare: '비교에 추가',
     removeFromCompare: '비교에서 삭제',
     inCompare: '비교 중',
+    comparing: '비교 중',
+    compareListFull: '비교 목록이 가득 찼습니다 (최대 5개)',
     viewComparison: '비교 보기',
     rankTrendTooltip: 'Arena Score 트렌드 (30일)',
     scoreTrend30d: '점수 트렌드 (30일)',
@@ -2343,8 +2345,14 @@ const ko = {
 
     // Trader page i18n
     aumLabel: 'AUM',
+    verifiedAccounts: '인증된 계정',
     mddLabel: 'MDD',
     tradesLabel: '거래',
+    dataOutdatedBanner: '데이터가 오래되었을 수 있습니다. 새로고침하여 최신 정보를 확인하세요.',
+    rankTrend: '순위 추이 (7일)',
+    drawdownChart: '드로다운',
+    dailyReturnsDistribution: '일별 수익률 분포',
+    estimatedFromRoi: 'ROI 기반 추정',
 
     // PortfolioTable
     unlockFullPortfolio: '전체 포트폴리오 잠금 해제',
@@ -4785,6 +4793,23 @@ compFieldDescription: '설명',
 compFieldDescPlaceholder: '대회 규칙과 상품을 설명하세요...',
 compFieldMetric: '경쟁 지표',
 compFieldMaxParticipants: '최대 참가자 수',
+    compTabInfo: '정보',
+    compTabStandings: '순위',
+    compStandingsLive: '실시간 순위',
+    compStandingsUpdating: '업데이트 중...',
+    compStandingsLastUpdate: '마지막 업데이트',
+    compStandingsRank: '순위',
+    compStandingsTrader: '트레이더',
+    compStandingsPlatform: '플랫폼',
+    compStandingsValue: '값',
+    compStandingsChange: '변동',
+    compStandingsNoData: '아직 순위 데이터가 없습니다',
+    compPodium1st: '1위',
+    compPodium2nd: '2위',
+    compPodium3rd: '3위',
+    compPodiumWinners: '우승자',
+    compShareCopied: '대회 링크가 복사되었습니다!',
+    compShareTitle: 'Arena에서 이 대회를 확인하세요',
 
     // Token Rankings
     tokenRankingsTitle: '토큰 랭킹',
@@ -4804,6 +4829,15 @@ compFieldMaxParticipants: '최대 참가자 수',
     tokenRankingPrev: '이전',
     tokenRankingNext: '다음',
     rankingsSubNavTokens: '토큰',
+
+    // Achievements
+    achievementUnlocked: '업적 달성',
+    achievementFirstWatchlist: '워치리스트 개척자',
+    achievementFirstComparison: '분석가',
+    achievementFirstPost: 'Arena의 목소리',
+    achievementExplorer5: '탐험가',
+    achievementProSubscriber: 'Pro 멤버',
+    achievementSocialButterfly: '소셜 나비',
 
 } as const
 
