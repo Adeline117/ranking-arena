@@ -52,6 +52,8 @@ export interface CacheEntry<T> {
   tier: CacheTier
   cachedAt: number
   expiresAt: number
+  /** Soft expiry — data is stale but serveable during SWR window (softExpiresAt < now < expiresAt) */
+  softExpiresAt?: number
 }
 
 export interface LayerStats {
@@ -212,8 +214,13 @@ export async function tieredGet<T>(
   // L1: 内存缓存
   const memoryData = memoryCache.get<CacheEntry<T>>(key)
   if (memoryData?.data !== undefined) {
-    layerStats.memory.hits++
-    return { data: memoryData.data, layer: 'memory' }
+    // Check soft expiry — if past soft TTL, treat as miss so SWR can serve stale + revalidate
+    const softExpiry = memoryData.softExpiresAt ?? memoryData.expiresAt
+    if (Date.now() < softExpiry) {
+      layerStats.memory.hits++
+      return { data: memoryData.data, layer: 'memory' }
+    }
+    // Past soft expiry but still in memory (SWR window) — fall through to let tieredGetOrSet handle it
   }
   layerStats.memory.misses++
   
@@ -256,12 +263,14 @@ export async function tieredSet<T>(
     data,
     tier,
     cachedAt: now,
-    expiresAt: now + config.redisTtlSeconds * 1000,
-
+    expiresAt: now + (config.redisTtlSeconds + config.staleWhileRevalidate) * 1000,
+    softExpiresAt: now + config.redisTtlSeconds * 1000,
   }
-  
-  // L1: 写入内存缓存
-  memoryCache.set(key, entry, config.memoryTtlSeconds)
+
+  // L1: 写入内存缓存 — TTL covers SWR window (primary + stale period)
+  // This eliminates the need for a separate swr: bucket entry
+  const memoryTtl = config.memoryTtlSeconds + config.staleWhileRevalidate
+  memoryCache.set(key, entry, memoryTtl)
   
   // L2: 写入 Redis (single pipeline when tags present)
   const redis = await initRedis()
@@ -362,16 +371,16 @@ export async function tieredGetOrSet<T>(
     return data
   }
 
-  // Check stale-while-revalidate bucket in memory
+  // Check stale-while-revalidate: primary entry may be past soft expiry but still in memory
   const config = CACHE_TIERS[tier]
   if (config.staleWhileRevalidate > 0) {
     const memoryCache = getMemoryCache()
-    const staleEntry = memoryCache.get<CacheEntry<T>>(`swr:${key}`)
-    if (staleEntry?.data !== undefined) {
+    const staleEntry = memoryCache.get<CacheEntry<T>>(key)
+    if (staleEntry?.data !== undefined && staleEntry.softExpiresAt && Date.now() >= staleEntry.softExpiresAt) {
       // Serve stale, refresh in background
       fetcher().then(fresh => {
-        tieredSet(key, fresh, tier, tags).catch(err => console.warn(`[redis-layer] SWR set failed for ${key}:`, err instanceof Error ? err.message : String(err)))
-      }).catch(err => console.warn(`[redis-layer] SWR fetch failed for ${key}:`, err instanceof Error ? err.message : String(err)))
+        tieredSet(key, fresh, tier, tags).catch(err => dataLogger.warn(`[redis-layer] SWR set failed for ${key}:`, { error: err instanceof Error ? err.message : String(err) }))
+      }).catch(err => dataLogger.warn(`[redis-layer] SWR fetch failed for ${key}:`, { error: err instanceof Error ? err.message : String(err) }))
       return staleEntry.data
     }
   }
@@ -396,18 +405,7 @@ export async function tieredGetOrSet<T>(
     dataLogger.warn('[RedisLayer] 缓存写入失败:', { key, error: err })
   })
 
-  // Store in SWR bucket with extended TTL
-  if (config.staleWhileRevalidate > 0) {
-    const memoryCache = getMemoryCache()
-    const swrEntry: CacheEntry<T> = {
-      data: freshData,
-      tier,
-      cachedAt: Date.now(),
-      expiresAt: Date.now() + (config.redisTtlSeconds + config.staleWhileRevalidate) * 1000,
-  
-    }
-    memoryCache.set(`swr:${key}`, swrEntry, config.redisTtlSeconds + config.staleWhileRevalidate)
-  }
+  // SWR data is now stored in the primary entry with softExpiresAt — no separate swr: bucket needed
 
   return freshData
 }
