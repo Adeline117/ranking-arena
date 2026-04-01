@@ -29,6 +29,24 @@ export const COPIN_PROTOCOLS: Record<string, string> = {
 
 // ── Copin API types ──
 
+interface CopinPositionDetail {
+  account?: string
+  openBlockTime?: string
+  closeBlockTime?: string
+  pair?: string
+  isLong?: boolean
+  size?: number
+  collateral?: number
+  leverage?: number
+  pnl?: number
+  roi?: number
+  fee?: number
+  status?: string
+  averagePrice?: number
+  entryPrice?: number
+  closePrice?: number
+}
+
 interface CopinTraderStats {
   account: string
   totalPnl: number
@@ -282,11 +300,66 @@ export async function fetchGainsPositionHistory(_addr: string): Promise<Position
   return []
 }
 
-// Aevo — native API provides stats directly (better than Copin)
-export async function fetchAevoEquityCurve(_addr: string, _days: number): Promise<EquityCurvePoint[]> {
-  // Aevo API only provides aggregate stats, no per-day equity data.
-  // Falls back to buildEquityCurveFromSnapshots in enrichment-runner.
-  return []
+// Aevo — native API provides stats, Copin provides position data for equity curves
+export async function fetchAevoEquityCurve(addr: string, days: number): Promise<EquityCurvePoint[]> {
+  // Try Copin position data to build equity curve (same approach as dYdX)
+  try {
+    const url = `${COPIN_BASE}/AEVO/position/filter?accounts=${addr}&status=CLOSE&limit=500&sort_by=closeBlockTime&sort_type=desc`
+    const data = await fetchJson<{ data?: CopinPositionDetail[] }>(url, { timeoutMs: 10000 })
+
+    if (!data?.data || data.data.length === 0) return []
+
+    const cutoffDate = new Date()
+    cutoffDate.setDate(cutoffDate.getDate() - days)
+    const cutoff = cutoffDate.toISOString()
+
+    // Build daily cumulative PnL
+    const dailyPnl = new Map<string, number>()
+    for (const pos of data.data) {
+      const closeTime = pos.closeBlockTime
+      if (!closeTime || closeTime < cutoff) continue
+      const date = closeTime.split('T')[0]
+      const pnl = pos.pnl ?? 0
+      dailyPnl.set(date, (dailyPnl.get(date) ?? 0) + pnl)
+    }
+
+    if (dailyPnl.size === 0) return []
+
+    // Sort by date, gap-fill, and compute cumulative
+    const sortedDates = [...dailyPnl.entries()].sort((a, b) => a[0].localeCompare(b[0]))
+    let cumPnl = 0
+    const sparseCum = new Map<string, number>()
+    for (const [date, pnl] of sortedDates) {
+      cumPnl += pnl
+      sparseCum.set(date, cumPnl)
+    }
+
+    // Gap-fill missing days
+    const firstDate = new Date(sortedDates[0][0])
+    const lastDate = new Date(sortedDates[sortedDates.length - 1][0])
+    const points: EquityCurvePoint[] = []
+    let prevCumPnl = 0
+    for (let d = new Date(firstDate); d <= lastDate; d.setDate(d.getDate() + 1)) {
+      const dateStr = d.toISOString().split('T')[0]
+      const val = sparseCum.get(dateStr)
+      if (val !== undefined) prevCumPnl = val
+      points.push({ date: dateStr, roi: 0, pnl: prevCumPnl })
+    }
+
+    // Estimate ROI from total volume
+    const totalVolume = data.data.reduce((sum, pos) => sum + Math.abs(pos.size ?? pos.collateral ?? 0), 0)
+    const estimatedCapital = totalVolume > 0 ? totalVolume / 5 : Math.abs(cumPnl) * 5
+    if (estimatedCapital > 0) {
+      for (const p of points) {
+        p.roi = ((p.pnl ?? 0) / estimatedCapital) * 100
+      }
+    }
+
+    return points
+  } catch (err) {
+    logger.warn(`[aevo] Copin equity curve failed for ${addr}: ${err instanceof Error ? err.message : String(err)}`)
+    return []
+  }
 }
 
 export async function fetchAevoStatsDetail(addr: string): Promise<StatsDetail | null> {
@@ -329,7 +402,30 @@ export async function fetchAevoStatsDetail(addr: string): Promise<StatsDetail | 
   return buildCopinStatsDetail('aevo', addr)
 }
 
-export async function fetchAevoPositionHistory(_addr: string): Promise<PositionHistoryItem[]> {
-  // Aevo does not expose per-trade history via public API
-  return []
+export async function fetchAevoPositionHistory(addr: string): Promise<PositionHistoryItem[]> {
+  try {
+    const url = `${COPIN_BASE}/AEVO/position/filter?accounts=${addr}&limit=100&sort_by=closeBlockTime&sort_type=desc`
+    const data = await fetchJson<{ data?: CopinPositionDetail[] }>(url, { timeoutMs: 10000 })
+
+    if (!data?.data || data.data.length === 0) return []
+
+    return data.data.map((pos) => ({
+      symbol: pos.pair || 'UNKNOWN',
+      direction: pos.isLong ? 'long' as const : 'short' as const,
+      positionType: 'perpetual',
+      marginMode: 'cross',
+      openTime: pos.openBlockTime || null,
+      closeTime: pos.closeBlockTime || null,
+      entryPrice: pos.entryPrice ?? pos.averagePrice ?? null,
+      exitPrice: pos.closePrice ?? null,
+      maxPositionSize: pos.size ?? null,
+      closedSize: pos.size ?? null,
+      pnlUsd: pos.pnl ?? null,
+      pnlPct: pos.roi != null ? pos.roi * 100 : null,
+      status: pos.status === 'CLOSE' ? 'closed' : (pos.status?.toLowerCase() || 'filled'),
+    }))
+  } catch (err) {
+    logger.warn(`[aevo] Copin position history failed for ${addr}: ${err instanceof Error ? err.message : String(err)}`)
+    return []
+  }
 }
