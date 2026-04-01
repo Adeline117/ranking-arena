@@ -53,7 +53,8 @@ export async function GET(request: Request) {
     // - endpoint_gone: platform API discontinued
     // - geo_blocked: blocked from verify region (sfo1) but works from fetcher region (hnd1)
     // - waf_blocked: Cloudflare WAF challenge — fetchers use proxy/browser headers to bypass
-    const SKIP_REASONS = new Set(['auth_required', 'endpoint_gone', 'geo_blocked', 'waf_blocked'])
+    // empty_data: platform returns valid response but zero traders (e.g., bingx after API change)
+    const SKIP_REASONS = new Set(['auth_required', 'endpoint_gone', 'geo_blocked', 'waf_blocked', 'empty_data'])
     const skipped = results.filter((r: VerifyResult) => !r.healthy && SKIP_REASONS.has(r.failureReason || ''))
     const failed = results.filter((r: VerifyResult) => !r.healthy && !SKIP_REASONS.has(r.failureReason || ''))
 
