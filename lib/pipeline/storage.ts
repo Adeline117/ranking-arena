@@ -136,7 +136,7 @@ export class PipelineStorage {
     const { error, count } = await supabase
       .from('trader_snapshots_v2')
       .upsert(snapshots, {
-        onConflict: 'platform,trader_key,window',
+        onConflict: 'platform,trader_key,window,as_of_ts',
         ignoreDuplicates: false,
         count: 'exact',
       })

@@ -232,7 +232,7 @@ export class JobRunner {
            (platform, market_type, trader_key, "window", as_of_ts, metrics, quality,
             arena_score, roi_pct, pnl_usd, max_drawdown_pct, win_rate_pct, trades_count, copier_count)
          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
-         ON CONFLICT (platform, market_type, trader_key, "window", trunc_hour(as_of_ts)) DO UPDATE SET
+         ON CONFLICT (platform, market_type, trader_key, "window", as_of_ts) DO UPDATE SET
            metrics = $6, quality = $7, arena_score = $8, roi_pct = $9, pnl_usd = $10,
            max_drawdown_pct = $11, win_rate_pct = $12, trades_count = $13, copier_count = $14`,
         [

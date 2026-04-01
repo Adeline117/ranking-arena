@@ -330,7 +330,7 @@ async function storeSyncedData(
       updated_at: new Date().toISOString(),
     },
     {
-      onConflict: 'platform,trader_key,window',
+      onConflict: 'platform,trader_key,window,as_of_ts',
     }
   )
 

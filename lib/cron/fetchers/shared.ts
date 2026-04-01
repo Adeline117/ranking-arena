@@ -499,7 +499,7 @@ export async function upsertTraders(
         supabase,
         'trader_snapshots_v2',
         snapshots,
-        { onConflict: 'platform,market_type,trader_key,window' },
+        { onConflict: 'platform,market_type,trader_key,window,as_of_ts' },
         { maxAttempts: 3, initialDelayMs: 2000 }
       )
 
