@@ -335,6 +335,55 @@ const PLATFORMS = {
 }
 
 // ============================================
+// Rate Limiting: Token Bucket (30 req/min global)
+// ============================================
+
+class TokenBucket {
+  constructor(maxTokens, refillRate) {
+    this.maxTokens = maxTokens
+    this.tokens = maxTokens
+    this.refillRate = refillRate // tokens per ms
+    this.lastRefill = Date.now()
+  }
+
+  _refill() {
+    const now = Date.now()
+    const elapsed = now - this.lastRefill
+    this.tokens = Math.min(this.maxTokens, this.tokens + elapsed * this.refillRate)
+    this.lastRefill = now
+  }
+
+  async acquire() {
+    this._refill()
+    if (this.tokens >= 1) {
+      this.tokens -= 1
+      return
+    }
+    // Wait until a token is available
+    const waitMs = Math.ceil((1 - this.tokens) / this.refillRate)
+    await new Promise(r => setTimeout(r, waitMs))
+    this._refill()
+    this.tokens -= 1
+  }
+}
+
+// 30 requests per minute = 0.5 tokens/second = 0.0005 tokens/ms
+const globalBucket = new TokenBucket(30, 30 / 60000)
+
+// ============================================
+// Per-platform sequential lock (concurrency = 1)
+// ============================================
+
+const platformLocks = new Map()
+
+function withPlatformLock(platformKey, fn) {
+  const prev = platformLocks.get(platformKey) || Promise.resolve()
+  const next = prev.then(fn, fn) // run fn after previous completes (even if it failed)
+  platformLocks.set(platformKey, next)
+  return next
+}
+
+// ============================================
 // Helpers
 // ============================================
 
@@ -374,6 +423,7 @@ async function callScraper(endpoint, params = {}, timeoutMs = 180000) {
   const timeout = setTimeout(() => controller.abort(), timeoutMs)
 
   try {
+    await globalBucket.acquire()
     const res = await fetch(url.toString(), {
       headers: { 'x-proxy-key': SCRAPER_KEY },
       signal: controller.signal,
@@ -564,6 +614,7 @@ async function fetchPlatform(platformKey) {
           const copinUrl = `https://api.copin.io/leaderboards/page?protocol=DYDX&statisticType=${statisticType}&queryDate=${queryDate}&limit=${pageLimit}&offset=${offset}&sort_by=ranking&sort_type=asc`
           const controller = new AbortController()
           const timeout = setTimeout(() => controller.abort(), 30000)
+          await globalBucket.acquire()
           const res = await fetch(copinUrl, { signal: controller.signal })
           clearTimeout(timeout)
           if (!res.ok) { log('  Copin API returned ' + res.status); break }
@@ -619,6 +670,7 @@ async function fetchPlatform(platformKey) {
           const url = `https://www.okx.com/api/v5/copytrading/public-lead-traders?instType=SWAP&sortType=pnl&dataRange=${dataRange}&pageNo=${page}&limit=${pageSize}`
           const controller = new AbortController()
           const timeout = setTimeout(() => controller.abort(), 15000)
+          await globalBucket.acquire()
           const res = await fetch(url, { signal: controller.signal })
           clearTimeout(timeout)
           if (!res.ok) { log('  OKX API returned ' + res.status); break }
@@ -680,6 +732,7 @@ async function fetchPlatform(platformKey) {
         try {
           // Substitute {period} placeholder with actual period key (e.g., 90d for CoinEx)
           const apiUrl = config.directApi.replace('{period}', periodKey)
+          await globalBucket.acquire()
           const res = await fetch(apiUrl, {
             headers: config.directHeaders || {},
             signal: controller.signal,
@@ -770,11 +823,11 @@ async function main() {
     process.exit(1)
   }
 
-  // Process platforms sequentially (scraper has a single-request queue anyway)
+  // Process platforms sequentially with per-platform lock + global rate limit
   const allResults = []
   for (const p of requestedPlatforms) {
     try {
-      const result = await fetchPlatform(p)
+      const result = await withPlatformLock(p, () => fetchPlatform(p))
       allResults.push(result)
     } catch (err) {
       log('FATAL ERROR on ' + p + ': ' + err.message)
