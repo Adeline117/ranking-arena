@@ -163,11 +163,9 @@ export const DEAD_BLOCKED_PLATFORMS: TraderSource[] = [
   // 'phemex' — Mac Mini fetch-phemex.mjs (183 traders)
   // 'lbank' — VPS scraper working (42 traders)
   // 'blofin' — VPS/Mac Mini working (429 traders)
-  // 'kucoin' — was RECOVERED 2026-03-19, now DEAD again — copy trading discontinued 2026-03, all APIs 404
-  'kucoin',
+  // 'kucoin' — RECOVERED 2026-03-31: POST API at /_api/ct-copy-trade/ works (822 traders)
   // crypto_com: DELETED — confirmed no copy trading feature on web (2026-03-19)
-  // bingx_spot: No spot leaderboard API, page returns 404 — confirmed dead 2026-03-31
-  'bingx_spot',
+  // 'bingx_spot' — RECOVERED 2026-03-31: SSR extraction gets 12 spot traders
   // 'weex' — RE-ENABLED 2026-03-31: VPS scraper works (server back from 521)
   // 'okx_web3' — RE-ENABLED 2026-03-31: same v5 copytrading API as okx_futures (confirmed working)
   // dydx: RECOVERED 2026-03-31 — Copin API needs queryDate = now-3days (2-day processing delay)
