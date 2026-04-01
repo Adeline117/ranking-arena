@@ -23,8 +23,9 @@ import GroupEditTab from './components/GroupEditTab'
 import AlertConfigTab from './components/AlertConfigTab'
 import TraderClaimsTab from './components/TraderClaimsTab'
 import AuditLogTab from './components/AuditLogTab'
+import ModerationQueueTab from './components/ModerationQueueTab'
 
-type AdminTab = 'dashboard' | 'scraperStatus' | 'users' | 'reports' | 'applications' | 'editApplications' | 'alertConfig' | 'traderClaims' | 'auditLog'
+type AdminTab = 'dashboard' | 'scraperStatus' | 'users' | 'reports' | 'applications' | 'editApplications' | 'alertConfig' | 'traderClaims' | 'auditLog' | 'moderationQueue'
 
 export default function AdminPage() {
   const router = useRouter()
@@ -151,6 +152,12 @@ export default function AdminPage() {
             {t('alertConfig')}
           </Button>
           <Button
+            variant={activeTab === 'moderationQueue' ? 'primary' : 'secondary'}
+            onClick={() => setActiveTab('moderationQueue')}
+          >
+            {t('moderationQueue') || 'Mod Queue'}
+          </Button>
+          <Button
             variant={activeTab === 'auditLog' ? 'primary' : 'secondary'}
             onClick={() => setActiveTab('auditLog')}
           >
@@ -189,6 +196,10 @@ export default function AdminPage() {
 
         {activeTab === 'alertConfig' && (
           <AlertConfigTab accessToken={accessToken} />
+        )}
+
+        {activeTab === 'moderationQueue' && (
+          <ModerationQueueTab accessToken={accessToken} />
         )}
 
         {activeTab === 'auditLog' && (
