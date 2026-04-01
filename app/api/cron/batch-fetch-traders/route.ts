@@ -54,11 +54,14 @@ const GROUPS: Record<string, string[]> = {
   // Group D2: Web3 + Gate.io + BTCC (every 6h)
   d2: ['binance_web3', 'okx_web3', 'gateio', 'btcc'],
   // Group E: DEX + social trading (every 6h) — Solana DEX, eToro
+  // DEAD removed 2026-04-01: vertex (no API), apex_pro (no API), rabbitx (DNS dead)
   e: ['drift', 'jupiter_perps', 'aevo', 'web3_bot', 'toobit', 'xt', 'etoro'],
   // Group F: VPS scraper slow platforms (every 6h)
-  f: ['mexc', 'bingx', 'weex', 'woox', 'polymarket', 'copin'],
-  // Group G: Recovered platforms (every 6h) — KuCoin POST API, BingX Spot VPS, dydx Copin
-  g: ['kucoin', 'bingx_spot', 'dydx', 'lbank', 'phemex', 'blofin'],
+  // DEAD removed 2026-04-01: bingx (empty_data), weex (75% timeout)
+  f: ['mexc', 'woox', 'polymarket', 'copin'],
+  // Group G: Mac Mini / recovered (every 6h)
+  // DEAD removed 2026-04-01: kucoin (discontinued), bingx_spot (no leaderboard), dydx (API 404), phemex (API 404)
+  g: ['lbank', 'blofin'],
 }
 
 interface BatchResult {
