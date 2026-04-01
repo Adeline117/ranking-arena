@@ -38,7 +38,7 @@ const DEAD_COUNTER_TTL = 7 * 24 * 60 * 60 // 7 days in seconds
 const DEAD_THRESHOLD = 3 // consecutive failures before alerting (reduced from 10 for ~12h detection)
 
 export const dynamic = 'force-dynamic'
-export const maxDuration = 900 // Vercel Pro max: 15 minutes (emergency fix 2026-04-01)
+export const maxDuration = 800 // Vercel Pro max: 15 minutes (emergency fix 2026-04-01)
 export const preferredRegion = 'hnd1' // Tokyo — avoids Binance/OKX/Bybit geo-blocking
 
 const GROUPS: Record<string, string[]> = {
