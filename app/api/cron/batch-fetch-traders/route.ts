@@ -12,8 +12,9 @@
  *   group=e → drift, jupiter_perps, aevo, web3_bot, toobit, xt, etoro, dydx (every 6h)
  *   group=f → mexc, bingx, weex, woox, polymarket, copin (every 6h, VPS scraper slow)
  * Dead/blocked platforms:
- *   kucoin (copy trading discontinued 2026-03, APIs 404), bingx_spot (no spot leaderboard),
- *   mux, synthetix, bitmart, whitebit, btse, pionex, vertex, paradex
+ *   kucoin (copy trading discontinued 2026-03), bingx (empty data 2026-04), bingx_spot,
+ *   weex (enrichment 75% fail rate), vertex (no API), apex_pro (no API), rabbitx (DNS dead),
+ *   dydx (API 404), mux, synthetix, bitmart, whitebit, btse, pionex, paradex
  * Mac Mini only (crontab feeds data directly):
  *   phemex (CloudFront blocks VPS), lbank (browser crashes on VPS), blofin (API needs auth)
  * Restored 2026-03-15:
@@ -48,17 +49,16 @@ const GROUPS: Record<string, string[]> = {
   b: ['bybit', 'bybit_spot', 'bitget_futures'],
   // Group C: DEX + fast CEX (every 4h) — Hyperliquid, GMX (subgraph), Bitunix
   c: ['hyperliquid', 'gmx', 'bitunix'],
-  // Group D: Fast CEX/DEX mix (every 6h) — direct APIs, low latency
-  d: ['gains', 'htx_futures', 'bitfinex', 'coinex', 'binance_web3', 'okx_web3', 'gateio', 'btcc'],
+  // Group D1: Fast CEX (every 6h) — split from old group d (8 was too many, caused 524 timeout)
+  d1: ['gains', 'htx_futures', 'bitfinex', 'coinex'],
+  // Group D2: Web3 + Gate.io + BTCC (every 6h)
+  d2: ['binance_web3', 'okx_web3', 'gateio', 'btcc'],
   // Group E: DEX + social trading (every 6h) — Solana DEX, eToro
-  // DEAD removed 2026-04-01: vertex (no API), apex_pro (no API), rabbitx (DNS dead), dydx (API 404)
   e: ['drift', 'jupiter_perps', 'aevo', 'web3_bot', 'toobit', 'xt', 'etoro'],
-  // Group F: VPS scraper slow platforms (every 6h) — MEXC + new platforms
-  // DEAD removed 2026-04-01: bingx (empty_data), weex (6/8 enrichment failures)
-  f: ['mexc', 'woox', 'polymarket', 'copin'],
-  // Group G: Mac Mini / recovered (every 6h)
-  // DEAD removed 2026-04-01: kucoin (copy trading discontinued), bingx_spot (no leaderboard)
-  g: ['lbank', 'blofin'],
+  // Group F: VPS scraper slow platforms (every 6h)
+  f: ['mexc', 'bingx', 'weex', 'woox', 'polymarket', 'copin'],
+  // Group G: Recovered platforms (every 6h) — KuCoin POST API, BingX Spot VPS, dydx Copin
+  g: ['kucoin', 'bingx_spot', 'dydx', 'lbank', 'phemex', 'blofin'],
 }
 
 interface BatchResult {
