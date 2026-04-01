@@ -4831,6 +4831,34 @@ compShareTitle: 'Check out this competition on Arena',
     achievementProSubscriber: 'Pro Member',
     achievementSocialButterfly: 'Social Butterfly',
 
+    // PnL Calendar Heatmap
+    dailyPnlHeatmap: 'Daily PnL Heatmap',
+    profit: 'Profit',
+    loss: 'Loss',
+
+    // Rank Percentile Badge
+    topPercent: 'Top {pct}%',
+    topPercentOn: 'Top {pct}% on {platform}',
+
+    // Risk/Reward Ratio
+    riskReward: 'Risk/Reward',
+    riskRewardTooltip: 'Average win / average loss ratio. Above 1.5 is good.',
+
+    // Largest Win/Loss
+    largestWin: 'Largest Win',
+    largestLoss: 'Largest Loss',
+
+    // Data Source Indicators (Claim System)
+    dataSourceVerified: 'Verified Data',
+    dataSourcePublic: 'Public Data',
+    dataSourceDerived: 'Derived Data',
+    dataSourceHistorical: 'Historical Data',
+    dataSourceVerifiedTooltip: 'This trader has verified their identity and authorized real-time data access',
+    dataSourcePublicTooltip: 'Data sourced from public exchange APIs',
+    bindApiKey: 'Bind API Key',
+    connectWallet: 'Connect Wallet',
+    verifiedSince: 'Verified since',
+
 } as const
 
 export default en
