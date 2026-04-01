@@ -50,14 +50,15 @@ const GROUPS: Record<string, string[]> = {
   c: ['hyperliquid', 'gmx', 'bitunix'],
   // Group D: Fast CEX/DEX mix (every 6h) — direct APIs, low latency
   d: ['gains', 'htx_futures', 'bitfinex', 'coinex', 'binance_web3', 'okx_web3', 'gateio', 'btcc'],
-  // Group E: DEX + social trading (every 6h) — Solana DEX, eToro, new DEX
-  // 2026-04-01: dydx disabled (API 404, needs Copin integration)
-  e: ['drift', 'jupiter_perps', 'aevo', 'web3_bot', 'toobit', 'xt', 'etoro', 'vertex', 'apex_pro', 'rabbitx'],
-  // Group F: VPS scraper slow platforms (every 6h) — MEXC, BingX, WEEX + new platforms
-  f: ['mexc', 'bingx', 'weex', 'woox', 'polymarket', 'copin'],
-  // Group G: Recovered platforms (every 6h)
-  // 2026-04-01: phemex disabled (API 404)
-  g: ['kucoin', 'bingx_spot', 'lbank', 'blofin'],
+  // Group E: DEX + social trading (every 6h) — Solana DEX, eToro
+  // DEAD removed 2026-04-01: vertex (no API), apex_pro (no API), rabbitx (DNS dead), dydx (API 404)
+  e: ['drift', 'jupiter_perps', 'aevo', 'web3_bot', 'toobit', 'xt', 'etoro'],
+  // Group F: VPS scraper slow platforms (every 6h) — MEXC + new platforms
+  // DEAD removed 2026-04-01: bingx (empty_data), weex (6/8 enrichment failures)
+  f: ['mexc', 'woox', 'polymarket', 'copin'],
+  // Group G: Mac Mini / recovered (every 6h)
+  // DEAD removed 2026-04-01: kucoin (copy trading discontinued), bingx_spot (no leaderboard)
+  g: ['lbank', 'blofin'],
 }
 
 interface BatchResult {

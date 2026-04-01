@@ -39,18 +39,26 @@ interface OpenInterestRow {
 async function getOpenInterest(): Promise<OpenInterestRow[]> {
   const supabase = getSupabaseAdmin()
 
+  // Use DB-side deduplication via RPC (DISTINCT ON is far more efficient)
+  try {
+    const { data, error } = await supabase.rpc('get_latest_open_interest')
+    if (!error && data) return data as OpenInterestRow[]
+  } catch {
+    // RPC not available, fall back to client-side dedup
+  }
+
+  // Fallback: fetch and deduplicate in memory
   const { data, error } = await supabase
     .from('open_interest')
     .select('platform, symbol, open_interest_usd, open_interest_contracts, timestamp')
     .order('timestamp', { ascending: false })
-    .limit(200)
+    .limit(500)
 
   if (error) {
     console.error('[open-interest] fetch error:', error.message)
     return []
   }
 
-  // Deduplicate: keep only the latest entry per platform+symbol
   const seen = new Set<string>()
   const deduped: OpenInterestRow[] = []
   for (const row of data || []) {
@@ -60,7 +68,6 @@ async function getOpenInterest(): Promise<OpenInterestRow[]> {
       deduped.push(row)
     }
   }
-
   return deduped
 }
 

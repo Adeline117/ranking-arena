@@ -294,12 +294,42 @@ export default function GroupDetailPage({ params }: { params: Promise<{ id: stri
       setError(null)
 
       try {
-        const { data: groupData, error: groupErr } = await supabase
-          .from('groups')
-          .select('id, name, name_en, description, description_en, avatar_url, member_count, created_at, created_by, rules, rules_json, is_premium_only')
-          .eq('id', groupId)
-          .maybeSingle()
+        // Parallelize all independent queries (was sequential waterfall)
+        const [groupResult, previewResult, membershipResult] = await Promise.all([
+          // 1. Group data
+          supabase
+            .from('groups')
+            .select('id, name, name_en, description, description_en, avatar_url, member_count, created_at, created_by, rules, rules_json, is_premium_only')
+            .eq('id', groupId)
+            .maybeSingle(),
+          // 2. Member avatar previews (5 most recent)
+          supabase
+            .from('group_members')
+            .select('user_profiles(handle, avatar_url)')
+            .eq('group_id', groupId)
+            .order('joined_at', { ascending: false })
+            .limit(5),
+          // 3. Membership check (if logged in)
+          userId
+            ? supabase
+                .from('group_members')
+                .select('role')
+                .eq('group_id', groupId)
+                .eq('user_id', userId)
+                .maybeSingle()
+            : Promise.resolve({ data: null }),
+        ])
 
+        const { data: groupData, error: groupErr } = groupResult
+
+        if (groupErr) {
+          const isInvalidId = groupErr.code === '22P02' || groupErr.message?.includes('invalid input syntax')
+          setError(isInvalidId ? t('groupNotFound') : t('loadFailed'))
+          setLoading(false)
+          return
+        }
+
+        // Owner handle lookup (depends on groupData.created_by)
         let ownerHandle = null
         if (groupData?.created_by) {
           const { data: ownerData } = await supabase
@@ -310,40 +340,25 @@ export default function GroupDetailPage({ params }: { params: Promise<{ id: stri
           ownerHandle = ownerData?.handle
         }
 
-        if (groupErr) {
-          const isInvalidId = groupErr.code === '22P02' || groupErr.message?.includes('invalid input syntax')
-          setError(isInvalidId ? t('groupNotFound') : t('loadFailed'))
-          setLoading(false)
-          return
-        }
-
         setGroup(groupData ? { ...groupData, owner_handle: ownerHandle } as Group : null)
 
-        // Fetch member avatar previews (5 most recent)
-        const { data: previewData } = await supabase
-          .from('group_members')
-          .select('user_profiles(handle, avatar_url)')
-          .eq('group_id', groupId)
-          .order('joined_at', { ascending: false })
-          .limit(5)
-        if (previewData) {
-          setMemberPreviews(previewData.map(m => {
+        // Process member previews
+        if (previewResult.data) {
+          setMemberPreviews(previewResult.data.map(m => {
             const p = Array.isArray(m.user_profiles) ? m.user_profiles[0] : m.user_profiles
             return { avatar_url: (p as { avatar_url?: string | null } | null)?.avatar_url, handle: (p as { handle?: string | null } | null)?.handle }
           }).filter(m => m.avatar_url || m.handle))
         }
 
+        // Process membership
         let _membershipConfirmed = false
-        if (userId) {
-          const { data: membership } = await supabase
-            .from('group_members')
-            .select('role')
-            .eq('group_id', groupId)
-            .eq('user_id', userId)
-            .maybeSingle()
-          setIsMember(!!membership)
-          setUserRole(membership?.role as 'owner' | 'admin' | 'member' | null)
-          _membershipConfirmed = !!membership
+        if (userId && membershipResult.data) {
+          setIsMember(true)
+          setUserRole(membershipResult.data.role as 'owner' | 'admin' | 'member' | null)
+          _membershipConfirmed = true
+        } else if (userId) {
+          setIsMember(false)
+          setUserRole(null)
         }
 
         // Load posts for all visitors (non-members can browse read-only)
