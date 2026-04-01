@@ -33,6 +33,7 @@ const Web3VerifiedBadge = dynamic(() => import('./Web3VerifiedBadge').then(m => 
 const BadgeDisplay = dynamic(() => import('./BadgeDisplay').then(m => ({ default: m.BadgeDisplay })), { ssr: false })
 const VerifiedBadge = dynamic(() => import('./VerifiedBadge'), { ssr: false })
 const RankTrendSparkline = dynamic(() => import('./RankTrendSparkline'), { ssr: false })
+const RankPercentileBadge = dynamic(() => import('./RankPercentileBadge'), { ssr: false })
 
 interface TraderHeaderProps {
   handle: string
@@ -79,6 +80,12 @@ interface TraderHeaderProps {
   linkedPlatforms?: string[]
   /** External profile URL on the exchange */
   profileUrl?: string | null
+  /** Data source type: 'authorized' | 'public_api' | 'enrichment' | 'historical' */
+  dataSource?: 'authorized' | 'public_api' | 'enrichment' | 'historical' | null
+  /** Whether this trader has an active authorization (API key or wallet bound) */
+  isAuthorized?: boolean
+  /** When the authorization was last verified */
+  authorizedSince?: string | null
 }
 
 // Helpers extracted to ./TraderHeaderHelpers.tsx
@@ -164,6 +171,9 @@ export default function TraderHeader({
   platform,
   traderKey,
   profileUrl,
+  dataSource,
+  isAuthorized = false,
+  authorizedSince,
 }: TraderHeaderProps): React.ReactElement {
   const [userId, setUserId] = useState<string | null>(externalUserId ?? null)
   const [mounted, setMounted] = useState(false)
@@ -424,10 +434,47 @@ export default function TraderHeader({
               </Badge>
             )}
 
+            {/* Rank Percentile Badge */}
+            {rank != null && rank > 0 && source && (
+              <RankPercentileBadge rank={rank} platform={source} />
+            )}
+
             {isBot && (
               <Badge key="bot" color="var(--color-brand)" style={{ padding: '2px 8px', flexShrink: 0 }} title={t('botTooltip')}>
                 <span style={{ fontSize: 11, marginRight: 2 }}>{'⚡'}</span>
                 <Text size="xs" weight="bold" style={{ color: 'var(--color-brand)' }}>{t('botLabel')}</Text>
+              </Badge>
+            )}
+
+            {/* Data Source Badge: Verified (blue) vs Public (gray) */}
+            {(isAuthorized || dataSource === 'authorized') && (
+              <Badge
+                key="data-source"
+                color={tokens.colors.accent.primary}
+                style={{ padding: '2px 8px', flexShrink: 0 }}
+                title={authorizedSince
+                  ? `${t('dataSourceVerifiedTooltip')} · ${t('verifiedSince')} ${new Date(authorizedSince).toLocaleDateString()}`
+                  : t('dataSourceVerifiedTooltip')
+                }
+              >
+                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke={tokens.colors.accent.primary} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ marginRight: 2 }}>
+                  <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+                </svg>
+                <Text size="xs" weight="bold" style={{ color: tokens.colors.accent.primary, letterSpacing: '0.3px' }}>
+                  {t('dataSourceVerified')}
+                </Text>
+              </Badge>
+            )}
+            {!isAuthorized && dataSource !== 'authorized' && dataSource && (
+              <Badge
+                key="data-source-public"
+                color={tokens.colors.text.tertiary}
+                style={{ padding: '2px 8px', flexShrink: 0 }}
+                title={t('dataSourcePublicTooltip')}
+              >
+                <Text size="xs" weight="bold" style={{ color: tokens.colors.text.tertiary, letterSpacing: '0.3px' }}>
+                  {t('dataSourcePublic')}
+                </Text>
               </Badge>
             )}
 
