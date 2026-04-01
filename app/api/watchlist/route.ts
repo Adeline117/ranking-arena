@@ -50,7 +50,43 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
     }
 
-    return NextResponse.json({ watchlist: data || [] })
+    const watchlist = data || []
+
+    // Enrich watchlist items with leaderboard snapshot data (ROI, PnL, rank, arena_score)
+    if (watchlist.length > 0) {
+      const adminUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || ''
+      const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || ''
+      if (serviceKey) {
+        const admin = createClient(adminUrl, serviceKey)
+        // Build filter for all watchlist items
+        const keys = watchlist.map(w => `${w.source}:${w.source_trader_id}`)
+        const { data: ranks } = await admin
+          .from('leaderboard_ranks')
+          .select('source, source_trader_id, roi, pnl, rank, arena_score, win_rate, avatar_url')
+          .eq('time_range', '90D')
+          .in('source', [...new Set(watchlist.map(w => w.source))])
+
+        if (ranks && ranks.length > 0) {
+          const rankMap = new Map(ranks.map(r => [`${r.source}:${r.source_trader_id}`, r]))
+          for (const item of watchlist) {
+            const key = `${item.source}:${item.source_trader_id}`
+            const rank = rankMap.get(key)
+            if (rank) {
+              Object.assign(item, {
+                roi: rank.roi,
+                pnl: rank.pnl,
+                rank: rank.rank,
+                arena_score: rank.arena_score,
+                win_rate: rank.win_rate,
+                avatar_url: rank.avatar_url,
+              })
+            }
+          }
+        }
+      }
+    }
+
+    return NextResponse.json({ watchlist })
   } catch (error) {
     log.error('GET failed', { error: error instanceof Error ? error.message : String(error) })
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
