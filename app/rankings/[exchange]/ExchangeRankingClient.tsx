@@ -19,7 +19,7 @@ import dynamic from 'next/dynamic'
 import { useVirtualizer } from '@tanstack/react-virtual'
 import PullToRefresh from '@/app/components/ui/PullToRefresh'
 import { useProStatus } from '@/lib/hooks/useProStatus'
-import { exportToCSV, exportToJSON } from '@/lib/utils/export'
+import { exportToCSV, exportToJSON, exportToPDF } from '@/lib/utils/export'
 const ShareLeaderboardButton = dynamic(() => import('./ShareLeaderboardButton'), { ssr: false })
 
 // ── Advanced Filters (Pro-gated) ────────────────────────────
@@ -233,7 +233,7 @@ function ProExportButton({ traders, exchange, period, isPro, t }: {
     return () => document.removeEventListener('mousedown', handler)
   }, [showMenu])
 
-  const doExport = (format: 'csv' | 'json') => {
+  const doExport = (format: 'csv' | 'json' | 'pdf') => {
     setShowMenu(false)
     const rows = traders.map((tr, i) => ({
       Rank: i + 1,
@@ -248,6 +248,7 @@ function ProExportButton({ traders, exchange, period, isPro, t }: {
     }))
     const filename = `arena-ranking-${exchange || 'all'}-${period}`
     if (format === 'json') exportToJSON(rows, filename)
+    else if (format === 'pdf') exportToPDF(rows as unknown as Record<string, unknown>[], filename)
     else exportToCSV(rows as unknown as Record<string, unknown>[], filename)
   }
 
@@ -304,6 +305,15 @@ function ProExportButton({ traders, exchange, period, isPro, t }: {
             onMouseEnter={e => { e.currentTarget.style.background = tokens.colors.bg.tertiary || 'var(--overlay-hover)' }}
             onMouseLeave={e => { e.currentTarget.style.background = 'transparent' }}>
             JSON
+          </button>
+          <button onClick={() => doExport('pdf')} style={{
+            display: 'block', width: '100%', padding: '6px 12px', background: 'transparent',
+            border: 'none', color: tokens.colors.text.primary, fontSize: 13, cursor: 'pointer', textAlign: 'left',
+            borderRadius: tokens.radius.sm,
+          }}
+            onMouseEnter={e => { e.currentTarget.style.background = tokens.colors.bg.tertiary || 'var(--overlay-hover)' }}
+            onMouseLeave={e => { e.currentTarget.style.background = 'transparent' }}>
+            PDF
           </button>
         </div>
       )}

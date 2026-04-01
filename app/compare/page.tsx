@@ -236,11 +236,10 @@ function CompareContent() {
               {t('compareDesc')}
             </Text>
           </Box>
-          {traders.length > 0 && (
+          {traders.length > 0 && isPro && (
             <ExportButton
-              hidePDF
               onExport={async (format) => {
-                const { exportToCSV, exportToJSON } = await import('@/lib/utils/export')
+                const { exportToCSV, exportToJSON, exportToPDF } = await import('@/lib/utils/export')
                 const rows = traders.map(t => ({
                   handle: t.handle || t.id,
                   source: t.source,
@@ -255,6 +254,7 @@ function CompareContent() {
                 }))
                 const filename = `compare-${traders.map(t => t.handle || t.id).join('-')}`
                 if (format === 'json') exportToJSON(rows, filename)
+                else if (format === 'pdf') exportToPDF(rows as unknown as Record<string, unknown>[], filename)
                 else exportToCSV(rows as unknown as Record<string, unknown>[], filename)
               }}
             />

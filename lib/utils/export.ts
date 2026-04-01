@@ -29,11 +29,41 @@ export function exportToJSON(data: unknown, filename: string): void {
   downloadBlob(json, `${filename}.json`, 'application/json;charset=utf-8;')
 }
 
-// ── Screenshot export (canvas capture) ───────────────────────
-// html2canvas removed — use native browser screenshot or a lighter alternative if needed
+// ── PDF via print ─────────────────────────────────────────────
+// Opens a print dialog with a formatted HTML table. Users can "Save as PDF" from the dialog.
 
-export async function exportToPDF(_element: HTMLElement, _filename: string): Promise<void> {
-  throw new Error('PDF export is not available. html2canvas has been removed.')
+export function exportToPDF(data: Record<string, unknown>[], filename: string): void {
+  if (!data.length) return
+
+  const keys = Object.keys(data[0])
+  const headerCells = keys.map(k => `<th style="padding:6px 12px;border-bottom:2px solid #8b6fa8;text-align:left;font-size:13px;white-space:nowrap">${escapeHtml(k)}</th>`).join('')
+  const bodyRows = data.map(row =>
+    `<tr>${keys.map(k => `<td style="padding:5px 12px;border-bottom:1px solid #ddd;font-size:12px">${escapeHtml(String(row[k] ?? ''))}</td>`).join('')}</tr>`
+  ).join('')
+
+  const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>${escapeHtml(filename)}</title>
+<style>
+  @media print { body { margin: 0; } @page { size: landscape; margin: 10mm; } }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; color: #222; }
+  table { border-collapse: collapse; width: 100%; }
+  h1 { font-size: 16px; color: #8b6fa8; margin-bottom: 8px; }
+  p.meta { font-size: 11px; color: #888; margin-bottom: 12px; }
+</style></head><body>
+<h1>Arena - ${escapeHtml(filename)}</h1>
+<p class="meta">Exported on ${new Date().toLocaleDateString()} from arenafi.org</p>
+<table><thead><tr>${headerCells}</tr></thead><tbody>${bodyRows}</tbody></table>
+<script>window.onafterprint=function(){window.close()};window.print();<\/script>
+</body></html>`
+
+  const printWindow = window.open('', '_blank')
+  if (printWindow) {
+    printWindow.document.write(html)
+    printWindow.document.close()
+  }
+}
+
+function escapeHtml(str: string): string {
+  return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
 }
 
 // ── Blob download helper ───────────────────────────────────
