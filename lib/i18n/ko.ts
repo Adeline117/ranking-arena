@@ -222,6 +222,7 @@ const ko = {
     // Common
     lightMode: '라이트 모드',
     darkMode: '다크 모드',
+    systemMode: '시스템 테마',
     language: '언어',
     chinese: '中文',
     english: 'English',

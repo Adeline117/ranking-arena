@@ -213,6 +213,7 @@ const ja = {
     profitableWeeks: '利益の出た週',
     lightMode: 'ライトモード',
     darkMode: 'ダークモード',
+    systemMode: 'システムテーマ',
     language: '言語',
     chinese: '中文',
     english: 'English',

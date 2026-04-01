@@ -222,6 +222,7 @@ const en = {
     // Common
     lightMode: 'Light Mode',
     darkMode: 'Dark Mode',
+    systemMode: 'System Theme',
     language: 'Language',
     chinese: '中文',
     english: 'English',

@@ -222,6 +222,7 @@ const zh = {
     // 通用
     lightMode: '浅色模式',
     darkMode: '深色模式',
+    systemMode: '跟随系统',
     language: '语言',
     chinese: '中文',
     english: 'English',
