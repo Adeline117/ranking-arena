@@ -149,7 +149,7 @@ export async function POST(
     }
 
     return NextResponse.json(
-      { error: 'Failed to create refresh job', details: error.message },
+      { error: 'Failed to create refresh job' },
       { status: 500 }
     )
   }

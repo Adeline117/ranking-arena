@@ -54,7 +54,7 @@ export async function GET(request: NextRequest) {
         return NextResponse.json(
           {
             error: 'Unable to query connection pool',
-            details: error?.message || countError.message,
+            details: 'Database connection pool error',
             hint: 'Create the get_active_connections() RPC function for accurate monitoring',
           },
           { status: 500 }

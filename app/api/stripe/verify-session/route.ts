@@ -178,7 +178,7 @@ export async function POST(request: NextRequest) {
       logger.error('Failed to retrieve subscription', { error: errorMessage, subscriptionId })
       return NextResponse.json({
         error: 'Failed to retrieve subscription',
-        details: errorMessage
+        details: 'Payment verification failed'
       }, { status: 500 })
     }
 
