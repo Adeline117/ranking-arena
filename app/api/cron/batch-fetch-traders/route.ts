@@ -49,7 +49,7 @@ const GROUPS: Record<string, string[]> = {
   // Group A2: OKX (every 3h)
   a2: ['okx_futures', 'okx_spot'],
   // Group B: VPS scraper CEX (every 3h) — Bybit + Bitget
-  b: ['bybit', 'bybit_spot', 'bitget_futures'],
+  b: ['bybit', 'bybit_spot', 'bitget_futures', 'bitget_spot'],
   // Group C: DEX + fast CEX (every 4h) — Hyperliquid, GMX (subgraph), Bitunix
   c: ['hyperliquid', 'gmx', 'bitunix'],
   // Group D1: Fast CEX (every 6h) — split from old group d (8 was too many, caused 524 timeout)
