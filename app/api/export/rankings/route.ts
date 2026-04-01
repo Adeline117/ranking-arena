@@ -3,10 +3,11 @@
  * GET /api/export/rankings?format=csv|json&exchange=all&timeRange=90D&limit=500
  */
 
-import { NextResponse } from 'next/server'
+import { NextRequest, NextResponse } from 'next/server'
 import { env } from '@/lib/env'
 import { getSupabaseAdmin } from '@/lib/supabase/server'
 import logger from '@/lib/logger'
+import { checkRateLimit, RateLimitPresets } from '@/lib/utils/rate-limit'
 
 export const runtime = 'edge'
 export const dynamic = 'force-dynamic'
@@ -17,7 +18,9 @@ function escapeCsv(v: unknown): string {
   return /[,"\n\r]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s
 }
 
-export async function GET(request: Request) {
+export async function GET(request: NextRequest) {
+  const rl = await checkRateLimit(request, RateLimitPresets.public)
+  if (rl) return rl
   // Require authentication to prevent data scraping
   const authHeader = request.headers.get('authorization')
   const cronSecret = env.CRON_SECRET

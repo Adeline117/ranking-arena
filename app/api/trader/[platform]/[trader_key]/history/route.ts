@@ -84,7 +84,7 @@ export async function GET(
     if (error) {
       logger.error('Failed to fetch trader history:', error)
       return NextResponse.json(
-        { error: 'Failed to fetch history', details: error.message },
+        { error: 'Failed to fetch history' },
         { status: 500 }
       )
     }

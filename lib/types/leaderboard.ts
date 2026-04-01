@@ -46,7 +46,7 @@ export const LEADERBOARD_PLATFORMS = [
   // Web3 / DEX
   'binance_web3', 'okx_web3',
   'hyperliquid', 'gmx', 'dydx', 'gains', 'jupiter_perps', 'aevo',
-  'drift', 'paradex', 'vertex', 'apex_pro', 'rabbitx',
+  'drift', 'paradex', 'vertex', 'apex_pro', 'rabbitx', 'vertex', 'apex_pro', 'rabbitx',
   // Social trading
   'etoro',
   // Bots
