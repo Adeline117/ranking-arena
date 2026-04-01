@@ -181,7 +181,9 @@ const PLATFORMS = {
     // KuCoin POST API — works from any IP, no auth needed, 822 traders
     directApi: 'https://www.kucoin.com/_api/ct-copy-trade/v1/copyTrading/rn/leaderboard/query',
     directMethod: 'POST',
-    directBody: { currentPage: 1, pageSize: 50 },
+    directBody: { currentPage: 1, pageSize: 50 }, // Will be paginated in batch mode
+    batch: true, // Use batch pagination (pages 1-17)
+    maxPages: 17,
     directHeaders: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
     endpoint: '/kucoin/leaderboard',
     periods: { '1': '30D' }, // API only returns 30D data
@@ -559,6 +561,7 @@ function buildSnapshotRows(normalized, platform, marketType, window) {
         trader_key: t.trader_key,
         window: window,
         as_of_ts: now,
+        updated_at: now,
         roi_pct: roiCapped,
         pnl_usd: t.pnl ?? null,
         win_rate: t.win_rate ?? null,
