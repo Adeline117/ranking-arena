@@ -107,20 +107,40 @@ export async function fetchDydxEquityCurve(
       return await fetchEquityCurveFromStats(address, days)
     }
 
-    // Sort by date and compute cumulative
+    // Sort by date and gap-fill missing days (carry forward cumPnl)
     const sortedDates = [...dailyPnl.entries()].sort((a, b) => a[0].localeCompare(b[0]))
     let cumPnl = 0
-    const points: EquityCurvePoint[] = sortedDates.map(([date, pnl]) => {
+    const sparsePoints = new Map<string, number>()
+    for (const [date, pnl] of sortedDates) {
       cumPnl += pnl
-      return { date, roi: 0, pnl: cumPnl }
-    })
+      sparsePoints.set(date, cumPnl)
+    }
 
-    // Compute ROI relative to first point
-    if (points.length >= 2) {
-      const initialPnl = points[0].pnl ?? 0
+    // Gap-fill: iterate from first to last date, carry forward on empty days
+    const firstDate = new Date(sortedDates[0][0])
+    const lastDate = new Date(sortedDates[sortedDates.length - 1][0])
+    const points: EquityCurvePoint[] = []
+    let prevCumPnl = 0
+    for (let d = new Date(firstDate); d <= lastDate; d.setDate(d.getDate() + 1)) {
+      const dateStr = d.toISOString().split('T')[0]
+      const val = sparsePoints.get(dateStr)
+      if (val !== undefined) {
+        prevCumPnl = val
+      }
+      points.push({ date: dateStr, roi: 0, pnl: prevCumPnl })
+    }
+
+    // Estimate capital from total position volume (same approach as enrichment-dex)
+    const totalVolume = positions.reduce((sum, pos) => {
+      const size = pos.size ?? pos.collateral ?? 0
+      return sum + Math.abs(size)
+    }, 0)
+    // Estimate capital as ~5x leverage average for dYdX
+    const estimatedCapital = totalVolume > 0 ? totalVolume / 5 : Math.abs(cumPnl) * 5
+
+    if (estimatedCapital > 0 && points.length >= 2) {
       for (const point of points) {
-        const pnlDiff = (point.pnl ?? 0) - initialPnl
-        point.roi = initialPnl !== 0 ? (pnlDiff / Math.abs(initialPnl)) * 100 : 0
+        point.roi = ((point.pnl ?? 0) / estimatedCapital) * 100
       }
     }
 
