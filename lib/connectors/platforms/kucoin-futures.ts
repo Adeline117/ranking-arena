@@ -46,17 +46,30 @@ export class KucoinFuturesConnector extends BaseConnector {
       if (rawList.length === 0 && Array.isArray(dataObj)) rawList = dataObj as Record<string, unknown>[]
     }
 
-    // Strategy 2: Direct API (new ct-copy-trade endpoint, may work from residential IPs)
+    // Strategy 2: Direct POST API (works from any IP, no auth needed)
+    // 2026-03-31: POST with currentPage returns 822 traders. GET returns 0.
     if (rawList.length === 0) {
       try {
-        const _rawLb = await this.request<Record<string, unknown>>(
-          `https://www.kucoin.com/_api/ct-copy-trade/v1/copyTrading/rn/leaderboard/query?lang=en_US&pageNo=${pageNo}&pageSize=${limit}`,
-          { method: 'GET' }
+        const controller = new AbortController()
+        const timeout = setTimeout(() => controller.abort(), 30000)
+        const res = await fetch(
+          'https://www.kucoin.com/_api/ct-copy-trade/v1/copyTrading/rn/leaderboard/query',
+          {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+            body: JSON.stringify({ currentPage: pageNo, pageSize: limit }),
+            signal: controller.signal,
+          }
         )
-        const list = (_rawLb?.data as Record<string, unknown>)?.items || (_rawLb?.data as unknown[])
-        if (Array.isArray(list)) rawList = list as Record<string, unknown>[]
+        clearTimeout(timeout)
+        if (res.ok) {
+          const _rawLb = await res.json() as Record<string, unknown>
+          const dataObj = _rawLb?.data as Record<string, unknown>
+          const list = dataObj?.items || dataObj?.list
+          if (Array.isArray(list)) rawList = list as Record<string, unknown>[]
+        }
       } catch {
-        // New API also requires browser cookies — expected to fail from datacenter
+        // POST API failed
       }
     }
 
@@ -138,16 +151,21 @@ export class KucoinFuturesConnector extends BaseConnector {
   }
 
   normalize(raw: Record<string, unknown>): Record<string, unknown> {
+    // New POST API returns thirtyDayPnlRatio as decimal (2.80 = 280%)
+    const rawRoi = this.num(raw.thirtyDayPnlRatio ?? raw.totalPnlRatio ?? raw.roi ?? raw.returnRate)
+    const roi = rawRoi != null ? (Math.abs(rawRoi) <= 10 ? rawRoi * 100 : rawRoi) : null
     return {
       trader_key: raw.leadConfigId || raw.uid,
       display_name: raw.nickName || raw.name,
-      roi: this.num(raw.roi) ?? this.num(raw.returnRate),
-      pnl: this.num(raw.totalPnl) ?? this.num(raw.pnl),
-      win_rate: this.num(raw.winRate),
-      max_drawdown: this.num(raw.maxDrawdown) ?? this.num(raw.mdd),
-      followers: this.num(raw.followerCount),
-      copiers: this.num(raw.currentCopyCount),
+      avatar_url: raw.avatarUrl || raw.avatar || null,
+      roi,
+      pnl: this.num(raw.thirtyDayPnl ?? raw.totalPnl ?? raw.pnl),
+      win_rate: null, // Not in leaderboard response
+      max_drawdown: null, // Not in leaderboard response
+      followers: this.num(raw.currentCopyUserCount ?? raw.followerCount),
+      copiers: this.num(raw.currentCopyUserCount ?? raw.currentCopyCount),
       trades_count: this.num(raw.tradeCount),
+      aum: this.num(raw.leadPrincipal),
     }
   }
 

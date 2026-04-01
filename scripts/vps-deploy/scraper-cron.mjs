@@ -175,6 +175,73 @@ const PLATFORMS = {
     },
   },
 
+  kucoin: {
+    source: 'kucoin',
+    market_type: 'futures',
+    // KuCoin POST API — works from any IP, no auth needed, 822 traders
+    directApi: 'https://www.kucoin.com/_api/ct-copy-trade/v1/copyTrading/rn/leaderboard/query',
+    directMethod: 'POST',
+    directBody: { currentPage: 1, pageSize: 50 },
+    directHeaders: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+    endpoint: '/kucoin/leaderboard',
+    periods: { '1': '30D' }, // API only returns 30D data
+    pageSize: 50,
+    extractList: (data) => {
+      return data?.data?.items || data?.data?.list || []
+    },
+    normalize: (raw) => {
+      const rawRoi = num(raw.thirtyDayPnlRatio ?? raw.totalPnlRatio)
+      // KuCoin returns ROI as decimal (2.80 = 280%)
+      const roi = rawRoi != null ? rawRoi * 100 : null
+      return {
+        trader_key: String(raw.leadConfigId ?? ''),
+        display_name: raw.nickName ?? null,
+        avatar_url: raw.avatarUrl ?? null,
+        roi,
+        pnl: num(raw.thirtyDayPnl ?? raw.totalPnl),
+        win_rate: null,
+        max_drawdown: null,
+        sharpe_ratio: null,
+        followers: num(raw.currentCopyUserCount),
+      }
+    },
+  },
+
+  bingx_spot: {
+    source: 'bingx_spot',
+    market_type: 'spot',
+    endpoint: '/bingx/leaderboard',
+    periods: {
+      '2': '30D',
+    },
+    pageSize: 50,
+    // BingX spot needs type=spot param
+    extraParams: { type: 'spot' },
+    extractList: (data) => {
+      if (data?.data?.global?.result) return data.data.global.result
+      if (data?.data?.result) return data.data.result
+      if (Array.isArray(data?.data)) return data.data
+      return []
+    },
+    normalize: (raw) => {
+      const info = raw.traderInfoVo || {}
+      const rawRoi = num(raw.cumulativePnlRate7Days ?? raw.roi ?? raw.roiRate ?? raw.returnRate)
+      const roi = rawRoi != null ? (Math.abs(rawRoi) <= 1 ? rawRoi * 100 : rawRoi) : null
+      const rawWr = num(raw.winRate)
+      const winRate = rawWr != null ? (rawWr <= 1 ? rawWr * 100 : rawWr) : null
+      return {
+        trader_key: String(info.trader || info.apiIdentity || raw.uniqueId || raw.uid || ''),
+        display_name: info.traderName || raw.traderName || raw.nickname || null,
+        roi,
+        pnl: num(raw.totalEarnings ?? raw.pnl ?? raw.totalPnl ?? raw.profit),
+        win_rate: winRate,
+        max_drawdown: null,
+        sharpe_ratio: null,
+        followers: num(raw.followerNum ?? raw.followers ?? raw.followerCount),
+      }
+    },
+  },
+
   coinex: {
     source: 'coinex',
     market_type: 'futures',
@@ -733,10 +800,15 @@ async function fetchPlatform(platformKey) {
           // Substitute {period} placeholder with actual period key (e.g., 90d for CoinEx)
           const apiUrl = config.directApi.replace('{period}', periodKey)
           await globalBucket.acquire()
-          const res = await fetch(apiUrl, {
+          const fetchOpts = {
+            method: config.directMethod || 'GET',
             headers: config.directHeaders || {},
             signal: controller.signal,
-          })
+          }
+          if (config.directBody) {
+            fetchOpts.body = JSON.stringify(config.directBody)
+          }
+          const res = await fetch(apiUrl, fetchOpts)
           clearTimeout(timeout)
           if (res.ok) {
             data = await res.json()
@@ -754,12 +826,12 @@ async function fetchPlatform(platformKey) {
 
       // Fallback: VPS Playwright scraper
       if (!data) {
-        const params = { pageSize: config.pageSize }
+        const params = { pageSize: config.pageSize, ...(config.extraParams || {}) }
         if (platformKey === 'bitget_futures') {
           params.period = periodKey
         } else if (platformKey === 'mexc') {
           params.periodType = periodKey
-        } else if (platformKey === 'bingx') {
+        } else if (platformKey === 'bingx' || platformKey === 'bingx_spot') {
           params.timeType = periodKey
         }
         const scraperTimeout = platformKey === 'mexc' ? 300000 : 120000

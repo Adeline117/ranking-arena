@@ -54,8 +54,8 @@ const GROUPS: Record<string, string[]> = {
   e: ['drift', 'jupiter_perps', 'aevo', 'web3_bot', 'toobit', 'xt', 'etoro', 'dydx'],
   // Group F: VPS scraper slow platforms (every 6h) — MEXC, BingX, WEEX + new platforms
   f: ['mexc', 'bingx', 'weex', 'woox', 'polymarket', 'copin'],
-  // crypto_com: REMOVED — copy-trading feature shut down 2026-03-19
-  // kucoin: PERMANENTLY DEAD — copy trading APIs 404 since 2026-03
+  // Group G: Recovered platforms (every 6h)
+  g: ['kucoin', 'bingx_spot', 'lbank', 'phemex', 'blofin'],
 }
 
 interface BatchResult {
