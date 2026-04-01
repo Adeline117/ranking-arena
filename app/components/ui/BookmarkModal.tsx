@@ -8,6 +8,7 @@ import { getCsrfHeaders } from '@/lib/api/client'
 import { useToast } from './Toast'
 import { useAuthSession } from '@/lib/hooks/useAuthSession'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
+import { useLoginModal } from '@/lib/hooks/useLoginModal'
 import { logger } from '@/lib/logger'
 
 type BookmarkFolder = {
@@ -188,6 +189,66 @@ export default function BookmarkModal({ isOpen, onClose, onSelect, postId: _post
   }
 
   if (!isOpen || typeof document === 'undefined') return null
+
+  // Show login prompt when user is not authenticated
+  if (authChecked && !accessToken) {
+    const loginPromptContent = (
+      <Box
+        style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          background: 'var(--color-backdrop)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: tokens.zIndex.modal,
+        }}
+        onClick={onClose}
+      >
+        <Box
+          role="dialog"
+          aria-modal="true"
+          aria-label={t('bookmarkSelectFolder')}
+          style={{
+            background: tokens.colors.bg.primary,
+            borderRadius: tokens.radius.xl,
+            padding: tokens.spacing[6],
+            width: '90%',
+            maxWidth: 400,
+            border: `1px solid ${tokens.colors.border.primary}`,
+            textAlign: 'center',
+          }}
+          onClick={(e) => e.stopPropagation()}
+        >
+          <Text size="lg" weight="bold" style={{ marginBottom: tokens.spacing[3], display: 'block' }}>
+            {t('bookmarkTo')}
+          </Text>
+          <Text size="sm" color="tertiary" style={{ marginBottom: tokens.spacing[4], display: 'block' }}>
+            {t('loginToBookmark') || 'Log in to save bookmarks'}
+          </Text>
+          <Box style={{ display: 'flex', gap: tokens.spacing[2], justifyContent: 'center' }}>
+            <Button
+              variant="primary"
+              size="sm"
+              onClick={() => {
+                onClose()
+                useLoginModal.getState().openLoginModal()
+              }}
+            >
+              {t('login') || 'Log In'}
+            </Button>
+            <Button variant="text" size="sm" onClick={onClose}>
+              {t('cancel') || 'Cancel'}
+            </Button>
+          </Box>
+        </Box>
+      </Box>
+    )
+    return createPortal(loginPromptContent, document.body)
+  }
 
   const modalContent = (
     <Box
