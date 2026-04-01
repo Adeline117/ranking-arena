@@ -82,10 +82,14 @@ function formatPnl(pnl: number): string {
   return `${sign}$${abs.toFixed(0)}`
 }
 
-export default function TokensIndexClient() {
+interface TokensIndexClientProps {
+  initialTokens?: PopularToken[]
+}
+
+export default function TokensIndexClient({ initialTokens }: TokensIndexClientProps = {}) {
   const { t } = useLanguage()
-  const [popularTokens, setPopularTokens] = useState<PopularToken[]>([])
-  const [loading, setLoading] = useState(true)
+  const [popularTokens, setPopularTokens] = useState<PopularToken[]>(initialTokens || [])
+  const [loading, setLoading] = useState(!initialTokens || initialTokens.length === 0)
   const [search, setSearch] = useState('')
 
   useEffect(() => {
