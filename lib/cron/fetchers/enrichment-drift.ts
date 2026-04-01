@@ -457,6 +457,7 @@ export async function fetchDriftStatsDetail(
       // This is far more reliable than fills which often return empty
       let winRate: number | null = null
       let maxDrawdown: number | null = null
+      let sharpeRatio: number | null = null
       let totalDays = 0
 
       try {
@@ -495,6 +496,19 @@ export async function fetchDriftStatsDetail(
           if (mdd > 0.01 && mdd <= 100) {
             maxDrawdown = Math.round(mdd * 100) / 100
           }
+
+          // Compute Sharpe from daily PnL deltas
+          if (snaps.length >= 7) {
+            const dailyReturns: number[] = []
+            for (let i = 1; i < snaps.length; i++) {
+              dailyReturns.push(snaps[i].pnl - snaps[i - 1].pnl)
+            }
+            if (dailyReturns.length >= 5) {
+              const mean = dailyReturns.reduce((a, b) => a + b, 0) / dailyReturns.length
+              const std = Math.sqrt(dailyReturns.reduce((a, r) => a + (r - mean) ** 2, 0) / dailyReturns.length)
+              if (std > 0) sharpeRatio = Math.round((mean / std) * Math.sqrt(365) * 100) / 100
+            }
+          }
         }
       } catch (snapErr) {
         logger.warn(`[drift] Snapshots failed for ${authority}: ${snapErr instanceof Error ? snapErr.message : String(snapErr)}`)
@@ -513,7 +527,7 @@ export async function fetchDriftStatsDetail(
         avgLoss: derivedStats.avgLoss ?? null,
         largestWin: derivedStats.largestWin ?? null,
         largestLoss: derivedStats.largestLoss ?? null,
-        sharpeRatio: null,
+        sharpeRatio: sharpeRatio,
         maxDrawdown: maxDrawdown ?? derivedStats.maxDrawdown ?? null,
         currentDrawdown: null,
         volatility: null,
