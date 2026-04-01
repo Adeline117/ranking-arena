@@ -99,7 +99,8 @@ export async function POST(request: NextRequest) {
       // Remove login sessions
       supabase.from('login_sessions').delete().eq('user_id', user.id),
       // Clear 2FA secrets
-      supabase.from('user_profiles').update({ totp_secret: null, totp_enabled: false }).eq('id', user.id),
+      supabase.from('user_profiles').update({ totp_enabled: false }).eq('id', user.id),
+      supabase.from('user_2fa_secrets').delete().eq('user_id', user.id),
       // Remove notifications
       supabase.from('notifications').delete().eq('user_id', user.id),
       // Remove post likes

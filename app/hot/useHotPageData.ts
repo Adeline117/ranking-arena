@@ -12,7 +12,11 @@ import { useToast } from '@/app/components/ui/Toast'
 import { logger } from '@/lib/logger'
 import type { Trader, Post, Comment } from './types'
 
-export function useHotPageData() {
+interface UseHotPageDataOptions {
+  initialPosts?: Post[]
+}
+
+export function useHotPageData(options: UseHotPageDataOptions = {}) {
   const { t, language } = useLanguage()
   const localizedName = (zh: string, en?: string | null) => localizedLabel(zh, en, language)
   const { showToast } = useToast()
@@ -31,8 +35,8 @@ export function useHotPageData() {
   const [expandedPosts, setExpandedPosts] = useState<Record<string, boolean>>({})
   const [_traders, setTraders] = useState<Trader[]>([])
   const [_loadingTraders, setLoadingTraders] = useState(true)
-  const [posts, setPosts] = useState<Post[]>([])
-  const [loadingPosts, setLoadingPosts] = useState(true)
+  const [posts, setPosts] = useState<Post[]>(options.initialPosts || [])
+  const [loadingPosts, setLoadingPosts] = useState(!options.initialPosts || options.initialPosts.length === 0)
 
   // Tabbed sections state
   const [activeHotTab, setActiveHotTab] = useState<'posts' | 'groups'>('posts')

@@ -35,7 +35,7 @@ export async function POST(request: NextRequest) {
     // Check if 2FA is already enabled
     const { data: profile, error: profileError } = await supabase
       .from('user_profiles')
-      .select('totp_enabled, totp_secret')
+      .select('totp_enabled')
       .eq('id', user.id)
       .single()
 
@@ -58,11 +58,10 @@ export async function POST(request: NextRequest) {
     // Generate QR code as data URL
     const qrCode = await toDataURL(uri)
 
-    // Store the secret temporarily (not enabled yet)
+    // Store the secret in secure table (service_role only, not accessible by client)
     const { error: updateError } = await supabase
-      .from('user_profiles')
-      .update({ totp_secret: secret })
-      .eq('id', user.id)
+      .from('user_2fa_secrets')
+      .upsert({ user_id: user.id, totp_secret: secret, updated_at: new Date().toISOString() })
 
     if (updateError) {
       logger.error('[2FA Setup] Secret storage error:', updateError)

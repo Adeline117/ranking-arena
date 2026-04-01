@@ -468,8 +468,5 @@ export const SOURCE_TO_CONNECTOR_MAP: Record<string, { platform: string; marketT
   woox: { platform: 'woox', marketType: 'copy' },
   polymarket: { platform: 'polymarket', marketType: 'copy' },
   copin: { platform: 'copin', marketType: 'perp' },
-  // New DEX platforms (Wave 3)
-  vertex: { platform: 'vertex', marketType: 'perp' },
-  apex_pro: { platform: 'apex_pro', marketType: 'perp' },
-  rabbitx: { platform: 'rabbitx', marketType: 'perp' },
+  // DEAD (2026-04): rabbitx (DNS dead), vertex (no public leaderboard API), apex_pro (no public leaderboard API, geo-blocked)
 }

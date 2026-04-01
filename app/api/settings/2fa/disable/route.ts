@@ -82,11 +82,11 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: '2FA is not enabled' }, { status: 400 })
     }
 
-    // Disable 2FA: clear secret and set enabled to false
-    const { error: updateError } = await supabase
-      .from('user_profiles')
-      .update({ totp_enabled: false, totp_secret: null })
-      .eq('id', user.id)
+    // Disable 2FA: set enabled to false and delete secret from secure table
+    const [{ error: updateError }] = await Promise.all([
+      supabase.from('user_profiles').update({ totp_enabled: false }).eq('id', user.id),
+      supabase.from('user_2fa_secrets').delete().eq('user_id', user.id),
+    ])
 
     if (updateError) {
       logger.error('[2FA Disable] Update error:', updateError)

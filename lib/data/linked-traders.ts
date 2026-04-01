@@ -126,18 +126,37 @@ export async function getLinkedTraders(
 
   if (links.length === 0) return []
 
-  // Enrich with latest snapshot stats from trader_snapshots_v2
+  // Enrich with latest snapshot stats — batch query instead of N+1
+  // Group links by platform for efficient .in() queries
+  const byPlatform = new Map<string, string[]>()
   for (const link of links) {
-    const { data: snapshot } = await supabase
-      .from('trader_snapshots_v2')
-      .select('roi, pnl, arena_score, win_rate, max_drawdown, rank')
-      .eq('platform', link.platform)
-      .eq('trader_key', link.traderKey)
-      .eq('window', '90D')
-      .order('fetched_at', { ascending: false })
-      .limit(1)
-      .maybeSingle()
+    const keys = byPlatform.get(link.platform) || []
+    keys.push(link.traderKey)
+    byPlatform.set(link.platform, keys)
+  }
 
+  // Parallel batch fetch per platform
+  const snapshotMap = new Map<string, Record<string, unknown>>()
+  await Promise.all(
+    [...byPlatform.entries()].map(async ([platform, traderKeys]) => {
+      const { data: snapshots } = await supabase
+        .from('trader_snapshots_v2')
+        .select('platform, trader_key, roi, pnl, arena_score, win_rate, max_drawdown, rank')
+        .eq('platform', platform)
+        .in('trader_key', traderKeys)
+        .eq('window', '90D')
+
+      if (snapshots) {
+        for (const s of snapshots) {
+          snapshotMap.set(`${s.platform}:${s.trader_key}`, s)
+        }
+      }
+    })
+  )
+
+  // Apply snapshot data to links
+  for (const link of links) {
+    const snapshot = snapshotMap.get(`${link.platform}:${link.traderKey}`)
     if (snapshot) {
       link.roi = snapshot.roi as number | null
       link.pnl = snapshot.pnl as number | null
