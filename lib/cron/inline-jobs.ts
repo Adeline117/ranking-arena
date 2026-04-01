@@ -139,7 +139,7 @@ export async function runWorkerInline(): Promise<InlineJobResult> {
                 copiers: result.data.metrics.copiers,
                 sharpe_ratio: result.data.metrics.sharpe_ratio,
                 arena_score: arenaScore,
-              }, { onConflict: 'platform,market_type,trader_key,window' })
+              }, { onConflict: 'platform,market_type,trader_key,window,as_of_ts' })
               if (snapInsertErr) logger.warn(`[inline-jobs] SNAPSHOT upsert error: ${snapInsertErr.message}`)
             }
           }
@@ -245,7 +245,7 @@ async function upsertLeaderboardData(
     const batch = snapshots.slice(i, i + BATCH_SIZE)
     const { error: batchErr } = await supabase.from('trader_snapshots_v2').upsert(
       batch,
-      { onConflict: 'platform,market_type,trader_key,window' }
+      { onConflict: 'platform,market_type,trader_key,window,as_of_ts' }
     )
     if (batchErr) logger.warn(`[inline-jobs] DISCOVER upsert batch ${i} error: ${batchErr.message}`)
   }
@@ -407,7 +407,7 @@ export async function syncTradersInline(): Promise<InlineJobResult> {
           win_rate: traderData.winRate, max_drawdown: traderData.maxDrawdown,
           arena_score: arenaScoreResult.totalScore,
           updated_at: new Date().toISOString(),
-        }, { onConflict: 'platform,market_type,trader_key,window' })
+        }, { onConflict: 'platform,market_type,trader_key,window,as_of_ts' })
         if (snapErr) logger.warn(`[Sync] snapshot upsert failed for ${auth.platform}/${auth.trader_id}: ${snapErr.message}`)
 
         const { error: srcErr } = await supabase.from('trader_sources').upsert({
