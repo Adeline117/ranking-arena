@@ -38,7 +38,7 @@ const DEAD_COUNTER_TTL = 7 * 24 * 60 * 60 // 7 days in seconds
 const DEAD_THRESHOLD = 3 // consecutive failures before alerting (reduced from 10 for ~12h detection)
 
 export const dynamic = 'force-dynamic'
-export const maxDuration = 800 // Vercel Pro max: 10 minutes (was 300s = 5min)
+export const maxDuration = 900 // Vercel Pro max: 15 minutes (emergency fix 2026-04-01)
 export const preferredRegion = 'hnd1' // Tokyo — avoids Binance/OKX/Bybit geo-blocking
 
 const GROUPS: Record<string, string[]> = {
@@ -50,12 +50,14 @@ const GROUPS: Record<string, string[]> = {
   c: ['hyperliquid', 'gmx', 'bitunix'],
   // Group D: Fast CEX/DEX mix (every 6h) — direct APIs, low latency
   d: ['gains', 'htx_futures', 'bitfinex', 'coinex', 'binance_web3', 'okx_web3', 'gateio', 'btcc'],
-  // Group E: DEX + social trading (every 6h) — Solana DEX, dYdX (Copin), eToro, new DEX
-  e: ['drift', 'jupiter_perps', 'aevo', 'web3_bot', 'toobit', 'xt', 'etoro', 'dydx', 'vertex', 'apex_pro', 'rabbitx'],
+  // Group E: DEX + social trading (every 6h) — Solana DEX, eToro, new DEX
+  // 2026-04-01: dydx disabled (API 404, needs Copin integration)
+  e: ['drift', 'jupiter_perps', 'aevo', 'web3_bot', 'toobit', 'xt', 'etoro', 'vertex', 'apex_pro', 'rabbitx'],
   // Group F: VPS scraper slow platforms (every 6h) — MEXC, BingX, WEEX + new platforms
   f: ['mexc', 'bingx', 'weex', 'woox', 'polymarket', 'copin'],
   // Group G: Recovered platforms (every 6h)
-  g: ['kucoin', 'bingx_spot', 'lbank', 'phemex', 'blofin'],
+  // 2026-04-01: phemex disabled (API 404)
+  g: ['kucoin', 'bingx_spot', 'lbank', 'blofin'],
 }
 
 interface BatchResult {

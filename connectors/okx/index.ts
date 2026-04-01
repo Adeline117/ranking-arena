@@ -29,7 +29,7 @@ export class OkxConnector extends BaseConnector {
   platform: Platform = 'okx';
   market_type: MarketType = 'futures';
 
-  protected rate_limit = { rpm: 15, concurrent: 1, delay_ms: 4000 };
+  protected rate_limit = { rpm: 30, concurrent: 3, delay_ms: 2000 }; // Emergency fix 2026-04-01: increase speed
 
   async discoverLeaderboard(window: Window, limit = 100): Promise<ConnectorResult<LeaderboardEntry[]>> {
     try {
