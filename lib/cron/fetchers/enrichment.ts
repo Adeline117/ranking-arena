@@ -94,6 +94,7 @@ export {
 // DEX (Hyperliquid + GMX)
 export {
   fetchHyperliquidPositionHistory,
+  fetchHyperliquidPortfolio,
   fetchHyperliquidEquityCurve,
   fetchHyperliquidStatsDetail,
   fetchGmxPositionHistory,

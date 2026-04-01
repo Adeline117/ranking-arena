@@ -21,6 +21,7 @@ import {
   fetchBitgetStatsDetail,
   fetchBitgetPositionHistory,
   fetchHyperliquidPositionHistory,
+  fetchHyperliquidPortfolio,
   fetchHyperliquidEquityCurve,
   fetchHyperliquidStatsDetail,
   fetchGmxPositionHistory,
@@ -297,6 +298,7 @@ export const ENRICHMENT_PLATFORM_CONFIGS: Record<string, EnrichmentConfig> = {
     fetchEquityCurve: fetchHyperliquidEquityCurve,
     fetchStatsDetail: fetchHyperliquidStatsDetail,
     fetchPositionHistory: fetchHyperliquidPositionHistory,
+    fetchCurrentPositions: fetchHyperliquidPortfolio,
     concurrency: 10, delayMs: 200, // No rate limit, fast API
   },
   gmx: {
