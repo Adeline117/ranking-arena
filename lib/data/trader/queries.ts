@@ -400,7 +400,12 @@ export async function getTraderDetail(supabase: SupabaseClient, params: {
     largest_win: number | null; largest_loss: number | null; aum: number | null; period: string | null
   }
   const statsRows = (statsDetailResult || []) as StatsRow[]
-  const statsPrimary = statsRows.find(s => s.period === '90D') || statsRows[0] || null
+  // Prefer 90D row with actual data (non-null fields) over empty newer rows
+  const hasData = (s: StatsRow) => s.avg_profit != null || s.largest_win != null || s.sharpe_ratio != null || s.winning_positions != null
+  const statsPrimary = statsRows.find(s => s.period === '90D' && hasData(s))
+    || statsRows.find(s => s.period === '90D')
+    || statsRows.find(s => hasData(s))
+    || statsRows[0] || null
 
   const stats = statsPrimary ? {
     sharpeRatio: statsPrimary.sharpe_ratio,
