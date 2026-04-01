@@ -28,6 +28,8 @@ interface HtxRankItem {
   tradeDays?: number
 }
 
+const DETAIL_URL = 'https://futures.htx.com/-/x/hbg/v1/futures/copytrading/trader/detail'
+
 /**
  * Fetch equity curve for an HTX trader by finding them in the ranking
  * and converting their profitList to EquityCurvePoint[].
@@ -112,7 +114,18 @@ async function findTraderInRanking(traderId: string): Promise<HtxRankItem | null
     return traderCache.get(traderId) || null
   }
 
-  // Fetch full ranking to populate cache
+  // Strategy 1: Direct detail endpoint (returns richer data including profitList)
+  try {
+    const url = `${DETAIL_URL}?uid=${traderId}`
+    const resp = await fetchJson<{ code: number; data?: HtxRankItem }>(url, { timeoutMs: 8000 })
+    if (resp?.code === 200 && resp.data && (resp.data.uid || resp.data.userSign)) {
+      return resp.data
+    }
+  } catch (err) {
+    logger.warn(`[htx_futures] Detail endpoint failed for ${traderId}: ${err instanceof Error ? err.message : String(err)}`)
+  }
+
+  // Strategy 2: Search in ranking cache
   await populateTraderCache()
   return traderCache.get(traderId) || null
 }
