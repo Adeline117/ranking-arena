@@ -12,6 +12,7 @@ import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import { getScoreColor } from '@/lib/utils/score-colors'
 import { Box, Text } from '@/app/components/base'
 import ExchangeLogo from '@/app/components/ui/ExchangeLogo'
+import EmptyState from '@/app/components/ui/EmptyState'
 
 type Period = '7D' | '30D' | '90D'
 
@@ -595,41 +596,33 @@ export default function TokenRankingClient({ token }: { token: string }) {
 
       {/* Empty State */}
       {!loading && traders.length === 0 && (
-        <Box
-          style={{
-            textAlign: 'center',
-            padding: 40,
-            color: tokens.colors.text.tertiary,
-          }}
-        >
-          <div style={{ fontSize: 16, marginBottom: 16, opacity: 0.5 }}>No data found</div>
-          <Text
-            size="base"
-            weight="semibold"
-            style={{ color: tokens.colors.text.secondary, marginBottom: 8 }}
-          >
-            {t('tokenRankingNoData').replace('{token}', token)}
-          </Text>
-          <Text size="sm" style={{ color: tokens.colors.text.tertiary }}>
-            {t('tokenRankingNoDataDesc')}
-          </Text>
-          <Link
-            href="/rankings/tokens"
-            style={{
-              display: 'inline-block',
-              marginTop: 16,
-              padding: '8px 20px',
-              borderRadius: tokens.radius.md,
-              background: tokens.colors.accent.primary + '15',
-              color: tokens.colors.accent.primary,
-              textDecoration: 'none',
-              fontSize: 14,
-              fontWeight: 600,
-            }}
-          >
-            {t('tokenRankingBrowseAll')}
-          </Link>
-        </Box>
+        <EmptyState
+          icon={
+            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+              <circle cx="11" cy="11" r="8" />
+              <path d="M21 21l-4.35-4.35" strokeLinecap="round" />
+            </svg>
+          }
+          title={t('tokenRankingNoData').replace('{token}', token)}
+          description={t('tokenRankingNoDataDesc')}
+          action={
+            <Link
+              href="/rankings/tokens"
+              style={{
+                display: 'inline-block',
+                padding: '8px 20px',
+                borderRadius: tokens.radius.md,
+                background: 'var(--color-accent-primary)',
+                color: 'var(--color-bg-primary)',
+                textDecoration: 'none',
+                fontSize: 14,
+                fontWeight: 600,
+              }}
+            >
+              {t('tokenRankingBrowseAll')}
+            </Link>
+          }
+        />
       )}
     </Box>
   )
