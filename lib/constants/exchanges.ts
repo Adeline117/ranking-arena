@@ -163,18 +163,14 @@ export const DEAD_BLOCKED_PLATFORMS: TraderSource[] = [
   // 'phemex' — Mac Mini fetch-phemex.mjs (183 traders)
   // 'lbank' — VPS scraper working (42 traders)
   // 'blofin' — VPS/Mac Mini working (429 traders)
-  // 'kucoin' — Mac Mini fetch-kucoin-v2.mjs (12 traders, browser-only API)
   // 'kucoin' — was RECOVERED 2026-03-19, now DEAD again — copy trading discontinued 2026-03, all APIs 404
   'kucoin',
   // crypto_com: DELETED — confirmed no copy trading feature on web (2026-03-19)
-  // 'weex' — was RECOVERED 2026-03-19, now DEAD again — 521 server down 2026-03-28
-  'weex',
-  // okx_web3: API broken since 2026-03-18, no data for 10 days
-  'okx_web3',
-  // bingx_spot: No spot leaderboard API, no dedicated fetcher — 2026-03-31
+  // bingx_spot: No spot leaderboard API, page returns 404 — confirmed dead 2026-03-31
   'bingx_spot',
+  // 'weex' — RE-ENABLED 2026-03-31: VPS scraper works (server back from 521)
+  // 'okx_web3' — RE-ENABLED 2026-03-31: same v5 copytrading API as okx_futures (confirmed working)
   // dydx: RECOVERED 2026-03-31 — Copin API needs queryDate = now-3days (2-day processing delay)
-  // Was wrongly marked dead because queryDate=now returned 0 PnL. Fixed in dydx-perp.ts.
 
   // ═══════════════════════════════════════════════════════════════
   // BLOCKED — needs API key or credentials to unlock
@@ -222,6 +218,7 @@ export const PRIORITY_SOURCES: TraderSource[] = [
   'bitfinex',
   'bitunix',
   'toobit',
+  'weex',
   // Social trading
   'etoro',
   // Web3 / DEX
@@ -266,6 +263,7 @@ export const SOURCES_WITH_DATA: TraderSource[] = [
   'bitfinex',
   'bitunix',
   'toobit',
+  'weex',
   // Social trading
   'etoro',
   // CEX spot

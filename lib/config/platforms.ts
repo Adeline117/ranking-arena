@@ -13,9 +13,10 @@
 // All timeout fixes failed, cleanup cron not catching them
 // Re-enable after deep investigation of timeout root cause
 // 2026-03-31: Re-enabled binance_futures and bybit — too critical to leave disabled.
-// kucoin/weex/okx_web3 stay disabled (already in DEAD_BLOCKED_PLATFORMS).
+// 2026-03-31: Re-enabled weex (VPS scraper works, server back from 521) and okx_web3 (v5 API confirmed working).
+// kucoin stays disabled (copy trading APIs all 404, permanently dead).
 // dydx enrichment disabled separately in NO_ENRICHMENT_PLATFORMS.
-export const DISABLED_PLATFORMS = ['bitget_spot', 'kucoin', 'weex', 'okx_web3'] as const
+export const DISABLED_PLATFORMS = ['bitget_spot', 'kucoin'] as const
 export type DisabledPlatform = typeof DISABLED_PLATFORMS[number]
 
 export function isPlatformDisabled(platform: string): boolean {
