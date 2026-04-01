@@ -76,24 +76,32 @@ async function fetchCopinTraderStats(
   account: string
 ): Promise<CopinTraderStats | null> {
   const copinProtocol = COPIN_PROTOCOLS[protocol] || protocol.toUpperCase()
+  const accountLower = account.toLowerCase()
 
-  try {
-    // Search leaderboard for this specific account
-    const now = new Date()
-    const queryDate = new Date(now.getFullYear(), now.getMonth(), 1).getTime()
-    const url = `${COPIN_BASE}/leaderboards/page?protocol=${copinProtocol}&statisticType=MONTH&queryDate=${queryDate}&limit=1000&offset=0&sort_by=ranking&sort_type=asc`
+  // Try multiple statistic types — MONTH first (most common), then WEEK, then D60
+  // Different traders may only appear in certain time ranges
+  const now = new Date()
+  const queryDates: Array<{ type: string; date: number }> = [
+    { type: 'MONTH', date: new Date(now.getFullYear(), now.getMonth(), 1).getTime() },
+    { type: 'WEEK', date: now.getTime() },
+    { type: 'D60', date: now.getTime() },
+  ]
 
-    const data = await fetchJson<CopinLeaderboardResponse>(url, { timeoutMs: 15000 })
-    if (!data?.data) return null
+  for (const { type, date } of queryDates) {
+    try {
+      const url = `${COPIN_BASE}/leaderboards/page?protocol=${copinProtocol}&statisticType=${type}&queryDate=${date}&limit=1000&offset=0&sort_by=ranking&sort_type=asc`
 
-    // Find our trader in the leaderboard
-    const accountLower = account.toLowerCase()
-    const found = data.data.find((t) => t.account.toLowerCase() === accountLower)
-    return found || null
-  } catch (err) {
-    logger.warn(`[copin] Stats lookup failed for ${protocol}/${account}: ${err instanceof Error ? err.message : String(err)}`)
-    return null
+      const data = await fetchJson<CopinLeaderboardResponse>(url, { timeoutMs: 15000 })
+      if (!data?.data) continue
+
+      const found = data.data.find((t) => t.account.toLowerCase() === accountLower)
+      if (found) return found
+    } catch (err) {
+      logger.warn(`[copin] Stats lookup failed for ${protocol}/${account} (${type}): ${err instanceof Error ? err.message : String(err)}`)
+    }
   }
+
+  return null
 }
 
 /**

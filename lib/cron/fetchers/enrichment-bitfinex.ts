@@ -68,6 +68,29 @@ async function fetchRankings(key: string, timeframe: string): Promise<Map<string
   return map
 }
 
+// Additional timeframes for win_rate estimation
+let extendedCache: {
+  pluDiff1d: Map<string, BitfinexRankingEntry>
+  pluDiff3d: Map<string, BitfinexRankingEntry>
+  plr1w: Map<string, BitfinexRankingEntry>
+  fetchedAt: number
+} | null = null
+
+async function ensureExtendedCache(): Promise<typeof extendedCache> {
+  if (extendedCache && Date.now() - extendedCache.fetchedAt < CACHE_TTL_MS) {
+    return extendedCache
+  }
+
+  const [pluDiff1d, pluDiff3d, plr1w] = await Promise.all([
+    fetchRankings('plu_diff', '1d'),
+    fetchRankings('plu_diff', '3d'),
+    fetchRankings('plr', '1w'),
+  ])
+
+  extendedCache = { pluDiff1d, pluDiff3d, plr1w, fetchedAt: Date.now() }
+  return extendedCache
+}
+
 async function ensureRankingsCache(): Promise<BitfinexRankingsCache> {
   if (rankingsCache && Date.now() - rankingsCache.fetchedAt < CACHE_TTL_MS) {
     return rankingsCache
@@ -174,21 +197,52 @@ export async function fetchBitfinexStatsDetail(
       return null
     }
 
-    // Estimate MDD from equity and PnL
-    // If we have equity (inception profit) and period PnL, rough MDD estimate
+    // Estimate MDD from equity and PnL across multiple timeframes
     let maxDrawdown: number | null = null
-    if (equity && pnl1m && equity.value > 0) {
-      // If the trader lost money in a period relative to their equity
-      // This is a rough lower-bound estimate
-      const periodLoss = Math.min(0, pnl1m.value)
-      if (periodLoss < 0) {
-        maxDrawdown = Math.abs(periodLoss / equity.value) * 100
+    if (equity && equity.value > 0) {
+      // Check losses across all available timeframes for better MDD estimate
+      const periodLoss1m = pnl1m ? Math.min(0, pnl1m.value) : 0
+      const periodLoss7d = pnl7d ? Math.min(0, pnl7d.value) : 0
+      const worstLoss = Math.min(periodLoss1m, periodLoss7d)
+      if (worstLoss < 0) {
+        maxDrawdown = Math.min(Math.abs(worstLoss / equity.value) * 100, 100)
+        maxDrawdown = Math.round(maxDrawdown * 100) / 100
       }
+    }
+
+    // Estimate win_rate from multi-timeframe PnL data
+    // Fetch extended timeframes (1d, 3d) for more granular profit/loss signal
+    let profitableTradesPct: number | null = null
+    try {
+      const ext = await ensureExtendedCache()
+      if (ext) {
+        // Count profitable vs losing timeframes as a proxy for win rate
+        // Use PnL diff across 1d, 3d, 7d, 1M as samples
+        const pnl1d = ext.pluDiff1d.get(id)
+        const pnl3d = ext.pluDiff3d.get(id)
+        const plr7d = cache.plr7d.get(id)
+        const plr1m = cache.plr1m.get(id)
+
+        const samples: number[] = []
+        if (pnl1d) samples.push(pnl1d.value)
+        if (pnl3d) samples.push(pnl3d.value)
+        if (pnl7d) samples.push(pnl7d.value)
+        if (pnl1m) samples.push(pnl1m.value)
+        if (plr7d) samples.push(plr7d.value) // plr is ratio, sign indicates profit/loss
+        if (plr1m) samples.push(plr1m.value)
+
+        if (samples.length >= 2) {
+          const wins = samples.filter((v) => v > 0).length
+          profitableTradesPct = Math.round((wins / samples.length) * 10000) / 100
+        }
+      }
+    } catch {
+      // Extended cache fetch failed, proceed without win_rate
     }
 
     return {
       totalTrades: null,
-      profitableTradesPct: null, // Will be computed from equity curve by enhanceStatsWithDerivedMetrics
+      profitableTradesPct,
       avgHoldingTimeHours: null,
       avgProfit: null,
       avgLoss: null,
