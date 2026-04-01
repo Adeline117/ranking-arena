@@ -15,7 +15,7 @@ import {
 import { logger } from '@/lib/logger'
 import { recordFetchResult } from '@/lib/utils/pipeline-monitor'
 import { connectorRegistry, initializeConnectors } from '@/lib/connectors/registry'
-import { runConnectorBatch } from '@/lib/connectors/connector-db-adapter'
+import { runConnectorBatch } from '@/lib/pipeline/connector-db-adapter'
 import { SOURCE_TO_CONNECTOR_MAP } from '@/lib/constants/exchanges'
 import { env } from '@/lib/env'
 

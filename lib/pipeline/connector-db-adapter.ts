@@ -13,7 +13,7 @@
  */
 
 import type { SupabaseClient } from '@supabase/supabase-js'
-import type { PlatformConnector } from './types'
+import type { PlatformConnector } from '@/lib/connectors/types'
 import type { DiscoverResult } from '@/lib/types/leaderboard'
 import {
   type TraderData,

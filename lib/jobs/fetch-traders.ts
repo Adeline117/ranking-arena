@@ -79,7 +79,7 @@ export const fetchPlatformTask = task({
 
     // Dynamic imports to avoid loading heavy dependencies at module level
     const { runConnectorBatch } = await import(
-      '@/lib/connectors/connector-db-adapter'
+      '@/lib/pipeline/connector-db-adapter'
     )
     const { connectorRegistry, initializeConnectors } = await import(
       '@/lib/connectors/registry'

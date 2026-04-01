@@ -5,7 +5,7 @@
  * Supabase client and connector instances.
  */
 
-import { writeDiscoverResult, runConnectorBatch } from '../connector-db-adapter'
+import { writeDiscoverResult, runConnectorBatch } from '@/lib/pipeline/connector-db-adapter'
 import type { PlatformConnector } from '../types'
 import type { DiscoverResult } from '@/lib/types/leaderboard'
 
