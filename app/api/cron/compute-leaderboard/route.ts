@@ -715,7 +715,7 @@ async function computeSeason(
               }
 
               // Sortino ratio
-              if (existing.sortino_ratio == null && dailyReturns.length >= 7) {
+              if (existing.sortino_ratio == null && dailyReturns.length >= 3) {
                 const decimalReturns = dailyReturns.map(r => r / 100)
                 const negReturns = decimalReturns.filter(r => r < 0)
                 if (negReturns.length > 0) {
@@ -742,7 +742,7 @@ async function computeSeason(
               }
 
               // Profit factor from daily returns (gross wins / gross losses)
-              if (existing.profit_factor == null && dailyReturns.length >= 7) {
+              if (existing.profit_factor == null && dailyReturns.length >= 3) {
                 const grossWin = dailyReturns.filter(r => r > 0).reduce((s, r) => s + r, 0)
                 const grossLoss = Math.abs(dailyReturns.filter(r => r < 0).reduce((s, r) => s + r, 0))
                 if (grossLoss > 0) {
