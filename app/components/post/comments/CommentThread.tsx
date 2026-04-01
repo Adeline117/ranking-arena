@@ -5,7 +5,7 @@ import Image from 'next/image'
 import { tokens } from '@/lib/design-tokens'
 import { ThumbsUpIcon, ThumbsDownIcon } from '../../ui/icons'
 import { renderContentWithLinks, ARENA_PURPLE } from '@/lib/utils/content'
-import { formatTimeAgo } from '@/lib/utils/date'
+import { formatTimeAgo, type Locale } from '@/lib/utils/date'
 import { ProBadgeOverlay } from '../../ui/ProBadge'
 import { renderWithStickers, hasStickers } from '../../ui/StickerRenderer'
 import { commentStyles, REPLIES_PREVIEW_COUNT, type Comment } from './comment-types'
@@ -165,7 +165,7 @@ export function CommentThread({
             </Link>
             {showProBadge && <ProBadge />}
             <span style={{ fontSize: 11, color: tokens.colors.text.tertiary }}>
-              {formatTimeAgo(comment.created_at, language as import('@/lib/utils/date').Locale)}
+              {formatTimeAgo(comment.created_at, language as Locale)}
             </span>
           </div>
 
