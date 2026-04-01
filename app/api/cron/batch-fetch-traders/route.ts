@@ -19,11 +19,12 @@
  *   group=h  → gateio, btcc (every 6h)
  *   group=g1 → drift, jupiter_perps, aevo (every 6h)
  *   group=g2 → web3_bot, toobit, xt, crypto_com (every 6h)
- *   group=i  → etoro, dydx (every 6h)
+ *   group=i  → etoro (every 6h)
+ *   group=j  → dydx (every 6h, separated to avoid timeout with etoro)
+ *   group=k  → weex (every 6h, VPS scraper — re-enabled 2026-03-31)
  * Dead/blocked platforms:
- *   kucoin (copy trading discontinued 2026-03), weex (521 server down),
- *   okx_web3 (API broken since 2026-03-18), mux, synthetix, bitmart,
- *   whitebit, btse, pionex, vertex, okx_spot, paradex
+ *   kucoin (copy trading discontinued 2026-03, APIs 404), bingx_spot (no spot leaderboard),
+ *   mux, synthetix, bitmart, whitebit, btse, pionex, vertex, paradex
  * Mac Mini only (crontab feeds data directly):
  *   phemex (CloudFront blocks VPS), lbank (browser crashes on VPS), blofin (API needs auth)
  * Restored 2026-03-15:
@@ -68,8 +69,8 @@ const GROUPS: Record<string, string[]> = {
   d1: ['gains', 'htx_futures'],
   // Group E: Fast CEX+DEX (every 6h) — coinex URL fixed + VPS proxy
   e: ['bitfinex', 'coinex', 'binance_web3'],
-  // Group E2: DISABLED 2026-03-28 — okx_web3 API broken since 2026-03-18 (no data 10 days)
-  // e2: ['okx_web3'],
+  // Group E2: OKX Web3 — RE-ENABLED 2026-03-31, same v5 copytrading API as okx_futures (confirmed working)
+  e2: ['okx_web3'],
   // Group F: MEXC only (every 6h) — VPS scraper, slow
   f: ['mexc'],
   // Group F2: BingX (every 6h) — VPS scraper
@@ -81,10 +82,13 @@ const GROUPS: Record<string, string[]> = {
   // Group G2: DEX+CEX+scraper (every 6h)
   g2: ['web3_bot', 'toobit', 'xt'],
   // crypto_com: REMOVED — copy-trading feature shut down, /exchange/copy-trading redirects to /exchange/ — 2026-03-19
-  // Group I: Social trading + restored platforms (every 6h)
-  i: ['etoro', 'dydx'],
-  // Group K: DISABLED 2026-03-28 — kucoin (copy trading discontinued), weex (521 server down)
-  // k: ['kucoin', 'weex'],
+  // Group I: Social trading (every 6h)
+  i: ['etoro'],
+  // Group J: dYdX (every 6h) — separated from etoro to avoid timeout (Copin API paginates slowly)
+  j: ['dydx'],
+  // Group K: WEEX — RE-ENABLED 2026-03-31, VPS scraper works (server back from 521)
+  k: ['weex'],
+  // kucoin: PERMANENTLY DEAD — copy trading APIs 404 since 2026-03
   // Group L: New platforms Wave 2 (every 6h) — WOO X, Polymarket, Copin.io
   l: ['woox', 'polymarket', 'copin'],
 }

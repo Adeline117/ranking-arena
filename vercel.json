@@ -155,6 +155,18 @@
       "schedule": "24 2,8,14,20 * * *"
     },
     {
+      "path": "/api/cron/batch-fetch-traders?group=j",
+      "schedule": "32 2,8,14,20 * * *"
+    },
+    {
+      "path": "/api/cron/batch-fetch-traders?group=k",
+      "schedule": "38 3,9,15,21 * * *"
+    },
+    {
+      "path": "/api/cron/batch-fetch-traders?group=e2",
+      "schedule": "30 */6 * * *"
+    },
+    {
       "path": "/api/cron/batch-fetch-traders?group=l",
       "schedule": "42 3,9,15,21 * * *"
     },
