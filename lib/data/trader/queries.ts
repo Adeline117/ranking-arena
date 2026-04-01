@@ -339,7 +339,7 @@ export async function getTraderDetail(supabase: SupabaseClient, params: {
       // Stats detail (all periods) — enrichment tables use v1 naming
       safeQuery(() =>
         supabase.from('trader_stats_detail')
-          .select('sharpe_ratio, copiers_pnl, copiers_count, winning_positions, total_positions, avg_holding_time_hours, avg_profit, avg_loss, aum, period')
+          .select('sharpe_ratio, copiers_pnl, copiers_count, winning_positions, total_positions, avg_holding_time_hours, avg_profit, avg_loss, largest_win, largest_loss, aum, period')
           .in(ENRICH.source, sourceAliases).eq(ENRICH.source_trader_id, traderKey)
           .order('captured_at', { ascending: false }).limit(3)
       ),
@@ -397,7 +397,7 @@ export async function getTraderDetail(supabase: SupabaseClient, params: {
     sharpe_ratio: number | null; copiers_pnl: number | null; copiers_count: number | null
     winning_positions: number | null; total_positions: number | null
     avg_holding_time_hours: number | null; avg_profit: number | null; avg_loss: number | null
-    aum: number | null; period: string | null
+    largest_win: number | null; largest_loss: number | null; aum: number | null; period: string | null
   }
   const statsRows = (statsDetailResult || []) as StatsRow[]
   const statsPrimary = statsRows.find(s => s.period === '90D') || statsRows[0] || null
@@ -411,6 +411,8 @@ export async function getTraderDetail(supabase: SupabaseClient, params: {
     avgHoldingHours: statsPrimary.avg_holding_time_hours,
     avgProfit: statsPrimary.avg_profit,
     avgLoss: statsPrimary.avg_loss,
+    largestWin: statsPrimary.largest_win,
+    largestLoss: statsPrimary.largest_loss,
     aum: statsPrimary.aum,
   } : null
 
