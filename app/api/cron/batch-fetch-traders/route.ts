@@ -30,12 +30,12 @@ import { runConnectorBatch } from '@/lib/connectors/connector-db-adapter'
 import { connectorRegistry, initializeConnectors } from '@/lib/connectors/registry'
 import { SOURCE_TO_CONNECTOR_MAP } from '@/lib/constants/exchanges'
 import * as cache from '@/lib/cache'
+import { PipelineState } from '@/lib/services/pipeline-state'
 import { sendAlert } from '@/lib/alerts/send-alert'
 import { env } from '@/lib/env'
 import { validatePlatform } from '@/lib/config/platforms'
 
 const DEAD_COUNTER_PREFIX = 'dead:consecutive:'
-const DEAD_COUNTER_TTL = 7 * 24 * 60 * 60 // 7 days in seconds
 const DEAD_THRESHOLD = 3 // consecutive failures before alerting (reduced from 10 for ~12h detection)
 
 export const runtime = 'nodejs' // Required: edge runtime has 30s timeout, nodejs supports maxDuration
@@ -44,8 +44,10 @@ export const maxDuration = 300 // Vercel Pro: 300s max for serverless functions
 export const preferredRegion = 'hnd1' // Tokyo — avoids Binance/OKX/Bybit geo-blocking
 
 const GROUPS: Record<string, string[]> = {
-  // Group A: Fast direct APIs (every 3h) — Binance + OKX
-  a: ['binance_futures', 'binance_spot', 'okx_futures', 'okx_spot'],
+  // Group A1: Binance (every 3h) — split to fit 300s maxDuration
+  a1: ['binance_futures', 'binance_spot'],
+  // Group A2: OKX (every 3h)
+  a2: ['okx_futures', 'okx_spot'],
   // Group B: VPS scraper CEX (every 3h) — Bybit + Bitget
   b: ['bybit', 'bybit_spot', 'bitget_futures'],
   // Group C: DEX + fast CEX (every 4h) — Hyperliquid, GMX (subgraph), Bitunix
@@ -115,9 +117,9 @@ export async function GET(request: NextRequest) {
   // Safety timeout: ensure plog gets called before Vercel kills the function at 600s
   const safetyTimer = setTimeout(async () => {
     try {
-      await plog.error(new Error('Safety timeout: function approaching 800s limit'))
+      await plog.error(new Error('Safety timeout: function approaching 300s limit'))
     } catch { /* best effort */ }
-  }, 780_000) // Was 280s, now 580s for 800s maxDuration
+  }, 280_000) // 280s safety margin for 300s maxDuration
 
   // Per-platform timeout: configurable, default 700s for scraper groups buffer for logging/cleanup within 800s limit
   const PLATFORM_TIMEOUT_MS = parseInt(process.env.PLATFORM_FETCH_TIMEOUT_MS || '750000', 10)
@@ -148,8 +150,8 @@ export async function GET(request: NextRequest) {
     // Circuit breaker: skip platforms with recent consecutive failures
     try {
       const deadKey = `${DEAD_COUNTER_PREFIX}${platform}`
-      const countStr = await cache.get<number>(deadKey)
-      const recentFailures = typeof countStr === 'number' ? countStr : parseInt(String(countStr || '0'), 10)
+      const stored = await PipelineState.get<number>(deadKey)
+      const recentFailures = typeof stored === 'number' ? stored : 0
       if (recentFailures >= DEAD_THRESHOLD) {
         logger.warn(`[batch-fetch-traders-${group}] Skipping ${platform}: ${recentFailures} consecutive failures (threshold: ${DEAD_THRESHOLD})`)
         return { platform, status: 'error', durationMs: 0, error: `Skipped: ${recentFailures} consecutive failures (circuit breaker)` }
@@ -206,9 +208,7 @@ export async function GET(request: NextRequest) {
         // Track consecutive failure for dead platform detection
         try {
           const deadKey = `${DEAD_COUNTER_PREFIX}${platform}`
-          const rawCount = await cache.incr(deadKey)
-          const count = typeof rawCount === 'number' ? rawCount : parseInt(String(rawCount || '0'), 10)
-          if (count === 1) await cache.set(deadKey, count, { ttl: DEAD_COUNTER_TTL, skipMemory: true })
+          const count = await PipelineState.incr(deadKey)
           if (count >= DEAD_THRESHOLD) {
             sendAlert({ title: `Dead platform detected: ${platform}`, message: `${platform} has failed ${count} consecutive times. Consider adding to DEAD_BLOCKED_PLATFORMS.`, level: 'critical', details: { platform, consecutiveFailures: count, group } }).catch(err => logger.warn(`[batch-fetch-traders-${group}] Failed to send dead platform alert for ${platform}`, { error: err instanceof Error ? err.message : String(err) }))
           }
@@ -220,7 +220,7 @@ export async function GET(request: NextRequest) {
       }
 
       // Success: reset dead platform counter
-      cache.del(`${DEAD_COUNTER_PREFIX}${platform}`).catch(err => logger.warn(`[batch-fetch-traders-${group}] Cache del failed for ${platform}`, { error: err instanceof Error ? err.message : String(err) }))
+      PipelineState.del(`${DEAD_COUNTER_PREFIX}${platform}`).catch(err => logger.warn(`[batch-fetch-traders-${group}] State del failed for ${platform}`, { error: err instanceof Error ? err.message : String(err) }))
 
       return { platform, status: 'success', durationMs: Date.now() - start, totalSaved, via: 'connector' }
     } catch (err) {
@@ -238,9 +238,7 @@ export async function GET(request: NextRequest) {
       // Track consecutive failure for dead platform detection
       try {
         const deadKey = `${DEAD_COUNTER_PREFIX}${platform}`
-        const rawCount = await cache.incr(deadKey)
-        const count = typeof rawCount === 'number' ? rawCount : parseInt(String(rawCount || '0'), 10)
-        if (count === 1) await cache.set(deadKey, count, { ttl: DEAD_COUNTER_TTL, skipMemory: true })
+        const count = await PipelineState.incr(deadKey)
         if (count >= DEAD_THRESHOLD) {
           sendAlert({ title: `Dead platform detected: ${platform}`, message: `${platform} has failed ${count} consecutive times. Consider adding to DEAD_BLOCKED_PLATFORMS.\nLast error: ${errMsg.substring(0, 200)}`, level: 'critical', details: { platform, consecutiveFailures: count, group } }).catch(err => logger.warn(`[batch-fetch-traders-${group}] Failed to send dead platform alert for ${platform}`, { error: err instanceof Error ? err.message : String(err) }))
         }

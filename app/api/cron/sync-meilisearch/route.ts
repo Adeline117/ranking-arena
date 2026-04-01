@@ -10,6 +10,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getSupabaseAdmin } from '@/lib/supabase/server'
 import { createLogger } from '@/lib/utils/logger'
 import { PipelineLogger } from '@/lib/services/pipeline-logger'
+import { PipelineState } from '@/lib/services/pipeline-state'
 import { EXCHANGE_CONFIG } from '@/lib/constants/exchanges'
 import { env } from '@/lib/env'
 import { getSharedRedis } from '@/lib/cache/redis-client'
@@ -59,8 +60,8 @@ export async function GET(request: NextRequest) {
     // Determine last sync timestamp for incremental sync
     const LAST_SYNC_KEY = 'meilisearch:last_sync'
     let lastSync = '1970-01-01T00:00:00Z'
-    if (!isFull && redis) {
-      const stored = await redis.get<string>(LAST_SYNC_KEY)
+    if (!isFull) {
+      const stored = await PipelineState.get<string>(LAST_SYNC_KEY)
       if (stored) lastSync = stored
     }
     const syncStartTime = new Date().toISOString()
@@ -150,10 +151,8 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ ok: true, traders: 0, message: 'no changes', elapsed_ms: elapsed })
     }
 
-    // Update last sync timestamp in Redis
-    if (redis) {
-      await redis.set(LAST_SYNC_KEY, syncStartTime)
-    }
+    // Update last sync timestamp in DB (persistent, no TTL expiry risk)
+    await PipelineState.set(LAST_SYNC_KEY, syncStartTime)
 
     const elapsed = Date.now() - startTime
     logger.info(`Meilisearch synced: ${totalSynced} traders (${JSON.stringify(seasonCounts)}) in ${elapsed}ms${isFull ? ' [full]' : ' [incremental]'}`)

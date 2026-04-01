@@ -28,6 +28,7 @@ import { sanitizeDisplayName } from '@/lib/utils/profanity'
 import { generateIdenticonSvg } from '@/lib/utils/avatar'
 import { tieredGet, tieredSet, tieredDel } from '@/lib/cache/redis-layer'
 import { getSharedRedis } from '@/lib/cache/redis-client'
+import { PipelineState } from '@/lib/services/pipeline-state'
 import { env } from '@/lib/env'
 
 export const dynamic = 'force-dynamic'
@@ -905,18 +906,14 @@ async function computeSeason(
   // only produces ~8K, causing ratio=47% < 70% threshold on EVERY run. Fix: use the last scored count
   // from Redis (i.e., what the compute actually produced last time) as the baseline.
   const LAST_SCORED_KEY = `leaderboard:last-scored-count:${season}`
-  const LAST_SCORED_TTL = 6 * 3600 // 6 hours — survives multiple cron intervals + force-compute cycles
   let baselineCount = previousCount || 0
   try {
-    const redis = await getSharedRedis()
-    if (redis) {
-      const cached = await redis.get<number>(LAST_SCORED_KEY)
-      if (cached && typeof cached === 'number' && cached > 0) {
-        baselineCount = cached
-        logger.info(`[${season}] Using Redis baseline (last scored count): ${baselineCount} (table count: ${previousCount})`)
-      }
+    const stored = await PipelineState.get<number>(LAST_SCORED_KEY)
+    if (stored && typeof stored === 'number' && stored > 0) {
+      baselineCount = stored
+      logger.info(`[${season}] Using DB baseline (last scored count): ${baselineCount} (table count: ${previousCount})`)
     }
-  } catch { /* Redis miss — fall back to previousCount */ }
+  } catch { /* DB miss — fall back to previousCount */ }
 
   const MAX_CONSECUTIVE_SKIPS = 2
   const ratio = baselineCount ? scored.length / baselineCount : 1
@@ -928,17 +925,16 @@ async function computeSeason(
       let consecutiveSkips = 0
       const skipKey = `leaderboard:degradation-skips:${season}`
       try {
-        const cached = await tieredGet<number>(skipKey, 'cold')
-        consecutiveSkips = (cached?.data as number) || 0
-        consecutiveSkips++
-        await tieredSet(skipKey, consecutiveSkips, 'cold', ['leaderboard'])
-      } catch { /* Redis failure — proceed with skip */ }
+        const stored = await PipelineState.get<number>(skipKey)
+        consecutiveSkips = (typeof stored === 'number' ? stored : 0) + 1
+        await PipelineState.set(skipKey, consecutiveSkips)
+      } catch { /* DB failure — proceed with skip */ }
 
       if (consecutiveSkips >= MAX_CONSECUTIVE_SKIPS) {
         logger.warn(`${season}: degradation detected (${scored.length}/${baselineCount}, ${(ratio * 100).toFixed(1)}%) but FORCE-COMPUTING after ${consecutiveSkips} consecutive skips to prevent stale data`)
         // Reset counter and fall through to upsert
         try {
-          await tieredDel(skipKey)
+          await PipelineState.del(skipKey)
         } catch { /* non-critical */ }
       } else {
         logger.error(`${season}: computed ${scored.length} traders (baseline: ${baselineCount}, ratio: ${(ratio * 100).toFixed(1)}%). SKIPPING — below ${DEGRADATION_THRESHOLD * 100}% threshold (skip ${consecutiveSkips}/${MAX_CONSECUTIVE_SKIPS}).`)
@@ -950,7 +946,7 @@ async function computeSeason(
   }
   // Reset consecutive skip counter on successful computation
   try {
-    await tieredDel(`leaderboard:degradation-skips:${season}`)
+    await PipelineState.del(`leaderboard:degradation-skips:${season}`)
   } catch { /* non-critical */ }
 
   // Phase 2: Incremental upsert — only update changed rows to reduce write volume ~40%
@@ -1062,14 +1058,11 @@ async function computeSeason(
     logger.info(`${season}: cleaned ${staleIds.length} stale rows (>14d old)`)
   }
 
-  // Store the last scored count in Redis so the degradation check uses a realistic baseline
+  // Store the last scored count in DB so the degradation check uses a realistic baseline
   // instead of the inflated table count (which includes zombie rows from incremental upserts).
-  // TTL = 6h to survive multiple cron intervals + force-compute cycles.
+  // Persistent — no TTL expiry risk (was the root cause of the 6-day leaderboard freeze).
   try {
-    const redis = await getSharedRedis()
-    if (redis) {
-      await redis.set(LAST_SCORED_KEY, scored.length, { ex: LAST_SCORED_TTL })
-    }
+    await PipelineState.set(LAST_SCORED_KEY, scored.length)
   } catch { /* non-critical */ }
 
   const actualUpserted = scored.length - upsertErrors
