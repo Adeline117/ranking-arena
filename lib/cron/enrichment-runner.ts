@@ -222,6 +222,7 @@ interface EnrichmentConfig {
   fetchCurrentPositions?: (traderId: string) => Promise<(PortfolioPosition | PositionHistoryItem)[]>
   concurrency: number
   delayMs: number
+  limit?: number // Max traders to enrich per run (for slow VPS scrapers)
 }
 
 export const ENRICHMENT_PLATFORM_CONFIGS: Record<string, EnrichmentConfig> = {
@@ -242,7 +243,7 @@ export const ENRICHMENT_PLATFORM_CONFIGS: Record<string, EnrichmentConfig> = {
     platform: 'bybit',
     fetchEquityCurve: fetchBybitEquityCurve,
     fetchStatsDetail: fetchBybitStatsDetail,
-    concurrency: 1, delayMs: 3000, // VPS scraper is serial (Playwright), go slow
+    concurrency: 1, delayMs: 3000, limit: 6, // VPS scraper: ~18s/trader, max 6 in 120s timeout
   },
   okx_futures: {
     platform: 'okx_futures',

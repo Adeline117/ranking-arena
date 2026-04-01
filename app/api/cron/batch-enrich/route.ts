@@ -58,11 +58,11 @@ const PLATFORM_LIMITS: Record<string, { limit90: number; limit30: number; limit7
   // Re-enabled platforms
   dydx: { limit90: 200, limit30: 200, limit7: 200 },
   aevo: { limit90: 200, limit30: 200, limit7: 200 },
-  // VPS scrapers (slow)
-  bybit: { limit90: 100, limit30: 100, limit7: 100 },
-  weex: { limit90: 30, limit30: 30, limit7: 30 },
-  // kucoin: DEAD — copy trading discontinued, all APIs 404 (2026-03-23)
-  bingx_spot: { limit90: 20, limit30: 20, limit7: 20 },
+  // VPS scrapers (slow — ~18s/trader via Playwright, max 6 in 120s timeout)
+  bybit: { limit90: 6, limit30: 6, limit7: 6 },
+  // weex: DISABLED 2026-04-01 (75% timeout, removed from fetch groups)
+  // kucoin: DEAD 2026-03 (copy trading discontinued)
+  // bingx_spot: REMOVED (no enrichment API)
 }
 
 // 2026-03-20: Full coverage — batch-cached first (instant), then API-per-trader

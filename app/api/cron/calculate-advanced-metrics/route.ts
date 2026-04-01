@@ -243,10 +243,11 @@ export async function POST(request: NextRequest) {
     const duration = Date.now() - startTime
 
     const plog = await PipelineLogger.start('calculate-advanced-metrics')
-    if (errors > 0) {
+    const failureRate = processed > 0 ? errors / processed : 0
+    if (failureRate > 0.5 && errors >= 5) {
       await plog.error(new Error(`${errors} errors in ${processed} processed`), { updated, errors })
     } else {
-      await plog.success(updated, { processed })
+      await plog.success(updated, { processed, errors: errors > 0 ? errors : undefined })
     }
 
     return NextResponse.json({

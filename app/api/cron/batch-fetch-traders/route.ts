@@ -38,8 +38,9 @@ const DEAD_COUNTER_PREFIX = 'dead:consecutive:'
 const DEAD_COUNTER_TTL = 7 * 24 * 60 * 60 // 7 days in seconds
 const DEAD_THRESHOLD = 3 // consecutive failures before alerting (reduced from 10 for ~12h detection)
 
+export const runtime = 'nodejs' // Required: edge runtime has 30s timeout, nodejs supports maxDuration
 export const dynamic = 'force-dynamic'
-export const maxDuration = 800 // Vercel Pro max: 15 minutes (emergency fix 2026-04-01)
+export const maxDuration = 300 // Vercel Pro: 300s max for serverless functions
 export const preferredRegion = 'hnd1' // Tokyo — avoids Binance/OKX/Bybit geo-blocking
 
 const GROUPS: Record<string, string[]> = {
