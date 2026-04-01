@@ -14,7 +14,7 @@
 
 import { logger, fireAndForget } from '@/lib/logger'
 import { getSupabaseAdmin } from '@/lib/supabase/server'
-import { sendAlert } from '@/lib/alerts/send-alert'
+import { sendAlert, sendRateLimitedAlert } from '@/lib/alerts/send-alert'
 import { syncPipelineLog } from '@/lib/analytics/dual-write'
 import { pingHealthcheck } from '@/lib/utils/healthcheck'
 
@@ -71,6 +71,7 @@ export class PipelineLogger {
     'cleanup-stuck-logs',
     'cleanup-data',
     'cleanup-deleted-accounts',
+    'meta-monitor',
 
     // Snapshots & ranks
     'snapshot-positions',
@@ -200,6 +201,15 @@ export class PipelineLogger {
           }),
           'clickhouse-pipeline-log-partial-success'
         )
+        // Auto-alert on partial failure if there are failed items
+        if (failedItems.length > 0) {
+          sendRateLimitedAlert({
+            title: `Cron 部分失败: ${jobName}`,
+            message: `${failedItems.length} items failed: ${failedItems.slice(0, 5).join(', ')}`,
+            level: 'warning',
+            details: { job: jobName, failed_count: failedItems.length, duration_ms: durationMs },
+          }, `plog:partial:${jobName}`, 600_000).catch(() => {})
+        }
       },
       async error(err, meta) {
         const durationMs = Date.now() - startedAt
@@ -228,6 +238,13 @@ export class PipelineLogger {
           }),
           'clickhouse-pipeline-log-error'
         )
+        // Auto-alert on error (fire-and-forget, rate-limited per job)
+        sendRateLimitedAlert({
+          title: `Cron 失败: ${jobName}`,
+          message: errorMessage.slice(0, 500),
+          level: 'critical',
+          details: { job: jobName, duration_ms: durationMs },
+        }, `plog:error:${jobName}`, 600_000).catch(() => {})
       },
       async timeout(meta) {
         const durationMs = Date.now() - startedAt
@@ -254,6 +271,13 @@ export class PipelineLogger {
           }),
           'clickhouse-pipeline-log-timeout'
         )
+        // Auto-alert on timeout (fire-and-forget, rate-limited per job)
+        sendRateLimitedAlert({
+          title: `Cron 超时: ${jobName}`,
+          message: `Job ${jobName} timed out after ${Math.round(durationMs / 1000)}s`,
+          level: 'warning',
+          details: { job: jobName, duration_ms: durationMs },
+        }, `plog:timeout:${jobName}`, 600_000).catch(() => {})
       },
     }
   }
