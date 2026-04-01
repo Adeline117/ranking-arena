@@ -60,6 +60,56 @@ export async function verifyAdmin(
 }
 
 /**
+ * 验证管理员或版主身份
+ * 允许 role='moderator' 或 role='admin' 的用户
+ */
+export async function verifyModeratorOrAdmin(
+  supabase: SupabaseClient,
+  authHeader: string | null
+): Promise<{ id: string; email: string; role: 'admin' | 'moderator' } | null> {
+  if (!authHeader?.startsWith('Bearer ')) {
+    return null
+  }
+
+  const token = authHeader.slice(7)
+  const { data: { user }, error } = await supabase.auth.getUser(token)
+
+  if (error || !user) {
+    return null
+  }
+
+  // 方法1: 邮箱白名单 (admin only)
+  const isAdminByEmail = user.email && ADMIN_EMAILS.includes(user.email)
+
+  // 方法2: 数据库角色
+  const { data: profile } = await supabase
+    .from('user_profiles')
+    .select('role')
+    .eq('id', user.id)
+    .maybeSingle()
+
+  const isAdminByRole = profile?.role === 'admin'
+  const isModeratorByRole = profile?.role === 'moderator'
+
+  if (isAdminByEmail || isAdminByRole) {
+    return { id: user.id, email: user.email || '', role: 'admin' }
+  }
+
+  if (isModeratorByRole) {
+    return { id: user.id, email: user.email || '', role: 'moderator' }
+  }
+
+  return null
+}
+
+/**
+ * 检查用户是否是管理员或版主
+ */
+export function isModeratorOrAdmin(role: string | null | undefined): boolean {
+  return role === 'admin' || role === 'moderator'
+}
+
+/**
  * 获取管理员邮箱列表（用于调试）
  */
 export function getAdminEmails(): string[] {
