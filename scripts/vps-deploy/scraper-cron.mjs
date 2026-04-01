@@ -654,7 +654,7 @@ async function fetchPlatform(platformKey) {
         const v1Rows = buildV1Rows(normalized, config.source, window)
 
         const [v2Result, v1Result] = await Promise.all([
-          supabaseUpsert('trader_snapshots_v2', v2Rows, 'platform,trader_key,window').catch(e => ({ error: e.message })),
+          supabaseUpsert('trader_snapshots_v2', v2Rows, 'platform,market_type,trader_key,window,as_of_ts').catch(e => ({ error: e.message })),
           supabaseUpsert('trader_snapshots', v1Rows, 'source,source_trader_id,season_id').catch(e => ({ error: e.message })),
         ])
 
@@ -709,7 +709,7 @@ async function fetchPlatform(platformKey) {
         const v1Rows = buildV1Rows(normalized, config.source, window)
 
         const [v2Result, v1Result] = await Promise.all([
-          supabaseUpsert('trader_snapshots_v2', v2Rows, 'platform,trader_key,window').catch(e => ({ error: e.message })),
+          supabaseUpsert('trader_snapshots_v2', v2Rows, 'platform,market_type,trader_key,window,as_of_ts').catch(e => ({ error: e.message })),
           supabaseUpsert('trader_snapshots', v1Rows, 'source,source_trader_id,season_id').catch(e => ({ error: e.message })),
         ])
 
@@ -771,7 +771,7 @@ async function fetchPlatform(platformKey) {
         const v1Rows = buildV1Rows(normalized, config.source, window)
 
         const [v2Result, v1Result] = await Promise.all([
-          supabaseUpsert('trader_snapshots_v2', v2Rows, 'platform,trader_key,window').catch(e => ({ error: e.message })),
+          supabaseUpsert('trader_snapshots_v2', v2Rows, 'platform,market_type,trader_key,window,as_of_ts').catch(e => ({ error: e.message })),
           supabaseUpsert('trader_snapshots', v1Rows, 'source,source_trader_id,season_id').catch(e => ({ error: e.message })),
         ])
 
@@ -853,7 +853,7 @@ async function fetchPlatform(platformKey) {
       const v1Rows = buildV1Rows(normalized, config.source, window)
 
       const [v2Result, v1Result] = await Promise.all([
-        supabaseUpsert('trader_snapshots_v2', v2Rows, 'platform,trader_key,window').catch(e => ({ error: e.message })),
+        supabaseUpsert('trader_snapshots_v2', v2Rows, 'platform,market_type,trader_key,window,as_of_ts').catch(e => ({ error: e.message })),
         supabaseUpsert('trader_snapshots', v1Rows, 'source,source_trader_id,season_id').catch(e => ({ error: e.message })),
       ])
 

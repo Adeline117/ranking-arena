@@ -327,7 +327,7 @@ async function saveTraders(traders) {
   }))
   const { error: v2Err } = await supabase
     .from('trader_snapshots_v2')
-    .upsert(snapshotsV2, { onConflict: 'platform,market_type,trader_key,window' })
+    .upsert(snapshotsV2, { onConflict: 'platform,market_type,trader_key,window,as_of_ts' })
   if (v2Err && !v2Err.message.includes('duplicate')) {
     console.error('trader_snapshots_v2 error:', v2Err.message)
   }

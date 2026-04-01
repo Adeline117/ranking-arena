@@ -227,16 +227,46 @@ export class JobProcessor {
     }
 
     const now = new Date().toISOString()
+    const windowUpper = job.window?.toUpperCase() || '90D'
 
-    // Upsert snapshot
-    const { error } = await this.supabase
+    // Upsert to trader_snapshots_v2 (PRIMARY — read by compute-leaderboard)
+    const { error: v2Error } = await this.supabase
+      .from('trader_snapshots_v2')
+      .upsert({
+        platform: job.platform,
+        market_type: job.market_type,
+        trader_key: job.trader_key,
+        window: windowUpper,
+        as_of_ts: now,
+        roi_pct: result.metrics.roi ?? null,
+        pnl_usd: result.metrics.pnl ?? null,
+        win_rate: result.metrics.win_rate ?? null,
+        max_drawdown: result.metrics.max_drawdown ?? null,
+        arena_score: result.metrics.arena_score ?? null,
+        sharpe_ratio: result.metrics.sharpe_ratio ?? null,
+        trades_count: result.metrics.trades_count ?? null,
+        followers: null,
+        copiers: null,
+        metrics: result.metrics,
+        quality_flags: result.quality_flags,
+        updated_at: now,
+      }, {
+        onConflict: 'platform,market_type,trader_key,window,as_of_ts',
+      })
+
+    if (v2Error && v2Error.code !== '23505') {
+      throw new Error(`Upsert trader_snapshots_v2 failed: ${v2Error.message}`)
+    }
+
+    // Also upsert to trader_snapshots (v1) for legacy compatibility
+    const { error: v1Error } = await this.supabase
       .from('trader_snapshots')
       .upsert({
         source: job.platform,
         source_trader_id: job.trader_key,
         market_type: job.market_type,
         window: job.window,
-        season_id: job.window?.toUpperCase() || '90D',
+        season_id: windowUpper,
         as_of_ts: now,
         roi: result.metrics.roi,
         pnl: result.metrics.pnl,
@@ -260,13 +290,8 @@ export class JobProcessor {
         onConflict: 'source,market_type,source_trader_id,window,as_of_ts',
       })
 
-    if (error) {
-      // If dedup conflict, just update
-      if (error.code === '23505') {
-        jobLogger.info(`[Snapshot] Duplicate snapshot, skipping`)
-        return
-      }
-      throw new Error(`Upsert snapshot failed: ${error.message}`)
+    if (v1Error && v1Error.code !== '23505') {
+      jobLogger.warn(`[Snapshot] v1 upsert failed (non-critical): ${v1Error.message}`)
     }
 
     jobLogger.info(`[Snapshot] Updated ${job.platform}/${job.trader_key}/${window}: score=${result.metrics.arena_score}`)

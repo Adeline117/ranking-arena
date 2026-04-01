@@ -198,6 +198,7 @@ async function upsertBatch(traders) {
     }))
     await supabase.from('trader_sources').upsert(sources, { onConflict: 'source,source_trader_id' })
 
+    // v1 snapshots (legacy)
     const snapshots = batch.map(t => ({
       source: t.source, source_trader_id: t.source_trader_id,
       season_id: t.season_id, rank: t.rank, roi: t.roi, pnl: t.pnl,
@@ -205,7 +206,30 @@ async function upsertBatch(traders) {
       arena_score: t.arena_score, captured_at: t.captured_at,
     }))
     const { error } = await supabase.from('trader_snapshots').upsert(snapshots, { onConflict: 'source,source_trader_id,season_id' })
-    if (error) console.error(`  Upsert error: ${error.message}`)
+    if (error) console.error(`  Upsert v1 error: ${error.message}`)
+
+    // v2 snapshots (PRIMARY — read by compute-leaderboard)
+    const snapshotsV2 = batch.map(t => ({
+      platform: t.source,
+      market_type: 'futures',
+      trader_key: t.source_trader_id,
+      window: t.season_id,
+      as_of_ts: t.captured_at,
+      roi_pct: t.roi ?? null,
+      pnl_usd: t.pnl ?? null,
+      win_rate: t.win_rate ?? null,
+      max_drawdown: t.max_drawdown ?? null,
+      arena_score: t.arena_score ?? null,
+      metrics: {
+        roi: t.roi ?? null, pnl: t.pnl ?? null,
+        win_rate: t.win_rate ?? null, max_drawdown: t.max_drawdown ?? null,
+        followers: t.followers ?? null, arena_score: t.arena_score ?? null,
+      },
+      quality_flags: { is_suspicious: false, suspicion_reasons: [], data_completeness: 0.6 },
+      updated_at: new Date().toISOString(),
+    }))
+    const { error: v2Err } = await supabase.from('trader_snapshots_v2').upsert(snapshotsV2, { onConflict: 'platform,market_type,trader_key,window,as_of_ts' })
+    if (v2Err && !v2Err.message.includes('duplicate')) console.error(`  Upsert v2 error: ${v2Err.message}`)
     else saved += batch.length
   }
   return saved
