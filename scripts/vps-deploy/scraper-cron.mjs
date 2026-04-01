@@ -211,6 +211,47 @@ const PLATFORMS = {
       }
     },
   },
+
+  dydx: {
+    source: 'dydx',
+    market_type: 'perp',
+    // dYdX uses Copin API — no scraper needed, direct HTTP from VPS
+    // Copin has a 2-day processing delay so queryDate should be 3 days ago
+    directApi: null, // set dynamically per period
+    endpoint: null, // no scraper endpoint
+    periods: {
+      'WEEK': '7D',
+      'MONTH': '30D',
+    },
+    pageSize: 500,
+    extractList: (data) => {
+      return data?.data || []
+    },
+    normalize: (raw) => {
+      const totalWin = Number(raw.totalWin) || 0
+      const totalLose = Number(raw.totalLose) || 0
+      const totalTrade = Number(raw.totalTrade) || (totalWin + totalLose)
+      const winRate = totalTrade > 0 ? (totalWin / totalTrade) * 100 : null
+      const pnl = num(raw.totalPnl ?? raw.totalRealisedPnl ?? raw.pnl)
+      const volume = num(raw.totalVolume)
+      // Estimate ROI from PnL/Volume with assumed leverage
+      const roi = pnl != null && volume != null && volume > 0
+        ? (pnl / (volume / 5)) * 100
+        : null
+      return {
+        trader_key: String(raw.account || raw.address || ''),
+        display_name: null,
+        roi,
+        pnl,
+        win_rate: winRate,
+        max_drawdown: null,
+        sharpe_ratio: null,
+        trades_count: totalTrade > 0 ? totalTrade : null,
+        followers: null,
+        platform_rank: raw.ranking != null ? Number(raw.ranking) : null,
+      }
+    },
+  },
 }
 
 // ============================================
@@ -424,6 +465,62 @@ async function fetchPlatform(platformKey) {
     } catch (err) {
       log('  BATCH ERROR: ' + err.message)
       results['batch'] = { error: err.message }
+    }
+
+    return { platform: platformKey, totalTraders, results }
+  }
+
+  // dYdX: use Copin API directly (no scraper needed)
+  if (platformKey === 'dydx') {
+    for (const [statisticType, window] of Object.entries(config.periods)) {
+      log('  Fetching ' + window + ' via Copin API (type=' + statisticType + ')...')
+      try {
+        // Copin has a 2-day processing delay — use queryDate = 3 days ago
+        const queryDate = Date.now() - 3 * 24 * 60 * 60 * 1000
+        const allTraders = []
+        let offset = 0
+        const pageLimit = 500
+        while (allTraders.length < 2000) {
+          const copinUrl = `https://api.copin.io/leaderboards/page?protocol=DYDX&statisticType=${statisticType}&queryDate=${queryDate}&limit=${pageLimit}&offset=${offset}&sort_by=ranking&sort_type=asc`
+          const controller = new AbortController()
+          const timeout = setTimeout(() => controller.abort(), 30000)
+          const res = await fetch(copinUrl, { signal: controller.signal })
+          clearTimeout(timeout)
+          if (!res.ok) { log('  Copin API returned ' + res.status); break }
+          const json = await res.json()
+          const list = json?.data || []
+          if (list.length === 0) break
+          allTraders.push(...list)
+          const total = Number(json?.meta?.total) || 0
+          offset += list.length
+          if (offset >= total || list.length < pageLimit) break
+          await new Promise(r => setTimeout(r, 300))
+        }
+
+        if (!allTraders.length) {
+          log('  ' + window + ': 0 traders from Copin')
+          results[window] = { count: 0 }
+          continue
+        }
+
+        const normalized = allTraders.map(config.normalize)
+        const v2Rows = buildSnapshotRows(normalized, config.source, config.market_type, window)
+        const v1Rows = buildV1Rows(normalized, config.source, window)
+
+        const [v2Result, v1Result] = await Promise.all([
+          supabaseUpsert('trader_snapshots_v2', v2Rows, 'platform,trader_key,window').catch(e => ({ error: e.message })),
+          supabaseUpsert('trader_snapshots', v1Rows, 'source,source_trader_id,season_id').catch(e => ({ error: e.message })),
+        ])
+
+        log('  ' + window + ': ' + normalized.length + ' traders -> v2: ' + (v2Result.count ?? v2Result.error) + ', v1: ' + (v1Result.count ?? v1Result.error))
+        results[window] = { count: normalized.length }
+        totalTraders += normalized.length
+      } catch (err) {
+        log('  ' + window + ': ERROR - ' + err.message)
+        results[window] = { error: err.message }
+      }
+
+      await new Promise(r => setTimeout(r, 1000))
     }
 
     return { platform: platformKey, totalTraders, results }
