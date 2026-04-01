@@ -145,13 +145,13 @@ export class MexcFuturesConnector extends BaseConnector {
     const metrics: SnapshotMetrics = {
       roi: this.num(info.yield), pnl: this.num(info.pnl),
       win_rate: this.num(info.winRate), max_drawdown: this.num(info.maxRetrace),
-      sharpe_ratio: null, sortino_ratio: null, trades_count: null,
+      sharpe_ratio: null, sortino_ratio: null, trades_count: this.num(info.openTimes),
       followers: this.num(info.followerCount), copiers: this.num(info.copyCount),
       aum: this.num(info.aum), platform_rank: null,
       arena_score: null, return_score: null, drawdown_score: null, stability_score: null,
     }
     const quality_flags: QualityFlags = {
-      missing_fields: ['sharpe_ratio', 'sortino_ratio', 'trades_count'],
+      missing_fields: ['sharpe_ratio', 'sortino_ratio'],
       non_standard_fields: {}, window_native: true, notes: [],
     }
     return { metrics, quality_flags, fetched_at: new Date().toISOString() }
@@ -178,6 +178,19 @@ export class MexcFuturesConnector extends BaseConnector {
     const rawMdd = this.num(raw.maxRetrace ?? raw.maxDrawdown7 ?? raw.mdd ?? raw.maxDrawdown)
     const maxDrawdown = rawMdd != null ? Math.abs(rawMdd <= 1 ? rawMdd * 100 : rawMdd) : null
 
+    // Compute Sharpe ratio from curveValues (daily ROI equity curve points)
+    const curveValues = raw.curveValues as number[] | undefined
+    let sharpe: number | null = null
+    if (Array.isArray(curveValues) && curveValues.length >= 5) {
+      const returns: number[] = []
+      for (let i = 1; i < curveValues.length; i++) {
+        returns.push((curveValues[i] as number) - (curveValues[i - 1] as number))
+      }
+      const mean = returns.reduce((a, b) => a + b, 0) / returns.length
+      const std = Math.sqrt(returns.reduce((a, r) => a + (r - mean) ** 2, 0) / returns.length)
+      if (std > 0) sharpe = Math.round((mean / std) * Math.sqrt(365) * 100) / 100
+    }
+
     return {
       trader_key: raw.uid ?? raw.traderId ?? raw.id ?? raw.userId ?? null,
       display_name: raw.nickname ?? raw.nickName ?? raw.name ?? raw.displayName ?? raw.traderName ?? null,
@@ -190,7 +203,7 @@ export class MexcFuturesConnector extends BaseConnector {
       followers: this.num(raw.followers ?? raw.followerCount ?? raw.copierCount),
       copiers: this.num(raw.historyFollowers),
       aum: this.num(raw.followCopyFunds ?? raw.equity),
-      sharpe_ratio: null,
+      sharpe_ratio: sharpe,
       platform_rank: this.num(raw.order),
       // Extra: equity curve data from leaderboard API
       _curve_time: raw.curveTime,
