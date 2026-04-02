@@ -208,6 +208,25 @@ export default function RootLayout({
         style={{ fontFamily: 'var(--font-inter), "PingFang SC", "Microsoft YaHei", "Noto Sans CJK SC", system-ui, sans-serif' }}
         suppressHydrationWarning
       >
+        {/* Suppress Cloudflare/third-party script DOM injection errors.
+            Cloudflare CDN injects beacon scripts at </body> which React's reconciler
+            then tries to manage, causing insertBefore/removeChild crashes.
+            This script patches those methods to silently ignore the specific case
+            where the node is not a child of the parent (third-party injection). */}
+        <script dangerouslySetInnerHTML={{ __html: `
+          (function(){
+            var origInsert = Node.prototype.insertBefore;
+            Node.prototype.insertBefore = function(n, r) {
+              if (r && r.parentNode !== this) return n;
+              return origInsert.call(this, n, r);
+            };
+            var origRemove = Node.prototype.removeChild;
+            Node.prototype.removeChild = function(c) {
+              if (c.parentNode !== this) return c;
+              return origRemove.call(this, c);
+            };
+          })();
+        `}} />
         {/* Load non-critical CSS early — outside Providers to avoid waiting for hydration */}
         <AsyncStylesheets />
         <Providers>
