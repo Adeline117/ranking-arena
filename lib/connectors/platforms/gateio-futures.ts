@@ -187,12 +187,15 @@ export class GateioFuturesConnector extends BaseConnector {
         }
       }
 
+      const rawSharpe = this.num((info as Record<string, unknown>).sharp_ratio ?? (info as Record<string, unknown>).sharpRatio ?? (info as Record<string, unknown>).sharpe_ratio)
+      const sharpe_ratio = rawSharpe != null ? Math.max(-20, Math.min(20, Math.round(rawSharpe * 100) / 100)) : null
+
       const metrics: SnapshotMetrics = {
         roi: this.num(info.roi),
         pnl: this.num(info.pnl),
         win_rate: this.num(info.winRate),
         max_drawdown: this.num(info.maxDrawdown),
-        sharpe_ratio: null,
+        sharpe_ratio,
         sortino_ratio: null,
         trades_count: null,
         followers: this.num(info.followers),
@@ -205,8 +208,11 @@ export class GateioFuturesConnector extends BaseConnector {
         stability_score: null,
       }
 
+      const missingFields = ['sortino_ratio', 'trades_count', 'aum']
+      if (sharpe_ratio == null) missingFields.unshift('sharpe_ratio')
+
       const quality_flags: QualityFlags = {
-        missing_fields: ['sharpe_ratio', 'sortino_ratio', 'trades_count', 'aum'],
+        missing_fields: missingFields,
         non_standard_fields: {},
         window_native: true,
         notes: ['Gate.io strategy bot platform'],
@@ -258,7 +264,10 @@ export class GateioFuturesConnector extends BaseConnector {
       followers: this.num(raw.curr_follow_num ?? raw.follower_num ?? raw.followers ?? raw.followerCount),
       copiers: this.num(raw.copier_num ?? raw.copierCount),
       aum: null,
-      sharpe_ratio: null,
+      sharpe_ratio: (() => {
+        const s = this.num(raw.sharp_ratio ?? raw.sharpRatio ?? raw.sharpe_ratio)
+        return s != null ? Math.max(-20, Math.min(20, Math.round(s * 100) / 100)) : null
+      })(),
       platform_rank: null,
     }
   }
