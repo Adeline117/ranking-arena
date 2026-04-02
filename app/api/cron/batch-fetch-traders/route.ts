@@ -123,9 +123,10 @@ export async function GET(request: NextRequest) {
     } catch { /* best effort */ }
   }, 280_000) // 280s safety margin for 300s maxDuration
 
-  // Per-platform timeout: must fit within 300s maxDuration with room for N platforms + logging
-  // Formula: (maxDuration - safetyMargin) / maxPlatformsPerGroup ≈ (300-20) / 4 ≈ 70s
-  const PLATFORM_TIMEOUT_MS = parseInt(process.env.PLATFORM_FETCH_TIMEOUT_MS || '70000', 10)
+  // Per-platform timeout: dynamic based on group size to maximize time per platform
+  // Formula: (maxDuration - safetyMargin) / platformCount, clamped to 60-140s
+  const dynamicTimeout = Math.min(140000, Math.max(60000, Math.floor((300000 - 20000) / platforms.length)))
+  const PLATFORM_TIMEOUT_MS = parseInt(process.env.PLATFORM_FETCH_TIMEOUT_MS || String(dynamicTimeout), 10)
 
   // Initialize all connectors (once per cold start)
   if (!connectorsInitialized) {
