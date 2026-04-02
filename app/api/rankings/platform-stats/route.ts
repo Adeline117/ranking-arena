@@ -53,19 +53,34 @@ export async function GET() {
       async () => {
         const supabase = getSupabaseAdmin()
 
-        const { data, error } = await supabase
-          .from('leaderboard_ranks')
-          .select('source, arena_score, roi, win_rate, max_drawdown')
-          .eq('season_id', '90D')
-          .not('arena_score', 'is', null)
-          .gt('arena_score', 0)
-          .or('is_outlier.is.null,is_outlier.eq.false')
+        // Fetch ALL rows — PostgREST defaults to 1000, but we have 19K+ traders.
+        // Paginate in chunks of 5000 to get complete data.
+        const allRows: LeaderboardRow[] = []
+        const PAGE_SIZE = 5000
+        let offset = 0
+        let hasMore = true
 
-        if (error) {
-          throw new Error(error.message)
+        while (hasMore) {
+          const { data: page, error: pageError } = await supabase
+            .from('leaderboard_ranks')
+            .select('source, arena_score, roi, win_rate, max_drawdown')
+            .eq('season_id', '90D')
+            .not('arena_score', 'is', null)
+            .gt('arena_score', 0)
+            .or('is_outlier.is.null,is_outlier.eq.false')
+            .range(offset, offset + PAGE_SIZE - 1)
+
+          if (pageError) throw new Error(pageError.message)
+          if (!page || page.length === 0) break
+
+          allRows.push(...(page as LeaderboardRow[]))
+          offset += PAGE_SIZE
+          hasMore = page.length === PAGE_SIZE
         }
 
-        if (!data || data.length === 0) return []
+        if (allRows.length === 0) return []
+
+        const data = allRows
 
         // Aggregate per-platform stats in a single pass over 30K+ rows
         const stats = new Map<string, PlatformAccumulator>()
