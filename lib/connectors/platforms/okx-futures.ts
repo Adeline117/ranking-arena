@@ -179,7 +179,19 @@ export class OkxFuturesConnector extends BaseConnector {
       followers: this.num(raw.accCopyTraderNum ?? raw.copyTraderNum),
       copiers: this.num(raw.copyTraderNum),
       aum: this.num(raw.aum),
-      sharpe_ratio: raw.sharpeRatio != null ? Number(raw.sharpeRatio) : null,
+      sharpe_ratio: raw.sharpeRatio != null ? Number(raw.sharpeRatio) : (() => {
+        // Fallback: compute Sharpe from pnlRatios (daily ROI curve from leaderboard API)
+        const pnlRatios = raw.pnlRatios as Array<{ beginTs?: unknown; pnlRatio?: unknown }> | undefined
+        if (!Array.isArray(pnlRatios) || pnlRatios.length < 5) return null
+        const roiValues = pnlRatios.map(p => Number(p.pnlRatio)).filter(n => !isNaN(n))
+        if (roiValues.length < 5) return null
+        const returns = roiValues.slice(1).map((v, i) => v - roiValues[i])
+        const mean = returns.reduce((a, b) => a + b, 0) / returns.length
+        const std = Math.sqrt(returns.reduce((a, r) => a + (r - mean) ** 2, 0) / returns.length)
+        if (std <= 0) return null
+        const sharpe = Math.round((mean / std) * Math.sqrt(365) * 100) / 100
+        return Math.max(-20, Math.min(20, sharpe))
+      })(),
       platform_rank: null,
     }
   }
