@@ -142,7 +142,7 @@ export default function WelcomeModal() {
             justifyContent: 'center',
           }}
         >
-          \u2715
+          {'\u2715'}
         </button>
 
         {/* Step content */}
@@ -187,7 +187,7 @@ export default function WelcomeModal() {
                 minHeight: 44,
               }}
             >
-              \u2190 Back
+              {'\u2190'} Back
             </button>
           )}
           <button
