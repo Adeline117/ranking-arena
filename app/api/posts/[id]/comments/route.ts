@@ -52,6 +52,13 @@ export async function GET(request: NextRequest, context: RouteContext) {
     if (rateLimitResponse) return rateLimitResponse
 
     const { id } = await context.params
+
+    // Validate UUID format to prevent PostgreSQL cast errors
+    const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+    if (!UUID_RE.test(id)) {
+      return successWithPagination({ comments: [] }, { limit: 50, offset: 0, has_more: false })
+    }
+
     const { searchParams } = new URL(request.url)
     
     const limit = validateNumber(searchParams.get('limit'), { min: 1, max: 100 }) ?? 50
