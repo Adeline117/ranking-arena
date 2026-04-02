@@ -169,6 +169,19 @@ const PLATFORMS = {
       const winRate = rawWr != null ? (rawWr <= 1 ? rawWr * 100 : rawWr) : null
       const rawMdd = num(raw.maxRetrace ?? raw.maxDrawdown7 ?? raw.mdd ?? raw.maxDrawdown)
       const maxDrawdown = rawMdd != null ? Math.abs(rawMdd <= 1 ? rawMdd * 100 : rawMdd) : null
+      // Compute Sharpe from curveValues (daily ROI equity curve)
+      let sharpe = null
+      const cv = Array.isArray(raw.curveValues) ? raw.curveValues : null
+      if (cv && cv.length >= 5) {
+        const rets = []
+        for (let i = 1; i < cv.length; i++) rets.push(cv[i] - cv[i - 1])
+        const mean = rets.reduce((a, b) => a + b, 0) / rets.length
+        const std = Math.sqrt(rets.reduce((a, b) => a + (b - mean) ** 2, 0) / rets.length)
+        if (std > 0) {
+          const raw_sharpe = Math.round((mean / std) * Math.sqrt(365) * 100) / 100
+          sharpe = Math.max(-20, Math.min(20, raw_sharpe))
+        }
+      }
       return {
         trader_key: String(raw.uid ?? raw.traderId ?? raw.id ?? raw.userId ?? ''),
         display_name: raw.nickname ?? raw.nickName ?? raw.name ?? null,
@@ -177,7 +190,7 @@ const PLATFORMS = {
         pnl: num(raw.pnl ?? raw.totalPnl ?? raw.profit),
         win_rate: winRate,
         max_drawdown: maxDrawdown,
-        sharpe_ratio: null,
+        sharpe_ratio: sharpe,
         followers: num(raw.followers ?? raw.followerCount ?? raw.copierCount),
         aum: num(raw.equity),
         platform_rank: num(raw.order),
