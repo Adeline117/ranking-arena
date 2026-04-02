@@ -19,7 +19,7 @@ import { env } from '@/lib/env'
 const logger = createLogger('batch-enrich')
 
 export const dynamic = 'force-dynamic'
-export const maxDuration = 800 // Vercel Pro max (emergency fix 2026-04-01)
+export const maxDuration = 300 // Vercel Pro max (800 was invalid — silently capped at 300s anyway)
 
 // Platform configs with limits per period
 // EMERGENCY REDUCTION (2026-03-13 Round 2): batch-enrich STILL hitting 600s timeout
@@ -126,11 +126,11 @@ export async function GET(request: NextRequest) {
   const results: BatchResult[] = []
   const plog = await PipelineLogger.start(`batch-enrich-${periodParam}`, { period: periodParam, enrichAll, platforms })
 
-  // Safety timeout: ensure plog gets called before Vercel kills the function at 900s
-  const SAFETY_TIMEOUT_MS = 880_000 // 880s for 900s limit (20s buffer)
+  // Safety timeout: ensure plog gets called before Vercel kills the function at 300s
+  const SAFETY_TIMEOUT_MS = 280_000 // 280s for 300s limit (20s buffer)
   const safetyTimer = setTimeout(async () => {
     try {
-      await plog.error(new Error('Safety timeout: function approaching 600s limit'), { results })
+      await plog.error(new Error('Safety timeout: function approaching 300s limit'), { results })
     } catch { /* best effort */ }
   }, SAFETY_TIMEOUT_MS)
 
@@ -142,18 +142,18 @@ export async function GET(request: NextRequest) {
   //      CEX: 30s (single) / 20s (multi) - enough for 1-2 API calls
   //      Onchain: 60s (single) / 40s (multi) - GraphQL/RPC needs slightly more time
   const ONCHAIN_PLATFORMS = new Set(['gmx', 'jupiter_perps', 'hyperliquid', 'drift', 'aevo', 'gains'])
-  const ENRICH_TIMEOUT_MS = 180_000  // 180s (doubled from 90s) - 2026-04-01 emergency fix
-  const ONCHAIN_TIMEOUT_MS = 300_000  // 300s (increased from 180s) - prevents onchain platform timeouts
+  const ENRICH_TIMEOUT_MS = 90_000   // 90s per platform — must fit many platforms in 300s total
+  const ONCHAIN_TIMEOUT_MS = 120_000  // 120s for onchain — GraphQL/RPC slightly slower
 
   const functionStart = Date.now()
-  // Budget per period: divide 870s (leaving 30s buffer from 900s total) by number of periods
-  const PER_PERIOD_BUDGET_MS = Math.floor(870_000 / periodsToRun.length)
+  // Budget per period: divide 270s (leaving 30s buffer from 300s total) by number of periods
+  const PER_PERIOD_BUDGET_MS = Math.floor(270_000 / periodsToRun.length)
 
   // Run each period sequentially (when period=all, this runs 90D → 30D → 7D)
   for (const period of periodsToRun) {
-    // Bail early if we're running low on time (leave 50s for cleanup/logging)
+    // Bail early if we're running low on time (leave 30s for cleanup/logging)
     const elapsed = Date.now() - functionStart
-    if (elapsed > 850_000) {
+    if (elapsed > 270_000) {
       results.push({ platform: '*', period, status: 'error', durationMs: 0, error: `Skipped: ${Math.round(elapsed / 1000)}s elapsed, <50s remaining` })
       continue
     }
