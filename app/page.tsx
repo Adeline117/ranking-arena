@@ -84,9 +84,10 @@ export default async function Page() {
             Hidden via CSS (display:none) once the interactive HomePage mounts.
             Spacers match Phase 2 element heights to minimize CLS on transition. */}
         <div id="ssr-homepage-shell" style={{ maxWidth: 1400, margin: '0 auto', padding: '8px 16px' }}>
-          {/* Spacers for Phase 2 elements not in SSR: TopNav(56) + ExchangePartners(47) */}
+          {/* Spacers for Phase 2 elements not in SSR: TopNav(56) + FoundingMemberBanner(30) + ExchangePartners(47) */}
           <div aria-hidden="true" style={{ height: 56 }} />
           <HomeHeroSSR traderCount={heroStats.traderCount} exchangeCount={heroStats.exchangeCount} />
+          <div aria-hidden="true" style={{ height: 30 }} />
           <div aria-hidden="true" style={{ height: 47, borderBottom: '1px solid var(--color-border-primary, rgba(255,255,255,0.1))' }} />
           {ssrTable}
         </div>
