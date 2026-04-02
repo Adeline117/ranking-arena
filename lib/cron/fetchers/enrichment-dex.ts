@@ -642,23 +642,6 @@ export async function fetchGmxStatsDetail(
 
     const derivedStats = computeStatsFromPositions(positions)
 
-    // Compute Sharpe from daily PnL aggregation
-    let sharpeRatio: number | null = null
-    const positionsWithTime = positions.filter((p) => p.pnlUsd != null && p.closeTime)
-    if (positionsWithTime.length >= 5) {
-      const dailyPnl = new Map<string, number>()
-      for (const p of positionsWithTime) {
-        const day = p.closeTime!.split('T')[0]
-        dailyPnl.set(day, (dailyPnl.get(day) || 0) + (p.pnlUsd ?? 0))
-      }
-      const dailyValues = [...dailyPnl.values()]
-      if (dailyValues.length >= 5) {
-        const mean = dailyValues.reduce((a, b) => a + b, 0) / dailyValues.length
-        const std = Math.sqrt(dailyValues.reduce((a, r) => a + (r - mean) ** 2, 0) / dailyValues.length)
-        if (std > 0) sharpeRatio = Math.round((mean / std) * Math.sqrt(365) * 100) / 100
-      }
-    }
-
     return {
       totalTrades: derivedStats.totalTrades ?? null,
       profitableTradesPct: derivedStats.profitableTradesPct ?? null,
@@ -667,7 +650,7 @@ export async function fetchGmxStatsDetail(
       avgLoss: derivedStats.avgLoss ?? null,
       largestWin: derivedStats.largestWin ?? null,
       largestLoss: derivedStats.largestLoss ?? null,
-      sharpeRatio,
+      sharpeRatio: derivedStats.sharpeRatio ?? null,
       maxDrawdown: derivedStats.maxDrawdown ?? null,
       currentDrawdown: null,
       volatility: null,

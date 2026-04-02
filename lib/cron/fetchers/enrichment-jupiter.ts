@@ -119,7 +119,7 @@ export async function fetchJupiterStatsDetail(
       avgLoss: derivedStats.avgLoss ?? null,
       largestWin: derivedStats.largestWin ?? null,
       largestLoss: derivedStats.largestLoss ?? null,
-      sharpeRatio: null, // Computed from equity curve
+      sharpeRatio: derivedStats.sharpeRatio ?? null,
       maxDrawdown: derivedStats.maxDrawdown ?? null,
       currentDrawdown: null,
       volatility: null,
