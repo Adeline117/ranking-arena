@@ -3,9 +3,9 @@
 # Triggers batch-fetch-traders groups via Vercel Cron API
 # Runs every 3 hours as supplementary fetch (Vercel cron is the primary)
 
-# Read CRON_SECRET from .env.local (never hardcode)
-SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-CRON_SECRET=$(grep '^CRON_SECRET=' "$SCRIPT_DIR/../../.env.local" 2>/dev/null | cut -d'=' -f2 | tr -d '"')
+# Read CRON_SECRET from .env.local (absolute path for launchd compatibility)
+ARENA_DIR="/Users/adelinewen/ranking-arena"
+CRON_SECRET=$(grep '^CRON_SECRET=' "$ARENA_DIR/.env.local" 2>/dev/null | cut -d'=' -f2 | tr -d '"')
 if [ -z "$CRON_SECRET" ]; then
   echo "ERROR: CRON_SECRET not found in .env.local"
   exit 1
