@@ -12,7 +12,7 @@ import { useMultiAccountStore } from '@/lib/stores/multiAccountStore'
 function AuthCallbackContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
-  const { t, language } = useLanguage()
+  const { t, language: _language } = useLanguage()
 
   useEffect(() => {
     const handleCallback = async () => {

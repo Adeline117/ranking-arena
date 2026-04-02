@@ -74,7 +74,7 @@ export default function AdvancedFilter({
   onDeleteFilter,
   isPro,
 }: AdvancedFilterProps) {
-  const { t, language } = useLanguage()
+  const { t, language: _language } = useLanguage()
   const [isExpanded, setIsExpanded] = useState(true)
   // Save filter states removed - filters are session-only
 

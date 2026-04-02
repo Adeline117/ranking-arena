@@ -6,7 +6,7 @@ import { tokens } from '@/lib/design-tokens'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 
 export default function GroupActions({ groupId }: { groupId: string }) {
-  const { t, language } = useLanguage()
+  const { t, language: _language } = useLanguage()
 
   return (
     <Box

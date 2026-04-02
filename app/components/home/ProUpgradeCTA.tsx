@@ -11,7 +11,7 @@ interface ProUpgradeCTAProps {
 }
 
 export default function ProUpgradeCTA({
-  language,
+  language: _language,
   t,
   freeLimit,
   onUpgrade,

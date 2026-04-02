@@ -28,7 +28,7 @@ export default function TradingStyleRadar({
   winRate,
   maxDrawdown,
 }: TradingStyleRadarProps) {
-  const { t, language } = useLanguage()
+  const { t, language: _language } = useLanguage()
 
   // Normalize values to 0-1
   const normalize = (v: number | null | undefined, max: number = 100) => {

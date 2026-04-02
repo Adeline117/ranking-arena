@@ -48,7 +48,7 @@ interface LoginModalProps {
 }
 
 export default function LoginModal({ open, onClose, message }: LoginModalProps) {
-  const { t, language } = useLanguage()
+  const { t, language: _language } = useLanguage()
   const [step, setStep] = useState<LoginStep>('choose')
   const [email, setEmail] = useState('')
   const [otp, setOtp] = useState('')

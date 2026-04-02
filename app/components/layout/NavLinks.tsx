@@ -9,7 +9,7 @@ import { useLanguage } from '../Providers/LanguageProvider'
 import { usePostStore } from '@/lib/stores/postStore'
 
 export default function NavLinks() {
-  const { t, language } = useLanguage()
+  const { t, language: _language } = useLanguage()
   const pathname = usePathname()
 
   const items = [

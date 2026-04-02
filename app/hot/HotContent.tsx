@@ -25,7 +25,7 @@ interface HotContentProps {
 export default function HotContent({ initialPosts }: HotContentProps) {
   const {
     t,
-    language,
+    language: _language,
     localizedName,
     email,
     loggedIn,

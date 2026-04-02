@@ -106,7 +106,7 @@ interface TrendingSearchesProps {
 }
 
 /** Trending / popular searches section */
-export function TrendingSearches({ trending, language, onClose, hasHistory, loading }: TrendingSearchesProps) {
+export function TrendingSearches({ trending, language: _language, onClose, hasHistory, loading }: TrendingSearchesProps) {
   const { t } = useLanguage()
   if (!loading && trending.length === 0) return null
 

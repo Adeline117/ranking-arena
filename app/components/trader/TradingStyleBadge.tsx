@@ -245,7 +245,7 @@ export function TradingStyleCard({
   confidence?: number | null
   assetPreference?: string[]
 }) {
-  const { t, language } = useLanguage()
+  const { t, language: _language } = useLanguage()
 
   if (!style) {
     return (

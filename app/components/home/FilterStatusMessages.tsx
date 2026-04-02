@@ -17,7 +17,7 @@ interface FilterStatusMessagesProps {
 
 export default function FilterStatusMessages({
   loading,
-  language,
+  language: _language,
   selectedExchange,
   advancedFilteredCount,
   tradersCount,

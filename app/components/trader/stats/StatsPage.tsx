@@ -62,7 +62,7 @@ export default function StatsPage({
   isPro = true,
   onUnlock,
 }: ExtendedStatsPageProps) {
-  const { t, language } = useLanguage()
+  const { t, language: _language } = useLanguage()
   const [mounted, setMounted] = useState(false)
 
   useEffect(() => {

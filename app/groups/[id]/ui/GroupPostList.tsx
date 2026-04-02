@@ -298,7 +298,7 @@ export default function GroupPostList(props: GroupPostListProps) {
 // Empty State (shared between list and masonry)
 // ─────────────────────────────────────────────
 
-function EmptyPostsState({ groupId, language, isMember }: { groupId: string; language: string; isMember: boolean }) {
+function EmptyPostsState({ groupId, language: _language, isMember }: { groupId: string; language: string; isMember: boolean }) {
   const { t } = useLanguage()
 
   return (

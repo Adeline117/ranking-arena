@@ -18,7 +18,7 @@ interface ImageUploaderProps {
 export function ImageUploader({
   images, uploading, fileInputRef,
   onUpload, onRemove, onInsert,
-  language, t,
+  language: _language, t,
 }: ImageUploaderProps): React.ReactElement {
   return (
     <Box>
