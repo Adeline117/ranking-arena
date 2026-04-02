@@ -68,6 +68,7 @@ export const TraderCard = memo(function TraderCard({
   return (
     <Link
       href={href}
+      prefetch={false}
       style={{ textDecoration: 'none', display: 'block' }}
       aria-label={`#${rank} ${displayName}, ROI ${formatROI(trader.roi)}`}
     >

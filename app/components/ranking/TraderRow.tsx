@@ -301,6 +301,7 @@ export const TraderRow = memo(function TraderRow({
       <div ref={contentRef} className="swipe-row-content">
     <Link
       href={href}
+      prefetch={false}
       className="ranking-row-link"
       style={{ textDecoration: 'none', display: 'block', '--row-index': rank } as React.CSSProperties}
       aria-label={`#${rank} ${displayName}, ROI ${Number(trader.roi ?? 0) >= 0 ? '+' : ''}${Number(trader.roi ?? 0).toFixed(2)}%`}
