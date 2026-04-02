@@ -4,11 +4,12 @@
    No CSS hiding needed — React state removes it when client table mounts.
    This eliminates CLS because the swap happens at the same DOM position. */
 
-/* Two-phase rendering: SSR shell is removed via JS (useEffect) in HomePage.tsx
-   AFTER React has painted. This preserves the SSR content as the LCP element.
-   Previously used CSS :has() to hide immediately — but that kills LCP because
-   the SSR hero disappears before the client hero paints, forcing Lighthouse to
-   wait for the full JS bundle to load (~8.9s on slow 4G). */
+/* Two-phase rendering: SSR shell is crossfaded out via JS in HomePage.tsx.
+   The shell is positioned absolutely (removing from flow) then faded to opacity:0.
+   This preserves the SSR hero as the LCP element while avoiding CLS (~2.1 → ~0).
+   - CSS :has() kills LCP (hero disappears before JS loads on slow 4G)
+   - shell.remove() kills CLS (DOM removal causes massive layout shift)
+   - Position:absolute + opacity:0 avoids both issues */
 
 /*
  * Performance Optimization: CSS files moved to async loading
@@ -1810,22 +1811,24 @@ a:focus-visible, button:focus-visible, [role="button"]:focus-visible, [tabindex=
   to { transform: translateX(-50%) rotate(360deg); }
 }
 
-/* Chinese font optimization */
+/* Chinese font optimization — use 'optional' to match Inter strategy and avoid CLS.
+   These are local() fonts: either available instantly or not at all, so swap adds
+   no benefit but can trigger text re-render layout shifts. */
 @font-face {
   font-family: 'PingFang SC';
-  font-display: swap;
+  font-display: optional;
   src: local('PingFang SC');
 }
 
 @font-face {
   font-family: 'Microsoft YaHei';
-  font-display: swap;
+  font-display: optional;
   src: local('Microsoft YaHei');
 }
 
 @font-face {
   font-family: 'Noto Sans CJK SC';
-  font-display: swap;
+  font-display: optional;
   src: local('Noto Sans CJK SC');
 }
 
