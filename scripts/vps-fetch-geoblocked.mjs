@@ -5,7 +5,8 @@
  * Run on VPS where these APIs are accessible.
  */
 
-const SUPABASE_URL = 'https://iknktzifjdyujdccyhsv.supabase.co'
+const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL
+if (!SUPABASE_URL) { console.error('SUPABASE_URL not set'); process.exit(1) }
 const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY
 if (!SUPABASE_KEY) { console.error('SUPABASE_SERVICE_ROLE_KEY not set'); process.exit(1) }
 

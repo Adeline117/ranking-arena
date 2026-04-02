@@ -95,7 +95,7 @@ export async function GET(request: NextRequest) {
           .select('source, source_trader_id, handle, avatar_url, roi, pnl, arena_score, win_rate, max_drawdown, followers, rank, trader_type, computed_at')
           .eq('season_id', season)
           .gt('arena_score', 0)
-          .neq('is_outlier', true)
+          .or('is_outlier.is.null,is_outlier.eq.false')
 
         // Incremental: only fetch traders updated since last sync
         if (!isFull) {
