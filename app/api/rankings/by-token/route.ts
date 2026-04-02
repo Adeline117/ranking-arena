@@ -181,36 +181,22 @@ export async function GET(request: NextRequest) {
           pnl_pct: number | null
         }> = []
 
+        // Use primary symbol pattern (most common) to avoid statement timeout
+        const primaryPattern = `${token}USDT`
         const { data: positionData, error: posError } = await supabase
           .from('trader_position_history')
           .select('source, source_trader_id, pnl_usd, pnl_pct')
-          .or(symbolPatterns.map(p => `symbol.eq.${p}`).join(','))
+          .or(`symbol.eq.${primaryPattern},symbol.eq.${token}USD,symbol.eq.${token}-PERP,symbol.eq.${token}/USDT`)
           .gte('close_time', cutoffISO)
           .not('pnl_usd', 'is', null)
           .order('pnl_usd', { ascending: false })
-          .limit(10000)
+          .limit(5000)
 
         if (posError) {
           throw new Error(`Position history query failed: ${posError.message}`)
         }
 
         allRows = (positionData || []) as typeof allRows
-
-        if (allRows.length === 0) {
-          // Fallback: try ILIKE for less strict matching
-          const { data: fallbackData, error: fallbackErr } = await supabase
-            .from('trader_position_history')
-            .select('source, source_trader_id, pnl_usd, pnl_pct')
-            .ilike('symbol', `%${token}%`)
-            .gte('close_time', cutoffISO)
-            .not('pnl_usd', 'is', null)
-            .order('pnl_usd', { ascending: false })
-            .limit(10000)
-
-          if (!fallbackErr && fallbackData) {
-            allRows = fallbackData as typeof allRows
-          }
-        }
 
         if (allRows.length === 0) {
           return { traders: [], token, period, total: 0 }

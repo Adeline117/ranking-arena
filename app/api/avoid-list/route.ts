@@ -92,7 +92,13 @@ export async function GET(request: NextRequest) {
   } catch (error: unknown) {
     // Gracefully handle missing table (feature not yet deployed)
     const msg = error instanceof Error ? error.message : String(error)
-    if (msg.includes('trader_avoid_scores') || msg.includes('trader_avoid_votes')) {
+    if (
+      msg.includes('trader_avoid_scores') ||
+      msg.includes('trader_avoid_votes') ||
+      msg.includes('avoid_votes') ||
+      msg.includes('does not exist') ||
+      msg.includes('42P01')
+    ) {
       return success({ avoid_list: [], message: 'Feature coming soon' })
     }
     return handleError(error, 'avoid-list GET')
