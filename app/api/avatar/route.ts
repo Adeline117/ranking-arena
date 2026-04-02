@@ -29,8 +29,18 @@ export async function GET(request: Request) {
 
   try {
     // 解码 URL
-    const decodedUrl = decodeURIComponent(url)
-    
+    let decodedUrl: string
+    try {
+      decodedUrl = decodeURIComponent(url)
+    } catch {
+      return new NextResponse('Invalid URL encoding', { status: 400 })
+    }
+
+    // Reject non-HTTP(S) URLs
+    if (!decodedUrl.startsWith('http://') && !decodedUrl.startsWith('https://')) {
+      return new NextResponse('Only HTTP(S) URLs allowed', { status: 400 })
+    }
+
     // 验证 URL 是否来自允许的域名
     const allowedDomains = [
       // Supabase Storage (user uploaded avatars/covers)
@@ -147,7 +157,7 @@ export async function GET(request: Request) {
       },
     }).finally(() => clearTimeout(timeout))
 
-    if (!response.ok && (response.status === 403 || response.status === 401)) {
+    if (!response.ok && (response.status === 403 || response.status === 401 || response.status === 502 || response.status === 503)) {
       // Retry with minimal headers — some CDNs block specific header combos
       const controller2 = new AbortController()
       const timeout2 = setTimeout(() => controller2.abort(), 8_000)
