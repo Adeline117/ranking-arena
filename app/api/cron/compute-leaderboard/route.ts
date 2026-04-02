@@ -669,11 +669,11 @@ async function computeSeason(
     logger.info(`[${season}] Derived ${derived} WR/MDD values from equity curves`)
   }
 
-  // Phase 4b: Compute sortino/calmar/profit_factor from equity_curve for traders still missing them
-  // Also compute trading_style from avg_holding_hours
+  // Phase 4b: Compute sharpe/sortino/calmar/profit_factor from equity_curve for traders still missing them
+  // Also estimate trades_count from equity curve points for platforms that don't provide it
   {
     const needAdvanced = Array.from(traderMap.values())
-      .filter(t => t.roi != null && (t.sortino_ratio == null || t.calmar_ratio == null || t.profit_factor == null))
+      .filter(t => t.roi != null && (t.sharpe_ratio == null || t.sortino_ratio == null || t.calmar_ratio == null || t.profit_factor == null || t.trades_count == null))
     if (needAdvanced.length > 0) {
       const advBySource = new Map<string, string[]>()
       for (const t of needAdvanced) {
@@ -688,7 +688,7 @@ async function computeSeason(
             const chunk = traderIds.slice(i, i + 50)
             const { data: eqRows } = await supabase
               .from('trader_equity_curve')
-              .select('source_trader_id, roi_pct, data_date')
+              .select('source_trader_id, roi_pct, pnl_usd, data_date')
               .eq('source', source)
               .in('source_trader_id', chunk)
               .order('data_date', { ascending: true })
@@ -696,22 +696,54 @@ async function computeSeason(
             if (!eqRows?.length) continue
 
             // Group by trader
-            const byTrader = new Map<string, Array<{ roi: number; date: string }>>()
+            const byTrader = new Map<string, Array<{ roi: number; pnl: number | null; date: string }>>()
             for (const row of eqRows) {
               const tid = row.source_trader_id.startsWith('0x') ? row.source_trader_id.toLowerCase() : row.source_trader_id
               const arr = byTrader.get(tid) || []
-              if (row.roi_pct != null) arr.push({ roi: Number(row.roi_pct), date: row.data_date })
+              if (row.roi_pct != null) arr.push({ roi: Number(row.roi_pct), pnl: row.pnl_usd != null ? Number(row.pnl_usd) : null, date: row.data_date })
               byTrader.set(tid, arr)
             }
 
             for (const [tid, points] of byTrader) {
               const existing = traderMap.get(`${source}:${tid}`)
-              if (!existing || points.length < 7) continue
+              if (!existing) continue
+
+              // Estimate trades_count from equity curve data points (each point = a day with activity)
+              if (existing.trades_count == null && points.length >= 2) {
+                existing.trades_count = points.length
+                advancedDerived++
+              }
+
+              if (points.length < 7) continue
 
               // Compute daily returns from cumulative ROI
               const dailyReturns: number[] = []
               for (let j = 1; j < points.length; j++) {
                 dailyReturns.push(points[j].roi - points[j - 1].roi)
+              }
+
+              // Compute daily PnL changes for avg_profit/avg_loss/largest_win/largest_loss
+              const dailyPnlChanges: number[] = []
+              for (let j = 1; j < points.length; j++) {
+                const prevPnl = points[j - 1].pnl
+                const currPnl = points[j].pnl
+                if (prevPnl != null && currPnl != null) {
+                  const change = currPnl - prevPnl
+                  if (Math.abs(change) > 0.01) dailyPnlChanges.push(change)
+                }
+              }
+
+              // Sharpe ratio = (mean daily return / std dev of daily returns) * sqrt(365)
+              if (existing.sharpe_ratio == null && dailyReturns.length >= 7) {
+                const decimalReturns = dailyReturns.map(r => r / 100)
+                const mean = decimalReturns.reduce((a, b) => a + b, 0) / decimalReturns.length
+                const variance = decimalReturns.reduce((s, r) => s + (r - mean) ** 2, 0) / decimalReturns.length
+                const stdDev = Math.sqrt(variance)
+                if (stdDev > 0) {
+                  const sharpe = (mean / stdDev) * Math.sqrt(365)
+                  existing.sharpe_ratio = Math.round(Math.max(-20, Math.min(20, sharpe)) * 10000) / 10000
+                  advancedDerived++
+                }
               }
 
               // Sortino ratio
@@ -756,7 +788,7 @@ async function computeSeason(
           }
         })
       )
-      logger.info(`[${season}] Derived ${advancedDerived} sortino/calmar/PF values from equity curves`)
+      logger.info(`[${season}] Derived ${advancedDerived} sharpe/sortino/calmar/PF/trades values from equity curves`)
     }
   }
 
@@ -764,7 +796,7 @@ async function computeSeason(
   // This covers traders not reached by enrichment (which only processes top N by score)
   {
     const stillNeedAdvanced = Array.from(traderMap.values())
-      .filter(t => t.roi != null && (t.sortino_ratio == null || t.calmar_ratio == null || t.profit_factor == null))
+      .filter(t => t.roi != null && (t.sharpe_ratio == null || t.sortino_ratio == null || t.calmar_ratio == null || t.profit_factor == null))
     if (stillNeedAdvanced.length > 0) {
       const dsBySource = new Map<string, string[]>()
       for (const t of stillNeedAdvanced) {
@@ -799,6 +831,19 @@ async function computeSeason(
             for (const [tid, dailyReturns] of byTrader) {
               const existing = traderMap.get(`${source}:${tid}`)
               if (!existing || dailyReturns.length < 3) continue
+
+              // Sharpe ratio from daily snapshots
+              if (existing.sharpe_ratio == null && dailyReturns.length >= 7) {
+                const decReturns = dailyReturns.map(r => r / 100)
+                const mean = decReturns.reduce((a, b) => a + b, 0) / decReturns.length
+                const variance = decReturns.reduce((s, r) => s + (r - mean) ** 2, 0) / decReturns.length
+                const stdDev = Math.sqrt(variance)
+                if (stdDev > 0) {
+                  const sharpe = (mean / stdDev) * Math.sqrt(365)
+                  existing.sharpe_ratio = Math.round(Math.max(-20, Math.min(20, sharpe)) * 10000) / 10000
+                  dailyDerived++
+                }
+              }
 
               // Sortino
               if (existing.sortino_ratio == null && dailyReturns.length >= 3) {
@@ -841,7 +886,7 @@ async function computeSeason(
           }
         })
       )
-      logger.info(`[${season}] Derived ${dailyDerived} sortino/calmar/PF values from daily_snapshots (fallback)`)
+      logger.info(`[${season}] Derived ${dailyDerived} sharpe/sortino/calmar/PF values from daily_snapshots (fallback)`)
     }
   }
 
@@ -1193,7 +1238,7 @@ async function computeSeason(
 
   // Phase 2: Incremental upsert — only update changed rows to reduce write volume ~40%
   // Fetch current arena_scores to diff against
-  const currentScoreMap = new Map<string, { arena_score: number; rank: number; handle: string | null; avatar_url: string | null; sortino_ratio: number | null; calmar_ratio: number | null; profit_factor: number | null; trading_style: string | null }>()
+  const currentScoreMap = new Map<string, { arena_score: number; rank: number; handle: string | null; avatar_url: string | null; sharpe_ratio: number | null; sortino_ratio: number | null; calmar_ratio: number | null; profit_factor: number | null; trading_style: string | null }>()
   {
     // Fetch in pages of 1000 to handle large leaderboards
     let offset = 0
@@ -1207,7 +1252,7 @@ async function computeSeason(
       }
       const { data: currentScores } = await supabase
         .from('leaderboard_ranks')
-        .select('source, source_trader_id, arena_score, rank, handle, avatar_url, sortino_ratio, calmar_ratio, profit_factor, trading_style')
+        .select('source, source_trader_id, arena_score, rank, handle, avatar_url, sharpe_ratio, sortino_ratio, calmar_ratio, profit_factor, trading_style')
         .eq('season_id', season)
         .range(offset, offset + PAGE - 1)
       if (!currentScores?.length) break
@@ -1217,6 +1262,7 @@ async function computeSeason(
           rank: r.rank,
           handle: r.handle,
           avatar_url: r.avatar_url,
+          sharpe_ratio: r.sharpe_ratio,
           sortino_ratio: r.sortino_ratio,
           calmar_ratio: r.calmar_ratio,
           profit_factor: r.profit_factor,
@@ -1238,6 +1284,7 @@ async function computeSeason(
     if (current.rank !== newRank) return true // rank changed
     if (current.arena_score === 0) return t.arena_score !== 0 // was zero, check if now non-zero
     // Force update if new advanced metrics available (first-time backfill)
+    if (t.sharpe_ratio != null && !current.sharpe_ratio) return true
     if (t.sortino_ratio != null && !current.sortino_ratio) return true
     if (t.calmar_ratio != null && !current.calmar_ratio) return true
     if (t.profit_factor != null && !current.profit_factor) return true
