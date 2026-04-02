@@ -149,6 +149,21 @@ export async function fetchBitunixStatsDetail(
         totalTrades = Math.round(winCount / winRate)
       }
 
+      // Compute Sharpe from dailyWinRate (daily cumulative ROI curve)
+      let sharpeRatio: number | null = null
+      const curve = entry.dailyWinRate
+      if (Array.isArray(curve) && curve.length >= 5) {
+        const values = curve.map(p => toNum(p.amount) ?? 0)
+        const returns: number[] = []
+        for (let i = 1; i < values.length; i++) returns.push(values[i] - values[i - 1])
+        const mean = returns.reduce((a, b) => a + b, 0) / returns.length
+        const std = Math.sqrt(returns.reduce((a, b) => a + (b - mean) ** 2, 0) / returns.length)
+        if (std > 0) {
+          const raw = Math.round((mean / std) * Math.sqrt(365) * 100) / 100
+          sharpeRatio = Math.max(-20, Math.min(20, raw))
+        }
+      }
+
       return {
         totalTrades,
         profitableTradesPct: profitableTradesPct != null ? Math.round(profitableTradesPct * 10) / 10 : null,
@@ -157,7 +172,7 @@ export async function fetchBitunixStatsDetail(
         avgLoss: null,
         largestWin: null,
         largestLoss: null,
-        sharpeRatio: null,
+        sharpeRatio,
         maxDrawdown,
         currentDrawdown: null,
         volatility: null,
