@@ -81,7 +81,7 @@ export async function GET(
       // 2. Latest snapshot for each window (flat columns are more reliable than metrics JSONB)
       supabase
         .from('trader_snapshots_v2')
-        .select('window, roi_pct, pnl_usd, win_rate, max_drawdown, trades_count, followers, copiers, arena_score, sharpe_ratio, metrics, quality_flags, as_of_ts, updated_at')
+        .select('window, roi_pct, pnl_usd, win_rate, max_drawdown, trades_count, followers, copiers, arena_score, sharpe_ratio, beta_btc, beta_eth, alpha, metrics, quality_flags, as_of_ts, updated_at')
         .eq('platform', platform)
         .eq('trader_key', trader_key)
         .order('updated_at', { ascending: false })
@@ -154,6 +154,9 @@ export async function GET(
           copiers: snap.copiers ?? m.copiers ?? null,
           aum: m.aum ?? null,
           sharpe_ratio: snap.sharpe_ratio ?? m.sharpe_ratio ?? null,
+          beta_btc: snap.beta_btc ?? m.beta_btc ?? null,
+          beta_eth: snap.beta_eth ?? m.beta_eth ?? null,
+          alpha: snap.alpha ?? m.alpha ?? null,
           return_score: m.return_score ?? null,
           drawdown_score: m.drawdown_score ?? null,
           stability_score: m.stability_score ?? null,
