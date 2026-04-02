@@ -90,6 +90,11 @@ export async function GET(request: NextRequest) {
       return response
     }
   } catch (error: unknown) {
+    // Gracefully handle missing table (feature not yet deployed)
+    const msg = error instanceof Error ? error.message : String(error)
+    if (msg.includes('trader_avoid_scores') || msg.includes('trader_avoid_votes')) {
+      return success({ avoid_list: [], message: 'Feature coming soon' })
+    }
     return handleError(error, 'avoid-list GET')
   }
 }

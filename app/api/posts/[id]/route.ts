@@ -28,6 +28,13 @@ export async function GET(request: NextRequest, context: RouteContext) {
 
   try {
     const { id } = await context.params
+
+    // Validate UUID format to prevent PostgreSQL cast errors
+    const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+    if (!UUID_RE.test(id)) {
+      return notFound('Post not found')
+    }
+
     const supabase = getSupabaseAdmin()
 
     const post = await getPostById(supabase, id)
