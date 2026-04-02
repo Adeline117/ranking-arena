@@ -30,50 +30,34 @@ export class KucoinFuturesConnector extends BaseConnector {
 
   async discoverLeaderboard(window: Window, limit = 50, offset = 0): Promise<DiscoverResult> {
     const pageNo = Math.floor(offset / limit) + 1
-
-    // Strategy 1: VPS Playwright scraper (primary — KuCoin API returns 404 from datacenter)
-    const vpsData = await this.fetchViaVPS<Record<string, unknown>>('/kucoin/leaderboard', {
-      pageNo: String(pageNo), pageSize: String(limit),
-    }, 90000) // 90s — CF challenge can be slow
-
     let rawList: Record<string, unknown>[] = []
-    if (vpsData) {
-      const dataObj = (vpsData?.data ?? vpsData) as Record<string, unknown>
-      // New API returns items under data.items or data directly
-      const items = dataObj?.items || dataObj?.list || dataObj?.rows
-      if (Array.isArray(items)) rawList = items as Record<string, unknown>[]
-      // May also return flat array under data
-      if (rawList.length === 0 && Array.isArray(dataObj)) rawList = dataObj as Record<string, unknown>[]
-    }
 
-    // Strategy 2: Direct POST API (works from any IP, no auth needed)
-    // 2026-03-31: POST with currentPage returns 822 traders. GET returns 0.
-    if (rawList.length === 0) {
-      try {
-        const controller = new AbortController()
-        const timeout = setTimeout(() => controller.abort(), 30000)
-        const res = await fetch(
-          'https://www.kucoin.com/_api/ct-copy-trade/v1/copyTrading/rn/leaderboard/query',
-          {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
-            body: JSON.stringify({ currentPage: pageNo, pageSize: limit }),
-            signal: controller.signal,
-          }
-        )
-        clearTimeout(timeout)
-        if (res.ok) {
-          const _rawLb = await res.json() as Record<string, unknown>
-          const dataObj = _rawLb?.data as Record<string, unknown>
-          const list = dataObj?.items || dataObj?.list
-          if (Array.isArray(list)) rawList = list as Record<string, unknown>[]
+    // Strategy 1: Direct POST API (works from any IP, no auth needed)
+    // 2026-04-02: POST is primary — VPS scraper no longer handles kucoin
+    try {
+      const controller = new AbortController()
+      const timeout = setTimeout(() => controller.abort(), 30000)
+      const res = await fetch(
+        'https://www.kucoin.com/_api/ct-copy-trade/v1/copyTrading/rn/leaderboard/query',
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+          body: JSON.stringify({ currentPage: pageNo, pageSize: limit }),
+          signal: controller.signal,
         }
-      } catch {
-        // POST API failed
+      )
+      clearTimeout(timeout)
+      if (res.ok) {
+        const _rawLb = await res.json() as Record<string, unknown>
+        const dataObj = _rawLb?.data as Record<string, unknown>
+        const list = dataObj?.items || dataObj?.list
+        if (Array.isArray(list)) rawList = list as Record<string, unknown>[]
       }
+    } catch {
+      // POST API failed — try fallbacks
     }
 
-    // Strategy 3: Legacy API fallback
+    // Strategy 2: Legacy GET API fallback
     if (rawList.length === 0) {
       try {
         const _rawLb = await this.request<Record<string, unknown>>(
@@ -85,6 +69,19 @@ export class KucoinFuturesConnector extends BaseConnector {
         if (Array.isArray(list)) rawList = list as Record<string, unknown>[]
       } catch {
         // Direct API failed — expected
+      }
+    }
+
+    // Strategy 3: VPS proxy fallback (last resort)
+    if (rawList.length === 0) {
+      const vpsData = await this.fetchViaVPS<Record<string, unknown>>('/kucoin/leaderboard', {
+        pageNo: String(pageNo), pageSize: String(limit),
+      }, 30000)
+      if (vpsData) {
+        const dataObj = (vpsData?.data ?? vpsData) as Record<string, unknown>
+        const items = dataObj?.items || dataObj?.list || dataObj?.rows
+        if (Array.isArray(items)) rawList = items as Record<string, unknown>[]
+        if (rawList.length === 0 && Array.isArray(dataObj)) rawList = dataObj as Record<string, unknown>[]
       }
     }
 
