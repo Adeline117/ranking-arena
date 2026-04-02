@@ -257,7 +257,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
         if (insertError.code === '23505') {
           return NextResponse.json({ error: 'Already bookmarked' }, { status: 409 })
         }
-        return NextResponse.json({ error: `Bookmark failed: ${insertError.message}` }, { status: 500 })
+        return NextResponse.json({ error: 'Bookmark failed' }, { status: 500 })
       }
 
       // 使用原子递增操作避免竞态条件
