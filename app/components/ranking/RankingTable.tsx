@@ -1,7 +1,6 @@
 'use client'
 
 import React, { useState, useEffect, useRef, memo, useCallback, useMemo, useDeferredValue } from 'react'
-import Link from 'next/link'
 import { useLoginModal } from '@/lib/hooks/useLoginModal'
 import { tokens } from '@/lib/design-tokens'
 import { RankingSkeleton } from '../ui/Skeleton'
@@ -38,7 +37,6 @@ import {
   type Trader,
   type ColumnKey,
   type ViewMode,
-  ALL_TOGGLEABLE_COLUMNS,
   DEFAULT_VISIBLE_COLUMNS,
   LS_KEY_COLUMNS,
   LS_KEY_VIEW_MODE,
@@ -320,7 +318,7 @@ function RankingTableInner(props: {
         case 'roi': aRaw = a.roi ?? null; bRaw = b.roi ?? null; break
         case 'pnl': aRaw = a.pnl ?? null; bRaw = b.pnl ?? null; break
         case 'winrate': aRaw = a.win_rate ?? null; bRaw = b.win_rate ?? null; break
-        case 'mdd': aRaw = a.max_drawdown != null ? Math.abs(a.max_drawdown) : null; bRaw = b.max_drawdown != null ? Math.abs(b.max_drawdown) : null; break
+        case 'mdd': aRaw = a.max_drawdown != null ? Math.abs(Number(a.max_drawdown)) : null; bRaw = b.max_drawdown != null ? Math.abs(Number(b.max_drawdown)) : null; break
         case 'sortino': aRaw = a.sortino_ratio ?? null; bRaw = b.sortino_ratio ?? null; break
         case 'alpha': aRaw = a.alpha ?? null; bRaw = b.alpha ?? null; break
       }

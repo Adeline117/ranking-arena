@@ -79,7 +79,7 @@ function AnimatedROI({ roi, roiColor, animate }: { roi: number; roiColor: string
       weight="black"
       className="roi-value"
       style={{ color: roiColor, lineHeight: 1.2, fontSize: '16px', maxWidth: '100%', overflow: 'hidden', textOverflow: 'ellipsis', fontVariantNumeric: 'tabular-nums', fontFeatureSettings: '"tnum" 1' }}
-      title={`${roi >= 0 ? '+' : ''}${roi.toFixed(2)}%`}
+      title={`${roi >= 0 ? '+' : ''}${Number(roi).toFixed(2)}%`}
     >
       {formatROI(displayValue)}
     </Text>
@@ -123,7 +123,7 @@ export const TraderRow = memo(function TraderRow({
   // Compare checkbox state — use individual selectors to avoid new object on every getSnapshot call
   // (returning an object from a Zustand selector causes useSyncExternalStore infinite loop)
   const isSelected = useComparisonStore(useCallback(s => s.isSelected(trader.id), [trader.id]))
-  const canAddMore = useComparisonStore(useCallback(s => s.selectedTraders.length < 5, []))
+  const _canAddMore = useComparisonStore(useCallback(s => s.selectedTraders.length < 5, []))
 
   // Memoize trading style classification to avoid recomputing on every render
   const tradingStyleInfo = useMemo(() => {
@@ -303,7 +303,7 @@ export const TraderRow = memo(function TraderRow({
       href={href}
       className="ranking-row-link"
       style={{ textDecoration: 'none', display: 'block', '--row-index': rank } as React.CSSProperties}
-      aria-label={`#${rank} ${displayName}, ROI ${(trader.roi ?? 0) >= 0 ? '+' : ''}${(trader.roi ?? 0).toFixed(2)}%`}
+      aria-label={`#${rank} ${displayName}, ROI ${Number(trader.roi ?? 0) >= 0 ? '+' : ''}${Number(trader.roi ?? 0).toFixed(2)}%`}
       tabIndex={0}
       onMouseEnter={handleMouseEnter}
       onMouseLeave={handleMouseLeave}
@@ -352,7 +352,7 @@ export const TraderRow = memo(function TraderRow({
                     width: 6, height: 6, borderRadius: '50%',
                     background: getScoreColor(trader.arena_score),
                   }} />
-                  <span style={{ fontSize: tokens.typography.fontSize.xs, fontWeight: 700, color: TRADER_TEXT_TERTIARY }}>{trader.arena_score.toFixed(0)}</span>
+                  <span style={{ fontSize: tokens.typography.fontSize.xs, fontWeight: 700, color: TRADER_TEXT_TERTIARY }}>{Number(trader.arena_score).toFixed(0)}</span>
                 </span>
               )}
             </Box>
@@ -476,7 +476,7 @@ export const TraderRow = memo(function TraderRow({
         <Box className="col-winrate" style={{ textAlign: 'right', alignItems: 'center', justifyContent: 'flex-end' }}>
           {trader.win_rate != null ? (
             <Text size="sm" weight="semibold" style={{ color: trader.win_rate > 50 ? tokens.colors.accent.success : TRADER_TEXT_TERTIARY, lineHeight: 1.2, fontSize: tokens.typography.fontSize.sm, fontVariantNumeric: 'tabular-nums', opacity: trader.metrics_estimated ? 0.5 : 1 }} title={trader.metrics_estimated ? t('estimatedFromRoi') : undefined}>
-              {trader.metrics_estimated ? '~' : ''}{trader.win_rate.toFixed(1)}%
+              {trader.metrics_estimated ? '~' : ''}{Number(trader.win_rate).toFixed(1)}%
             </Text>
           ) : (
             <NaIndicator source={trader.source || source} metricType="winRate" />
@@ -487,7 +487,7 @@ export const TraderRow = memo(function TraderRow({
         <Box className="col-mdd" style={{ textAlign: 'right', alignItems: 'center', justifyContent: 'flex-end' }}>
           {trader.max_drawdown != null ? (
             <Text size="sm" weight="semibold" style={{ color: TRADER_ACCENT_ERROR, lineHeight: 1.2, fontSize: tokens.typography.fontSize.sm, fontVariantNumeric: 'tabular-nums', opacity: trader.metrics_estimated ? 0.5 : 1 }} title={trader.metrics_estimated ? t('estimatedFromRoi') : undefined}>
-              {trader.metrics_estimated ? '~' : ''}{Math.abs(trader.max_drawdown) < 0.05 ? '< 0.1' : `-${Math.abs(trader.max_drawdown).toFixed(1)}`}%
+              {trader.metrics_estimated ? '~' : ''}{Math.abs(Number(trader.max_drawdown)) < 0.05 ? '< 0.1' : `-${Math.abs(Number(trader.max_drawdown)).toFixed(1)}`}%
             </Text>
           ) : (
             <NaIndicator source={trader.source || source} metricType="drawdown" />
@@ -498,7 +498,7 @@ export const TraderRow = memo(function TraderRow({
         <Box className="col-sharpe" style={{ textAlign: 'right', alignItems: 'center', justifyContent: 'flex-end' }}>
           {trader.sharpe_ratio != null ? (
             <Text size="sm" weight="semibold" style={{ color: trader.sharpe_ratio >= 1 ? tokens.colors.accent.success : TRADER_TEXT_TERTIARY, lineHeight: 1.2, fontSize: tokens.typography.fontSize.sm, fontVariantNumeric: 'tabular-nums' }}>
-              {trader.sharpe_ratio.toFixed(2)}
+              {Number(trader.sharpe_ratio).toFixed(2)}
             </Text>
           ) : (
             <span style={{ fontSize: tokens.typography.fontSize.xs, color: TRADER_TEXT_TERTIARY, opacity: 0.4 }}>&mdash;</span>
@@ -509,7 +509,7 @@ export const TraderRow = memo(function TraderRow({
         <Box className="col-followers" style={{ textAlign: 'right', alignItems: 'center', justifyContent: 'flex-end' }}>
           {trader.followers > 0 ? (
             <Text size="sm" weight="semibold" style={{ color: TRADER_TEXT_TERTIARY, lineHeight: 1.2, fontSize: tokens.typography.fontSize.sm, fontVariantNumeric: 'tabular-nums' }}>
-              {trader.followers >= 1000 ? `${(trader.followers / 1000).toFixed(1)}K` : trader.followers}
+              {Number(trader.followers) >= 1000 ? `${(Number(trader.followers) / 1000).toFixed(1)}K` : trader.followers}
             </Text>
           ) : (
             <span style={{ fontSize: tokens.typography.fontSize.xs, color: TRADER_TEXT_TERTIARY, opacity: 0.4 }}>&mdash;</span>
@@ -520,7 +520,7 @@ export const TraderRow = memo(function TraderRow({
         <Box className="col-trades" style={{ textAlign: 'right', alignItems: 'center', justifyContent: 'flex-end' }}>
           {trader.trades_count != null && trader.trades_count > 0 ? (
             <Text size="sm" weight="semibold" style={{ color: TRADER_TEXT_TERTIARY, lineHeight: 1.2, fontSize: tokens.typography.fontSize.sm, fontVariantNumeric: 'tabular-nums' }}>
-              {trader.trades_count >= 1000 ? `${(trader.trades_count / 1000).toFixed(1)}K` : trader.trades_count}
+              {Number(trader.trades_count) >= 1000 ? `${(Number(trader.trades_count) / 1000).toFixed(1)}K` : trader.trades_count}
             </Text>
           ) : (
             <span style={{ fontSize: tokens.typography.fontSize.xs, color: TRADER_TEXT_TERTIARY, opacity: 0.4 }}>&mdash;</span>

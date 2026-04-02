@@ -27,9 +27,12 @@ export const Sparkline = memo(function Sparkline({
   color,
   className,
 }: SparklineProps) {
+  // useId must be called before any early return to satisfy rules-of-hooks
+  const gradientId = useId()
+
   // Fallback: ROI bar
   if (!data || data.length < 2) {
-    const roiVal = roi ?? 0
+    const roiVal = Number(roi ?? 0)
     const isPositive = roiVal >= 0
     const barColor = color || (isPositive ? tokens.colors.sentiment.bull : tokens.colors.sentiment.bear)
     const barWidth = Math.min(Math.abs(roiVal) / 100, 1) * (width - 4)
@@ -66,9 +69,6 @@ export const Sparkline = memo(function Sparkline({
       </svg>
     )
   }
-
-  // eslint-disable-next-line react-hooks/rules-of-hooks -- memo component, stable call order
-  const gradientId = useId()
 
   // Sparkline curve
   const min = Math.min(...data)

@@ -183,7 +183,7 @@ export const TraderCard = memo(function TraderCard({
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
               }}>
                 <Text size="sm" weight="black" style={{ color: textColor, fontSize: tokens.typography.fontSize.sm }}>
-                  {trader.arena_score.toFixed(0)}
+                  {Number(trader.arena_score).toFixed(0)}
                 </Text>
                 <ScoreConfidenceIndicator trader={trader} />
               </Box>
@@ -214,13 +214,13 @@ export const TraderCard = memo(function TraderCard({
           />
           <MetricStat
             label={t('winRatePercent')}
-            value={trader.win_rate != null ? `${trader.win_rate.toFixed(0)}%` : undefined}
+            value={trader.win_rate != null ? `${Number(trader.win_rate).toFixed(0)}%` : undefined}
             color={trader.win_rate != null && trader.win_rate > 50 ? tokens.colors.accent.success : undefined}
             nullTooltip={trader.win_rate == null ? (getPlatformNote(trader.source || source || '') || `Not available for ${EXCHANGE_NAMES[trader.source || source || ''] || (trader.source || source || '').replace('_', ' ')}`) : undefined}
           />
           <MetricStat
             label="MDD"
-            value={trader.max_drawdown != null ? (Math.abs(trader.max_drawdown) < 0.05 ? '< 0.1%' : `-${Math.abs(trader.max_drawdown).toFixed(1)}%`) : undefined}
+            value={trader.max_drawdown != null ? (Math.abs(Number(trader.max_drawdown)) < 0.05 ? '< 0.1%' : `-${Math.abs(Number(trader.max_drawdown)).toFixed(1)}%`) : undefined}
             color={trader.max_drawdown != null ? TRADER_ACCENT_ERROR : undefined}
             nullTooltip={trader.max_drawdown == null ? (getPlatformNote(trader.source || source || '') || `Not available for ${EXCHANGE_NAMES[trader.source || source || ''] || (trader.source || source || '').replace('_', ' ')}`) : undefined}
           />
