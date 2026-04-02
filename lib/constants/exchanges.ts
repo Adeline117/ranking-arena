@@ -265,11 +265,15 @@ export const SOURCES_WITH_DATA: TraderSource[] = [
   'bitunix',
   'toobit',
   'weex',
+  'kucoin',
+  'phemex',
+  'lbank',
   // Social trading
   'etoro',
   // CEX spot
   'binance_spot',
   'bybit_spot',
+  'okx_spot',
   // Web3 / DEX
   'gmx',
   'hyperliquid',
