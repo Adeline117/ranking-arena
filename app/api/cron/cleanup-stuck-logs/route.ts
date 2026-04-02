@@ -11,7 +11,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getSupabaseAdmin } from '@/lib/supabase/server'
 import { logger } from '@/lib/logger'
 import { PipelineLogger } from '@/lib/services/pipeline-logger'
-import { sendAlert } from '@/lib/alerts/send-alert'
+import { sendRateLimitedAlert } from '@/lib/alerts/send-alert'
 import { env } from '@/lib/env'
 
 export const dynamic = 'force-dynamic'
@@ -120,24 +120,28 @@ export async function GET(request: NextRequest) {
 
     await plog.success(cleaned, { jobs: stuckLogs.map(l => l.job_name), oldLogsDeleted })
 
-    // Send Telegram alert listing stuck job names
-    const jobDetails = stuckLogs
-      .map(l => {
-        const stuckMin = Math.round(
-          (Date.now() - new Date(l.started_at).getTime()) / 60000
-        )
-        return `  ${l.job_name}: stuck ${stuckMin}min`
-      })
-      .join('\n')
-    await sendAlert({
-      title: `卡住任务清理: ${cleaned} 个任务超时`,
-      message: `以下任务运行超过30分钟，已标记为 timeout:\n${jobDetails}`,
-      level: 'warning',
-      details: {
-        cleaned,
-        jobs: stuckLogs.map(l => l.job_name).join(', '),
-      },
-    })
+    // Only alert if many jobs stuck (>3) — occasional 1-2 stuck is normal timeout
+    // Rate-limited: same stuck jobs won't re-alert for 6 hours
+    if (cleaned >= 3) {
+      const jobDetails = stuckLogs
+        .map(l => {
+          const stuckMin = Math.round(
+            (Date.now() - new Date(l.started_at).getTime()) / 60000
+          )
+          return `  ${l.job_name}: stuck ${stuckMin}min`
+        })
+        .join('\n')
+      const jobKey = stuckLogs.map(l => l.job_name).sort().join(',')
+      await sendRateLimitedAlert({
+        title: `卡住任务清理: ${cleaned} 个任务超时`,
+        message: `以下任务运行超过30分钟，已标记为 timeout:\n${jobDetails}`,
+        level: 'warning',
+        details: {
+          cleaned,
+          jobs: stuckLogs.map(l => l.job_name).join(', '),
+        },
+      }, `cleanup-stuck:${jobKey}`, 6 * 60 * 60 * 1000)
+    }
 
     return NextResponse.json({
       ok: true,

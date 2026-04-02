@@ -33,6 +33,45 @@ const TELEGRAM_CHAT_ID = process.env.TELEGRAM_ALERT_CHAT_ID
 const AUTO_FIX_COOLDOWN_MS = 6 * 60 * 60 * 1000
 const fixAttempts = new Map() // platform -> last attempt timestamp
 
+// Alert dedup: don't re-send same issue within cooldown
+import fs from 'fs'
+const ALERT_COOLDOWN_MS = 2 * 60 * 60 * 1000 // 2 hours between same-issue alerts
+const ALERT_STATE_FILE = path.resolve(__dirname, '.health-monitor-state.json')
+
+function loadAlertState() {
+  try {
+    if (fs.existsSync(ALERT_STATE_FILE)) {
+      return JSON.parse(fs.readFileSync(ALERT_STATE_FILE, 'utf-8'))
+    }
+  } catch { /* ignore */ }
+  return {}
+}
+
+function saveAlertState(state) {
+  try {
+    fs.writeFileSync(ALERT_STATE_FILE, JSON.stringify(state))
+  } catch { /* ignore */ }
+}
+
+/**
+ * Check if we should send this alert (dedup by issue fingerprint).
+ * Returns true if alert should be sent.
+ */
+function shouldSendAlert(issueFingerprint) {
+  const state = loadAlertState()
+  const lastSent = state[issueFingerprint]
+  if (lastSent && Date.now() - lastSent < ALERT_COOLDOWN_MS) {
+    return false
+  }
+  state[issueFingerprint] = Date.now()
+  // Cleanup entries older than 24h
+  for (const [key, ts] of Object.entries(state)) {
+    if (Date.now() - ts > 24 * 60 * 60 * 1000) delete state[key]
+  }
+  saveAlertState(state)
+  return true
+}
+
 // Dead/blocked platforms - skip in alerts & auto-fix
 // Synced with DEAD_BLOCKED_PLATFORMS in lib/constants/exchanges.ts (2026-03-13)
 // Recovered: lbank, phemex, blofin (VPS/Mac Mini)
@@ -135,11 +174,18 @@ async function runHealthCheck() {
     issues.push(`⚠️ Pipeline check failed: ${err.message}`)
   }
 
-  // 3. Send alert if issues found
+  // 3. Send alert if issues found (with dedup)
   if (issues.length > 0) {
-    const msg = `<b>🏟 Arena Health Alert</b>\n\n${issues.join('\n')}\n\n<i>${new Date().toISOString()}</i>`
-    await sendTelegram(msg)
-    console.log('ALERT:', issues.join(' | '))
+    // Fingerprint = sorted issue types (ignore specific timestamps/details)
+    const fingerprint = issues.map(i => i.replace(/\d+/g, 'N').slice(0, 60)).sort().join('|')
+
+    if (shouldSendAlert(fingerprint)) {
+      const msg = `<b>🏟 Arena Health Alert</b>\n\n${issues.join('\n')}\n\n<i>${new Date().toISOString()}</i>`
+      await sendTelegram(msg)
+      console.log('ALERT SENT:', issues.join(' | '))
+    } else {
+      console.log('ALERT DEDUPED (same issue within 2h):', issues.join(' | '))
+    }
 
     // 4. Trigger auto-fix if --with-auto-fix flag is set
     if (process.argv.includes('--with-auto-fix') && pipelineHealth) {
