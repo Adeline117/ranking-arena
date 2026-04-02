@@ -53,14 +53,13 @@ export async function GET() {
       async () => {
         const supabase = getSupabaseAdmin()
 
-        // Fetch ALL rows — PostgREST defaults to 1000, but we have 19K+ traders.
-        // Paginate in chunks of 5000 to get complete data.
+        // Fetch ALL rows — Supabase has a max_rows=1000 limit per request.
+        // Paginate in 1000-row chunks (the Supabase hard limit) to get complete data.
         const allRows: LeaderboardRow[] = []
-        const PAGE_SIZE = 5000
+        const PAGE_SIZE = 1000
         let offset = 0
-        let hasMore = true
 
-        while (hasMore) {
+        while (true) {
           const { data: page, error: pageError } = await supabase
             .from('leaderboard_ranks')
             .select('source, arena_score, roi, win_rate, max_drawdown')
@@ -75,7 +74,7 @@ export async function GET() {
 
           allRows.push(...(page as LeaderboardRow[]))
           offset += PAGE_SIZE
-          hasMore = page.length === PAGE_SIZE
+          if (page.length < PAGE_SIZE) break // Last page
         }
 
         if (allRows.length === 0) return []
