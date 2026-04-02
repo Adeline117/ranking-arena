@@ -127,6 +127,15 @@ export async function GET(request: NextRequest) {
 
     const forceWrite = request.nextUrl.searchParams.get('force') === '1'
 
+    // Pre-compute: fill NULL PnL from sibling windows for platforms where
+    // the leaderboard API doesn't return PnL (e.g., Bybit).
+    // This propagates enrichment PnL across all windows for the same trader.
+    try {
+      await supabase.rpc('fill_null_pnl_from_siblings')
+    } catch (e) {
+      logger.warn('fill_null_pnl_from_siblings failed (non-critical):', e)
+    }
+
     // Phase 2: Parallelize season computation (300s → 120s)
     const results = await Promise.all(
       SEASONS.map(async (season) => {
