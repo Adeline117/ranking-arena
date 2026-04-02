@@ -38,13 +38,13 @@ export class MexcConnector extends BaseConnector {
 
       for (let page = 1; page <= pages && entries.length < limit; page++) {
         // Try VPS scraper first
-        const vpsResponse = await this.fetchViaVPS<any>('/mexc/leaderboard', {
+        const vpsResponse = await this.fetchViaVPS<MexcVPSResponse>('/mexc/leaderboard', {
           page,
           pageSize,
           periodDays: WINDOW_MAP[window],
         });
 
-        let traderList: any[] = [];
+        let traderList: MexcTraderItem[] = [];
 
         if (vpsResponse) {
           // VPS scraper returns: { code, data: { goldTraders: [...], silverTraders: [...], ... } }
@@ -190,6 +190,19 @@ const FIELD_MAP: Record<string, string> = {
   followers: 'followerCount',
   copiers: 'copierCount',
 };
+
+interface MexcVPSResponse {
+  data?: {
+    goldTraders?: MexcTraderItem[];
+    silverTraders?: MexcTraderItem[];
+    bullsTraders?: MexcTraderItem[];
+    bearsTraders?: MexcTraderItem[];
+  };
+  goldTraders?: MexcTraderItem[];
+  silverTraders?: MexcTraderItem[];
+  bullsTraders?: MexcTraderItem[];
+  bearsTraders?: MexcTraderItem[];
+}
 
 interface MexcListResponse {
   data: { list: MexcTraderItem[] };
