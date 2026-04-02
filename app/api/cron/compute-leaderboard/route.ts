@@ -157,7 +157,9 @@ export async function GET(request: NextRequest) {
         rolledBack.push(season)
         stats.seasons[season] = previousCounts[season]
       } else if (count === -1) {
-        const msg = `${season}: degradation detected, upsert SKIPPED (previous: ${previousCounts[season]})`
+        // Degradation skip is auto-recoverable (MAX_CONSECUTIVE_SKIPS=2 forces compute on 3rd attempt)
+        // Only treat as warning, not error, to avoid noisy OpenClaw alerts
+        const msg = `${season}: degradation detected, upsert SKIPPED (table: ${previousCounts[season]})`
         warnings.push(msg)
         rolledBack.push(season)
         stats.seasons[season] = previousCounts[season] // Keep old count in stats
@@ -281,8 +283,14 @@ export async function GET(request: NextRequest) {
     await tieredDel(IDEMPOTENCY_KEY)
 
     const totalRanked = Object.values(stats.seasons).reduce((a, b) => a + b, 0)
-    if (warnings.length > 0) {
+    // Distinguish between computation FAILUREs (real errors) and degradation SKIPs (auto-recoverable)
+    const hasRealFailures = results.some(r => r.error && r.count !== -1)
+    if (hasRealFailures) {
+      // Real computation failure — report as error
       await plog.error(new Error(warnings.join('; ')), { stats, rolledBack })
+    } else if (warnings.length > 0) {
+      // Only degradation skips — report as partial success (auto-recovers next run)
+      await plog.success(totalRanked, { stats, warnings, rolledBack, note: 'degradation skips are auto-recoverable' })
     } else {
       await plog.success(totalRanked, { stats })
     }
@@ -1266,7 +1274,7 @@ async function computeSeason(
     }
   } catch { /* DB miss — fall back to previousCount */ }
 
-  const MAX_CONSECUTIVE_SKIPS = 2
+  const MAX_CONSECUTIVE_SKIPS = 1 // Force-compute on 2nd attempt to prevent stale data (was 2)
   const ratio = baselineCount ? scored.length / baselineCount : 1
   logger.info(`[${season}] Degradation check: scored=${scored.length}, baseline=${baselineCount}, tableCount=${previousCount}, ratio=${(ratio * 100).toFixed(1)}%, threshold=${DEGRADATION_THRESHOLD * 100}%`)
 
