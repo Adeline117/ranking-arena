@@ -68,7 +68,7 @@ export const PLATFORM_ROUTES: Record<string, RouteConfig> = {
   bitget_futures:  { routes: ['direct', 'vps_sg', 'scraper_sg'], notes: 'Direct API works sometimes; VPS proxy faster than Playwright. Scraper as last resort.' },
   bitget_spot:     { routes: ['direct', 'vps_sg', 'scraper_sg'], notes: 'Same as bitget futures — direct first, VPS fallback, scraper last resort.' },
   bingx:           { routes: ['scraper_sg'],                   notes: 'CloudFlare JS challenge. waitForResponse multi-rank.' },
-  mexc:            { routes: ['direct'],                        notes: 'Mobile UA bypass (MEXC/1.0 iPhone) works from any IP. No VPS/scraper needed.' },
+  mexc:            { routes: ['direct', 'vps_sg', 'scraper_sg'], notes: 'Mobile UA bypass works locally but Vercel hnd1 may be blocked. VPS proxy + scraper fallback.' },
   gateio:          { routes: ['direct', 'scraper_sg'],         notes: 'Direct works from Mac, Vercel may get WAF-blocked.' },
 
   // ─── BROWSER_ONLY (no public JSON API) ───────────────────────

@@ -14,9 +14,9 @@
 // Re-enable after deep investigation of timeout root cause
 // 2026-03-31: Re-enabled binance_futures and bybit — too critical to leave disabled.
 // 2026-03-31: Re-enabled weex (VPS scraper works, server back from 521) and okx_web3 (v5 API confirmed working).
-// kucoin stays disabled (copy trading APIs all 404, permanently dead).
+// kucoin: RE-ENABLED 2026-04-02 — POST /_api/ct-copy-trade/ works (822 traders)
 // dydx enrichment disabled separately in NO_ENRICHMENT_PLATFORMS.
-export const DISABLED_PLATFORMS = ['bitget_spot', 'kucoin'] as const
+export const DISABLED_PLATFORMS = ['bitget_spot'] as const
 export type DisabledPlatform = typeof DISABLED_PLATFORMS[number]
 
 export function isPlatformDisabled(platform: string): boolean {
