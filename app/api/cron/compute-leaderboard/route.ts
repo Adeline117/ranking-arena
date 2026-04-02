@@ -456,17 +456,25 @@ async function computeSeason(
 
         if (error || !data?.length) return rows
 
+        let totalJsonbFallbacks = 0
         for (const d of data) {
           // Supabase returns `numeric` columns as strings for high-precision values.
           // Must use Number() to convert, not `as number` (which is just a TS type assertion).
           // Fallback to metrics JSONB when columns are NULL (some platforms write only to JSONB).
           const m = (d.metrics as Record<string, unknown>) || {}
+          let jsonbFallbackCount = 0
           const col = (key: string, jsonKey?: string) => {
             const v = d[key as keyof typeof d]
-            if (v != null) return Number(v)
+            if (v != null) { const n = Number(v); return Number.isFinite(n) ? n : null }
             const jk = jsonKey || key
             const jv = m[jk]
-            return jv != null ? Number(jv) : null
+            if (jv != null) {
+              const n = Number(jv)
+              if (!Number.isFinite(n)) return null
+              jsonbFallbackCount++
+              return n
+            }
+            return null
           }
           rows.push({
             source: d.platform as string,
@@ -494,6 +502,10 @@ async function computeSeason(
             trader_type: null,
             metrics_estimated: false,
           })
+          if (jsonbFallbackCount > 0) totalJsonbFallbacks++
+        }
+        if (totalJsonbFallbacks > 0) {
+          console.log(`[compute-leaderboard] ${source}: ${totalJsonbFallbacks}/${data.length} traders used JSONB metrics fallback`)
         }
         return rows
       })
@@ -1216,7 +1228,8 @@ async function computeSeason(
             arenaFollowerMap.set(row.trader_id, (arenaFollowerMap.get(row.trader_id) || 0) + row.cnt)
           }
         }
-      } catch {
+      } catch (e) {
+        logger.warn(`[${season}] arena follower batch query failed, using fallback: ${e instanceof Error ? e.message : String(e)}`)
         // Fallback: individual count query
         const { data: fallbackData } = await supabase
           .from('trader_follows')
@@ -1272,7 +1285,7 @@ async function computeSeason(
       baselineSource = 'table-count-discounted'
       logger.info(`[${season}] No pipeline_state baseline — using discounted table count: ${baselineCount} (raw: ${previousCount})`)
     }
-  } catch { /* DB miss — fall back to previousCount */ }
+  } catch (e) { logger.warn(`[${season}] pipeline_state read failed: ${e instanceof Error ? e.message : String(e)}`) }
 
   const MAX_CONSECUTIVE_SKIPS = 1 // Force-compute on 2nd attempt to prevent stale data (was 2)
   const ratio = baselineCount ? scored.length / baselineCount : 1
@@ -1287,14 +1300,14 @@ async function computeSeason(
         const stored = await PipelineState.get<number>(skipKey)
         consecutiveSkips = (typeof stored === 'number' ? stored : 0) + 1
         await PipelineState.set(skipKey, consecutiveSkips)
-      } catch { /* DB failure — proceed with skip */ }
+      } catch (e) { logger.warn(`[${season}] skip counter DB failure: ${e instanceof Error ? e.message : String(e)}`) }
 
       if (consecutiveSkips >= MAX_CONSECUTIVE_SKIPS) {
         logger.warn(`${season}: degradation detected (${scored.length}/${baselineCount}, ${(ratio * 100).toFixed(1)}%) but FORCE-COMPUTING after ${consecutiveSkips} consecutive skips to prevent stale data`)
         // Reset counter and fall through to upsert
         try {
           await PipelineState.del(skipKey)
-        } catch { /* non-critical */ }
+        } catch (e) { logger.warn(`[${season}] skip counter reset failed: ${e instanceof Error ? e.message : String(e)}`) }
       } else {
         logger.error(`${season}: computed ${scored.length} traders (baseline: ${baselineCount}, ratio: ${(ratio * 100).toFixed(1)}%). SKIPPING — below ${DEGRADATION_THRESHOLD * 100}% threshold (skip ${consecutiveSkips}/${MAX_CONSECUTIVE_SKIPS}).`)
         return -1
@@ -1306,7 +1319,7 @@ async function computeSeason(
   // Reset consecutive skip counter on successful computation
   try {
     await PipelineState.del(`leaderboard:degradation-skips:${season}`)
-  } catch { /* non-critical */ }
+  } catch (e) { logger.warn(`[${season}] skip counter cleanup failed: ${e instanceof Error ? e.message : String(e)}`) }
 
   // Phase 2: Incremental upsert — only update changed rows to reduce write volume ~40%
   // Fetch current arena_scores to diff against
@@ -1437,7 +1450,11 @@ async function computeSeason(
   // Persistent — no TTL expiry risk (was the root cause of the 6-day leaderboard freeze).
   try {
     await PipelineState.set(LAST_SCORED_KEY, scored.length)
-  } catch { /* non-critical */ }
+  } catch (e) {
+    // CRITICAL: This write prevents the 6-day leaderboard freeze (pipeline_state baseline).
+    // If this fails repeatedly, the degradation check uses inflated table counts.
+    logger.error(`[${season}] CRITICAL: failed to write scored count to pipeline_state: ${e instanceof Error ? e.message : String(e)}`)
+  }
 
   const actualUpserted = scored.length - upsertErrors
   logger.info(`${season}: ranked ${scored.length} traders (${upsertErrors} upsert errors)`)
