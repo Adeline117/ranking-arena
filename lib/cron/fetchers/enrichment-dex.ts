@@ -177,20 +177,23 @@ interface HyperliquidFill {
 /**
  * Fetch raw fills from Hyperliquid API (cached for reuse across position history + equity curve + stats).
  */
-async function fetchHyperliquidFills(address: string): Promise<HyperliquidFill[]> {
+async function fetchHyperliquidFills(address: string, days = 90): Promise<HyperliquidFill[]> {
+  // Use userFillsByTime with startTime for full time range coverage
+  // userFills only returns latest 2000 which for active traders covers < 5 days
+  const startTime = Date.now() - days * 86400000
   const fills = await fetchJson<HyperliquidFill[]>(
     'https://api.hyperliquid.xyz/info',
     {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: { type: 'userFills', user: address },
+      body: { type: 'userFillsByTime', user: address, startTime },
       timeoutMs: 15000,
     }
   )
   return Array.isArray(fills) ? fills : []
 }
 
-function parseFillsToPositions(fills: HyperliquidFill[], limit = 200): PositionHistoryItem[] {
+function parseFillsToPositions(fills: HyperliquidFill[], limit = 2000): PositionHistoryItem[] {
   const closingFills = fills
     .filter((f) => {
       const pnl = parseFloat(f.closedPnl || '0')

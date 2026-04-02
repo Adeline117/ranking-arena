@@ -362,9 +362,15 @@ export async function fetchDriftPositionHistoryFromS3(
  */
 interface DriftSnapshot {
   epochTs?: number
-  cumulativeRealizedPnl?: number
-  cumulativePerpPnl?: number
-  allTimeTotalPnl?: number
+  ts?: number  // API actually returns 'ts', not 'epochTs'
+  cumulativeRealizedPnl?: number | string
+  cumulativePerpPnl?: number | string
+  allTimeTotalPnl?: number | string
+}
+
+interface DriftSnapshotsResponse {
+  success?: boolean
+  accounts?: Array<{ accountId?: string; snapshots?: DriftSnapshot[]; metrics?: unknown }>
 }
 
 /**
@@ -385,17 +391,27 @@ export async function fetchDriftEquityCurve(
       // Strategy 1: Use snapshots/trading API for accurate daily equity curve
       try {
         const snapUrl = `${DATA_API}/authority/${authority}/snapshots/trading?days=${days}`
-        const snapshots = await fetchJson<DriftSnapshot[]>(snapUrl, { timeoutMs: 15000 })
+        const resp = await fetchJson<DriftSnapshotsResponse>(snapUrl, { timeoutMs: 15000 })
 
-        if (Array.isArray(snapshots) && snapshots.length >= 2) {
-          const points: EquityCurvePoint[] = snapshots
-            .filter((s) => s.epochTs != null)
+        // Extract snapshots from nested accounts structure
+        const allSnaps: DriftSnapshot[] = []
+        if (resp?.accounts && Array.isArray(resp.accounts)) {
+          for (const acct of resp.accounts) {
+            if (Array.isArray(acct.snapshots)) allSnaps.push(...acct.snapshots)
+          }
+        } else if (Array.isArray(resp)) {
+          allSnaps.push(...(resp as unknown as DriftSnapshot[]))
+        }
+
+        if (allSnaps.length >= 2) {
+          const points: EquityCurvePoint[] = allSnaps
+            .filter((s) => (s.ts ?? s.epochTs) != null)
             .map((s) => {
-              const pnl = s.cumulativeRealizedPnl ?? s.allTimeTotalPnl ?? s.cumulativePerpPnl ?? 0
+              const pnl = Number(s.cumulativeRealizedPnl ?? s.allTimeTotalPnl ?? s.cumulativePerpPnl ?? 0)
               // Drift values are in USDC base units (divide by 1e6)
               const pnlUsd = Math.abs(pnl) > 1e10 ? pnl / 1e6 : pnl
               return {
-                date: new Date((s.epochTs ?? 0) * 1000).toISOString().split('T')[0],
+                date: new Date(((s.ts ?? s.epochTs) ?? 0) * 1000).toISOString().split('T')[0],
                 roi: 0,
                 pnl: pnlUsd,
               }
@@ -462,17 +478,29 @@ export async function fetchDriftStatsDetail(
 
       try {
         const snapUrl = `${DATA_API}/authority/${authority}/snapshots/trading?days=90`
-        // The snapshots/trading API returns a flat array of DriftSnapshot objects
-        // (same format used by fetchDriftEquityCurve)
-        const snapshots = await fetchJson<DriftSnapshot[]>(snapUrl, { timeoutMs: 15000 })
+        // API returns { success, accounts: [{ snapshots: [...] }] }
+        const resp = await fetchJson<DriftSnapshotsResponse>(snapUrl, { timeoutMs: 15000 })
 
-        const snaps = (Array.isArray(snapshots) ? snapshots : [])
-          .filter((s) => s.epochTs != null)
+        // Extract snapshots from nested accounts structure
+        const allSnapshots: DriftSnapshot[] = []
+        if (resp?.accounts && Array.isArray(resp.accounts)) {
+          for (const acct of resp.accounts) {
+            if (Array.isArray(acct.snapshots)) {
+              allSnapshots.push(...acct.snapshots)
+            }
+          }
+        } else if (Array.isArray(resp)) {
+          // Fallback: flat array format (legacy)
+          allSnapshots.push(...(resp as unknown as DriftSnapshot[]))
+        }
+
+        const snaps = allSnapshots
+          .filter((s) => (s.ts ?? s.epochTs) != null)
           .map((s) => {
-            const rawPnl = s.cumulativeRealizedPnl ?? s.allTimeTotalPnl ?? s.cumulativePerpPnl ?? 0
+            const rawPnl = Number(s.cumulativeRealizedPnl ?? s.allTimeTotalPnl ?? s.cumulativePerpPnl ?? 0)
             // Drift values may be in USDC base units (divide by 1e6 if very large)
             const pnl = Math.abs(rawPnl) > 1e10 ? rawPnl / 1e6 : rawPnl
-            return { ts: s.epochTs!, pnl }
+            return { ts: (s.ts ?? s.epochTs)!, pnl }
           })
           .sort((a, b) => a.ts - b.ts)
 
