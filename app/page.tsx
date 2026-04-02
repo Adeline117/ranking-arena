@@ -1,8 +1,10 @@
 import type { Metadata } from 'next'
 import { getInitialTraders } from '@/lib/getInitialTraders'
 import { getHeroStats } from '@/lib/data/hero-stats'
-import SSRRankingTable from './components/home/SSRRankingTable'
-import HomeHeroSSR from './components/home/HomeHeroSSR'
+// SSR shell removed — it caused React reconciliation crashes (insertBefore/removeChild)
+// when the interactive HomePage mounted and modified DOM nodes React still tracked.
+// import SSRRankingTable from './components/home/SSRRankingTable'
+// import HomeHeroSSR from './components/home/HomeHeroSSR'
 import { JsonLd } from './components/Providers/JsonLd'
 import HomePageLoader from './components/home/HomePageLoader'
 import { PageErrorBoundary } from './components/utils/ErrorBoundary'
@@ -67,10 +69,8 @@ export default async function Page() {
   // Fetch data in parallel for optimal performance
   const [{ traders: initialTraders, lastUpdated }, heroStats] = await Promise.all([
     getInitialTraders('90D', 10),
-    getHeroStats(), // Cached in Redis (1hr TTL), falls back to defaults on error
+    getHeroStats(),
   ])
-
-  const ssrTable = <SSRRankingTable traders={initialTraders} />
 
   return (
     <>
@@ -78,17 +78,6 @@ export default async function Page() {
           This was forcing the browser to download ranking data before any JS initialized.
           The SSR table already shows data — the client fetch can happen lazily. */}
       <JsonLd data={organizationJsonLd} />
-
-      {/* Phase 1: SSR hero + ranking table — pure HTML, 0 JS, visible immediately.
-          IMPORTANT: Outside PageErrorBoundary so React never tries to reconcile
-          these server-rendered nodes. The interactive HomePage hides this via display:none. */}
-      <div id="ssr-homepage-shell" style={{ maxWidth: 1400, margin: '0 auto', padding: '8px 16px' }}>
-        <div aria-hidden="true" style={{ height: 56 }} />
-        <HomeHeroSSR traderCount={heroStats.traderCount} exchangeCount={heroStats.exchangeCount} />
-        <div aria-hidden="true" style={{ height: 30 }} />
-        <div aria-hidden="true" style={{ height: 47, borderBottom: '1px solid var(--color-border-primary, rgba(255,255,255,0.1))' }} />
-        {ssrTable}
-      </div>
 
       <PageErrorBoundary>
         {/* Phase 2: Full interactive homepage — loaded with ssr:false via HomePageLoader. */}

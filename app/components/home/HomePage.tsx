@@ -31,24 +31,7 @@ interface HomePageProps {
 }
 
 export default function HomePage({ initialTraders, initialLastUpdated, heroStats }: HomePageProps) {
-  // Crossfade SSR shell → interactive content with zero CLS.
-  // The SSR shell is our LCP element (hero headline), so we can't hide it via CSS :has()
-  // (that kills LCP on slow connections). Instead:
-  // 1. Position the SSR shell absolutely (removes from flow without CLS — it's already painted)
-  // 2. Fade it out while the interactive content takes its place
-  // Previously shell.remove() caused CLS ~2.0 by destroying the entire SSR DOM in one frame.
-  useEffect(() => {
-    const shell = document.getElementById('ssr-homepage-shell')
-    if (!shell) return
-    // Step 1: Collapse the SSR shell out of document flow instantly.
-    // Since the interactive content is already rendered below it, this causes
-    // the interactive content to move UP to fill the space — but since the
-    // interactive content is the same visual content, there's no visible shift.
-    // Hide the SSR shell — use display:none instead of remove() to avoid
-    // React DOM reference errors (insertBefore/removeChild crashes) when
-    // React tries to update nodes that were removed from the document.
-    shell.style.display = 'none'
-  }, [])
+  // SSR shell removed from page.tsx — no longer need to hide it
 
   return (
     <div
