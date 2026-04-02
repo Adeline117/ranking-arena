@@ -79,7 +79,17 @@ export async function fetchBtccStatsDetail(
     avgLoss: null,
     largestWin: null,
     largestLoss: null,
-    sharpeRatio: null,
+    sharpeRatio: (() => {
+      if (!trader.netProfitList || typeof trader.netProfitList !== 'string') return null
+      const values = trader.netProfitList.split(',').map(v => parseFloat(v.trim())).filter(v => !isNaN(v))
+      if (values.length < 7) return null
+      const returns = values.slice(1).map((v, i) => v - values[i])
+      const mean = returns.reduce((a, b) => a + b, 0) / returns.length
+      const std = Math.sqrt(returns.reduce((a, r) => a + (r - mean) ** 2, 0) / returns.length)
+      if (std <= 0) return null
+      const sharpe = Math.round((mean / std) * Math.sqrt(365) * 100) / 100
+      return sharpe > -20 && sharpe < 20 ? sharpe : null
+    })(),
     maxDrawdown,
     currentDrawdown: null,
     volatility: null,
