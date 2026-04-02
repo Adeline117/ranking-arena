@@ -80,7 +80,7 @@ async function getFollowersList(
       return NextResponse.json({ followers: [], count: 0 })
     }
     logger.dbError('Fetch followers', followersError, { targetUserId: targetUser.id })
-    return NextResponse.json({ error: followersError.message }, { status: 500 })
+    return NextResponse.json({ error: 'Failed to fetch followers' }, { status: 500 })
   }
 
   let followStatus: Record<string, boolean> = {}
@@ -142,7 +142,7 @@ async function getFollowingList(
       return NextResponse.json({ following: [], count: 0 })
     }
     logger.dbError('Fetch following', followingError, { targetUserId: targetUser.id })
-    return NextResponse.json({ error: followingError.message }, { status: 500 })
+    return NextResponse.json({ error: 'Failed to fetch following list' }, { status: 500 })
   }
 
   let followStatus: Record<string, boolean> = {}

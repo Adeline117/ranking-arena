@@ -17,6 +17,7 @@ import {
 } from '@/lib/utils/tradingview-ws'
 import { createLogger } from '@/lib/utils/logger'
 import { getCorsOrigin } from '@/lib/utils/cors'
+import { getOrSetWithLock } from '@/lib/cache'
 
 // 必须使用 Node.js 运行时
 export const runtime = 'nodejs'
@@ -53,7 +54,11 @@ async function handleSnapshot(origin: string | null): Promise<NextResponse> {
       })
     }
 
-    const snapshot = await getRealtimeSnapshot()
+    const snapshot = await getOrSetWithLock(
+      'api:market:realtime:snapshot',
+      async () => getRealtimeSnapshot(),
+      { ttl: 5, lockTtl: 5 }
+    )
     snapshotCache = { ts: now, data: snapshot }
 
     return NextResponse.json(snapshot, {

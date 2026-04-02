@@ -88,7 +88,7 @@ export async function GET(request: NextRequest) {
 
     if (followError && !followError.message?.includes('Could not find')) {
       logger.error('[User Follow API] 查询错误:', followError)
-      return NextResponse.json({ error: followError.message }, { status: 500 })
+      return NextResponse.json({ error: 'Failed to check follow status' }, { status: 500 })
     }
 
     // 检查是否互相关注
