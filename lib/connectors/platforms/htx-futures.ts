@@ -152,7 +152,18 @@ export class HtxFuturesConnector extends BaseConnector {
       followers: safeNumber(raw.copyUserNum),
       copiers: null,
       aum: safeNumber(raw.aum),
-      sharpe_ratio: null,
+      sharpe_ratio: (() => {
+        const profitList = raw.profitList as string[] | number[] | undefined
+        if (!Array.isArray(profitList) || profitList.length < 7) return null
+        const values = profitList.map(Number).filter(n => !isNaN(n))
+        if (values.length < 7) return null
+        const returns = values.slice(1).map((v, i) => v - values[i])
+        const mean = returns.reduce((a, b) => a + b, 0) / returns.length
+        const std = Math.sqrt(returns.reduce((a, r) => a + (r - mean) ** 2, 0) / returns.length)
+        if (std <= 0) return null
+        const sharpe = Math.round((mean / std) * Math.sqrt(365) * 100) / 100
+        return Math.max(-20, Math.min(20, sharpe))
+      })(),
       platform_rank: safeNumber(raw.no ?? raw.order ?? raw.rank),
       // Extra: equity curve from profitList (30-day daily cumulative returns)
       _profit_list: raw.profitList,
