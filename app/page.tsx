@@ -79,19 +79,18 @@ export default async function Page() {
           The SSR table already shows data — the client fetch can happen lazily. */}
       <JsonLd data={organizationJsonLd} />
 
-      <PageErrorBoundary>
-        {/* Phase 1: SSR hero + ranking table — pure HTML, 0 JS, visible immediately.
-            Hidden via CSS (display:none) once the interactive HomePage mounts.
-            Spacers match Phase 2 element heights to minimize CLS on transition. */}
-        <div id="ssr-homepage-shell" style={{ maxWidth: 1400, margin: '0 auto', padding: '8px 16px' }}>
-          {/* Spacers for Phase 2 elements not in SSR: TopNav(56) + FoundingMemberBanner(30) + ExchangePartners(47) */}
-          <div aria-hidden="true" style={{ height: 56 }} />
-          <HomeHeroSSR traderCount={heroStats.traderCount} exchangeCount={heroStats.exchangeCount} />
-          <div aria-hidden="true" style={{ height: 30 }} />
-          <div aria-hidden="true" style={{ height: 47, borderBottom: '1px solid var(--color-border-primary, rgba(255,255,255,0.1))' }} />
-          {ssrTable}
-        </div>
+      {/* Phase 1: SSR hero + ranking table — pure HTML, 0 JS, visible immediately.
+          IMPORTANT: Outside PageErrorBoundary so React never tries to reconcile
+          these server-rendered nodes. The interactive HomePage hides this via display:none. */}
+      <div id="ssr-homepage-shell" style={{ maxWidth: 1400, margin: '0 auto', padding: '8px 16px' }}>
+        <div aria-hidden="true" style={{ height: 56 }} />
+        <HomeHeroSSR traderCount={heroStats.traderCount} exchangeCount={heroStats.exchangeCount} />
+        <div aria-hidden="true" style={{ height: 30 }} />
+        <div aria-hidden="true" style={{ height: 47, borderBottom: '1px solid var(--color-border-primary, rgba(255,255,255,0.1))' }} />
+        {ssrTable}
+      </div>
 
+      <PageErrorBoundary>
         {/* Phase 2: Full interactive homepage — loaded with ssr:false via HomePageLoader. */}
         <HomePageLoader
           initialTraders={initialTraders}
