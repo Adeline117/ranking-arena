@@ -1240,11 +1240,20 @@ async function computeSeason(
   // from Redis (i.e., what the compute actually produced last time) as the baseline.
   const LAST_SCORED_KEY = `leaderboard:last-scored-count:${season}`
   let baselineCount = previousCount || 0
+  let baselineSource = 'table-count'
   try {
     const stored = await PipelineState.get<number>(LAST_SCORED_KEY)
     if (stored && typeof stored === 'number' && stored > 0) {
       baselineCount = stored
+      baselineSource = 'pipeline-state'
       logger.info(`[${season}] Using DB baseline (last scored count): ${baselineCount} (table count: ${previousCount})`)
+    } else if (previousCount && previousCount > 0) {
+      // Cold start: pipeline_state has no baseline yet (table may not exist or first run).
+      // The table count includes zombie rows from incremental upsert, so it's inflated.
+      // Use 60% of table count as conservative baseline to avoid false degradation alerts.
+      baselineCount = Math.round(previousCount * 0.60)
+      baselineSource = 'table-count-discounted'
+      logger.info(`[${season}] No pipeline_state baseline — using discounted table count: ${baselineCount} (raw: ${previousCount})`)
     }
   } catch { /* DB miss — fall back to previousCount */ }
 

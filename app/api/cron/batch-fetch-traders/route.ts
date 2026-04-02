@@ -59,11 +59,14 @@ const GROUPS: Record<string, string[]> = {
   // DEAD removed 2026-04-01: vertex (no API), apex_pro (no API), rabbitx (DNS dead)
   e: ['drift', 'jupiter_perps', 'aevo', 'web3_bot', 'toobit', 'xt', 'etoro'],
   // Group F: VPS scraper slow platforms (every 6h)
-  // DEAD removed 2026-04-01: bingx (empty_data), weex (75% timeout)
-  f: ['mexc', 'woox', 'polymarket', 'copin'],
+  // bingx: DEAD (empty_data)
+  // weex: RE-ENABLED — 117 traders in leaderboard, fresh data in snapshots_v2
+  f: ['mexc', 'woox', 'polymarket', 'copin', 'weex'],
   // Group G: Mac Mini / recovered (every 6h)
-  // DEAD removed 2026-04-01: kucoin (discontinued), bingx_spot (no leaderboard), dydx (API 404), phemex (API 404)
-  g: ['lbank', 'blofin'],
+  // bingx_spot: DEAD (no leaderboard), phemex: DEAD (API 404)
+  // kucoin: RECOVERED 2026-03-31 via POST /_api/ct-copy-trade/ (205 traders in snapshots_v2)
+  // dydx: RECOVERED 2026-03-31 via Copin API (3339 traders)
+  g: ['lbank', 'blofin', 'kucoin', 'dydx'],
 }
 
 interface BatchResult {
