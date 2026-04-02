@@ -230,9 +230,9 @@ export function useTraderData(options: UseTraderDataOptions = {}) {
 
     const requestPromise = (async (): Promise<CachedData> => {
       try {
-        // Progressive loading: fetch 200 initially (covers 4+ pages of pagination).
-        // Full 1000 only loaded when user searches or scrolls past page 4.
-        const fetchLimit = 200
+        // Progressive loading: fetch 50 initially (covers ~2 pages of visible ranking).
+        // Full data loaded on-demand when user scrolls or searches.
+        const fetchLimit = 50
         let url: string
         if (timeRange === 'COMPOSITE') {
           url = `/api/rankings?window=composite&limit=${fetchLimit}`
@@ -444,7 +444,7 @@ export function useTraderData(options: UseTraderDataOptions = {}) {
     if (prefetchedRef.current || state.loading || state.currentTraders.length === 0) return
     prefetchedRef.current = true
     const otherRanges: TimeRange[] = (['90D', '30D', '7D'] as TimeRange[]).filter(r => r !== state.activeTimeRange)
-    const staggerMs = 2000 // 2s between each prefetch to avoid rate limit bursts
+    const staggerMs = 5000 // 5s between each prefetch — prioritize initial load
     const timers: ReturnType<typeof setTimeout>[] = []
 
     const prefetch = () => {
