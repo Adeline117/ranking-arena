@@ -422,7 +422,7 @@ async function computeSeason(
         const freshnessISO = freshnessISOBySource(source)
         let { data, error } = await supabase
           .from('trader_snapshots_v2')
-          .select('platform, trader_key, roi_pct, pnl_usd, win_rate, max_drawdown, trades_count, followers, arena_score, updated_at, sharpe_ratio, sortino_ratio, calmar_ratio, volatility_pct, downside_volatility_pct')
+          .select('platform, trader_key, roi_pct, pnl_usd, win_rate, max_drawdown, trades_count, followers, arena_score, updated_at, sharpe_ratio, sortino_ratio, calmar_ratio, volatility_pct, downside_volatility_pct, metrics')
           .eq('platform', source)
           .eq('window', v2Window)
           .gte('updated_at', freshnessISO)
@@ -434,7 +434,7 @@ async function computeSeason(
         if ((!data || data.length < FALLBACK_THRESHOLD) && v2Window !== '30D') {
           const fallback = await supabase
             .from('trader_snapshots_v2')
-            .select('platform, trader_key, roi_pct, pnl_usd, win_rate, max_drawdown, trades_count, followers, arena_score, updated_at, sharpe_ratio, sortino_ratio, calmar_ratio, volatility_pct, downside_volatility_pct')
+            .select('platform, trader_key, roi_pct, pnl_usd, win_rate, max_drawdown, trades_count, followers, arena_score, updated_at, sharpe_ratio, sortino_ratio, calmar_ratio, volatility_pct, downside_volatility_pct, metrics')
             .eq('platform', source)
             .eq('window', '30D')
             .gte('updated_at', freshnessISO)
@@ -451,16 +451,25 @@ async function computeSeason(
         for (const d of data) {
           // Supabase returns `numeric` columns as strings for high-precision values.
           // Must use Number() to convert, not `as number` (which is just a TS type assertion).
+          // Fallback to metrics JSONB when columns are NULL (some platforms write only to JSONB).
+          const m = (d.metrics as Record<string, unknown>) || {}
+          const col = (key: string, jsonKey?: string) => {
+            const v = d[key as keyof typeof d]
+            if (v != null) return Number(v)
+            const jk = jsonKey || key
+            const jv = m[jk]
+            return jv != null ? Number(jv) : null
+          }
           rows.push({
             source: d.platform as string,
             source_trader_id: d.trader_key as string,
-            roi: d.roi_pct != null ? Number(d.roi_pct) : null,
-            pnl: d.pnl_usd != null ? Number(d.pnl_usd) : null,
-            win_rate: d.win_rate != null ? Number(d.win_rate) : null,
-            max_drawdown: d.max_drawdown != null ? Number(d.max_drawdown) : null,
-            trades_count: d.trades_count != null ? Number(d.trades_count) : null,
-            followers: d.followers != null ? Number(d.followers) : null,
-            arena_score: d.arena_score != null ? Number(d.arena_score) : null,
+            roi: col('roi_pct', 'roi'),
+            pnl: col('pnl_usd', 'pnl'),
+            win_rate: col('win_rate'),
+            max_drawdown: col('max_drawdown'),
+            trades_count: col('trades_count'),
+            followers: col('followers'),
+            arena_score: col('arena_score'),
             captured_at: d.updated_at as string,
             full_confidence_at: null,
             profitability_score: null,
