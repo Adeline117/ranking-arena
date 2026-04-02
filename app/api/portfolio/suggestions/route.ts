@@ -21,7 +21,7 @@ import {
   type TraderForPortfolio,
 } from '@/lib/utils/portfolio-builder'
 import { getFeatureLimits } from '@/lib/types/premium'
-import logger from '@/lib/logger'
+import _logger from '@/lib/logger'
 
 export const dynamic = 'force-dynamic'
 

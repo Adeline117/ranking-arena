@@ -43,7 +43,7 @@ const PLATFORM_GROUPS: Record<string, string[]> = {
 }
 
 /** All unique platforms across all groups */
-const ALL_PLATFORMS = [...new Set(Object.values(PLATFORM_GROUPS).flat())]
+const _ALL_PLATFORMS = [...new Set(Object.values(PLATFORM_GROUPS).flat())]
 
 // ─── Per-Platform Child Task ─────────────────────────────────────────────────
 

@@ -15,7 +15,7 @@
  * - tracked_since（Arena 首次追踪时间）
  */
 
-import { NextRequest, NextResponse } from 'next/server'
+import { NextRequest } from 'next/server'
 import { getSupabaseAdmin } from '@/lib/supabase/server'
 import { z } from 'zod'
 import { checkRateLimit, RateLimitPresets } from '@/lib/api'

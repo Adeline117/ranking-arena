@@ -17,7 +17,7 @@ const REFERRAL_REWARD_THRESHOLD = 3
 const REFERRAL_REWARD = '1 month Pro free'
 
 export default function ReferralCard() {
-  const { t, language } = useLanguage()
+  const { language } = useLanguage()
   const { userId, getAuthHeadersAsync } = useAuthSession()
   const [data, setData] = useState<ReferralData | null>(null)
   const [loading, setLoading] = useState(true)

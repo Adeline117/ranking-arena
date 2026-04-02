@@ -82,7 +82,6 @@ const AnimatedAvatar = memo(function AnimatedAvatar({
         />
       )}
       {showFallback && isWalletAddress(traderId) ? (
-        /* eslint-disable-next-line @next/next/no-img-element */
         <img
           src={generateBlockieSvg(traderId, size * 2)}
           alt={handle}

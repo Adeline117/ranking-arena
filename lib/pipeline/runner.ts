@@ -16,7 +16,7 @@ import {
 import { PipelineNormalizer, getNormalizer } from './normalizer'
 import { PipelineCalculator, getCalculator } from './calculator'
 import { PipelineStorage, getStorage } from './storage'
-import { getPlatformCapabilities, getSupportedWindows } from './capabilities'
+import { getSupportedWindows } from './capabilities'
 import { createLogger } from '@/lib/utils/logger'
 
 const log = createLogger('pipeline:runner')

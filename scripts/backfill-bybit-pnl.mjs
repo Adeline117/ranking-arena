@@ -28,7 +28,7 @@ async function fetchPnl(leaderMark) {
   const url = `${VPS_HOST}/bybit/trader-detail?leaderMark=${encodeURIComponent(leaderMark)}`
   const res = await fetch(url, {
     headers: { 'X-Proxy-Key': VPS_KEY, Accept: 'application/json' },
-    signal: AbortSignal.timeout(90000),
+    signal: AbortSignal.timeout(120000),
   })
   if (!res.ok) return null
   const data = await res.json()
@@ -91,9 +91,9 @@ async function main() {
       console.warn(`Failed ${key}: ${err.message}`)
     }
 
-    // Delay to not overwhelm VPS (scraper needs ~15s, add buffer to avoid saturation)
+    // Delay: one at a time, VPS Playwright needs 15-45s per trader
     if (i < uniqueKeys.length - 1) {
-      await new Promise(r => setTimeout(r, 5000))
+      await new Promise(r => setTimeout(r, 8000))
     }
   }
 

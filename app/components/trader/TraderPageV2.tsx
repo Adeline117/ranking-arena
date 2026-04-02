@@ -64,7 +64,6 @@ export default function TraderPageV2({ platform, traderKey }: TraderPageV2Props)
                     onError={(e) => { (e.target as HTMLImageElement).style.display = 'none' }}
                   />
                 ) : isWalletAddress(traderKey) ? (
-                  /* eslint-disable-next-line @next/next/no-img-element */
                   <img
                     src={generateBlockieSvg(traderKey, 128)}
                     alt={data.profile.display_name || traderKey}

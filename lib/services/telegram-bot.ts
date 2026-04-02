@@ -16,7 +16,7 @@
 
 import { getSupabaseAdmin } from '@/lib/supabase/server'
 import { getLeaderboard, searchTraders } from '@/lib/data/unified'
-import { EXCHANGE_CONFIG, EXCHANGE_NAMES } from '@/lib/constants/exchanges'
+import { EXCHANGE_CONFIG } from '@/lib/constants/exchanges'
 import { logger } from '@/lib/logger'
 import { botMessages, type BotLang } from '@/lib/i18n/bot'
 import { BASE_URL } from '@/lib/constants/urls'

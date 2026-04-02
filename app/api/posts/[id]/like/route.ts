@@ -3,7 +3,7 @@
  * POST /api/posts/[id]/like - 点赞/取消点赞
  */
 
-import { NextRequest, NextResponse } from 'next/server'
+import { NextRequest } from 'next/server'
 import {
   getSupabaseAdmin,
   requireAuth,

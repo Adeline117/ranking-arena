@@ -19,7 +19,6 @@
 import { useCallback } from 'react'
 import { tokens } from '@/lib/design-tokens'
 import { usePeriodStore } from '@/lib/stores/periodStore'
-import { t } from '@/lib/i18n'
 
 interface ShareOnXButtonProps {
   handle: string

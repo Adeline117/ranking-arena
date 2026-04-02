@@ -11,7 +11,7 @@ import { tieredGetOrSet } from '@/lib/cache/redis-layer'
 import { createLogger } from '@/lib/utils/logger'
 import type { PersonalRecommendation } from '@/lib/recommendations/personal'
 
-const logger = createLogger('api-rec-personal')
+const _logger = createLogger('api-rec-personal')
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'

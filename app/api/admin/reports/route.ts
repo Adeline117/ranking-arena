@@ -4,7 +4,7 @@ import { success as apiSuccess } from '@/lib/api/response'
 import { ApiError } from '@/lib/api/errors'
 import { createLogger } from '@/lib/utils/logger'
 
-const logger = createLogger('api:admin-reports')
+const _logger = createLogger('api:admin-reports')
 
 export const dynamic = 'force-dynamic'
 

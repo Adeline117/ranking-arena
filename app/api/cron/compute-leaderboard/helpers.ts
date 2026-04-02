@@ -2,7 +2,7 @@ import { getSupabaseAdmin } from '@/lib/api'
 import { SOURCE_TYPE_MAP } from '@/lib/constants/exchanges'
 import { createLogger } from '@/lib/utils/logger'
 
-const logger = createLogger('compute-leaderboard')
+const _logger = createLogger('compute-leaderboard')
 
 // DEX sources where 0x addresses may be bots
 const DEX_SOURCES = new Set(['hyperliquid', 'gmx', 'dydx', 'drift', 'aevo', 'gains', 'jupiter_perps'])

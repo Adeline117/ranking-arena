@@ -38,7 +38,7 @@ export class CoinexConnector extends BaseConnector {
 
       for (let page = 1; page <= pages && entries.length < limit; page++) {
         // Try VPS scraper first
-        let vpsResponse = await this.fetchViaVPS<CoinexVPSResponse>('/coinex/leaderboard', {
+        const vpsResponse = await this.fetchViaVPS<CoinexVPSResponse>('/coinex/leaderboard', {
           page,
           pageSize,
           period: WINDOW_MAP[window],

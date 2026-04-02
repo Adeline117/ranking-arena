@@ -13,7 +13,7 @@ import {
 } from '@/lib/api'
 import { resolveTrader } from '@/lib/data/unified'
 import { hasFeatureAccess } from '@/lib/types/premium'
-import logger from '@/lib/logger'
+import _logger from '@/lib/logger'
 
 export const runtime = 'nodejs'
 

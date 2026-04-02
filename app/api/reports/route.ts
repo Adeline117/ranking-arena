@@ -3,7 +3,7 @@
  * POST /api/reports - 提交举报
  */
 
-import { NextRequest, NextResponse } from 'next/server'
+import { NextRequest } from 'next/server'
 import { createLogger } from '@/lib/utils/logger'
 import { checkRateLimit, RateLimitPresets } from '@/lib/utils/rate-limit'
 import { getAuthUser, getSupabaseAdmin } from '@/lib/supabase/server'
