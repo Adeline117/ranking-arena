@@ -597,7 +597,7 @@ export class BinanceFuturesConnector extends BaseConnector {
       followers: entry.currentCopyCount != null ? Number(entry.currentCopyCount) : (entry.followerCount != null ? Number(entry.followerCount) : null),
       copiers: entry.currentCopyCount != null ? Number(entry.currentCopyCount) : (entry.copyCount != null ? Number(entry.copyCount) : null),
       aum: entry.aum != null ? Number(entry.aum) : null,
-      sharpe_ratio: entry.sharpRatio != null && Math.abs(Number(entry.sharpRatio)) <= 10 ? Number(entry.sharpRatio) : null,
+      sharpe_ratio: entry.sharpRatio != null && Math.abs(Number(entry.sharpRatio)) <= 20 ? Number(entry.sharpRatio) : null,
       platform_rank: entry.rank != null ? Number(entry.rank) : null,
     }
   }

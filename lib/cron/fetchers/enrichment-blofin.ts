@@ -86,7 +86,26 @@ export async function fetchBlofinStatsDetail(
       // Direct call failed (likely 401), try CF proxy
     }
 
-    // Strategy 2: CF Worker proxy
+    // Strategy 2: VPS Playwright scraper (WAF bypass)
+    if (!info) {
+      try {
+        const scraperHost = process.env.VPS_SCRAPER_SG || process.env.VPS_SCRAPER_HOST
+        const scraperKey = process.env.VPS_PROXY_KEY?.trim()
+        if (scraperHost && scraperKey) {
+          const data = await fetchJson<{ data?: BloFinTraderDetail }>(
+            `${scraperHost}/blofin/trader-detail?uniqueCode=${traderId}`, {
+              headers: { 'X-Proxy-Key': scraperKey },
+              timeoutMs: 20000,
+            }
+          )
+          info = data?.data || null
+        }
+      } catch {
+        // VPS scraper also failed
+      }
+    }
+
+    // Strategy 3: CF Worker proxy (fallback)
     if (!info) {
       try {
         const proxyUrl = process.env.CLOUDFLARE_PROXY_URL || 'https://ranking-arena-proxy.broosbook.workers.dev'

@@ -527,7 +527,7 @@ export async function fetchDriftStatsDetail(
         avgLoss: derivedStats.avgLoss ?? null,
         largestWin: derivedStats.largestWin ?? null,
         largestLoss: derivedStats.largestLoss ?? null,
-        sharpeRatio: sharpeRatio,
+        sharpeRatio: sharpeRatio ?? derivedStats.sharpeRatio ?? null,
         maxDrawdown: maxDrawdown ?? derivedStats.maxDrawdown ?? null,
         currentDrawdown: null,
         volatility: null,

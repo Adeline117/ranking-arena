@@ -57,6 +57,26 @@ export function computeStatsFromPositions(positions: PositionHistoryItem[]): Par
   // Clamp MDD to 100% (can't lose more than 100% of peak equity)
   maxDD = Math.min(maxDD, 100)
 
+  // Compute Sharpe from daily PnL aggregation (benefits all DEX platforms)
+  let sharpeRatio: number | null = null
+  const positionsWithTime = withPnl.filter((p) => p.closeTime)
+  if (positionsWithTime.length >= 5) {
+    const dailyPnl = new Map<string, number>()
+    for (const p of positionsWithTime) {
+      const day = p.closeTime!.split('T')[0]
+      dailyPnl.set(day, (dailyPnl.get(day) || 0) + (p.pnlUsd ?? 0))
+    }
+    const dailyValues = [...dailyPnl.values()]
+    if (dailyValues.length >= 5) {
+      const mean = dailyValues.reduce((a, b) => a + b, 0) / dailyValues.length
+      const std = Math.sqrt(dailyValues.reduce((a, r) => a + (r - mean) ** 2, 0) / dailyValues.length)
+      if (std > 0) {
+        const raw = Math.round((mean / std) * Math.sqrt(365) * 100) / 100
+        sharpeRatio = Math.max(-20, Math.min(20, raw))
+      }
+    }
+  }
+
   return {
     totalTrades,
     profitableTradesPct: profitableTradesPct != null ? Math.round(profitableTradesPct * 10) / 10 : null,
@@ -67,6 +87,7 @@ export function computeStatsFromPositions(positions: PositionHistoryItem[]): Par
     largestWin: largestWin != null ? Math.round(largestWin * 100) / 100 : null,
     largestLoss: largestLoss != null ? Math.round(largestLoss * 100) / 100 : null,
     maxDrawdown: maxDD > 0 ? Math.round(Math.min(maxDD, 100) * 100) / 100 : null,
+    sharpeRatio,
   }
 }
 
@@ -488,7 +509,7 @@ export async function fetchHyperliquidStatsDetail(
       avgLoss: derivedStats.avgLoss ?? null,
       largestWin: derivedStats.largestWin ?? null,
       largestLoss: derivedStats.largestLoss ?? null,
-      sharpeRatio: null, // Computed from equity curve in enhanceStatsWithDerivedMetrics
+      sharpeRatio: derivedStats.sharpeRatio ?? null,
       maxDrawdown: derivedStats.maxDrawdown ?? null,
       currentDrawdown: null,
       volatility: null,
