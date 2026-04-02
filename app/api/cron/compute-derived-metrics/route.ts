@@ -54,13 +54,15 @@ export async function GET(request: NextRequest) {
     }
 
     // Fetch recent daily returns (last 90 days) per-platform
+    // Single pass: collects returns, ROI, AND date-indexed returns for beta/alpha
     const returnsByTrader = new Map<string, number[]>()
     const roiByTrader = new Map<string, number[]>()
+    const traderDateReturns = new Map<string, Map<string, number>>()
 
     for (const platform of platforms) {
       const { data: platformDaily } = await supabase
         .from('trader_daily_snapshots')
-        .select('platform, trader_key, daily_return_pct, roi')
+        .select('platform, trader_key, date, daily_return_pct, roi')
         .eq('platform', platform)
         .gte('date', ninetyDaysAgo)
         .order('date', { ascending: true })
@@ -71,8 +73,14 @@ export async function GET(request: NextRequest) {
       for (const row of platformDaily) {
         const key = `${row.platform}:${row.trader_key}`
         if (row.daily_return_pct != null) {
+          const val = parseFloat(String(row.daily_return_pct))
           if (!returnsByTrader.has(key)) returnsByTrader.set(key, [])
-          returnsByTrader.get(key)!.push(parseFloat(String(row.daily_return_pct)))
+          returnsByTrader.get(key)!.push(val)
+          // Also store date-indexed for beta/alpha alignment
+          if (row.date) {
+            if (!traderDateReturns.has(key)) traderDateReturns.set(key, new Map())
+            traderDateReturns.get(key)!.set(row.date, val)
+          }
         }
         if (row.roi != null) {
           if (!roiByTrader.has(key)) roiByTrader.set(key, [])
@@ -162,29 +170,7 @@ export async function GET(request: NextRequest) {
     }
 
     if (btcReturnsByDate.size >= 14 && ethReturnsByDate.size >= 14) {
-      // For each trader with daily returns, align dates and compute beta/alpha
-      // We need date-aligned returns, so fetch daily snapshots with dates
-      const traderDateReturns = new Map<string, Map<string, number>>()
-
-      for (const platform of platforms) {
-        const { data: pdRows } = await supabase
-          .from('trader_daily_snapshots')
-          .select('trader_key, date, daily_return_pct')
-          .eq('platform', platform)
-          .gte('date', ninetyDaysAgo)
-          .not('daily_return_pct', 'is', null)
-          .order('date', { ascending: true })
-          .limit(10000)
-
-        if (!pdRows) continue
-        for (const row of pdRows) {
-          if (row.daily_return_pct == null) continue
-          const key = `${platform}:${row.trader_key}`
-          if (!traderDateReturns.has(key)) traderDateReturns.set(key, new Map())
-          traderDateReturns.get(key)!.set(row.date, parseFloat(String(row.daily_return_pct)))
-        }
-      }
-
+      // Use traderDateReturns already built in the single-pass above
       for (const [key, dateReturns] of traderDateReturns) {
         // Align trader returns with BTC/ETH returns on matching dates
         const traderReturns: number[] = []
