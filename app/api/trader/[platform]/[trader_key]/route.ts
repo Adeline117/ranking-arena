@@ -254,40 +254,34 @@ export async function GET(
     const needsAssetBreakdown = !timeseries.asset_breakdown
 
     if (needsEquityCurve || needsAssetBreakdown) {
-      const fallbackQueries: Promise<unknown>[] = []
+      // Wrap Supabase query builders in Promise.resolve() to satisfy TypeScript
+      // (PostgREST builders are PromiseLike but not Promise<unknown>)
+      const ecQuery = needsEquityCurve
+        ? Promise.resolve(
+            supabase
+              .from('trader_equity_curve')
+              .select('data_date, roi_pct, pnl_usd')
+              .in('source', sourceAliases)
+              .eq('source_trader_id', trader_key)
+              .in('period', ['90D', '30D', '7D'])
+              .order('data_date', { ascending: true })
+              .limit(365)
+          )
+        : Promise.resolve(null)
 
-      // Equity curve fallback
-      if (needsEquityCurve) {
-        fallbackQueries.push(
-          supabase
-            .from('trader_equity_curve')
-            .select('data_date, roi_pct, pnl_usd')
-            .in('source', sourceAliases)
-            .eq('source_trader_id', trader_key)
-            .in('period', ['90D', '30D', '7D'])
-            .order('data_date', { ascending: true })
-            .limit(365)
-        )
-      } else {
-        fallbackQueries.push(Promise.resolve(null))
-      }
+      const abQuery = needsAssetBreakdown
+        ? Promise.resolve(
+            supabase
+              .from('trader_asset_breakdown')
+              .select('symbol, weight_pct')
+              .in('source', sourceAliases)
+              .eq('source_trader_id', trader_key)
+              .order('weight_pct', { ascending: false })
+              .limit(20)
+          )
+        : Promise.resolve(null)
 
-      // Asset breakdown fallback
-      if (needsAssetBreakdown) {
-        fallbackQueries.push(
-          supabase
-            .from('trader_asset_breakdown')
-            .select('symbol, weight_pct')
-            .in('source', sourceAliases)
-            .eq('source_trader_id', trader_key)
-            .order('weight_pct', { ascending: false })
-            .limit(20)
-        )
-      } else {
-        fallbackQueries.push(Promise.resolve(null))
-      }
-
-      const [ecResult, abResult] = await Promise.all(fallbackQueries) as [
+      const [ecResult, abResult] = await Promise.all([ecQuery, abQuery]) as [
         { data: Array<{ data_date: string; roi_pct: number | null; pnl_usd: number | null }> | null } | null,
         { data: Array<{ symbol: string; weight_pct: number }> | null } | null,
       ]
