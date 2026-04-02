@@ -191,7 +191,18 @@ export class CoinexFuturesConnector extends BaseConnector {
       followers: this.num(raw.follower_count ?? raw.followerCount ?? raw.copier_num ?? raw.cur_follower_num),
       copiers: null,
       aum: this.num(raw.aum),
-      sharpe_ratio: null,
+      sharpe_ratio: (() => {
+        const series = raw.profit_rate_series as Array<[number, string]> | undefined
+        if (!Array.isArray(series) || series.length < 7) return null
+        const roiValues = series.map(p => Number(p[1])).filter(n => !isNaN(n))
+        if (roiValues.length < 7) return null
+        const returns = roiValues.slice(1).map((v, i) => v - roiValues[i])
+        const mean = returns.reduce((a, b) => a + b, 0) / returns.length
+        const std = Math.sqrt(returns.reduce((a, r) => a + (r - mean) ** 2, 0) / returns.length)
+        if (std <= 0) return null
+        const sharpe = Math.round((mean / std) * Math.sqrt(365) * 100) / 100
+        return Math.max(-20, Math.min(20, sharpe))
+      })(),
       platform_rank: null,
       // Extra: equity curve from profit_rate_series
       _profit_rate_series: raw.profit_rate_series,
