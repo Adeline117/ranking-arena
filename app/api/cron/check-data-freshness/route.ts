@@ -15,7 +15,7 @@ import { getSupabaseAdmin } from '@/lib/supabase/server'
 import { isAuthorized } from '@/lib/cron/utils'
 import { getSupportedInlinePlatforms } from '@/lib/cron/fetchers'
 import { DEAD_BLOCKED_PLATFORMS } from '@/lib/constants/exchanges'
-import { sendScraperAlert } from '@/lib/alerts/send-alert'
+import { sendScraperAlert, sendRateLimitedAlert } from '@/lib/alerts/send-alert'
 import { captureMessage } from '@/lib/utils/logger'
 import { logger } from '@/lib/logger'
 import { PipelineLogger } from '@/lib/services/pipeline-logger'
@@ -257,56 +257,34 @@ export async function GET(req: Request) {
       })
     }
 
-    // ── Telegram 告警 ─────────────────────────────────────
+    // ── Telegram 告警 (rate-limited, 6h cooldown per platform set) ─────
     if (criticalPlatforms.length > 0 || stalePlatforms.length > 0) {
-      const tgToken = process.env.TELEGRAM_BOT_TOKEN
-      const tgChatId = process.env.TELEGRAM_ALERT_CHAT_ID
-
-      if (tgToken && tgChatId) {
-        try {
-          const emoji = criticalPlatforms.length > 0 ? '🚨' : '⚠️'
-          const lines: string[] = [
-            `${emoji} <b>数据新鲜度告警</b>`,
-            '',
-          ]
-          if (criticalPlatforms.length > 0) {
-            lines.push(`<b>严重过期 (&gt;24h):</b>`)
-            criticalPlatforms.forEach((p) => {
-              lines.push(`  • ${p.displayName} — ${p.ageHours}h ago, ${p.recordCount} records`)
-            })
-          }
-          if (stalePlatforms.length > 0) {
-            lines.push(`<b>陈旧 (&gt;8h):</b>`)
-            stalePlatforms.forEach((p) => {
-              lines.push(`  • ${p.displayName} — ${p.ageHours}h ago, ${p.recordCount} records`)
-            })
-          }
-          lines.push('', `✅ ${report.summary.fresh} fresh / ${report.summary.total} total`)
-
-          const tgRes = await fetch(
-            `https://api.telegram.org/bot${tgToken}/sendMessage`,
-            {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                chat_id: tgChatId,
-                text: lines.join('\n'),
-                parse_mode: 'HTML',
-              }),
-            }
-          )
-          if (!tgRes.ok) {
-            logger.error(`[DataFreshness] Telegram send failed: ${tgRes.status} ${await tgRes.text()}`)
-          }
-        } catch (tgErr) {
-          logger.error('[DataFreshness] Telegram send error:', tgErr)
-        }
-      } else {
-        logger.error('[DataFreshness] TELEGRAM_BOT_TOKEN or TELEGRAM_ALERT_CHAT_ID not set. Alert details:', JSON.stringify({
-          critical: criticalPlatforms.map(p => ({ platform: p.platform, ageHours: p.ageHours })),
-          stale: stalePlatforms.map(p => ({ platform: p.platform, ageHours: p.ageHours })),
-        }))
+      const isCritical = criticalPlatforms.length > 0
+      const lines: string[] = []
+      if (criticalPlatforms.length > 0) {
+        lines.push('严重过期 (>24h):')
+        criticalPlatforms.forEach((p) => {
+          lines.push(`  • ${p.displayName} — ${p.ageHours}h ago, ${p.recordCount} records`)
+        })
       }
+      if (stalePlatforms.length > 0) {
+        lines.push('陈旧 (>8h):')
+        stalePlatforms.forEach((p) => {
+          lines.push(`  • ${p.displayName} — ${p.ageHours}h ago, ${p.recordCount} records`)
+        })
+      }
+      lines.push(`\n✅ ${report.summary.fresh} fresh / ${report.summary.total} total`)
+
+      const platformKey = [...criticalPlatforms, ...stalePlatforms].map(p => p.platform).sort().join(',')
+      await sendRateLimitedAlert({
+        title: '数据新鲜度告警',
+        message: lines.join('\n'),
+        level: isCritical ? 'critical' : 'warning',
+        details: {
+          critical_count: criticalPlatforms.length,
+          stale_count: stalePlatforms.length,
+        },
+      }, `data-freshness:${platformKey}`, 6 * 60 * 60 * 1000)
     }
 
     // ── 外部告警通知（Slack / 飞书等）────────────────────────

@@ -158,9 +158,12 @@ export async function sendTelegramAlert(opts: TelegramAlertOptions): Promise<boo
   }
 
   // Severity-based dedup: critical=1h, report=no dedup
+  // Normalize title to prevent key explosion from dynamic error messages
   const dedupTtl = DEDUP_TTL_BY_LEVEL[opts.level]
   if (dedupTtl > 0) {
-    const dedupKey = `${opts.source}:${opts.title}`
+    // Strip numbers, hashes, timestamps from title to create stable dedup key
+    const normalizedTitle = opts.title.replace(/[\d]+/g, 'N').replace(/[a-f0-9]{8,}/gi, 'HASH').slice(0, 80)
+    const dedupKey = `${opts.source}:${normalizedTitle}`
     const deduped = await isDeduplicated(dedupKey, dedupTtl)
     if (deduped) {
       logger.info(`[Telegram] ${dedupTtl / 3600}h 去重跳过: ${dedupKey}`)
@@ -253,9 +256,10 @@ async function recordWarningForDigest(opts: TelegramAlertOptions): Promise<void>
       ts: Date.now(),
     })
     await redis.zadd('alert:warnings:24h', { score: Date.now(), member: entry })
-    // Trim entries older than 24h
+    // Trim entries older than 24h + cap at 1000 entries max
     const cutoff = Date.now() - 24 * 60 * 60 * 1000
     await redis.zremrangebyscore('alert:warnings:24h', 0, cutoff)
+    await redis.zremrangebyrank('alert:warnings:24h', 0, -1001)
   } catch {
     // Intentionally swallowed: Redis warning aggregation is best-effort, alerts still sent via primary channel
   }

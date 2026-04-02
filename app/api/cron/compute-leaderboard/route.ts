@@ -168,16 +168,16 @@ export async function GET(request: NextRequest) {
     const elapsed = Date.now() - startTime
     logger.info(`Leaderboard computed in ${elapsed}ms`, stats)
 
-    // Send Telegram alert if degradation detected
+    // Send alert if degradation detected (rate-limited: 6h cooldown)
     if (warnings.length > 0) {
       try {
-        const { sendTelegramAlert } = await import('@/lib/notifications/telegram')
-        await sendTelegramAlert({
-          level: 'critical',
-          source: 'Leaderboard',
+        const { sendRateLimitedAlert } = await import('@/lib/alerts/send-alert')
+        await sendRateLimitedAlert({
           title: '排行榜降级告警',
           message: warnings.join('\n'),
-        })
+          level: 'critical',
+          details: { seasons_affected: rolledBack.join(', ') },
+        }, 'leaderboard:degradation', 6 * 60 * 60 * 1000)
       } catch (e) {
         logger.error('[compute-leaderboard] 告警发送失败:', e)
       }
