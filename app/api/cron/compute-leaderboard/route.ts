@@ -510,9 +510,12 @@ async function computeSeason(
         return rows
       })
     )
-    results.forEach(rows => {
+    results.forEach((rows, idx) => {
+      const batchSource = batch[idx]
       if (rows.length > 0) {
         v2CountBySource.set(rows[0].source, rows.length)
+      } else if (batchSource) {
+        logger.warn(`[${season}] ${batchSource}: 0 traders fetched from snapshots_v2 (window=${v2Window}, fallback checked)`)
       }
       rows.forEach(addToTraderMap)
     })
