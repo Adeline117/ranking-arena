@@ -164,6 +164,50 @@ export async function fetchPolymarketStatsDetail(
       }
     }
 
+    // Compute Sharpe from daily PnL activity
+    let sharpeRatio: number | null = null
+    try {
+      const startTs90d = Math.floor((Date.now() - 90 * 86400000) / 1000)
+      const allActivity: Array<Record<string, unknown>> = []
+      let actOffset = 0
+      while (actOffset < 5000) {
+        const actData = await fetchJson<Array<Record<string, unknown>>>(
+          `${DATA_API}/activity?user=${traderId}&limit=500&offset=${actOffset}&start=${startTs90d}`,
+          { timeoutMs: 15000 }
+        ).catch(() => null)
+        if (!Array.isArray(actData) || actData.length === 0) break
+        allActivity.push(...actData)
+        if (actData.length < 500) break
+        actOffset += 500
+      }
+      if (allActivity.length > 0) {
+        const dailyPnlMap = new Map<string, number>()
+        for (const act of allActivity) {
+          const ts = num(act.timestamp)
+          if (ts == null) continue
+          const date = new Date(ts * 1000).toISOString().split('T')[0]
+          const usdcSize = num(act.usdcSize) ?? 0
+          const side = String(act.side || '')
+          const type = String(act.type || '')
+          let flow = 0
+          if (type === 'TRADE') flow = side === 'SELL' ? usdcSize : -usdcSize
+          else if (type === 'REDEEM' || type === 'REWARD' || type === 'MAKER_REBATE') flow = usdcSize
+          dailyPnlMap.set(date, (dailyPnlMap.get(date) || 0) + flow)
+        }
+        const dailyReturns = Array.from(dailyPnlMap.values())
+        if (dailyReturns.length >= 7) {
+          const mean = dailyReturns.reduce((a, b) => a + b, 0) / dailyReturns.length
+          const std = Math.sqrt(dailyReturns.reduce((a, r) => a + (r - mean) ** 2, 0) / dailyReturns.length)
+          if (std > 0) {
+            const s = Math.round((mean / std) * Math.sqrt(365) * 100) / 100
+            if (s > -20 && s < 20) sharpeRatio = s
+          }
+        }
+      }
+    } catch {
+      // Non-critical — proceed without Sharpe
+    }
+
     return {
       totalTrades: totalClosed > 0 ? totalClosed : null,
       profitableTradesPct,
@@ -172,7 +216,7 @@ export async function fetchPolymarketStatsDetail(
       avgLoss: null,
       largestWin: null,
       largestLoss: null,
-      sharpeRatio: null,
+      sharpeRatio,
       maxDrawdown: null,
       currentDrawdown: null,
       volatility: null,
