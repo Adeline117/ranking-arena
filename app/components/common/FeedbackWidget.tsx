@@ -73,7 +73,7 @@ export default function FeedbackWidget() {
           display: 'grid',
           placeItems: 'center',
           cursor: 'pointer',
-          zIndex: tokens.zIndex.toast,
+          zIndex: tokens.zIndex.dropdown,
           transition: `all ${tokens.transition.base}`,
           color: 'var(--color-text-tertiary)',
         }}
