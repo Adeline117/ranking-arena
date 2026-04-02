@@ -56,13 +56,16 @@ export const PLATFORM_ROUTES: Record<string, RouteConfig> = {
 
   // ─── GEO_BLOCKED (VPS proxy required) ────────────────────────
   binance_futures: { routes: ['vps_sg', 'vps_jp'],            notes: 'Direct 451 geo-blocked. VPS SG works via /friendly/ API.' },
+  binance_spot:    { routes: ['vps_sg', 'vps_jp'],            notes: 'Same as futures — geo-blocked, /friendly/ spot-copy-trade API.' },
   okx_futures:     { routes: ['direct', 'vps_sg', 'vps_jp'],  notes: 'v5 public API, direct works. VPS SG fallback for geo-blocked regions.' },
 
   crypto_com:      { routes: ['scraper_sg'],                   notes: 'Cloudflare JS challenge. VPS Playwright scraper only.' },
 
   // ─── WAF_PROTECTED (need Playwright) ─────────────────────────
   bybit:           { routes: ['scraper_sg', 'vps_jp'],        notes: 'Akamai WAF blocks all HTTP proxy. bybitglobal.com scraper.' },
+  bybit_spot:      { routes: ['scraper_sg', 'vps_jp'],        notes: 'Same as bybit futures — Akamai WAF, scraper required.' },
   bitget_futures:  { routes: ['scraper_sg', 'vps_sg'],        notes: 'CloudFlare JS challenge. Scraper intercepts trace API.' },
+  bitget_spot:     { routes: ['scraper_sg', 'vps_sg'],        notes: 'Same as bitget futures — CF JS challenge.' },
   bingx:           { routes: ['scraper_sg'],                   notes: 'CloudFlare JS challenge. waitForResponse multi-rank.' },
   mexc:            { routes: ['scraper_sg', 'vps_sg'],         notes: 'API path changed. Scraper intercepts copyFutures.' },
   gateio:          { routes: ['direct', 'scraper_sg'],         notes: 'Direct works from Mac, Vercel may get WAF-blocked.' },
