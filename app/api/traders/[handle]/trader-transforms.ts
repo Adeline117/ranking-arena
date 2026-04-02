@@ -34,8 +34,8 @@ export async function getTraderDetails(
   // Parallel获取所有数据（10s 超时保护）
   const [
     snapshotResult,
-    snapshot7dResult,
-    snapshot30dResult,
+    _snapshot7dResult,
+    _snapshot30dResult,
     arenaFollowersResult,
     userProfileResult,
     portfolioResult,
@@ -48,8 +48,8 @@ export async function getTraderDetails(
     equityCurve30dResult,
     equityCurve7dResult,
     statsDetailResult,
-    trackedSinceResult,
-    v3ScoresResult,
+    _trackedSinceResult,
+    _v3ScoresResult,
   ] = await withTimeout(Promise.all([
     // Primary: leaderboard_ranks for all periods (replaces 3 separate v1 snapshot queries)
     supabase.from('leaderboard_ranks')

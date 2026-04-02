@@ -65,7 +65,7 @@ async function fetchBinanceFuturesAvatar(traderId: string): Promise<string | nul
   return data?.data?.userPhotoUrl || null
 }
 
-async function fetchBinanceSpotAvatar(traderId: string): Promise<string | null> {
+async function _fetchBinanceSpotAvatar(traderId: string): Promise<string | null> {
   // Binance spot uses same portfolio API
   const data = await fetchJSON('https://www.binance.com/bapi/futures/v1/public/future/copy-trade/lead-portfolio/detail', {
     method: 'POST',
@@ -416,7 +416,7 @@ export async function GET(request: Request) {
         ])
         const subData = await subRes.json() as AvatarResult
         results.push(subData)
-      } catch (err) {
+      } catch (_err) {
         results.push({ platform: p, total: 0, updated: 0, errors: 1 })
       }
     }

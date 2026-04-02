@@ -12,7 +12,7 @@
 
 import { BaseConnector } from '../base'
 import { warnValidate } from '../schemas'
-import { safeNumber, safePercent, safeNonNeg, safeStr, safeMdd } from '../utils'
+import { safeNumber, safeNonNeg, safeStr, safeMdd } from '../utils'
 import {
   BlofinFuturesLeaderboardResponseSchema,
   BlofinFuturesDetailResponseSchema,
@@ -140,7 +140,7 @@ export class BlofinFuturesConnector extends BaseConnector {
         },
       }
       return { profile, fetched_at: new Date().toISOString() }
-    } catch (err) {
+    } catch (_err) {
       return null
     }
   }
@@ -191,7 +191,7 @@ export class BlofinFuturesConnector extends BaseConnector {
       }
 
       return { metrics, quality_flags, fetched_at: new Date().toISOString() }
-    } catch (err) {
+    } catch (_err) {
       return null
     }
   }

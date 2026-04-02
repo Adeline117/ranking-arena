@@ -12,7 +12,6 @@
 import { BaseConnector } from '../base'
 import { warnValidate } from '../schemas'
 import {
-  GateioFuturesLeaderboardResponseSchema,
   GateioFuturesDetailResponseSchema,
 } from './schemas'
 import type {

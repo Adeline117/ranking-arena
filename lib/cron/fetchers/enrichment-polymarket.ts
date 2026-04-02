@@ -126,7 +126,7 @@ export async function fetchPolymarketStatsDetail(
     ])
 
     const entry = Array.isArray(lbAll) && lbAll.length > 0 ? lbAll[0] : null
-    const monthEntry = Array.isArray(lbMonth) && lbMonth.length > 0 ? lbMonth[0] : null
+    const _monthEntry = Array.isArray(lbMonth) && lbMonth.length > 0 ? lbMonth[0] : null
     const openPositions = Array.isArray(positions) ? positions : []
     const closedPos = Array.isArray(closedPositions) ? closedPositions : []
 

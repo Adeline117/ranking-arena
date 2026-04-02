@@ -35,7 +35,7 @@ function getSupabase(): Promise<LazySupabaseClient> {
 
 // Synchronous getter — only works after lazy init resolves.
 // Falls back to null before that (callers must handle).
-function getSupabaseSync() {
+function _getSupabaseSync() {
   return _supabase
 }
 

@@ -32,7 +32,7 @@ export default function ShareLeaderboardButton({ traders, exchange }: Props) {
   const { t } = useLanguage()
   const { showToast } = useToast()
   const [sharing, setSharing] = useState(false)
-  const [shareUrl, setShareUrl] = useState<string | null>(null)
+  const [_shareUrl, setShareUrl] = useState<string | null>(null)
 
   const handleShare = useCallback(async () => {
     if (sharing) return

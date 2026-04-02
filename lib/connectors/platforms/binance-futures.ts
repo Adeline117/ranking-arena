@@ -19,7 +19,6 @@
 import { BaseConnector } from '../base'
 import { warnValidate } from '../schemas'
 import {
-  BinanceFuturesLeaderboardResponseSchema,
   BinanceFuturesBaseInfoResponseSchema,
   BinanceFuturesPerformanceResponseSchema,
   BinanceFuturesPositionResponseSchema,
@@ -45,7 +44,7 @@ import { calculateArenaScore } from '../../utils/arena-score'
 // Binance API Types
 // ============================================
 
-interface BinanceLeaderboardResponse {
+interface _BinanceLeaderboardResponse {
   data: {
     otherLeaderboardUrl: string
     list: BinanceTraderEntry[]

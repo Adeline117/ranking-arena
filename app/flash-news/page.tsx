@@ -141,7 +141,7 @@ export default function FlashNewsPage() {
       setLoading(false)
       setLoadingMore(false)
     }
-  }, [showToast, language])
+  }, [showToast, t])
 
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null)
 
@@ -158,7 +158,7 @@ export default function FlashNewsPage() {
     let interval: ReturnType<typeof setInterval> | null = null
     const start = () => { if (!interval) interval = setInterval(() => fetchNews(1, selectedCategory), 120000) }
     const stop = () => { if (interval) { clearInterval(interval); interval = null } }
-    const onVisibility = () => { document.hidden ? stop() : start() }
+    const onVisibility = () => { if (document.hidden) { stop() } else { start() } }
     if (!document.hidden) start()
     document.addEventListener('visibilitychange', onVisibility)
     return () => { stop(); document.removeEventListener('visibilitychange', onVisibility) }

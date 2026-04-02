@@ -8,7 +8,7 @@ import { tokens } from '@/lib/design-tokens'
 import { supabase } from '@/lib/supabase/client'
 import { Box, Text } from '../base'
 import { getAvatarGradient, getAvatarInitial, isWalletAddress, generateBlockieSvg } from '@/lib/utils/avatar'
-import { EXCHANGE_NAMES, EXCHANGE_CONFIG } from '@/lib/constants/exchanges'
+import { EXCHANGE_NAMES } from '@/lib/constants/exchanges'
 import { formatDisplayName } from '@/app/components/ranking/utils'
 import { ProBadgeOverlay } from '../ui/ProBadge'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
@@ -17,20 +17,19 @@ import ExchangeLogo from '../ui/ExchangeLogo'
 import TraderFollowButton from '../ui/TraderFollowButton'
 import UserFollowButton from '../ui/UserFollowButton'
 import ShareButton from '../common/ShareButton'
-import ShareOnXButton from './ShareOnXButton'
 import ShareRankCardButtons from './ShareRankCardButtons'
 import {
-  SOURCE_CONFIG, getSourceCategory, CATEGORY_I18N_KEYS, CATEGORY_COLORS,
+  SOURCE_CONFIG, getSourceCategory,
   getTradingStyleTags, formatAum, getActiveDays, formatActiveDays,
-  Badge, StatItem, ActionButton,
+  Badge, ActionButton,
 } from './TraderHeaderHelpers'
 import { getScoreColor, getScoreColorHex } from '@/lib/utils/score-colors'
 import { useComparisonStore } from '@/lib/stores'
 
 // Lazy-load rarely-used components
-const OnChainBadge = dynamic(() => import('./OnChainBadge').then(m => ({ default: m.OnChainBadge })), { ssr: false })
+const _OnChainBadge = dynamic(() => import('./OnChainBadge').then(m => ({ default: m.OnChainBadge })), { ssr: false })
 const Web3VerifiedBadge = dynamic(() => import('./Web3VerifiedBadge').then(m => ({ default: m.Web3VerifiedBadge })), { ssr: false })
-const BadgeDisplay = dynamic(() => import('./BadgeDisplay').then(m => ({ default: m.BadgeDisplay })), { ssr: false })
+const _BadgeDisplay = dynamic(() => import('./BadgeDisplay').then(m => ({ default: m.BadgeDisplay })), { ssr: false })
 const VerifiedBadge = dynamic(() => import('./VerifiedBadge'), { ssr: false })
 const RankTrendSparkline = dynamic(() => import('./RankTrendSparkline'), { ssr: false })
 const RankPercentileBadge = dynamic(() => import('./RankPercentileBadge'), { ssr: false })
@@ -143,17 +142,17 @@ export default function TraderHeader({
   handle,
   displayName: displayNameProp,
   traderId,
-  uid,
+  uid: _uid,
   avatarUrl,
   coverUrl,
   isRegistered,
   followers = 0,
-  following = 0,
+  following: _following = 0,
   aum,
   isOwnProfile = false,
   source,
   proBadgeTier,
-  isPro = false,
+  isPro: _isPro = false,
   activeSince,
   roi90d,
   maxDrawdown,
@@ -170,7 +169,7 @@ export default function TraderHeader({
   linkedPlatforms,
   platform,
   traderKey,
-  profileUrl,
+  profileUrl: _profileUrl,
   dataSource,
   isAuthorized = false,
   authorizedSince,
@@ -191,8 +190,8 @@ export default function TraderHeader({
       return () => clearTimeout(timer)
     }
   }, [followerCount])
-  const [badgesExpanded, setBadgesExpanded] = useState(false)
-  const [moreMenuOpen, setMoreMenuOpen] = useState(false)
+  const [_badgesExpanded, _setBadgesExpanded] = useState(false)
+  const [_moreMenuOpen, _setMoreMenuOpen] = useState(false)
   const router = useRouter()
   const [handleCopied, setHandleCopied] = useState(false)
   const { t } = useLanguage()
@@ -215,7 +214,7 @@ export default function TraderHeader({
       setHandleCopied(true)
       setTimeout(() => setHandleCopied(false), 2000)
       _showToast(t('copiedToClipboard'), 'success', 2000)
-    }).catch(() => { // eslint-disable-line no-restricted-syntax -- intentional fire-and-forget
+    }).catch(() => {
       _showToast(t('copyFailed') || 'Copy failed', 'error', 2000)
     })
   }, [handle, _showToast, t])
@@ -236,11 +235,11 @@ export default function TraderHeader({
   // Prefer claimed user avatar over exchange avatar
   const effectiveAvatarUrl = claimedAvatarUrl || avatarUrl
   const sourceLabelKey = source ? SOURCE_CONFIG[source.toLowerCase()] : null
-  const sourceLabel = sourceLabelKey ? t(sourceLabelKey) : null
+  const _sourceLabel = sourceLabelKey ? t(sourceLabelKey) : null
   const hasCover = Boolean(coverUrl)
   const activeDays = getActiveDays(activeSince)
-  const tags = getTradingStyleTags(t, source, roi90d, maxDrawdown, winRate)
-  const iconStroke = hasCover ? 'var(--glass-bg-light)' : tokens.colors.text.tertiary
+  const _tags = getTradingStyleTags(t, source, roi90d, maxDrawdown, winRate)
+  const _iconStroke = hasCover ? 'var(--glass-bg-light)' : tokens.colors.text.tertiary
 
   const containerBackground = hasCover
     ? `linear-gradient(to bottom, var(--color-overlay-subtle) 0%, var(--color-backdrop) 100%), url(${coverUrl}) center/cover no-repeat`
@@ -333,7 +332,6 @@ export default function TraderHeader({
                 onError={() => setAvatarError(true)}
               />
             ) : isWalletAddress(traderId) ? (
-              /* eslint-disable-next-line @next/next/no-img-element */
               <img
                 src={generateBlockieSvg(traderId, 96)}
                 alt={handle}

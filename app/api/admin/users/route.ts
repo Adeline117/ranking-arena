@@ -3,11 +3,9 @@
  * GET /api/admin/users - 获取用户列表（支持分页、搜索）
  */
 
-import { NextResponse } from 'next/server'
 import { withAdminAuth } from '@/lib/api/with-admin-auth'
-import { success as apiSuccess, successWithPagination } from '@/lib/api/response'
+import { successWithPagination } from '@/lib/api/response'
 import { ApiError } from '@/lib/api/errors'
-import { parsePaginationParams } from '@/lib/api/pagination'
 import { createLogger } from '@/lib/utils/logger'
 
 const logger = createLogger('admin-users')

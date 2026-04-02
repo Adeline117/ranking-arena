@@ -16,7 +16,6 @@ import { BaseConnector } from '../base'
 import { safeNumber } from '../utils'
 import { warnValidate } from '../schemas'
 import {
-  GmxLeaderboardResponseSchema,
   GmxSubgraphResponseSchema,
 } from './schemas'
 import type {
@@ -47,7 +46,7 @@ export class GmxPerpConnector extends BaseConnector {
     return 'https://gmx.squids.live/gmx-synthetics-arbitrum/graphql'
   }
 
-  private getPeriodPrefix(window: Window): string {
+  private getPeriodPrefix(_window: Window): string {
     // GMX subgraph periods: "1d:TIMESTAMP", "1w:TIMESTAMP", "total"
     // For leaderboard, use "total" (all-time) since subgraph doesn't have native 7d/30d/90d periods
     return 'total'

@@ -16,7 +16,7 @@
  */
 
 import { BaseConnector } from '../base'
-import { safeNumber, safePercent, safeNonNeg, safeStr, safeMdd, safeInt } from '../utils'
+import { safeNumber, safePercent, safeStr, safeMdd, safeInt } from '../utils'
 import type {
   LeaderboardPlatform,
   MarketType,

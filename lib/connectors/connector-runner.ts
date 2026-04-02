@@ -14,7 +14,7 @@
  */
 
 import { PipelineLogger, type PipelineLogHandle } from '@/lib/services/pipeline-logger'
-import { sendAlert, sendRateLimitedAlert } from '@/lib/alerts/send-alert'
+import { sendRateLimitedAlert } from '@/lib/alerts/send-alert'
 import { tieredSet, tieredGet, tieredDel } from '@/lib/cache/redis-layer'
 import { dataLogger } from '@/lib/utils/logger'
 import type { RankingWindow } from '@/lib/types/leaderboard'

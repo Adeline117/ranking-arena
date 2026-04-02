@@ -53,7 +53,7 @@ function SearchContent() {
   const [postTotal, setPostTotal] = useState(0)
   const [traderTotal, setTraderTotal] = useState(0)
   const [didYouMean, setDidYouMean] = useState<string[]>([])
-  const [matchedExchange, setMatchedExchange] = useState<string | null>(null)
+  const [_matchedExchange, setMatchedExchange] = useState<string | null>(null)
 
   useEffect(() => {
      

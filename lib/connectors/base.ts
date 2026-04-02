@@ -33,18 +33,12 @@ import type { RouteType } from './route-config'
 import { ConnectorError, DEFAULT_CONNECTOR_CONFIG, getConnectorConfigForPlatform } from './types'
 export { ConnectorError, DEFAULT_CONNECTOR_CONFIG, getConnectorConfigForPlatform }
 import {
-  retry,
-  circuitBreaker,
-  handleAll,
-  wrap,
-  ExponentialBackoff,
-  ConsecutiveBreaker,
   BrokenCircuitError,
 } from 'cockatiel'
 import { getPlatformPolicy, BrokenCircuitError as RegistryBrokenCircuitError } from './circuit-registry'
 
 // Scraper result cache TTL (30 minutes)
-const SCRAPER_CACHE_TTL = 30 * 60
+const _SCRAPER_CACHE_TTL = 30 * 60
 
 // ============================================
 // Circuit Breaker (standalone, for legacy usage)

@@ -113,7 +113,7 @@ export function usePostTranslation({ posts, language, translatingEnabled = true,
     } finally {
       setTranslatingPosts(false)
     }
-  }, [translatingPosts, translatedPosts, getTranslationCache, setTranslationCache])
+  }, [translatingPosts, translatedPosts, getTranslationCache, setTranslationCache, accessToken])
 
   // Trigger translation when posts change
   useEffect(() => {

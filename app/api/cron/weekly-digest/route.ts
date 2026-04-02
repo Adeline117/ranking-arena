@@ -54,7 +54,7 @@ export async function GET(request: NextRequest) {
 
     // Resolve emails from auth.users via admin API
     // We batch-fetch subscriber user IDs
-    const subscriberIds = subscribers.map(s => s.id)
+    const _subscriberIds = subscribers.map(s => s.id)
 
     // 2. Get top movers (biggest rank changes this week)
     const { data: movers } = await supabase

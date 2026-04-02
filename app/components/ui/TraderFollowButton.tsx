@@ -35,7 +35,7 @@ type _FollowResponse = {
  * 区分于 UserFollowButton（用于关注平台用户）
  */
 export default function TraderFollowButton({ traderId, userId, initialFollowing = false, onFollowChange }: TraderFollowButtonProps) {
-  const router = useRouter()
+  const _router = useRouter()
   const { showToast } = useToast()
   const { t } = useLanguage()
   const { getAuthHeadersAsync } = useAuthSession()

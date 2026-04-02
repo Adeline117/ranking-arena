@@ -85,7 +85,7 @@ export async function POST(request: NextRequest) {
 
     // Step 3: Process each trader
     let generated = 0
-    let skipped = 0
+    const skipped = 0
     let errors = 0
 
     // Process in batches of 50 for snapshot lookups

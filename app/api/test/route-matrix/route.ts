@@ -10,7 +10,7 @@
 
 import { NextResponse } from 'next/server'
 import { env } from '@/lib/env'
-import { PLATFORM_ROUTES, type RouteType } from '@/lib/connectors/route-config'
+import { PLATFORM_ROUTES } from '@/lib/connectors/route-config'
 
 export const runtime = 'nodejs'
 export const maxDuration = 300

@@ -22,11 +22,9 @@
  * Caching: s-maxage=60, stale-while-revalidate=300
  */
 
-import { NextResponse } from 'next/server';
 import type { RankingWindow, TradingCategory, Platform, GranularPlatform, RankingsQuery } from '@/lib/types/leaderboard';
 import { GRANULAR_PLATFORMS, PLATFORM_CATEGORY } from '@/lib/types/leaderboard';
 import { getSupabaseAdmin } from '@/lib/supabase/server';
-import { getLeaderboard } from '@/lib/data/unified';
 import type { TradingPeriod } from '@/lib/types/unified-trader';
 import { tieredGetOrSet } from '@/lib/cache/redis-layer';
 import { ApiError } from '@/lib/api/errors';
@@ -192,7 +190,7 @@ async function getRankingsFallback(rankingsQuery: RankingsQuery, _cursor?: strin
   const unifiedSortBy = sortByMap[sort_by] || 'arena_score';
 
   // Determine platform filter based on category
-  let platformFilter: string | undefined = platform || undefined;
+  const platformFilter: string | undefined = platform || undefined;
   let platformsInCategory: string[] | undefined;
   if (!platformFilter && category) {
     platformsInCategory = Object.entries(PLATFORM_CATEGORY)

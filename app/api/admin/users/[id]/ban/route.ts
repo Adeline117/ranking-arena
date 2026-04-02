@@ -3,10 +3,10 @@
  * POST /api/admin/users/[id]/ban
  */
 
-import { NextRequest, NextResponse } from 'next/server'
+import { NextRequest } from 'next/server'
 import { withAdminAuth } from '@/lib/api/with-admin-auth'
 import { success as apiSuccess } from '@/lib/api/response'
-import { ApiError, ErrorCode } from '@/lib/api/errors'
+import { ApiError } from '@/lib/api/errors'
 import { createLogger } from '@/lib/utils/logger'
 
 const logger = createLogger('admin-ban-user')

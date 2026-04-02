@@ -152,7 +152,7 @@ export function TraderLinksSection({ userId }: { userId: string }) {
     } finally {
       setLoading(false)
     }
-  }, [getAuthHeaders])
+  }, [getAuthHeaders, showToast, t])
 
   useEffect(() => {
     if (userId) loadLinkedTraders()

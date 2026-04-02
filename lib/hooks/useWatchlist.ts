@@ -33,7 +33,7 @@ export function useWatchlist() {
     { revalidateOnFocus: false, dedupingInterval: 30000 }
   )
 
-  const watchlist = data || []
+  const watchlist = useMemo(() => data || [], [data])
   const watchlistSet = useMemo(
     () => new Set(watchlist.map((w) => `${w.source}:${w.source_trader_id}`)),
     [watchlist]

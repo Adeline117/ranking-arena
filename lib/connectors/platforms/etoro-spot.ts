@@ -23,7 +23,6 @@ import type {
   SnapshotResult,
   TimeseriesResult,
   TraderSource,
-  SnapshotMetrics,
 } from '../../types/leaderboard'
 
 // Non-crypto asset classes to filter out
@@ -133,12 +132,12 @@ export class EtoroSpotConnector extends BaseConnector {
     }
   }
 
-  async fetchTraderProfile(traderKey: string): Promise<ProfileResult | null> {
+  async fetchTraderProfile(_traderKey: string): Promise<ProfileResult | null> {
     // eToro profiles require web scraping, not available via rankings API
     return null
   }
 
-  async fetchTraderSnapshot(traderKey: string, window: Window): Promise<SnapshotResult | null> {
+  async fetchTraderSnapshot(_traderKey: string, _window: Window): Promise<SnapshotResult | null> {
     // Individual snapshot requires fetching full leaderboard — use discoverLeaderboard instead
     return null
   }

@@ -7,7 +7,6 @@ import {
   requireAuth,
   success,
   error,
-  handleError,
 } from '@/lib/api'
 import { hasFeatureAccess, getFeatureLimits } from '@/lib/types/premium'
 import logger from '@/lib/logger'

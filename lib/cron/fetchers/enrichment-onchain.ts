@@ -108,7 +108,7 @@ export async function fetchGainsOnchainPositionHistory(
     const paddedAddr = '0x' + traderAddress.toLowerCase().replace('0x', '').padStart(64, '0')
 
     // Fetch last 90 days of blocks (~7200 blocks/day on Arbitrum = ~648000 blocks)
-    const fromBlock = 'earliest' // Let Etherscan handle block range
+    const _fromBlock = 'earliest' // Let Etherscan handle block range
 
     const allEvents: EtherscanLogEntry[] = []
 

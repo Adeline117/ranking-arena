@@ -7,7 +7,6 @@ import { ButtonSpinner } from '../../ui/LoadingSpinner'
 import { ARENA_PURPLE } from '@/lib/utils/content'
 import { useToast } from '../../ui/Toast'
 import { STICKERS } from '@/lib/stickers'
-import { commentStyles } from './comment-types'
 
 interface CommentInputProps {
   postId: string

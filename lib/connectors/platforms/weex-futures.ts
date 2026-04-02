@@ -6,7 +6,6 @@
 import { BaseConnector } from '../base'
 import { warnValidate } from '../schemas'
 import {
-  WeexFuturesLeaderboardResponseSchema,
   WeexFuturesDetailResponseSchema,
 } from './schemas'
 import type {
@@ -30,7 +29,7 @@ export class WeexFuturesConnector extends BaseConnector {
     notes: ['No 90d window', 'Aggressive CF'],
   }
 
-  async discoverLeaderboard(window: Window, limit = 50, offset = 0): Promise<DiscoverResult> {
+  async discoverLeaderboard(window: Window, limit = 50, _offset = 0): Promise<DiscoverResult> {
     // Strategy 1: VPS Playwright scraper (intercepts http-gateway1.weex.com API)
     const allTraders: TraderSource[] = []
 

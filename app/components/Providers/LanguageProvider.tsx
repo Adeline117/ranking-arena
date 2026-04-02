@@ -33,9 +33,11 @@ export function LanguageProvider({ children }: { children: ReactNode }) {
     // Pre-cache all language files in the background to eliminate flash when switching
     // Language files are small (~15KB each gzipped), so this is safe to do eagerly
     const preloadLangs: Language[] = ['zh', 'ja', 'ko']
-    requestIdleCallback
-      ? requestIdleCallback(() => { preloadLangs.forEach(lang => loadTranslations(lang)) })
-      : setTimeout(() => { preloadLangs.forEach(lang => loadTranslations(lang)) }, 2000)
+    if (requestIdleCallback) {
+      requestIdleCallback(() => { preloadLangs.forEach(lang => loadTranslations(lang)) })
+    } else {
+      setTimeout(() => { preloadLangs.forEach(lang => loadTranslations(lang)) }, 2000)
+    }
 
     const handleLanguageChange = (e: CustomEvent<Language>) => {
       if (e.detail !== 'en') {

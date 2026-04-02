@@ -6,7 +6,6 @@
 import type { IConnector, Platform, MarketType } from './base/types';
 import { BinanceFuturesConnector, BinanceSpotConnector, BinanceWeb3Connector } from './binance';
 import { BybitConnector } from './bybit';
-import { BitgetFuturesConnector, BitgetSpotConnector } from './bitget';
 import { MexcConnector } from './mexc';
 import { CoinexConnector } from './coinex';
 import { OkxConnector, OkxWalletConnector } from './okx';

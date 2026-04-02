@@ -17,7 +17,6 @@ import { logger } from '@/lib/logger'
 import {
   mapLeaderboardRow,
   mapV2Snapshot,
-  normalizeWinRate,
   normalizePeriod,
   getSourceAliases,
 } from './mappers'

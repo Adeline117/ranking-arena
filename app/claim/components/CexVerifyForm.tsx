@@ -95,7 +95,7 @@ export function CexVerifyForm({
 
       showToast(t('claimVerifiedAutoApproved'), 'success')
       onSuccess()
-    } catch (error) {
+    } catch (_error) {
       showToast(t('claimFailed'), 'error')
     } finally {
       setLoading(false)
