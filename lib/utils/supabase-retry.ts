@@ -28,11 +28,12 @@ function sleep(ms: number): Promise<void> {
   return new Promise(resolve => setTimeout(resolve, ms))
 }
 
-function isRetryableError(error: any): boolean {
+function isRetryableError(error: unknown): boolean {
   if (!error) return false
-  
-  const message = String(error.message || error.error || error)
-  const code = error.code || error.status || error.statusCode
+
+  const err = error as Record<string, unknown>
+  const message = String(err.message || err.error || error)
+  const code = err.code || err.status || err.statusCode
   
   // Cloudflare 502 Bad Gateway
   if (code === 502 || message.includes('502') || message.includes('Bad gateway')) {
@@ -74,7 +75,7 @@ export async function retrySupabaseQuery<T>(
   options: RetryOptions = {}
 ): Promise<PostgrestResponse<T>> {
   const opts = { ...DEFAULT_OPTIONS, ...options }
-  let lastError: any
+  let lastError: unknown
   let delay = opts.initialDelayMs
   
   for (let attempt = 1; attempt <= opts.maxAttempts; attempt++) {

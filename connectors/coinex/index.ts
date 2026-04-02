@@ -49,10 +49,10 @@ export class CoinexConnector extends BaseConnector {
         if (vpsResponse?.data?.data) {
           // VPS scraper returns: { data: { data: [...] } }
           // Map VPS response to connector format
-          traders = vpsResponse.data.data.map((item: any) => ({
-            trader_id: item.trader_id || item.uid || item.user_id,
-            nick_name: item.nickname || item.nick_name || item.account_name,
-            avatar: item.avatar || item.avatar_url,
+          traders = vpsResponse.data.data.map((item: Record<string, unknown>): CoinexTraderItem => ({
+            trader_id: String(item.trader_id || item.uid || item.user_id || ''),
+            nick_name: String(item.nickname || item.nick_name || item.account_name || ''),
+            avatar: String(item.avatar || item.avatar_url || ''),
             roi: this.parseNumber(item.profit_rate || item.roi || item.roiRate) as number,
             win_rate: this.parseNumber(item.winning_rate || item.win_rate || item.winRate) as number,
             pnl: this.parseNumber(item.profit_amount || item.pnl || item.profit) as number,
@@ -205,8 +205,8 @@ interface CoinexListResponse {
 }
 
 interface CoinexVPSResponse {
-  data: { 
-    data?: any[];
+  data: {
+    data?: Record<string, unknown>[];
     items?: CoinexTraderItem[];
   };
 }
@@ -222,5 +222,5 @@ interface CoinexTraderItem {
   trade_count?: number;
   aum?: number;
   max_drawdown?: number;
-  raw?: any;
+  raw?: Record<string, unknown>;
 }

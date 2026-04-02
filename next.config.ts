@@ -36,7 +36,7 @@ const nextConfig = {
   },
 
   // Webpack config (production builds use webpack for better chunk consolidation)
-  webpack: (config: any, { isServer }: { isServer: boolean }) => {
+  webpack: (config: Record<string, any>, { isServer }: { isServer: boolean }) => {
     if (!isServer) {
       config.resolve.fallback = {
         ...config.resolve.fallback,
