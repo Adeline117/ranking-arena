@@ -126,7 +126,6 @@ export default function RankingSection({
         <TimeRangeSelector
           activeRange={activeTimeRange}
           onChange={onTimeRangeChange}
-          disabled={loading}
         />
       </div>
 
