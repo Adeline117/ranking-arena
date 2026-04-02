@@ -5,7 +5,7 @@
  * to avoid duplicate connections and initialization overhead.
  */
 
-import { dataLogger } from '@/lib/utils/logger'
+import { dataLogger, fireAndForget } from '@/lib/utils/logger'
 
 type UpstashRedisType = InstanceType<typeof import('@upstash/redis')['Redis']>
 
@@ -29,7 +29,7 @@ export async function getSharedRedis(): Promise<UpstashRedisType | null> {
       const now = Date.now()
       if (now - lastHealthCheck > HEALTH_CHECK_INTERVAL) {
         lastHealthCheck = now
-        pingRedis().catch(() => {})
+        fireAndForget(pingRedis(), 'redis-health-check')
       }
     }
     return healthy ? redisClient : null

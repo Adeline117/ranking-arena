@@ -98,7 +98,7 @@ export default function TokensIndexClient({ initialTokens }: TokensIndexClientPr
       .then(data => {
         if (data.tokens) setPopularTokens(data.tokens)
       })
-      .catch(() => {})
+      .catch(() => {}) // eslint-disable-line no-restricted-syntax -- fire-and-forget
       .finally(() => setLoading(false))
   }, [])
 

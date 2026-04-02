@@ -43,7 +43,7 @@ export default function RankingsIndexClient({ initialPlatforms = [] }: { initial
     fetch('/api/rankings/platform-stats')
       .then(r => r.json())
       .then(data => { if (data.platforms) setPlatforms(data.platforms) })
-      .catch(() => {})
+      .catch(() => {}) // eslint-disable-line no-restricted-syntax -- fire-and-forget
       .finally(() => setLoading(false))
   }, [])
 

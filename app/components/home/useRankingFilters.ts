@@ -501,7 +501,7 @@ export function useRankingFilters({ traders, activeTimeRange }: UseRankingFilter
           })
           setServerSearchResults(mapped)
         })
-        .catch(() => { /* silent best-effort fallback */ })
+        .catch(() => { /* silent best-effort fallback */ }) // eslint-disable-line no-restricted-syntax -- fire-and-forget
     }, 400)
     return () => { clearTimeout(timer); controller.abort() }
     // eslint-disable-next-line react-hooks/exhaustive-deps

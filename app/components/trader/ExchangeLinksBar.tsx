@@ -114,7 +114,7 @@ export default function ExchangeLinksBar({ primary, linkedAccounts, activeAccoun
                   method: 'POST',
                   headers: { 'Content-Type': 'application/json' },
                   body: JSON.stringify({ type: 'exchange_link_click', platform: acc.platform, traderKey: acc.traderKey }),
-                }).catch(() => {}) // Intentional: analytics is non-critical
+                }).catch(() => {}) // eslint-disable-line no-restricted-syntax -- fire-and-forget: analytics is non-critical
               }}
               onMouseEnter={e => {
                 e.currentTarget.style.borderColor = tokens.colors.accent.primary + '80'

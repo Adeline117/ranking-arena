@@ -139,7 +139,7 @@ export default function OnboardingPage() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', ...getCsrfHeaders() },
         body: JSON.stringify({ traderId, action }),
-      }).catch(() => { /* swallow individual failures; UI already updated optimistically */ })
+      }).catch(() => { /* swallow individual failures; UI already updated optimistically */ }) // eslint-disable-line no-restricted-syntax -- fire-and-forget
     )
     Promise.all(promises)
   }, [])
@@ -153,7 +153,7 @@ export default function OnboardingPage() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', ...getCsrfHeaders() },
         body: JSON.stringify({ groupId, action }),
-      }).catch(() => { /* swallow individual failures; UI already updated optimistically */ })
+      }).catch(() => { /* swallow individual failures; UI already updated optimistically */ }) // eslint-disable-line no-restricted-syntax -- fire-and-forget
     )
     Promise.all(promises)
   }, [])
