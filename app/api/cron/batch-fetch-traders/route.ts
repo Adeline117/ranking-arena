@@ -121,8 +121,9 @@ export async function GET(request: NextRequest) {
     } catch { /* best effort */ }
   }, 280_000) // 280s safety margin for 300s maxDuration
 
-  // Per-platform timeout: configurable, default 700s for scraper groups buffer for logging/cleanup within 800s limit
-  const PLATFORM_TIMEOUT_MS = parseInt(process.env.PLATFORM_FETCH_TIMEOUT_MS || '750000', 10)
+  // Per-platform timeout: must fit within 300s maxDuration with room for N platforms + logging
+  // Formula: (maxDuration - safetyMargin) / maxPlatformsPerGroup ≈ (300-20) / 4 ≈ 70s
+  const PLATFORM_TIMEOUT_MS = parseInt(process.env.PLATFORM_FETCH_TIMEOUT_MS || '70000', 10)
 
   // Initialize all connectors (once per cold start)
   if (!connectorsInitialized) {
