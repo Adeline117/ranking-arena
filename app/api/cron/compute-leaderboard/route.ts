@@ -505,7 +505,7 @@ async function computeSeason(
           if (jsonbFallbackCount > 0) totalJsonbFallbacks++
         }
         if (totalJsonbFallbacks > 0) {
-          console.log(`[compute-leaderboard] ${source}: ${totalJsonbFallbacks}/${data.length} traders used JSONB metrics fallback`)
+          logger.warn(`[${source}] ${totalJsonbFallbacks}/${data.length} traders used JSONB metrics fallback`)
         }
         return rows
       })
