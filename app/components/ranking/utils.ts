@@ -59,7 +59,7 @@ export function parseSourceInfo(src: string, t: (key: string) => string): Source
  * Format display name - truncate wallet addresses
  */
 export function formatDisplayName(name: string, platform?: string): string {
-  if (!name) return 'Unknown'
+  if (!name || name === 'null' || name === 'undefined') return 'Unknown'
   
   let formatted: string
   
