@@ -15,8 +15,16 @@ import { ReactNode, useState, useEffect, lazy, Suspense, Component } from 'react
 import type { ErrorInfo } from 'react';
 import { PRIVY_APP_ID } from '@/lib/privy/config';
 
-// Lazy-load the actual PrivyProvider to defer its massive JS bundle
-const LazyPrivyProvider = lazy(() => import('./PrivyProviderInner'));
+// Lazy-load the actual PrivyProvider to defer its massive JS bundle.
+// Wrap import in try-catch: noble-secp256k1 can throw BigInt errors at module evaluation
+// time (before any React component renders), which ErrorBoundary cannot catch.
+const LazyPrivyProvider = lazy(() =>
+  import('./PrivyProviderInner').catch((err) => {
+    console.warn('[Privy] SDK failed to load, Web3 features disabled:', err?.message);
+    // Return a passthrough component so React doesn't crash
+    return { default: ({ children }: { children: ReactNode }) => <>{children}</> };
+  })
+);
 
 /** Isolate Privy SDK crashes — children render without Privy on failure */
 class PrivyErrorBoundary extends Component<{ children: ReactNode }, { hasError: boolean }> {
