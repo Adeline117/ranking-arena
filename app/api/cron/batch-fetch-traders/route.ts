@@ -35,7 +35,8 @@ import { env } from '@/lib/env'
 import { validatePlatform } from '@/lib/config/platforms'
 
 const DEAD_COUNTER_PREFIX = 'dead:consecutive:'
-const DEAD_THRESHOLD = 3 // consecutive failures before alerting (reduced from 10 for ~12h detection)
+const DEAD_THRESHOLD = 10 // consecutive failures before circuit-breaking (restored from 3 — was causing cascade skips)
+const DEAD_COUNTER_MAX_AGE_MS = 6 * 3600 * 1000 // Auto-reset counters older than 6h
 
 export const runtime = 'nodejs' // Required: edge runtime has 30s timeout, nodejs supports maxDuration
 export const dynamic = 'force-dynamic'
@@ -152,13 +153,23 @@ export async function GET(request: NextRequest) {
     }
 
     // Circuit breaker: skip platforms with recent consecutive failures
+    // Auto-reset counters older than DEAD_COUNTER_MAX_AGE_MS to allow retry
     try {
       const deadKey = `${DEAD_COUNTER_PREFIX}${platform}`
-      const stored = await PipelineState.get<number>(deadKey)
-      const recentFailures = typeof stored === 'number' ? stored : 0
-      if (recentFailures >= DEAD_THRESHOLD) {
-        logger.warn(`[batch-fetch-traders-${group}] Skipping ${platform}: ${recentFailures} consecutive failures (threshold: ${DEAD_THRESHOLD})`)
-        return { platform, status: 'error', durationMs: 0, error: `Skipped: ${recentFailures} consecutive failures (circuit breaker)` }
+      // Check counter age — use getByPrefix to get updated_at
+      const entries = await PipelineState.getByPrefix(deadKey)
+      const entry = entries.find(e => e.key === deadKey)
+      if (entry) {
+        const age = Date.now() - new Date(entry.updated_at).getTime()
+        const recentFailures = typeof entry.value === 'number' ? entry.value : 0
+        if (age > DEAD_COUNTER_MAX_AGE_MS) {
+          // Counter is stale — reset it to allow retry
+          logger.info(`[batch-fetch-traders-${group}] Resetting stale dead counter for ${platform} (age: ${Math.round(age / 3600000)}h, failures: ${recentFailures})`)
+          await PipelineState.del(deadKey)
+        } else if (recentFailures >= DEAD_THRESHOLD) {
+          logger.warn(`[batch-fetch-traders-${group}] Skipping ${platform}: ${recentFailures} consecutive failures (threshold: ${DEAD_THRESHOLD})`)
+          return { platform, status: 'error', durationMs: 0, error: `Skipped: ${recentFailures} consecutive failures (circuit breaker)` }
+        }
       }
     } catch (err) {
       logger.warn(`[batch-fetch-traders-${group}] Failed to check dead counter for ${platform}`, { error: err instanceof Error ? err.message : String(err) })
