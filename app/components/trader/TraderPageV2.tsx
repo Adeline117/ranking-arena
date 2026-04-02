@@ -5,6 +5,7 @@
  * Pure DB read (< 200ms), staleness indicator, refresh button, graceful degradation.
  */
 
+import { useState } from 'react'
 import { tokens } from '@/lib/design-tokens'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import { useTraderDetailV2 } from '@/lib/hooks/useTraderDetailV2'
@@ -17,7 +18,7 @@ import { isWalletAddress, generateBlockieSvg, getAvatarGradient } from '@/lib/ut
 // Lazy load heavy below-the-fold components
 const AdvancedMetricsCard = dynamic(() => import('./AdvancedMetricsCard'), { ssr: false })
 const MarketCorrelationCard = dynamic(() => import('./MarketCorrelationCard'), { ssr: false })
-import type { SnapshotWindow, SnapshotMetrics } from '@/lib/types/trading-platform'
+import type { SnapshotWindow, SnapshotMetrics, EquityCurvePoint } from '@/lib/types/trading-platform'
 import type { TraderAdvancedMetrics, TraderMarketCorrelation } from '@/lib/types/unified-trader'
 import type { TradingStyle } from '@/lib/types/trader'
 
@@ -117,13 +118,27 @@ export default function TraderPageV2({ platform, traderKey }: TraderPageV2Props)
           </div>
 
           {/* Profile stats bar */}
-          <div
-            className="grid grid-cols-2 gap-4 p-4 rounded-xl"
-            style={{ backgroundColor: tokens.colors.bg.secondary }}
-          >
-            <StatItem label={t('followers')} value={data.profile.followers} format="number" />
-            <StatItem label={t('aumLabel')} value={data.profile.aum} format="currency" />
-          </div>
+          {(() => {
+            const statItems: Array<{ label: string; value: number | null | undefined; format: 'number' | 'currency' | 'percent' }> = [
+              { label: t('followers'), value: data.profile.followers, format: 'number' },
+              { label: t('aumLabel'), value: data.profile.aum, format: 'currency' },
+            ]
+            // Show copiers only when data exists
+            if (data.profile.copiers != null && data.profile.copiers > 0) {
+              statItems.push({ label: t('copiers') || 'Copiers', value: data.profile.copiers, format: 'number' })
+            }
+            const cols = statItems.length
+            return (
+              <div
+                className={`grid gap-4 p-4 rounded-xl`}
+                style={{ backgroundColor: tokens.colors.bg.secondary, gridTemplateColumns: `repeat(${cols}, 1fr)` }}
+              >
+                {statItems.map((item, i) => (
+                  <StatItem key={i} label={item.label} value={item.value} format={item.format} />
+                ))}
+              </div>
+            )
+          })()}
 
           {/* Performance Snapshots */}
           <div className="space-y-4">
@@ -189,14 +204,22 @@ export default function TraderPageV2({ platform, traderKey }: TraderPageV2Props)
             return null
           })()}
 
-          {/* Equity Curve */}
+          {/* Equity Curve with ROI/PnL toggle */}
           {data.timeseries.equity_curve && data.timeseries.equity_curve.length > 0 && (
+            <EquityCurveSection
+              data={data.timeseries.equity_curve as EquityCurvePoint[]}
+              t={t}
+            />
+          )}
+
+          {/* Asset Breakdown */}
+          {data.timeseries.asset_breakdown && data.timeseries.asset_breakdown.length > 0 && (
             <div className="space-y-3">
               <h2 className="text-lg font-semibold" style={{ color: tokens.colors.text.primary }}>
-                {t('equityCurve')}
+                {t('assetBreakdown') || 'Asset Breakdown'}
               </h2>
               <div className="p-4 rounded-xl" style={{ backgroundColor: tokens.colors.bg.secondary }}>
-                <SimpleChart data={data.timeseries.equity_curve} />
+                <AssetBreakdownChart data={data.timeseries.asset_breakdown} />
               </div>
             </div>
           )}
@@ -360,21 +383,58 @@ function SnapshotCard({ window, metrics }: { window: SnapshotWindow; metrics: Sn
   )
 }
 
-function SimpleChart({ data }: { data: Array<{ date: string; roi: number }> }) {
+function EquityCurveSection({ data, t }: { data: EquityCurvePoint[]; t: (key: string) => string }) {
+  const [mode, setMode] = useState<'roi' | 'pnl'>('roi')
+  const hasPnl = data.some(d => (d as EquityCurvePoint).pnl != null && (d as EquityCurvePoint).pnl !== 0)
+
+  return (
+    <div className="space-y-3">
+      <div className="flex items-center justify-between">
+        <h2 className="text-lg font-semibold" style={{ color: tokens.colors.text.primary }}>
+          {t('equityCurve')}
+        </h2>
+        {hasPnl && (
+          <div className="flex gap-1 p-0.5 rounded-md" style={{ backgroundColor: tokens.colors.bg.tertiary }}>
+            {(['roi', 'pnl'] as const).map(m => (
+              <button
+                key={m}
+                onClick={() => setMode(m)}
+                className="px-3 py-1 rounded text-xs font-medium transition-all"
+                style={{
+                  backgroundColor: mode === m ? tokens.colors.bg.primary : 'transparent',
+                  color: mode === m ? tokens.colors.text.primary : tokens.colors.text.tertiary,
+                  border: 'none',
+                  cursor: 'pointer',
+                }}
+              >
+                {m === 'roi' ? 'ROI %' : 'PnL $'}
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+      <div className="p-4 rounded-xl" style={{ backgroundColor: tokens.colors.bg.secondary }}>
+        <SimpleChart data={data} mode={mode} />
+      </div>
+    </div>
+  )
+}
+
+function SimpleChart({ data, mode = 'roi' }: { data: EquityCurvePoint[]; mode?: 'roi' | 'pnl' }) {
   if (data.length < 2) return null
 
   const width = 600
   const height = 120
   const padding = 8
 
-  const values = data.map(d => d.roi)
+  const values = data.map(d => mode === 'pnl' ? ((d as EquityCurvePoint).pnl ?? d.roi) : d.roi)
   const minVal = Math.min(...values)
   const maxVal = Math.max(...values)
   const range = maxVal - minVal || 1
 
-  const points = data.map((d, i) => {
+  const points = data.map((_, i) => {
     const x = padding + (i / (data.length - 1)) * (width - 2 * padding)
-    const y = height - padding - ((d.roi - minVal) / range) * (height - 2 * padding)
+    const y = height - padding - ((values[i] - minVal) / range) * (height - 2 * padding)
     return `${x},${y}`
   })
 
@@ -382,19 +442,86 @@ function SimpleChart({ data }: { data: Array<{ date: string; roi: number }> }) {
   const isPositive = values[values.length - 1] >= values[0]
   const color = isPositive ? tokens.colors.accent.success : tokens.colors.accent.error
 
+  // Show min/max labels
+  const lastVal = values[values.length - 1]
+  const formatVal = mode === 'pnl'
+    ? `$${lastVal >= 0 ? '+' : ''}${lastVal.toLocaleString(undefined, { maximumFractionDigits: 0 })}`
+    : `${lastVal >= 0 ? '+' : ''}${lastVal.toFixed(2)}%`
+
   return (
-    <svg viewBox={`0 0 ${width} ${height}`} className="w-full h-24" preserveAspectRatio="none">
-      <path d={pathData} fill="none" stroke={color} strokeWidth="2" strokeLinejoin="round" />
-      <defs>
-        <linearGradient id="chartGradient" x1="0" x2="0" y1="0" y2="1">
-          <stop offset="0%" stopColor={color} stopOpacity="0.2" />
-          <stop offset="100%" stopColor={color} stopOpacity="0" />
-        </linearGradient>
-      </defs>
-      <path
-        d={`${pathData} L ${width - padding},${height - padding} L ${padding},${height - padding} Z`}
-        fill="url(#chartGradient)"
-      />
-    </svg>
+    <div>
+      <svg viewBox={`0 0 ${width} ${height}`} className="w-full h-24" preserveAspectRatio="none">
+        <path d={pathData} fill="none" stroke={color} strokeWidth="2" strokeLinejoin="round" />
+        <defs>
+          <linearGradient id={`chartGrad-${mode}`} x1="0" x2="0" y1="0" y2="1">
+            <stop offset="0%" stopColor={color} stopOpacity="0.2" />
+            <stop offset="100%" stopColor={color} stopOpacity="0" />
+          </linearGradient>
+        </defs>
+        <path
+          d={`${pathData} L ${width - padding},${height - padding} L ${padding},${height - padding} Z`}
+          fill={`url(#chartGrad-${mode})`}
+        />
+      </svg>
+      <div className="flex justify-between mt-1">
+        <span className="text-xs" style={{ color: tokens.colors.text.tertiary }}>
+          {data[0].date}
+        </span>
+        <span className="text-xs font-medium" style={{ color }}>
+          {formatVal}
+        </span>
+        <span className="text-xs" style={{ color: tokens.colors.text.tertiary }}>
+          {data[data.length - 1].date}
+        </span>
+      </div>
+    </div>
+  )
+}
+
+function AssetBreakdownChart({ data }: { data: Array<{ symbol: string; weight_pct: number; count: number }> }) {
+  const sorted = [...data].sort((a, b) => b.weight_pct - a.weight_pct).slice(0, 10)
+  const totalPct = sorted.reduce((sum, item) => sum + item.weight_pct, 0)
+
+  const COLORS = [
+    tokens.colors.accent.brand,
+    tokens.colors.accent.success,
+    tokens.colors.accent.error,
+    '#8B5CF6', '#F59E0B', '#06B6D4', '#EC4899', '#10B981', '#6366F1', '#EF4444',
+  ]
+
+  return (
+    <div className="space-y-3">
+      {/* Horizontal stacked bar */}
+      <div className="flex h-6 rounded-lg overflow-hidden" style={{ backgroundColor: tokens.colors.bg.tertiary }}>
+        {sorted.map((item, idx) => (
+          <div
+            key={item.symbol}
+            style={{
+              width: `${(item.weight_pct / totalPct) * 100}%`,
+              backgroundColor: COLORS[idx % COLORS.length],
+              minWidth: 3,
+            }}
+            title={`${item.symbol}: ${item.weight_pct.toFixed(1)}%`}
+          />
+        ))}
+      </div>
+      {/* Legend grid */}
+      <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+        {sorted.map((item, idx) => (
+          <div key={item.symbol} className="flex items-center gap-2">
+            <div
+              className="w-2.5 h-2.5 rounded-sm flex-shrink-0"
+              style={{ backgroundColor: COLORS[idx % COLORS.length] }}
+            />
+            <span className="text-xs font-medium" style={{ color: tokens.colors.text.primary }}>
+              {item.symbol}
+            </span>
+            <span className="text-xs ml-auto" style={{ color: tokens.colors.text.secondary, fontVariantNumeric: 'tabular-nums' }}>
+              {item.weight_pct.toFixed(1)}%
+            </span>
+          </div>
+        ))}
+      </div>
+    </div>
   )
 }
