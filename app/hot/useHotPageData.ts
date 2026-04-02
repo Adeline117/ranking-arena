@@ -380,12 +380,12 @@ export function useHotPageData(options: UseHotPageDataOptions = {}) {
     }
   }, [translatingList, translatedListPosts, isChineseText])
 
-  // Translate list when posts load or language changes
+  // Translate list when posts load or language changes (requires auth — translation uses OpenAI credits)
   useEffect(() => {
-    if (posts.length > 0) {
+    if (posts.length > 0 && email) {
       translateListPosts(posts, language as 'zh' | 'en')
     }
-  }, [posts, language, translateListPosts])
+  }, [posts, language, translateListPosts, email])
 
   // Translate post content (with cache)
   const translateContent = useCallback(async (postId: string, content: string, targetLang: 'zh' | 'en') => {

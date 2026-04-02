@@ -111,6 +111,9 @@ export async function GET(request: Request) {
       'whitebit.com',
       // Toobit
       'toobit.com',
+      // eToro
+      'etorostatic.com',
+      'etoro.com',
       // Aevo
       'aevo.xyz',
       // Hyperliquid
