@@ -16,7 +16,7 @@ import { env } from '@/lib/env'
 import { getSharedRedis } from '@/lib/cache/redis-client'
 
 export const dynamic = 'force-dynamic'
-export const maxDuration = 60
+export const maxDuration = 120 // Increased from 60s — paginated Supabase queries can be slow
 
 const logger = createLogger('sync-meilisearch')
 
@@ -94,17 +94,17 @@ export async function GET(request: NextRequest) {
           .from('leaderboard_ranks')
           .select('source, source_trader_id, handle, avatar_url, roi, pnl, arena_score, win_rate, max_drawdown, followers, rank, trader_type, computed_at')
           .eq('season_id', season)
-          .not('arena_score', 'is', null)
           .gt('arena_score', 0)
-          .or('is_outlier.is.null,is_outlier.eq.false')
+          .neq('is_outlier', true)
 
         // Incremental: only fetch traders updated since last sync
         if (!isFull) {
           query = query.gte('computed_at', lastSync)
         }
 
+        // Use id ordering instead of arena_score to avoid slow sort on large result sets
         const { data, error } = await query
-          .order('arena_score', { ascending: false })
+          .order('id', { ascending: true })
           .range(offset, offset + pageSize - 1)
 
         if (error) throw new Error(`Supabase query failed (${season}): ${error.message}`)
