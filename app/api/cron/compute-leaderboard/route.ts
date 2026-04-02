@@ -871,14 +871,25 @@ async function computeSeason(
       else if (h < 24) { snap.trading_style = 'day_trader'; snap.style_confidence = 0.7 }
       else if (h < 168) { snap.trading_style = 'swing'; snap.style_confidence = 0.6 }
       else { snap.trading_style = 'position'; snap.style_confidence = 0.5 }
-    } else if (snap.trades_count != null && snap.roi != null) {
+    } else if (snap.trades_count != null && snap.trades_count > 0 && snap.roi != null) {
       // Heuristic: high trade count relative to period → likely scalper/day trader
       const periodDays = season === '7D' ? 7 : season === '30D' ? 30 : 90
       const tradesPerDay = snap.trades_count / periodDays
       if (tradesPerDay > 10) { snap.trading_style = 'scalper'; snap.style_confidence = 0.4 }
       else if (tradesPerDay > 2) { snap.trading_style = 'day_trader'; snap.style_confidence = 0.3 }
       else if (tradesPerDay > 0.3) { snap.trading_style = 'swing'; snap.style_confidence = 0.3 }
-      else if (snap.trades_count > 0) { snap.trading_style = 'position'; snap.style_confidence = 0.3 }
+      else { snap.trading_style = 'position'; snap.style_confidence = 0.3 }
+    } else if (snap.roi != null && snap.max_drawdown != null && snap.win_rate != null) {
+      // Last resort: classify by risk profile (ROI magnitude + MDD + WR pattern)
+      // This enables trading_style for ALL traders that have the basic 3 metrics
+      const absRoi = Math.abs(snap.roi)
+      const mdd = snap.max_drawdown
+      const wr = snap.win_rate
+      if (absRoi > 500 && mdd > 30) { snap.trading_style = 'aggressive'; snap.style_confidence = 0.25 }
+      else if (wr > 65 && mdd < 15) { snap.trading_style = 'conservative'; snap.style_confidence = 0.25 }
+      else if (absRoi > 100 && mdd > 15 && mdd < 50) { snap.trading_style = 'swing'; snap.style_confidence = 0.2 }
+      else if (absRoi < 50 && mdd < 20) { snap.trading_style = 'conservative'; snap.style_confidence = 0.2 }
+      else { snap.trading_style = 'balanced'; snap.style_confidence = 0.15 }
     }
   }
 
