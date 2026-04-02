@@ -284,7 +284,7 @@ export async function GET(request: NextRequest) {
       for (let i = 0; i < allMetricUpdates.length; i += RPC_BATCH) {
         const batch = allMetricUpdates.slice(i, i + RPC_BATCH)
         const { data: count, error: rpcError } = await supabase
-          .rpc('bulk_update_snapshot_metrics', { updates: JSON.stringify(batch) })
+          .rpc('bulk_update_snapshot_metrics', { updates: batch })
 
         if (rpcError) {
           logger.warn(`[compute-derived-metrics] bulk_update_snapshot_metrics RPC error: ${rpcError.message}`)
