@@ -116,10 +116,11 @@ export default function TradingViewChart({
     if (!containerRef.current || !data || data.length === 0) return
 
     let cancelled = false
+    const containerEl = containerRef.current
 
     // Dynamic import: ~300KB loaded only when chart renders
     import('lightweight-charts').then((lc) => {
-      if (cancelled || !containerRef.current) return
+      if (cancelled || !containerEl) return
 
       // Canvas API doesn't support CSS variables — resolve them to actual values
       const resolveCssVar = (val: string): string => {
@@ -131,8 +132,8 @@ export default function TradingViewChart({
         Object.entries(colors).map(([k, v]) => [k, resolveCssVar(v)])
       ) as typeof colors
 
-      const chart = lc.createChart(containerRef.current!, {
-        width: containerRef.current!.clientWidth,
+      const chart = lc.createChart(containerEl!, {
+        width: containerEl!.clientWidth,
         height,
         layout: {
           background: { type: lc.ColorType.Solid, color: c.bg },
@@ -223,7 +224,7 @@ export default function TradingViewChart({
         pointer-events: none; font-family: monospace; line-height: 1.6;
         backdrop-filter: blur(8px); box-shadow: 0 4px 12px var(--color-overlay-medium);
       `
-      containerRef.current!.appendChild(tooltip)
+      containerEl!.appendChild(tooltip)
       tooltipRef.current = tooltip
 
       chart.subscribeCrosshairMove((param) => {
@@ -258,7 +259,7 @@ export default function TradingViewChart({
         tooltip.innerHTML = html
         tooltip.style.display = 'block'
 
-        const container = containerRef.current!
+        const container = containerEl!
         const toolW = tooltip.offsetWidth
         const x = (param.point?.x ?? 0)
         tooltip.style.left = `${x + toolW + 20 > container.clientWidth ? x - toolW - 10 : x + 10}px`
@@ -269,20 +270,20 @@ export default function TradingViewChart({
 
       // Resize observer
       const ro = new ResizeObserver(() => {
-        if (containerRef.current) {
-          chart.applyOptions({ width: containerRef.current.clientWidth })
+        if (containerEl) {
+          chart.applyOptions({ width: containerEl.clientWidth })
         }
       })
-      ro.observe(containerRef.current!)
+      ro.observe(containerEl!)
 
       // Store cleanup for the returned destructor
       chartRef.current = chart
-      ;(containerRef.current as HTMLDivElement & { _ro?: ResizeObserver })._ro = ro
+      ;(containerEl as HTMLDivElement & { _ro?: ResizeObserver })._ro = ro
     })
 
     return () => {
       cancelled = true
-      const container = containerRef.current as HTMLDivElement & { _ro?: ResizeObserver } | null
+      const container = containerEl as HTMLDivElement & { _ro?: ResizeObserver } | null
       container?._ro?.disconnect()
       chartRef.current?.remove()
       tooltipRef.current?.remove()

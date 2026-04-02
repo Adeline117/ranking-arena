@@ -1,7 +1,6 @@
 'use client'
 
 import { useEffect, useState, Suspense } from 'react'
-import Link from 'next/link'
 import { supabase } from '@/lib/supabase/client'
 import { tokens } from '@/lib/design-tokens'
 import { useLanguage } from '../Providers/LanguageProvider'
@@ -31,7 +30,7 @@ interface GroupsFeedPageProps {
   initialGroups?: unknown[]
 }
 
-export default function GroupsFeedPage({ initialPosts, initialGroups }: GroupsFeedPageProps) {
+export default function GroupsFeedPage({ initialPosts, initialGroups: _initialGroups }: GroupsFeedPageProps) {
   const { language: _language, t } = useLanguage()
   const { email, userId } = useAuthSession()
   const [myGroups, setMyGroups] = useState<Group[]>([])

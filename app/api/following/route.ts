@@ -201,7 +201,8 @@ export const GET = withAuth(async ({ user: authUser, request }) => {
     fireAndForget(tieredSet(cacheKey, result, 'hot', ['following']), 'Cache following list')
   }
 
-  let { items, traderCount, userCount } = result
+  let { items, userCount } = result
+  const { traderCount } = result
 
   // When social features are off, filter to trader items only
   if (!features.social) {

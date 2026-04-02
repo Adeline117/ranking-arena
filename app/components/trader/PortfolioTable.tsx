@@ -5,7 +5,6 @@ import { tokens } from '@/lib/design-tokens'
 import { Box, Text } from '../base'
 import type { PortfolioItem, PositionHistoryItem } from '@/lib/data/trader'
 import type { ExtendedPositionHistoryItem } from './portfolio-table-utils'
-import PortfolioProLock from './PortfolioProLock'
 import PortfolioTableHeader from './PortfolioTableHeader'
 import PortfolioCurrentView from './PortfolioCurrentView'
 import PositionHistoryView from './PositionHistoryView'
@@ -24,7 +23,7 @@ type ViewMode = 'current' | 'history'
  * Portfolio页面 - 显示当前持仓和历史仓位
  * 现代化设计，流畅动画
  */
-export default function PortfolioTable({ items, history = [], isPro = true, onUnlock }: PortfolioTableProps) {
+export default function PortfolioTable({ items, history = [], isPro = true, onUnlock: _onUnlock }: PortfolioTableProps) {
   const [viewMode, setViewMode] = useState<ViewMode>('current')
   const [selectedMarket, setSelectedMarket] = useState<string | null>(null)
   const [sortBy, setSortBy] = useState<'openTime' | 'closeTime' | 'pnl'>('openTime')

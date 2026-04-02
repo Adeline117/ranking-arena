@@ -28,7 +28,7 @@ const logger = createLogger('precompute-composite')
 const COMPOSITE_WEIGHTS = { '7D': 0.05, '30D': 0.25, '90D': 0.70 } as const
 const ROI_ANOMALY_THRESHOLD = 5000
 const _CACHE_TTL_SECONDS = 10800 // 3 hours (cron runs every 2h, overlap for safety)
-const FRESHNESS_HOURS = 168 // 7 days — resilient to intermittent fetch failures
+const _FRESHNESS_HOURS = 168 // 7 days — resilient to intermittent fetch failures
 
 export async function GET(request: NextRequest) {
   const authHeader = request.headers.get('authorization')

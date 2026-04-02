@@ -25,7 +25,7 @@ function NavIcon({ active, children }: IconProps & { children: React.ReactNode }
   )
 }
 
-function HomeIcon({ active }: IconProps): React.ReactElement {
+function _HomeIcon({ active }: IconProps): React.ReactElement {
   return (
     <NavIcon active={active}>
       <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
@@ -94,7 +94,7 @@ function MarketIcon({ active }: IconProps): React.ReactElement {
   )
 }
 
-function SearchIcon({ active }: IconProps): React.ReactElement {
+function _SearchIcon({ active }: IconProps): React.ReactElement {
   return (
     <NavIcon active={active}>
       <circle cx="11" cy="11" r="8" />
@@ -103,7 +103,7 @@ function SearchIcon({ active }: IconProps): React.ReactElement {
   )
 }
 
-function LibraryIcon({ active }: IconProps): React.ReactElement {
+function _LibraryIcon({ active }: IconProps): React.ReactElement {
   return (
     <NavIcon active={active}>
       <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" />
@@ -428,7 +428,7 @@ function NavItemLink({ item, active, onClick, t }: NavItemLinkProps): React.Reac
   )
 }
 
-function ActiveIndicator(): React.ReactElement {
+function _ActiveIndicator(): React.ReactElement {
   return (
     <span
       style={{

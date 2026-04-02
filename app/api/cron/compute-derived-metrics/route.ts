@@ -28,7 +28,7 @@ export async function GET(request: NextRequest) {
 
   try {
     // Get all active platforms from leaderboard_ranks
-    const { data: platformRows } = await supabase
+    const { data: _platformRows } = await supabase
       .from('leaderboard_ranks')
       .select('source')
       .eq('season_id', '90D')

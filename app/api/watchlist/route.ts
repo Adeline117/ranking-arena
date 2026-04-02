@@ -59,7 +59,7 @@ export async function GET(request: NextRequest) {
       if (serviceKey) {
         const admin = createClient(adminUrl, serviceKey)
         // Build filter for all watchlist items
-        const keys = watchlist.map(w => `${w.source}:${w.source_trader_id}`)
+        const _keys = watchlist.map(w => `${w.source}:${w.source_trader_id}`)
         const { data: ranks } = await admin
           .from('leaderboard_ranks')
           .select('source, source_trader_id, roi, pnl, rank, arena_score, win_rate, avatar_url')

@@ -55,7 +55,7 @@ export async function GET(request: NextRequest) {
 
   try {
     const supabase = getSupabaseAdmin()
-    const redis = await getSharedRedis()
+    const _redis = await getSharedRedis()
 
     // Determine last sync timestamp for incremental sync
     const LAST_SYNC_KEY = 'meilisearch:last_sync'

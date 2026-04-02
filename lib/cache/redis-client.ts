@@ -61,7 +61,6 @@ export async function getSharedRedis(): Promise<UpstashRedisType | null> {
       }
       return fetch(input, init)
     }
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     redisClient = new Redis({ url, token, enableAutoPipelining: true, fetch: isrSafeFetch } as any)
     dataLogger.info('[Redis] connected')
     return redisClient
@@ -75,7 +74,7 @@ export async function getSharedRedis(): Promise<UpstashRedisType | null> {
 /**
  * Record a Redis error. After MAX_CONSECUTIVE_ERRORS, marks Redis as unhealthy.
  */
-export function recordRedisError(error: unknown): void {
+export function recordRedisError(_error: unknown): void {
   consecutiveErrors++
   if (consecutiveErrors >= MAX_CONSECUTIVE_ERRORS && healthy) {
     dataLogger.warn(`[Redis] ${consecutiveErrors} consecutive errors, switching to memory cache`)

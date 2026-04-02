@@ -16,7 +16,7 @@ const DEFAULT_STATS = {
 }
 
 const CACHE_KEY = 'hero-stats:v1'
-const CACHE_TTL = 3600 // 1 hour
+const _CACHE_TTL = 3600 // 1 hour
 
 export interface HeroStats {
   exchangeCount: number

@@ -81,7 +81,7 @@ async function checkDailyLimit(
 // Response helpers (use standard apiSuccess/apiError + CORS headers)
 // ---------------------------------------------------------------------------
 
-const CORS_HEADERS = {
+const _CORS_HEADERS = {
   'Access-Control-Allow-Origin': '*',
 }
 

@@ -438,7 +438,7 @@ function PeriodSelector({ period, onChange, loading }: { period: Period; onChang
   return (<div role="group" aria-label="Select time period" style={{ display: 'inline-flex', gap: 0, padding: 2, background: tokens.colors.bg.secondary, borderRadius: tokens.radius.lg, border: '1px solid var(--glass-border-light)' }}>{periods.map((p) => (<button key={p} onClick={() => onChange(p)} disabled={loading} aria-label={`Show ${labels[p]} rankings`} aria-pressed={period === p} style={{ padding: '6px 14px', minHeight: 36, borderRadius: tokens.radius.md, border: 'none', fontSize: 13, fontWeight: period === p ? 700 : 500, background: period === p ? tokens.colors.accent.brand + '20' : 'transparent', color: period === p ? tokens.colors.accent.brand : tokens.colors.text.tertiary, cursor: loading ? 'wait' : 'pointer', opacity: loading ? 0.6 : 1, transition: 'all 0.15s' }}>{labels[p]}</button>))}</div>)
 }
 
-export default function ExchangeRankingClient({ traders: initialTraders, exchange, totalCount }: { traders: TraderData[]; exchange?: string; totalCount?: number }) {
+export default function ExchangeRankingClient({ traders: initialTraders, exchange, totalCount: _totalCount }: { traders: TraderData[]; exchange?: string; totalCount?: number }) {
   const { language, t } = useLanguage()
   const router = useRouter()
   const pathname = usePathname()
@@ -474,7 +474,7 @@ export default function ExchangeRankingClient({ traders: initialTraders, exchang
     router.replace(`${pathname}${qs ? '?' + qs : ''}`, { scroll: false })
   }, [pathname, router, searchParams])
   const handlePeriodChange = useCallback((newPeriod: Period) => { setPeriod(newPeriod); const params = new URLSearchParams(searchParams.toString()); if (newPeriod === '90D') { params.delete('period') } else { params.set('period', newPeriod) }; const qs = params.toString(); router.replace(`${pathname}${qs ? '?' + qs : ''}`, { scroll: false }) }, [pathname, router, searchParams])
-  useEffect(() => { if (!exchange) return; let cancelled = false; setPeriodLoading(true); const win = PERIOD_TO_WINDOW[period]; fetch('/api/rankings?window=' + win + '&platform=' + encodeURIComponent(exchange) + '&limit=5000').then(r => r.ok ? r.json() : null).then(json => { const rows = Array.isArray(json?.data) ? json.data : json?.data?.traders; if (cancelled || !rows?.length) { setPeriodLoading(false); return }; setTraders(rows.map((row: Record<string, unknown>) => mapApiRow(row, exchange))); setPeriodLoading(false) }).catch(() => setPeriodLoading(false)); return () => { cancelled = true } }, [exchange, period]) // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { if (!exchange) return; let cancelled = false; setPeriodLoading(true); const win = PERIOD_TO_WINDOW[period]; fetch('/api/rankings?window=' + win + '&platform=' + encodeURIComponent(exchange) + '&limit=5000').then(r => r.ok ? r.json() : null).then(json => { const rows = Array.isArray(json?.data) ? json.data : json?.data?.traders; if (cancelled || !rows?.length) { setPeriodLoading(false); return }; setTraders(rows.map((row: Record<string, unknown>) => mapApiRow(row, exchange))); setPeriodLoading(false) }).catch(() => setPeriodLoading(false)); return () => { cancelled = true } }, [exchange, period])
   const handleRealtimeUpdate = useCallback((updates: Array<{ id: string; source: string; roi: number; pnl: number | null; win_rate: number | null; max_drawdown: number | null; arena_score: number | null; [key: string]: unknown }>) => { setTraders(prev => { const updateMap = new Map(updates.map(u => [u.id, u])); let changed = false; const next = prev.map(tr => { const u = updateMap.get(tr._source_id || '') || updateMap.get(tr.trader_key); if (!u) return tr; changed = true; return { ...tr, roi: u.roi, pnl: u.pnl ?? tr.pnl, win_rate: u.win_rate, max_drawdown: u.max_drawdown, arena_score: u.arena_score } }); return changed ? next : prev }) }, [])
   useRealtimeRankings({ onUpdate: handleRealtimeUpdate })
   const filteredTraders = useMemo(() => {
@@ -499,6 +499,7 @@ export default function ExchangeRankingClient({ traders: initialTraders, exchang
   const handleColumnToggle = useCallback((col: OptionalColumn) => { setOptionalColumns(prev => ({ ...prev, [col]: !prev[col] })) }, [])
   const tableScrollRef = useRef<HTMLDivElement>(null)
   const shouldVirtualize = viewMode === 'table' && activeTraders.length > 50
+  // eslint-disable-next-line react-hooks/incompatible-library -- TanStack Virtual is inherently incompatible with React Compiler
   const rowVirtualizer = useVirtualizer({ count: shouldVirtualize ? activeTraders.length : 0, getScrollElement: () => tableScrollRef.current, estimateSize: () => 48, overscan: 10 })
   const cardScrollRef = useRef<HTMLDivElement>(null)
   const shouldVirtualizeCards = viewMode === 'card' && activeTraders.length > 50

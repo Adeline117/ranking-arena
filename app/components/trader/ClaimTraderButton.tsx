@@ -4,7 +4,6 @@ import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase/client'
 import { Button } from '../base'
-import { getCsrfHeaders } from '@/lib/api/client'
 import { useToast } from '../ui/Toast'
 import { useDialog } from '../ui/Dialog'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
@@ -35,8 +34,8 @@ export default function ClaimTraderButton({ traderId, handle, userId, source = '
   const { showToast } = useToast()
   const { showConfirm } = useDialog()
   const { t } = useLanguage()
-  const [loading, setLoading] = useState(false)
-  const [claimed, setClaimed] = useState(false)
+  const [loading, _setLoading] = useState(false)
+  const [claimed, _setClaimed] = useState(false)
   const [claimStatus, setClaimStatus] = useState<string | null>(null)
   const [hasVerifiedAccounts, setHasVerifiedAccounts] = useState(false)
   const [thisTraderLinked, setThisTraderLinked] = useState(false)

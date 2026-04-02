@@ -13,7 +13,6 @@
 import { BaseConnector } from '../base'
 import { warnValidate } from '../schemas'
 import {
-  BingxFuturesLeaderboardResponseSchema,
   BingxFuturesDetailResponseSchema,
 } from './schemas'
 import type {
@@ -154,7 +153,7 @@ export class BingxFuturesConnector extends BaseConnector {
         },
       }
       return { profile, fetched_at: new Date().toISOString() }
-    } catch (err) {
+    } catch (_err) {
       return null
     }
   }
@@ -205,7 +204,7 @@ export class BingxFuturesConnector extends BaseConnector {
       }
 
       return { metrics, quality_flags, fetched_at: new Date().toISOString() }
-    } catch (err) {
+    } catch (_err) {
       return null
     }
   }

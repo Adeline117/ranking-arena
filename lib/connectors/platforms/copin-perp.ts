@@ -274,14 +274,14 @@ export class CopinPerpConnector extends BaseConnector {
       let totalPnl = 0
       let wins = 0
       let losses = 0
-      let totalVolume = 0
+      let _totalVolume = 0
       const rois: number[] = []
 
       for (const pos of positions) {
         totalPnl += pos.pnl ?? 0
         if (pos.isWin) wins++
         else losses++
-        totalVolume += Math.abs(pos.size ?? 0)
+        _totalVolume += Math.abs(pos.size ?? 0)
         if (pos.roi != null) rois.push(pos.roi)
       }
 

@@ -56,7 +56,7 @@ export default function RankingSection({
   lastUpdated,
   error,
   onRetry,
-  onRefresh,
+  onRefresh: _onRefresh,
 }: RankingSectionProps) {
   const {
     language,
@@ -87,7 +87,7 @@ export default function RankingSection({
     handleLoadFilter,
     handleDeleteFilter,
     handleProRequired,
-    handleCopyLink,
+    handleCopyLink: _handleCopyLink,
     handleResetFilters,
     handleFilterToggle,
     formatLastUpdated,

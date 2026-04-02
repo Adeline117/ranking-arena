@@ -21,7 +21,6 @@ import type { PlatformConnector } from './types'
 
  
 type AnyConnector = any
-import { TokenBucketRateLimiter } from './rate-limiter'
 import { RedisRateLimiter } from './redis-rate-limiter'
 
 // Legacy connector imports removed — _deprecated directory was deleted.

@@ -30,8 +30,8 @@ interface VerifiedTraderEditorProps {
 }
 
 export default function VerifiedTraderEditor({
-  traderId,
-  source,
+  traderId: _traderId,
+  source: _source,
   currentData,
   onSaved,
 }: VerifiedTraderEditorProps) {

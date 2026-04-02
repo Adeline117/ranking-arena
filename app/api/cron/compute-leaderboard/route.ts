@@ -27,7 +27,6 @@ import { PipelineLogger } from '@/lib/services/pipeline-logger'
 import { sanitizeDisplayName } from '@/lib/utils/profanity'
 import { generateIdenticonSvg } from '@/lib/utils/avatar'
 import { tieredGet, tieredSet, tieredDel } from '@/lib/cache/redis-layer'
-import { getSharedRedis } from '@/lib/cache/redis-client'
 import { PipelineState } from '@/lib/services/pipeline-state'
 import { env } from '@/lib/env'
 

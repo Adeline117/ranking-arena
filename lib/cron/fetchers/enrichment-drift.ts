@@ -38,7 +38,7 @@ interface DriftFill {
   pnl?: number
 }
 
-interface DriftUserStats {
+interface _DriftUserStats {
   authority?: string
   pnl?: number
   volume?: number
@@ -213,7 +213,7 @@ function groupFillsIntoPositions(trades: S3TradeRecord[], authority: string): Po
   let openTs: number | null = null
   let totalBaseSize = 0
   let totalQuoteSize = 0
-  let totalFees = 0
+  let _totalFees = 0
   let entryPrice: number | null = null
   let fillCount = 0
 
@@ -261,14 +261,14 @@ function groupFillsIntoPositions(trades: S3TradeRecord[], authority: string): Po
       openTs = ts
       totalBaseSize = 0
       totalQuoteSize = 0
-      totalFees = 0
+      _totalFees = 0
       entryPrice = oracle > 0 ? oracle / 1e6 : (quoteSize > 0 && baseSize > 0 ? quoteSize / baseSize : null)
       fillCount = 0
     }
 
     totalBaseSize += baseSize
     totalQuoteSize += quoteSize
-    totalFees += fee
+    _totalFees += fee
     fillCount++
   }
 

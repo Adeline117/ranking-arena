@@ -38,7 +38,7 @@ export async function GET(request: NextRequest) {
     yesterday.setUTCDate(yesterday.getUTCDate() - 1)
     const dateStr = yesterday.toISOString().split('T')[0]
     const today = new Date()
-    const todayStr = today.toISOString().split('T')[0]
+    const _todayStr = today.toISOString().split('T')[0]
 
     // Step 1: Fetch ALL yesterday's snapshots in one query using RPC or direct query
     // Use distinct on (source, source_trader_id) ordered by captured_at desc to get latest per trader

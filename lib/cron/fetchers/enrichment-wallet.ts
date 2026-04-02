@@ -244,7 +244,7 @@ export async function fetchEvmWalletPortfolio(
   if (balances.length === 0) return []
 
   const chainStables = STABLECOINS[chain] || {}
-  const majorTokens = new Set(MAJOR_TOKENS[chain] || [])
+  const _majorTokens = new Set(MAJOR_TOKENS[chain] || [])
   const positions: PortfolioPosition[] = []
 
   // Calculate total value first for weightPct

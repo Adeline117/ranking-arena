@@ -80,7 +80,7 @@ export class BitunixFuturesConnector extends BaseConnector {
     const pageSize = 200
     const maxPages = Math.ceil(Math.min(limit, 2000) / pageSize)
     const allTraders: TraderSource[] = []
-    const statType = this.mapWindowToStatType(window)
+    const _statType = this.mapWindowToStatType(window)
 
     for (let page = 1; page <= maxPages; page++) {
       try {

@@ -8,7 +8,6 @@
 import { BaseConnector } from '../base'
 import { warnValidate } from '../schemas'
 import {
-  BitgetFuturesLeaderboardResponseSchema,
   BitgetFuturesDetailResponseSchema,
   BitgetFuturesTimeseriesResponseSchema,
 } from './schemas'

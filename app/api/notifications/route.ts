@@ -37,10 +37,11 @@ export async function GET(request: NextRequest) {
     const offset = validateNumber(searchParams.get('offset'), { min: 0 }) ?? 0
     const unread_only = searchParams.get('unread_only') === 'true'
 
-    let [notifications, unreadCount] = await Promise.all([
+    const [initialNotifications, unreadCount] = await Promise.all([
       getUserNotifications(supabase, user.id, { limit, offset, unread_only }),
       getUnreadNotificationCount(supabase, user.id),
     ])
+    let notifications = initialNotifications
 
     // When social features are off, filter out social notification types
     if (!features.social) {

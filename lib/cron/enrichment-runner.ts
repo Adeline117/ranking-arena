@@ -76,8 +76,6 @@ import {
   fetchBitfinexRoi,
   fetchBlofinEquityCurve,
   fetchBlofinStatsDetail,
-  fetchPhemexEquityCurve,
-  fetchPhemexStatsDetail,
   fetchBingxEquityCurve,
   fetchBingxStatsDetail,
   fetchBingxCurrentPositions,
@@ -95,7 +93,6 @@ import {
   upsertPortfolio,
   enhanceStatsWithDerivedMetrics,
   calculateAssetBreakdown,
-  classifyTradingStyle,
   type StatsDetail,
   type EquityCurvePoint,
   type PositionHistoryItem,
@@ -110,14 +107,7 @@ import {
   fetchOkxWeb3EquityCurve,
   fetchOkxWeb3StatsDetail,
 } from '@/lib/cron/fetchers/enrichment-okx-web3'
-import {
-  fetchWeexEquityCurve,
-  fetchWeexStatsDetail,
-} from '@/lib/cron/fetchers/enrichment-weex'
-import {
-  fetchKucoinEquityCurve,
-  fetchKucoinStatsDetail,
-} from '@/lib/cron/fetchers/enrichment-kucoin'
+// kucoin enrichment disabled — import removed
 import {
   fetchWooxEquityCurve,
   fetchWooxStatsDetail,

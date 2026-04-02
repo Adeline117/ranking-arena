@@ -36,7 +36,7 @@ interface UseGroupDataOptions {
   language: string
 }
 
-export function useGroupData({ groupId, userId, accessToken, showToast, language }: UseGroupDataOptions) {
+export function useGroupData({ groupId, userId, accessToken, showToast, language: _language }: UseGroupDataOptions) {
   const [group, setGroup] = useState<Group | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -110,7 +110,7 @@ export function useGroupData({ groupId, userId, accessToken, showToast, language
         setLoading(false)
       }
     }
-  }, [groupId, userId, language])
+  }, [groupId, userId])
 
   useEffect(() => {
     loadGroup()
@@ -151,7 +151,7 @@ export function useGroupData({ groupId, userId, accessToken, showToast, language
     } finally {
       setJoining(false)
     }
-  }, [userId, accessToken, groupId, showToast, language])
+  }, [userId, accessToken, groupId, showToast])
 
   // Leave group
   const handleLeave = useCallback(async () => {
@@ -176,7 +176,7 @@ export function useGroupData({ groupId, userId, accessToken, showToast, language
       logger.error('Leave error:', err)
       showToast(t('leaveFailed'), 'error')
     }
-  }, [userId, groupId, showToast, language])
+  }, [userId, groupId, showToast])
 
   // Load members
   const loadMembers = useCallback(async () => {

@@ -3,7 +3,6 @@
 import { tokens } from '@/lib/design-tokens'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import { Box, Text } from '../base'
-import type { FilterConfig } from '../premium/AdvancedFilter'
 
 interface FilterStatusMessagesProps {
   loading: boolean

@@ -363,7 +363,7 @@ export function useTraderData(options: UseTraderDataOptions = {}) {
         fetchedAt: Date.now(),
       })
     }
-  }, [hasInitialData, initialTraders, initialLastUpdated])
+  }, [hasInitialData, initialTraders, initialLastUpdated, state.activeTimeRange])
 
   // 初次加载和时间段切换时加载数据
   // Skip initial fetch if we have server-provided data for 90D

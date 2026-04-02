@@ -121,7 +121,7 @@ export class GainsPerpConnector extends BaseConnector {
     }
   }
 
-  async fetchTraderSnapshot(traderKey: string, window: Window): Promise<SnapshotResult | null> {
+  async fetchTraderSnapshot(traderKey: string, _window: Window): Promise<SnapshotResult | null> {
     try {
       // Compute stats from leaderboard data (which contains aggregate fields).
       // The personal-trading-history-table endpoint was removed (404 since 2026-04).

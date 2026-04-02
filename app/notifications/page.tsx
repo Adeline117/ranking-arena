@@ -263,7 +263,7 @@ export default function NotificationsPage() {
 
   // 加载通知 — 初始加载 30 条，滚动加载更多
   const NOTIFICATION_PAGE_SIZE = 30
-  const [hasMoreNotifs, setHasMoreNotifs] = useState(true)
+  const [_hasMoreNotifs, setHasMoreNotifs] = useState(true)
   const loadNotifications = useCallback(async (offset = 0, append = false) => {
     if (!accessToken) return
     if (!append) setLoading(true)

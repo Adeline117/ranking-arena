@@ -23,7 +23,6 @@ import {
   getUserClaim,
   getUserVerifiedTrader,
   isTraderClaimed,
-  type VerificationMethod,
 } from '@/lib/data/trader-claims'
 import { notifyTraderClaim } from '@/lib/notifications/activity-alerts'
 import { logger } from '@/lib/logger'

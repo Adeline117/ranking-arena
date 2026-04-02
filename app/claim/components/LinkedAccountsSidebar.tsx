@@ -7,7 +7,7 @@ import { LinkedTrader } from './types'
 
 export function LinkedAccountsSidebar({
   linkedTraders,
-  onRefresh,
+  onRefresh: _onRefresh,
 }: {
   linkedTraders: LinkedTrader[]
   onRefresh: () => void

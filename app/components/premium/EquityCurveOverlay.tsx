@@ -46,7 +46,7 @@ export default function EquityCurveOverlay({ traders, height = 300 }: EquityCurv
     // Find global min/max ROI and date range
     let globalMin = Infinity
     let globalMax = -Infinity
-    let allDates = new Set<string>()
+    const allDates = new Set<string>()
 
     for (const trader of tradersWithData) {
       for (const point of trader.data) {

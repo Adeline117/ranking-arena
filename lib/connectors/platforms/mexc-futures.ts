@@ -7,7 +7,7 @@
 
 import { BaseConnector } from '../base'
 import { warnValidate } from '../schemas'
-import { MexcFuturesLeaderboardResponseSchema, MexcFuturesDetailResponseSchema } from './schemas'
+import { MexcFuturesDetailResponseSchema } from './schemas'
 import type {
   DiscoverResult, ProfileResult, SnapshotResult, TimeseriesResult,
   TraderSource, TraderProfile, SnapshotMetrics, QualityFlags,

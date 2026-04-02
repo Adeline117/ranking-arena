@@ -40,8 +40,6 @@ export async function GET(request: NextRequest) {
     // Query active connections via pg_stat_activity
     const { data, error } = await supabase.rpc('get_active_connections')
 
-    let activeConnections: number
-
     if (error || !data) {
       // Fallback: use a raw count query via PostgREST-compatible approach
       // If the RPC doesn't exist, we estimate from a lightweight query
@@ -74,7 +72,7 @@ export async function GET(request: NextRequest) {
       })
     }
 
-    activeConnections = typeof data === 'number' ? data : parseInt(String(data), 10)
+    const activeConnections = typeof data === 'number' ? data : parseInt(String(data), 10)
     const utilizationPct = Math.round((activeConnections / MAX_CONNECTIONS) * 10000) / 100
 
     let status: 'healthy' | 'warning' | 'critical'

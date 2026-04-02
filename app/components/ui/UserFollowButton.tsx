@@ -34,7 +34,7 @@ export default function UserFollowButton({
   fullWidth = false,
   onFollowChange
 }: UserFollowButtonProps) {
-  const router = useRouter()
+  const _router = useRouter()
   const { showToast } = useToast()
   const { t } = useLanguage()
   const { getAuthHeadersAsync } = useAuthSession()
@@ -188,7 +188,7 @@ export default function UserFollowButton({
       setLoading(false)
       pendingRef.current = false
     }
-  }, [currentUserId, targetUserId, following, loading, getAuthHeadersAsync, showToast, router, t, onFollowChange])
+  }, [currentUserId, targetUserId, following, loading, getAuthHeadersAsync, showToast, t, onFollowChange, openLoginModal])
 
   const sizeStyles = {
     sm: { padding: '10px 16px', fontSize: tokens.typography.fontSize.sm, borderRadius: tokens.radius.md, minHeight: '44px' },

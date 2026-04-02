@@ -103,7 +103,7 @@ export default function OnboardingPage() {
 
       if (e.key === 'Enter') {
         e.preventDefault()
-        const stepIndex = STEPS.indexOf(step)
+        const _stepIndex = STEPS.indexOf(step)
         if (step === 'welcome') goToStep('interests')
         else if (step === 'interests') goToStep('traders')
         else if (step === 'traders') goToStep('groups')

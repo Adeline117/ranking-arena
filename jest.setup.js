@@ -159,7 +159,7 @@ jest.mock('@/lib/logger', () => {
 // Proxy-based Supabase chain builder — returns itself for any chained call,
 // resolves via .then() so `await` works.  Tests override specific methods.
 // ---------------------------------------------------------------------------
-function createSupabaseChain(defaultResult = { data: null, error: null }) {
+function _createSupabaseChain(defaultResult = { data: null, error: null }) {
   const chain = new Proxy({}, {
     get(target, prop) {
       if (prop === 'then') {

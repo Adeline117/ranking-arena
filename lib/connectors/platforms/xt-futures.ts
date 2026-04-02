@@ -15,7 +15,6 @@ import { BaseConnector } from '../base'
 import { safeNumber, safePercent, safeNonNeg, safeStr, safeMdd } from '../utils'
 import { warnValidate } from '../schemas'
 import {
-  XtFuturesLeaderboardResponseSchema,
   XtFuturesDetailResponseSchema,
 } from './schemas'
 import type {
