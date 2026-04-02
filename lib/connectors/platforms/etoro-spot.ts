@@ -40,6 +40,7 @@ interface EtoroTraderEntry {
   PeakToValley: number  // Negative MDD (e.g. -8.43)
   Copiers: number
   AUMValue: number
+  Trades?: number
   TopTradedAssetClassName: string
   RiskScore: number
   DailyDD: number
@@ -169,7 +170,7 @@ export class EtoroSpotConnector extends BaseConnector {
       copiers: e.Copiers ?? null,
       aum,
       platform_rank: null,
-      trades_count: null,
+      trades_count: e.Trades != null ? Number(e.Trades) : null,
       sharpe_ratio: null,
     }
   }
