@@ -44,16 +44,10 @@ export default function HomePage({ initialTraders, initialLastUpdated, heroStats
     // Since the interactive content is already rendered below it, this causes
     // the interactive content to move UP to fill the space — but since the
     // interactive content is the same visual content, there's no visible shift.
-    shell.style.position = 'absolute'
-    shell.style.top = '0'
-    shell.style.left = '0'
-    shell.style.right = '0'
-    shell.style.opacity = '0'
-    shell.style.pointerEvents = 'none'
-    shell.style.zIndex = '-1'
-    // Step 2: Remove from DOM after fade
-    const timer = setTimeout(() => shell.remove(), 300)
-    return () => clearTimeout(timer)
+    // Hide the SSR shell — use display:none instead of remove() to avoid
+    // React DOM reference errors (insertBefore/removeChild crashes) when
+    // React tries to update nodes that were removed from the document.
+    shell.style.display = 'none'
   }, [])
 
   return (
