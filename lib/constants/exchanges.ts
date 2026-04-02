@@ -388,9 +388,14 @@ export const EXCHANGE_SLUG_ALIASES: Record<string, string> = {
   'woo_x': 'woox',
 }
 
-/** Resolve a URL slug to the canonical exchange source key */
+/** Resolve a URL slug to the canonical exchange source key.
+ *  Handles hyphenated URLs (binance-futures → binance_futures) and aliases (binance → binance_futures). */
 export function resolveExchangeSlug(slug: string): string {
-  return EXCHANGE_SLUG_ALIASES[slug] || slug
+  // Check alias first (exact match)
+  if (EXCHANGE_SLUG_ALIASES[slug]) return EXCHANGE_SLUG_ALIASES[slug]
+  // Normalize hyphens → underscores (URL-friendly → DB key)
+  const normalized = slug.replace(/-/g, '_')
+  return EXCHANGE_SLUG_ALIASES[normalized] || normalized
 }
 
 // Populate SOURCE_TYPE_MAP from EXCHANGE_CONFIG
