@@ -154,7 +154,7 @@ export async function GET(request: NextRequest) {
     // Bail early if we're running low on time (leave 30s for cleanup/logging)
     const elapsed = Date.now() - functionStart
     if (elapsed > 270_000) {
-      results.push({ platform: '*', period, status: 'error', durationMs: 0, error: `Skipped: ${Math.round(elapsed / 1000)}s elapsed, <50s remaining` })
+      results.push({ platform: '*', period, status: 'error', durationMs: 0, error: `Skipped: ${Math.round(elapsed / 1000)}s elapsed, <30s remaining (budget: 300s)` })
       continue
     }
 

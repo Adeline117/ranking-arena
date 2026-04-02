@@ -79,6 +79,12 @@ export async function GET() {
 
         if (allRows.length === 0) return []
 
+        // Sanity check: if we got significantly fewer rows than expected,
+        // don't cache partial data (Supabase can return null on connection reset)
+        if (allRows.length < 1000 && offset > PAGE_SIZE) {
+          throw new Error(`Partial data: got ${allRows.length} rows after ${offset / PAGE_SIZE} pages, expected more`)
+        }
+
         const data = allRows
 
         // Aggregate per-platform stats in a single pass over 30K+ rows
