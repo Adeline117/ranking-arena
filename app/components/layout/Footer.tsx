@@ -106,6 +106,7 @@ export default function Footer() {
                   ) : (
                     <Link
                       href={link.href}
+                      prefetch={false}
                       className="footer-link"
                       style={{
                         fontSize: tokens.typography.fontSize.sm,
