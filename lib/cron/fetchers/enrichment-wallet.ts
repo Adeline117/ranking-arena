@@ -200,7 +200,7 @@ export async function fetchEvmWalletAUM(
   for (const b of balances) {
     const tokenAddr = b.token.address.toLowerCase()
     const decimals = parseInt(b.token.decimals || '18')
-    const rawValue = Number(BigInt(b.value || '0')) / Math.pow(10, decimals)
+    const rawValue = (() => { try { return Number(BigInt(String(b.value || '0').split('.')[0])) } catch { return 0 } })() / Math.pow(10, decimals)
 
     // Stablecoins: direct USD value
     if (chainStables[tokenAddr]) {
@@ -254,7 +254,7 @@ export async function fetchEvmWalletPortfolio(
   for (const b of balances) {
     const tokenAddr = b.token.address.toLowerCase()
     const decimals = parseInt(b.token.decimals || '18')
-    const rawValue = Number(BigInt(b.value || '0')) / Math.pow(10, decimals)
+    const rawValue = (() => { try { return Number(BigInt(String(b.value || '0').split('.')[0])) } catch { return 0 } })() / Math.pow(10, decimals)
     if (rawValue <= 0) continue
 
     let usdValue = 0

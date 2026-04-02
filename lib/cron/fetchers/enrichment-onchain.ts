@@ -363,7 +363,7 @@ function parseKwentaEvents(events: BlockscoutLogEntry[], limit: number): Positio
     .filter((e) => e.data && e.data.length > 2 && e.topics.length >= 3)
     .map((e) => {
       const timestamp = parseInt(e.timeStamp, 16) * 1000
-      const marketId = Number(BigInt(e.topics[1]))
+      let marketId = 0; try { marketId = Number(BigInt(e.topics[1])) } catch { /* invalid topic */ }
       const symbol = SYNTHETIX_MARKETS[marketId] || `MKT-${marketId}`
 
       // Parse data words (10 words: fillPrice, pnl, accruedFunding, sizeDelta, newSize, totalFees, ...)
