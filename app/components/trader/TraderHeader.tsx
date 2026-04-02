@@ -542,7 +542,7 @@ export default function TraderHeader({
           )}
 
           {/* Bio — from claimed user or exchange profile */}
-          {claimedBio && (
+          {claimedBio && claimedBio !== 'null' && claimedBio !== 'undefined' && (
             <Text size="xs" color="secondary" style={{ marginTop: 2, maxWidth: 400, lineHeight: 1.4, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
               {claimedBio}
             </Text>
