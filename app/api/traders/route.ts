@@ -120,9 +120,11 @@ async function fetchFromLeaderboard(
   const { timeRange, exchangeFilter, sortBy, order, cursor, limit, useLegacyPaging, page } = params
 
   // Build query — select only needed columns (avoid SELECT *)
+  // Use 'planned' count (fastest) instead of 'estimated' which adds ~300ms per query.
+  // The totalCount is approximate but sufficient for pagination UI.
   let query = supabase
     .from('leaderboard_ranks')
-    .select(LEADERBOARD_COLUMNS, { count: 'estimated' })
+    .select(LEADERBOARD_COLUMNS, { count: 'planned' })
     .eq('season_id', timeRange)
 
   if (exchangeFilter) {
