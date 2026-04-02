@@ -579,10 +579,8 @@ async function computeSeason(
             if (existing.avg_holding_hours == null && sr.avg_holding_time_hours != null) {
               existing.avg_holding_hours = sr.avg_holding_time_hours
             }
-            // Fill followers from copiers_count in enrichment data
-            if ((existing.followers == null || existing.followers === 0) && sr.copiers_count != null && sr.copiers_count > 0) {
-              existing.followers = sr.copiers_count
-            }
+            // copiers_count from enrichment is now stored as 'copiers' (exchange copy-trade count)
+            // Arena followers come from trader_follows table, applied after scoring
           }
         }
       })
@@ -1131,7 +1129,8 @@ async function computeSeason(
       pnl: t.pnl,
       win_rate: normalizedWinRate,
       max_drawdown: t.max_drawdown,
-      followers: t.followers ?? 0,
+      followers: 0, // Will be replaced with Arena follower count below
+      copiers: t.followers ?? 0, // Exchange copy-trade follower count
       trades_count: t.trades_count,
       handle: displayHandle,
       // Generate identicon locally when no avatar — eliminates external dicebear.com request per trader
@@ -1175,6 +1174,45 @@ async function computeSeason(
   }
   if (outlierCount > 0) {
     logger.info(`[${season}] Marked ${outlierCount} outliers (kept in leaderboard with is_outlier=true)`)
+  }
+
+  // Phase: Replace exchange followers with Arena internal follower counts from trader_follows
+  {
+    const allTraderIds = [...new Set(scored.map(t => t.source_trader_id))]
+    const arenaFollowerMap = new Map<string, number>()
+    // Query trader_follows in chunks of 500
+    for (let i = 0; i < allTraderIds.length; i += 500) {
+      const chunk = allTraderIds.slice(i, i + 500)
+      try {
+        const { data, error } = await supabase
+          .rpc('count_trader_followers', { trader_ids: chunk })
+        if (!error && data) {
+          for (const row of data as { trader_id: string; cnt: number }[]) {
+            arenaFollowerMap.set(row.trader_id, (arenaFollowerMap.get(row.trader_id) || 0) + row.cnt)
+          }
+        }
+      } catch {
+        // Fallback: individual count query
+        const { data: fallbackData } = await supabase
+          .from('trader_follows')
+          .select('trader_id')
+          .in('trader_id', chunk)
+          .limit(10000)
+        if (fallbackData) {
+          for (const row of fallbackData) {
+            arenaFollowerMap.set(row.trader_id, (arenaFollowerMap.get(row.trader_id) || 0) + 1)
+          }
+        }
+      }
+    }
+    // Apply Arena follower counts to scored array
+    let arenaFollowersApplied = 0
+    for (const t of scored) {
+      const count = arenaFollowerMap.get(t.source_trader_id) || 0
+      t.followers = count
+      if (count > 0) arenaFollowersApplied++
+    }
+    logger.info(`[${season}] Arena followers: ${arenaFollowersApplied} traders have followers (${arenaFollowerMap.size} unique trader_ids queried)`)
   }
 
   // Sort by arena_score desc, then by drawdown, then by id
@@ -1314,6 +1352,7 @@ async function computeSeason(
       win_rate: t.win_rate,
       max_drawdown: t.max_drawdown,
       followers: t.followers,
+      copiers: (t as Record<string, unknown>).copiers ?? 0,
       trades_count: t.trades_count,
       handle: t.handle,
       avatar_url: t.avatar_url,
@@ -1522,7 +1561,7 @@ async function warmupLeaderboardCache(
     warmupTargets.map(async ({ season, key }) => {
       const { data, error } = await supabase
         .from('leaderboard_ranks')
-        .select('source, source_trader_id, rank, arena_score, roi, pnl, win_rate, max_drawdown, handle, avatar_url, followers, trades_count, sharpe_ratio, trader_type, market_type, season_id')
+        .select('source, source_trader_id, rank, arena_score, roi, pnl, win_rate, max_drawdown, handle, avatar_url, followers, copiers, trades_count, sharpe_ratio, trader_type, market_type, season_id')
         .eq('season_id', season)
         .not('arena_score', 'is', null)
         .gt('arena_score', 0)
