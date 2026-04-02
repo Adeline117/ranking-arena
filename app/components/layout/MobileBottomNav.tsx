@@ -370,6 +370,7 @@ function NavItemLink({ item, active, onClick, t }: NavItemLinkProps): React.Reac
   return (
     <Link
       href={item.href}
+      prefetch={false}
       className="touch-target mobile-nav-item"
       aria-label={t(item.labelKey)}
       aria-current={active ? 'page' : undefined}

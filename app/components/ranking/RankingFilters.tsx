@@ -250,7 +250,7 @@ export function RankingFilters({
           </Box>
 
           {/* Compare button */}
-          <Link href="/compare" title={t('compareTraders')} className="toolbar-btn touch-target-sm" style={{ gap: 4 }}>
+          <Link href="/compare" prefetch={false} title={t('compareTraders')} className="toolbar-btn touch-target-sm" style={{ gap: 4 }}>
             <CompareIcon size={11} />
             <span>{t('compare')}</span>
             {!isPro && <LockIconSmall size={7} />}
