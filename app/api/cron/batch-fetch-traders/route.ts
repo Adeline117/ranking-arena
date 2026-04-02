@@ -31,7 +31,7 @@ import { connectorRegistry, initializeConnectors } from '@/lib/connectors/regist
 import { SOURCE_TO_CONNECTOR_MAP } from '@/lib/constants/exchanges'
 import * as cache from '@/lib/cache'
 import { PipelineState } from '@/lib/services/pipeline-state'
-import { sendAlert } from '@/lib/alerts/send-alert'
+import { sendRateLimitedAlert } from '@/lib/alerts/send-alert'
 import { env } from '@/lib/env'
 import { validatePlatform } from '@/lib/config/platforms'
 
@@ -211,7 +211,7 @@ export async function GET(request: NextRequest) {
           const deadKey = `${DEAD_COUNTER_PREFIX}${platform}`
           const count = await PipelineState.incr(deadKey)
           if (count >= DEAD_THRESHOLD) {
-            sendAlert({ title: `Dead platform detected: ${platform}`, message: `${platform} has failed ${count} consecutive times. Consider adding to DEAD_BLOCKED_PLATFORMS.`, level: 'critical', details: { platform, consecutiveFailures: count, group } }).catch(err => logger.warn(`[batch-fetch-traders-${group}] Failed to send dead platform alert for ${platform}`, { error: err instanceof Error ? err.message : String(err) }))
+            sendRateLimitedAlert({ title: `Dead platform detected: ${platform}`, message: `${platform} has failed ${count} consecutive times. Consider adding to DEAD_BLOCKED_PLATFORMS.`, level: 'critical', details: { platform, consecutiveFailures: count, group } }, `dead-platform:${platform}`, 12 * 60 * 60 * 1000).catch(err => logger.warn(`[batch-fetch-traders-${group}] Failed to send dead platform alert for ${platform}`, { error: err instanceof Error ? err.message : String(err) }))
           }
         } catch (counterErr) {
           logger.warn(`[batch-fetch-traders-${group}] Failed to update dead counter for ${platform}`, { error: counterErr instanceof Error ? counterErr.message : String(counterErr) })
@@ -241,7 +241,7 @@ export async function GET(request: NextRequest) {
         const deadKey = `${DEAD_COUNTER_PREFIX}${platform}`
         const count = await PipelineState.incr(deadKey)
         if (count >= DEAD_THRESHOLD) {
-          sendAlert({ title: `Dead platform detected: ${platform}`, message: `${platform} has failed ${count} consecutive times. Consider adding to DEAD_BLOCKED_PLATFORMS.\nLast error: ${errMsg.substring(0, 200)}`, level: 'critical', details: { platform, consecutiveFailures: count, group } }).catch(err => logger.warn(`[batch-fetch-traders-${group}] Failed to send dead platform alert for ${platform}`, { error: err instanceof Error ? err.message : String(err) }))
+          sendRateLimitedAlert({ title: `Dead platform detected: ${platform}`, message: `${platform} has failed ${count} consecutive times. Consider adding to DEAD_BLOCKED_PLATFORMS.\nLast error: ${errMsg.substring(0, 200)}`, level: 'critical', details: { platform, consecutiveFailures: count, group } }, `dead-platform:${platform}`, 12 * 60 * 60 * 1000).catch(err => logger.warn(`[batch-fetch-traders-${group}] Failed to send dead platform alert for ${platform}`, { error: err instanceof Error ? err.message : String(err) }))
         }
       } catch (counterErr) {
         logger.warn(`[batch-fetch-traders-${group}] Failed to update dead counter for ${platform}`, { error: counterErr instanceof Error ? counterErr.message : String(counterErr) })

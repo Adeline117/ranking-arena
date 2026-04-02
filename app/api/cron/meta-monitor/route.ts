@@ -7,7 +7,7 @@
 
 import { NextResponse } from 'next/server'
 import { PipelineLogger } from '@/lib/services/pipeline-logger'
-import { sendAlert } from '@/lib/alerts/send-alert'
+import { sendRateLimitedAlert } from '@/lib/alerts/send-alert'
 import { env } from '@/lib/env'
 import { logger } from '@/lib/logger'
 
@@ -130,15 +130,16 @@ export async function GET(request: Request) {
         .map(j => `\u2022 ${j.job}: last success ${j.actualMinutes === -1 ? 'NEVER' : `${j.actualMinutes}m ago`} (expected: every ${j.expectedMinutes}m)`)
         .join('\n')
 
-      await sendAlert({
-        title: `Meta-Monitor: ${stuckJobs.length} cron jobs \u5F02\u5E38`,
-        message: `\u4EE5\u4E0B cron job \u8D85\u8FC7\u9884\u671F\u95F4\u9694\u672A\u6210\u529F\u8FD0\u884C:\n\n${jobList}`,
+      const jobKey = stuckJobs.map(j => j.job).sort().join(',')
+      await sendRateLimitedAlert({
+        title: `Meta-Monitor: ${stuckJobs.length} cron jobs 异常`,
+        message: `以下 cron job 超过预期间隔未成功运行:\n\n${jobList}`,
         level: stuckJobs.length >= 3 ? 'critical' : 'warning',
         details: {
           stuck_count: stuckJobs.length,
           total_monitored: Object.keys(EXPECTED_INTERVALS).length,
         },
-      })
+      }, `meta-monitor:${jobKey}`, 3 * 60 * 60 * 1000)
     }
 
     await plog.success(stuckJobs.length, { stuck_jobs: stuckJobs.map(j => j.job) })

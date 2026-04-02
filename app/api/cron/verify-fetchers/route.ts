@@ -16,7 +16,7 @@
 import { NextResponse } from 'next/server'
 import { isAuthorized } from '@/lib/cron/utils'
 import { PipelineLogger } from '@/lib/services/pipeline-logger'
-import { sendAlert } from '@/lib/alerts/send-alert'
+import { sendRateLimitedAlert } from '@/lib/alerts/send-alert'
 import { logger } from '@/lib/logger'
 import { verifyAll, type VerifyResult } from '@/lib/cron/fetchers/verify-registry'
 
@@ -114,7 +114,7 @@ export async function GET(request: Request) {
         const isCritical = CRITICAL_PLATFORMS.has(result.platform)
         const level: 'critical' | 'warning' = isCritical ? 'critical' : 'warning'
 
-        await sendAlert({
+        await sendRateLimitedAlert({
           title: `${result.platform} API 不可用`,
           message: [
             `平台: ${result.platform}`,
@@ -133,7 +133,7 @@ export async function GET(request: Request) {
             '延迟': `${result.latencyMs}ms`,
             '检查时间': result.checkedAt,
           },
-        })
+        }, `verify:${result.platform}`, 6 * 60 * 60 * 1000)
       }
     }
 
