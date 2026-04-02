@@ -15,7 +15,53 @@
 const SCRAPER_URL = 'http://localhost:3457'
 const SCRAPER_KEY = 'arena-proxy-sg-2026'
 const SUPABASE_URL = 'https://iknktzifjdyujdccyhsv.supabase.co'
-const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || 'PASTE_SERVICE_ROLE_KEY_HERE'
+const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY
+
+// ── Startup guard: refuse to run without Supabase key ──
+if (!SUPABASE_KEY || SUPABASE_KEY === 'PASTE_SERVICE_ROLE_KEY_HERE') {
+  console.error('[FATAL] SUPABASE_SERVICE_ROLE_KEY is not set. Refusing to run.')
+  console.error('Fix: set it in ecosystem.config.js env block, then `pm2 restart arena-cron && pm2 save`')
+  sendTelegramSync('🚨 <b>VPS scraper-cron BLOCKED</b>\nSUPABASE_SERVICE_ROLE_KEY is not set.\nData is NOT being written to Supabase.')
+  process.exit(1)
+}
+
+// ── Telegram alert helpers ──
+const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN
+const TELEGRAM_CHAT_ID = process.env.TELEGRAM_ALERT_CHAT_ID
+
+async function sendTelegram(text) {
+  if (!TELEGRAM_BOT_TOKEN || !TELEGRAM_CHAT_ID) {
+    console.log('[Telegram disabled]', text)
+    return
+  }
+  try {
+    await fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        chat_id: TELEGRAM_CHAT_ID,
+        text,
+        parse_mode: 'HTML',
+        disable_web_page_preview: true,
+      }),
+    })
+  } catch (err) {
+    console.error('Telegram send failed:', err.message)
+  }
+}
+
+// Sync version for startup guard (before event loop)
+function sendTelegramSync(text) {
+  if (!TELEGRAM_BOT_TOKEN || !TELEGRAM_CHAT_ID) return
+  try {
+    // Use sync XMLHttpRequest-like approach — but in Node we just fire-and-forget
+    fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ chat_id: TELEGRAM_CHAT_ID, text, parse_mode: 'HTML' }),
+    }).catch(() => {})
+  } catch (_) {}
+}
 
 // ============================================
 // Platform configs: scraper endpoint + periods
@@ -916,17 +962,35 @@ async function main() {
   log('=== VPS Scraper Cron Done ===')
   log('Total: ' + totalTraders + ' traders across ' + requestedPlatforms.length + ' platforms in ' + elapsed + 's')
 
+  const failures = []
   for (const r of allResults) {
     if (r.error) {
       log('  ' + r.platform + ': FAILED - ' + r.error)
+      failures.push(r.platform + ': ' + r.error)
     } else {
       log('  ' + r.platform + ': ' + r.totalTraders + ' traders')
     }
   }
+
+  // ── Telegram: alert on failures, summary on success ──
+  if (failures.length > 0) {
+    await sendTelegram(
+      `🚨 <b>VPS Cron ${failures.length}/${requestedPlatforms.length} FAILED</b>\n` +
+      failures.map(f => `• ${f}`).join('\n') +
+      `\n\n✅ OK: ${totalTraders} traders in ${elapsed}s`
+    )
+  } else if (totalTraders === 0) {
+    await sendTelegram(
+      `⚠️ <b>VPS Cron: 0 traders written</b>\n` +
+      `${requestedPlatforms.length} platforms ran but produced no data.\n⏱ ${elapsed}s`
+    )
+  }
+  // Success with data: silent (no spam). Use daily report for normal monitoring.
 }
 
-main().catch(err => {
+main().catch(async err => {
   log('UNHANDLED ERROR: ' + err.message)
   console.error(err)
+  await sendTelegram(`🔥 <b>VPS Cron CRASHED</b>\n<code>${err.message}</code>`)
   process.exit(1)
 })
