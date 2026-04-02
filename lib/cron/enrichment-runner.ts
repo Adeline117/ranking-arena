@@ -329,13 +329,13 @@ export const ENRICHMENT_PLATFORM_CONFIGS: Record<string, EnrichmentConfig> = {
     fetchEquityCurve: fetchGateioEquityCurve,
     fetchStatsDetail: fetchGateioStatsDetail,
     fetchCurrentPositions: fetchGateioCurrentPositions,
-    concurrency: 5, delayMs: 800,
+    concurrency: 8, delayMs: 300, // Increased from 5/800: Gate.io API handles higher concurrency
   },
   mexc: {
     platform: 'mexc',
     fetchEquityCurve: fetchMexcEquityCurve,
     fetchStatsDetail: fetchMexcStatsDetail,
-    concurrency: 5, delayMs: 800,
+    concurrency: 5, delayMs: 500, // Reduced delay from 800: MEXC mobile UA bypass is fast
   },
   bingx_spot: {
     platform: 'bingx_spot',
@@ -359,7 +359,7 @@ export const ENRICHMENT_PLATFORM_CONFIGS: Record<string, EnrichmentConfig> = {
     fetchEquityCurve: fetchDydxEquityCurve,
     fetchStatsDetail: fetchDydxStatsDetail,
     fetchPositionHistory: fetchDydxV4PositionHistory,
-    concurrency: 3, delayMs: 1000, // Reduced from 8/300: prevent timeout amplification
+    concurrency: 5, delayMs: 500, // Increased from 3/1000: Copin API handles higher concurrency
   },
   aevo: {
     platform: 'aevo',
