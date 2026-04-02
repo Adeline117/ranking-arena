@@ -87,8 +87,13 @@ export async function GET(
       .limit(500)
     
     if (error) {
+      // Gracefully handle missing table
+      const msg = error.message || ''
+      if (error.code === '42P01' || msg.includes('does not exist')) {
+        return NextResponse.json({ positions: [], totalPnl: 0, totalPnlPct: 0, cached: false })
+      }
       logger.error('[Positions API] Error:', error)
-      return NextResponse.json({ error: 'Failed to fetch positions' }, { status: 500 })
+      return NextResponse.json({ error: 'Failed to fetch positions', detail: msg }, { status: 500 })
     }
 
     const portfolioData = (portfolio || []) as PortfolioRow[]
