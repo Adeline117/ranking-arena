@@ -155,8 +155,83 @@ export class BinanceSpotConnector extends BaseConnector {
     return null
   }
 
-  async fetchTraderSnapshot(_traderKey: string, _window: Window): Promise<SnapshotResult | null> {
-    return null
+  async fetchTraderSnapshot(traderKey: string, window: Window): Promise<SnapshotResult | null> {
+    const timeRange = WINDOW_MAP[window]
+    try {
+      // Fetch performance data (ROI, PnL, MDD, winRate, sharpRatio)
+      const perfUrl = `${this.BASE_URL}/v1/public/future/spot-copy-trade/lead-portfolio/performance?portfolioId=${traderKey}&timeRange=${timeRange}`
+      let perfData = await this.proxyViaVPS<Record<string, unknown>>(perfUrl, {
+        method: 'GET', headers: this.HEADERS,
+      }, 15000)
+
+      // Fallback to direct if VPS fails
+      if (!perfData?.data) {
+        try {
+          perfData = await this.request<Record<string, unknown>>(perfUrl, {
+            method: 'GET', headers: this.HEADERS,
+          })
+        } catch { /* both failed */ }
+      }
+
+      if (!perfData?.data) return null
+      const d = perfData.data as Record<string, unknown>
+
+      // Fetch detail for AUM and copier count
+      let aum: number | null = null
+      let copiersCount: number | null = null
+      try {
+        const detailUrl = `${this.BASE_URL}/v1/friendly/future/spot-copy-trade/lead-portfolio/detail?portfolioId=${traderKey}`
+        const detailData = await this.proxyViaVPS<Record<string, unknown>>(detailUrl, {
+          method: 'GET', headers: this.HEADERS,
+        }, 10000)
+        const dd = detailData?.data as Record<string, unknown> | null
+        if (dd) {
+          aum = dd.aum != null ? Number(dd.aum) : null
+          copiersCount = dd.currentCopyCount != null ? Number(dd.currentCopyCount) : null
+        }
+      } catch { /* detail is optional */ }
+
+      const totalOrder = d.totalOrder != null ? Number(d.totalOrder) : null
+      const winRate = d.winRate != null ? Number(d.winRate) : null
+      const mdd = d.mdd != null ? Math.abs(Number(d.mdd)) : null
+      const sharpe = d.sharpRatio != null && Math.abs(Number(d.sharpRatio)) <= 10
+        ? Number(d.sharpRatio) : null
+
+      const missing: string[] = []
+      if (d.roi == null) missing.push('roi')
+      if (d.pnl == null) missing.push('pnl')
+      if (winRate == null) missing.push('win_rate')
+      if (mdd == null) missing.push('max_drawdown')
+
+      return {
+        metrics: {
+          roi: d.roi != null ? Number(d.roi) : null,
+          pnl: d.pnl != null ? Number(d.pnl) : null,
+          win_rate: winRate,
+          max_drawdown: mdd,
+          sharpe_ratio: sharpe,
+          sortino_ratio: null,
+          trades_count: totalOrder,
+          followers: copiersCount,
+          copiers: copiersCount,
+          aum,
+          platform_rank: null,
+          arena_score: null,
+          return_score: null,
+          drawdown_score: null,
+          stability_score: null,
+        },
+        quality_flags: {
+          missing_fields: missing,
+          non_standard_fields: {},
+          window_native: true,
+          notes: ['Fetched from Binance spot-copy-trade performance API'],
+        },
+        fetched_at: new Date().toISOString(),
+      }
+    } catch {
+      return null
+    }
   }
 
   async fetchTimeseries(_traderKey: string): Promise<TimeseriesResult> {
