@@ -15,12 +15,12 @@ const STEPS: Step[] = [
   {
     title: 'Welcome to Arena',
     description: 'Browse rankings of 34,000+ traders across 28 exchanges',
-    cta: 'Explore Rankings \u2192',
+    cta: 'Explore Rankings →',
   },
   {
     title: 'Follow Top Traders',
     description: 'Follow traders to track their performance and get notifications',
-    cta: 'Next \u2192',
+    cta: 'Next →',
   },
   {
     title: 'Go Pro for Deep Insights',
@@ -142,7 +142,7 @@ export default function WelcomeModal() {
             justifyContent: 'center',
           }}
         >
-          {'\u2715'}
+          {'✕'}
         </button>
 
         {/* Step content */}
@@ -187,7 +187,7 @@ export default function WelcomeModal() {
                 minHeight: 44,
               }}
             >
-              {'\u2190'} Back
+              {'←'} Back
             </button>
           )}
           <button
