@@ -153,25 +153,8 @@ export default function TraderProfileClient({ data, serverTraderData, claimedUse
   const [isOwner, setIsOwner] = useState(false)
 
   // Multi-account linked traders (SWR-based)
-  const { linkedAccounts, aggregatedData, hasMultipleAccounts } = useLinkedAccounts(data.source, data.source_trader_id)
+  // P7: bundled aggregate data will be passed once traderData loads (see below)
   const [activeAccount, setActiveAccount] = useState<string>('all')
-
-  // Check if this trader is verified (claimed) and if current user is the owner.
-  const claimUrl = data.source_trader_id && data.source
-    ? `/api/traders/claim/status?trader_id=${encodeURIComponent(data.source_trader_id)}&source=${encodeURIComponent(data.source)}`
-    : null
-  const { data: claimData } = useSWR<{ success: boolean; data: { is_verified: boolean; owner_id: string | null } }>(
-    claimUrl,
-    fetcher,
-    { revalidateOnFocus: false, dedupingInterval: 300_000 }
-  )
-
-  // Derive verified/owner state from SWR claim data
-  useEffect(() => {
-    const isVerified = !!claimData?.data?.is_verified
-    setIsVerifiedTrader(isVerified)
-    setIsOwner(isVerified && !!currentUserId && claimData?.data?.owner_id === currentUserId)
-  }, [claimData, currentUserId])
 
   const displayName = formatDisplayName(data.handle, data.source)
   const _exchangeName = EXCHANGE_NAMES[data.source] || data.source
@@ -225,6 +208,23 @@ export default function TraderProfileClient({ data, serverTraderData, claimedUse
     router.replace(`${pathname}${qs ? `?${qs}` : ''}`, { scroll: false })
   }, [searchParams, pathname, router])
 
+  // ── P7: Merged trader detail fetch (bundles claim + aggregate + rank_history) ──
+  // We need linked accounts for activeAccountParsed, but linked accounts also depend
+  // on traderData for bundled aggregate. Break the cycle: useLinkedAccounts fires its
+  // own SWR on the first render; once traderData arrives with bundled aggregate, the
+  // hook suppresses the duplicate fetch on subsequent renders.
+
+  // Step 1: First pass of useLinkedAccounts (may fire its own fetch before bundled data is ready)
+  // The bundled aggregate from traderData is passed as third arg — undefined on first render,
+  // then populated once traderData loads, which suppresses the separate /api/traders/aggregate call.
+  // We forward-declare a ref to hold the bundled aggregate and update it after SWR resolves.
+  const bundledAggregateRef = useRef<{ aggregated: unknown; accounts: unknown[]; totalAccounts: number } | null | undefined>(undefined)
+  const { linkedAccounts, aggregatedData, hasMultipleAccounts } = useLinkedAccounts(
+    data.source,
+    data.source_trader_id,
+    bundledAggregateRef.current,
+  )
+
   // Parse active account into platform + traderKey for per-account data fetching
   const activeAccountParsed = useMemo(() => {
     if (activeAccount === 'all' || !activeAccount.includes(':')) return null
@@ -235,13 +235,26 @@ export default function TraderProfileClient({ data, serverTraderData, claimedUse
   }, [activeAccount, linkedAccounts])
 
   // SWR for full trader data — switches URL when account tab changes
+  // P7: When fetching primary account, bundle claim/aggregate/rank_history via include param (4→1 API call)
   const effectivePlatform = activeAccountParsed?.platform || searchParams?.get('platform') || data.source || ''
   const effectiveHandle = activeAccountParsed?.handle || activeAccountParsed?.traderKey || data.handle || data.source_trader_id
-  const traderApiUrl = effectivePlatform
-    ? `/api/traders/${encodeURIComponent(effectiveHandle)}?source=${encodeURIComponent(effectivePlatform)}`
-    : `/api/traders/${encodeURIComponent(effectiveHandle)}`
   const isPrimaryAccount = !activeAccountParsed
-  const { data: traderData, error: traderError, isLoading: traderLoading } = useSWR<TraderPageData>(
+  const traderApiUrl = useMemo(() => {
+    const base = effectivePlatform
+      ? `/api/traders/${encodeURIComponent(effectiveHandle)}?source=${encodeURIComponent(effectivePlatform)}`
+      : `/api/traders/${encodeURIComponent(effectiveHandle)}`
+    // Only bundle extras for the primary account (not when switching linked accounts)
+    if (isPrimaryAccount) {
+      const separator = base.includes('?') ? '&' : '?'
+      return `${base}${separator}include=claim,aggregate,rank_history`
+    }
+    return base
+  }, [effectivePlatform, effectiveHandle, isPrimaryAccount])
+  const { data: traderData, error: traderError, isLoading: traderLoading } = useSWR<TraderPageData & {
+    claim_status?: { is_verified: boolean; owner_id?: string | null; profile?: Record<string, unknown> }
+    aggregate?: { aggregated: unknown; accounts: unknown[]; totalAccounts: number }
+    rank_history?: { history: { date: string; rank: number; arena_score: number }[] }
+  }>(
     traderApiUrl,
     traderFetcher,
     {
@@ -256,8 +269,38 @@ export default function TraderProfileClient({ data, serverTraderData, claimedUse
     }
   )
 
+  // P7: Extract bundled data from merged response
+  const bundledClaimData = traderData?.claim_status
+  const bundledRankHistory = traderData?.rank_history
+
+  // P7: Update bundled aggregate ref so useLinkedAccounts can use it on next render
+  if (traderData?.aggregate) {
+    bundledAggregateRef.current = traderData.aggregate
+  }
+
+  // Check if this trader is verified (claimed) and if current user is the owner.
+  // P7: Skip separate fetch when bundled claim data is available from merged endpoint
+  const claimUrl = (!bundledClaimData && data.source_trader_id && data.source)
+    ? `/api/traders/claim/status?trader_id=${encodeURIComponent(data.source_trader_id)}&source=${encodeURIComponent(data.source)}`
+    : null
+  const { data: claimData } = useSWR<{ success: boolean; data: { is_verified: boolean; owner_id: string | null } }>(
+    claimUrl,
+    fetcher,
+    { revalidateOnFocus: false, dedupingInterval: 300_000 }
+  )
+
+  // Derive verified/owner state from SWR claim data or bundled claim data
+  useEffect(() => {
+    // Prefer bundled claim data from merged endpoint
+    const claimSource = bundledClaimData ?? claimData?.data
+    const isVerified = !!claimSource?.is_verified
+    setIsVerifiedTrader(isVerified)
+    setIsOwner(isVerified && !!currentUserId && claimSource?.owner_id === currentUserId)
+  }, [bundledClaimData, claimData, currentUserId])
+
   // Rank history for sparkline (7-day trajectory)
-  const rankHistoryUrl = effectivePlatform && effectiveHandle
+  // P7: Skip separate fetch when bundled data is available from the merged endpoint
+  const rankHistoryUrl = (!bundledRankHistory && effectivePlatform && effectiveHandle)
     ? `/api/trader/rank-history?platform=${encodeURIComponent(effectivePlatform)}&trader_key=${encodeURIComponent(data.source_trader_id)}&period=90D&days=7`
     : null
   const { data: rankHistoryData } = useSWR<{ history: { date: string; rank: number; arena_score: number }[] }>(
@@ -265,7 +308,7 @@ export default function TraderProfileClient({ data, serverTraderData, claimedUse
     traderFetcher,
     { revalidateOnFocus: false, dedupingInterval: 60000, errorRetryCount: 1 }
   )
-  const rankSparklineData = rankHistoryData?.history?.map(h => ({ rank: h.rank })) ?? []
+  const rankSparklineData = (bundledRankHistory?.history ?? rankHistoryData?.history)?.map(h => ({ rank: h.rank })) ?? []
 
   const traderProfile = traderData?.profile ?? null
   const traderPerformance = traderData?.performance ?? null

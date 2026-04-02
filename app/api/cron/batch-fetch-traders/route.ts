@@ -33,6 +33,7 @@ import { PipelineState } from '@/lib/services/pipeline-state'
 import { sendRateLimitedAlert } from '@/lib/alerts/send-alert'
 import { env } from '@/lib/env'
 import { validatePlatform } from '@/lib/config/platforms'
+import { triggerDownstreamRefresh } from '@/lib/cron/trigger-chain'
 
 const DEAD_COUNTER_PREFIX = 'dead:consecutive:'
 const DEAD_THRESHOLD = 10 // consecutive failures before circuit-breaking (restored from 3 — was causing cascade skips)
@@ -290,6 +291,11 @@ export async function GET(request: NextRequest) {
       new Error(`${failed}/${results.length} platforms failed`),
       { results }
     )
+  }
+
+  // Trigger downstream refresh (compute-leaderboard → warm-cache) when we wrote data
+  if (succeeded > 0) {
+    triggerDownstreamRefresh(`batch-fetch-traders-${group}`)
   }
 
   return NextResponse.json({

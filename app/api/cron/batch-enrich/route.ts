@@ -15,6 +15,7 @@ import { PipelineLogger } from '@/lib/services/pipeline-logger'
 import { runEnrichment, type EnrichmentResult } from '@/lib/cron/enrichment-runner'
 import { createLogger } from '@/lib/utils/logger'
 import { env } from '@/lib/env'
+import { triggerDownstreamRefresh } from '@/lib/cron/trigger-chain'
 
 const logger = createLogger('batch-enrich')
 
@@ -256,6 +257,11 @@ export async function GET(request: NextRequest) {
       new Error(`${failed}/${results.length} enrichments failed`),
       { results }
     )
+  }
+
+  // Trigger downstream refresh (compute-leaderboard → warm-cache) when we enriched data
+  if (succeeded > 0) {
+    triggerDownstreamRefresh(`batch-enrich-${periodParam}`)
   }
 
   return NextResponse.json({

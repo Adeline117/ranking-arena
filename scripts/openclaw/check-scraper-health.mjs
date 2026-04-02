@@ -3,9 +3,7 @@
  * Mac Mini Scraper Health Check
  *
  * Checks data freshness for platforms that run exclusively on the Mac Mini:
- *   - kucoin   (DEAD — copy trading discontinued 2026-03, all APIs 404)
  *   - lbank    (fetch-lbank.mjs, crontab every 6h at :20)
- *   - blofin   (fetch-blofin.mjs, crontab every 6h at :30)
  *   - phemex   (fetch-phemex.mjs, crontab every 6h at :00)
  *
  * Reports last update time, trader count, and sends Telegram alert if stale >12h.
@@ -38,25 +36,10 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_KEY)
 
 const MAC_MINI_PLATFORMS = [
   {
-    source: 'kucoin',
-    script: 'fetch-kucoin.mjs',
-    cron: 'DISABLED — copy trading discontinued 2026-03',
-    url: 'kucoin.com/copytrading (DEAD — all APIs 404, page empty)',
-    target: 0,
-    dead: true,
-  },
-  {
     source: 'lbank',
     script: 'fetch-lbank.mjs',
     cron: 'Every 6h at :20 (10 0,6,12,18 * * *)',
     url: 'lbank.com/copy-trading (browser intercept via uuapi.rerrkvifj.com)',
-    target: 200,
-  },
-  {
-    source: 'blofin',
-    script: 'fetch-blofin.mjs',
-    cron: 'Every 6h at :30 (20 0,6,12,18 * * *)',
-    url: 'blofin.com/en/copy-trade (browser intercept)',
     target: 200,
   },
   {
@@ -201,18 +184,11 @@ async function main() {
 
   console.log(`[${new Date().toISOString()}] Checking Mac Mini scraper health...`)
 
-  const activePlatforms = MAC_MINI_PLATFORMS.filter(p => !p.dead)
-  const deadPlatforms = MAC_MINI_PLATFORMS.filter(p => p.dead)
   const results = await Promise.all(MAC_MINI_PLATFORMS.map(checkPlatform))
   const report = formatReport(results)
   console.log('\n' + report)
 
-  if (deadPlatforms.length > 0) {
-    console.log(`\n[info] Dead platforms (excluded from alerts): ${deadPlatforms.map(p => p.source).join(', ')}`)
-  }
-
-  // Only alert on stale active (non-dead) platforms
-  const stale = results.filter(r => r.isStale && !MAC_MINI_PLATFORMS.find(p => p.source === r.source)?.dead)
+  const stale = results.filter(r => r.isStale)
 
   if (shouldAlert && stale.length > 0) {
     const alertLines = stale.map(r => {

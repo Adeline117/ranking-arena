@@ -7,7 +7,7 @@
  * Calls scraper at localhost:3457, writes to Supabase via REST API.
  *
  * Usage: node scraper-cron.mjs [platform1,platform2,...]
- * Default: all scraper platforms (bybit, bitget_futures, mexc, bingx)
+ * Default: all scraper platforms (bingx, bingx_spot)
  *
  * Crontab: 0 0,3,6,9,12,15,18,21 * * * node /opt/arena-cron/scraper-cron.mjs
  */
@@ -68,136 +68,6 @@ function sendTelegramSync(text) {
 // ============================================
 
 const PLATFORMS = {
-  bybit: {
-    source: 'bybit',
-    market_type: 'futures',
-    useBatch: true,
-    endpoint: '/bybit/leaderboard-batch',
-    singleEndpoint: '/bybit/leaderboard',
-    periods: {
-      'DATA_DURATION_SEVEN_DAY': '7D',
-      'DATA_DURATION_THIRTY_DAY': '30D',
-      'DATA_DURATION_NINETY_DAY': '90D',
-    },
-    pageSize: 50,
-    extractList: (data) => data?.result?.data || data?.result?.leaderDetails || [],
-    normalize: (raw) => {
-      const mv = Array.isArray(raw.metricValues) ? raw.metricValues : null
-      return {
-        trader_key: String(raw.leaderMark || raw.leaderUserId || ''),
-        display_name: raw.nickName || null,
-        roi: num(raw.roi) ?? parsePercent(mv?.[0]),
-        pnl: num(raw.pnl),
-        win_rate: num(raw.winRate) ?? parsePercent(mv?.[3]),
-        max_drawdown: num(raw.maxDrawdown) ?? parsePercent(mv?.[1]),
-        sharpe_ratio: num(raw.sharpeRatio) ?? parsePercent(mv?.[5]),
-        followers: num(raw.followerCount) ?? num(raw.maxFollowerCount),
-      }
-    },
-  },
-
-  bitget_futures: {
-    source: 'bitget_futures',
-    market_type: 'futures',
-    endpoint: '/bitget/leaderboard',
-    periods: {
-      'WEEKLY': '7D',
-      'THIRTY_DAYS': '30D',
-      'THREE_MONTHS': '90D',
-    },
-    pageSize: 100,
-    extractList: (data) => data?.data?.traderList || [],
-    normalize: (raw) => {
-      // traderList API returns profitRate/returnRate as decimal ratios (0.155 = 15.5%)
-      // and winningRate as decimal (0.72 = 72%). Must convert to percentage.
-      const rawRoi = num(raw.profitRate ?? raw.returnRate)
-      const rawWr = num(raw.winningRate)
-      const rawMdd = num(raw.maxDrawdown)
-      return {
-        trader_key: String(raw.traderUid || raw.traderId || ''),
-        display_name: raw.nickName || raw.traderName || null,
-        roi: rawRoi != null ? rawRoi * 100 : null,
-        pnl: num(raw.totalProfit ?? raw.allTotalRevenue),
-        win_rate: raw.winRate != null ? num(raw.winRate) : (rawWr != null ? rawWr * 100 : null),
-        max_drawdown: rawMdd != null && Math.abs(rawMdd) <= 1 ? rawMdd * 100 : rawMdd,
-        sharpe_ratio: null,
-        followers: num(raw.followerCount ?? raw.traceNum),
-      }
-    },
-  },
-
-  mexc: {
-    source: 'mexc',
-    market_type: 'futures',
-    // 2026-03-31: Direct API with mobile UA bypasses CF WAF (no scraper needed)
-    directApi: 'https://www.mexc.com/api/platform/futures/copyFutures/api/v1/traders/top?limit=100',
-    directHeaders: { 'User-Agent': 'MEXC/1.0 (iPhone; iOS 17.0)', 'Accept': 'application/json' },
-    endpoint: '/mexc/leaderboard', // VPS scraper fallback
-    periods: {
-      '1': '7D',
-      '2': '30D',
-      '3': '90D',
-    },
-    pageSize: 50,
-    extractList: (data) => {
-      // MEXC API returns multiple category lists — merge all unique traders
-      const dataObj = data?.data ?? {}
-      const categories = [
-        'comprehensives', 'rois', 'pnls', 'followers', 'newTraders',
-        'highPressureTraders', 'lowPressureTraders', 'bullsTraders', 'bearsTraders',
-        'intradayTraders', 'longTermTraders', 'goldTraders', 'silverTraders',
-        'list', 'resultList',
-      ]
-      const seen = new Set()
-      const merged = []
-      for (const key of categories) {
-        const list = dataObj[key]
-        if (!Array.isArray(list)) continue
-        for (const item of list) {
-          const uid = String(item.uid || '')
-          if (!uid || seen.has(uid)) continue
-          seen.add(uid)
-          merged.push(item)
-        }
-      }
-      return merged
-    },
-    normalize: (raw) => {
-      const rawRoi = num(raw.yield ?? raw.roi ?? raw.totalRoi ?? raw.pnlRate)
-      const roi = rawRoi != null ? (Math.abs(rawRoi) <= 1 ? rawRoi * 100 : rawRoi) : null
-      const rawWr = num(raw.winRate ?? raw.totalWinRate)
-      const winRate = rawWr != null ? (rawWr <= 1 ? rawWr * 100 : rawWr) : null
-      const rawMdd = num(raw.maxRetrace ?? raw.maxDrawdown7 ?? raw.mdd ?? raw.maxDrawdown)
-      const maxDrawdown = rawMdd != null ? Math.abs(rawMdd <= 1 ? rawMdd * 100 : rawMdd) : null
-      // Compute Sharpe from curveValues (daily ROI equity curve)
-      let sharpe = null
-      const cv = Array.isArray(raw.curveValues) ? raw.curveValues : null
-      if (cv && cv.length >= 5) {
-        const rets = []
-        for (let i = 1; i < cv.length; i++) rets.push(cv[i] - cv[i - 1])
-        const mean = rets.reduce((a, b) => a + b, 0) / rets.length
-        const std = Math.sqrt(rets.reduce((a, b) => a + (b - mean) ** 2, 0) / rets.length)
-        if (std > 0) {
-          const raw_sharpe = Math.round((mean / std) * Math.sqrt(365) * 100) / 100
-          sharpe = Math.max(-20, Math.min(20, raw_sharpe))
-        }
-      }
-      return {
-        trader_key: String(raw.uid ?? raw.traderId ?? raw.id ?? raw.userId ?? ''),
-        display_name: raw.nickname ?? raw.nickName ?? raw.name ?? null,
-        avatar_url: raw.avatar ?? null,
-        roi,
-        pnl: num(raw.pnl ?? raw.totalPnl ?? raw.profit),
-        win_rate: winRate,
-        max_drawdown: maxDrawdown,
-        sharpe_ratio: sharpe,
-        followers: num(raw.followers ?? raw.followerCount ?? raw.copierCount),
-        aum: num(raw.equity),
-        platform_rank: num(raw.order),
-      }
-    },
-  },
-
   bingx: {
     source: 'bingx',
     market_type: 'futures',
@@ -230,40 +100,6 @@ const PLATFORMS = {
         max_drawdown: maxDrawdown,
         sharpe_ratio: null,
         followers: num(raw.followerNum ?? raw.followers ?? raw.followerCount),
-      }
-    },
-  },
-
-  kucoin: {
-    source: 'kucoin',
-    market_type: 'futures',
-    // KuCoin POST API — works from any IP, no auth needed, 822 traders
-    directApi: 'https://www.kucoin.com/_api/ct-copy-trade/v1/copyTrading/rn/leaderboard/query',
-    directMethod: 'POST',
-    directBody: { currentPage: 1, pageSize: 50 }, // Will be paginated in batch mode
-    batch: true, // Use batch pagination (pages 1-17)
-    maxPages: 17,
-    directHeaders: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
-    endpoint: '/kucoin/leaderboard',
-    periods: { '1': '30D' }, // API only returns 30D data
-    pageSize: 50,
-    extractList: (data) => {
-      return data?.data?.items || data?.data?.list || []
-    },
-    normalize: (raw) => {
-      const rawRoi = num(raw.thirtyDayPnlRatio ?? raw.totalPnlRatio)
-      // KuCoin returns ROI as decimal (2.80 = 280%)
-      const roi = rawRoi != null ? rawRoi * 100 : null
-      return {
-        trader_key: String(raw.leadConfigId ?? ''),
-        display_name: raw.nickName ?? null,
-        avatar_url: raw.avatarUrl ?? null,
-        roi,
-        pnl: num(raw.thirtyDayPnl ?? raw.totalPnl),
-        win_rate: null,
-        max_drawdown: null,
-        sharpe_ratio: null,
-        followers: num(raw.currentCopyUserCount),
       }
     },
   },
@@ -303,163 +139,6 @@ const PLATFORMS = {
     },
   },
 
-  coinex: {
-    source: 'coinex',
-    market_type: 'futures',
-    // CoinEx has no CF protection — direct API works from VPS (geo-blocked from Vercel hnd1)
-    directApi: 'https://www.coinex.com/res/copy-trading/public/traders?page=1&limit=50&sort_by=roi&period={period}',
-    endpoint: '/coinex/leaderboard', // VPS scraper fallback (currently broken/hanging)
-    periods: {
-      '7d': '7D',
-      '30d': '30D',
-      '90d': '90D',
-    },
-    pageSize: 50,
-    extractList: (data) => {
-      return data?.data?.data || data?.data?.items || []
-    },
-    normalize: (raw) => {
-      const rawRoi = num(raw.profit_rate)
-      // CoinEx returns ROI as decimal (1.33 = 133%)
-      const roi = rawRoi != null ? rawRoi * 100 : null
-      const rawWr = num(raw.winning_rate)
-      const winRate = rawWr != null ? rawWr * 100 : null
-      const rawMdd = num(raw.mdd)
-      const maxDrawdown = rawMdd != null ? Math.abs(rawMdd) * 100 : null
-      return {
-        trader_key: String(raw.trader_id ?? ''),
-        display_name: raw.nickname ?? null,
-        avatar_url: raw.avatar ?? null,
-        roi,
-        pnl: num(raw.profit_amount ?? raw.total_profit_amount),
-        win_rate: winRate,
-        max_drawdown: maxDrawdown,
-        sharpe_ratio: null,
-        followers: num(raw.cur_follower_num),
-      }
-    },
-  },
-
-  okx_web3: {
-    source: 'okx_web3',
-    market_type: 'web3',
-    // OKX v5 copytrading API — same as okx_futures, direct HTTP (no scraper needed)
-    directApi: 'https://www.okx.com/api/v5/copytrading/public-lead-traders?instType=SWAP&sortType=pnl&dataRange={period}&pageNo=1&limit=20',
-    endpoint: null,
-    periods: {
-      '7d': '7D',
-      '30d': '30D',
-      '90d': '90D',
-    },
-    pageSize: 20,
-    extractList: (data) => {
-      // v5 response: { code: "0", data: [{ ranks: [...] }] }
-      const dataArr = Array.isArray(data?.data) ? data.data[0] : data?.data
-      return dataArr?.ranks || []
-    },
-    normalize: (raw) => {
-      const pnlRatio = num(raw.pnlRatio ?? raw.profitRatio)
-      const roi = pnlRatio != null ? (Math.abs(pnlRatio) < 10 ? pnlRatio * 100 : pnlRatio) : null
-      const winRatio = num(raw.winRatio)
-      const winRate = winRatio != null ? (winRatio <= 1 ? winRatio * 100 : winRatio) : null
-      return {
-        trader_key: String(raw.uniqueCode || raw.uniqueName || ''),
-        display_name: raw.nickName || null,
-        avatar_url: raw.portLink || null,
-        roi,
-        pnl: num(raw.pnl ?? raw.totalPnl ?? raw.accPnl),
-        win_rate: winRate,
-        max_drawdown: null,
-        sharpe_ratio: raw.sharpeRatio != null ? num(raw.sharpeRatio) : null,
-        followers: num(raw.copyTraderNum ?? raw.followerCount),
-      }
-    },
-  },
-
-  weex: {
-    source: 'weex',
-    market_type: 'futures',
-    endpoint: '/weex/leaderboard',
-    periods: {
-      'default': '30D',
-    },
-    pageSize: 50,
-    extractList: (data) => {
-      // VPS scraper response: { data: [{ tab, list: [...] }, ...] }
-      // Merge all unique traders across tabs
-      const dataObj = data?.data
-      if (!Array.isArray(dataObj)) return []
-      const seen = new Set()
-      const merged = []
-      for (const section of dataObj) {
-        const list = section?.list || []
-        if (!Array.isArray(list)) continue
-        for (const trader of list) {
-          const uid = String(trader.traderUserId || '')
-          if (uid && !seen.has(uid)) {
-            seen.add(uid)
-            merged.push(trader)
-          }
-        }
-      }
-      return merged
-    },
-    normalize: (raw) => {
-      const rawRoi = num(raw.totalReturnRate ?? raw.roi)
-      const roi = rawRoi != null ? (Math.abs(rawRoi) <= 1 ? rawRoi * 100 : rawRoi) : null
-      return {
-        trader_key: String(raw.traderUserId || raw.uid || ''),
-        display_name: raw.traderNickName || raw.nickName || null,
-        roi,
-        pnl: num(raw.threeWeeksPNL ?? raw.pnl),
-        win_rate: null,
-        max_drawdown: null,
-        sharpe_ratio: null,
-        followers: num(raw.followCount ?? raw.followers),
-      }
-    },
-  },
-
-  dydx: {
-    source: 'dydx',
-    market_type: 'perp',
-    // dYdX uses Copin API — no scraper needed, direct HTTP from VPS
-    // Copin has a 2-day processing delay so queryDate should be 3 days ago
-    directApi: null, // set dynamically per period
-    endpoint: null, // no scraper endpoint
-    periods: {
-      'WEEK': '7D',
-      'MONTH': '30D',
-    },
-    pageSize: 500,
-    extractList: (data) => {
-      return data?.data || []
-    },
-    normalize: (raw) => {
-      const totalWin = Number(raw.totalWin) || 0
-      const totalLose = Number(raw.totalLose) || 0
-      const totalTrade = Number(raw.totalTrade) || (totalWin + totalLose)
-      const winRate = totalTrade > 0 ? (totalWin / totalTrade) * 100 : null
-      const pnl = num(raw.totalPnl ?? raw.totalRealisedPnl ?? raw.pnl)
-      const volume = num(raw.totalVolume)
-      // Estimate ROI from PnL/Volume with assumed leverage
-      const roi = pnl != null && volume != null && volume > 0
-        ? (pnl / (volume / 5)) * 100
-        : null
-      return {
-        trader_key: String(raw.account || raw.address || ''),
-        display_name: null,
-        roi,
-        pnl,
-        win_rate: winRate,
-        max_drawdown: null,
-        sharpe_ratio: null,
-        trades_count: totalTrade > 0 ? totalTrade : null,
-        followers: null,
-        platform_rank: raw.ranking != null ? Number(raw.ranking) : null,
-      }
-    },
-  },
 }
 
 // ============================================
@@ -518,14 +197,6 @@ function withPlatformLock(platformKey, fn) {
 function num(val) {
   if (val === null || val === undefined) return null
   const n = Number(val)
-  return isNaN(n) ? null : n
-}
-
-function parsePercent(val) {
-  if (!val) return null
-  const cleaned = String(val).replace(/[+%]/g, '').trim()
-  if (!cleaned || cleaned === '--') return null
-  const n = Number(cleaned)
   return isNaN(n) ? null : n
 }
 
@@ -646,27 +317,6 @@ function buildSnapshotRows(normalized, platform, marketType, window) {
     })
 }
 
-function buildV1Rows(normalized, source, window) {
-  const now = new Date().toISOString()
-
-  return normalized
-    .filter(t => t.trader_key)
-    .map(t => ({
-      source: source,
-      source_trader_id: t.trader_key,
-      season_id: window,
-      rank: null,
-      roi: t.roi ?? null,
-      pnl: t.pnl ?? null,
-      followers: t.followers ?? null,
-      win_rate: t.win_rate ?? null,
-      max_drawdown: t.max_drawdown ?? null,
-      trades_count: null,
-      arena_score: null,
-      captured_at: now,
-    }))
-}
-
 // ============================================
 // Fetch one platform
 // ============================================
@@ -682,173 +332,7 @@ async function fetchPlatform(platformKey) {
   let totalTraders = 0
   const results = {}
 
-  // Bybit supports batch endpoint (all periods in one browser session)
-  if (config.useBatch) {
-    const periodKeys = Object.keys(config.periods)
-    log('  Calling batch endpoint with ' + periodKeys.length + ' periods...')
-
-    try {
-      const data = await callScraper(config.endpoint, {
-        durations: periodKeys.join(','),
-        pageSize: config.pageSize,
-      })
-
-      for (const [periodKey, window] of Object.entries(config.periods)) {
-        const periodData = data[periodKey]
-        if (!periodData || periodData.error) {
-          log('  ' + window + ': ERROR - ' + (periodData?.error || 'no data'))
-          results[window] = { error: periodData?.error || 'no data' }
-          continue
-        }
-
-        const rawList = config.extractList(periodData)
-        if (!rawList.length) {
-          log('  ' + window + ': 0 traders (empty)')
-          results[window] = { count: 0 }
-          continue
-        }
-
-        const normalized = rawList.map(config.normalize)
-        const v2Rows = buildSnapshotRows(normalized, config.source, config.market_type, window)
-        const v1Rows = buildV1Rows(normalized, config.source, window)
-
-        const [v2Result, v1Result] = await Promise.all([
-          supabaseUpsert('trader_snapshots_v2', v2Rows, 'platform,market_type,trader_key,window,as_of_ts').catch(e => ({ error: e.message })),
-          supabaseUpsert('trader_snapshots', v1Rows, 'source,source_trader_id,season_id').catch(e => ({ error: e.message })),
-        ])
-
-        log('  ' + window + ': ' + normalized.length + ' traders -> v2: ' + (v2Result.count ?? v2Result.error) + ', v1: ' + (v1Result.count ?? v1Result.error))
-        results[window] = { count: normalized.length }
-        totalTraders += normalized.length
-      }
-    } catch (err) {
-      log('  BATCH ERROR: ' + err.message)
-      results['batch'] = { error: err.message }
-    }
-
-    return { platform: platformKey, totalTraders, results }
-  }
-
-  // dYdX: use Copin API directly (no scraper needed)
-  if (platformKey === 'dydx') {
-    for (const [statisticType, window] of Object.entries(config.periods)) {
-      log('  Fetching ' + window + ' via Copin API (type=' + statisticType + ')...')
-      try {
-        // Copin has a 2-day processing delay — use queryDate = 3 days ago
-        const queryDate = Date.now() - 3 * 24 * 60 * 60 * 1000
-        const allTraders = []
-        let offset = 0
-        const pageLimit = 500
-        while (allTraders.length < 2000) {
-          const copinUrl = `https://api.copin.io/leaderboards/page?protocol=DYDX&statisticType=${statisticType}&queryDate=${queryDate}&limit=${pageLimit}&offset=${offset}&sort_by=ranking&sort_type=asc`
-          const controller = new AbortController()
-          const timeout = setTimeout(() => controller.abort(), 30000)
-          await globalBucket.acquire()
-          const res = await fetch(copinUrl, { signal: controller.signal })
-          clearTimeout(timeout)
-          if (!res.ok) { log('  Copin API returned ' + res.status); break }
-          const json = await res.json()
-          const list = json?.data || []
-          if (list.length === 0) break
-          allTraders.push(...list)
-          const total = Number(json?.meta?.total) || 0
-          offset += list.length
-          if (offset >= total || list.length < pageLimit) break
-          await new Promise(r => setTimeout(r, 300))
-        }
-
-        if (!allTraders.length) {
-          log('  ' + window + ': 0 traders from Copin')
-          results[window] = { count: 0 }
-          continue
-        }
-
-        const normalized = allTraders.map(config.normalize)
-        const v2Rows = buildSnapshotRows(normalized, config.source, config.market_type, window)
-        const v1Rows = buildV1Rows(normalized, config.source, window)
-
-        const [v2Result, v1Result] = await Promise.all([
-          supabaseUpsert('trader_snapshots_v2', v2Rows, 'platform,market_type,trader_key,window,as_of_ts').catch(e => ({ error: e.message })),
-          supabaseUpsert('trader_snapshots', v1Rows, 'source,source_trader_id,season_id').catch(e => ({ error: e.message })),
-        ])
-
-        log('  ' + window + ': ' + normalized.length + ' traders -> v2: ' + (v2Result.count ?? v2Result.error) + ', v1: ' + (v1Result.count ?? v1Result.error))
-        results[window] = { count: normalized.length }
-        totalTraders += normalized.length
-      } catch (err) {
-        log('  ' + window + ': ERROR - ' + err.message)
-        results[window] = { error: err.message }
-      }
-
-      await new Promise(r => setTimeout(r, 1000))
-    }
-
-    return { platform: platformKey, totalTraders, results }
-  }
-
-  // OKX Web3: paginate through v5 copytrading API (20 per page, up to 50 pages)
-  if (platformKey === 'okx_web3') {
-    for (const [dataRange, window] of Object.entries(config.periods)) {
-      log('  Fetching ' + window + ' via OKX v5 API (dataRange=' + dataRange + ')...')
-      try {
-        const allTraders = []
-        const seen = new Set()
-        const pageSize = 20
-        const maxPages = 50
-        for (let page = 1; page <= maxPages; page++) {
-          const url = `https://www.okx.com/api/v5/copytrading/public-lead-traders?instType=SWAP&sortType=pnl&dataRange=${dataRange}&pageNo=${page}&limit=${pageSize}`
-          const controller = new AbortController()
-          const timeout = setTimeout(() => controller.abort(), 15000)
-          await globalBucket.acquire()
-          const res = await fetch(url, { signal: controller.signal })
-          clearTimeout(timeout)
-          if (!res.ok) { log('  OKX API returned ' + res.status); break }
-          const json = await res.json()
-          if (json?.code !== '0') { log('  OKX API error: ' + json?.msg); break }
-          const ranks = json?.data?.[0]?.ranks || []
-          if (!ranks.length) break
-          // Deduplicate by uniqueCode to avoid ON CONFLICT errors
-          for (const r of ranks) {
-            const key = String(r.uniqueCode || r.uniqueName || '')
-            if (key && !seen.has(key)) {
-              seen.add(key)
-              allTraders.push(r)
-            }
-          }
-          if (ranks.length < pageSize) break
-          await new Promise(r => setTimeout(r, 200))
-        }
-
-        if (!allTraders.length) {
-          log('  ' + window + ': 0 traders from OKX')
-          results[window] = { count: 0 }
-          continue
-        }
-
-        const normalized = allTraders.map(config.normalize)
-        const v2Rows = buildSnapshotRows(normalized, config.source, config.market_type, window)
-        const v1Rows = buildV1Rows(normalized, config.source, window)
-
-        const [v2Result, v1Result] = await Promise.all([
-          supabaseUpsert('trader_snapshots_v2', v2Rows, 'platform,market_type,trader_key,window,as_of_ts').catch(e => ({ error: e.message })),
-          supabaseUpsert('trader_snapshots', v1Rows, 'source,source_trader_id,season_id').catch(e => ({ error: e.message })),
-        ])
-
-        log('  ' + window + ': ' + normalized.length + ' traders -> v2: ' + (v2Result.count ?? v2Result.error) + ', v1: ' + (v1Result.count ?? v1Result.error))
-        results[window] = { count: normalized.length }
-        totalTraders += normalized.length
-      } catch (err) {
-        log('  ' + window + ': ERROR - ' + err.message)
-        results[window] = { error: err.message }
-      }
-
-      await new Promise(r => setTimeout(r, 1000))
-    }
-
-    return { platform: platformKey, totalTraders, results }
-  }
-
-  // Non-batch: call scraper once per period
+  // Call scraper once per period
   for (const [periodKey, window] of Object.entries(config.periods)) {
     log('  Fetching ' + window + ' (param=' + periodKey + ')...')
 
@@ -889,15 +373,10 @@ async function fetchPlatform(platformKey) {
       // Fallback: VPS Playwright scraper
       if (!data) {
         const params = { pageSize: config.pageSize, ...(config.extraParams || {}) }
-        if (platformKey === 'bitget_futures') {
-          params.period = periodKey
-        } else if (platformKey === 'mexc') {
-          params.periodType = periodKey
-        } else if (platformKey === 'bingx' || platformKey === 'bingx_spot') {
+        if (platformKey === 'bingx' || platformKey === 'bingx_spot') {
           params.timeType = periodKey
         }
-        const scraperTimeout = platformKey === 'mexc' ? 300000 : 120000
-        data = await callScraper(config.endpoint, params, scraperTimeout)
+        data = await callScraper(config.endpoint, params, 120000)
       }
       const rawList = config.extractList(data)
 
@@ -909,14 +388,10 @@ async function fetchPlatform(platformKey) {
 
       const normalized = rawList.map(config.normalize)
       const v2Rows = buildSnapshotRows(normalized, config.source, config.market_type, window)
-      const v1Rows = buildV1Rows(normalized, config.source, window)
 
-      const [v2Result, v1Result] = await Promise.all([
-        supabaseUpsert('trader_snapshots_v2', v2Rows, 'platform,market_type,trader_key,window,as_of_ts').catch(e => ({ error: e.message })),
-        supabaseUpsert('trader_snapshots', v1Rows, 'source,source_trader_id,season_id').catch(e => ({ error: e.message })),
-      ])
+      const v2Result = await supabaseUpsert('trader_snapshots_v2', v2Rows, 'platform,market_type,trader_key,window,as_of_ts').catch(e => ({ error: e.message }))
 
-      log('  ' + window + ': ' + normalized.length + ' traders -> v2: ' + (v2Result.count ?? v2Result.error) + ', v1: ' + (v1Result.count ?? v1Result.error))
+      log('  ' + window + ': ' + normalized.length + ' traders -> v2: ' + (v2Result.count ?? v2Result.error))
       results[window] = { count: normalized.length }
       totalTraders += normalized.length
     } catch (err) {

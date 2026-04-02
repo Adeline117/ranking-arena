@@ -268,6 +268,8 @@ export class GateioFuturesConnector extends BaseConnector {
         return s != null ? Math.max(-20, Math.min(20, Math.round(s * 100) / 100)) : null
       })(),
       platform_rank: null,
+      // Extra: equity curve from leaderboard API (profit_list is array of daily ROI ratios)
+      _profit_list: raw.profit_list,
     }
   }
 
