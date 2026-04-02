@@ -145,13 +145,14 @@ export class CoinexFuturesConnector extends BaseConnector {
     const metrics: SnapshotMetrics = {
       roi: this.num(info.roi), pnl: this.num(info.profit),
       win_rate: this.num(info.win_rate), max_drawdown: this.num(info.max_drawdown),
-      sharpe_ratio: null, sortino_ratio: null, trades_count: null,
+      sharpe_ratio: null, sortino_ratio: null,
+      trades_count: this.num(info.trade_count ?? info.tradeCount ?? info.trades_count),
       followers: this.num(info.followers), copiers: this.num(info.copiers),
       aum: null, platform_rank: null,
       arena_score: null, return_score: null, drawdown_score: null, stability_score: null,
     }
     const quality_flags: QualityFlags = {
-      missing_fields: ['sharpe_ratio', 'sortino_ratio', 'trades_count', 'aum'],
+      missing_fields: ['sharpe_ratio', 'sortino_ratio', 'aum'],
       non_standard_fields: {}, window_native: true, notes: [],
     }
     return { metrics, quality_flags, fetched_at: new Date().toISOString() }
