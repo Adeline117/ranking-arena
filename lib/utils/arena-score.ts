@@ -236,13 +236,14 @@ export function calculateRoiIntensity(roi: number, period: Period): number {
  * @param roi ROI 百分比
  * @param period 时间段
  */
-export function calculateReturnScore(roi: number, period: Period): number {
-  if (!Number.isFinite(roi)) return 0
+export function calculateReturnScore(roi: number | bigint, period: Period): number {
+  const r = Number(roi) // Guard BigInt from Supabase
+  if (!Number.isFinite(r)) return 0
   const params = ARENA_CONFIG.PARAMS[period]
 
   // Cap ROI to prevent extreme values from dominating
-  const cappedRoi = Math.min(roi, ARENA_CONFIG.ROI_CAP)
-  
+  const cappedRoi = Math.min(r, ARENA_CONFIG.ROI_CAP)
+
   const intensity = calculateRoiIntensity(cappedRoi, period)
   
   // R0 = tanh(coeff * I)
@@ -314,11 +315,12 @@ export function calculateStabilityScore(winRate: number | null, period: Period):
  * @param pnl 已实现盈亏（USD）
  * @param period 时间段
  */
-export function calculatePnlScore(pnl: number | null, period: Period): number {
-  if (pnl === null || pnl === undefined || !Number.isFinite(pnl) || pnl <= 0) return 0
+export function calculatePnlScore(pnl: number | bigint | null, period: Period): number {
+  const p = Number(pnl) // Guard BigInt from Supabase
+  if (pnl === null || pnl === undefined || !Number.isFinite(p) || p <= 0) return 0
 
   const params = ARENA_CONFIG.PNL_PARAMS[period]
-  const logArg = 1 + pnl / params.base
+  const logArg = 1 + p / params.base
   if (logArg <= 0) return 0
 
   const score = ARENA_CONFIG.MAX_PNL_SCORE * Math.tanh(params.coeff * Math.log(logArg))
@@ -382,7 +384,9 @@ export function calculateArenaScore(
   input: TraderScoreInput,
   period: Period
 ): ArenaScoreResult {
-  const { roi, pnl } = input
+  // Guard against BigInt from Supabase — Number() converts safely
+  const roi = Number(input.roi)
+  const pnl = Number(input.pnl)
 
   // V3: 只计算 ROI 和 PnL 两个维度
   const returnScore = calculateReturnScore(roi, period)
@@ -592,7 +596,14 @@ export function calculateArenaScoreV3Legacy(
 ): ArenaScoreV3LegacyResult {
   // For backward compat: use fixed-threshold scoring (not percentile)
   // to avoid breaking existing cron until peer data is available
-  const { roi, pnl, maxDrawdown, winRate, alpha, sortinoRatio, calmarRatio } = input
+  // Guard BigInt from Supabase
+  const roi = Number(input.roi)
+  const pnl = Number(input.pnl)
+  const maxDrawdown = input.maxDrawdown != null ? Number(input.maxDrawdown) : null
+  const winRate = input.winRate != null ? Number(input.winRate) : null
+  const alpha = input.alpha != null ? Number(input.alpha) : null
+  const sortinoRatio = input.sortinoRatio != null ? Number(input.sortinoRatio) : null
+  const calmarRatio = input.calmarRatio != null ? Number(input.calmarRatio) : null
   const scoreConfidence = getScoreConfidence(maxDrawdown, winRate)
 
   // Simple threshold-based scoring (legacy behavior)
