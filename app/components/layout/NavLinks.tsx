@@ -32,7 +32,7 @@ export default function NavLinks() {
           <Link
             key={item.href}
             href={item.href}
-            prefetch={true}
+            prefetch={false}
             className={`top-nav-link${isActive ? ' top-nav-link-active' : ''}`}
             aria-current={isActive ? 'page' : undefined}
             title={item.tooltip}

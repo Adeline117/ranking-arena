@@ -136,6 +136,7 @@ export default function HomeHero({ traderCount: traderCountProp, exchangeCount: 
       {/* Pro CTA badge */}
       <Link
         href="/pricing"
+        prefetch={false}
         style={{
           display: 'inline-flex',
           alignItems: 'center',

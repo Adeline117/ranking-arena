@@ -135,6 +135,7 @@ export default function HomeHeroSSR({ traderCount = 34000, exchangeCount = 27 }:
       {/* Pro CTA badge */}
       <Link
         href="/pricing"
+        prefetch={false}
         style={{
           display: 'inline-flex',
           alignItems: 'center',

@@ -125,6 +125,7 @@ export default function DesktopSidebar() {
             <Link
               key={item.labelKey}
               href={href}
+              prefetch={false}
               aria-current={active ? 'page' : undefined}
               style={{
                 display: 'flex',

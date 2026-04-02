@@ -33,6 +33,7 @@ export default function HomeSubNav() {
           <Link
             key={tab.href}
             href={tab.href}
+            prefetch={false}
             className="btn-press home-subnav-pill"
             style={{
               padding: `${tokens.spacing[2]} ${tokens.spacing[4]}`,

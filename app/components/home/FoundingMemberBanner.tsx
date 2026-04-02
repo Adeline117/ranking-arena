@@ -43,6 +43,7 @@ export default function FoundingMemberBanner() {
       </span>
       <Link
         href="/pricing#lifetime"
+        prefetch={false}
         style={{
           padding: `2px ${tokens.spacing[3]}`,
           borderRadius: tokens.radius.md,

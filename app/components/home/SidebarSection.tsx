@@ -49,6 +49,7 @@ export default function SidebarSection({ position }: SidebarSectionProps) {
 
         <Link
           href="/groups"
+          prefetch={false}
           style={{
             display: 'flex',
             alignItems: 'center',
