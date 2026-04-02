@@ -20,8 +20,6 @@ import type {
   DiscoverResult,
   ProfileResult,
   SnapshotResult,
-  SnapshotMetrics,
-  QualityFlags,
   TimeseriesResult,
   TraderSource,
 } from '../../types/leaderboard'

@@ -9,7 +9,7 @@
 import { BaseConnector } from '../base'
 import type {
   DiscoverResult, ProfileResult, SnapshotResult, TimeseriesResult,
-  TraderSource, TraderProfile, SnapshotMetrics, QualityFlags,
+  TraderSource, TraderProfile, SnapshotMetrics,
   PlatformCapabilities, Window,
 } from '../../types/leaderboard'
 

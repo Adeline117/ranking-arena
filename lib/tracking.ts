@@ -41,7 +41,7 @@ function flushQueue(): void {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(batch[0]), // Fallback: send first event only
     keepalive: true,
-  }).catch(() => {})
+  }).catch(() => {}) // eslint-disable-line no-restricted-syntax -- fire-and-forget tracking, client-side
 }
 
 export function trackInteraction(event: InteractionEvent): void {

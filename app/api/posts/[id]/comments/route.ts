@@ -6,7 +6,7 @@
  * DELETE /api/posts/[id]/comments - 删除评论
  */
 
-import { NextRequest, NextResponse } from 'next/server'
+import { NextRequest } from 'next/server'
 import { z } from 'zod'
 import {
   getSupabaseAdmin,

@@ -11,7 +11,7 @@
  * - 单次调用返回所有时间段（weekly/monthly/all_time）
  */
 
-import { RawFetchResult, RawTraderEntry, TimeWindow } from '../types'
+import { RawFetchResult, TimeWindow } from '../types'
 import { PlatformScraper, registerScraper } from '../runner'
 
 export class AevoScraper implements PlatformScraper {

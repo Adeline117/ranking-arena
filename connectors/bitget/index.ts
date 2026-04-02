@@ -38,7 +38,7 @@ export class BitgetFuturesConnector extends BaseConnector {
 
       for (let page = 1; page <= pages && entries.length < limit; page++) {
         // Try VPS scraper first (bypasses WAF)
-        let vpsResponse = await this.fetchViaVPS<BitgetListResponse>('/bitget/leaderboard', {
+        const vpsResponse = await this.fetchViaVPS<BitgetListResponse>('/bitget/leaderboard', {
           page,
           pageSize,
           period: WINDOW_MAP[window],
@@ -222,7 +222,7 @@ export class BitgetSpotConnector extends BaseConnector {
 
       for (let page = 1; page <= pages && entries.length < limit; page++) {
         // Try VPS scraper first (bypasses WAF)
-        let vpsResponse = await this.fetchViaVPS<BitgetListResponse>('/bitget/leaderboard', {
+        const vpsResponse = await this.fetchViaVPS<BitgetListResponse>('/bitget/leaderboard', {
           page,
           pageSize,
           period: WINDOW_MAP[window],

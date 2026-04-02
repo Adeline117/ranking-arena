@@ -39,7 +39,7 @@ export class BybitConnector extends BaseConnector {
 
       for (let page = 1; page <= pages && entries.length < limit; page++) {
         // Try VPS scraper first (bypasses WAF)
-        let vpsResponse = await this.fetchViaVPS<BybitListResponse>('/bybit/leaderboard', {
+        const vpsResponse = await this.fetchViaVPS<BybitListResponse>('/bybit/leaderboard', {
           page,
           pageSize,
           timeRange: WINDOW_MAP[window],

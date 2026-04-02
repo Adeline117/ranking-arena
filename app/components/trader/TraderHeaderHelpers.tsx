@@ -1,6 +1,5 @@
 import { tokens } from '@/lib/design-tokens'
 import { Box, Text, Button } from '../base'
-import { t } from '@/lib/i18n'
 
 // ─── Source / Category Helpers ────────────────────────────────────────────────
 

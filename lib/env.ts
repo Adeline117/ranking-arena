@@ -48,7 +48,6 @@ if (!criticalResult.success) {
       .filter(([k]) => k !== '_errors')
       .map(([k, v]) => `  - ${k}: ${(v as { _errors?: string[] })?._errors?.join(', ') ?? 'invalid'}`)
       .join('\n')
-    // eslint-disable-next-line no-console -- logger may not be ready at env validation time
     console.error(`[env] Critical environment validation failed:\n${messages}`)
     // Do not throw in test/dev to avoid breaking HMR; throw in production
     if (process.env.NODE_ENV === 'production') {

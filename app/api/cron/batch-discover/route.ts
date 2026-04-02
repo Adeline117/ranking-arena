@@ -16,7 +16,7 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { PipelineLogger } from '@/lib/services/pipeline-logger'
-import logger from '@/lib/logger'
+import _logger from '@/lib/logger'
 import { env } from '@/lib/env'
 import { getSupabaseAdmin } from '@/lib/supabase/server'
 
@@ -103,7 +103,7 @@ async function discoverRankingsInline(): Promise<BatchResult> {
     }
 
     return { name, status: 'success', durationMs: Date.now() - start, detail: { jobs_created: jobs.length, blocked: Array.from(blockedPlatforms) } }
-  } catch (err) {
+  } catch (_err) {
     return { name, status: 'error', durationMs: Date.now() - start, error: 'Discovery task failed' }
   }
 }

@@ -40,7 +40,6 @@ const DEFAULT_CONFIG: CircuitConfig = {
   halfOpenAfter: 30 * 60 * 1000, // 30 minutes
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 type AnyPolicy = IPolicy<any, any>
 
 /** Per-platform policy instances */

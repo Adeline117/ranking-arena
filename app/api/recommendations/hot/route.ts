@@ -13,7 +13,7 @@ import { createLogger } from '@/lib/utils/logger'
 import type { HotTrader } from '@/lib/recommendations/hot-score'
 import { socialFeatureGuard } from '@/lib/features'
 
-const logger = createLogger('api-rec-hot')
+const _logger = createLogger('api-rec-hot')
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'

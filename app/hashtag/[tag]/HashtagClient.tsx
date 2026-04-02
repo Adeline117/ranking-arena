@@ -14,7 +14,6 @@ interface HashtagClientProps {
 }
 
 export default function HashtagClient({ tag }: HashtagClientProps) {
-  const { t } = useLanguage()
   const { email } = useAuthSession()
 
   return (

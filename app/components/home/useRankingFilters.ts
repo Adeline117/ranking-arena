@@ -417,7 +417,6 @@ export function useRankingFilters({ traders, activeTimeRange }: UseRankingFilter
         try { localStorage.removeItem(LS_KEY_EXCHANGE) } catch { /* ignore */ }
       }
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- syncStateToUrl excluded to prevent infinite loop
   }, [selectedExchange, categoryFiltered])
 
   const presetFiltered = useMemo(() => {
@@ -441,7 +440,6 @@ export function useRankingFilters({ traders, activeTimeRange }: UseRankingFilter
         }
       }
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- syncStateToUrl excluded to prevent infinite loop
   }, [activePreset, exchangeFiltered])
 
   const advancedFiltered = useMemo(

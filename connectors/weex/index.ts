@@ -28,7 +28,7 @@ export class WeexConnector extends BaseConnector {
       const periodMap: Record<Window, string> = { '7d': '7', '30d': '30', '90d': '90' };
 
       // Try VPS scraper first
-      let vpsResponse = await this.fetchViaVPS<{ data: { list: Record<string, unknown>[] } }>('/weex/leaderboard', {
+      const vpsResponse = await this.fetchViaVPS<{ data: { list: Record<string, unknown>[] } }>('/weex/leaderboard', {
         page: 1,
         pageSize: Math.min(limit, 50),
         period: periodMap[window],

@@ -164,7 +164,7 @@ export function generateAutoBio(input: AutoProfileInput): { en: string; zh: stri
 
   if (!snapshot || snapshot_window == null) {
     // Minimal bio when no snapshot data available
-    const type = getPlatformType(platform)
+    const _type = getPlatformType(platform)
     if (is_bot) {
       return {
         en: `Automated trading bot on ${platName}.`,
@@ -315,7 +315,7 @@ export function generateAutoTags(input: AutoProfileInput): string[] {
 // Combined helper
 // ---------------------------------------------------------------------------
 
-export function generateAutoProfile(input: AutoProfileInput, lang: 'en' | 'zh' = 'en'): AutoProfileResult {
+export function generateAutoProfile(input: AutoProfileInput, _lang: 'en' | 'zh' = 'en'): AutoProfileResult {
   const bio = generateAutoBio(input)
   const tags = generateAutoTags(input)
 

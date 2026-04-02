@@ -28,7 +28,7 @@ export class PhemexConnector extends BaseConnector {
       const periodMap: Record<Window, string> = { '7d': '7D', '30d': '30D', '90d': '90D' };
 
       // Try VPS scraper first
-      let vpsResponse = await this.fetchViaVPS<{ data: { list: Record<string, unknown>[] } }>('/phemex/leaderboard', {
+      const vpsResponse = await this.fetchViaVPS<{ data: { list: Record<string, unknown>[] } }>('/phemex/leaderboard', {
         page: 1,
         pageSize: Math.min(limit, 50),
         period: periodMap[window],

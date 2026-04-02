@@ -24,7 +24,6 @@ import {
   getSupabaseClient,
 } from '@/lib/cron/fetchers/shared'
 import { dataLogger } from '@/lib/utils/logger'
-import { SOURCE_TYPE_MAP } from '@/lib/constants/exchanges'
 import {
   ENRICHMENT_PLATFORM_CONFIGS,
   NO_ENRICHMENT_PLATFORMS,
@@ -84,7 +83,7 @@ export async function writeDiscoverResult(
 ): Promise<AdapterResult> {
   const { dryRun = false, calculateScore = true, sourceOverride } = options
   const platform = sourceOverride || connector.platform
-  const marketType = connector.marketType
+  const _marketType = connector.marketType
   const window = result.window.toUpperCase() // '7d' → '7D'
   const capturedAt = result.fetched_at || new Date().toISOString()
 
@@ -590,11 +589,6 @@ function safeStr(v: unknown): string | null {
   if (v == null) return null
   const s = String(v)
   return s.length > 0 ? s : null
-}
-
-function clampOpt(v: number | null, min: number, max: number): number | null {
-  if (v == null) return null
-  return Math.max(min, Math.min(max, v))
 }
 
 function nonNegOpt(v: number | null): number | null {

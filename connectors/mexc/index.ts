@@ -38,7 +38,7 @@ export class MexcConnector extends BaseConnector {
 
       for (let page = 1; page <= pages && entries.length < limit; page++) {
         // Try VPS scraper first
-        let vpsResponse = await this.fetchViaVPS<any>('/mexc/leaderboard', {
+        const vpsResponse = await this.fetchViaVPS<any>('/mexc/leaderboard', {
           page,
           pageSize,
           periodDays: WINDOW_MAP[window],
