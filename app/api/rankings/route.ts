@@ -8,7 +8,7 @@
  *   window: '7d' | '30d' | '90d' (required)
  *   category: 'futures' | 'spot' | 'onchain' (optional)
  *   platform: Platform string (optional, overrides category)
- *   limit: number (default 100, max 2000)
+ *   limit: number (default 100, max 5000)
  *   offset: number (default 0) — legacy, prefer cursor
  *   cursor: string (optional, format: "score:id" for keyset pagination)
  *   sort_by: 'arena_score' | 'roi' | 'pnl' | 'drawdown' | 'copiers'
@@ -80,7 +80,7 @@ export const GET = withPublic(async ({ request }) => {
 
     const sortDir = (searchParams.get('sort_dir') || 'desc') as 'asc' | 'desc';
 
-    const limit = Math.min(parseInt(searchParams.get('limit') || '100', 10) || 100, 2000);
+    const limit = Math.min(parseInt(searchParams.get('limit') || '100', 10) || 100, 5000);
     const offset = parseInt(searchParams.get('offset') || '0', 10) || 0;
     const cursor = searchParams.get('cursor') || undefined; // format: "score:id" for keyset pagination
     const minPnl = searchParams.get('min_pnl') ? Number(searchParams.get('min_pnl')) : undefined;
@@ -176,7 +176,7 @@ async function getRankingsFallback(rankingsQuery: RankingsQuery, _cursor?: strin
   } = rankingsQuery;
 
   const supabase = getSupabaseAdmin();
-  const safeLimit = Math.min(limit, 2000);
+  const safeLimit = Math.min(limit, 5000);
   const seasonId = window.toUpperCase() as TradingPeriod;
 
   // Map sort_by to unified sortBy parameter
@@ -198,50 +198,95 @@ async function getRankingsFallback(rankingsQuery: RankingsQuery, _cursor?: strin
       .map(([p]) => p);
   }
 
-  // Build direct query against leaderboard_ranks for full control over filters
-  let dbQuery = supabase
-    .from('leaderboard_ranks')
-    .select(
-      `source_trader_id, handle, source, source_type, roi, pnl, win_rate, max_drawdown,
-       trades_count, followers, arena_score, avatar_url, rank, computed_at,
-       profitability_score, risk_control_score, execution_score, score_completeness,
-       trading_style, avg_holding_hours, sharpe_ratio, sortino_ratio, calmar_ratio, profit_factor, trader_type, is_outlier, metrics_estimated`,
-      { count: 'exact' }
-    )
-    .eq('season_id', seasonId)
-    .not('arena_score', 'is', null)
-    .or('is_outlier.is.null,is_outlier.eq.false')
-
-  // Apply ROI anomaly filter
-  dbQuery = dbQuery.lte('roi', ROI_ANOMALY_THRESHOLD).gte('roi', -ROI_ANOMALY_THRESHOLD)
-
-  if (platformFilter) {
-    dbQuery = dbQuery.eq('source', platformFilter);
-  } else if (platformsInCategory && platformsInCategory.length > 0) {
-    dbQuery = dbQuery.in('source', platformsInCategory);
-  }
-
-  if (min_pnl != null) {
-    dbQuery = dbQuery.gte('pnl', min_pnl);
-  }
-  if (min_trades != null) {
-    dbQuery = dbQuery.gte('trades_count', min_trades);
-  }
-
-  // Filter by trader type (human/bot)
-  if (trader_type === 'bot') {
-    dbQuery = dbQuery.or('trader_type.eq.bot,source.eq.web3_bot');
-  } else if (trader_type === 'human') {
-    dbQuery = dbQuery.neq('source', 'web3_bot').or('trader_type.is.null,trader_type.neq.bot');
-  }
-
   // Sorting
   const sortColumn = unifiedSortBy === 'rank' ? 'rank' : unifiedSortBy;
   const ascending = sort_dir === 'asc';
-  dbQuery = dbQuery.order(sortColumn, { ascending, nullsFirst: false });
-  dbQuery = dbQuery.range(offset, offset + safeLimit - 1);
 
-  const { data: rows, count: totalCount, error } = await dbQuery;
+  // Helper: build base query with all filters applied (reusable for chunked fetches)
+  const SELECT_COLS = `source_trader_id, handle, source, source_type, roi, pnl, win_rate, max_drawdown,
+       trades_count, followers, arena_score, avatar_url, rank, computed_at,
+       profitability_score, risk_control_score, execution_score, score_completeness,
+       trading_style, avg_holding_hours, sharpe_ratio, sortino_ratio, calmar_ratio, profit_factor, trader_type, is_outlier, metrics_estimated`
+
+  function buildBaseQuery(opts?: { count?: 'exact' }) {
+    let q = supabase
+      .from('leaderboard_ranks')
+      .select(SELECT_COLS, opts ? { count: opts.count } : undefined)
+      .eq('season_id', seasonId)
+      .not('arena_score', 'is', null)
+      .or('is_outlier.is.null,is_outlier.eq.false')
+      .lte('roi', ROI_ANOMALY_THRESHOLD)
+      .gte('roi', -ROI_ANOMALY_THRESHOLD)
+
+    if (platformFilter) {
+      q = q.eq('source', platformFilter);
+    } else if (platformsInCategory && platformsInCategory.length > 0) {
+      q = q.in('source', platformsInCategory);
+    }
+
+    if (min_pnl != null) {
+      q = q.gte('pnl', min_pnl);
+    }
+    if (min_trades != null) {
+      q = q.gte('trades_count', min_trades);
+    }
+
+    // Filter by trader type (human/bot)
+    if (trader_type === 'bot') {
+      q = q.or('trader_type.eq.bot,source.eq.web3_bot');
+    } else if (trader_type === 'human') {
+      q = q.neq('source', 'web3_bot').or('trader_type.is.null,trader_type.neq.bot');
+    }
+
+    q = q.order(sortColumn, { ascending, nullsFirst: false });
+    return q;
+  }
+
+  // Supabase PostgREST has a max_rows limit (typically 1000) per request.
+  // Paginate in 1000-row chunks when safeLimit > 1000 to get complete data.
+  const CHUNK_SIZE = 1000;
+  let rows: Record<string, unknown>[] = [];
+  let totalCount: number | null = null;
+  let error: { message: string } | null = null;
+
+  if (safeLimit <= CHUNK_SIZE) {
+    // Single request — include count
+    const result = await buildBaseQuery({ count: 'exact' })
+      .range(offset, offset + safeLimit - 1);
+    rows = (result.data || []) as Record<string, unknown>[];
+    totalCount = result.count;
+    error = result.error;
+  } else {
+    // Chunked fetch: first chunk gets count, rest fetch in parallel
+    const firstResult = await buildBaseQuery({ count: 'exact' })
+      .range(offset, offset + CHUNK_SIZE - 1);
+    if (firstResult.error) {
+      error = firstResult.error;
+    } else {
+      rows = (firstResult.data || []) as Record<string, unknown>[];
+      totalCount = firstResult.count;
+
+      // Calculate remaining chunks needed
+      const remaining = safeLimit - CHUNK_SIZE;
+      if (remaining > 0 && rows.length === CHUNK_SIZE) {
+        const chunkCount = Math.ceil(remaining / CHUNK_SIZE);
+        const chunkPromises = Array.from({ length: chunkCount }, (_, i) => {
+          const chunkOffset = offset + CHUNK_SIZE * (i + 1);
+          const chunkEnd = Math.min(chunkOffset + CHUNK_SIZE - 1, offset + safeLimit - 1);
+          return buildBaseQuery()
+            .range(chunkOffset, chunkEnd);
+        });
+        const chunkResults = await Promise.all(chunkPromises);
+        for (const cr of chunkResults) {
+          if (cr.error) {
+            error = cr.error;
+            break;
+          }
+          if (cr.data) rows = rows.concat(cr.data as Record<string, unknown>[]);
+        }
+      }
+    }
+  }
 
   if (error) {
     throw new Error(`Leaderboard query failed: ${error.message}`);
