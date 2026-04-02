@@ -331,7 +331,7 @@ async function writeInlineEnrichment(
     }
 
     // htx_futures: profitList (30 daily cumulative return values as strings)
-    if (normalized._profit_list && Array.isArray(normalized._profit_list)) {
+    if (platform === 'htx_futures' && normalized._profit_list && Array.isArray(normalized._profit_list)) {
       const profitList = normalized._profit_list as string[]
       if (profitList.length >= 2) {
         const now = new Date()
@@ -340,6 +340,24 @@ async function writeInlineEnrichment(
           return {
             date: date.toISOString().split('T')[0],
             roi: Number(val) || 0,
+            pnl: null,
+          }
+        })
+        await upsertEquityCurve(supabase, platform, traderKey, window, curve)
+        equityCurveCount++
+      }
+    }
+
+    // gateio: profit_list (array of daily ROI ratios, e.g. 0.0954 = 9.54%)
+    if (platform === 'gateio' && normalized._profit_list && Array.isArray(normalized._profit_list)) {
+      const profitList = normalized._profit_list as number[]
+      if (profitList.length >= 2) {
+        const now = new Date()
+        const curve: EquityCurvePoint[] = profitList.map((val, i) => {
+          const date = new Date(now.getTime() - (profitList.length - 1 - i) * 86400000)
+          return {
+            date: date.toISOString().split('T')[0],
+            roi: (Number(val) || 0) * 100, // ratio → percentage
             pnl: null,
           }
         })

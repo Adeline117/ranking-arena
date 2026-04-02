@@ -52,6 +52,7 @@ export const PLATFORM_ROUTES: Record<string, RouteConfig> = {
   binance_web3:   { routes: ['direct', 'vps_sg'],             notes: 'web3.binance.com, usually not blocked' },
   okx_web3:       { routes: ['direct', 'vps_sg'],             notes: 'Same as OKX v5 API' },
   gmx:            { routes: ['direct', 'vps_sg'],             notes: 'Satsuma GraphQL subgraph' },
+  kucoin:         { routes: ['direct', 'vps_sg'],             notes: 'POST /_api/ct-copy-trade leaderboard API works from any IP' },
   kwenta:         { routes: ['direct'],                       notes: 'TheGraph subgraph' },
 
   // ─── GEO_BLOCKED (VPS proxy required) ────────────────────────
@@ -64,10 +65,10 @@ export const PLATFORM_ROUTES: Record<string, RouteConfig> = {
   // ─── WAF_PROTECTED (need Playwright) ─────────────────────────
   bybit:           { routes: ['scraper_sg', 'vps_jp'],        notes: 'Akamai WAF blocks all HTTP proxy. bybitglobal.com scraper.' },
   bybit_spot:      { routes: ['scraper_sg', 'vps_jp'],        notes: 'Same as bybit futures — Akamai WAF, scraper required.' },
-  bitget_futures:  { routes: ['scraper_sg', 'vps_sg'],        notes: 'CloudFlare JS challenge. Scraper intercepts trace API.' },
-  bitget_spot:     { routes: ['scraper_sg', 'vps_sg'],        notes: 'Same as bitget futures — CF JS challenge.' },
+  bitget_futures:  { routes: ['direct', 'vps_sg', 'scraper_sg'], notes: 'Direct API works sometimes; VPS proxy faster than Playwright. Scraper as last resort.' },
+  bitget_spot:     { routes: ['direct', 'vps_sg', 'scraper_sg'], notes: 'Same as bitget futures — direct first, VPS fallback, scraper last resort.' },
   bingx:           { routes: ['scraper_sg'],                   notes: 'CloudFlare JS challenge. waitForResponse multi-rank.' },
-  mexc:            { routes: ['scraper_sg', 'vps_sg'],         notes: 'API path changed. Scraper intercepts copyFutures.' },
+  mexc:            { routes: ['direct'],                        notes: 'Mobile UA bypass (MEXC/1.0 iPhone) works from any IP. No VPS/scraper needed.' },
   gateio:          { routes: ['direct', 'scraper_sg'],         notes: 'Direct works from Mac, Vercel may get WAF-blocked.' },
 
   // ─── BROWSER_ONLY (no public JSON API) ───────────────────────

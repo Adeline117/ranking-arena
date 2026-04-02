@@ -24,6 +24,7 @@ import { createLogger } from '@/lib/utils/logger'
 import { resolveTrader, getTraderDetail, toTraderPageData } from '@/lib/data/unified'
 import { ApiError } from '@/lib/api/errors'
 import { success as apiSuccess, handleError, withCache } from '@/lib/api/response'
+import { getAggregatedStats, findUserByTrader } from '@/lib/data/linked-traders'
 
 // 输入验证 schema（支持字母、数字、下划线、连字符、点、中文、0x 地址）
 const handleSchema = z.string().min(1).max(255)
@@ -91,11 +92,152 @@ export async function GET(
 
     const data = toTraderPageData(detail)
 
-    // 缓存结果
+    // ── include: bundle additional data into the response ──
+    const includeParam = request.nextUrl.searchParams.get('include') || ''
+    const includes = includeParam ? includeParam.split(',').map(s => s.trim().toLowerCase()) : []
+    const extras: Record<string, unknown> = {}
+
+    if (includes.length > 0) {
+      const promises: Promise<void>[] = []
+
+      // claim status
+      if (includes.includes('claim')) {
+        promises.push(
+          (async () => {
+            try {
+              const traderId = resolved.traderKey
+              const source = resolved.platform
+              const { data: verified } = await supabase
+                .from('verified_traders')
+                .select('id, user_id, display_name, bio, avatar_url, twitter_url, telegram_url, discord_url, website_url')
+                .eq('trader_id', traderId)
+                .eq('source', source)
+                .maybeSingle()
+
+              if (!verified) {
+                extras.claim_status = { is_verified: false }
+              } else {
+                extras.claim_status = {
+                  is_verified: true,
+                  owner_id: verified.user_id,
+                  profile: {
+                    display_name: verified.display_name,
+                    bio: verified.bio,
+                    avatar_url: verified.avatar_url,
+                    twitter_url: verified.twitter_url,
+                    telegram_url: verified.telegram_url,
+                    discord_url: verified.discord_url,
+                    website_url: verified.website_url,
+                  },
+                }
+              }
+            } catch (e) {
+              logger.warn('include=claim failed', { error: e instanceof Error ? e.message : String(e) })
+              extras.claim_status = { is_verified: false, _error: 'fetch_failed' }
+            }
+          })()
+        )
+      }
+
+      // aggregate (multi-account)
+      if (includes.includes('aggregate')) {
+        promises.push(
+          (async () => {
+            try {
+              const userId = await findUserByTrader(supabase, resolved.platform, resolved.traderKey)
+              if (!userId) {
+                extras.aggregate = { aggregated: null, accounts: [], totalAccounts: 0 }
+              } else {
+                const stats = await getAggregatedStats(supabase, userId)
+                if (!stats) {
+                  extras.aggregate = { aggregated: null, accounts: [], totalAccounts: 0 }
+                } else {
+                  extras.aggregate = {
+                    aggregated: {
+                      combinedPnl: stats.combinedPnl,
+                      bestRoi: stats.bestRoi,
+                      weightedScore: stats.weightedScore,
+                    },
+                    accounts: stats.accounts.map((a) => ({
+                      id: a.id,
+                      platform: a.platform,
+                      traderKey: a.traderKey,
+                      handle: a.handle,
+                      label: a.label,
+                      isPrimary: a.isPrimary,
+                      roi: a.roi,
+                      pnl: a.pnl,
+                      arenaScore: a.arenaScore,
+                      winRate: a.winRate,
+                      maxDrawdown: a.maxDrawdown,
+                      rank: a.rank,
+                    })),
+                    totalAccounts: stats.totalAccounts,
+                  }
+                }
+              }
+            } catch (e) {
+              logger.warn('include=aggregate failed', { error: e instanceof Error ? e.message : String(e) })
+              extras.aggregate = { aggregated: null, accounts: [], totalAccounts: 0, _error: 'fetch_failed' }
+            }
+          })()
+        )
+      }
+
+      // rank history (sparkline)
+      if (includes.includes('rank_history')) {
+        promises.push(
+          (async () => {
+            try {
+              const period = request.nextUrl.searchParams.get('rh_period') || '90D'
+              const days = Math.min(Number(request.nextUrl.searchParams.get('rh_days') || '7'), 30)
+              const cutoffDate = new Date()
+              cutoffDate.setDate(cutoffDate.getDate() - days)
+              const cutoffISO = cutoffDate.toISOString().split('T')[0]
+
+              const { data: rhData, error: rhError } = await supabase
+                .from('rank_history')
+                .select('snapshot_date, rank, arena_score')
+                .eq('platform', resolved.platform)
+                .eq('trader_key', resolved.traderKey)
+                .eq('period', period)
+                .gte('snapshot_date', cutoffISO)
+                .order('snapshot_date', { ascending: true })
+                .limit(days)
+
+              if (rhError) {
+                logger.warn('include=rank_history query error', { error: rhError.message })
+                extras.rank_history = { history: [], platform: resolved.platform, trader_key: resolved.traderKey, period, _error: 'query_failed' }
+              } else {
+                extras.rank_history = {
+                  history: (rhData || []).map(row => ({
+                    date: row.snapshot_date,
+                    rank: row.rank,
+                    arena_score: row.arena_score,
+                  })),
+                  platform: resolved.platform,
+                  trader_key: resolved.traderKey,
+                  period,
+                }
+              }
+            } catch (e) {
+              logger.warn('include=rank_history failed', { error: e instanceof Error ? e.message : String(e) })
+              extras.rank_history = { history: [], _error: 'fetch_failed' }
+            }
+          })()
+        )
+      }
+
+      await Promise.all(promises)
+    }
+
+    const responseData = { ...data as Record<string, unknown>, ...extras }
+
+    // 缓存结果 (cache without extras to keep base data clean)
     setServerCache(cacheKey, data, CacheTTL.MEDIUM)
 
     const duration = Date.now() - startTime
-    const response = apiSuccess({ ...data as Record<string, unknown>, cached: false, fetchTime: duration })
+    const response = apiSuccess({ ...responseData, cached: false, fetchTime: duration })
     return withCache(response, { maxAge: 300, staleWhileRevalidate: 600 })
 
   } catch (error: unknown) {

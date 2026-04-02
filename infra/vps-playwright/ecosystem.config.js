@@ -1,3 +1,4 @@
+// SG VPS: Primary scraper + proxy + cron
 // PM2 config for Arena VPS services
 // Deployed to: /opt/arena-cron/ecosystem.config.js
 //

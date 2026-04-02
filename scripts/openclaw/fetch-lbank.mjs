@@ -296,14 +296,6 @@ async function saveTraders(traders) {
   const { error: profileErr } = await supabase.from('trader_profiles_v2').upsert(profiles, { onConflict: 'platform,market_type,trader_key' })
   if (profileErr) console.error('trader_profiles_v2 error:', profileErr.message)
 
-  const snapshotsV1 = traders.map(t => ({
-    source: t.source, source_trader_id: t.source_trader_id, season_id: t.season_id,
-    rank: t.rank, roi: t.roi, pnl: t.pnl, win_rate: t.win_rate, max_drawdown: t.max_drawdown,
-    followers: t.followers, arena_score: t.arena_score, captured_at: t.captured_at,
-  }))
-  const { error: v1Err } = await supabase.from('trader_snapshots').upsert(snapshotsV1, { onConflict: 'source,source_trader_id,season_id' })
-  if (v1Err) return { total: traders.length, saved: 0, error: v1Err.message }
-
   const snapshotsV2 = traders.map(t => ({
     platform: t.source, market_type: 'futures', trader_key: t.source_trader_id, window: t.season_id, as_of_ts: t.captured_at,
     metrics: { roi: t.roi ?? 0, pnl: t.pnl ?? 0, win_rate: t.win_rate ?? null, max_drawdown: t.max_drawdown ?? null, followers: t.followers ?? null, arena_score: t.arena_score ?? null },
