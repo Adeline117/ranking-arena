@@ -453,7 +453,7 @@ export function useTraderData(options: UseTraderDataOptions = {}) {
           const timer = setTimeout(() => {
             // Only prefetch if user hasn't already switched to this range (cache miss)
             if (!tradersCache.current.has(range)) {
-              loadTimeRange(range, false).catch(() => {})
+              loadTimeRange(range, false).catch(() => {}) // eslint-disable-line no-restricted-syntax -- fire-and-forget
             }
           }, idx * staggerMs)
           timers.push(timer)

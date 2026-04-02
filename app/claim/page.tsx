@@ -90,7 +90,7 @@ export default function ClaimPage() {
       if (data.user) {
         fetchLinkedTraders()
       }
-    }).catch(() => {})
+    }).catch(() => {}) // eslint-disable-line no-restricted-syntax -- fire-and-forget
   }, [fetchLinkedTraders])
 
   const handleTraderSelect = (result: SearchResult) => {

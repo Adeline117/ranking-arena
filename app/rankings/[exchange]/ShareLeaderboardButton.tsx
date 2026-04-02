@@ -75,7 +75,7 @@ export default function ShareLeaderboardButton({ traders, exchange }: Props) {
           await navigator.share({
             title: 'Arena Leaderboard Snapshot',
             url,
-          }).catch(() => {
+          }).catch(() => { // eslint-disable-line no-restricted-syntax -- fire-and-forget
             // user cancelled
           })
         } else {

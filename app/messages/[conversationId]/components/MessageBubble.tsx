@@ -91,7 +91,7 @@ export default function MessageBubble({
   const handleCopyText = useCallback(() => {
     setShowContextMenu(false)
     if (msg.content) {
-      navigator.clipboard.writeText(msg.content).catch(() => { /* clipboard write may fail in some browsers */ })
+      navigator.clipboard.writeText(msg.content).catch(() => { /* clipboard write may fail in some browsers */ }) // eslint-disable-line no-restricted-syntax -- fire-and-forget
     }
   }, [msg.content])
 

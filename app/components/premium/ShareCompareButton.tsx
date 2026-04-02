@@ -22,7 +22,7 @@ export default function ShareCompareButton({ traderIds, traderNames }: ShareComp
       : `Trader comparison on Arena\n\n${url}`
 
     if (typeof navigator !== 'undefined' && typeof navigator.share === 'function' && /Mobi|Android/i.test(navigator.userAgent)) {
-      navigator.share({ title: 'Trader Comparison', text, url }).catch(_err => {
+      navigator.share({ title: 'Trader Comparison', text, url }).catch(_err => { // eslint-disable-line no-restricted-syntax -- fire-and-forget
         // user cancelled
       })
     } else {

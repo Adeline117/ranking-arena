@@ -11,7 +11,7 @@ import type { ScoreConfidence } from '@/lib/utils/arena-score'
 import type { UnifiedTrader } from '@/lib/types/unified-trader'
 import { getLeaderboard } from '@/lib/data/unified'
 import { mapLeaderboardRow } from '@/lib/data/trader/mappers'
-import { logger } from '@/lib/logger'
+import { logger, fireAndForget } from '@/lib/logger'
 import { sanitizeDisplayName } from '@/lib/utils/profanity'
 import * as cache from '@/lib/cache'
 
@@ -80,7 +80,7 @@ export async function getInitialTraders(
 
   // Cache the result asynchronously (2-minute TTL)
   if (result.traders.length > 0) {
-    cache.set(cacheKey, result, { ttl: 120 }).catch(() => {})
+    fireAndForget(cache.set(cacheKey, result, { ttl: 120 }), 'cache-set-initial-traders')
   }
 
   return result

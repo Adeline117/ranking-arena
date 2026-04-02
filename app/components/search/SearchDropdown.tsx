@@ -110,7 +110,7 @@ export default function SearchDropdown({ open, query, onClose }: SearchDropdownP
     if (query.trim()) saveToHistory(query)
     if (resultId && query.trim()) {
       fetch(`/api/search?type=click&q=${encodeURIComponent(query.trim())}&id=${encodeURIComponent(resultId)}&rtype=${resultType || ''}`)
-        .catch(() => {}) // Intentional: click tracking is non-critical
+        .catch(() => {}) // eslint-disable-line no-restricted-syntax -- fire-and-forget: click tracking is non-critical
     }
     onClose()
   }

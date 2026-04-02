@@ -38,7 +38,7 @@ export default function ChartFullscreen({ open, onClose, children, title }: Char
   const handleFullscreen = useCallback(() => {
     const el = document.documentElement
     if (el.requestFullscreen) {
-      el.requestFullscreen().catch(() => { /* ignore */ })
+      el.requestFullscreen().catch(() => { /* ignore */ }) // eslint-disable-line no-restricted-syntax -- fire-and-forget
     }
   }, [])
 
