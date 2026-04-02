@@ -325,6 +325,14 @@ function SnapshotCard({ window, metrics }: { window: SnapshotWindow; metrics: Sn
             <span className="text-sm" style={{ color: tokens.colors.accent.error }}>{Math.abs(metrics.max_drawdown) < 0.05 ? '< 0.1%' : `-${Math.abs(metrics.max_drawdown).toFixed(1)}%`}</span>
           </div>
         )}
+        {metrics.sharpe_ratio != null && (
+          <div className="flex justify-between">
+            <span className="text-xs" style={{ color: tokens.colors.text.secondary }}>Sharpe</span>
+            <span className="text-sm" style={{ color: metrics.sharpe_ratio >= 2 ? tokens.colors.accent.success : metrics.sharpe_ratio <= 0 ? tokens.colors.accent.error : tokens.colors.text.primary }}>
+              {metrics.sharpe_ratio.toFixed(2)}
+            </span>
+          </div>
+        )}
         {metrics.trades_count != null && (
           <div className="flex justify-between">
             <span className="text-xs" style={{ color: tokens.colors.text.secondary }}>{t('tradesLabel')}</span>

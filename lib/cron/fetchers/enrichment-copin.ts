@@ -493,8 +493,23 @@ export async function fetchAevoStatsDetail(addr: string): Promise<StatsDetail | 
     logger.warn(`[aevo] Native stats failed for ${addr}: ${err instanceof Error ? err.message : String(err)}`)
   }
 
-  // Fallback: Copin leaderboard stats
-  return buildCopinStatsDetail('aevo', addr)
+  // Fallback: Copin leaderboard stats + compute Sharpe from position history
+  const copinStats = await buildCopinStatsDetail('aevo', addr)
+  if (copinStats && copinStats.sharpeRatio == null) {
+    try {
+      const positions = await fetchAevoPositionHistory(addr)
+      if (positions.length >= 5) {
+        const { computeStatsFromPositions } = await import('./enrichment-dex')
+        const derived = computeStatsFromPositions(positions)
+        if (derived.sharpeRatio != null) {
+          copinStats.sharpeRatio = derived.sharpeRatio
+        }
+      }
+    } catch {
+      // Position history unavailable — Sharpe will be computed from equity curve later
+    }
+  }
+  return copinStats
 }
 
 export async function fetchAevoPositionHistory(addr: string): Promise<PositionHistoryItem[]> {
