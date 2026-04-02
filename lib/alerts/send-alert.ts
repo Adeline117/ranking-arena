@@ -233,16 +233,45 @@ export async function flushAllAlerts(): Promise<void> {
 // 限流告警
 // ============================================
 
+// In-memory fallback only — Redis is preferred for cross-instance dedup
 const rateLimitCache: Map<string, number> = new Map()
 
+/**
+ * Rate-limited alert sending.
+ * Uses Redis for rate limiting (survives Vercel cold starts),
+ * falls back to in-memory Map.
+ */
 export async function sendRateLimitedAlert(
   payload: AlertPayload,
   rateLimitKey: string,
   rateLimitMs: number = 300000
 ): Promise<{ sent: boolean; rateLimited: boolean; channels: string[] }> {
   const now = Date.now()
-  const lastSent = rateLimitCache.get(rateLimitKey)
 
+  // Try Redis first (survives cold starts)
+  try {
+    const { Redis } = await import('@upstash/redis')
+    const url = process.env.UPSTASH_REDIS_REST_URL
+    const token = process.env.UPSTASH_REDIS_REST_TOKEN
+    if (url && token) {
+      const redis = new Redis({ url, token })
+      const redisKey = `alert:ratelimit:${rateLimitKey}`
+      const existing = await redis.get<number>(redisKey)
+      if (existing && now - existing < rateLimitMs) {
+        return { sent: false, rateLimited: true, channels: [] }
+      }
+      const result = await sendAlert(payload)
+      if (result.sent) {
+        await redis.set(redisKey, now, { ex: Math.ceil(rateLimitMs / 1000) })
+      }
+      return { ...result, rateLimited: false }
+    }
+  } catch {
+    // Redis unavailable — fall through to in-memory
+  }
+
+  // In-memory fallback
+  const lastSent = rateLimitCache.get(rateLimitKey)
   if (lastSent && now - lastSent < rateLimitMs) {
     return { sent: false, rateLimited: true, channels: [] }
   }

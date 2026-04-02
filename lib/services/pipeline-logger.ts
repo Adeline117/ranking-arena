@@ -132,12 +132,12 @@ export class PipelineLogger {
       // If logging fails, return a no-op handle so jobs still run
       logger.warn(`[PipelineLogger] Failed to start log for ${jobName}: ${error?.message}`)
       // Alert so we know pipeline logging is broken (fire-and-forget)
-      sendAlert({
+      fireAndForget(sendAlert({
         title: `PipelineLogger 启动失败: ${jobName}`,
         message: `无法插入 pipeline_logs: ${error?.message || 'unknown error'}\n任务仍会运行，但不会被记录。`,
         level: 'warning',
         details: { jobName, error: error?.message || 'no data returned' },
-      }).catch(() => {})
+      }), 'pipeline-logger:start-alert')
       return createNoOpHandle()
     }
 
@@ -203,12 +203,12 @@ export class PipelineLogger {
         )
         // Auto-alert on partial failure if there are failed items
         if (failedItems.length > 0) {
-          sendRateLimitedAlert({
+          fireAndForget(sendRateLimitedAlert({
             title: `Cron 部分失败: ${jobName}`,
             message: `${failedItems.length} items failed: ${failedItems.slice(0, 5).join(', ')}`,
             level: 'warning',
             details: { job: jobName, failed_count: failedItems.length, duration_ms: durationMs },
-          }, `plog:partial:${jobName}`, 600_000).catch(() => {})
+          }, `plog:partial:${jobName}`, 600_000), 'pipeline-logger:partial-alert')
         }
       },
       async error(err, meta) {
@@ -238,13 +238,13 @@ export class PipelineLogger {
           }),
           'clickhouse-pipeline-log-error'
         )
-        // Auto-alert on error (fire-and-forget, rate-limited per job)
-        sendRateLimitedAlert({
+        // Auto-alert on error (fire-and-forget, rate-limited per job, 1h cooldown)
+        fireAndForget(sendRateLimitedAlert({
           title: `Cron 失败: ${jobName}`,
           message: errorMessage.slice(0, 500),
           level: 'critical',
           details: { job: jobName, duration_ms: durationMs },
-        }, `plog:error:${jobName}`, 600_000).catch(() => {})
+        }, `plog:error:${jobName}`, 3_600_000), 'pipeline-logger:error-alert')
       },
       async timeout(meta) {
         const durationMs = Date.now() - startedAt
@@ -271,13 +271,13 @@ export class PipelineLogger {
           }),
           'clickhouse-pipeline-log-timeout'
         )
-        // Auto-alert on timeout (fire-and-forget, rate-limited per job)
-        sendRateLimitedAlert({
+        // Auto-alert on timeout (fire-and-forget, rate-limited per job, 2h cooldown)
+        fireAndForget(sendRateLimitedAlert({
           title: `Cron 超时: ${jobName}`,
           message: `Job ${jobName} timed out after ${Math.round(durationMs / 1000)}s`,
           level: 'warning',
           details: { job: jobName, duration_ms: durationMs },
-        }, `plog:timeout:${jobName}`, 600_000).catch(() => {})
+        }, `plog:timeout:${jobName}`, 7_200_000), 'pipeline-logger:timeout-alert')
       },
     }
   }

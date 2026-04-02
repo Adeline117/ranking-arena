@@ -13,7 +13,7 @@
  */
 
 import * as cache from '@/lib/cache'
-import { sendAlert } from '@/lib/alerts/send-alert'
+import { sendAlert, sendRateLimitedAlert } from '@/lib/alerts/send-alert'
 import { getRouteConfig, type RouteType } from '@/lib/connectors/route-config'
 import { EXCHANGE_CONFIG } from '@/lib/constants/exchanges'
 import { logger } from '@/lib/logger'
@@ -122,7 +122,7 @@ export async function evaluateAndAlert(
 ): Promise<PlatformAlertCheck[]> {
   const alerts: PlatformAlertCheck[] = []
 
-  for (const { platform, ageHours, recordCount } of platformStatuses) {
+  for (const { platform, ageHours } of platformStatuses) {
     const displayName = EXCHANGE_CONFIG[platform as keyof typeof EXCHANGE_CONFIG]?.name || platform
     const consecutiveFailures = await getConsecutiveFailures(platform)
 
@@ -165,7 +165,9 @@ export async function evaluateAndAlert(
       })
     }
 
-    await sendAlert({
+    // Rate-limit consolidated self-heal alerts: same platforms = same key, 6h cooldown
+    const platformKey = alerts.map(a => a.platform).sort().join(',')
+    await sendRateLimitedAlert({
       title: isCritical ? '管道自愈: 严重告警' : '管道自愈: 数据过期告警',
       message: lines.join('\n'),
       level: isCritical ? 'critical' : 'warning',
@@ -174,7 +176,7 @@ export async function evaluateAndAlert(
         warningCount: warnings.length,
         platforms: alerts.map(a => a.platform).join(', '),
       },
-    })
+    }, `self-heal:${isCritical ? 'critical' : 'warning'}:${platformKey}`, 6 * 60 * 60 * 1000)
   }
 
   return alerts
