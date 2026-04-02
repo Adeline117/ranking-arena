@@ -44,6 +44,7 @@ interface CoinexTraderItem {
   followerCount?: number
   copier_num?: number
   cur_follower_num?: number
+  profit_rate_series?: Array<[number, string]>
 }
 
 /**
@@ -88,7 +89,18 @@ export async function fetchCoinexStatsDetail(
     avgLoss: null,
     largestWin: null,
     largestLoss: null,
-    sharpeRatio: null,
+    sharpeRatio: (() => {
+      const series = trader.profit_rate_series
+      if (!Array.isArray(series) || series.length < 7) return null
+      const roiValues = series.map(p => Number(p[1])).filter(n => !isNaN(n))
+      if (roiValues.length < 7) return null
+      const returns = roiValues.slice(1).map((v, i) => v - roiValues[i])
+      const mean = returns.reduce((a, b) => a + b, 0) / returns.length
+      const std = Math.sqrt(returns.reduce((a, r) => a + (r - mean) ** 2, 0) / returns.length)
+      if (std <= 0) return null
+      const sharpe = Math.round((mean / std) * Math.sqrt(365) * 100) / 100
+      return sharpe > -20 && sharpe < 20 ? sharpe : null
+    })(),
     maxDrawdown,
     currentDrawdown: null,
     volatility: null,
