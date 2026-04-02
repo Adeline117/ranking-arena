@@ -81,7 +81,7 @@ export default function SSRRankingTable({ traders }: Props) {
               </div>
 
               <span className={`ssr-score ${trader.arena_score != null ? getScoreColor(trader.arena_score) : ''}`}>
-                {trader.arena_score != null ? trader.arena_score.toFixed(0) : '—'}
+                {trader.arena_score != null ? Number(trader.arena_score).toFixed(0) : '—'}
               </span>
 
               <div className="ssr-roi">
@@ -92,11 +92,11 @@ export default function SSRRankingTable({ traders }: Props) {
               </div>
 
               <span className="hide-mobile ssr-wr">
-                {trader.win_rate != null ? `${trader.win_rate.toFixed(1)}%` : '—'}
+                {trader.win_rate != null ? `${Number(trader.win_rate).toFixed(1)}%` : '—'}
               </span>
 
               <span className="hide-mobile ssr-mdd">
-                {trader.max_drawdown != null ? (Math.abs(trader.max_drawdown) < 0.05 ? '< 0.1%' : `-${Math.abs(trader.max_drawdown).toFixed(1)}%`) : '—'}
+                {trader.max_drawdown != null ? (Math.abs(Number(trader.max_drawdown)) < 0.05 ? '< 0.1%' : `-${Math.abs(Number(trader.max_drawdown)).toFixed(1)}%`) : '—'}
               </span>
             </a>
           )

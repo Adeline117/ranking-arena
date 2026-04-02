@@ -138,7 +138,6 @@ export function TraderAvatar({ traderId, displayName, avatarUrl, rank, size = 36
           onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none' }}
         />
       ) : blockieSrc ? (
-        /* eslint-disable-next-line @next/next/no-img-element */
         <img
           src={blockieSrc}
           alt={displayName}
@@ -261,7 +260,7 @@ export function ArenaScoreBadge({ score, showConfidence, trader }: {
         fontSize: tokens.typography.fontSize.sm, lineHeight: 1,
         ...(isLegendary ? { textShadow: '0 0 8px var(--color-accent-primary-40)' } : {}),
       }}>
-        {score.toFixed(1)}
+        {Number(score).toFixed(1)}
       </Text>
       {showConfidence && trader && <ScoreConfidenceIndicator trader={trader} />}
     </Box>
@@ -411,7 +410,7 @@ export function ArenaScoreCircle({
         fontWeight: 800,
       }}>
         {t('scoreTotal')}:{' '}
-        <span style={{ color: ringColor, fontVariantNumeric: 'tabular-nums' }}>{score.toFixed(0)}</span>
+        <span style={{ color: ringColor, fontVariantNumeric: 'tabular-nums' }}>{Number(score).toFixed(0)}</span>
         <span style={{ color: tokens.colors.text.tertiary }}>{' '}/ 100</span>
       </div>
     </div>
@@ -457,7 +456,7 @@ export function ArenaScoreCircle({
           fontVariantNumeric: 'tabular-nums',
           letterSpacing: '-0.5px',
         }}>
-          {score.toFixed(0)}
+          {Number(score).toFixed(0)}
         </span>
       </div>
 
