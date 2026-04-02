@@ -36,28 +36,32 @@ const PLATFORM_LIMITS: Record<string, { limit90: number; limit30: number; limit7
   toobit: { limit90: 100, limit30: 100, limit7: 100 },
   coinex: { limit90: 200, limit30: 200, limit7: 200 },
   // Large CEX — API per trader, need offset rotation for full coverage
-  binance_futures: { limit90: 300, limit30: 300, limit7: 300 },
+  binance_futures: { limit90: 600, limit30: 300, limit7: 300 },
   okx_futures: { limit90: 300, limit30: 300, limit7: 300 },
-  hyperliquid: { limit90: 200, limit30: 200, limit7: 200 },
+  hyperliquid: { limit90: 400, limit30: 200, limit7: 200 },
   htx_futures: { limit90: 200, limit30: 200, limit7: 200 },
-  etoro: { limit90: 200, limit30: 200, limit7: 200 },
-  drift: { limit90: 300, limit30: 300, limit7: 300 },
+  etoro: { limit90: 400, limit30: 200, limit7: 200 },
+  drift: { limit90: 500, limit30: 300, limit7: 300 },
   gmx: { limit90: 200, limit30: 200, limit7: 200 },
-  gateio: { limit90: 200, limit30: 200, limit7: 200 },
+  gateio: { limit90: 400, limit30: 200, limit7: 200 },
   // Medium CEX
   bitget_futures: { limit90: 200, limit30: 200, limit7: 200 },
-  mexc: { limit90: 150, limit30: 150, limit7: 150 },
+  mexc: { limit90: 300, limit30: 150, limit7: 150 },
   btcc: { limit90: 50, limit30: 50, limit7: 50 },
   phemex: { limit90: 80, limit30: 80, limit7: 80 },
   bingx: { limit90: 40, limit30: 40, limit7: 40 },
   okx_spot: { limit90: 40, limit30: 40, limit7: 40 },
   okx_web3: { limit90: 400, limit30: 400, limit7: 400 },
   // DEX on-chain
-  jupiter_perps: { limit90: 100, limit30: 100, limit7: 100 },
+  jupiter_perps: { limit90: 200, limit30: 100, limit7: 100 },
   gains: { limit90: 30, limit30: 25, limit7: 15 },
   // Re-enabled platforms
-  dydx: { limit90: 200, limit30: 200, limit7: 200 },
-  aevo: { limit90: 200, limit30: 200, limit7: 200 },
+  dydx: { limit90: 350, limit30: 200, limit7: 200 },
+  aevo: { limit90: 300, limit30: 200, limit7: 200 },
+  // Additional platforms
+  binance_web3: { limit90: 400, limit30: 400, limit7: 400 },
+  binance_spot: { limit90: 400, limit30: 400, limit7: 400 },
+  polymarket: { limit90: 200, limit30: 200, limit7: 200 },
   // VPS scrapers (slow — ~18s/trader via Playwright, max 6 in 120s timeout)
   bybit: { limit90: 6, limit30: 6, limit7: 6 },
   // weex: DISABLED 2026-04-01 (75% timeout, removed from fetch groups)
@@ -74,6 +78,7 @@ const MEDIUM_PRIORITY = [
   'htx_futures', 'gateio', 'mexc', 'drift', 'gmx', 'gains',
   'bitget_futures', 'btcc', 'etoro', 'phemex', 'bingx', 'okx_spot', 'okx_web3',
   'dydx', 'aevo', // re-enabled via Copin + indexer
+  'binance_web3', 'binance_spot', 'polymarket', // added for full coverage
 ]
 const LOW_PRIORITY = ['bybit', 'weex', 'bingx_spot'] // VPS scrapers, run last
 const LOWER_PRIORITY: string[] = []
