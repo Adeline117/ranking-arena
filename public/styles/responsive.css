@@ -1636,7 +1636,8 @@
   /* 7. Watchlist / 404 pages: contain decorative elements */
   .glow-orb,
   .not-found-bg .glow-orb {
-    max-width: 100vw !important;
+    max-width: calc(100vw - 20px) !important;
+    width: min(var(--orb-size, 300px), calc(100vw - 20px)) !important;
     overflow: hidden;
   }
 

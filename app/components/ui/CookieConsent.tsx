@@ -1,13 +1,20 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import { usePathname } from 'next/navigation'
 import Link from 'next/link'
 import { tokens } from '@/lib/design-tokens'
 
 const LS_KEY = 'cookie_consent'
 
+/** Pages where the mobile bottom nav is hidden (must mirror MobileBottomNav.HIDDEN_PATHS) */
+const NAV_HIDDEN_PATHS = ['/login', '/onboarding', '/reset-password', '/auth/callback']
+
 export default function CookieConsent() {
   const [visible, setVisible] = useState(false)
+  const pathname = usePathname()
+
+  const isNavHidden = NAV_HIDDEN_PATHS.some(p => pathname === p || pathname.startsWith(p + '/'))
 
   useEffect(() => {
     try {
@@ -34,7 +41,7 @@ export default function CookieConsent() {
     <div
       style={{
         position: 'fixed',
-        bottom: 'var(--mobile-nav-height, 60px)',
+        bottom: isNavHidden ? 0 : 'var(--mobile-nav-height, 60px)',
         left: 0,
         right: 0,
         zIndex: tokens.zIndex.overlay,
