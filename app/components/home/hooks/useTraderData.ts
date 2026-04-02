@@ -204,12 +204,12 @@ export function useTraderData(options: UseTraderDataOptions = {}) {
 
   // 加载单个时间段数据（含请求去重）
   // 使用渐进式加载：先快速加载 50 条显示，再后台加载完整 1000 条
-  const loadTimeRange = useCallback(async (timeRange: TimeRange, forceRefresh = false): Promise<CachedData> => {
+  const loadTimeRange = useCallback(async (timeRange: TimeRange, forceRefresh = false, limit?: number): Promise<CachedData> => {
     // 检查缓存（非强制刷新时）
     if (!forceRefresh && tradersCache.current.has(timeRange)) {
       const cached = tradersCache.current.get(timeRange)
-      // 如果缓存数据足够多（>100条），直接返回
-      if (cached && cached.traders.length > 100) {
+      // 如果缓存数据足够多（超过请求量的2倍），直接返回
+      if (cached && cached.traders.length > (limit || 100)) {
         return cached
       }
     }
@@ -231,8 +231,8 @@ export function useTraderData(options: UseTraderDataOptions = {}) {
     const requestPromise = (async (): Promise<CachedData> => {
       try {
         // Progressive loading: fetch 50 initially (covers ~2 pages of visible ranking).
-        // Full data loaded on-demand when user scrolls or searches.
-        const fetchLimit = 50
+        // Deferred fetch requests 500 for full client-side pagination.
+        const fetchLimit = limit || 50
         let url: string
         if (timeRange === 'COMPOSITE') {
           url = `/api/rankings?window=composite&limit=${fetchLimit}`
@@ -381,7 +381,7 @@ export function useTraderData(options: UseTraderDataOptions = {}) {
         // Only fetch full data if user hasn't switched time range
         if (state.activeTimeRange === '90D') {
           dispatch({ type: 'SET_DEFERRED_FETCH_FAILED', failed: false })
-          loadTimeRange('90D', false).then(cached => {
+          loadTimeRange('90D', true, 500).then(cached => {
             // Only update if we got more data than initial
             if (cached.traders.length > (initialTraders?.length || 0)) {
               startTransition(() => {
