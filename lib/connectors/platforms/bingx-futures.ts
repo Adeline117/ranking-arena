@@ -184,9 +184,9 @@ export class BingxFuturesConnector extends BaseConnector {
         pnl: this.num(info.pnl),
         win_rate: this.num(info.winRate),
         max_drawdown: this.num(info.maxDrawdown),
-        sharpe_ratio: null,
+        sharpe_ratio: this.num(info.sharpe30d ?? info.sharpeRatio ?? info.sharpe),
         sortino_ratio: null,
-        trades_count: null,
+        trades_count: this.num(info.tradeCount ?? info.totalOrders),
         followers: this.num(info.followerNum),
         copiers: this.num(info.copyNum),
         aum: this.num(info.aum),
@@ -245,7 +245,8 @@ export class BingxFuturesConnector extends BaseConnector {
       followers: this.num(raw.followerNum ?? raw.followers ?? raw.followerCount),
       copiers: null,
       aum: null,
-      sharpe_ratio: null,
+      // BingX page shows "Sharpe Ratio" and API returns sharpe30d field
+      sharpe_ratio: this.num(raw.sharpe30d ?? raw.sharpeRatio ?? raw.sharpe ?? raw.sharpRatio),
       platform_rank: this.num(raw.rank),
     }
   }
