@@ -40,10 +40,10 @@ const PLATFORM_LIMITS: Record<string, { limit90: number; limit30: number; limit7
   okx_futures: { limit90: 300, limit30: 300, limit7: 300 },
   hyperliquid: { limit90: 400, limit30: 200, limit7: 200 },
   htx_futures: { limit90: 200, limit30: 200, limit7: 200 },
-  etoro: { limit90: 400, limit30: 200, limit7: 200 },
-  drift: { limit90: 500, limit30: 300, limit7: 300 },
+  etoro: { limit90: 100, limit30: 50, limit7: 50 }, // Reduced: 81% failure rate from rate limiting
+  drift: { limit90: 100, limit30: 50, limit7: 50 }, // Reduced: 78% failure rate from API limits
   gmx: { limit90: 200, limit30: 200, limit7: 200 },
-  gateio: { limit90: 400, limit30: 200, limit7: 200 },
+  gateio: { limit90: 100, limit30: 50, limit7: 50 }, // Reduced: 64% failure rate from rate limiting
   // Medium CEX
   bitget_futures: { limit90: 200, limit30: 200, limit7: 200 },
   mexc: { limit90: 300, limit30: 150, limit7: 150 },
@@ -53,7 +53,7 @@ const PLATFORM_LIMITS: Record<string, { limit90: number; limit30: number; limit7
   okx_spot: { limit90: 40, limit30: 40, limit7: 40 },
   okx_web3: { limit90: 400, limit30: 400, limit7: 400 },
   // DEX on-chain
-  jupiter_perps: { limit90: 200, limit30: 100, limit7: 100 },
+  jupiter_perps: { limit90: 50, limit30: 30, limit7: 30 }, // Reduced: 75% failure rate from Solana RPC limits
   gains: { limit90: 30, limit30: 25, limit7: 15 },
   // Re-enabled platforms
   dydx: { limit90: 350, limit30: 200, limit7: 200 },
@@ -63,7 +63,7 @@ const PLATFORM_LIMITS: Record<string, { limit90: number; limit30: number; limit7
   binance_spot: { limit90: 400, limit30: 400, limit7: 400 },
   polymarket: { limit90: 200, limit30: 200, limit7: 200 },
   // VPS scrapers (slow — ~18s/trader via Playwright, max 6 in 120s timeout)
-  bybit: { limit90: 6, limit30: 6, limit7: 6 },
+  bybit: { limit90: 10, limit30: 10, limit7: 10 }, // Increased from 6: longer per-trader timeout (45s) allows more traders
   // weex: DISABLED 2026-04-01 (75% timeout, removed from fetch groups)
   // kucoin: DEAD 2026-03 (copy trading discontinued)
   // bingx_spot: REMOVED (no enrichment API)
