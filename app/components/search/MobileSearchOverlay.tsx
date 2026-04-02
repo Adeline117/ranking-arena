@@ -19,7 +19,7 @@ interface MobileSearchOverlayProps {
  * Optimized for touch with larger tap targets
  */
 export default function MobileSearchOverlay({ open, onClose }: MobileSearchOverlayProps) {
-  const { t, language } = useLanguage()
+  const { t, language: _language } = useLanguage()
   const router = useRouter()
   const [query, setQuery] = useState('')
   const [searchHistory, setSearchHistory] = useState<string[]>([])

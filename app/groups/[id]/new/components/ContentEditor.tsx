@@ -32,7 +32,7 @@ export function ContentEditor({
   showStickerPicker, setShowStickerPicker,
   draftSaved,
   linkPreview, setLinkPreview, linkPreviewLoading, linkPreviewUrlRef,
-  language, t,
+  language: _language, t,
 }: ContentEditorProps): React.ReactElement {
   return (
     <Box>

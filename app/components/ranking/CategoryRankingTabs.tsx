@@ -38,7 +38,7 @@ export default function CategoryRankingTabs({
   isPro,
   onProRequired,
 }: CategoryRankingTabsProps) {
-  const { language, t } = useLanguage()
+  const { language: _language, t } = useLanguage()
   const { showToast } = useToast()
   const [hoveredTab, setHoveredTab] = useState<CategoryType | null>(null)
 

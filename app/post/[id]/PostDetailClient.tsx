@@ -29,7 +29,7 @@ interface PostData {
 
 export default function PostDetailClient({ postId }: { postId: string }) {
   const { email } = useAuthSession()
-  const { language, t } = useLanguage()
+  const { language: _language, t } = useLanguage()
   const [postData, setPostData] = useState<PostData | null>(null)
 
   useEffect(() => {

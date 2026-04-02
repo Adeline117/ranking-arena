@@ -119,7 +119,7 @@ export default function TraderProfileClient({ data, serverTraderData, claimedUse
   const router = useRouter()
   const searchParams = useSearchParams()
   const pathname = usePathname()
-  const { t, language } = useLanguage()
+  const { t, language: _language } = useLanguage()
   const { isPro } = useSubscription()
   const { userId: currentUserId } = useAuthSession()
   const selectedPeriod = usePeriodStore(s => s.period)

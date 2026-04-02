@@ -26,7 +26,7 @@ function formatTraderName(t: Trader) {
   return name
 }
 
-export default function TradersStep({ theme, language, traders, followedTraders, loadingTraders, tr, onFollowTrader, onBack, onContinue }: TradersStepProps) {
+export default function TradersStep({ theme, language: _language, traders, followedTraders, loadingTraders, tr, onFollowTrader, onBack, onContinue }: TradersStepProps) {
   return (
     <div key="traders" className="step-content">
       <button onClick={onBack} style={{

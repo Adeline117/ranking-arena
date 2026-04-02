@@ -12,7 +12,7 @@ export { formatROI, formatPnL } from '@/lib/utils/format'
  * - Binance: 交易员本人盈亏
  * - Bybit/Bitget/KuCoin/MEXC: 跟单者收益（非交易员本人）
  */
-export function getPnLTooltip(source: string, language: string): string {
+export function getPnLTooltip(source: string, _language: string): string {
   const traderPnlSources = ['binance', 'binance_futures', 'binance_spot', 'binance_web3']
   const followerPnlSources = ['bybit', 'bitget', 'bitget_futures', 'bitget_spot', 'kucoin', 'mexc', 'htx', 'htx_futures', 'weex']
 

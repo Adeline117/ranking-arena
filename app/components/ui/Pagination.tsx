@@ -16,7 +16,7 @@ export interface PaginationProps {
  * Uses CSS classes for hover effects instead of JS onMouseEnter/Leave.
  */
 export default memo(function Pagination({ currentPage, totalPages, onPageChange }: PaginationProps) {
-  const { t, language } = useLanguage()
+  const { t, language: _language } = useLanguage()
 
   if (totalPages <= 1) return null
 

@@ -16,7 +16,7 @@ import { Box } from '@/app/components/base'
 type FeedTab = 'hot' | 'latest' | 'following'
 
 export default function FeedPage() {
-  const { t, language } = useLanguage()
+  const { t, language: _language } = useLanguage()
   const [email, setEmail] = useState<string | null>(null)
   const [activeTab, setActiveTab] = useState<FeedTab>('hot')
 

@@ -55,7 +55,7 @@ export default function MessageInput({
   onPreviewOpen,
   showToast,
   t,
-  language,
+  language: _language,
   inputRef,
 }: MessageInputProps) {
   const fileInputRef = useRef<HTMLInputElement>(null)

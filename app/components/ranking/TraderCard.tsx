@@ -36,7 +36,7 @@ export const TraderCard = memo(function TraderCard({
   trader,
   rank,
   source,
-  language,
+  language: _language,
   searchQuery = '',
   getMedalGlowClass,
   parseSourceInfo,

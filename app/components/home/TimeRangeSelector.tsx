@@ -24,7 +24,7 @@ export default function TimeRangeSelector({
   onChange,
   disabled = false,
 }: TimeRangeSelectorProps) {
-  const { t, language } = useLanguage()
+  const { t, language: _language } = useLanguage()
   const containerRef = useRef<HTMLDivElement>(null)
   const [indicatorStyle, setIndicatorStyle] = useState<{ left: number; width: number } | null>(null)
   const hasInitialized = useRef(false)
