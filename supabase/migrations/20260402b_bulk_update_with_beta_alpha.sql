@@ -20,7 +20,7 @@ BEGIN
     alpha = COALESCE(p.alpha, t.alpha),
     updated_at = now()
   FROM parsed p
-  WHERE t.platform = p.platform AND t.trader_key = p.trader_key AND t."window" = p."window";
+  WHERE t.platform = p.platform AND t.trader_key = p.trader_key AND UPPER(t."window") = UPPER(p."window");
   GET DIAGNOSTICS updated_count = ROW_COUNT;
   RETURN updated_count;
 END;
