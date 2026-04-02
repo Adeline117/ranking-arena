@@ -249,21 +249,65 @@ export async function GET(
     }
 
     // Fallback: equity curve from trader_equity_curve (old table)
-    if (!timeseries.equity_curve) {
-      const { data: legacyCurve } = await supabase
-        .from('trader_equity_curve')
-        .select('data_date, roi_pct, pnl_usd')
-        .in('source', sourceAliases)
-        .eq('source_trader_id', trader_key)
-        .in('period', ['90D', '30D', '7D'])
-        .order('data_date', { ascending: true })
-        .limit(365)
+    // Also fetch asset breakdown from trader_asset_breakdown in parallel
+    const needsEquityCurve = !timeseries.equity_curve
+    const needsAssetBreakdown = !timeseries.asset_breakdown
 
-      if (legacyCurve && legacyCurve.length > 0) {
-        timeseries.equity_curve = legacyCurve.map(p => ({
+    if (needsEquityCurve || needsAssetBreakdown) {
+      const fallbackQueries: Promise<unknown>[] = []
+
+      // Equity curve fallback
+      if (needsEquityCurve) {
+        fallbackQueries.push(
+          supabase
+            .from('trader_equity_curve')
+            .select('data_date, roi_pct, pnl_usd')
+            .in('source', sourceAliases)
+            .eq('source_trader_id', trader_key)
+            .in('period', ['90D', '30D', '7D'])
+            .order('data_date', { ascending: true })
+            .limit(365)
+        )
+      } else {
+        fallbackQueries.push(Promise.resolve(null))
+      }
+
+      // Asset breakdown fallback
+      if (needsAssetBreakdown) {
+        fallbackQueries.push(
+          supabase
+            .from('trader_asset_breakdown')
+            .select('symbol, weight_pct')
+            .in('source', sourceAliases)
+            .eq('source_trader_id', trader_key)
+            .order('weight_pct', { ascending: false })
+            .limit(20)
+        )
+      } else {
+        fallbackQueries.push(Promise.resolve(null))
+      }
+
+      const [ecResult, abResult] = await Promise.all(fallbackQueries) as [
+        { data: Array<{ data_date: string; roi_pct: number | null; pnl_usd: number | null }> | null } | null,
+        { data: Array<{ symbol: string; weight_pct: number }> | null } | null,
+      ]
+
+      // Map equity curve with pnl field
+      if (ecResult?.data && ecResult.data.length > 0) {
+        timeseries.equity_curve = ecResult.data.map(p => ({
           date: p.data_date,
           roi: p.roi_pct ?? 0,
+          pnl: p.pnl_usd != null ? Number(p.pnl_usd) : 0,
         })) as EquityCurvePoint[]
+      }
+
+      // Map asset breakdown
+      if (abResult?.data && abResult.data.length > 0) {
+        timeseries.asset_breakdown = abResult.data.map(a => ({
+          symbol: a.symbol,
+          weight_pct: Number(a.weight_pct),
+          count: 0, // legacy table doesn't have trade count per symbol
+        })) as AssetBreakdownPoint[]
       }
     }
 
