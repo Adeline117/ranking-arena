@@ -150,7 +150,7 @@ export class BtccFuturesConnector extends BaseConnector {
   }
 
   normalize(raw: unknown): Record<string, unknown> {
-    const e = raw as BtccTraderEntry
+    const e = raw as BtccTraderEntry & { netProfitList?: string }
     return {
       trader_key: String(e.traderId),
       display_name: e.nickName || null,
@@ -163,7 +163,17 @@ export class BtccFuturesConnector extends BaseConnector {
       followers: e.followNum ?? null,
       trades_count: e.orderNum ?? null,
       platform_rank: null,
-      sharpe_ratio: null,
+      sharpe_ratio: (() => {
+        if (!e.netProfitList || typeof e.netProfitList !== 'string') return null
+        const values = e.netProfitList.split(',').map(v => parseFloat(v.trim())).filter(v => !isNaN(v))
+        if (values.length < 7) return null
+        const returns = values.slice(1).map((v, i) => v - values[i])
+        const mean = returns.reduce((a, b) => a + b, 0) / returns.length
+        const std = Math.sqrt(returns.reduce((a, r) => a + (r - mean) ** 2, 0) / returns.length)
+        if (std <= 0) return null
+        const sharpe = Math.round((mean / std) * Math.sqrt(365) * 100) / 100
+        return Math.max(-20, Math.min(20, sharpe))
+      })(),
       aum: null,
       copiers: null,
     }
