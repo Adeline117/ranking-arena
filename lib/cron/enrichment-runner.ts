@@ -235,7 +235,7 @@ export const ENRICHMENT_PLATFORM_CONFIGS: Record<string, EnrichmentConfig> = {
     platform: 'bybit',
     fetchEquityCurve: fetchBybitEquityCurve,
     fetchStatsDetail: fetchBybitStatsDetail,
-    concurrency: 3, delayMs: 1500, limit: 50, // VPS scraper: ~10s/trader, 3 concurrent = ~170s for 50 traders
+    concurrency: 2, delayMs: 2000, limit: 20, // VPS scraper: ~20s/trader (2 Playwright calls), 2 concurrent = ~200s for 20 traders
   },
   okx_futures: {
     platform: 'okx_futures',
@@ -319,7 +319,7 @@ export const ENRICHMENT_PLATFORM_CONFIGS: Record<string, EnrichmentConfig> = {
     fetchEquityCurve: fetchGateioEquityCurve,
     fetchStatsDetail: fetchGateioStatsDetail,
     fetchCurrentPositions: fetchGateioCurrentPositions,
-    concurrency: 8, delayMs: 300, // Increased from 5/800: Gate.io API handles higher concurrency
+    concurrency: 3, delayMs: 1000, // Reduced from 8/300: 64% failure rate indicates rate limiting
   },
   mexc: {
     platform: 'mexc',
@@ -342,7 +342,7 @@ export const ENRICHMENT_PLATFORM_CONFIGS: Record<string, EnrichmentConfig> = {
       if (s3Positions.length > 0) return s3Positions
       return fetchDriftPositionHistory(traderId)
     },
-    concurrency: 8, delayMs: 300, // Increased: public API, fast
+    concurrency: 3, delayMs: 800, // Reduced from 8/300: 78% failure rate, API rate-limiting
   },
   dydx: {
     platform: 'dydx',
@@ -411,7 +411,7 @@ export const ENRICHMENT_PLATFORM_CONFIGS: Record<string, EnrichmentConfig> = {
     fetchEquityCurve: fetchJupiterEquityCurve,
     fetchStatsDetail: fetchJupiterStatsDetail,
     fetchPositionHistory: fetchJupiterPositionHistory,
-    concurrency: 3, delayMs: 300,
+    concurrency: 2, delayMs: 1000, // Reduced from 3/300: 75% failure rate, Solana RPC limits
   },
   btcc: {
     platform: 'btcc',
@@ -424,7 +424,7 @@ export const ENRICHMENT_PLATFORM_CONFIGS: Record<string, EnrichmentConfig> = {
     fetchEquityCurve: fetchEtoroEquityCurve,
     fetchStatsDetail: fetchEtoroStatsDetail,
     fetchCurrentPositions: fetchEtoroPortfolio,
-    concurrency: 5, delayMs: 800,
+    concurrency: 2, delayMs: 2000, // Reduced from 5/800: eToro rate-limits aggressively (81% failure rate)
   },
   coinex: {
     platform: 'coinex',
@@ -539,6 +539,8 @@ export const NO_ENRICHMENT_PLATFORMS = new Set([
 const PLATFORM_TIMEOUT_MS: Record<string, number> = {
   'bitget_futures': 180_000,  // 3min total - increased for 200 trader limit at concurrency 3
   'binance_spot': 60_000,  // RE-ENABLED 2026-03-19 — 60s per-platform timeout
+  'bybit': 240_000, // 4min - VPS Playwright scraper is slow (~20s/trader × 20 traders / 2 concurrent = ~200s)
+  'etoro': 180_000, // 3min - eToro APIs are rate-limited, need generous timeout
   // Batch-cached: instant, but set generous limit
   'bitunix': 30_000, 'xt': 30_000, 'blofin': 60_000,
   'bitfinex': 60_000, 'toobit': 60_000, 'coinex': 60_000,
@@ -554,6 +556,8 @@ const PER_TRADER_TIMEOUT_MS: Record<string, number> = {
   'bitget_futures': 18_000,  // 18s per trader - equity 15s + detail 10s run in parallel, 18s is generous
   'binance_futures': 12_000, // 12s per trader - ultra-short (VPS proxy tested <500ms, 3-8s API timeouts)
   'dydx': 15_000, // 15s per trader - 3 APIs × 5-6s timeout + fallback buffer
+  'bybit': 45_000, // 45s per trader - VPS Playwright scraper: page load + WAF bypass + 2 API calls
+  'etoro': 20_000, // 20s per trader - CopySim + ranking cache + portfolio fetch
 }
 
 function getPlatformTimeout(platform: string): number {
