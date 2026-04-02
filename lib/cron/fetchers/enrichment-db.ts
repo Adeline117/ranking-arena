@@ -190,10 +190,9 @@ export async function upsertStatsDetail(
     if (stats.sharpeRatio != null && Math.abs(stats.sharpeRatio) <= 20) {
       v2Update.sharpe_ratio = stats.sharpeRatio
     }
-    // Sync followers/copiers from enrichment detail APIs
-    if (stats.copiersCount != null && stats.copiersCount > 0) {
-      v2Update.followers = stats.copiersCount
-    }
+    // Note: copiersCount is kept in stats_detail.copiers_count but NOT synced to v2.followers.
+    // v2.followers is reserved for Arena internal follower counts (from trader_follows table).
+    // Exchange copy-trade counts flow via compute-leaderboard → leaderboard_ranks.copiers.
 
     // Update all matching v2 rows (removed .is('win_rate', null) guard
     // so stale win_rate values get refreshed with latest enrichment data)

@@ -43,7 +43,7 @@ const SOURCES_TTL = 30 * 60 * 1000 // 30 min — sources change only on cron run
 const SOURCES_CACHE_MAX = 50 // prevent unbounded growth
 
 // Select only needed columns from leaderboard_ranks (avoid SELECT *)
-const LEADERBOARD_COLUMNS = 'source_trader_id, handle, roi, pnl, win_rate, max_drawdown, trades_count, followers, source, source_type, avatar_url, arena_score, rank, profitability_score, risk_control_score, execution_score, score_completeness, trading_style, avg_holding_hours, style_confidence, computed_at, season_id, sharpe_ratio, trader_type'
+const LEADERBOARD_COLUMNS = 'source_trader_id, handle, roi, pnl, win_rate, max_drawdown, trades_count, followers, copiers, source, source_type, avatar_url, arena_score, rank, profitability_score, risk_control_score, execution_score, score_completeness, trading_style, avg_holding_hours, style_confidence, computed_at, season_id, sharpe_ratio, trader_type'
 
 export const GET = withPublic(
   async ({ supabase, request }) => {
@@ -183,6 +183,7 @@ async function fetchFromLeaderboard(
     max_drawdown: row.max_drawdown != null ? Number(row.max_drawdown) : null,
     trades_count: row.trades_count != null ? Number(row.trades_count) : null,
     followers: row.followers != null ? Number(row.followers) : null,
+    copiers: row.copiers != null ? Number(row.copiers) : null,
     source: row.source as string,
     source_type: row.source_type as string,
     avatar_url: row.avatar_url as string | null,
