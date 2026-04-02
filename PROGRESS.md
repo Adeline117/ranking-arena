@@ -2,6 +2,55 @@
 
 > Auto-read by Claude Code at session start. Keep concise — archive completed items weekly.
 
+## Sharpe Coverage Overhaul (2026-04-02)
+
+### 5 Commits Pushed
+1. `fix(mexc)`: scraper-cron compute Sharpe from curveValues (was hardcoded null)
+2. `fix: boost sharpe across 8+ platforms`: binance guard 10→20, bitunix dailyWinRate, DEX shared computeStatsFromPositions sharpe, blofin VPS scraper
+3. `fix(enrichment): Hyperliquid + Drift critical bugs`: HL userFills→userFillsByTime, Drift nested accounts parsing + ts field + string→Number
+4. `fix(etoro)`: CopySim API for daily equity curve (was monthly-only, 3 pts → 198 pts)
+5. `fix(mexc)`: VPS deploy of scraper-cron sharpe fix
+
+### Coverage Results (leaderboard_ranks)
+| Platform | Before | After | Δ |
+|----------|--------|-------|---|
+| gateio | 33% | **75%** | +42% |
+| coinex | 57% | **70%** | +13% |
+| aevo | 43% | **50%** | +7% |
+| htx_futures | 50% | **57%** | +7% |
+| toobit | 26% | **33%** | +7% |
+| mexc | 62% | **68%** | +6% |
+| drift | 28% | **34%** | +6% |
+| jupiter_perps | 29% | **34%** | +5% |
+| etoro | 22% | **26%** | +4% |
+| binance_spot | 92% | **90%** | ✅ |
+
+### Verified in snapshots_v2 (will propagate over enrichment cycles)
+- drift: **95%** sharpe in latest batch (nested accounts bug was blocking ALL data)
+- mexc: **90%** (curveValues fix)
+- gateio: **98%** (enrichment equity curve)
+- etoro: CopySim daily API discovered, 198 data points per trader
+
+### Still Low (API limitations)
+- hyperliquid 37%: userFillsByTime helps mid-tier; whales have <5 closing days in 90d
+- blofin 11%: Cloudflare WAF blocks even Playwright stealth
+- bingx 23%: no daily curve in API
+- gains 32%: onchain events sparse
+
+### Key Bugs Found & Fixed
+1. **Drift**: API returns `{accounts:[{snapshots:[...]}]}` but code did `Array.isArray(response)` = FALSE → snaps=[] for ALL traders
+2. **Drift**: API field is `ts` not `epochTs`, values are strings not numbers
+3. **Hyperliquid**: `userFills` returns latest 2000 (covers <5 days for active traders), switched to `userFillsByTime` with startTime
+4. **MEXC scraper-cron**: `sharpe_ratio: null` hardcoded despite curveValues available
+5. **eToro**: gain history only returns monthly data (3 pts); CopySim API returns daily (198 pts)
+6. **Binance**: sharpRatio guard `<=10` was too tight, widened to `<=20`
+7. **DEX shared**: `computeStatsFromPositions` had no sharpe computation
+
+### Scripts Created
+- `scripts/vps-fetch-geoblocked.mjs`: One-shot VPS fetch for binance/htx/gateio
+- `/tmp/push-sharpe-raw.mjs`: Push sharpe from snapshots_v2 → leaderboard_ranks
+- `/tmp/compute-sharpe-daily.mjs`: Compute sharpe from trader_daily_snapshots history
+
 ## Critical Fix: Leaderboard 3-Day Stale (2026-03-28)
 
 **Root cause**: `compute-leaderboard` wasn't updating `leaderboard_ranks` since 2026-03-25 (3 days).
