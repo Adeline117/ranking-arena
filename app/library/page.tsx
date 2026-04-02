@@ -26,6 +26,7 @@ export const metadata: Metadata = {
   },
 }
 
+export const dynamic = 'force-dynamic' // Skip static generation, render at request time
 export const revalidate = 3600 // 1 hour
 
 interface LibraryItem {
