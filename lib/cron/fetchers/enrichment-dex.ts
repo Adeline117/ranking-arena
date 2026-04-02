@@ -58,16 +58,18 @@ export function computeStatsFromPositions(positions: PositionHistoryItem[]): Par
   maxDD = Math.min(maxDD, 100)
 
   // Compute Sharpe from daily PnL aggregation (benefits all DEX platforms)
+  // Threshold lowered to 3 days: many DEX traders (especially GMX) trade in short bursts
+  // spanning only 3-4 unique days, but with dozens of trades per day
   let sharpeRatio: number | null = null
   const positionsWithTime = withPnl.filter((p) => p.closeTime)
-  if (positionsWithTime.length >= 5) {
+  if (positionsWithTime.length >= 3) {
     const dailyPnl = new Map<string, number>()
     for (const p of positionsWithTime) {
       const day = p.closeTime!.split('T')[0]
       dailyPnl.set(day, (dailyPnl.get(day) || 0) + (p.pnlUsd ?? 0))
     }
     const dailyValues = [...dailyPnl.values()]
-    if (dailyValues.length >= 5) {
+    if (dailyValues.length >= 3) {
       const mean = dailyValues.reduce((a, b) => a + b, 0) / dailyValues.length
       const std = Math.sqrt(dailyValues.reduce((a, r) => a + (r - mean) ** 2, 0) / dailyValues.length)
       if (std > 0) {

@@ -59,33 +59,46 @@ export async function GET(request: NextRequest) {
     const roiByTrader = new Map<string, number[]>()
     const traderDateReturns = new Map<string, Map<string, number>>()
 
+    // Paginate per-platform: some platforms have 30K-86K rows in 90 days,
+    // far exceeding the old 10K limit which silently truncated data
+    const PAGE_SIZE = 10000
     for (const platform of platforms) {
-      const { data: platformDaily } = await supabase
-        .from('trader_daily_snapshots')
-        .select('platform, trader_key, date, daily_return_pct, roi')
-        .eq('platform', platform)
-        .gte('date', ninetyDaysAgo)
-        .order('date', { ascending: true })
-        .limit(10000)
+      let offset = 0
+      let hasMore = true
+      while (hasMore) {
+        const { data: platformDaily } = await supabase
+          .from('trader_daily_snapshots')
+          .select('platform, trader_key, date, daily_return_pct, roi')
+          .eq('platform', platform)
+          .gte('date', ninetyDaysAgo)
+          .order('date', { ascending: true })
+          .range(offset, offset + PAGE_SIZE - 1)
 
-      if (!platformDaily) continue
+        if (!platformDaily || platformDaily.length === 0) {
+          hasMore = false
+          break
+        }
 
-      for (const row of platformDaily) {
-        const key = `${row.platform}:${row.trader_key}`
-        if (row.daily_return_pct != null) {
-          const val = parseFloat(String(row.daily_return_pct))
-          if (!returnsByTrader.has(key)) returnsByTrader.set(key, [])
-          returnsByTrader.get(key)!.push(val)
-          // Also store date-indexed for beta/alpha alignment
-          if (row.date) {
-            if (!traderDateReturns.has(key)) traderDateReturns.set(key, new Map())
-            traderDateReturns.get(key)!.set(row.date, val)
+        for (const row of platformDaily) {
+          const key = `${row.platform}:${row.trader_key}`
+          if (row.daily_return_pct != null) {
+            const val = parseFloat(String(row.daily_return_pct))
+            if (!returnsByTrader.has(key)) returnsByTrader.set(key, [])
+            returnsByTrader.get(key)!.push(val)
+            // Also store date-indexed for beta/alpha alignment
+            if (row.date) {
+              if (!traderDateReturns.has(key)) traderDateReturns.set(key, new Map())
+              traderDateReturns.get(key)!.set(row.date, val)
+            }
+          }
+          if (row.roi != null) {
+            if (!roiByTrader.has(key)) roiByTrader.set(key, [])
+            roiByTrader.get(key)!.push(parseFloat(String(row.roi)))
           }
         }
-        if (row.roi != null) {
-          if (!roiByTrader.has(key)) roiByTrader.set(key, [])
-          roiByTrader.get(key)!.push(parseFloat(String(row.roi)))
-        }
+
+        hasMore = platformDaily.length === PAGE_SIZE
+        offset += PAGE_SIZE
       }
     }
 
