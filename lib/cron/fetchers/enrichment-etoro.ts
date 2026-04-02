@@ -60,9 +60,24 @@ interface EtoroRankingEntry {
   RiskScore: number
 }
 
+interface EtoroCopySimChart {
+  timestamp: string
+  equity: number
+  pnL: number
+  credit: number
+}
+
+interface EtoroCopySimResponse {
+  simulation?: Record<string, {
+    period?: string
+    chart?: EtoroCopySimChart[]
+  }>
+}
+
 /**
  * Fetch equity curve for an eToro trader.
- * Uses monthly gain history and converts to daily-equivalent points.
+ * Uses CopySim API which returns DAILY equity data (not monthly).
+ * Endpoint: /sapi/userstats/copysim/cid/{cid}?period=SixMonthsAgo&dataResolution=Day
  */
 export async function fetchEtoroEquityCurve(
   traderId: string,
@@ -70,46 +85,46 @@ export async function fetchEtoroEquityCurve(
 ): Promise<EquityCurvePoint[]> {
   try {
     const periodMap: Record<number, string> = {
-      7: 'CurrMonth',
-      30: 'OneMonthAgo',
-      90: 'ThreeMonthsAgo',
+      7: 'OneMonthAgo',
+      30: 'ThreeMonthsAgo',
+      90: 'SixMonthsAgo',
     }
-    const period = periodMap[days] || 'ThreeMonthsAgo'
+    const period = periodMap[days] || 'SixMonthsAgo'
 
-    const data = await fetchJson<EtoroGainHistory>(
-      `${GAIN_HISTORY_URL}/${traderId}/history?period=${period}`,
-      { timeoutMs: 10000 }
+    const data = await fetchJson<EtoroCopySimResponse>(
+      `https://www.etoro.com/sapi/userstats/copysim/cid/${traderId}?period=${period}&dataResolution=Day`,
+      { timeoutMs: 15000 }
     )
 
-    if (!data?.monthly || data.monthly.length === 0) {
-      logger.warn(`[etoro] Gain history empty for ${traderId}`)
-      return []
+    if (!data?.simulation) return []
+
+    // Extract chart from the first available period key
+    let chart: EtoroCopySimChart[] = []
+    for (const periodData of Object.values(data.simulation)) {
+      if (periodData?.chart && periodData.chart.length > 0) {
+        chart = periodData.chart
+        break
+      }
     }
 
-    // Filter to relevant period and non-simulation data
-    const cutoffDate = new Date(Date.now() - days * 86400000)
+    if (chart.length < 2) return []
 
-    const relevantMonths = data.monthly
-      .filter(m => !m.isSimulation && new Date(m.start) >= cutoffDate)
-      .sort((a, b) => new Date(a.start).getTime() - new Date(b.start).getTime())
+    // Filter to relevant time range and skip initial 10000 equity (before trading starts)
+    const cutoff = Date.now() - days * 86400000
+    const activeChart = chart.filter(p =>
+      new Date(p.timestamp).getTime() >= cutoff &&
+      (p.equity !== 10000 || p.pnL !== 0)
+    )
 
-    if (relevantMonths.length === 0) return []
+    if (activeChart.length < 2) return []
 
-    // Convert monthly returns to cumulative equity curve
-    let cumulative = 0
-    const points: EquityCurvePoint[] = []
-
-    for (const entry of relevantMonths) {
-      cumulative += entry.gain
-      const date = new Date(entry.start).toISOString().split('T')[0]
-      points.push({
-        date,
-        roi: cumulative,
-        pnl: null, // PnL not available from gain history
-      })
-    }
-
-    return points
+    // Convert to equity curve points with ROI relative to first point
+    const baseEquity = activeChart[0].equity
+    return activeChart.map(p => ({
+      date: new Date(p.timestamp).toISOString().split('T')[0],
+      roi: baseEquity > 0 ? ((p.equity - baseEquity) / baseEquity) * 100 : 0,
+      pnl: p.pnL,
+    }))
   } catch (err) {
     logger.warn(`[etoro] Equity curve failed for ${traderId}: ${err instanceof Error ? err.message : String(err)}`)
     return []
