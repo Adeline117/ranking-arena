@@ -4,9 +4,10 @@
  * Cached for 15 minutes.
  */
 
-export const runtime = 'edge'
+export const runtime = 'nodejs'
+export const maxDuration = 10
 
-import { NextRequest, NextResponse } from 'next/server'
+import { NextRequest } from 'next/server'
 import {
   getSupabaseAdmin,
   success,
@@ -15,7 +16,7 @@ import {
   RateLimitPresets,
 } from '@/lib/api'
 import { getTrendingHashtags } from '@/lib/data/hashtags'
-import { getServerCache, setServerCache, CacheTTL } from '@/lib/utils/server-cache'
+import { getServerCache, setServerCache } from '@/lib/utils/server-cache'
 
 const CACHE_KEY = 'hashtags:trending'
 
