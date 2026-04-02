@@ -242,9 +242,9 @@ const fetchExchangeTradersSSR = unstable_cache(
         avatar_url: (row.avatar_url as string | null) ?? null,
         roi: row.roi != null ? Number(row.roi) : null,
         pnl: row.pnl != null ? Number(row.pnl) : null,
-        win_rate: row.win_rate as number | null,
-        max_drawdown: row.max_drawdown as number | null,
-        arena_score: row.arena_score as number | null,
+        win_rate: row.win_rate != null ? Number(row.win_rate) : null,
+        max_drawdown: row.max_drawdown != null ? Number(row.max_drawdown) : null,
+        arena_score: row.arena_score != null ? Number(row.arena_score) : null,
         sharpe_ratio: row.sharpe_ratio != null ? Number(row.sharpe_ratio) : null,
         captured_at: (row.computed_at as string) || null,
       }))

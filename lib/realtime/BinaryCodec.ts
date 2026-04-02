@@ -316,10 +316,10 @@ export function toTraderBinary(trader: {
     traderId: trader.traderId,
     source: trader.source,
     timestamp: trader.timestamp || Date.now(),
-    roiBps: Math.round((trader.roi ?? 0) * 100),        // % → bps
-    pnlCents: Math.round((trader.pnl ?? 0) * 100),     // $ → cents
-    winRateBps: Math.round((trader.winRate ?? 0) * 100),
-    drawdownBps: Math.round((trader.drawdown ?? 0) * 100),
+    roiBps: Math.round(Number(trader.roi ?? 0) * 100),        // % → bps
+    pnlCents: Math.round(Number(trader.pnl ?? 0) * 100),     // $ → cents
+    winRateBps: Math.round(Number(trader.winRate ?? 0) * 100),
+    drawdownBps: Math.round(Number(trader.drawdown ?? 0) * 100),
     rank: trader.rank ?? 0,
     followers: trader.followers ?? 0,
     name: trader.name,
