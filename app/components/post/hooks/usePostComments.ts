@@ -14,6 +14,7 @@ export type Comment = {
   author_is_pro?: boolean
   author_show_pro_badge?: boolean
   created_at: string
+  updated_at?: string
   like_count?: number
   dislike_count?: number
   user_liked?: boolean
