@@ -14,6 +14,7 @@ import EmptyState from '@/app/components/ui/EmptyState'
 import { logger } from '@/lib/logger'
 import type { UnifiedSearchResponse } from '@/app/api/search/route'
 import { features } from '@/lib/features'
+import { EXCHANGE_CONFIG } from '@/lib/constants/exchanges'
 
 interface SearchResult {
   type: 'library' | 'group' | 'post' | 'trader'
@@ -37,6 +38,7 @@ function SearchContent() {
   const { t } = useLanguage()
   const query = searchParams.get('q') || ''
   const activeTab = searchParams.get('tab') || 'all'
+  const platformFilter = searchParams.get('platform') || ''
   const [loading, setLoading] = useState(false)
   const [email, setEmail] = useState<string | null>(null)
   const [searchError, setSearchError] = useState(false)
@@ -54,6 +56,7 @@ function SearchContent() {
   const [traderTotal, setTraderTotal] = useState(0)
   const [didYouMean, setDidYouMean] = useState<string[]>([])
   const [_matchedExchange, setMatchedExchange] = useState<string | null>(null)
+  const [availablePlatforms, setAvailablePlatforms] = useState<string[]>([])
 
   useEffect(() => {
      
@@ -140,7 +143,8 @@ function SearchContent() {
       try {
         // Use unified search API instead of direct Supabase queries
         // This leverages server-side caching and consistent search logic
-        const apiRes = await fetch(`/api/search?q=${encodeURIComponent(query.trim())}&limit=${SECTION_LIMIT}`, {
+        const platformParam = platformFilter ? `&platform=${encodeURIComponent(platformFilter)}` : ''
+        const apiRes = await fetch(`/api/search?q=${encodeURIComponent(query.trim())}&limit=${SECTION_LIMIT}${platformParam}`, {
           signal: controller.signal,
         })
 
@@ -178,6 +182,9 @@ function SearchContent() {
             title: tr.title,
             subtitle: tr.subtitle || undefined,
           })))
+          // Extract unique platforms for filter UI
+          const platforms = [...new Set(data.results.traders.map(tr => tr.meta?.platform as string).filter(Boolean))]
+          setAvailablePlatforms(platforms)
 
           // Groups
           const groupsResults = data.results.groups || []
@@ -229,7 +236,7 @@ function SearchContent() {
         abortControllerRef.current.abort()
       }
     }
-  }, [query, t, showToast])
+  }, [query, platformFilter, t, showToast])
 
   const getHref = (result: SearchResult) => {
     if (result.type === 'library') return `/library/${result.id}`
@@ -400,6 +407,46 @@ function SearchContent() {
                 {tab.label} {tab.count > 0 && <span style={{ opacity: 0.6, fontSize: 11 }}>({tab.count})</span>}
               </Link>
             ))}
+          </div>
+        )}
+
+        {/* Platform filter pills (when viewing traders tab and multiple platforms exist) */}
+        {query && !loading && !searchError && (activeTab === 'all' || activeTab === 'traders') && availablePlatforms.length > 1 && (
+          <div style={{ display: 'flex', gap: 6, marginBottom: 12, flexWrap: 'wrap', alignItems: 'center' }}>
+            <span style={{ fontSize: 11, color: tokens.colors.text.tertiary, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', marginRight: 4 }}>
+              {t('platform') || 'Platform'}:
+            </span>
+            <Link
+              href={`/search?q=${encodeURIComponent(query)}${activeTab !== 'all' ? `&tab=${activeTab}` : ''}`}
+              style={{
+                padding: '4px 12px', borderRadius: tokens.radius.full, fontSize: 12, fontWeight: 500,
+                background: !platformFilter ? 'var(--color-accent-primary-15)' : tokens.colors.bg.secondary,
+                border: `1px solid ${!platformFilter ? 'var(--color-accent-primary-40)' : tokens.colors.border.primary}`,
+                color: !platformFilter ? tokens.colors.accent.brand : tokens.colors.text.tertiary,
+                textDecoration: 'none', transition: 'all 0.15s',
+              }}
+            >
+              {t('searchTabAll') || 'All'}
+            </Link>
+            {availablePlatforms.slice(0, 8).map(p => {
+              const name = EXCHANGE_CONFIG[p as keyof typeof EXCHANGE_CONFIG]?.name || p
+              const isActive = platformFilter === p
+              return (
+                <Link
+                  key={p}
+                  href={`/search?q=${encodeURIComponent(query)}${activeTab !== 'all' ? `&tab=${activeTab}` : ''}&platform=${encodeURIComponent(p)}`}
+                  style={{
+                    padding: '4px 12px', borderRadius: tokens.radius.full, fontSize: 12, fontWeight: 500,
+                    background: isActive ? 'var(--color-accent-primary-15)' : tokens.colors.bg.secondary,
+                    border: `1px solid ${isActive ? 'var(--color-accent-primary-40)' : tokens.colors.border.primary}`,
+                    color: isActive ? tokens.colors.accent.brand : tokens.colors.text.tertiary,
+                    textDecoration: 'none', transition: 'all 0.15s',
+                  }}
+                >
+                  {name}
+                </Link>
+              )
+            })}
           </div>
         )}
 
