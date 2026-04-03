@@ -1404,16 +1404,38 @@ async function computeSeason(
   const rankMap = new Map<string, number>()
   scored.forEach((t, idx) => rankMap.set(`${t.source}:${t.source_trader_id}`, idx + 1))
 
+  // Fetch previous ranks to compute rank_change
+  const prevRankMap = new Map<string, number>()
+  const { data: prevRanks } = await supabase
+    .from('leaderboard_ranks')
+    .select('source, source_trader_id, rank')
+    .eq('season_id', season)
+    .not('rank', 'is', null)
+    .limit(5000)
+  if (prevRanks) {
+    for (const row of prevRanks) {
+      prevRankMap.set(`${row.source}:${row.source_trader_id}`, row.rank)
+    }
+  }
+
   // Upsert only changed rows in batches
   let upsertErrors = 0
   const batchUpsertSize = 500
   for (let i = 0; i < changedTraders.length; i += batchUpsertSize) {
-    const batch = changedTraders.slice(i, i + batchUpsertSize).map((t) => ({
+    const batch = changedTraders.slice(i, i + batchUpsertSize).map((t) => {
+      const key = `${t.source}:${t.source_trader_id}`
+      const newRank = rankMap.get(key) ?? 0
+      const prevRank = prevRankMap.get(key)
+      const rankChange = prevRank != null ? prevRank - newRank : null
+      const isNew = prevRank == null
+      return {
       season_id: season,
       source: t.source,
       source_type: SOURCE_TYPE_MAP[t.source] || 'futures',
       source_trader_id: t.source_trader_id,
-      rank: rankMap.get(`${t.source}:${t.source_trader_id}`) ?? 0,
+      rank: newRank,
+      rank_change: rankChange,
+      is_new: isNew,
       arena_score: t.arena_score,
       roi: t.roi,
       pnl: t.pnl,
@@ -1438,7 +1460,7 @@ async function computeSeason(
       calmar_ratio: t.calmar_ratio ?? null,
       trader_type: t.trader_type || (t.source === 'web3_bot' ? 'bot' : null),
       is_outlier: (t as Record<string, unknown>).is_outlier === true ? true : false,
-    }))
+    }})
 
     const { error } = await supabase
       .from('leaderboard_ranks')

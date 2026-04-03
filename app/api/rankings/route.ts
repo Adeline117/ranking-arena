@@ -207,7 +207,7 @@ async function getRankingsFallback(rankingsQuery: RankingsQuery, _cursor?: strin
 
   // Helper: build base query with all filters applied (reusable for chunked fetches)
   const SELECT_COLS = `source_trader_id, handle, source, source_type, roi, pnl, win_rate, max_drawdown,
-       trades_count, followers, copiers, arena_score, avatar_url, rank, computed_at,
+       trades_count, followers, copiers, arena_score, avatar_url, rank, rank_change, is_new, computed_at,
        profitability_score, risk_control_score, execution_score, score_completeness,
        trading_style, avg_holding_hours, sharpe_ratio, sortino_ratio, calmar_ratio, profit_factor, trader_type, is_outlier, metrics_estimated`
 
@@ -343,6 +343,8 @@ async function getRankingsFallback(rankingsQuery: RankingsQuery, _cursor?: strin
       display_name: (row.handle as string) || null,
       avatar_url: (row.avatar_url as string) || null,
       rank: (row.rank as number) ?? offset + idx + 1,
+      rank_change: (row.rank_change as number) ?? null,
+      is_new: (row.is_new as boolean) ?? false,
       metrics: {
         roi: row.roi != null ? Number(row.roi) : null,
         pnl: row.pnl != null ? Number(row.pnl) : null,
