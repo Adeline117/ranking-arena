@@ -101,7 +101,7 @@ export default function FearGreedGauge() {
 
   if (!data) return null
 
-  const displayValue = data.value
+  const displayValue = Math.max(0, Math.min(100, data.value ?? 0))
   const color = getColor(displayValue)
   const label = getLabel(displayValue)
 
