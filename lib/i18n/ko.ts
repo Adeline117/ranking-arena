@@ -4843,6 +4843,28 @@ compFieldMaxParticipants: '최대 참가자 수',
     achievementProSubscriber: 'Pro 멤버',
     achievementSocialButterfly: '소셜 나비',
 
+    // Missing translations added 2026-04-03
+    autoRefresh: '30초마다 자동 새로고침',
+    liveData: '실시간',
+    topPercent: '상위 {pct}%',
+    topPercentOn: '{platform} 상위 {pct}%',
+    riskReward: '위험/보상',
+    riskRewardTooltip: '평균 수익 / 평균 손실 비율. 1.5 이상이면 양호.',
+    profit: '수익',
+    loss: '손실',
+    largestWin: '최대 수익',
+    largestLoss: '최대 손실',
+    dailyPnlHeatmap: '일일 손익 히트맵',
+    dataSourceVerified: '검증된 데이터',
+    dataSourcePublic: '공개 데이터',
+    dataSourceDerived: '파생 데이터',
+    dataSourceHistorical: '과거 데이터',
+    dataSourceVerifiedTooltip: '이 트레이더는 신원을 확인하고 실시간 데이터 접근을 승인했습니다',
+    dataSourcePublicTooltip: '공개 거래소 API에서 가져온 데이터',
+    bindApiKey: 'API 키 연결',
+    connectWallet: '지갑 연결',
+    verifiedSince: '인증 날짜',
+
 } as const
 
 export default ko
