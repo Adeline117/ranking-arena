@@ -244,6 +244,15 @@
       ]
     },
     {
+      "source": "/api/market/prices",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "public, s-maxage=30, stale-while-revalidate=120"
+        }
+      ]
+    },
+    {
       "source": "/api/market/:path*",
       "headers": [
         {
@@ -361,20 +370,20 @@
       ]
     },
     {
-      "source": "/api/portfolio/:path*",
-      "headers": [
-        {
-          "key": "Cache-Control",
-          "value": "private, no-store"
-        }
-      ]
-    },
-    {
       "source": "/api/portfolio/suggestions",
       "headers": [
         {
           "key": "Cache-Control",
           "value": "public, s-maxage=300, stale-while-revalidate=900"
+        }
+      ]
+    },
+    {
+      "source": "/api/portfolio/:path*",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "private, no-store"
         }
       ]
     },
@@ -483,15 +492,6 @@
         {
           "key": "Cache-Control",
           "value": "public, s-maxage=60, stale-while-revalidate=300"
-        }
-      ]
-    },
-    {
-      "source": "/api/market/prices",
-      "headers": [
-        {
-          "key": "Cache-Control",
-          "value": "public, s-maxage=30, stale-while-revalidate=120"
         }
       ]
     },
