@@ -2222,6 +2222,7 @@ const ja = {
     mddLabel: 'MDD',
     tradesLabel: '取引数',
     dataOutdatedBanner: 'データが古い可能性があります。更新して最新情報を取得してください。',
+    platformDataUnavailable: 'このプラットフォームのデータは一時的に利用できません。以下の履歴データは古い場合があります。',
     rankTrend: 'ランク推移（7日）',
     drawdownChart: 'ドローダウン',
     dailyReturnsDistribution: '日次リターン分布',

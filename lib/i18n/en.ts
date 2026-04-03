@@ -2356,6 +2356,7 @@ const en = {
     mddLabel: 'MDD',
     tradesLabel: 'Trades',
     dataOutdatedBanner: 'Data may be outdated. Refresh to get the latest.',
+    platformDataUnavailable: 'Data for this platform is temporarily unavailable. Historical data shown below may be outdated.',
     rankTrend: 'Rank trend (7d)',
     drawdownChart: 'Drawdown',
     dailyReturnsDistribution: 'Daily Returns Distribution',

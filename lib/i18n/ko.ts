@@ -2351,6 +2351,7 @@ const ko = {
     mddLabel: 'MDD',
     tradesLabel: '거래',
     dataOutdatedBanner: '데이터가 오래되었을 수 있습니다. 새로고침하여 최신 정보를 확인하세요.',
+    platformDataUnavailable: '이 플랫폼의 데이터를 일시적으로 사용할 수 없습니다. 아래 표시된 기록 데이터가 오래되었을 수 있습니다.',
     rankTrend: '순위 추이 (7일)',
     drawdownChart: '드로다운',
     dailyReturnsDistribution: '일별 수익률 분포',

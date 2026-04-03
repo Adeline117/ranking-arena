@@ -92,6 +92,7 @@ export interface UnregisteredTraderData {
   profitability_score?: number | null
   risk_control_score?: number | null
   execution_score?: number | null
+  is_platform_dead?: boolean
 }
 
 type TraderTabKey = 'overview' | 'stats' | 'portfolio' | 'posts'
@@ -404,6 +405,23 @@ export default function TraderProfileClient({ data, serverTraderData, claimedUse
           }}>
             <Text size="xs" style={{ color: tokens.colors.accent.warning }}>
               {t('dataOutdatedBanner') || 'Data may be outdated. Refresh to get the latest.'}
+            </Text>
+          </Box>
+        )}
+
+        {data.is_platform_dead && (
+          <Box style={{
+            padding: `${tokens.spacing[3]} ${tokens.spacing[4]}`,
+            marginBottom: tokens.spacing[3],
+            background: `${tokens.colors.accent.error}10`,
+            border: `1px solid ${tokens.colors.accent.error}25`,
+            borderRadius: tokens.radius.md,
+            display: 'flex',
+            alignItems: 'center',
+            gap: tokens.spacing[2],
+          }}>
+            <Text size="sm" style={{ color: tokens.colors.accent.error }}>
+              {t('platformDataUnavailable') || `Data for ${EXCHANGE_NAMES[data.source] || data.source} is temporarily unavailable. Historical data shown below may be outdated.`}
             </Text>
           </Box>
         )}
