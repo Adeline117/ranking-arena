@@ -155,7 +155,24 @@ export async function getPostComments(
   if (error) throw error
   if (!allTopComments || allTopComments.length === 0) return []
 
-  const comments = sortComments(allTopComments, sort).slice(offset, offset + limit)
+  // Filter out comments from blocked users (bidirectional)
+  let filteredComments = allTopComments
+  if (userId) {
+    const { data: blocks } = await supabase
+      .from('blocked_users')
+      .select('blocker_id, blocked_id')
+      .or(`blocker_id.eq.${userId},blocked_id.eq.${userId}`)
+    if (blocks && blocks.length > 0) {
+      const blockedIds = new Set<string>()
+      for (const b of blocks) {
+        if (b.blocker_id === userId) blockedIds.add(b.blocked_id)
+        else blockedIds.add(b.blocker_id)
+      }
+      filteredComments = allTopComments.filter(c => !blockedIds.has(c.user_id))
+    }
+  }
+
+  const comments = sortComments(filteredComments, sort).slice(offset, offset + limit)
   if (comments.length === 0) return []
 
   const commentIds = comments.map(c => c.id)
