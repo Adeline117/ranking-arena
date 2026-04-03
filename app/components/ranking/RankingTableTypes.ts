@@ -62,6 +62,8 @@ export interface Trader {
   source?: string
   avatar_url?: string | null
   arena_score?: number
+  /** Pre-computed rank from leaderboard_ranks DB table */
+  rank?: number | null
   return_score?: number
   pnl_score?: number
   drawdown_score?: number
