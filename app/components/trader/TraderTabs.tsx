@@ -81,10 +81,10 @@ export default function TraderTabs({ activeTab, onTabChange, isPro = false, onPr
 
   return (
     <div style={{ position: 'relative', marginBottom: tokens.spacing[5] }}>
-      {/* Left scroll fade indicator */}
+      {/* Left scroll fade indicator — 20px on mobile to save space */}
       {scrollState.canScrollLeft && (
         <div aria-hidden="true" style={{
-          position: 'absolute', left: 0, top: 0, bottom: 0, width: 32, zIndex: 2,
+          position: 'absolute', left: 0, top: 0, bottom: 0, width: 20, zIndex: 2,
           background: 'linear-gradient(to right, var(--color-bg-primary), transparent)',
           pointerEvents: 'none',
         }} />
@@ -92,7 +92,7 @@ export default function TraderTabs({ activeTab, onTabChange, isPro = false, onPr
       {/* Right scroll fade indicator */}
       {scrollState.canScrollRight && (
         <div aria-hidden="true" style={{
-          position: 'absolute', right: 0, top: 0, bottom: 0, width: 32, zIndex: 2,
+          position: 'absolute', right: 0, top: 0, bottom: 0, width: 20, zIndex: 2,
           background: 'linear-gradient(to left, var(--color-bg-primary), transparent)',
           pointerEvents: 'none',
         }} />
