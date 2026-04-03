@@ -20,8 +20,8 @@ import UserFollowButton from '../ui/UserFollowButton'
 import ShareButton from '../common/ShareButton'
 import ShareRankCardButtons from './ShareRankCardButtons'
 import {
-  SOURCE_CONFIG, getSourceCategory,
-  getTradingStyleTags, formatAum, getActiveDays, formatActiveDays,
+  getSourceCategory,
+  formatAum, getActiveDays, formatActiveDays,
   Badge, ActionButton,
 } from './TraderHeaderHelpers'
 import { getScoreColor, getScoreColorHex } from '@/lib/utils/score-colors'
@@ -235,12 +235,8 @@ export default function TraderHeader({
 
   // Prefer claimed user avatar over exchange avatar
   const effectiveAvatarUrl = claimedAvatarUrl || avatarUrl
-  const sourceLabelKey = source ? SOURCE_CONFIG[source.toLowerCase()] : null
-  const _sourceLabel = sourceLabelKey ? t(sourceLabelKey) : null
   const hasCover = Boolean(coverUrl)
   const activeDays = getActiveDays(activeSince)
-  const _tags = getTradingStyleTags(t, source, roi90d, maxDrawdown, winRate)
-  const _iconStroke = hasCover ? 'var(--glass-bg-light)' : tokens.colors.text.tertiary
 
   const containerBackground = hasCover
     ? `linear-gradient(to bottom, var(--color-overlay-subtle) 0%, var(--color-backdrop) 100%), url(${coverUrl}) center/cover no-repeat`
