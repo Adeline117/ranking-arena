@@ -233,13 +233,14 @@ export function CommentThread({
                 <button
                   onClick={onCancelEdit}
                   style={{
-                    padding: '3px 8px',
+                    padding: '6px 12px',
                     borderRadius: tokens.radius.sm,
                     border: `1px solid ${tokens.colors.border.primary}`,
                     background: 'transparent',
                     color: tokens.colors.text.tertiary,
                     fontSize: 12,
                     cursor: 'pointer',
+                    minHeight: 36,
                   }}
                 >
                   {t('cancel')}
@@ -248,7 +249,7 @@ export function CommentThread({
                   onClick={() => onSubmitEdit(postId)}
                   disabled={submittingEdit || !editContent?.trim()}
                   style={{
-                    padding: '3px 10px',
+                    padding: '6px 14px',
                     borderRadius: tokens.radius.sm,
                     border: 'none',
                     background: editContent?.trim() ? ARENA_PURPLE : `${ARENA_PURPLE}40`,
@@ -256,6 +257,7 @@ export function CommentThread({
                     fontSize: 12,
                     fontWeight: 700,
                     cursor: submittingEdit || !editContent?.trim() ? 'default' : 'pointer',
+                    minHeight: 36,
                   }}
                 >
                   {submittingEdit ? '...' : t('save')}
@@ -297,7 +299,7 @@ export function CommentThread({
                   position: 'absolute',
                   right: 6,
                   bottom: 6,
-                  padding: '3px 10px',
+                  padding: '6px 14px',
                   borderRadius: tokens.radius.sm,
                   border: 'none',
                   background: replyContent.trim() ? ARENA_PURPLE : `${ARENA_PURPLE}40`,
@@ -305,6 +307,7 @@ export function CommentThread({
                   fontSize: 12,
                   fontWeight: 700,
                   cursor: submittingReply || !replyContent.trim() ? 'default' : 'pointer',
+                  minHeight: 36,
                 }}
               >
                 {submittingReply ? '...' : t('send')}

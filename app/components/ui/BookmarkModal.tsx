@@ -303,6 +303,11 @@ export default function BookmarkModal({ isOpen, onClose, onSelect, postId: _post
                 fontSize: 20,
                 cursor: 'pointer',
                 color: tokens.colors.text.tertiary,
+                minWidth: 44,
+                minHeight: 44,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
               }}
             >
               <span aria-hidden="true">&times;</span>

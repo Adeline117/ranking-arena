@@ -65,9 +65,10 @@ export function CommentSortToggle({ commentSort, onSortChange, t }: CommentSortT
           key={mode}
           onClick={() => onSortChange(mode)}
           style={{
-            padding: '4px 12px',
+            padding: '8px 14px',
             borderRadius: tokens.radius.md,
             border: 'none',
+            minHeight: 44,
             background: commentSort === mode ? `${ARENA_PURPLE}20` : 'transparent',
             color: commentSort === mode ? ARENA_PURPLE : tokens.colors.text.tertiary,
             fontSize: 12,
