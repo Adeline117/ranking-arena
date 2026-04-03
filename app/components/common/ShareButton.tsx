@@ -225,6 +225,8 @@ function DropdownItem({ label, onClick, icon }: { label: string; onClick: () => 
       }}
       onMouseEnter={e => { e.currentTarget.style.background = tokens.colors.bg.tertiary }}
       onMouseLeave={e => { e.currentTarget.style.background = 'transparent' }}
+      onFocus={e => { e.currentTarget.style.background = tokens.colors.bg.tertiary; e.currentTarget.style.outline = `2px solid ${tokens.colors.accent.brand}`; e.currentTarget.style.outlineOffset = '-2px' }}
+      onBlur={e => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.outline = 'none' }}
     >
       <span style={{ color: tokens.colors.text.tertiary, display: 'flex', alignItems: 'center' }}>{icon}</span>
       {label}
