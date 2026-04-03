@@ -161,7 +161,7 @@ export async function GET(request: NextRequest) {
         const cutoffISO = cutoffDate.toISOString()
 
         // Fetch position history rows matching the token symbol patterns
-        let allRows: Array<{
+        const allRows: Array<{
           source: string
           source_trader_id: string
           pnl_usd: number | null

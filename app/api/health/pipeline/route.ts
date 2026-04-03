@@ -224,7 +224,7 @@ export async function GET(req: NextRequest) {
     return NextResponse.json(result, {
       headers: { 'Cache-Control': 'no-store' },
     })
-  } catch (err) {
+  } catch (_err) {
     return NextResponse.json(
       { error: 'Internal server error' },
       { status: 500, headers: { 'Cache-Control': 'no-store' } }
