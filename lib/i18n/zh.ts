@@ -1369,6 +1369,8 @@ const zh = {
     upgradeProFull: '升级 Pro 查看全部',
     sourcesLabel: '数据来源:',
     notInvestmentAdvice: '数据仅供参考，不构成投资建议。请自行研究。',
+    liveData: '实时',
+    autoRefresh: '每 30 秒自动刷新',
 
     // ExchangeFilter
     lessExchanges: '收起',

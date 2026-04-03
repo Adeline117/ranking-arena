@@ -1368,6 +1368,8 @@ const en = {
     upgradeProFull: 'Upgrade to Pro for full access',
     sourcesLabel: 'Sources:',
     notInvestmentAdvice: 'Data is for reference only. Not financial advice. DYOR.',
+    liveData: 'Live',
+    autoRefresh: 'Auto-refresh every 30s',
 
     // ExchangeFilter
     lessExchanges: 'Less',
