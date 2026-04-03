@@ -48,7 +48,6 @@ export default function HomeHeroSSR({ traderCount = 34000, exchangeCount = 27 }:
         position: 'relative',
         overflow: 'hidden',
         minHeight: 120,
-        maxHeight: 200,
         contain: 'layout style',
       }}
     >
