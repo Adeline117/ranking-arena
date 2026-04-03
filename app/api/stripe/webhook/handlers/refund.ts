@@ -20,19 +20,19 @@ export async function handleChargeRefunded(charge: Stripe.Charge) {
     return
   }
 
-  try {
-    await getSupabase()
-      .from('payment_history')
-      .insert({
-        user_id: profile.id,
-        stripe_payment_intent_id: charge.payment_intent as string,
-        amount: -(charge.amount_refunded || 0),
-        currency: charge.currency,
-        status: 'refunded',
-        created_at: new Date().toISOString(),
-      })
-  } catch (err: unknown) {
-    logger.error('Failed to record refund', { error: err })
+  // Record refund in payment_history (upsert to handle retries)
+  const { error: historyErr } = await getSupabase()
+    .from('payment_history')
+    .upsert({
+      user_id: profile.id,
+      stripe_payment_intent_id: charge.payment_intent as string,
+      amount: -(charge.amount_refunded || 0),
+      currency: charge.currency,
+      status: 'refunded',
+      created_at: new Date().toISOString(),
+    }, { onConflict: 'stripe_payment_intent_id' })
+  if (historyErr) {
+    logger.error('Failed to record refund', { error: historyErr, chargeId: charge.id })
   }
 
   if (charge.refunded && charge.amount === charge.amount_refunded) {
