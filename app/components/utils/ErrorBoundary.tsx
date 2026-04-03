@@ -62,8 +62,10 @@ export class ErrorBoundary extends Component<Props, State> {
       errorInfo,
     })
 
-    // Auto-retry once before showing error UI (Sentry recovery pattern)
-    if (this.state.retryCount < MAX_AUTO_RETRIES) {
+    // Auto-retry once for transient errors (network, 5xx). Skip for 4xx (won't help).
+    const status = (error as { status?: number })?.status
+    const isRetryable = !status || status >= 500 || status === 429
+    if (isRetryable && this.state.retryCount < MAX_AUTO_RETRIES) {
       logger.info(`ErrorBoundary: auto-retry ${this.state.retryCount + 1}/${MAX_AUTO_RETRIES}`)
       setTimeout(() => this.handleReset(), 500)
       return
