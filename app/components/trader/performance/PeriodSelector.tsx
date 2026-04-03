@@ -185,6 +185,8 @@ export function PeriodSelector({ period, onPeriodChange, source, lastUpdated }: 
                 key={p}
                 onClick={() => { if (!isDisabled) onPeriodChange(p) }}
                 disabled={isDisabled}
+                aria-pressed={period === p}
+                aria-label={`${label} period`}
                 style={{
                   padding: `${tokens.spacing[2]} ${tokens.spacing[4]}`,
                   minHeight: 44,
