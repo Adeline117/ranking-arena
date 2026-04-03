@@ -43,16 +43,23 @@ export async function POST(request: NextRequest) {
 
     const supabase = getSupabase()
 
-    // Idempotency check
-    const { data: existingEvent } = await supabase
+    // Atomic idempotency: INSERT first, skip if duplicate (race-safe)
+    const { error: idempotencyError } = await supabase
       .from('stripe_events')
-      .select('id')
-      .eq('event_id', event.id)
-      .single()
+      .insert({
+        event_id: event.id,
+        event_type: event.type,
+        processed_at: new Date().toISOString(),
+      })
 
-    if (existingEvent) {
-      logger.info(`Event ${event.id} already processed, skipping`, { type: event.type })
-      return NextResponse.json({ received: true, skipped: true })
+    if (idempotencyError) {
+      // Unique constraint violation = already processed
+      if (idempotencyError.code === '23505') {
+        logger.info(`Event ${event.id} already processed, skipping`, { type: event.type })
+        return NextResponse.json({ received: true, skipped: true })
+      }
+      logger.warn('Idempotency insert failed', { eventId: event.id, error: idempotencyError.message })
+      // Continue processing — better to risk double-process than miss an event
     }
 
     logger.info(`[Stripe Webhook] Processing ${event.type}`, { eventId: event.id, correlationId })
@@ -102,18 +109,7 @@ export async function POST(request: NextRequest) {
         logger.info(`Unhandled event type: ${event.type}`)
     }
 
-    // Record processed event for idempotency
-    try {
-      await supabase
-        .from('stripe_events')
-        .insert({
-          event_id: event.id,
-          event_type: event.type,
-          processed_at: new Date().toISOString(),
-        })
-    } catch (insertError) {
-      logger.warn('Failed to record processed event', { eventId: event.id, error: insertError })
-    }
+    // Event already recorded at start (atomic idempotency)
 
     const duration = Date.now() - startTime
     logger.info(`[Stripe Webhook] Completed ${event.type} in ${duration}ms`, { eventId: event.id, correlationId, duration })
