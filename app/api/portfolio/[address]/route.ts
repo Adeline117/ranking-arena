@@ -44,8 +44,8 @@ export async function GET(
     // Fetch fresh data
     const portfolio = await getPortfolio(address)
 
-    // Cache for 30 seconds
-    await cache.set(cacheKey, portfolio, { ttl: 30 })
+    // Cache for 5 minutes — portfolio only changes when user trades
+    await cache.set(cacheKey, portfolio, { ttl: 300 })
 
     return NextResponse.json(portfolio, {
       headers: { 'X-Cache': 'MISS' },
