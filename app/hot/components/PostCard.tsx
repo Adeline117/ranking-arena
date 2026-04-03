@@ -202,15 +202,21 @@ export function PostCard({
           <Text size="xs" color="tertiary">{p.author}</Text>
         )}
         <Text size="xs" color="tertiary">{p.time}</Text>
-        <span style={{ display: 'flex', alignItems: 'center', gap: 4, color: 'var(--color-text-tertiary)' }}>
-          <CommentIcon size={12} /> {p.comments}
-        </span>
-        <span style={{ display: 'flex', alignItems: 'center', gap: 4, color: 'var(--color-text-tertiary)' }}>
-          <ThumbsUpIcon size={12} /> {p.likes}
-        </span>
-        <Text size="xs" color="tertiary" style={{ marginLeft: 'auto' }}>
-          {(p.views ?? 0).toLocaleString('en-US')} {t('views')}
-        </Text>
+        {p.comments > 0 && (
+          <span style={{ display: 'flex', alignItems: 'center', gap: 4, color: 'var(--color-text-tertiary)' }}>
+            <CommentIcon size={12} /> {p.comments}
+          </span>
+        )}
+        {p.likes > 0 && (
+          <span style={{ display: 'flex', alignItems: 'center', gap: 4, color: 'var(--color-text-tertiary)' }}>
+            <ThumbsUpIcon size={12} /> {p.likes}
+          </span>
+        )}
+        {(p.views ?? 0) > 0 && (
+          <Text size="xs" color="tertiary" style={{ marginLeft: 'auto' }}>
+            {(p.views ?? 0).toLocaleString('en-US')} {t('views')}
+          </Text>
+        )}
       </Box>
     </Box>
   )
