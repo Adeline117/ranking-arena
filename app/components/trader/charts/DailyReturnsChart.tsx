@@ -1,5 +1,6 @@
 'use client'
 
+import { useState } from 'react'
 import { tokens } from '@/lib/design-tokens'
 import { useLanguage } from '../../Providers/LanguageProvider'
 
@@ -34,6 +35,7 @@ function computeStats(data: { returnPct: number }[]) {
 
 export function DailyReturnsChart({ data }: DailyReturnsChartProps) {
   const { t } = useLanguage()
+  const [hoverBucket, setHoverBucket] = useState<number | null>(null)
 
   if (!data || data.length === 0) {
     return (
@@ -149,6 +151,10 @@ export function DailyReturnsChart({ data }: DailyReturnsChartProps) {
                 height={barH}
                 fill={bucket.color}
                 rx={2}
+                opacity={hoverBucket === null || hoverBucket === i ? 1 : 0.4}
+                style={{ transition: 'opacity 0.15s ease', cursor: 'pointer' }}
+                onMouseEnter={() => setHoverBucket(i)}
+                onMouseLeave={() => setHoverBucket(null)}
               />
               {/* Count label on top of bar */}
               {bucket.count > 0 && (
@@ -228,6 +234,29 @@ export function DailyReturnsChart({ data }: DailyReturnsChartProps) {
         >
           Days
         </text>
+
+        {/* Hover tooltip */}
+        {hoverBucket !== null && buckets[hoverBucket].count > 0 && (() => {
+          const b = buckets[hoverBucket]
+          const bx = PADDING.left + hoverBucket * barWidth + barWidth / 2
+          const bBarH = (b.count / maxCount) * INNER_HEIGHT
+          const by = PADDING.top + INNER_HEIGHT - bBarH - 28
+          const pct = ((b.count / data.length) * 100).toFixed(1)
+          return (
+            <g>
+              <rect
+                x={bx - 40} y={by} width={80} height={24} rx={4}
+                fill="var(--color-bg-primary)" stroke="var(--color-border-primary)" strokeWidth={0.5}
+              />
+              <text x={bx} y={by + 10} textAnchor="middle" fill="var(--color-text-primary)" fontSize={8} fontWeight={600}>
+                {b.count} days ({pct}%)
+              </text>
+              <text x={bx} y={by + 20} textAnchor="middle" fill="var(--color-text-tertiary)" fontSize={7}>
+                {b.label}
+              </text>
+            </g>
+          )
+        })()}
       </svg>
     </div>
   )
