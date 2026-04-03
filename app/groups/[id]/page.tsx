@@ -363,7 +363,7 @@ export default function GroupDetailPage({ params }: { params: Promise<{ id: stri
 
         // Load posts for all visitors (non-members can browse read-only)
         postsHook.loadPosts(true)
-      } catch (err) {
+      } catch (_err) {
         if (controller.signal.aborted) return
         setError(t('loadFailed'))
         showToast(t('loadFailed'), 'error')
