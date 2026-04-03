@@ -45,9 +45,9 @@ export default function FloatingActionButton() {
       className="fab-container"
       style={{
         position: 'fixed',
-        bottom: 80,
+        bottom: 'calc(var(--mobile-nav-height, 60px) + env(safe-area-inset-bottom, 0px) + 20px)',
         right: 20,
-        zIndex: tokens.zIndex.dropdown,
+        zIndex: tokens.zIndex.sticky + 1,
       }}
     >
       {/* Popup menu */}
