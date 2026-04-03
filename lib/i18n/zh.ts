@@ -4888,6 +4888,8 @@ compFieldMaxParticipants: '最大参与人数',
     referralTitle: '推荐计划',
     referralDesc: '邀请好友，赚取 Pro 奖励',
     copyText: '复制',
+    reportIssue: '报告问题',
+    helpAndFeedback: '帮助与反馈',
 
 } as const
 
