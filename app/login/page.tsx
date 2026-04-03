@@ -84,7 +84,7 @@ export default function LoginPage() {
       return '/'
     }
     const returnUrl = searchParams.get('returnUrl') || searchParams.get('redirect')
-    if (returnUrl && returnUrl.startsWith('/')) {
+    if (returnUrl && returnUrl.startsWith('/') && !returnUrl.startsWith('//')) {
       return returnUrl
     }
     // Default to rankings instead of user profile — most users want to browse after login

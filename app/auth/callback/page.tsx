@@ -28,7 +28,9 @@ function AuthCallbackContent() {
       // Don't clear flag yet — wait until saveToStore succeeds
 
       const returnUrl = searchParams.get('returnUrl')
-      const defaultRedirect = isAddAccount ? '/' : (returnUrl && returnUrl.startsWith('/') ? returnUrl : '/')
+      // Validate returnUrl: must start with / but NOT // (prevents protocol-relative open redirect)
+      const isSafeReturn = returnUrl && returnUrl.startsWith('/') && !returnUrl.startsWith('//')
+      const defaultRedirect = isAddAccount ? '/' : (isSafeReturn ? returnUrl : '/')
 
       // Save new account to multi-account store
       const saveToStore = async (sess: typeof session) => {
