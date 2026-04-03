@@ -26,10 +26,11 @@ export default function ExchangeVolume() {
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
-    fetch('/api/market/exchanges')
+    fetch('/api/market/exchanges', { signal: AbortSignal.timeout(15000) })
       .then((r) => r.json())
       .then((json) => { if (Array.isArray(json)) setExchanges(json) })
       .catch((err) => {
+        if (err instanceof Error && err.name === 'AbortError') return
         setError(err instanceof Error ? err.message : 'Failed to load')
       })
       .finally(() => setLoading(false))

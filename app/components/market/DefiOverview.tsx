@@ -27,10 +27,11 @@ export default function DefiOverview() {
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
-    fetch('/api/market/defi')
+    fetch('/api/market/defi', { signal: AbortSignal.timeout(15000) })
       .then((r) => r.json())
       .then((json) => { if (!json.error) setData(json) })
       .catch((err) => {
+        if (err instanceof Error && err.name === 'AbortError') return
         setError(err instanceof Error ? err.message : 'Failed to load')
       })
       .finally(() => setLoading(false))

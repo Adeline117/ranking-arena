@@ -30,10 +30,11 @@ export default function FearGreedGauge() {
   }
 
   useEffect(() => {
-    fetch('/api/market/fear-greed')
+    fetch('/api/market/fear-greed', { signal: AbortSignal.timeout(15000) })
       .then((r) => r.json())
       .then((json) => { if (json.current) setData(json.current) })
       .catch((err) => {
+        if (err instanceof Error && err.name === 'AbortError') return
         setError(err instanceof Error ? err.message : 'Failed to load')
       })
   }, [])

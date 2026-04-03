@@ -120,12 +120,13 @@ export function useRealtimeMarket(options: UseRealtimeMarketOptions = {}) {
   const fetchData = useCallback(async () => {
     if (!mountedRef.current) return
     try {
-      const res = await fetch('/api/market/realtime')
+      const res = await fetch('/api/market/realtime', { signal: AbortSignal.timeout(15000) })
       if (!res.ok) throw new Error(`HTTP ${res.status}`)
       const data = (await res.json()) as RealtimeSnapshot
       handleSnapshot(data)
     } catch (e) {
       if (!mountedRef.current) return
+      if (e instanceof Error && e.name === 'AbortError') return
       setError(e instanceof Error ? e.message : 'fetch failed')
       setConnected(false)
     }
