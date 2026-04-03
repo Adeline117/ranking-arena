@@ -1294,6 +1294,9 @@ select:focus-visible {
 .trader-card-contained {
   contain: layout style;
 }
+.trader-card-contained:hover .compare-checkbox-cell {
+  opacity: 1 !important;
+}
 
 
 /* Responsive utility classes */
