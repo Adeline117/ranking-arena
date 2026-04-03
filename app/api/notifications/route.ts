@@ -79,7 +79,7 @@ export async function PUT(request: NextRequest) {
       // Batch mark-read: update all IDs belonging to this user
       await supabase
         .from('notifications')
-        .update({ read: true })
+        .update({ read: true, read_at: new Date().toISOString() })
         .in('id', notification_ids)
         .eq('user_id', user.id)
       return success({ message: `${notification_ids.length} notifications marked as read` })
