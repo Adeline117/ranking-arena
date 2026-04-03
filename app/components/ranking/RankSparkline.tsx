@@ -16,7 +16,13 @@ interface RankSparklineProps {
  * Green if rank improved, red if worsened, gray if unchanged.
  */
 export function RankSparkline({ data, width = 60, height = 20 }: RankSparklineProps) {
-  if (data.length < 2) return null
+  if (data.length < 2) {
+    return (
+      <svg width={width} height={height} viewBox={`0 0 ${width} ${height}`} role="img" aria-label="No rank history">
+        <line x1={0} y1={height / 2} x2={width} y2={height / 2} stroke="#9ca3af" strokeWidth={1} strokeDasharray="3,3" opacity={0.4} />
+      </svg>
+    )
+  }
 
   const ranks = data.map(d => d.rank)
   const min = Math.min(...ranks)
