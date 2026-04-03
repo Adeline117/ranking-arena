@@ -22,32 +22,38 @@
 
 ## Sharpe Coverage Overhaul (2026-04-02)
 
-### 5 Commits Pushed
+### 6 Commits Pushed
 1. `fix(mexc)`: scraper-cron compute Sharpe from curveValues (was hardcoded null)
 2. `fix: boost sharpe across 8+ platforms`: binance guard 10→20, bitunix dailyWinRate, DEX shared computeStatsFromPositions sharpe, blofin VPS scraper
 3. `fix(enrichment): Hyperliquid + Drift critical bugs`: HL userFills→userFillsByTime, Drift nested accounts parsing + ts field + string→Number
 4. `fix(etoro)`: CopySim API for daily equity curve (was monthly-only, 3 pts → 198 pts)
 5. `fix(mexc)`: VPS deploy of scraper-cron sharpe fix
+6. `fix: 10x enrichment batch limits`: HL 400→2000, drift 100→2000, etoro 100→1000, gateio 100→1000, jupiter 50→500, gains 30→200
 
-### Coverage Results (leaderboard_ranks)
-| Platform | Before | After | Δ |
-|----------|--------|-------|---|
-| gateio | 33% | **75%** | +42% |
-| coinex | 57% | **70%** | +13% |
-| aevo | 43% | **50%** | +7% |
-| htx_futures | 50% | **57%** | +7% |
-| toobit | 26% | **33%** | +7% |
-| mexc | 62% | **68%** | +6% |
-| drift | 28% | **34%** | +6% |
-| jupiter_perps | 29% | **34%** | +5% |
-| etoro | 22% | **26%** | +4% |
-| binance_spot | 92% | **90%** | ✅ |
+### Final Coverage (after 6 rounds enrichment + blitz)
+Overall: **46% → 62%** (+16%)
+| Platform | Start | Final | Δ |
+|----------|-------|-------|---|
+| binance_spot | 78% | **88%** | +10% ✅ |
+| jupiter_perps | 28% | **77%** | +49% 🔶 |
+| binance_futures | 55% | **77%** | +22% 🔶 |
+| gateio | 65% | **72%** | +7% 🔶 |
+| polymarket | 70% | **72%** | +2% 🔶 |
+| coinex | 56% | **65%** | +9% 🔶 |
+| aevo | 42% | **63%** | +21% 🔶 |
+| mexc | 53% | **60%** | +7% 🔶 |
+| htx_futures | 50% | **59%** | +9% |
+| drift | 25% | **58%** | +33% |
+| dydx | 33% | **53%** | +20% |
+| hyperliquid | 30% | **44%** | +14% |
+| toobit | 26% | **37%** | +11% |
+| etoro | 22% | **34%** | +12% |
 
-### Verified in snapshots_v2 (will propagate over enrichment cycles)
-- drift: **95%** sharpe in latest batch (nested accounts bug was blocking ALL data)
-- mexc: **90%** (curveValues fix)
-- gateio: **98%** (enrichment equity curve)
-- etoro: CopySim daily API discovered, 198 data points per trader
+### Saturated — remaining nulls are data-insufficient traders
+- Numbers stabilized after round 3 (rounds 4-6 added <1% each)
+- Root cause: enrichment processed all reachable traders, but many have <3 days of equity curve / closing fills / daily snapshots
+- enrichment batch limits already 10x'd — not a throughput issue anymore
+- To go higher: lower sharpe threshold from 3→2 days, use unrealized PnL for HL whales, or accept null for truly inactive traders
 
 ### Still Low (API limitations)
 - hyperliquid 37%: userFillsByTime helps mid-tier; whales have <5 closing days in 90d
