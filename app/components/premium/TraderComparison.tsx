@@ -53,7 +53,7 @@ function getBestIndex(values: (number | undefined | null)[], isHigherBetter = tr
   let bestIdx = -1
   let bestVal = isHigherBetter ? -Infinity : Infinity
   values.forEach((val, idx) => {
-    if (val != null) {
+    if (val != null && isFinite(val)) {
       if (isHigherBetter ? val > bestVal : val < bestVal) {
         bestVal = val
         bestIdx = idx
@@ -392,7 +392,7 @@ export default function TraderComparison({ traders, onRemove, showRemoveButton =
 
                   {traders.map((trader, traderIdx) => {
                     const value = (trader as unknown as Record<string, unknown>)[metric.key] as number | undefined
-                    const isBest = traderIdx === bestIdx && value != null
+                    const isBest = traderIdx === bestIdx && value != null && isFinite(value)
                     const color = metric.isPercent || metric.isNegative
                       ? getValueColor(value, metric.higherBetter)
                       : isBest
