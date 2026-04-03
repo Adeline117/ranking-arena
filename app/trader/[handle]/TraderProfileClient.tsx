@@ -261,7 +261,7 @@ export default function TraderProfileClient({ data, serverTraderData, claimedUse
     traderFetcher,
     {
       revalidateOnFocus: false,
-      refreshInterval: 0,
+      refreshInterval: 5 * 60 * 1000, // 5 min auto-refresh
       dedupingInterval: 5000,
       errorRetryCount: 2,
       fallbackData: isPrimaryAccount ? (serverTraderData ?? undefined) : undefined,
