@@ -86,7 +86,8 @@ export default function NewGroupPostPage(): React.ReactElement {
       setUserId(data.user?.id ?? null)
 
       if (!data.user) {
-        router.push('/login')
+        const currentPath = typeof window !== 'undefined' ? window.location.pathname : '/'
+        router.push(`/login?returnUrl=${encodeURIComponent(currentPath)}`)
         return
       }
 
@@ -407,7 +408,8 @@ export default function NewGroupPostPage(): React.ReactElement {
 
     if (!userId) {
       showToast(t('pleaseLogin'), 'warning')
-      router.push('/login')
+      const currentPath = typeof window !== 'undefined' ? window.location.pathname : '/'
+      router.push(`/login?returnUrl=${encodeURIComponent(currentPath)}`)
       return
     }
 

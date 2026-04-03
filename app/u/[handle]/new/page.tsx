@@ -427,7 +427,8 @@ export default function NewPostPage() {
 
     if (!userId) {
       showToast(t('pleaseLogin'), 'warning')
-      router.push('/login')
+      const currentPath = typeof window !== 'undefined' ? window.location.pathname : '/login'
+      router.push(`/login?returnUrl=${encodeURIComponent(currentPath)}`)
       submitRef.current = false
       return
     }
