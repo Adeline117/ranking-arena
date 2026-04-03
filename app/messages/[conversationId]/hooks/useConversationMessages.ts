@@ -217,8 +217,9 @@ export function useConversationMessages({ conversationId, userId, accessToken }:
 
   const handleDeleteMessage = useCallback(async (msgId: string) => {
     if (!accessToken) return
-    const snapshot = messages
-    setMessages(msgs => msgs.filter(m => m.id !== msgId))
+    // Capture snapshot via functional updater to avoid stale closure over messages
+    let snapshot: Message[] = []
+    setMessages(prev => { snapshot = prev; return prev.filter(m => m.id !== msgId) })
     try {
       const res = await fetch(`/api/messages/${msgId}`, {
         method: 'DELETE',
@@ -232,7 +233,7 @@ export function useConversationMessages({ conversationId, userId, accessToken }:
       setMessages(snapshot)
       showToast(t('operationFailed'), 'error')
     }
-  }, [accessToken, messages, showToast, t])
+  }, [accessToken, showToast, t])
 
   return {
     messages, setMessages, otherUser, loading, loadingMore, hasMore, connectionStatus,
