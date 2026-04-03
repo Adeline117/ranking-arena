@@ -35,9 +35,12 @@ export async function generateMetadata({ params }: { params: Promise<{ id: strin
     const title = `${data.title} - @${data.author_handle}`
     const description = data.content?.slice(0, 160) || data.title
 
+    const ogImage = `${APP_URL}/api/og?title=${encodeURIComponent(data.title.slice(0, 60))}&author=${encodeURIComponent(data.author_handle || '')}`
+
     return {
       title,
       description,
+      alternates: { canonical: `${APP_URL}/post/${id}` },
       openGraph: {
         title: data.title,
         description,
@@ -46,13 +49,14 @@ export async function generateMetadata({ params }: { params: Promise<{ id: strin
         publishedTime: data.created_at,
         authors: [`@${data.author_handle}`],
         siteName: 'Arena',
-        images: [`${APP_URL}/og-default.png`],
+        images: [{ url: ogImage, width: 1200, height: 630 }],
       },
       twitter: {
         card: 'summary_large_image',
         title: data.title,
         description,
-        images: [`${APP_URL}/og-default.png`],
+        creator: '@arenafi',
+        images: [ogImage],
       },
     }
   } catch {
