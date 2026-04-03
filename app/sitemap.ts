@@ -143,6 +143,7 @@ export default async function sitemap({ id }: { id: number }): Promise<MetadataR
 
     const staticPages: MetadataRoute.Sitemap = [
       { url: `${BASE_URL}/`, lastModified: now, changeFrequency: 'hourly', priority: 1 },
+      { url: `${BASE_URL}/rankings`, lastModified: now, changeFrequency: 'hourly', priority: 0.95 },
       { url: `${BASE_URL}/hot`, lastModified: now, changeFrequency: 'hourly', priority: 0.9 },
       { url: `${BASE_URL}/groups`, lastModified: now, changeFrequency: 'daily', priority: 0.8 },
       { url: `${BASE_URL}/rankings/bots`, lastModified: now, changeFrequency: 'daily', priority: 0.8 },
@@ -153,6 +154,8 @@ export default async function sitemap({ id }: { id: number }): Promise<MetadataR
       { url: `${BASE_URL}/search`, lastModified: now, changeFrequency: 'weekly', priority: 0.6 },
       { url: `${BASE_URL}/flash-news`, lastModified: now, changeFrequency: 'hourly', priority: 0.7 },
       { url: `${BASE_URL}/market`, lastModified: now, changeFrequency: 'hourly', priority: 0.8 },
+      { url: `${BASE_URL}/library`, lastModified: now, changeFrequency: 'weekly', priority: 0.7 },
+      { url: `${BASE_URL}/competitions`, lastModified: now, changeFrequency: 'daily', priority: 0.7 },
       { url: `${BASE_URL}/help`, lastModified: now, changeFrequency: 'monthly', priority: 0.5 },
       { url: `${BASE_URL}/feed`, lastModified: now, changeFrequency: 'hourly', priority: 0.7 },
       { url: `${BASE_URL}/claim`, lastModified: now, changeFrequency: 'monthly', priority: 0.6 },
