@@ -31,7 +31,11 @@ interface HomePageProps {
 }
 
 export default function HomePage({ initialTraders, initialLastUpdated, heroStats }: HomePageProps) {
-  // SSR shell removed from page.tsx — no longer need to hide it
+  // Hide SSR shell once this client component mounts (avoids duplicate content)
+  useEffect(() => {
+    document.getElementById('ssr-hero-shell')?.remove()
+    document.getElementById('ssr-ranking-table')?.remove()
+  }, [])
 
   return (
     <div
