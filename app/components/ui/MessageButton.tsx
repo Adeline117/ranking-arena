@@ -105,6 +105,7 @@ export default function MessageButton({
     return (
       <button
         onClick={() => useLoginModal.getState().openLoginModal()}
+        className="interactive-scale"
         style={{
           ...sizeStyles[size],
           width: fullWidth ? '100%' : 'auto',
@@ -117,7 +118,10 @@ export default function MessageButton({
           alignItems: 'center',
           justifyContent: 'center',
           gap: '6px',
+          transition: 'all 200ms ease',
         }}
+        onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--glass-bg-medium, rgba(255,255,255,0.08))' }}
+        onMouseLeave={(e) => { e.currentTarget.style.background = 'var(--glass-bg-light)' }}
       >
         <MessageIcon size={size === 'sm' ? 14 : 16} />
         {t('directMessage')}
@@ -132,7 +136,8 @@ export default function MessageButton({
   return (
     <button
       onClick={handleClick}
-            aria-label="Send message"
+      aria-label="Send message"
+      className="interactive-scale"
       disabled={isLoading}
       style={{
         ...sizeStyles[size],
@@ -149,6 +154,8 @@ export default function MessageButton({
         justifyContent: 'center',
         gap: '6px',
       }}
+      onMouseEnter={(e) => { if (!isLoading) e.currentTarget.style.background = 'var(--glass-bg-medium, rgba(255,255,255,0.08))' }}
+      onMouseLeave={(e) => { if (!isLoading) e.currentTarget.style.background = 'var(--glass-bg-light)' }}
     >
       {isLoading ? (
         <ButtonSpinner size="xs" />
