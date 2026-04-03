@@ -8,7 +8,7 @@ import { NextResponse } from 'next/server'
 import { z } from 'zod'
 import { withApiMiddleware, createErrorResponse } from '@/lib/api/middleware'
 import { ApiError } from '@/lib/api/errors'
-import { createLogger, fireAndForget } from '@/lib/utils/logger'
+import { createLogger } from '@/lib/utils/logger'
 import { invalidateFollowingCache } from '@/app/api/following/route'
 
 const logger = createLogger('follow-api')

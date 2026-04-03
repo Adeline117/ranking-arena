@@ -525,7 +525,7 @@ export default function NewPostPage() {
       clearDraft()
       showToast(t('publishSuccess'), 'success')
       router.push(`/u/${encodeURIComponent(decodedHandle)}`)
-    } catch (error) {
+    } catch (_error) {
       showToast(t('publishFailed'), 'error')
     } finally {
       setLoading(false)

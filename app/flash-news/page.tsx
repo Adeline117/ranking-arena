@@ -100,7 +100,7 @@ export default function FlashNewsPage() {
   const [news, setNews] = useState<FlashNews[]>([])
   const [loading, setLoading] = useState(true)
   const [loadingMore, setLoadingMore] = useState(false)
-  const [currentPage, setCurrentPage] = useState(1)
+  const [_currentPage, setCurrentPage] = useState(1)
   const [selectedCategory, setSelectedCategory] = useState('all')
   const [hasMore, setHasMore] = useState(true)
   const [_pagination, setPagination] = useState({
