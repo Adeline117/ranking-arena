@@ -21,12 +21,13 @@ Sentry.init({
   
   // 过滤已知的非关键错误
   ignoreErrors: [
-    // 网络错误（用户侧）
+    // 网络错误（用户侧/上游不可用）
     'ECONNRESET',
     'ENOTFOUND',
     'ETIMEDOUT',
     'ECONNREFUSED',
     'EPIPE',
+    'ENOSPC',
     'UND_ERR_CONNECT_TIMEOUT',
     'fetch failed',
     'Failed to fetch',
@@ -34,6 +35,7 @@ Sentry.init({
     'JWTExpired',
     'JWT expired',
     'Invalid Refresh Token',
+    'Lock "lock:arena-auth"',
     // 用户取消
     'AbortError',
     'The operation was aborted',
@@ -41,6 +43,13 @@ Sentry.init({
     'Too Many Requests',
     // Vercel 边界
     'FUNCTION_INVOCATION_TIMEOUT',
+    // Pipeline operational alerts — monitored via Telegram, not Sentry
+    /^\[Enrichment\]/,
+    /^\[DataFreshness\]/,
+    /High failure rate/,
+    /STALE:/,
+    // Disk space — transient Vercel Lambda issue
+    'no space left on device',
   ],
   
   // 在发送前处理事件

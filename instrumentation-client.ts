@@ -42,6 +42,7 @@ async function initSentry() {
       /^chrome-extension:\/\//,
       /^moz-extension:\/\//,
       'Network request failed',
+      'Network connection failed',
       'Failed to fetch',
       'Load failed',
       'AbortError',
@@ -49,7 +50,22 @@ async function initSentry() {
       'ResizeObserver loop completed with undelivered notifications',
       'Hydration failed',
       'Text content does not match',
-      // Keep monitoring — root causes being fixed
+      // HTTP 4xx — not bugs, normal auth/permission flow
+      /^HTTP 40[0-9]$/,
+      'HTTP 401',
+      'HTTP 403',
+      'HTTP 404',
+      // Supabase auth lock contention — benign, auto-recovers
+      'Lock "lock:arena-auth"',
+      'another request stole it',
+      // Network timeouts — user-side, not actionable
+      'Request timed out',
+      'Request failed',
+      'request timed out',
+      // DOM manipulation errors — browser extensions or hydration mismatch
+      "Failed to execute 'removeChild'",
+      "Failed to execute 'insertBefore'",
+      'is not a child of this node',
     ],
 
     // 按路由采样
@@ -61,8 +77,20 @@ async function initSentry() {
       return process.env.NODE_ENV === 'production' ? 0.1 : 1.0
     },
 
-    beforeSend(event) {
+    beforeSend(event, hint) {
       if (event.user) delete event.user.ip_address
+
+      // Drop HTTP 4xx errors (auth expiry, not-found, etc.)
+      const msg = (hint?.originalException as Error)?.message || event.message || ''
+      if (/HTTP\s+4\d{2}/.test(msg)) return null
+
+      // Drop headless browser / bot errors (Vercel preview, crawlers)
+      const ua = typeof navigator !== 'undefined' ? navigator.userAgent : ''
+      if (/HeadlessChrome|Googlebot|bingbot|Bytespider/.test(ua)) return null
+
+      // Drop DOM NotFoundError (browser extensions, hydration race)
+      if (msg.includes('not a child of this node') || msg.includes('removeChild') || msg.includes('insertBefore')) return null
+
       return event
     },
 
