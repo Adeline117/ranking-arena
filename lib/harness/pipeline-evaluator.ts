@@ -154,7 +154,7 @@ export class PipelineEvaluator {
 
     // Query distinct platforms with their latest update
     const { data: platformFreshness } = await supabase.rpc('get_platform_freshness')
-      .catch(() => ({ data: null }))
+      .then(r => r, () => ({ data: null, error: null, count: null, status: 0, statusText: '' }))
 
     // Fallback: check via raw query if RPC doesn't exist
     let staleCount = 0
@@ -363,8 +363,13 @@ export class PipelineEvaluator {
     const issues: EvaluationIssue[] = []
 
     // Check for duplicate (source, source_trader_id, season) in leaderboard_ranks
-    const { data: dupeCheck } = await supabase.rpc('check_leaderboard_duplicates')
-      .catch(() => ({ data: null }))
+    let dupeCheck: unknown[] | null = null
+    try {
+      const { data } = await supabase.rpc('check_leaderboard_duplicates')
+      dupeCheck = data
+    } catch {
+      // RPC may not exist yet
+    }
 
     let score = 100
     if (dupeCheck && Array.isArray(dupeCheck) && dupeCheck.length > 0) {

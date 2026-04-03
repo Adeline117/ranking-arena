@@ -41,7 +41,7 @@ export async function GET(request: NextRequest) {
     } else {
       await plog.partialSuccess(
         result.checks.filter(c => c.passed).length,
-        result.issues.map(i => ({ platform: i.platform, type: i.type, severity: i.severity })),
+        result.issues.map(i => `${i.platform}:${i.type}:${i.severity}`),
         {
           score: result.overall_score,
           trace_id: traceId,
