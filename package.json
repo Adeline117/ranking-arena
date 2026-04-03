@@ -123,7 +123,7 @@
   "devDependencies": {
     "@capacitor/android": "^8.2.0",
     "@capacitor/app": "^8.0.1",
-    "@capacitor/browser": "^8.0.2",
+    "@capacitor/browser": "^8.0.3",
     "@capacitor/camera": "^8.0.2",
     "@capacitor/cli": "^8.2.0",
     "@capacitor/core": "^8.2.0",
