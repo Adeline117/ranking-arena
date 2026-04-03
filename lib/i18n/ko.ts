@@ -4877,6 +4877,22 @@ compFieldMaxParticipants: '최대 참가자 수',
     referralDesc: '친구를 초대하고 Pro 보상을 받으세요',
     copyText: '복사',
 
+    // Watchlist page
+    watchlistTitle: '관심 목록',
+    watchlistSubtitle: '저장한 트레이더 목록입니다. 트레이더 프로필의 별표를 클릭하여 추가하세요.',
+    watchlistSignInTitle: '관심 목록을 보려면 로그인하세요',
+    watchlistSignInDesc: '계정을 만들거나 로그인하여 즐겨찾는 트레이더를 저장하고 추적하세요.',
+    watchlistEmptyTitle: '관심 목록이 비어 있습니다',
+    watchlistEmptyDesc: '랭킹을 살펴보고 트레이더 프로필의 별표 아이콘을 클릭하여 추가하세요.',
+    watchlistBrowseRankings: '랭킹 보기',
+    watchlistSaved: '저장됨',
+    watchlistShown: '표시 중',
+    watchlistAllPlatforms: '모든 플랫폼',
+    watchlistActions: '작업',
+    watchlistRemove: '삭제',
+    watchlistConfirmYes: '예',
+    watchlistConfirmNo: '아니오',
+
 } as const
 
 export default ko
