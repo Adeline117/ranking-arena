@@ -151,10 +151,10 @@ export function SimpleLineChart({
         justifyContent: 'space-between',
       }}>
         <Text size="xs" color="tertiary" style={{ fontFamily: tokens.typography.fontFamily.mono.join(', '), fontSize: 11 }}>
-          {dataKey === 'roi' ? `${maxValue.toFixed(0)}%` : formatAxisLabel(maxValue)}
+          {dataKey === 'roi' ? `${maxValue.toFixed(Math.abs(maxValue) < 10 ? 1 : 0)}%` : formatAxisLabel(maxValue)}
         </Text>
         <Text size="xs" color="tertiary" style={{ fontFamily: tokens.typography.fontFamily.mono.join(', '), fontSize: 11 }}>
-          {dataKey === 'roi' ? `${minValue.toFixed(0)}%` : formatAxisLabel(minValue)}
+          {dataKey === 'roi' ? `${minValue.toFixed(Math.abs(minValue) < 10 ? 1 : 0)}%` : formatAxisLabel(minValue)}
         </Text>
       </Box>
 
