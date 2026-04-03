@@ -146,6 +146,7 @@ jest.mock('@/lib/config/platforms', () => ({
 jest.mock('@/lib/services/pipeline-state', () => ({
   PipelineState: {
     get: jest.fn().mockResolvedValue(0),
+    set: jest.fn().mockResolvedValue(undefined),
     incr: jest.fn().mockResolvedValue(1),
     del: jest.fn().mockResolvedValue(undefined),
   },
