@@ -569,8 +569,13 @@ export async function runEnrichment(params: {
   period: string
   limit: number
   offset?: number
+  /** When provided, skip leaderboard_ranks DB read and enrich these trader keys directly.
+   *  Used by batch-fetch to enrich freshly-fetched traders inline. */
+  traderKeys?: string[]
+  /** Optional time budget in ms. Enrichment stops when elapsed time exceeds this. */
+  timeBudgetMs?: number
 }): Promise<EnrichmentResult> {
-  const { platform: platformParam, period, limit, offset = 0 } = params
+  const { platform: platformParam, period, limit, offset = 0, traderKeys: providedKeys, timeBudgetMs } = params
   const startTime = Date.now()
   
   // ✅ Parameter validation - prevent invalid/missing period
@@ -626,22 +631,29 @@ export async function runEnrichment(params: {
 
     try {
       await raceWithTimeout((async () => {
-    // Read from leaderboard_ranks (canonical, has latest trader keys)
-    // Previously read from trader_snapshots v1, which has stale keys
-    // (e.g., Binance migrated from encryptedUid to leadPortfolioId)
-    // LR columns: source → platform, source_trader_id → traderKey, season_id → period
-    const { data: traders, error: fetchError } = await supabase
-      .from('leaderboard_ranks')
-      .select(LR.source_trader_id)
-      .eq(LR.source, platformKey)
-      .eq(LR.season_id, period)
-      .not(LR.arena_score, 'is', null)
-      .order(LR.arena_score, { ascending: false })
-      .range(offset, offset + limit - 1)
+    // Get trader keys: either provided directly (inline from batch-fetch) or read from DB
+    let traders: Array<{ source_trader_id: string }>
+    if (providedKeys && providedKeys.length > 0) {
+      // Inline enrichment: trader keys provided by batch-fetch, skip DB read
+      traders = providedKeys.slice(offset, offset + limit).map(k => ({ source_trader_id: k }))
+      logger.info(`[enrich] ${platformKey}/${period}: using ${traders.length} provided trader keys (inline)`)
+    } else {
+      // Standard enrichment: read from leaderboard_ranks (canonical, has latest trader keys)
+      // LR columns: source → platform, source_trader_id → traderKey, season_id → period
+      const { data: dbTraders, error: fetchError } = await supabase
+        .from('leaderboard_ranks')
+        .select(LR.source_trader_id)
+        .eq(LR.source, platformKey)
+        .eq(LR.season_id, period)
+        .not(LR.arena_score, 'is', null)
+        .order(LR.arena_score, { ascending: false })
+        .range(offset, offset + limit - 1)
 
-    if (fetchError || !traders) {
-      results[platformKey].errors.push(`Failed to fetch traders: ${fetchError?.message}`)
-      return
+      if (fetchError || !dbTraders) {
+        results[platformKey].errors.push(`Failed to fetch traders: ${fetchError?.message}`)
+        return
+      }
+      traders = dbTraders
     }
 
     logger.warn(`[enrich] Processing ${traders.length} ${platformKey} traders for ${period} (timeout: ${platformTimeoutMs / 1000}s)`)
@@ -654,6 +666,16 @@ export async function runEnrichment(params: {
         logger.warn(`[enrich] ${platformKey} approaching timeout (${Math.round(platformElapsed / 1000)}s), skipping ${remaining} remaining traders`)
         results[platformKey].errors.push(`Timeout: ${remaining} traders skipped after ${Math.round(platformElapsed / 1000)}s`)
         break
+      }
+      // Check caller-provided time budget (used by inline enrichment from batch-fetch)
+      if (timeBudgetMs) {
+        const totalElapsed = Date.now() - startTime
+        if (totalElapsed > timeBudgetMs - 3000) {
+          const remaining = traders.length - i
+          logger.warn(`[enrich] ${platformKey} inline time budget exhausted (${Math.round(totalElapsed / 1000)}s/${Math.round(timeBudgetMs / 1000)}s), ${remaining} traders deferred to batch-enrich`)
+          results[platformKey].errors.push(`Time budget: ${remaining} traders deferred after ${Math.round(totalElapsed / 1000)}s`)
+          break
+        }
       }
 
       const batch = traders.slice(i, i + config.concurrency)
