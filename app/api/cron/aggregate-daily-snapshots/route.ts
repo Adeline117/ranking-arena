@@ -65,12 +65,21 @@ export async function GET(request: NextRequest) {
       const recentCutoffStr = recentCutoff.toISOString()
 
       // First, get distinct platform names
-      const { data: platformList } = await supabase
+      const { data: platformList, error: platformListError } = await supabase
         .from('trader_snapshots_v2')
         .select('platform')
         .gte('updated_at', recentCutoffStr)
         .limit(50000)
-      const distinctPlatforms = [...new Set((platformList || []).map(r => r.platform))]
+
+      if (platformListError || !platformList) {
+        await plog.error(platformListError || new Error('No snapshot data returned'))
+        return NextResponse.json(
+          { error: 'Failed to fetch snapshots', details: platformListError?.message },
+          { status: 500 }
+        )
+      }
+
+      const distinctPlatforms = [...new Set(platformList.map(r => r.platform))]
 
       snapshotMap = new Map()
 
@@ -110,15 +119,9 @@ export async function GET(request: NextRequest) {
         }
       }
 
-      if (snapshotMap.size === 0) {
-        await plog.error(new Error('No snapshot data returned from any platform'))
-        return NextResponse.json(
-          { error: 'Failed to fetch snapshots', details: 'No data from any platform' },
-          { status: 500 }
-        )
+      if (snapshotMap.size > 0) {
+        logger.info(`[aggregate] Loaded ${snapshotMap.size} traders from ${distinctPlatforms.length} platforms (per-platform query)`)
       }
-
-      logger.info(`[aggregate] Loaded ${snapshotMap.size} traders from ${distinctPlatforms.length} platforms (per-platform query)`)
     } else {
       snapshotMap = new Map()
       for (const s of snapshots) {
