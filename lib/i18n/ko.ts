@@ -4867,7 +4867,6 @@ compFieldMaxParticipants: '최대 참가자 수',
 
     linkAdditionalAccount: '추가 계정 연결',
     linkAdditionalAccountDesc: '프로필에 연결할 다른 트레이더 계정을 검색하세요.',
-    portfolioAnalytics: '분석',
     moderationQueue: '검토 대기',
     auditLog: '감사 로그',
 
