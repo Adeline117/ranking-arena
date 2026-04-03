@@ -127,7 +127,7 @@ export default function TraderProfileClient({ data, serverTraderData, claimedUse
   const { userId: currentUserId } = useAuthSession()
   const selectedPeriod = usePeriodStore(s => s.period)
 
-  // P1-7: Read initial period from URL param
+  // P1-7: Read initial period from URL param and sync store on mount
   const urlPeriod = searchParams.get('period')
   const setPeriod = usePeriodStore(s => s.setPeriod)
   useEffect(() => {
@@ -137,7 +137,17 @@ export default function TraderProfileClient({ data, serverTraderData, claimedUse
   }, []) // eslint-disable-line react-hooks/exhaustive-deps -- only on mount
 
   // P1-7: Sync period changes to URL
+  // Skip the very first invocation (mount) — the store default may differ from URL param,
+  // and the init effect above hasn't propagated the URL value into the store yet.
+  // On mount, both effects fire in order but setPeriod won't update selectedPeriod until
+  // the next render, so the sync effect would incorrectly strip the period param from URL.
+  const periodSyncCountRef = useRef(0)
   useEffect(() => {
+    // Skip the first fire (mount) — let the init effect take over first
+    if (periodSyncCountRef.current === 0) {
+      periodSyncCountRef.current = 1
+      return
+    }
     const params = new URLSearchParams(searchParams.toString())
     if (selectedPeriod === '90D') {
       params.delete('period')
@@ -815,7 +825,7 @@ export default function TraderProfileClient({ data, serverTraderData, claimedUse
 
               {(traderSimilar.length > 0 || features.social) && (
                 <Box style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[6] }}>
-                  {traderSimilar.length > 0 && <SectionErrorBoundary fallbackMessage="Similar traders unavailable"><SimilarTraders traders={traderSimilar} /></SectionErrorBoundary>}
+                  {traderSimilar.length > 0 && <SectionErrorBoundary><SimilarTraders traders={traderSimilar} /></SectionErrorBoundary>}
                   {features.social && (
                     <Link href="/groups" prefetch={false} style={{ textDecoration: 'none' }}>
                       <Box
