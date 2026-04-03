@@ -160,8 +160,8 @@ describe('calculateMaxDrawdown', () => {
     ]
     const result = calculateMaxDrawdown(curve)
     expect(result).not.toBeNull()
-    // Max drawdown from 60 to 25 = 35 (absolute difference)
-    expect(result).toBe(35)
+    // Max drawdown from 60 to 25 = ((60-25)/60)*100 = 58.33%
+    expect(result).toBeCloseTo(58.33, 1)
   })
 
   test('finds max drawdown even with recovery', () => {
@@ -173,7 +173,8 @@ describe('calculateMaxDrawdown', () => {
     ]
     const result = calculateMaxDrawdown(curve)
     expect(result).not.toBeNull()
-    expect(result).toBe(40)
+    // Max drawdown from 50 to 10 = ((50-10)/50)*100 = 80%
+    expect(result).toBe(80)
   })
 })
 
@@ -375,10 +376,10 @@ describe('Edge Cases', () => {
 
     // With these extreme values:
     // volatility >= 200 returns null
-    // maxDD = 3000 (from 5000 to 2000), capped at 100 by Math.min(maxDD, 100)
+    // maxDD = ((5000-2000)/5000)*100 = 60% (percentage-based)
     expect(volatility).toBeNull() // Too high
-    expect(maxDD).toBe(100) // 3000 capped at 100
-    // currentDD doesn't have the cap, so returns full difference
+    expect(maxDD).toBe(60) // (5000-2000)/5000 * 100
+    // currentDD is absolute difference (peak - current)
     expect(currentDD).not.toBeNull()
     expect(currentDD).toBe(3000) // 5000 - 2000
   })
@@ -397,8 +398,8 @@ describe('Edge Cases', () => {
     expect(volatility).not.toBeNull()
     expect(maxDD).not.toBeNull()
     expect(currentDD).not.toBeNull()
-    expect(maxDD).toBe(30) // 50 - 20
-    expect(currentDD).toBe(30) // 50 - 20 (current is last point)
+    expect(maxDD).toBe(60) // ((50-20)/50)*100 = 60%
+    expect(currentDD).toBe(30) // 50 - 20 (absolute, current is last point)
   })
 
   test('handles all negative ROI values', () => {
