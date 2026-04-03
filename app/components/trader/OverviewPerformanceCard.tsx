@@ -191,8 +191,7 @@ export default function OverviewPerformanceCard({
   // 生成 sparkline 数据 — 使用当前 period 对应的 equity curve，过滤掉 null/NaN 值
   const periodCurve = allEquityCurves?.[period] ?? (period === '90D' ? equityCurve : undefined)
   const sparklineRawData = (periodCurve?.map(d => d.roi) || []).filter(v => v != null && !isNaN(v as number)) as number[]
-  const hasNonZeroSparkline = sparklineRawData.some(v => v !== 0)
-  const sparklineData = hasNonZeroSparkline ? sparklineRawData : []
+  const sparklineData = sparklineRawData.length >= 2 ? sparklineRawData : []
 
   return (
     <div ref={cardRef}>
