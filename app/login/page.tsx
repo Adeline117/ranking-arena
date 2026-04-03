@@ -79,7 +79,7 @@ export default function LoginPage() {
     })
   }, [isAddAccount])
 
-  const getRedirectUrl = useCallback((userHandle?: string | null, userEmail?: string | null): string => {
+  const getRedirectUrl = useCallback((_userHandle?: string | null, _userEmail?: string | null): string => {
     if (isAddAccount || localStorage.getItem('arena_adding_account')) {
       return '/'
     }
