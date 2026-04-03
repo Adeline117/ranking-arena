@@ -206,9 +206,9 @@ export const TraderCard = memo(function TraderCard({
         {/* Stats row */}
         <Box style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: tokens.spacing[2] }}>
           <MetricStat
-            label="ROI"
-            value={formatROI(trader.roi)}
-            color={trader.roi != null ? (trader.roi >= 0 ? tokens.colors.accent.success : TRADER_ACCENT_ERROR) : undefined}
+            label="Sharpe"
+            value={trader.sharpe_ratio != null ? trader.sharpe_ratio.toFixed(2) : undefined}
+            color={trader.sharpe_ratio != null ? (trader.sharpe_ratio >= 2 ? tokens.colors.accent.success : trader.sharpe_ratio <= 0 ? TRADER_ACCENT_ERROR : undefined) : undefined}
           />
           <MetricStat
             label="PnL"
