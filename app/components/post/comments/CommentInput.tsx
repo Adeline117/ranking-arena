@@ -56,6 +56,7 @@ export function CommentInput({
         <textarea
           ref={commentInputRef}
           value={newComment}
+          maxLength={2000}
           onChange={(e) => {
             setNewComment(e.target.value)
             // Auto-expand
