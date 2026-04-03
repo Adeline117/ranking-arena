@@ -145,8 +145,10 @@ async function generateRankChanges(supabase: AnySupabase): Promise<{ title: stri
     return `${i + 1}. **${name}** (${platform}) — Score: ${Number(t.arena_score).toFixed(1)}${roi}`
   })
 
-  const title = 'Top Movers This Week'
-  const content = `**This week's highest-scoring traders (7D)**\n\n${lines.join('\n')}\n\n---\n📊 Arena tracks 54K+ traders across 27 exchanges. Rankings update every 30 min.`
+  const topName = top7d[0].handle || top7d[0].source_trader_id?.slice(0, 8)
+  const topRoi = top7d[0].roi != null ? `+${Number(top7d[0].roi).toFixed(0)}%` : ''
+  const title = `${topName} leads with ${topRoi} ROI — This Week's Top 5`
+  const content = `🔥 **This week's highest-scoring traders (7D)**\n\n${lines.join('\n')}\n\n_Who will top next week's leaderboard?_`
   return { title, content }
 }
 
@@ -180,8 +182,9 @@ async function generateExchangeCompare(supabase: AnySupabase): Promise<{ title: 
     return `${medal} **${r.name}** — Avg Score: ${r.avgScore.toFixed(1)} | Top ROI: +${r.topRoi.toFixed(0)}%`
   })
 
-  const title = 'Exchange Performance Comparison (30D)'
-  const content = `**How do the top exchanges compare?**\nAvg Arena Score of top 20 traders per exchange (30D):\n\n${lines.join('\n')}\n\n---\n📊 Data from Arena leaderboard | 数据来自 Arena 排行榜`
+  const winner = results[0]
+  const title = `${winner.name} dominates with ${winner.avgScore.toFixed(0)} avg score — Exchange Battle`
+  const content = `⚔️ **Which exchange has the best traders?**\nAvg Arena Score of top 20 traders per exchange (30D):\n\n${lines.join('\n')}\n\n_Where would you rank?_`
   return { title, content }
 }
 
