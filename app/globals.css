@@ -2019,11 +2019,129 @@ input[type="search"]::-webkit-search-cancel-button:hover {
     display: none !important;
   }
 
+  /* Hide interactive/floating elements */
+  .fab-container,
+  .toast-container,
+  .feedback-widget,
+  .sticker-picker,
+  button[aria-label="Feedback"],
+  .export-ranking-btn,
+  .interactive-scale,
+  .print-hide {
+    display: none !important;
+  }
+
   /* No shadows or transforms */
   * {
     box-shadow: none !important;
     text-shadow: none !important;
     transform: none !important;
+  }
+
+  /* ── Trader Detail Page ── */
+
+  /* Single-column layout */
+  .trader-page-container,
+  .profile-grid {
+    display: block !important;
+    max-width: 100% !important;
+  }
+
+  /* Convert dark glass backgrounds to white */
+  [style*="background"],
+  [style*="backdrop-filter"] {
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+  }
+
+  /* Performance cards */
+  .performance-main-grid {
+    grid-template-columns: 1fr 1fr !important;
+    gap: 8pt !important;
+  }
+
+  .performance-main-grid > div {
+    background: #f8f8f8 !important;
+    border: 1px solid #ddd !important;
+    border-radius: 4pt !important;
+    color: #000 !important;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  /* Hero metric values — preserve color for ROI/PnL */
+  .hero-metric-value {
+    font-size: 24pt !important;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  /* Metric badges */
+  .metric-badges-grid {
+    gap: 4pt !important;
+  }
+
+  .metric-badges-grid > * {
+    background: #f0f0f0 !important;
+    border: 1px solid #ccc !important;
+    color: #000 !important;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  /* Score breakdown bars */
+  .score-breakdown-layout {
+    flex-direction: row !important;
+  }
+
+  /* Trader header */
+  .profile-header {
+    background: #fff !important;
+    border-bottom: 2px solid #8b6fa8 !important;
+    padding: 12pt 0 !important;
+  }
+
+  .profile-header-actions {
+    display: none !important;
+  }
+
+  /* Tab panels */
+  .tab-pane-enter {
+    animation: none !important;
+  }
+
+  /* Equity curve chart — ensure SVGs print */
+  .chart-container svg {
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  /* Page breaks */
+  .trader-page-container > section,
+  .trader-page-container > div {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+
+  /* Ensure colored text prints with color */
+  [style*="color: var(--color-accent-success)"],
+  [style*="color: var(--color-accent-error)"] {
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  @page {
+    size: A4 portrait;
+    margin: 12mm 10mm;
+  }
+
+  /* Print header */
+  .print-header {
+    display: block !important;
+    text-align: center;
+    border-bottom: 2px solid #8b6fa8;
+    padding-bottom: 8pt;
+    margin-bottom: 12pt;
   }
 }
 
