@@ -160,7 +160,7 @@ export default function MessageBubble({
           {/* Media content */}
           {msg.media_url && msg.media_type === 'image' && (
             <Image
-              src={msg.media_url} alt="" width={400} height={300}
+              src={msg.media_url} alt="Shared image" width={400} height={300}
               onClick={() => onPreviewOpen({ type: 'image', url: msg.media_url! })}
               style={{ maxWidth: '100%', maxHeight: 300, borderRadius: 14, cursor: 'pointer', display: 'block', objectFit: 'contain' }}
               unoptimized

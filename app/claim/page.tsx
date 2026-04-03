@@ -184,7 +184,7 @@ export default function ClaimPage() {
               {selectedTrader.avatar_url && (
                 <img
                   src={selectedTrader.avatar_url.startsWith('data:') ? selectedTrader.avatar_url : '/api/avatar?url=' + encodeURIComponent(selectedTrader.avatar_url)}
-                  alt=""
+                  alt={selectedTrader.handle || 'Trader'}
                   style={{ width: 40, height: 40, borderRadius: '50%' }}
                 />
               )}

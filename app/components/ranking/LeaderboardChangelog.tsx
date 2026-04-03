@@ -44,7 +44,7 @@ function MoverRow({ mover, type }: { mover: Mover; type: 'riser' | 'faller' }) {
         {mover.avatar_url ? (
           <img
             src={mover.avatar_url}
-            alt=""
+            alt={displayName}
             width={24}
             height={24}
             style={{ borderRadius: '50%', flexShrink: 0 }}

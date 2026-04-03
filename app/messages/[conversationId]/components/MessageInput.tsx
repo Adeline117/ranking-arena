@@ -119,7 +119,7 @@ export default function MessageInput({
       {pendingAttachment && (
         <Box style={{ maxWidth: 800, margin: '0 auto', marginBottom: 8, padding: 8, background: tokens.colors.bg.tertiary, borderRadius: tokens.radius.lg, display: 'flex', alignItems: 'center', gap: 10 }}>
           {pendingAttachment.type === 'image' ? (
-            <Image src={pendingAttachment.url} alt="" width={60} height={60} style={{ width: 60, height: 60, objectFit: 'cover', borderRadius: tokens.radius.md, cursor: 'pointer' }} onClick={() => onPreviewOpen({ type: 'image', url: pendingAttachment.url })} unoptimized />
+            <Image src={pendingAttachment.url} alt="Attachment preview" width={60} height={60} style={{ width: 60, height: 60, objectFit: 'cover', borderRadius: tokens.radius.md, cursor: 'pointer' }} onClick={() => onPreviewOpen({ type: 'image', url: pendingAttachment.url })} unoptimized />
           ) : pendingAttachment.type === 'video' ? (
             <Box onClick={() => onPreviewOpen({ type: 'video', url: pendingAttachment.url })} style={{ width: 60, height: 60, borderRadius: tokens.radius.md, background: tokens.colors.bg.primary, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
               <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke={tokens.colors.text.secondary} strokeWidth="2"><polygon points="5 3 19 12 5 21 5 3" /></svg>

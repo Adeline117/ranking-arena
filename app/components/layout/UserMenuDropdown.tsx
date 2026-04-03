@@ -105,7 +105,7 @@ export default function UserMenuDropdown({
         {myAvatarUrl && !avatarError ? (
           <Image
             src={myAvatarUrl.startsWith('data:') ? myAvatarUrl : `/api/avatar?url=${encodeURIComponent(myAvatarUrl)}`}
-            alt=""
+            alt="Avatar"
             width={36}
             height={36}
             sizes="36px"

@@ -93,7 +93,7 @@ export function SearchSection({ onSelect }: { onSelect: (result: SearchResult) =
               {r.avatar_url && (
                 <img
                   src={r.avatar_url.startsWith('data:') ? r.avatar_url : '/api/avatar?url=' + encodeURIComponent(r.avatar_url)}
-                  alt=""
+                  alt={r.handle || 'Trader'}
                   style={{ width: 32, height: 32, borderRadius: '50%' }}
                 />
               )}

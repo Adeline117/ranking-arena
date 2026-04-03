@@ -548,7 +548,7 @@ export default function NotificationsPage() {
                           zIndex: 3 - i,
                         }}>
                           {actor.avatar_url ? (
-                            <Image src={actor.avatar_url} alt="" fill sizes="20px" style={{ objectFit: 'cover' }} unoptimized />
+                            <Image src={actor.avatar_url} alt={actor.handle || 'User'} fill sizes="20px" style={{ objectFit: 'cover' }} unoptimized />
                           ) : (
                             (actor.handle || '?')[0].toUpperCase()
                           )}

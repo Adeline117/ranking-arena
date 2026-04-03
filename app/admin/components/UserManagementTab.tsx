@@ -149,7 +149,7 @@ export default function UserManagementTab({ accessToken }: UserManagementTabProp
                           {user.avatar_url ? (
                             <Image
                               src={user.avatar_url.startsWith('data:') ? user.avatar_url : '/api/avatar?url=' + encodeURIComponent(user.avatar_url)}
-                              alt=""
+                              alt={user.handle || user.email || 'User'}
                               width={32}
                               height={32}
                               style={{ width: '100%', height: '100%', objectFit: 'cover' }}
