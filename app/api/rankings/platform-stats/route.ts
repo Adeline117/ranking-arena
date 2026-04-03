@@ -10,9 +10,10 @@
  * Cache: 1 hour (s-maxage=3600)
  */
 
-import { NextResponse } from 'next/server'
+import { NextRequest, NextResponse } from 'next/server'
 import { getSupabaseAdmin } from '@/lib/api'
 import { tieredGetOrSet } from '@/lib/cache/redis-layer'
+import { checkRateLimit, RateLimitPresets } from '@/lib/utils/rate-limit'
 
 // Remove force-dynamic so Vercel CDN can cache this response.
 // The tieredGetOrSet below caches at the Redis layer (1h TTL).
@@ -44,8 +45,11 @@ interface PlatformStat {
   avgWinRate: number | null
 }
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
+    const rl = await checkRateLimit(request, RateLimitPresets.read)
+    if (rl) return rl
+
     const CACHE_KEY = 'rankings:platform-stats:90D'
 
     const platformStats = await tieredGetOrSet<PlatformStat[]>(
