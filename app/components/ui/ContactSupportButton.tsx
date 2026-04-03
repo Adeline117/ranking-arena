@@ -179,6 +179,8 @@ export default function ContactSupportButton({
           width: fullWidth ? '100%' : 'auto',
           textAlign: 'left',
         }}
+        onMouseEnter={(e) => { if (!loading) e.currentTarget.style.borderColor = 'var(--color-accent-primary)' }}
+        onMouseLeave={(e) => { if (!loading) e.currentTarget.style.borderColor = 'var(--color-border-primary)' }}
       >
         <div
           style={{
@@ -234,6 +236,8 @@ export default function ContactSupportButton({
         justifyContent: 'center',
         gap: '6px',
       }}
+      onMouseEnter={(e) => { if (!loading) e.currentTarget.style.background = 'var(--glass-bg-medium, rgba(255,255,255,0.08))' }}
+      onMouseLeave={(e) => { if (!loading) e.currentTarget.style.background = 'var(--glass-bg-light)' }}
     >
       <MessageIcon size={size === 'sm' ? 14 : 16} />
       {loading ? '...' : defaultLabel}
