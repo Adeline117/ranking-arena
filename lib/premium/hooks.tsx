@@ -43,10 +43,16 @@ export const FEATURE_LIMITS = {
  * Beta mode: unlock all Pro features for everyone during early launch.
  * Set to false when paywalls should be enforced.
  *
- * ⚠️ SECURITY: This flag was set to true, unlocking all Pro features for everyone.
+ * ⚠️ SECURITY: This flag MUST be false in production.
+ * Setting to true bypasses ALL paywalls — revenue impact.
  * Changed to false on 2026-03-28 to enforce the paywall.
  */
 export const BETA_PRO_FEATURES_FREE = false
+
+// Runtime safeguard: prevent accidental enabling via env var in production
+if (typeof process !== 'undefined' && process.env.NODE_ENV === 'production' && process.env.NEXT_PUBLIC_BETA_PRO_FREE === 'true') {
+  console.error('CRITICAL: NEXT_PUBLIC_BETA_PRO_FREE=true is not allowed in production. Ignoring.')
+}
 
 interface PremiumContextValue {
   /** 当前订阅 */
