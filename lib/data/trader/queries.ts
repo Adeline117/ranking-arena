@@ -749,5 +749,30 @@ export async function resolveTrader(supabase: SupabaseClient, params: {
     }
   }
 
+  // Step 5: Last resort — check trader_snapshots_v2 directly
+  // Some traders exist in snapshots (written by VPS scraper-cron) but not in
+  // trader_sources or leaderboard_ranks (e.g., freshly discovered traders).
+  {
+    let svQuery = supabase
+      .from('trader_snapshots_v2')
+      .select('platform, trader_key')
+      .eq(V2.trader_key, decodedHandle)
+      .order('updated_at', { ascending: false })
+
+    if (platformFilter) {
+      svQuery = svQuery.eq(V2.platform, platformFilter)
+    }
+
+    const { data: svResult } = await svQuery.limit(1).maybeSingle()
+    if (svResult) {
+      return {
+        platform: svResult.platform,
+        traderKey: svResult.trader_key,
+        handle: null,
+        avatarUrl: null,
+      }
+    }
+  }
+
   return null
 }
