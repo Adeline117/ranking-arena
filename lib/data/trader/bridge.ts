@@ -73,14 +73,30 @@ export function toTraderPageData(detail: TraderDetail): Record<string, unknown> 
     sharpe_ratio: t.sharpeRatio ?? null,
     sharpe_ratio_30d: p30?.sharpeRatio ?? null,
     sharpe_ratio_7d: p7?.sharpeRatio ?? null,
-    winning_positions: detail.stats?.winningPositions ?? (
-      t.winRate != null && t.tradesCount != null && t.tradesCount > 0
-        ? Math.round((t.winRate / 100) * t.tradesCount)
-        : undefined
-    ),
-    total_positions: detail.stats?.totalPositions ?? (
-      t.tradesCount != null && t.tradesCount > 0 ? t.tradesCount : undefined
-    ),
+    winning_positions: (() => {
+      // Use enrichment stats, but validate: winning can never exceed total trades
+      const enrichWin = detail.stats?.winningPositions
+      const enrichTotal = detail.stats?.totalPositions
+      const periodTrades = t.tradesCount
+      // If enrichment winning > period trades, enrichment is lifetime data — compute from period instead
+      if (enrichWin != null && periodTrades != null && enrichWin > periodTrades) {
+        return t.winRate != null && periodTrades > 0
+          ? Math.round((t.winRate / 100) * periodTrades) : undefined
+      }
+      return enrichWin ?? (
+        t.winRate != null && periodTrades != null && periodTrades > 0
+          ? Math.round((t.winRate / 100) * periodTrades) : undefined
+      )
+    })(),
+    total_positions: (() => {
+      const enrichTotal = detail.stats?.totalPositions
+      const periodTrades = t.tradesCount
+      // If enrichment total >> period trades, use period trades (more accurate for display period)
+      if (enrichTotal != null && periodTrades != null && enrichTotal > periodTrades * 2) {
+        return periodTrades > 0 ? periodTrades : undefined
+      }
+      return enrichTotal ?? (periodTrades != null && periodTrades > 0 ? periodTrades : undefined)
+    })(),
     // Per-period winning positions (computed from win_rate * trades_count when not available)
     winning_positions_7d: p7?.winRate != null && p7?.tradesCount != null && p7.tradesCount > 0
       ? Math.round((p7.winRate / 100) * p7.tradesCount) : undefined,
