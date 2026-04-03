@@ -63,6 +63,8 @@ export interface AdapterResult {
   error?: string
   dryRunData?: TraderData[]
   writeConsistency?: WriteConsistency
+  /** Trader keys that were successfully written — used for inline enrichment */
+  savedTraderKeys: string[]
 }
 
 // ---------------------------------------------------------------------------
@@ -209,6 +211,7 @@ export async function writeDiscoverResult(
       total: result.traders.length,
       saved: 0,
       skipped,
+      savedTraderKeys: [],
       // Only report as error if there were traders to normalize (avoids false positive on empty API response)
       error: result.traders.length > 0 ? `All ${result.traders.length} traders failed normalization` : undefined,
     }
@@ -222,6 +225,7 @@ export async function writeDiscoverResult(
       total: result.traders.length,
       saved: traderDataArray.length,
       skipped,
+      savedTraderKeys: traderDataArray.map(t => t.source_trader_id),
       dryRunData: traderDataArray,
     }
   }
@@ -235,6 +239,7 @@ export async function writeDiscoverResult(
       total: result.traders.length,
       saved: 0,
       skipped,
+      savedTraderKeys: [],
       error: 'Supabase client not available (missing env vars)',
     }
   }
@@ -258,6 +263,7 @@ export async function writeDiscoverResult(
     total: result.traders.length,
     saved,
     skipped,
+    savedTraderKeys: saved > 0 ? traderDataArray.map(t => t.source_trader_id) : [],
     error,
     writeConsistency: write_consistency,
   }
