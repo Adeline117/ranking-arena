@@ -8,6 +8,7 @@ import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import { formatTimeAgo } from '@/lib/utils/date'
 import { useToast } from '@/app/components/ui/Toast'
 import { SectionCard, getInputStyle } from './shared'
+import PasswordInput from '@/app/components/ui/PasswordInput'
 import { validateEmail, validatePassword, validatePasswordMatch } from '../validation'
 
 interface SessionInfo {
@@ -156,8 +157,8 @@ export const SecuritySection = React.memo(function SecuritySection(props: Securi
 
         {props.passwordResetMode === 'password' ? (
           <Box style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[3] }}>
-            <input
-              type="password"
+            <PasswordInput
+              
               value={props.currentPassword}
               onChange={(e) => props.setCurrentPassword(e.target.value)}
               placeholder={t('currentPasswordPlaceholder')}
@@ -165,8 +166,8 @@ export const SecuritySection = React.memo(function SecuritySection(props: Securi
               style={getInputStyle()}
             />
             <Box>
-              <input
-                type="password"
+              <PasswordInput
+                
                 value={props.newPassword}
                 onChange={(e) => props.setNewPassword(e.target.value)}
                 onBlur={() => props.markTouched('newPassword')}
@@ -181,8 +182,8 @@ export const SecuritySection = React.memo(function SecuritySection(props: Securi
               )}
             </Box>
             <Box>
-              <input
-                type="password"
+              <PasswordInput
+                
                 value={props.confirmNewPassword}
                 onChange={(e) => props.setConfirmNewPassword(e.target.value)}
                 onBlur={() => props.markTouched('confirmPassword')}
@@ -441,8 +442,8 @@ export const SecuritySection = React.memo(function SecuritySection(props: Securi
               {t('enterPasswordToDisable')}
             </Text>
             <Box style={{ display: 'flex', gap: tokens.spacing[3], alignItems: 'center' }}>
-              <input
-                type="password"
+              <PasswordInput
+                
                 value={props.disablePassword}
                 onChange={(e) => props.setDisablePassword(e.target.value)}
                 placeholder={t('enterCurrentPasswordPlaceholder')}

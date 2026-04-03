@@ -1,4 +1,5 @@
 'use client'
+import PasswordInput from '@/app/components/ui/PasswordInput'
 
 import { useState } from 'react'
 import { tokens } from '@/lib/design-tokens'
@@ -145,8 +146,7 @@ export function CexVerifyForm({
         <label style={{ display: 'block', marginBottom: tokens.spacing[1], fontWeight: 500, fontSize: tokens.typography.fontSize.sm }}>
           API Secret
         </label>
-        <input
-          type="password"
+        <PasswordInput
           value={apiSecret}
           onChange={(e) => setApiSecret(e.target.value)}
           placeholder="Enter your API Secret"
@@ -166,8 +166,7 @@ export function CexVerifyForm({
           <label style={{ display: 'block', marginBottom: tokens.spacing[1], fontWeight: 500, fontSize: tokens.typography.fontSize.sm }}>
             Passphrase
           </label>
-          <input
-            type="password"
+          <PasswordInput
             value={passphrase}
             onChange={(e) => setPassphrase(e.target.value)}
             placeholder="Enter your Passphrase"
