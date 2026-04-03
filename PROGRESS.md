@@ -49,11 +49,29 @@
 - gateio: **98%** (enrichment equity curve)
 - etoro: CopySim daily API discovered, 198 data points per trader
 
-### Still Low (API limitations)
+### Sharpe Coverage Analysis (2026-04-02 session 2)
+
+**Fixes pushed:**
+1. `fix(bingx)`: enrichment was hardcoding `sharpeRatio: null` despite connector reading `sharpe30d`/`sharpeRatio`/`sharpe`/`sharpRatio` from API. Now extracts from CF Worker proxy response. (0/208 v2 traders had sharpe)
+2. `fix(aggregate-daily-snapshots)`: fallback query had 50K global limit dominated by gmx (156K) + hyperliquid (155K rows in 2 days). Small platforms (bingx: 228, toobit: 1.6K, gains: 2.3K) were entirely crowded out — daily snapshots stopped flowing since March 18. Now queries per-platform with 5K limit each.
+3. This unblocks `compute-derived-metrics` (00:20 UTC) from computing Sharpe from daily returns for toobit/bingx/gains/drift/hyperliquid/blofin/etoro.
+
+**Root cause analysis per platform:**
+- **BingX** (0% sharpe in v2): enrichment hardcoded null (FIXED). Also: connector reads sharpe from ranking API, but enrichment ignored it.
+- **Toobit** (33% sharpe): API `sharpeRatio` field missing for most traders. Both connector + enrichment already try. Need daily snapshot path (FIXED via aggregate fix).
+- **Gains** (32% sharpe): on-chain events sparse (<3 unique trading days per trader). Copin API position filter returns `[]` for GNS. Native `personal-trading-history-table` API is 404.
+- **eToro** (26% sharpe): CopySim API works but CF rate limits all IPs. Not a code bug.
+- **Drift** (34% sharpe in LR, 95% in v2): already fixed. Remaining nulls = traders with <3 snapshots.
+- **Hyperliquid** (37% sharpe): whales have <5 closing days in 90d. Not a code bug.
+- **BloFin** (11% sharpe): CF WAF blocks API + VPS scraper. Not a code bug.
+
+**Key insight:** The aggregate-daily-snapshots bottleneck was the #1 blocker. Once daily snapshots resume for all platforms, the compute-derived-metrics and compute-leaderboard crons will auto-compute Sharpe from daily returns (needs 7+ days of history).
+
+### Still Low (API limitations, not code bugs)
 - hyperliquid 37%: userFillsByTime helps mid-tier; whales have <5 closing days in 90d
 - blofin 11%: Cloudflare WAF blocks even Playwright stealth
-- bingx 23%: no daily curve in API
-- gains 32%: onchain events sparse
+- bingx 23%: no daily curve in API, sharpe extraction from API now enabled
+- gains 32%: onchain events sparse, Copin position API empty for GNS
 
 ### Key Bugs Found & Fixed
 1. **Drift**: API returns `{accounts:[{snapshots:[...]}]}` but code did `Array.isArray(response)` = FALSE → snaps=[] for ALL traders
