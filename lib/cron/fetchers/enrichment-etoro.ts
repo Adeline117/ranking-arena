@@ -23,6 +23,12 @@ const _GAIN_HISTORY_URL = 'https://www.etoro.com/sapi/userstats/gain/cid' // Kep
 const PORTFOLIO_URL = 'https://www.etoro.com/sapi/trade-data-real/live/public/portfolios'
 const RANKINGS_URL = 'https://www.etoro.com/sapi/rankings/rankings'
 
+// eToro WAF requires Referer header or returns 403
+const ETORO_HEADERS = {
+  Referer: 'https://www.etoro.com/',
+  Origin: 'https://www.etoro.com',
+}
+
 interface EtoroGainEntry {
   start: string  // ISO timestamp
   gain: number   // Percentage return
@@ -93,7 +99,7 @@ export async function fetchEtoroEquityCurve(
 
     const data = await fetchJson<EtoroCopySimResponse>(
       `https://www.etoro.com/sapi/userstats/copysim/cid/${traderId}?period=${period}&dataResolution=Day`,
-      { timeoutMs: 15000 }
+      { timeoutMs: 15000, headers: ETORO_HEADERS }
     )
 
     if (!data?.simulation) return []
@@ -147,7 +153,7 @@ export async function fetchEtoroStatsDetail(
     try {
       const portfolio = await fetchJson<EtoroPortfolioResponse>(
         `${PORTFOLIO_URL}?cid=${traderId}`,
-        { timeoutMs: 8000 }
+        { timeoutMs: 8000, headers: ETORO_HEADERS }
       )
       if (portfolio?.AggregatedPositions) {
         positionCount = portfolio.AggregatedPositions.length
@@ -218,7 +224,7 @@ export async function fetchEtoroPortfolio(
   try {
     const data = await fetchJson<EtoroPortfolioResponse>(
       `${PORTFOLIO_URL}?cid=${traderId}`,
-      { timeoutMs: 8000 }
+      { timeoutMs: 8000, headers: ETORO_HEADERS }
     )
 
     if (!data?.AggregatedPositions || data.AggregatedPositions.length === 0) {
@@ -264,6 +270,7 @@ async function populateTraderCache(): Promise<void> {
         const url = `${RANKINGS_URL}/?Period=${period}&page=${page}&pagesize=100`
         const data = await fetchJson<{ Items: EtoroRankingEntry[]; TotalRows: number }>(url, {
           timeoutMs: 10000,
+          headers: ETORO_HEADERS,
         })
 
         if (!data?.Items || data.Items.length === 0) break
