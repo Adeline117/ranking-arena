@@ -53,6 +53,8 @@ export default function PostDetailModal({ postId, onClose }: PostDetailModalProp
   // Focus management: trap focus, handle Escape, restore focus on close
   useEffect(() => {
     previousFocusRef.current = document.activeElement as HTMLElement
+    const prevOverflow = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
 
     const timer = setTimeout(() => {
       if (dialogRef.current) {
@@ -88,6 +90,7 @@ export default function PostDetailModal({ postId, onClose }: PostDetailModalProp
     document.addEventListener('keydown', handleKeyDown)
     return () => {
       clearTimeout(timer)
+      document.body.style.overflow = prevOverflow
       document.removeEventListener('keydown', handleKeyDown)
       previousFocusRef.current?.focus()
     }
