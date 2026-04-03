@@ -110,16 +110,16 @@ html.theme-transition #main-content {
   --color-border-primary: #2A2836;
   --color-border-secondary: #3A3848;
   
-  /* Accent colors */
-  --color-accent-primary: #8b6fa8;
-  --color-accent-primary-08: rgba(139, 111, 168, 0.08);
-  --color-accent-primary-10: rgba(139, 111, 168, 0.1);
-  --color-accent-primary-12: rgba(139, 111, 168, 0.12);
-  --color-accent-primary-15: rgba(139, 111, 168, 0.15);
-  --color-accent-primary-20: rgba(139, 111, 168, 0.2);
-  --color-accent-primary-30: rgba(139, 111, 168, 0.3);
-  --color-accent-primary-40: rgba(139, 111, 168, 0.4);
-  --color-accent-primary-60: rgba(139, 111, 168, 0.6);
+  /* Accent colors — brightened for WCAG AA 5.6:1 on secondary bg #14121C */
+  --color-accent-primary: #9A85B5;
+  --color-accent-primary-08: rgba(154, 133, 181, 0.08);
+  --color-accent-primary-10: rgba(154, 133, 181, 0.1);
+  --color-accent-primary-12: rgba(154, 133, 181, 0.12);
+  --color-accent-primary-15: rgba(154, 133, 181, 0.15);
+  --color-accent-primary-20: rgba(154, 133, 181, 0.2);
+  --color-accent-primary-30: rgba(154, 133, 181, 0.3);
+  --color-accent-primary-40: rgba(154, 133, 181, 0.4);
+  --color-accent-primary-60: rgba(154, 133, 181, 0.6);
   --color-translated: #7CBBB8;
   --color-translated-08: rgba(124, 187, 184, 0.08);
   --color-translated-20: rgba(124, 187, 184, 0.2);

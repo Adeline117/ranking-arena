@@ -125,9 +125,9 @@ export const darkTokens = {
       success: '#4DFF9A',      // Positive ROI/states
       warning: '#FFB800',      // Warnings
       error: '#FF4D4D',        // Negative ROI/states
-      brand: '#8b6fa8',        // Arena brand purple
-      brandHover: '#9d84b5',   // Brand hover state
-      brandMuted: 'rgba(139, 111, 168, 0.15)', // Brand muted background
+      brand: '#9A85B5',        // Arena brand purple (WCAG AA 5.6:1 on card bg)
+      brandHover: '#B09DC8',   // Brand hover state (brighter)
+      brandMuted: 'rgba(154, 133, 181, 0.15)', // Brand muted background
       brandLight: '#c9b8db',   // Brand light for secondary text on brand bg
       translated: '#7CBBB8',   // Translated text color (soft teal for dark mode)
     },
