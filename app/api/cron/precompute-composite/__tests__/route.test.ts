@@ -90,25 +90,26 @@ function createCronRequest(secret?: string): NextRequest {
   return new NextRequest('http://localhost:3000/api/cron/precompute-composite', { headers })
 }
 
-/** Create a chainable Supabase query proxy that resolves to given data */
+/** Create a chainable Supabase query proxy that resolves to given data.
+ *  Thenable: `await proxy` at any point in the chain resolves to resolvedValue.
+ *  The .then handler is returned from the get trap (not set as a direct property)
+ *  because Proxy get traps intercept ALL property access, including .then. */
 function chainProxy(resolvedValue: { data: unknown; error: unknown }) {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const proxy: any = new Proxy({}, {
     get(_, prop) {
-      if (prop === 'then') return undefined // not a Promise
+      if (prop === 'then') {
+        return (resolve: (v: unknown) => void) => Promise.resolve(resolvedValue).then(resolve)
+      }
+      if (prop === 'catch') {
+        return (reject: (v: unknown) => void) => Promise.resolve(resolvedValue).catch(reject)
+      }
       return jest.fn().mockImplementation((..._args: unknown[]) => {
-        // Terminal methods that return the result
         if (prop === 'single' || prop === 'maybeSingle') return Promise.resolve(resolvedValue)
-        // If the resolved value has a `then`, it's the last in chain
-        // But we need the chain to be flexible, so always return proxy
-        // except check if next call should resolve
         return proxy
       })
     },
   })
-  // Make the proxy thenable so await works at any point in chain
-  proxy.then = (resolve: (v: unknown) => void) => Promise.resolve(resolvedValue).then(resolve)
-  proxy.catch = (reject: (v: unknown) => void) => Promise.resolve(resolvedValue).catch(reject)
   return proxy
 }
 
@@ -160,7 +161,7 @@ describe('GET /api/cron/precompute-composite', () => {
 
   // ---- Normal execution ----------------------------------------------------
 
-  it.skip('computes composite rankings and stores in Redis', async () => {
+  it('computes composite rankings and stores in Redis', async () => {
     const rows7d = [
       makeSnapshotRow({ trader_key: 'trader1', arena_score: 90, roi_pct: 60 }),
       makeSnapshotRow({ trader_key: 'trader2', arena_score: 70, roi_pct: 30 }),
@@ -173,8 +174,6 @@ describe('GET /api/cron/precompute-composite', () => {
       makeSnapshotRow({ trader_key: 'trader1', arena_score: 80, roi_pct: 45 }),
     ]
 
-    const snapshotQueryFor = (rows: unknown[]) => chainProxy({ data: rows, error: null })
-
     const traderSourcesQuery = chainProxy({
       data: [
         { source: 'binance-futures', source_trader_id: 'trader1', handle: 'CryptoKing', avatar_url: 'https://img/1.png' },
@@ -184,8 +183,9 @@ describe('GET /api/cron/precompute-composite', () => {
       error: null,
     })
 
-    // The route calls fetchWindow 3 times (7D, 30D, 90D) in parallel
-    // Return different data based on which window is queried
+    // The route calls fetchWindow 3 times (7D, 30D, 90D) in parallel.
+    // Each from('trader_snapshots_v2') call gets a fresh proxy that captures
+    // .eq('window', X) and resolves to the matching window's data.
     const windowData = new Map([
       ['7D', rows7d],
       ['30D', rows30d],
@@ -194,29 +194,31 @@ describe('GET /api/cron/precompute-composite', () => {
 
     mockSupabaseFrom.mockImplementation((table: string) => {
       if (table === 'trader_snapshots_v2') {
-        // Return a new proxy that captures .eq('window', X) and returns appropriate data
         let windowFilter: string | null = null
-        const proxy = new Proxy({}, {
+        const resolveData = () => {
+          const data = windowFilter && windowData.has(windowFilter) ? windowData.get(windowFilter) : []
+          return { data, error: null }
+        }
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const proxy: any = new Proxy({}, {
           get(_, prop) {
-            if (prop === 'then') return undefined
-            return jest.fn().mockImplementation((...args) => {
-              // Capture window filter from .eq('window', 'XD')
+            if (prop === 'then') {
+              return (resolve: (v: unknown) => void) => Promise.resolve(resolveData()).then(resolve)
+            }
+            if (prop === 'catch') {
+              return (reject: (v: unknown) => void) => Promise.resolve(resolveData()).catch(reject)
+            }
+            return jest.fn().mockImplementation((...args: unknown[]) => {
               if (prop === 'eq' && args[0] === 'window') {
                 windowFilter = args[1] as string
               }
               if (prop === 'single' || prop === 'maybeSingle') {
-                const data = windowFilter && windowData.has(windowFilter) ? windowData.get(windowFilter) : []
-                return Promise.resolve({ data, error: null })
+                return Promise.resolve(resolveData())
               }
               return proxy
             })
           },
         })
-        proxy.then = (resolve: (v: unknown) => void) => {
-          const data = windowFilter && windowData.has(windowFilter) ? windowData.get(windowFilter) : []
-          return Promise.resolve({ data, error: null }).then(resolve)
-        }
-        proxy.catch = (reject: (v: unknown) => void) => Promise.resolve({ data: [], error: null }).catch(reject)
         return proxy
       }
       if (table === 'trader_sources') return traderSourcesQuery
@@ -225,10 +227,6 @@ describe('GET /api/cron/precompute-composite', () => {
 
     const res = await GET(createCronRequest(CRON_SECRET))
     const body = await res.json()
-
-    if (res.status !== 200) {
-      console.error('[TEST DEBUG] Unexpected error:', JSON.stringify(body, null, 2))
-    }
 
     expect(res.status).toBe(200)
     expect(body.ok).toBe(true)
@@ -251,7 +249,7 @@ describe('GET /api/cron/precompute-composite', () => {
 
   // ---- Empty data ----------------------------------------------------------
 
-  it.skip('handles empty snapshot data gracefully', async () => {
+  it('handles empty snapshot data gracefully', async () => {
     mockSupabaseFrom.mockImplementation(() => chainProxy({ data: [], error: null }))
 
     const res = await GET(createCronRequest(CRON_SECRET))
@@ -307,7 +305,6 @@ describe('GET /api/cron/precompute-composite', () => {
     expect(res.status).toBe(500)
     const body = await res.json()
     expect(body.error).toBe('Precompute failed')
-    // Error message may vary depending on execution path
-    expect(body.detail).toBeTruthy()
+    expect(body.detail).toContain('Redis connection refused')
   })
 })

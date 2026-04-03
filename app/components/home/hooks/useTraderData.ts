@@ -395,9 +395,11 @@ export function useTraderData(options: UseTraderDataOptions = {}) {
     }
 
     if ('requestIdleCallback' in window) {
-      requestIdleCallback(deferredFetch, { timeout: 5000 })
+      const idleId = requestIdleCallback(deferredFetch, { timeout: 5000 })
+      return () => cancelIdleCallback(idleId)
     } else {
-      setTimeout(deferredFetch, 3000)
+      const timerId = setTimeout(deferredFetch, 3000)
+      return () => clearTimeout(timerId)
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps -- intentionally runs once on mount
   }, [])
