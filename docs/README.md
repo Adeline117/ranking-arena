@@ -1,149 +1,66 @@
 # Documentation Index
 
-This directory contains technical documentation for the Ranking Arena project.
-
-## Quick Reference
+## Core
 
 | Document | Description |
 |----------|-------------|
-| [QUICK_REFERENCE.md](./QUICK_REFERENCE.md) | Common commands and quick start guide |
-| [../CLAUDE.md](../CLAUDE.md) | Project overview and development guidelines |
-
----
-
-## Developer Guides
-
-### Development Workflow
-
-| Document | Description |
-|----------|-------------|
-| [GIT_WORKFLOW.md](./GIT_WORKFLOW.md) | Git branching strategy and commit conventions |
-| [BRANCH_PROTECTION.md](./BRANCH_PROTECTION.md) | Branch protection rules and PR workflow |
-| [LINTING_GUIDE.md](./LINTING_GUIDE.md) | ESLint rules and code quality guidelines |
-
-### API Development
-
-| Document | Description |
-|----------|-------------|
-| [API_BEST_PRACTICES.md](./API_BEST_PRACTICES.md) | API error handling and response format standards |
-| [API_ROUTES.md](./API_ROUTES.md) | Complete API endpoint reference |
-
-### Database & Security
-
-| Document | Description |
-|----------|-------------|
-| [RLS_POLICIES.md](./RLS_POLICIES.md) | Row Level Security policies documentation |
-| [SECURITY_BEST_PRACTICES.md](./SECURITY_BEST_PRACTICES.md) | Security best practices guide |
-
-### Feature Documentation
-
-| Document | Description |
-|----------|-------------|
-| [MESSAGE_TRACING.md](./MESSAGE_TRACING.md) | Message system lifecycle and tracing |
-| [GROUP_STATE_SYNC.md](./GROUP_STATE_SYNC.md) | Group membership state synchronization |
-| [I18N_STRATEGY.md](./I18N_STRATEGY.md) | Internationalization strategy |
-
----
-
-## Architecture
-
-| Document | Description |
-|----------|-------------|
+| [../CLAUDE.md](../CLAUDE.md) | Project constitution and dev guidelines |
 | [architecture/ARCHITECTURE.md](./architecture/ARCHITECTURE.md) | System architecture overview |
-| [architecture/PROJECT_STRUCTURE.md](./architecture/PROJECT_STRUCTURE.md) | Project directory structure |
+| [architecture/PROJECT_STRUCTURE.md](./architecture/PROJECT_STRUCTURE.md) | Directory structure |
 
----
-
-## Setup Guides
+## API & Data
 
 | Document | Description |
 |----------|-------------|
-| [setup/SUPABASE_SETUP.md](./setup/SUPABASE_SETUP.md) | Supabase configuration |
-| [setup/VERCEL_DEPLOY.md](./setup/VERCEL_DEPLOY.md) | Vercel deployment guide |
-| [setup/MCP_SETUP.md](./setup/MCP_SETUP.md) | MCP server configuration |
+| [API_ROUTES.md](./API_ROUTES.md) | Complete API endpoint reference |
+| [API_BEST_PRACTICES.md](./API_BEST_PRACTICES.md) | Error handling and response format standards |
+| [DATA_COVERAGE_ANALYSIS.md](./DATA_COVERAGE_ANALYSIS.md) | Data coverage across exchanges |
+| [DATA_PIPELINE_ARCHITECTURE.md](./DATA_PIPELINE_ARCHITECTURE.md) | Four-layer pipeline architecture |
+| [EXCHANGE_FIELD_MAPPING.md](./EXCHANGE_FIELD_MAPPING.md) | Exchange API field mapping |
 
----
+## Exchange API Docs
+
+| Document | Description |
+|----------|-------------|
+| [exchange-apis/bitget-futures.md](./exchange-apis/bitget-futures.md) | Bitget Futures API |
+| [exchange-apis/bybit.md](./exchange-apis/bybit.md) | Bybit API |
+| [exchange-apis/bybit_spot.md](./exchange-apis/bybit_spot.md) | Bybit Spot API |
+| [exchange-apis/gateio.md](./exchange-apis/gateio.md) | Gate.io API |
+| [exchange-apis/htx-futures.md](./exchange-apis/htx-futures.md) | HTX Futures API |
+
+## Security & Database
+
+| Document | Description |
+|----------|-------------|
+| [RLS_POLICIES.md](./RLS_POLICIES.md) | Row Level Security policies |
+| [SECURITY_BEST_PRACTICES.md](./SECURITY_BEST_PRACTICES.md) | Security guidelines |
+| [reference/TOKENS_PERMISSIONS.md](./reference/TOKENS_PERMISSIONS.md) | API token requirements |
+
+## Operations
+
+| Document | Description |
+|----------|-------------|
+| [RUNBOOK.md](./RUNBOOK.md) | Emergency operations manual |
+| [SCRAPER_ARCHITECTURE.md](./SCRAPER_ARCHITECTURE.md) | VPS scraper architecture |
+| [SCRAPER_USAGE_GUIDE.md](./SCRAPER_USAGE_GUIDE.md) | Scraper testing and operations |
+| [STAGING.md](./STAGING.md) | Staging deployment |
+| [STATUS.md](./STATUS.md) | Platform status audit |
+
+## QA & Testing
+
+| Document | Description |
+|----------|-------------|
+| [QA_TEST_CASES.md](./QA_TEST_CASES.md) | Comprehensive test cases |
+| [QA_PAYMENT_FLOW_TESTS.md](./QA_PAYMENT_FLOW_TESTS.md) | Payment flow tests |
+| [UX-AUDIT.md](./UX-AUDIT.md) | UX audit findings |
 
 ## Reference
 
 | Document | Description |
 |----------|-------------|
-| [reference/ARENA_SCORE_METHODOLOGY.md](./reference/ARENA_SCORE_METHODOLOGY.md) | Arena Score calculation methodology |
-| [reference/ACCOUNT_REQUIRED_FIELDS.md](./reference/ACCOUNT_REQUIRED_FIELDS.md) | Exchange account field requirements |
-| [reference/SECURITY_AUDIT.md](./reference/SECURITY_AUDIT.md) | Security audit findings |
-| [reference/PERFORMANCE_OPTIMIZATION.md](./reference/PERFORMANCE_OPTIMIZATION.md) | Performance optimization guide |
-
----
-
-## Design Documents
-
-| Document | Description |
-|----------|-------------|
-| [CHAT_SETTINGS_DESIGN.md](./CHAT_SETTINGS_DESIGN.md) | Chat feature design |
-| [PRO_GROUPS_DM_DESIGN.md](./PRO_GROUPS_DM_DESIGN.md) | Pro groups and DM feature design |
-| [UI_DEAI_IMPROVEMENTS.md](./UI_DEAI_IMPROVEMENTS.md) | UI/UX improvement proposals |
-| [MOBILE_APP_SETUP.md](./MOBILE_APP_SETUP.md) | Mobile app (Capacitor) setup guide |
-| [ACCESSIBILITY.md](./ACCESSIBILITY.md) | Accessibility guidelines |
-
----
-
-## Operations & Monitoring
-
-| Document | Description |
-|----------|-------------|
-| [MONITORING_DASHBOARD.md](./MONITORING_DASHBOARD.md) | Monitoring dashboard setup |
-| [PERFORMANCE_GUIDE.md](./PERFORMANCE_GUIDE.md) | Performance optimization guide |
+| [reference/ARENA_SCORE_METHODOLOGY.md](./reference/ARENA_SCORE_METHODOLOGY.md) | Arena Score formula |
+| [GIT_WORKFLOW.md](./GIT_WORKFLOW.md) | Git conventions |
 | [system-principles.md](./system-principles.md) | System design principles |
-
----
-
-## Data & Exchange Integration
-
-| Document | Description |
-|----------|-------------|
-| [EXCHANGE_FIELD_MAPPING.md](./EXCHANGE_FIELD_MAPPING.md) | Exchange API field mapping |
-| [DATA_COVERAGE_ANALYSIS.md](./DATA_COVERAGE_ANALYSIS.md) | Data coverage analysis across exchanges |
-| [ANOMALY_DETECTION.md](./ANOMALY_DETECTION.md) | Anomaly detection system documentation |
-| [PUPPETEER_WORKER_PLAN.md](./PUPPETEER_WORKER_PLAN.md) | Puppeteer worker architecture plan |
-| [SCRIPTS_CLEANUP_ANALYSIS.md](./SCRIPTS_CLEANUP_ANALYSIS.md) | Data scraping scripts analysis |
-
----
-
-## Audit Reports
-
-| Document | Description |
-|----------|-------------|
-| [OPTIMIZATION_REPORT.md](./OPTIMIZATION_REPORT.md) | Project optimization summary |
-| [ARENA_COMMUNITY_AUDIT_REPORT.md](./ARENA_COMMUNITY_AUDIT_REPORT.md) | Community features audit |
-| [HIDDEN_BUGS_AUDIT_REPORT.md](./HIDDEN_BUGS_AUDIT_REPORT.md) | Hidden bugs analysis |
-| [I18N_HARDCODE_AUDIT.md](./I18N_HARDCODE_AUDIT.md) | Hardcoded strings audit |
-| [VULNERABILITY_FIX_PLAN.md](./VULNERABILITY_FIX_PLAN.md) | Security vulnerability fixes |
-
----
-
-## Test & QA Documentation
-
-| Document | Description |
-|----------|-------------|
-| [QA_TEST_CASES.md](./QA_TEST_CASES.md) | Comprehensive QA test cases |
-| [QA_PAYMENT_FLOW_TESTS.md](./QA_PAYMENT_FLOW_TESTS.md) | Payment flow test cases |
-| [STAGING_TEST_GUIDE.md](./STAGING_TEST_GUIDE.md) | Staging environment test guide |
-| [USER_OPERATIONS.md](./USER_OPERATIONS.md) | User operations flow documentation |
-| [reference/BUTTON_TEST_CHECKLIST.md](./reference/BUTTON_TEST_CHECKLIST.md) | UI interaction test checklist |
-| [reference/TEST_OPTIMIZATION.md](./reference/TEST_OPTIMIZATION.md) | Test optimization strategies |
-
----
-
-## Document Status Legend
-
-- **Active**: Currently maintained and accurate
-- **Reference**: Historical reference, may need updates
-- **Design**: Feature design proposals
-
-## Contributing to Documentation
-
-1. Keep documents focused and concise
-2. Update the index when adding new documents
-3. Use relative links for cross-references
-4. Follow Markdown best practices
-5. Date major updates in document headers
+| [reports/TRADER_DATA_ANALYSIS.md](./reports/TRADER_DATA_ANALYSIS.md) | Trader data structure reference |
+| [retros/retro-2026-03-18.md](./retros/retro-2026-03-18.md) | Engineering retrospective |
+| [fix-reports/2026-03-19-platform-expiry-fix.md](./fix-reports/2026-03-19-platform-expiry-fix.md) | Platform expiry root cause fix |
