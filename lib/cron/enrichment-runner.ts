@@ -927,7 +927,7 @@ export async function runEnrichment(params: {
                     .update({ aum: walletAum })
                     .eq('source', platformKey)
                     .eq('source_trader_id', traderId)
-                    .eq('season_id', period)
+                    .eq('period', period)
                   if (aumErr) {
                     logger.warn(`[enrich] AUM update failed for ${platformKey}/${traderId}: ${aumErr.message}`)
                   }
