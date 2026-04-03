@@ -4,6 +4,7 @@ import { useState, useCallback } from 'react'
 import Link from 'next/link'
 import useSWR from 'swr'
 import { getScoreColor } from '@/lib/utils/score-colors'
+import { formatROI } from '@/lib/utils/format'
 import { tokens, RANK_COLORS_ARRAY } from '@/lib/design-tokens'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import SidebarCard from './SidebarCard'
@@ -158,7 +159,7 @@ export default function TopTraders() {
                 ? formatId(trader.handle)
                 : formatId(trader.source_trader_id)
             const roiStr = trader.roi != null
-              ? `${trader.roi >= 0 ? '+' : ''}${trader.roi >= 1000 ? `${(trader.roi / 1000).toFixed(1)}K` : trader.roi.toFixed(1)}%`
+              ? formatROI(trader.roi)
               : null
             return (
               <Link prefetch={true}
