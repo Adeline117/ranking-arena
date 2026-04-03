@@ -302,9 +302,9 @@ export async function GET(request: NextRequest) {
       },
     })
   } catch (err) {
-    const message = err instanceof Error ? err.message : 'Unknown error'
+    console.error('[by-token]', err instanceof Error ? err.message : String(err))
     return NextResponse.json(
-      { error: 'Internal server error', detail: message },
+      { error: 'Internal server error' },
       { status: 500 }
     )
   }

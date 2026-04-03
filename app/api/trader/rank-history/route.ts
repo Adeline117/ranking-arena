@@ -68,7 +68,7 @@ export async function GET(request: NextRequest) {
   } catch (err) {
     log.error('Unexpected error', { error: err instanceof Error ? err.message : String(err) })
     return NextResponse.json(
-      { error: 'Internal server error', detail: err instanceof Error ? err.message : 'Unknown error' },
+      { error: 'Internal server error' },
       { status: 500 }
     )
   }
