@@ -571,29 +571,24 @@ export async function runConnectorBatch(
           `budget ${Math.round(enrichBudgetMs / 1000)}s (fetch took ${Math.round(fetchElapsed / 1000)}s)`
         )
 
-        // Enrich 90D first (most important for profile page), then 30D, 7D
-        for (const enrichPeriod of ['90D', '30D', '7D']) {
-          const periodBudget = Date.now() - startTime
-          if (periodBudget > platformTimeBudgetMs - 8_000) {
-            dataLogger.warn(`[adapter] ${platform}: skipping ${enrichPeriod} enrichment (time budget exhausted)`)
-            break
-          }
+        // Only enrich 90D inline — it fetches the longest equity curve (90 days,
+        // covering 30D/7D range) and stats/positions are period-independent.
+        // Running all 3 periods burns 3x API quota and triggers rate limits (429).
+        // batch-enrich cron fills 30D/7D equity curves on its regular schedule.
+        const remainingBudget = Math.max(5_000, platformTimeBudgetMs - (Date.now() - startTime) - 5_000)
 
-          const remainingBudget = Math.max(5_000, platformTimeBudgetMs - (Date.now() - startTime) - 5_000)
-
-          try {
-            await runEnrichment({
-              platform,
-              period: enrichPeriod,
-              limit: traderKeys.length,
-              traderKeys,
-              timeBudgetMs: remainingBudget,
-            })
-          } catch (err) {
-            dataLogger.warn(
-              `[adapter] Inline enrichment ${platform}/${enrichPeriod} failed: ${err instanceof Error ? err.message : String(err)}`
-            )
-          }
+        try {
+          await runEnrichment({
+            platform,
+            period: '90D',
+            limit: traderKeys.length,
+            traderKeys,
+            timeBudgetMs: remainingBudget,
+          })
+        } catch (err) {
+          dataLogger.warn(
+            `[adapter] Inline enrichment ${platform}/90D failed: ${err instanceof Error ? err.message : String(err)}`
+          )
         }
       }
     }
