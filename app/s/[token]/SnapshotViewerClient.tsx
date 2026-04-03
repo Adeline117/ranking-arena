@@ -117,7 +117,7 @@ export default function SnapshotViewerClient({ snapshot, traders }: SnapshotView
 
   const formatDate = (dateStr: string) => {
     const date = new Date(dateStr)
-    return date.toLocaleDateString(language === 'zh' ? 'zh-CN' : 'en-US', {
+    return date.toLocaleDateString(({ zh: 'zh-CN', ja: 'ja-JP', ko: 'ko-KR' } as Record<string, string>)[language] || 'en-US', {
       year: 'numeric',
       month: 'short',
       day: 'numeric',
