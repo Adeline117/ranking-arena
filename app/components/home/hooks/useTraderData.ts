@@ -367,52 +367,49 @@ export function useTraderData(options: UseTraderDataOptions = {}) {
     }
   }, [hasInitialData, initialTraders, initialLastUpdated, state.activeTimeRange])
 
-  // 初次加载和时间段切换时加载数据
-  // Skip initial fetch if we have server-provided data for 90D
-  // Performance: Defer full data fetch until after LCP using requestIdleCallback
-  const isInitialMount = useRef(true)
+  // Deferred full fetch — runs once on mount, independent of effect re-runs.
+  // Uses refs so it's never cancelled by dependency changes.
+  const loadTimeRangeRef = useRef(loadTimeRange)
+  useEffect(() => { loadTimeRangeRef.current = loadTimeRange }, [loadTimeRange])
+  const deferredFetchDone = useRef(false)
   useEffect(() => {
-    // If we have initial data and we're on 90D on INITIAL mount, defer full fetch
-    if (hasInitialData && state.activeTimeRange === '90D' && isInitialMount.current) {
-      isInitialMount.current = false
-      // Use initial data immediately - don't block for full fetch
-      dispatch({ type: 'SET_LOADING', loading: false })
+    if (!hasInitialData || deferredFetchDone.current) return
+    deferredFetchDone.current = true
 
-      // Defer full 500 trader fetch until browser is idle (after LCP)
-      const deferredFetch = () => {
-        // Only fetch full data if user hasn't switched time range
-        if (state.activeTimeRange === '90D') {
-          dispatch({ type: 'SET_DEFERRED_FETCH_FAILED', failed: false })
-          loadTimeRange('90D', true, 500).then(cached => {
-            // Only update if we got more data than initial
-            if (cached.traders.length > (initialTraders?.length || 0)) {
-              startTransition(() => {
-                dispatch({
-                  type: 'SET_TRADERS',
-                  traders: cached.traders,
-                  lastUpdated: cached.lastUpdated,
-                  availableSources: cached.availableSources || [],
-                })
-              })
-            }
-          }).catch(() => {
-            // Graceful degradation — we still have initial data but flag the failure
-            // so UI can optionally show a retry prompt
-            dispatch({ type: 'SET_DEFERRED_FETCH_FAILED', failed: true })
+    const deferredFetch = () => {
+      dispatch({ type: 'SET_DEFERRED_FETCH_FAILED', failed: false })
+      loadTimeRangeRef.current('90D', true, 500).then(cached => {
+        if (cached.traders.length > (initialTraders?.length || 0)) {
+          startTransition(() => {
+            dispatch({
+              type: 'SET_TRADERS',
+              traders: cached.traders,
+              lastUpdated: cached.lastUpdated,
+              availableSources: cached.availableSources || [],
+            })
           })
         }
-      }
+      }).catch(() => {
+        dispatch({ type: 'SET_DEFERRED_FETCH_FAILED', failed: true })
+      })
+    }
 
-      // Use requestIdleCallback to defer fetch, with 5s timeout fallback
-      // Increased from 3s to 5s to avoid competing with LCP/TBT budget
-      if ('requestIdleCallback' in window) {
-        const idleId = requestIdleCallback(deferredFetch, { timeout: 5000 })
-        return () => cancelIdleCallback(idleId)
-      } else {
-        // Safari fallback: wait 3s after page load
-        const timerId = setTimeout(deferredFetch, 3000)
-        return () => clearTimeout(timerId)
-      }
+    if ('requestIdleCallback' in window) {
+      requestIdleCallback(deferredFetch, { timeout: 5000 })
+    } else {
+      setTimeout(deferredFetch, 3000)
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- intentionally runs once on mount
+  }, [])
+
+  // 初次加载和时间段切换时加载数据
+  const isInitialMount = useRef(true)
+  useEffect(() => {
+    // If we have initial data and we're on 90D on INITIAL mount, skip fetch (deferred handles it)
+    if (hasInitialData && state.activeTimeRange === '90D' && isInitialMount.current) {
+      isInitialMount.current = false
+      dispatch({ type: 'SET_LOADING', loading: false })
+      return
     }
     isInitialMount.current = false
 
