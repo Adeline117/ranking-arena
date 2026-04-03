@@ -460,6 +460,7 @@
     width: 100%;
     justify-content: center !important;
     overflow-x: auto;
+    overflow-y: hidden;
     -webkit-overflow-scrolling: touch;
     scrollbar-width: none;
     flex-wrap: nowrap !important;
@@ -1351,6 +1352,7 @@
   /* Compare table: horizontal scroll within container */
   .compare-grid-scroll {
     overflow-x: auto !important;
+    overflow-y: hidden !important;
     -webkit-overflow-scrolling: touch !important;
     max-width: 100% !important;
   }
