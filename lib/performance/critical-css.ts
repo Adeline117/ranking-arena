@@ -166,7 +166,7 @@ footer,.sidebar-contained{content-visibility:auto;contain-intrinsic-size:auto 30
    ============================================ */
 /* Mobile: Rank | Trader | ROI only */
 .ranking-table-grid{grid-template-columns:36px 1fr 80px !important}
-.ranking-table-grid .col-score,.ranking-table-grid .col-pnl,.ranking-table-grid .col-winrate,.ranking-table-grid .col-mdd{display:none !important}
+.ranking-table-grid .col-score,.ranking-table-grid .col-pnl,.ranking-table-grid .col-winrate,.ranking-table-grid .col-mdd,.ranking-table-grid .col-sharpe,.ranking-table-grid .col-followers,.ranking-table-grid .col-trades,.ranking-table-grid .col-copiers{display:none !important}
 @media(min-width:640px){.ranking-table-grid{grid-template-columns:40px 1fr 80px 60px 80px !important}.ranking-table-grid .col-score,.ranking-table-grid .col-pnl{display:flex !important}}
 @media(min-width:768px){.ranking-table-grid{grid-template-columns:44px minmax(140px,1.5fr) 80px 80px 70px 70px 64px !important}.ranking-table-grid .col-score,.ranking-table-grid .col-pnl,.ranking-table-grid .col-winrate,.ranking-table-grid .col-mdd{display:flex !important}}
 
