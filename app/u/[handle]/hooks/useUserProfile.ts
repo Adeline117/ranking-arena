@@ -168,6 +168,18 @@ export function useUserProfile({ handle, serverProfile, serverTraderData }: UseU
   const isTraderDataLoading = isTrader && traderLoading && !serverTraderData
   const isTraderDataError = isTrader && traderError && !traderData
 
+  // Block check: bidirectional
+  const [isBlocked, setIsBlocked] = useState(false)
+  useEffect(() => {
+    if (!currentUserId || !profile?.id || isOwnProfile) return
+    supabase
+      .from('blocked_users')
+      .select('blocker_id')
+      .or(`and(blocker_id.eq.${currentUserId},blocked_id.eq.${profile.id}),and(blocker_id.eq.${profile.id},blocked_id.eq.${currentUserId})`)
+      .limit(1)
+      .then(({ data }) => { if (data && data.length > 0) setIsBlocked(true) })
+  }, [currentUserId, profile?.id, isOwnProfile])
+
   return {
     // Core state
     email,
@@ -176,6 +188,7 @@ export function useUserProfile({ handle, serverProfile, serverTraderData }: UseU
     mounted,
     isPro,
     isOwnProfile,
+    isBlocked,
     router,
     t,
 
