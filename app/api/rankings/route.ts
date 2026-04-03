@@ -336,11 +336,27 @@ async function getRankingsFallback(rankingsQuery: RankingsQuery, _cursor?: strin
   const isStale = stalenessMs > 3600 * 1000;
 
   // Transform to response format
+  const PLACEHOLDER_NAMES = new Set(['Enter Name', 'enter name', 'Unknown', 'null', 'undefined', ''])
+  const formatDisplayName = (handle: string | null, traderId: string): string => {
+    if (handle && !PLACEHOLDER_NAMES.has(handle)) return handle
+    // Format 0x addresses as "0x1234...5678"
+    if (traderId?.startsWith('0x') && traderId.length >= 10) {
+      return `${traderId.slice(0, 6)}...${traderId.slice(-4)}`
+    }
+    // Copin format: "protocol:0xAddr" → show the address part
+    if (traderId?.includes(':')) {
+      const addr = traderId.split(':')[1]
+      if (addr?.startsWith('0x') && addr.length >= 10) return `${addr.slice(0, 6)}...${addr.slice(-4)}`
+    }
+    return traderId || 'Anonymous'
+  }
+
   const traders = paginatedRows.map((row: Record<string, unknown>, idx: number) => {
+    const traderId = row.source_trader_id as string
     return {
       platform: row.source as Platform,
-      trader_key: row.source_trader_id as string,
-      display_name: (row.handle as string) || null,
+      trader_key: traderId,
+      display_name: formatDisplayName(row.handle as string | null, traderId),
       avatar_url: (row.avatar_url as string) || null,
       rank: (row.rank as number) ?? offset + idx + 1,
       rank_change: (row.rank_change as number) ?? null,
