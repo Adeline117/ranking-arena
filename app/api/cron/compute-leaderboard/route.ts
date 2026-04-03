@@ -1291,7 +1291,7 @@ async function computeSeason(
   // from Redis (i.e., what the compute actually produced last time) as the baseline.
   const LAST_SCORED_KEY = `leaderboard:last-scored-count:${season}`
   let baselineCount = previousCount || 0
-  let __baselineSource = 'table-count'
+  let _baselineSource = 'table-count'
   try {
     const stored = await PipelineState.get<number>(LAST_SCORED_KEY)
     if (stored && typeof stored === 'number' && stored > 0) {
