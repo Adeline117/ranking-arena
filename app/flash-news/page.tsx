@@ -156,7 +156,14 @@ export default function FlashNewsPage() {
   // Auto-refresh: poll only when page is visible (saves bandwidth when tab is hidden)
   useEffect(() => {
     let interval: ReturnType<typeof setInterval> | null = null
-    const start = () => { if (!interval) interval = setInterval(() => fetchNews(1, selectedCategory), 120000) }
+    // Auto-refresh only prepends new items (page 1), don't wipe accumulated scroll data
+    const autoRefresh = () => {
+      fetchNews(1, selectedCategory).then(() => {
+        // Reset page counter so next scroll-load starts from page 2
+        setCurrentPage(1)
+      })
+    }
+    const start = () => { if (!interval) interval = setInterval(autoRefresh, 120000) }
     const stop = () => { if (interval) { clearInterval(interval); interval = null } }
     const onVisibility = () => { if (document.hidden) { stop() } else { start() } }
     if (!document.hidden) start()
@@ -170,16 +177,18 @@ export default function FlashNewsPage() {
     const observer = new IntersectionObserver(
       (entries) => {
         if (entries[0].isIntersecting && hasMore && !loading && !loadingMore) {
-          const nextPage = currentPage + 1
-          setCurrentPage(nextPage)
-          fetchNews(nextPage, selectedCategory, true)
+          setCurrentPage(prev => {
+            const nextPage = prev + 1
+            fetchNews(nextPage, selectedCategory, true)
+            return nextPage
+          })
         }
       },
       { rootMargin: '200px' }
     )
     observer.observe(sentinelRef.current)
     return () => observer.disconnect()
-  }, [hasMore, loading, loadingMore, currentPage, selectedCategory, fetchNews])
+  }, [hasMore, loading, loadingMore, selectedCategory, fetchNews])
 
   // Translate content for items that need it
   const translateNewsContent = useCallback(async (items: FlashNews[]) => {
