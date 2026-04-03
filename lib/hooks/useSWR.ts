@@ -55,10 +55,9 @@ const defaultConfig: SWRConfiguration = {
   errorRetryCount: 2, // 减少重试次数，避免长时间等待
   errorRetryInterval: 3000, // 减少重试间隔
   shouldRetryOnError: (error) => {
-    // 只对网络错误和 5xx 错误重试，不对 4xx 错误重试
-    if (error?.status >= 400 && error?.status < 500) {
-      return false
-    }
+    // Retry network errors + 5xx + 429 rate limit. Don't retry other 4xx.
+    if (error?.status === 429) return true // rate limit — retry after backoff
+    if (error?.status >= 400 && error?.status < 500) return false
     return true
   },
 }
