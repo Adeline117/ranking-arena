@@ -83,7 +83,8 @@ function formatPrice(n: number): string {
 // Use formatDateLocalized from shared utils instead of this local function.
 // Kept as wrapper for backward compatibility within this file.
 function formatDate(iso: string, locale = 'en'): string {
-  return new Date(iso).toLocaleDateString(locale === 'zh' ? 'zh-CN' : 'en-US', { year: 'numeric', month: 'short', day: 'numeric' })
+  const localeMap: Record<string, string> = { zh: 'zh-CN', ja: 'ja-JP', ko: 'ko-KR' }
+  return new Date(iso).toLocaleDateString(localeMap[locale] || 'en-US', { year: 'numeric', month: 'short', day: 'numeric' })
 }
 
 function StatRow({ label, value }: { label: string; value: string }) {

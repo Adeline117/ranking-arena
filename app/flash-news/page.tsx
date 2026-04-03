@@ -297,7 +297,7 @@ export default function FlashNewsPage() {
           {lastUpdated && (
             <Text style={{ color: tokens.colors.text.tertiary, fontSize: tokens.typography.fontSize.xs, marginTop: tokens.spacing[1] }}>
               {t('flashNewsLastUpdated')}
-              {lastUpdated.toLocaleTimeString(language === 'zh' ? 'zh-CN' : 'en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+              {lastUpdated.toLocaleTimeString(({ zh: 'zh-CN', ja: 'ja-JP', ko: 'ko-KR' } as Record<string, string>)[language] || 'en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
             </Text>
           )}
         </Box>

@@ -144,7 +144,7 @@ export default function PostListItem(props: PostListItemProps) {
               </Text>
             )}
             <Text size="xs" color="tertiary" style={{ marginLeft: tokens.spacing[1] }}>
-              · {new Date(post.created_at).toLocaleString(language === 'zh' ? 'zh-CN' : 'en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
+              · {new Date(post.created_at).toLocaleString(({ zh: 'zh-CN', ja: 'ja-JP', ko: 'ko-KR' } as Record<string, string>)[language] || 'en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
             </Text>
           </Box>
 
