@@ -59,7 +59,7 @@ const DEFAULT_ALERT: AlertData = {
 }
 
 export default function AlertConfig({ traderId, traderHandle, source, userId, onClose }: AlertConfigProps) {
-  const { t } = useLanguage()
+  const { t, language } = useLanguage()
   const { showToast } = useToast()
   const [alert, setAlert] = useState<AlertData>(DEFAULT_ALERT)
   const [history, setHistory] = useState<HistoryItem[]>([])
@@ -373,7 +373,7 @@ export default function AlertConfig({ traderId, traderHandle, source, userId, on
                   fontSize: 12,
                 }}>
                   <Text style={{ color: tokens.colors.text.secondary }}>
-                    {new Date(item.triggered_at).toLocaleString('zh-CN')}
+                    {new Date(item.triggered_at).toLocaleString(language === 'zh' ? 'zh-CN' : language === 'ja' ? 'ja-JP' : language === 'ko' ? 'ko-KR' : 'en-US')}
                   </Text>
                   <Text style={{ color: tokens.colors.text.primary, marginLeft: 8 }}>
                     [{alertTypeLabel(item.alert_type)}] {(item.data as { message?: string })?.message || ''}
