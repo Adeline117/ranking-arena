@@ -57,48 +57,68 @@ export async function GET(request: NextRequest) {
     }>
 
     if (snapshotError || !snapshots) {
-      // Fallback: fetch with regular query (less optimal but works without RPC)
-      logger.warn('[aggregate] RPC not available, falling back to v2 paginated query')
+      // Fallback: fetch with regular query per-platform (prevents large platforms from crowding out small ones)
+      logger.warn('[aggregate] RPC not available, falling back to v2 per-platform query')
 
-      // Fetch ALL current snapshots (v2 is a latest-per-trader table, not append-only).
-      // Use updated_at > 2 days ago to only get recently-refreshed traders.
-      // No upper time bound — cron runs at 00:05 UTC but many platforms refresh after midnight.
       const recentCutoff = new Date()
       recentCutoff.setUTCDate(recentCutoff.getUTCDate() - 2)
       const recentCutoffStr = recentCutoff.toISOString()
 
-      const { data: fallbackData, error: fallbackError } = await supabase
+      // First, get distinct platform names
+      const { data: platformList } = await supabase
         .from('trader_snapshots_v2')
-        .select('platform, trader_key, window, roi_pct, pnl_usd, win_rate, max_drawdown, followers, trades_count, as_of_ts')
+        .select('platform')
         .gte('updated_at', recentCutoffStr)
-        .order('updated_at', { ascending: false })
         .limit(50000)
+      const distinctPlatforms = [...new Set((platformList || []).map(r => r.platform))]
 
-      if (fallbackError || !fallbackData) {
-        await plog.error(fallbackError || new Error('No snapshot data returned'))
+      snapshotMap = new Map()
+
+      // Fetch per-platform: each platform gets its own query with a per-platform limit
+      // This ensures small platforms (bingx: 228, toobit: 1597) aren't crowded out by
+      // large platforms (gmx: 156K, hyperliquid: 155K)
+      const PER_PLATFORM_LIMIT = 5000
+      for (const platform of distinctPlatforms) {
+        const { data: platformData, error: platformError } = await supabase
+          .from('trader_snapshots_v2')
+          .select('platform, trader_key, window, roi_pct, pnl_usd, win_rate, max_drawdown, followers, trades_count, as_of_ts')
+          .eq('platform', platform)
+          .gte('updated_at', recentCutoffStr)
+          .order('updated_at', { ascending: false })
+          .limit(PER_PLATFORM_LIMIT)
+
+        if (platformError || !platformData) {
+          logger.warn(`[aggregate] Failed to fetch platform ${platform}: ${platformError?.message}`)
+          continue
+        }
+
+        // Deduplicate: keep latest per (platform, trader_key)
+        for (const s of platformData) {
+          const key = `${s.platform}:${s.trader_key}`
+          if (!snapshotMap.has(key)) {
+            snapshotMap.set(key, {
+              source: s.platform,
+              source_trader_id: s.trader_key,
+              roi: s.roi_pct,
+              pnl: s.pnl_usd,
+              win_rate: s.win_rate,
+              max_drawdown: s.max_drawdown,
+              followers: s.followers,
+              trades_count: s.trades_count,
+            })
+          }
+        }
+      }
+
+      if (snapshotMap.size === 0) {
+        await plog.error(new Error('No snapshot data returned from any platform'))
         return NextResponse.json(
-          { error: 'Failed to fetch snapshots', details: fallbackError?.message },
+          { error: 'Failed to fetch snapshots', details: 'No data from any platform' },
           { status: 500 }
         )
       }
 
-      // Deduplicate: keep latest per (platform, trader_key)
-      snapshotMap = new Map()
-      for (const s of fallbackData) {
-        const key = `${s.platform}:${s.trader_key}`
-        if (!snapshotMap.has(key)) {
-          snapshotMap.set(key, {
-            source: s.platform,
-            source_trader_id: s.trader_key,
-            roi: s.roi_pct,
-            pnl: s.pnl_usd,
-            win_rate: s.win_rate,
-            max_drawdown: s.max_drawdown,
-            followers: s.followers,
-            trades_count: s.trades_count,
-          })
-        }
-      }
+      logger.info(`[aggregate] Loaded ${snapshotMap.size} traders from ${distinctPlatforms.length} platforms (per-platform query)`)
     } else {
       snapshotMap = new Map()
       for (const s of snapshots) {
