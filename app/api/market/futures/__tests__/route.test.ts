@@ -26,6 +26,20 @@ jest.mock('@supabase/supabase-js', () => ({
   }),
 }))
 
+jest.mock('@/lib/supabase/server', () => ({
+  getSupabaseAdmin: jest.fn(() => ({
+    from: jest.fn(() => ({
+      select: jest.fn().mockReturnThis(),
+      order: jest.fn().mockReturnThis(),
+      limit: mockLimit,
+    })),
+  })),
+}))
+
+jest.mock('@/lib/cache', () => ({
+  getOrSetWithLock: jest.fn(async (_key: string, fetcher: () => unknown) => fetcher()),
+}))
+
 const originalFetch = global.fetch
 
 import { GET } from '../route'

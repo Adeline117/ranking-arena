@@ -52,6 +52,7 @@ jest.mock('@/lib/constants/exchanges', () => ({
 
 jest.mock('@/lib/alerts/send-alert', () => ({
   sendScraperAlert: jest.fn().mockResolvedValue({ sent: true }),
+  sendRateLimitedAlert: jest.fn().mockResolvedValue({ sent: true }),
 }))
 
 jest.mock('@/lib/utils/logger', () => ({

@@ -79,7 +79,11 @@ jest.mock('@/lib/api', () => ({
     const statusCode = (error as { statusCode?: number })?.statusCode || 500
     return { status: statusCode, _body: { success: false, error: message }, async json() { return this._body }, headers: new Map() }
   },
-  validateNumber: (val: unknown, def: number) => Number(val) || def,
+  validateNumber: (val: unknown) => {
+    if (val === null || val === undefined || val === '') return null
+    const n = Number(val)
+    return Number.isFinite(n) ? n : null
+  },
   getAuthUser: jest.fn(),
   getUserHandle: jest.fn(),
   getUserProfile: jest.fn(),
@@ -97,6 +101,10 @@ jest.mock('@/lib/data/comments', () => ({
   deleteComment: (...args: unknown[]) => mockDeleteComment(...args),
 }))
 
+jest.mock('@/lib/features', () => ({
+  socialFeatureGuard: jest.fn().mockReturnValue(null),
+}))
+
 jest.mock('@/lib/utils/logger', () => ({
   createLogger: jest.fn(() => ({ info: jest.fn(), warn: jest.fn(), error: jest.fn() })),
   logger: { error: jest.fn(), warn: jest.fn(), info: jest.fn(), debug: jest.fn() },
@@ -108,7 +116,8 @@ jest.mock('@/lib/utils/logger', () => ({
 import { NextRequest } from 'next/server'
 import { GET, POST, DELETE } from '../route'
 
-const createContext = (id: string) => ({ params: Promise.resolve({ id }) })
+const TEST_POST_ID = 'a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d'
+const createContext = (id: string = TEST_POST_ID) => ({ params: Promise.resolve({ id }) })
 
 describe('/api/posts/[id]/comments', () => {
   const mockUser = { id: 'user-1', email: 'test@test.com' }
@@ -135,8 +144,8 @@ describe('/api/posts/[id]/comments', () => {
       ]
       mockGetPostComments.mockResolvedValue(mockComments)
 
-      const req = new NextRequest('http://localhost/api/posts/post-1/comments')
-      const res = await GET(req, createContext('post-1'))
+      const req = new NextRequest(`http://localhost/api/posts/${TEST_POST_ID}/comments`)
+      const res = await GET(req, createContext())
       const body = await res.json()
 
       expect(res.status).toBe(200)
@@ -147,8 +156,8 @@ describe('/api/posts/[id]/comments', () => {
     it('returns paginated comments', async () => {
       mockGetPostComments.mockResolvedValue([])
 
-      const req = new NextRequest('http://localhost/api/posts/post-1/comments?limit=10&offset=5')
-      const res = await GET(req, createContext('post-1'))
+      const req = new NextRequest('http://localhost/api/posts/${TEST_POST_ID}/comments?limit=10&offset=5')
+      const res = await GET(req, createContext())
       const body = await res.json()
 
       expect(res.status).toBe(200)
@@ -159,8 +168,8 @@ describe('/api/posts/[id]/comments', () => {
     it('returns empty comments for a post with no comments', async () => {
       mockGetPostComments.mockResolvedValue([])
 
-      const req = new NextRequest('http://localhost/api/posts/post-1/comments')
-      const res = await GET(req, createContext('post-1'))
+      const req = new NextRequest(`http://localhost/api/posts/${TEST_POST_ID}/comments`)
+      const res = await GET(req, createContext())
       const body = await res.json()
 
       expect(res.status).toBe(200)
@@ -177,11 +186,11 @@ describe('/api/posts/[id]/comments', () => {
         Object.assign(new Error('Unauthorized'), { statusCode: 401 })
       )
 
-      const req = new NextRequest('http://localhost/api/posts/post-1/comments', {
+      const req = new NextRequest(`http://localhost/api/posts/${TEST_POST_ID}/comments`, {
         method: 'POST',
         body: { content: 'Nice post!' },
       })
-      const res = await POST(req, createContext('post-1'))
+      const res = await POST(req, createContext())
       const body = await res.json()
 
       expect(res.status).toBeGreaterThanOrEqual(400)
@@ -191,11 +200,11 @@ describe('/api/posts/[id]/comments', () => {
     it('returns 400 when content is missing', async () => {
       mockRequireAuth.mockResolvedValue(mockUser)
 
-      const req = new NextRequest('http://localhost/api/posts/post-1/comments', {
+      const req = new NextRequest(`http://localhost/api/posts/${TEST_POST_ID}/comments`, {
         method: 'POST',
         body: {},
       })
-      const res = await POST(req, createContext('post-1'))
+      const res = await POST(req, createContext())
       const body = await res.json()
 
       expect(res.status).toBeGreaterThanOrEqual(400)
@@ -207,11 +216,11 @@ describe('/api/posts/[id]/comments', () => {
       const mockComment = { id: 'c-new', content: 'Nice post!', post_id: 'post-1' }
       mockCreateComment.mockResolvedValue(mockComment)
 
-      const req = new NextRequest('http://localhost/api/posts/post-1/comments', {
+      const req = new NextRequest(`http://localhost/api/posts/${TEST_POST_ID}/comments`, {
         method: 'POST',
         body: { content: 'Nice post!' },
       })
-      const res = await POST(req, createContext('post-1'))
+      const res = await POST(req, createContext())
       const body = await res.json()
 
       expect(res.status).toBe(201)
@@ -225,12 +234,12 @@ describe('/api/posts/[id]/comments', () => {
       const mockComment = { id: 'c-reply', content: 'Reply!', parent_id: parentId }
       mockCreateComment.mockResolvedValue(mockComment)
 
-      const req = new NextRequest('http://localhost/api/posts/post-1/comments', {
+      const req = new NextRequest(`http://localhost/api/posts/${TEST_POST_ID}/comments`, {
         method: 'POST',
         body: JSON.stringify({ content: 'Reply!', parent_id: parentId }),
         headers: { 'Content-Type': 'application/json' },
       })
-      const res = await POST(req, createContext('post-1'))
+      const res = await POST(req, createContext())
       const body = await res.json()
 
       expect(res.status).toBe(201)
@@ -246,11 +255,11 @@ describe('/api/posts/[id]/comments', () => {
         Object.assign(new Error('Unauthorized'), { statusCode: 401 })
       )
 
-      const req = new NextRequest('http://localhost/api/posts/post-1/comments', {
+      const req = new NextRequest(`http://localhost/api/posts/${TEST_POST_ID}/comments`, {
         method: 'DELETE',
         body: { comment_id: 'c1' },
       })
-      const res = await DELETE(req, createContext('post-1'))
+      const res = await DELETE(req, createContext())
       const body = await res.json()
 
       expect(res.status).toBeGreaterThanOrEqual(400)
@@ -260,11 +269,11 @@ describe('/api/posts/[id]/comments', () => {
     it('returns 400 when comment_id is missing', async () => {
       mockRequireAuth.mockResolvedValue(mockUser)
 
-      const req = new NextRequest('http://localhost/api/posts/post-1/comments', {
+      const req = new NextRequest(`http://localhost/api/posts/${TEST_POST_ID}/comments`, {
         method: 'DELETE',
         body: {},
       })
-      const res = await DELETE(req, createContext('post-1'))
+      const res = await DELETE(req, createContext())
       const body = await res.json()
 
       expect(res.status).toBeGreaterThanOrEqual(400)
@@ -275,11 +284,11 @@ describe('/api/posts/[id]/comments', () => {
       mockRequireAuth.mockResolvedValue(mockUser)
       mockDeleteComment.mockResolvedValue(undefined)
 
-      const req = new NextRequest('http://localhost/api/posts/post-1/comments', {
+      const req = new NextRequest(`http://localhost/api/posts/${TEST_POST_ID}/comments`, {
         method: 'DELETE',
         body: { comment_id: 'b2c3d4e5-f6a7-4b8c-9d0e-1f2a3b4c5d6e' },
       })
-      const res = await DELETE(req, createContext('post-1'))
+      const res = await DELETE(req, createContext())
       const body = await res.json()
 
       expect(res.status).toBe(200)
