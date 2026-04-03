@@ -13,7 +13,7 @@ import dynamic from 'next/dynamic'
 import TraderRefreshButton from './TraderRefreshButton'
 import DataStateWrapper from '@/app/components/ui/DataStateWrapper'
 import TradingStyleBadge from './TradingStyleBadge'
-import { isWalletAddress, generateBlockieSvg, getAvatarGradient } from '@/lib/utils/avatar'
+import { isWalletAddress, generateBlockieSvg, getAvatarGradient, getAvatarInitial } from '@/lib/utils/avatar'
 
 // Lazy load heavy below-the-fold components
 const AdvancedMetricsCard = dynamic(() => import('./AdvancedMetricsCard'), { ssr: false })
@@ -53,8 +53,11 @@ export default function TraderPageV2({ platform, traderKey }: TraderPageV2Props)
             <div className="flex items-center gap-4">
               <div
                 className="w-16 h-16 rounded-full flex items-center justify-center overflow-hidden"
-                style={{ background: data.profile.avatar_url ? tokens.colors.bg.secondary : getAvatarGradient(traderKey), position: 'relative' }}
+                style={{ background: getAvatarGradient(traderKey), position: 'relative' }}
               >
+                <span style={{ color: tokens.colors.white, fontSize: '24px', fontWeight: 900 }}>
+                  {getAvatarInitial(data.profile.display_name || traderKey)}
+                </span>
                 {data.profile.avatar_url ? (
                   <img
                     src={data.profile.avatar_url?.startsWith("/") ? data.profile.avatar_url : `/api/avatar?url=${encodeURIComponent(data.profile.avatar_url || "")}`}
@@ -62,7 +65,8 @@ export default function TraderPageV2({ platform, traderKey }: TraderPageV2Props)
                     width={64}
                     height={64}
                     className="w-full h-full object-cover"
-                    onError={(e) => { (e.target as HTMLImageElement).style.display = 'none' }}
+                    style={{ position: 'absolute', inset: 0 }}
+                    onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none' }}
                   />
                 ) : isWalletAddress(traderKey) ? (
                   <img
