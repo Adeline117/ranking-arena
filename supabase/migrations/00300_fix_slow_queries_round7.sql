@@ -67,3 +67,9 @@ BEGIN
   RETURN updated_count;
 END;
 $$;
+
+-- Fix 4: leaderboard_ranks NULL metrics query 388ms → 0.1ms
+-- Partial index for enrichment queries that find traders missing win_rate/max_drawdown
+CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_leaderboard_ranks_null_metrics
+ON leaderboard_ranks (source, id)
+WHERE win_rate IS NULL OR max_drawdown IS NULL;
