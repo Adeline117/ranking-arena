@@ -294,7 +294,7 @@ export async function GET(request: NextRequest) {
   const results: BatchResult[] = []
   for (let i = 0; i < platforms.length; i += CONCURRENCY) {
     const batch = platforms.slice(i, i + CONCURRENCY)
-    const batchResults = await Promise.all(batch.map(async (platform) => {
+    const batchResults: BatchResult[] = await Promise.all(batch.map(async (platform): Promise<BatchResult> => {
       // Skip platforms already completed in a prior run (checkpoint resume)
       if (PipelineCheckpoint.isCompleted(checkpoint, platform)) {
         logger.info(`[batch-fetch-traders-${group}] Skipping ${platform}: already completed in checkpoint`)
