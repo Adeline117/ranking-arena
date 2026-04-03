@@ -77,10 +77,14 @@ export default async function Page() {
           The SSR table already shows data — the client fetch can happen lazily. */}
       <JsonLd data={organizationJsonLd} />
 
-      {/* Phase 1 (SSR): Static HTML shell — visible instantly, hidden by CSS once Phase 2 mounts.
-          Placed OUTSIDE HomePageLoader so React never tries to reconcile these DOM nodes. */}
-      <HomeHeroSSR traderCount={heroStats?.traderCount} exchangeCount={heroStats?.exchangeCount} />
-      <SSRRankingTable traders={initialTraders} />
+      {/* Phase 1 (SSR): Static HTML shell — visible until Phase 2 JS loads.
+          Wrapped in a container that CSS hides INSTANTLY (same paint frame) when
+          #homepage-interactive appears. Uses content-visibility:hidden which collapses
+          height to 0 without triggering CLS (unlike display:none which removes from flow). */}
+      <div id="ssr-shell" aria-hidden="false">
+        <HomeHeroSSR traderCount={heroStats?.traderCount} exchangeCount={heroStats?.exchangeCount} />
+        <SSRRankingTable traders={initialTraders} />
+      </div>
 
       <PageErrorBoundary>
         {/* Phase 2: Full interactive homepage — loaded with ssr:false via HomePageLoader. */}

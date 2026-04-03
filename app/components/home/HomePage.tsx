@@ -31,24 +31,16 @@ interface HomePageProps {
 }
 
 export default function HomePage({ initialTraders, initialLastUpdated, heroStats }: HomePageProps) {
-  // Crossfade SSR shell → interactive content with zero CLS.
-  // position:absolute collapses it out of flow; opacity:0 makes it invisible.
-  // Do NOT use .remove() — that causes CLS ~1.0 and resets LCP measurement.
+  // SSR shell is hidden via CSS :has(#homepage-interactive) in globals.css.
+  // CSS fires in the same paint frame — no CLS, no LCP reset.
+  // Clean up DOM after mount (non-urgent, requestIdleCallback).
   useEffect(() => {
-    const hide = (id: string) => {
-      const el = document.getElementById(id)
-      if (!el) return
-      el.style.position = 'absolute'
-      el.style.top = '0'
-      el.style.left = '0'
-      el.style.right = '0'
-      el.style.opacity = '0'
-      el.style.pointerEvents = 'none'
-      el.style.zIndex = '-1'
-      setTimeout(() => el.remove(), 500)
+    const cleanup = () => document.getElementById('ssr-shell')?.remove()
+    if ('requestIdleCallback' in window) {
+      (window as Window).requestIdleCallback(cleanup)
+    } else {
+      setTimeout(cleanup, 1000)
     }
-    hide('ssr-hero-shell')
-    hide('ssr-ranking-table')
   }, [])
 
   return (
