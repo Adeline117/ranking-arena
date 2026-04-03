@@ -117,7 +117,7 @@ export default function ShareButton({ data, size = 'sm', variant = 'ghost', show
   }, [showToast, t])
 
   const shareToTwitter = useCallback(() => {
-    openPopup(`https://twitter.com/intent/tweet?text=${encodeURIComponent(text)}`)
+    openPopup(`https://x.com/intent/post?text=${encodeURIComponent(text)}`)
   }, [text, openPopup])
 
   const shareToTelegram = useCallback(() => {
