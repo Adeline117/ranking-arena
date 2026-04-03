@@ -19,6 +19,11 @@ import { env } from '@/lib/env'
 export const dynamic = 'force-dynamic'
 export const maxDuration = 120
 
+// Vercel cron sends GET — alias to POST handler
+export async function GET(request: NextRequest) {
+  return POST(request)
+}
+
 export async function POST(request: NextRequest) {
   // Auth check
   const authHeader = request.headers.get('authorization')
