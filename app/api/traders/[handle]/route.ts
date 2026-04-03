@@ -19,12 +19,12 @@ import { NextRequest } from 'next/server'
 import { getSupabaseAdmin } from '@/lib/supabase/server'
 import { z } from 'zod'
 import { checkRateLimit, RateLimitPresets } from '@/lib/api'
-import { getServerCache, setServerCache, CacheTTL } from '@/lib/utils/server-cache'
 import { createLogger } from '@/lib/utils/logger'
 import { resolveTrader, getTraderDetail, toTraderPageData } from '@/lib/data/unified'
 import { ApiError } from '@/lib/api/errors'
 import { success as apiSuccess, handleError, withCache } from '@/lib/api/response'
 import { getAggregatedStats, findUserByTrader } from '@/lib/data/linked-traders'
+import { tieredGetOrSet } from '@/lib/cache/redis-layer'
 
 // 输入验证 schema（支持字母、数字、下划线、连字符、点、中文、0x 地址）
 const handleSchema = z.string().min(1).max(255)
@@ -61,36 +61,37 @@ export async function GET(
     const sourceParam = request.nextUrl.searchParams.get('source') || ''
     const cacheKey = `${CACHE_PREFIX}${decodedHandle.toLowerCase()}${sourceParam ? `:${sourceParam}` : ''}`
 
-    // 检查缓存
-    const cached = getServerCache<Record<string, unknown>>(cacheKey)
-    if (cached) {
-      const cachedData = await cached
-      return apiSuccess({ ...cachedData, cached: true })
-    }
-
     const supabase = getSupabaseAdmin()
 
-    // ── Unified data layer: resolveTrader → getTraderDetail ──
-    const resolved = await resolveTrader(supabase, {
-      handle: decodedHandle,
-      platform: sourceParam || undefined,
-    })
+    // ── Unified data layer: resolveTrader → getTraderDetail (cached in Redis, 5 min) ──
+    const data = await tieredGetOrSet(
+      cacheKey,
+      async () => {
+        const resolved = await resolveTrader(supabase, {
+          handle: decodedHandle,
+          platform: sourceParam || undefined,
+        })
 
-    if (!resolved) {
-      logger.warn(`No trader found for handle: ${decodedHandle}`)
-      throw ApiError.notFound(`Trader not found: ${decodedHandle}`)
-    }
+        if (!resolved) {
+          throw ApiError.notFound(`Trader not found: ${decodedHandle}`)
+        }
 
-    const detail = await getTraderDetail(supabase, {
-      platform: resolved.platform,
-      traderKey: resolved.traderKey,
-    })
+        const detail = await getTraderDetail(supabase, {
+          platform: resolved.platform,
+          traderKey: resolved.traderKey,
+        })
 
-    if (!detail) {
-      throw ApiError.notFound(`No data for trader: ${decodedHandle}`)
-    }
+        if (!detail) {
+          throw ApiError.notFound(`No data for trader: ${decodedHandle}`)
+        }
 
-    const data = toTraderPageData(detail)
+        return { pageData: toTraderPageData(detail), resolved: { platform: resolved.platform, traderKey: resolved.traderKey } }
+      },
+      'warm', // warm tier: 2 min memory, 15 min Redis
+      ['trader']
+    )
+
+    const { pageData, resolved } = data
 
     // ── include: bundle additional data into the response ──
     const includeParam = request.nextUrl.searchParams.get('include') || ''
@@ -231,10 +232,7 @@ export async function GET(
       await Promise.all(promises)
     }
 
-    const responseData = { ...data as Record<string, unknown>, ...extras }
-
-    // 缓存结果 (cache without extras to keep base data clean)
-    setServerCache(cacheKey, data, CacheTTL.MEDIUM)
+    const responseData = { ...pageData as Record<string, unknown>, ...extras }
 
     const duration = Date.now() - startTime
     const response = apiSuccess({ ...responseData, cached: false, fetchTime: duration })

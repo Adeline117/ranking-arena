@@ -14,6 +14,7 @@ import { PipelineLogger } from '@/lib/services/pipeline-logger'
 import { DEAD_BLOCKED_PLATFORMS, EXCHANGE_CONFIG } from '@/lib/constants/exchanges'
 import { getSupportedPlatforms } from '@/lib/cron/fetchers'
 import { getSupabaseAdmin } from '@/lib/supabase/server'
+import { tieredGetOrSet } from '@/lib/cache/redis-layer'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -144,71 +145,89 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
-  const [jobStatuses, jobStats, recentFailuresRaw, platformHealth] = await Promise.all([
-    PipelineLogger.getJobStatuses(),
-    PipelineLogger.getJobStats(),
-    PipelineLogger.getRecentFailures(10),
-    getPlatformHealthData(),
-  ])
+  try {
+    // Cache the entire health response for 2 minutes (health data doesn't change fast)
+    const CACHE_KEY = 'api:health:pipeline'
+    const result = await tieredGetOrSet(
+      CACHE_KEY,
+      async () => {
+        const [jobStatuses, jobStats, recentFailuresRaw, platformHealth] = await Promise.all([
+          PipelineLogger.getJobStatuses(),
+          PipelineLogger.getJobStats(),
+          PipelineLogger.getRecentFailures(10),
+          getPlatformHealthData(),
+        ])
 
-  // Filter out dead/blocked platforms from failure counts
-  const deadSet = new Set<string>([...DEAD_BLOCKED_PLATFORMS])
-  const isDeadPlatformJob = (jobName: string) => {
-    for (const dead of deadSet) {
-      if (jobName.includes(dead)) return true
-    }
-    return false
+        // Filter out dead/blocked platforms from failure counts
+        const deadSet = new Set<string>([...DEAD_BLOCKED_PLATFORMS])
+        const isDeadPlatformJob = (jobName: string) => {
+          for (const dead of deadSet) {
+            if (jobName.includes(dead)) return true
+          }
+          return false
+        }
+        const recentFailures = recentFailuresRaw.filter(
+          (f: { job_name?: string }) => !isDeadPlatformJob(f.job_name || '')
+        )
+
+        // Calculate overall pipeline health (excluding dead platforms)
+        const activeJobs = jobStatuses.filter(j => !isDeadPlatformJob(j.job_name || ''))
+        const totalJobs = activeJobs.length
+        const healthyJobs = activeJobs.filter(j => j.health_status === 'healthy').length
+        const failedJobs = activeJobs.filter(j => j.health_status === 'failed').length
+        const staleJobs = activeJobs.filter(j => j.health_status === 'stale').length
+        const stuckJobs = activeJobs.filter(j => j.health_status === 'stuck').length
+
+        // Platform health summary
+        const platformHealthy = platformHealth.filter(p => p.status === 'healthy').length
+        const platformWarning = platformHealth.filter(p => p.status === 'warning').length
+        const platformCritical = platformHealth.filter(p => p.status === 'critical').length
+
+        let overallStatus: 'healthy' | 'degraded' | 'critical' = 'healthy'
+        if (stuckJobs > 0 || failedJobs > totalJobs * 0.3 || platformCritical > platformHealth.length * 0.3) {
+          overallStatus = 'critical'
+        } else if (failedJobs > 0 || staleJobs > totalJobs * 0.2 || platformWarning > platformHealth.length * 0.3) {
+          overallStatus = 'degraded'
+        }
+
+        // Average success rate across active jobs only (exclude dead platforms)
+        const activeStats = jobStats.filter(j => !isDeadPlatformJob(j.job_name || ''))
+        const avgSuccessRate = activeStats.length > 0
+          ? activeStats.reduce((sum, j) => sum + (j.success_rate || 0), 0) / activeStats.length
+          : 0
+
+        return {
+          status: overallStatus,
+          timestamp: new Date().toISOString(),
+          summary: {
+            totalJobs,
+            healthyJobs,
+            failedJobs,
+            staleJobs,
+            stuckJobs,
+            avgSuccessRate7d: Math.round(avgSuccessRate * 10) / 10,
+            platformHealthy,
+            platformWarning,
+            platformCritical,
+            totalPlatforms: platformHealth.length,
+          },
+          platformHealth,
+          jobs: jobStatuses,
+          stats: jobStats,
+          recentFailures,
+        }
+      },
+      'warm', // warm tier: 2 min memory, 15 min Redis (we override with custom TTL via tier)
+      ['pipeline-health']
+    )
+
+    return NextResponse.json(result, {
+      headers: { 'Cache-Control': 'no-store' },
+    })
+  } catch (err) {
+    return NextResponse.json(
+      { error: 'Internal server error' },
+      { status: 500, headers: { 'Cache-Control': 'no-store' } }
+    )
   }
-  const recentFailures = recentFailuresRaw.filter(
-    (f: { job_name?: string }) => !isDeadPlatformJob(f.job_name || '')
-  )
-
-  // Calculate overall pipeline health (excluding dead platforms)
-  const activeJobs = jobStatuses.filter(j => !isDeadPlatformJob(j.job_name || ''))
-  const totalJobs = activeJobs.length
-  const healthyJobs = activeJobs.filter(j => j.health_status === 'healthy').length
-  const failedJobs = activeJobs.filter(j => j.health_status === 'failed').length
-  const staleJobs = activeJobs.filter(j => j.health_status === 'stale').length
-  const stuckJobs = activeJobs.filter(j => j.health_status === 'stuck').length
-
-  // Platform health summary
-  const platformHealthy = platformHealth.filter(p => p.status === 'healthy').length
-  const platformWarning = platformHealth.filter(p => p.status === 'warning').length
-  const platformCritical = platformHealth.filter(p => p.status === 'critical').length
-
-  let overallStatus: 'healthy' | 'degraded' | 'critical' = 'healthy'
-  if (stuckJobs > 0 || failedJobs > totalJobs * 0.3 || platformCritical > platformHealth.length * 0.3) {
-    overallStatus = 'critical'
-  } else if (failedJobs > 0 || staleJobs > totalJobs * 0.2 || platformWarning > platformHealth.length * 0.3) {
-    overallStatus = 'degraded'
-  }
-
-  // Average success rate across active jobs only (exclude dead platforms)
-  const activeStats = jobStats.filter(j => !isDeadPlatformJob(j.job_name || ''))
-  const avgSuccessRate = activeStats.length > 0
-    ? activeStats.reduce((sum, j) => sum + (j.success_rate || 0), 0) / activeStats.length
-    : 0
-
-  return NextResponse.json({
-    status: overallStatus,
-    timestamp: new Date().toISOString(),
-    summary: {
-      totalJobs,
-      healthyJobs,
-      failedJobs,
-      staleJobs,
-      stuckJobs,
-      avgSuccessRate7d: Math.round(avgSuccessRate * 10) / 10,
-      platformHealthy,
-      platformWarning,
-      platformCritical,
-      totalPlatforms: platformHealth.length,
-    },
-    platformHealth,
-    jobs: jobStatuses,
-    stats: jobStats,
-    recentFailures,
-  }, {
-    headers: { 'Cache-Control': 'no-store' },
-  })
 }
