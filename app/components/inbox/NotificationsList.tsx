@@ -73,6 +73,7 @@ export default function NotificationsList() {
     try {
       const response = await fetch(`/api/notifications?offset=${notifications.length}&limit=${PAGE_SIZE}`, {
         headers: { 'Authorization': `Bearer ${accessToken}` },
+        signal: AbortSignal.timeout(15000),
       })
       if (!response.ok) return
       const result = await response.json()
@@ -89,12 +90,16 @@ export default function NotificationsList() {
 
   useEffect(() => {
     const abortController = new AbortController()
+    const timeoutId = setTimeout(() => abortController.abort(), 15000)
 
     if (accessToken) {
-      loadNotifications(abortController.signal)
+      loadNotifications(abortController.signal).finally(() => clearTimeout(timeoutId))
+    } else {
+      clearTimeout(timeoutId)
     }
 
     return () => {
+      clearTimeout(timeoutId)
       abortController.abort()
     }
   }, [accessToken, loadNotifications])
@@ -120,11 +125,13 @@ export default function NotificationsList() {
           ...getCsrfHeaders(),
         },
         body: JSON.stringify({ mark_all: true }),
+        signal: AbortSignal.timeout(15000),
       })
       if (!response.ok) {
         throw new Error('Failed to mark all as read')
       }
-    } catch {
+    } catch (err) {
+      if (err instanceof Error && err.name === 'AbortError') return
       // 回滚
       setNotifications(prevNotifications)
       setUnreadNotifications(prevUnreadCount)
@@ -158,11 +165,13 @@ export default function NotificationsList() {
           ...getCsrfHeaders(),
         },
         body: JSON.stringify({ notification_id: id }),
+        signal: AbortSignal.timeout(15000),
       })
       if (!response.ok) {
         throw new Error('Failed to mark as read')
       }
-    } catch {
+    } catch (err) {
+      if (err instanceof Error && err.name === 'AbortError') return
       // 回滚
       setNotifications((prev) => prev.map((n) => n.id === id ? { ...n, read: false } : n))
       setUnreadNotifications(unreadNotifications)
