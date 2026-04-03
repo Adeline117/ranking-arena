@@ -4,12 +4,21 @@
    No CSS hiding needed — React state removes it when client table mounts.
    This eliminates CLS because the swap happens at the same DOM position. */
 
-/* Two-phase rendering: SSR shell is crossfaded out via JS in HomePage.tsx.
-   The shell is positioned absolutely (removing from flow) then faded to opacity:0.
-   This preserves the SSR hero as the LCP element while avoiding CLS (~2.1 → ~0).
-   - CSS :has() kills LCP (hero disappears before JS loads on slow 4G)
-   - shell.remove() kills CLS (DOM removal causes massive layout shift)
-   - Position:absolute + opacity:0 avoids both issues */
+/* Two-phase rendering: SSR shell hidden via CSS :has() in the SAME paint frame
+   as Phase 2 mounting. This avoids CLS because the transition is atomic:
+   - Before JS: #ssr-shell visible, #homepage-interactive not in DOM → SSR shows
+   - JS loads: #homepage-interactive mounts → CSS instantly hides #ssr-shell
+   - No intermediate state where both or neither are visible
+
+   content-visibility:hidden + height:0 collapses the SSR content without
+   affecting LCP (the element stays in DOM, just not painted). */
+#ssr-shell:has(~ * #homepage-interactive),
+:has(#homepage-interactive) #ssr-shell {
+  content-visibility: hidden;
+  height: 0;
+  overflow: hidden;
+  contain: strict;
+}
 
 /*
  * Performance Optimization: CSS files moved to async loading
