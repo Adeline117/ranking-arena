@@ -498,7 +498,7 @@ export async function fetchAevoStatsDetail(addr: string): Promise<StatsDetail | 
   if (copinStats && copinStats.sharpeRatio == null) {
     try {
       const positions = await fetchAevoPositionHistory(addr)
-      if (positions.length >= 5) {
+      if (positions.length >= 2) {
         const { computeStatsFromPositions } = await import('./enrichment-dex')
         const derived = computeStatsFromPositions(positions)
         if (derived.sharpeRatio != null) {

@@ -195,7 +195,7 @@ export async function fetchPolymarketStatsDetail(
           dailyPnlMap.set(date, (dailyPnlMap.get(date) || 0) + flow)
         }
         const dailyReturns = Array.from(dailyPnlMap.values())
-        if (dailyReturns.length >= 7) {
+        if (dailyReturns.length >= 2) {
           const mean = dailyReturns.reduce((a, b) => a + b, 0) / dailyReturns.length
           const std = Math.sqrt(dailyReturns.reduce((a, r) => a + (r - mean) ** 2, 0) / dailyReturns.length)
           if (std > 0) {

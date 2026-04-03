@@ -526,12 +526,12 @@ export async function fetchDriftStatsDetail(
           }
 
           // Compute Sharpe from daily PnL deltas
-          if (snaps.length >= 7) {
+          if (snaps.length >= 3) {
             const dailyReturns: number[] = []
             for (let i = 1; i < snaps.length; i++) {
               dailyReturns.push(snaps[i].pnl - snaps[i - 1].pnl)
             }
-            if (dailyReturns.length >= 5) {
+            if (dailyReturns.length >= 2) {
               const mean = dailyReturns.reduce((a, b) => a + b, 0) / dailyReturns.length
               const std = Math.sqrt(dailyReturns.reduce((a, r) => a + (r - mean) ** 2, 0) / dailyReturns.length)
               if (std > 0) sharpeRatio = Math.round((mean / std) * Math.sqrt(365) * 100) / 100
