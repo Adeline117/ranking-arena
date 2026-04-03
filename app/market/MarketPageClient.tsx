@@ -222,6 +222,19 @@ function MarketPageContent({ initialSpotData }: { initialSpotData?: SpotCoinSSR[
         </Suspense>
       </SectionErrorBoundary>
 
+      {/* Live indicator */}
+      <div style={{
+        display: 'flex', alignItems: 'center', justifyContent: 'flex-end',
+        gap: 6, padding: '4px 20px 0', maxWidth: 1400, margin: '0 auto',
+        fontSize: 11, color: tokens.colors.text.tertiary,
+      }}>
+        <span style={{
+          width: 6, height: 6, borderRadius: '50%', background: tokens.colors.accent.success,
+          display: 'inline-block', animation: 'pulse 2s infinite',
+        }} />
+        <span suppressHydrationWarning>{t('liveData')} · {t('autoRefresh')}</span>
+      </div>
+
       {isMobile ? (
         /* Mobile: Tab Layout */
         <Suspense fallback={<LoadingCard height={400} />}>
