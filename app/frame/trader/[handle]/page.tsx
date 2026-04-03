@@ -63,7 +63,7 @@ export async function generateMetadata({ params, searchParams }: Props): Promise
 
   // Profile URL on main site
   const profileSource = trader?.source || source || ''
-  const profileId = trader?.source_trader_id || decodedHandle
+  const _profileId = trader?.source_trader_id || decodedHandle
   const profileUrl = `${BASE_URL}/trader/${encodeURIComponent(trader?.handle || decodedHandle)}${profileSource ? `?platform=${profileSource}` : ''}`
 
   // Frame URL (this page)
