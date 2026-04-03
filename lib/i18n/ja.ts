@@ -169,6 +169,8 @@ const ja = {
     traderNotRegistered: '未登録トレーダー',
     traderNotRegisteredDesc: 'このトレーダーはこのアカウントを申請していません',
     unclaimedBadge: '未申請',
+    communityDiscoverTitle: 'コミュニティに参加',
+    communityDiscoverDesc: '戦略を議論し、インサイトを共有し、他のトレーダーとグループに参加しましょう。',
     claimThisProfile: 'このプロフィールを申請する',
     claimYourProfile: 'あなたですか？プロフィールを申請しましょう',
     claimYourProfileShort: 'あなたのアカウントですか？申請してプロフィールをカスタマイズしましょう。',
@@ -2639,6 +2641,7 @@ const ja = {
     heroStatTraders: 'トレーダー',
     heroStatExchanges: '取引所',
     heroStatUpdated: '更新頻度',
+    heroExploreRankings: 'ランキングを見る',
     heroProBadge: 'Proにアップグレード — 全トレーダーと高度なフィルターを解放',
 
     rankingsSearchPlaceholder: '名前でトレーダーを検索...',

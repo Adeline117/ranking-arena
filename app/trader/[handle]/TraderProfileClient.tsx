@@ -33,6 +33,7 @@ import {
   combineSchemas,
 } from '@/lib/seo'
 import { BASE_URL } from '@/lib/constants/urls'
+import { features } from '@/lib/features'
 
 const DailyReturnsChart = dynamic(() => import('@/app/components/trader/charts/DailyReturnsChart').then(m => ({ default: m.DailyReturnsChart })), { ssr: false })
 const DrawdownChart = dynamic(() => import('@/app/components/trader/charts/DrawdownChart').then(m => ({ default: m.DrawdownChart })), { ssr: false })
@@ -752,9 +753,42 @@ export default function TraderProfileClient({ data, serverTraderData, claimedUse
                 )}
               </Box>
 
-              {traderSimilar.length > 0 && (
+              {(traderSimilar.length > 0 || features.social) && (
                 <Box style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[6] }}>
-                  <SimilarTraders traders={traderSimilar} />
+                  {traderSimilar.length > 0 && <SimilarTraders traders={traderSimilar} />}
+                  {features.social && (
+                    <Link href="/groups" prefetch={false} style={{ textDecoration: 'none' }}>
+                      <Box
+                        className="glass-card"
+                        style={{
+                          padding: tokens.spacing[5],
+                          background: tokens.colors.bg.secondary,
+                          borderRadius: tokens.radius.xl,
+                          border: `1px solid ${tokens.colors.border.primary}60`,
+                          transition: 'all 0.2s',
+                          cursor: 'pointer',
+                        }}
+                        onMouseEnter={(e: React.MouseEvent<HTMLDivElement>) => {
+                          e.currentTarget.style.borderColor = tokens.colors.accent.primary + '60'
+                        }}
+                        onMouseLeave={(e: React.MouseEvent<HTMLDivElement>) => {
+                          e.currentTarget.style.borderColor = tokens.colors.border.primary + '60'
+                        }}
+                      >
+                        <Box style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: tokens.spacing[2] }}>
+                          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={tokens.colors.accent.primary} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                            <path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2" /><circle cx="9" cy="7" r="4" /><path d="M23 21v-2a4 4 0 00-3-3.87" /><path d="M16 3.13a4 4 0 010 7.75" />
+                          </svg>
+                          <Text size="sm" weight="bold" style={{ color: tokens.colors.text.primary }}>
+                            {t('communityDiscoverTitle')}
+                          </Text>
+                        </Box>
+                        <Text size="xs" style={{ color: tokens.colors.text.secondary, lineHeight: 1.5 }}>
+                          {t('communityDiscoverDesc')}
+                        </Text>
+                      </Box>
+                    </Link>
+                  )}
                 </Box>
               )}
             </Box>

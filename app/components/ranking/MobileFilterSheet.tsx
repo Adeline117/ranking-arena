@@ -60,7 +60,7 @@ export default function MobileFilterSheet({
                 background: 'var(--color-bg-tertiary)',
                 color: 'var(--color-text-secondary)',
                 cursor: 'pointer',
-                minHeight: 36,
+                minHeight: 44,
                 transition: 'all 0.15s ease',
               }}
             >

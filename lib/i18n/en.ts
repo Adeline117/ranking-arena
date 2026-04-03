@@ -175,6 +175,8 @@ const en = {
     traderNotRegistered: 'Trader Not Registered',
     traderNotRegisteredDesc: 'This trader has not claimed this account',
     unclaimedBadge: 'Unclaimed',
+    communityDiscoverTitle: 'Join the Community',
+    communityDiscoverDesc: 'Discuss strategies, share insights, and join trading groups with other traders.',
     claimThisProfile: 'Claim this profile',
     claimYourProfile: 'Is this you? Claim your profile',
     claimYourProfileShort: 'Is this your account? Claim to customize your profile.',
@@ -2809,6 +2811,7 @@ const en = {
     heroStatTraders: 'Traders',
     heroStatExchanges: 'Exchanges',
     heroStatUpdated: 'Update Freq',
+    heroExploreRankings: 'Explore Rankings',
     heroProBadge: 'Go Pro — Unlock All Traders & Advanced Filters',
 
     // Rankings search

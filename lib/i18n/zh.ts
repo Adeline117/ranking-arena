@@ -175,6 +175,8 @@ const zh = {
     traderNotRegistered: '交易员未入驻',
     traderNotRegisteredDesc: '该交易员尚未认领此账号',
     unclaimedBadge: '未认领',
+    communityDiscoverTitle: '加入交易社区',
+    communityDiscoverDesc: '与其他交易员交流策略、分享观点、加入交易小组。',
     claimThisProfile: '认领此主页',
     claimYourProfile: '这是你吗？认领你的主页',
     claimYourProfileShort: '这是你的交易账号吗？认领后可以自定义 profile。',
@@ -2809,6 +2811,7 @@ const zh = {
     heroStatTraders: '交易员',
     heroStatExchanges: '交易所',
     heroStatUpdated: '更新频率',
+    heroExploreRankings: '浏览排行榜',
     heroProBadge: '升级 Pro — 解锁全部交易员和高级筛选',
 
     // Rankings search
