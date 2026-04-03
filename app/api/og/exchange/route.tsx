@@ -238,7 +238,7 @@ export async function GET(request: NextRequest) {
               </div>
             ) : (
               <div style={{ display: 'flex', flex: 1, alignItems: 'center', justifyContent: 'center' }}>
-                <span style={{ fontSize: 24, color: C.dim }}>{t('rankingsComingSoon') || 'Rankings coming soon'}</span>
+                <span style={{ fontSize: 24, color: C.dim }}>Rankings coming soon</span>
               </div>
             )}
 
