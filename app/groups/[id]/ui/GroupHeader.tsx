@@ -290,16 +290,18 @@ export default function GroupHeader({
                       </Button>
                     </Link>
                   )}
-                  <Button
-                    variant="secondary"
-                    size="sm"
-                    onClick={onLeave}
-                    disabled={joining}
-                  >
-                    {joining
-                      ? t('groupLeaving')
-                      : t('groupLeaveBtn')}
-                  </Button>
+                  {userRole !== 'owner' && (
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      onClick={onLeave}
+                      disabled={joining}
+                    >
+                      {joining
+                        ? t('groupLeaving')
+                        : t('groupLeaveBtn')}
+                    </Button>
+                  )}
                 </>
               ) : (
                 <Button
