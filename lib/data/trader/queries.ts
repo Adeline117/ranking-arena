@@ -181,7 +181,7 @@ export async function getTraderDetail(supabase: SupabaseClient, params: {
           .limit(5)
       ),
     ]),
-    10000
+    20000 // 20s: parallel queries compete for Supabase pool; 10s was too tight
   )
 
   const lrRows = (lrResult || []) as Record<string, unknown>[]
@@ -343,7 +343,7 @@ export async function getTraderDetail(supabase: SupabaseClient, params: {
       // Similar traders (by arena score range)
       fetchSimilarTraders(supabase, platform, traderKey, trader.arenaScore, trader.roi),
     ]),
-    10000
+    20000 // 20s: parallel queries compete for Supabase pool; 10s was too tight
   )
 
   // Map equity curves — split merged result by period
