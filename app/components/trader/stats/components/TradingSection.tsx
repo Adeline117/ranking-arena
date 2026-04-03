@@ -90,10 +90,10 @@ export function TradingSection({
             marginBottom: tokens.spacing[6],
           }}
         >
-          <MiniKpi label={i18nT('totalTrades90d')} value={trading!.totalTrades12M > 0 ? String(trading!.totalTrades12M) : NULL_DISPLAY} />
+          <MiniKpi label={i18nT('totalTrades90d')} value={trading!.totalTrades12M != null ? String(trading!.totalTrades12M) : NULL_DISPLAY} />
           <MiniKpi
             label={i18nT('avgProfitLoss')}
-            value={trading!.avgProfit > 0 || trading!.avgLoss < 0
+            value={trading!.avgProfit != null && trading!.avgLoss != null
               ? `${trading!.avgProfit.toFixed(2)}% / ${trading!.avgLoss.toFixed(2)}%`
               : NULL_DISPLAY
             }
