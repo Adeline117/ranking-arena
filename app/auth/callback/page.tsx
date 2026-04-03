@@ -99,7 +99,9 @@ function AuthCallbackContent() {
         const now = Date.now()
         const isNewUser = now - createdAt < 30_000
 
-        router.replace(isAddAccount ? '/' : (isNewUser ? '/onboarding' : defaultRedirect))
+        // New users → onboarding (preserve returnUrl so they land on right page after)
+        const onboardingDest = isSafeReturn ? `/onboarding?returnUrl=${encodeURIComponent(returnUrl!)}` : '/onboarding'
+        router.replace(isAddAccount ? '/' : (isNewUser ? onboardingDest : defaultRedirect))
       } else {
         // Wait a moment for supabase to process the hash fragment
         setTimeout(async () => {
@@ -110,7 +112,8 @@ function AuthCallbackContent() {
             const createdAt = new Date(retrySession.user.created_at).getTime()
             const now = Date.now()
             const isNewUser = now - createdAt < 30_000
-            router.replace(isAddAccount ? '/' : (isNewUser ? '/onboarding' : defaultRedirect))
+            const onboardingDest2 = isSafeReturn ? `/onboarding?returnUrl=${encodeURIComponent(returnUrl!)}` : '/onboarding'
+            router.replace(isAddAccount ? '/' : (isNewUser ? onboardingDest2 : defaultRedirect))
           } else {
             router.replace('/login?error=no_session')
           }
