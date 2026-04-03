@@ -17,11 +17,11 @@ export interface LivePosition {
   id: string
   symbol: string
   direction: 'long' | 'short'
-  size: number
-  entryPrice: number
-  markPrice: number
-  pnl: number
-  pnlPct: number
+  size: number | null
+  entryPrice: number | null
+  markPrice: number | null
+  pnl: number | null
+  pnlPct: number | null
   leverage: number
   marginType: 'cross' | 'isolated'
   updatedAt: string
@@ -103,21 +103,21 @@ export async function GET(
       id: row.id,
       symbol: row.symbol,
       direction: row.direction === 'short' ? 'short' : 'long',
-      size: row.weight_pct ?? 0,
-      entryPrice: row.entry_price ?? 0,
-      markPrice: row.mark_price ?? row.entry_price ?? 0,
-      pnl: row.pnl ?? 0,
-      pnlPct: row.pnl_pct ?? 0,
+      size: row.weight_pct ?? null,
+      entryPrice: row.entry_price ?? null,
+      markPrice: row.mark_price ?? row.entry_price ?? null,
+      pnl: row.pnl ?? null,
+      pnlPct: row.pnl_pct ?? null,
       leverage: row.leverage ?? 1,
       marginType: row.margin_type === 'isolated' ? 'isolated' : 'cross',
       updatedAt: row.updated_at,
     }))
     
     // 计算总盈亏
-    const totalPnl = positions.reduce((sum, p) => sum + p.pnl, 0)
-    const totalSize = positions.reduce((sum, p) => sum + p.size, 0)
+    const totalPnl = positions.reduce((sum, p) => sum + (p.pnl ?? 0), 0)
+    const totalSize = positions.reduce((sum, p) => sum + (p.size ?? 0), 0)
     const totalPnlPct = positions.length > 0 && totalSize > 0
-      ? positions.reduce((sum, p) => sum + p.pnlPct * p.size, 0) / totalSize
+      ? positions.reduce((sum, p) => sum + (p.pnlPct ?? 0) * (p.size ?? 0), 0) / totalSize
       : 0
 
     const result = { positions, totalPnl, totalPnlPct }
