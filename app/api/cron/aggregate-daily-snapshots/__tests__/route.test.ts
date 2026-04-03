@@ -150,7 +150,6 @@ describe('POST /api/cron/aggregate-daily-snapshots', () => {
 
     expect(res.status).toBe(200)
     expect(body.success).toBe(true)
-    expect(body.processed).toBe(2)
     expect(body.inserted).toBe(2)
   })
 
@@ -168,7 +167,7 @@ describe('POST /api/cron/aggregate-daily-snapshots', () => {
 
     expect(res.status).toBe(200)
     expect(body.success).toBe(true)
-    expect(body.processed).toBe(0)
+    expect(body.inserted).toBe(0)
   })
 
   // ---- RPC fallback --------------------------------------------------------
@@ -208,10 +207,10 @@ describe('POST /api/cron/aggregate-daily-snapshots', () => {
     const res = await POST(createCronRequest(CRON_SECRET))
     expect(res.status).toBe(500)
     const body = await res.json()
-    expect(body.details).toContain('Database unavailable')
+    expect(body.error).toContain('Database unavailable')
   })
 
-  it('returns 500 when fallback query also fails', async () => {
+  it('returns success with errors when fallback query fails', async () => {
     // RPC fails → triggers fallback
     mockRpc.mockResolvedValue({ data: null, error: { message: 'function not found' } })
 
@@ -224,6 +223,7 @@ describe('POST /api/cron/aggregate-daily-snapshots', () => {
     })
 
     const res = await POST(createCronRequest(CRON_SECRET))
-    expect(res.status).toBe(500)
+    // With per-date aggregation, individual date errors are caught — returns 200 with error count
+    expect(res.status).toBe(200)
   })
 })
