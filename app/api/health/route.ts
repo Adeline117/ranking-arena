@@ -9,6 +9,7 @@
 
 import { NextResponse } from 'next/server'
 import { getSupabaseAdmin } from '@/lib/supabase/server'
+import { getSharedRedis } from '@/lib/cache/redis-client'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'edge'
@@ -33,14 +34,10 @@ async function checkDatabase(): Promise<{ status: 'pass' | 'fail' | 'skip'; late
 }
 
 async function checkRedis(): Promise<{ status: 'pass' | 'fail' | 'skip'; latency?: number; message?: string }> {
-  const url = process.env.UPSTASH_REDIS_REST_URL
-  const token = process.env.UPSTASH_REDIS_REST_TOKEN
-  if (!url || !token) return { status: 'skip', message: 'Not configured' }
-
   const t0 = Date.now()
   try {
-    const { Redis } = await import('@upstash/redis')
-    const redis = new Redis({ url, token })
+    const redis = await getSharedRedis()
+    if (!redis) return { status: 'skip', message: 'Not configured' }
     const pong = await redis.ping()
     const latency = Date.now() - t0
     return pong === 'PONG' ? { status: 'pass', latency } : { status: 'fail', message: `Got: ${pong}`, latency }
