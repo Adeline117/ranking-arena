@@ -134,7 +134,7 @@
     "@capacitor/push-notifications": "^8.0.2",
     "@capacitor/share": "^8.0.1",
     "@capacitor/splash-screen": "^8.0.1",
-    "@capacitor/status-bar": "^8.0.1",
+    "@capacitor/status-bar": "^8.0.2",
     "@mathieuc/tradingview": "^3.5.2",
     "@next/bundle-analyzer": "^16.2.1",
     "@playwright/test": "^1.58.2",
