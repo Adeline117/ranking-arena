@@ -98,7 +98,7 @@ export function TradingSection({
               : NULL_DISPLAY
             }
           />
-          <MiniKpi label={i18nT('profitableTradesLabel')} value={trading!.profitableTradesPct > 0 ? `${trading!.profitableTradesPct.toFixed(2)}%` : NULL_DISPLAY} />
+          <MiniKpi label={i18nT('profitableTradesLabel')} value={trading!.profitableTradesPct != null ? `${trading!.profitableTradesPct.toFixed(2)}%` : NULL_DISPLAY} />
         </Box>
       )}
 
