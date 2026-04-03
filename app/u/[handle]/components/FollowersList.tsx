@@ -85,7 +85,7 @@ export default function FollowersList({ profileId }: { profileId: string }) {
                   <Text size="sm" weight="bold" style={{ color: tokens.colors.white }}>{getAvatarInitial(f.handle)}</Text>
                 )}
               </Box>
-              <Text size="sm" weight="semibold" style={{ color: tokens.colors.text.primary }}>
+              <Text size="sm" weight="semibold" style={{ color: tokens.colors.text.primary, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0, maxWidth: 180 }}>
                 @{f.handle}
               </Text>
             </Box>
