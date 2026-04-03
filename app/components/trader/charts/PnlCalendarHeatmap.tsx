@@ -115,7 +115,16 @@ export function PnlCalendarHeatmap({ data, days = 90 }: PnlCalendarHeatmapProps)
   }, [data, days])
 
   if (!data || data.length < 3) {
-    return null
+    return (
+      <div style={{
+        padding: tokens.spacing[4],
+        color: tokens.colors.text.tertiary,
+        fontSize: tokens.typography.fontSize.sm,
+        textAlign: 'center',
+      }}>
+        {t('insufficientData')}
+      </div>
+    )
   }
 
   const cellSize = 14
