@@ -1,5 +1,6 @@
 'use client'
 
+import { useEffect, useRef } from 'react'
 import { createPortal } from 'react-dom'
 import Link from 'next/link'
 import { tokens } from '@/lib/design-tokens'
@@ -26,10 +27,28 @@ interface PostDetailModalProps {
 }
 
 export default function PostDetailModal({ post, fullContent, loading, t, onClose }: PostDetailModalProps) {
+  const dialogRef = useRef<HTMLDivElement>(null)
+
+  // ESC key handler + body scroll lock
+  useEffect(() => {
+    if (!post) return
+    const prev = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
+    document.addEventListener('keydown', onKey)
+    dialogRef.current?.focus()
+    return () => {
+      document.body.style.overflow = prev
+      document.removeEventListener('keydown', onKey)
+    }
+  }, [post, onClose])
+
   if (!post) return null
 
   const modalContent = (
     <div
+      ref={dialogRef}
+      tabIndex={-1}
       onClick={onClose}
       role="dialog"
       aria-modal="true"
