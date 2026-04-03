@@ -151,6 +151,14 @@ export const GRANULAR_PLATFORMS = [
   'woox',
   'polymarket',
   'copin',
+  'okx_spot',
+  'paradex',
+  'vertex',
+  'apex_pro',
+  'rabbitx',
+  'synthetix',
+  'perpetual_protocol',
+  'bingx_spot',
 ] as const
 
 export type GranularPlatform = (typeof GRANULAR_PLATFORMS)[number]
@@ -207,6 +215,14 @@ export const PLATFORM_CATEGORY: Record<GranularPlatform, TradingCategory> = {
   woox: 'futures',
   polymarket: 'onchain',
   copin: 'onchain',
+  okx_spot: 'spot',
+  bingx_spot: 'spot',
+  paradex: 'onchain',
+  vertex: 'onchain',
+  apex_pro: 'onchain',
+  rabbitx: 'onchain',
+  synthetix: 'onchain',
+  perpetual_protocol: 'onchain',
 }
 
 // ============================================
@@ -543,6 +559,15 @@ export const PLATFORM_RATE_LIMITS: Record<GranularPlatform, RateLimiterConfig> =
   woox: { max_requests: 30, window_ms: 60_000, min_delay_ms: 2000, max_delay_ms: 5000, max_concurrent: 3 },
   polymarket: { max_requests: 60, window_ms: 60_000, min_delay_ms: 1000, max_delay_ms: 3000, max_concurrent: 5 },
   copin: { max_requests: 30, window_ms: 60_000, min_delay_ms: 2000, max_delay_ms: 5000, max_concurrent: 2 },
+  // Dead/pending platforms (minimal config for type completeness)
+  okx_spot: { max_requests: 10, window_ms: 60_000, min_delay_ms: 1000, max_delay_ms: 3000, max_concurrent: 2 },
+  bingx_spot: { max_requests: 10, window_ms: 60_000, min_delay_ms: 1000, max_delay_ms: 3000, max_concurrent: 2 },
+  paradex: { max_requests: 10, window_ms: 60_000, min_delay_ms: 1000, max_delay_ms: 3000, max_concurrent: 2 },
+  vertex: { max_requests: 10, window_ms: 60_000, min_delay_ms: 1000, max_delay_ms: 3000, max_concurrent: 2 },
+  apex_pro: { max_requests: 10, window_ms: 60_000, min_delay_ms: 1000, max_delay_ms: 3000, max_concurrent: 2 },
+  rabbitx: { max_requests: 10, window_ms: 60_000, min_delay_ms: 1000, max_delay_ms: 3000, max_concurrent: 2 },
+  synthetix: { max_requests: 10, window_ms: 60_000, min_delay_ms: 1000, max_delay_ms: 3000, max_concurrent: 2 },
+  perpetual_protocol: { max_requests: 10, window_ms: 60_000, min_delay_ms: 1000, max_delay_ms: 3000, max_concurrent: 2 },
 }
 
 // ============================================
