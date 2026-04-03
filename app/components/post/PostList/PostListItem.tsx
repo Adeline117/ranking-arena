@@ -29,6 +29,7 @@ interface PostListItemProps {
   onTogglePin: (post: Post, e: React.MouseEvent) => void
   onStartEdit: (post: Post, e: React.MouseEvent) => void
   onDeletePost: (post: Post, e: React.MouseEvent) => void
+  onReport?: (post: Post) => void
   removeImagesFromContent: (content: string) => string
   t: (key: string) => string
 }
@@ -41,6 +42,7 @@ export const PostListItem = memo(function PostListItem({
   translatedListPosts,
   onOpenPost,
   onToggleReaction,
+  onReport,
   onTogglePin,
   onStartEdit,
   onDeletePost,
@@ -332,6 +334,21 @@ export const PostListItem = memo(function PostListItem({
           </span>
         )}
 
+        {/* Report button for non-author posts */}
+        {currentUserId && p.author_id !== currentUserId && onReport && (
+          <button
+            onClick={(e) => { e.stopPropagation(); onReport(p) }}
+            style={{
+              background: 'transparent', border: 'none', color: tokens.colors.text.tertiary,
+              cursor: 'pointer', fontSize: 12, padding: '2px 6px', borderRadius: tokens.radius.sm, marginLeft: 'auto',
+            }}
+            onMouseEnter={(e) => { e.currentTarget.style.color = tokens.colors.accent.error }}
+            onMouseLeave={(e) => { e.currentTarget.style.color = tokens.colors.text.tertiary }}
+            title={t('report')}
+          >
+            ⚑
+          </button>
+        )}
         {/* Author actions: Pin/Edit/Delete */}
         {currentUserId && p.author_id === currentUserId && (
           <span style={{ display: 'flex', gap: 8, marginLeft: 'auto' }}>
