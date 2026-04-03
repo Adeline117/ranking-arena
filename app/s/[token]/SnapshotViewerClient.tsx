@@ -274,7 +274,7 @@ export default function SnapshotViewerClient({ snapshot, traders }: SnapshotView
                     <Text size="xs" color="tertiary">·</Text>
                     <EyeIcon size={12} />
                     <Text size="xs" color="tertiary">
-                      {snapshot.viewCount.toLocaleString()}
+                      {snapshot.viewCount.toLocaleString('en-US')}
                     </Text>
                   </>
                 )}

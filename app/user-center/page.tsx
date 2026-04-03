@@ -230,9 +230,9 @@ function UserCenterPage() {
 
               <Box style={{ width: '100%' }}>
                 <Box style={{ display: 'flex', justifyContent: 'space-between', marginBottom: tokens.spacing[1] }}>
-                  <Text size="xs" color="tertiary">EXP {info.currentExp.toLocaleString()}</Text>
+                  <Text size="xs" color="tertiary">EXP {info.currentExp.toLocaleString('en-US')}</Text>
                   <Text size="xs" color="tertiary">
-                    {info.nextExp ? `${t('userCenterNextLevel')} ${info.nextExp.toLocaleString()}` : t('userCenterMaxLevel')}
+                    {info.nextExp ? `${t('userCenterNextLevel')} ${info.nextExp.toLocaleString('en-US')}` : t('userCenterMaxLevel')}
                   </Text>
                 </Box>
                 <Box style={{ height: 6, borderRadius: tokens.radius.full, background: tokens.colors.bg.tertiary, overflow: 'hidden' }}>

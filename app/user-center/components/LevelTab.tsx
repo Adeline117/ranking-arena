@@ -64,7 +64,7 @@ export default function LevelTab({ info, dailyEarned, expActions }: LevelTabProp
                 fontSize: tokens.typography.fontSize.xs, color: tokens.colors.text.tertiary,
                 marginBottom: tokens.spacing[2],
               }}>
-                <span>EXP {info.currentExp.toLocaleString()}{info.nextExp ? ` / ${info.nextExp.toLocaleString()}` : ''}</span>
+                <span>EXP {info.currentExp.toLocaleString('en-US')}{info.nextExp ? ` / ${info.nextExp.toLocaleString('en-US')}` : ''}</span>
                 <span style={{ color: tokens.colors.accent.success, fontWeight: tokens.typography.fontWeight.semibold }}>
                   +{dailyEarned} {t('userCenterToday')}
                 </span>
@@ -176,7 +176,7 @@ export default function LevelTab({ info, dailyEarned, expActions }: LevelTabProp
                   <span style={{
                     fontSize: tokens.typography.fontSize.sm, color: tokens.colors.text.tertiary, fontVariantNumeric: 'tabular-nums',
                   }}>
-                    {lvl.minExp.toLocaleString()} EXP
+                    {lvl.minExp.toLocaleString('en-US')} EXP
                   </span>
                 </div>
               </div>
