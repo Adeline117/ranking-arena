@@ -82,7 +82,7 @@ export function PeriodSelector({ period, onPeriodChange, source, lastUpdated }: 
         </Text>
         {lastUpdated && (
           <Text size="xs" color="tertiary" style={{ opacity: 0.6 }}>
-            {t('updatedAt')} {new Date(lastUpdated).toLocaleTimeString(getLocaleFromLanguage(language), { hour: '2-digit', minute: '2-digit' })}
+            {t('updatedAt')} {new Date(lastUpdated).toLocaleTimeString(getLocaleFromLanguage(language), { hour: '2-digit', minute: '2-digit', timeZoneName: 'short' })}
           </Text>
         )}
       </Box>
