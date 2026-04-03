@@ -15,8 +15,8 @@ import { PipelineLogger } from '@/lib/services/pipeline-logger'
 import { runEnrichment, type EnrichmentResult } from '@/lib/cron/enrichment-runner'
 import { createLogger } from '@/lib/utils/logger'
 import { env } from '@/lib/env'
-import { triggerDownstreamRefresh, type TraceMetadata } from '@/lib/cron/trigger-chain'
-import { randomUUID } from 'crypto'
+import { triggerDownstreamRefresh } from '@/lib/cron/trigger-chain'
+import { PipelineCheckpoint } from '@/lib/harness/pipeline-checkpoint'
 
 const logger = createLogger('batch-enrich')
 
@@ -132,6 +132,9 @@ export async function GET(request: NextRequest) {
   const results: BatchResult[] = []
   const plog = await PipelineLogger.start(`batch-enrich-${periodParam}`, { period: periodParam, enrichAll, platforms })
 
+  // Checkpoint: resume from last crash point (skip already-enriched platforms)
+  const checkpoint = await PipelineCheckpoint.startOrResume('enrich', periodParam)
+
   // Safety timeout: ensure plog gets called before Vercel kills the function at 300s
   const SAFETY_TIMEOUT_MS = 280_000 // 280s for 300s limit (20s buffer)
   const safetyTimer = setTimeout(async () => {
@@ -189,6 +192,12 @@ export async function GET(request: NextRequest) {
       const batch = platforms.slice(i, i + BATCH_CONCURRENCY)
       const batchResults = await Promise.allSettled(
         batch.map(async (platform): Promise<BatchResult> => {
+          // Checkpoint: skip platforms already completed in a prior (crashed) run
+          const checkpointKey = `${platform}:${period}`
+          if (PipelineCheckpoint.isCompleted(checkpoint, checkpointKey)) {
+            logger.info(`[checkpoint] Skipping ${checkpointKey} (already completed in prior run)`)
+            return { platform, period, status: 'success', durationMs: 0, enriched: 0 }
+          }
           const config = PLATFORM_LIMITS[platform]
           if (!config) return { platform, period, status: 'error', durationMs: 0, error: 'No config' }
 
@@ -216,6 +225,11 @@ export async function GET(request: NextRequest) {
                 setTimeout(() => reject(new Error(`Enrichment ${platform}/${period} timed out after ${timeoutMs / 1000}s`)), timeoutMs)
               ),
             ])
+            if (result.ok) {
+              await PipelineCheckpoint.markCompleted(checkpoint, checkpointKey, result.summary.enriched ?? 0)
+            } else {
+              await PipelineCheckpoint.markFailed(checkpoint, checkpointKey, `${result.summary.failed} enrichments failed`)
+            }
             return {
               platform, period,
               status: result.ok ? 'success' : 'error',
@@ -225,6 +239,7 @@ export async function GET(request: NextRequest) {
               error: result.ok ? undefined : `${result.summary.failed} enrichments failed`,
             }
           } catch (err) {
+            await PipelineCheckpoint.markFailed(checkpoint, checkpointKey, err instanceof Error ? err.message : String(err))
             return {
               platform, period,
               status: 'error',
@@ -271,19 +286,10 @@ export async function GET(request: NextRequest) {
     )
   }
 
-  // Trigger downstream refresh (compute-leaderboard → evaluate → warm-cache) with trace metadata
+  // Finalize checkpoint and trigger downstream with trace metadata from checkpoint
+  const traceMetadata = await PipelineCheckpoint.finalize(checkpoint, Date.now() - functionStart)
   if (succeeded > 0) {
-    const successPlatforms = results.filter(r => r.status === 'success').map(r => r.platform)
-    const failedPlatforms = results.filter(r => r.status === 'error').map(r => r.platform)
-    const trace: TraceMetadata = {
-      trace_id: randomUUID(),
-      source: `batch-enrich-${periodParam}`,
-      platforms_updated: successPlatforms,
-      records_written: succeeded,
-      duration_ms: Date.now() - functionStart,
-      failed_platforms: failedPlatforms,
-    }
-    triggerDownstreamRefresh(`batch-enrich-${periodParam}`, trace)
+    triggerDownstreamRefresh(`batch-enrich-${periodParam}`, traceMetadata)
   }
 
   return NextResponse.json({
