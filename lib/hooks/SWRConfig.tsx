@@ -29,7 +29,9 @@ export function SWRConfigProvider({ children }: { children: ReactNode }) {
         
         // 智能重试 - 只对网络错误和服务器错误重试
         shouldRetryOnError: (error) => {
-          // 不对 4xx 客户端错误重试（如 401, 403, 404）
+          // 429 rate limit — retry after backoff (server-side throttling is transient)
+          if (error?.status === 429) return true
+          // 不对其他 4xx 客户端错误重试（如 401, 403, 404）
           if (error?.status >= 400 && error?.status < 500) {
             return false
           }
