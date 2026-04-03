@@ -15,7 +15,7 @@
 
 ## Overview
 
-Arena aggregates, normalizes, and ranks 34,000+ crypto traders across 35+ centralized and decentralized exchanges. Every trader receives an Arena Score, a composite metric combining ROI and absolute PnL on a 0-100 scale, allowing apples-to-apples comparison regardless of the originating platform. The system ingests data continuously through 60 scheduled cron jobs via 42 exchange connectors, enriches trader profiles with equity curves, position history, and advanced statistics, and serves the results through a Next.js 16 frontend with ISR and edge caching.
+Arena aggregates, normalizes, and ranks 34,000+ crypto traders across 35+ centralized and decentralized exchanges. Every trader receives an Arena Score, a composite metric combining ROI and absolute PnL on a 0-100 scale, allowing apples-to-apples comparison regardless of the originating platform. The system ingests data continuously through 53 scheduled cron jobs via 42 exchange connectors, enriches trader profiles with equity curves, position history, and advanced statistics, and serves the results through a Next.js 16 frontend with ISR and edge caching.
 
 Beyond rankings, Arena provides a 60,000+ item educational library (books, research papers, whitepapers), real-time market data via TradingView WebSocket, community features (groups, posts, comments, reputation-gated access), trading competitions, on-chain attestation via EAS, and a Pro membership tier. The platform supports 4 languages (English, Chinese, Japanese, Korean) and runs on both web and native mobile (iOS/Android via Capacitor).
 
@@ -112,7 +112,7 @@ Each trader profile includes:
 
 ### Localization and Theming
 
-- 4 languages: English, Chinese, Japanese, Korean (3,977 keys each, 100% coverage)
+- 4 languages: English, Chinese, Japanese, Korean (4,800+ keys each, 100% coverage)
 - Dark and Light themes with design tokens (`lib/design-tokens.ts`)
 - Simple object map i18n — zero runtime overhead, type-safe
 
@@ -122,7 +122,7 @@ Each trader profile includes:
 |-------|-----------|---------|
 | Framework | Next.js 16 | App Router, React 19, Turbopack dev server |
 | Language | TypeScript 5 | Strict mode, 139 test suites, 2,271 tests |
-| Database | Supabase | PostgreSQL, Auth, Realtime subscriptions, RLS on all tables, 163 migrations |
+| Database | Supabase | PostgreSQL, Auth, Realtime subscriptions, RLS on all tables, 184 migrations |
 | Caching | Upstash Redis | Edge-compatible, used for leaderboard cache, rate limiting, session data |
 | Search | Meilisearch | Full-text search with fuzzy matching (pg_trgm fallback) |
 | Hosting | Vercel | Edge + Serverless functions, primary region hnd1 (Tokyo), ISR for static pages |
@@ -151,7 +151,7 @@ Each trader profile includes:
                         +--------+----------+
                         |    Next.js 16     |
                         |    App Router     |
-                        |   283 API routes  |
+                        |   292 API routes  |
                         +--+-----+-------+--+
                            |     |       |
               +------------+  +--+---+  ++------------+
@@ -159,11 +159,11 @@ Each trader profile includes:
      +--------+-----+  +-----+---+  +-----+-----+   |
      |   Supabase   |  | Upstash  |  | Meilisearch|   |
      |  PostgreSQL  |  |  Redis   |  | Full-text  |   |
-     | 163 migrations|  |  Cache   |  |  Search    |   |
+     | 184 migrations|  |  Cache   |  |  Search    |   |
      |  Auth + RLS  |  +---------+  +-----------+   |
      +--------------+                                |
                                        +-------------+---+
-                                       | 60 Cron Jobs    |
+                                       | 53 Cron Jobs    |
                   +------------------->| Data Pipeline   |
                   |                    +--------+--------+
                   |                             |
@@ -197,7 +197,7 @@ Each trader profile includes:
 
 ## Data Pipeline
 
-The data pipeline consists of 60 Vercel cron jobs organized into several categories:
+The data pipeline consists of 53 Vercel cron jobs organized into several categories:
 
 ### Trader Data Ingestion
 
@@ -265,8 +265,8 @@ All cron jobs use `PipelineLogger` for structured execution logging with three d
 
 ```
 app/                          # Next.js App Router
-  api/                        # 283 API route handlers across 78 route groups
-    cron/                     # 42+ scheduled job endpoints (called by Vercel Cron)
+  api/                        # 292 API route handlers
+    cron/                     # 53 scheduled job endpoints (called by Vercel Cron)
     v2/, v3/                  # Versioned API endpoints
     admin/                    # Admin-only endpoints (metrics, monitoring)
     health/                   # Health check endpoints (pipeline, dependencies)
@@ -307,7 +307,7 @@ lib/                          # Core business logic (60+ subdirectories)
     arena-score.ts            # Arena Score V2 formula
   scoring/                    # Arena Score V3 percentile scoring
   cache/                      # Redis cache helpers
-  i18n/                       # 4 languages (en/zh/ja/ko, 3977 keys each)
+  i18n/                       # 4 languages (en/zh/ja/ko, 4,800+ keys each)
   web3/                       # EAS attestation, wallet integration
   supabase/                   # Supabase client (getSupabaseAdmin singleton)
   stripe/                     # Stripe integration
@@ -322,7 +322,7 @@ scripts/                      # CLI tools and maintenance (110+ files)
   vps-scrapers/               # VPS Playwright scraper code
   maintenance/                # R2 backup, cleanup scripts
 
-supabase/migrations/          # 163 PostgreSQL migration files
+supabase/migrations/          # 184 PostgreSQL migration files
 
 cloudflare-worker/            # CF Worker proxy for geo-blocked exchange APIs
 
@@ -466,13 +466,13 @@ All environment variables must be configured in the Vercel dashboard. The primar
 
 ### Cron Jobs
 
-Cron schedules are defined in `vercel.json`. All 60 cron endpoints require an `Authorization: Bearer CRON_SECRET` header. Schedules are staggered to avoid database connection contention (no two heavy jobs share the same minute offset).
+Cron schedules are defined in `vercel.json`. All 53 cron endpoints require an `Authorization: Bearer CRON_SECRET` header. Schedules are staggered to avoid database connection contention (no two heavy jobs share the same minute offset).
 
 ### Infrastructure
 
 | Component | Details |
 |-----------|---------|
-| **Vercel** | Edge + Serverless, region hnd1, 60 cron jobs |
+| **Vercel** | Edge + Serverless, region hnd1, 53 cron jobs |
 | **SG VPS** (45.76.152.169) | Proxy :3456 + Playwright Scraper :3457 (PM2) |
 | **JP VPS** (149.28.27.242) | Polymarket + exchange proxy |
 | **Mac Mini** (OpenClaw) | Health monitor (30min), daily reports, auto-fix, weekly self-check |
@@ -495,11 +495,11 @@ Cron schedules are defined in `vercel.json`. All 60 cron endpoints require an `A
 | Active Platforms | 35 |
 | Exchange Connectors | 42 |
 | Enrichment Modules | 26 |
-| Cron Jobs | 60 |
-| API Routes | 283 |
-| SQL Migrations | 163 |
+| Cron Jobs | 53 |
+| API Routes | 292 |
+| SQL Migrations | 184 |
 | Test Suites | 139 (2,271 tests) |
-| Languages | 4 (en/zh/ja/ko, 3,977 keys each) |
+| Languages | 4 (en/zh/ja/ko, 4,800+ keys each) |
 | Lighthouse | Performance ~65+, Accessibility 97, Best Practices 96, SEO 100 |
 
 ## License
