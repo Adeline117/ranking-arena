@@ -72,11 +72,11 @@ function formatSupply(n: number | null | undefined): string {
   if (Math.abs(n) >= 1e9) return `${(n / 1e9).toFixed(2)}B`
   if (Math.abs(n) >= 1e6) return `${(n / 1e6).toFixed(2)}M`
   if (Math.abs(n) >= 1e3) return `${(n / 1e3).toFixed(2)}K`
-  return n.toLocaleString()
+  return n.toLocaleString('en-US')
 }
 
 function formatPrice(n: number): string {
-  if (n >= 1) return `$${n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+  if (n >= 1) return `$${n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
   return `$${n.toPrecision(4)}`
 }
 

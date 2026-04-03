@@ -112,7 +112,7 @@ function CoinItem({ symbol, price, changePct, isGainer, index }: {
   const formattedPrice = (() => {
     const num = parseFloat(price.replace(/[$,]/g, ''))
     if (isNaN(num)) return price
-    if (num >= 1000) return `$${num.toLocaleString(undefined, { maximumFractionDigits: 2 })}`
+    if (num >= 1000) return `$${num.toLocaleString('en-US', { maximumFractionDigits: 2 })}`
     if (num >= 1) return `$${num.toFixed(2)}`
     return `$${num.toFixed(4)}`
   })()
@@ -262,7 +262,7 @@ export default function CoreCards() {
         .filter(s => s.change24h != null && s.price != null)
         .map(s => ({
           symbol: `${s.symbol.toUpperCase()}-USD`,
-          price: s.price?.toLocaleString(undefined, { maximumFractionDigits: 2 }) ?? '0',
+          price: s.price?.toLocaleString('en-US', { maximumFractionDigits: 2 }) ?? '0',
           changePct: `${s.change24h >= 0 ? '+' : ''}${s.change24h.toFixed(2)}%`,
           direction: s.change24h >= 0 ? 'up' as const : 'down' as const,
         }))
