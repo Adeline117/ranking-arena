@@ -1,9 +1,12 @@
-import { NextResponse } from 'next/server'
+import { NextRequest, NextResponse } from 'next/server'
+import { checkRateLimit, RateLimitPresets } from '@/lib/utils/rate-limit'
 import { fetchFearGreedIndex } from '@/lib/utils/fear-greed'
 import { getOrSetWithLock } from '@/lib/cache'
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
+    const rl = await checkRateLimit(request, RateLimitPresets.read)
+    if (rl) return rl
     const result = await getOrSetWithLock(
       'api:market:fear-greed',
       async () => {

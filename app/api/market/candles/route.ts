@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { checkRateLimit, RateLimitPresets } from '@/lib/utils/rate-limit'
 import { convertTimeframe, TIMEFRAME_SECONDS, type Timeframe } from '@/lib/utils/candlestick'
 
 const VALID_TIMEFRAMES = Object.keys(TIMEFRAME_SECONDS) as Timeframe[]
@@ -21,6 +22,8 @@ export async function GET(request: NextRequest) {
   }
 
   try {
+    const rl = await checkRateLimit(request, RateLimitPresets.read)
+    if (rl) return rl
     // Dynamic import to avoid bundling ccxt (huge) at build time
     const ccxt = await import('ccxt')
     

@@ -1,4 +1,5 @@
-import { NextResponse } from 'next/server'
+import { NextRequest, NextResponse } from 'next/server'
+import { checkRateLimit, RateLimitPresets } from '@/lib/utils/rate-limit'
 import { detectArbitrageOpportunities } from '@/lib/utils/arbitrage'
 import { createLogger } from '@/lib/utils/logger'
 import { getOrSetWithLock } from '@/lib/cache'
@@ -7,8 +8,10 @@ const log = createLogger('api:arbitrage')
 
 export const dynamic = 'force-dynamic'
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
+    const rl = await checkRateLimit(request, RateLimitPresets.read)
+    if (rl) return rl
     const result = await getOrSetWithLock(
       'api:market:arbitrage',
       async () => {
