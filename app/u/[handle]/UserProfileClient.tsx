@@ -62,7 +62,7 @@ export default function UserProfileClient({ handle, serverProfile, serverTraderD
     return (
       <>
         <TopNav email={email} />
-        <Box style={{ ...userProfileStyles.wrapper, textAlign: 'center', padding: '80px 20px' }}>
+        <Box style={{ maxWidth: 600, margin: '80px auto', textAlign: 'center', padding: '0 20px' }}>
           <Box style={{ fontSize: 48, marginBottom: 16 }}>🚫</Box>
           <Box style={{ color: tokens.colors.text.secondary, fontSize: 16 }}>
             {t('profileUnavailable') || 'This profile is not available.'}
