@@ -116,7 +116,7 @@ export default function WelcomeModal() {
           border: '1px solid var(--color-border-primary, rgba(255,255,255,0.1))',
           borderRadius: 16,
           padding: '32px 28px 24px',
-          boxShadow: '0 24px 80px rgba(0,0,0,0.5)',
+          boxShadow: '0 24px 80px var(--color-overlay-heavy, rgba(0,0,0,0.5))',
           position: 'relative',
         }}
         onClick={e => e.stopPropagation()}
