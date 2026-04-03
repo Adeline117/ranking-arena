@@ -167,7 +167,9 @@ export default function TraderProfileClient({ data, serverTraderData, claimedUse
 
   // Multi-account linked traders (SWR-based)
   // P7: bundled aggregate data will be passed once traderData loads (see below)
-  const [activeAccount, setActiveAccount] = useState<string>('all')
+  // Restore active account from URL param for deep-link support
+  const urlAccount = searchParams.get('account')
+  const [activeAccount, setActiveAccount] = useState<string>(urlAccount || 'all')
 
   const displayName = formatDisplayName(data.handle, data.source)
   const _exchangeName = EXCHANGE_NAMES[data.source] || data.source
