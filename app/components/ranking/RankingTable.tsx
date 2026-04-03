@@ -585,7 +585,9 @@ function RankingTableInner(props: {
             }}
           >
             {sortedTraders.slice(0, cardVisibleCount).map((trader, idx) => {
-              const rank = idx + 1
+              const positionRank = idx + 1
+              const isDefaultCardSort = sortColumn === 'score' && sortDir === 'desc' && !debouncedSearch.trim()
+              const rank = (isDefaultCardSort && trader.rank) ? trader.rank : positionRank
               return (
                 <TraderCard key={`${trader.id}-${trader.source || 'unknown'}`}
                   trader={trader} rank={rank} source={source} language={language}
@@ -634,7 +636,10 @@ function RankingTableInner(props: {
             }}
           >
             {paginatedTraders.map((trader, idx) => {
-              const rank = startIndex + idx + 1
+              const positionRank = startIndex + idx + 1
+              // Use DB rank when in default sort (arena_score desc) and no search filter
+              const isDefaultSort = sortColumn === 'score' && sortDir === 'desc' && !debouncedSearch.trim()
+              const rank = (isDefaultSort && trader.rank) ? trader.rank : positionRank
               return (
                 <TraderRow key={`${trader.id}-${trader.source || 'unknown'}-${startIndex + idx}`}
                   trader={trader} rank={rank} source={source} language={language}
