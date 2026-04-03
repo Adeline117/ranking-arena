@@ -197,7 +197,7 @@ function PositionHistoryCard({ position, t }: { position: PositionHistoryItem; t
               fontFamily: tokens.typography.fontFamily.mono.join(', '),
             }}
           >
-            {isProfit ? '+' : ''}{(position.pnlUsd ?? 0).toFixed(2)} USDT
+            {isProfit ? '+' : '-'}${Math.abs(position.pnlUsd ?? 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
           </Text>
         </Box>
       </Box>

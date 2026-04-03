@@ -95,7 +95,7 @@ const PositionHistoryCard = memo(function PositionHistoryCard({
         <PortfolioDataCell
           label={t('closePnl')}
           value={position.pnlUsd !== undefined && position.pnlUsd !== 0
-            ? `${isProfit ? '+' : ''}${formatPriceWithComma(position.pnlUsd)} USDT`
+            ? `${isProfit ? '+' : '-'}$${formatPriceWithComma(Math.abs(position.pnlUsd))}`
             : `${isProfit ? '+' : ''}${(position.pnlPct ?? 0).toFixed(2)}%`
           }
           highlight
