@@ -1,5 +1,5 @@
 /**
- * Event-driven trigger chain: fetch → compute → cache
+ * Event-driven trigger chain: fetch → compute → evaluate → cache
  *
  * After batch-fetch-traders or batch-enrich successfully writes new data,
  * triggers compute-leaderboard → warm-cache in sequence.
@@ -82,7 +82,25 @@ export function triggerDownstreamRefresh(source: string, trace?: TraceMetadata):
         `[${source}] compute-leaderboard: ${computeRes.status} (${Date.now() - computeStart}ms, trace=${traceId})`
       )
 
-      // ── 2. Trigger warm-cache ────────────────────────────────────
+      // ── 2. Trigger pipeline-evaluate (Anthropic harness: independent Evaluator) ──
+      logger.info(`[${source}] Triggering pipeline-evaluate (trace=${traceId})...`)
+      const evalStart = Date.now()
+      try {
+        const evalRes = await fetch(`${baseUrl}/api/cron/pipeline-evaluate${traceQs}`, {
+          method: 'GET',
+          headers,
+          signal: AbortSignal.timeout(60_000), // 60s timeout
+        })
+        const evalBody = await evalRes.json().catch(() => null)
+        logger.info(
+          `[${source}] pipeline-evaluate: ${evalRes.status} score=${evalBody?.score ?? '?'}/100 (${Date.now() - evalStart}ms, trace=${traceId})`
+        )
+      } catch (evalErr) {
+        // Evaluator failure must not block cache warming
+        logger.warn(`[${source}] pipeline-evaluate failed (non-blocking): ${evalErr instanceof Error ? evalErr.message : String(evalErr)}`)
+      }
+
+      // ── 3. Trigger warm-cache ────────────────────────────────────
       logger.info(`[${source}] Triggering warm-cache...`)
       const cacheStart = Date.now()
       const cacheRes = await fetch(`${baseUrl}/api/cron/warm-cache`, {
@@ -94,7 +112,7 @@ export function triggerDownstreamRefresh(source: string, trace?: TraceMetadata):
         `[${source}] warm-cache: ${cacheRes.status} (${Date.now() - cacheStart}ms)`
       )
 
-      logger.info(`[${source}] Downstream refresh complete`)
+      logger.info(`[${source}] Downstream refresh complete (trace=${traceId})`)
     } catch (err) {
       logger.warn(
         `[${source}] Downstream refresh failed: ${err instanceof Error ? err.message : String(err)}`
