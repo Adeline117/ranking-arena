@@ -83,7 +83,7 @@ export async function GET(request: NextRequest) {
       const allData: Record<string, unknown>[] = []
       let offset = 0
       const pageSize = 1000
-      const MAX_PAGES = 100
+      const MAX_PAGES = 20  // 20K traders per season is plenty for search
       let pageCount = 0
       while (true) {
         if (++pageCount > MAX_PAGES) {
@@ -98,7 +98,7 @@ export async function GET(request: NextRequest) {
           .select('source, source_trader_id, handle, avatar_url, roi, pnl, arena_score, win_rate, max_drawdown, followers, rank, trader_type, computed_at')
           .eq('season_id', season)
           .gt('arena_score', 0)
-          .eq('is_outlier', false)  // 44K rows are false, 19 are true — partial index covers this
+          .or('is_outlier.is.null,is_outlier.eq.false')  // match partial index condition
 
         // Incremental: only fetch traders updated since last sync
         if (!isFull) {
