@@ -283,13 +283,10 @@ export async function getTraderDetail(supabase: SupabaseClient, params: {
 
   // --- Phase 2: Fetch enrichment data in parallel ---
   // Enrichment tables use v1 naming: source + source_trader_id
+  // Merge 3 equity_curve + 3 asset_breakdown queries into 2 (6→2, saves 4 round trips)
   const [
-    equityCurve90dResult,
-    equityCurve30dResult,
-    equityCurve7dResult,
-    assetBreakdown90dResult,
-    assetBreakdown30dResult,
-    assetBreakdown7dResult,
+    allEquityCurveResult,
+    allAssetBreakdownResult,
     statsDetailResult,
     portfolioResult,
     positionHistoryResult,
@@ -297,43 +294,21 @@ export async function getTraderDetail(supabase: SupabaseClient, params: {
     similarTradersResult,
   ] = await withTimeout(
     Promise.all([
-      // Equity curves (3 periods) — enrichment tables use v1 naming: source, source_trader_id
+      // Equity curves — all periods in single query, split client-side
       safeQuery(() =>
         supabase.from('trader_equity_curve')
-          .select('data_date, roi_pct, pnl_usd')
-          .in(ENRICH.source, sourceAliases).eq(ENRICH.source_trader_id, traderKey).eq(ENRICH.period, '90D')
-          .order('data_date', { ascending: true }).limit(90)
+          .select('period, data_date, roi_pct, pnl_usd')
+          .in(ENRICH.source, sourceAliases).eq(ENRICH.source_trader_id, traderKey)
+          .in('period', ['90D', '30D', '7D'])
+          .order('data_date', { ascending: true }).limit(130)
       ),
-      safeQuery(() =>
-        supabase.from('trader_equity_curve')
-          .select('data_date, roi_pct, pnl_usd')
-          .in(ENRICH.source, sourceAliases).eq(ENRICH.source_trader_id, traderKey).eq(ENRICH.period, '30D')
-          .order('data_date', { ascending: true }).limit(30)
-      ),
-      safeQuery(() =>
-        supabase.from('trader_equity_curve')
-          .select('data_date, roi_pct, pnl_usd')
-          .in(ENRICH.source, sourceAliases).eq(ENRICH.source_trader_id, traderKey).eq(ENRICH.period, '7D')
-          .order('data_date', { ascending: true }).limit(7)
-      ),
-      // Asset breakdowns (3 periods) — enrichment tables use v1 naming
+      // Asset breakdowns — all periods in single query, split client-side
       safeQuery(() =>
         supabase.from('trader_asset_breakdown')
-          .select('symbol, weight_pct')
-          .in(ENRICH.source, sourceAliases).eq(ENRICH.source_trader_id, traderKey).eq(ENRICH.period, '90D')
-          .order('weight_pct', { ascending: false }).limit(20)
-      ),
-      safeQuery(() =>
-        supabase.from('trader_asset_breakdown')
-          .select('symbol, weight_pct')
-          .in(ENRICH.source, sourceAliases).eq(ENRICH.source_trader_id, traderKey).eq(ENRICH.period, '30D')
-          .order('weight_pct', { ascending: false }).limit(20)
-      ),
-      safeQuery(() =>
-        supabase.from('trader_asset_breakdown')
-          .select('symbol, weight_pct')
-          .in(ENRICH.source, sourceAliases).eq(ENRICH.source_trader_id, traderKey).eq(ENRICH.period, '7D')
-          .order('weight_pct', { ascending: false }).limit(20)
+          .select('period, symbol, weight_pct')
+          .in(ENRICH.source, sourceAliases).eq(ENRICH.source_trader_id, traderKey)
+          .in('period', ['90D', '30D', '7D'])
+          .order('weight_pct', { ascending: false }).limit(60)
       ),
       // Stats detail (all periods) — enrichment tables use v1 naming
       safeQuery(() =>
