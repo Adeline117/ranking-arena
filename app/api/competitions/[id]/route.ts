@@ -44,7 +44,7 @@ export async function GET(
         participant_count: entriesResult.data?.length || 0,
       },
     })
-  } catch (err) {
+  } catch (_err) {
     return NextResponse.json(
       { success: false, error: 'Internal server error' },
       { status: 500 }
