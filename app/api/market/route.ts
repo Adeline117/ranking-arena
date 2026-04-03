@@ -69,7 +69,7 @@ function formatRow(symbol: string, priceNum: number, pctNum: number, rawPrice?: 
   } else if (actualPrice < 1) {
     priceStr = actualPrice.toFixed(4)
   } else {
-    priceStr = Number(priceNum).toLocaleString(undefined, { maximumFractionDigits: 2 })
+    priceStr = Number(priceNum).toLocaleString('en-US', { maximumFractionDigits: 2 })
   }
   return {
     symbol,
