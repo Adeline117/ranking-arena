@@ -46,7 +46,12 @@ export default function CommentsSection(props: CommentsSectionProps) {
       paddingTop: tokens.spacing[3],
       borderTop: `1px solid ${tokens.colors.border.primary}`,
     }}>
-      {/* Comment input */}
+      {/* Comment input or read-only hint */}
+      {readOnly && (
+        <Text size="xs" color="tertiary" style={{ textAlign: 'center', padding: tokens.spacing[2], marginBottom: tokens.spacing[2] }}>
+          {t('joinGroupToComment') || 'Join this group to comment'}
+        </Text>
+      )}
       {accessToken && !readOnly && (
         <Box style={{ display: 'flex', gap: tokens.spacing[2], marginBottom: tokens.spacing[3] }}>
           <input
