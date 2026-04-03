@@ -314,7 +314,7 @@ export default function PipelineMonitoringDashboard() {
   const fetchData = useCallback(async () => {
     try {
       setLoading(true)
-      const cronSecret = process.env.NEXT_PUBLIC_CRON_SECRET || localStorage.getItem('admin_cron_secret') || ''
+      const cronSecret = process.env.NEXT_PUBLIC_CRON_SECRET || ''
 
       const [pipelineRes, enrichmentRes] = await Promise.all([
         fetch('/api/health/pipeline', {

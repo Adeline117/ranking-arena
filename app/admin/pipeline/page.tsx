@@ -197,7 +197,7 @@ export default function PipelineDashboard() {
   const fetchData = useCallback(async () => {
     try {
       setLoading(true)
-      const cronSecret = localStorage.getItem('admin_token') || ''
+      const cronSecret = process.env.NEXT_PUBLIC_CRON_SECRET || ''
       const res = await fetch('/api/admin/pipeline/self-heal', {
         headers: { 'x-admin-token': cronSecret },
       })
