@@ -277,7 +277,7 @@ export async function saveAlertsAsNotifications(
     type: 'trader_alert' as const,
     title: formatAlertTitle(alert.alertType, 'zh'),
     message: formatAlertMessage(alert, 'zh'),
-    link: `/trader/${encodeURIComponent(alert.traderId)}?source=${alert.source}`,
+    link: `/trader/${encodeURIComponent(alert.traderId)}?platform=${alert.source}`,
     read: false,
     reference_id: `${alert.alertType}:${alert.traderId}:${new Date().toISOString().split('T')[0]}`,
   }))
