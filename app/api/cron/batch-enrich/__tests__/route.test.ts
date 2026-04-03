@@ -50,13 +50,49 @@ jest.mock('@/lib/cron/enrichment-runner', () => ({
 
 jest.mock('@/lib/services/pipeline-state', () => ({
   PipelineState: {
-    get: jest.fn().mockResolvedValue(0),
+    get: jest.fn().mockResolvedValue(null),
     set: jest.fn().mockResolvedValue(undefined),
+    del: jest.fn().mockResolvedValue(undefined),
+    incr: jest.fn().mockResolvedValue(1),
+    getByPrefix: jest.fn().mockResolvedValue([]),
   },
 }))
 
 jest.mock('@/lib/cron/trigger-chain', () => ({
   triggerDownstreamRefresh: jest.fn(),
+}))
+
+const mockCheckpointState = {
+  completed_platforms: [] as string[],
+  failed_platforms: [] as Array<{ platform: string; error: string }>,
+  records_processed: 0,
+}
+jest.mock('@/lib/harness/pipeline-checkpoint', () => ({
+  PipelineCheckpoint: {
+    startOrResume: jest.fn().mockImplementation(async () => ({
+      trace_id: 'test-trace-id',
+      job_type: 'enrich',
+      group: 'test',
+      started_at: new Date().toISOString(),
+      last_checkpoint_at: new Date().toISOString(),
+      completed_platforms: mockCheckpointState.completed_platforms,
+      failed_platforms: mockCheckpointState.failed_platforms,
+      current_platform: null,
+      records_processed: mockCheckpointState.records_processed,
+    })),
+    markInProgress: jest.fn().mockResolvedValue(undefined),
+    markCompleted: jest.fn().mockResolvedValue(undefined),
+    markFailed: jest.fn().mockResolvedValue(undefined),
+    finalize: jest.fn().mockResolvedValue({
+      trace_id: 'test-trace-id',
+      source: 'enrich-test',
+      platforms_updated: [],
+      records_written: 0,
+      duration_ms: 100,
+      failed_platforms: [],
+    }),
+    isCompleted: jest.fn().mockReturnValue(false),
+  },
 }))
 
 import { NextRequest } from 'next/server'
@@ -87,6 +123,10 @@ describe('GET /api/cron/batch-enrich', () => {
 
   beforeEach(() => {
     jest.clearAllMocks()
+    // Reset checkpoint state between tests
+    mockCheckpointState.completed_platforms = []
+    mockCheckpointState.failed_platforms = []
+    mockCheckpointState.records_processed = 0
   })
 
   // ---- Auth ----------------------------------------------------------------
