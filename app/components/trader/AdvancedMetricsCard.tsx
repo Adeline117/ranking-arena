@@ -334,7 +334,7 @@ export default function AdvancedMetricsCard({
                   fontFamily: tokens.typography.fontFamily.mono.join(', '),
                 }}
               >
-                +${largestWin.toLocaleString(undefined, { maximumFractionDigits: largestWin < 1000 ? 2 : 0 })}
+                +${largestWin.toLocaleString('en-US', { maximumFractionDigits: largestWin < 1000 ? 2 : 0 })}
               </Text>
             </Box>
           )}
@@ -368,7 +368,7 @@ export default function AdvancedMetricsCard({
                   fontFamily: tokens.typography.fontFamily.mono.join(', '),
                 }}
               >
-                -${Math.abs(largestLoss).toLocaleString(undefined, { maximumFractionDigits: Math.abs(largestLoss) < 1000 ? 2 : 0 })}
+                -${Math.abs(largestLoss).toLocaleString('en-US', { maximumFractionDigits: Math.abs(largestLoss) < 1000 ? 2 : 0 })}
               </Text>
             </Box>
           )}

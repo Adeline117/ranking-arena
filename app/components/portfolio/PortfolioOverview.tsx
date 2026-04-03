@@ -43,12 +43,12 @@ export default function PortfolioOverview({
       <div style={styles.grid}>
         <div style={styles.card}>
           <span style={styles.label}>{t('totalEquity') || 'Total Equity'}</span>
-          <span style={styles.value}>${totalEquity.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+          <span style={styles.value}>${totalEquity.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
         </div>
         <div style={styles.card}>
           <span style={styles.label}>{t('unrealizedPnl') || 'Unrealized PnL'}</span>
           <span style={{ ...styles.value, color: pnlColor }}>
-            {pnlSign}${totalPnl.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+            {pnlSign}${totalPnl.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
           </span>
         </div>
         <div style={styles.card}>
