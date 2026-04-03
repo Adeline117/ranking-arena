@@ -316,7 +316,7 @@ export const PostListItem = memo(function PostListItem({
         <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
           <CommentIcon size={14} /> {p.comment_count}
         </span>
-        <span style={{ color: tokens.colors.text.tertiary }}>
+        <span style={{ color: tokens.colors.text.tertiary }} title={new Date(p.created_at).toLocaleString()}>
           {formatTimeAgo(p.created_at, language)}
         </span>
 

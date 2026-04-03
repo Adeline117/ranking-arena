@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo } from 'react'
+import { useMemo, useState } from 'react'
 import { tokens } from '@/lib/design-tokens'
 import { Box, Text } from '../base'
 import { useLanguage } from '../Providers/LanguageProvider'
@@ -32,6 +32,7 @@ interface EquityCurveOverlayProps {
 
 export default function EquityCurveOverlay({ traders, height = 300 }: EquityCurveOverlayProps) {
   const { t } = useLanguage()
+  const [hiddenIndices, setHiddenIndices] = useState<Set<number>>(new Set())
   const tradersWithData = traders.filter(tr => tr.data && tr.data.length > 1)
 
   const { paths, yLabels, xLabels, yMin, yMax, viewBox } = useMemo(() => {
@@ -204,7 +205,8 @@ export default function EquityCurveOverlay({ traders, height = 300 }: EquityCurv
             strokeWidth={2}
             strokeLinejoin="round"
             strokeLinecap="round"
-            opacity={0.9}
+            opacity={hiddenIndices.has(i) ? 0 : 0.9}
+            style={{ transition: 'opacity 0.3s ease' }}
           />
         ))}
       </svg>
