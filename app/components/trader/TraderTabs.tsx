@@ -139,10 +139,7 @@ export default function TraderTabs({ activeTab, onTabChange, isPro = false, onPr
               ref={(el) => { if (el) tabRefs.current.set(tab.key, el) }}
               className="profile-tab-button interactive-scale"
               onClick={() => {
-                if (!isPro && (tab.key === 'stats' || tab.key === 'portfolio') && onProRequired) {
-                  onProRequired()
-                  return
-                }
+                // Always allow tab switch — paywall overlay shown inside tab content
                 onTabChange(tab.key)
               }}
               onKeyDown={(e) => {
