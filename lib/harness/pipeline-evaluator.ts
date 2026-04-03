@@ -145,30 +145,28 @@ export class PipelineEvaluator {
     const supabase = getSupabaseAdmin()
     const issues: EvaluationIssue[] = []
 
-    // Query latest snapshot per platform
-    const { data: freshness } = await supabase
-      .from('trader_snapshots_v2')
-      .select('source, updated_at')
-      .order('updated_at', { ascending: false })
-      .limit(1)
-
-    // Query distinct platforms with their latest update
+    // Query distinct platforms with their latest update via RPC
     const { data: platformFreshness } = await supabase.rpc('get_platform_freshness')
       .then(r => r, () => ({ data: null, error: null, count: null, status: 0, statusText: '' }))
 
-    // Fallback: check via raw query if RPC doesn't exist
     let staleCount = 0
     let totalPlatforms = 0
 
     if (platformFreshness && Array.isArray(platformFreshness)) {
-      totalPlatforms = platformFreshness.length
+      // Filter by platformsHint if provided (only check platforms that were just updated)
+      const platforms = platformsHint?.length
+        ? platformFreshness.filter((p: { source: string }) => platformsHint.includes(p.source))
+        : platformFreshness
+
+      totalPlatforms = platforms.length
       const now = Date.now()
+      const DEX_PLATFORMS = ['hyperliquid', 'gmx', 'drift', 'jupiter_perps', 'aevo', 'gains']
       const CEX_MAX_STALE_MS = 6 * 3600 * 1000  // 6h for CEX
       const DEX_MAX_STALE_MS = 12 * 3600 * 1000 // 12h for DEX
 
-      for (const p of platformFreshness) {
+      for (const p of platforms) {
         const age = now - new Date(p.latest_update).getTime()
-        const maxAge = p.source?.includes('web3') || ['hyperliquid', 'gmx', 'drift', 'jupiter_perps', 'aevo', 'gains'].includes(p.source)
+        const maxAge = p.source?.includes('web3') || DEX_PLATFORMS.includes(p.source)
           ? DEX_MAX_STALE_MS
           : CEX_MAX_STALE_MS
 
@@ -363,22 +361,49 @@ export class PipelineEvaluator {
     const issues: EvaluationIssue[] = []
 
     // Check for duplicate (source, source_trader_id, season) in leaderboard_ranks
-    let dupeCheck: unknown[] | null = null
-    try {
-      const { data } = await supabase.rpc('check_leaderboard_duplicates')
-      dupeCheck = data
-    } catch {
-      // RPC may not exist yet
+    // Uses direct query instead of RPC — no migration dependency
+    const { data: dupeCheck } = await supabase
+      .from('leaderboard_ranks')
+      .select('source, source_trader_id, season', { count: 'exact' })
+      .limit(0) // We only need the count check below
+
+    // Query for duplicates: count by (source, source_trader_id, season) having count > 1
+    // Supabase JS doesn't support GROUP BY/HAVING, so do a simpler check:
+    // Compare total rows vs distinct (source, source_trader_id, season) rows
+    const { count: totalRows } = await supabase
+      .from('leaderboard_ranks')
+      .select('*', { count: 'exact', head: true })
+
+    // Get approximate distinct count via a different approach:
+    // If total rows exist, check for any obvious duplicates by sampling
+    let score = 100
+    let dupeCount = 0
+
+    if (totalRows && totalRows > 0) {
+      // Sample: pick a random source and check for duplicates within it
+      const { data: sampleDupes } = await supabase
+        .from('leaderboard_ranks')
+        .select('source, source_trader_id, season')
+        .order('updated_at', { ascending: false })
+        .limit(1000)
+
+      if (sampleDupes) {
+        const seen = new Set<string>()
+        for (const row of sampleDupes) {
+          const key = `${row.source}:${row.source_trader_id}:${row.season}`
+          if (seen.has(key)) dupeCount++
+          seen.add(key)
+        }
+      }
     }
 
-    let score = 100
-    if (dupeCheck && Array.isArray(dupeCheck) && dupeCheck.length > 0) {
-      score = 50
+    if (dupeCount > 0) {
+      score = dupeCount > 10 ? 30 : 50
       issues.push({
         platform: 'all',
         type: 'duplicate_ranks',
         severity: 'critical',
-        description: `${dupeCheck.length} duplicate entries in leaderboard_ranks`,
+        description: `${dupeCount} duplicate entries found in leaderboard_ranks sample (top 1000 rows)`,
         recommendation: 'Check compute-leaderboard upsert logic — conflict resolution may be broken.',
       })
     }
@@ -389,7 +414,7 @@ export class PipelineEvaluator {
         category: 'consistency',
         passed: score >= 70,
         score,
-        details: dupeCheck ? `${dupeCheck.length} duplicates found` : 'Integrity check OK (no duplicates RPC)',
+        details: `${dupeCount} duplicates in sample of ${totalRows ?? '?'} total rows`,
       },
       issues,
     }
