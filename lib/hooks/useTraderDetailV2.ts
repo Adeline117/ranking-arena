@@ -13,8 +13,10 @@ import type {
   Platform,
 } from '@/lib/types/trading-platform'
 
+const FETCH_TIMEOUT_MS = 15_000
+
 const fetcher = async (url: string): Promise<TraderDetailResponse> => {
-  const res = await fetch(url)
+  const res = await fetch(url, { signal: AbortSignal.timeout(FETCH_TIMEOUT_MS) })
   if (!res.ok) {
     const error = await res.json().catch(() => ({ error: 'Network error' }))
     throw new Error(error.error || `HTTP ${res.status}`)
@@ -96,6 +98,7 @@ export function useTraderDetailV2({
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ job_type: 'full_refresh', priority: 1 }),
+        signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
       })
 
       if (!res.ok) {
