@@ -467,7 +467,7 @@ const nextConfig = {
       `script-src 'self' 'unsafe-inline' ${process.env.NODE_ENV === 'development' ? "'unsafe-eval'" : ''} https://js.stripe.com https://challenges.cloudflare.com`,
       "style-src 'self' 'unsafe-inline' blob:",
       "style-src-elem 'self' 'unsafe-inline' blob:",
-      "img-src 'self' data: blob: https: http:",
+      "img-src 'self' data: blob: https:",
       "font-src 'self'",
       "connect-src 'self' blob: https://*.supabase.co https://*.stripe.com https://*.sentry.io https://*.ingest.us.sentry.io wss://*.supabase.co https://api.coingecko.com",
       "frame-src 'self' https://js.stripe.com https://challenges.cloudflare.com",
