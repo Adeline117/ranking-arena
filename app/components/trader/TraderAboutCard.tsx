@@ -506,7 +506,7 @@ function StatItem({
           display: 'block',
         }}
       >
-        {value.toLocaleString()}
+        {value.toLocaleString('en-US')}
       </Text>
     </Box>
   )

@@ -180,8 +180,8 @@ export function ScoreBreakdownSection({
           }}
         >
           {t('traderRankOf')
-            .replace('{rank}', rank.toLocaleString())
-            .replace('{total}', totalTraders.toLocaleString())
+            .replace('{rank}', rank.toLocaleString('en-US'))
+            .replace('{total}', totalTraders.toLocaleString('en-US'))
             .replace('{platform}', platformName)}
           {' · '}
           {t('traderRankTop').replace('{pct}', (rank / totalTraders * 100).toFixed(1))}
