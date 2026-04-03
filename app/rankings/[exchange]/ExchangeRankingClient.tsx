@@ -269,7 +269,7 @@ function ProExportButton({ traders, exchange, period, isPro, t }: {
 
   return (
     <div ref={ref} style={{ position: 'relative' }}>
-      <button onClick={() => setShowMenu(o => !o)} style={{
+      <button onClick={() => setShowMenu(o => !o)} aria-expanded={showMenu} aria-haspopup="menu" style={{
         display: 'flex', alignItems: 'center', gap: 4,
         padding: '6px 12px', borderRadius: tokens.radius.md,
         border: '1px solid var(--glass-border-light)',
@@ -282,7 +282,7 @@ function ProExportButton({ traders, exchange, period, isPro, t }: {
         {t('export') || 'Export'}
       </button>
       {showMenu && (
-        <div style={{
+        <div className="dropdown-enter" role="menu" style={{
           position: 'absolute', top: '100%', right: 0, marginTop: 4,
           background: tokens.colors.bg.secondary, border: `1px solid ${tokens.colors.border.primary}`,
           borderRadius: tokens.radius.md, padding: 4, zIndex: 100, minWidth: 120,
@@ -473,7 +473,7 @@ function ColumnToggle({ columns, onToggle, label }: { columns: Record<OptionalCo
   const { t } = useLanguage()
   useEffect(() => { if (!open) return; const handler = (e: MouseEvent) => { if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false) }; document.addEventListener('mousedown', handler); return () => document.removeEventListener('mousedown', handler) }, [open])
   const columnLabels: Record<OptionalColumn, string> = { pnl: t('rankingPnl'), followers: t('rankingFollowers'), sharpe_ratio: t('rankingSharpeRatio'), trades_count: t('rankingTradesCount') }
-  return (<div ref={ref} style={{ position: 'relative' }}><button onClick={() => setOpen(o => !o)} style={{ padding: '6px 12px', minHeight: 36, borderRadius: tokens.radius.md, border: '1px solid var(--glass-border-light)', fontSize: 12, fontWeight: 600, background: 'var(--overlay-hover)', color: tokens.colors.text.secondary, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4 }}><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 3h7a2 2 0 012 2v14a2 2 0 01-2 2h-7m0-18H5a2 2 0 00-2 2v14a2 2 0 002 2h7m0-18v18" /></svg>{label}</button>{open && (<div style={{ position: 'absolute', top: '100%', right: 0, marginTop: 4, background: 'var(--color-bg-primary)', border: '1px solid var(--glass-border-light)', borderRadius: tokens.radius.md, padding: '8px 0', zIndex: 100, minWidth: 160, boxShadow: tokens.shadow.lg }}>{(Object.keys(columnLabels) as OptionalColumn[]).map((col) => (<label key={col} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 12px', cursor: 'pointer', fontSize: 13, color: tokens.colors.text.primary }}><input type="checkbox" checked={columns[col]} onChange={() => onToggle(col)} style={{ accentColor: tokens.colors.accent.brand }} />{columnLabels[col]}</label>))}</div>)}</div>)
+  return (<div ref={ref} style={{ position: 'relative' }}><button onClick={() => setOpen(o => !o)} aria-expanded={open} aria-haspopup="menu" style={{ padding: '6px 12px', minHeight: 36, borderRadius: tokens.radius.md, border: '1px solid var(--glass-border-light)', fontSize: 12, fontWeight: 600, background: 'var(--overlay-hover)', color: tokens.colors.text.secondary, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4 }}><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 3h7a2 2 0 012 2v14a2 2 0 01-2 2h-7m0-18H5a2 2 0 00-2 2v14a2 2 0 002 2h7m0-18v18" /></svg>{label}</button>{open && (<div className="dropdown-enter" style={{ position: 'absolute', top: '100%', right: 0, marginTop: 4, background: 'var(--color-bg-primary)', border: '1px solid var(--glass-border-light)', borderRadius: tokens.radius.md, padding: '8px 0', zIndex: 100, minWidth: 160, boxShadow: tokens.shadow.lg }}>{(Object.keys(columnLabels) as OptionalColumn[]).map((col) => (<label key={col} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 12px', cursor: 'pointer', fontSize: 13, color: tokens.colors.text.primary }}><input type="checkbox" checked={columns[col]} onChange={() => onToggle(col)} style={{ accentColor: tokens.colors.accent.brand }} />{columnLabels[col]}</label>))}</div>)}</div>)
 }
 
 function PeriodSelector({ period, onChange, loading }: { period: Period; onChange: (p: Period) => void; loading: boolean }) {
