@@ -79,8 +79,10 @@ export default function CookieConsent() {
         <div style={{ display: 'flex', gap: tokens.spacing[2], flexShrink: 0 }}>
           <Link
             href="/legal/privacy"
+            className="interactive-scale"
             style={{
               padding: '8px 16px',
+              minHeight: 44,
               borderRadius: tokens.radius.md,
               border: tokens.glass.border.medium,
               background: 'transparent',
@@ -90,14 +92,19 @@ export default function CookieConsent() {
               textDecoration: 'none',
               display: 'inline-flex',
               alignItems: 'center',
+              transition: 'background 0.15s, border-color 0.15s',
             }}
+            onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--color-bg-tertiary)' }}
+            onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent' }}
           >
             Manage
           </Link>
           <button
             onClick={handleAccept}
+            className="interactive-scale"
             style={{
               padding: '8px 20px',
+              minHeight: 44,
               borderRadius: tokens.radius.md,
               border: 'none',
               background: tokens.gradient.primary,
@@ -105,7 +112,10 @@ export default function CookieConsent() {
               fontSize: 13,
               fontWeight: 700,
               cursor: 'pointer',
+              transition: 'opacity 0.15s',
             }}
+            onMouseEnter={(e) => { e.currentTarget.style.opacity = '0.85' }}
+            onMouseLeave={(e) => { e.currentTarget.style.opacity = '1' }}
           >
             Accept
           </button>
