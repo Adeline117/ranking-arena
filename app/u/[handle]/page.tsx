@@ -10,15 +10,42 @@ export const revalidate = 60
 export async function generateMetadata({ params }: { params: Promise<{ handle: string }> }): Promise<Metadata> {
   const { handle } = await params
   const decoded = decodeURIComponent(handle)
+
+  // Try to fetch avatar for OG image
+  let avatarUrl: string | null = null
+  try {
+    const supabase = getSupabaseAdmin()
+    const { data } = await supabase
+      .from('user_profiles')
+      .select('avatar_url')
+      .eq('handle', decoded)
+      .maybeSingle()
+    avatarUrl = data?.avatar_url || null
+  } catch { /* use default */ }
+
+  const title = `@${decoded} — Arena Profile`
+  const description = `View @${decoded}'s trading stats, posts, and activity on Arena — the crypto trader ranking platform.`
+  const ogImage = avatarUrl || `${BASE_URL}/api/og`
+  const profileUrl = `${BASE_URL}/u/${encodeURIComponent(decoded)}`
+
   return {
-    title: `@${decoded}`,
-    description: `View @${decoded}'s profile, trading stats, and activity on Arena.`,
+    title,
+    description,
+    alternates: { canonical: profileUrl },
     openGraph: {
-      title: `@${decoded}`,
-      description: `View @${decoded}'s profile, trading stats, and activity on Arena.`,
-      url: `${BASE_URL}/u/${encodeURIComponent(decoded)}`,
+      title,
+      description,
+      url: profileUrl,
       siteName: 'Arena',
       type: 'profile',
+      images: [{ url: ogImage, width: avatarUrl ? 400 : 1200, height: avatarUrl ? 400 : 630 }],
+    },
+    twitter: {
+      card: avatarUrl ? 'summary' : 'summary_large_image',
+      title,
+      description,
+      creator: '@arenafi',
+      images: [ogImage],
     },
   }
 }
