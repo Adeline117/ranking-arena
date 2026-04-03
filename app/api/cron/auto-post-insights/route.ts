@@ -55,7 +55,7 @@ export async function GET(request: NextRequest) {
     }
 
     // Rotate post types based on day of week
-    const dayOfWeek = new Date().getDay() // 0=Sun, 1=Mon...
+    const dayOfWeek = new Date().getUTCDay() // 0=Sun, 1=Mon... (UTC for server consistency)
     const generators = [
       generateWeeklyRecap,     // 0: Sun
       generateRankChanges,     // 1: Mon
