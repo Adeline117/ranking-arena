@@ -180,7 +180,9 @@ export async function GET(request: NextRequest) {
     }
 
     // Cache the DB fallback response too
-    tieredSet(cacheKey, responseBody, 'hot', ['rankings', `live:${period}`]).catch(() => {})
+    tieredSet(cacheKey, responseBody, 'hot', ['rankings', `live:${period}`]).catch((err) => {
+      logger.warn('[rankings-live] Cache write failed:', err instanceof Error ? err.message : String(err))
+    })
 
     const response = NextResponse.json(responseBody)
     response.headers.set('Cache-Control', 'no-cache, no-store, must-revalidate')
