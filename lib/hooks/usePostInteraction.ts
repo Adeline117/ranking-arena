@@ -139,8 +139,8 @@ export function usePostComments({ postId, pageSize = 10 }: UsePostCommentsOption
 
     const authHeaders = getAuthHeaders()
     if (!authHeaders) {
-      setSubmitError('请先登录')
-      setSubmitState('error')
+      const { useLoginModal } = await import('@/lib/hooks/useLoginModal')
+      useLoginModal.getState().openLoginModal()
       return null
     }
 
@@ -238,7 +238,8 @@ export function usePostReaction() {
   ): Promise<{ like_count: number; dislike_count: number; reaction: 'up' | 'down' | null } | null> => {
     const authHeaders = getAuthHeaders()
     if (!authHeaders) {
-      options?.onError?.('请先登录')
+      const { useLoginModal } = await import('@/lib/hooks/useLoginModal')
+      useLoginModal.getState().openLoginModal()
       return null
     }
 
