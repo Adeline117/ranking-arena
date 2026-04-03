@@ -4891,6 +4891,22 @@ compFieldMaxParticipants: '最大参与人数',
     reportIssue: '报告问题',
     helpAndFeedback: '帮助与反馈',
 
+    // Watchlist page
+    watchlistTitle: '自选列表',
+    watchlistSubtitle: '您收藏的交易员。点击任何交易员页面上的星标即可添加。',
+    watchlistSignInTitle: '登录查看自选列表',
+    watchlistSignInDesc: '创建账户或登录以保存和追踪您喜欢的交易员。',
+    watchlistEmptyTitle: '自选列表为空',
+    watchlistEmptyDesc: '浏览排行榜，点击任何交易员页面上的星标图标即可添加。',
+    watchlistBrowseRankings: '浏览排行榜',
+    watchlistSaved: '已收藏',
+    watchlistShown: '已显示',
+    watchlistAllPlatforms: '全部平台',
+    watchlistActions: '操作',
+    watchlistRemove: '移除',
+    watchlistConfirmYes: '确认',
+    watchlistConfirmNo: '取消',
+
 } as const
 
 export default zh

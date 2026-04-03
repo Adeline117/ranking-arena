@@ -4881,6 +4881,22 @@ compShareTitle: 'Check out this competition on Arena',
     reportIssue: 'Report Issue',
     helpAndFeedback: 'Help & Feedback',
 
+    // Watchlist page
+    watchlistTitle: 'Watchlist',
+    watchlistSubtitle: 'Your saved traders. Click the star on any trader profile to add them.',
+    watchlistSignInTitle: 'Sign in to view your watchlist',
+    watchlistSignInDesc: 'Create an account or log in to save and track your favorite traders.',
+    watchlistEmptyTitle: 'Your watchlist is empty',
+    watchlistEmptyDesc: 'Browse the rankings and click the star icon on any trader profile to add them here.',
+    watchlistBrowseRankings: 'Browse Rankings',
+    watchlistSaved: 'saved',
+    watchlistShown: 'shown',
+    watchlistAllPlatforms: 'All Platforms',
+    watchlistActions: 'Actions',
+    watchlistRemove: 'Remove',
+    watchlistConfirmYes: 'Yes',
+    watchlistConfirmNo: 'No',
+
 } as const
 
 export default en

@@ -4589,6 +4589,22 @@ compFieldMaxParticipants: '最大参加人数',
     referralDesc: '友達を招待してProリワードを獲得',
     copyText: 'コピー',
 
+    // Watchlist page
+    watchlistTitle: 'ウォッチリスト',
+    watchlistSubtitle: '保存したトレーダー一覧。トレーダーページの星マークをクリックして追加できます。',
+    watchlistSignInTitle: 'ウォッチリストを表示するにはログインしてください',
+    watchlistSignInDesc: 'アカウントを作成またはログインして、お気に入りのトレーダーを保存・追跡しましょう。',
+    watchlistEmptyTitle: 'ウォッチリストは空です',
+    watchlistEmptyDesc: 'ランキングを閲覧し、トレーダーページの星アイコンをクリックして追加してください。',
+    watchlistBrowseRankings: 'ランキングを見る',
+    watchlistSaved: '保存済み',
+    watchlistShown: '表示中',
+    watchlistAllPlatforms: 'すべてのプラットフォーム',
+    watchlistActions: '操作',
+    watchlistRemove: '削除',
+    watchlistConfirmYes: 'はい',
+    watchlistConfirmNo: 'いいえ',
+
 } as const
 
 export default ja

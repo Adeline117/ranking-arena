@@ -9,6 +9,7 @@ import { tokens } from '@/lib/design-tokens'
 import { supabase } from '@/lib/supabase/client'
 import { formatPnL } from '@/lib/utils/format'
 import LoadingSkeleton from '@/app/components/ui/LoadingSkeleton'
+import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 
 interface WatchlistItem {
   source: string; source_trader_id: string; handle: string | null; created_at: string
@@ -36,6 +37,7 @@ function formatScore(score: number | null | undefined): string {
 type SortKey = 'added' | 'roi' | 'pnl' | 'score' | 'rank'
 
 export default function WatchlistClient() {
+  const { t } = useLanguage()
   const [email, setEmail] = useState<string | null>(null)
   const [isAuthenticated, setIsAuthenticated] = useState<boolean | null>(null)
   const [watchlist, setWatchlist] = useState<WatchlistItem[]>([])
@@ -95,24 +97,24 @@ export default function WatchlistClient() {
     <div style={{ minHeight: '100vh', background: 'var(--color-bg-primary)', color: 'var(--color-text-primary)' }}>
       <TopNav email={email} />
       <div style={{ maxWidth: 1000, margin: '0 auto', padding: '24px 16px 60px' }}>
-        <div style={{ marginBottom: 24 }}><h1 style={{ fontSize: 28, fontWeight: 700, margin: 0 }}>Watchlist</h1><p style={{ fontSize: 14, color: 'var(--color-text-secondary)', marginTop: 6 }}>Your saved traders. Click the star on any trader profile to add them.</p></div>
-        {isAuthenticated === false && <EmptyState variant="card" icon={<svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><rect x="3" y="11" width="18" height="11" rx="2" ry="2" /><path d="M7 11V7a5 5 0 0110 0v4" /></svg>} title="Sign in to view your watchlist" description="Create an account or log in to save and track your favorite traders." action={<Link href="/login" style={{ display:'inline-block',padding:'10px 24px',background:'var(--color-accent-primary)',color:'var(--color-bg-primary)',borderRadius:tokens.radius.md,fontWeight:600,fontSize:14,textDecoration:'none' }}>Sign In</Link>} />}
+        <div style={{ marginBottom: 24 }}><h1 style={{ fontSize: 28, fontWeight: 700, margin: 0 }}>{t('watchlistTitle')}</h1><p style={{ fontSize: 14, color: 'var(--color-text-secondary)', marginTop: 6 }}>{t('watchlistSubtitle')}</p></div>
+        {isAuthenticated === false && <EmptyState variant="card" icon={<svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><rect x="3" y="11" width="18" height="11" rx="2" ry="2" /><path d="M7 11V7a5 5 0 0110 0v4" /></svg>} title={t('watchlistSignInTitle')} description={t('watchlistSignInDesc')} action={<Link href="/login" style={{ display:'inline-block',padding:'10px 24px',background:'var(--color-accent-primary)',color:'var(--color-bg-primary)',borderRadius:tokens.radius.md,fontWeight:600,fontSize:14,textDecoration:'none' }}>{t('login')}</Link>} />}
         {loading && isAuthenticated !== false && <LoadingSkeleton variant="list" count={5} />}
-        {!loading && isAuthenticated && watchlist.length === 0 && <EmptyState variant="card" icon={<svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><polygon points="12,2 15.09,8.26 22,9.27 17,14.14 18.18,21.02 12,17.77 5.82,21.02 7,14.14 2,9.27 8.91,8.26" /></svg>} title="Your watchlist is empty" description="Browse the rankings and click the star icon on any trader profile to add them here." action={<Link href="/rankings" style={{ display:'inline-block',padding:'10px 24px',background:'var(--color-accent-primary)',color:'var(--color-bg-primary)',borderRadius:tokens.radius.md,fontWeight:600,fontSize:14,textDecoration:'none' }}>Browse Rankings</Link>} />}
+        {!loading && isAuthenticated && watchlist.length === 0 && <EmptyState variant="card" icon={<svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><polygon points="12,2 15.09,8.26 22,9.27 17,14.14 18.18,21.02 12,17.77 5.82,21.02 7,14.14 2,9.27 8.91,8.26" /></svg>} title={t('watchlistEmptyTitle')} description={t('watchlistEmptyDesc')} action={<Link href="/rankings" style={{ display:'inline-block',padding:'10px 24px',background:'var(--color-accent-primary)',color:'var(--color-bg-primary)',borderRadius:tokens.radius.md,fontWeight:600,fontSize:14,textDecoration:'none' }}>{t('watchlistBrowseRankings')}</Link>} />}
         {!loading && isAuthenticated && watchlist.length > 0 && (<>
           <div style={{ display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:12,flexWrap:'wrap',gap:8 }}>
-            <div style={{ fontSize:13,color:watchlist.length>=180?'var(--color-accent-warning)':'var(--color-text-tertiary)' }}>{watchlist.length} / 200 saved{platformFilter!=='all'?` (${displayList.length} shown)`:''}</div>
-            {platforms.length>1&&<select value={platformFilter} onChange={e=>setPlatformFilter(e.target.value)} aria-label="Filter by platform" style={{ padding:'6px 10px',borderRadius:tokens.radius.sm,border:`1px solid ${tokens.colors.border.primary}`,background:tokens.colors.bg.secondary,color:tokens.colors.text.primary,fontSize:12,cursor:'pointer' }}><option value="all">All Platforms</option>{platforms.map(p=><option key={p} value={p}>{PLATFORM_LABELS[p]||p}</option>)}</select>}
+            <div style={{ fontSize:13,color:watchlist.length>=180?'var(--color-accent-warning)':'var(--color-text-tertiary)' }}>{watchlist.length} / 200 {t('watchlistSaved')}{platformFilter!=='all'?` (${displayList.length} ${t('watchlistShown')})`:''}</div>
+            {platforms.length>1&&<select value={platformFilter} onChange={e=>setPlatformFilter(e.target.value)} aria-label={t('watchlistAllPlatforms')} style={{ padding:'6px 10px',borderRadius:tokens.radius.sm,border:`1px solid ${tokens.colors.border.primary}`,background:tokens.colors.bg.secondary,color:tokens.colors.text.primary,fontSize:12,cursor:'pointer' }}><option value="all">{t('watchlistAllPlatforms')}</option>{platforms.map(p=><option key={p} value={p}>{PLATFORM_LABELS[p]||p}</option>)}</select>}
           </div>
           <div style={{ overflowX:'auto' }}>
             <table style={{ width:'100%',borderCollapse:'collapse',fontSize:14 }}>
               <thead><tr style={{ borderBottom:`1px solid var(--color-border-primary)` }}>
-                <th style={thStyle}>Trader</th><th style={thStyle}>Exchange</th>
-                <th style={{...thStyle,textAlign:'right',cursor:'pointer'}} onClick={()=>doSort('roi')}>ROI{sa('roi')}</th>
-                <th style={{...thStyle,textAlign:'right',cursor:'pointer'}} onClick={()=>doSort('pnl')}>PnL{sa('pnl')}</th>
-                <th style={{...thStyle,textAlign:'center',cursor:'pointer'}} onClick={()=>doSort('rank')}>Rank{sa('rank')}</th>
-                <th style={{...thStyle,textAlign:'right',cursor:'pointer'}} onClick={()=>doSort('score')}>Score{sa('score')}</th>
-                <th style={{...thStyle,textAlign:'center',width:100}}>Actions</th>
+                <th style={thStyle}>{t('trader')}</th><th style={thStyle}>{t('exchange')}</th>
+                <th style={{...thStyle,textAlign:'right',cursor:'pointer'}} onClick={()=>doSort('roi')}>{t('roi')}{sa('roi')}</th>
+                <th style={{...thStyle,textAlign:'right',cursor:'pointer'}} onClick={()=>doSort('pnl')}>{t('pnl')}{sa('pnl')}</th>
+                <th style={{...thStyle,textAlign:'center',cursor:'pointer'}} onClick={()=>doSort('rank')}>{t('rank')}{sa('rank')}</th>
+                <th style={{...thStyle,textAlign:'right',cursor:'pointer'}} onClick={()=>doSort('score')}>{t('score')}{sa('score')}</th>
+                <th style={{...thStyle,textAlign:'center',width:100}}>{t('watchlistActions')}</th>
               </tr></thead>
               <tbody>{displayList.map(item=>{
                 const key=`${item.source}:${item.source_trader_id}`; const isRemoving=removing===key
@@ -128,11 +130,11 @@ export default function WatchlistClient() {
                   <td style={{padding:'12px 16px',textAlign:'right',color:'var(--color-text-primary)',fontWeight:600,fontVariantNumeric:'tabular-nums'}}>{formatScore(item.arena_score)}</td>
                   <td style={{padding:'12px 16px',textAlign:'center'}}>
                     {confirmRemove===key?(<span style={{display:'inline-flex',gap:4}}>
-                      <button onClick={e=>{e.stopPropagation();handleRemove(item.source,item.source_trader_id);setConfirmRemove(null)}} style={{padding:'4px 8px',borderRadius:tokens.radius.sm,border:'none',background:'var(--color-accent-error)',color:'#fff',fontSize:11,fontWeight:600,cursor:'pointer'}}>Yes</button>
-                      <button onClick={e=>{e.stopPropagation();setConfirmRemove(null)}} style={{padding:'4px 8px',borderRadius:tokens.radius.sm,border:`1px solid ${tokens.colors.border.primary}`,background:'transparent',color:tokens.colors.text.secondary,fontSize:11,cursor:'pointer'}}>No</button>
+                      <button onClick={e=>{e.stopPropagation();handleRemove(item.source,item.source_trader_id);setConfirmRemove(null)}} style={{padding:'4px 8px',borderRadius:tokens.radius.sm,border:'none',background:'var(--color-accent-error)',color:'#fff',fontSize:11,fontWeight:600,cursor:'pointer'}}>{t('watchlistConfirmYes')}</button>
+                      <button onClick={e=>{e.stopPropagation();setConfirmRemove(null)}} style={{padding:'4px 8px',borderRadius:tokens.radius.sm,border:`1px solid ${tokens.colors.border.primary}`,background:'transparent',color:tokens.colors.text.secondary,fontSize:11,cursor:'pointer'}}>{t('watchlistConfirmNo')}</button>
                     </span>):(<button onClick={e=>{e.stopPropagation();setConfirmRemove(key)}} disabled={isRemoving}
                       style={{padding:'4px 12px',borderRadius:tokens.radius.sm,border:'1px solid var(--color-accent-error)',background:'transparent',color:'var(--color-accent-error)',fontSize:12,fontWeight:500,cursor:isRemoving?'not-allowed':'pointer',transition:'background 0.15s'}}
-                      onMouseEnter={e=>{if(!isRemoving)e.currentTarget.style.background='rgba(255,59,48,0.1)'}} onMouseLeave={e=>{e.currentTarget.style.background='transparent'}}>Remove</button>)}
+                      onMouseEnter={e=>{if(!isRemoving)e.currentTarget.style.background='rgba(255,59,48,0.1)'}} onMouseLeave={e=>{e.currentTarget.style.background='transparent'}}>{t('watchlistRemove')}</button>)}
                   </td>
                 </tr>)
               })}</tbody>
