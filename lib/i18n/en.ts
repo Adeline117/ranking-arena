@@ -4878,6 +4878,8 @@ compShareTitle: 'Check out this competition on Arena',
     copyText: 'Copy',
     auditLog: 'Audit Log',
     moderationQueue: 'Moderation Queue',
+    reportIssue: 'Report Issue',
+    helpAndFeedback: 'Help & Feedback',
 
 } as const
 

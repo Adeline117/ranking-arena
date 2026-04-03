@@ -420,17 +420,54 @@ export default function Error({
           </Link>
         </div>
 
-        {/* Help hint */}
-        <p 
+        {/* Error digest + report issue */}
+        {error?.digest && (
+          <p
+            className="content-section"
+            style={{
+              animationDelay: '0.45s',
+              fontSize: 12,
+              color: 'var(--color-text-quaternary, #444)',
+              fontFamily: 'monospace',
+              marginBottom: 8,
+            }}
+          >
+            Error ID: {error.digest}
+          </p>
+        )}
+
+        <div
           className="content-section"
           style={{
             animationDelay: '0.5s',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: 16,
             fontSize: 13,
             color: 'var(--color-text-tertiary, #5a5a5a)',
           }}
         >
-          {t('errorPersist')}
-        </p>
+          <span>{t('errorPersist')}</span>
+          <a
+            href="https://x.com/Arena_English"
+            target="_blank"
+            rel="noopener noreferrer"
+            style={{
+              color: ARENA_PURPLE,
+              textDecoration: 'none',
+              fontWeight: 500,
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 4,
+            }}
+          >
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z" />
+            </svg>
+            {t('reportIssue') || 'Report Issue'}
+          </a>
+        </div>
       </div>
       
       <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
