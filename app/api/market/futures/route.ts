@@ -73,11 +73,23 @@ async function computeFuturesData() {
   }
 
   // Fetch prices from CoinGecko
-  const ids = Object.keys(symbolMap).map(s => s.toLowerCase()).join(',')
+  // CoinGecko uses full names (solana, ethereum) not ticker symbols (SOL, ETH)
+  const SYMBOL_TO_CG_ID: Record<string, string> = {
+    BTC: 'bitcoin', ETH: 'ethereum', SOL: 'solana', BNB: 'binancecoin',
+    XRP: 'ripple', DOGE: 'dogecoin', ADA: 'cardano', AVAX: 'avalanche-2',
+    DOT: 'polkadot', LINK: 'chainlink', MATIC: 'matic-network', UNI: 'uniswap',
+    ARB: 'arbitrum', OP: 'optimism', SUI: 'sui', APT: 'aptos',
+    NEAR: 'near', ATOM: 'cosmos', FIL: 'filecoin', LTC: 'litecoin',
+    TRX: 'tron', TON: 'the-open-network', PEPE: 'pepe', WIF: 'dogwifcoin',
+    AAVE: 'aave', MKR: 'maker', RENDER: 'render-token', INJ: 'injective-protocol',
+    FET: 'fetch-ai', BONK: 'bonk', WLD: 'worldcoin-wld', JUP: 'jupiter-exchange-solana',
+  }
+  const symbols = Object.keys(symbolMap)
+  const cgIds = symbols.map(s => SYMBOL_TO_CG_ID[s] || s.toLowerCase()).filter(Boolean).join(',')
   const priceMap: Record<string, { price: number; change24h: number; volume24h: number; image: string }> = {}
   try {
     const cgRes = await fetch(
-      `https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&ids=${ids}&sparkline=false&price_change_percentage=24h`,
+      `https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&ids=${cgIds}&sparkline=false&price_change_percentage=24h`,
       { next: { revalidate: 60 } }
     )
     if (cgRes.ok) {
