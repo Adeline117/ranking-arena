@@ -444,11 +444,17 @@ export interface BatchRunOptions extends AdapterOptions {
   /** Max traders per window (default: 500) */
   limit?: number
   /**
-   * If true, fire-and-forget enrichment for top 10 traders (90D window only)
-   * after the main fetch+save completes. Only runs if the platform has enrichment support.
-   * Default: false
+   * Run enrichment (equity curve, stats, positions) for all fetched traders
+   * immediately after leaderboard write. New traders get complete profiles in one pass.
+   * Default: true
    */
   inlineEnrich?: boolean
+  /**
+   * Total time budget for this platform in ms (from batch-fetch route).
+   * Used to allocate remaining time to inline enrichment after fetch+write.
+   * Default: 120000 (120s)
+   */
+  platformTimeBudgetMs?: number
 }
 
 /**
@@ -461,7 +467,7 @@ export async function runConnectorBatch(
   connector: PlatformConnector,
   options: BatchRunOptions = {}
 ): Promise<FetchResult> {
-  const { windows = ['7d', '30d', '90d'], limit = 2000, sourceOverride, inlineEnrich = false } = options
+  const { windows = ['7d', '30d', '90d'], limit = 2000, sourceOverride, inlineEnrich = true, platformTimeBudgetMs = 120_000 } = options
   const startTime = Date.now()
   const platform = sourceOverride || connector.platform
   const periods: FetchResult['periods'] = {}
@@ -537,18 +543,59 @@ export async function runConnectorBatch(
     }
   }
 
-  // Fire-and-forget inline enrichment for top 10 traders (90D only)
+  // --- Inline enrichment: enrich ALL fetched traders immediately ---
+  // Collects equity curves, stats detail, positions, derived metrics in one pass.
+  // New traders get complete profiles without waiting for batch-enrich cron.
   if (inlineEnrich && anySaved) {
     const hasEnrichmentSupport =
       platform in ENRICHMENT_PLATFORM_CONFIGS && !NO_ENRICHMENT_PLATFORMS.has(platform)
 
     if (hasEnrichmentSupport) {
-      // Do not await — fire and forget so it never blocks the main result
-      runEnrichment({ platform, period: '90D', limit: 10 }).catch((err) => {
-        dataLogger.warn(
-          `[adapter] Inline enrichment failed for ${platform}: ${err instanceof Error ? err.message : String(err)}`
+      // Collect unique trader keys across all windows
+      const allTraderKeys = new Set<string>()
+      for (const settled of windowResults) {
+        if (settled.status === 'rejected') continue
+        const { writeResult } = settled.value as { writeResult?: AdapterResult }
+        if (writeResult?.savedTraderKeys) {
+          for (const key of writeResult.savedTraderKeys) allTraderKeys.add(key)
+        }
+      }
+
+      if (allTraderKeys.size > 0) {
+        const traderKeys = Array.from(allTraderKeys)
+        const fetchElapsed = Date.now() - startTime
+        const enrichBudgetMs = Math.max(10_000, platformTimeBudgetMs - fetchElapsed - 5_000)
+
+        dataLogger.info(
+          `[adapter] Inline enrichment for ${platform}: ${traderKeys.length} traders, ` +
+          `budget ${Math.round(enrichBudgetMs / 1000)}s (fetch took ${Math.round(fetchElapsed / 1000)}s)`
         )
-      })
+
+        // Enrich 90D first (most important for profile page), then 30D, 7D
+        for (const enrichPeriod of ['90D', '30D', '7D']) {
+          const periodBudget = Date.now() - startTime
+          if (periodBudget > platformTimeBudgetMs - 8_000) {
+            dataLogger.warn(`[adapter] ${platform}: skipping ${enrichPeriod} enrichment (time budget exhausted)`)
+            break
+          }
+
+          const remainingBudget = Math.max(5_000, platformTimeBudgetMs - (Date.now() - startTime) - 5_000)
+
+          try {
+            await runEnrichment({
+              platform,
+              period: enrichPeriod,
+              limit: traderKeys.length,
+              traderKeys,
+              timeBudgetMs: remainingBudget,
+            })
+          } catch (err) {
+            dataLogger.warn(
+              `[adapter] Inline enrichment ${platform}/${enrichPeriod} failed: ${err instanceof Error ? err.message : String(err)}`
+            )
+          }
+        }
+      }
     }
   }
 
