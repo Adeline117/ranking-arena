@@ -179,7 +179,7 @@ async function fetchFromLeaderboard(
   const traders = (data || []).map((row: Record<string, unknown>) => ({
     id: row.source_trader_id as string,
     handle: (row.handle as string) || null,
-    roi: row.roi != null ? Number(row.roi) : 0,
+    roi: row.roi != null ? Number(row.roi) : null,
     pnl: row.pnl != null ? Number(row.pnl) : null,
     win_rate: row.win_rate != null ? Number(row.win_rate) : null,
     max_drawdown: row.max_drawdown != null ? Number(row.max_drawdown) : null,
@@ -189,7 +189,7 @@ async function fetchFromLeaderboard(
     source: row.source as string,
     source_type: row.source_type as string,
     avatar_url: row.avatar_url as string | null,
-    arena_score: row.arena_score != null ? Number(row.arena_score) : 0,
+    arena_score: row.arena_score != null ? Number(row.arena_score) : null,
     rank: Number(row.rank),
     // Score breakdown
     profitability_score: row.profitability_score != null ? Number(row.profitability_score) : null,

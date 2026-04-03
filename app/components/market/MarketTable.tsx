@@ -2,6 +2,7 @@
 
 import { useState, useMemo, memo, CSSProperties } from 'react'
 import { tokens } from '@/lib/design-tokens'
+import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 
 export interface Column<T> {
   key: string
@@ -32,6 +33,7 @@ function MarketTableInner<T>({
   rowKey,
   onRowClick,
 }: MarketTableProps<T>) {
+  const { t } = useLanguage()
   const [sortKey, setSortKey] = useState(defaultSortKey || '')
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>(defaultSortDir)
 
@@ -142,7 +144,7 @@ function MarketTableInner<T>({
                     <line x1="3" y1="9" x2="21" y2="9" />
                     <line x1="9" y1="21" x2="9" y2="9" />
                   </svg>
-                  <span style={{ fontSize: 13 }}>No data available</span>
+                  <span style={{ fontSize: 13 }}>{t('noDataAvailable')}</span>
                 </div>
               </td>
             </tr>
