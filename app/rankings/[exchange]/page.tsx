@@ -236,9 +236,10 @@ const fetchExchangeTradersSSR = unstable_cache(
         return { traders: [], totalCount: 0, top10ForJsonLd: [] }
       }
 
+      const formatAddr = (id: string) => id?.startsWith('0x') && id.length >= 10 ? `${id.slice(0, 6)}...${id.slice(-4)}` : id
       const traders: TraderSSR[] = (data || []).map((row: Record<string, unknown>) => ({
         trader_key: String(row.handle || row.source_trader_id || ''),
-        display_name: row.handle ? String(row.handle) : null,
+        display_name: row.handle ? String(row.handle) : formatAddr(String(row.source_trader_id || '')),
         avatar_url: (row.avatar_url as string | null) ?? null,
         roi: row.roi != null ? Number(row.roi) : null,
         pnl: row.pnl != null ? Number(row.pnl) : null,
@@ -251,7 +252,7 @@ const fetchExchangeTradersSSR = unstable_cache(
 
       const top10ForJsonLd = (top10Data || []).map((row: Record<string, unknown>) => ({
         trader_key: String(row.handle || row.source_trader_id || ''),
-        display_name: row.handle ? String(row.handle) : null,
+        display_name: row.handle ? String(row.handle) : formatAddr(String(row.source_trader_id || '')),
         avatar_url: (row.avatar_url as string | null) ?? null,
       }))
 
