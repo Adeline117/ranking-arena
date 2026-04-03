@@ -100,8 +100,8 @@ export default memo(function Pagination({ currentPage, totalPages, onPageChange 
               className={`pagination-btn pagination-page ${isActive ? 'pagination-active' : ''}`}
               onClick={() => onPageChange(pageNum)}
               style={{
-                minWidth: 36,
-                height: 36,
+                minWidth: 44,
+                height: 44,
                 padding: `0 ${tokens.spacing[1]}`,
                 background: isActive ? `${tokens.colors.accent.primary}20` : 'transparent',
                 border: `1px solid ${isActive ? `${tokens.colors.accent.primary}60` : 'transparent'}`,

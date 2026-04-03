@@ -23,7 +23,7 @@ export function getStripe(): Stripe {
   if (!_stripe) {
     const secretKey = requireEnv('STRIPE_SECRET_KEY')
     _stripe = new Stripe(secretKey, {
-      apiVersion: '2026-02-25.clover',
+      apiVersion: '2026-03-25.dahlia',
       typescript: true,
     })
   }
