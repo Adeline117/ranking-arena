@@ -39,12 +39,12 @@ const PLATFORM_LIMITS: Record<string, { limit90: number; limit30: number; limit7
   // Large CEX — API per trader, need offset rotation for full coverage
   binance_futures: { limit90: 600, limit30: 300, limit7: 300 },
   okx_futures: { limit90: 300, limit30: 300, limit7: 300 },
-  hyperliquid: { limit90: 400, limit30: 200, limit7: 200 },
+  hyperliquid: { limit90: 2000, limit30: 500, limit7: 500 },
   htx_futures: { limit90: 200, limit30: 200, limit7: 200 },
-  etoro: { limit90: 100, limit30: 50, limit7: 50 }, // Reduced: 81% failure rate from rate limiting
-  drift: { limit90: 100, limit30: 50, limit7: 50 }, // Reduced: 78% failure rate from API limits
+  etoro: { limit90: 1000, limit30: 200, limit7: 200 },
+  drift: { limit90: 2000, limit30: 500, limit7: 500 },
   gmx: { limit90: 200, limit30: 200, limit7: 200 },
-  gateio: { limit90: 100, limit30: 50, limit7: 50 }, // Reduced: 64% failure rate from rate limiting
+  gateio: { limit90: 1000, limit30: 200, limit7: 200 },
   // Medium CEX
   bitget_futures: { limit90: 200, limit30: 200, limit7: 200 },
   mexc: { limit90: 300, limit30: 150, limit7: 150 },
@@ -54,8 +54,8 @@ const PLATFORM_LIMITS: Record<string, { limit90: number; limit30: number; limit7
   okx_spot: { limit90: 40, limit30: 40, limit7: 40 },
   okx_web3: { limit90: 400, limit30: 400, limit7: 400 },
   // DEX on-chain
-  jupiter_perps: { limit90: 50, limit30: 30, limit7: 30 }, // Reduced: 75% failure rate from Solana RPC limits
-  gains: { limit90: 30, limit30: 25, limit7: 15 },
+  jupiter_perps: { limit90: 500, limit30: 200, limit7: 200 },
+  gains: { limit90: 200, limit30: 100, limit7: 100 },
   // Re-enabled platforms
   dydx: { limit90: 350, limit30: 200, limit7: 200 },
   aevo: { limit90: 300, limit30: 200, limit7: 200 },
