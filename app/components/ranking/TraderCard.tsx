@@ -198,7 +198,7 @@ export const TraderCard = memo(function TraderCard({
           <Box style={{ flexShrink: 1, minWidth: 0, overflow: 'hidden' }}>
             <Sparkline roi={trader.roi} width={120} height={24} />
           </Box>
-          <Text size="lg" weight="black" style={{ color: trader.roi >= 0 ? tokens.colors.accent.success : TRADER_ACCENT_ERROR, marginLeft: 'auto' }}>
+          <Text size="lg" weight="black" style={{ color: trader.roi != null ? (trader.roi >= 0 ? tokens.colors.accent.success : TRADER_ACCENT_ERROR) : tokens.colors.text.tertiary, marginLeft: 'auto' }}>
             {formatROI(trader.roi)}
           </Text>
         </Box>
@@ -208,7 +208,7 @@ export const TraderCard = memo(function TraderCard({
           <MetricStat
             label="ROI"
             value={formatROI(trader.roi)}
-            color={trader.roi >= 0 ? tokens.colors.accent.success : TRADER_ACCENT_ERROR}
+            color={trader.roi != null ? (trader.roi >= 0 ? tokens.colors.accent.success : TRADER_ACCENT_ERROR) : undefined}
           />
           <MetricStat
             label="PnL"
