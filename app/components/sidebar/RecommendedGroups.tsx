@@ -178,7 +178,7 @@ export default function RecommendedGroups() {
                       whiteSpace: 'nowrap',
                     }}
                   >
-                    {(g.member_count || 0).toLocaleString()} {t('members')}
+                    {(g.member_count || 0).toLocaleString('en-US')} {t('members')}
                     {!g.recommendation_reason && desc && (
                       <span style={{ marginLeft: 6, color: tokens.colors.text.secondary }}>
                         {desc.length > 20 ? desc.slice(0, 20) + '...' : desc}

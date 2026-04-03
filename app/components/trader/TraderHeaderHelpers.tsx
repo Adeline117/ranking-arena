@@ -146,7 +146,7 @@ export function StatItem({ icon, value, label, hasCover }: StatItemProps): React
           letterSpacing: '-0.01em',
         }}
       >
-        {typeof value === 'number' ? value.toLocaleString() : value}
+        {typeof value === 'number' ? value.toLocaleString('en-US') : value}
       </Text>
       <Text size="sm" style={{ color: textColor, textShadow }}>
         {label}

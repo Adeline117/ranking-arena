@@ -246,7 +246,7 @@ export default function TradingViewChart({
             <div>${labels.high}: <b>${d.high.toFixed(2)}</b></div>
             <div>${labels.low}: <b>${d.low.toFixed(2)}</b></div>
             <div>${labels.close}: <b style="color:${d.close >= d.open ? c.upColor : c.downColor}">${d.close.toFixed(2)}</b></div>
-            ${volData && 'value' in volData ? `<div>${labels.volume}: <b>${(volData as LineData).value.toLocaleString()}</b></div>` : ''}
+            ${volData && 'value' in volData ? `<div>${labels.volume}: <b>${(volData as LineData).value.toLocaleString('en-US')}</b></div>` : ''}
           `
         } else if ('value' in mainData) {
           const d = mainData as LineData

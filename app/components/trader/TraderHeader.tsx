@@ -247,13 +247,13 @@ export default function TraderHeader({
   if (linkedAccountCount && linkedAccountCount >= 2) {
     subtitleParts.push(`${linkedAccountCount} ${t('verifiedAccounts') || 'verified accounts'}`)
   }
-  if (followerCount > 0) subtitleParts.push(`${followerCount.toLocaleString()} ${t('arenaFollowers') || 'followers'}`)
+  if (followerCount > 0) subtitleParts.push(`${followerCount.toLocaleString('en-US')} ${t('arenaFollowers') || 'followers'}`)
   // copiers removed — only show platform internal followers
   if (aum !== undefined && aum > 0) subtitleParts.push(`${t('aumLabel') || 'AUM'} ${formatAum(aum)}`)
   if (activeDays !== null && activeDays >= 7) subtitleParts.push(formatActiveDays(activeDays, t))
   if (rank != null && rank > 0 && source && EXCHANGE_NAMES[source.toLowerCase()]) {
     subtitleParts.push(t('rankedOnExchange')
-      .replace('{rank}', rank.toLocaleString())
+      .replace('{rank}', rank.toLocaleString('en-US'))
       .replace('{exchange}', EXCHANGE_NAMES[source.toLowerCase()] || source))
   }
 
