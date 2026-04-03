@@ -188,7 +188,7 @@ export default function AggregatedStats({
               letterSpacing: '-0.02em',
             }}
           >
-            {weightedScore > 0 ? weightedScore.toFixed(1) : '—'}
+            {weightedScore != null ? weightedScore.toFixed(1) : '—'}
           </Text>
           {/* Tooltip */}
           {showScoreTooltip && (
