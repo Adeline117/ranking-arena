@@ -89,23 +89,23 @@ export default function GroupHeader({
             overflow: 'hidden',
             flexShrink: 0,
             boxShadow: '0 2px 8px var(--color-overlay-subtle)',
+            position: 'relative',
           }}
         >
-          {group.avatar_url ? (
+          <Text size="2xl" weight="bold" color="tertiary">
+            {group.name.charAt(0).toUpperCase()}
+          </Text>
+          {group.avatar_url && (
             <img
               src={`/api/avatar?url=${encodeURIComponent(group.avatar_url)}`}
               alt={group.name}
               width={72}
               height={72}
               loading="lazy"
-              style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+              style={{ width: '100%', height: '100%', objectFit: 'cover', position: 'absolute', inset: 0 }}
               referrerPolicy="no-referrer"
               onError={(e) => { e.currentTarget.style.display = 'none' }}
             />
-          ) : (
-            <Text size="2xl" weight="bold" color="tertiary">
-              {group.name.charAt(0).toUpperCase()}
-            </Text>
           )}
         </Box>
 

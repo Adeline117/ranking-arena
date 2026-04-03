@@ -204,20 +204,19 @@ function UserCenterPage() {
               background: tokens.glass.bg.light, backdropFilter: tokens.glass.blur.xs,
               WebkitBackdropFilter: tokens.glass.blur.xs, border: tokens.glass.border.light,
               color: tokens.colors.text.tertiary, flexShrink: 0,
-              overflow: 'hidden',
+              overflow: 'hidden', position: 'relative',
             }}>
-              {userAvatarUrl ? (
+              {(userHandle || 'U').charAt(0).toUpperCase()}
+              {userAvatarUrl && (
                 <Image
                   src={`/api/avatar?url=${encodeURIComponent(userAvatarUrl)}`}
                   alt={userHandle || 'User'}
                   width={56}
                   height={56}
                   unoptimized
-                  style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-                  onError={(e) => { (e.target as HTMLImageElement).style.display = 'none' }}
+                  style={{ width: '100%', height: '100%', objectFit: 'cover', position: 'absolute', inset: 0 }}
+                  onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none' }}
                 />
-              ) : (
-                (userHandle || 'U').charAt(0).toUpperCase()
               )}
             </Box>
 
