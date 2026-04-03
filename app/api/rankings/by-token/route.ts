@@ -160,18 +160,6 @@ export async function GET(request: NextRequest) {
         cutoffDate.setDate(cutoffDate.getDate() - lookbackDays)
         const cutoffISO = cutoffDate.toISOString()
 
-        // Build symbol patterns to match BTCUSDT, BTC/USD, BTC-PERP, etc.
-        const symbolPatterns = [
-          `${token}USDT`,
-          `${token}USD`,
-          `${token}/USDT`,
-          `${token}/USD`,
-          `${token}-PERP`,
-          `${token}-USD`,
-          `${token}USDT.P`,
-          `${token}BUSD`,
-        ]
-
         // Fetch position history rows matching the token symbol patterns
         let allRows: Array<{
           source: string
@@ -180,16 +168,16 @@ export async function GET(request: NextRequest) {
           pnl_pct: number | null
         }> = []
 
-        // Use primary symbol pattern (most common) to avoid statement timeout
-        const primaryPattern = `${token}USDT`
+        // Use ilike prefix match to catch all symbol variants (BTCUSDT, BTC/USD, BTC-PERP, etc.)
+        // Combined with limit + statement_timeout to prevent slow scans
         const { data: positionData, error: posError } = await supabase
           .from('trader_position_history')
           .select('source, source_trader_id, pnl_usd, pnl_pct')
-          .or(`symbol.eq.${primaryPattern},symbol.eq.${token}USD,symbol.eq.${token}-PERP,symbol.eq.${token}/USDT`)
+          .ilike('symbol', `${token}%`)
           .gte('close_time', cutoffISO)
           .not('pnl_usd', 'is', null)
           .order('pnl_usd', { ascending: false })
-          .limit(5000)
+          .limit(3000)
 
         if (posError) {
           throw new Error(`Position history query failed: ${posError.message}`)
