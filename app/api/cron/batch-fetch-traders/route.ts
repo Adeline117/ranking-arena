@@ -72,6 +72,17 @@ const GROUPS: Record<string, string[]> = {
   g: ['lbank', 'dydx'],
 }
 
+// Per-platform leaderboard limits — override the default 2000
+// Binance: 9000+ traders but API returns only 20/page → 100 pages × 3 windows × 0.5s = 150s (exceeds 140s timeout)
+// Reduced to 500 (25 pages × 3 windows × 0.5s = 37s) — still captures top 500 per period
+const PLATFORM_LIMITS: Record<string, number> = {
+  binance_futures: 500,
+  binance_spot: 500,
+  // VPS scraper-dependent platforms: keep low to avoid queue buildup
+  bybit: 200,
+  bybit_spot: 200,
+}
+
 interface BatchResult {
   platform: string
   status: 'success' | 'error'
@@ -195,7 +206,7 @@ export async function GET(request: NextRequest) {
 
     try {
       const result = await Promise.race([
-        runConnectorBatch(connector, { supabase, windows: ['7d', '30d', '90d'], sourceOverride: platform, platformTimeBudgetMs: PLATFORM_TIMEOUT_MS }),
+        runConnectorBatch(connector, { supabase, windows: ['7d', '30d', '90d'], sourceOverride: platform, platformTimeBudgetMs: PLATFORM_TIMEOUT_MS, limit: PLATFORM_LIMITS[platform] }),
         new Promise<never>((_, reject) =>
           setTimeout(() => reject(new Error(`Platform ${platform} timed out after ${PLATFORM_TIMEOUT_MS / 1000}s`)), PLATFORM_TIMEOUT_MS)
         ),
