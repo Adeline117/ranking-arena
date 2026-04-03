@@ -12,6 +12,7 @@ import ChatSettingsDrawer from '@/app/components/features/ChatSettingsDrawer'
 import ChatSearchOverlay from '@/app/components/features/ChatSearchOverlay'
 import Link from 'next/link'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
+import { useToast } from '@/app/components/ui/Toast'
 
 import type { Message } from './components/types'
 import ConversationHeader from './components/ConversationHeader'
@@ -27,6 +28,7 @@ export default function ConversationPage({ params }: { params: Promise<{ convers
   if (!features.social) notFound()
 
   const { t, language } = useLanguage()
+  const { showToast } = useToast()
   const [conversationId, setConversationId] = useState<string>('')
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [searchOpen, setSearchOpen] = useState(false)
@@ -318,7 +320,7 @@ export default function ConversationPage({ params }: { params: Promise<{ convers
         userId={userId} conversationId={conversationId}
         showStickerPicker={showStickerPicker} setShowStickerPicker={setShowStickerPicker}
         onSend={handleSend} onVoiceSent={msgHook.handleVoiceSent}
-        onPreviewOpen={setPreviewOpen} showToast={() => {}}
+        onPreviewOpen={setPreviewOpen} showToast={showToast}
         t={t} language={language} inputRef={inputRef}
       />
     </Box>
