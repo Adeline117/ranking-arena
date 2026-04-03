@@ -3,6 +3,7 @@
 import { useMemo } from 'react'
 import { tokens } from '@/lib/design-tokens'
 import { Box, Text } from '../base'
+import { useLanguage } from '../Providers/LanguageProvider'
 
 export const CHART_COLORS = [
   tokens.colors.accent.brand,
@@ -30,7 +31,8 @@ interface EquityCurveOverlayProps {
 }
 
 export default function EquityCurveOverlay({ traders, height = 300 }: EquityCurveOverlayProps) {
-  const tradersWithData = traders.filter(t => t.data && t.data.length > 1)
+  const { t } = useLanguage()
+  const tradersWithData = traders.filter(tr => tr.data && tr.data.length > 1)
 
   const { paths, yLabels, xLabels, yMin, yMax, viewBox } = useMemo(() => {
     if (tradersWithData.length === 0) {
@@ -131,7 +133,7 @@ export default function EquityCurveOverlay({ traders, height = 300 }: EquityCurv
         borderRadius: tokens.radius.xl,
         border: `1px solid ${tokens.colors.border.primary}`,
       }}>
-        <Text size="sm" color="tertiary">No equity curve data available</Text>
+        <Text size="sm" color="tertiary">{t('noEquityCurveData')}</Text>
       </Box>
     )
   }
