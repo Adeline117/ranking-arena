@@ -4555,6 +4555,28 @@ compFieldMaxParticipants: '最大参加人数',
     achievementProSubscriber: 'Proメンバー',
     achievementSocialButterfly: 'ソーシャルバタフライ',
 
+    // Missing translations added 2026-04-03
+    autoRefresh: '30秒ごとに自動更新',
+    liveData: 'ライブ',
+    topPercent: '上位 {pct}%',
+    topPercentOn: '{platform} 上位 {pct}%',
+    riskReward: 'リスク/リワード',
+    riskRewardTooltip: '平均利益 / 平均損失の比率。1.5以上が良好。',
+    profit: '利益',
+    loss: '損失',
+    largestWin: '最大利益',
+    largestLoss: '最大損失',
+    dailyPnlHeatmap: '日次損益ヒートマップ',
+    dataSourceVerified: '検証済みデータ',
+    dataSourcePublic: '公開データ',
+    dataSourceDerived: '派生データ',
+    dataSourceHistorical: '履歴データ',
+    dataSourceVerifiedTooltip: 'このトレーダーは本人確認済みで、リアルタイムデータへのアクセスを許可しています',
+    dataSourcePublicTooltip: '公開取引所APIからのデータ',
+    bindApiKey: 'APIキーをバインド',
+    connectWallet: 'ウォレットを接続',
+    verifiedSince: '検証日',
+
 } as const
 
 export default ja

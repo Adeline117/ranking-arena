@@ -4846,6 +4846,34 @@ compFieldMaxParticipants: '最大参与人数',
     achievementProSubscriber: 'Pro 会员',
     achievementSocialButterfly: '社交达人',
 
+    // Top Percent Badge
+    topPercent: '前 {pct}%',
+    topPercentOn: '{platform} 前 {pct}%',
+
+    // Risk/Reward
+    riskReward: '盈亏比',
+    riskRewardTooltip: '平均盈利 / 平均亏损比率，高于 1.5 为优秀。',
+    profit: '盈利',
+    loss: '亏损',
+
+    // Largest Win/Loss
+    largestWin: '最大单笔盈利',
+    largestLoss: '最大单笔亏损',
+
+    // Daily PnL Heatmap
+    dailyPnlHeatmap: '每日盈亏热力图',
+
+    // Data Source Indicators (Claim System)
+    dataSourceVerified: '已验证数据',
+    dataSourcePublic: '公开数据',
+    dataSourceDerived: '衍生数据',
+    dataSourceHistorical: '历史数据',
+    dataSourceVerifiedTooltip: '该交易员已验证身份并授权实时数据访问',
+    dataSourcePublicTooltip: '数据来源于公开交易所 API',
+    bindApiKey: '绑定 API Key',
+    connectWallet: '连接钱包',
+    verifiedSince: '验证时间',
+
 } as const
 
 export default zh
