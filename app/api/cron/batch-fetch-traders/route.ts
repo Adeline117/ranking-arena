@@ -194,7 +194,7 @@ export async function GET(request: NextRequest) {
 
     try {
       const result = await Promise.race([
-        runConnectorBatch(connector, { supabase, windows: ['7d', '30d', '90d'], sourceOverride: platform }),
+        runConnectorBatch(connector, { supabase, windows: ['7d', '30d', '90d'], sourceOverride: platform, platformTimeBudgetMs: PLATFORM_TIMEOUT_MS }),
         new Promise<never>((_, reject) =>
           setTimeout(() => reject(new Error(`Platform ${platform} timed out after ${PLATFORM_TIMEOUT_MS / 1000}s`)), PLATFORM_TIMEOUT_MS)
         ),
