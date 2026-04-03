@@ -104,6 +104,40 @@ const PLATFORMS = {
     },
   },
 
+  kucoin: {
+    source: 'kucoin',
+    market_type: 'futures',
+    // KuCoin POST API — works from VPS, blocked from Vercel hnd1
+    directApi: 'https://www.kucoin.com/_api/ct-copy-trade/v1/copyTrading/rn/leaderboard/query',
+    directMethod: 'POST',
+    directBody: { currentPage: 1, pageSize: 50 },
+    batch: true,
+    maxPages: 17,
+    directHeaders: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+    endpoint: null, // no scraper endpoint needed
+    periods: { '1': '30D' }, // API only returns 30D data
+    pageSize: 50,
+    extractList: (data) => {
+      return data?.data?.items || data?.data?.list || []
+    },
+    normalize: (raw) => {
+      const rawRoi = num(raw.thirtyDayPnlRatio ?? raw.totalPnlRatio)
+      // KuCoin returns ROI as decimal (2.80 = 280%)
+      const roi = rawRoi != null ? rawRoi * 100 : null
+      return {
+        trader_key: String(raw.leadConfigId ?? ''),
+        display_name: raw.nickName ?? null,
+        avatar_url: raw.avatarUrl ?? null,
+        roi,
+        pnl: num(raw.thirtyDayPnl ?? raw.totalPnl),
+        win_rate: null,
+        max_drawdown: null,
+        sharpe_ratio: null,
+        followers: num(raw.currentCopyUserCount),
+      }
+    },
+  },
+
   bingx_spot: {
     source: 'bingx_spot',
     market_type: 'spot',
@@ -340,33 +374,72 @@ async function fetchPlatform(platformKey) {
       let data
       // Direct API bypass: use mobile UA instead of VPS scraper (faster, no CF WAF issues)
       if (config.directApi) {
-        const controller = new AbortController()
-        const timeout = setTimeout(() => controller.abort(), 30000)
-        try {
-          // Substitute {period} placeholder with actual period key (e.g., 90d for CoinEx)
-          const apiUrl = config.directApi.replace('{period}', periodKey)
-          await globalBucket.acquire()
-          const fetchOpts = {
-            method: config.directMethod || 'GET',
-            headers: config.directHeaders || {},
-            signal: controller.signal,
+        // Batch pagination for platforms like KuCoin (multiple pages)
+        if (config.batch && config.maxPages) {
+          const allItems = []
+          const seen = new Set()
+          for (let page = 1; page <= config.maxPages; page++) {
+            const controller = new AbortController()
+            const timeout = setTimeout(() => controller.abort(), 30000)
+            try {
+              await globalBucket.acquire()
+              const body = { ...config.directBody, currentPage: page }
+              const res = await fetch(config.directApi, {
+                method: config.directMethod || 'POST',
+                headers: config.directHeaders || {},
+                body: JSON.stringify(body),
+                signal: controller.signal,
+              })
+              clearTimeout(timeout)
+              if (!res.ok) { log('  Batch page ' + page + ': HTTP ' + res.status); break }
+              const pageData = await res.json()
+              const items = config.extractList(pageData)
+              if (!items.length) break
+              for (const item of items) {
+                const key = config.normalize(item).trader_key
+                if (key && !seen.has(key)) { seen.add(key); allItems.push(item) }
+              }
+              if (items.length < config.pageSize) break
+              await new Promise(r => setTimeout(r, 200))
+            } catch (err) {
+              clearTimeout(timeout)
+              log('  Batch page ' + page + ' error: ' + err.message)
+              break
+            }
           }
-          if (config.directBody) {
-            fetchOpts.body = JSON.stringify(config.directBody)
+          if (allItems.length > 0) {
+            data = { data: { items: allItems } }
+            log('  Direct API batch: ' + allItems.length + ' unique traders across pages')
           }
-          const res = await fetch(apiUrl, fetchOpts)
-          clearTimeout(timeout)
-          if (res.ok) {
-            data = await res.json()
-            log('  Direct API success (status ' + res.status + ')')
-          } else {
-            log('  Direct API failed (status ' + res.status + '), falling back to scraper')
+        } else {
+          // Single-page direct API
+          const controller = new AbortController()
+          const timeout = setTimeout(() => controller.abort(), 30000)
+          try {
+            const apiUrl = config.directApi.replace('{period}', periodKey)
+            await globalBucket.acquire()
+            const fetchOpts = {
+              method: config.directMethod || 'GET',
+              headers: config.directHeaders || {},
+              signal: controller.signal,
+            }
+            if (config.directBody) {
+              fetchOpts.body = JSON.stringify(config.directBody)
+            }
+            const res = await fetch(apiUrl, fetchOpts)
+            clearTimeout(timeout)
+            if (res.ok) {
+              data = await res.json()
+              log('  Direct API success (status ' + res.status + ')')
+            } else {
+              log('  Direct API failed (status ' + res.status + '), falling back to scraper')
+              data = null
+            }
+          } catch (directErr) {
+            clearTimeout(timeout)
+            log('  Direct API error: ' + directErr.message + ', falling back to scraper')
             data = null
           }
-        } catch (directErr) {
-          clearTimeout(timeout)
-          log('  Direct API error: ' + directErr.message + ', falling back to scraper')
-          data = null
         }
       }
 
