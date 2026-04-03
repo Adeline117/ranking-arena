@@ -69,7 +69,7 @@ export default function HomePage({ initialTraders, initialLastUpdated, heroStats
           leftSidebar={
             features.social ? (
               <SectionErrorBoundary>
-                <Suspense fallback={<div className="skeleton contain-layout-style" style={{ minHeight: 400, height: 400, borderRadius: tokens.radius.lg }} />}>
+                <Suspense fallback={<div className="skeleton contain-layout-style" style={{ minHeight: 400, borderRadius: tokens.radius.lg }} />}>
                   <HotDiscussions />
                 </Suspense>
               </SectionErrorBoundary>
@@ -79,7 +79,7 @@ export default function HomePage({ initialTraders, initialLastUpdated, heroStats
             <div className="contain-layout-style" style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
               <div style={{ flexShrink: 0 }}>
                 <SectionErrorBoundary>
-                  <Suspense fallback={<div className="skeleton contain-layout-style" style={{ minHeight: 200, height: 200, borderRadius: tokens.radius.lg }} />}>
+                  <Suspense fallback={<div className="skeleton contain-layout-style" style={{ minHeight: 200, borderRadius: tokens.radius.lg }} />}>
                     <WatchlistMarket />
                   </Suspense>
                 </SectionErrorBoundary>
@@ -95,7 +95,7 @@ export default function HomePage({ initialTraders, initialLastUpdated, heroStats
               )}
               <div style={{ flex: 1, minHeight: 0 }}>
                 <SectionErrorBoundary>
-                  <Suspense fallback={<div className="skeleton contain-layout-style" style={{ minHeight: 300, height: 300, borderRadius: tokens.radius.lg }} />}>
+                  <Suspense fallback={<div className="skeleton contain-layout-style" style={{ minHeight: 300, borderRadius: tokens.radius.lg }} />}>
                     <NewsFlash />
                   </Suspense>
                 </SectionErrorBoundary>
