@@ -182,8 +182,11 @@ export function useRealtimeRankings({
     // Initial fetch
     fetchLiveRankings()
 
-    // Set up polling
-    const intervalId = setInterval(fetchLiveRankings, pollInterval)
+    // Set up polling — pause when tab is hidden to save bandwidth
+    const intervalId = setInterval(() => {
+      if (typeof document !== 'undefined' && document.visibilityState === 'hidden') return
+      fetchLiveRankings()
+    }, pollInterval)
 
     return () => {
       aborted = true
