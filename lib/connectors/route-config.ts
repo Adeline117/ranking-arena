@@ -73,7 +73,7 @@ export const PLATFORM_ROUTES: Record<string, RouteConfig> = {
 
   // ─── BROWSER_ONLY (no public JSON API) ───────────────────────
   toobit:          { routes: ['scraper_sg'],                   notes: 'VPS scraper works (65 traders). Direct returns HTML.' },
-  blofin:          { routes: ['direct'],                        notes: 'openapi.blofin.com NOT geo-blocked. Requires BLOFIN_API_KEY/SECRET/PASSPHRASE env vars.' },
+  blofin:          { routes: ['mac_mini'],                      notes: 'CF challenge + geo-block. Mac Mini headless:new Chrome bypasses. openapi 401 without API key.' },
   lbank:           { routes: ['mac_mini'],                     notes: 'VPS scraper fails (no data). Mac Mini only.' },
   phemex:          { routes: ['mac_mini'],                     notes: 'CloudFront geo-blocks SG VPS. Mac Mini only.' },
 
