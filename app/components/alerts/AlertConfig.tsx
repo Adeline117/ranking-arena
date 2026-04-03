@@ -329,7 +329,7 @@ export default function AlertConfig({ traderId, traderHandle, source, userId, on
             fontWeight: 600,
           }}
         >
-          {saving ? t('saving') : t('save')}
+          {saving ? `⏳ ${t('saving')}` : t('save')}
         </Button>
         {alert.id && (
           <Button
