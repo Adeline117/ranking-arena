@@ -42,7 +42,7 @@ export function CommentAvatar({ handle, avatarUrl, isReply, isPro, showProBadge 
   return (
     <Link href={href} onClick={(e) => e.stopPropagation()} style={{ textDecoration: 'none', flexShrink: 0, position: 'relative' }}>
       {avatarUrl ? (
-        <Image src={avatarUrl.startsWith('data:') ? avatarUrl : `/api/avatar?url=${encodeURIComponent(avatarUrl)}`} alt={`${handle || 'User'} avatar`} width={size} height={size} sizes={`${size}px`} loading="lazy" unoptimized style={commentStyles.avatar(size)} />
+        <Image src={avatarUrl.startsWith('data:') ? avatarUrl : `/api/avatar?url=${encodeURIComponent(avatarUrl)}`} alt={`${handle || 'User'} avatar`} width={size} height={size} sizes={`${size}px`} loading="lazy" unoptimized style={commentStyles.avatar(size)} onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none' }} />
       ) : (
         <div style={commentStyles.avatarPlaceholder(size)}>
           {(handle?.[0] || 'A').toUpperCase()}
