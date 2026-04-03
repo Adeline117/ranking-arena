@@ -137,6 +137,8 @@ export default function ShareButton({ data, size = 'sm', variant = 'ghost', show
     <div ref={ref} style={{ position: 'relative', display: 'inline-block' }}>
       <button
         onClick={handleClick}
+        aria-expanded={open}
+        aria-haspopup="menu"
         style={{
           display: 'flex', alignItems: 'center', gap: tokens.spacing[2],
           padding: pad, fontSize, borderRadius: tokens.radius.lg,
@@ -186,7 +188,7 @@ export default function ShareButton({ data, size = 'sm', variant = 'ghost', show
           borderRadius: tokens.radius.lg,
           boxShadow: tokens.shadow.lg,
           zIndex: tokens.zIndex.dropdown,
-          animation: 'shareDropdownIn 0.15s ease-out',
+          animation: 'fadeInDown 0.2s cubic-bezier(0.4, 0, 0.2, 1) forwards',
         }}>
           <DropdownItem label={t('shareToTwitter')} onClick={shareToTwitter} icon={
             <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/></svg>
