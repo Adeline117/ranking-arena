@@ -30,6 +30,8 @@ export function EditPostModal({
 
   useEffect(() => {
     previousFocusRef.current = document.activeElement as HTMLElement
+    const prevOverflow = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
 
     const timer = setTimeout(() => {
       if (dialogRef.current) {
@@ -63,6 +65,7 @@ export function EditPostModal({
     document.addEventListener('keydown', handleKeyDown)
     return () => {
       clearTimeout(timer)
+      document.body.style.overflow = prevOverflow
       document.removeEventListener('keydown', handleKeyDown)
       previousFocusRef.current?.focus()
     }
