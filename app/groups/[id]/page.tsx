@@ -40,6 +40,7 @@ interface Group {
   rules_json?: Array<{ zh: string; en: string }> | null
   owner_handle?: string | null
   is_premium_only?: boolean | null
+  status?: string | null
   dissolved_at?: string | null
 }
 
@@ -597,7 +598,6 @@ export default function GroupDetailPage({ params }: { params: Promise<{ id: stri
             isMember={isMember}
             userRole={userRole}
             joining={joining}
-            isDissolved={!!group?.dissolved_at}
             onJoin={() => handleJoin()}
             onLeave={handleLeave}
             onShowGroupInfo={() => setShowGroupInfo(true)}
