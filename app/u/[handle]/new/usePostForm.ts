@@ -407,7 +407,8 @@ export function usePostForm() {
 
     if (!userId) {
       showToast(t('pleaseLogin'), 'warning')
-      router.push('/login')
+      const currentPath = typeof window !== 'undefined' ? window.location.pathname + window.location.search : '/login'
+      router.push(`/login?returnUrl=${encodeURIComponent(currentPath)}`)
       submitRef.current = false
       return
     }
