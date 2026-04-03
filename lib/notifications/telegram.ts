@@ -13,6 +13,7 @@
  */
 
 import { logger } from '@/lib/logger'
+import { getSharedRedis } from '@/lib/cache/redis-client'
 
 // ============================================
 // Types
@@ -51,11 +52,8 @@ async function isDeduplicated(key: string, ttlSeconds: number = DEDUP_TTL_SECOND
   if (ttlSeconds <= 0) return false
 
   try {
-    const { Redis } = await import('@upstash/redis')
-    const url = process.env.UPSTASH_REDIS_REST_URL
-    const token = process.env.UPSTASH_REDIS_REST_TOKEN
-    if (url && token) {
-      const redis = new Redis({ url, token })
+    const redis = await getSharedRedis()
+    if (redis) {
       const existing = await redis.get<number>(`alert:dedup:${key}`)
       if (existing) return true
       await redis.set(`alert:dedup:${key}`, Date.now(), { ex: ttlSeconds })
@@ -74,11 +72,8 @@ async function isDeduplicated(key: string, ttlSeconds: number = DEDUP_TTL_SECOND
  */
 async function clearDedup(key: string): Promise<void> {
   try {
-    const { Redis } = await import('@upstash/redis')
-    const url = process.env.UPSTASH_REDIS_REST_URL
-    const token = process.env.UPSTASH_REDIS_REST_TOKEN
-    if (url && token) {
-      const redis = new Redis({ url, token })
+    const redis = await getSharedRedis()
+    if (redis) {
       await redis.del(`alert:dedup:${key}`)
     }
   } catch {
@@ -243,12 +238,9 @@ export async function sendRecoveryNotification(
  */
 async function recordWarningForDigest(opts: TelegramAlertOptions): Promise<void> {
   try {
-    const { Redis } = await import('@upstash/redis')
-    const url = process.env.UPSTASH_REDIS_REST_URL
-    const token = process.env.UPSTASH_REDIS_REST_TOKEN
-    if (!url || !token) return
+    const redis = await getSharedRedis()
+    if (!redis) return
 
-    const redis = new Redis({ url, token })
     const entry = JSON.stringify({
       source: opts.source,
       title: opts.title,
@@ -270,12 +262,9 @@ async function recordWarningForDigest(opts: TelegramAlertOptions): Promise<void>
  */
 async function getBufferedWarnings(): Promise<Array<{ source: string; title: string; message: string; ts: number }>> {
   try {
-    const { Redis } = await import('@upstash/redis')
-    const url = process.env.UPSTASH_REDIS_REST_URL
-    const token = process.env.UPSTASH_REDIS_REST_TOKEN
-    if (!url || !token) return []
+    const redis = await getSharedRedis()
+    if (!redis) return []
 
-    const redis = new Redis({ url, token })
     const cutoff = Date.now() - 24 * 60 * 60 * 1000
     const entries = await redis.zrange('alert:warnings:24h', cutoff, Date.now(), { byScore: true })
     return (entries as string[]).map(e => {
