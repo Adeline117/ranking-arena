@@ -87,8 +87,8 @@ export default function LoginPage() {
     if (returnUrl && returnUrl.startsWith('/') && !returnUrl.startsWith('//')) {
       return returnUrl
     }
-    // Default to rankings instead of user profile — most users want to browse after login
-    return '/rankings'
+    // Default to homepage — the ranking table is the main content on /
+    return '/'
   }, [searchParams, isAddAccount])
 
   const emailValidation = validateEmail(email)
