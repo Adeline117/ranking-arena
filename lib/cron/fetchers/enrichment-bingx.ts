@@ -52,6 +52,11 @@ interface BingXStatResponse {
     followerNum?: number | string
     copyNum?: number | string
     aum?: number | string
+    // Sharpe ratio fields (BingX page shows "Sharpe Ratio", API may return it)
+    sharpe30d?: number | string
+    sharpeRatio?: number | string
+    sharpe?: number | string
+    sharpRatio?: number | string
     // Some responses nest inside stat object
     stat?: {
       winRate?: number | string
@@ -59,6 +64,10 @@ interface BingXStatResponse {
       tradeCount?: number | string
       maxDrawdown?: number | string
       mdd?: number | string
+      sharpe30d?: number | string
+      sharpeRatio?: number | string
+      sharpe?: number | string
+      sharpRatio?: number | string
     }
   }
 }
@@ -98,6 +107,15 @@ export async function fetchBingxStatsDetail(
 
     const totalTrades = safeNum(stat.totalTrades ?? stat.tradeCount ?? (data as Record<string, unknown>)?.orderCount)
 
+    // Sharpe ratio: try multiple field names from API response
+    const rawSharpe = safeNum(
+      stat.sharpe30d ?? stat.sharpeRatio ?? stat.sharpe ?? stat.sharpRatio ??
+      (data as Record<string, unknown>)?.sharpe30d ?? (data as Record<string, unknown>)?.sharpeRatio ??
+      (data as Record<string, unknown>)?.sharpe ?? (data as Record<string, unknown>)?.sharpRatio
+    )
+    // BingX sharpe values should be in reasonable range (-20 to 20)
+    const sharpeRatio = rawSharpe != null && rawSharpe >= -20 && rawSharpe <= 20 ? rawSharpe : null
+
     return {
       totalTrades: totalTrades != null ? Math.round(totalTrades) : null,
       profitableTradesPct: winRate,
@@ -106,7 +124,7 @@ export async function fetchBingxStatsDetail(
       avgLoss: null,
       largestWin: null,
       largestLoss: null,
-      sharpeRatio: null,
+      sharpeRatio,
       maxDrawdown,
       currentDrawdown: null,
       volatility: null,
