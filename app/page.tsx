@@ -66,7 +66,7 @@ const organizationJsonLd = {
 export default async function Page() {
   // Fetch data in parallel for optimal performance
   const [{ traders: initialTraders, lastUpdated }, heroStats] = await Promise.all([
-    getInitialTraders('90D', 10),
+    getInitialTraders('90D', 50),
     getHeroStats(),
   ])
 
