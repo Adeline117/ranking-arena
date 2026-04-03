@@ -10,7 +10,6 @@
  * - API may require authentication for leaderboard data
  */
 
-import crypto from 'crypto'
 import { BaseConnector } from '../base'
 import { warnValidate } from '../schemas'
 import { safeNumber, safeNonNeg, safeStr, safeMdd } from '../utils'
@@ -27,29 +26,14 @@ import { createLogger } from '@/lib/utils/logger'
 
 const log = createLogger('connector:blofin')
 
-// HMAC-SHA256 auth for BloFin API (openapi.blofin.com)
-// API key created at blofin.com/account/apis
-function blofinAuthHeaders(method: string, path: string, body = ''): Record<string, string> {
-  const apiKey = process.env.BLOFIN_API_KEY
-  const secret = process.env.BLOFIN_API_SECRET
-  const passphrase = process.env.BLOFIN_API_PASSPHRASE
-  if (!apiKey || !secret || !passphrase) return {}
-
-  const timestamp = String(Date.now())
-  const nonce = crypto.randomUUID()
-  const prehash = timestamp + nonce + method.toUpperCase() + path + body
-  const signature = crypto
-    .createHmac('sha256', secret)
-    .update(prehash)
-    .digest('hex')
-  const sign = Buffer.from(signature).toString('base64')
-
+// BloFin data is fetched by Mac Mini crontab (scripts/openclaw/fetch-blofin.mjs)
+// using headless:'new' Chrome which bypasses CF challenge + geo-block.
+// This connector serves as fallback for enrichment/detail queries.
+// Optional: HMAC auth headers for openapi.blofin.com (if API key available)
+function blofinAuthHeaders(_method: string, _path: string, _body = ''): Record<string, string> {
+  // Auth disabled — Mac Mini handles leaderboard fetch via browser
+  // If API key becomes available, re-enable HMAC-SHA256 signing here
   return {
-    'ACCESS-KEY': apiKey,
-    'ACCESS-SIGN': sign,
-    'ACCESS-TIMESTAMP': timestamp,
-    'ACCESS-NONCE': nonce,
-    'ACCESS-PASSPHRASE': passphrase,
   }
 }
 
