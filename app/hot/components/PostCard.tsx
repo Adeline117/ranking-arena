@@ -128,7 +128,7 @@ export function PostCard({
           overflow: 'hidden',
           textOverflow: 'ellipsis',
         }}>
-          {translatedTitle || p.title}
+          {translatedTitle || (p.title && p.title !== 'Untitled' && p.title !== 'untitled' ? p.title : (p.body?.slice(0, 80) || ''))}
           {translatedTitle && (
             <span style={{
               fontSize: 10, fontWeight: 500, marginLeft: 6,

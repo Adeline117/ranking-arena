@@ -67,7 +67,7 @@ const getHotPosts = unstable_cache(
           group: (groups?.name as string) || '',
           group_en: (groups?.name_en as string) || undefined,
           group_id: (post.group_id as string) || undefined,
-          title: (post.title as string) || '',
+          title: ((post.title as string) && (post.title as string) !== 'Untitled') ? (post.title as string) : '',
           author: (author?.handle as string) || 'user',
           author_handle: (author?.handle as string) || undefined,
           time: timeStr,
