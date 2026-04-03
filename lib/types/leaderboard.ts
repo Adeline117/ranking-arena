@@ -574,7 +574,7 @@ export interface RankingsQuery {
   platform?: Platform
   limit?: number
   offset?: number
-  sort_by?: 'arena_score' | 'roi' | 'pnl' | 'drawdown' | 'copiers'
+  sort_by?: 'arena_score' | 'roi' | 'pnl' | 'drawdown' | 'copiers' | 'win_rate' | 'sharpe_ratio' | 'trades_count'
   sort_dir?: 'asc' | 'desc'
   min_pnl?: number
   min_trades?: number

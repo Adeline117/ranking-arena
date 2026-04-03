@@ -11,7 +11,7 @@
  *   limit: number (default 100, max 5000)
  *   offset: number (default 0) — legacy, prefer cursor
  *   cursor: string (optional, format: "score:id" for keyset pagination)
- *   sort_by: 'arena_score' | 'roi' | 'pnl' | 'drawdown' | 'copiers'
+ *   sort_by: 'arena_score' | 'roi' | 'pnl' | 'drawdown' | 'copiers' | 'win_rate' | 'sharpe_ratio' | 'trades_count'
  *   sort_dir: 'asc' | 'desc'
  *   min_pnl: number (optional)
  *   min_trades: number (optional)
@@ -47,7 +47,7 @@ function setCachedSources(seasonId: string, sources: string[]) {
 
 const VALID_WINDOWS: (RankingWindow | 'composite')[] = ['7d', '30d', '90d', 'composite'];
 const VALID_CATEGORIES: TradingCategory[] = ['futures', 'spot', 'onchain'];
-const VALID_SORT_BY = ['arena_score', 'roi', 'pnl', 'drawdown', 'copiers'] as const;
+const VALID_SORT_BY = ['arena_score', 'roi', 'pnl', 'drawdown', 'copiers', 'win_rate', 'sharpe_ratio', 'trades_count'] as const;
 
 // Data quality: ROI values above this threshold are considered anomalous
 const ROI_ANOMALY_THRESHOLD = 50000; // 50000% = 500x — only filter extreme data errors, not legitimate high performers
@@ -186,6 +186,9 @@ async function getRankingsFallback(rankingsQuery: RankingsQuery, _cursor?: strin
     pnl: 'pnl',
     drawdown: 'max_drawdown',
     copiers: 'copiers',
+    win_rate: 'win_rate',
+    sharpe_ratio: 'sharpe_ratio',
+    trades_count: 'trades_count',
   };
   const unifiedSortBy = sortByMap[sort_by] || 'arena_score';
 
@@ -411,7 +414,7 @@ async function getCompositeRankings(params: {
     platform: params.platform,
     limit: params.limit,
     offset: params.offset,
-    sort_by: params.sort_by as 'arena_score' | 'roi' | 'pnl' | 'drawdown' | 'copiers',
+    sort_by: params.sort_by as 'arena_score' | 'roi' | 'pnl' | 'drawdown' | 'copiers' | 'win_rate' | 'sharpe_ratio' | 'trades_count',
     sort_dir: params.sort_dir,
     min_pnl: params.min_pnl,
     min_trades: params.min_trades,
