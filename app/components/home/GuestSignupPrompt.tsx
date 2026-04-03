@@ -12,9 +12,9 @@ import { useLoginModal } from '@/lib/hooks/useLoginModal'
  * Uses IntersectionObserver instead of scroll listener to reduce TBT.
  */
 export default function GuestSignupPrompt() {
-  const { isLoggedIn, user } = useAuthSession()
+  const { isLoggedIn, user, authChecked } = useAuthSession()
   const session = isLoggedIn && user
-  const loading = false
+  const loading = !authChecked
   const { t } = useLanguage()
   const [show, setShow] = useState(false)
   const [dismissed, setDismissed] = useState(false)
