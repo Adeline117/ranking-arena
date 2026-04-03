@@ -543,9 +543,9 @@ function RankingTableInner(props: {
       <ScoreRulesModal isOpen={showScoreRulesModal} onClose={() => setShowScoreRulesModal(false)} />
 
       <Box style={{ minHeight: 400, contain: 'layout style' }}>
-      {loading ? (
+      {loading && sortedTraders.length === 0 ? (
         <Box style={{ animation: 'fadeIn 0.2s ease-in' }}><RankingSkeleton /></Box>
-      ) : error ? (
+      ) : error && sortedTraders.length === 0 ? (
         <Box style={{ padding: `${tokens.spacing[10]} ${tokens.spacing[4]}`, textAlign: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: tokens.spacing[3] }}>
           <Text size="md" color="secondary">{error}</Text>
           {onRetry && (
