@@ -56,7 +56,7 @@ export default function RankingSection({
   lastUpdated,
   error,
   onRetry,
-  onRefresh: _onRefresh,
+  onRefresh,
 }: RankingSectionProps) {
   const {
     language,
@@ -202,6 +202,7 @@ export default function RankingSection({
         lastUpdated={lastUpdated}
         formatLastUpdated={formatLastUpdated}
         t={t}
+        onRefresh={onRefresh}
       />
     </section>
   )
