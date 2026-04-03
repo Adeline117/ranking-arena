@@ -524,16 +524,23 @@ export const GET = withPublic(
     }
 
     // Sort traders by relevance score (Meilisearch-inspired weighted ranking)
-    // Weight: exact handle match > partial match > arena_score > ROI
+    // When searching for an exchange name, prioritize arena_score (best traders first).
+    // For text searches, prioritize text match quality.
+    const isExchangeSearch = !!matchedExchange && !platformFilter
     const scoredTraders = exchangeTopTraders.map(t => {
       let relevance = 0
-      const handle = (t.handle || t.traderKey || '').toLowerCase()
-      const q = sanitizedQuery.toLowerCase()
-      if (handle === q) relevance += 100 // Exact match
-      else if (handle.startsWith(q)) relevance += 50 // Prefix match
-      else if (handle.includes(q)) relevance += 20 // Contains
-      relevance += Math.min((t.arenaScore ?? 0) / 2, 30) // Score bonus (max 30)
-      relevance += Math.min(Math.log10(Math.max(t.roi ?? 1, 1)) * 5, 15) // ROI bonus (max 15)
+      if (isExchangeSearch) {
+        // Exchange search: sort by arena_score (most relevant = best performer)
+        relevance = (t.arenaScore ?? 0)
+      } else {
+        const handle = (t.handle || t.traderKey || '').toLowerCase()
+        const q = sanitizedQuery.toLowerCase()
+        if (handle === q) relevance += 100 // Exact match
+        else if (handle.startsWith(q)) relevance += 50 // Prefix match
+        else if (handle.includes(q)) relevance += 20 // Contains
+        relevance += Math.min((t.arenaScore ?? 0) / 2, 30) // Score bonus (max 30)
+        relevance += Math.min(Math.log10(Math.max(t.roi ?? 1, 1)) * 5, 15) // ROI bonus (max 15)
+      }
       return { ...t, _relevance: relevance }
     }).sort((a, b) => b._relevance - a._relevance)
 
