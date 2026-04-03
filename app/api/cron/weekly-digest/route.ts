@@ -68,7 +68,7 @@ export async function GET(request: NextRequest) {
     const topMovers = (movers || []).map(m => ({
       name: m.display_name || m.source_trader_id,
       change: `${(m.roi_pct ?? 0) > 0 ? '+' : ''}${((m.roi_pct ?? 0)).toFixed(1)}% ROI`,
-      link: `/trader/${m.platform}/${encodeURIComponent(m.source_trader_id)}`,
+      link: `/trader/${encodeURIComponent(m.display_name || m.source_trader_id)}?platform=${m.platform}`,
     }))
 
     // 3. New traders this week
