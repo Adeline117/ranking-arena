@@ -73,15 +73,16 @@ function shouldSendAlert(issueFingerprint) {
 }
 
 // Dead/blocked platforms - skip in alerts & auto-fix
-// Synced with DEAD_BLOCKED_PLATFORMS in lib/constants/exchanges.ts (2026-03-13)
-// Recovered: lbank, phemex, blofin (VPS/Mac Mini)
-// Mac Mini: kucoin, weex (geo-blocked from VPS, scripts deployed)
-// Dead: perpetual_protocol, whitebit, bitmart, btse
+// Synced 2026-04-03 — skip dead platforms in alerts & auto-fix
 const DEAD_PLATFORMS = new Set([
   'perpetual_protocol', 'whitebit', 'bitmart', 'btse',
-  // kucoin, weex — RECOVERED via Mac Mini (2026-03-13)
   'kwenta', 'mux', 'synthetix', 'paradex',
-  'okx_spot', 'bitget_spot',
+  'kucoin',   // copy trading discontinued 2026-03
+  'phemex',   // API 404 since 2026-04
+  'bingx',    // empty leaderboard data
+  'bingx_spot', // no leaderboard API
+  'weex',     // 75% timeout rate
+  'vertex', 'apex_pro', 'rabbitx', // DNS dead / no API
 ])
 
 if (!CRON_SECRET) {
