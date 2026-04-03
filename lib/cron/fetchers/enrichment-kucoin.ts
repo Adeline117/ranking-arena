@@ -181,7 +181,7 @@ export async function fetchKucoinStatsDetail(
     if (maxDD > 0 && maxDD <= 100) maxDrawdown = Math.round(maxDD * 100) / 100
 
     // Sharpe ratio (annualized)
-    if (returns.length >= 5) {
+    if (returns.length >= 2) {
       const mean = returns.reduce((a, b) => a + b, 0) / returns.length
       const std = Math.sqrt(returns.reduce((a, r) => a + (r - mean) ** 2, 0) / returns.length)
       if (std > 0) sharpeRatio = Math.round((mean / std) * Math.sqrt(365) * 100) / 100

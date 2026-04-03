@@ -152,7 +152,7 @@ export async function fetchBitunixStatsDetail(
       // Compute Sharpe from dailyWinRate (daily cumulative ROI curve)
       let sharpeRatio: number | null = null
       const curve = entry.dailyWinRate
-      if (Array.isArray(curve) && curve.length >= 5) {
+      if (Array.isArray(curve) && curve.length >= 3) {
         const values = curve.map(p => toNum(p.amount) ?? 0)
         const returns: number[] = []
         for (let i = 1; i < values.length; i++) returns.push(values[i] - values[i - 1])

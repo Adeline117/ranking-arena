@@ -849,21 +849,21 @@ export async function runEnrichment(params: {
                       if (roiVal !== 0) snapshotUpdate.roi_pct = roiVal
                     }
                     // Sharpe from daily returns if not from stats
-                    if (!snapshotUpdate.sharpe_ratio && curve.length >= 7) {
+                    if (!snapshotUpdate.sharpe_ratio && curve.length >= 3) {
                       const returns: number[] = []
                       for (let j = 1; j < curve.length; j++) {
                         if (curve[j].roi != null && curve[j - 1].roi != null) {
                           returns.push(curve[j].roi! - curve[j - 1].roi!)
                         }
                       }
-                      if (returns.length >= 5) {
+                      if (returns.length >= 2) {
                         const mean = returns.reduce((a, b) => a + b, 0) / returns.length
                         const std = Math.sqrt(returns.reduce((a, r) => a + (r - mean) ** 2, 0) / returns.length)
                         if (std > 0) snapshotUpdate.sharpe_ratio = Math.round((mean / std) * Math.sqrt(365) * 100) / 100
                       }
                     }
                     // Win rate from daily returns if not from stats
-                    if (!snapshotUpdate.win_rate && curve.length >= 5) {
+                    if (!snapshotUpdate.win_rate && curve.length >= 3) {
                       const dailyReturns: number[] = []
                       for (let j = 1; j < curve.length; j++) {
                         if (curve[j].pnl != null && curve[j - 1].pnl != null) {

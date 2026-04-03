@@ -244,20 +244,20 @@ export function enhanceStatsWithDerivedMetrics(
     }
   }
 
-  if (!stats.sharpeRatio && curve.length >= 5) {
+  if (!stats.sharpeRatio && curve.length >= 3) {
     stats.sharpeRatio = calculateSharpeRatio(curve, period)
   }
 
-  if (!stats.sortinoRatio && curve.length >= 5) {
+  if (!stats.sortinoRatio && curve.length >= 3) {
     stats.sortinoRatio = calculateSortinoRatio(curve, period)
   }
 
-  if (!stats.calmarRatio && curve.length >= 5) {
+  if (!stats.calmarRatio && curve.length >= 3) {
     stats.calmarRatio = calculateCalmarRatio(curve, period)
   }
 
   // Derive win_rate from equity curve daily returns if not available
-  if (stats.profitableTradesPct == null && curve.length >= 5) {
+  if (stats.profitableTradesPct == null && curve.length >= 3) {
     let wins = 0, total = 0
     const values = extractValues(curve)
     for (let i = 1; i < values.length; i++) {

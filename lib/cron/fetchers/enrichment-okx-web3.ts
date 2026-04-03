@@ -99,7 +99,7 @@ export async function fetchOkxWeb3StatsDetail(
       if (maxDD > 0 && maxDD <= 100) maxDrawdown = Math.round(maxDD * 100) / 100
 
       // Sharpe from daily ratio returns
-      if (sorted.length >= 5) {
+      if (sorted.length >= 3) {
         const returns: number[] = []
         for (let i = 1; i < sorted.length; i++) {
           returns.push(sorted[i].ratio - sorted[i - 1].ratio)
