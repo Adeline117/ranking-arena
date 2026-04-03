@@ -41,7 +41,7 @@ export default function TradingStyleRadar({
     normalize(riskControl),
     normalize(execution),
     normalize(winRate),
-    maxDrawdown != null ? Math.max(0, 1 - Math.abs(maxDrawdown) / 50) : 0, // Lower MDD = higher score
+    maxDrawdown != null ? Math.max(0, Math.min(1, 1 - Math.abs(maxDrawdown) / 100)) : 0, // Lower MDD = higher score; scale 0-100%
   ]
 
   const labels = [t('radarProfit'), t('radarRisk'), t('radarExec'), t('radarWinRate'), t('radarStable')]
