@@ -138,7 +138,7 @@ export function DrawdownChart({ equityCurve }: DrawdownChartProps) {
                 fill="var(--color-text-tertiary)"
                 fontSize={8}
               >
-                {tick.toFixed(tick === 0 ? 0 : 1)}%
+                {tick === 0 ? '0%' : `${tick.toFixed(Math.abs(tick) < 1 ? 2 : 1)}%`}
               </text>
             </g>
           )
