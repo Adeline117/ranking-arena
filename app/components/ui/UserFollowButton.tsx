@@ -255,6 +255,7 @@ export default function UserFollowButton({
       aria-label={following ? t('unfollowUser') : t('followUser')}
       aria-pressed={following}
       aria-busy={loading}
+      className="interactive-scale"
       style={{
         ...sizeStyles[size],
         width: fullWidth ? '100%' : 'auto',
@@ -270,6 +271,8 @@ export default function UserFollowButton({
         justifyContent: 'center',
         gap: '6px',
       }}
+      onMouseEnter={(e) => { if (!loading) e.currentTarget.style.opacity = '0.85' }}
+      onMouseLeave={(e) => { if (!loading) e.currentTarget.style.opacity = '1' }}
     >
       {loading && <ButtonSpinner size="xs" />}
       {loading
