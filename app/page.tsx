@@ -77,12 +77,13 @@ export default async function Page() {
           The SSR table already shows data — the client fetch can happen lazily. */}
       <JsonLd data={organizationJsonLd} />
 
-      {/* Phase 1 (SSR): Static HTML shell — visible until Phase 2 JS loads.
-          Wrapped in a container that CSS hides INSTANTLY (same paint frame) when
-          #homepage-interactive appears. Uses content-visibility:hidden which collapses
-          height to 0 without triggering CLS (unlike display:none which removes from flow). */}
-      <div id="ssr-shell" aria-hidden="false">
+      {/* Phase 1 (SSR): Hero stays visible as LCP element even after Phase 2 loads.
+          Only the ranking table is hidden (it gets replaced by the interactive table).
+          Hero is kept visible because hiding it resets LCP to Phase 2 hero load time (~11s on slow 4G). */}
+      <div id="ssr-hero-shell">
         <HomeHeroSSR traderCount={heroStats?.traderCount} exchangeCount={heroStats?.exchangeCount} />
+      </div>
+      <div id="ssr-ranking-table">
         <SSRRankingTable traders={initialTraders} />
       </div>
 
