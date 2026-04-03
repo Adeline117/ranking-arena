@@ -8,6 +8,7 @@ import { EXCHANGE_CONFIG } from '@/lib/constants/exchanges'
 import TraderProfileClient, { type UnregisteredTraderData } from './TraderProfileClient'
 import { ErrorBoundary } from '@/app/components/utils/ErrorBoundary'
 import { resolveTrader, getTraderDetail, toTraderPageData } from '@/lib/data/unified'
+import { isDead } from '@/lib/connectors/route-config'
 import { LR } from '@/lib/types/schema-mapping'
 import { BASE_URL } from '@/lib/constants/urls'
 import { generateTraderProfilePageSchema, type TraderSchemaInput } from '@/lib/seo/structured-data'
@@ -248,11 +249,13 @@ export default async function TraderPage({ params, searchParams }: { params: Pro
   const serverTraderData = detailResult ? toTraderPageData(detailResult) : null
 
   // Build UnregisteredTraderData for initial render
+  const platformDead = isDead(resolved.platform)
   const traderData: UnregisteredTraderData = {
     handle: resolved.handle || decodedHandle,
     avatar_url: resolved.avatarUrl,
     source: resolved.platform,
     source_trader_id: resolved.traderKey,
+    is_platform_dead: platformDead || undefined,
     // Pull basic scores from serverTraderData if available
     ...(serverTraderData?.performance ? {
       arena_score: (serverTraderData.performance as Record<string, unknown>).arena_score as number | null,

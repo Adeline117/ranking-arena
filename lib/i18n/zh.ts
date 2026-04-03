@@ -2357,6 +2357,7 @@ const zh = {
     mddLabel: '回撤',
     tradesLabel: '交易次数',
     dataOutdatedBanner: '数据可能已过时，请刷新获取最新信息。',
+    platformDataUnavailable: '该平台数据暂时不可用，以下显示的历史数据可能已过时。',
     rankTrend: '排名趋势（7天）',
     drawdownChart: '回撤',
     dailyReturnsDistribution: '日收益分布',
