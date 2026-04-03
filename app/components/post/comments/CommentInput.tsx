@@ -34,9 +34,13 @@ export function CommentInput({
   // Close emoji picker on outside click
   useEffect(() => {
     if (!showEmojiPicker) return
+    let mounted = true
     const handler = () => setShowEmojiPicker(false)
-    const timer = setTimeout(() => document.addEventListener('click', handler), 0)
-    return () => { clearTimeout(timer); document.removeEventListener('click', handler) }
+    // Defer so the click that opened the picker doesn't immediately close it
+    const timer = setTimeout(() => {
+      if (mounted) document.addEventListener('click', handler)
+    }, 0)
+    return () => { mounted = false; clearTimeout(timer); document.removeEventListener('click', handler) }
   }, [showEmojiPicker])
 
   return (
