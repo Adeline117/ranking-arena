@@ -465,6 +465,20 @@ export function useSettingsHandlers({ showToast, showConfirm, t }: UseSettingsHa
       if (signInError) { showToast(t('currentPasswordWrong'), 'error'); return }
       const { error } = await supabase.auth.updateUser({ password: newPassword })
       if (error) { showToast(error.message, 'error'); return }
+      // After password change, revoke all other sessions to kick out other devices
+      try {
+        const { data: { session: currentSession } } = await supabase.auth.getSession()
+        if (currentSession?.access_token) {
+          await fetch('/api/settings/sessions', {
+            method: 'DELETE',
+            headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${currentSession.access_token}` },
+            body: JSON.stringify({ all: true }),
+          })
+        }
+      } catch (revokeErr) {
+        // Non-critical: password was changed even if session revocation fails
+        uiLogger.warn('[ChangePassword] Failed to revoke other sessions:', revokeErr)
+      }
       showToast(t('passwordChanged'), 'success')
       setCurrentPassword(''); setNewPassword(''); setConfirmNewPassword('')
       setTouchedFields(prev => ({ ...prev, newPassword: false, confirmPassword: false }))
