@@ -3,7 +3,8 @@
 import { features } from '@/lib/features'
 import { notFound } from 'next/navigation'
 import Link from 'next/link'
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useCallback } from 'react'
+import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase/client'
 import { getLocaleFromLanguage } from '@/lib/utils/format'
 import { tokens } from '@/lib/design-tokens'
@@ -101,6 +102,7 @@ export default function GroupManagePage({ params }: { params: Promise<{ id: stri
   const { showToast } = useToast()
   const { showDangerConfirm } = useDialog()
   const { accessToken, email, userId } = useAuthSession()
+  const router = useRouter()
   const [group, setGroup] = useState<Group | null>(null)
   const [members, setMembers] = useState<GroupMember[]>([])
   const [posts, setPosts] = useState<Post[]>([])
@@ -304,6 +306,32 @@ export default function GroupManagePage({ params }: { params: Promise<{ id: stri
     }
   }
 
+  // Dissolve group (owner only)
+  const [dissolving, setDissolving] = useState(false)
+  const handleDissolve = useCallback(async () => {
+    if (!isOwner || dissolving) return
+    const confirmed = await showDangerConfirm(
+      t('dissolveGroup') || 'Dissolve Group',
+      t('dissolveGroupConfirm') || 'This will permanently freeze this group. All members can still view history but cannot post or interact. This action cannot be undone.'
+    )
+    if (!confirmed) return
+    setDissolving(true)
+    try {
+      const res = await fetch(`/api/groups/${groupId}/dissolve`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${accessToken}`, ...getCsrfHeaders() },
+      })
+      if (res.ok) {
+        showToast(t('groupDissolved') || 'Group dissolved', 'success')
+        router.push('/groups')
+      } else {
+        const data = await res.json().catch(() => ({}))
+        showToast(data.error || t('operationFailed'), 'error')
+      }
+    } catch { showToast(t('networkError'), 'error') }
+    finally { setDissolving(false) }
+  }, [isOwner, dissolving, groupId, accessToken, showDangerConfirm, showToast, router, t])
+
   // Filtering
   const searchLower = contentSearch.toLowerCase()
   const filteredPosts = contentSearch ? posts.filter(p => (p.title?.toLowerCase().includes(searchLower)) || (p.content?.toLowerCase().includes(searchLower)) || (p.author_handle?.toLowerCase().includes(searchLower))) : posts
@@ -362,6 +390,43 @@ export default function GroupManagePage({ params }: { params: Promise<{ id: stri
           />
         )}
         {activeTab === 'activity' && <Card title={t('activityLog')}><ActivityLogSection groupId={groupId} /></Card>}
+
+        {/* Danger Zone — dissolve group (owner only) */}
+        {isOwner && (
+          <Box style={{
+            marginTop: tokens.spacing[8],
+            padding: tokens.spacing[5],
+            borderRadius: tokens.radius.lg,
+            border: '1px solid var(--color-accent-error)',
+            background: 'var(--color-accent-error-04, rgba(239,68,68,0.04))',
+          }}>
+            <Text size="sm" weight="bold" style={{ color: 'var(--color-accent-error)', marginBottom: tokens.spacing[2] }}>
+              {t('dangerZone') || 'Danger Zone'}
+            </Text>
+            <Text size="xs" color="tertiary" style={{ marginBottom: tokens.spacing[4], lineHeight: 1.5 }}>
+              {t('dissolveGroupDesc') || 'Dissolving this group will freeze all activity. Members can still view historical posts but cannot create new content. This action cannot be undone.'}
+            </Text>
+            <button
+              onClick={handleDissolve}
+              disabled={dissolving}
+              style={{
+                padding: '8px 20px',
+                borderRadius: tokens.radius.md,
+                border: '1px solid var(--color-accent-error)',
+                background: dissolving ? 'var(--color-accent-error-10)' : 'transparent',
+                color: 'var(--color-accent-error)',
+                fontSize: 13,
+                fontWeight: 600,
+                cursor: dissolving ? 'not-allowed' : 'pointer',
+                transition: 'background 0.15s',
+              }}
+              onMouseEnter={e => { if (!dissolving) e.currentTarget.style.background = 'var(--color-accent-error)'; e.currentTarget.style.color = '#fff' }}
+              onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = 'var(--color-accent-error)' }}
+            >
+              {dissolving ? '...' : (t('dissolveGroupBtn') || 'Dissolve Group')}
+            </button>
+          </Box>
+        )}
 
         {showMuteModal && <MuteModal targetUserId={showMuteModal} muteDuration={muteDuration} setMuteDuration={setMuteDuration} muteReason={muteReason} setMuteReason={setMuteReason} onMute={handleMute} onClose={() => setShowMuteModal(null)} inputStyle={inputStyle} t={t} />}
         {showNotifyModal && <NotifyModal notifyTitle={notifyTitle} setNotifyTitle={setNotifyTitle} notifyMessage={notifyMessage} setNotifyMessage={setNotifyMessage} notifySending={notifySending} onNotify={handleNotify} onClose={() => setShowNotifyModal(false)} inputStyle={inputStyle} t={t} />}
