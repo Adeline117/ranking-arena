@@ -2,6 +2,24 @@
 
 > Auto-read by Claude Code at session start. Keep concise — archive completed items weekly.
 
+## Inline Enrichment — Fetch+Enrich in One Pass (2026-04-02)
+
+**Goal**: New traders get complete profile pages immediately (no waiting for batch-enrich cron).
+
+### Changes
+1. `enrichment-runner.ts`: Added `traderKeys` + `timeBudgetMs` params to `runEnrichment`
+2. `connector-db-adapter.ts`: `AdapterResult.savedTraderKeys` + `runConnectorBatch` runs enrichment for 90D→30D→7D with time budget
+3. `batch-fetch-traders/route.ts`: Passes `platformTimeBudgetMs` to `runConnectorBatch`
+4. `inlineEnrich` defaults to `true` — all platforms auto-enrich after fetch
+
+### How It Works
+- After leaderboard fetch+write, remaining platform time budget goes to enrichment
+- Batch-cached platforms (bitunix, xt, coinex, etc.): enrich ALL traders instantly
+- API platforms: enrich within time budget, excess deferred to batch-enrich
+- batch-enrich cron continues as safety net for stragglers
+
+---
+
 ## Sharpe Coverage Overhaul (2026-04-02)
 
 ### 5 Commits Pushed
