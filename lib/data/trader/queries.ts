@@ -346,26 +346,28 @@ export async function getTraderDetail(supabase: SupabaseClient, params: {
     10000
   )
 
-  // Map equity curves
-  type EqRow = { data_date: string; roi_pct: number | null; pnl_usd: number | null }
-  const mapEquity = (rows: EqRow[] | null): EquityPoint[] =>
-    (rows || []).map(r => ({ date: r.data_date, roi: r.roi_pct, pnl: r.pnl_usd }))
+  // Map equity curves — split merged result by period
+  type EqRow = { period: string; data_date: string; roi_pct: number | null; pnl_usd: number | null }
+  const allEqRows = (allEquityCurveResult || []) as EqRow[]
+  const mapEquity = (period: string): EquityPoint[] =>
+    allEqRows.filter(r => r.period === period).map(r => ({ date: r.data_date, roi: r.roi_pct, pnl: r.pnl_usd }))
 
   const equityCurve: Record<TradingPeriod, EquityPoint[]> = {
-    '90D': mapEquity(equityCurve90dResult as EqRow[] | null),
-    '30D': mapEquity(equityCurve30dResult as EqRow[] | null),
-    '7D': mapEquity(equityCurve7dResult as EqRow[] | null),
+    '90D': mapEquity('90D'),
+    '30D': mapEquity('30D'),
+    '7D': mapEquity('7D'),
   }
 
-  // Map asset breakdowns
-  type AbRow = { symbol: string; weight_pct: number }
-  const mapAssets = (rows: AbRow[] | null): AssetWeight[] =>
-    (rows || []).map(r => ({ symbol: r.symbol, weightPct: r.weight_pct }))
+  // Map asset breakdowns — split merged result by period
+  type AbRow = { period: string; symbol: string; weight_pct: number }
+  const allAbRows = (allAssetBreakdownResult || []) as AbRow[]
+  const mapAssets = (period: string): AssetWeight[] =>
+    allAbRows.filter(r => r.period === period).map(r => ({ symbol: r.symbol, weightPct: r.weight_pct }))
 
   const assetBreakdown: Record<TradingPeriod, AssetWeight[]> = {
-    '90D': mapAssets(assetBreakdown90dResult as AbRow[] | null),
-    '30D': mapAssets(assetBreakdown30dResult as AbRow[] | null),
-    '7D': mapAssets(assetBreakdown7dResult as AbRow[] | null),
+    '90D': mapAssets('90D'),
+    '30D': mapAssets('30D'),
+    '7D': mapAssets('7D'),
   }
 
   // Map stats detail (prefer 90D)
