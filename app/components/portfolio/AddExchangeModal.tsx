@@ -105,7 +105,7 @@ export default function AddExchangeModal({ open, onClose, onSubmit }: AddExchang
           </div>
 
           <div style={styles.field}>
-            <label style={styles.label}>{t('apiKey')}</label>
+            <label style={styles.label}>{t('apiKey')} <span style={{ color: 'var(--color-accent-error)' }}>*</span></label>
             <input
               type="password"
               value={apiKey}
@@ -117,7 +117,7 @@ export default function AddExchangeModal({ open, onClose, onSubmit }: AddExchang
           </div>
 
           <div style={styles.field}>
-            <label style={styles.label}>{t('apiSecret')}</label>
+            <label style={styles.label}>{t('apiSecret')} <span style={{ color: 'var(--color-accent-error)' }}>*</span></label>
             <input
               type="password"
               value={apiSecret}
@@ -137,8 +137,9 @@ export default function AddExchangeModal({ open, onClose, onSubmit }: AddExchang
           <button type="submit" disabled={submitting} style={{
             ...styles.submitBtn,
             opacity: submitting ? 0.6 : 1,
+            cursor: submitting ? 'not-allowed' : 'pointer',
           }}>
-            {submitting ? t('connecting') : t('connect')}
+            {submitting ? `⏳ ${t('connecting')}` : t('connect')}
           </button>
         </form>
       </div>
