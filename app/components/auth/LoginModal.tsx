@@ -186,7 +186,7 @@ export default function LoginModal({ open, onClose, message }: LoginModalProps) 
             position: 'absolute', top: 12, right: 12,
             background: 'none', border: 'none',
             color: 'var(--color-text-tertiary)', cursor: 'pointer',
-            padding: 8, display: 'flex', minWidth: 36, minHeight: 36,
+            padding: 8, display: 'flex', minWidth: 44, minHeight: 44,
             alignItems: 'center', justifyContent: 'center',
           }}
         >

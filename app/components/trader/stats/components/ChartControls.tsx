@@ -30,8 +30,8 @@ export function PeriodSelector({
           key={p}
           onClick={() => onChange(p)}
           style={{
-            padding: `6px 14px`,
-            minHeight: 36,
+            padding: `8px 14px`,
+            minHeight: 44,
             borderRadius: tokens.radius.md,
             border: 'none',
             background: value === p ? tokens.colors.bg.primary : 'transparent',

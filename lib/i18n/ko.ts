@@ -175,6 +175,8 @@ const ko = {
     traderNotRegistered: '미등록 트레이더',
     traderNotRegisteredDesc: '이 트레이더는 아직 이 계정을 인증하지 않았습니다',
     unclaimedBadge: '미인증',
+    communityDiscoverTitle: '커뮤니티 참여하기',
+    communityDiscoverDesc: '전략을 논의하고, 인사이트를 공유하며, 다른 트레이더들과 그룹에 참여하세요.',
     claimThisProfile: '이 프로필 인증하기',
     claimYourProfile: '본인이신가요? 프로필을 인증하세요',
     claimYourProfileShort: '본인의 계정인가요? 인증하여 프로필을 커스터마이즈하세요.',
@@ -2804,6 +2806,7 @@ const ko = {
     heroStatTraders: '트레이더',
     heroStatExchanges: '거래소',
     heroStatUpdated: '업데이트 주기',
+    heroExploreRankings: '랭킹 탐색',
     heroProBadge: 'Pro로 업그레이드 — 모든 트레이더와 고급 필터 잠금 해제',
 
     // Rankings search

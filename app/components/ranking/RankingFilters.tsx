@@ -84,11 +84,12 @@ function ExportRankingButton({ traders, source, timeRange }: ExportRankingButton
         aria-label={t('exportRanking')}
         className="export-ranking-btn"
         style={{
-          padding: '6px 12px', borderRadius: tokens.radius.sm,
+          padding: '8px 12px', borderRadius: tokens.radius.sm,
           border: `1px solid ${tokens.colors.border.primary}`,
           background: tokens.colors.bg.secondary,
           color: tokens.colors.text.primary,
           fontSize: 12, fontWeight: 600, cursor: 'pointer',
+          minHeight: 44,
         }}
       >
         <svg width={12} height={12} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className="hide-desktop">
@@ -333,7 +334,7 @@ export function RankingFilters({
           display: 'flex', alignItems: 'center', gap: tokens.spacing[1],
           padding: `${tokens.spacing[1]} ${tokens.spacing[4]}`,
           borderBottom: '1px solid var(--glass-border-light)',
-          flexWrap: 'wrap', background: tokens.glass.bg.light, minHeight: 32,
+          flexWrap: 'wrap', background: tokens.glass.bg.light, minHeight: 44,
         }}>
           <Text size="xs" weight="bold" color="tertiary" style={{ flexShrink: 0 }}>
             {t('traderTypeFilter')}:
@@ -347,7 +348,7 @@ export function RankingFilters({
               key={opt.value}
               onClick={() => onTraderTypeFilterChange(opt.value)}
               style={{
-                padding: '2px 10px', borderRadius: tokens.radius.lg,
+                padding: '6px 12px', borderRadius: tokens.radius.lg, minHeight: 36,
                 border: traderTypeFilter === opt.value
                   ? `1px solid ${tokens.colors.accent.primary}80`
                   : `1px solid ${tokens.colors.border.primary}`,
@@ -370,7 +371,7 @@ export function RankingFilters({
           display: 'flex', alignItems: 'center', gap: tokens.spacing[1],
           padding: `${tokens.spacing[1]} ${tokens.spacing[4]}`,
           borderBottom: '1px solid var(--glass-border-light)',
-          flexWrap: 'wrap', background: tokens.glass.bg.light, minHeight: 32,
+          flexWrap: 'wrap', background: tokens.glass.bg.light, minHeight: 44,
         }}>
           <Text size="xs" weight="bold" color="tertiary" style={{ flexShrink: 0 }}>
             {t('rankingStyleLabel')}:
@@ -383,7 +384,7 @@ export function RankingFilters({
               key={opt.value}
               onClick={() => onStyleFilterChange(opt.value)}
               style={{
-                padding: '2px 10px', borderRadius: tokens.radius.lg,
+                padding: '6px 12px', borderRadius: tokens.radius.lg, minHeight: 36,
                 border: styleFilter === opt.value
                   ? `1px solid ${tokens.colors.accent.primary}80`
                   : `1px solid ${tokens.colors.border.primary}`,

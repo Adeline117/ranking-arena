@@ -87,9 +87,8 @@ export default function LoginPage() {
     if (returnUrl && returnUrl.startsWith('/')) {
       return returnUrl
     }
-    if (userHandle) return `/u/${userHandle}`
-    if (userEmail) return `/u/${userEmail.split('@')[0]}`
-    return '/'
+    // Default to rankings instead of user profile — most users want to browse after login
+    return '/rankings'
   }, [searchParams, isAddAccount])
 
   const emailValidation = validateEmail(email)

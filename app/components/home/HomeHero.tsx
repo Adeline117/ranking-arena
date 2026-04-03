@@ -133,33 +133,64 @@ export default function HomeHero({ traderCount: traderCountProp, exchangeCount: 
         </div>
       </div>
 
-      {/* Pro CTA badge */}
-      <Link
-        href="/pricing"
-        prefetch={false}
-        style={{
-          display: 'inline-flex',
-          alignItems: 'center',
-          gap: 6,
-          marginTop: tokens.spacing[3],
-          padding: '4px 12px',
-          fontSize: tokens.typography.fontSize.xs,
-          color: 'var(--color-pro-gradient-start, #a78bfa)',
-          background: 'var(--color-pro-glow, rgba(167,139,250,0.1))',
-          border: '1px solid var(--color-pro-border, rgba(167,139,250,0.25))',
-          borderRadius: tokens.radius.full,
-          textDecoration: 'none',
-          transition: tokens.transition.fast,
-          position: 'relative',
-          zIndex: 1,
-          fontWeight: 500,
-        }}
-      >
-        <svg width={12} height={12} viewBox="0 0 24 24" fill="var(--color-pro-gradient-start, #a78bfa)" style={{ flexShrink: 0 }}>
-          <path d="M12 2L15.09 8.26L22 9.27L17 14.14L18.18 21.02L12 17.77L5.82 21.02L7 14.14L2 9.27L8.91 8.26L12 2Z" />
-        </svg>
-        <span className="shiny-text">{t('heroProBadge' as Parameters<typeof t>[0])}</span>
-      </Link>
+      {/* CTA row: Explore Rankings + Pro badge */}
+      <div style={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: tokens.spacing[3],
+        marginTop: tokens.spacing[3],
+        position: 'relative',
+        zIndex: 1,
+        flexWrap: 'wrap',
+      }}>
+        <Link
+          href="/rankings"
+          prefetch={false}
+          style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: 6,
+            padding: '8px 20px',
+            fontSize: tokens.typography.fontSize.sm,
+            fontWeight: 700,
+            color: '#fff',
+            background: tokens.gradient.primary,
+            border: 'none',
+            borderRadius: tokens.radius.full,
+            textDecoration: 'none',
+            transition: tokens.transition.fast,
+            minHeight: 44,
+          }}
+        >
+          {t('heroExploreRankings' as Parameters<typeof t>[0])}
+          <svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
+            <path d="M5 12h14M12 5l7 7-7 7" />
+          </svg>
+        </Link>
+        <Link
+          href="/pricing"
+          prefetch={false}
+          style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: 6,
+            padding: '4px 12px',
+            fontSize: tokens.typography.fontSize.xs,
+            color: 'var(--color-pro-gradient-start, #a78bfa)',
+            background: 'var(--color-pro-glow, rgba(167,139,250,0.1))',
+            border: '1px solid var(--color-pro-border, rgba(167,139,250,0.25))',
+            borderRadius: tokens.radius.full,
+            textDecoration: 'none',
+            transition: tokens.transition.fast,
+            fontWeight: 500,
+          }}
+        >
+          <svg width={12} height={12} viewBox="0 0 24 24" fill="var(--color-pro-gradient-start, #a78bfa)" style={{ flexShrink: 0 }}>
+            <path d="M12 2L15.09 8.26L22 9.27L17 14.14L18.18 21.02L12 17.77L5.82 21.02L7 14.14L2 9.27L8.91 8.26L12 2Z" />
+          </svg>
+          <span className="shiny-text">{t('heroProBadge' as Parameters<typeof t>[0])}</span>
+        </Link>
+      </div>
     </section>
   )
 }

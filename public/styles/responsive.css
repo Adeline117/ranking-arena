@@ -166,8 +166,8 @@
 }
 
 .touch-target-sm {
-  min-height: 36px;
-  min-width: 36px;
+  min-height: 44px;
+  min-width: 44px;
 }
 
 /* ============================================
@@ -795,10 +795,10 @@
     gap: 6px !important;
   }
 
-  /* Make toolbar buttons 36px touch targets */
+  /* Make toolbar buttons meet 44px Apple HIG touch target */
   .touch-target-sm {
-    min-width: 36px !important;
-    min-height: 36px !important;
+    min-width: 44px !important;
+    min-height: 44px !important;
   }
 }
 

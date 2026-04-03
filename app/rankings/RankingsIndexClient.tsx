@@ -60,9 +60,9 @@ export default function RankingsIndexClient({ initialPlatforms = [] }: { initial
   }, [platforms])
 
   const filtered = useMemo(() => {
-    if (tab === 'all') return allPlatforms
-    if (tab === 'cex') return allPlatforms.filter(p => isCex(p.platform))
-    return allPlatforms.filter(p => !isCex(p.platform))
+    const list = tab === 'all' ? allPlatforms : tab === 'cex' ? allPlatforms.filter(p => isCex(p.platform)) : allPlatforms.filter(p => !isCex(p.platform))
+    // Sort by trader count descending so most popular exchanges appear first
+    return [...list].sort((a, b) => b.traderCount - a.traderCount)
   }, [allPlatforms, tab])
 
   const totalTraders = useMemo(() => allPlatforms.reduce((s, p) => s + p.traderCount, 0), [allPlatforms])
