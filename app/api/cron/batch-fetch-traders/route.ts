@@ -140,10 +140,13 @@ export async function GET(request: NextRequest) {
     } catch { /* best effort */ }
   }, 280_000) // 280s safety margin for 300s maxDuration
 
-  // Per-platform timeout: dynamic based on group size to maximize time per platform
-  // Formula: (maxDuration - safetyMargin) / platformCount, clamped to 60-140s
-  const dynamicTimeout = Math.min(140000, Math.max(60000, Math.floor((300000 - 20000) / platforms.length)))
-  const PLATFORM_TIMEOUT_MS = parseInt(process.env.PLATFORM_FETCH_TIMEOUT_MS || String(dynamicTimeout), 10)
+  // Per-platform timeout: FIXED to prevent cascade timeouts
+  // 2026-04-03: Dynamic timeout caused issues - bybit 140s still too short, others wasted time
+  // FIX: Use platform-specific timeouts based on actual performance data:
+  //   - VPS scrapers (bybit): 180s (Playwright slow ~30s/page × 6 windows)
+  //   - Fast CEX APIs: 60s (direct API calls)
+  //   - Medium CEX: 90s (some need more time)
+  const PLATFORM_TIMEOUT_MS = 90000 // Default: 90s for most platforms
 
   // Initialize all connectors (once per cold start)
   if (!connectorsInitialized) {
@@ -155,9 +158,30 @@ export async function GET(request: NextRequest) {
     }
   }
 
+  // Platform-specific timeouts based on actual performance (2026-04-03)
+  const PLATFORM_TIMEOUTS: Record<string, number> = {
+    // VPS scrapers: Playwright slow, need 180s
+    bybit: 180000,
+    bybit_spot: 180000,
+    // Fast APIs: can finish in 60s
+    binance_futures: 60000,
+    binance_spot: 60000,
+    okx_futures: 60000,
+    okx_spot: 60000,
+    bitunix: 60000,
+    coinex: 60000,
+    // Medium APIs: need 90-120s
+    htx_futures: 120000,
+    gateio: 120000,
+    okx_web3: 120000,
+    bitget_futures: 90000,
+    // Others: default 90s
+  }
+
   // Run a single platform via Connector
   async function runPlatform(platform: string): Promise<BatchResult> {
     const start = Date.now()
+    const timeoutMs = PLATFORM_TIMEOUTS[platform] || PLATFORM_TIMEOUT_MS
 
     // 🚨 Blacklist check - prevent disabled platforms
     try {
@@ -209,9 +233,9 @@ export async function GET(request: NextRequest) {
 
     try {
       const result = await Promise.race([
-        runConnectorBatch(connector, { supabase, windows: ['7d', '30d', '90d'], sourceOverride: platform, platformTimeBudgetMs: PLATFORM_TIMEOUT_MS, limit: PLATFORM_LIMITS[platform] }),
+        runConnectorBatch(connector, { supabase, windows: ['7d', '30d', '90d'], sourceOverride: platform, platformTimeBudgetMs: timeoutMs, limit: PLATFORM_LIMITS[platform] }),
         new Promise<never>((_, reject) =>
-          setTimeout(() => reject(new Error(`Platform ${platform} timed out after ${PLATFORM_TIMEOUT_MS / 1000}s`)), PLATFORM_TIMEOUT_MS)
+          setTimeout(() => reject(new Error(`Platform ${platform} timed out after ${timeoutMs / 1000}s`)), timeoutMs)
         ),
       ])
 

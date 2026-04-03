@@ -38,12 +38,14 @@ log "========================================"
 log "Local cron starting (batch groups)"
 
 # High priority (every 3h)
-fetch_group "a"   # binance_futures, binance_spot, okx_futures, okx_spot
-fetch_group "b"   # bybit, bybit_spot, bitget_futures
+fetch_group "a1"  # binance_futures, binance_spot
+fetch_group "a2"  # okx_futures, okx_spot
+fetch_group "b1"  # bybit, bybit_spot
+fetch_group "b2"  # bitget_futures
 fetch_group "c"   # hyperliquid, gmx, bitunix
 
 # Medium priority (every 6h — only run at 00/06/12/18)
-HOUR=$(date +%H)
+HOUR=$((10#$(date +%H)))  # Force base-10 to avoid octal interpretation (08/09 errors)
 if [ $((HOUR % 6)) -eq 0 ]; then
   fetch_group "d1"  # gains, htx_futures, bitfinex, coinex
   fetch_group "d2"  # binance_web3, okx_web3, gateio, btcc

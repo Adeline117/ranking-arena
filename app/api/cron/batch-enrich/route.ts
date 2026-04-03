@@ -139,16 +139,23 @@ export async function GET(request: NextRequest) {
     } catch { /* best effort */ }
   }, SAFETY_TIMEOUT_MS)
 
-  // Per-platform enrichment timeout
-  // EMERGENCY FIX Round 5 (2026-03-14): binance_spot repeatedly hanging 45-76min
-  // ROOT CAUSE: fetchBinanceEquityCurve + fetchBinanceStatsDetail both call API with 15s timeout
-  //             If both hang repeatedly (retry logic), 15s×3 retries×2 calls = 90s+ per trader
-  // FIX: Aggressive timeout reduction for ALL platforms to prevent cascade hangs
-  //      CEX: 30s (single) / 20s (multi) - enough for 1-2 API calls
-  //      Onchain: 60s (single) / 40s (multi) - GraphQL/RPC needs slightly more time
+  // Per-platform enrichment timeout (2026-04-03 optimization)
+  // Previous: 90s CEX / 120s onchain caused frequent timeouts
+  // New strategy: Platform-specific timeouts based on actual data:
+  //   - Batch-cached (bitunix, xt, etc.): 30s (no per-trader API calls)
+  //   - Fast CEX APIs: 60s
+  //   - Slow CEX/onchain: 120s
+  //   - VPS scrapers: 180s (Playwright)
   const ONCHAIN_PLATFORMS = new Set(['gmx', 'jupiter_perps', 'hyperliquid', 'drift', 'aevo', 'gains'])
-  const ENRICH_TIMEOUT_MS = 90_000   // 90s per platform — must fit many platforms in 300s total
-  const ONCHAIN_TIMEOUT_MS = 120_000  // 120s for onchain — GraphQL/RPC slightly slower
+  const BATCH_CACHED = new Set(['bitunix', 'xt', 'blofin', 'bitfinex', 'toobit', 'coinex'])
+  const VPS_SCRAPERS = new Set(['bybit'])
+  
+  function getPlatformTimeout(platform: string): number {
+    if (VPS_SCRAPERS.has(platform)) return 180_000
+    if (BATCH_CACHED.has(platform)) return 30_000
+    if (ONCHAIN_PLATFORMS.has(platform)) return 120_000
+    return 60_000 // Default for CEX APIs
+  }
 
   const functionStart = Date.now()
   // Budget per period: divide 270s (leaving 30s buffer from 300s total) by number of periods
@@ -201,8 +208,7 @@ export async function GET(request: NextRequest) {
 
           try {
             // Wrap enrichment in a timeout to prevent stuck jobs
-            // Use longer timeout for onchain platforms (360s vs 240s)
-            const timeoutMs = ONCHAIN_PLATFORMS.has(platform) ? ONCHAIN_TIMEOUT_MS : ENRICH_TIMEOUT_MS
+            const timeoutMs = getPlatformTimeout(platform)
             const result: EnrichmentResult = await Promise.race([
               runEnrichment({ platform, period, limit, offset }),
               new Promise<never>((_, reject) =>
