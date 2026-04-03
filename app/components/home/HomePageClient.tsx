@@ -101,7 +101,7 @@ export default function HomePageClient({ initialTraders, initialLastUpdated }: H
           activeTimeRange={activeTimeRange}
           onTimeRangeChange={handleTimeRangeChange}
           lastUpdated={lastUpdated}
-          error={error || (deferredFetchFailed ? t('dataLoadIncomplete') : null)}
+          error={error}
           onRetry={deferredFetchFailed ? retryDeferredFetch : refresh}
           onRefresh={refresh}
           availableSources={availableSources}
