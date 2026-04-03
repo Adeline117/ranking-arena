@@ -195,7 +195,9 @@ export const TraderCard = memo(function TraderCard({
         {/* Sparkline */}
         <Box style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[2] }}>
           {/* roi is guaranteed non-null by data layer (leaderboard_ranks.roi coerced via ?? 0) */}
-          <Sparkline roi={trader.roi} width={120} height={24} />
+          <Box style={{ flexShrink: 1, minWidth: 0, overflow: 'hidden' }}>
+            <Sparkline roi={trader.roi} width={120} height={24} />
+          </Box>
           <Text size="lg" weight="black" style={{ color: trader.roi >= 0 ? tokens.colors.accent.success : TRADER_ACCENT_ERROR, marginLeft: 'auto' }}>
             {formatROI(trader.roi)}
           </Text>
