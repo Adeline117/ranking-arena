@@ -32,7 +32,21 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const { returnUrl } = await request.json()
+    const { returnUrl: rawReturnUrl } = await request.json()
+
+    // Validate returnUrl to prevent open redirect
+    let returnUrl: string | undefined
+    if (rawReturnUrl && typeof rawReturnUrl === 'string') {
+      try {
+        const appOrigin = new URL(env.NEXT_PUBLIC_APP_URL || 'https://www.arenafi.org').origin
+        const parsed = new URL(rawReturnUrl, appOrigin)
+        if (parsed.origin === appOrigin) {
+          returnUrl = parsed.href
+        }
+      } catch {
+        // Invalid URL — use default
+      }
+    }
 
     // 获取当前用户 - 优先从 Authorization header，回退到 cookie
     const authHeader = request.headers.get('authorization')
