@@ -55,10 +55,13 @@ export async function PUT(request: NextRequest) {
       updates.bio = bio || null
     }
 
-    // URL validation helper
+    // URL validation helper — only allow https URLs, block internal hosts
     function isValidUrl(url: string): boolean {
       try {
-        new URL(url)
+        const parsed = new URL(url)
+        if (parsed.protocol !== 'https:') return false
+        const host = parsed.hostname.toLowerCase()
+        if (host === 'localhost' || host === '127.0.0.1' || host === '0.0.0.0' || host.endsWith('.local')) return false
         return true
       } catch {
         return false
