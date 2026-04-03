@@ -213,6 +213,10 @@
     {
       "path": "/api/cron/fetch-traders/blofin",
       "schedule": "55 1,7,13,19 * * *"
+    },
+    {
+      "path": "/api/cron/health-check-all",
+      "schedule": "20,50 * * * *"
     }
   ],
   "headers": [

@@ -18,6 +18,8 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
+  const plog = await PipelineLogger.start('weekly-report')
+
   try {
     const supabase = getSupabaseAdmin()
     const weekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString()
@@ -111,9 +113,11 @@ export async function GET(request: NextRequest) {
     })
 
     logger.info('[每周报告] 已发送')
+    await plog.success(totalRuns, { totalErrors, avgSuccessRate, newTraders, newUsers })
     return NextResponse.json({ ok: true, totalRuns, totalErrors, avgSuccessRate, newTraders, newUsers })
   } catch (err) {
     logger.error('[每周报告] 错误:', err)
+    await plog.error(err instanceof Error ? err : new Error(String(err)))
     return NextResponse.json({ error: 'Internal error' }, { status: 500 })
   }
 }
