@@ -15,6 +15,7 @@ import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import { useToast } from '@/app/components/ui/Toast'
 import ExchangeLogo from '../ui/ExchangeLogo'
 import TraderFollowButton from '../ui/TraderFollowButton'
+import WatchlistToggleButton from './WatchlistToggleButton'
 import UserFollowButton from '../ui/UserFollowButton'
 import ShareButton from '../common/ShareButton'
 import ShareRankCardButtons from './ShareRankCardButtons'
@@ -588,6 +589,15 @@ export default function TraderHeader({
               }}
             />
           )
+        )}
+
+        {/* Watchlist star */}
+        {source && (
+          <WatchlistToggleButton
+            source={source}
+            sourceTraderID={traderId}
+            handle={handle}
+          />
         )}
 
         {/* Compare toggle (P0-4) */}
