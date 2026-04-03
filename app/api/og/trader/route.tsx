@@ -132,17 +132,17 @@ export async function GET(request: NextRequest) {
       return new Response('Missing handle parameter', { status: 400 })
     }
 
-    const overrideRoi = searchParams.get('roi')
-    const overrideScore = searchParams.get('score')
-    const overrideRank = searchParams.get('rank')
+    // Only `source` is allowed as a hint for multi-platform traders.
+    // ROI/score/rank overrides removed — prevents attackers from crafting
+    // misleading share links with fake stats for any trader.
     const overrideSource = searchParams.get('source')
 
     const trader = await fetchTrader(handle)
 
     const displayName = trader?.display_name || trader?.handle || handle
-    const roi = overrideRoi ? parseFloat(overrideRoi) : (trader?.roi ?? null)
-    const score = overrideScore ? parseFloat(overrideScore) : (trader?.arena_score ?? null)
-    const rank = overrideRank ? parseInt(overrideRank) : (trader?.rank ?? null)
+    const roi = trader?.roi ?? null
+    const score = trader?.arena_score ?? null
+    const rank = trader?.rank ?? null
     const winRate = trader?.win_rate ?? null
     const mdd = trader?.max_drawdown ?? null
     const platform = overrideSource || trader?.platform || ''
