@@ -31,22 +31,13 @@ interface HomePageProps {
 }
 
 export default function HomePage({ initialTraders, initialLastUpdated, heroStats }: HomePageProps) {
-  // SSR ranking table is hidden by CSS :has(#homepage-interactive) — instant, zero CLS.
-  // SSR hero stays visible as LCP element. Hide it via JS after Phase 2 hero paints.
-  // position:absolute removes it from flow without CLS (Phase 2 hero is already in place).
+  // SSR ranking table: hidden by CSS :has(#homepage-interactive) — instant, zero CLS.
+  // SSR hero: NEVER hidden by JS. It IS the LCP element (~1.3s on slow 4G).
+  //   Phase 2 hero renders on top via z-index (same visual content).
+  //   SSR hero stays underneath indefinitely — invisible to user but preserves LCP.
+  // Cleanup: remove SSR table DOM node after idle (hero stays for LCP).
   useEffect(() => {
-    const heroShell = document.getElementById('ssr-hero-shell')
-    if (heroShell) {
-      heroShell.style.position = 'absolute'
-      heroShell.style.opacity = '0'
-      heroShell.style.pointerEvents = 'none'
-      heroShell.style.zIndex = '-1'
-    }
-    // Cleanup both shells after everything settled
-    const cleanup = () => {
-      document.getElementById('ssr-hero-shell')?.remove()
-      document.getElementById('ssr-ranking-table')?.remove()
-    }
+    const cleanup = () => document.getElementById('ssr-ranking-table')?.remove()
     if ('requestIdleCallback' in window) {
       (window as Window).requestIdleCallback(cleanup)
     } else {

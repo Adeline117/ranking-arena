@@ -46,7 +46,7 @@ export async function GET(request: NextRequest) {
     if (error) {
       log.error('Query error', { error: error.message })
       return NextResponse.json(
-        { error: 'Failed to fetch rank history', detail: error.message },
+        { error: 'Failed to fetch rank history' },
         { status: 500 }
       )
     }
