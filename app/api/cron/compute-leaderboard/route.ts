@@ -856,14 +856,32 @@ async function computeSeason(
               .limit(10000)
             if (!dsRows?.length) continue
 
-            // Group by trader
-            const byTrader = new Map<string, number[]>()
+            // Group by trader — collect daily_return_pct AND roi for fallback computation
+            const byTraderRaw = new Map<string, Array<{ daily_return_pct: number | null; roi: number | null }>>()
             for (const row of dsRows) {
               const tid = row.trader_key.startsWith('0x') ? row.trader_key.toLowerCase() : row.trader_key
-              if (!byTrader.has(tid)) byTrader.set(tid, [])
-              // Prefer daily_return_pct; fallback to ROI diff
-              const ret = row.daily_return_pct != null ? Number(row.daily_return_pct) : null
-              if (ret != null && !isNaN(ret)) byTrader.get(tid)!.push(ret)
+              if (!byTraderRaw.has(tid)) byTraderRaw.set(tid, [])
+              byTraderRaw.get(tid)!.push({
+                daily_return_pct: row.daily_return_pct != null ? Number(row.daily_return_pct) : null,
+                roi: row.roi != null ? Number(row.roi) : null,
+              })
+            }
+
+            // Compute daily returns: prefer daily_return_pct, fallback to ROI diff between consecutive days
+            const byTrader = new Map<string, number[]>()
+            for (const [tid, rows] of byTraderRaw) {
+              const returns: number[] = []
+              for (let r = 0; r < rows.length; r++) {
+                const ret = rows[r].daily_return_pct
+                if (ret != null && !isNaN(ret)) {
+                  returns.push(ret)
+                } else if (r > 0 && rows[r].roi != null && rows[r - 1].roi != null) {
+                  // Compute daily return from consecutive ROI values
+                  const diff = rows[r].roi! - rows[r - 1].roi!
+                  if (Math.abs(diff) < 1000) returns.push(diff)
+                }
+              }
+              byTrader.set(tid, returns)
             }
 
             for (const [tid, dailyReturns] of byTrader) {
