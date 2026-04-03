@@ -264,11 +264,11 @@ export function getResourceHints(): Array<{ rel: string; href: string; crossOrig
     { rel: 'preconnect', href: supabaseUrl, crossOrigin: 'anonymous' },
     // cdn.arenafi.org preconnect REMOVED — only used via /api/cdn-proxy for PDFs,
     // never fetched from browser on initial page load. Wasted connection.
-    // Removed non-critical hints to reduce connection overhead on slow networks:
-    // - Exchange avatar CDNs — loaded lazily
-    // - CoinGecko — fetched server-side
-    // - Sentry — deferred, non-critical for page load
-    // - Upstash — server-side only
+    // dns-prefetch only (no TCP/TLS) for top exchange avatar CDNs — cheap, saves ~100ms on first avatar
+    { rel: 'dns-prefetch', href: 'https://bin.bnbstatic.com' },
+    { rel: 'dns-prefetch', href: 'https://www.okx.com' },
+    { rel: 'dns-prefetch', href: 'https://public.bnbstatic.com' },
+    // CoinGecko, Sentry, Upstash — server-side only, no client hints needed
   ]
 
   return hints
