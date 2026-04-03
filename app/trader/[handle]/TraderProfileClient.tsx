@@ -339,13 +339,40 @@ export default function TraderProfileClient({ data, serverTraderData, claimedUse
     return (
       <Box style={{ minHeight: '100vh', background: tokens.colors.bg.primary, color: tokens.colors.text.primary }}>
         <TopNav />
-        <Box style={{ maxWidth: 1200, margin: '0 auto', padding: tokens.spacing[6], textAlign: 'center' }}>
-          <Text size="lg" weight="bold" style={{ marginBottom: tokens.spacing[2] }}>
+        <Box style={{ maxWidth: 1200, margin: '0 auto', padding: tokens.spacing[6], textAlign: 'center', paddingTop: tokens.spacing[8] }}>
+          <div style={{ fontSize: 48, marginBottom: tokens.spacing[4] }}>⚠️</div>
+          <Text size="xl" weight="bold" style={{ marginBottom: tokens.spacing[2] }}>
             {t('loadFailedRetryMsg')}
           </Text>
-          <Link href="/rankings" style={{ color: tokens.colors.accent.brand, textDecoration: 'none', fontSize: tokens.typography.fontSize.sm }}>
-            {t('leaderboardBreadcrumb')}
-          </Link>
+          <Text size="sm" color="tertiary" style={{ marginBottom: tokens.spacing[5] }}>
+            {traderError?.message || 'Network error'}
+          </Text>
+          <Box style={{ display: 'flex', gap: tokens.spacing[3], justifyContent: 'center' }}>
+            <button
+              onClick={() => window.location.reload()}
+              style={{
+                padding: `${tokens.spacing[3]} ${tokens.spacing[5]}`,
+                borderRadius: tokens.radius.lg,
+                border: 'none',
+                background: tokens.colors.accent.brand,
+                color: tokens.colors.white,
+                fontWeight: 700,
+                cursor: 'pointer',
+              }}
+            >
+              {t('retry')}
+            </button>
+            <Link href="/rankings" style={{
+              padding: `${tokens.spacing[3]} ${tokens.spacing[5]}`,
+              borderRadius: tokens.radius.lg,
+              border: `1px solid ${tokens.colors.border.primary}`,
+              color: tokens.colors.text.secondary,
+              textDecoration: 'none',
+              fontWeight: 600,
+            }}>
+              {t('leaderboardBreadcrumb')}
+            </Link>
+          </Box>
         </Box>
       </Box>
     )
