@@ -17,7 +17,7 @@ const PositionHistoryCard = memo(function PositionHistoryCard({
   position: ExtendedPositionHistoryItem
   index: number
 }) {
-  const { t } = useLanguage()
+  const { t, language } = useLanguage()
   const [isHovered, setIsHovered] = useState(false)
   const isLong = position.direction === 'long'
   const isProfit = (position.pnlUsd ?? position.pnlPct ?? 0) >= 0
@@ -90,7 +90,7 @@ const PositionHistoryCard = memo(function PositionHistoryCard({
         gap: tokens.spacing[4],
         marginBottom: tokens.spacing[3],
       }}>
-        <PortfolioDataCell label={t('openTime')} value={position.openTime ? formatDateTime(position.openTime) : NULL_DISPLAY} />
+        <PortfolioDataCell label={t('openTime')} value={position.openTime ? formatDateTime(position.openTime, language) : NULL_DISPLAY} />
         <PortfolioDataCell label={t('openPrice')} value={`${formatPriceWithComma(position.entryPrice)}`} />
         <PortfolioDataCell
           label={t('closePnl')}
@@ -109,7 +109,7 @@ const PositionHistoryCard = memo(function PositionHistoryCard({
       }}>
         <PortfolioDataCell label={t('closePrice')} value={`${formatPriceWithComma(position.exitPrice)}`} secondary />
         <PortfolioDataCell label={t('maxPosition')} value={formatSizeWithUnit(position.maxPositionSize, coinName)} secondary />
-        <PortfolioDataCell label={t('closeTime')} value={position.closeTime ? formatDateTime(position.closeTime) : NULL_DISPLAY} secondary />
+        <PortfolioDataCell label={t('closeTime')} value={position.closeTime ? formatDateTime(position.closeTime, language) : NULL_DISPLAY} secondary />
       </Box>
     </Box>
   )
