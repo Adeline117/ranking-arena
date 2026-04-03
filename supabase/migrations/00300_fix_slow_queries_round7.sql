@@ -28,3 +28,42 @@ BEGIN
   ON CONFLICT (season_id, source) DO UPDATE SET total_count = EXCLUDED.total_count, updated_at = NOW();
 END;
 $$;
+
+-- Fix 3: fill_null_pnl_from_siblings 5707ms → <1ms
+-- Replace CTE + cross-partition JOIN with correlated subquery + EXISTS guard
+-- Correlated subquery enables partition pruning per-row
+CREATE OR REPLACE FUNCTION fill_null_pnl_from_siblings()
+RETURNS INTEGER
+LANGUAGE plpgsql
+SET statement_timeout = '30s'
+AS $$
+DECLARE
+  updated_count INTEGER := 0;
+BEGIN
+  UPDATE trader_snapshots_v2 t
+  SET pnl_usd = (
+    SELECT sv2.pnl_usd
+    FROM trader_snapshots_v2 sv2
+    WHERE sv2.platform = t.platform
+      AND sv2.trader_key = t.trader_key
+      AND sv2."window" != t."window"
+      AND sv2.pnl_usd IS NOT NULL
+      AND sv2.updated_at > NOW() - INTERVAL '7 days'
+    ORDER BY sv2.updated_at DESC
+    LIMIT 1
+  )
+  WHERE t.pnl_usd IS NULL
+    AND t.updated_at > NOW() - INTERVAL '72 hours'
+    AND t.roi_pct IS NOT NULL
+    AND EXISTS (
+      SELECT 1 FROM trader_snapshots_v2 sv2
+      WHERE sv2.platform = t.platform
+        AND sv2.trader_key = t.trader_key
+        AND sv2."window" != t."window"
+        AND sv2.pnl_usd IS NOT NULL
+        AND sv2.updated_at > NOW() - INTERVAL '7 days'
+    );
+  GET DIAGNOSTICS updated_count = ROW_COUNT;
+  RETURN updated_count;
+END;
+$$;
