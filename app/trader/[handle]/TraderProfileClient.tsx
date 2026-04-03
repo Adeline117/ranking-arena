@@ -288,7 +288,7 @@ export default function TraderProfileClient({ data, serverTraderData, claimedUse
   const { data: claimData } = useSWR<{ success: boolean; data: { is_verified: boolean; owner_id: string | null } }>(
     claimUrl,
     fetcher,
-    { revalidateOnFocus: false, dedupingInterval: 300_000 }
+    { revalidateOnFocus: true, dedupingInterval: 30_000 }
   )
 
   // Derive verified/owner state from SWR claim data or bundled claim data
