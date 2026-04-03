@@ -185,21 +185,14 @@ describe('GET /api/cron/precompute-composite', () => {
     })
 
     // The route calls fetchWindow 3 times (7D, 30D, 90D) in parallel
-    let snapshotCallCount = 0
-    const snapshotQueries = [
-      snapshotQueryFor(rows7d),
-      snapshotQueryFor(rows30d),
-      snapshotQueryFor(rows90d),
-    ]
+    // Use a single proxy that always returns combined rows (test verifies composite logic, not per-window splits)
+    const allRows = [...rows7d, ...rows30d, ...rows90d]
+    const snapshotQuery = snapshotQueryFor(allRows)
 
     mockSupabaseFrom.mockImplementation((table: string) => {
-      if (table === 'trader_snapshots_v2') {
-        const idx = snapshotCallCount
-        snapshotCallCount++
-        return snapshotQueries[idx] || snapshotQueries[0]
-      }
+      if (table === 'trader_snapshots_v2') return snapshotQuery
       if (table === 'trader_sources') return traderSourcesQuery
-      return { select: jest.fn().mockResolvedValue({ data: [], error: null }) }
+      return chainProxy({ data: [], error: null })
     })
 
     const res = await GET(createCronRequest(CRON_SECRET))
