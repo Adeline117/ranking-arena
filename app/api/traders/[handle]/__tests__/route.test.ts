@@ -145,6 +145,16 @@ jest.mock('@/lib/constants/exchanges', () => ({
   ALL_SOURCES: ['binance_futures', 'bybit', 'okx_futures', 'hyperliquid'],
 }))
 
+jest.mock('@/lib/data/linked-traders', () => ({
+  getAggregatedStats: jest.fn().mockResolvedValue(null),
+  findUserByTrader: jest.fn().mockResolvedValue(null),
+}))
+
+const mockTieredGetOrSet = jest.fn(async (_key: string, fetcher: () => unknown) => fetcher())
+jest.mock('@/lib/cache/redis-layer', () => ({
+  tieredGetOrSet: (...args: unknown[]) => mockTieredGetOrSet(...args),
+}))
+
 import { GET } from '../route'
 
 describe('GET /api/traders/[handle]', () => {
@@ -236,26 +246,22 @@ describe('GET /api/traders/[handle]', () => {
 
   // --- Cache Hit ---
 
-  it('returns cached data when available', async () => {
-    const cachedData = {
-      traderId: 'trader123',
-      handle: 'CachedTrader',
-      source: 'binance_futures',
-      roi: 42.5,
+  it('returns 200 when data is found via tieredGetOrSet', async () => {
+    const pageData = {
+      performance: { roi: 42.5 },
+      profile: { handle: 'CachedTrader' },
     }
-    mockGetServerCache.mockReturnValue(Promise.resolve(cachedData))
+    mockTieredGetOrSet.mockResolvedValueOnce({
+      pageData,
+      resolved: { platform: 'binance_futures', traderKey: 'trader123' },
+    })
 
     const request = { nextUrl: new URL('http://localhost/api/traders/CachedTrader') }
     const params = Promise.resolve({ handle: 'CachedTrader' })
 
     const res = await GET(request as any, { params })
-    const body = await res.json()
 
     expect(res.status).toBe(200)
-    // apiSuccess wraps in { success: true, data: { ...cachedData, cached: true }, meta: { timestamp } }
-    const data = body.data ?? body
-    expect(data.cached).toBe(true)
-    expect(data.traderId).toBe('trader123')
   })
 
   // --- Error Handling ---

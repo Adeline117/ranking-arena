@@ -1,12 +1,13 @@
 /**
  * OKX Futures Connector Tests
  *
- * Tests discoverLeaderboard, fetchTraderProfile, fetchTraderSnapshot,
- * normalize, and error handling with mocked HTTP responses.
+ * Tests discoverLeaderboard, normalize, and platform metadata.
+ * Note: fetchTraderProfile/fetchTraderSnapshot/fetchTimeseries return null/empty
+ * because OKX priapi endpoints were removed (404 since March 2026).
+ * All trader data is extracted from leaderboard API in normalize().
  */
 
 import { OkxFuturesConnector } from '../okx-futures'
-import { ConnectorError } from '../../base'
 
 // ============================================
 // Mock fetch globally
@@ -164,19 +165,6 @@ describe('OkxFuturesConnector', () => {
       expect(result.traders).toHaveLength(0)
     })
 
-    test('fetchTraderProfile throws ConnectorError on rate limit (429)', async () => {
-      const connector = createConnector()
-      // fetchTraderProfile uses request() directly and does NOT catch errors
-      mockFetch.mockResolvedValueOnce({
-        ok: false,
-        status: 429,
-        headers: { get: (key: string) => key === 'content-type' ? 'application/json' : key === 'Retry-After' ? '60' : null },
-        json: async () => ({}),
-      })
-
-      await expect(connector.fetchTraderProfile('trader-abc-123')).rejects.toThrow(ConnectorError)
-    })
-
     test('total_available equals number of fetched traders', async () => {
       const connector = createConnector()
       mockFetchResponse(validResponse)
@@ -189,236 +177,36 @@ describe('OkxFuturesConnector', () => {
   })
 
   // ============================================
-  // Tests: fetchTraderProfile
+  // Tests: fetchTraderProfile / Snapshot / Timeseries
+  // (priapi removed — all return null/empty)
   // ============================================
 
   describe('fetchTraderProfile', () => {
-    const validProfileResponse = {
-      code: '0',
-      data: {
-        nickName: 'OkxWhale',
-        portrait: 'https://static.okx.com/avatar1.jpg',
-        desc: 'Professional derivatives trader with 5 years of experience',
-        followerNum: '3500',
-        copyTraderNum: '180',
-        aum: '500000',
-      },
-      msg: '',
-    }
-
-    test('returns profile from valid response', async () => {
+    test('returns null (priapi endpoints removed)', async () => {
       const connector = createConnector()
-      mockFetchResponse(validProfileResponse)
-
       const result = await connector.fetchTraderProfile('trader-abc-123')
-
-      expect(result).not.toBeNull()
-      expect(result!.profile.display_name).toBe('OkxWhale')
-      expect(result!.profile.avatar_url).toBe('https://static.okx.com/avatar1.jpg')
-      expect(result!.profile.bio).toBe('Professional derivatives trader with 5 years of experience')
-      expect(result!.profile.followers).toBe(3500)
-      expect(result!.profile.copiers).toBe(180)
-      expect(result!.profile.aum).toBe(500000)
-      expect(result!.profile.trader_key).toBe('trader-abc-123')
-      expect(result!.profile.platform).toBe('okx')
-      expect(result!.profile.market_type).toBe('futures')
-      expect(result!.profile.profile_url).toBe('https://www.okx.com/copy-trading/account/trader-abc-123')
-      expect(result!.profile.tags).toEqual([])
-      expect(result!.profile.provenance.source_platform).toBe('okx')
-      expect(result!.profile.provenance.acquisition_method).toBe('api')
-      expect(result!.fetched_at).toBeDefined()
-    })
-
-    test('returns null when profile data is empty', async () => {
-      const connector = createConnector()
-      mockFetchResponse({ code: '0', data: null, msg: '' })
-
-      const result = await connector.fetchTraderProfile('INVALID')
-
       expect(result).toBeNull()
-    })
-
-    test('handles null fields gracefully', async () => {
-      const connector = createConnector()
-      mockFetchResponse({
-        code: '0',
-        data: {
-          nickName: null,
-          portrait: null,
-          desc: null,
-          followerNum: null,
-          copyTraderNum: null,
-          aum: null,
-        },
-        msg: '',
-      })
-
-      const result = await connector.fetchTraderProfile('trader-xyz')
-
-      expect(result).not.toBeNull()
-      expect(result!.profile.display_name).toBeNull()
-      expect(result!.profile.avatar_url).toBeNull()
-      expect(result!.profile.bio).toBeNull()
-      expect(result!.profile.followers).toBeNull()
-      expect(result!.profile.copiers).toBeNull()
-      expect(result!.profile.aum).toBeNull()
-    })
-
-    test('throws on network error', async () => {
-      const connector = createConnector()
-      mockFetchNetworkError()
-
-      await expect(connector.fetchTraderProfile('trader-abc-123')).rejects.toThrow()
+      // Should NOT make any HTTP requests
+      expect(mockFetch).not.toHaveBeenCalled()
     })
   })
 
-  // ============================================
-  // Tests: fetchTraderSnapshot
-  // ============================================
-
   describe('fetchTraderSnapshot', () => {
-    const validSnapshotResponse = {
-      code: '0',
-      data: {
-        profitRatio: '0.85',
-        profit: '120000',
-        winRatio: '0.72',
-        maxDrawdown: '0.12',
-        tradeCount: '350',
-        followerNum: '3500',
-        copyTraderNum: '180',
-        aum: '500000',
-      },
-      msg: '',
-    }
-
-    test('returns snapshot with correctly mapped metrics', async () => {
+    test('returns null (priapi endpoints removed)', async () => {
       const connector = createConnector()
-      mockFetchResponse(validSnapshotResponse)
-
       const result = await connector.fetchTraderSnapshot('trader-abc-123', '7d')
-
-      expect(result).not.toBeNull()
-      // OKX returns decimals: 0.85 -> 85% (decimalToPercent: abs(0.85) < 10, so 0.85 * 100 = 85)
-      expect(result!.metrics.roi).toBe(85)
-      expect(result!.metrics.pnl).toBe(120000)
-      // winRatio 0.72 -> 72%
-      expect(result!.metrics.win_rate).toBe(72)
-      // maxDrawdown 0.12 -> 12%
-      expect(result!.metrics.max_drawdown).toBe(12)
-      expect(result!.metrics.trades_count).toBe(350)
-      expect(result!.metrics.followers).toBe(3500)
-      expect(result!.metrics.copiers).toBe(180)
-      expect(result!.metrics.aum).toBe(500000)
-      expect(result!.metrics.sharpe_ratio).toBeNull()
-      expect(result!.metrics.sortino_ratio).toBeNull()
-      expect(result!.metrics.platform_rank).toBeNull()
-      expect(result!.fetched_at).toBeDefined()
-    })
-
-    test('sends correct dataRange for each window', async () => {
-      const connector = createConnector()
-
-      // Test 7d window
-      mockFetchResponse(validSnapshotResponse)
-      await connector.fetchTraderSnapshot('trader-abc-123', '7d')
-      let url = mockFetch.mock.calls[0][0] as string
-      expect(url).toContain('dataRange=7')
-
-      mockFetch.mockReset()
-
-      // Test 30d window
-      mockFetchResponse(validSnapshotResponse)
-      await connector.fetchTraderSnapshot('trader-abc-123', '30d')
-      url = mockFetch.mock.calls[0][0] as string
-      expect(url).toContain('dataRange=30')
-
-      mockFetch.mockReset()
-
-      // Test 90d window
-      mockFetchResponse(validSnapshotResponse)
-      await connector.fetchTraderSnapshot('trader-abc-123', '90d')
-      url = mockFetch.mock.calls[0][0] as string
-      expect(url).toContain('dataRange=90')
-    })
-
-    test('returns null when snapshot data is empty', async () => {
-      const connector = createConnector()
-      mockFetchResponse({ code: '0', data: null, msg: '' })
-
-      const result = await connector.fetchTraderSnapshot('INVALID', '7d')
-
       expect(result).toBeNull()
+      expect(mockFetch).not.toHaveBeenCalled()
     })
+  })
 
-    test('quality flags indicate missing sharpe and sortino', async () => {
+  describe('fetchTimeseries', () => {
+    test('returns empty series (priapi endpoints removed)', async () => {
       const connector = createConnector()
-      mockFetchResponse(validSnapshotResponse)
-
-      const result = await connector.fetchTraderSnapshot('trader-abc-123', '7d')
-
-      expect(result).not.toBeNull()
-      expect(result!.quality_flags).toBeDefined()
-      expect(result!.quality_flags.missing_fields).toContain('sharpe_ratio')
-      expect(result!.quality_flags.missing_fields).toContain('sortino_ratio')
-      expect(result!.quality_flags.window_native).toBe(true)
-    })
-
-    test('handles large ROI values without double-converting', async () => {
-      const connector = createConnector()
-      // If profitRatio is already > 10, decimalToPercent should NOT multiply by 100
-      mockFetchResponse({
-        code: '0',
-        data: {
-          profitRatio: '250',
-          profit: '500000',
-          winRatio: '0.90',
-          maxDrawdown: '0.05',
-          tradeCount: '100',
-          followerNum: '1000',
-          copyTraderNum: '50',
-          aum: '200000',
-        },
-        msg: '',
-      })
-
-      const result = await connector.fetchTraderSnapshot('trader-abc-123', '30d')
-
-      expect(result).not.toBeNull()
-      // abs(250) >= 10, so decimalToPercent returns 250 as-is
-      expect(result!.metrics.roi).toBe(250)
-    })
-
-    test('handles negative ROI correctly', async () => {
-      const connector = createConnector()
-      mockFetchResponse({
-        code: '0',
-        data: {
-          profitRatio: '-0.35',
-          profit: '-25000',
-          winRatio: '0.30',
-          maxDrawdown: '0.45',
-          tradeCount: '50',
-          followerNum: '100',
-          copyTraderNum: '5',
-          aum: '10000',
-        },
-        msg: '',
-      })
-
-      const result = await connector.fetchTraderSnapshot('trader-losing', '7d')
-
-      expect(result).not.toBeNull()
-      // abs(-0.35) = 0.35 < 10, so -0.35 * 100 = -35
-      expect(result!.metrics.roi).toBe(-35)
-      expect(result!.metrics.pnl).toBe(-25000)
-    })
-
-    test('throws on network error', async () => {
-      const connector = createConnector()
-      mockFetchNetworkError()
-
-      await expect(connector.fetchTraderSnapshot('trader-abc-123', '7d')).rejects.toThrow()
+      const result = await connector.fetchTimeseries('trader-abc-123')
+      expect(result.series).toHaveLength(0)
+      expect(result.fetched_at).toBeDefined()
+      expect(mockFetch).not.toHaveBeenCalled()
     })
   })
 
@@ -482,19 +270,6 @@ describe('OkxFuturesConnector', () => {
       expect(result.traders).toHaveLength(0)
     })
 
-    test('fetchTraderProfile throws ConnectorError on client error (400)', async () => {
-      const connector = createConnector()
-      // fetchTraderProfile does NOT catch errors
-      mockFetch.mockResolvedValueOnce({
-        ok: false,
-        status: 400,
-        headers: { get: (key: string) => key === 'content-type' ? 'application/json' : null },
-        json: async () => ({ error: 'Bad request' }),
-      })
-
-      await expect(connector.fetchTraderProfile('trader-abc-123')).rejects.toThrow(ConnectorError)
-    })
-
     test('handles invalid JSON response gracefully via warnValidate', async () => {
       const connector = createConnector()
       mockFetchResponse({ unexpected: 'structure', code: '1' })
@@ -534,10 +309,10 @@ describe('OkxFuturesConnector', () => {
       expect(connector.capabilities.available_fields).toContain('aum')
     })
 
-    test('capabilities report profiles and timeseries support', () => {
+    test('capabilities reflect priapi removal (no profiles/timeseries)', () => {
       const connector = createConnector()
-      expect(connector.capabilities.has_timeseries).toBe(true)
-      expect(connector.capabilities.has_profiles).toBe(true)
+      expect(connector.capabilities.has_timeseries).toBe(false)
+      expect(connector.capabilities.has_profiles).toBe(false)
     })
   })
 })
