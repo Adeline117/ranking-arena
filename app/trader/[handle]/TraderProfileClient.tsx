@@ -345,7 +345,7 @@ export default function TraderProfileClient({ data, serverTraderData, claimedUse
             {t('loadFailedRetryMsg')}
           </Text>
           <Text size="sm" color="tertiary" style={{ marginBottom: tokens.spacing[5] }}>
-            {traderError?.message || 'Network error'}
+            {traderError?.message || t('networkError')}
           </Text>
           <Box style={{ display: 'flex', gap: tokens.spacing[3], justifyContent: 'center' }}>
             <button
