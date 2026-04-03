@@ -113,6 +113,16 @@ export function formatDate(
   }
 }
 
+/**
+ * Get today's date as a UTC YYYY-MM-DD string.
+ * Use this instead of `new Date().toISOString().split('T')[0]` to avoid
+ * timezone-related off-by-one issues.
+ */
+export function getTodayUTC(): string {
+  const now = new Date()
+  return `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, '0')}-${String(now.getUTCDate()).padStart(2, '0')}`
+}
+
 export function daysBetween(date1: Date | string, date2: Date | string): number {
   const d1 = typeof date1 === 'string' ? new Date(date1) : date1
   const d2 = typeof date2 === 'string' ? new Date(date2) : date2
