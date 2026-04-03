@@ -106,6 +106,8 @@ const cachedFindUserHandleByTrader = unstable_cache(
 
 export async function generateMetadata({ params }: { params: Promise<{ handle: string }> }): Promise<Metadata> {
   const { handle } = await params
+  // Reject absurdly long handles early to prevent cache key bloat and DB abuse
+  if (handle.length > 300) return notFound()
   const decoded = decodeURIComponent(handle)
   const BASE = BASE_URL
 
