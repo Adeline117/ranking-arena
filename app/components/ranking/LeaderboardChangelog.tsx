@@ -139,8 +139,8 @@ export default function LeaderboardChangelog({ risers, fallers }: LeaderboardCha
           gap: tokens.spacing[1],
           marginBottom: tokens.spacing[2],
         }}>
-          <span style={{ color: '#22c55e', fontSize: 14 }}>{'\u2191'}</span>
-          <Text size="sm" weight="bold" style={{ color: '#22c55e' }}>
+          <span style={{ color: 'var(--color-accent-success)', fontSize: 14 }}>{'\u2191'}</span>
+          <Text size="sm" weight="bold" style={{ color: 'var(--color-accent-success)' }}>
             Rising
           </Text>
         </Box>
@@ -162,8 +162,8 @@ export default function LeaderboardChangelog({ risers, fallers }: LeaderboardCha
           gap: tokens.spacing[1],
           marginBottom: tokens.spacing[2],
         }}>
-          <span style={{ color: '#ef4444', fontSize: 14 }}>{'\u2193'}</span>
-          <Text size="sm" weight="bold" style={{ color: '#ef4444' }}>
+          <span style={{ color: 'var(--color-accent-error)', fontSize: 14 }}>{'\u2193'}</span>
+          <Text size="sm" weight="bold" style={{ color: 'var(--color-accent-error)' }}>
             Falling
           </Text>
         </Box>
