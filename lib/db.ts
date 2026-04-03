@@ -71,6 +71,12 @@ export function getPool(): Pool {
       // Keep connections alive through load balancer/pooler
       keepAlive: true,
       keepAliveInitialDelayMillis: 10000,
+      // statement_timeout: kill queries that run longer than 30s to prevent
+      // connection hogging in serverless (Vercel function timeout is 60s)
+      statement_timeout: isProduction ? 30000 : 60000,
+      // allowExitOnIdle: let pool drain when serverless function goes idle
+      // Prevents connections from persisting after Vercel function freezes
+      allowExitOnIdle: isProduction,
     };
 
     // Supabase requires SSL in production
