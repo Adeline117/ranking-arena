@@ -21,7 +21,7 @@ const DIRECT_DOMAINS = new Set([
   // Exchange CDN subdomains that don't have Referrer checks (confirmed working)
   'gavatar.staticimgs.com',
   'static.okx.com',
-  // etoro-cdn.etorostatic.com — REMOVED: blocks requests without proper Referer, must go through proxy
+  'etoro-cdn.etorostatic.com', // New URL format /avatars/150X150/{id}/1.jpg works direct (old format was 403)
   // public.bscdnweb.com — REMOVED: returns 424, must go through proxy
   's1.bycsi.com',
   'a.static-global.com',
