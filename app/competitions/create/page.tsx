@@ -58,7 +58,7 @@ export default function CreateCompetitionPage() {
       })
       const json = await res.json()
       if (!json.success) {
-        setError(json.error || 'Failed to create competition')
+        setError(t('competitionCreateFailed') || 'Failed to create competition')
       } else {
         router.push(`/competitions/${json.data.id}`)
       }
