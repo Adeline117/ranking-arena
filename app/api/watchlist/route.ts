@@ -9,6 +9,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { createLogger } from '@/lib/utils/logger'
+import { checkRateLimit, RateLimitPresets } from '@/lib/utils/rate-limit'
 
 const log = createLogger('api:watchlist')
 
@@ -28,6 +29,9 @@ function getSupabaseWithAuth(accessToken: string) {
 
 export async function GET(request: NextRequest) {
   try {
+    const rl = await checkRateLimit(request, RateLimitPresets.read)
+    if (rl) return rl
+
     const token = getAuthenticatedUser(request)
     if (!token) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
@@ -95,6 +99,9 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
+    const rl = await checkRateLimit(request, RateLimitPresets.write)
+    if (rl) return rl
+
     const token = getAuthenticatedUser(request)
     if (!token) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
@@ -161,6 +168,9 @@ export async function POST(request: NextRequest) {
 
 export async function DELETE(request: NextRequest) {
   try {
+    const rl = await checkRateLimit(request, RateLimitPresets.write)
+    if (rl) return rl
+
     const token = getAuthenticatedUser(request)
     if (!token) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
