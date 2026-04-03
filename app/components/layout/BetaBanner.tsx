@@ -24,11 +24,8 @@ export default function BetaBanner() {
           padding: '10px 48px 10px 16px',
           fontSize: '14px',
           fontWeight: 600,
-          position: 'fixed',
-          top: 0,
-          left: 0,
-          right: 0,
-          zIndex: 700, /* tokens.zIndex.toast — below modal/max, above sticky/overlay */
+          position: 'relative',
+          zIndex: 1, /* flows in document — no longer overlaps sticky header */
         }}
       >
         Arena is in closed beta — data is being updated and some features are under development.
