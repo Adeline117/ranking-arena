@@ -92,6 +92,7 @@ async function resolveTraderForWrapped(
 
 export async function generateMetadata({ params, searchParams }: Props): Promise<Metadata> {
   const { trader_key } = await params
+  if (trader_key.length > 300) return { title: 'Not Found' }
   const { platform, window: windowParam = '7d' } = await searchParams
   const decoded = decodeURIComponent(trader_key)
 
