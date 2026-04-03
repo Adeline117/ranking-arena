@@ -13,8 +13,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { getSupabaseAdmin } from '@/lib/api'
-import { tieredGetOrSet } from '@/lib/cache/redis-layer'
 import { checkRateLimit, RateLimitPresets } from '@/lib/utils/rate-limit'
+import { tieredGetOrSet } from '@/lib/cache/redis-layer'
 
 export const runtime = 'nodejs'
 
