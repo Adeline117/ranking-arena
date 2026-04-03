@@ -525,7 +525,7 @@ export const TraderRow = memo(function TraderRow({
 
         {/* Followers (P1-2) */}
         <Box className="col-followers" style={{ textAlign: 'right', alignItems: 'center', justifyContent: 'flex-end' }}>
-          {trader.followers > 0 ? (
+          {trader.followers != null ? (
             <Text size="sm" weight="semibold" style={{ color: TRADER_TEXT_TERTIARY, lineHeight: 1.2, fontSize: tokens.typography.fontSize.sm, fontVariantNumeric: 'tabular-nums' }}>
               {Number(trader.followers) >= 1000 ? `${(Number(trader.followers) / 1000).toFixed(1)}K` : trader.followers}
             </Text>
@@ -536,7 +536,7 @@ export const TraderRow = memo(function TraderRow({
 
         {/* Trades Count (P1-4) */}
         <Box className="col-trades" style={{ textAlign: 'right', alignItems: 'center', justifyContent: 'flex-end' }}>
-          {trader.trades_count != null && trader.trades_count > 0 ? (
+          {trader.trades_count != null ? (
             <Text size="sm" weight="semibold" style={{ color: TRADER_TEXT_TERTIARY, lineHeight: 1.2, fontSize: tokens.typography.fontSize.sm, fontVariantNumeric: 'tabular-nums' }}>
               {Number(trader.trades_count) >= 1000 ? `${(Number(trader.trades_count) / 1000).toFixed(1)}K` : trader.trades_count}
             </Text>
