@@ -8,6 +8,7 @@ import Avatar from './Avatar'
 import UserFollowButton from './UserFollowButton'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import { useToast } from './Toast'
+import { supabase } from '@/lib/supabase/client'
 
 type FollowUser = {
   id: string
@@ -115,12 +116,16 @@ export default function FollowListModal({
     try {
       const endpoint = `/api/users/${encodeURIComponent(handle)}/follow?list=${type}`
 
-      const url = currentUserId
-        ? `${endpoint}&requesterId=${currentUserId}`
-        : endpoint
+      // Pass auth token instead of requesterId in query params (security: prevent IDOR)
+      const headers: Record<string, string> = {}
+      const { data: { session } } = await supabase.auth.getSession()
+      if (session?.access_token) {
+        headers['Authorization'] = `Bearer ${session.access_token}`
+      }
 
-      const response = await fetch(url, {
+      const response = await fetch(endpoint, {
         signal: abortControllerRef.current.signal,
+        headers,
       })
 
       if (!response.ok) {

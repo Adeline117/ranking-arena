@@ -10,7 +10,7 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server'
-import { getSupabaseAdmin } from '@/lib/supabase/server'
+import { getSupabaseAdmin, getAuthUser } from '@/lib/supabase/server'
 import logger from '@/lib/logger'
 import { socialFeatureGuard } from '@/lib/features'
 
@@ -188,7 +188,9 @@ export async function GET(
     const supabase = getSupabaseAdmin()
     const searchParams = request.nextUrl.searchParams
     const list = searchParams.get('list') // 'followers' | 'following'
-    const requesterId = searchParams.get('requesterId')
+    // Derive requesterId from auth token, not query params (prevents IDOR)
+    const authUser = await getAuthUser(request)
+    const requesterId = authUser?.id ?? null
 
     const { data: targetUser, error: userError } = await supabase
       .from('user_profiles')
