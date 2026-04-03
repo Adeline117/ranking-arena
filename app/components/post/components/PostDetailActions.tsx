@@ -180,7 +180,11 @@ export function PostDetailActions({
               showToast(t('linkCopied'), 'success')
             }
           } catch {
-            // Intentionally swallowed: user cancelled share dialog or clipboard API unavailable
+            // Fallback: copy link if share dialog was cancelled or unavailable
+            try {
+              await navigator.clipboard.writeText(shareUrl)
+              showToast(t('linkCopied'), 'success')
+            } catch { /* clipboard also unavailable */ }
           }
         }}
         active={false}
