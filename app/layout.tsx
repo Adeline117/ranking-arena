@@ -241,14 +241,14 @@ export default function RootLayout({
             <Suspense fallback={null}>
               <GlobalProgress />
             </Suspense>
+            {/* BetaBanner: server-rendered, flows in document above main content */}
+            <BetaBanner />
             <PageErrorBoundary>
               <main id="main-content" tabIndex={-1}>
                 {children}
               </main>
             </PageErrorBoundary>
             <MobileBottomNav />
-            {/* BetaBanner: server-rendered (SSR) for LCP — not deferred */}
-            <BetaBanner />
             {/* Deferred: components that don't affect initial render or LCP */}
             <Suspense fallback={null}>
               <NetworkStatusBanner />
