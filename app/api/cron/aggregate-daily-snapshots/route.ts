@@ -64,8 +64,7 @@ export async function GET(request: NextRequest) {
   }
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-async function aggregateForDate(supabase: any, dateStr: string, plog: any): Promise<{ inserted: number; errors: number }> {
+async function aggregateForDate(supabase: any, dateStr: string, _plog: any): Promise<{ inserted: number; errors: number }> {
     const today = new Date()
     const _todayStr = today.toISOString().split('T')[0]
 
