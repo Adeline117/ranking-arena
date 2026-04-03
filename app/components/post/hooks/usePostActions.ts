@@ -149,7 +149,7 @@ export function usePostActions({
 
   // Built-in poll voting
   const _toggleVote = useCallback(async (postId: string, choice: PollChoice) => {
-    if (!accessToken) { showToast(t('pleaseLogin'), 'warning'); return }
+    if (!accessToken) { const { useLoginModal } = await import('@/lib/hooks/useLoginModal'); useLoginModal.getState().openLoginModal(); return }
     const key = `vote-${postId}-${choice}`
     if (lockRef.current.has(key)) return
     lockRef.current.add(key)
@@ -259,7 +259,7 @@ export function usePostActions({
 
   // Repost
   const handleRepost = useCallback(async (postId: string, comment?: string) => {
-    if (!accessToken) { showToast(t('pleaseLogin'), 'warning'); return }
+    if (!accessToken) { const { useLoginModal } = await import('@/lib/hooks/useLoginModal'); useLoginModal.getState().openLoginModal(); return }
     const post = posts.find(p => p.id === postId) || openPost
     if (post?.author_id === currentUserId) { showToast(t('cannotRepostOwn'), 'warning'); return }
     setRepostLoading(prev => ({ ...prev, [postId]: true }))
