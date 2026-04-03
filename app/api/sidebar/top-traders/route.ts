@@ -14,7 +14,7 @@ export const GET = withPublic(
     const data = await getOrSetWithLock(
       'sidebar:top-traders',
       async () => {
-        // Step 1: Get top traders from leaderboard_ranks (same source as main ranking table)
+        // Fetch top 50 to diversify across exchanges (avoid showing only 1-2 exchanges)
         const { data: snapData, error: snapErr } = await supabase
           .from('leaderboard_ranks')
           .select('source, source_trader_id, handle, avatar_url, roi, pnl, arena_score')
@@ -23,14 +23,26 @@ export const GET = withPublic(
           .gt('arena_score', 50)
           .or('is_outlier.is.null,is_outlier.eq.false')
           .order('arena_score', { ascending: false })
-          .limit(10)
+          .limit(50)
 
         if (snapErr || !snapData || snapData.length === 0) {
           return { traders: [] }
         }
 
-        // leaderboard_ranks already has handle + avatar_url
-        const traders = snapData.map(d => ({
+        // Diversify: pick top 1 per exchange first, then fill remaining slots by score
+        const perExchange = new Map<string, typeof snapData[0]>()
+        const rest: typeof snapData = []
+        for (const d of snapData) {
+          if (!perExchange.has(d.source)) {
+            perExchange.set(d.source, d)
+          } else {
+            rest.push(d)
+          }
+        }
+        // Start with 1 per exchange (diverse), sorted by score
+        const diverse = [...perExchange.values()].sort((a, b) => (b.arena_score ?? 0) - (a.arena_score ?? 0))
+        // Fill remaining to reach 10
+        const traders = [...diverse, ...rest].slice(0, 10).map(d => ({
           source: d.source,
           source_trader_id: d.source_trader_id,
           handle: d.handle || null,
