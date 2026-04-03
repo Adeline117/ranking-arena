@@ -251,12 +251,12 @@ export default function WatchlistClient() {
                         onMouseEnter={e => (e.currentTarget.style.background = 'var(--color-bg-hover)')}
                         onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
                         onClick={() => {
-                          window.location.href = `/trader/${item.source}/${item.source_trader_id}`
+                          window.location.href = `/trader/${encodeURIComponent(item.handle || item.source_trader_id)}?platform=${item.source}`
                         }}
                       >
                         <td style={{ padding: '12px 16px' }}>
                           <Link
-                            href={`/trader/${item.source}/${item.source_trader_id}`}
+                            href={`/trader/${encodeURIComponent(item.handle || item.source_trader_id)}?platform=${item.source}`}
                             style={{
                               color: 'var(--color-text-primary)',
                               fontWeight: 600,
