@@ -538,6 +538,11 @@ export function useRankingFilters({ traders, activeTimeRange }: UseRankingFilter
   const handleResetFilters = useCallback(() => {
     handleFilterChange({})
     setShowAdvancedFilter(false)
+    setSortColumn('score')
+    setSortDir('desc')
+    setSelectedExchange(null)
+    setActivePreset(null)
+    setCategory('all')
   }, [handleFilterChange])
 
   const handleFilterToggle = useCallback(() => {
