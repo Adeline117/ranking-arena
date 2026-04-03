@@ -12,6 +12,8 @@ import SnapshotViewerClient from './SnapshotViewerClient'
 
 export const revalidate = 300
 
+const BASE_URL = process.env.NEXT_PUBLIC_BASE_URL || 'https://www.arenafi.org'
+
 interface PageProps {
   params: Promise<{ token: string }>
 }
@@ -46,6 +48,7 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
   return {
     title: `${title}`,
     description,
+    alternates: { canonical: `${BASE_URL}/s/${token}` },
     openGraph: {
       title,
       description,
