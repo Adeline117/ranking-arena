@@ -429,8 +429,12 @@ const TraderCardItem = React.memo(function TraderCardItem({ trader, rank }: { tr
   )
 })
 
+// StatBlock styles — module-level constants
+const STAT_BLOCK_OUTER: React.CSSProperties = { textAlign: 'center', padding: '6px 0', borderRadius: tokens.radius.md, background: 'var(--overlay-hover)' }
+const STAT_BLOCK_LABEL: React.CSSProperties = { fontSize: 10, color: tokens.colors.text.tertiary, marginBottom: 2 }
+
 const StatBlock = React.memo(function StatBlock({ label, value, color }: { label: string; value: string; color?: string }) {
-  return (<div style={{ textAlign: 'center', padding: '6px 0', borderRadius: tokens.radius.md, background: 'var(--overlay-hover)' }}><div style={{ fontSize: 10, color: tokens.colors.text.tertiary, marginBottom: 2 }}>{label}</div><div style={{ fontSize: 13, fontWeight: 700, color: color || tokens.colors.text.primary }}>{value}</div></div>)
+  return (<div style={STAT_BLOCK_OUTER}><div style={STAT_BLOCK_LABEL}>{label}</div><div style={{ fontSize: 13, fontWeight: 700, color: color || tokens.colors.text.primary }}>{value}</div></div>)
 })
 
 const SortArrow = React.memo(function SortArrow({ active, dir }: { active: boolean; dir: SortDir }) {
