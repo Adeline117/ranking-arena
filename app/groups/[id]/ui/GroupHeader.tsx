@@ -27,6 +27,7 @@ interface GroupHeaderProps {
   isMember: boolean
   userRole: 'owner' | 'admin' | 'member' | null
   joining: boolean
+  isDissolved?: boolean
   onJoin: () => void
   onLeave: () => void
   onShowGroupInfo: () => void
@@ -42,6 +43,7 @@ export default function GroupHeader({
   isMember,
   userRole,
   joining,
+  isDissolved,
   onJoin,
   onLeave,
   onShowGroupInfo,

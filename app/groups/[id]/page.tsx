@@ -40,6 +40,7 @@ interface Group {
   rules_json?: Array<{ zh: string; en: string }> | null
   owner_handle?: string | null
   is_premium_only?: boolean | null
+  dissolved_at?: string | null
 }
 
 interface GroupMember {
@@ -566,6 +567,7 @@ export default function GroupDetailPage({ params }: { params: Promise<{ id: stri
 
   return (
     <PageWrapper email={email}>
+      {group?.dissolved_at && <Box style={{ background: 'var(--color-accent-warning-10)', border: '1px solid var(--color-accent-warning)', borderRadius: 8, padding: '10px 16px', margin: '0 16px 16px', textAlign: 'center', fontSize: 13, color: 'var(--color-accent-warning)', fontWeight: 600 }}>This group has been dissolved. You can view history but cannot post or interact.</Box>}
       <Box
         as="main"
         className="content-sidebar-grid"
@@ -595,7 +597,7 @@ export default function GroupDetailPage({ params }: { params: Promise<{ id: stri
             isMember={isMember}
             userRole={userRole}
             joining={joining}
-            isDissolved={group?.status === 'dissolved'}
+            isDissolved={!!group?.dissolved_at}
             onJoin={() => handleJoin()}
             onLeave={handleLeave}
             onShowGroupInfo={() => setShowGroupInfo(true)}
@@ -664,7 +666,7 @@ export default function GroupDetailPage({ params }: { params: Promise<{ id: stri
           </SectionErrorBoundary>
 
           {/* Floating Post Button */}
-          {isMember && (
+          {isMember && !group?.dissolved_at && (
             <Link
               href={`/groups/${groupId}/new`}
               aria-label={t('groupNewPost')}
