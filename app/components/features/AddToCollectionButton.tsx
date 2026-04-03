@@ -95,6 +95,8 @@ export default function AddToCollectionButton({ itemType, itemId, compact }: Add
     <div ref={ref} style={{ position: 'relative', display: 'inline-block' }}>
       <button
         onClick={() => open ? setOpen(false) : loadCollections()}
+        aria-expanded={open}
+        aria-haspopup="menu"
         style={{
           display: 'inline-flex',
           alignItems: 'center',
@@ -117,7 +119,7 @@ export default function AddToCollectionButton({ itemType, itemId, compact }: Add
       </button>
 
       {open && (
-        <Box style={{
+        <Box className="dropdown-enter" style={{
           position: 'absolute',
           top: '100%',
           right: 0,
