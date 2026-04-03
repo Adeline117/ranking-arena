@@ -30,25 +30,28 @@ export async function sendEmail(options: {
   subject: string
   html: string
 }): Promise<boolean> {
+  // Strategy 1: Resend (primary)
   const resend = getResend()
-  if (!resend) {
-    logger.warn('RESEND_API_KEY not configured, skipping email')
-    return false
+  if (resend) {
+    try {
+      await resend.emails.send({
+        from: FROM_EMAIL,
+        to: options.to,
+        subject: options.subject,
+        html: options.html,
+      })
+      logger.info('Email sent via Resend', { to: options.to, subject: options.subject })
+      return true
+    } catch (error) {
+      logger.error('Resend send failed', { error, to: options.to })
+      return false
+    }
   }
 
-  try {
-    await resend.emails.send({
-      from: FROM_EMAIL,
-      to: options.to,
-      subject: options.subject,
-      html: options.html,
-    })
-    logger.info('Email sent', { to: options.to, subject: options.subject })
-    return true
-  } catch (error) {
-    logger.error('Failed to send email', { error, to: options.to })
-    return false
-  }
+  // No provider configured — log content so nothing is silently lost
+  logger.warn(`[EMAIL NOT SENT] No provider. To: ${options.to} | Subject: ${options.subject}`)
+  logger.info(`[EMAIL CONTENT] ${options.html.replace(/<[^>]*>/g, ' ').replace(/\\s+/g, ' ').slice(0, 300)}...`)
+  return false
 }
 
 export function buildTraderAlertEmail(alerts: Array<{ title: string; message: string; link?: string }>): string {
