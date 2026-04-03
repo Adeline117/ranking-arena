@@ -197,12 +197,21 @@ export function useAuthSession(): AuthSessionReturn {
           // Token about to expire, refresh
           refreshingRef.current = true
           try {
-            const { data: { session: refreshed } } = await sb.auth.refreshSession()
+            const { data: { session: refreshed }, error: refreshError } = await sb.auth.refreshSession()
             if (refreshed) {
               updateFromSession(refreshed)
               setGlobalAuthState({ loading: false, authChecked: true })
               return refreshed.access_token
             }
+            // Refresh failed — clear stale auth state so UI prompts re-login
+            if (refreshError) {
+              logger.warn('[getToken] Token refresh failed:', refreshError.message)
+            }
+            setGlobalAuthState({
+              user: null, userId: null, email: null, accessToken: null,
+              isLoggedIn: false, loading: false, authChecked: true,
+            })
+            return null
           } finally {
             refreshingRef.current = false
           }
