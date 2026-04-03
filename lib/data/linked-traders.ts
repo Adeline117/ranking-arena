@@ -135,20 +135,22 @@ export async function getLinkedTraders(
     byPlatform.set(link.platform, keys)
   }
 
-  // Parallel batch fetch per platform
+  // Parallel batch fetch per platform from leaderboard_ranks (precomputed, has correct columns)
+  // Previously queried trader_snapshots_v2 with wrong column names (roi→roi_pct, pnl→pnl_usd,
+  // rank doesn't exist), causing null values for linked account stats.
   const snapshotMap = new Map<string, Record<string, unknown>>()
   await Promise.all(
     [...byPlatform.entries()].map(async ([platform, traderKeys]) => {
       const { data: snapshots } = await supabase
-        .from('trader_snapshots_v2')
-        .select('platform, trader_key, roi, pnl, arena_score, win_rate, max_drawdown, rank')
-        .eq('platform', platform)
-        .in('trader_key', traderKeys)
-        .eq('window', '90D')
+        .from('leaderboard_ranks')
+        .select('source, source_trader_id, roi, pnl, arena_score, win_rate, max_drawdown, rank')
+        .eq('source', platform)
+        .in('source_trader_id', traderKeys)
+        .eq('season_id', '90D')
 
       if (snapshots) {
         for (const s of snapshots) {
-          snapshotMap.set(`${s.platform}:${s.trader_key}`, s)
+          snapshotMap.set(`${s.source}:${s.source_trader_id}`, s)
         }
       }
     })
