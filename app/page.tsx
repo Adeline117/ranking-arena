@@ -1,10 +1,8 @@
 import type { Metadata } from 'next'
 import { getInitialTraders } from '@/lib/getInitialTraders'
 import { getHeroStats } from '@/lib/data/hero-stats'
-// SSR shell removed — it caused React reconciliation crashes (insertBefore/removeChild)
-// when the interactive HomePage mounted and modified DOM nodes React still tracked.
-// import SSRRankingTable from './components/home/SSRRankingTable'
-// import HomeHeroSSR from './components/home/HomeHeroSSR'
+import SSRRankingTable from './components/home/SSRRankingTable'
+import HomeHeroSSR from './components/home/HomeHeroSSR'
 import { JsonLd } from './components/Providers/JsonLd'
 import HomePageLoader from './components/home/HomePageLoader'
 import { PageErrorBoundary } from './components/utils/ErrorBoundary'
@@ -78,6 +76,11 @@ export default async function Page() {
           This was forcing the browser to download ranking data before any JS initialized.
           The SSR table already shows data — the client fetch can happen lazily. */}
       <JsonLd data={organizationJsonLd} />
+
+      {/* Phase 1 (SSR): Static HTML shell — visible instantly, hidden by CSS once Phase 2 mounts.
+          Placed OUTSIDE HomePageLoader so React never tries to reconcile these DOM nodes. */}
+      <HomeHeroSSR traderCount={heroStats?.traderCount} exchangeCount={heroStats?.exchangeCount} />
+      <SSRRankingTable traders={initialTraders} />
 
       <PageErrorBoundary>
         {/* Phase 2: Full interactive homepage — loaded with ssr:false via HomePageLoader. */}
