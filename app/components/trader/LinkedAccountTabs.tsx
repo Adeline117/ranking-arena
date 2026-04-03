@@ -3,6 +3,7 @@
 import { useRef, useEffect, useState, useCallback } from 'react'
 import { preload } from 'swr'
 import { tokens } from '@/lib/design-tokens'
+import { formatROI } from '@/lib/utils/format'
 import { EXCHANGE_NAMES } from '@/lib/constants/exchanges'
 import { Box, Text } from '@/app/components/base'
 import ExchangeLogo from '@/app/components/ui/ExchangeLogo'
@@ -27,10 +28,6 @@ interface LinkedAccountTabsProps {
   onAccountChange: (account: string) => void
 }
 
-function formatRoi(roi: number): string {
-  const sign = roi >= 0 ? '+' : ''
-  return `${sign}${roi.toFixed(1)}%`
-}
 
 export default function LinkedAccountTabs({
   accounts,
@@ -218,7 +215,7 @@ export default function LinkedAccountTabs({
                       fontFamily: tokens.typography.fontFamily.mono.join(', '),
                       fontSize: 11,
                     }}>
-                      {formatRoi(account.roi)}
+                      {formatROI(account.roi)}
                     </Text>
                   )}
                 </button>
@@ -322,7 +319,7 @@ export default function LinkedAccountTabs({
                   letterSpacing: '-0.02em',
                 }}
               >
-                {formatRoi(account.roi)}
+                {formatROI(account.roi)}
               </Text>
             )}
           </button>
