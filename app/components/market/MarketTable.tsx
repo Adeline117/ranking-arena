@@ -134,9 +134,16 @@ function MarketTableInner<T>({
             <tr>
               <td
                 colSpan={columns.length}
-                style={{ padding: tokens.spacing[8], textAlign: 'center', color: tokens.colors.text.tertiary }}
+                style={{ padding: `${tokens.spacing[10]} ${tokens.spacing[4]}`, textAlign: 'center', color: tokens.colors.text.tertiary }}
               >
-                --
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8 }}>
+                  <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" style={{ opacity: 0.4 }}>
+                    <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
+                    <line x1="3" y1="9" x2="21" y2="9" />
+                    <line x1="9" y1="21" x2="9" y2="9" />
+                  </svg>
+                  <span style={{ fontSize: 13 }}>No data available</span>
+                </div>
               </td>
             </tr>
           ) : (
