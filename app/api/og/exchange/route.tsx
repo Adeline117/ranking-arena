@@ -182,7 +182,7 @@ export async function GET(request: NextRequest) {
               <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
                 <span style={{ fontSize: 42, fontWeight: 900, color: C.white, letterSpacing: '-1px' }}>{displayName} Rankings</span>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-                  <span style={{ fontSize: 16, color: C.dim }}>{total > 0 ? total.toLocaleString() : '0'} ranked traders</span>
+                  <span style={{ fontSize: 16, color: C.dim }}>{total > 0 ? total.toLocaleString('en-US') : '0'} ranked traders</span>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '3px 10px', borderRadius: 6, background: platformColor + '18', border: '1px solid ' + platformColor + '35' }}>
                     <div style={{ width: 5, height: 5, borderRadius: 999, background: platformColor, display: 'flex' }} />
                     <span style={{ fontSize: 12, fontWeight: 700, color: platformColor }}>{displayName}</span>
