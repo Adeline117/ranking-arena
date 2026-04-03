@@ -171,14 +171,6 @@
       "schedule": "40 */2 * * *"
     },
     {
-      "path": "/api/analytics/daily",
-      "schedule": "6 1 * * *"
-    },
-    {
-      "path": "/api/notifications/ranking-changes",
-      "schedule": "0 9 * * *"
-    },
-    {
       "path": "/api/cron/weekly-report",
       "schedule": "0 8 * * 1"
     },
@@ -214,21 +206,9 @@
       "path": "/api/cron/snapshot-positions",
       "schedule": "15 * * * *"
     },
-{
-      "path": "/api/cron/fetch-traders/phemex",
-      "schedule": "35 1,7,13,19 * * *"
-    },
     {
       "path": "/api/cron/fetch-traders/blofin",
       "schedule": "55 1,7,13,19 * * *"
-    },
-    {
-      "path": "/api/cron/update-competitions",
-      "schedule": "12,42 * * * *"
-    },
-    {
-      "path": "/api/cron/expire-mutes",
-      "schedule": "50 * * * *"
     }
   ],
   "headers": [
