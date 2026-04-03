@@ -55,6 +55,15 @@ export class EtoroSpotConnector extends BaseConnector {
   readonly platform: LeaderboardPlatform = 'etoro'
   readonly marketType: MarketType = 'spot'
 
+  constructor() {
+    super({
+      headers: {
+        Referer: 'https://www.etoro.com/',
+        Origin: 'https://www.etoro.com',
+      },
+    })
+  }
+
   readonly capabilities: PlatformCapabilities = {
     platform: 'etoro',
     market_types: ['spot'],
