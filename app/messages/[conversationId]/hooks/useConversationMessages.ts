@@ -182,13 +182,20 @@ export function useConversationMessages({ conversationId, userId, accessToken }:
     const auth = await getAuthSession()
     if (!auth) return
     const tempId = `voice-${Date.now()}`
+    const attachment: MediaAttachment = { url: voiceUrl, type: 'file', fileName: 'voice-message.webm', originalName: 'voice-message.webm' }
     const tempMsg: Message = {
       id: tempId, sender_id: userId, receiver_id: otherUser.id, content, read: false, created_at: new Date().toISOString(),
-      media_url: voiceUrl, media_type: 'file', media_name: 'voice-message.webm', _status: 'sending', _tempId: tempId,
+      media_url: voiceUrl, media_type: 'file', media_name: 'voice-message.webm', _status: 'sending', _tempId: tempId, _attachment: attachment,
     }
     setMessages(prev => [...prev, tempMsg])
-    try { await sendMessageRequest(otherUser.id, content, auth.accessToken, { url: voiceUrl, type: 'file', fileName: 'voice-message.webm', originalName: 'voice-message.webm' }) }
-    catch { setMessages(prev => prev.map(m => m.id === tempId ? { ...m, _status: 'failed' as MessageStatus } : m)) }
+    try {
+      const result = await sendMessageRequest(otherUser.id, content, auth.accessToken, attachment)
+      if (result.ok && result.data.message) {
+        setMessages(prev => prev.map(m => m.id === tempId ? { ...(result.data.message as Message), _status: 'sent' as MessageStatus } : m))
+      } else {
+        setMessages(prev => prev.map(m => m.id === tempId ? { ...m, _status: 'failed' as MessageStatus } : m))
+      }
+    } catch { setMessages(prev => prev.map(m => m.id === tempId ? { ...m, _status: 'failed' as MessageStatus } : m)) }
   }, [userId, otherUser, t])
 
   const navigateToMessage = useCallback((messageId: string) => {
