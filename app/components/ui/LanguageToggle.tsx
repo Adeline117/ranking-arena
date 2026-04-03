@@ -19,6 +19,7 @@ export default function LanguageToggle() {
   const dropdownRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
+    if (!isOpen) return
     const handleClickOutside = (e: MouseEvent) => {
       if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
         setIsOpen(false)
@@ -26,7 +27,7 @@ export default function LanguageToggle() {
     }
     document.addEventListener('mousedown', handleClickOutside)
     return () => document.removeEventListener('mousedown', handleClickOutside)
-  }, [])
+  }, [isOpen])
 
   const switchLanguage = useCallback((newLang: Language) => {
     if (isChanging || newLang === language) {
@@ -58,6 +59,8 @@ export default function LanguageToggle() {
       <button
         onClick={() => setIsOpen(!isOpen)}
         aria-label={t('switchLanguage')}
+        aria-expanded={isOpen}
+        aria-haspopup="listbox"
         disabled={isChanging}
         style={{
           display: 'flex',
@@ -80,7 +83,7 @@ export default function LanguageToggle() {
         {LANG_LABELS[language] || 'EN'}
       </button>
       {isOpen && (
-        <div style={{
+        <div className="dropdown-enter" style={{
           position: 'absolute',
           top: '100%',
           right: 0,
