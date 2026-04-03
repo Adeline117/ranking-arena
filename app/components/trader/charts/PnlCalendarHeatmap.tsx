@@ -64,24 +64,23 @@ export function PnlCalendarHeatmap({ data, days = 90 }: PnlCalendarHeatmapProps)
       dailyMap.set(curr.date, { date: curr.date, pnl: dailyPnl, roi: dailyRoi })
     }
 
-    // Generate last N days
+    // Generate last N days (all UTC to avoid timezone date shift)
     const today = new Date()
-    const startDate = new Date(today)
-    startDate.setDate(startDate.getDate() - days + 1)
+    const startDate = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate() - days + 1))
 
-    // Align start to the beginning of the week (Sunday)
-    const startDay = startDate.getDay()
-    startDate.setDate(startDate.getDate() - startDay)
+    // Align start to the beginning of the week (Sunday) using UTC
+    const startDay = startDate.getUTCDay()
+    startDate.setUTCDate(startDate.getUTCDate() - startDay)
 
     const gridData: (DayData | null)[] = []
     const current = new Date(startDate)
-    const endDate = new Date(today)
+    const endDate = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate()))
 
     while (current <= endDate) {
       const dateStr = current.toISOString().split('T')[0]
       const dayData = dailyMap.get(dateStr) || null
       gridData.push(dayData)
-      current.setDate(current.getDate() + 1)
+      current.setUTCDate(current.getUTCDate() + 1)
     }
 
     // Pad to full weeks
@@ -99,10 +98,10 @@ export function PnlCalendarHeatmap({ data, days = 90 }: PnlCalendarHeatmapProps)
       const dayIndex = i % 7
       if (dayIndex !== 0) continue // Only check first day of each week
       const d = new Date(startDate)
-      d.setDate(d.getDate() + i)
-      if (d.getMonth() !== lastMonth) {
-        lastMonth = d.getMonth()
-        const monthName = d.toLocaleString('en', { month: 'short' })
+      d.setUTCDate(d.getUTCDate() + i)
+      if (d.getUTCMonth() !== lastMonth) {
+        lastMonth = d.getUTCMonth()
+        const monthName = d.toLocaleString('en', { month: 'short', timeZone: 'UTC' })
         labels.push({ label: monthName, week: weekIndex })
       }
     }
