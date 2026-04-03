@@ -123,6 +123,11 @@ export function CommentThread({
             {showProBadge && <ProBadge />}
             <span style={{ fontSize: 11, color: tokens.colors.text.tertiary }}>
               {formatTimeAgo(comment.created_at, language as Locale)}
+              {comment.updated_at && comment.updated_at !== comment.created_at && (
+                <span title={new Date(comment.updated_at).toLocaleString()} style={{ marginLeft: 4, fontStyle: 'italic' }}>
+                  ({t('edited') || 'edited'})
+                </span>
+              )}
             </span>
           </div>
 
