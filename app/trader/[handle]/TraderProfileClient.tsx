@@ -183,9 +183,13 @@ export default function TraderProfileClient({ data, serverTraderData, claimedUse
     return keys
   }, [claimedUser])
   const urlTab = searchParams.get('tab')
-  const [activeTab, setActiveTab] = useState<TraderTabKey>(
-    urlTab && tabKeys.includes(urlTab as TraderTabKey) ? urlTab as TraderTabKey : 'overview'
-  )
+  const initialTab = urlTab && tabKeys.includes(urlTab as TraderTabKey) ? urlTab as TraderTabKey : 'overview'
+  const [activeTab, setActiveTab] = useState<TraderTabKey>(initialTab)
+
+  // Track which tabs have been visited — only render tab content after first visit.
+  // This avoids mounting heavy components (StatsPage, PortfolioTable, charts) for
+  // tabs the user hasn't viewed yet, while SwipeableView still lays out placeholders.
+  const [visitedTabs, setVisitedTabs] = useState<Set<TraderTabKey>>(() => new Set([initialTab]))
 
   const handleAccountChange = useCallback((account: string) => {
     setActiveAccount(account)
@@ -201,6 +205,12 @@ export default function TraderProfileClient({ data, serverTraderData, claimedUse
 
   const handleTabChange = useCallback((tab: TraderTabKey) => {
     setActiveTab(tab)
+    setVisitedTabs(prev => {
+      if (prev.has(tab)) return prev
+      const next = new Set(prev)
+      next.add(tab)
+      return next
+    })
     const params = new URLSearchParams(searchParams.toString())
     if (tab === 'overview') {
       params.delete('tab')
@@ -625,7 +635,7 @@ export default function TraderProfileClient({ data, serverTraderData, claimedUse
 
                 {/* Equity Curve Chart */}
                 {traderEquityCurve && (
-                  <SectionErrorBoundary fallbackMessage="Chart unavailable">
+                  <SectionErrorBoundary>
                     <EquityCurveSection
                       equityCurve={traderEquityCurve}
                       traderHandle={traderProfile?.handle || data.handle}
@@ -651,7 +661,7 @@ export default function TraderProfileClient({ data, serverTraderData, claimedUse
                       <Text size="sm" weight="bold" style={{ color: 'var(--color-text-secondary)', marginBottom: tokens.spacing[3] }}>
                         {t('drawdownChart') || 'Drawdown'} ({selectedPeriod})
                       </Text>
-                      <SectionErrorBoundary fallbackMessage="Chart unavailable"><DrawdownChart equityCurve={curve} /></SectionErrorBoundary>
+                      <SectionErrorBoundary><DrawdownChart equityCurve={curve} /></SectionErrorBoundary>
                     </Box>
                   )
                 })()}
@@ -845,9 +855,9 @@ export default function TraderProfileClient({ data, serverTraderData, claimedUse
           )}
           </Box>
 
-          {/* Stats Tab */}
+          {/* Stats Tab — lazy: only mount after first visit */}
           <Box style={{ minHeight: 200 }}>
-            {traderStats ? (
+            {visitedTabs.has('stats') && traderStats ? (
               <StatsPage
                 stats={traderStats}
                 traderHandle={traderProfile?.handle || data.handle}
@@ -857,7 +867,7 @@ export default function TraderProfileClient({ data, serverTraderData, claimedUse
                 isPro={isPro}
                 onUnlock={() => router.push('/pricing')}
               />
-            ) : (
+            ) : visitedTabs.has('stats') ? (
               <Box style={{
                 padding: tokens.spacing[6],
                 background: tokens.colors.bg.secondary,
@@ -869,12 +879,16 @@ export default function TraderProfileClient({ data, serverTraderData, claimedUse
                   {t('noStatsData')}
                 </Text>
               </Box>
+            ) : (
+              <RankingSkeleton />
             )}
           </Box>
 
-          {/* Portfolio Tab — shown for ALL platforms, empty state when no data */}
+          {/* Portfolio Tab — lazy: only mount after first visit */}
           <Box style={{ minHeight: 200 }}>
-            {traderPortfolio.length === 0 && traderPositionHistory.length === 0 ? (
+            {!visitedTabs.has('portfolio') ? (
+              <RankingSkeleton />
+            ) : traderPortfolio.length === 0 && traderPositionHistory.length === 0 ? (
               <Box style={{
                 padding: tokens.spacing[10],
                 textAlign: 'center',
