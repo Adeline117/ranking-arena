@@ -180,12 +180,12 @@ async function getRankingsFallback(rankingsQuery: RankingsQuery, _cursor?: strin
   const seasonId = window.toUpperCase() as TradingPeriod;
 
   // Map sort_by to unified sortBy parameter
-  const sortByMap: Record<string, 'rank' | 'arena_score' | 'roi' | 'pnl'> = {
+  const sortByMap: Record<string, string> = {
     arena_score: 'arena_score',
     roi: 'roi',
     pnl: 'pnl',
-    drawdown: 'arena_score', // no direct drawdown sort in unified, fall back to arena_score
-    copiers: 'arena_score',  // no direct copiers sort in unified, fall back to arena_score
+    drawdown: 'max_drawdown',
+    copiers: 'copiers',
   };
   const unifiedSortBy = sortByMap[sort_by] || 'arena_score';
 
@@ -204,7 +204,7 @@ async function getRankingsFallback(rankingsQuery: RankingsQuery, _cursor?: strin
 
   // Helper: build base query with all filters applied (reusable for chunked fetches)
   const SELECT_COLS = `source_trader_id, handle, source, source_type, roi, pnl, win_rate, max_drawdown,
-       trades_count, followers, arena_score, avatar_url, rank, computed_at,
+       trades_count, followers, copiers, arena_score, avatar_url, rank, computed_at,
        profitability_score, risk_control_score, execution_score, score_completeness,
        trading_style, avg_holding_hours, sharpe_ratio, sortino_ratio, calmar_ratio, profit_factor, trader_type, is_outlier, metrics_estimated`
 
@@ -347,7 +347,7 @@ async function getRankingsFallback(rankingsQuery: RankingsQuery, _cursor?: strin
         max_drawdown: row.max_drawdown != null ? Number(row.max_drawdown) : null,
         trades_count: (row.trades_count as number) ?? null,
         followers: (row.followers as number) ?? null,
-        copiers: null,
+        copiers: row.copiers != null ? Number(row.copiers) : null,
         aum: null,
         arena_score: row.arena_score != null ? Number(row.arena_score) : null,
         return_score: null,
