@@ -291,7 +291,8 @@ function RankingTableInner(props: {
       const q = debouncedSearch.trim().toLowerCase()
       data = data.filter(t => {
         const handle = (t.handle || t.id || '').toLowerCase()
-        return handle.includes(q) || t.id.toLowerCase().includes(q)
+        const displayName = (t.display_name || '').toLowerCase()
+        return handle.includes(q) || t.id.toLowerCase().includes(q) || displayName.includes(q)
       })
     }
     // Apply trader type filter (human/bot)
