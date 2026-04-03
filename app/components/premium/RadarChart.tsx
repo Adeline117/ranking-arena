@@ -57,8 +57,8 @@ export default function RadarChart({
   const traderCount = data[0]?.values.length ?? 0
 
   return (
-    <div style={{ position: 'relative', width: size, height: size + 24 }}>
-      <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} style={{ overflow: 'visible' }}>
+    <div style={{ position: 'relative', width: '100%', maxWidth: size, aspectRatio: `${size} / ${size + 24}` }}>
+      <svg viewBox={`0 0 ${size} ${size}`} style={{ width: '100%', height: 'auto', overflow: 'visible' }}>
         {rings.map((pct) => (
           <polygon
             key={pct}
