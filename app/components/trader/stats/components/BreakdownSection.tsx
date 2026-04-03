@@ -50,7 +50,7 @@ export function BreakdownSection({
     return null
   }
 
-  const totalPct = currentData.reduce((sum, item) => sum + item.weightPct, 0)
+  const totalPct = currentData.reduce((sum, item) => sum + item.weightPct, 0) || 1
 
   return (
     <Box
