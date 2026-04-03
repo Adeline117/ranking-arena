@@ -1,4 +1,5 @@
 'use client'
+'use no memo'
 
 import { tokens } from '@/lib/design-tokens'
 import { ThumbsUpIcon, ThumbsDownIcon } from '../../ui/icons'
