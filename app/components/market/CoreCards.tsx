@@ -209,7 +209,10 @@ function useTimeSince(timestamp: number | null): string {
   const [now, setNow] = useState(Date.now())
   useEffect(() => {
     if (!timestamp) return
-    const id = setInterval(() => setNow(Date.now()), 1000)
+    const id = setInterval(() => {
+      if (document.visibilityState === 'hidden') return
+      setNow(Date.now())
+    }, 1000)
     return () => clearInterval(id)
   }, [timestamp])
   if (!timestamp) return ''
@@ -330,8 +333,11 @@ export default function CoreCards() {
         .catch(err => console.warn('[CoreCards] fetch failed', err))
     }
     fetchMarketData()
-    // Refresh market data every 60 seconds
-    const interval = setInterval(fetchMarketData, 60000)
+    // Refresh market data every 60 seconds (skip when tab hidden)
+    const interval = setInterval(() => {
+      if (document.visibilityState === 'hidden') return
+      fetchMarketData()
+    }, 60000)
     return () => {
       alive = false
       controller.abort()
