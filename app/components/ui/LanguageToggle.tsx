@@ -91,7 +91,7 @@ export default function LanguageToggle() {
           overflow: 'hidden',
           zIndex: 50,
           minWidth: 120,
-          boxShadow: '0 4px 12px rgba(0,0,0,0.3)',
+          boxShadow: '0 4px 12px var(--color-overlay-medium, rgba(0,0,0,0.3))',
         }}>
           {SUPPORTED_LANGUAGES.map(lang => (
             <button
@@ -109,6 +109,13 @@ export default function LanguageToggle() {
                 fontSize: tokens.typography.fontSize.sm,
                 cursor: 'pointer',
                 textAlign: 'left',
+                transition: 'background 0.15s',
+              }}
+              onMouseEnter={(e) => {
+                if (lang.code !== language) e.currentTarget.style.background = 'var(--color-bg-tertiary, rgba(255,255,255,0.05))'
+              }}
+              onMouseLeave={(e) => {
+                if (lang.code !== language) e.currentTarget.style.background = 'transparent'
               }}
             >
               <span style={{ fontWeight: 600, width: 24 }}>{LANG_LABELS[lang.code]}</span>
