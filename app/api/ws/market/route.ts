@@ -33,11 +33,11 @@ export async function GET(request: NextRequest) {
   const encoder = new TextEncoder()
   let unsubscribe: (() => void) | null = null
   let keepAliveTimer: ReturnType<typeof setInterval> | null = null
-  // Close the SSE stream after 55 seconds to stay within Vercel's 60s
-  // serverless function limit and allow the client to reconnect cleanly.
-  // The client (useMarketFeed) will automatically reconnect on close.
+  // Close the SSE stream before Vercel's 60s serverless timeout.
+  // 58s gives 2s safety margin (was 55s = 5s wasted per cycle).
+  // Client (useMarketFeed) auto-reconnects on close.
   let maxAgeTimer: ReturnType<typeof setTimeout> | null = null
-  const MAX_CONNECTION_AGE_MS = 55_000
+  const MAX_CONNECTION_AGE_MS = 58_000
 
   const stream = new ReadableStream({
     start(controller) {
