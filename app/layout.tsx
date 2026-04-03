@@ -135,6 +135,7 @@ export const metadata: Metadata = {
       `${BASE_URL}/api/og?title=Arena&subtitle=All+rankings+in+crypto`,
     ],
     creator: '@arenafi',
+    site: '@arenafi',
   },
   robots: {
     index: true,
