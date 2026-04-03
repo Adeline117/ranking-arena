@@ -129,6 +129,11 @@ function MobileSectorsTab() {
 
   if (loading) return <LoadingSkeleton variant="list" count={4} />
   if (fetchError) return <ErrorState title={t('loadFailed')} variant="compact" />
+  if (sectors.length === 0) return (
+    <div style={{ height: 160, display: 'flex', alignItems: 'center', justifyContent: 'center', color: tokens.colors.text.tertiary, fontSize: 14 }}>
+      {t('noData') || 'No sector data available'}
+    </div>
+  )
 
   return (
     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 10, padding: '4px 16px' }}>
@@ -246,7 +251,7 @@ function MarketPageContent({ initialSpotData }: { initialSpotData?: SpotCoinSSR[
           </section>
 
           {/* Widgets row: Fear&Greed + Arbitrage + Live Trades */}
-          <section style={{ marginBottom: 16, display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12, height: 200 }}>
+          <section style={{ marginBottom: 16, display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12, minHeight: 200 }}>
             <SectionErrorBoundary fallbackMessage="Failed to load Fear &amp; Greed index">
               <Suspense fallback={<LoadingCard height={160} />}>
                 <FearGreedGauge />
