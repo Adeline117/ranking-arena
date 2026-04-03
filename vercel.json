@@ -37,11 +37,11 @@
       "schedule": "10 * * * *"
     },
     {
-      "path": "/api/cron/fetch-details?tier=hot&concurrency=50&limit=150",
-      "schedule": "*/15 * * * *"
+      "path": "/api/cron/fetch-details?tier=hot&concurrency=20&limit=50",
+      "schedule": "*/30 * * * *"
     },
     {
-      "path": "/api/cron/fetch-details?tier=normal&concurrency=25&limit=500",
+      "path": "/api/cron/fetch-details?tier=normal&concurrency=10&limit=200",
       "schedule": "22 */4 * * *"
     },
     {
