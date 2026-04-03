@@ -270,12 +270,14 @@ function RankingTableInner(props: {
     if (onSortChange) { onSortChange(col, newDir) }
     else { setInternalSortColumn(col); setInternalSortDir(newDir) }
     setCurrentPage(1)
+    setCardVisibleCount(20)
   }
 
   const _handleSearchInput = (value: string) => {
     if (onSearchChange) onSearchChange(value)
     else setInternalSearchQuery(value)
     setCurrentPage(1)
+    setCardVisibleCount(20)
   }
 
   const hasStyleData = React.useMemo(
@@ -393,10 +395,10 @@ function RankingTableInner(props: {
           onToggleColumn={toggleColumn}
           onResetColumns={resetColumns}
           styleFilter={styleFilter}
-          onStyleFilterChange={(s) => { setStyleFilter(s); setCurrentPage(1) }}
+          onStyleFilterChange={(s) => { setStyleFilter(s); setCurrentPage(1); setCardVisibleCount(20) }}
           hasStyleData={hasStyleData}
           traderTypeFilter={traderTypeFilter}
-          onTraderTypeFilterChange={(type) => { setTraderTypeFilter(type); setCurrentPage(1) }}
+          onTraderTypeFilterChange={(type) => { setTraderTypeFilter(type); setCurrentPage(1); setCardVisibleCount(20) }}
           traders={traders}
           source={source}
           timeRange={timeRange}
@@ -616,6 +618,11 @@ function RankingTableInner(props: {
                 </button>
               </Box>
             </>
+          )}
+          {cardVisibleCount >= sortedTraders.length && sortedTraders.length > 20 && (
+            <Box style={{ textAlign: 'center', padding: tokens.spacing[4], opacity: 0.5 }}>
+              <Text size="xs" color="tertiary">{t('endOfList') || `All ${sortedTraders.length} traders shown`}</Text>
+            </Box>
           )}
         </>
       ) : (
