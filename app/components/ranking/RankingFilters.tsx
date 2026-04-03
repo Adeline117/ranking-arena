@@ -103,7 +103,7 @@ function ExportRankingButton({ traders, source, timeRange }: ExportRankingButton
         <span className="hide-mobile">{t('exportRanking')}</span>
       </button>
       {showMenu && (
-        <div style={{
+        <div className="dropdown-enter" style={{
           position: 'absolute', top: '100%', right: 0, marginTop: 4,
           background: tokens.colors.bg.secondary, border: `1px solid ${tokens.colors.border.primary}`,
           borderRadius: tokens.radius.md, overflow: 'hidden', zIndex: tokens.zIndex.dropdown, minWidth: 160,
@@ -278,7 +278,7 @@ export function RankingFilters({
               <SettingsIcon size={11} />
             </Box>
             {showColumnSettings && (
-              <Box style={{
+              <Box className="dropdown-enter" style={{
                 position: 'absolute', top: '100%', right: 0, marginTop: tokens.spacing[1],
                 padding: tokens.spacing[3],
                 background: tokens.colors.bg.primary, border: `1px solid ${tokens.colors.border.primary}`,
