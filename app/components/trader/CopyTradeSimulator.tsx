@@ -52,9 +52,9 @@ export default function CopyTradeSimulator({ equityCurve }: CopyTradeSimulatorPr
 
   let svgPath = ''
   if (simulation && simulation.portfolioCurve.length > 1) {
-    const values = simulation.portfolioCurve.map((p) => p.value)
-    const minVal = Math.min(...values)
-    const maxVal = Math.max(...values)
+    const values = simulation.portfolioCurve.map((p) => p.value).filter(v => isFinite(v))
+    const minVal = values.length >= 2 ? Math.min(...values) : 0
+    const maxVal = values.length >= 2 ? Math.max(...values) : 1
     const range = maxVal - minVal || 1
 
     const points = values.map((v, i) => {
