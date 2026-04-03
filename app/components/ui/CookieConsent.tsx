@@ -26,6 +26,16 @@ export default function CookieConsent() {
     }
   }, [])
 
+  // Auto-dismiss after 8 seconds — continued browsing implies consent
+  useEffect(() => {
+    if (!visible) return
+    const timer = setTimeout(() => {
+      handleAccept()
+    }, 8000)
+    return () => clearTimeout(timer)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [visible])
+
   const handleAccept = () => {
     try {
       localStorage.setItem(LS_KEY, 'accepted')
