@@ -402,23 +402,43 @@ const RankBadge = React.memo(function RankBadge({ rank }: { rank: number }) {
   return <span style={style}>{rank}</span>
 })
 
+// TraderCardItem wrapper styles — per-rank constants
+const CARD_LINK_STYLE: React.CSSProperties = { textDecoration: 'none', display: 'block' }
+const CARD_BASE = { padding: tokens.spacing[4], borderRadius: tokens.radius.lg, display: 'flex' as const, flexDirection: 'column' as const, gap: tokens.spacing[3], transition: `transform ${tokens.transition.fast}, box-shadow ${tokens.transition.fast}` }
+const CARD_WRAPPER_1: React.CSSProperties = { ...CARD_BASE, background: 'linear-gradient(145deg, rgba(255,215,0,0.12) 0%, var(--overlay-hover) 60%)', border: '1px solid rgba(255,215,0,0.25)', boxShadow: `${tokens.shadow.sm}, 0 0 12px rgba(255,215,0,0.15)` }
+const CARD_WRAPPER_2: React.CSSProperties = { ...CARD_BASE, background: 'linear-gradient(145deg, rgba(192,192,192,0.10) 0%, var(--overlay-hover) 60%)', border: '1px solid rgba(192,192,192,0.20)', boxShadow: `${tokens.shadow.sm}, 0 0 12px rgba(192,192,192,0.12)` }
+const CARD_WRAPPER_3: React.CSSProperties = { ...CARD_BASE, background: 'linear-gradient(145deg, rgba(205,127,50,0.10) 0%, var(--overlay-hover) 60%)', border: '1px solid rgba(205,127,50,0.20)', boxShadow: `${tokens.shadow.sm}, 0 0 12px rgba(205,127,50,0.12)` }
+const CARD_WRAPPER_DEFAULT: React.CSSProperties = { ...CARD_BASE, background: 'var(--overlay-hover)', border: '1px solid var(--glass-border-light)', boxShadow: tokens.shadow.sm }
+const CARD_HEADER_ROW: React.CSSProperties = { display: 'flex', alignItems: 'center', gap: tokens.spacing[3] }
+const CARD_AVATAR_WRAPPER: React.CSSProperties = { width: 40, height: 40, borderRadius: '50%', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' }
+const CARD_NAME_STYLE: React.CSSProperties = { fontSize: 14, fontWeight: 600, color: tokens.colors.text.primary, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }
+const CARD_PLATFORM_ROW: React.CSSProperties = { fontSize: 11, color: tokens.colors.text.tertiary, display: 'flex', alignItems: 'center', gap: 4 }
+const CARD_STATS_GRID: React.CSSProperties = { display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: tokens.spacing[2] }
+
+function getCardWrapperStyle(rank: number): React.CSSProperties {
+  if (rank === 1) return CARD_WRAPPER_1
+  if (rank === 2) return CARD_WRAPPER_2
+  if (rank === 3) return CARD_WRAPPER_3
+  return CARD_WRAPPER_DEFAULT
+}
+
 const TraderCardItem = React.memo(function TraderCardItem({ trader, rank }: { trader: TraderData; rank: number }) {
   const { t } = useLanguage()
   const name = getDisplayName(trader)
   const roiColor = trader.roi != null && trader.roi >= 0 ? tokens.colors.accent.success : tokens.colors.accent.error
   return (
-    <Link href={`/trader/${encodeURIComponent(trader.trader_key)}?platform=${trader.platform}`} prefetch={false} style={{ textDecoration: 'none', display: 'block' }}>
-      <div style={{ padding: tokens.spacing[4], borderRadius: tokens.radius.lg, background: rank === 1 ? 'linear-gradient(145deg, rgba(255,215,0,0.12) 0%, var(--overlay-hover) 60%)' : rank === 2 ? 'linear-gradient(145deg, rgba(192,192,192,0.10) 0%, var(--overlay-hover) 60%)' : rank === 3 ? 'linear-gradient(145deg, rgba(205,127,50,0.10) 0%, var(--overlay-hover) 60%)' : 'var(--overlay-hover)', border: rank === 1 ? '1px solid rgba(255,215,0,0.25)' : rank === 2 ? '1px solid rgba(192,192,192,0.20)' : rank === 3 ? '1px solid rgba(205,127,50,0.20)' : '1px solid var(--glass-border-light)', display: 'flex', flexDirection: 'column', gap: tokens.spacing[3], transition: `transform ${tokens.transition.fast}, box-shadow ${tokens.transition.fast}`, boxShadow: rank <= 3 ? `${tokens.shadow.sm}, 0 0 12px ${rank === 1 ? 'rgba(255,215,0,0.15)' : rank === 2 ? 'rgba(192,192,192,0.12)' : 'rgba(205,127,50,0.12)'}` : tokens.shadow.sm }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[3] }}>
+    <Link href={`/trader/${encodeURIComponent(trader.trader_key)}?platform=${trader.platform}`} prefetch={false} style={CARD_LINK_STYLE}>
+      <div style={getCardWrapperStyle(rank)}>
+        <div style={CARD_HEADER_ROW}>
           <RankBadge rank={rank} />
-          <div style={{ width: 40, height: 40, borderRadius: '50%', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', background: getAvatarGradient(trader.trader_key) }}><TraderAvatarImg avatarUrl={trader.avatar_url} traderKey={trader.trader_key} name={name} size={40} /></div>
+          <div style={{ ...CARD_AVATAR_WRAPPER, background: getAvatarGradient(trader.trader_key) }}><TraderAvatarImg avatarUrl={trader.avatar_url} traderKey={trader.trader_key} name={name} size={40} /></div>
           <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ fontSize: 14, fontWeight: 600, color: tokens.colors.text.primary, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{name}</div>
-            <div style={{ fontSize: 11, color: tokens.colors.text.tertiary, display: 'flex', alignItems: 'center', gap: 4 }}>{EXCHANGE_NAMES[trader.platform] || trader.platform}{(trader.platform === 'web3_bot' || trader.trader_type === 'bot' || trader.is_bot) && <span style={{ padding: '0px 4px', borderRadius: 4, fontSize: 10, fontWeight: 600, color: '#a78bfa', background: 'rgba(167,139,250,0.12)', border: '1px solid rgba(167,139,250,0.25)' }}>Bot</span>}</div>
+            <div style={CARD_NAME_STYLE}>{name}</div>
+            <div style={CARD_PLATFORM_ROW}>{EXCHANGE_NAMES[trader.platform] || trader.platform}{(trader.platform === 'web3_bot' || trader.trader_type === 'bot' || trader.is_bot) && <span style={CELL_BOT_BADGE}>Bot</span>}</div>
           </div>
           <div style={{ textAlign: 'right' }}><div style={{ fontSize: 18, fontWeight: 800, color: roiColor }}>{formatROI(trader.roi)}</div><Sparkline roi={trader.roi ?? undefined} width={60} height={16} /></div>
         </div>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: tokens.spacing[2] }}>
+        <div style={CARD_STATS_GRID}>
           <StatBlock label="PnL" value={trader.pnl != null ? `$${trader.pnl >= 1000 ? `${(trader.pnl / 1000).toFixed(1)}K` : trader.pnl.toFixed(0)}` : NULL_DISPLAY} color={trader.pnl != null ? (trader.pnl >= 0 ? tokens.colors.accent.success : tokens.colors.accent.error) : undefined} />
           <StatBlock label={t('rankingWinRate')} value={trader.win_rate != null ? `${trader.win_rate.toFixed(1)}%` : NULL_DISPLAY} color={trader.win_rate != null ? (trader.win_rate >= 50 ? tokens.colors.accent.success : tokens.colors.accent.error) : undefined} />
           <StatBlock label={t('rankingMdd')} value={trader.max_drawdown != null ? `-${Math.abs(trader.max_drawdown).toFixed(1)}%` : NULL_DISPLAY} color={trader.max_drawdown != null ? tokens.colors.accent.error + 'cc' : undefined} />
