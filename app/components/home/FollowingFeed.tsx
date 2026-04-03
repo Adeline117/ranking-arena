@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useCallback } from 'react'
 import Image from 'next/image'
+import Link from 'next/link'
 import { supabase } from '@/lib/supabase/client'
 import { tokens } from '@/lib/design-tokens'
 import { useAuthSession } from '@/lib/hooks/useAuthSession'
@@ -139,13 +140,13 @@ export default function FollowingFeed() {
         <p style={{ fontSize: 13 }}>
           {t('followingFeedDiscoverTraders')}
         </p>
-        <a href="/rankings" style={{
+        <Link href="/rankings" style={{
           display: 'inline-block', marginTop: 16, padding: '8px 24px', borderRadius: tokens.radius.md,
           background: tokens.colors.accent.brand, color: tokens.colors.white,
           textDecoration: 'none', fontWeight: 600, fontSize: 14,
         }}>
           {t('followingFeedViewRankings')}
-        </a>
+        </Link>
       </div>
     )
   }

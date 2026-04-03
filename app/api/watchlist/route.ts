@@ -145,7 +145,14 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
     }
 
-    return NextResponse.json({ ok: true })
+    // Return updated watchlist so client can mutate SWR cache immediately
+    const { data: updated } = await supabase
+      .from('trader_watchlist')
+      .select('source, source_trader_id, handle, created_at')
+      .eq('user_id', user.id)
+      .order('created_at', { ascending: false })
+
+    return NextResponse.json({ ok: true, watchlist: updated ?? [] })
   } catch (error) {
     log.error('POST failed', { error: error instanceof Error ? error.message : String(error) })
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
@@ -188,7 +195,14 @@ export async function DELETE(request: NextRequest) {
       return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
     }
 
-    return NextResponse.json({ ok: true })
+    // Return updated watchlist so client can mutate SWR cache immediately
+    const { data: updated } = await supabase
+      .from('trader_watchlist')
+      .select('source, source_trader_id, handle, created_at')
+      .eq('user_id', user.id)
+      .order('created_at', { ascending: false })
+
+    return NextResponse.json({ ok: true, watchlist: updated ?? [] })
   } catch (error) {
     log.error('DELETE failed', { error: error instanceof Error ? error.message : String(error) })
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })

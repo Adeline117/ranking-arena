@@ -200,7 +200,7 @@ function AdvancedFiltersPanel({ filters, onChange, isPro, expanded, onToggle, on
           position: 'relative', padding: '12px 16px', borderTop: '1px solid var(--glass-border-light)',
           textAlign: 'center',
         }}>
-          <a href="/pricing" style={{
+          <Link href="/pricing" style={{
             display: 'inline-flex', alignItems: 'center', gap: 6,
             padding: '8px 20px', borderRadius: 8,
             background: 'linear-gradient(135deg, #a78bfa, #8b5cf6)',
@@ -208,7 +208,7 @@ function AdvancedFiltersPanel({ filters, onChange, isPro, expanded, onToggle, on
           }}>
             <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M12 1C8.676 1 6 3.676 6 7V8H4V21H20V8H18V7C18 3.676 15.324 1 12 1ZM12 3C14.276 3 16 4.724 16 7V8H8V7C8 4.724 9.724 3 12 3Z" /></svg>
             Upgrade to Pro
-          </a>
+          </Link>
         </div>
       )}
     </div>
@@ -254,7 +254,7 @@ function ProExportButton({ traders, exchange, period, isPro, t }: {
 
   if (!isPro) {
     return (
-      <a href="/pricing" title="Pro feature" style={{
+      <Link href="/pricing" title="Pro feature" style={{
         display: 'flex', alignItems: 'center', gap: 4,
         padding: '6px 12px', borderRadius: tokens.radius.md,
         border: '1px solid var(--glass-border-light)',
@@ -263,7 +263,7 @@ function ProExportButton({ traders, exchange, period, isPro, t }: {
       }}>
         <svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor"><path d="M12 1C8.676 1 6 3.676 6 7V8H4V21H20V8H18V7C18 3.676 15.324 1 12 1ZM12 3C14.276 3 16 4.724 16 7V8H8V7C8 4.724 9.724 3 12 3Z" /></svg>
         {t('export') || 'Export'}
-      </a>
+      </Link>
     )
   }
 

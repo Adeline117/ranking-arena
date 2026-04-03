@@ -10,6 +10,7 @@ import { getCsrfHeaders } from '@/lib/api/client'
 import { usePresence } from '@/lib/hooks/usePresence'
 import ChatSettingsDrawer from '@/app/components/features/ChatSettingsDrawer'
 import ChatSearchOverlay from '@/app/components/features/ChatSearchOverlay'
+import Link from 'next/link'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 
 import type { Message } from './components/types'
@@ -163,7 +164,7 @@ export default function ConversationPage({ params }: { params: Promise<{ convers
             </Box>
             <Text size="lg" weight="bold" style={{ marginBottom: tokens.spacing[2], color: tokens.colors.text.primary }}>{t('pleaseLogin')}</Text>
             <Text size="sm" color="tertiary" style={{ maxWidth: 280, margin: '0 auto', lineHeight: 1.6, marginBottom: tokens.spacing[4] }}>{t('loginToViewMessages')}</Text>
-            <a href="/login" style={{ display: 'inline-block', padding: '12px 24px', background: `linear-gradient(135deg, ${tokens.colors.accent.brand} 0%, var(--color-brand-hover) 100%)`, color: tokens.colors.white, borderRadius: tokens.radius.lg, textDecoration: 'none', fontWeight: 700, fontSize: '14px' }}>{t('goToLogin')}</a>
+            <Link href="/login" style={{ display: 'inline-block', padding: '12px 24px', background: `linear-gradient(135deg, ${tokens.colors.accent.brand} 0%, var(--color-brand-hover) 100%)`, color: tokens.colors.white, borderRadius: tokens.radius.lg, textDecoration: 'none', fontWeight: 700, fontSize: '14px' }}>{t('goToLogin')}</Link>
           </Box>
         </Box>
       </Box>

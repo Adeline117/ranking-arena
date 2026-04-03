@@ -171,9 +171,9 @@ export default function TermsOfServicePage() {
           <p style={{ marginTop: 12 }}>
             Users may delete their own accounts at any time through account settings or
             by messaging{' '}
-            <a href="/u/adelinewen1107" style={{ color: 'var(--color-accent-primary)' }}>
+            <Link href="/u/adelinewen1107" style={{ color: 'var(--color-accent-primary)' }}>
               @adelinewen1107
-            </a>.
+            </Link>.
           </p>
         </div>
       </section>
@@ -233,9 +233,9 @@ export default function TermsOfServicePage() {
         <div style={bodyStyle}>
           <p>
             For questions about these Terms, send a message to{' '}
-            <a href="/u/adelinewen1107" style={{ color: 'var(--color-accent-primary)' }}>
+            <Link href="/u/adelinewen1107" style={{ color: 'var(--color-accent-primary)' }}>
               @adelinewen1107
-            </a>
+            </Link>
           </p>
         </div>
       </section>
@@ -313,9 +313,9 @@ export default function TermsOfServicePage() {
           </ul>
           <p style={{ marginTop: 12 }}>
             用户可随时通过账户设置或联系{' '}
-            <a href="/u/adelinewen1107" style={{ color: 'var(--color-accent-primary)' }}>
+            <Link href="/u/adelinewen1107" style={{ color: 'var(--color-accent-primary)' }}>
               @adelinewen1107
-            </a>{' '}
+            </Link>{' '}
             删除自己的账户。
           </p>
         </div>
@@ -365,9 +365,9 @@ export default function TermsOfServicePage() {
         <div style={bodyStyle}>
           <p>
             如对本条款有任何疑问，请私信联系：{' '}
-            <a href="/u/adelinewen1107" style={{ color: 'var(--color-accent-primary)' }}>
+            <Link href="/u/adelinewen1107" style={{ color: 'var(--color-accent-primary)' }}>
               @adelinewen1107
-            </a>
+            </Link>
           </p>
         </div>
       </section>

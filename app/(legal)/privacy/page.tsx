@@ -154,9 +154,9 @@ export default function PrivacyPolicyPage() {
           <div style={calloutStyle}>
             <p style={{ margin: 0 }}>
               To exercise any of these rights, send a message to{' '}
-              <a href="/u/adelinewen1107" style={{ color: 'var(--color-accent-primary)' }}>
+              <Link href="/u/adelinewen1107" style={{ color: 'var(--color-accent-primary)' }}>
                 @adelinewen1107
-              </a>
+              </Link>
             </p>
           </div>
         </div>
@@ -203,9 +203,9 @@ export default function PrivacyPolicyPage() {
         <div style={bodyStyle}>
           <p>
             For questions or concerns about this Privacy Policy, please send a message to{' '}
-            <a href="/u/adelinewen1107" style={{ color: 'var(--color-accent-primary)' }}>
+            <Link href="/u/adelinewen1107" style={{ color: 'var(--color-accent-primary)' }}>
               @adelinewen1107
-            </a>
+            </Link>
           </p>
         </div>
       </section>
@@ -299,9 +299,9 @@ export default function PrivacyPolicyPage() {
           <div style={calloutStyle}>
             <p style={{ margin: 0 }}>
               如需行使上述任何权利，请私信联系：{' '}
-              <a href="/u/adelinewen1107" style={{ color: 'var(--color-accent-primary)' }}>
+              <Link href="/u/adelinewen1107" style={{ color: 'var(--color-accent-primary)' }}>
                 @adelinewen1107
-              </a>
+              </Link>
             </p>
           </div>
         </div>
@@ -339,9 +339,9 @@ export default function PrivacyPolicyPage() {
         <div style={bodyStyle}>
           <p>
             如对本隐私政策有任何疑问或顾虑，请私信联系：{' '}
-            <a href="/u/adelinewen1107" style={{ color: 'var(--color-accent-primary)' }}>
+            <Link href="/u/adelinewen1107" style={{ color: 'var(--color-accent-primary)' }}>
               @adelinewen1107
-            </a>
+            </Link>
           </p>
         </div>
       </section>
