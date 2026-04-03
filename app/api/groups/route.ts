@@ -59,11 +59,11 @@ export async function GET(request: NextRequest) {
           },
         }
       },
-      { ttl: 120, lockTtl: 10 }
+      { ttl: 300, lockTtl: 10 }
     )
 
     const response = NextResponse.json(result)
-    response.headers.set('Cache-Control', 'public, s-maxage=120, stale-while-revalidate=300')
+    response.headers.set('Cache-Control', 'public, s-maxage=300, stale-while-revalidate=600')
     return response
   } catch (error: unknown) {
     logger.apiError('/api/groups', error, {})
