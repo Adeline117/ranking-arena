@@ -19,14 +19,14 @@ const MAX_SAVED_FILTERS = 10
 const FilterConfigSchema = z.object({
   category: z.array(z.string()).optional(),
   exchange: z.array(z.string()).optional(),
-  roi_min: z.number().optional(),
-  roi_max: z.number().optional(),
-  drawdown_min: z.number().optional(),
-  drawdown_max: z.number().optional(),
+  roi_min: z.number().min(-100).max(100000).optional(),
+  roi_max: z.number().min(-100).max(100000).optional(),
+  drawdown_min: z.number().min(0).max(100).optional(),
+  drawdown_max: z.number().min(0).max(100).optional(),
   period: z.enum(['7D', '30D', '90D']).optional(),
-  min_pnl: z.number().optional(),
-  min_score: z.number().optional(),
-  min_win_rate: z.number().optional(),
+  min_pnl: z.number().min(-1e12).max(1e12).optional(),
+  min_score: z.number().min(0).max(100).optional(),
+  min_win_rate: z.number().min(0).max(100).optional(),
 }).passthrough()
 
 // Zod schema for POST /api/saved-filters
