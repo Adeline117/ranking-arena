@@ -116,7 +116,7 @@ async function handlePopularTokens(): Promise<NextResponse> {
       { tokens: result },
       { headers: { 'Cache-Control': 'public, s-maxage=3600, stale-while-revalidate=1800' } }
     )
-  } catch (err) {
+  } catch (_err) {
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
 }
@@ -168,22 +168,31 @@ export async function GET(request: NextRequest) {
           pnl_pct: number | null
         }> = []
 
-        // Use ilike prefix match to catch all symbol variants (BTCUSDT, BTC/USD, BTC-PERP, etc.)
-        // Combined with limit + statement_timeout to prevent slow scans
-        const { data: positionData, error: posError } = await supabase
-          .from('trader_position_history')
-          .select('source, source_trader_id, pnl_usd, pnl_pct')
-          .ilike('symbol', `${token}%`)
-          .gte('close_time', cutoffISO)
-          .not('pnl_usd', 'is', null)
-          .order('pnl_usd', { ascending: false })
-          .limit(3000)
+        // Query each common symbol format individually with .eq() (indexed, fast)
+        // ilike('symbol', 'BTC%') causes statement timeout on large tables
+        const symbolVariants = [
+          `${token}USDT`, `${token}USDT.P`, `${token}USD`,
+          `${token}/USDT`, `${token}/USD`, `${token}-PERP`,
+        ]
 
-        if (posError) {
-          throw new Error(`Position history query failed: ${posError.message}`)
+        // Run queries in parallel, each with .eq() for index usage
+        const results = await Promise.allSettled(
+          symbolVariants.map(sym =>
+            supabase
+              .from('trader_position_history')
+              .select('source, source_trader_id, pnl_usd, pnl_pct')
+              .eq('symbol', sym)
+              .gte('close_time', cutoffISO)
+              .not('pnl_usd', 'is', null)
+              .limit(500)
+          )
+        )
+
+        for (const r of results) {
+          if (r.status === 'fulfilled' && r.value.data) {
+            allRows.push(...(r.value.data as typeof allRows))
+          }
         }
-
-        allRows = (positionData || []) as typeof allRows
 
         if (allRows.length === 0) {
           return { traders: [], token, period, total: 0 }
