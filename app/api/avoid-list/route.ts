@@ -97,7 +97,7 @@ export async function GET(request: NextRequest) {
       msg.includes('trader_avoid_votes') ||
       msg.includes('avoid_votes') ||
       msg.includes('does not exist') ||
-      msg.includes('42P01')
+      msg.includes('42P01') || msg.includes('PGRST205') || msg.includes('could not find')
     ) {
       return success({ avoid_list: [], message: 'Feature coming soon' })
     }
