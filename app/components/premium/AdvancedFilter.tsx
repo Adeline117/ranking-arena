@@ -349,8 +349,11 @@ export default function AdvancedFilter({
                 type="number"
                 placeholder={t('min')}
                 aria-label={`${t('roiRange')} ${t('min')}`}
+                min={-100}
+                max={100000}
+                step="any"
                 value={currentFilter.roi_min ?? ''}
-                onChange={(e) => updateFilter('roi_min', e.target.value ? Number(e.target.value) : undefined)}
+                onChange={(e) => { const v = parseFloat(e.target.value); updateFilter('roi_min', e.target.value && !isNaN(v) ? v : undefined) }}
                 style={{
                   width: 80,
                   padding: tokens.spacing[2],
@@ -367,8 +370,11 @@ export default function AdvancedFilter({
                 type="number"
                 placeholder={t('max')}
                 aria-label={`${t('roiRange')} ${t('max')}`}
+                min={-100}
+                max={100000}
+                step="any"
                 value={currentFilter.roi_max ?? ''}
-                onChange={(e) => updateFilter('roi_max', e.target.value ? Number(e.target.value) : undefined)}
+                onChange={(e) => { const v = parseFloat(e.target.value); updateFilter('roi_max', e.target.value && !isNaN(v) ? v : undefined) }}
                 style={{
                   width: 80,
                   padding: tokens.spacing[2],
@@ -393,8 +399,11 @@ export default function AdvancedFilter({
                 type="number"
                 placeholder={t('min')}
                 aria-label={`${t('drawdownRange')} ${t('min')}`}
+                min={0}
+                max={100}
+                step="any"
                 value={currentFilter.drawdown_min ?? ''}
-                onChange={(e) => updateFilter('drawdown_min', e.target.value ? Number(e.target.value) : undefined)}
+                onChange={(e) => { const v = parseFloat(e.target.value); updateFilter('drawdown_min', e.target.value && !isNaN(v) ? v : undefined) }}
                 style={{
                   width: 80,
                   padding: tokens.spacing[2],
@@ -411,8 +420,11 @@ export default function AdvancedFilter({
                 type="number"
                 placeholder={t('max')}
                 aria-label={`${t('drawdownRange')} ${t('max')}`}
+                min={0}
+                max={100}
+                step="any"
                 value={currentFilter.drawdown_max ?? ''}
-                onChange={(e) => updateFilter('drawdown_max', e.target.value ? Number(e.target.value) : undefined)}
+                onChange={(e) => { const v = parseFloat(e.target.value); updateFilter('drawdown_max', e.target.value && !isNaN(v) ? v : undefined) }}
                 style={{
                   width: 80,
                   padding: tokens.spacing[2],
