@@ -48,7 +48,7 @@ export default function CookieConsent() {
     <div
       style={{
         position: 'fixed',
-        bottom: isNavHidden ? 0 : 'var(--mobile-nav-height, 60px)',
+        bottom: isNavHidden ? 'env(safe-area-inset-bottom, 0px)' : 'var(--mobile-nav-height, 60px)',
         left: 0,
         right: 0,
         zIndex: tokens.zIndex.overlay,
