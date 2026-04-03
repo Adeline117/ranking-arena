@@ -24,36 +24,35 @@ export function ServiceWorkerRegistration() {
     }
     navigator.serviceWorker.addEventListener('controllerchange', onControllerChange)
 
+    let registrationRef: ServiceWorkerRegistration | null = null
+    const onUpdateFound = () => {
+      const newWorker = registrationRef?.installing
+      if (!newWorker) return
+      newWorker.addEventListener('statechange', onStateChange)
+    }
+    const onStateChange = function(this: ServiceWorker) {
+      if (this.state === 'installed' && navigator.serviceWorker.controller) {
+        this.postMessage({ type: 'SKIP_WAITING' })
+      }
+    }
+
     navigator.serviceWorker
       .register('/sw.js')
       .then((registration) => {
-        // Check for updates periodically (every 60 minutes)
-        intervalId = setInterval(() => {
-          registration.update()
-        }, 60 * 60 * 1000)
-
-        // Listen for new service worker waiting to activate
-        registration.addEventListener('updatefound', () => {
-          const newWorker = registration.installing
-          if (!newWorker) return
-
-          newWorker.addEventListener('statechange', () => {
-            if (
-              newWorker.state === 'installed' &&
-              navigator.serviceWorker.controller
-            ) {
-              newWorker.postMessage({ type: 'SKIP_WAITING' })
-            }
-          })
-        })
+        registrationRef = registration
+        intervalId = setInterval(() => { registration.update() }, 60 * 60 * 1000)
+        registration.addEventListener('updatefound', onUpdateFound)
       })
-      .catch(() => { // eslint-disable-line no-restricted-syntax -- intentional fire-and-forget
-        // Registration failed silently
-      })
+      .catch(() => { /* Registration failed silently */ })
 
     return () => {
       if (intervalId) clearInterval(intervalId)
       navigator.serviceWorker.removeEventListener('controllerchange', onControllerChange)
+      if (registrationRef) {
+        registrationRef.removeEventListener('updatefound', onUpdateFound)
+        registrationRef.installing?.removeEventListener('statechange', onStateChange)
+        registrationRef.waiting?.removeEventListener('statechange', onStateChange)
+      }
     }
   }, [])
 
