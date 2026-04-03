@@ -129,7 +129,7 @@ export default function PositionHistoryView({
       ) : (
         <Box>
           <Box className="portfolio-table-scroll" style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 320 }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 520 }}>
               <thead>
                 <tr>
                   <th style={{ ...thStyle, textAlign: 'left' }}>{t('symbol')}</th>
