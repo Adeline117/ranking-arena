@@ -152,8 +152,10 @@ export async function getTraderDetail(supabase: SupabaseClient, params: {
   const { platform, traderKey } = params
   const sourceAliases = getSourceAliases(platform)
 
-  // --- Phase 1: Fetch basic data from leaderboard_ranks + v2 in parallel ---
-  const [lrResult, v2Result] = await withTimeout(
+  // --- Phase 1: Fetch basic data + profile in parallel (4 queries) ---
+  // Profile queries (traders + trader_profiles_v2) don't depend on LR/v2 results,
+  // so run them all in one Promise.all to save a sequential round trip (~100-200ms).
+  const [lrResult, v2Result, sourceProfile, profileV2] = await withTimeout(
     Promise.all([
       // leaderboard_ranks: all periods (precomputed, primary source)
       // Uses v1 column names: source, source_trader_id, season_id
@@ -180,6 +182,26 @@ export async function getTraderDetail(supabase: SupabaseClient, params: {
           .order('created_at', { ascending: false })
           .limit(5)
       ),
+      // Profile from traders table
+      safeQuery(() =>
+        supabase
+          .from('traders')
+          .select('trader_key, handle, profile_url, avatar_url, market_type')
+          .eq('platform', platform)
+          .eq('trader_key', traderKey)
+          .limit(1)
+          .maybeSingle()
+      ) as Promise<Record<string, unknown> | null>,
+      // Bio from trader_profiles_v2
+      safeQuery(() =>
+        supabase
+          .from('trader_profiles_v2')
+          .select('bio, display_name, avatar_url')
+          .eq('platform', platform)
+          .eq('trader_key', traderKey)
+          .limit(1)
+          .maybeSingle()
+      ) as Promise<Record<string, unknown> | null>,
     ]),
     20000 // 20s: parallel queries compete for Supabase pool; 10s was too tight
   )
@@ -221,28 +243,6 @@ export async function getTraderDetail(supabase: SupabaseClient, params: {
   // Build the primary trader record (prefer 90D, then 30D, then 7D)
   const primaryPeriod: TradingPeriod = periods['90D'] ? '90D' : periods['30D'] ? '30D' : '7D'
   const primaryData = periods[primaryPeriod]!
-
-  // Get profile info from traders table + bio from trader_profiles_v2
-  const [sourceProfile, profileV2] = await Promise.all([
-    safeQuery(() =>
-      supabase
-        .from('traders')
-        .select('trader_key, handle, profile_url, avatar_url, market_type')
-        .eq('platform', platform)
-        .eq('trader_key', traderKey)
-        .limit(1)
-        .maybeSingle()
-    ) as Promise<Record<string, unknown> | null>,
-    safeQuery(() =>
-      supabase
-        .from('trader_profiles_v2')
-        .select('bio, display_name, avatar_url')
-        .eq('platform', platform)
-        .eq('trader_key', traderKey)
-        .limit(1)
-        .maybeSingle()
-    ) as Promise<Record<string, unknown> | null>,
-  ])
 
   const trader: UnifiedTrader = {
     platform,
