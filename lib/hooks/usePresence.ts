@@ -112,6 +112,7 @@ export function usePresence(currentUserId: string | null, watchUserIds: string[]
       if (heartbeatRef.current) clearInterval(heartbeatRef.current)
       clearInterval(dbHeartbeat)
       channel.unsubscribe()
+      supabase.removeChannel(channel)
     }
   }, [currentUserId])
 
