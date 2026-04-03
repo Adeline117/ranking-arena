@@ -76,7 +76,8 @@ export function useMultiAccount() {
     })
 
     if (error || !data.session) {
-      // Token expired, prompt re-login
+      // Token expired — remove stale account from store so user isn't stuck
+      removeAccount(userId)
       return { success: false, error: 'session_expired', userId }
     }
 
