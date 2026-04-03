@@ -154,8 +154,9 @@ export class PipelineEvaluator {
 
     if (platformFreshness && Array.isArray(platformFreshness)) {
       // Filter by platformsHint if provided (only check platforms that were just updated)
+      // RPC returns: { platform, latest_snapshot, trader_count }
       const platforms = platformsHint?.length
-        ? platformFreshness.filter((p: { source: string }) => platformsHint.includes(p.source))
+        ? platformFreshness.filter((p: { platform: string }) => platformsHint.includes(p.platform))
         : platformFreshness
 
       totalPlatforms = platforms.length
@@ -165,19 +166,19 @@ export class PipelineEvaluator {
       const DEX_MAX_STALE_MS = 12 * 3600 * 1000 // 12h for DEX
 
       for (const p of platforms) {
-        const age = now - new Date(p.latest_update).getTime()
-        const maxAge = p.source?.includes('web3') || DEX_PLATFORMS.includes(p.source)
+        const age = now - new Date(p.latest_snapshot).getTime()
+        const maxAge = p.platform?.includes('web3') || DEX_PLATFORMS.includes(p.platform)
           ? DEX_MAX_STALE_MS
           : CEX_MAX_STALE_MS
 
         if (age > maxAge) {
           staleCount++
           issues.push({
-            platform: p.source,
+            platform: p.platform,
             type: 'stale_data',
             severity: age > maxAge * 2 ? 'critical' : 'warning',
             description: `Data is ${Math.round(age / 3600000)}h old (max: ${Math.round(maxAge / 3600000)}h)`,
-            recommendation: `Check cron job for ${p.source}. May need VPS fallback or connector fix.`,
+            recommendation: `Check cron job for ${p.platform}. May need VPS fallback or connector fix.`,
           })
         }
       }
@@ -266,11 +267,11 @@ export class PipelineEvaluator {
     const supabase = getSupabaseAdmin()
     const issues: EvaluationIssue[] = []
 
-    // Find anomalous ROI values
+    // Find anomalous ROI values (column: roi_pct in trader_snapshots_v2)
     const { data: anomalies, count: anomalyCount } = await supabase
       .from('trader_snapshots_v2')
-      .select('source, source_trader_id, roi', { count: 'exact' })
-      .or('roi.lt.-100,roi.gt.50000')
+      .select('platform, trader_key, roi_pct', { count: 'exact' })
+      .or('roi_pct.lt.-100,roi_pct.gt.50000')
       .limit(10) // Only sample for reporting
 
     const score = (anomalyCount ?? 0) === 0 ? 100
@@ -282,7 +283,7 @@ export class PipelineEvaluator {
       // Group by platform
       const byPlatform: Record<string, number> = {}
       for (const a of anomalies) {
-        byPlatform[a.source] = (byPlatform[a.source] || 0) + 1
+        byPlatform[a.platform] = (byPlatform[a.platform] || 0) + 1
       }
 
       for (const [platform, count] of Object.entries(byPlatform)) {
@@ -360,16 +361,9 @@ export class PipelineEvaluator {
     const supabase = getSupabaseAdmin()
     const issues: EvaluationIssue[] = []
 
-    // Check for duplicate (source, source_trader_id, season) in leaderboard_ranks
-    // Uses direct query instead of RPC — no migration dependency
-    const { data: dupeCheck } = await supabase
-      .from('leaderboard_ranks')
-      .select('source, source_trader_id, season', { count: 'exact' })
-      .limit(0) // We only need the count check below
-
-    // Query for duplicates: count by (source, source_trader_id, season) having count > 1
+    // Check for duplicate (source, source_trader_id, season_id) in leaderboard_ranks
     // Supabase JS doesn't support GROUP BY/HAVING, so do a simpler check:
-    // Compare total rows vs distinct (source, source_trader_id, season) rows
+    // Compare total rows vs distinct (source, source_trader_id, season_id) rows
     const { count: totalRows } = await supabase
       .from('leaderboard_ranks')
       .select('*', { count: 'exact', head: true })
@@ -380,17 +374,17 @@ export class PipelineEvaluator {
     let dupeCount = 0
 
     if (totalRows && totalRows > 0) {
-      // Sample: pick a random source and check for duplicates within it
+      // Sample: pick recent rows and check for duplicates within them
       const { data: sampleDupes } = await supabase
         .from('leaderboard_ranks')
-        .select('source, source_trader_id, season')
+        .select('source, source_trader_id, season_id')
         .order('updated_at', { ascending: false })
         .limit(1000)
 
       if (sampleDupes) {
         const seen = new Set<string>()
         for (const row of sampleDupes) {
-          const key = `${row.source}:${row.source_trader_id}:${row.season}`
+          const key = `${row.source}:${row.source_trader_id}:${row.season_id}`
           if (seen.has(key)) dupeCount++
           seen.add(key)
         }

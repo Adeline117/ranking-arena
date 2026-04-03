@@ -15,7 +15,8 @@ import { PipelineLogger } from '@/lib/services/pipeline-logger'
 import { runEnrichment, type EnrichmentResult } from '@/lib/cron/enrichment-runner'
 import { createLogger } from '@/lib/utils/logger'
 import { env } from '@/lib/env'
-import { triggerDownstreamRefresh } from '@/lib/cron/trigger-chain'
+import { triggerDownstreamRefresh, type TraceMetadata } from '@/lib/cron/trigger-chain'
+import { randomUUID } from 'crypto'
 
 const logger = createLogger('batch-enrich')
 
@@ -270,9 +271,19 @@ export async function GET(request: NextRequest) {
     )
   }
 
-  // Trigger downstream refresh (compute-leaderboard → warm-cache) when we enriched data
+  // Trigger downstream refresh (compute-leaderboard → evaluate → warm-cache) with trace metadata
   if (succeeded > 0) {
-    triggerDownstreamRefresh(`batch-enrich-${periodParam}`)
+    const successPlatforms = results.filter(r => r.status === 'success').map(r => r.platform)
+    const failedPlatforms = results.filter(r => r.status === 'error').map(r => r.platform)
+    const trace: TraceMetadata = {
+      trace_id: randomUUID(),
+      source: `batch-enrich-${periodParam}`,
+      platforms_updated: successPlatforms,
+      records_written: succeeded,
+      duration_ms: Date.now() - functionStart,
+      failed_platforms: failedPlatforms,
+    }
+    triggerDownstreamRefresh(`batch-enrich-${periodParam}`, trace)
   }
 
   return NextResponse.json({
