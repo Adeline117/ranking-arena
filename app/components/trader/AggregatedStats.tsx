@@ -314,7 +314,7 @@ export default function AggregatedStats({
               {/* PnL */}
               <ComparisonRow label="PnL" accounts={accounts} getValue={a => a.pnl} format={v => formatPnL(v)} higherIsBetter />
               {/* Arena Score */}
-              <ComparisonRow label="Arena Score" accounts={accounts} getValue={a => a.arenaScore} format={v => v.toFixed(1)} higherIsBetter />
+              <ComparisonRow label="Arena Score" accounts={accounts} getValue={a => a.arenaScore} format={v => v.toFixed(0)} higherIsBetter />
               {/* Win Rate */}
               <ComparisonRow label={t('winRate') || 'Win Rate'} accounts={accounts} getValue={a => a.winRate ?? null} format={v => `${v.toFixed(1)}%`} higherIsBetter />
               {/* Max Drawdown */}
