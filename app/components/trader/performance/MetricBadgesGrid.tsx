@@ -52,19 +52,19 @@ export function MetricBadgesGrid({
         label={t('sharpe')}
         value={sharpeRatio != null && sharpeRatio < 9000 ? sharpeRatio.toFixed(2) : '—'}
         highlight={sharpeRatio != null && sharpeRatio > 1 && sharpeRatio < 9000}
-        tooltip={sharpeRatio == null ? t('sharpeNotAvailable') : sharpeRatio >= 9000 ? t('sharpeNotAvailable') : undefined}
+        tooltip={sharpeRatio == null || sharpeRatio >= 9000 ? t('sharpeNotAvailable') : (t('sharpeTooltip') || 'Risk-adjusted return per unit of risk. > 1 good, > 2 excellent.')}
       />
       <MetricBadge
         label={t('maxDrawdownShort')}
         value={maxDrawdown != null && Math.abs(maxDrawdown) <= 100 ? (Math.abs(maxDrawdown) < 0.05 ? '< -0.1%' : `-${Math.abs(maxDrawdown).toFixed(1)}%`) : '—'}
         negative
-        tooltip={maxDrawdown == null ? t('drawdownNotAvailable') : Math.abs(maxDrawdown) > 100 ? t('drawdownNotAvailable') : undefined}
+        tooltip={maxDrawdown == null || Math.abs(maxDrawdown) > 100 ? t('drawdownNotAvailable') : (t('mddTooltip') || 'Largest peak-to-trough decline. Lower = better risk control.')}
       />
       <MetricBadge
         label={t('winRateShort')}
         value={winRate != null ? `${winRate.toFixed(1)}%` : '—'}
         highlight={winRate != null && winRate > 60}
-        tooltip={winRate == null ? t('winRateNotAvailable') : undefined}
+        tooltip={winRate == null ? t('winRateNotAvailable') : (t('winRateTooltip') || 'Percentage of profitable trades. Higher = more consistent.')}
       />
       <MetricBadge
         label={t('winningPositions')}
