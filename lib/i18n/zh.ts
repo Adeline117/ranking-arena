@@ -4874,6 +4874,13 @@ compFieldMaxParticipants: '最大参与人数',
     connectWallet: '连接钱包',
     verifiedSince: '验证时间',
 
+    // Missing keys found via fallback pattern audit
+    linkAdditionalAccount: '关联其他账户',
+    linkAdditionalAccountDesc: '搜索要关联到您个人资料的其他交易员账户。',
+    portfolioAnalytics: '投资分析',
+    moderationQueue: '审核队列',
+    auditLog: '操作日志',
+
 } as const
 
 export default zh
