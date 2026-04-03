@@ -103,7 +103,7 @@ export function usePostActions({
 
   // Toggle reaction
   const toggleReaction = useCallback(async (postId: string, reactionType: 'up' | 'down') => {
-    if (!accessToken) { showToast(t('pleaseLogin'), 'warning'); return }
+    if (!accessToken) { const { useLoginModal } = await import('@/lib/hooks/useLoginModal'); useLoginModal.getState().openLoginModal(); return }
     const key = `react-${postId}-${reactionType}`
     if (lockRef.current.has(key)) return
     lockRef.current.add(key)
@@ -183,7 +183,7 @@ export function usePostActions({
   }, [accessToken])
 
   const submitCustomPollVote = useCallback(async (postId: string) => {
-    if (!accessToken) { showToast(t('pleaseLogin'), 'warning'); return }
+    if (!accessToken) { const { useLoginModal } = await import('@/lib/hooks/useLoginModal'); useLoginModal.getState().openLoginModal(); return }
     if (selectedPollOptions.length === 0) { showToast(t('selectAtLeastOneOption'), 'warning'); return }
     setVotingCustomPoll(true)
     try {
@@ -203,7 +203,7 @@ export function usePostActions({
 
   // Bookmark (with optimistic update, matching toggleReaction pattern)
   const handleBookmark = useCallback(async (postId: string) => {
-    if (!accessToken) { showToast(t('pleaseLogin'), 'warning'); return }
+    if (!accessToken) { const { useLoginModal } = await import('@/lib/hooks/useLoginModal'); useLoginModal.getState().openLoginModal(); return }
     if (bookmarkLoading[postId]) return
     setBookmarkLoading(prev => ({ ...prev, [postId]: true }))
 
