@@ -32,6 +32,26 @@ import { t as i18nTFn } from '@/lib/i18n'
 const SWIPE_THRESHOLD = 50
 const ACTION_WIDTH = 140
 
+// Module-level style constants — avoid allocating new objects on every render (defeats React.memo)
+const HERO_STYLE_RANK_1: React.CSSProperties = {
+  background: 'linear-gradient(135deg, rgba(255,215,0,0.13) 0%, rgba(255,215,0,0.04) 40%, transparent 80%)',
+  boxShadow: 'inset 3px 0 0 var(--color-rank-gold), 0 2px 20px rgba(255,215,0,0.08)',
+  borderRadius: 10,
+  margin: '3px 4px',
+}
+const HERO_STYLE_RANK_2: React.CSSProperties = {
+  background: 'linear-gradient(135deg, rgba(192,192,192,0.10) 0%, rgba(192,192,192,0.03) 40%, transparent 80%)',
+  boxShadow: 'inset 3px 0 0 var(--color-rank-silver), 0 2px 16px rgba(192,192,192,0.06)',
+  borderRadius: 10,
+  margin: '3px 4px',
+}
+const HERO_STYLE_RANK_3: React.CSSProperties = {
+  background: 'linear-gradient(135deg, rgba(205,127,50,0.10) 0%, rgba(205,127,50,0.03) 40%, transparent 80%)',
+  boxShadow: 'inset 3px 0 0 var(--color-rank-bronze), 0 2px 16px rgba(205,127,50,0.06)',
+  borderRadius: 10,
+  margin: '3px 4px',
+}
+
 const ScoreBreakdownLazy = dynamic(
   () => import('./ScoreBreakdown'),
   { ssr: false, loading: () => <div style={{ padding: 16, textAlign: 'center', opacity: 0.5 }}>...</div> }
@@ -198,13 +218,10 @@ export const TraderRow = memo(function TraderRow({
   // Rank class for CSS art direction (top 3 heroes)
   const rankClass = rank <= 3 ? ` rank-${rank}` : ''
 
-  // Top 3 inline styles (critical — CSS is async-loaded)
-  const heroStyle = rank === 1
-    ? { background: 'linear-gradient(135deg, rgba(255,215,0,0.13) 0%, rgba(255,215,0,0.04) 40%, transparent 80%)', boxShadow: 'inset 3px 0 0 var(--color-rank-gold), 0 2px 20px rgba(255,215,0,0.08)', borderRadius: 10, margin: '3px 4px' }
-    : rank === 2
-    ? { background: 'linear-gradient(135deg, rgba(192,192,192,0.10) 0%, rgba(192,192,192,0.03) 40%, transparent 80%)', boxShadow: 'inset 3px 0 0 var(--color-rank-silver), 0 2px 16px rgba(192,192,192,0.06)', borderRadius: 10, margin: '3px 4px' }
-    : rank === 3
-    ? { background: 'linear-gradient(135deg, rgba(205,127,50,0.10) 0%, rgba(205,127,50,0.03) 40%, transparent 80%)', boxShadow: 'inset 3px 0 0 var(--color-rank-bronze), 0 2px 16px rgba(205,127,50,0.06)', borderRadius: 10, margin: '3px 4px' }
+  // Top 3 inline styles — use module-level constants to avoid object allocation per render
+  const heroStyle = rank === 1 ? HERO_STYLE_RANK_1
+    : rank === 2 ? HERO_STYLE_RANK_2
+    : rank === 3 ? HERO_STYLE_RANK_3
     : undefined
 
   // Swipe state (mobile only)
