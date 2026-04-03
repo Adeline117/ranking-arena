@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect, useCallback, useRef } from 'react'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { Box } from '@/app/components/base'
 import { setLanguage, translations, type Language } from '@/lib/i18n'
 import { supabase } from '@/lib/supabase/client'
@@ -25,6 +25,9 @@ const STEPS: Step[] = ['welcome', 'interests', 'traders', 'groups', 'complete']
 
 export default function OnboardingPage() {
   const router = useRouter()
+  const searchParams = useSearchParams()
+  const returnUrl = searchParams.get('returnUrl')
+  const afterOnboarding = returnUrl && returnUrl.startsWith('/') && !returnUrl.startsWith('//') ? returnUrl : '/rankings'
   const { showToast } = useToast()
   const [language, setLang] = useState<Language>('zh')
   const [theme, setTheme] = useState<Theme>('dark')
@@ -108,7 +111,7 @@ export default function OnboardingPage() {
         else if (step === 'interests') goToStep('traders')
         else if (step === 'traders') goToStep('groups')
         else if (step === 'groups' && !saving) saveAndComplete()
-        else if (step === 'complete') router.push('/rankings')
+        else if (step === 'complete') router.push(afterOnboarding)
       } else if (e.key === 'Escape') {
         e.preventDefault()
         if (step === 'interests') goToStep('welcome')
@@ -286,7 +289,7 @@ export default function OnboardingPage() {
             onComplete={saveAndComplete} />
         )}
         {step === 'complete' && (
-          <CompleteStep theme={obTheme} tr={tr} onGoRankings={() => router.push('/rankings')} />
+          <CompleteStep theme={obTheme} tr={tr} onGoRankings={() => router.push(afterOnboarding)} />
         )}
       </Box>
     </Box>
