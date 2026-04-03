@@ -14,6 +14,7 @@ export const dynamic = 'force-dynamic'
 
 const MAX_FILE_SIZE = 2 * 1024 * 1024 // 2MB
 const ALLOWED_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/gif']
+const ALLOWED_BUCKETS = ['reports', 'avatars', 'posts']
 
 export async function POST(request: NextRequest) {
   const rateLimitResponse = await checkRateLimit(request, RateLimitPresets.write)
@@ -24,6 +25,10 @@ export async function POST(request: NextRequest) {
     const formData = await request.formData()
     const file = formData.get('file') as File | null
     const bucket = (formData.get('bucket') as string) || 'reports'
+
+    if (!ALLOWED_BUCKETS.includes(bucket)) {
+      return NextResponse.json({ error: `Invalid bucket. Allowed: ${ALLOWED_BUCKETS.join(', ')}` }, { status: 400 })
+    }
 
     if (!file) {
       return NextResponse.json({ error: 'No file provided' }, { status: 400 })
