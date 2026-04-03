@@ -459,7 +459,7 @@ export const TraderRow = memo(function TraderRow({
         {/* ROI */}
         {(() => {
           const roi = trader.roi ?? 0
-          const roiColor = roi >= 0 ? tokens.colors.accent.success : tokens.colors.accent.error
+          const roiColor = roi > 0 ? tokens.colors.accent.success : roi < 0 ? tokens.colors.accent.error : tokens.colors.text.tertiary
           return (
             <Box className="roi-cell" style={{ textAlign: 'right', display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 2 }}>
               <AnimatedROI roi={roi} roiColor={roiColor} animate={rank <= 3} />
