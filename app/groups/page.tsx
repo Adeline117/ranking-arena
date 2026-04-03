@@ -1,3 +1,4 @@
+import type { Metadata } from 'next'
 import { features } from '@/lib/features'
 import { notFound } from 'next/navigation'
 import { Suspense } from 'react'
@@ -7,6 +8,25 @@ import GroupsFeedPage from '@/app/components/groups/GroupsFeedPage'
 import { RankingSkeleton } from '@/app/components/ui/Skeleton'
 import { tokens } from '@/lib/design-tokens'
 import { Box } from '@/app/components/base'
+import { BASE_URL } from '@/lib/constants/urls'
+
+export const metadata: Metadata = {
+  title: 'Trading Groups & Community',
+  description: 'Join crypto trading groups, share insights, and discuss strategies with ranked traders on Arena.',
+  alternates: { canonical: `${BASE_URL}/groups` },
+  openGraph: {
+    title: 'Trading Groups & Community | Arena',
+    description: 'Join crypto trading groups, share insights, and discuss strategies with ranked traders.',
+    url: `${BASE_URL}/groups`,
+    images: [{ url: `${BASE_URL}/api/og`, width: 1200, height: 630 }],
+  },
+  twitter: {
+    card: 'summary_large_image',
+    title: 'Trading Groups & Community | Arena',
+    description: 'Join crypto trading groups, share insights, and discuss strategies with ranked traders.',
+    creator: '@arenafi',
+  },
+}
 
 export const revalidate = 300 // ISR: 5 min
 
