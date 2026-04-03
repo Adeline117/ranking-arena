@@ -502,7 +502,11 @@ export default function AdvancedAlerts({
                 type="number"
                 value={newCondition.threshold ?? ''}
                 aria-label="Threshold value"
-                onChange={(e) => setNewCondition({ ...newCondition, threshold: parseFloat(e.target.value) || 0 })}
+                step="any"
+                onChange={(e) => {
+                  const v = parseFloat(e.target.value)
+                  setNewCondition({ ...newCondition, threshold: !isNaN(v) ? v : 0 })
+                }}
                 style={{
                   width: 80,
                   padding: `${tokens.spacing[2]} ${tokens.spacing[3]}`,
