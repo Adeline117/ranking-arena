@@ -1,10 +1,11 @@
 'use client'
 
 import Link from 'next/link'
-import { t } from '@/lib/i18n'
 import { tokens } from '@/lib/design-tokens'
+import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 
 export default function UserNotFound() {
+  const { t } = useLanguage()
   return (
     <div style={{
       minHeight: '60vh',
