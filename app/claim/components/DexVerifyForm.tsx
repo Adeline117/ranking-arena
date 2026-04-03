@@ -8,6 +8,7 @@ import { Box, Text } from '@/app/components/base'
 import { getCsrfHeaders } from '@/lib/api/client'
 import { useToast } from '@/app/components/ui/Toast'
 import { SearchResult, isSolanaDex } from './types'
+import { trackEvent } from '@/lib/analytics/track'
 
 declare global {
   interface Window {
@@ -155,6 +156,7 @@ export function DexVerifyForm({
         return
       }
 
+      trackEvent('claim_trader', { method: 'dex_wallet' })
       showToast(t('claimVerifiedAutoApproved'), 'success')
       onSuccess()
     } catch (error) {

@@ -9,6 +9,7 @@ import { Box, Text } from '@/app/components/base'
 import { getCsrfHeaders } from '@/lib/api/client'
 import { useToast } from '@/app/components/ui/Toast'
 import { SearchResult, CEX_PLATFORMS } from './types'
+import { trackEvent } from '@/lib/analytics/track'
 
 export function CexVerifyForm({
   trader,
@@ -94,6 +95,7 @@ export function CexVerifyForm({
         return
       }
 
+      trackEvent('claim_trader', { method: 'cex_api_key' })
       showToast(t('claimVerifiedAutoApproved'), 'success')
       onSuccess()
     } catch (_error) {
