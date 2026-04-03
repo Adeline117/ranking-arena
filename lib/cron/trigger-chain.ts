@@ -18,14 +18,25 @@ const logger = createLogger('trigger-chain')
 const DEDUP_KEY = 'trigger-chain:last-run'
 const DEDUP_WINDOW_MS = 5 * 60 * 1000 // 5 minutes — skip if last trigger was <5min ago
 
+/** Structured metadata passed from upstream job to downstream (Anthropic harness handoff pattern) */
+export interface TraceMetadata {
+  trace_id: string
+  source: string
+  platforms_updated: string[]
+  records_written: number
+  duration_ms: number
+  failed_platforms: string[]
+}
+
 /**
  * Fire-and-forget trigger for downstream cron jobs after successful data write.
  * Calls compute-leaderboard → warm-cache in sequence.
  * Non-blocking: errors are logged but don't affect the caller.
  *
  * @param source - identifier for logging (e.g. "batch-fetch-traders-a1", "batch-enrich-90D")
+ * @param trace - optional trace metadata from upstream job (for structured handoff)
  */
-export function triggerDownstreamRefresh(source: string): void {
+export function triggerDownstreamRefresh(source: string, trace?: TraceMetadata): void {
   // Immediately return — entire chain runs in background
   void (async () => {
     try {
@@ -58,15 +69,17 @@ export function triggerDownstreamRefresh(source: string): void {
       const headers = { Authorization: `Bearer ${secret}` }
 
       // ── 1. Trigger compute-leaderboard ───────────────────────────
-      logger.info(`[${source}] Triggering compute-leaderboard...`)
+      const traceId = trace?.trace_id ?? 'no-trace'
+      const traceQs = trace ? `?trace_id=${trace.trace_id}&platforms=${trace.platforms_updated.join(',')}` : ''
+      logger.info(`[${source}] Triggering compute-leaderboard (trace=${traceId})...`)
       const computeStart = Date.now()
-      const computeRes = await fetch(`${baseUrl}/api/cron/compute-leaderboard`, {
+      const computeRes = await fetch(`${baseUrl}/api/cron/compute-leaderboard${traceQs}`, {
         method: 'GET',
         headers,
         signal: AbortSignal.timeout(240_000), // 4min timeout (compute can be slow)
       })
       logger.info(
-        `[${source}] compute-leaderboard: ${computeRes.status} (${Date.now() - computeStart}ms)`
+        `[${source}] compute-leaderboard: ${computeRes.status} (${Date.now() - computeStart}ms, trace=${traceId})`
       )
 
       // ── 2. Trigger warm-cache ────────────────────────────────────
