@@ -11,7 +11,6 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server'
-import { checkRateLimit, RateLimitPresets } from '@/lib/utils/rate-limit'
 import {
   getRealtimeSnapshot,
   type RealtimeSnapshot,
@@ -31,8 +30,6 @@ let snapshotCache: { ts: number; data: RealtimeSnapshot } | null = null
 const SNAPSHOT_TTL_MS = 2000
 
 export async function GET(request: NextRequest) {
-  const rl = await checkRateLimit(request, RateLimitPresets.read)
-  if (rl) return rl
 
   const { searchParams } = new URL(request.url)
   const isStream = searchParams.get('stream') === '1'

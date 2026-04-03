@@ -73,9 +73,10 @@ const LOCAL_LOGOS: Record<string, string> = {
   dune_hyperliquid: '/icons/exchanges/hyperliquid.png',
   dune_uniswap: '/icons/exchanges/uniswap.png',
   dune_defi: '/icons/exchanges/uniswap.png',
-  web3_bot: '/icons/exchanges/hyperliquid.png',
+  // Active sources that share a base exchange logo
+  web3_bot: '/icons/exchanges/hyperliquid.png', // Web3 bot traders — use Hyperliquid as primary DEX icon
   bingx_spot: '/icons/exchanges/bingx.png',
-  paradex: '/icons/exchanges/dydx.png',
+  paradex: '/icons/exchanges/dydx.png', // Paradex is built on StarkEx (dYdX ecosystem)
 }
 
 // CoinGecko CDN fallback URLs

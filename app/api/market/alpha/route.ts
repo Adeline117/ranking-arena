@@ -4,15 +4,12 @@
  * Redis-cached for 2 minutes with lock.
  */
 import { NextRequest, NextResponse } from 'next/server'
-import { checkRateLimit, RateLimitPresets } from '@/lib/utils/rate-limit'
 import { getOrSetWithLock } from '@/lib/cache'
 
 export const dynamic = 'force-dynamic'
 
 export async function GET(request: NextRequest) {
   try {
-    const rl = await checkRateLimit(request, RateLimitPresets.read)
-    if (rl) return rl
     const result = await getOrSetWithLock(
       'api:market:alpha',
       async () => fetchAlphaData(),
