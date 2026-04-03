@@ -117,10 +117,15 @@ export async function getUserFromToken(token: string): Promise<User | null> {
     const isBanned = !!(profile?.banned_at || profile?.deleted_at)
     banStatusCache.set(user.id, { banned: isBanned, ts: Date.now() })
 
-    // Prevent cache from growing unbounded
+    // Prevent cache from growing unbounded — evict expired entries first (O(n)),
+    // then hard-clear if still too large (avoids O(n log n) sort)
     if (banStatusCache.size > 10000) {
-      const oldest = [...banStatusCache.entries()].sort((a, b) => a[1].ts - b[1].ts)
-      for (let i = 0; i < 5000; i++) banStatusCache.delete(oldest[i][0])
+      const now = Date.now()
+      for (const [key, val] of banStatusCache) {
+        if (now - val.ts > BAN_CACHE_TTL) banStatusCache.delete(key)
+      }
+      // If still oversized after TTL eviction, clear entirely
+      if (banStatusCache.size > 10000) banStatusCache.clear()
     }
 
     return isBanned ? null : user
