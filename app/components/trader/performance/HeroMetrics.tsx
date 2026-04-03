@@ -5,6 +5,7 @@ import { Box, Text } from '../../base'
 import { useLanguage } from '../../Providers/LanguageProvider'
 import { Sparkline } from '@/app/components/ui/Sparkline'
 import { formatPnL as formatPnLUtil, formatROI as formatROIUtil } from '../../ranking/utils'
+import InfoTooltip from '../../ui/InfoTooltip'
 
 export interface HeroMetricsProps {
   roi: number | undefined
@@ -47,8 +48,9 @@ export function HeroMetrics({ roi, pnl, sparklineData, isVisible }: HeroMetricsP
           overflow: 'hidden',
         }}
       >
-        <Text size="xs" style={{ color: tokens.colors.text.tertiary, marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.5px', fontSize: tokens.typography.fontSize.xs, fontWeight: 500 }}>
+        <Text size="xs" style={{ color: tokens.colors.text.tertiary, marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.5px', fontSize: tokens.typography.fontSize.xs, fontWeight: 500, display: 'flex', alignItems: 'center', gap: 4 }}>
           {t('roi')}
+          <InfoTooltip text={t('roiTooltip').replace('{range}', '') || 'Return on Investment: Total percentage gain or loss on the trader\'s portfolio.'} size={11} />
         </Text>
         <Box style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between' }}>
           <Text
@@ -92,8 +94,9 @@ export function HeroMetrics({ roi, pnl, sparklineData, isVisible }: HeroMetricsP
           border: `1px solid ${pnl != null && pnl >= 0 ? tokens.colors.accent.success + '20' : pnl != null ? tokens.colors.accent.error + '20' : tokens.colors.border.primary}`,
         }}
       >
-        <Text size="xs" style={{ color: tokens.colors.text.tertiary, marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.5px', fontSize: tokens.typography.fontSize.xs, fontWeight: 500 }}>
+        <Text size="xs" style={{ color: tokens.colors.text.tertiary, marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.5px', fontSize: tokens.typography.fontSize.xs, fontWeight: 500, display: 'flex', alignItems: 'center', gap: 4 }}>
           {t('pnl')}
+          <InfoTooltip text={t('pnlTooltip') || 'Profit & Loss: Total dollar amount gained or lost.'} size={11} />
         </Text>
         <Text
           className="hero-metric-value"
