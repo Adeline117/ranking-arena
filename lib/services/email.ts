@@ -111,7 +111,7 @@ export function buildWeeklyDigestEmail(stats: {
       ` : ''}
 
       <p style="margin: 24px 0 0; text-align: center;">
-        <a href="${BASE_URL}/rankings" style="display: inline-block; background: #6366f1; color: #fff; padding: 10px 24px; border-radius: 6px; text-decoration: none; font-size: 14px;">View Full Rankings</a>
+        <a href="${BASE_URL}" style="display: inline-block; background: #6366f1; color: #fff; padding: 10px 24px; border-radius: 6px; text-decoration: none; font-size: 14px;">View Full Rankings</a>
       </p>
 
       <p style="margin: 24px 0 0; font-size: 12px; color: #64748b; text-align: center;">
