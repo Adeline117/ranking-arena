@@ -351,7 +351,7 @@ export default function TraderHeader({
         {/* Name + badges + subtitle */}
         <Box style={{ flex: 1, minWidth: 0 }}>
           {/* Line 1: Name + exchange badge + score badge */}
-          <Box style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'nowrap' }}>
+          <Box className="trader-name-badges-row" style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'nowrap', overflow: 'hidden' }}>
             <Text
               as="h1"
               size="lg"
