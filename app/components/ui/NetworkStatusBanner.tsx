@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useCallback } from 'react'
 import { tokens } from '@/lib/design-tokens'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 
@@ -13,7 +13,6 @@ export default function NetworkStatusBanner() {
     const handleOffline = () => { setIsOffline(true); setShow(true) }
     const handleOnline = () => {
       setIsOffline(false)
-      // Keep banner briefly to show "reconnected"
       setTimeout(() => setShow(false), 2000)
     }
 
@@ -24,6 +23,14 @@ export default function NetworkStatusBanner() {
     return () => {
       window.removeEventListener('offline', handleOffline)
       window.removeEventListener('online', handleOnline)
+    }
+  }, [])
+
+  const handleRetry = useCallback(() => {
+    if (navigator.onLine) {
+      setIsOffline(false)
+      setTimeout(() => setShow(false), 1000)
+      window.location.reload()
     }
   }, [])
 
@@ -39,7 +46,7 @@ export default function NetworkStatusBanner() {
         left: 0,
         right: 0,
         zIndex: tokens.zIndex.toast,
-        padding: '8px 16px',
+        padding: '10px 16px',
         textAlign: 'center',
         fontSize: 13,
         fontWeight: 500,
@@ -65,7 +72,22 @@ export default function NetworkStatusBanner() {
             <path d="M8.53 16.11a6 6 0 0 1 6.95 0" />
             <line x1="12" y1="20" x2="12.01" y2="20" />
           </svg>
-          {t('networkDisconnected')}
+          <span>{t('networkDisconnected')}</span>
+          <button
+            onClick={handleRetry}
+            style={{
+              background: 'rgba(255,255,255,0.2)',
+              border: '1px solid rgba(255,255,255,0.4)',
+              color: tokens.colors.white,
+              borderRadius: tokens.radius.sm,
+              padding: '3px 10px',
+              fontSize: 12,
+              cursor: 'pointer',
+              marginLeft: 4,
+            }}
+          >
+            {t('retry')}
+          </button>
         </>
       ) : (
         <>
