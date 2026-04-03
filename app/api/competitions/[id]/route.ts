@@ -15,32 +15,39 @@ export async function GET(
     return NextResponse.json({ success: false, error: 'Competition ID is required' }, { status: 400 })
   }
 
-  const supabase = getSupabaseAdmin()
+  try {
+    const supabase = getSupabaseAdmin()
 
-  // Fetch competition + entries in parallel
-  const [compResult, entriesResult] = await Promise.all([
-    supabase
-      .from('competitions')
-      .select('*')
-      .eq('id', id)
-      .single(),
-    supabase
-      .from('competition_entries')
-      .select('*')
-      .eq('competition_id', id)
-      .order('rank', { ascending: true, nullsFirst: false }),
-  ])
+    // Fetch competition + entries in parallel
+    const [compResult, entriesResult] = await Promise.all([
+      supabase
+        .from('competitions')
+        .select('*')
+        .eq('id', id)
+        .single(),
+      supabase
+        .from('competition_entries')
+        .select('*')
+        .eq('competition_id', id)
+        .order('rank', { ascending: true, nullsFirst: false }),
+    ])
 
-  if (compResult.error || !compResult.data) {
-    return NextResponse.json({ success: false, error: 'Competition not found' }, { status: 404 })
+    if (compResult.error || !compResult.data) {
+      return NextResponse.json({ success: false, error: 'Competition not found' }, { status: 404 })
+    }
+
+    return NextResponse.json({
+      success: true,
+      data: {
+        competition: compResult.data,
+        entries: entriesResult.data || [],
+        participant_count: entriesResult.data?.length || 0,
+      },
+    })
+  } catch (err) {
+    return NextResponse.json(
+      { success: false, error: 'Internal server error' },
+      { status: 500 }
+    )
   }
-
-  return NextResponse.json({
-    success: true,
-    data: {
-      competition: compResult.data,
-      entries: entriesResult.data || [],
-      participant_count: entriesResult.data?.length || 0,
-    },
-  })
 }
