@@ -28,7 +28,7 @@ export async function GET(request: NextRequest) {
   const rc = rv && roi >= 0 ? C.success : C.error, rs = rv ? fmtRoi(roi) : '--', tp = rank > 0 && total > 0 ? topPct(rank, total) : ''
   const pl = PLAT_L[tr.source] || tr.source.replace(/_/g, ' ').replace(/\b\w/g, (c: string) => c.toUpperCase())
   const pc = PLAT_C[tr.source] || C.purpleLight
-  const rd = rank > 0 ? (rank <= 9999 ? String(rank) : (rank / 1000).toFixed(0) + 'K') : '--', td = total > 0 ? total.toLocaleString() + '+' : '34,000+'
+  const rd = rank > 0 ? (rank <= 9999 ? String(rank) : (rank / 1000).toFixed(0) + 'K') : '--', td = total > 0 ? total.toLocaleString('en-US') + '+' : '34,000+'
   const cta = ref ? `arenafi.org/?ref=${ref}` : 'arenafi.org'
 
   return new ImageResponse(
