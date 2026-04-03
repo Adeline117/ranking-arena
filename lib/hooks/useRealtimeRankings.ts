@@ -3,12 +3,15 @@
 /**
  * Near-real-time rankings hook
  *
- * Polls /api/rankings/live every 120 seconds for fresh ranking data.
+ * Polls /api/rankings/live every 60 seconds for fresh ranking data.
+ * Also subscribes to Supabase Realtime on leaderboard_ranks for instant
+ * refresh when compute-leaderboard writes new data (~every 30 min).
  * Batches UI updates over a 2-second window to avoid excessive re-renders.
  * Adds a 'ranking-pulse' CSS class on data updates for visual feedback.
  */
 
 import { useEffect, useCallback, useRef, useReducer } from 'react'
+import { supabase } from '@/lib/supabase/client'
 
 interface RankingUpdate {
   id: string
@@ -32,7 +35,7 @@ interface UseRealtimeRankingsOptions {
   limit?: number
   /** Whether to enable polling (default: true) */
   enabled?: boolean
-  /** Poll interval in ms (default: 120000 = 120s) */
+  /** Poll interval in ms (default: 60000 = 60s) */
   pollInterval?: number
   /** Callback when ranking data changes */
   onUpdate?: (updates: RankingUpdate[]) => void
@@ -103,7 +106,7 @@ export function useRealtimeRankings({
   period = '90D',
   limit = 50,
   enabled = true,
-  pollInterval = 120_000,
+  pollInterval = 60_000,
   onUpdate,
 }: UseRealtimeRankingsOptions): UseRealtimeRankingsReturn {
   const [state, dispatch] = useReducer(realtimeReducer, initialRealtimeState)
@@ -188,9 +191,27 @@ export function useRealtimeRankings({
       fetchLiveRankings()
     }, pollInterval)
 
+    // Subscribe to Supabase Realtime for instant refresh when compute-leaderboard writes
+    const channel = supabase
+      .channel(`rankings-live:${period}`)
+      .on(
+        'postgres_changes',
+        { event: 'UPDATE', schema: 'public', table: 'leaderboard_ranks', filter: `season_id=eq.${period}` },
+        () => {
+          // Debounce: compute-leaderboard writes many rows at once.
+          // Wait 3s after the first notification, then fetch once.
+          if (flushTimerRef.current) clearTimeout(flushTimerRef.current)
+          flushTimerRef.current = setTimeout(() => {
+            if (!aborted) fetchLiveRankings()
+          }, 3000)
+        }
+      )
+      .subscribe()
+
     return () => {
       aborted = true
       clearInterval(intervalId)
+      supabase.removeChannel(channel)
       if (flushTimerRef.current) clearTimeout(flushTimerRef.current)
       if (pulseTimerRef.current) clearTimeout(pulseTimerRef.current)
       flush() // Flush remaining buffered updates
