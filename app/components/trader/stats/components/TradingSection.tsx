@@ -90,7 +90,7 @@ export function TradingSection({
             marginBottom: tokens.spacing[6],
           }}
         >
-          <MiniKpi label={i18nT('totalTrades90d')} value={trading!.totalTrades12M != null ? String(trading!.totalTrades12M) : NULL_DISPLAY} />
+          <MiniKpi label={i18nT('totalTrades90d')} value={trading!.totalTrades12M != null ? trading!.totalTrades12M.toLocaleString('en-US') : NULL_DISPLAY} />
           <MiniKpi
             label={i18nT('avgProfitLoss')}
             value={trading!.avgProfit != null && trading!.avgLoss != null
@@ -137,7 +137,7 @@ export function TradingSection({
             />
             <MiniKpi
               label={t('maxDrawdown')}
-              value={additionalStats?.maxDrawdown != null && Math.abs(additionalStats.maxDrawdown) <= 100 ? (Math.abs(additionalStats.maxDrawdown) < 0.005 ? '< 0.01%' : `-${Math.abs(additionalStats.maxDrawdown).toFixed(2)}%`) : NULL_DISPLAY}
+              value={additionalStats?.maxDrawdown != null && Math.abs(additionalStats.maxDrawdown) <= 100 ? (Math.abs(additionalStats.maxDrawdown) < 0.05 ? '< -0.1%' : `-${Math.abs(additionalStats.maxDrawdown).toFixed(1)}%`) : NULL_DISPLAY}
               highlight={additionalStats?.maxDrawdown != null && Math.abs(additionalStats.maxDrawdown) <= 100}
               isNegative
             />
