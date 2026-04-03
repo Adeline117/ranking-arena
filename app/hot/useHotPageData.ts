@@ -437,6 +437,8 @@ export function useHotPageData(options: UseHotPageDataOptions = {}) {
   const handleOpenPost = useCallback((post: Post, fromUrlRestore = false) => {
     setOpenPost(post)
     setComments([])
+    setCommentsOffset(0)
+    setHasMoreComments(true)
     setTranslatedContent(null)
     setShowingOriginal(true)
     loadComments(post.id)
