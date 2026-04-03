@@ -15,6 +15,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { env } from '@/lib/env'
 import { fetchLeaderboardFromDB } from '@/lib/getInitialTraders'
+import { PipelineLogger } from '@/lib/services/pipeline-logger'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -26,6 +27,7 @@ export async function GET(request: NextRequest) {
   }
 
   const start = Date.now()
+  const plog = await PipelineLogger.start('warm-cache')
 
   try {
     // Warm the SSR homepage cache — this keeps the Redis key fresh so page.tsx
@@ -42,6 +44,7 @@ export async function GET(request: NextRequest) {
     const warmedApis = warmResults.filter(r => r.status === 'fulfilled').length
 
     const duration = Date.now() - start
+    await plog.success(traders.length, { apis_warmed: warmedApis })
 
     return NextResponse.json({
       ok: true,
@@ -52,6 +55,7 @@ export async function GET(request: NextRequest) {
     })
   } catch (err) {
     const duration = Date.now() - start
+    await plog.error(err instanceof Error ? err : new Error(String(err)))
     return NextResponse.json(
       {
         ok: false,
