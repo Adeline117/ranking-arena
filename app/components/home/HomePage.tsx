@@ -31,10 +31,24 @@ interface HomePageProps {
 }
 
 export default function HomePage({ initialTraders, initialLastUpdated, heroStats }: HomePageProps) {
-  // Hide SSR shell once this client component mounts (avoids duplicate content)
+  // Crossfade SSR shell → interactive content with zero CLS.
+  // position:absolute collapses it out of flow; opacity:0 makes it invisible.
+  // Do NOT use .remove() — that causes CLS ~1.0 and resets LCP measurement.
   useEffect(() => {
-    document.getElementById('ssr-hero-shell')?.remove()
-    document.getElementById('ssr-ranking-table')?.remove()
+    const hide = (id: string) => {
+      const el = document.getElementById(id)
+      if (!el) return
+      el.style.position = 'absolute'
+      el.style.top = '0'
+      el.style.left = '0'
+      el.style.right = '0'
+      el.style.opacity = '0'
+      el.style.pointerEvents = 'none'
+      el.style.zIndex = '-1'
+      setTimeout(() => el.remove(), 500)
+    }
+    hide('ssr-hero-shell')
+    hide('ssr-ranking-table')
   }, [])
 
   return (
