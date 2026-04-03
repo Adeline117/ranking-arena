@@ -639,10 +639,10 @@ export default function TraderProfileClient({ data, serverTraderData, claimedUse
                   if (!curve || curve.length <= 5) return null
                   const dailyReturns = curve.slice(1).map((point, i) => ({
                     date: point.date,
-                    returnPct: curve[i].roi !== 0
+                    returnPct: Math.abs(curve[i].roi ?? 0) > 0.001
                       ? ((point.roi - curve[i].roi) / Math.abs(curve[i].roi)) * 100
-                      : 0,
-                  }))
+                      : (point.roi - curve[i].roi),
+                  })).filter(d => Number.isFinite(d.returnPct))
                   if (dailyReturns.length <= 5) return null
                   return (
                     <Box
