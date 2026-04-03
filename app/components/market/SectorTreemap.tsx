@@ -259,6 +259,14 @@ export default function SectorTreemap({ onSectorClick }: { onSectorClick?: (cate
           }}>
             {t('sectorTreemapLoading')}
           </div>
+        ) : nodes.length === 0 ? (
+          <div style={{
+            width: '100%', height: '100%',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            color: tokens.colors.text.tertiary, fontSize: 14,
+          }}>
+            {t('noDataGeneric')}
+          </div>
         ) : nodes.map(node => {
           const isHovered = hoveredNode === node.name
           const showName = node.width > 36 && node.height > 28
