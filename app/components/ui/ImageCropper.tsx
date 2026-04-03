@@ -45,14 +45,10 @@ async function getCroppedImg(
   }
 
   // Calculate output dimensions maintaining aspect ratio
-  let outputWidth = Math.min(pixelCrop.width, maxWidth)
+  // Avatars (1:1): 400px, covers (wide): 1200px, others: maxWidth
+  const effectiveMax = aspectRatio === 1 ? 400 : aspectRatio > 2 ? 1200 : maxWidth
+  let outputWidth = Math.min(pixelCrop.width, effectiveMax)
   let outputHeight = outputWidth / aspectRatio
-
-  // For square images (avatars), use smaller size
-  if (aspectRatio === 1) {
-    outputWidth = Math.min(pixelCrop.width, 400)
-    outputHeight = outputWidth
-  }
 
   // Set canvas size
   canvas.width = outputWidth
@@ -71,19 +67,34 @@ async function getCroppedImg(
     outputHeight
   )
 
-  // Convert to blob
+  // Convert to WebP (smaller size, better quality) with JPEG fallback
   return new Promise((resolve, reject) => {
-    canvas.toBlob(
-      (blob) => {
-        if (blob) {
-          resolve(blob)
-        } else {
-          reject(new Error('Canvas is empty'))
-        }
-      },
-      'image/jpeg',
-      0.9
-    )
+    const tryFormat = (format: string, quality: number) => {
+      canvas.toBlob(
+        (blob) => {
+          if (blob) {
+            // If blob is still > 500KB, re-encode at lower quality
+            if (blob.size > 512_000 && quality > 0.6) {
+              canvas.toBlob(
+                (compressed) => resolve(compressed || blob),
+                format,
+                quality - 0.15
+              )
+            } else {
+              resolve(blob)
+            }
+          } else if (format === 'image/webp') {
+            // WebP not supported — fallback to JPEG
+            tryFormat('image/jpeg', quality)
+          } else {
+            reject(new Error('Canvas is empty'))
+          }
+        },
+        format,
+        quality
+      )
+    }
+    tryFormat('image/webp', 0.85)
   })
 }
 
