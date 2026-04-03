@@ -47,13 +47,14 @@ export async function POST(request: NextRequest) {
 
     const now = new Date().toISOString()
 
-    // Mark all unread messages sent to this user as read
+    // Mark all unread messages sent to this user as read (exclude soft-deleted)
     const { data: updated, error } = await supabase
       .from('direct_messages')
       .update({ read: true, read_at: now })
       .eq('conversation_id', conversationId)
       .eq('receiver_id', user.id)
       .eq('read', false)
+      .is('deleted_at', null)
       .select('id')
 
     if (error) {

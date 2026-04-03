@@ -54,12 +54,13 @@ export const GET = withAuth(
         .from('user_profiles')
         .select('id, handle, avatar_url, bio')
         .in('id', uniqueOtherUserIds),
-      // 一次性获取所有会话的未读计数
+      // 一次性获取所有会话的未读计数（排除已删除消息）
       supabase
         .from('direct_messages')
         .select('conversation_id', { count: 'exact' })
         .eq('receiver_id', userId)
         .eq('read', false)
+        .is('deleted_at', null)
         .in('conversation_id', conversationIds),
       // 一次性获取所有会话的成员设置（备注、置顶、静音等）
       supabase
