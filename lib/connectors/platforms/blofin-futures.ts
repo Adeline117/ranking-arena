@@ -10,6 +10,7 @@
  * - API may require authentication for leaderboard data
  */
 
+import crypto from 'crypto'
 import { BaseConnector } from '../base'
 import { warnValidate } from '../schemas'
 import { safeNumber, safeNonNeg, safeStr, safeMdd } from '../utils'
@@ -25,6 +26,32 @@ import type {
 import { createLogger } from '@/lib/utils/logger'
 
 const log = createLogger('connector:blofin')
+
+// HMAC-SHA256 auth for BloFin API (openapi.blofin.com)
+// API key created at blofin.com/account/apis
+function blofinAuthHeaders(method: string, path: string, body = ''): Record<string, string> {
+  const apiKey = process.env.BLOFIN_API_KEY
+  const secret = process.env.BLOFIN_API_SECRET
+  const passphrase = process.env.BLOFIN_API_PASSPHRASE
+  if (!apiKey || !secret || !passphrase) return {}
+
+  const timestamp = String(Date.now())
+  const nonce = crypto.randomUUID()
+  const prehash = timestamp + nonce + method.toUpperCase() + path + body
+  const signature = crypto
+    .createHmac('sha256', secret)
+    .update(prehash)
+    .digest('hex')
+  const sign = Buffer.from(signature).toString('base64')
+
+  return {
+    'ACCESS-KEY': apiKey,
+    'ACCESS-SIGN': sign,
+    'ACCESS-TIMESTAMP': timestamp,
+    'ACCESS-NONCE': nonce,
+    'ACCESS-PASSPHRASE': passphrase,
+  }
+}
 
 interface BloFinTraderEntry {
   traderId?: string
@@ -81,10 +108,12 @@ export class BlofinFuturesConnector extends BaseConnector {
     const period = periodMap[window] || '30'
 
     try {
-      // Attempt BloFin API endpoint
+      // BloFin API requires authentication (API key from blofin.com/account/apis)
+      const path = `/api/v1/copytrading/public/leaderboard?period=${period}&limit=${limit}`
+      const authHeaders = blofinAuthHeaders('GET', path)
       const _rawLb = await this.request<{ data?: { list?: BloFinTraderEntry[] } }>(
-        `https://openapi.blofin.com/api/v1/copytrading/public/leaderboard?period=${period}&limit=${limit}`,
-        { method: 'GET', headers: this.getHeaders() }
+        `https://openapi.blofin.com${path}`,
+        { method: 'GET', headers: { ...this.getHeaders(), ...authHeaders } }
       )
       const data = warnValidate(BlofinFuturesLeaderboardResponseSchema, _rawLb, 'blofin-futures/leaderboard')
 
@@ -110,9 +139,11 @@ export class BlofinFuturesConnector extends BaseConnector {
 
   async fetchTraderProfile(traderKey: string): Promise<ProfileResult | null> {
     try {
+      const path = `/api/v1/copytrading/public/trader/${traderKey}`
+      const authHeaders = blofinAuthHeaders('GET', path)
       const _rawProfile = await this.request<{ data?: BloFinTraderEntry }>(
-        `https://openapi.blofin.com/api/v1/copytrading/public/trader/${traderKey}`,
-        { method: 'GET', headers: this.getHeaders() }
+        `https://openapi.blofin.com${path}`,
+        { method: 'GET', headers: { ...this.getHeaders(), ...authHeaders } }
       )
       const data = warnValidate(BlofinFuturesDetailResponseSchema, _rawProfile, 'blofin-futures/profile')
 
@@ -150,9 +181,11 @@ export class BlofinFuturesConnector extends BaseConnector {
     const period = periodMap[window] || '30'
 
     try {
+      const path = `/api/v1/copytrading/public/trader/${traderKey}?period=${period}`
+      const authHeaders = blofinAuthHeaders('GET', path)
       const _rawSnap = await this.request<{ data?: BloFinTraderEntry }>(
-        `https://openapi.blofin.com/api/v1/copytrading/public/trader/${traderKey}?period=${period}`,
-        { method: 'GET', headers: this.getHeaders() }
+        `https://openapi.blofin.com${path}`,
+        { method: 'GET', headers: { ...this.getHeaders(), ...authHeaders } }
       )
       const data = warnValidate(BlofinFuturesDetailResponseSchema, _rawSnap, 'blofin-futures/snapshot')
 
