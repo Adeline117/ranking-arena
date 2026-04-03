@@ -789,22 +789,22 @@ function RelatedGroupsSidebar({ groups, loading, language }: {
                   justifyContent: 'center',
                   overflow: 'hidden',
                   flexShrink: 0,
+                  position: 'relative',
                 }}
               >
-                {relGroup.avatar_url ? (
+                <Text size="sm" weight="bold" style={{ color: 'var(--color-brand-accent)' }}>
+                  {relGroup.name.charAt(0).toUpperCase()}
+                </Text>
+                {relGroup.avatar_url && (
                   <img
                     src={`/api/avatar?url=${encodeURIComponent(relGroup.avatar_url)}`}
                     alt={relGroup.name}
                     width={40}
                     height={40}
                     loading="lazy"
-                    style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-                    onError={(e) => { (e.target as HTMLImageElement).style.display = 'none' }}
+                    style={{ width: '100%', height: '100%', objectFit: 'cover', position: 'absolute', inset: 0 }}
+                    onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none' }}
                   />
-                ) : (
-                  <Text size="sm" weight="bold" style={{ color: 'var(--color-brand-accent)' }}>
-                    {relGroup.name.charAt(0).toUpperCase()}
-                  </Text>
                 )}
               </Box>
               <Box style={{ flex: 1, minWidth: 0 }}>
