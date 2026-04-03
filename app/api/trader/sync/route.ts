@@ -19,6 +19,13 @@ import type { Period } from '@/lib/utils/arena-score'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import type { TraderData } from '@/lib/adapters/types'
 
+/** Truncate timestamp to hour boundary for partitioned upsert dedup */
+function truncateToHour(): string {
+  const d = new Date()
+  d.setUTCMinutes(0, 0, 0)
+  return d.toISOString()
+}
+
 import { checkRateLimit, RateLimitPresets } from '@/lib/utils/rate-limit'
 
 export const dynamic = 'force-dynamic'
@@ -326,11 +333,11 @@ async function storeSyncedData(
       win_rate: traderData.winRate,
       max_drawdown: traderData.maxDrawdown,
       arena_score: arenaScore.totalScore,
-      as_of_ts: new Date().toISOString(),
+      as_of_ts: truncateToHour(),
       updated_at: new Date().toISOString(),
     },
     {
-      onConflict: 'platform,trader_key,window,as_of_ts',
+      onConflict: 'platform,market_type,trader_key,window,as_of_ts',
     }
   )
 
