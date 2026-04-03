@@ -11,20 +11,41 @@ export async function generateMetadata({ params }: { params: Promise<{ handle: s
   const { handle } = await params
   const decoded = decodeURIComponent(handle)
 
-  // Try to fetch avatar for OG image
+  // Fetch profile + claimed trader data for richer social previews
   let avatarUrl: string | null = null
+  let traderMeta: { roi?: number; score?: number; platform?: string } | null = null
   try {
     const supabase = getSupabaseAdmin()
     const { data } = await supabase
       .from('user_profiles')
-      .select('avatar_url')
+      .select('avatar_url, bio, trader_source, trader_source_id')
       .eq('handle', decoded)
       .maybeSingle()
     avatarUrl = data?.avatar_url || null
+
+    // If user claimed a trader, fetch their trading stats for meta description
+    if (data?.trader_source && data?.trader_source_id) {
+      const { data: lr } = await supabase
+        .from('leaderboard_ranks')
+        .select('roi, arena_score, source')
+        .eq('source', data.trader_source)
+        .eq('source_trader_id', data.trader_source_id)
+        .eq('season_id', '90D')
+        .maybeSingle()
+      if (lr) {
+        traderMeta = { roi: lr.roi, score: lr.arena_score, platform: lr.source }
+      }
+    }
   } catch { /* use default */ }
 
   const title = `@${decoded} — Arena Profile`
-  const description = `View @${decoded}'s trading stats, posts, and activity on Arena — the crypto trader ranking platform.`
+  const traderParts = traderMeta ? [
+    traderMeta.roi != null ? `${traderMeta.roi >= 0 ? '+' : ''}${traderMeta.roi.toFixed(1)}% ROI` : null,
+    traderMeta.score != null ? `Score ${traderMeta.score.toFixed(0)}` : null,
+  ].filter(Boolean).join(' · ') : null
+  const description = traderParts
+    ? `@${decoded} — Verified trader${traderMeta?.platform ? ` on ${traderMeta.platform}` : ''} (${traderParts}). View performance, analytics, and rankings on Arena.`
+    : `View @${decoded}'s trading stats, posts, and activity on Arena — the crypto trader ranking platform.`
   const ogImage = avatarUrl || `${BASE_URL}/api/og`
   const profileUrl = `${BASE_URL}/u/${encodeURIComponent(decoded)}`
 
