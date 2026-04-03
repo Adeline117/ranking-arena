@@ -52,7 +52,7 @@ export const PLATFORM_ROUTES: Record<string, RouteConfig> = {
   binance_web3:   { routes: ['direct', 'vps_sg'],             notes: 'web3.binance.com, usually not blocked' },
   okx_web3:       { routes: ['direct', 'vps_sg'],             notes: 'Same as OKX v5 API' },
   gmx:            { routes: ['direct', 'vps_sg'],             notes: 'Satsuma GraphQL subgraph' },
-  kucoin:         { routes: ['direct', 'vps_sg'],             notes: 'POST /_api/ct-copy-trade leaderboard API works from any IP' },
+  kucoin:         { routes: ['vps_sg', 'direct'],              notes: 'POST API works but Vercel hnd1 IP blocked. VPS proxy first.' },
   kwenta:         { routes: ['direct'],                       notes: 'TheGraph subgraph' },
 
   // ─── GEO_BLOCKED (VPS proxy required) ────────────────────────
