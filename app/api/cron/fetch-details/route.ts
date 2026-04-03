@@ -229,12 +229,13 @@ export async function GET(req: Request) {
 
     // traders table uses platform/trader_key columns (not source/source_trader_id)
     // Order by updated_at ascending so least-recently-updated get enriched first
+    // Removed ORDER BY updated_at — causes statement timeout on large traders table.
+    // The LIMIT + random platform shuffle gives adequate coverage without expensive sort.
     let baseQuery = supabase
       .from('traders')
       .select('platform, trader_key')
       .in('platform', platforms)
       .eq('is_active', true)
-      .order('updated_at', { ascending: true })
       .limit(limit)
 
     if (!force) {
