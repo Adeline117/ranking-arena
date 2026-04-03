@@ -49,11 +49,27 @@ export default function UserProfileClient({ handle, serverProfile, serverTraderD
     traderData,
     isTraderDataLoading,
     isTraderDataError,
+    isBlocked,
   } = useUserProfile({ handle, serverProfile, serverTraderData })
 
   // Not found state
   if (!profile) {
     return <ProfileNotFound handle={handle} email={email} />
+  }
+
+  // Blocked state — show minimal page
+  if (isBlocked) {
+    return (
+      <>
+        <TopNav email={email} />
+        <Box style={{ ...userProfileStyles.wrapper, textAlign: 'center', padding: '80px 20px' }}>
+          <Box style={{ fontSize: 48, marginBottom: 16 }}>🚫</Box>
+          <Box style={{ color: tokens.colors.text.secondary, fontSize: 16 }}>
+            {t('profileUnavailable') || 'This profile is not available.'}
+          </Box>
+        </Box>
+      </>
+    )
   }
 
   // Trader loading state
