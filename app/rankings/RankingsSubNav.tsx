@@ -6,7 +6,7 @@ import { tokens } from '@/lib/design-tokens'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 
 const TAB_KEYS = [
-  { href: '/', key: 'rankingsSubNavTraders' as const },
+  { href: '/rankings', key: 'rankingsSubNavTraders' as const },
   { href: '/rankings/tokens', key: 'rankingsSubNavTokens' as const },
 ]
 
@@ -24,7 +24,9 @@ export default function RankingsSubNav() {
       }}
     >
       {TAB_KEYS.map((tab) => {
-        const isActive = tab.href === '/' ? pathname === '/' : pathname.startsWith(tab.href)
+        const isActive = tab.href === '/rankings'
+          ? pathname === '/rankings' || (pathname.startsWith('/rankings/') && !pathname.startsWith('/rankings/tokens'))
+          : pathname.startsWith(tab.href)
         return (
           <Link
             key={tab.href}
