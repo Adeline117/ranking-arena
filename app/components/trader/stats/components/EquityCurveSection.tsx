@@ -254,7 +254,7 @@ export function EquityCurveSection({
             {t('insufficientDataForChart')}
           </Text>
           <Text size="xs" color="tertiary" style={{ textAlign: 'center', fontFamily: tokens.typography.fontFamily.mono.join(', '), opacity: 0.7 }}>
-            {currentData.map(d => `${new Date(d.date).toLocaleDateString()}: ${chartType === 'roi' ? d.roi.toFixed(2) + '%' : '$' + d.pnl.toLocaleString()}`).join('  |  ')}
+            {currentData.map(d => `${new Date(d.date).toLocaleDateString('en-US')}: ${chartType === 'roi' ? d.roi.toFixed(2) + '%' : '$' + d.pnl.toLocaleString('en-US')}`).join('  |  ')}
           </Text>
         </Box>
       ) : hasData ? (
