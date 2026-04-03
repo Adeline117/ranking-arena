@@ -201,11 +201,17 @@ export function PeriodSelector({ period, onPeriodChange, source, lastUpdated }: 
                   fontSize: 13,
                   fontWeight: period === p ? 600 : 400,
                   cursor: isDisabled ? 'not-allowed' : 'pointer',
-                  transition: 'color 0.2s ease, font-weight 0.2s ease',
+                  transition: 'all 0.2s ease',
                   fontFamily: tokens.typography.fontFamily.sans.join(', '),
                   opacity: isDisabled ? 0.5 : 1,
                   position: 'relative',
                   zIndex: 1,
+                }}
+                onMouseEnter={(e) => {
+                  if (!isDisabled && period !== p) e.currentTarget.style.background = 'var(--color-bg-tertiary, rgba(255,255,255,0.05))'
+                }}
+                onMouseLeave={(e) => {
+                  if (!isDisabled && period !== p) e.currentTarget.style.background = 'transparent'
                 }}
                 title={isDisabled ? t('noDataForPeriod') : undefined}
               >
