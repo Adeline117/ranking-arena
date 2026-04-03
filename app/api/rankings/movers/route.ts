@@ -57,24 +57,32 @@ export async function GET(request: NextRequest) {
 async function computeMovers() {
   const supabase = getSupabaseAdmin()
 
-  // Find the most recent date in trader_daily_snapshots
+  // Find the two most recent DISTINCT dates in trader_daily_snapshots
+  // We need yesterday vs today (or the two most recent dates available)
   const { data: recentDateRows } = await supabase
     .from('trader_daily_snapshots')
     .select('date')
     .order('date', { ascending: false })
-    .limit(1)
+    .limit(100)
 
   if (!recentDateRows?.length) {
     return { risers: [], fallers: [], period: '90D' }
   }
 
-  const latestSnapDate = recentDateRows[0].date
+  // Deduplicate dates
+  const uniqueDates = [...new Set(recentDateRows.map(r => r.date))].sort().reverse()
+  if (uniqueDates.length < 2) {
+    return { risers: [], fallers: [], period: '90D' }
+  }
 
-  // Get yesterday's daily snapshots (most recent date available)
+  const todayDate = uniqueDates[0]
+  const yesterdayDate = uniqueDates[1]
+
+  // Get PREVIOUS day's daily snapshots (to compare against current leaderboard)
   const { data: yesterdaySnaps } = await supabase
     .from('trader_daily_snapshots')
     .select('platform, trader_key, roi')
-    .eq('date', latestSnapDate)
+    .eq('date', yesterdayDate)
     .not('roi', 'is', null)
     .limit(2000)
 
@@ -149,5 +157,5 @@ async function computeMovers() {
   const risers = movers.filter((m) => m.roiDelta > 0).slice(0, 5)
   const fallers = movers.filter((m) => m.roiDelta < 0).slice(0, 5)
 
-  return { risers, fallers, period: '90D', snapshotDate: latestSnapDate }
+  return { risers, fallers, period: '90D', snapshotDate: yesterdayDate, compareDate: todayDate }
 }
