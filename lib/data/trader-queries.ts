@@ -458,7 +458,8 @@ export async function getTraderPositionHistory(handle: string): Promise<Position
       .select('symbol, direction, entry_price, exit_price, pnl_pct, open_time, close_time')
       .eq('source', source.source)
       .eq('source_trader_id', source.source_trader_id)
-      .order('close_time', { ascending: false })
+      .gte('open_time', new Date(Date.now() - 90 * 86400000).toISOString())
+      .order('open_time', { ascending: false })
       .limit(50)
 
     if (!data) return []
