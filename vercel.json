@@ -115,8 +115,12 @@
       "schedule": "4 */3 * * *"
     },
     {
-      "path": "/api/cron/batch-fetch-traders?group=b",
+      "path": "/api/cron/batch-fetch-traders?group=b1",
       "schedule": "12 */3 * * *"
+    },
+    {
+      "path": "/api/cron/batch-fetch-traders?group=b2",
+      "schedule": "15 */3 * * *"
     },
     {
       "path": "/api/cron/batch-fetch-traders?group=c",
