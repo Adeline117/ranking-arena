@@ -91,6 +91,14 @@ export function getPool(): Pool {
       logger.error('[db/pool] Unexpected pool error:', err.message);
       resetPool();
     });
+
+    // Log connection pool metrics on connect/remove for leak detection
+    pool.on('connect', () => {
+      logger.debug(`[db/pool] Connection acquired (total: ${pool?.totalCount}, idle: ${pool?.idleCount}, waiting: ${pool?.waitingCount})`);
+    });
+    pool.on('remove', () => {
+      logger.debug(`[db/pool] Connection removed (total: ${pool?.totalCount}, idle: ${pool?.idleCount}, waiting: ${pool?.waitingCount})`);
+    });
   }
   return pool;
 }
