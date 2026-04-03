@@ -38,7 +38,6 @@ export default function HomeHeroSSR({ traderCount = 34000, exchangeCount = 27 }:
 
   return (
     <section
-      id="ssr-hero-shell"
       style={{
         padding: `${tokens.spacing[6]} ${tokens.spacing[6]} ${tokens.spacing[5]}`,
         marginBottom: tokens.spacing[3],

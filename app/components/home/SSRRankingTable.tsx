@@ -31,7 +31,7 @@ export default function SSRRankingTable({ traders }: Props) {
   if (!traders.length) return null
 
   return (
-      <div id="ssr-ranking-table" className="ssr-t">
+      <div className="ssr-t">
         <div className="ssr-hdr">
           <span>RANK</span>
           <span>TRADER</span>

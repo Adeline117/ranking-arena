@@ -5,12 +5,11 @@
    This eliminates CLS because the swap happens at the same DOM position. */
 
 /* Two-phase rendering:
-   - SSR hero (#ssr-hero-shell) STAYS VISIBLE — it IS the LCP element.
-     Hiding it resets LCP to Phase 2 hero (~11s on slow 4G).
-   - SSR ranking table (#ssr-ranking-table) hidden via CSS :has() in the
-     SAME paint frame as Phase 2 mounting — zero CLS.
-   - Phase 2 renders its own hero on top; the SSR hero underneath is
-     hidden via JS (position:absolute) after Phase 2 paints. */
+   - SSR hero + ranking table rendered as static HTML for instant LCP.
+   - Once Phase 2 (#homepage-interactive) mounts, CSS hides both SSR shells
+     in the same paint frame — zero CLS. LCP is already recorded by then.
+   - JS idle callback removes the SSR DOM nodes for cleanup. */
+:has(#homepage-interactive) #ssr-hero-shell,
 :has(#homepage-interactive) #ssr-ranking-table {
   content-visibility: hidden;
   height: 0;
