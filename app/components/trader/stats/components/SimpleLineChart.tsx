@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import { tokens } from '@/lib/design-tokens'
 import { Box, Text } from '@/app/components/base'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
@@ -64,6 +64,85 @@ export function SimpleLineChart({
     if (abs >= 1_000) return `${sign}$${(abs / 1_000).toFixed(0)}K`
     return `${sign}$${abs.toFixed(0)}`
   }
+
+  // Drag state for panning zoomed chart
+  const dragStartX = useRef<number | null>(null)
+  const dragStartOffset = useRef(0)
+
+  const handleDragStart = useCallback((clientX: number) => {
+    if (zoomLevel <= 1) return
+    dragStartX.current = clientX
+    dragStartOffset.current = zoomOffset
+  }, [zoomLevel, zoomOffset])
+
+  const handleDragMove = useCallback((clientX: number) => {
+    if (dragStartX.current === null || !chartRef.current || zoomLevel <= 1) return
+    const rect = chartRef.current.getBoundingClientRect()
+    const deltaPixels = clientX - dragStartX.current
+    const deltaPct = deltaPixels / rect.width
+    // Convert pixel delta to data-point offset
+    const windowSize = Math.max(4, Math.ceil(data.length / zoomLevel))
+    const deltaPoints = Math.round(deltaPct * windowSize)
+    const maxOff = Math.max(0, data.length - windowSize)
+    setZoomOffset(Math.max(0, Math.min(maxOff, dragStartOffset.current + deltaPoints)))
+  }, [zoomLevel, data.length])
+
+  const handleDragEnd = useCallback(() => {
+    dragStartX.current = null
+  }, [])
+
+  // Mouse drag handlers
+  const handleMouseDown = useCallback((e: React.MouseEvent) => {
+    if (zoomLevel <= 1) return
+    handleDragStart(e.clientX)
+  }, [zoomLevel, handleDragStart])
+
+  // Touch handlers for mobile
+  const handleTouchStart = useCallback((e: React.TouchEvent) => {
+    if (zoomLevel <= 1 || e.touches.length !== 1) return
+    handleDragStart(e.touches[0].clientX)
+  }, [zoomLevel, handleDragStart])
+
+  const handleTouchMove = useCallback((e: React.TouchEvent) => {
+    if (dragStartX.current === null || e.touches.length !== 1) return
+    e.preventDefault()
+    handleDragMove(e.touches[0].clientX)
+    // Also update hover
+    if (chartRef.current) {
+      const rect = chartRef.current.getBoundingClientRect()
+      const relX = e.touches[0].clientX - rect.left
+      const pct = relX / rect.width
+      const idx = Math.round(pct * (data.length - 1))
+      setHoverIndex(Math.max(0, Math.min(data.length - 1, idx)))
+      setTooltipPos({ x: e.touches[0].clientX - rect.left, y: e.touches[0].clientY - rect.top })
+    }
+  }, [handleDragMove, data.length])
+
+  const handleTouchEnd = useCallback(() => {
+    handleDragEnd()
+    setHoverIndex(null)
+    setTooltipPos(null)
+  }, [handleDragEnd])
+
+  // Wheel to zoom
+  const handleWheel = useCallback((e: React.WheelEvent) => {
+    if (Math.abs(e.deltaY) < 5) return
+    e.preventDefault()
+    if (e.deltaY < 0) {
+      // Scroll up = zoom in
+      setZoomLevel(prev => Math.min(prev * 2, Math.floor(data.length / 4)))
+    } else {
+      // Scroll down = zoom out
+      setZoomLevel(prev => { const next = Math.max(1, prev / 2); if (next === 1) setZoomOffset(0); return next })
+    }
+  }, [data.length])
+
+  // Global mouse up to end drag
+  useEffect(() => {
+    const handleUp = () => handleDragEnd()
+    window.addEventListener('mouseup', handleUp)
+    return () => window.removeEventListener('mouseup', handleUp)
+  }, [handleDragEnd])
 
   // Reset zoom when data/period changes
   useEffect(() => { setZoomLevel(1); setZoomOffset(0) }, [data, period])
@@ -176,10 +255,16 @@ export function SimpleLineChart({
           marginLeft: 55,
           height: 'calc(100% - 32px)',
           position: 'relative',
-          cursor: 'crosshair',
+          cursor: zoomLevel > 1 && dragStartX.current !== null ? 'grabbing' : zoomLevel > 1 ? 'grab' : 'crosshair',
+          touchAction: zoomLevel > 1 ? 'none' : 'auto',
         }}
-        onMouseMove={handleMouseMove}
-        onMouseLeave={handleMouseLeave}
+        onMouseMove={(e: React.MouseEvent<HTMLDivElement>) => { if (dragStartX.current !== null) handleDragMove(e.clientX); else handleMouseMove(e) }}
+        onMouseLeave={() => { handleDragEnd(); handleMouseLeave() }}
+        onMouseDown={handleMouseDown}
+        onTouchStart={handleTouchStart}
+        onTouchMove={handleTouchMove}
+        onTouchEnd={handleTouchEnd}
+        onWheel={handleWheel}
       >
         <svg
           viewBox={`0 0 ${width} ${height}`}
