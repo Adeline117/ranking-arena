@@ -13,7 +13,7 @@ import { getSupabaseAdmin } from '@/lib/supabase/server'
 import logger from '@/lib/logger'
 import { BASE_URL } from '@/lib/constants/urls'
 
-export const runtime = 'edge'
+export const runtime = 'nodejs' // requires Node.js for getSupabaseAdmin()
 
 const C = {
   bgTop: '#0A0A0F',
