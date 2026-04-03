@@ -4,6 +4,7 @@ import React, { useState } from 'react'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import { tokens } from '@/lib/design-tokens'
 
+import PasswordInput from '@/app/components/ui/PasswordInput'
 const SUPPORTED_EXCHANGES = [
   'binance',
   'bybit',
@@ -106,8 +107,7 @@ export default function AddExchangeModal({ open, onClose, onSubmit }: AddExchang
 
           <div style={styles.field}>
             <label style={styles.label}>{t('apiKey')} <span style={{ color: 'var(--color-accent-error)' }}>*</span></label>
-            <input
-              type="password"
+            <PasswordInput
               value={apiKey}
               onChange={e => setApiKey(e.target.value)}
               placeholder={t('enterApiKeyPlaceholder')}
@@ -118,8 +118,7 @@ export default function AddExchangeModal({ open, onClose, onSubmit }: AddExchang
 
           <div style={styles.field}>
             <label style={styles.label}>{t('apiSecret')} <span style={{ color: 'var(--color-accent-error)' }}>*</span></label>
-            <input
-              type="password"
+            <PasswordInput
               value={apiSecret}
               onChange={e => setApiSecret(e.target.value)}
               placeholder={t('enterApiSecretPlaceholder')}

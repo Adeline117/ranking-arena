@@ -1,4 +1,5 @@
 'use client'
+import PasswordInput from '@/app/components/ui/PasswordInput'
 
 import React, { useEffect, useRef } from 'react'
 import { tokens } from '@/lib/design-tokens'

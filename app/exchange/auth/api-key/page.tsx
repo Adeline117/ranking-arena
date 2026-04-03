@@ -1,4 +1,5 @@
 'use client'
+import PasswordInput from '@/app/components/ui/PasswordInput'
 
 import { useEffect, useState, Suspense } from 'react'
 import { useSearchParams, useRouter } from 'next/navigation'
@@ -544,8 +545,7 @@ function ApiKeyAuthContent() {
                       API Secret <span style={{ color: tokens.colors.accent.error }}>*</span>
                     </Text>
                     <Box style={{ display: 'flex', gap: tokens.spacing[2] }}>
-                      <input
-                        type="password"
+                      <PasswordInput
                         value={apiSecret}
                         onChange={(e) => setApiSecret(e.target.value)}
                         placeholder={t('pasteYourApiSecret')}
@@ -578,8 +578,7 @@ function ApiKeyAuthContent() {
                         Passphrase <span style={{ color: tokens.colors.accent.error }}>*</span>
                       </Text>
                       <Box style={{ display: 'flex', gap: tokens.spacing[2] }}>
-                        <input
-                          type="password"
+                        <PasswordInput
                           value={passphrase}
                           onChange={(e) => setPassphrase(e.target.value)}
                           placeholder={t('pasteYourPassphrase')}
