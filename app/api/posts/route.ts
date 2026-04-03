@@ -344,9 +344,9 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // 创建帖子后清除相关缓存
+    // 创建帖子后清除相关缓存（await Redis to avoid race with next GET）
     deleteServerCacheByPrefix(POSTS_CACHE_PREFIX)
-    fireAndForget(cacheDel('hot_posts:top50'), 'Invalidate hot posts Redis cache')
+    await cacheDel('hot_posts:top50').catch(() => {})
 
     return success({ post }, 201)
   } catch (error: unknown) {
