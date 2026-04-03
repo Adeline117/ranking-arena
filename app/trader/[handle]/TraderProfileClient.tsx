@@ -9,6 +9,7 @@ import useSWR from 'swr'
 import { traderFetcher } from '@/lib/hooks/traderFetcher'
 import { fetcher } from '@/lib/hooks/useSWR'
 import { tokens } from '@/lib/design-tokens'
+import { SectionErrorBoundary } from '@/app/components/utils/ErrorBoundary'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import { useSubscription } from '@/app/components/home/hooks/useSubscription'
 import { useAuthSession } from '@/lib/hooks/useAuthSession'
@@ -624,11 +625,13 @@ export default function TraderProfileClient({ data, serverTraderData, claimedUse
 
                 {/* Equity Curve Chart */}
                 {traderEquityCurve && (
-                  <EquityCurveSection
-                    equityCurve={traderEquityCurve}
-                    traderHandle={traderProfile?.handle || data.handle}
-                    delay={0}
-                  />
+                  <SectionErrorBoundary fallbackMessage="Chart unavailable">
+                    <EquityCurveSection
+                      equityCurve={traderEquityCurve}
+                      traderHandle={traderProfile?.handle || data.handle}
+                      delay={0}
+                    />
+                  </SectionErrorBoundary>
                 )}
 
                 {/* Drawdown Chart — P1-6: follows selected period */}
@@ -648,7 +651,7 @@ export default function TraderProfileClient({ data, serverTraderData, claimedUse
                       <Text size="sm" weight="bold" style={{ color: 'var(--color-text-secondary)', marginBottom: tokens.spacing[3] }}>
                         {t('drawdownChart') || 'Drawdown'} ({selectedPeriod})
                       </Text>
-                      <DrawdownChart equityCurve={curve} />
+                      <SectionErrorBoundary fallbackMessage="Chart unavailable"><DrawdownChart equityCurve={curve} /></SectionErrorBoundary>
                     </Box>
                   )
                 })()}
@@ -657,7 +660,7 @@ export default function TraderProfileClient({ data, serverTraderData, claimedUse
                 {(() => {
                   const simCurve = traderEquityCurve?.[selectedPeriod] ?? traderEquityCurve?.['90D']
                   if (!simCurve || simCurve.length <= 2) return null
-                  return <CopyTradeSimulator equityCurve={simCurve} />
+                  return <SectionErrorBoundary fallbackMessage="Simulator unavailable"><CopyTradeSimulator equityCurve={simCurve} /></SectionErrorBoundary>
                 })()}
 
                 {/* Daily Returns Distribution — P1-6: follows selected period */}
@@ -684,7 +687,7 @@ export default function TraderProfileClient({ data, serverTraderData, claimedUse
                       <Text size="sm" weight="bold" style={{ color: 'var(--color-text-secondary)', marginBottom: tokens.spacing[3] }}>
                         {t('dailyReturnsDistribution') || 'Daily Returns Distribution'} ({selectedPeriod})
                       </Text>
-                      <DailyReturnsChart data={dailyReturns} />
+                      <SectionErrorBoundary fallbackMessage="Chart unavailable"><DailyReturnsChart data={dailyReturns} /></SectionErrorBoundary>
                     </Box>
                   )
                 })()}
@@ -738,13 +741,15 @@ export default function TraderProfileClient({ data, serverTraderData, claimedUse
                     <Text size="sm" weight="bold" style={{ color: 'var(--color-text-secondary)', marginBottom: tokens.spacing[3], textAlign: 'center' }}>
                       {t('traderTradingStyleLabel')}
                     </Text>
-                    <TradingStyleRadar
-                      profitability={data.profitability_score}
-                      riskControl={data.risk_control_score}
-                      execution={data.execution_score}
-                      winRate={data.win_rate}
-                      maxDrawdown={data.max_drawdown}
-                    />
+                    <SectionErrorBoundary fallbackMessage="Chart unavailable">
+                      <TradingStyleRadar
+                        profitability={data.profitability_score}
+                        riskControl={data.risk_control_score}
+                        execution={data.execution_score}
+                        winRate={data.win_rate}
+                        maxDrawdown={data.max_drawdown}
+                      />
+                    </SectionErrorBoundary>
                   </Box>
                 )}
 
@@ -800,7 +805,7 @@ export default function TraderProfileClient({ data, serverTraderData, claimedUse
 
               {(traderSimilar.length > 0 || features.social) && (
                 <Box style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[6] }}>
-                  {traderSimilar.length > 0 && <SimilarTraders traders={traderSimilar} />}
+                  {traderSimilar.length > 0 && <SectionErrorBoundary fallbackMessage="Similar traders unavailable"><SimilarTraders traders={traderSimilar} /></SectionErrorBoundary>}
                   {features.social && (
                     <Link href="/groups" prefetch={false} style={{ textDecoration: 'none' }}>
                       <Box
