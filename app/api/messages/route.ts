@@ -96,6 +96,7 @@ export async function GET(request: NextRequest) {
         media_name
       `)
       .eq('conversation_id', conversationId)
+      .is('deleted_at', null)
       .order('created_at', { ascending: false })
       .limit(limit + 1) // fetch one extra to check has_more
 
