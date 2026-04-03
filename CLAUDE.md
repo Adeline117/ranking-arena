@@ -197,11 +197,14 @@ Key commands: `/fix-pipeline`, `/debug-cron`, `/deploy-staging`, `/implement-spe
 
 ## Agent Work Rules (MUST FOLLOW)
 
-### Git Commit Rule (MANDATORY)
-**Every change must be committed and pushed to GitHub immediately.**
+### Git Commit Rule (MANDATORY — 铁律)
+**每修一个问题立即 git commit + git push origin main。绝不攒多个修改一起提交。**
 - No asking "should I commit?" - just do it
-- After any file edit, stage → commit → push
-- Small, atomic commits preferred
+- After ANY file edit: `git add → git commit → git push origin main` immediately
+- One fix = one commit. Never batch multiple fixes into one commit.
+- Commit message 必须写清楚修了什么（中英文均可）
+- Small, atomic commits preferred — 宁可多 commit 也不要少 commit
+- **记住所有终端输出** — 每个命令的结果都要记住，不要丢失上下文
 
 ### Checkpoint Protocol
 1. **No one-shot features** - Break into subtasks, commit after each
