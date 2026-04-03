@@ -1073,7 +1073,7 @@
 
 @media (max-width: 639px) {
   .chart-container {
-    height: 200px !important;
+    height: 240px !important;
   }
 }
 
@@ -1083,7 +1083,7 @@
 
 @media (max-width: 639px) {
   .hero-metric-value {
-    font-size: 22px !important;
+    font-size: clamp(16px, 5vw, 22px) !important;
   }
 }
 
@@ -1569,8 +1569,8 @@
   /* 1. Trader detail: action buttons — smaller on mobile, scrollable, 44px touch target */
   .profile-header-actions button {
     font-size: 11px !important;
-    padding: 5px 8px !important;
-    min-height: 36px;
+    padding: 8px 10px !important;
+    min-height: 44px;
     white-space: nowrap;
     flex-shrink: 0;
   }
