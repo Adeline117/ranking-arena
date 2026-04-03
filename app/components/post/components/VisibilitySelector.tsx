@@ -46,8 +46,9 @@ export function VisibilitySelector({ value, onChange, isGroupPost }: VisibilityS
   const [open, setOpen] = useState(false)
   const ref = useRef<HTMLDivElement>(null)
 
-  // Close dropdown on outside click
+  // Close dropdown on outside click (only when open)
   useEffect(() => {
+    if (!open) return
     const handleClick = (e: MouseEvent) => {
       if (ref.current && !ref.current.contains(e.target as Node)) {
         setOpen(false)
@@ -55,7 +56,7 @@ export function VisibilitySelector({ value, onChange, isGroupPost }: VisibilityS
     }
     document.addEventListener('mousedown', handleClick)
     return () => document.removeEventListener('mousedown', handleClick)
-  }, [])
+  }, [open])
 
   const selected = VISIBILITY_OPTIONS.find(o => o.value === value) || VISIBILITY_OPTIONS[0]
 
@@ -86,6 +87,8 @@ export function VisibilitySelector({ value, onChange, isGroupPost }: VisibilityS
       <button
         type="button"
         onClick={() => setOpen(!open)}
+        aria-expanded={open}
+        aria-haspopup="listbox"
         style={{
           display: 'flex',
           alignItems: 'center',
@@ -116,7 +119,7 @@ export function VisibilitySelector({ value, onChange, isGroupPost }: VisibilityS
       </button>
 
       {open && (
-        <div style={{
+        <div className="dropdown-enter" style={{
           position: 'absolute',
           top: '100%',
           left: 0,
