@@ -6,7 +6,7 @@ import { Box, Text } from '@/app/components/base'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 
 /**
- * Fill date gaps in time-series data with zero entries.
+ * Fill date gaps in time-series data with linearly interpolated values.
  * Prevents misleading visual jumps when days are missing.
  */
 function fillDateGaps(data: Array<{ date: string; roi: number; pnl: number }>): Array<{ date: string; roi: number; pnl: number }> {
@@ -18,9 +18,20 @@ function fillDateGaps(data: Array<{ date: string; roi: number; pnl: number }>): 
       const current = new Date(data[i].date)
       const next = new Date(data[i + 1].date)
       const gap = Math.round((next.getTime() - current.getTime()) / 86400000)
-      for (let d = 1; d < gap; d++) {
-        const fillDate = new Date(current.getTime() + d * 86400000)
-        filled.push({ date: fillDate.toISOString().split('T')[0], roi: 0, pnl: 0 })
+      if (gap > 1) {
+        const startRoi = data[i].roi
+        const endRoi = data[i + 1].roi
+        const startPnl = data[i].pnl
+        const endPnl = data[i + 1].pnl
+        for (let d = 1; d < gap; d++) {
+          const t = d / gap
+          const fillDate = new Date(current.getTime() + d * 86400000)
+          filled.push({
+            date: fillDate.toISOString().split('T')[0],
+            roi: startRoi + (endRoi - startRoi) * t,
+            pnl: startPnl + (endPnl - startPnl) * t,
+          })
+        }
       }
     }
   }
