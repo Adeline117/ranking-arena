@@ -164,7 +164,7 @@ export const env = {
 
   // ── Email ──
   RESEND_API_KEY: isServer ? getEnv('RESEND_API_KEY', false) : undefined,
-  RESEND_FROM_EMAIL: getEnv('RESEND_FROM_EMAIL', false, 'noreply@example.com'),
+  RESEND_FROM_EMAIL: getEnv('RESEND_FROM_EMAIL', false, 'noreply@arenafi.org'),
 
   // ── Telegram ──
   TELEGRAM_BOT_TOKEN: isServer ? getEnv('TELEGRAM_BOT_TOKEN', false) : undefined,
