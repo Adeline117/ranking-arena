@@ -4,6 +4,7 @@
  * Fallback chain: CoinGecko → Binance public ticker API
  */
 import { NextRequest, NextResponse } from 'next/server'
+import { checkRateLimit, RateLimitPresets } from '@/lib/utils/rate-limit'
 import { tieredGetOrSet } from '@/lib/cache/redis-layer'
 import { CoinGeckoMarketsResponseSchema, validateCoinGeckoResponse } from './schemas'
 import { createLogger } from '@/lib/utils/logger'
@@ -161,6 +162,8 @@ async function fetchFromBinance(): Promise<SpotCoin[]> {
 
 export async function GET(_req: NextRequest) {
   try {
+    const rl = await checkRateLimit(_req, RateLimitPresets.read)
+    if (rl) return rl
     const data = await tieredGetOrSet(
       'api:market:spot:top100',
       async () => {

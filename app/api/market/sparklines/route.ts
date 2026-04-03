@@ -4,7 +4,8 @@
  * Uses CoinGecko /coins/markets?sparkline=true
  * Cached in memory for 4 hours — sparklines don't need real-time updates.
  */
-import { NextResponse } from 'next/server'
+import { NextRequest, NextResponse } from 'next/server'
+import { checkRateLimit, RateLimitPresets } from '@/lib/utils/rate-limit'
 
 export const dynamic = 'force-dynamic'
 
@@ -17,7 +18,7 @@ interface SparklineEntry {
 let memCache: { data: SparklineEntry[]; ts: number } | null = null
 const CACHE_TTL = 4 * 60 * 60 * 1000 // 4 hours
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   // Serve from memory cache if fresh
   if (memCache && Date.now() - memCache.ts < CACHE_TTL) {
     return NextResponse.json(memCache.data, {
@@ -26,6 +27,8 @@ export async function GET() {
   }
 
   try {
+    const rl = await checkRateLimit(request, RateLimitPresets.read)
+    if (rl) return rl
     const url =
       'https://api.coingecko.com/api/v3/coins/markets' +
       '?vs_currency=usd&order=market_cap_desc&per_page=50&page=1' +
