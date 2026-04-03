@@ -43,7 +43,6 @@ export default function HomeHero({ traderCount: traderCountProp, exchangeCount: 
         position: 'relative',
         overflow: 'hidden',
         minHeight: 120,
-        maxHeight: 200,
         contain: 'layout style',
       }}
     >
