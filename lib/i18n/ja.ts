@@ -4581,6 +4581,13 @@ compFieldMaxParticipants: '最大参加人数',
     linkAdditionalAccountDesc: 'プロフィールにリンクする別のトレーダーアカウントを検索してください。',
     moderationQueue: 'モデレーション',
     auditLog: '操作ログ',
+    deleteAccountRecoveryNote: 'アカウントは30日間停止され、その後完全に削除されます。この期間中に再ログインするとキャンセルできます。',
+    copyBackupCodes: 'すべてのコードをコピー',
+    bioTooLong: '自己紹介は200文字以内にしてください',
+    invalidEmailFormat: 'メールアドレスの形式が無効です',
+    referralTitle: '紹介プログラム',
+    referralDesc: '友達を招待してProリワードを獲得',
+    copyText: 'コピー',
 
 } as const
 

@@ -4868,6 +4868,17 @@ compShareTitle: 'Check out this competition on Arena',
     connectWallet: 'Connect Wallet',
     verifiedSince: 'Verified since',
 
+    // Missing keys discovered in round 79 acceptance
+    deleteAccountRecoveryNote: 'Your account will be deactivated for 30 days before permanent deletion. You can log back in during this period to cancel.',
+    copyBackupCodes: 'Copy all codes',
+    bioTooLong: 'Bio must be 200 characters or less',
+    invalidEmailFormat: 'Invalid email format',
+    referralTitle: 'Referral Program',
+    referralDesc: 'Invite friends and earn Pro rewards',
+    copyText: 'Copy',
+    auditLog: 'Audit Log',
+    moderationQueue: 'Moderation Queue',
+
 } as const
 
 export default en
