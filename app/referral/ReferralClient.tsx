@@ -305,7 +305,7 @@ export default function ReferralClient() {
                 </h3>
                 <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
                   <a
-                    href={`https://twitter.com/intent/tweet?text=${encodeURIComponent(shareText)}&url=${encodeURIComponent(shareUrl)}`}
+                    href={`https://x.com/intent/post?text=${encodeURIComponent(shareText)}&url=${encodeURIComponent(shareUrl)}`}
                     target="_blank"
                     rel="noopener noreferrer"
                     style={shareBtnStyle}
