@@ -158,9 +158,8 @@ export class EtoroSpotConnector extends BaseConnector {
     return {
       trader_key: String(e.CustomerId),
       display_name: e.UserName || null,
-      avatar_url: e.HasAvatar
-        ? `https://etoro-cdn.etorostatic.com/avatars/${e.CustomerId}/150x150.jpg`
-        : null,
+      // eToro CDN blocks all external requests (403) — use dicebear identicon instead
+      avatar_url: `https://api.dicebear.com/7.x/identicon/svg?seed=etoro_${e.CustomerId}`,
       roi,
       pnl,
       win_rate: e.WinRatio ?? null,
