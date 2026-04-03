@@ -237,7 +237,7 @@ export function useGroupPosts({
 
     const observer = new IntersectionObserver(
       (entries) => {
-        if (entries[0].isIntersecting) {
+        if (entries[0].isIntersecting && hasMorePosts && !loadingMore) {
           loadMorePosts()
         }
       },
@@ -246,7 +246,7 @@ export function useGroupPosts({
 
     observer.observe(sentinel)
     return () => observer.disconnect()
-  }, [loadMorePosts])
+  }, [loadMorePosts, hasMorePosts, loadingMore])
 
   // Sorted posts (memoized)
   const sortedPosts = useMemo(() => {
