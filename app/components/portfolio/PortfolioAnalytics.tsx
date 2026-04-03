@@ -71,7 +71,7 @@ export default function PortfolioAnalytics({ positions, snapshots }: PortfolioAn
     return null
   }
 
-  const formatPnl = (v: number) => `${v >= 0 ? '+' : ''}$${v.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+  const formatPnl = (v: number) => `${v >= 0 ? '+' : ''}$${v.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
   const pnlColor = (v: number) => v >= 0 ? tokens.colors.accent.success : tokens.colors.accent.error
 
   return (

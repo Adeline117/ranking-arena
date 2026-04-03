@@ -153,7 +153,7 @@ export default function CopyTradeSimulator({ equityCurve }: CopyTradeSimulatorPr
         }}>
           <div style={{ fontSize: 13, color: 'var(--color-text-secondary)', marginBottom: tokens.spacing[2], lineHeight: 1.5 }}>
             {(t('copyTradeResult') || 'If you invested ${amount} on {date}, you would have:')
-              .replace('${amount}', `$${investment.toLocaleString()}`)
+              .replace('${amount}', `$${investment.toLocaleString('en-US')}`)
               .replace('{date}', simulation.startDate)}
           </div>
           <div style={{ display: 'flex', alignItems: 'baseline', gap: tokens.spacing[3], flexWrap: 'wrap' }}>
@@ -162,14 +162,14 @@ export default function CopyTradeSimulator({ equityCurve }: CopyTradeSimulatorPr
               fontWeight: 800,
               color: isPositive ? 'var(--color-accent-success)' : 'var(--color-accent-error)',
             }}>
-              ${simulation.finalValue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              ${simulation.finalValue.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
             </span>
             <span style={{
               fontSize: 14,
               fontWeight: 600,
               color: isPositive ? 'var(--color-accent-success)' : 'var(--color-accent-error)',
             }}>
-              {isPositive ? '+' : ''}{simulation.profit.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              {isPositive ? '+' : ''}{simulation.profit.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
               {' '}({isPositive ? '+' : ''}{simulation.returnPct.toFixed(1)}%)
             </span>
           </div>

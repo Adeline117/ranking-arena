@@ -262,11 +262,11 @@ function StatItem({ label, value, format }: {
     if (isNull) return '—'
     switch (format) {
       case 'currency':
-        return `$${value.toLocaleString(undefined, { maximumFractionDigits: 0 })}`
+        return `$${value.toLocaleString('en-US', { maximumFractionDigits: 0 })}`
       case 'percent':
         return `${value.toFixed(2)}%`
       default:
-        return value.toLocaleString()
+        return value.toLocaleString('en-US')
     }
   }
 
@@ -450,7 +450,7 @@ function SimpleChart({ data, mode = 'roi' }: { data: EquityCurvePoint[]; mode?: 
   // Show min/max labels
   const lastVal = values[values.length - 1]
   const formatVal = mode === 'pnl'
-    ? `$${lastVal >= 0 ? '+' : ''}${lastVal.toLocaleString(undefined, { maximumFractionDigits: 0 })}`
+    ? `$${lastVal >= 0 ? '+' : ''}${lastVal.toLocaleString('en-US', { maximumFractionDigits: 0 })}`
     : `${lastVal >= 0 ? '+' : ''}${lastVal.toFixed(2)}%`
 
   return (

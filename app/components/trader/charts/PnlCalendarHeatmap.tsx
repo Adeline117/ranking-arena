@@ -265,7 +265,7 @@ export function PnlCalendarHeatmap({ data, days = 90 }: PnlCalendarHeatmapProps)
           <div style={{ color: tooltip.day.pnl >= 0 ? 'var(--color-accent-success)' : 'var(--color-accent-error)' }}>
             PnL: {tooltip.day.pnl >= 0 ? '+' : ''}{tooltip.day.pnl < 1000 && tooltip.day.pnl > -1000
               ? `$${tooltip.day.pnl.toFixed(2)}`
-              : `$${tooltip.day.pnl.toLocaleString(undefined, { maximumFractionDigits: 0 })}`}
+              : `$${tooltip.day.pnl.toLocaleString('en-US', { maximumFractionDigits: 0 })}`}
           </div>
           <div style={{ color: tooltip.day.roi >= 0 ? 'var(--color-accent-success)' : 'var(--color-accent-error)' }}>
             ROI: {tooltip.day.roi >= 0 ? '+' : ''}{tooltip.day.roi.toFixed(2)}%

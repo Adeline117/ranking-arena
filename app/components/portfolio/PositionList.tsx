@@ -122,12 +122,12 @@ export default function PositionList({ positions, isLoading }: PositionListProps
                   }}>
                     {pos.side}
                   </td>
-                  <td style={styles.td}>${Number(pos.entry_price).toLocaleString()}</td>
-                  <td style={styles.td}>${Number(pos.mark_price).toLocaleString()}</td>
-                  <td style={styles.td}>{Number(pos.size).toLocaleString()}</td>
+                  <td style={styles.td}>${Number(pos.entry_price).toLocaleString('en-US')}</td>
+                  <td style={styles.td}>${Number(pos.mark_price).toLocaleString('en-US')}</td>
+                  <td style={styles.td}>{Number(pos.size).toLocaleString('en-US')}</td>
                   <td style={styles.td}>{pos.leverage}x</td>
                   <td style={{ ...styles.td, color: pnlColor, fontWeight: 600 }}>
-                    {sign}${Number(pos.pnl).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                    {sign}${Number(pos.pnl).toLocaleString('en-US', { minimumFractionDigits: 2 })}
                   </td>
                   <td style={{ ...styles.td, color: pnlColor }}>
                     {sign}{Number(pos.pnl_pct).toFixed(2)}%
@@ -160,17 +160,17 @@ export default function PositionList({ positions, isLoading }: PositionListProps
               <div style={styles.mobileCardRow}>
                 <span style={styles.mobileLabel}>Entry / Mark</span>
                 <span style={styles.mobileValue}>
-                  ${Number(pos.entry_price).toLocaleString()} / ${Number(pos.mark_price).toLocaleString()}
+                  ${Number(pos.entry_price).toLocaleString('en-US')} / ${Number(pos.mark_price).toLocaleString('en-US')}
                 </span>
               </div>
               <div style={styles.mobileCardRow}>
                 <span style={styles.mobileLabel}>Size</span>
-                <span style={styles.mobileValue}>{Number(pos.size).toLocaleString()}</span>
+                <span style={styles.mobileValue}>{Number(pos.size).toLocaleString('en-US')}</span>
               </div>
               <div style={styles.mobileCardRow}>
                 <span style={styles.mobileLabel}>PnL</span>
                 <span style={{ ...styles.mobileValue, color: pnlColor, fontWeight: 600 }}>
-                  {sign}${Number(pos.pnl).toLocaleString(undefined, { minimumFractionDigits: 2 })} ({sign}{Number(pos.pnl_pct).toFixed(2)}%)
+                  {sign}${Number(pos.pnl).toLocaleString('en-US', { minimumFractionDigits: 2 })} ({sign}{Number(pos.pnl_pct).toFixed(2)}%)
                 </span>
               </div>
             </div>
