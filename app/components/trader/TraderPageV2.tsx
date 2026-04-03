@@ -7,6 +7,7 @@
 
 import { useState } from 'react'
 import { tokens } from '@/lib/design-tokens'
+import { formatROI, formatPnL, formatNumber } from '@/lib/utils/format'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import { useTraderDetailV2 } from '@/lib/hooks/useTraderDetailV2'
 import dynamic from 'next/dynamic'
@@ -331,13 +332,13 @@ function SnapshotCard({ window, metrics }: { window: SnapshotWindow; metrics: Sn
         <div className="flex justify-between">
           <span className="text-xs" style={{ color: tokens.colors.text.secondary }}>ROI</span>
           <span className="text-sm font-semibold" style={{ color: roiColor }}>
-            {roi >= 0 ? '+' : ''}{roi.toFixed(2)}%
+            {formatROI(roi)}
           </span>
         </div>
         <div className="flex justify-between">
           <span className="text-xs" style={{ color: tokens.colors.text.secondary }}>PnL</span>
-          <span className="text-sm font-medium" style={{ color: tokens.colors.text.primary }}>
-            ${pnl.toLocaleString(undefined, { maximumFractionDigits: 0 })}
+          <span className="text-sm font-medium" style={{ color: pnl >= 0 ? tokens.colors.accent.success : tokens.colors.accent.error }}>
+            {formatPnL(pnl)}
           </span>
         </div>
         {metrics.win_rate != null && (
@@ -363,7 +364,7 @@ function SnapshotCard({ window, metrics }: { window: SnapshotWindow; metrics: Sn
         {metrics.trades_count != null && (
           <div className="flex justify-between">
             <span className="text-xs" style={{ color: tokens.colors.text.secondary }}>{t('tradesLabel')}</span>
-            <span className="text-sm" style={{ color: tokens.colors.text.primary }}>{metrics.trades_count}</span>
+            <span className="text-sm" style={{ color: tokens.colors.text.primary }}>{formatNumber(metrics.trades_count, 0)}</span>
           </div>
         )}
         {metrics.sortino_ratio != null && (
