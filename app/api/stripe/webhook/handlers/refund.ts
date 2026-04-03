@@ -43,23 +43,31 @@ export async function handleChargeRefunded(charge: Stripe.Charge) {
       .eq('status', 'active')
       .single()
 
-    if (!subscription) {
+    // Cancel active subscription if exists
+    if (subscription) {
       await getSupabase()
-        .from('user_profiles')
-        .update({
-          subscription_tier: 'free',
-          updated_at: new Date().toISOString(),
-        })
-        .eq('id', profile.id)
-
-      try {
-        await leaveProOfficialGroup(profile.id)
-      } catch (leaveError) {
-        logger.error('Error leaving Pro group after refund', { error: leaveError })
-      }
-
-      logger.info(`User ${profile.id} downgraded to free after full refund`)
+        .from('subscriptions')
+        .update({ status: 'canceled', canceled_at: new Date().toISOString() })
+        .eq('id', subscription.id)
+      logger.info(`Subscription ${subscription.id} canceled due to full refund`)
     }
+
+    // Downgrade user to free tier
+    await getSupabase()
+      .from('user_profiles')
+      .update({
+        subscription_tier: 'free',
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', profile.id)
+
+    try {
+      await leaveProOfficialGroup(profile.id)
+    } catch (leaveError) {
+      logger.error('Error leaving Pro group after refund', { error: leaveError })
+    }
+
+    logger.info(`User ${profile.id} downgraded to free after full refund`)
   }
 
   logger.info('Charge refunded', { userId: profile.id, chargeId: charge.id, amount: charge.amount_refunded })
