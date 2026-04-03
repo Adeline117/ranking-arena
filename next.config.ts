@@ -417,6 +417,7 @@ const nextConfig = {
       'otpauth',
       'lightweight-charts',
       '@tanstack/react-query',
+      '@tanstack/react-virtual',
       'viem',
       '@rainbow-me/rainbowkit',
       'wagmi',
