@@ -234,7 +234,7 @@ export function RankingFilters({
           </Box>
 
           {/* Filter button */}
-          <Box onClick={onFilterToggle} title={t('advancedFilter')} aria-label={t('advancedFilter')} role="button" tabIndex={0}
+          <Box onClick={onFilterToggle} onKeyDown={(e: React.KeyboardEvent) => { if ((e.key === 'Enter' || e.key === ' ') && onFilterToggle) { e.preventDefault(); onFilterToggle() } }} title={t('advancedFilter')} aria-label={t('advancedFilter')} role="button" tabIndex={0}
             className={`toolbar-btn touch-target-sm${hasActiveFilters ? ' toolbar-btn-active' : ''}`}
             style={{ position: 'relative', gap: 4 }}
           >
@@ -273,7 +273,7 @@ export function RankingFilters({
 
           {/* Column settings */}
           <div ref={columnSettingsRef} style={{ position: 'relative' }}>
-            <Box onClick={() => onShowColumnSettings(!showColumnSettings)} title={t('columnSettingsTitle')} aria-label={t('columnSettingsTitle')} aria-expanded={showColumnSettings} role="button" tabIndex={0}
+            <Box onClick={() => onShowColumnSettings(!showColumnSettings)} onKeyDown={(e: React.KeyboardEvent) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onShowColumnSettings(!showColumnSettings) } }} title={t('columnSettingsTitle')} aria-label={t('columnSettingsTitle')} aria-expanded={showColumnSettings} role="button" tabIndex={0}
               className={`toolbar-btn touch-target-sm${showColumnSettings ? ' toolbar-btn-active' : ''}`}>
               <SettingsIcon size={11} />
             </Box>
