@@ -9,6 +9,7 @@ import { Box, Text } from '../base'
 import { useLanguage } from '../Providers/LanguageProvider'
 import dynamic from 'next/dynamic'
 import { DynamicScoreRulesModal as ScoreRulesModal } from '../ui/Dynamic'
+import InfoTooltip from '../ui/InfoTooltip'
 import { CategoryType } from './CategoryRankingTabs'
 
 // Lazy-load non-LCP components to reduce initial bundle
@@ -462,14 +463,14 @@ function RankingTableInner(props: {
           style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 2 }}
         >
           {t('winRateShort')}
-          <span title={t('winRateTooltip') || 'Percentage of profitable trading days.'} style={{ cursor: 'help', opacity: 0.6, fontSize: 11, flexShrink: 0 }} aria-label={t('winRateTooltip') || 'Percentage of profitable trading days.'}>&#9432;</span>
+          <InfoTooltip text={t('winRateTooltip') || 'Win Rate: Percentage of profitable trades.\nHigher = more consistent profits.'} />
           <SortIndicator active={sortColumn === 'winrate'} dir={sortDir} />
         </Box>
         <Box className={`col-mdd sort-header sort-header-end${sortColumn === 'mdd' ? ' sort-header-active' : ''} ${justSortedColumn === 'mdd' ? 'just-sorted' : ''}`} as="button" onClick={() => handleSort('mdd')} title={t('mddTooltip') || 'Largest peak-to-trough decline. Lower is better.'} role="columnheader" aria-label={`${t('maxDrawdownShort')} — click to sort`} aria-sort={sortColumn === 'mdd' ? (sortDir === 'asc' ? 'ascending' : 'descending') : 'none'} data-sortable
           style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 2 }}
         >
           {t('maxDrawdownShort')}
-          <span title={t('mddTooltip') || 'Largest peak-to-trough decline. Lower is better.'} style={{ cursor: 'help', opacity: 0.6, fontSize: 11, flexShrink: 0 }} aria-label={t('mddTooltip') || 'Largest peak-to-trough decline. Lower is better.'}>&#9432;</span>
+          <InfoTooltip text={t('mddTooltip') || 'Max Drawdown: Largest peak-to-trough decline.\nLower = better risk control.'} />
           <SortIndicator active={sortColumn === 'mdd'} dir={sortDir} />
         </Box>
         {visibleColumns.includes('sharpe') && (
@@ -477,7 +478,7 @@ function RankingTableInner(props: {
             <Text size="xs" weight="bold" color="tertiary" style={{ textTransform: 'uppercase', letterSpacing: '0.5px' }}>
               Sharpe
             </Text>
-            <span title={t('sharpeTooltip') || 'Risk-adjusted return ratio. Higher = better risk/reward.'} style={{ cursor: 'help', opacity: 0.6, fontSize: 11, flexShrink: 0 }}>&#9432;</span>
+            <InfoTooltip text={t('sharpeTooltip') || 'Sharpe Ratio: Risk-adjusted return per unit of risk.\n> 1 good, > 2 excellent, > 3 outstanding.'} />
           </Box>
         )}
         {visibleColumns.includes('sortino') && (
@@ -485,7 +486,7 @@ function RankingTableInner(props: {
             style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 2 }}
           >
             {t('sortinoRatio')}
-            <span title={t('sortinoTooltip') || 'Risk-adjusted return. Higher = better risk/reward.'} style={{ cursor: 'help', opacity: 0.6, fontSize: 11, flexShrink: 0 }} aria-label={t('sortinoTooltip') || 'Risk-adjusted return. Higher = better risk/reward.'}>&#9432;</span>
+            <InfoTooltip text={t('sortinoTooltip') || 'Sortino: Like Sharpe but only penalizes downside risk.\nHigher = better risk-adjusted return.'} />
             <SortIndicator active={sortColumn === 'sortino'} dir={sortDir} />
           </Box>
         )}
