@@ -221,6 +221,19 @@ export function SimpleLineChart({
 
   const hoverData = hoverIndex !== null ? validData[hoverIndex] : null
 
+  // Compute tooltip position with edge detection
+  const tooltipStyle = (() => {
+    if (!tooltipPos) return null
+    const cw = chartRef.current?.clientWidth || 300
+    const tw = 120
+    let tLeft = tooltipPos.x
+    let tTransform = 'translateX(-50%)'
+    if (tLeft < tw / 2) { tLeft = 0; tTransform = 'translateX(0)' }
+    else if (tLeft > cw - tw / 2) { tLeft = cw; tTransform = 'translateX(-100%)' }
+    const tTop = tooltipPos.y < 70 ? tooltipPos.y + 20 : tooltipPos.y - 60
+    return { left: tLeft, top: tTop, transform: tTransform }
+  })()
+
   return (
     <Box style={{
       height: '100%',
@@ -393,14 +406,14 @@ export function SimpleLineChart({
           })()}
         </svg>
 
-        {/* Tooltip */}
-        {hoverData && tooltipPos && (
+        {/* Tooltip with edge detection */}
+        {hoverData && tooltipStyle && (
           <Box
             style={{
               position: 'absolute',
-              left: tooltipPos.x,
-              top: tooltipPos.y - 60,
-              transform: 'translateX(-50%)',
+              left: tooltipStyle.left,
+              top: tooltipStyle.top,
+              transform: tooltipStyle.transform,
               background: tokens.colors.bg.primary,
               border: `1px solid ${tokens.colors.border.primary}`,
               borderRadius: tokens.radius.lg,
