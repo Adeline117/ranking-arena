@@ -53,6 +53,10 @@
       "schedule": "1,16,31,46 * * * *"
     },
     {
+      "path": "/api/cron/pipeline-evaluate",
+      "schedule": "30 */6 * * *"
+    },
+    {
       "path": "/api/cron/cleanup-deleted-accounts",
       "schedule": "0 3 * * *"
     },
