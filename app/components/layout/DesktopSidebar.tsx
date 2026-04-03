@@ -40,6 +40,14 @@ function GroupIcon({ active }: { active: boolean }) {
   )
 }
 
+function MarketIcon({ active }: { active: boolean }) {
+  return (
+    <svg width="20" height="20" viewBox="0 0 24 24" fill={active ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <polyline points="22 12 18 12 15 21 9 3 6 12 2 12" />
+    </svg>
+  )
+}
+
 function UserIcon({ active }: { active: boolean }) {
   return (
     <svg width="20" height="20" viewBox="0 0 24 24" fill={active ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -82,6 +90,7 @@ export default function DesktopSidebar() {
   const navItems = [
     { href: '/', labelKey: 'home' as const, icon: HomeIcon },
     { href: '/rankings', labelKey: 'rankings' as const, icon: TrophyIcon },
+    { href: '/market', labelKey: 'market' as const, icon: MarketIcon },
     { href: '/groups', labelKey: 'groups' as const, icon: GroupIcon },
     { href: userHandle ? `/u/${encodeURIComponent(userHandle)}` : '/settings', labelKey: 'me' as const, icon: UserIcon },
   ]
