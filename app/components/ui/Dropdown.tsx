@@ -5,9 +5,10 @@
  *
  * Accessible dropdown/select component with keyboard navigation
  * Supports arrow keys, Enter, Escape, Home, End, and type-ahead search
+ * Auto-shows search input when options > 8
  */
 
-import React, { useState, useRef, useEffect, useCallback } from 'react'
+import React, { useState, useRef, useEffect, useCallback, useId } from 'react'
 import { tokens } from '@/lib/design-tokens'
 import { useKeyboardNavigation } from '@/lib/hooks/useKeyboardNavigation'
 
@@ -31,6 +32,8 @@ export interface DropdownProps<T = string> {
   className?: string
   style?: React.CSSProperties
   renderOption?: (option: DropdownOption<T>, isActive: boolean, isSelected: boolean) => React.ReactNode
+  /** Force show/hide search input (auto-shown when options > 8) */
+  searchable?: boolean
 }
 
 export function Dropdown<T = string>({
@@ -46,35 +49,65 @@ export function Dropdown<T = string>({
   className,
   style,
   renderOption,
+  searchable,
 }: DropdownProps<T>) {
   const [isOpen, setIsOpen] = useState(false)
+  const [searchQuery, setSearchQuery] = useState('')
   const containerRef = useRef<HTMLDivElement>(null)
   const listRef = useRef<HTMLUListElement>(null)
   const buttonRef = useRef<HTMLButtonElement>(null)
+  const searchInputRef = useRef<HTMLInputElement>(null)
+  const instanceId = useId()
+
+  const listId = `dropdown-list-${instanceId}`
+  const errorId = `dropdown-error-${instanceId}`
 
   const selectedOption = options.find((opt) => opt.value === value)
   const hasError = Boolean(error)
   const errorMessage = typeof error === 'string' ? error : undefined
 
+  // Show search when explicitly enabled or when many options
+  const showSearch = searchable ?? options.length > 8
+
+  // Filter options by search query
+  const filteredOptions = showSearch && searchQuery
+    ? options.filter((opt) =>
+        opt.label.toLowerCase().includes(searchQuery.toLowerCase())
+      )
+    : options
+
   const handleSelect = useCallback((option: DropdownOption<T>) => {
     if (!option.disabled) {
       onChange(option.value)
       setIsOpen(false)
+      setSearchQuery('')
       buttonRef.current?.focus()
     }
   }, [onChange])
 
+  const handleOpen = useCallback(() => {
+    setIsOpen(true)
+    setSearchQuery('')
+    // Focus search input when opening if searchable
+    if (showSearch) {
+      requestAnimationFrame(() => {
+        searchInputRef.current?.focus()
+      })
+    }
+  }, [showSearch])
+
   const { activeIndex, handleKeyDown, resetActiveIndex } = useKeyboardNavigation({
-    items: options,
+    items: filteredOptions,
     isOpen,
     onSelect: handleSelect,
     onClose: () => {
       setIsOpen(false)
+      setSearchQuery('')
       buttonRef.current?.focus()
     },
     getItemLabel: (opt) => opt.label,
     loop: true,
-    typeAhead: true,
+    typeAhead: !showSearch, // Disable type-ahead when search input is active
   })
 
   // Click outside to close
@@ -84,6 +117,7 @@ export function Dropdown<T = string>({
     const handleClickOutside = (e: MouseEvent) => {
       if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
         setIsOpen(false)
+        setSearchQuery('')
       }
     }
 
@@ -155,16 +189,24 @@ export function Dropdown<T = string>({
         role="combobox"
         aria-expanded={isOpen}
         aria-haspopup="listbox"
-        aria-controls="dropdown-list"
+        aria-controls={listId}
         aria-invalid={hasError}
-        aria-describedby={errorMessage ? 'dropdown-error' : undefined}
+        aria-describedby={errorMessage ? errorId : undefined}
         disabled={disabled}
-        onClick={() => !disabled && setIsOpen(!isOpen)}
+        onClick={() => {
+          if (disabled) return
+          if (isOpen) {
+            setIsOpen(false)
+            setSearchQuery('')
+          } else {
+            handleOpen()
+          }
+        }}
         onKeyDown={(e) => {
           if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
             e.preventDefault()
             if (!isOpen) {
-              setIsOpen(true)
+              handleOpen()
             } else {
               handleKeyDown(e)
             }
@@ -172,7 +214,7 @@ export function Dropdown<T = string>({
             handleKeyDown(e)
           } else if (e.key === 'Enter' || e.key === ' ') {
             e.preventDefault()
-            setIsOpen(true)
+            handleOpen()
           }
         }}
         style={{
@@ -232,18 +274,14 @@ export function Dropdown<T = string>({
 
       {/* Dropdown list */}
       {isOpen && (
-        <ul
-          ref={listRef}
-          id="dropdown-list"
-          role="listbox"
-          aria-label={label || 'Options'}
+        <div
+          className="dropdown-enter"
           style={{
             position: 'absolute',
             top: '100%',
             left: 0,
             right: 0,
             marginTop: tokens.spacing[1],
-            padding: tokens.spacing[1],
             background: tokens.glass.bg.secondary,
             backdropFilter: tokens.glass.blur.xl,
             WebkitBackdropFilter: tokens.glass.blur.xl,
@@ -251,87 +289,150 @@ export function Dropdown<T = string>({
             borderRadius: tokens.radius.lg,
             boxShadow: tokens.shadow.xl,
             zIndex: tokens.zIndex.dropdown,
-            maxHeight: 300,
-            overflowY: 'auto',
-            listStyle: 'none',
+            overflow: 'hidden',
           }}
         >
-          {options.map((option, index) => {
-            const isActive = index === activeIndex
-            const isSelected = option.value === value
-            const isDisabled = option.disabled
+          {/* Search input for long lists */}
+          {showSearch && (
+            <div style={{ padding: `${tokens.spacing[2]} ${tokens.spacing[2]} 0` }}>
+              <input
+                ref={searchInputRef}
+                type="text"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                onKeyDown={(e) => {
+                  // Allow Escape and arrow keys to propagate to keyboard navigation
+                  if (e.key === 'Escape') {
+                    setIsOpen(false)
+                    setSearchQuery('')
+                    buttonRef.current?.focus()
+                  } else if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+                    e.preventDefault()
+                    handleKeyDown(e)
+                  } else if (e.key === 'Enter') {
+                    e.preventDefault()
+                    if (filteredOptions.length > 0) {
+                      const target = activeIndex >= 0 ? filteredOptions[activeIndex] : filteredOptions[0]
+                      if (target && !target.disabled) handleSelect(target)
+                    }
+                  }
+                }}
+                placeholder="Search..."
+                style={{
+                  width: '100%',
+                  padding: `${tokens.spacing[2]} ${tokens.spacing[3]}`,
+                  background: 'var(--glass-bg-light)',
+                  border: `1px solid ${tokens.colors.border.primary}`,
+                  borderRadius: tokens.radius.md,
+                  color: tokens.colors.text.primary,
+                  fontSize: tokens.typography.fontSize.sm,
+                  outline: 'none',
+                }}
+              />
+            </div>
+          )}
 
-            if (renderOption) {
+          <ul
+            ref={listRef}
+            id={listId}
+            role="listbox"
+            aria-label={label || 'Options'}
+            style={{
+              padding: tokens.spacing[1],
+              maxHeight: 'min(300px, 50vh)',
+              overflowY: 'auto',
+              listStyle: 'none',
+              margin: 0,
+            }}
+          >
+            {filteredOptions.length === 0 && searchQuery && (
+              <li
+                style={{
+                  ...listItemSizeStyles[size],
+                  color: tokens.colors.text.tertiary,
+                  textAlign: 'center',
+                }}
+              >
+                No matches
+              </li>
+            )}
+            {filteredOptions.map((option, index) => {
+              const isActive = index === activeIndex
+              const isSelected = option.value === value
+              const isDisabled = option.disabled
+
+              if (renderOption) {
+                return (
+                  <li
+                    key={String(option.value)}
+                    role="option"
+                    aria-selected={isSelected}
+                    aria-disabled={isDisabled}
+                  >
+                    {renderOption(option, isActive, isSelected)}
+                  </li>
+                )
+              }
+
               return (
                 <li
                   key={String(option.value)}
                   role="option"
                   aria-selected={isSelected}
                   aria-disabled={isDisabled}
+                  onClick={() => !isDisabled && handleSelect(option)}
+                  onMouseEnter={() => !isDisabled && resetActiveIndex()}
+                  style={{
+                    ...listItemSizeStyles[size],
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: tokens.spacing[2],
+                    borderRadius: tokens.radius.md,
+                    cursor: isDisabled ? 'not-allowed' : 'pointer',
+                    color: isDisabled
+                      ? tokens.colors.text.disabled
+                      : isSelected
+                      ? tokens.colors.accent.brand
+                      : tokens.colors.text.primary,
+                    background: isActive
+                      ? tokens.colors.bg.hover
+                      : isSelected
+                      ? `${tokens.colors.accent.brand}15`
+                      : 'transparent',
+                    fontWeight: isSelected
+                      ? tokens.typography.fontWeight.semibold
+                      : tokens.typography.fontWeight.medium,
+                    opacity: isDisabled ? 0.5 : 1,
+                    transition: tokens.transition.fast,
+                  }}
                 >
-                  {renderOption(option, isActive, isSelected)}
+                  {option.icon}
+                  <span style={{ flex: 1 }}>{option.label}</span>
+                  {isSelected && (
+                    <svg
+                      width="16"
+                      height="16"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    >
+                      <polyline points="20 6 9 17 4 12" />
+                    </svg>
+                  )}
                 </li>
               )
-            }
-
-            return (
-              <li
-                key={String(option.value)}
-                role="option"
-                aria-selected={isSelected}
-                aria-disabled={isDisabled}
-                onClick={() => !isDisabled && handleSelect(option)}
-                onMouseEnter={() => !isDisabled && resetActiveIndex()}
-                style={{
-                  ...listItemSizeStyles[size],
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: tokens.spacing[2],
-                  borderRadius: tokens.radius.md,
-                  cursor: isDisabled ? 'not-allowed' : 'pointer',
-                  color: isDisabled
-                    ? tokens.colors.text.disabled
-                    : isSelected
-                    ? tokens.colors.accent.brand
-                    : tokens.colors.text.primary,
-                  background: isActive
-                    ? tokens.colors.bg.hover
-                    : isSelected
-                    ? `${tokens.colors.accent.brand}15`
-                    : 'transparent',
-                  fontWeight: isSelected
-                    ? tokens.typography.fontWeight.semibold
-                    : tokens.typography.fontWeight.medium,
-                  opacity: isDisabled ? 0.5 : 1,
-                  transition: tokens.transition.fast,
-                }}
-              >
-                {option.icon}
-                <span style={{ flex: 1 }}>{option.label}</span>
-                {isSelected && (
-                  <svg
-                    width="16"
-                    height="16"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  >
-                    <polyline points="20 6 9 17 4 12" />
-                  </svg>
-                )}
-              </li>
-            )
-          })}
-        </ul>
+            })}
+          </ul>
+        </div>
       )}
 
       {/* Error message */}
       {errorMessage && (
         <p
-          id="dropdown-error"
+          id={errorId}
           role="alert"
           style={{
             marginTop: tokens.spacing[1],
