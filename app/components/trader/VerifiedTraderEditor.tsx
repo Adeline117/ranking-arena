@@ -234,7 +234,7 @@ export default function VerifiedTraderEditor({
           onClick={handleSave}
           disabled={saving}
         >
-          {saving ? t('verifiedTraderSaving') : t('verifiedTraderSaveChanges')}
+          {saving ? `⏳ ${t('verifiedTraderSaving')}` : t('verifiedTraderSaveChanges')}
         </Button>
       </Box>
     </Box>
