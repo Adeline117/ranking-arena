@@ -274,7 +274,7 @@ export async function POST(req: Request) {
             type: 'trader_alert',
             title: 'ROI 变动提醒',
             message: `Trader ${alert.trader_id} ROI ${direction} ${change.toFixed(2)}%（${prevSnapshot.roi_90d.toFixed(2)}% → ${currentData.roi.toFixed(2)}%）`,
-            link: `/trader/${encodeURIComponent(alert.trader_id)}`,
+            link: `/trader/${encodeURIComponent(alert.trader_id)}?platform=${alert.source}`,
           })
 
           // 收集日志（不再单独插入）
@@ -301,7 +301,7 @@ export async function POST(req: Request) {
             type: 'trader_alert',
             title: '回撤预警',
             message: `Trader ${alert.trader_id} max drawdown reached ${drawdown.toFixed(2)}%`,
-            link: `/trader/${encodeURIComponent(alert.trader_id)}`,
+            link: `/trader/${encodeURIComponent(alert.trader_id)}?platform=${alert.source}`,
           })
 
           alertLogsToInsert.push({
@@ -327,7 +327,7 @@ export async function POST(req: Request) {
             type: 'trader_alert',
             title: 'Arena Score 变动',
             message: `Trader ${alert.trader_id} Arena Score ${direction} ${change.toFixed(1)} pts (${prevSnapshot.arena_score.toFixed(1)} → ${currentData.arena_score.toFixed(1)}）`,
-            link: `/trader/${encodeURIComponent(alert.trader_id)}`,
+            link: `/trader/${encodeURIComponent(alert.trader_id)}?platform=${alert.source}`,
           })
 
           alertLogsToInsert.push({
