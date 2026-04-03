@@ -8,6 +8,7 @@ import Avatar from '@/app/components/ui/Avatar'
 import { useToast } from '@/app/components/ui/Toast'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import { useAuthSession } from '@/lib/hooks/useAuthSession'
+import { ButtonSpinner } from '@/app/components/ui/LoadingSpinner'
 
 type UserResult = {
   id: string
@@ -252,7 +253,7 @@ export default function CreateGroupModal({ isOpen, onClose }: CreateGroupModalPr
           ) : (
             <>
               <Box style={{ marginBottom: 16 }}>
-                <Text size="sm" weight="bold" style={{ marginBottom: 6 }}>{t('groupName')}</Text>
+                <Text size="sm" weight="bold" style={{ marginBottom: 6 }}>{t('groupName')} <span style={{ color: 'var(--color-accent-error)' }}>*</span></Text>
                 <input
                   type="text"
                   value={groupName}
@@ -316,7 +317,7 @@ export default function CreateGroupModal({ isOpen, onClose }: CreateGroupModalPr
               opacity: (step === 'members' && selectedMembers.length < 1) || (step === 'details' && (!groupName.trim() || creating)) ? 0.5 : 1,
             }}
           >
-            {step === 'members' ? (t('next') || '下一步') : (creating ? t('loading') : t('createGroup'))}
+            {step === 'members' ? (t('next') || '下一步') : creating ? <><ButtonSpinner size="xs" /> {t('loading')}</> : t('createGroup')}
           </button>
         </Box>
       </Box>
