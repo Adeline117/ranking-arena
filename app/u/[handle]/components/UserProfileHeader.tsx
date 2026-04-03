@@ -93,10 +93,11 @@ export default function UserProfileHeader({
             className="profile-header-avatar"
             style={{
               width: 72, height: 72, borderRadius: tokens.radius.full,
-              background: profile.avatar_url ? tokens.colors.bg.secondary : getAvatarGradient(profile.id),
+              background: getAvatarGradient(profile.id),
               border: `3px solid ${avatarHovered ? tokens.colors.accent.primary : tokens.colors.border.primary}`,
               display: 'grid', placeItems: 'center',
               overflow: 'hidden',
+              position: 'relative',
               boxShadow: avatarHovered
                 ? `0 8px 32px var(--color-accent-primary-40), 0 0 0 4px ${tokens.colors.accent.primary}20`
                 : '0 4px 16px var(--color-overlay-light)',
@@ -105,17 +106,16 @@ export default function UserProfileHeader({
               cursor: 'pointer',
             }}
           >
-            {profile.avatar_url ? (
+            <Text size="2xl" weight="black" style={{ color: tokens.colors.white, textShadow: 'var(--text-shadow-md)', fontSize: '32px', lineHeight: '1' }}>
+              {getAvatarInitial(profile.handle)}
+            </Text>
+            {profile.avatar_url && (
               <Image
                 src={`/api/avatar?url=${encodeURIComponent(profile.avatar_url)}`}
                 alt={profile.handle} width={72} height={72}
-                style={{ width: '100%', height: '100%', objectFit: 'cover', transition: 'all 0.4s ease' }}
-                onError={(e) => { (e.target as HTMLImageElement).style.display = 'none' }}
+                style={{ width: '100%', height: '100%', objectFit: 'cover', position: 'absolute', inset: 0, transition: 'all 0.4s ease' }}
+                onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none' }}
               />
-            ) : (
-              <Text size="2xl" weight="black" style={{ color: tokens.colors.white, textShadow: 'var(--text-shadow-md)', fontSize: '32px', lineHeight: '1' }}>
-                {getAvatarInitial(profile.handle)}
-              </Text>
             )}
           </Box>
           {profile.proBadgeTier === 'pro' && <ProBadgeOverlay position="bottom-right" />}
