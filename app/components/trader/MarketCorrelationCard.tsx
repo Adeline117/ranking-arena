@@ -44,18 +44,18 @@ export default function MarketCorrelationCard({
   }, [])
 
   const formatBeta = (value: number | null): string => {
-    if (value === null || value === undefined) return '—'
+    if (value == null || !isFinite(value)) return '—'
     return value.toFixed(2)
   }
 
   const formatAlpha = (value: number | null): string => {
-    if (value === null || value === undefined) return '—'
+    if (value == null || !isFinite(value)) return '—'
     const sign = value >= 0 ? '+' : ''
     return `${sign}${value.toFixed(2)}%`
   }
 
   const formatConditionPerf = (value: number | null): string => {
-    if (value === null || value === undefined) return '—'
+    if (value == null || !isFinite(value)) return '—'
     const sign = value >= 0 ? '+' : ''
     return `${sign}${value.toFixed(1)}%`
   }
