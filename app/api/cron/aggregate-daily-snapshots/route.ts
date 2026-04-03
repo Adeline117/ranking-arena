@@ -34,9 +34,38 @@ export async function GET(request: NextRequest) {
   const plog = await PipelineLogger.start('aggregate-daily-snapshots')
 
   try {
-    const yesterday = new Date()
-    yesterday.setUTCDate(yesterday.getUTCDate() - 1)
-    const dateStr = yesterday.toISOString().split('T')[0]
+    // Support ?days_back=N to backfill multiple past days (default: 1 = yesterday only)
+    const daysBack = Math.min(Math.max(parseInt(request.nextUrl.searchParams.get('days_back') || '1', 10) || 1, 1), 30)
+    let totalInserted = 0
+    let totalErrors = 0
+
+    for (let dayOffset = daysBack; dayOffset >= 1; dayOffset--) {
+      const targetDate = new Date()
+      targetDate.setUTCDate(targetDate.getUTCDate() - dayOffset)
+      const dateStr = targetDate.toISOString().split('T')[0]
+      const { inserted, errors } = await aggregateForDate(supabase, dateStr, plog)
+      totalInserted += inserted
+      totalErrors += errors
+      logger.info(`[aggregate] ${dateStr}: inserted=${inserted}, errors=${errors}`)
+    }
+
+    const duration = `${Date.now() - startTime}ms`
+    if (totalErrors > 0) {
+      await plog.error(new Error(`${totalErrors} upsert errors across ${daysBack} days`), { inserted: totalInserted, errors: totalErrors, days: daysBack })
+    } else {
+      await plog.success(totalInserted, { days: daysBack })
+    }
+    return NextResponse.json({ success: true, days: daysBack, inserted: totalInserted, errors: totalErrors, duration })
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error)
+    logger.error('[aggregate-daily-snapshots] Fatal error:', { error: message })
+    await plog.error(error instanceof Error ? error : new Error(message))
+    return NextResponse.json({ success: false, error: message }, { status: 500 })
+  }
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+async function aggregateForDate(supabase: any, dateStr: string, plog: any): Promise<{ inserted: number; errors: number }> {
     const today = new Date()
     const _todayStr = today.toISOString().split('T')[0]
 
@@ -72,14 +101,11 @@ export async function GET(request: NextRequest) {
         .limit(50000)
 
       if (platformListError || !platformList) {
-        await plog.error(platformListError || new Error('No snapshot data returned'))
-        return NextResponse.json(
-          { error: 'Failed to fetch snapshots', details: platformListError?.message },
-          { status: 500 }
-        )
+        logger.error(`[aggregate] Failed to fetch platform list for ${dateStr}`, { error: platformListError?.message })
+        return { inserted: 0, errors: 1 }
       }
 
-      const distinctPlatforms = [...new Set(platformList.map(r => r.platform))]
+      const distinctPlatforms = [...new Set(platformList.map((r: { platform: string }) => r.platform))]
 
       snapshotMap = new Map()
 
@@ -167,14 +193,7 @@ export async function GET(request: NextRequest) {
     }
 
     if (snapshotMap.size === 0) {
-      await plog.success(0)
-      return NextResponse.json({
-        success: true,
-        message: 'No snapshots found for yesterday',
-        date: dateStr,
-        processed: 0,
-        inserted: 0,
-      })
+      return { inserted: 0, errors: 0 }
     }
 
     // Step 3: Fetch ALL previous daily snapshots in one query
@@ -275,29 +294,5 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    const duration = Date.now() - startTime
-
-    if (errors > 0) {
-      await plog.error(new Error(`${errors} upsert errors`), { inserted, errors, date: dateStr })
-    } else {
-      await plog.success(inserted, { date: dateStr })
-    }
-
-    return NextResponse.json({
-      success: true,
-      date: dateStr,
-      processed: snapshotMap.size,
-      inserted,
-      errors,
-      queries: 3,
-      duration: `${duration}ms`,
-    })
-  } catch (error) {
-    logger.apiError('/api/cron/aggregate-daily-snapshots', error, {})
-    await plog.error(error)
-    return NextResponse.json(
-      { error: 'Internal server error', details: error instanceof Error ? error.message : 'Unknown error' },
-      { status: 500 }
-    )
-  }
+    return { inserted, errors }
 }
