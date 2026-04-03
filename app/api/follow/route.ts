@@ -105,6 +105,29 @@ export const POST = withApiMiddleware(
 
       logger.info('用户关注交易员', { userId: user.id, traderId })
       await invalidateFollowingCache(user.id).catch(() => {})
+
+      // Fire-and-forget: notify the followed trader's claimed user (if any)
+      ;(async () => {
+        try {
+          const { data: claim } = await supabase
+            .from('verified_traders')
+            .select('user_id')
+            .eq('trader_id', traderId)
+            .maybeSingle()
+          if (claim?.user_id && claim.user_id !== user.id) {
+            await supabase.from('notifications').insert({
+              user_id: claim.user_id,
+              type: 'new_follower',
+              title: 'New Follower',
+              message: 'Someone started following your trader profile',
+              link: `/trader/${encodeURIComponent(traderId)}`,
+              actor_id: user.id,
+              reference_id: traderId,
+            })
+          }
+        } catch { /* non-critical */ }
+      })()
+
       return { success: true, following: true }
     } else {
       // 取消关注
