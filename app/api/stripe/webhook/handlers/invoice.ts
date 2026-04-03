@@ -21,9 +21,10 @@ export async function handlePaymentSucceeded(invoice: Stripe.Invoice) {
 
   if (!profile) return
 
-  await getSupabase()
+  // Upsert payment record (handles webhook retries)
+  const { error: historyErr } = await getSupabase()
     .from('payment_history')
-    .insert({
+    .upsert({
       user_id: profile.id,
       stripe_invoice_id: invoice.id,
       stripe_payment_intent_id: null,
@@ -31,9 +32,9 @@ export async function handlePaymentSucceeded(invoice: Stripe.Invoice) {
       currency: invoice.currency,
       status: 'succeeded',
       created_at: new Date().toISOString(),
-    })
-
-  logger.info(`Payment succeeded for user ${profile.id}`, { amount: invoice.amount_paid })
+    }, { onConflict: 'stripe_invoice_id' })
+  if (historyErr) logger.error('Failed to record payment', { error: historyErr, invoiceId: invoice.id })
+  else logger.info(`Payment succeeded for user ${profile.id}`, { amount: invoice.amount_paid })
 }
 
 export async function handlePaymentFailed(invoice: Stripe.Invoice) {
@@ -50,20 +51,17 @@ export async function handlePaymentFailed(invoice: Stripe.Invoice) {
     return
   }
 
-  try {
-    await getSupabase()
-      .from('payment_history')
-      .insert({
-        user_id: profile.id,
-        stripe_invoice_id: invoice.id,
-        amount: invoice.amount_due,
-        currency: invoice.currency,
-        status: 'failed',
-        created_at: new Date().toISOString(),
-      })
-  } catch (err: unknown) {
-    logger.error('Failed to record payment failure', { error: err })
-  }
+  const { error: historyErr } = await getSupabase()
+    .from('payment_history')
+    .upsert({
+      user_id: profile.id,
+      stripe_invoice_id: invoice.id,
+      amount: invoice.amount_due,
+      currency: invoice.currency,
+      status: 'failed',
+      created_at: new Date().toISOString(),
+    }, { onConflict: 'stripe_invoice_id' })
+  if (historyErr) logger.error('Failed to record payment failure', { error: historyErr })
 
   const subscriptionData = invoice.parent?.subscription_details?.subscription
   const subscriptionId = typeof subscriptionData === 'string'
