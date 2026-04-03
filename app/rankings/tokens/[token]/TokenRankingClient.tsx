@@ -249,7 +249,7 @@ export default function TokenRankingClient({ token }: { token: string }) {
             <Text size="sm" style={{ color: tokens.colors.text.secondary }}>
               {total > 0
                 ? t('tokenRankingCount')
-                    .replace('{count}', total.toLocaleString())
+                    .replace('{count}', total.toLocaleString('en-US'))
                     .replace('{token}', token)
                 : t('tokenRankingNoData').replace('{token}', token)}
             </Text>

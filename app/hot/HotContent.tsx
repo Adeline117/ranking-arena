@@ -189,7 +189,7 @@ export default function HotContent({ initialPosts }: HotContentProps) {
                                     #{rank}
                                   </Text>
                                   <Text size="xs" color="secondary">{localizedName(p.group, p.group_en)}</Text>
-                                  <Text size="xs" color="tertiary">{(p.views ?? 0).toLocaleString()} {t('views')}</Text>
+                                  <Text size="xs" color="tertiary">{(p.views ?? 0).toLocaleString('en-US')} {t('views')}</Text>
                                 </Box>
                                 <Text size="base" weight="bold" style={{ marginBottom: tokens.spacing[2] }}>
                                   {p.title}

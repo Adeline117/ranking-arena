@@ -193,7 +193,7 @@ function SearchContent() {
             type: 'group' as const,
             id: g.id,
             title: g.title,
-            subtitle: g.meta?.member_count ? `${(g.meta.member_count as number).toLocaleString()} ${t('members')}` : undefined,
+            subtitle: g.meta?.member_count ? `${(g.meta.member_count as number).toLocaleString('en-US')} ${t('members')}` : undefined,
             meta: g.subtitle ? (g.subtitle.slice(0, 60)) : undefined,
           })))
 

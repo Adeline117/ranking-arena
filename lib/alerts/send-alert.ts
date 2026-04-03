@@ -7,6 +7,7 @@
 
 import { sendTelegramAlert, type AlertLevel } from '@/lib/notifications/telegram'
 import { logger } from '@/lib/logger'
+import { getSharedRedis } from '@/lib/cache/redis-client'
 
 interface AlertPayload {
   title: string
@@ -250,11 +251,8 @@ export async function sendRateLimitedAlert(
 
   // Try Redis first (survives cold starts)
   try {
-    const { Redis } = await import('@upstash/redis')
-    const url = process.env.UPSTASH_REDIS_REST_URL
-    const token = process.env.UPSTASH_REDIS_REST_TOKEN
-    if (url && token) {
-      const redis = new Redis({ url, token })
+    const redis = await getSharedRedis()
+    if (redis) {
       const redisKey = `alert:ratelimit:${rateLimitKey}`
       const existing = await redis.get<number>(redisKey)
       if (existing && now - existing < rateLimitMs) {

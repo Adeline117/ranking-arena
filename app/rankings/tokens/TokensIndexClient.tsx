@@ -256,7 +256,7 @@ export default function TokensIndexClient({ initialTokens }: TokensIndexClientPr
                           {t('tokenRankingsTrades')}
                         </Text>
                         <Text size="base" weight="bold" style={{ color: tokens.colors.text.primary }}>
-                          {tk.trade_count.toLocaleString()}
+                          {tk.trade_count.toLocaleString('en-US')}
                         </Text>
                       </Box>
                       <Box>

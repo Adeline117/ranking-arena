@@ -209,7 +209,7 @@ export function PostCard({
           <ThumbsUpIcon size={12} /> {p.likes}
         </span>
         <Text size="xs" color="tertiary" style={{ marginLeft: 'auto' }}>
-          {(p.views ?? 0).toLocaleString()} {t('views')}
+          {(p.views ?? 0).toLocaleString('en-US')} {t('views')}
         </Text>
       </Box>
     </Box>

@@ -104,7 +104,7 @@ export default function FollowingListItem({
             )}
             {item.followers !== undefined && item.followers > 0 && (
               <Text size="xs" color="tertiary">
-                {t('copiers')}: {item.followers.toLocaleString()}
+                {t('copiers')}: {item.followers.toLocaleString('en-US')}
               </Text>
             )}
           </Box>

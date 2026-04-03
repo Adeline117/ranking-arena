@@ -162,7 +162,7 @@ function ItemCard({ item }: { item: LibraryItem }) {
             <span>{item.rating.toFixed(1)} ({item.rating_count})</span>
           )}
           {item.view_count > 0 && (
-            <span>{item.view_count.toLocaleString()} views</span>
+            <span>{item.view_count.toLocaleString('en-US')} views</span>
           )}
         </div>
       </div>
@@ -194,7 +194,7 @@ export default function LibraryBrowseClient({
             Library
           </h1>
           <p style={{ fontSize: 14, color: tokens.colors.text.secondary, marginTop: 6 }}>
-            {totalCount.toLocaleString()} resources for crypto traders &mdash; books, research papers, guides, and more.
+            {totalCount.toLocaleString('en-US')} resources for crypto traders &mdash; books, research papers, guides, and more.
           </p>
         </div>
 

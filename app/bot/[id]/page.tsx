@@ -30,7 +30,7 @@ function formatUsers(n: number | null): string {
   if (n == null) return '--'
   if (n >= 1e6) return `${(n / 1e6).toFixed(1)}M`
   if (n >= 1e3) return `${(n / 1e3).toFixed(1)}K`
-  return n.toLocaleString()
+  return n.toLocaleString('en-US')
 }
 
 function formatPercent(n: number | null): string {

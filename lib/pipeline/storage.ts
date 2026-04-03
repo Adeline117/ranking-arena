@@ -13,6 +13,13 @@ import { createLogger } from '@/lib/utils/logger'
 
 const log = createLogger('pipeline:storage')
 
+/** Truncate timestamp to hour boundary for partitioned upsert dedup */
+function truncateToHour(isoOrDate?: string | Date | null): string {
+  const d = isoOrDate ? new Date(isoOrDate) : new Date()
+  d.setUTCMinutes(0, 0, 0)
+  return d.toISOString()
+}
+
 // =============================================================================
 // Main Storage Class
 // =============================================================================
@@ -131,7 +138,7 @@ export class PipelineStorage {
       confidence_level: t.confidence,
       sharpe_ratio: t.sharpe_ratio,
       sortino_ratio: t.sortino_ratio,
-      as_of_ts: t.normalized_at.toISOString(),
+      as_of_ts: truncateToHour(t.normalized_at),
       updated_at: new Date().toISOString(),
     }))
 
