@@ -5,19 +5,37 @@
 import type { EquityCurvePoint, PositionHistoryItem, StatsDetail, AssetBreakdown } from './enrichment-types'
 
 /**
+ * Extract the best value series from an equity curve.
+ * Prefers ROI (percentage), falls back to PnL (USD) when ROI is all zero/null.
+ * Many DEX platforms (Hyperliquid, GMX, Drift) only have PnL in their equity curves.
+ */
+function extractValues(curve: EquityCurvePoint[]): number[] {
+  const roiValues = curve.map(p => p.roi ?? 0)
+  const hasRoi = roiValues.some(v => v !== 0)
+  if (hasRoi) return roiValues
+  // Fallback: use PnL. Values are USD not %, but relative changes still produce
+  // valid MDD, Sharpe, and volatility (computed from daily deltas, not absolute scale).
+  return curve.map(p => p.pnl ?? 0)
+}
+
+/**
+ * Calculate daily returns from value series.
+ */
+function dailyReturns(values: number[]): number[] {
+  const returns: number[] = []
+  for (let i = 1; i < values.length; i++) {
+    returns.push(values[i] - values[i - 1])
+  }
+  return returns
+}
+
+/**
  * Calculate volatility from equity curve (standard deviation of daily returns)
  */
 export function calculateVolatility(curve: EquityCurvePoint[]): number | null {
   if (curve.length < 3) return null
 
-  const returns: number[] = []
-  for (let i = 1; i < curve.length; i++) {
-    const prevRoi = curve[i - 1].roi
-    const currRoi = curve[i].roi
-    const dailyReturn = currRoi - prevRoi
-    returns.push(dailyReturn)
-  }
-
+  const returns = dailyReturns(extractValues(curve))
   if (returns.length < 2) return null
 
   const meanReturn = returns.reduce((sum, r) => sum + r, 0) / returns.length
@@ -33,18 +51,16 @@ export function calculateVolatility(curve: EquityCurvePoint[]): number | null {
 export function calculateCurrentDrawdown(curve: EquityCurvePoint[]): number | null {
   if (curve.length < 2) return null
 
-  let peakRoi = curve[0].roi
-  for (const point of curve) {
-    if (point.roi > peakRoi) {
-      peakRoi = point.roi
-    }
+  const values = extractValues(curve)
+  let peak = values[0]
+  for (const v of values) {
+    if (v > peak) peak = v
   }
 
-  const currentRoi = curve[curve.length - 1].roi
+  if (peak <= 0) return null
 
-  if (peakRoi <= 0) return null
-
-  const drawdown = peakRoi - currentRoi
+  const current = values[values.length - 1]
+  const drawdown = peak - current
   return drawdown > 0 ? drawdown : 0
 }
 
@@ -54,16 +70,15 @@ export function calculateCurrentDrawdown(curve: EquityCurvePoint[]): number | nu
 export function calculateMaxDrawdown(curve: EquityCurvePoint[]): number | null {
   if (curve.length < 2) return null
 
-  let peakRoi = curve[0].roi
+  const values = extractValues(curve)
+  let peak = values[0]
   let maxDD = 0
 
-  for (const point of curve) {
-    if (point.roi > peakRoi) {
-      peakRoi = point.roi
-    }
-    const dd = peakRoi - point.roi
-    if (dd > maxDD) {
-      maxDD = dd
+  for (const v of values) {
+    if (v > peak) peak = v
+    if (peak > 0) {
+      const dd = ((peak - v) / peak) * 100
+      if (dd > maxDD) maxDD = dd
     }
   }
 
@@ -76,12 +91,7 @@ export function calculateMaxDrawdown(curve: EquityCurvePoint[]): number | null {
 export function calculateSharpeRatio(curve: EquityCurvePoint[], _period: string): number | null {
   if (curve.length < 5) return null
 
-  const returns: number[] = []
-  for (let i = 1; i < curve.length; i++) {
-    const dailyReturn = curve[i].roi - curve[i - 1].roi
-    returns.push(dailyReturn)
-  }
-
+  const returns = dailyReturns(extractValues(curve))
   if (returns.length < 3) return null
 
   const meanReturn = returns.reduce((sum, r) => sum + r, 0) / returns.length
@@ -102,11 +112,7 @@ export function calculateSharpeRatio(curve: EquityCurvePoint[], _period: string)
 export function calculateSortinoRatio(curve: EquityCurvePoint[], _period: string): number | null {
   if (curve.length < 5) return null
 
-  const returns: number[] = []
-  for (let i = 1; i < curve.length; i++) {
-    returns.push(curve[i].roi - curve[i - 1].roi)
-  }
-
+  const returns = dailyReturns(extractValues(curve))
   if (returns.length < 3) return null
 
   const meanReturn = returns.reduce((sum, r) => sum + r, 0) / returns.length
@@ -130,7 +136,8 @@ export function calculateSortinoRatio(curve: EquityCurvePoint[], _period: string
 export function calculateCalmarRatio(curve: EquityCurvePoint[], _period: string): number | null {
   if (curve.length < 5) return null
 
-  const totalReturn = curve[curve.length - 1].roi - curve[0].roi
+  const values = extractValues(curve)
+  const totalReturn = values[values.length - 1] - values[0]
   const maxDD = calculateMaxDrawdown(curve)
 
   if (!maxDD || maxDD === 0) return null
@@ -252,8 +259,9 @@ export function enhanceStatsWithDerivedMetrics(
   // Derive win_rate from equity curve daily returns if not available
   if (stats.profitableTradesPct == null && curve.length >= 5) {
     let wins = 0, total = 0
-    for (let i = 1; i < curve.length; i++) {
-      const dailyReturn = curve[i].roi - curve[i - 1].roi
+    const values = extractValues(curve)
+    for (let i = 1; i < values.length; i++) {
+      const dailyReturn = values[i] - values[i - 1]
       if (dailyReturn > 0.01) wins++
       if (Math.abs(dailyReturn) > 0.01) total++
     }
