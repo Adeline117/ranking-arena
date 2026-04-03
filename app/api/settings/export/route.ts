@@ -11,8 +11,10 @@ import logger from '@/lib/logger'
 import { checkRateLimit, RateLimitPresets } from '@/lib/utils/rate-limit'
 
 export const dynamic = 'force-dynamic'
+export const maxDuration = 60 // Allow up to 60s for large exports
 
 const EXPORT_COOLDOWN_MS = 24 * 60 * 60 * 1000 // 24 hours
+const EXPORT_ROW_LIMIT = 10_000 // Max rows per table to prevent timeout
 
 interface UserProfile {
   id: string
@@ -88,34 +90,41 @@ export async function POST(request: NextRequest) {
     // Collect user data in parallel
     const [postsResult, commentsResult, followingResult, followersResult, tipsSentResult, tipsReceivedResult] = await Promise.all([
       // GDPR data export: select('*') is intentional — users are entitled to a complete copy of all their data
+      // .limit(EXPORT_ROW_LIMIT) prevents timeout on prolific users (Supabase default is 1000 which silently truncates)
       supabase
         .from('posts')
         .select('*')
         .eq('user_id', user.id)
-        .order('created_at', { ascending: false }),
+        .order('created_at', { ascending: false })
+        .limit(EXPORT_ROW_LIMIT),
       supabase
         .from('comments')
         .select('*')
         .eq('user_id', user.id)
-        .order('created_at', { ascending: false }),
+        .order('created_at', { ascending: false })
+        .limit(EXPORT_ROW_LIMIT),
       supabase
         .from('user_follows')
         .select('*')
-        .eq('follower_id', user.id),
+        .eq('follower_id', user.id)
+        .limit(EXPORT_ROW_LIMIT),
       supabase
         .from('user_follows')
         .select('*')
-        .eq('following_id', user.id),
+        .eq('following_id', user.id)
+        .limit(EXPORT_ROW_LIMIT),
       supabase
         .from('tips')
         .select('*')
         .eq('sender_id', user.id)
-        .order('created_at', { ascending: false }),
+        .order('created_at', { ascending: false })
+        .limit(EXPORT_ROW_LIMIT),
       supabase
         .from('tips')
         .select('*')
         .eq('receiver_id', user.id)
-        .order('created_at', { ascending: false }),
+        .order('created_at', { ascending: false })
+        .limit(EXPORT_ROW_LIMIT),
     ])
 
     // Update last export timestamp
