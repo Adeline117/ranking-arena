@@ -32,56 +32,45 @@ export class KucoinFuturesConnector extends BaseConnector {
     const pageNo = Math.floor(offset / limit) + 1
     let rawList: Record<string, unknown>[] = []
 
-    // Strategy 1: Direct POST API (works from any IP, no auth needed)
-    // 2026-04-02: POST is primary — VPS scraper no longer handles kucoin
-    try {
-      const controller = new AbortController()
-      const timeout = setTimeout(() => controller.abort(), 30000)
-      const res = await fetch(
-        'https://www.kucoin.com/_api/ct-copy-trade/v1/copyTrading/rn/leaderboard/query',
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
-          body: JSON.stringify({ currentPage: pageNo, pageSize: limit }),
-          signal: controller.signal,
-        }
-      )
-      clearTimeout(timeout)
-      if (res.ok) {
-        const _rawLb = await res.json() as Record<string, unknown>
-        const dataObj = _rawLb?.data as Record<string, unknown>
-        const list = dataObj?.items || dataObj?.list
-        if (Array.isArray(list)) rawList = list as Record<string, unknown>[]
-      }
-    } catch {
-      // POST API failed — try fallbacks
+    // Strategy 1: VPS proxy → POST API (Vercel hnd1 IP blocked by KuCoin)
+    const vpsData = await this.proxyViaVPS<Record<string, unknown>>(
+      'https://www.kucoin.com/_api/ct-copy-trade/v1/copyTrading/rn/leaderboard/query',
+      {
+        method: 'POST',
+        body: JSON.stringify({ currentPage: pageNo, pageSize: limit }),
+        headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+      },
+      30000,
+    )
+    if (vpsData) {
+      const dataObj = (vpsData?.data ?? vpsData) as Record<string, unknown>
+      const items = dataObj?.items || dataObj?.list || dataObj?.rows
+      if (Array.isArray(items)) rawList = items as Record<string, unknown>[]
     }
 
-    // Strategy 2: Legacy GET API fallback
+    // Strategy 2: Direct POST API fallback (works from residential IPs)
     if (rawList.length === 0) {
       try {
-        const _rawLb = await this.request<Record<string, unknown>>(
-          `https://www.kucoin.com/_api/copy-trade/leader/public/list?pageNo=${pageNo}&pageSize=${limit}&orderBy=ROI&period=${WINDOW_MAP[window]}`,
-          { method: 'GET' }
+        const controller = new AbortController()
+        const timeout = setTimeout(() => controller.abort(), 15000)
+        const res = await fetch(
+          'https://www.kucoin.com/_api/ct-copy-trade/v1/copyTrading/rn/leaderboard/query',
+          {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+            body: JSON.stringify({ currentPage: pageNo, pageSize: limit }),
+            signal: controller.signal,
+          }
         )
-        const data = warnValidate(KucoinFuturesLeaderboardResponseSchema, _rawLb, 'kucoin-futures/leaderboard')
-        const list = data?.data?.items || []
-        if (Array.isArray(list)) rawList = list as Record<string, unknown>[]
+        clearTimeout(timeout)
+        if (res.ok) {
+          const _rawLb = await res.json() as Record<string, unknown>
+          const dataObj = _rawLb?.data as Record<string, unknown>
+          const list = dataObj?.items || dataObj?.list
+          if (Array.isArray(list)) rawList = list as Record<string, unknown>[]
+        }
       } catch {
-        // Direct API failed — expected
-      }
-    }
-
-    // Strategy 3: VPS proxy fallback (last resort)
-    if (rawList.length === 0) {
-      const vpsData = await this.fetchViaVPS<Record<string, unknown>>('/kucoin/leaderboard', {
-        pageNo: String(pageNo), pageSize: String(limit),
-      }, 30000)
-      if (vpsData) {
-        const dataObj = (vpsData?.data ?? vpsData) as Record<string, unknown>
-        const items = dataObj?.items || dataObj?.list || dataObj?.rows
-        if (Array.isArray(items)) rawList = items as Record<string, unknown>[]
-        if (rawList.length === 0 && Array.isArray(dataObj)) rawList = dataObj as Record<string, unknown>[]
+        // POST API failed from this IP
       }
     }
 
