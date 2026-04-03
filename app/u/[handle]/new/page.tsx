@@ -288,7 +288,7 @@ export default function NewPostPage() {
       showToast(t('videoUploadSuccess'), 'success')
     } catch (error) {
       logger.error('Video upload error:', error)
-      showToast(error instanceof Error ? error.message : t('videoUploadFailed'), 'error')
+      showToast(t('videoUploadFailed'), 'error')
     } finally {
       setVideoUploading(false)
       setVideoUploadProgress(0)
@@ -526,8 +526,7 @@ export default function NewPostPage() {
       showToast(t('publishSuccess'), 'success')
       router.push(`/u/${encodeURIComponent(decodedHandle)}`)
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : t('publishFailed')
-      showToast(errorMessage, 'error')
+      showToast(t('publishFailed'), 'error')
     } finally {
       setLoading(false)
       submitRef.current = false

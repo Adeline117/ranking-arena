@@ -530,7 +530,7 @@ export default function EditPostPage() {
         .eq('author_id', userId)
 
       if (error) {
-        showToast(error.message, 'error')
+        showToast(t('updateFailed'), 'error')
         return
       }
 

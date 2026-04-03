@@ -365,9 +365,8 @@ export default function GroupDetailPage({ params }: { params: Promise<{ id: stri
         postsHook.loadPosts(true)
       } catch (err) {
         if (controller.signal.aborted) return
-        const errorMsg = err instanceof Error ? err.message : t('loadFailed')
-        setError(errorMsg)
-        showToast(errorMsg, 'error')
+        setError(t('loadFailed'))
+        showToast(t('loadFailed'), 'error')
       } finally {
         if (!controller.signal.aborted) {
           setLoading(false)
@@ -445,7 +444,7 @@ export default function GroupDetailPage({ params }: { params: Promise<{ id: stri
       showToast(t('joinSuccess'), 'success')
     } catch (err) {
       logger.error('Join error:', err)
-      showToast(err instanceof Error ? err.message : t('joinFailed'), 'error')
+      showToast(t('joinFailed'), 'error')
     } finally {
       setJoining(false)
     }
@@ -478,7 +477,7 @@ export default function GroupDetailPage({ params }: { params: Promise<{ id: stri
       showToast(t('leftGroup'), 'success')
     } catch (err) {
       logger.error('Leave error:', err)
-      showToast(err instanceof Error ? err.message : t('leaveFailed'), 'error')
+      showToast(t('leaveFailed'), 'error')
     } finally {
       setJoining(false)
     }
