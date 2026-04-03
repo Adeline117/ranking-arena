@@ -96,7 +96,7 @@ function MoverRow({ mover, type }: { mover: Mover; type: 'riser' | 'faller' }) {
         </span>
         {mover.arena_score != null && (
           <Text size="xs" color="tertiary" style={{ display: 'block' }}>
-            {Number(mover.arena_score).toFixed(1)}
+            {Number(mover.arena_score).toFixed(0)}
           </Text>
         )}
       </Box>
