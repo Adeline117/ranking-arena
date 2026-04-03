@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import crypto from 'crypto'
 import { createLogger } from '@/lib/utils/logger'
 import { getAuthUser, getSupabaseAdmin } from '@/lib/supabase/server'
+import { checkRateLimit, RateLimitPresets } from '@/lib/utils/rate-limit'
 import { env } from '@/lib/env'
 
 const logger = createLogger('exchange-oauth-authorize')
@@ -54,6 +55,9 @@ function generateCodeChallenge(codeVerifier: string): string {
 
 export async function GET(request: NextRequest) {
   try {
+    const rateLimitResponse = await checkRateLimit(request, RateLimitPresets.sensitive)
+    if (rateLimitResponse) return rateLimitResponse
+
     // Auth check - use authenticated user's ID instead of trusting query params
     const user = await getAuthUser(request)
     if (!user) {
