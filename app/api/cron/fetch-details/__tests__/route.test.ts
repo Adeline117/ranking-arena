@@ -151,26 +151,7 @@ describe('GET /api/cron/fetch-details', () => {
     ]
 
     mockFrom.mockImplementation((table: string) => {
-      if (table === 'traders') {
-        return {
-          select: jest.fn().mockReturnValue({
-            in: jest.fn().mockReturnValue({
-              eq: jest.fn().mockReturnValue({
-                order: jest.fn().mockReturnValue({
-                  limit: jest.fn().mockReturnValue({
-                    or: jest.fn().mockResolvedValue({ data: traders, error: null }),
-                  }),
-                }),
-              }),
-            }),
-          }),
-          update: jest.fn().mockReturnValue({
-            eq: jest.fn().mockReturnValue({
-              eq: jest.fn().mockResolvedValue({ error: null }),
-            }),
-          }),
-        }
-      }
+      if (table === 'traders') return chainable({ data: traders, error: null })
       return chainable({ data: null, error: null })
     })
 

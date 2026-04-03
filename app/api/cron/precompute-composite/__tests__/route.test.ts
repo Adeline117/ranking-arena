@@ -90,6 +90,28 @@ function createCronRequest(secret?: string): NextRequest {
   return new NextRequest('http://localhost:3000/api/cron/precompute-composite', { headers })
 }
 
+/** Create a chainable Supabase query proxy that resolves to given data */
+function chainProxy(resolvedValue: { data: unknown; error: unknown }) {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const proxy: any = new Proxy({}, {
+    get(_, prop) {
+      if (prop === 'then') return undefined // not a Promise
+      return jest.fn().mockImplementation((..._args: unknown[]) => {
+        // Terminal methods that return the result
+        if (prop === 'single' || prop === 'maybeSingle') return Promise.resolve(resolvedValue)
+        // If the resolved value has a `then`, it's the last in chain
+        // But we need the chain to be flexible, so always return proxy
+        // except check if next call should resolve
+        return proxy
+      })
+    },
+  })
+  // Make the proxy thenable so await works at any point in chain
+  proxy.then = (resolve: (v: unknown) => void) => Promise.resolve(resolvedValue).then(resolve)
+  proxy.catch = (reject: (v: unknown) => void) => Promise.resolve(resolvedValue).catch(reject)
+  return proxy
+}
+
 function makeSnapshotRow(overrides: Record<string, unknown> = {}) {
   return {
     platform: 'binance-futures',
@@ -151,42 +173,16 @@ describe('GET /api/cron/precompute-composite', () => {
       makeSnapshotRow({ trader_key: 'trader1', arena_score: 80, roi_pct: 45 }),
     ]
 
-    // Snapshot queries: .from('trader_snapshots_v2').select(...).eq(...).not(...).gte(...).lte(...).gte(...).or(...).order(...).limit(...)
-    const snapshotQueryFor = (rows: unknown[]) => ({
-      select: jest.fn().mockReturnValue({
-        eq: jest.fn().mockReturnValue({
-          not: jest.fn().mockReturnValue({
-            gte: jest.fn().mockReturnValue({
-              lte: jest.fn().mockReturnValue({
-                gte: jest.fn().mockReturnValue({
-                  or: jest.fn().mockReturnValue({
-                    order: jest.fn().mockReturnValue({
-                      limit: jest.fn().mockResolvedValue({ data: rows, error: null }),
-                    }),
-                  }),
-                }),
-              }),
-            }),
-          }),
-        }),
-      }),
-    })
+    const snapshotQueryFor = (rows: unknown[]) => chainProxy({ data: rows, error: null })
 
-    // trader_sources query for display names
-    const traderSourcesQuery = {
-      select: jest.fn().mockReturnValue({
-        in: jest.fn().mockReturnValue({
-          in: jest.fn().mockResolvedValue({
-            data: [
-              { source: 'binance-futures', source_trader_id: 'trader1', handle: 'CryptoKing', avatar_url: 'https://img/1.png' },
-              { source: 'binance-futures', source_trader_id: 'trader2', handle: 'TraderJoe', avatar_url: null },
-              { source: 'hyperliquid', source_trader_id: 'trader3', handle: 'DeFiWhale', avatar_url: null },
-            ],
-            error: null,
-          }),
-        }),
-      }),
-    }
+    const traderSourcesQuery = chainProxy({
+      data: [
+        { source: 'binance-futures', source_trader_id: 'trader1', handle: 'CryptoKing', avatar_url: 'https://img/1.png' },
+        { source: 'binance-futures', source_trader_id: 'trader2', handle: 'TraderJoe', avatar_url: null },
+        { source: 'hyperliquid', source_trader_id: 'trader3', handle: 'DeFiWhale', avatar_url: null },
+      ],
+      error: null,
+    })
 
     // The route calls fetchWindow 3 times (7D, 30D, 90D) in parallel
     let snapshotCallCount = 0
@@ -231,27 +227,7 @@ describe('GET /api/cron/precompute-composite', () => {
   // ---- Empty data ----------------------------------------------------------
 
   it('handles empty snapshot data gracefully', async () => {
-    const emptyQuery = {
-      select: jest.fn().mockReturnValue({
-        eq: jest.fn().mockReturnValue({
-          not: jest.fn().mockReturnValue({
-            gte: jest.fn().mockReturnValue({
-              lte: jest.fn().mockReturnValue({
-                gte: jest.fn().mockReturnValue({
-                  or: jest.fn().mockReturnValue({
-                    order: jest.fn().mockReturnValue({
-                      limit: jest.fn().mockResolvedValue({ data: [], error: null }),
-                    }),
-                  }),
-                }),
-              }),
-            }),
-          }),
-        }),
-      }),
-    }
-
-    mockSupabaseFrom.mockImplementation(() => emptyQuery)
+    mockSupabaseFrom.mockImplementation(() => chainProxy({ data: [], error: null }))
 
     const res = await GET(createCronRequest(CRON_SECRET))
     const body = await res.json()
@@ -279,30 +255,10 @@ describe('GET /api/cron/precompute-composite', () => {
   })
 
   it('returns 500 when snapshot fetch rejects with error', async () => {
-    const errorQuery = {
-      select: jest.fn().mockReturnValue({
-        eq: jest.fn().mockReturnValue({
-          not: jest.fn().mockReturnValue({
-            gte: jest.fn().mockReturnValue({
-              lte: jest.fn().mockReturnValue({
-                gte: jest.fn().mockReturnValue({
-                  or: jest.fn().mockReturnValue({
-                    order: jest.fn().mockReturnValue({
-                      limit: jest.fn().mockResolvedValue({
-                        data: null,
-                        error: { message: 'relation does not exist' },
-                      }),
-                    }),
-                  }),
-                }),
-              }),
-            }),
-          }),
-        }),
-      }),
-    }
-
-    mockSupabaseFrom.mockImplementation(() => errorQuery)
+    mockSupabaseFrom.mockImplementation(() => chainProxy({
+      data: null,
+      error: { message: 'relation does not exist' },
+    }))
 
     const res = await GET(createCronRequest(CRON_SECRET))
     expect(res.status).toBe(500)
@@ -312,39 +268,11 @@ describe('GET /api/cron/precompute-composite', () => {
   })
 
   it('returns 500 when Redis tieredSet fails', async () => {
-    // Provide valid snapshot data but make Redis fail
     const rows = [makeSnapshotRow({ arena_score: 90 })]
-    const snapshotQuery = {
-      select: jest.fn().mockReturnValue({
-        eq: jest.fn().mockReturnValue({
-          not: jest.fn().mockReturnValue({
-            gte: jest.fn().mockReturnValue({
-              lte: jest.fn().mockReturnValue({
-                gte: jest.fn().mockReturnValue({
-                  or: jest.fn().mockReturnValue({
-                    order: jest.fn().mockReturnValue({
-                      limit: jest.fn().mockResolvedValue({ data: rows, error: null }),
-                    }),
-                  }),
-                }),
-              }),
-            }),
-          }),
-        }),
-      }),
-    }
-
-    const traderSourcesQuery = {
-      select: jest.fn().mockReturnValue({
-        in: jest.fn().mockReturnValue({
-          in: jest.fn().mockResolvedValue({ data: [], error: null }),
-        }),
-      }),
-    }
 
     mockSupabaseFrom.mockImplementation((table: string) => {
-      if (table === 'trader_sources') return traderSourcesQuery
-      return snapshotQuery
+      if (table === 'trader_sources') return chainProxy({ data: [], error: null })
+      return chainProxy({ data: rows, error: null })
     })
 
     mockTieredSet.mockRejectedValueOnce(new Error('Redis connection refused'))
