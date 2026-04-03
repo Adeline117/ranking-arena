@@ -19,6 +19,13 @@ import { calculateArenaScore } from '@/lib/utils/arena-score'
 import type { Period } from '@/lib/utils/arena-score'
 import type { TraderData } from '@/lib/adapters/types'
 
+/** Truncate timestamp to hour boundary for partitioned upsert dedup */
+function truncateToHour(isoOrDate?: string | Date | null): string {
+  const d = isoOrDate ? new Date(isoOrDate) : new Date()
+  d.setUTCMinutes(0, 0, 0)
+  return d.toISOString()
+}
+
 const hotScoreLogger = createLogger('refresh-hot-scores')
 
 export interface InlineJobResult {
@@ -150,7 +157,7 @@ export async function runWorkerInline(): Promise<InlineJobResult> {
                 ? calculateArenaScoreV1(result.data.metrics.roi_pct, result.data.metrics.pnl_usd, result.data.metrics.max_drawdown, result.data.metrics.win_rate, window)
                 : null
               const { error: snapInsertErr } = await supabase.from('trader_snapshots_v2').upsert({
-                ...result.data,
+                ...result.data, as_of_ts: truncateToHour(),
                 market_type: canonicalMT,
                 roi_pct: result.data.metrics.roi_pct,
                 pnl_usd: result.data.metrics.pnl_usd,
@@ -253,7 +260,7 @@ async function upsertLeaderboardData(
         ? calculateArenaScoreV1(roi, e.metrics.pnl_usd ?? null, e.metrics.max_drawdown ?? null, e.metrics.win_rate ?? null, window)
         : null
       return {
-        platform, market_type, trader_key: e.trader_key, window, as_of_ts: now,
+        platform, market_type, trader_key: e.trader_key, window, as_of_ts: truncateToHour(),
         metrics: e.metrics, roi_pct: roi, pnl_usd: e.metrics.pnl_usd ?? null,
         win_rate: e.metrics.win_rate ?? null, max_drawdown: e.metrics.max_drawdown ?? null,
         trades_count: e.metrics.trades_count ?? null, followers: e.metrics.followers ?? null,
@@ -423,7 +430,7 @@ export async function syncTradersInline(): Promise<InlineJobResult> {
 
         // Write to v2 only (v1 writes removed 2026-03-18)
         const { error: snapErr } = await supabase.from('trader_snapshots_v2').upsert({
-          platform: auth.platform, market_type: 'futures', trader_key: auth.trader_id, window: period,
+          platform: auth.platform, market_type: 'futures', trader_key: auth.trader_id, window: period, as_of_ts: truncateToHour(),
           roi_pct: traderData.roi, pnl_usd: traderData.pnl, followers: traderData.followers,
           trades_count: traderData.tradesCount,
           win_rate: traderData.winRate, max_drawdown: traderData.maxDrawdown,

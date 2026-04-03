@@ -13,6 +13,18 @@ import { retryUpsert } from '@/lib/utils/supabase-retry'
 import { validateSnapshot } from '@/lib/pipeline/validate-snapshot'
 
 /** Resolve market_type from SOURCE_TYPE_MAP for trader_profiles_v2 */
+
+/**
+ * Truncate an ISO timestamp to the hour boundary.
+ * The partitioned trader_snapshots_v2 table has as_of_ts in its unique constraint.
+ * Without truncation, every upsert creates a new row instead of updating.
+ */
+export function truncateToHour(isoOrDate?: string | Date | null): string {
+  const d = isoOrDate ? new Date(isoOrDate) : new Date()
+  d.setUTCMinutes(0, 0, 0)
+  return d.toISOString()
+}
+
 function getMarketType(source: string): string {
   return SOURCE_TYPE_MAP[source] || 'futures'
 }
@@ -484,7 +496,7 @@ export async function upsertTraders(
         market_type: getMarketType(t.source),
         trader_key: t.source_trader_id,
         window: w,
-        as_of_ts: t.captured_at,
+        as_of_ts: truncateToHour(t.captured_at),
         // Flat columns — read by leaderboard, scoring, and frontend
         // Cap extreme ROI values (>100,000% is likely a normalization bug)
         // Also null out roi if roi ≈ pnl (data mapping error, e.g. Hyperliquid)

@@ -360,7 +360,7 @@ async function RankingsContent({ exchange }: { exchange: string }) {
           marginBottom: tokens.spacing[6],
         }}
       >
-        {(totalCount || traders.length).toLocaleString()} traders | Ranked by Arena Score | 90-day window | Updated {new Date().toLocaleDateString('en-US', { month: 'short', year: 'numeric' })}
+        {(totalCount || traders.length).toLocaleString('en-US')} traders | Ranked by Arena Score | 90-day window | Updated {new Date().toLocaleDateString('en-US', { month: 'short', year: 'numeric' })}
       </p>
       {/*
        * SSR passes 20 slim rows (no avatar_url / pnl / followers) to keep

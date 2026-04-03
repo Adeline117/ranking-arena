@@ -88,7 +88,7 @@ export function HotGroupsList({ groups, loading, error, onRetry, localizedName, 
               </Text>
             </Box>
             <Text size="xs" color="tertiary">
-              {group.member_count.toLocaleString()} {t('membersUnit')}
+              {group.member_count.toLocaleString('en-US')} {t('membersUnit')}
             </Text>
           </Box>
         </Box>

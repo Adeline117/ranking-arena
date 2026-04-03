@@ -82,7 +82,7 @@ export default function RankingsIndexClient({ initialPlatforms = [] }: { initial
           {t('rankings') || 'Rankings'}
         </Text>
         <Text size="sm" style={{ color: tokens.colors.text.secondary }}>
-          {totalTraders.toLocaleString()} traders across {allPlatforms.length} exchanges
+          {totalTraders.toLocaleString('en-US')} traders across {allPlatforms.length} exchanges
         </Text>
       </Box>
       {/* Token Rankings CTA */}
@@ -172,7 +172,7 @@ export default function RankingsIndexClient({ initialPlatforms = [] }: { initial
                   <Box style={{ display: 'flex', gap: 16, flexWrap: 'wrap' }}>
                     <Box>
                       <Text size="xs" style={{ color: tokens.colors.text.tertiary, marginBottom: 2 }}>Traders</Text>
-                      <Text size="base" weight="bold" style={{ color: tokens.colors.text.primary }}>{p.traderCount > 0 ? p.traderCount.toLocaleString() : '-'}</Text>
+                      <Text size="base" weight="bold" style={{ color: tokens.colors.text.primary }}>{p.traderCount > 0 ? p.traderCount.toLocaleString('en-US') : '-'}</Text>
                     </Box>
                     <Box>
                       <Text size="xs" style={{ color: tokens.colors.text.tertiary, marginBottom: 2 }}>Avg Score</Text>
