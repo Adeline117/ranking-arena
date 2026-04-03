@@ -12,8 +12,8 @@ export async function generateMetadata({
 }): Promise<Metadata> {
   const { id } = await params
 
-  let groupName = '小组'
-  let groupDescription = '加入 Arena 社区小组，讨论交易策略和市场动态'
+  let groupName = 'Group'
+  let groupDescription = 'Join this trading group on Arena to discuss strategies and market trends.'
 
   try {
     const supabase = createClient(supabaseUrl, supabaseAnonKey)
@@ -25,7 +25,7 @@ export async function generateMetadata({
 
     if (group) {
       groupName = group.name
-      groupDescription = group.description || `${group.name} - ${group.member_count || 0} 位成员`
+      groupDescription = group.description || `${group.name} — ${group.member_count || 0} members on Arena`
     }
   } catch {
     // Intentionally swallowed: metadata generation failure is non-critical, default metadata used
@@ -50,6 +50,7 @@ export async function generateMetadata({
       card: 'summary',
       title,
       description: groupDescription,
+      creator: '@arenafi',
     },
   }
 }
