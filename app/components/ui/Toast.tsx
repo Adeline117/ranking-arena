@@ -344,8 +344,16 @@ export function ToastProvider({ children }: { children: ReactNode }) {
   const showToast = useCallback((
     message: string | { message?: string; code?: string; error?: string } | unknown,
     type: ToastType = 'info',
-    duration: number = 4000
+    duration?: number
   ) => {
+    // Error/warning toasts need more reading time
+    const defaultDurations: Record<ToastType, number> = {
+      success: 4000,
+      info: 4000,
+      warning: 5000,
+      error: 5500,
+    }
+    const finalDuration = duration ?? defaultDurations[type]
     // Parse message
     let finalMessage: string
     if (typeof message === 'string') {
@@ -382,15 +390,22 @@ export function ToastProvider({ children }: { children: ReactNode }) {
     }
 
     const id = `toast-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
-    const newToast: Toast = { id, message: finalMessage, type, duration, createdAt: Date.now(), txHash, chainId, action }
+    const newToast: Toast = { id, message: finalMessage, type, duration: finalDuration, createdAt: Date.now(), txHash, chainId, action }
 
-    setToasts((prev) => [...prev.slice(-4), newToast]) // Keep max 5 toasts
+    setToasts((prev) => {
+      // Deduplicate: skip if same message shown within last 1.5s
+      const isDuplicate = prev.some(
+        (t) => t.message === finalMessage && Date.now() - t.createdAt < 1500
+      )
+      if (isDuplicate) return prev
+      return [...prev.slice(-4), newToast]
+    })
 
-    if (duration > 0) {
+    if (finalDuration > 0) {
       const timer = setTimeout(() => {
         setToasts((prev) => prev.filter((t) => t.id !== id))
         dismissTimersRef.current.delete(id)
-      }, duration)
+      }, finalDuration)
       dismissTimersRef.current.set(id, timer)
     }
   }, [])
@@ -420,6 +435,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
           role="status"
           aria-live="polite"
           aria-atomic="false"
+          className="toast-container"
           style={{
             position: 'fixed',
             top: 80,

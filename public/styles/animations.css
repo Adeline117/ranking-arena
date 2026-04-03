@@ -279,6 +279,24 @@
   animation: slideOutUp 0.25s cubic-bezier(0.4, 0, 0.2, 1) forwards;
 }
 
+/* Mobile: center toasts, limit visible count, fade-in instead of slide */
+@media (max-width: 640px) {
+  .toast-container {
+    right: 50% !important;
+    transform: translateX(50%);
+    top: 64px !important;
+  }
+
+  .toast-enter {
+    animation: fadeInDown 0.3s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+  }
+
+  /* Hide 4th+ toast on mobile to avoid blocking content */
+  .toast-container > :nth-child(n+4) {
+    display: none;
+  }
+}
+
 /* ============================================
    11. Modal animations
    ============================================ */
