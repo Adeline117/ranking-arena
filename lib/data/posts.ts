@@ -261,6 +261,25 @@ export async function getPosts(
     query = query.eq('visibility', 'public')
   }
 
+  // Block filtering: exclude posts from users the viewer has blocked (and vice versa)
+  if (viewer_id) {
+    const { data: blocks } = await supabase
+      .from('blocked_users')
+      .select('blocker_id, blocked_id')
+      .or(`blocker_id.eq.${viewer_id},blocked_id.eq.${viewer_id}`)
+    if (blocks && blocks.length > 0) {
+      const blockedIds = new Set<string>()
+      for (const b of blocks) {
+        if (b.blocker_id === viewer_id) blockedIds.add(b.blocked_id)
+        else blockedIds.add(b.blocker_id)
+      }
+      if (blockedIds.size > 0) {
+        // PostgREST: not.in filter excludes posts from blocked users
+        query = query.not('author_id', 'in', `(${[...blockedIds].join(',')})`)
+      }
+    }
+  }
+
   // Language filter
   if (langFilter) {
     query = query.eq('language', langFilter)
