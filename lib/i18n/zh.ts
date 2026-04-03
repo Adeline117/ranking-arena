@@ -4881,6 +4881,13 @@ compFieldMaxParticipants: '最大参与人数',
     linkAdditionalAccountDesc: '搜索要关联到您个人资料的其他交易员账户。',
     moderationQueue: '审核队列',
     auditLog: '操作日志',
+    deleteAccountRecoveryNote: '您的账户将被停用 30 天，之后永久删除。在此期间重新登录即可取消。',
+    copyBackupCodes: '复制所有备用码',
+    bioTooLong: '简介不能超过 200 个字符',
+    invalidEmailFormat: '邮箱格式无效',
+    referralTitle: '推荐计划',
+    referralDesc: '邀请好友，赚取 Pro 奖励',
+    copyText: '复制',
 
 } as const
 

@@ -4869,6 +4869,13 @@ compFieldMaxParticipants: '최대 참가자 수',
     linkAdditionalAccountDesc: '프로필에 연결할 다른 트레이더 계정을 검색하세요.',
     moderationQueue: '검토 대기',
     auditLog: '감사 로그',
+    deleteAccountRecoveryNote: '계정은 30일 동안 비활성화된 후 영구 삭제됩니다. 이 기간 동안 다시 로그인하면 취소할 수 있습니다.',
+    copyBackupCodes: '모든 코드 복사',
+    bioTooLong: '자기소개는 200자 이내여야 합니다',
+    invalidEmailFormat: '이메일 형식이 올바르지 않습니다',
+    referralTitle: '추천 프로그램',
+    referralDesc: '친구를 초대하고 Pro 보상을 받으세요',
+    copyText: '복사',
 
 } as const
 
