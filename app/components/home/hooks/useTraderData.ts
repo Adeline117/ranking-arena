@@ -277,6 +277,8 @@ export function useTraderData(options: UseTraderDataOptions = {}) {
             avatar_url: t.avatar_url as string | null,
             arena_score: (t.metrics as Record<string, unknown>)?.arena_score ?? 0,
             rank: t.rank as number,
+            rank_change: (t.rank_change as number) ?? null,
+            is_new: (t.is_new as boolean) ?? false,
             profitability_score: t.profitability_score ?? null,
             risk_control_score: t.risk_control_score ?? null,
             execution_score: t.execution_score ?? null,
