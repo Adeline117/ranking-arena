@@ -161,9 +161,10 @@ export async function GET(request: NextRequest) {
 
     const periodStart = Date.now()
 
-    // Run enrichments inline in parallel batches of 7 (increased from 5 to reduce total time)
-    // EMERGENCY INCREASE (2026-03-13): With 12 platforms, 7 concurrent = 2 batches × ~120s = ~240s
-    const BATCH_CONCURRENCY = 7
+    // Run enrichments inline in parallel batches of 10 to fit within 270s budget.
+    // With 27 platforms: 3 batches × ~90s = ~270s (tight but workable).
+    // batch-cached platforms (bitunix, xt, etc.) complete in <5s, freeing time for API-per-trader ones.
+    const BATCH_CONCURRENCY = 10
     for (let i = 0; i < platforms.length; i += BATCH_CONCURRENCY) {
       // Check per-period budget before starting next batch
       if (Date.now() - periodStart > PER_PERIOD_BUDGET_MS) {
