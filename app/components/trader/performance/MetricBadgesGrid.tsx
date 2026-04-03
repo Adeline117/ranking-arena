@@ -56,7 +56,7 @@ export function MetricBadgesGrid({
       />
       <MetricBadge
         label={t('maxDrawdownShort')}
-        value={maxDrawdown != null && Math.abs(maxDrawdown) <= 100 ? (Math.abs(maxDrawdown) < 0.05 ? '< 0.1%' : `${Math.abs(maxDrawdown).toFixed(1)}%`) : '—'}
+        value={maxDrawdown != null && Math.abs(maxDrawdown) <= 100 ? (Math.abs(maxDrawdown) < 0.05 ? '< -0.1%' : `-${Math.abs(maxDrawdown).toFixed(1)}%`) : '—'}
         negative
         tooltip={maxDrawdown == null ? t('drawdownNotAvailable') : Math.abs(maxDrawdown) > 100 ? t('drawdownNotAvailable') : undefined}
       />
@@ -99,7 +99,7 @@ export function MetricBadgesGrid({
       {tradesCount != null && (
         <MetricBadge
           label={t('tradesLabel') || 'Trades'}
-          value={String(tradesCount)}
+          value={tradesCount.toLocaleString('en-US')}
         />
       )}
       {avgHoldingTimeHours != null && (
