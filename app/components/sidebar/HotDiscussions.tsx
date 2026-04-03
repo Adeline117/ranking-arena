@@ -308,7 +308,7 @@ export default function HotDiscussions({ limit = 8 }: { limit?: number }) {
                   {post.author_avatar_url ? (
                     <Image
                       src={`/api/avatar?url=${encodeURIComponent(post.author_avatar_url)}`}
-                      alt={post.author_handle || ''}
+                      alt={post.author_handle || 'User avatar'}
                       width={18}
                       height={18}
                       unoptimized
