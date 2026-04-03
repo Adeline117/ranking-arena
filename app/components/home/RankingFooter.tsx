@@ -8,12 +8,22 @@ interface RankingFooterProps {
   t: (key: string) => string
 }
 
+function isStale(dateStr: string | null | undefined): boolean {
+  if (!dateStr) return false
+  try {
+    const diffMs = Date.now() - new Date(dateStr).getTime()
+    return diffMs > 60 * 60 * 1000 // > 1 hour
+  } catch { return false }
+}
+
 export default function RankingFooter({
   loading,
   lastUpdated,
   formatLastUpdated,
   t,
 }: RankingFooterProps) {
+  const stale = isStale(lastUpdated)
+
   return (
     <>
       {/* Last updated timestamp — exchange sources shown in chip bar above */}
@@ -27,7 +37,7 @@ export default function RankingFooter({
             justifyContent: 'flex-end',
             gap: 4,
             fontSize: tokens.typography.fontSize.xs,
-            color: 'var(--color-text-tertiary)',
+            color: stale ? 'var(--color-accent-warning, #f59e0b)' : 'var(--color-text-tertiary)',
             paddingRight: tokens.spacing[3],
           }}
         >
