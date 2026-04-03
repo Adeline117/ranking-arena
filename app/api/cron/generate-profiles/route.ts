@@ -98,25 +98,40 @@ export async function POST(request: NextRequest) {
     for (let i = 0; i < profiles.length; i += BATCH_SIZE) {
       const batch = profiles.slice(i, i + BATCH_SIZE)
 
-      // Batch-fetch all snapshots for this batch in a single query, then resolve in-memory
+      // Batch-fetch from leaderboard_ranks (authoritative, same source as UI display)
+      // Previously read from trader_snapshots_v2.metrics JSONB which was stale,
+      // causing bios to show different numbers than the trader page.
       const batchKeys = batch.map(p => p.trader_key)
-      const { data: batchSnaps } = await supabase
-        .from('trader_snapshots_v2')
-        .select('trader_key, window, metrics, as_of_ts')
-        .in('trader_key', batchKeys)
-        .in('window', ['90D', '30D', '7D'])
-        .order('as_of_ts', { ascending: false })
+      const { data: batchLR } = await supabase
+        .from('leaderboard_ranks')
+        .select('source_trader_id, source, season_id, roi, pnl, win_rate, max_drawdown, trades_count, followers, copiers, sharpe_ratio, arena_score, rank')
+        .in('source_trader_id', batchKeys)
+        .in('season_id', ['90D', '30D', '7D'])
 
-      // Build a map: trader_key → best window snapshot (prefer 90D > 30D > 7D)
+      // Build a map: trader_key → best period data (prefer 90D > 30D > 7D)
       const WINDOW_PRIORITY: Record<string, number> = { '90D': 3, '30D': 2, '7D': 1 }
       const bestSnapMap = new Map<string, { window: string; metrics: Record<string, unknown> }>()
-      for (const snap of batchSnaps ?? []) {
-        if (!snap.metrics) continue
-        const existing = bestSnapMap.get(snap.trader_key)
-        const snapPriority = WINDOW_PRIORITY[snap.window] ?? 0
+      for (const row of batchLR ?? []) {
+        const key = row.source_trader_id
+        const existing = bestSnapMap.get(key)
+        const snapPriority = WINDOW_PRIORITY[row.season_id] ?? 0
         const existingPriority = existing ? (WINDOW_PRIORITY[existing.window] ?? 0) : -1
         if (snapPriority > existingPriority) {
-          bestSnapMap.set(snap.trader_key, { window: snap.window, metrics: snap.metrics as Record<string, unknown> })
+          bestSnapMap.set(key, {
+            window: row.season_id,
+            metrics: {
+              roi: row.roi,
+              pnl: row.pnl,
+              win_rate: row.win_rate,
+              max_drawdown: row.max_drawdown,
+              trades_count: row.trades_count,
+              followers: row.followers,
+              copiers: row.copiers,
+              sharpe_ratio: row.sharpe_ratio,
+              arena_score: row.arena_score,
+              rank: row.rank,
+            },
+          })
         }
       }
 
