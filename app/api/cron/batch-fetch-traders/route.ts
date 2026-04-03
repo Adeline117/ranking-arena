@@ -30,6 +30,7 @@ import { runConnectorBatch } from '@/lib/pipeline/connector-db-adapter'
 import { connectorRegistry, initializeConnectors } from '@/lib/connectors/registry'
 import { SOURCE_TO_CONNECTOR_MAP } from '@/lib/constants/exchanges'
 import { PipelineState } from '@/lib/services/pipeline-state'
+import { PipelineCheckpoint } from '@/lib/harness/pipeline-checkpoint'
 import { sendRateLimitedAlert } from '@/lib/alerts/send-alert'
 import { env } from '@/lib/env'
 import { validatePlatform } from '@/lib/config/platforms'
@@ -91,7 +92,7 @@ interface BatchResult {
   durationMs: number
   totalSaved?: number
   error?: string
-  via?: 'connector'
+  via?: 'connector' | 'checkpoint-skip'
 }
 
 /**
@@ -280,44 +281,73 @@ export async function GET(request: NextRequest) {
     }
   }
 
+  // ── Checkpoint: start or resume from prior crash ─────────────
+  const checkpoint = await PipelineCheckpoint.startOrResume('fetch', group)
+  const resumedCount = checkpoint.completed_platforms.length
+  if (resumedCount > 0) {
+    logger.info(`[batch-fetch-traders-${group}] Resuming from checkpoint: ${resumedCount} platforms already done (trace=${checkpoint.trace_id})`)
+  }
+
   // Run platforms with concurrency limit (DeFiLlama PromisePool pattern)
   // Prevents overwhelming VPS proxy with too many concurrent scraper requests
   const CONCURRENCY = Math.min(platforms.length, 3) // Max 3 concurrent
   const results: BatchResult[] = []
   for (let i = 0; i < platforms.length; i += CONCURRENCY) {
     const batch = platforms.slice(i, i + CONCURRENCY)
-    const batchResults = await Promise.all(batch.map(runPlatform))
+    const batchResults = await Promise.all(batch.map(async (platform) => {
+      // Skip platforms already completed in a prior run (checkpoint resume)
+      if (PipelineCheckpoint.isCompleted(checkpoint, platform)) {
+        logger.info(`[batch-fetch-traders-${group}] Skipping ${platform}: already completed in checkpoint`)
+        return { platform, status: 'success' as const, durationMs: 0, totalSaved: 0, via: 'checkpoint-skip' as const }
+      }
+
+      await PipelineCheckpoint.markInProgress(checkpoint, platform)
+      const result = await runPlatform(platform)
+
+      if (result.status === 'success') {
+        await PipelineCheckpoint.markCompleted(checkpoint, platform, result.totalSaved ?? 0)
+      } else {
+        await PipelineCheckpoint.markFailed(checkpoint, platform, result.error ?? 'unknown')
+      }
+
+      return result
+    }))
     results.push(...batchResults)
   }
 
   clearTimeout(safetyTimer)
   const succeeded = results.filter((r) => r.status === 'success').length
-  const failed = results.length - succeeded
+  const failed = results.filter((r) => r.status === 'error').length
+
+  // ── Finalize checkpoint → produce trace metadata for downstream ──
+  const traceMetadata = await PipelineCheckpoint.finalize(checkpoint, Date.now() - overallStart)
 
   if (failed === 0) {
-    await plog.success(succeeded, { results })
+    await plog.success(succeeded, { results, trace_id: traceMetadata.trace_id })
   } else if (succeeded > 0) {
     // Partial success: some platforms failed but others worked — log as success with warning
-    await plog.success(succeeded, { results, warning: `${failed}/${results.length} platforms failed` })
+    await plog.success(succeeded, { results, warning: `${failed}/${results.length} platforms failed`, trace_id: traceMetadata.trace_id })
   } else {
     // Total failure: all platforms failed
     await plog.error(
       new Error(`${failed}/${results.length} platforms failed`),
-      { results }
+      { results, trace_id: traceMetadata.trace_id }
     )
   }
 
-  // Trigger downstream refresh (compute-leaderboard → warm-cache) when we wrote data
+  // Trigger downstream refresh with trace metadata (structured handoff)
   if (succeeded > 0) {
-    triggerDownstreamRefresh(`batch-fetch-traders-${group}`)
+    triggerDownstreamRefresh(`batch-fetch-traders-${group}`, traceMetadata)
   }
 
   return NextResponse.json({
     ok: succeeded === results.length,
     group,
+    trace_id: traceMetadata.trace_id,
     platforms: platforms.length,
     succeeded,
     failed,
+    resumed: resumedCount,
     totalDurationMs: Date.now() - overallStart,
     results,
   })
