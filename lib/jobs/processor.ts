@@ -10,6 +10,13 @@
 
 import { SupabaseClient } from '@supabase/supabase-js'
 import { getSupabaseAdmin } from '../supabase/server'
+
+/** Truncate timestamp to hour boundary for partitioned upsert dedup */
+function truncateToHour(): string {
+  const d = new Date()
+  d.setUTCMinutes(0, 0, 0)
+  return d.toISOString()
+}
 import type {
   RefreshJob,
   JobType,
@@ -237,7 +244,7 @@ export class JobProcessor {
         market_type: job.market_type,
         trader_key: job.trader_key,
         window: windowUpper,
-        as_of_ts: now,
+        as_of_ts: truncateToHour(),
         roi_pct: result.metrics.roi ?? null,
         pnl_usd: result.metrics.pnl ?? null,
         win_rate: result.metrics.win_rate ?? null,
@@ -267,7 +274,7 @@ export class JobProcessor {
         market_type: job.market_type,
         window: job.window,
         season_id: windowUpper,
-        as_of_ts: now,
+        as_of_ts: truncateToHour(),
         roi: result.metrics.roi,
         pnl: result.metrics.pnl,
         win_rate: result.metrics.win_rate,
