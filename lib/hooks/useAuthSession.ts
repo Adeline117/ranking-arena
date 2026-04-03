@@ -332,10 +332,27 @@ export async function authFetch(
 
   // Handle token expiry: try to refresh and retry once
   if (response.status === 401 && session) {
-    const { data: refreshData } = await sb.auth.refreshSession()
-    if (refreshData.session) {
-      headers.set('Authorization', `Bearer ${refreshData.session.access_token}`)
-      return fetch(url, { ...fetchOptions, headers })
+    try {
+      const { data: refreshData, error: refreshError } = await sb.auth.refreshSession()
+      if (refreshData.session) {
+        updateFromSession(refreshData.session)
+        headers.set('Authorization', `Bearer ${refreshData.session.access_token}`)
+        return fetch(url, { ...fetchOptions, headers })
+      }
+      // Refresh failed — session is dead, clear auth state so UI updates
+      if (refreshError) {
+        logger.warn('[authFetch] Token refresh failed, clearing auth state:', refreshError.message)
+      }
+      setGlobalAuthState({
+        user: null, userId: null, email: null, accessToken: null,
+        isLoggedIn: false, loading: false, authChecked: true,
+      })
+    } catch (refreshErr) {
+      logger.warn('[authFetch] Token refresh threw, clearing auth state:', refreshErr)
+      setGlobalAuthState({
+        user: null, userId: null, email: null, accessToken: null,
+        isLoggedIn: false, loading: false, authChecked: true,
+      })
     }
   }
 
