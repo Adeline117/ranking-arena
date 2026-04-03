@@ -4577,6 +4577,12 @@ compFieldMaxParticipants: '最大参加人数',
     connectWallet: 'ウォレットを接続',
     verifiedSince: '検証日',
 
+    linkAdditionalAccount: '追加アカウントをリンク',
+    linkAdditionalAccountDesc: 'プロフィールにリンクする別のトレーダーアカウントを検索してください。',
+    portfolioAnalytics: 'アナリティクス',
+    moderationQueue: 'モデレーション',
+    auditLog: '操作ログ',
+
 } as const
 
 export default ja
