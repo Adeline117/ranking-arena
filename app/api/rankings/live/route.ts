@@ -15,6 +15,7 @@ import { getTopTraders, getSortedSetSize } from '@/lib/realtime/ranking-store'
 import { getSupabaseAdmin } from '@/lib/api'
 import { createLogger } from '@/lib/utils/logger'
 import { tieredGet, tieredSet } from '@/lib/cache/redis-layer'
+import { checkRateLimit, RateLimitPresets } from '@/lib/utils/rate-limit'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -29,6 +30,9 @@ const liveRankingsSchema = z.object({
 })
 
 export async function GET(request: NextRequest) {
+  const rl = await checkRateLimit(request, RateLimitPresets.read)
+  if (rl) return rl
+
   const searchParams = request.nextUrl.searchParams
   const rawParams = Object.fromEntries(searchParams)
   const parsed = liveRankingsSchema.safeParse(rawParams)

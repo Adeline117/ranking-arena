@@ -14,6 +14,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { getSupabaseAdmin } from '@/lib/api'
 import { tieredGetOrSet } from '@/lib/cache/redis-layer'
+import { checkRateLimit, RateLimitPresets } from '@/lib/utils/rate-limit'
 
 export const runtime = 'nodejs'
 
@@ -130,6 +131,9 @@ const querySchema = z.object({
 })
 
 export async function GET(request: NextRequest) {
+  const rl = await checkRateLimit(request, RateLimitPresets.read)
+  if (rl) return rl
+
   const searchParams = request.nextUrl.searchParams
 
   // Check if this is a popular-tokens request
