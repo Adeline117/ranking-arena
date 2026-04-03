@@ -375,10 +375,16 @@ function TraderAvatarImg({ avatarUrl, traderKey, name, size = 32 }: { avatarUrl:
   return <img src={avatarSrc(avatarUrl)} alt={name || 'Trader avatar'} width={size} height={size} loading="lazy" style={{ width: '100%', height: '100%', objectFit: 'cover' }} onError={() => setError(true)} />
 }
 
+// RankBadge styles — module-level to avoid allocation per row
+const RANK_BADGE_DEFAULT: React.CSSProperties = { fontSize: 13, fontWeight: 600, color: tokens.colors.text.secondary, minWidth: 28, textAlign: 'center', display: 'inline-block' }
+const RANK_BADGE_1: React.CSSProperties = { width: 28, height: 28, borderRadius: '50%', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, fontWeight: 700, background: 'linear-gradient(135deg, #FFD700, #FFA500)', color: 'var(--color-bg-primary)' }
+const RANK_BADGE_2: React.CSSProperties = { width: 28, height: 28, borderRadius: '50%', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, fontWeight: 700, background: 'linear-gradient(135deg, #C0C0C0, #A0A0A0)', color: 'var(--color-on-accent)' }
+const RANK_BADGE_3: React.CSSProperties = { width: 28, height: 28, borderRadius: '50%', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, fontWeight: 700, background: 'linear-gradient(135deg, #CD7F32, #A0522D)', color: 'var(--color-on-accent)' }
+
 const RankBadge = React.memo(function RankBadge({ rank }: { rank: number }) {
-  if (rank > 3) return <span style={{ fontSize: 13, fontWeight: 600, color: tokens.colors.text.secondary, minWidth: 28, textAlign: 'center', display: 'inline-block' }}>{rank}</span>
-  const bg = rank === 1 ? 'linear-gradient(135deg, #FFD700, #FFA500)' : rank === 2 ? 'linear-gradient(135deg, #C0C0C0, #A0A0A0)' : 'linear-gradient(135deg, #CD7F32, #A0522D)'
-  return <span style={{ width: 28, height: 28, borderRadius: '50%', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, fontWeight: 700, background: bg, color: rank === 1 ? 'var(--color-bg-primary)' : 'var(--color-on-accent)' }}>{rank}</span>
+  if (rank > 3) return <span style={RANK_BADGE_DEFAULT}>{rank}</span>
+  const style = rank === 1 ? RANK_BADGE_1 : rank === 2 ? RANK_BADGE_2 : RANK_BADGE_3
+  return <span style={style}>{rank}</span>
 })
 
 const TraderCardItem = React.memo(function TraderCardItem({ trader, rank }: { trader: TraderData; rank: number }) {
