@@ -28,43 +28,44 @@ export const maxDuration = 300 // Vercel Pro max (800 was invalid — silently c
 // CEX platforms: slightly reduced to balance load
 // 2026-03-20: FULL COVERAGE — limits sized to actual leaderboard counts
 // With offset rotation, each run processes a different slice. Over 6 runs/day = full coverage.
+// Limits must satisfy: limit × per_trader_time < platform_timeout (90s CEX / 120s onchain)
+// With offset rotation, full coverage is achieved over multiple runs (every 4h).
 const PLATFORM_LIMITS: Record<string, { limit90: number; limit30: number; limit7: number }> = {
-  // Batch-cached (no per-trader API calls, instant)
-  bitunix: { limit90: 500, limit30: 500, limit7: 500 },
+  // Batch-cached (no per-trader API calls, instant) — can be higher
+  bitunix: { limit90: 300, limit30: 300, limit7: 300 },
   xt: { limit90: 100, limit30: 100, limit7: 100 },
-  blofin: { limit90: 300, limit30: 300, limit7: 300 },
+  blofin: { limit90: 200, limit30: 200, limit7: 200 },
   bitfinex: { limit90: 120, limit30: 120, limit7: 120 },
   toobit: { limit90: 100, limit30: 100, limit7: 100 },
   coinex: { limit90: 200, limit30: 200, limit7: 200 },
-  // Large CEX — API per trader, need offset rotation for full coverage
-  binance_futures: { limit90: 600, limit30: 300, limit7: 300 },
-  okx_futures: { limit90: 300, limit30: 300, limit7: 300 },
-  hyperliquid: { limit90: 2000, limit30: 500, limit7: 500 },
-  htx_futures: { limit90: 200, limit30: 200, limit7: 200 },
-  etoro: { limit90: 1000, limit30: 200, limit7: 200 },
-  drift: { limit90: 2000, limit30: 500, limit7: 500 },
-  gmx: { limit90: 200, limit30: 200, limit7: 200 },
-  gateio: { limit90: 1000, limit30: 200, limit7: 200 },
+  // Large CEX — API per trader (~0.5s/trader → max ~150 in 90s)
+  binance_futures: { limit90: 150, limit30: 100, limit7: 100 },
+  okx_futures: { limit90: 150, limit30: 100, limit7: 100 },
+  htx_futures: { limit90: 100, limit30: 80, limit7: 80 },
+  etoro: { limit90: 100, limit30: 80, limit7: 80 },
+  gateio: { limit90: 100, limit30: 80, limit7: 80 },
+  mexc: { limit90: 100, limit30: 80, limit7: 80 },
+  // DEX on-chain (~0.3s/trader → max ~300 in 120s, but leave margin)
+  hyperliquid: { limit90: 200, limit30: 150, limit7: 150 },
+  drift: { limit90: 200, limit30: 150, limit7: 150 },
+  jupiter_perps: { limit90: 150, limit30: 100, limit7: 100 },
+  gmx: { limit90: 100, limit30: 80, limit7: 80 },
+  gains: { limit90: 80, limit30: 60, limit7: 60 },
+  dydx: { limit90: 150, limit30: 100, limit7: 100 },
+  aevo: { limit90: 100, limit30: 80, limit7: 80 },
   // Medium CEX
-  bitget_futures: { limit90: 200, limit30: 200, limit7: 200 },
-  mexc: { limit90: 300, limit30: 150, limit7: 150 },
+  bitget_futures: { limit90: 100, limit30: 80, limit7: 80 },
   btcc: { limit90: 50, limit30: 50, limit7: 50 },
   phemex: { limit90: 80, limit30: 80, limit7: 80 },
   bingx: { limit90: 40, limit30: 40, limit7: 40 },
   okx_spot: { limit90: 40, limit30: 40, limit7: 40 },
-  okx_web3: { limit90: 400, limit30: 400, limit7: 400 },
-  // DEX on-chain
-  jupiter_perps: { limit90: 500, limit30: 200, limit7: 200 },
-  gains: { limit90: 200, limit30: 100, limit7: 100 },
-  // Re-enabled platforms
-  dydx: { limit90: 350, limit30: 200, limit7: 200 },
-  aevo: { limit90: 300, limit30: 200, limit7: 200 },
+  okx_web3: { limit90: 150, limit30: 100, limit7: 100 },
   // Additional platforms
-  binance_web3: { limit90: 400, limit30: 400, limit7: 400 },
-  binance_spot: { limit90: 400, limit30: 400, limit7: 400 },
-  polymarket: { limit90: 200, limit30: 200, limit7: 200 },
-  // VPS scrapers (slow — ~18s/trader via Playwright, max 6 in 120s timeout)
-  bybit: { limit90: 10, limit30: 10, limit7: 10 }, // Increased from 6: longer per-trader timeout (45s) allows more traders
+  binance_web3: { limit90: 150, limit30: 100, limit7: 100 },
+  binance_spot: { limit90: 150, limit30: 100, limit7: 100 },
+  polymarket: { limit90: 100, limit30: 80, limit7: 80 },
+  // VPS scrapers (slow — ~18s/trader via Playwright, max 5 in 90s timeout)
+  bybit: { limit90: 5, limit30: 5, limit7: 5 },
   // weex: DISABLED 2026-04-01 (75% timeout, removed from fetch groups)
   // kucoin: DEAD 2026-03 (copy trading discontinued)
   // bingx_spot: REMOVED (no enrichment API)
@@ -164,7 +165,7 @@ export async function GET(request: NextRequest) {
     // Run enrichments inline in parallel batches of 10 to fit within 270s budget.
     // With 27 platforms: 3 batches × ~90s = ~270s (tight but workable).
     // batch-cached platforms (bitunix, xt, etc.) complete in <5s, freeing time for API-per-trader ones.
-    const BATCH_CONCURRENCY = 10
+    const BATCH_CONCURRENCY = 7
     for (let i = 0; i < platforms.length; i += BATCH_CONCURRENCY) {
       // Check per-period budget before starting next batch
       if (Date.now() - periodStart > PER_PERIOD_BUDGET_MS) {
