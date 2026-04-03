@@ -7,6 +7,7 @@ import { Box, Text } from '@/app/components/base'
 import ExchangeLogo from '@/app/components/ui/ExchangeLogo'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import { getScoreColor } from '@/lib/utils/score-colors'
+import { formatROI, formatPnL } from '@/lib/utils/format'
 
 interface AggregatedAccount {
   platform: string
@@ -26,19 +27,6 @@ interface AggregatedStatsProps {
   bestRoi: { value: number; platform: string; traderKey: string } | null
   weightedScore: number
   accounts: AggregatedAccount[]
-}
-
-function formatPnl(pnl: number): string {
-  const abs = Math.abs(pnl)
-  const sign = pnl >= 0 ? '+' : '-'
-  if (abs >= 1_000_000) return `${sign}$${(abs / 1_000_000).toFixed(2)}M`
-  if (abs >= 1_000) return `${sign}$${(abs / 1_000).toFixed(1)}K`
-  return `${sign}$${abs.toFixed(0)}`
-}
-
-function formatRoi(roi: number): string {
-  const sign = roi >= 0 ? '+' : ''
-  return `${sign}${roi.toFixed(1)}%`
 }
 
 export default function AggregatedStats({
@@ -112,7 +100,7 @@ export default function AggregatedStats({
               letterSpacing: '-0.02em',
             }}
           >
-            {formatPnl(combinedPnl)}
+            {formatPnL(combinedPnl)}
           </Text>
         </Box>
 
@@ -139,7 +127,7 @@ export default function AggregatedStats({
                   letterSpacing: '-0.02em',
                 }}
               >
-                {formatRoi(bestRoi.value)}
+                {formatROI(bestRoi.value)}
               </Text>
               <ExchangeLogo exchange={bestRoi.platform} size={14} />
             </Box>
@@ -261,7 +249,7 @@ export default function AggregatedStats({
                   flexShrink: 0,
                 }}
               >
-                {formatPnl(pnl)}
+                {formatPnL(pnl)}
               </Text>
             </Box>
           )
@@ -322,9 +310,9 @@ export default function AggregatedStats({
             </thead>
             <tbody>
               {/* ROI */}
-              <ComparisonRow label="ROI" accounts={accounts} getValue={a => a.roi} format={v => formatRoi(v)} higherIsBetter />
+              <ComparisonRow label="ROI" accounts={accounts} getValue={a => a.roi} format={v => formatROI(v)} higherIsBetter />
               {/* PnL */}
-              <ComparisonRow label="PnL" accounts={accounts} getValue={a => a.pnl} format={v => formatPnl(v)} higherIsBetter />
+              <ComparisonRow label="PnL" accounts={accounts} getValue={a => a.pnl} format={v => formatPnL(v)} higherIsBetter />
               {/* Arena Score */}
               <ComparisonRow label="Arena Score" accounts={accounts} getValue={a => a.arenaScore} format={v => v.toFixed(1)} higherIsBetter />
               {/* Win Rate */}
