@@ -66,12 +66,12 @@ const GROUPS: Record<string, string[]> = {
   // bingx: DEAD (empty_data)
   // weex: RE-ENABLED — 117 traders in leaderboard, fresh data in snapshots_v2
   f: ['mexc', 'woox', 'polymarket', 'copin', 'weex'],
-  // Group G: Copin + Mac Mini (every 8h)
+  // Group G: Auth API + Copin + Mac Mini (every 8h)
   // bingx_spot: DEAD (no leaderboard), phemex: DEAD (API 404)
   // kucoin: moved to VPS scraper-cron (Vercel hnd1 IP blocked by KuCoin)
-  // blofin: DEAD 2026-04-03 (geo-blocked ALL IPs — SG VPS, JP VPS, Mac Mini)
+  // blofin: RECOVERED 2026-04-03 via authenticated openapi.blofin.com (not geo-blocked)
   // dydx: RECOVERED 2026-03-31 via Copin API (3339 traders)
-  g: ['lbank', 'dydx'],
+  g: ['blofin', 'lbank', 'dydx'],
 }
 
 // Per-platform leaderboard limits — override the default 2000
