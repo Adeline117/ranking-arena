@@ -20,7 +20,7 @@ interface TraderTabsProps {
 
 const useIsomorphicLayoutEffect = typeof window !== 'undefined' ? useLayoutEffect : useEffect
 
-export default function TraderTabs({ activeTab, onTabChange, isPro = false, onProRequired: _onProRequired, extraTabs, hideTabs }: TraderTabsProps) {
+export default function TraderTabs({ activeTab, onTabChange, isPro = false, onProRequired, extraTabs, hideTabs }: TraderTabsProps) {
   const { t } = useLanguage()
   const containerRef = useRef<HTMLDivElement>(null)
   const tabRefs = useRef<Map<TabKey, HTMLButtonElement>>(new Map())
@@ -138,7 +138,13 @@ export default function TraderTabs({ activeTab, onTabChange, isPro = false, onPr
               key={tab.key}
               ref={(el) => { if (el) tabRefs.current.set(tab.key, el) }}
               className="profile-tab-button interactive-scale"
-              onClick={() => onTabChange(tab.key)}
+              onClick={() => {
+                if (!isPro && (tab.key === 'stats' || tab.key === 'portfolio') && onProRequired) {
+                  onProRequired()
+                  return
+                }
+                onTabChange(tab.key)
+              }}
               onKeyDown={(e) => {
                 if (e.key === 'Enter' || e.key === ' ') {
                   e.preventDefault()
