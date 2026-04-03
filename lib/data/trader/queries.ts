@@ -350,10 +350,12 @@ export async function getTraderDetail(supabase: SupabaseClient, params: {
           .order('captured_at', { ascending: false }).limit(50)
       ),
       // Position history — enrichment tables use v1 naming
+      // Filter to last 90 days to avoid scanning thousands of rows on 11GB table
       safeQuery(() =>
         supabase.from('trader_position_history')
           .select('symbol, direction, open_time, close_time, entry_price, exit_price, pnl_usd, pnl_pct, status')
           .in(ENRICH.source, sourceAliases).eq(ENRICH.source_trader_id, traderKey)
+          .gte('open_time', new Date(Date.now() - 90 * 86400000).toISOString())
           .order('open_time', { ascending: false }).limit(100)
       ),
       // Tracked since (earliest v2 snapshot)
