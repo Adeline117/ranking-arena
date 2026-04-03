@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react'
 import { tokens } from '@/lib/design-tokens'
 import { Box, Text } from '../base'
+import { useLanguage } from '../Providers/LanguageProvider'
 import type { PortfolioItem, PositionHistoryItem } from '@/lib/data/trader'
 import type { ExtendedPositionHistoryItem } from './portfolio-table-utils'
 import PortfolioTableHeader from './PortfolioTableHeader'
@@ -24,6 +25,7 @@ type ViewMode = 'current' | 'history'
  * 现代化设计，流畅动画
  */
 export default function PortfolioTable({ items, history = [], isPro = true, onUnlock: _onUnlock }: PortfolioTableProps) {
+  const { t } = useLanguage()
   const [viewMode, setViewMode] = useState<ViewMode>('current')
   const [selectedMarket, setSelectedMarket] = useState<string | null>(null)
   const [sortBy, setSortBy] = useState<'openTime' | 'closeTime' | 'pnl'>('openTime')
@@ -84,8 +86,8 @@ export default function PortfolioTable({ items, history = [], isPro = true, onUn
           <path d="M3 5v14a2 2 0 0 0 2 2h16v-5" />
           <path d="M18 12a2 2 0 0 0 0 4h4v-4Z" />
         </svg>
-        <Text size="sm" weight="bold" color="secondary">No positions</Text>
-        <Text size="xs" color="tertiary">This trader has no open positions or trade history to display.</Text>
+        <Text size="sm" weight="bold" color="secondary">{t('noOpenPositions')}</Text>
+        <Text size="xs" color="tertiary">{t('noPositionHistoryDesc')}</Text>
       </Box>
     )
   }
