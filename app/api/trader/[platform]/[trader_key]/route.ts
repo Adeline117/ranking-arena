@@ -286,13 +286,19 @@ export async function GET(
         { data: Array<{ symbol: string; weight_pct: number }> | null } | null,
       ]
 
-      // Map equity curve with pnl field
+      // Map equity curve with pnl field — deduplicate by date (multiple periods can have same date)
       if (ecResult?.data && ecResult.data.length > 0) {
-        timeseries.equity_curve = ecResult.data.map(p => ({
-          date: p.data_date,
-          roi: p.roi_pct ?? 0,
-          pnl: p.pnl_usd != null ? Number(p.pnl_usd) : 0,
-        })) as EquityCurvePoint[]
+        const byDate = new Map<string, { roi: number; pnl: number }>()
+        for (const p of ecResult.data) {
+          // Last write wins (data is ordered by data_date asc, so later periods overwrite)
+          byDate.set(p.data_date, {
+            roi: p.roi_pct ?? 0,
+            pnl: p.pnl_usd != null ? Number(p.pnl_usd) : 0,
+          })
+        }
+        timeseries.equity_curve = [...byDate.entries()]
+          .sort(([a], [b]) => a.localeCompare(b))
+          .map(([date, v]) => ({ date, roi: v.roi, pnl: v.pnl })) as EquityCurvePoint[]
       }
 
       // Map asset breakdown
