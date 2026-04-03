@@ -8,6 +8,7 @@
 
 import { useState, useCallback } from 'react'
 import { tokens } from '@/lib/design-tokens'
+import { useToast } from '@/app/components/ui/Toast'
 import { getAddressExplorerUrl, type SupportedChainId, CHAIN_IDS } from '@/lib/web3/multi-chain'
 
 interface WalletAddressProps {
@@ -24,16 +25,18 @@ function shortenAddress(addr: string): string {
 
 export function WalletAddress({ address, chainId = CHAIN_IDS.BASE, showCopy = true, className = '' }: WalletAddressProps) {
   const [copied, setCopied] = useState(false)
+  const { showToast } = useToast()
 
   const handleCopy = useCallback(async () => {
     try {
       await navigator.clipboard.writeText(address)
       setCopied(true)
+      showToast('Copied!', 'success')
       setTimeout(() => setCopied(false), 2000)
     } catch {
-      console.warn('[WalletAddress] clipboard.writeText failed — browser may not support Clipboard API in this context')
+      showToast('Copy failed', 'error')
     }
-  }, [address])
+  }, [address, showToast])
 
   return (
     <span className={`inline-flex items-center gap-1.5 ${className}`}>
