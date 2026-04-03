@@ -1376,10 +1376,7 @@ a:focus-visible, button:focus-visible, [role="button"]:focus-visible, [tabindex=
   outline-offset: 2px;
   border-radius: 4px;
 }
-/* Minimum touch target for mobile */
-.touch-target {
-  min-height: 48px;
-}
+/* Minimum touch target — consolidated below in Mobile section */
 /* Shimmer text effect for premium badges */
 @keyframes shiny-text {
   0% { background-position: -200% 0; }
@@ -1522,10 +1519,10 @@ a:focus-visible, button:focus-visible, [role="button"]:focus-visible, [tabindex=
    Touch Targets & Mobile Utilities
    ============================================ */
 
-/* Minimum 44x44px touch target for all interactive elements on mobile */
+/* Minimum 48x48px touch target for all interactive elements (iOS HIG standard) */
 .touch-target {
-  min-width: 44px;
-  min-height: 44px;
+  min-width: 48px;
+  min-height: 48px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
