@@ -149,8 +149,9 @@ export async function GET() {
     )
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Unknown error'
+    console.error('[platform-stats]', message)
     return NextResponse.json(
-      { error: 'Internal server error', detail: message },
+      { error: 'Internal server error' },
       { status: 500 }
     )
   }
