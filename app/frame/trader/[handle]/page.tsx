@@ -64,7 +64,7 @@ export async function generateMetadata({ params, searchParams }: Props): Promise
   // Profile URL on main site
   const profileSource = trader?.source || source || ''
   const profileId = trader?.source_trader_id || decodedHandle
-  const profileUrl = `${BASE_URL}/trader/${encodeURIComponent(profileSource)}/${encodeURIComponent(profileId)}`
+  const profileUrl = `${BASE_URL}/trader/${encodeURIComponent(trader?.handle || decodedHandle)}${profileSource ? `?platform=${profileSource}` : ''}`
 
   // Frame URL (this page)
   const framePageParams = new URLSearchParams()
@@ -128,7 +128,7 @@ export default async function FrameTraderPage({ params, searchParams }: Props) {
       <h1 style={{ fontSize: 24, fontWeight: 700, margin: 0 }}>{decodedHandle}</h1>
       <p style={{ color: '#9A9A9A', margin: '8px 0 24px' }}>Trader Ranking Card on Arena</p>
       <a
-        href={`${BASE_URL}/trader/${encodeURIComponent(source || '')}/${encodeURIComponent(decodedHandle)}`}
+        href={`${BASE_URL}/trader/${encodeURIComponent(decodedHandle)}${source ? `?platform=${source}` : ''}`}
         style={{
           background: '#8b6fa8',
           color: '#fff',
