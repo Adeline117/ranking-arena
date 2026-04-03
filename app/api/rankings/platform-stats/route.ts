@@ -19,23 +19,6 @@ import { checkRateLimit, RateLimitPresets } from '@/lib/utils/rate-limit'
 // The tieredGetOrSet below caches at the Redis layer (1h TTL).
 export const runtime = 'nodejs'
 
-interface LeaderboardRow {
-  source: string
-  arena_score: number | null
-  roi: number | null
-  win_rate: number | null
-  max_drawdown: number | null
-}
-
-interface PlatformAccumulator {
-  count: number
-  totalScore: number
-  totalRoi: number
-  winRateCount: number
-  totalWinRate: number
-  scores: number[]
-}
-
 interface PlatformStat {
   platform: string
   traderCount: number
@@ -57,89 +40,25 @@ export async function GET(request: NextRequest) {
       async () => {
         const supabase = getSupabaseAdmin()
 
-        // Fetch ALL rows — Supabase has a max_rows=1000 limit per request.
-        // Paginate in 1000-row chunks (the Supabase hard limit) to get complete data.
-        const allRows: LeaderboardRow[] = []
-        const PAGE_SIZE = 1000
-        let offset = 0
+        // Single SQL GROUP BY via RPC — 47ms vs 4.5s (30 paginated queries)
+        const { data: rpcRows, error: rpcError } = await supabase.rpc('get_platform_stats', { p_season_id: '90D' })
 
-        while (true) {
-          const { data: page, error: pageError } = await supabase
-            .from('leaderboard_ranks')
-            .select('source, arena_score, roi, win_rate, max_drawdown')
-            .eq('season_id', '90D')
-            .not('arena_score', 'is', null)
-            .gt('arena_score', 0)
-            .or('is_outlier.is.null,is_outlier.eq.false')
-            .range(offset, offset + PAGE_SIZE - 1)
+        if (rpcError) throw new Error(`RPC get_platform_stats failed: ${rpcError.message}`)
+        if (!rpcRows || rpcRows.length === 0) return []
 
-          if (pageError) throw new Error(pageError.message)
-          if (!page || page.length === 0) break
-
-          allRows.push(...(page as LeaderboardRow[]))
-          offset += PAGE_SIZE
-          if (page.length < PAGE_SIZE) break // Last page
-        }
-
-        if (allRows.length === 0) return []
-
-        // Sanity check: if we got significantly fewer rows than expected,
-        // don't cache partial data (Supabase can return null on connection reset)
-        if (allRows.length < 1000 && offset > PAGE_SIZE) {
-          throw new Error(`Partial data: got ${allRows.length} rows after ${offset / PAGE_SIZE} pages, expected more`)
-        }
-
-        const data = allRows
-
-        // Aggregate per-platform stats in a single pass over 30K+ rows
-        const stats = new Map<string, PlatformAccumulator>()
-        for (const row of data as LeaderboardRow[]) {
-          const source = row.source
-          if (!source || row.arena_score == null) continue
-
-          if (!stats.has(source)) {
-            stats.set(source, {
-              count: 0,
-              totalScore: 0,
-              totalRoi: 0,
-              winRateCount: 0,
-              totalWinRate: 0,
-              scores: [],
-            })
-          }
-          const s = stats.get(source)!
-          s.count++
-          s.totalScore += row.arena_score
-          s.totalRoi += row.roi ?? 0
-          if (row.win_rate != null) {
-            s.winRateCount++
-            s.totalWinRate += row.win_rate
-          }
-          s.scores.push(row.arena_score)
-        }
-
-        return Array.from(stats.entries())
-          .map(([platform, s]) => {
-            const sorted = s.scores.slice().sort((a, b) => a - b)
-            const medianIdx = Math.floor(sorted.length / 2)
-            const medianScore = sorted.length % 2 === 0
-              ? (sorted[medianIdx - 1] + sorted[medianIdx]) / 2
-              : sorted[medianIdx]
-
-            return {
-              platform,
-              traderCount: s.count,
-              avgScore: Math.round(s.totalScore / s.count * 100) / 100,
-              avgRoi: Math.round(s.totalRoi / s.count * 100) / 100,
-              medianScore: Math.round(medianScore * 100) / 100,
-              avgWinRate: s.winRateCount > 0
-                ? Math.round(s.totalWinRate / s.winRateCount * 100) / 100
-                : null,
-            }
-          })
-          .sort((a, b) => b.traderCount - a.traderCount)
+        return (rpcRows as Array<{
+          platform: string; trader_count: number; avg_score: number;
+          avg_roi: number; median_score: number; avg_win_rate: number
+        }>).map(row => ({
+          platform: row.platform,
+          traderCount: Number(row.trader_count),
+          avgScore: Number(row.avg_score),
+          avgRoi: Number(row.avg_roi),
+          medianScore: Number(row.median_score),
+          avgWinRate: row.avg_win_rate != null ? Number(row.avg_win_rate) : null,
+        }))
       },
-      'cold', // 1-hour Redis TTL (cold tier)
+      'cold', // 1-hour Redis TTL
       ['rankings', 'platform-stats']
     )
 
