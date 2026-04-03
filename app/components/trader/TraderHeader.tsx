@@ -289,9 +289,10 @@ export default function TraderHeader({
           zIndex: 1,
         }}
       >
-        {/* Avatar — compact 48px */}
+        {/* Avatar — compact 48px, scrolls to top on click */}
         <Box
-          style={{ position: 'relative', flexShrink: 0 }}
+          style={{ position: 'relative', flexShrink: 0, cursor: 'pointer' }}
+          onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
           onMouseEnter={() => setAvatarHovered(true)}
           onMouseLeave={() => setAvatarHovered(false)}
         >

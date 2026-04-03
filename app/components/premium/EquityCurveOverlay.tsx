@@ -219,25 +219,55 @@ export default function EquityCurveOverlay({ traders, height = 300 }: EquityCurv
         justifyContent: 'center',
         marginTop: tokens.spacing[2],
       }}>
-        {paths.map((path, i) => (
-          <Box key={i} style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-            <Box style={{
-              width: 12,
-              height: 3,
-              borderRadius: 2,
-              background: path.color,
-              flexShrink: 0,
-            }} />
-            <Text size="xs" color="secondary" style={{
-              maxWidth: 100,
-              overflow: 'hidden',
-              textOverflow: 'ellipsis',
-              whiteSpace: 'nowrap',
-            }}>
-              {path.name}
-            </Text>
-          </Box>
-        ))}
+        {paths.map((path, i) => {
+          const isHidden = hiddenIndices.has(i)
+          const toggleSeries = () => {
+            setHiddenIndices(prev => {
+              const next = new Set(prev)
+              if (next.has(i)) next.delete(i)
+              else next.add(i)
+              return next
+            })
+          }
+          return (
+            <Box
+              key={i}
+              onClick={toggleSeries}
+              onKeyDown={(e: React.KeyboardEvent) => {
+                if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleSeries() }
+              }}
+              role="button"
+              tabIndex={0}
+              aria-label={`${isHidden ? 'Show' : 'Hide'} ${path.name}`}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 4,
+                cursor: 'pointer',
+                opacity: isHidden ? 0.35 : 1,
+                transition: 'opacity 0.2s ease',
+                userSelect: 'none',
+              }}
+            >
+              <Box style={{
+                width: 12,
+                height: 3,
+                borderRadius: 2,
+                background: path.color,
+                flexShrink: 0,
+              }} />
+              <Text size="xs" color="secondary" style={{
+                maxWidth: 100,
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+                whiteSpace: 'nowrap',
+                textDecoration: isHidden ? 'line-through' : 'none',
+              }}>
+                {path.name}
+              </Text>
+            </Box>
+          )
+        })}
       </Box>
     </Box>
   )
