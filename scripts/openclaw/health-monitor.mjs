@@ -204,9 +204,9 @@ async function triggerAutoFix(pipelineHealth) {
   const { spawn } = await import('child_process')
   const autoFixScript = path.join(__dirname, 'auto-fix.mjs')
   const failingJobs = (pipelineHealth.recentFailures || [])
-    .filter(f => f.job_name?.startsWith('fetch-traders-'))
+    .filter(f => f.job_name?.includes('fetch-traders'))
     .map(f => ({
-      platform: f.job_name.replace('fetch-traders-', ''),
+      platform: f.job_name.replace(/^batch-fetch-traders-/, ''),
       reason: classifyErrorMsg(f.error_message),
     }))
     .filter(f => !DEAD_PLATFORMS.has(f.platform))
