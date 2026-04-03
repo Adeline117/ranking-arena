@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase/client'
 import { tokens } from '@/lib/design-tokens'
 import { Box, Text, Button } from '@/app/components/base'
+import Link from 'next/link'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 
 export function ExchangeBindingBanner({ userId }: { userId: string | null }) {
@@ -56,11 +57,11 @@ export function ExchangeBindingBanner({ userId }: { userId: string | null }) {
           {t('bindExchangeBannerDesc')}
         </Text>
       </Box>
-      <a href="/exchange/auth" style={{ textDecoration: 'none', flexShrink: 0 }}>
+      <Link href="/exchange/auth" style={{ textDecoration: 'none', flexShrink: 0 }}>
         <Button variant="primary" size="sm">
           {t('goToBind')}
         </Button>
-      </a>
+      </Link>
     </Box>
   )
 }

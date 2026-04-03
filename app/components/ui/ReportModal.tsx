@@ -503,7 +503,7 @@ export default function ReportModal({
                   transition: 'all 0.2s',
                 }}
               >
-                {submitting ? t('reportSubmitting') : t('reportSubmit')}
+                {submitting ? `⏳ ${t('reportSubmitting')}` : t('reportSubmit')}
               </button>
             </Box>
           </Box>
