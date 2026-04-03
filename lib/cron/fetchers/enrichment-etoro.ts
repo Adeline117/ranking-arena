@@ -19,7 +19,7 @@ import type { EquityCurvePoint, StatsDetail, PortfolioPosition } from './enrichm
 import { fetchJson } from './shared'
 import { logger } from '@/lib/logger'
 
-const GAIN_HISTORY_URL = 'https://www.etoro.com/sapi/userstats/gain/cid'
+const _GAIN_HISTORY_URL = 'https://www.etoro.com/sapi/userstats/gain/cid' // Kept for reference; CopySim API used instead
 const PORTFOLIO_URL = 'https://www.etoro.com/sapi/trade-data-real/live/public/portfolios'
 const RANKINGS_URL = 'https://www.etoro.com/sapi/rankings/rankings'
 
@@ -29,7 +29,7 @@ interface EtoroGainEntry {
   isSimulation: boolean
 }
 
-interface EtoroGainHistory {
+interface _EtoroGainHistory {
   customerId: number
   monthly: EtoroGainEntry[]
   yearly: EtoroGainEntry[]

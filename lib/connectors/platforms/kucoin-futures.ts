@@ -4,7 +4,7 @@
 
 import { BaseConnector } from '../base'
 import { warnValidate } from '../schemas'
-import { KucoinFuturesLeaderboardResponseSchema, KucoinFuturesDetailResponseSchema } from './schemas'
+import { KucoinFuturesDetailResponseSchema } from './schemas'
 import type {
   DiscoverResult, ProfileResult, SnapshotResult, TimeseriesResult,
   TraderSource, TraderProfile, SnapshotMetrics, QualityFlags,
