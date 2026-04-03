@@ -219,7 +219,7 @@ export default function WatchlistMarket() {
                 </span>
                 <div style={{ textAlign: 'right' }}>
                   <div style={{ fontSize: tokens.typography.fontSize.sm, fontWeight: tokens.typography.fontWeight.medium, color: tokens.colors.text.primary }}>
-                    ${coin.price.toLocaleString(undefined, { maximumFractionDigits: coin.price < 1 ? 4 : 2 })}
+                    ${coin.price.toLocaleString('en-US', { maximumFractionDigits: coin.price < 1 ? 4 : 2 })}
                   </div>
                   <div style={{
                     fontSize: tokens.typography.fontSize.xs, fontWeight: tokens.typography.fontWeight.semibold,

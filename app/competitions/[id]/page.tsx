@@ -52,7 +52,7 @@ function metricLabel(metric: string): string {
 function formatValue(value: number | null, metric: string): string {
   if (value == null) return '-'
   if (metric === 'roi') return `${value.toFixed(2)}%`
-  if (metric === 'pnl') return `$${value.toLocaleString(undefined, { maximumFractionDigits: 2 })}`
+  if (metric === 'pnl') return `$${value.toLocaleString('en-US', { maximumFractionDigits: 2 })}`
   if (metric === 'sharpe') return value.toFixed(3)
   if (metric === 'max_drawdown') return `${value.toFixed(2)}%`
   return String(value)
@@ -63,7 +63,7 @@ function formatDelta(baseline: number | null, current: number | null, metric: st
   const delta = current - baseline
   const prefix = delta >= 0 ? '+' : ''
   if (metric === 'roi' || metric === 'max_drawdown') return `${prefix}${delta.toFixed(2)}%`
-  if (metric === 'pnl') return `${prefix}$${delta.toLocaleString(undefined, { maximumFractionDigits: 2 })}`
+  if (metric === 'pnl') return `${prefix}$${delta.toLocaleString('en-US', { maximumFractionDigits: 2 })}`
   return `${prefix}${delta.toFixed(3)}`
 }
 
