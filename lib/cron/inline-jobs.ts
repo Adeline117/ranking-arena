@@ -13,6 +13,7 @@ import { decrypt } from '@/lib/crypto/encryption'
 import { SOURCE_TYPE_MAP } from '@/lib/constants/exchanges'
 import { BybitAdapter } from '@/lib/adapters/bybit-adapter'
 import { logger } from '@/lib/logger'
+import { validateSnapshot } from '@/lib/pipeline/validate-snapshot'
 import { createLogger } from '@/lib/utils/logger'
 import { calculateArenaScore } from '@/lib/utils/arena-score'
 import type { Period } from '@/lib/utils/arena-score'
@@ -131,6 +132,20 @@ export async function runWorkerInline(): Promise<InlineJobResult> {
           for (const window of windows) {
             const result = await connector.fetchTraderSnapshot(job.trader_key, window)
             if (result.success && result.data) {
+              // Validate snapshot data before writing
+              const snapRow = {
+                platform: result.data.platform ?? job.platform,
+                trader_key: result.data.trader_key ?? job.trader_key,
+                roi_pct: result.data.metrics.roi_pct,
+                pnl_usd: result.data.metrics.pnl_usd,
+                win_rate: result.data.metrics.win_rate,
+                max_drawdown: result.data.metrics.max_drawdown,
+              }
+              const validation = validateSnapshot(snapRow)
+              if (!validation.valid) {
+                logger.warn(`[inline-jobs] SNAPSHOT rejected ${job.platform}/${job.trader_key}/${window}: ${validation.reasons.join(', ')}`)
+                continue
+              }
               const arenaScore = result.data.metrics.roi_pct != null
                 ? calculateArenaScoreV1(result.data.metrics.roi_pct, result.data.metrics.pnl_usd, result.data.metrics.max_drawdown, result.data.metrics.win_rate, window)
                 : null
