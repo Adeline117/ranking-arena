@@ -47,6 +47,9 @@ export async function GET(request: NextRequest) {
     const freshnessThreshold = new Date(Date.now() - 168 * 3600 * 1000).toISOString()
 
     const fetchWindow = async (seasonId: string) => {
+      // Removed .or('roi_pct.neq.0,pnl_usd.neq.0') — defeats index usage and causes
+      // statement timeout. Redundant: arena_score > 0 implies non-zero ROI or PnL.
+      // Filter trivially in app code if needed.
       const { data, error } = await supabase
         .from('trader_snapshots_v2')
         .select('platform, trader_key, as_of_ts, arena_score, roi_pct, pnl_usd, max_drawdown, win_rate, trades_count, followers, metrics')
@@ -55,7 +58,6 @@ export async function GET(request: NextRequest) {
         .gte('as_of_ts', freshnessThreshold)
         .lte('roi_pct', ROI_ANOMALY_THRESHOLD)
         .gte('roi_pct', -ROI_ANOMALY_THRESHOLD)
-        .or('roi_pct.neq.0,pnl_usd.neq.0')
         .order('arena_score', { ascending: false, nullsFirst: false })
         .limit(2000)
 
