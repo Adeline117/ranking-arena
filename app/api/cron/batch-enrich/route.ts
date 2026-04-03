@@ -56,8 +56,6 @@ const PLATFORM_LIMITS: Record<string, { limit90: number; limit30: number; limit7
   // Medium CEX
   bitget_futures: { limit90: 100, limit30: 80, limit7: 80 },
   btcc: { limit90: 50, limit30: 50, limit7: 50 },
-  phemex: { limit90: 80, limit30: 80, limit7: 80 },
-  bingx: { limit90: 40, limit30: 40, limit7: 40 },
   okx_spot: { limit90: 40, limit30: 40, limit7: 40 },
   okx_web3: { limit90: 150, limit30: 100, limit7: 100 },
   // Additional platforms
@@ -66,8 +64,11 @@ const PLATFORM_LIMITS: Record<string, { limit90: number; limit30: number; limit7
   polymarket: { limit90: 100, limit30: 80, limit7: 80 },
   // VPS scrapers (slow — ~18s/trader via Playwright, max 5 in 90s timeout)
   bybit: { limit90: 5, limit30: 5, limit7: 5 },
-  // weex: DISABLED 2026-04-01 (75% timeout, removed from fetch groups)
-  // kucoin: DEAD 2026-03 (copy trading discontinued)
+  // DEAD/DISABLED:
+  // phemex: DEAD (API 404 since 2026-04)
+  // bingx: DEAD (empty data since 2026-04)
+  // weex: DISABLED (75% timeout)
+  // kucoin: DEAD (copy trading discontinued)
   // bingx_spot: REMOVED (no enrichment API)
 }
 
@@ -78,11 +79,13 @@ const HIGH_PRIORITY = [
 ]
 const MEDIUM_PRIORITY = [
   'htx_futures', 'gateio', 'mexc', 'drift', 'gmx', 'gains',
-  'bitget_futures', 'btcc', 'etoro', 'phemex', 'bingx', 'okx_spot', 'okx_web3',
+  'bitget_futures', 'btcc', 'etoro', 'okx_spot', 'okx_web3',
   'dydx', 'aevo', // re-enabled via Copin + indexer
   'binance_web3', 'binance_spot', 'polymarket', // added for full coverage
+  // REMOVED: phemex (API 404), bingx (empty data)
 ]
-const LOW_PRIORITY = ['bybit', 'weex', 'bingx_spot'] // VPS scrapers, run last
+const LOW_PRIORITY = ['bybit'] // VPS scrapers, run last
+// REMOVED: weex (75% timeout), bingx_spot (no enrichment API)
 const LOWER_PRIORITY: string[] = []
 
 interface BatchResult {
