@@ -104,6 +104,7 @@ export function usePostTranslation({
         method: 'POST',
         headers,
         body: JSON.stringify({ text: textToTranslate, targetLang, contentType: 'post_content', contentId: postId }),
+        signal: AbortSignal.timeout(30000),
       })
       const data = await response.json()
 
@@ -156,6 +157,7 @@ export function usePostTranslation({
         method: 'POST',
         headers: { 'Content-Type': 'application/json', ...getCsrfHeaders() },
         body: JSON.stringify({ items, targetLang }),
+        signal: AbortSignal.timeout(30000),
       })
       const data = await response.json()
       if (response.ok && data.success && data.data?.results) {
@@ -207,6 +209,7 @@ export function usePostTranslation({
         method: 'POST',
         headers: { 'Content-Type': 'application/json', ...getCsrfHeaders() },
         body: JSON.stringify({ items, targetLang }),
+        signal: AbortSignal.timeout(30000),
       })
       const data = await response.json()
       if (response.ok && data.success && data.data?.results) {
