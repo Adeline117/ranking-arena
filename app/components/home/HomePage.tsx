@@ -87,7 +87,7 @@ export default function HomePage({ initialTraders, initialLastUpdated, heroStats
               {features.social && (
                 <div style={{ flexShrink: 0 }}>
                   <SectionErrorBoundary>
-                    <Suspense fallback={null}>
+                    <Suspense fallback={<div className="skeleton contain-layout-style" style={{ minHeight: 120, borderRadius: tokens.radius.lg }} />}>
                       <TrendingHashtags />
                     </Suspense>
                   </SectionErrorBoundary>
@@ -105,8 +105,8 @@ export default function HomePage({ initialTraders, initialLastUpdated, heroStats
         >
           <SectionErrorBoundary>
             <Suspense fallback={
-              <div style={{ minHeight: '60vh' }}>
-                <div className="skeleton" style={{ height: 400, borderRadius: tokens.radius.lg }} />
+              <div className="contain-layout-style" style={{ minHeight: '80vh' }}>
+                <div className="skeleton" style={{ minHeight: 800, borderRadius: tokens.radius.lg }} />
               </div>
             }>
                 <HomePageClient initialTraders={initialTraders} initialLastUpdated={initialLastUpdated} />
