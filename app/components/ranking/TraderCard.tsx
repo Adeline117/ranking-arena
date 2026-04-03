@@ -215,7 +215,7 @@ export const TraderCard = memo(function TraderCard({
           />
           <MetricStat
             label={t('winRatePercent')}
-            value={trader.win_rate != null ? `${Number(trader.win_rate).toFixed(0)}%` : undefined}
+            value={trader.win_rate != null ? `${Number(trader.win_rate).toFixed(1)}%` : undefined}
             color={trader.win_rate != null && trader.win_rate > 50 ? tokens.colors.accent.success : undefined}
             nullTooltip={trader.win_rate == null ? (getPlatformNote(trader.source || source || '') || `Not available for ${EXCHANGE_NAMES[trader.source || source || ''] || (trader.source || source || '').replace('_', ' ')}`) : undefined}
           />
