@@ -40,7 +40,7 @@ const safeStorage: StateStorage = {
 // 交易员对比状态
 // ============================================
 
-const MAX_COMPARE_TRADERS = 5
+const MAX_COMPARE_TRADERS = 10
 
 /** @deprecated UI-specific. Will be replaced by UnifiedTrader adapter. */
 export interface CompareTrader {

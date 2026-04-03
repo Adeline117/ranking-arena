@@ -81,7 +81,7 @@ function CompareFloatingBar() {
                 fontSize: 11,
                 fontWeight: 700,
               }}>
-                {selectedTraders.length}/5
+                {selectedTraders.length}/10
               </span>
             </>
           )}

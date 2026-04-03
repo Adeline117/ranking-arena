@@ -112,7 +112,7 @@ function CompareToggle({ traderId, handle, source, avatarUrl }: { traderId: stri
   const titleText = isSelected
     ? (t('removeFromCompare') || 'Remove from Compare')
     : !canAddMore
-      ? (t('compareListFull') || 'Compare list full (max 5)')
+      ? (t('compareListFull') || 'Compare list full (max 10)')
       : (t('addToCompare') || 'Add to Compare')
 
   return (
