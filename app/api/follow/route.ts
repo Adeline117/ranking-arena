@@ -104,7 +104,7 @@ export const POST = withApiMiddleware(
       }
 
       logger.info('用户关注交易员', { userId: user.id, traderId })
-      fireAndForget(invalidateFollowingCache(user.id), 'Invalidate following cache')
+      await invalidateFollowingCache(user.id).catch(() => {})
       return { success: true, following: true }
     } else {
       // 取消关注
@@ -125,7 +125,7 @@ export const POST = withApiMiddleware(
       }
 
       logger.info('用户取消关注交易员', { userId: user.id, traderId })
-      fireAndForget(invalidateFollowingCache(user.id), 'Invalidate following cache')
+      await invalidateFollowingCache(user.id).catch(() => {})
       return { success: true, following: false }
     }
   },
