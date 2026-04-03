@@ -8,6 +8,13 @@ import { createLogger } from '@/lib/utils/logger'
 
 const log = createLogger('enrichment-db')
 
+/** Truncate to current hour — matches storage.ts key generation */
+function truncateToHour(): string {
+  const d = new Date()
+  d.setUTCMinutes(0, 0, 0)
+  return d.toISOString()
+}
+
 export async function upsertEquityCurve(
   supabase: SupabaseClient,
   source: string,
@@ -76,6 +83,7 @@ export async function upsertEquityCurve(
           .eq('platform', source)
           .eq('trader_key', traderId)
           .eq('window', v2Window)
+          .eq('as_of_ts', truncateToHour())
           .then(({ error: v2Err }) => {
             if (v2Err) log.warn(`equity ROI sync failed for ${source}/${traderId}/${v2Window}`, { error: v2Err.message })
           })
@@ -203,6 +211,7 @@ export async function upsertStatsDetail(
         .update(v2Update)
         .eq('platform', source)
         .eq('trader_key', traderId)
+        .eq('as_of_ts', truncateToHour())
         .then(({ error: v2Err }) => {
           if (v2Err) log.warn(`v2 sync failed for ${source}/${traderId}`, { error: v2Err.message })
         })
