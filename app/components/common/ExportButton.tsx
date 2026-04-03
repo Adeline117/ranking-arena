@@ -66,6 +66,8 @@ export default function ExportButton({ onExport, hidePDF, size = 'sm' }: ExportB
     <div ref={ref} style={{ position: 'relative', display: 'inline-block' }}>
       <button
         onClick={() => setOpen(o => !o)}
+        aria-expanded={open}
+        aria-haspopup="menu"
         style={{
           display: 'flex', alignItems: 'center', gap: '4px',
           padding: pad, fontSize,
@@ -83,7 +85,7 @@ export default function ExportButton({ onExport, hidePDF, size = 'sm' }: ExportB
         <span>{t('export') || '导出'}</span>
       </button>
       {open && (
-        <div style={{
+        <div className="dropdown-enter" style={{
           position: 'absolute', top: '100%', right: 0, marginTop: '4px',
           background: tokens.colors.bg.secondary,
           border: `1px solid ${tokens.colors.border.primary}`,

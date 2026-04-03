@@ -60,6 +60,7 @@ export default function FeedbackWidget() {
       <button
         onClick={() => setOpen(!open)}
         aria-label="Feedback"
+        aria-expanded={open}
         style={{
           position: 'fixed',
           bottom: 'calc(var(--mobile-nav-height, 60px) + 16px)',
