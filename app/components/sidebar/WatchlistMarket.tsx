@@ -194,8 +194,14 @@ export default function WatchlistMarket() {
           </button>
         </div>
       ) : coins.length === 0 ? (
-        <div style={{ padding: `${tokens.spacing[3]} 0`, textAlign: 'center', color: tokens.colors.text.tertiary, fontSize: tokens.typography.fontSize.sm }}>
-          {t('noData')}
+        <div style={{ padding: `${tokens.spacing[3]} 0`, textAlign: 'center', color: tokens.colors.text.tertiary, fontSize: tokens.typography.fontSize.xs }}>
+          {t('marketDataLoading') || 'Loading market data...'}
+          <button
+            onClick={() => mutateMarket()}
+            style={{ display: 'block', margin: '8px auto 0', padding: `${tokens.spacing[1]} ${tokens.spacing[3]}`, borderRadius: tokens.radius.sm, border: `1px solid ${tokens.colors.border.primary}`, background: 'transparent', color: tokens.colors.text.secondary, fontSize: tokens.typography.fontSize.xs, cursor: 'pointer' }}
+          >
+            {t('retry') || 'Retry'}
+          </button>
         </div>
       ) : (
         <>
