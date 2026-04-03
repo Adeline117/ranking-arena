@@ -171,8 +171,13 @@ export default function FeedbackWidget() {
               cursor: !message.trim() || submitting ? 'not-allowed' : 'pointer',
             }}
           >
-            {submitting ? t('feedbackSubmitting') : t('feedbackSubmit')}
+            {submitting ? `⏳ ${t('feedbackSubmitting')}` : t('feedbackSubmit')}
           </button>
+          {!message.trim() && !submitting && (
+            <div style={{ fontSize: 11, color: 'var(--color-text-tertiary)', textAlign: 'center' }}>
+              {t('feedbackRequired') || 'Please enter your feedback to submit'}
+            </div>
+          )}
         </div>
       )}
     </>
