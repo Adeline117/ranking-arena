@@ -64,7 +64,7 @@ export function DrawdownChart({ equityCurve }: DrawdownChartProps) {
         fontSize: tokens.typography.fontSize.sm,
         textAlign: 'center',
       }}>
-        No drawdown recorded
+        {t('noDrawdownRecorded') || 'No drawdown recorded'}
       </div>
     )
   }
