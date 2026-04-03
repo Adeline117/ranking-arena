@@ -4574,6 +4574,7 @@ numberFormatBillion: 'B',
 // Share / Referral
 copyShareLink: 'Copy Link',
 shareOnX: 'Share on X',
+printOrPdf: 'Print / PDF',
 pricingProUnlockTitle: 'What Pro unlocks',
 pricingProDetailedAnalytics: 'Detailed trader analytics & score breakdowns',
 pricingProAlerts: 'Real-time trader alerts & notifications',

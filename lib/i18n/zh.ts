@@ -4581,6 +4581,7 @@ numberFormatBillion: '亿',
 // Share / Referral
 copyShareLink: '复制链接',
 shareOnX: '分享到 X',
+printOrPdf: '打印 / 导出 PDF',
 pricingProUnlockTitle: 'Pro 解锁内容',
 pricingProDetailedAnalytics: '详细交易员分析与评分拆解',
 pricingProAlerts: '实时交易员提醒与通知',
