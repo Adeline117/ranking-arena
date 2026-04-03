@@ -91,7 +91,7 @@ export function useMultiAccount() {
     setActiveAccount(userId)
 
     return { success: true }
-  }, [accounts, addAccount, setActiveAccount])
+  }, [accounts, addAccount, removeAccount, setActiveAccount])
 
   const signOutAll = useCallback(async () => {
     await supabase.auth.signOut()
