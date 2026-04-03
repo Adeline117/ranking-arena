@@ -120,6 +120,7 @@ export default function FeedbackWidget() {
             value={message}
             onChange={(e) => setMessage(e.target.value)}
             placeholder={t('feedbackPlaceholder')}
+            maxLength={5000}
             rows={4}
             style={{
               width: '100%',
