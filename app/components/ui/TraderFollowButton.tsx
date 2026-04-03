@@ -336,6 +336,7 @@ export default function TraderFollowButton({ traderId, userId, initialFollowing 
       aria-label={following ? t('unfollowTrader') : t('followTrader')}
       aria-pressed={following}
       aria-busy={isLoading}
+      className="interactive-scale"
       style={{
         width: 'auto',
         padding: `${tokens.spacing[3]} ${tokens.spacing[4]}`,
@@ -353,6 +354,8 @@ export default function TraderFollowButton({ traderId, userId, initialFollowing 
         justifyContent: 'center',
         gap: tokens.spacing[2],
       }}
+      onMouseEnter={(e) => { if (!isLoading) e.currentTarget.style.opacity = '0.85' }}
+      onMouseLeave={(e) => { if (!isLoading) e.currentTarget.style.opacity = '1' }}
     >
       {isLoading && <ButtonSpinner size="xs" />}
       {isLoading ? (following ? t('unfollowingAction') : t('followingAction')) : following ? t('unfollow') : t('follow')}
