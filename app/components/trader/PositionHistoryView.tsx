@@ -37,7 +37,7 @@ export default function PositionHistoryView({
   onHistoryExpandedToggle,
   onHoverRow,
 }: PositionHistoryViewProps) {
-  const { t } = useLanguage()
+  const { t, language } = useLanguage()
 
   if (sortedHistory.length === 0) {
     return (
@@ -203,7 +203,7 @@ export default function PositionHistoryView({
                     </td>
                     <td style={{ padding: tokens.spacing[4], textAlign: 'right' }}>
                       <Text size="xs" style={{ color: tokens.colors.text.tertiary }}>
-                        {item.closeTime ? formatDateTime(item.closeTime) : '-'}
+                        {item.closeTime ? formatDateTime(item.closeTime, language) : '-'}
                       </Text>
                     </td>
                   </tr>

@@ -30,10 +30,12 @@ export function formatPrice(price: number | undefined): string {
   return price >= 1 ? price.toFixed(2) : price.toFixed(4)
 }
 
-export function formatDateTime(timeStr: string): string {
+export function formatDateTime(timeStr: string, language?: string): string {
   if (!timeStr) return NULL_DISPLAY
   const date = new Date(timeStr)
-  return date.toLocaleString('zh-CN', {
+  const localeMap: Record<string, string> = { zh: 'zh-CN', ja: 'ja-JP', ko: 'ko-KR' }
+  const locale = language ? (localeMap[language] || 'en-US') : 'en-US'
+  return date.toLocaleString(locale, {
     month: '2-digit',
     day: '2-digit',
     hour: '2-digit',
