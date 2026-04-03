@@ -53,6 +53,7 @@ export default function FloatingActionButton() {
       {/* Popup menu */}
       {menuOpen && (
         <div
+          className="dropdown-enter"
           style={{
             position: 'absolute',
             bottom: 64,
