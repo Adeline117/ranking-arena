@@ -594,6 +594,8 @@ const nextConfig = {
       // /pro and /account redirects (2026-03)
       { source: '/pro', destination: '/pricing', permanent: true },
       { source: '/account', destination: '/settings', permanent: true },
+      // /rankings (bare) → / (homepage has the main ranking table)
+      { source: '/rankings', destination: '/', permanent: false },
     ];
   },
 };
