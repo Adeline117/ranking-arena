@@ -49,6 +49,12 @@ export class PipelineCheckpoint {
    * Start or resume a checkpoint for a job.
    * If an incomplete checkpoint exists (from a prior crash), resume it.
    * Otherwise, create a fresh one.
+   *
+   * NOTE: This uses a get-then-set pattern without a DB lock. Two concurrent
+   * runs of the same group could race. This is acceptable because:
+   * - Vercel cron dedup prevents concurrent runs for the same group
+   * - trigger-chain has a 5-min dedup window
+   * - Even if a race occurs, the worst case is duplicate processing (idempotent writes)
    */
   static async startOrResume(jobType: 'fetch' | 'enrich', group: string): Promise<CheckpointData> {
     const key = `${CHECKPOINT_PREFIX}${jobType}:${group}`
