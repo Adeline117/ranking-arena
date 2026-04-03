@@ -118,6 +118,15 @@ export async function runWorkerInline(): Promise<InlineJobResult> {
             }
           }
         } else if (job.job_type === 'SNAPSHOT' && job.trader_key) {
+          // Ensure trader_sources exists before writing snapshots (prevents orphans)
+          const canonicalMT = SOURCE_TYPE_MAP[job.platform] || job.market_type
+          await supabase.from('trader_sources').upsert({
+            source: job.platform,
+            source_trader_id: job.trader_key,
+            handle: job.trader_key,
+            source_type: canonicalMT,
+          }, { onConflict: 'source,source_trader_id' })
+
           const windows: Window[] = ['7d', '30d', '90d']
           for (const window of windows) {
             const result = await connector.fetchTraderSnapshot(job.trader_key, window)
@@ -125,8 +134,6 @@ export async function runWorkerInline(): Promise<InlineJobResult> {
               const arenaScore = result.data.metrics.roi_pct != null
                 ? calculateArenaScoreV1(result.data.metrics.roi_pct, result.data.metrics.pnl_usd, result.data.metrics.max_drawdown, result.data.metrics.win_rate, window)
                 : null
-              // Override market_type with canonical value from SOURCE_TYPE_MAP
-              const canonicalMT = SOURCE_TYPE_MAP[job.platform] || job.market_type
               const { error: snapInsertErr } = await supabase.from('trader_snapshots_v2').upsert({
                 ...result.data,
                 market_type: canonicalMT,
