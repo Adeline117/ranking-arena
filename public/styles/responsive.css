@@ -1466,6 +1466,15 @@
     width: 28px !important;
     height: 28px !important;
   }
+
+  /* Feed grid: single column on tiny screens */
+  .feed-main-content .stagger-children {
+    grid-template-columns: 1fr !important;
+  }
+
+  .post-feed-masonry {
+    columns: 1 !important;
+  }
 }
 
 /* ============================================
