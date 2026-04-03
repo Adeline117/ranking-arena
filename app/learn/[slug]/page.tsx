@@ -88,9 +88,15 @@ function renderMarkdown(md: string): string {
   return html.join('\n')
 }
 
+function escapeHtml(str: string): string {
+  return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
+}
+
 function inlineFormat(text: string): string {
+  // Escape HTML first to prevent XSS (defense-in-depth)
+  let result = escapeHtml(text)
   // Inline code
-  let result = text.replace(
+  result = result.replace(
     /`([^`]+)`/g,
     '<code style="background:var(--color-bg-tertiary,#111);padding:2px 6px;border-radius:4px;font-size:13px">$1</code>'
   )
