@@ -37,7 +37,7 @@ export default function MediaPreview({ preview, onClose, t }: MediaPreviewProps)
       </button>
 
       {preview.type === 'image' ? (
-        <Image src={preview.url} alt="" width={1200} height={900}
+        <Image src={preview.url} alt="Media preview" width={1200} height={900}
           onClick={(e) => e.stopPropagation()}
           style={{ maxWidth: '90vw', maxHeight: '90vh', objectFit: 'contain', borderRadius: tokens.radius.md }}
           unoptimized

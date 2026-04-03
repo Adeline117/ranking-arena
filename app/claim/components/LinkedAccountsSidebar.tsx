@@ -45,7 +45,7 @@ export function LinkedAccountsSidebar({
           {lt.stats?.avatar_url && (
             <img
               src={lt.stats.avatar_url.startsWith('data:') ? lt.stats.avatar_url : '/api/avatar?url=' + encodeURIComponent(lt.stats.avatar_url)}
-              alt=""
+              alt={lt.stats?.handle || 'Trader'}
               style={{ width: 28, height: 28, borderRadius: '50%' }}
             />
           )}

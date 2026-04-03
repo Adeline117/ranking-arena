@@ -103,7 +103,7 @@ export default function MobileProfileMenu() {
             {user?.avatarUrl ? (
               <img
                 src={`/api/avatar?url=${encodeURIComponent(user.avatarUrl)}`}
-                alt=""
+                alt={user?.handle || 'Avatar'}
                 width={56}
                 height={56}
                 style={{ width: '100%', height: '100%', objectFit: 'cover' }}

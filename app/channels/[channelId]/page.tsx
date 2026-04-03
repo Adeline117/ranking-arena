@@ -415,7 +415,7 @@ export default function ChannelPage({ params }: { params: Promise<{ channelId: s
                     maxWidth: '75%',
                   }}>
                     {msg.media_url && msg.media_type === 'image' && (
-                      <Image src={msg.media_url} alt="" width={300} height={200} sizes="(max-width: 768px) 100vw, 300px" loading="lazy" style={{ maxWidth: '100%', borderRadius: tokens.radius.lg, marginBottom: 4 }} />
+                      <Image src={msg.media_url} alt="Shared image" width={300} height={200} sizes="(max-width: 768px) 100vw, 300px" loading="lazy" style={{ maxWidth: '100%', borderRadius: tokens.radius.lg, marginBottom: 4 }} />
                     )}
                     {msg.content && !msg.content.startsWith('[') && (
                       <Text size="sm" style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word', lineHeight: 1.5 }}>
