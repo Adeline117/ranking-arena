@@ -315,10 +315,18 @@ export default function LoginModal({ open, onClose, message }: LoginModalProps) 
                 width: '100%', padding: '12px 16px', borderRadius: tokens.radius.lg,
                 background: tokens.gradient.primary,
                 border: 'none', color: '#fff',
-                fontWeight: 700, fontSize: 14, cursor: 'pointer',
+                fontWeight: 700, fontSize: 14,
+                cursor: loading || !email.trim() ? 'not-allowed' : 'pointer',
                 opacity: loading || !email.trim() ? 0.6 : 1,
+                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
               }}
             >
+              {loading && (
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" style={{ animation: 'spin 1s linear infinite' }}>
+                  <circle cx="12" cy="12" r="10" opacity={0.25} />
+                  <path d="M12 2a10 10 0 0 1 10 10" strokeLinecap="round" />
+                </svg>
+              )}
               {loading
                 ? t('authSending')
                 : t('authSendCode')}
