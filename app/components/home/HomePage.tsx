@@ -37,7 +37,10 @@ export default function HomePage({ initialTraders, initialLastUpdated, heroStats
   //   SSR hero stays underneath indefinitely — invisible to user but preserves LCP.
   // Cleanup: remove SSR table DOM node after idle (hero stays for LCP).
   useEffect(() => {
-    const cleanup = () => document.getElementById('ssr-ranking-table')?.remove()
+    const cleanup = () => {
+      document.getElementById('ssr-hero-shell')?.remove()
+      document.getElementById('ssr-ranking-table')?.remove()
+    }
     if ('requestIdleCallback' in window) {
       (window as Window).requestIdleCallback(cleanup)
     } else {
