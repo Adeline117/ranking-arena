@@ -38,6 +38,21 @@ export function DrawdownChart({ equityCurve }: DrawdownChartProps) {
   })
 
   const minDrawdown = Math.min(...drawdowns.map(d => d.drawdown), 0)
+
+  // If no drawdown at all, show a "no drawdown" message
+  if (minDrawdown === 0) {
+    return (
+      <div style={{
+        padding: tokens.spacing[4],
+        color: tokens.colors.accent.success,
+        fontSize: tokens.typography.fontSize.sm,
+        textAlign: 'center',
+      }}>
+        ✓ No drawdown recorded
+      </div>
+    )
+  }
+
   // Y range: minDrawdown to 0
   const yRange = Math.abs(minDrawdown) || 1
 

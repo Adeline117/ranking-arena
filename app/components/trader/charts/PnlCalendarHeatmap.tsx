@@ -122,7 +122,7 @@ export function PnlCalendarHeatmap({ data, days = 90 }: PnlCalendarHeatmapProps)
         fontSize: tokens.typography.fontSize.sm,
         textAlign: 'center',
       }}>
-        {t('insufficientData')}
+        {t('insufficientDataForChart')}
       </div>
     )
   }
