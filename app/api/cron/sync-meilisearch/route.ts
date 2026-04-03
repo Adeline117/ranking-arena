@@ -90,21 +90,23 @@ export async function GET(request: NextRequest) {
           logger.warn(`Reached MAX_PAGES (${MAX_PAGES}) for season ${season}, breaking`)
           break
         }
+        // Uses idx_leaderboard_ranks_sync: (season_id, computed_at DESC)
+        // WHERE arena_score > 0 AND (is_outlier IS NULL OR is_outlier = false)
+        // The is_outlier filter is baked into the partial index, no need for .or() in query.
         let query = supabase
           .from('leaderboard_ranks')
           .select('source, source_trader_id, handle, avatar_url, roi, pnl, arena_score, win_rate, max_drawdown, followers, rank, trader_type, computed_at')
           .eq('season_id', season)
           .gt('arena_score', 0)
-          .or('is_outlier.is.null,is_outlier.eq.false')
+          .eq('is_outlier', false)  // 44K rows are false, 19 are true — partial index covers this
 
         // Incremental: only fetch traders updated since last sync
         if (!isFull) {
           query = query.gte('computed_at', lastSync)
         }
 
-        // Use id ordering instead of arena_score to avoid slow sort on large result sets
         const { data, error } = await query
-          .order('id', { ascending: true })
+          .order('computed_at', { ascending: false })
           .range(offset, offset + pageSize - 1)
 
         if (error) throw new Error(`Supabase query failed (${season}): ${error.message}`)
