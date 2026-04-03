@@ -48,6 +48,17 @@ jest.mock('@/lib/cron/enrichment-runner', () => ({
   runEnrichment: (...args: unknown[]) => mockRunEnrichment(...args),
 }))
 
+jest.mock('@/lib/services/pipeline-state', () => ({
+  PipelineState: {
+    get: jest.fn().mockResolvedValue(0),
+    set: jest.fn().mockResolvedValue(undefined),
+  },
+}))
+
+jest.mock('@/lib/cron/trigger-chain', () => ({
+  triggerDownstreamRefresh: jest.fn(),
+}))
+
 import { NextRequest } from 'next/server'
 import { GET } from '../route'
 

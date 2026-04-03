@@ -35,11 +35,15 @@ const SUPABASE_SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || ''
 // 检测是否在 Node 环境（没有 native fetch）
 const hasNativeFetch = typeof globalThis.fetch === 'function'
 
-// 跳过条件：需要真实 Supabase 实例和 fetch 可用
-const shouldSkip = !SUPABASE_URL || !SUPABASE_ANON_KEY || !hasNativeFetch
+// 跳过条件：需要 RUN_INTEGRATION=true + 真实 Supabase 实例
+const isIntegrationRun = process.env.RUN_INTEGRATION === 'true'
+const shouldSkip = !isIntegrationRun || !SUPABASE_URL || !SUPABASE_ANON_KEY || !hasNativeFetch
 const shouldSkipServiceTests = shouldSkip || !SUPABASE_SERVICE_KEY
 
-describe('RLS Policies', () => {
+// eslint-disable-next-line jest/valid-describe-callback
+const describeIf = isIntegrationRun ? describe : describe.skip
+
+describeIf('RLS Policies', () => {
   let anonClient: SupabaseClient
   let serviceClient: SupabaseClient
 
