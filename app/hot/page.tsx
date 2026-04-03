@@ -1,3 +1,4 @@
+import type { Metadata } from 'next'
 import { features } from '@/lib/features'
 import { notFound } from 'next/navigation'
 import { Suspense } from 'react'
@@ -8,6 +9,24 @@ import TopNav from '@/app/components/layout/TopNav'
 import { Box } from '@/app/components/base'
 import { RankingSkeleton } from '@/app/components/ui/Skeleton'
 import HotContent from './HotContent'
+import { BASE_URL } from '@/lib/constants/urls'
+
+export const metadata: Metadata = {
+  title: 'Hot Posts & Trending Discussions',
+  description: 'Trending crypto trading discussions, market insights, and top posts from the Arena community.',
+  alternates: { canonical: `${BASE_URL}/hot` },
+  openGraph: {
+    title: 'Hot Posts & Trending Discussions | Arena',
+    description: 'Trending crypto trading discussions, market insights, and top posts from the Arena community.',
+    url: `${BASE_URL}/hot`,
+    images: [{ url: `${BASE_URL}/api/og`, width: 1200, height: 630 }],
+  },
+  twitter: {
+    card: 'summary_large_image',
+    title: 'Hot Posts & Trending | Arena',
+    creator: '@arenafi',
+  },
+}
 import type { Post } from './types'
 
 export const revalidate = 300 // ISR: 5 min
