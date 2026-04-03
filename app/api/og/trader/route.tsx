@@ -128,8 +128,8 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url)
     const handle = searchParams.get('handle')
 
-    if (!handle) {
-      return new Response('Missing handle parameter', { status: 400 })
+    if (!handle || handle.length > 200) {
+      return new Response('Missing or invalid handle parameter', { status: 400 })
     }
 
     // Only `source` is allowed as a hint for multi-platform traders.
