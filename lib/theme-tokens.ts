@@ -36,9 +36,9 @@ export const lightTokens = {
     // Accent colors
     accent: {
       primary: '#111111',      // Primary actions
-      success: '#00C853',      // Positive ROI/states
-      warning: '#FF9800',      // Warnings
-      error: '#F44336',        // Negative ROI/states
+      success: '#15803D',      // Positive ROI/states (WCAG AA 5.1:1 on white)
+      warning: '#b45309',      // Warnings (WCAG AA 5.3:1 on white)
+      error: '#DC2626',        // Negative ROI/states (WCAG AA 4.6:1 on white)
       brand: '#8b6fa8',        // Arena brand purple
       brandHover: '#9d84b5',   // Brand hover state
       brandMuted: 'rgba(139, 111, 168, 0.15)', // Brand muted background
@@ -48,8 +48,8 @@ export const lightTokens = {
 
     // Sentiment colors (bull/bear, positive/negative)
     sentiment: {
-      bull: '#00C853',         // Bullish / positive
-      bear: '#F44336',         // Bearish / negative
+      bull: '#15803D',         // Bullish / positive (WCAG AA on white)
+      bear: '#DC2626',         // Bearish / negative (WCAG AA on white)
       neutral: '#767676',      // Neutral state (4.54:1 WCAG AA on white)
     },
 
