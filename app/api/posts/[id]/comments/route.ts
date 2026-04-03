@@ -48,7 +48,7 @@ export async function GET(request: NextRequest, context: RouteContext) {
   if (guard) return guard
 
   try {
-    const rateLimitResponse = await checkRateLimit(request, RateLimitPresets.write)
+    const rateLimitResponse = await checkRateLimit(request, RateLimitPresets.read)
     if (rateLimitResponse) return rateLimitResponse
 
     const { id } = await context.params
