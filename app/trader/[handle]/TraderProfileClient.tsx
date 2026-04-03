@@ -670,7 +670,7 @@ export default function TraderProfileClient({ data, serverTraderData, claimedUse
                 {(() => {
                   const simCurve = traderEquityCurve?.[selectedPeriod] ?? traderEquityCurve?.['90D']
                   if (!simCurve || simCurve.length <= 2) return null
-                  return <SectionErrorBoundary fallbackMessage="Simulator unavailable"><CopyTradeSimulator equityCurve={simCurve} /></SectionErrorBoundary>
+                  return <SectionErrorBoundary><CopyTradeSimulator equityCurve={simCurve} /></SectionErrorBoundary>
                 })()}
 
                 {/* Daily Returns Distribution — P1-6: follows selected period */}
@@ -697,7 +697,7 @@ export default function TraderProfileClient({ data, serverTraderData, claimedUse
                       <Text size="sm" weight="bold" style={{ color: 'var(--color-text-secondary)', marginBottom: tokens.spacing[3] }}>
                         {t('dailyReturnsDistribution') || 'Daily Returns Distribution'} ({selectedPeriod})
                       </Text>
-                      <SectionErrorBoundary fallbackMessage="Chart unavailable"><DailyReturnsChart data={dailyReturns} /></SectionErrorBoundary>
+                      <SectionErrorBoundary><DailyReturnsChart data={dailyReturns} /></SectionErrorBoundary>
                     </Box>
                   )
                 })()}
@@ -751,7 +751,7 @@ export default function TraderProfileClient({ data, serverTraderData, claimedUse
                     <Text size="sm" weight="bold" style={{ color: 'var(--color-text-secondary)', marginBottom: tokens.spacing[3], textAlign: 'center' }}>
                       {t('traderTradingStyleLabel')}
                     </Text>
-                    <SectionErrorBoundary fallbackMessage="Chart unavailable">
+                    <SectionErrorBoundary>
                       <TradingStyleRadar
                         profitability={data.profitability_score}
                         riskControl={data.risk_control_score}
