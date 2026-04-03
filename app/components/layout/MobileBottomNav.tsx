@@ -166,35 +166,44 @@ function useUserHandle(): string | null {
   useEffect(() => {
     let alive = true
 
-    // Use getSession() — reads from local storage, no network request
+    function loadHandle(userId: string, email?: string | null) {
+      const emailHandle = email?.split('@')[0] || null
+      if (userHandle) return // already cached
+      supabase
+        .from('user_profiles')
+        .select('handle')
+        .eq('id', userId)
+        .maybeSingle()
+        .then(({ data: profile, error: profileError }) => {
+          if (!alive) return
+          const resolved = profileError ? emailHandle : (profile?.handle || emailHandle)
+          setUserHandle(resolved)
+          if (resolved) {
+            try { sessionStorage.setItem(USER_HANDLE_CACHE_KEY, resolved) } catch { /* ignore */ }
+          }
+        })
+    }
+
+    // Initial load from local session (no network)
     supabase.auth.getSession()
       .then(({ data, error }) => {
         if (!alive || error) return
-
         const userId = data.session?.user?.id
-        if (!userId) return
-        const emailHandle = data.session?.user?.email?.split('@')[0] || null
-
-        // If we already have a cached handle, skip the DB query
-        if (userHandle) return
-
-        supabase
-          .from('user_profiles')
-          .select('handle')
-          .eq('id', userId)
-          .maybeSingle()
-          .then(({ data: profile, error: profileError }) => {
-            if (!alive) return
-            const resolved = profileError ? emailHandle : (profile?.handle || emailHandle)
-            setUserHandle(resolved)
-            // Persist to sessionStorage to avoid re-querying on every navigation
-            if (resolved) {
-              try { sessionStorage.setItem(USER_HANDLE_CACHE_KEY, resolved) } catch { /* ignore */ }
-            }
-          })
+        if (userId) loadHandle(userId, data.session?.user?.email)
       })
 
-    return () => { alive = false }
+    // Listen for auth changes (login/logout) — clear handle on logout
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (!alive) return
+      if (session?.user?.id) {
+        loadHandle(session.user.id, session.user.email)
+      } else {
+        setUserHandle(null)
+        try { sessionStorage.removeItem(USER_HANDLE_CACHE_KEY) } catch { /* ignore */ }
+      }
+    })
+
+    return () => { alive = false; subscription.unsubscribe() }
   }, [userHandle])
 
   return userHandle

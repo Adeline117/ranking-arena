@@ -64,27 +64,38 @@ export default function DesktopSidebar() {
 
   useEffect(() => {
     let alive = true
-    // Use getSession() — reads from local storage, no network request
+
+    function loadHandle(userId: string, email?: string) {
+      supabase
+        .from('user_profiles')
+        .select('handle')
+        .eq('id', userId)
+        .maybeSingle()
+        .then(({ data: profile }) => {
+          if (!alive) return
+          if (profile?.handle) setUserHandle(profile.handle)
+          else if (email) setUserHandle(email.split('@')[0])
+        })
+    }
+
+    // Initial load from local session (no network)
     supabase.auth.getSession().then(({ data }) => {
       if (!alive) return
       const userId = data.session?.user?.id
-      if (userId) {
-        supabase
-          .from('user_profiles')
-          .select('handle')
-          .eq('id', userId)
-          .maybeSingle()
-          .then(({ data: profile }) => {
-            if (!alive) return
-            if (profile?.handle) {
-              setUserHandle(profile.handle)
-            } else if (data.session?.user?.email) {
-              setUserHandle(data.session.user.email.split('@')[0])
-            }
-          })
+      if (userId) loadHandle(userId, data.session?.user?.email ?? undefined)
+    })
+
+    // Listen for auth changes (login/logout)
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (!alive) return
+      if (session?.user?.id) {
+        loadHandle(session.user.id, session.user.email ?? undefined)
+      } else {
+        setUserHandle(null)
       }
     })
-    return () => { alive = false }
+
+    return () => { alive = false; subscription.unsubscribe() }
   }, [])
 
   const navItems = [
