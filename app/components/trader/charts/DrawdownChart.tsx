@@ -1,5 +1,6 @@
 'use client'
 
+import { useState, useRef, useCallback } from 'react'
 import { tokens } from '@/lib/design-tokens'
 import { useLanguage } from '../../Providers/LanguageProvider'
 
@@ -14,7 +15,22 @@ const INNER_WIDTH = CHART_WIDTH - PADDING.left - PADDING.right
 const INNER_HEIGHT = CHART_HEIGHT - PADDING.top - PADDING.bottom
 
 export function DrawdownChart({ equityCurve }: DrawdownChartProps) {
-  const { t } = useLanguage()
+  const { t, language } = useLanguage()
+  const [hoverIdx, setHoverIdx] = useState<number | null>(null)
+  const svgRef = useRef<SVGSVGElement>(null)
+
+  const locale = language === 'zh' ? 'zh-CN' : language === 'ja' ? 'ja-JP' : language === 'ko' ? 'ko-KR' : 'en-US'
+
+  const handleMouseMove = useCallback((e: React.MouseEvent<SVGSVGElement>) => {
+    if (!svgRef.current) return
+    const rect = svgRef.current.getBoundingClientRect()
+    const relX = e.clientX - rect.left
+    const svgX = (relX / rect.width) * CHART_WIDTH
+    const dataX = svgX - PADDING.left
+    if (dataX < 0 || dataX > INNER_WIDTH) { setHoverIdx(null); return }
+    const idx = Math.round((dataX / INNER_WIDTH) * (equityCurve.length - 1))
+    setHoverIdx(Math.max(0, Math.min(equityCurve.length - 1, idx)))
+  }, [equityCurve.length])
 
   if (!equityCurve || equityCurve.length < 2) {
     return (
@@ -48,7 +64,7 @@ export function DrawdownChart({ equityCurve }: DrawdownChartProps) {
         fontSize: tokens.typography.fontSize.sm,
         textAlign: 'center',
       }}>
-        ✓ No drawdown recorded
+        No drawdown recorded
       </div>
     )
   }
@@ -101,13 +117,18 @@ export function DrawdownChart({ equityCurve }: DrawdownChartProps) {
     }
   }
 
+  const hoverPoint = hoverIdx !== null ? { ...drawdowns[hoverIdx], ...points[hoverIdx] } : null
+
   return (
-    <div style={{ width: '100%' }}>
+    <div style={{ width: '100%', position: 'relative' }}>
       <svg
+        ref={svgRef}
         viewBox={`0 0 ${CHART_WIDTH} ${CHART_HEIGHT}`}
-        style={{ width: '100%', height: 'auto' }}
+        style={{ width: '100%', height: 'auto', cursor: 'crosshair' }}
         role="img"
         aria-label="Underwater drawdown chart"
+        onMouseMove={handleMouseMove}
+        onMouseLeave={() => setHoverIdx(null)}
       >
         {/* Gradient definition */}
         <defs>
@@ -196,7 +217,53 @@ export function DrawdownChart({ equityCurve }: DrawdownChartProps) {
             </g>
           )
         })()}
+
+        {/* Hover crosshair + dot */}
+        {hoverPoint && (
+          <g>
+            <line
+              x1={hoverPoint.x} y1={PADDING.top}
+              x2={hoverPoint.x} y2={PADDING.top + INNER_HEIGHT}
+              stroke="var(--color-text-tertiary)" strokeWidth={0.8} strokeDasharray="3,3"
+            />
+            <circle cx={hoverPoint.x} cy={hoverPoint.y} r={3.5} fill="#ef4444" stroke="var(--color-bg-primary)" strokeWidth={1.5} />
+          </g>
+        )}
       </svg>
+
+      {/* Tooltip */}
+      {hoverPoint && svgRef.current && (() => {
+        const rect = svgRef.current.getBoundingClientRect()
+        const pxX = (hoverPoint.x / CHART_WIDTH) * rect.width
+        const pxY = (hoverPoint.y / CHART_HEIGHT) * rect.height
+        const flipLeft = pxX > rect.width * 0.7
+        return (
+          <div
+            style={{
+              position: 'absolute',
+              left: flipLeft ? pxX - 8 : pxX + 8,
+              top: Math.max(0, pxY - 36),
+              transform: flipLeft ? 'translateX(-100%)' : 'translateX(0)',
+              background: 'var(--color-bg-primary)',
+              border: '1px solid var(--color-border-primary)',
+              borderRadius: tokens.radius.md,
+              padding: `${tokens.spacing[1]} ${tokens.spacing[2]}`,
+              boxShadow: '0 2px 8px var(--color-overlay-subtle)',
+              pointerEvents: 'none' as const,
+              whiteSpace: 'nowrap' as const,
+              zIndex: 10,
+              fontSize: 11,
+            }}
+          >
+            <div style={{ color: 'var(--color-text-tertiary)', marginBottom: 1 }}>
+              {new Date(hoverPoint.date).toLocaleDateString(locale, { month: 'short', day: 'numeric' })}
+            </div>
+            <div style={{ color: '#ef4444', fontWeight: 600, fontFamily: 'var(--font-mono, monospace)' }}>
+              {hoverPoint.drawdown.toFixed(2)}%
+            </div>
+          </div>
+        )
+      })()}
     </div>
   )
 }
