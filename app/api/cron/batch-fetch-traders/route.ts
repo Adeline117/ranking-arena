@@ -64,11 +64,12 @@ const GROUPS: Record<string, string[]> = {
   // bingx: DEAD (empty_data)
   // weex: RE-ENABLED — 117 traders in leaderboard, fresh data in snapshots_v2
   f: ['mexc', 'woox', 'polymarket', 'copin', 'weex'],
-  // Group G: Mac Mini / recovered (every 8h)
+  // Group G: Copin + Mac Mini (every 8h)
   // bingx_spot: DEAD (no leaderboard), phemex: DEAD (API 404)
   // kucoin: moved to VPS scraper-cron (Vercel hnd1 IP blocked by KuCoin)
+  // blofin: DEAD 2026-04-03 (geo-blocked ALL IPs — SG VPS, JP VPS, Mac Mini)
   // dydx: RECOVERED 2026-03-31 via Copin API (3339 traders)
-  g: ['lbank', 'blofin', 'dydx'],
+  g: ['lbank', 'dydx'],
 }
 
 interface BatchResult {
