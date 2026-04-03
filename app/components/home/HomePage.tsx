@@ -12,7 +12,7 @@ const ExchangePartners = lazy(() => import('./ExchangePartners'))
 const GuestSignupPrompt = lazy(() => import('./GuestSignupPrompt'))
 // HomeHero is above-fold (LCP element) — must NOT be lazy-loaded
 import HomeHero from './HomeHero'
-const WelcomeModal = lazy(() => import('../onboarding/WelcomeModal'))
+// WelcomeModal removed — blocks entire page for first-time visitors
 import HomePageClient from './HomePageClient'
 import { SectionErrorBoundary } from '../utils/ErrorBoundary'
 import { features } from '@/lib/features'
@@ -108,7 +108,7 @@ export default function HomePage({ initialTraders, initialLastUpdated, heroStats
       </div>
       {/* MobileBottomNav rendered in root layout.tsx */}
       <Suspense fallback={null}><GuestSignupPrompt /></Suspense>
-      <Suspense fallback={null}><WelcomeModal /></Suspense>
+      {/* WelcomeModal removed — homepage content IS the onboarding */}
     </div>
   )
 }
