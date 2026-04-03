@@ -583,7 +583,7 @@ const nextConfig = {
       { source: '/legal/privacy', destination: '/privacy', permanent: true },
       { source: '/legal/disclaimer', destination: '/disclaimer', permanent: true },
       { source: '/legal/dmca', destination: '/dmca', permanent: true },
-      { source: '/community', destination: '/groups', permanent: false },
+      { source: '/community', destination: '/groups', permanent: true },
       // /library was renamed to /learn (2026-03)
       { source: '/library', destination: '/learn', permanent: true },
       { source: '/library/:slug', destination: '/learn/:slug', permanent: true },
@@ -595,7 +595,7 @@ const nextConfig = {
       { source: '/pro', destination: '/pricing', permanent: true },
       { source: '/account', destination: '/settings', permanent: true },
       // /rankings (bare) → / (homepage has the main ranking table)
-      { source: '/rankings', destination: '/', permanent: false },
+      { source: '/rankings', destination: '/', permanent: true },
     ];
   },
 };
