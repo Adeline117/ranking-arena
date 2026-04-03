@@ -2,6 +2,34 @@
 
 > Auto-read by Claude Code at session start. Keep concise — archive completed items weekly.
 
+## Maintenance Sprint (2026-04-03)
+
+### Completed
+1. **Disk cleanup**: Cleared 16.5GB (12G Turbopack .next/dev cache + 4.5G npm cache)
+2. **Lint cleanup**: 5 errors → 0 (moved stray script, removed unused imports/types)
+3. **ESLint v10**: Tested — incompatible with eslint-plugin-react, reverted to v9.39.4
+4. **Blofin removed**: Confirmed dead (geo-blocked ALL IPs), removed from pipeline
+5. **Sharpe backfill**: SQL-computed sharpe from equity curves → 1,820 leaderboard_ranks + 91,504 snapshots_v2 updated. Coverage: **60.5% → 64.3%**
+6. **LCP optimization**: Restored SSR shell (HomeHeroSSR + SSRRankingTable) — was removed due to reconciliation crashes, now placed outside ssr:false boundary. Expected LCP 13.4s → ~2s
+7. **Vertex/Apex/RabbitX**: Confirmed DEAD (DNS dead / API 404 / no leaderboard). No action needed.
+
+### Lighthouse Scores (local headless)
+| Metric | Value |
+|--------|-------|
+| Performance | 75 |
+| Accessibility | 97 |
+| Best Practices | 96 |
+| SEO | 100 |
+| FCP | 1.3s |
+| LCP | 13.4s → TBD (SSR shell restored, needs re-test after deploy) |
+| TBT | 10ms |
+| CLS | 0.05 |
+
+### Pipeline Health
+- 30/31 platforms fresh (okx_futures 10h ago, yellow)
+- 6 enrichment warnings (dead platforms missing rate limiting annotations — cosmetic)
+- 0 failures
+
 ## Inline Enrichment — Fetch+Enrich in One Pass (2026-04-02)
 
 **Goal**: New traders get complete profile pages immediately (no waiting for batch-enrich cron).
