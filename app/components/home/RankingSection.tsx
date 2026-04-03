@@ -101,10 +101,10 @@ export default function RankingSection({
   const [movers, setMovers] = useState<{ risers: Array<{ platform: string; trader_key: string; rank: number; arena_score: number | null; roiDelta: number; handle: string | null; avatar_url: string | null }>; fallers: Array<{ platform: string; trader_key: string; rank: number; arena_score: number | null; roiDelta: number; handle: string | null; avatar_url: string | null }> }>({ risers: [], fallers: [] })
   useEffect(() => {
     const doFetch = () => {
-      fetch('/api/rankings/movers')
+      fetch('/api/rankings/movers', { signal: AbortSignal.timeout(15000) })
         .then(r => r.ok ? r.json() : null)
         .then(data => { if (data?.risers || data?.fallers) setMovers({ risers: data.risers || [], fallers: data.fallers || [] }) })
-        .catch((err) => { console.warn('[RankingSection] movers fetch failed:', err) })
+        .catch((err) => { if (err instanceof Error && err.name === 'AbortError') return; console.warn('[RankingSection] movers fetch failed:', err) })
     }
     // Defer movers fetch — it's below-fold, non-critical data
     if ('requestIdleCallback' in window) {

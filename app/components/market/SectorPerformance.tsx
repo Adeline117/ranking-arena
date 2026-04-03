@@ -31,10 +31,11 @@ export default function SectorPerformance() {
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
-    fetch('/api/market/sectors')
+    fetch('/api/market/sectors', { signal: AbortSignal.timeout(15000) })
       .then((r) => r.json())
       .then((json) => { if (Array.isArray(json)) setSectors(json.slice(0, 4)) })
       .catch((err) => {
+        if (err instanceof Error && err.name === 'AbortError') return
         setError(err instanceof Error ? err.message : 'Failed to load')
       })
       .finally(() => setLoading(false))
