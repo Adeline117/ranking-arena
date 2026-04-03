@@ -154,6 +154,8 @@ export default function RootLayout({
         <script dangerouslySetInnerHTML={{ __html: `try{var l=localStorage.getItem('language');if(l&&l!=='zh')document.documentElement.lang=l==='en'?'en':l==='ja'?'ja':l==='ko'?'ko':'zh-CN'}catch(e){/* localStorage unavailable */}` }} />
         {/* Sync theme from localStorage before paint — defaults to system preference for new users */}
         <script dangerouslySetInnerHTML={{ __html: `try{var t=localStorage.getItem('theme');var e=t==='light'?'light':t==='dark'?'dark':window.matchMedia('(prefers-color-scheme:dark)').matches?'dark':'light';document.documentElement.setAttribute('data-theme',e)}catch(x){/* localStorage unavailable */}` }} />
+        {/* Polyfill AbortSignal.timeout for Safari <16 */}
+        <script dangerouslySetInnerHTML={{ __html: `if(!AbortSignal.timeout){AbortSignal.timeout=function(ms){var c=new AbortController();setTimeout(function(){c.abort(new DOMException('TimeoutError','TimeoutError'))},ms);return c.signal}}` }} />
         {/* Inline critical CSS for faster initial render */}
         <style dangerouslySetInnerHTML={{ __html: getCriticalCss() }} />
 
