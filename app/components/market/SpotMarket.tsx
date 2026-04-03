@@ -38,7 +38,7 @@ function formatNum(n: number | null, decimals = 2): string {
 
 function formatPrice(n: number | null): string {
   if (n == null) return '--'
-  if (n >= 1) return `$${n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+  if (n >= 1) return `$${n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
   return `$${n.toPrecision(4)}`
 }
 
