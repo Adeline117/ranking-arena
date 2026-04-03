@@ -63,11 +63,11 @@ export async function POST(request: NextRequest, context: RouteContext) {
       likeCount = post?.like_count || 0
       dislikeCount = post?.dislike_count || 0
     } catch (fetchError) {
-      // 点赞已成功，只是无法获取最新计数
-      // 根据操作类型估算计数变化
+      // Reaction saved but couldn't fetch actual counts.
+      // Return null so client keeps its optimistic count instead of wrong "1".
       logger.warn('[posts/[id]/like] Failed to fetch updated counts:', fetchError)
-      likeCount = result.action === 'added' && reactionType === 'up' ? 1 : 0
-      dislikeCount = result.action === 'added' && reactionType === 'down' ? 1 : 0
+      likeCount = null as unknown as number
+      dislikeCount = null as unknown as number
     }
 
     // Send like notification (fire-and-forget, don't block response)
