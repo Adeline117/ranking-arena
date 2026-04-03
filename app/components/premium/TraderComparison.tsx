@@ -292,7 +292,7 @@ export default function TraderComparison({ traders, onRemove, showRemoveButton =
                         width: 56,
                         height: 56,
                         borderRadius: tokens.radius.full,
-                        background: proxyAvatarUrl ? tokens.colors.bg.secondary : getAvatarGradient(trader.id),
+                        background: getAvatarGradient(trader.id),
                         border: `2px solid ${tokens.colors.border.primary}`,
                         display: 'flex',
                         alignItems: 'center',
@@ -300,8 +300,12 @@ export default function TraderComparison({ traders, onRemove, showRemoveButton =
                         overflow: 'hidden',
                         cursor: 'pointer',
                         transition: 'border-color 0.2s',
+                        position: 'relative',
                       }}
                     >
+                      <Text size="lg" weight="black" style={{ color: tokens.colors.white }}>
+                        {getAvatarInitial(trader.handle || trader.id)}
+                      </Text>
                       {proxyAvatarUrl ? (
                         <img
                           src={proxyAvatarUrl}
@@ -309,8 +313,8 @@ export default function TraderComparison({ traders, onRemove, showRemoveButton =
                           width={48}
                           height={48}
                           loading="lazy"
-                          style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-                          onError={(e) => { (e.target as HTMLImageElement).style.display = 'none' }}
+                          style={{ width: '100%', height: '100%', objectFit: 'cover', position: 'absolute', inset: 0 }}
+                          onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none' }}
                         />
                       ) : isWalletAddress(trader.id) ? (
                         <img
@@ -318,12 +322,10 @@ export default function TraderComparison({ traders, onRemove, showRemoveButton =
                           alt={trader.handle || trader.id}
                           width={56}
                           height={56}
-                          style={{ width: '100%', height: '100%', objectFit: 'cover', imageRendering: 'pixelated' }}
+                          style={{ width: '100%', height: '100%', objectFit: 'cover', imageRendering: 'pixelated', position: 'absolute', inset: 0 }}
                         />
                       ) : (
-                        <Text size="lg" weight="black" style={{ color: tokens.colors.white }}>
-                          {getAvatarInitial(trader.handle || trader.id)}
-                        </Text>
+                        null
                       )}
                     </Box>
                   )
