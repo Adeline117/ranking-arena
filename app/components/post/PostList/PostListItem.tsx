@@ -276,7 +276,7 @@ export const PostListItem = memo(function PostListItem({
             <div style={{ marginTop: 8, display: 'flex', gap: 4 }}>
               {p.original_post.images.slice(0, 3).map((imgUrl, idx) => (
                 <div key={idx} style={{ width: 48, height: 48, borderRadius: tokens.radius.sm, overflow: 'hidden', position: 'relative' }}>
-                  <Image src={imgUrl} alt="Post image" fill sizes="(max-width: 768px) 100vw, 200px" loading="lazy" style={{ objectFit: 'cover' }} />
+                  <Image src={imgUrl} alt="Post image" fill sizes="(max-width: 768px) 100vw, 200px" loading="lazy" style={{ objectFit: 'cover' }} onError={(e) => { (e.target as HTMLImageElement).style.display = 'none' }} />
                 </div>
               ))}
               {p.original_post.images.length > 3 && (
