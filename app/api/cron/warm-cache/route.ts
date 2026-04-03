@@ -8,7 +8,6 @@
  * 1. Supabase connection pool stays warm (no cold-start latency)
  * 2. Homepage SSR cache stays fresh (TTL=2min, so we refresh every 5min)
  *    Prevents cold-DB-query on page load → faster LCP
- * 3. Pre-warms high-traffic API caches (traders, platform-stats)
  *
  * Schedule: every 5 minutes (configured in vercel.json)
  */
@@ -29,9 +28,12 @@ export async function GET(request: NextRequest) {
   const start = Date.now()
 
   try {
+    // Warm the SSR homepage cache — this keeps the Redis key fresh so page.tsx
+    // getInitialTraders() always hits cache instead of doing a cold DB query.
+    // fetchLeaderboardFromDB also does the DB warm-up query as a side-effect.
     const { traders } = await fetchLeaderboardFromDB('90D', 50)
 
-    // Pre-warm high-traffic API caches to prevent 3s cold starts on first visit
+    // Pre-warm high-traffic API caches to prevent 3s cold starts
     const baseUrl = request.nextUrl.origin
     const warmResults = await Promise.allSettled([
       fetch(`${baseUrl}/api/traders?timeRange=90D&limit=50`, { cache: 'no-store' }),

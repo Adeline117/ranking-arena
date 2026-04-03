@@ -260,9 +260,11 @@ export default function BookmarkModal({ isOpen, onClose, onSelect, postId: _post
         bottom: 0,
         background: 'var(--color-backdrop)',
         display: 'flex',
-        alignItems: 'center',
+        alignItems: 'flex-start',
         justifyContent: 'center',
+        paddingTop: 'max(10vh, env(safe-area-inset-top, 40px))',
         zIndex: tokens.zIndex.modal,
+        overflowY: 'auto',
       }}
       onClick={onClose}
       ref={modalRef}
