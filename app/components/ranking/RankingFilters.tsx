@@ -92,8 +92,10 @@ function ExportRankingButton({ traders, source, timeRange }: ExportRankingButton
           background: tokens.colors.bg.secondary,
           color: tokens.colors.text.primary,
           fontSize: 12, fontWeight: 600, cursor: 'pointer',
-          minHeight: 44,
+          minHeight: 44, transition: 'all 0.15s',
         }}
+        onMouseEnter={(e) => { e.currentTarget.style.background = tokens.colors.bg.tertiary }}
+        onMouseLeave={(e) => { e.currentTarget.style.background = tokens.colors.bg.secondary }}
       >
         <svg width={12} height={12} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className="hide-desktop">
           <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3" strokeLinecap="round" strokeLinejoin="round" />
