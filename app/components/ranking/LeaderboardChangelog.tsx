@@ -21,7 +21,7 @@ interface LeaderboardChangelogProps {
 
 function MoverRow({ mover, type }: { mover: Mover; type: 'riser' | 'faller' }) {
   const isRiser = type === 'riser'
-  const changeColor = isRiser ? '#22c55e' : '#ef4444'
+  const changeColor = isRiser ? 'var(--color-accent-success)' : 'var(--color-accent-error)'
   const arrow = isRiser ? '\u2191' : '\u2193'
   const absChange = Math.abs(mover.roiDelta)
   const displayName = mover.handle || mover.trader_key.slice(0, 10)
