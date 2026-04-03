@@ -27,7 +27,7 @@ export default function OnboardingPage() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const returnUrl = searchParams.get('returnUrl')
-  const afterOnboarding = returnUrl && returnUrl.startsWith('/') && !returnUrl.startsWith('//') ? returnUrl : '/rankings'
+  const afterOnboarding = returnUrl && returnUrl.startsWith('/') && !returnUrl.startsWith('//') ? returnUrl : '/'
   const { showToast } = useToast()
   const [language, setLang] = useState<Language>('zh')
   const [theme, setTheme] = useState<Theme>('dark')
