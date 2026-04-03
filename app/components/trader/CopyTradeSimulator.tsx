@@ -100,7 +100,7 @@ export default function CopyTradeSimulator({ equityCurve }: CopyTradeSimulatorPr
                 const val = parseFloat(e.target.value)
                 if (!isNaN(val) && val >= 0) setInvestment(val)
               }}
-              min={0}
+              min={1}
               step={100}
               style={{
                 width: '100%',
