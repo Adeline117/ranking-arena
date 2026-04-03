@@ -33,12 +33,17 @@ export async function POST(
     // Verify group exists
     const { data: group, error: groupErr } = await supabase
       .from('groups')
-      .select('id, created_by, is_premium_only, min_arena_score, is_verified_only')
+      .select('id, created_by, is_premium_only, min_arena_score, is_verified_only, dissolved_at')
       .eq('id', groupId)
       .maybeSingle()
 
     if (groupErr || !group) {
       return NextResponse.json({ error: 'Group not found' }, { status: 404 })
+    }
+
+    // Dissolved groups are frozen — no join/leave allowed
+    if (group.dissolved_at) {
+      return NextResponse.json({ error: 'This group has been dissolved' }, { status: 403 })
     }
 
     if (action === 'join') {
