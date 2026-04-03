@@ -10,6 +10,7 @@ import { SupabaseClient } from '@supabase/supabase-js'
 import { EnrichedTraderData, PersistResult } from './types'
 import { createLogger } from '@/lib/utils/logger'
 
+
 const log = createLogger('pipeline:storage')
 
 // =============================================================================
