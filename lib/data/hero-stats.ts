@@ -12,7 +12,7 @@ import { logger } from '@/lib/logger'
 // 默认值 - 当缓存和数据库都不可用时的回退
 const DEFAULT_STATS = {
   exchangeCount: 34,
-  traderCount: 40000,
+  traderCount: 32000, // Approximate unique traders in 90D season
 }
 
 const CACHE_KEY = 'hero-stats:v1'
@@ -56,9 +56,12 @@ export async function getHeroStats(): Promise<HeroStats> {
     if (error) {
       // RPC 不存在时回退到直接查询
       if (error.code === 'PGRST202') {
+        // Count only 90D season to avoid inflated numbers
+        // (same trader appears once per season: 7D + 30D + 90D)
         const { count, error: countError } = await supabase
           .from('leaderboard_ranks')
           .select('*', { count: 'exact', head: true })
+          .eq('season_id', '90D')
 
         if (countError) {
           logger.warn('[getHeroStats] Count query failed, using defaults', countError)
