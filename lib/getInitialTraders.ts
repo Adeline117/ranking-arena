@@ -140,23 +140,51 @@ async function fetchViaDiverseRPC(
   timeRange: Period,
   limit: number
 ): Promise<{ traders: InitialTrader[]; lastUpdated: string | null }> {
-  const MAX_PER_PLATFORM = 8
+  // Fetch more rows with lower per-platform cap, then enforce JS-side category diversity.
+  // Without this, DEX platforms (high ROI → high score) dominate all 50 slots.
+  const MAX_PER_PLATFORM = 5
 
-  // Try the SQL RPC first
+  // Try the SQL RPC first — fetch 2x limit to have room for diversity enforcement
   const { data, error } = await supabase.rpc('get_diverse_leaderboard', {
     p_season_id: timeRange,
     p_per_platform: MAX_PER_PLATFORM,
-    p_total_limit: limit,
+    p_total_limit: limit * 2,
   })
 
   if (!error && data && Array.isArray(data) && data.length > 0) {
     const unifiedTraders = data.map((row: Record<string, unknown>) => mapLeaderboardRow(row))
-    const initialTraders = unifiedTraders.map(mapUnifiedToInitial)
-    const lastUpdated = unifiedTraders.length > 0 ? unifiedTraders[0].lastUpdated : null
+
+    // Enforce category diversity: CEX futures, DEX, and spot/web3 should each have representation.
+    // Without this, DEX traders with 10,000%+ ROI crowd out all CEX traders.
+    const CEX_PLATFORMS = new Set(['binance_futures', 'bybit', 'okx_futures', 'bitget_futures', 'mexc', 'htx_futures', 'gateio', 'bingx', 'coinex', 'xt', 'blofin', 'bitfinex', 'toobit', 'bitunix', 'btcc', 'etoro'])
+    const cexTraders = unifiedTraders.filter(t => CEX_PLATFORMS.has(t.platform))
+    const dexTraders = unifiedTraders.filter(t => !CEX_PLATFORMS.has(t.platform))
+
+    // Guarantee at least 30% CEX and 30% DEX in the final list
+    const minCex = Math.floor(limit * 0.3) // ~15 CEX traders
+    const minDex = Math.floor(limit * 0.3) // ~15 DEX traders
+    const remaining = limit - minCex - minDex // ~20 slots by score
+
+    const diverseList: typeof unifiedTraders = []
+    // Add guaranteed CEX slots (top by score)
+    diverseList.push(...cexTraders.slice(0, minCex))
+    // Add guaranteed DEX slots (top by score)
+    diverseList.push(...dexTraders.slice(0, minDex))
+    // Fill remaining slots from ALL traders by score (skip already-added)
+    const addedKeys = new Set(diverseList.map(t => `${t.platform}:${t.traderKey}`))
+    const rest = unifiedTraders.filter(t => !addedKeys.has(`${t.platform}:${t.traderKey}`))
+    diverseList.push(...rest.slice(0, remaining))
+
+    // Sort final list by arena score descending
+    diverseList.sort((a, b) => (b.arenaScore ?? 0) - (a.arenaScore ?? 0))
+    const finalTraders = diverseList.slice(0, limit)
+
+    const initialTraders = finalTraders.map(mapUnifiedToInitial)
+    const lastUpdated = initialTraders.length > 0 ? unifiedTraders[0].lastUpdated : null
     return { traders: initialTraders, lastUpdated }
   }
 
-  // Fallback: RPC doesn't exist yet or returned empty — use legacy 2000-row approach
+  // Fallback: RPC doesn't exist yet or returned empty — use legacy approach
   if (error) {
     logger.warn('[getInitialTraders] RPC fallback — get_diverse_leaderboard unavailable:', error.message)
   }

@@ -17,7 +17,7 @@ export default function FoundingMemberBanner() {
   const [dismissed, setDismissed] = useState(false)
 
   useEffect(() => {
-    try { if (localStorage.getItem(DISMISS_KEY)) setDismissed(true) } catch {}
+    try { if (localStorage.getItem(DISMISS_KEY)) setDismissed(true) } catch { /* localStorage unavailable */ }
   }, [])
 
   if (dismissed) return null
@@ -71,7 +71,7 @@ export default function FoundingMemberBanner() {
         {cta}
       </Link>
       <button
-        onClick={() => { setDismissed(true); try { localStorage.setItem(DISMISS_KEY, '1') } catch {} }}
+        onClick={() => { setDismissed(true); try { localStorage.setItem(DISMISS_KEY, '1') } catch { /* ignore */ } }}
         aria-label="Dismiss"
         style={{
           marginLeft: 'auto',
