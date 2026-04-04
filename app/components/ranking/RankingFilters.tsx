@@ -240,7 +240,7 @@ export function RankingFilters({
           >
             <FilterIcon size={11} />
             <span>{t('filter')}</span>
-            {!isPro && <LockIconSmall size={7} />}
+            {!isPro && !BETA_PRO_FEATURES_FREE && <LockIconSmall size={7} />}
             {BETA_PRO_FEATURES_FREE && (
               <span style={{
                 fontSize: 8, fontWeight: 700, padding: '1px 4px', borderRadius: 4,
@@ -259,7 +259,7 @@ export function RankingFilters({
           <Link href="/compare" prefetch={false} title={t('compareTraders')} className="toolbar-btn touch-target-sm" style={{ gap: 4 }}>
             <CompareIcon size={11} />
             <span>{t('compare')}</span>
-            {!isPro && <LockIconSmall size={7} />}
+            {!isPro && !BETA_PRO_FEATURES_FREE && <LockIconSmall size={7} />}
             {BETA_PRO_FEATURES_FREE && (
               <span style={{
                 fontSize: 8, fontWeight: 700, padding: '1px 4px', borderRadius: 4,
