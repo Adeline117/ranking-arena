@@ -504,6 +504,117 @@ export class PipelineEvaluator {
     }
   }
 
+  // ── NEW CHECKS (added 2026-04-04) ────────────────────────────
+
+  /**
+   * Check 7: Platform Coverage — all expected platforms have leaderboard data.
+   */
+  private static async checkPlatformCoverage(): Promise<{ check: EvaluationCheck; issues: EvaluationIssue[] }> {
+    const supabase = getSupabaseAdmin()
+    const issues: EvaluationIssue[] = []
+    const EXPECTED = [
+      'binance_futures', 'bybit', 'okx_futures', 'bitget_futures', 'mexc',
+      'hyperliquid', 'gmx', 'dydx', 'drift', 'jupiter_perps',
+      'htx_futures', 'gateio', 'bingx', 'coinex', 'aevo', 'gains',
+    ]
+    const { data } = await supabase
+      .from('leaderboard_ranks').select('source').eq('season_id', '90D')
+      .not('arena_score', 'is', null).limit(50000)
+    const active = new Set((data || []).map(r => r.source))
+    const missing = EXPECTED.filter(p => !active.has(p))
+    for (const p of missing) {
+      issues.push({ platform: p, type: 'missing_platform', severity: 'warning',
+        description: `${p} has no traders in 90D leaderboard`,
+        recommendation: `Check batch-fetch-traders for ${p}.` })
+    }
+    const score = Math.round(((EXPECTED.length - missing.length) / EXPECTED.length) * 100)
+    return { check: { name: 'platform_coverage', category: 'completeness', passed: missing.length <= 2, score,
+      details: `${active.size} active, ${missing.length} missing of ${EXPECTED.length} expected` }, issues }
+  }
+
+  /**
+   * Check 8: API Response Time — key endpoints respond within acceptable latency.
+   */
+  private static async checkAPIResponseTime(): Promise<{ check: EvaluationCheck; issues: EvaluationIssue[] }> {
+    const issues: EvaluationIssue[] = []
+    const baseUrl = process.env.NEXT_PUBLIC_SITE_URL
+      || (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : null)
+      || 'http://localhost:3000'
+    const endpoints = [
+      { path: '/api/health', name: 'Health', maxMs: 2000 },
+      { path: '/api/traders?timeRange=90D&limit=5', name: 'Rankings', maxMs: 3000 },
+      { path: '/api/search?q=test&limit=3', name: 'Search', maxMs: 3000 },
+    ]
+    let totalScore = 0
+    for (const ep of endpoints) {
+      const start = Date.now()
+      try {
+        const res = await fetch(`${baseUrl}${ep.path}`, {
+          signal: AbortSignal.timeout(ep.maxMs * 2),
+          headers: { 'User-Agent': 'PipelineEvaluator/1.0' },
+        })
+        const latency = Date.now() - start
+        if (res.status >= 500) {
+          issues.push({ platform: 'api', type: 'api_error', severity: 'critical',
+            description: `${ep.name} API returned ${res.status} (${latency}ms)`,
+            recommendation: `Check ${ep.path}.` })
+        } else if (latency > ep.maxMs) {
+          totalScore += 50
+          issues.push({ platform: 'api', type: 'api_slow', severity: 'warning',
+            description: `${ep.name} took ${latency}ms (max: ${ep.maxMs}ms)`,
+            recommendation: `Optimize ${ep.path}.` })
+        } else { totalScore += 100 }
+      } catch {
+        issues.push({ platform: 'api', type: 'api_timeout', severity: 'critical',
+          description: `${ep.name} timed out`, recommendation: `Check ${ep.path}.` })
+      }
+    }
+    const score = Math.round(totalScore / endpoints.length)
+    return { check: { name: 'api_response_time', category: 'freshness', passed: score >= 70, score,
+      details: `${endpoints.length} endpoints, avg score ${score}/100` }, issues }
+  }
+
+  /**
+   * Check 9: Homepage SSR — homepage has server-rendered trader data.
+   */
+  private static async checkHomepageSSR(): Promise<{ check: EvaluationCheck; issues: EvaluationIssue[] }> {
+    const issues: EvaluationIssue[] = []
+    const baseUrl = process.env.NEXT_PUBLIC_SITE_URL
+      || (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : null)
+      || 'http://localhost:3000'
+    const start = Date.now()
+    try {
+      const res = await fetch(baseUrl, {
+        signal: AbortSignal.timeout(10_000),
+        headers: { 'User-Agent': 'PipelineEvaluator/1.0' },
+      })
+      const latency = Date.now() - start
+      const html = await res.text()
+      const hasHero = html.toLowerCase().includes('track') || html.toLowerCase().includes('trader')
+      let score = 100
+      if (res.status >= 500) {
+        score = 0
+        issues.push({ platform: 'frontend', type: 'homepage_error', severity: 'critical',
+          description: `Homepage returned ${res.status}`, recommendation: 'Check Next.js build.' })
+      } else if (!hasHero) {
+        score = 30
+        issues.push({ platform: 'frontend', type: 'homepage_empty', severity: 'warning',
+          description: 'Missing hero content', recommendation: 'Check SSR.' })
+      } else if (latency > 5000) {
+        score = 50
+        issues.push({ platform: 'frontend', type: 'homepage_slow', severity: 'warning',
+          description: `Homepage took ${latency}ms`, recommendation: 'Check ISR cache.' })
+      }
+      return { check: { name: 'homepage_ssr', category: 'freshness', passed: score >= 70, score,
+        details: `${res.status} ${latency}ms, hero=${hasHero}` }, issues }
+    } catch (err) {
+      return { check: { name: 'homepage_ssr', category: 'freshness', passed: false, score: 0,
+        details: `Failed: ${err instanceof Error ? err.message : 'timeout'}` },
+        issues: [{ platform: 'frontend', type: 'homepage_down', severity: 'critical',
+          description: 'Homepage unreachable', recommendation: 'Check Vercel.' }] }
+    }
+  }
+
   // ── Feedback Loop ──────────────────────────────────────────────
 
   /**
