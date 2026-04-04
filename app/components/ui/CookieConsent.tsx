@@ -52,7 +52,7 @@ export default function CookieConsent() {
         left: 0,
         right: 0,
         zIndex: tokens.zIndex.overlay,
-        padding: tokens.spacing[4],
+        padding: `${tokens.spacing[3]} ${tokens.spacing[4]}`,
         background: tokens.glass.bg.darkHeavy,
         backdropFilter: tokens.glass.blur.lg,
         WebkitBackdropFilter: tokens.glass.blur.lg,
@@ -70,19 +70,19 @@ export default function CookieConsent() {
           flexWrap: 'wrap',
         }}
       >
-        <p style={{ margin: 0, fontSize: 13, color: 'var(--color-text-secondary)', lineHeight: 1.5, flex: 1, minWidth: 200 }}>
-          We use cookies to improve your experience. By continuing, you agree to our{' '}
+        <p style={{ margin: 0, fontSize: 12, color: 'var(--color-text-secondary)', lineHeight: 1.4, flex: 1, minWidth: 140 }}>
+          We use cookies to improve your experience.{' '}
           <Link href="/legal/privacy" style={{ color: tokens.colors.accent.brand, textDecoration: 'underline' }}>
             Privacy Policy
-          </Link>.
+          </Link>
         </p>
         <div style={{ display: 'flex', gap: tokens.spacing[2], flexShrink: 0 }}>
           <Link
             href="/legal/privacy"
             className="interactive-scale"
             style={{
-              padding: '8px 16px',
-              minHeight: 44,
+              padding: '6px 14px',
+              minHeight: 36,
               borderRadius: tokens.radius.md,
               border: tokens.glass.border.medium,
               background: 'transparent',
@@ -103,8 +103,8 @@ export default function CookieConsent() {
             onClick={handleAccept}
             className="interactive-scale"
             style={{
-              padding: '8px 20px',
-              minHeight: 44,
+              padding: '6px 18px',
+              minHeight: 36,
               borderRadius: tokens.radius.md,
               border: 'none',
               background: tokens.gradient.primary,
