@@ -130,10 +130,10 @@ export function mapLeaderboardRow(row: Record<string, unknown>): UnifiedTrader {
 
     // Scores
     arenaScore: row.arena_score != null ? Number(row.arena_score) : null,
-    returnScore: row.return_score != null ? Number(row.return_score) : row.profitability_score != null ? Number(row.profitability_score) : null,
-    pnlScore: row.pnl_score != null ? Number(row.pnl_score) : row.score_completeness != null ? Number(row.score_completeness) : null,
-    drawdownScore: row.drawdown_score != null ? Number(row.drawdown_score) : row.risk_control_score != null ? Number(row.risk_control_score) : null,
-    stabilityScore: row.stability_score != null ? Number(row.stability_score) : row.execution_score != null ? Number(row.execution_score) : null,
+    returnScore: row.profitability_score != null ? Number(row.profitability_score) : null,
+    pnlScore: null, // not stored in leaderboard_ranks (score_completeness is confidence, not pnl score)
+    drawdownScore: row.risk_control_score != null ? Number(row.risk_control_score) : null,
+    stabilityScore: row.execution_score != null ? Number(row.execution_score) : null,
     profitabilityScore: row.profitability_score != null ? Number(row.profitability_score) : null,
     riskControlScore: row.risk_control_score != null ? Number(row.risk_control_score) : null,
     executionScore: row.execution_score != null ? Number(row.execution_score) : null,
