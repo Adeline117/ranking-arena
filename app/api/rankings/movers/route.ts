@@ -57,26 +57,32 @@ export async function GET(request: NextRequest) {
 async function computeMovers() {
   const supabase = getSupabaseAdmin()
 
-  // Find the two most recent DISTINCT dates in trader_daily_snapshots
-  // We need yesterday vs today (or the two most recent dates available)
-  const { data: recentDateRows } = await supabase
-    .from('trader_daily_snapshots')
-    .select('date')
-    .order('date', { ascending: false })
-    .limit(100)
+  // Find the two most recent DISTINCT dates using SQL DISTINCT
+  type DateRow = { date: string }
+  let recentDateRows: DateRow[] | null = null
+  try {
+    const { data } = await supabase.rpc('get_recent_snapshot_dates', { n: 2 })
+    recentDateRows = data as unknown as DateRow[] | null
+  } catch { /* RPC not available */ }
 
-  if (!recentDateRows?.length) {
-    return { risers: [], fallers: [], period: '90D' }
+  // Fallback: if RPC doesn't exist, use manual dedup
+  let todayDate: string
+  let yesterdayDate: string
+  if (recentDateRows && recentDateRows.length >= 2) {
+    todayDate = recentDateRows[0].date
+    yesterdayDate = recentDateRows[1].date
+  } else {
+    const { data: fallbackDates } = await supabase
+      .from('trader_daily_snapshots')
+      .select('date')
+      .order('date', { ascending: false })
+      .limit(100)
+    if (!fallbackDates?.length) return { risers: [], fallers: [], period: '90D' }
+    const uniqueDates = [...new Set(fallbackDates.map(r => r.date))].sort().reverse()
+    if (uniqueDates.length < 2) return { risers: [], fallers: [], period: '90D' }
+    todayDate = uniqueDates[0]
+    yesterdayDate = uniqueDates[1]
   }
-
-  // Deduplicate dates
-  const uniqueDates = [...new Set(recentDateRows.map(r => r.date))].sort().reverse()
-  if (uniqueDates.length < 2) {
-    return { risers: [], fallers: [], period: '90D' }
-  }
-
-  const todayDate = uniqueDates[0]
-  const yesterdayDate = uniqueDates[1]
 
   // Get PREVIOUS day's daily snapshots (to compare against current leaderboard)
   const { data: yesterdaySnaps } = await supabase
@@ -101,34 +107,18 @@ async function computeMovers() {
     snapsByPlatform.get(s.platform)!.push(s.trader_key)
   }
 
-  // Fetch current leaderboard data for these traders, per platform — in parallel
-  const allCurrentRanks: {
-    source: string
-    source_trader_id: string
-    rank: number | null
-    arena_score: number | null
-    roi: number | null
-    handle: string | null
-    avatar_url: string | null
-  }[] = []
+  // Fetch current leaderboard data — single query instead of N per-platform queries.
+  // The unique index (season_id, source, source_trader_id) makes this efficient.
+  const allTraderKeys = [...new Set(yesterdaySnaps.map(s => s.trader_key))]
+  const { data: allCurrentRanks } = await supabase
+    .from('leaderboard_ranks')
+    .select('source, source_trader_id, rank, arena_score, roi, handle, avatar_url')
+    .eq('season_id', '90D')
+    .in('source_trader_id', allTraderKeys.slice(0, 1000))
+    .not('arena_score', 'is', null)
+    .limit(2000)
 
-  const platforms = [...snapsByPlatform.keys()]
-  await Promise.all(
-    platforms.map(async (platform) => {
-      const traderKeys = snapsByPlatform.get(platform)!
-      const { data } = await supabase
-        .from('leaderboard_ranks')
-        .select('source, source_trader_id, rank, arena_score, roi, handle, avatar_url')
-        .eq('season_id', '90D')
-        .eq('source', platform)
-        .in('source_trader_id', traderKeys.slice(0, 500))
-        .not('arena_score', 'is', null)
-        .limit(500)
-      if (data) allCurrentRanks.push(...data)
-    })
-  )
-
-  if (!allCurrentRanks.length) {
+  if (!allCurrentRanks || allCurrentRanks.length === 0) {
     return { risers: [], fallers: [], period: '90D' }
   }
 
