@@ -20,10 +20,10 @@ interface MarketOverviewData {
 
 const CACHE_KEY = 'market:overview'
 const STALE_KEY = 'market:overview:stale'
-/** Fresh TTL — data considered fresh for 2 minutes */
-const FRESH_TTL = 120
-/** Stale TTL — stale copy kept for 30 minutes as fallback */
-const STALE_TTL = 1800
+/** Fresh TTL — data considered fresh for 5 minutes (market data doesn't need sub-minute freshness) */
+const FRESH_TTL = 300
+/** Stale TTL — stale copy kept for 1 hour as fallback */
+const STALE_TTL = 3600
 
 /**
  * Fetch market data from CoinGecko + Etherscan.
@@ -116,7 +116,7 @@ export async function GET(request: NextRequest) {
     const fresh = await get<MarketOverviewData>(CACHE_KEY)
     if (fresh !== null) {
       return NextResponse.json(fresh, {
-        headers: { 'Cache-Control': 'public, s-maxage=120, stale-while-revalidate=600' },
+        headers: { 'Cache-Control': 'public, s-maxage=300, stale-while-revalidate=600' },
       })
     }
 
@@ -139,7 +139,7 @@ export async function GET(request: NextRequest) {
     void cacheResult(data).catch((e) => logger.warn('Cache write failed', { error: String(e) }))
 
     return NextResponse.json(data, {
-      headers: { 'Cache-Control': 'public, s-maxage=120, stale-while-revalidate=600' },
+      headers: { 'Cache-Control': 'public, s-maxage=300, stale-while-revalidate=600' },
     })
   } catch (e: unknown) {
     const msg = e instanceof Error ? e.message : 'unknown error'
