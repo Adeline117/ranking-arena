@@ -1,8 +1,11 @@
 'use client'
 
+import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import { tokens } from '@/lib/design-tokens'
+
+const DISMISS_KEY = 'founding-banner-dismissed'
 
 /**
  * Founding Member Banner — subtle strip above the ranking table
@@ -11,6 +14,13 @@ import { tokens } from '@/lib/design-tokens'
  */
 export default function FoundingMemberBanner() {
   const { t } = useLanguage()
+  const [dismissed, setDismissed] = useState(false)
+
+  useEffect(() => {
+    try { if (localStorage.getItem(DISMISS_KEY)) setDismissed(true) } catch {}
+  }, [])
+
+  if (dismissed) return null
 
   const text = t('foundingMemberBannerText')
   const cta = t('foundingMemberBannerCta')
@@ -60,6 +70,23 @@ export default function FoundingMemberBanner() {
       >
         {cta}
       </Link>
+      <button
+        onClick={() => { setDismissed(true); try { localStorage.setItem(DISMISS_KEY, '1') } catch {} }}
+        aria-label="Dismiss"
+        style={{
+          marginLeft: 'auto',
+          background: 'none',
+          border: 'none',
+          color: 'var(--color-text-tertiary)',
+          cursor: 'pointer',
+          padding: '2px 4px',
+          fontSize: 14,
+          lineHeight: 1,
+          opacity: 0.6,
+        }}
+      >
+        ✕
+      </button>
     </div>
   )
 }
