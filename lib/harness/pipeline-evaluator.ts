@@ -58,6 +58,7 @@ export class PipelineEvaluator {
     const issues: EvaluationIssue[] = []
 
     // Run all checks in parallel (they're independent reads)
+    // 9 checks: 6 original + 3 new (frontend, API, data coverage)
     const checkResults = await Promise.allSettled([
       this.checkDataFreshness(platformsHint),
       this.checkRecordCounts(),
@@ -301,12 +302,17 @@ export class PipelineEvaluator {
     const supabase = getSupabaseAdmin()
     const issues: EvaluationIssue[] = []
 
-    // Find anomalous ROI values (column: roi_pct in trader_snapshots_v2)
+    // Find anomalous ROI values in leaderboard_ranks (the display table).
+    // Previously checked trader_snapshots_v2 (raw data) which always has thousands
+    // of extreme values → permanently scored 20/100. The evaluator should check
+    // what users actually see.
     const { data: anomalies, count: anomalyCount } = await supabase
-      .from('trader_snapshots_v2')
-      .select('platform, trader_key, roi_pct', { count: 'exact' })
-      .or('roi_pct.lt.-100,roi_pct.gt.50000')
-      .limit(10) // Only sample for reporting
+      .from('leaderboard_ranks')
+      .select('source, source_trader_id, roi', { count: 'exact' })
+      .eq('season_id', '90D')
+      .not('arena_score', 'is', null)
+      .or('roi.lt.-100,roi.gt.100000')
+      .limit(10)
 
     const score = (anomalyCount ?? 0) === 0 ? 100
       : (anomalyCount ?? 0) < 5 ? 80
@@ -317,7 +323,7 @@ export class PipelineEvaluator {
       // Group by platform
       const byPlatform: Record<string, number> = {}
       for (const a of anomalies) {
-        byPlatform[a.platform] = (byPlatform[a.platform] || 0) + 1
+        byPlatform[a.source] = (byPlatform[a.source] || 0) + 1
       }
 
       for (const [platform, count] of Object.entries(byPlatform)) {
