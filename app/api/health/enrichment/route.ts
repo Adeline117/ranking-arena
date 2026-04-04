@@ -84,8 +84,11 @@ export async function GET(req: NextRequest) {
           .maybeSingle(),
       ])
 
-      const totalTraders = totalRes.count || 0
-      const enrichedTraders = enrichedRes.count || 0
+      // Check for query errors — don't let null count masquerade as "0 traders"
+      if (totalRes.error) throw new Error(`leaderboard_ranks count failed: ${totalRes.error.message}`)
+      if (enrichedRes.error) throw new Error(`trader_equity_curve count failed: ${enrichedRes.error.message}`)
+      const totalTraders = totalRes.count ?? 0
+      const enrichedTraders = enrichedRes.count ?? 0
       const coveragePct = totalTraders > 0 ? Math.round((enrichedTraders / totalTraders) * 1000) / 10 : 0
       const lastEnrichmentAt = lastEnrichRes.data?.captured_at || null
 
