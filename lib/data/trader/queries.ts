@@ -473,7 +473,14 @@ export async function searchTraders(supabase: SupabaseClient, params: {
   if (!sanitizedQuery) return []
 
   // --- Try fuzzy RPC search first (handles typos via pg_trgm) ---
-  let sourcesData: Array<{ source_trader_id: string; handle: string | null; source: string; avatar_url: string | null; relevance_score?: number }> | null = null
+  // The RPC now returns arena_score/roi/pnl/rank/trader_type from leaderboard_ranks
+  // in a single query, eliminating a serial second query that added ~200ms.
+  type FuzzyResult = {
+    source_trader_id: string; handle: string | null; source: string; avatar_url: string | null;
+    relevance_score?: number; arena_score?: number | null; roi?: number | null; pnl?: number | null;
+    rank?: number | null; trader_type?: string | null;
+  }
+  let sourcesData: FuzzyResult[] | null = null
   let usedFuzzy = false
 
   try {
@@ -483,23 +490,12 @@ export async function searchTraders(supabase: SupabaseClient, params: {
       platform_filter: platform || null,
     })
     if (!fuzzyErr && fuzzyData && fuzzyData.length > 0) {
-      // Filter out false positives: require a substring match OR meaningful
-      // trigram similarity. The RPC adds arena_score*2 + followers*0.1 as
-      // popularity boost (up to ~250 points), which inflates relevance_score
-      // for popular traders even with zero text similarity. We must isolate
-      // the text-matching portion to avoid false positives.
       const qLower = sanitizedQuery.toLowerCase()
-      type FuzzyResult = { source_trader_id: string; handle: string | null; source: string; avatar_url: string | null; relevance_score?: number }
       const filtered = (fuzzyData as FuzzyResult[]).filter(t => {
         const handle = (t.handle || '').toLowerCase()
         const id = t.source_trader_id.toLowerCase()
         const hasSubstringMatch = handle.includes(qLower) || id.includes(qLower)
         if (hasSubstringMatch) return true
-        // For fuzzy-only matches (no substring), require relevance_score high
-        // enough that text similarity alone (max 50 points from similarity*50)
-        // contributed meaningfully. Arena_score boost can add up to ~200, so
-        // we need score > 250 to ensure real text similarity was present,
-        // OR the query must be short (< 5 chars) where trigram matching is inherently weak.
         const score = t.relevance_score ?? 0
         return score >= 250 && qLower.length >= 3
       })
@@ -525,7 +521,6 @@ export async function searchTraders(supabase: SupabaseClient, params: {
 
     const { data, error } = await sourcesQuery.limit(limit * 4)
     if (error || !data || data.length === 0) return []
-    // Map traders columns to expected shape
     sourcesData = data.map((d: { trader_key: string; handle: string | null; platform: string; avatar_url: string | null }) => ({
       source_trader_id: d.trader_key,
       handle: d.handle,
@@ -539,22 +534,37 @@ export async function searchTraders(supabase: SupabaseClient, params: {
   const filteredSources = sourcesData.filter(t => !deadSet.has(t.source))
   if (filteredSources.length === 0) return []
 
-  // Fetch arena scores from leaderboard_ranks for ranking
-  // LR columns: source → platform, source_trader_id → traderKey, season_id → period
-  const traderIds = filteredSources.map(t => t.source_trader_id)
-  const { data: scoreRows } = await supabase
-    .from('leaderboard_ranks')
-    .select(`${LR.source}, ${LR.source_trader_id}, ${LR.arena_score}, ${LR.roi}, ${LR.pnl}, ${LR.rank}, ${LR.season_id}, trader_type`)
-    .in(LR.source_trader_id, traderIds.slice(0, 200))
-    .eq(LR.season_id, '90D')
-    .not(LR.arena_score, 'is', null)
-    .order(LR.arena_score, { ascending: false })
+  // When fuzzy RPC was used, scores are already included — skip second query.
+  // Only fetch from leaderboard_ranks when using ILIKE fallback.
+  let scoreMap = new Map<string, Record<string, unknown>>()
+  if (!usedFuzzy) {
+    const traderIds = filteredSources.map(t => t.source_trader_id)
+    const { data: scoreRows } = await supabase
+      .from('leaderboard_ranks')
+      .select(`${LR.source}, ${LR.source_trader_id}, ${LR.arena_score}, ${LR.roi}, ${LR.pnl}, ${LR.rank}, ${LR.season_id}, trader_type`)
+      .in(LR.source_trader_id, traderIds.slice(0, 200))
+      .eq(LR.season_id, '90D')
+      .not(LR.arena_score, 'is', null)
+      .order(LR.arena_score, { ascending: false })
 
-  // Build score map
-  const scoreMap = new Map<string, Record<string, unknown>>()
-  for (const row of (scoreRows || [])) {
-    const key = `${row.source}:${row.source_trader_id}`
-    if (!scoreMap.has(key)) scoreMap.set(key, row)
+    for (const row of (scoreRows || [])) {
+      const key = `${row.source}:${row.source_trader_id}`
+      if (!scoreMap.has(key)) scoreMap.set(key, row)
+    }
+  } else {
+    // Build scoreMap from fuzzy results (already has LR data)
+    for (const t of filteredSources) {
+      const key = `${t.source}:${t.source_trader_id}`
+      scoreMap.set(key, {
+        source: t.source,
+        source_trader_id: t.source_trader_id,
+        arena_score: t.arena_score ?? null,
+        roi: t.roi ?? null,
+        pnl: t.pnl ?? null,
+        rank: t.rank ?? null,
+        trader_type: t.trader_type ?? null,
+      })
+    }
   }
 
   // Rank by relevance: exact match > prefix match > contains > fuzzy + arena_score
@@ -566,7 +576,6 @@ export async function searchTraders(supabase: SupabaseClient, params: {
       const handleLower = (t.handle || '').toLowerCase()
       const idLower = t.source_trader_id.toLowerCase()
 
-      // Multi-tier relevance scoring
       let textRelevance = 0
       if (handleLower === queryLower || idLower === queryLower) textRelevance += 10000
       if (handleLower.startsWith(queryLower) || idLower.startsWith(queryLower)) textRelevance += 1000
@@ -577,9 +586,6 @@ export async function searchTraders(supabase: SupabaseClient, params: {
 
       return { source: t, scoreRow, relevance, textRelevance }
     })
-    // Filter out results with no meaningful text relevance — prevents false positives
-    // from low trigram similarity matches that only rank due to arena score boost.
-    // A textRelevance of 0 means no substring match AND no fuzzy score at all.
     .filter(r => r.textRelevance > 0)
     .sort((a, b) => b.relevance - a.relevance)
     .slice(0, limit)
@@ -596,7 +602,7 @@ export async function searchTraders(supabase: SupabaseClient, params: {
       sourceType: SOURCE_TYPE_MAP[plat] || null,
       roi: scoreRow?.roi != null ? Number(scoreRow.roi) : null,
       pnl: scoreRow?.pnl != null ? Number(scoreRow.pnl) : null,
-      winRate: null, // Not fetched in search query (not needed for dropdown)
+      winRate: null,
       maxDrawdown: null,
       tradesCount: null,
       followers: null,
