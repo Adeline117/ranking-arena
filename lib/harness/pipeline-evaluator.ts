@@ -66,6 +66,9 @@ export class PipelineEvaluator {
       this.checkArenaScoreCoverage(),
       this.checkLeaderboardIntegrity(),
       this.checkEnrichmentCoverage(),
+      this.checkPlatformCoverage(),
+      this.checkAPIResponseTime(),
+      this.checkHomepageSSR(),
     ])
 
     for (const result of checkResults) {
