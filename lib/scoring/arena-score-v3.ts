@@ -1,4 +1,9 @@
 /**
+ * @deprecated NOT used in production pipeline. Production uses lib/utils/arena-score.ts (tanh-based).
+ * This V3 percentile-rank system was prototyped for peer-relative scoring but never integrated.
+ * Only referenced by lib/harness/pipeline-evaluator.ts for health checks.
+ * DO NOT use for leaderboard computation — that uses lib/utils/arena-score.ts.
+ *
  * Arena Score V3 — Three-Dimension Weighted Scoring System
  *
  * Dimensions:
