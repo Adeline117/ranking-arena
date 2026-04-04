@@ -377,11 +377,21 @@ export async function checkDataQuality(): Promise<HealthCheck[]> {
 export async function runFullHealthCheck(baseUrl: string): Promise<HealthReport> {
   const startTime = Date.now()
 
-  // Run all categories in parallel
+  // Run all categories in parallel — surface crash as explicit FAIL check instead of silent []
+  const categoryMap = { frontend: 'frontend', api: 'api', data: 'data_quality' } as const
+  const wrapCategory = (name: keyof typeof categoryMap, fn: Promise<HealthCheck[]>): Promise<HealthCheck[]> =>
+    fn.catch((err): HealthCheck[] => [{
+      name: `${name}_crash`,
+      category: categoryMap[name],
+      status: 'fail',
+      details: `Health check category crashed: ${err instanceof Error ? err.message : String(err)}`,
+      latency_ms: 0,
+    }])
+
   const [frontendChecks, apiChecks, dataChecks] = await Promise.all([
-    checkFrontendHealth(baseUrl).catch(() => [] as HealthCheck[]),
-    checkAPIHealth(baseUrl).catch(() => [] as HealthCheck[]),
-    checkDataQuality().catch(() => [] as HealthCheck[]),
+    wrapCategory('frontend', checkFrontendHealth(baseUrl)),
+    wrapCategory('api', checkAPIHealth(baseUrl)),
+    wrapCategory('data', checkDataQuality()),
   ])
 
   const allChecks = [...frontendChecks, ...apiChecks, ...dataChecks]
