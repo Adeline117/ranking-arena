@@ -56,6 +56,10 @@ interface TraderHeaderProps {
   winRate?: number
   /** Arena Score for display in header */
   arenaScore?: number | null
+  /** Score confidence level — 'full', 'partial', or 'minimal' */
+  scoreConfidence?: string | null
+  /** Total trades count — shown as warning when very low */
+  tradesCount?: number | null
   /** Leaderboard rank for the Share on X wrapped card */
   rank?: number | null
   /** Pre-fetched current user ID to avoid duplicate auth calls */
@@ -159,6 +163,8 @@ export default function TraderHeader({
   maxDrawdown,
   winRate,
   arenaScore,
+  scoreConfidence,
+  tradesCount,
   rank,
   currentUserId: externalUserId,
   isVerifiedTrader = false,
@@ -426,6 +432,29 @@ export default function TraderHeader({
                 </svg>
                 <Text size="xs" weight="black" style={{ color: getScoreColor(arenaScore), fontFamily: tokens.typography.fontFamily.mono.join(', '), letterSpacing: '-0.02em' }}>
                   {arenaScore.toFixed(0)}
+                </Text>
+              </Badge>
+            )}
+
+            {/* Low confidence warning — prominently shown when score is based on few trades */}
+            {scoreConfidence && scoreConfidence !== 'full' && (
+              <Badge
+                key="confidence"
+                color={scoreConfidence === 'minimal' ? tokens.colors.accent.error + '20' : tokens.colors.accent.warning + '20'}
+                style={{ padding: '2px 8px', flexShrink: 0, border: `1px solid ${scoreConfidence === 'minimal' ? tokens.colors.accent.error : tokens.colors.accent.warning}40` }}
+                title={scoreConfidence === 'minimal'
+                  ? `Low confidence: only ${tradesCount ?? '?'} trades`
+                  : `Partial confidence: limited trade history`}
+              >
+                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke={scoreConfidence === 'minimal' ? tokens.colors.accent.error : tokens.colors.accent.warning} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ marginRight: 2 }}>
+                  <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
+                  <line x1="12" y1="9" x2="12" y2="13" />
+                  <line x1="12" y1="17" x2="12.01" y2="17" />
+                </svg>
+                <Text size="xs" weight="bold" style={{ color: scoreConfidence === 'minimal' ? tokens.colors.accent.error : tokens.colors.accent.warning }}>
+                  {tradesCount != null && tradesCount < 10
+                    ? `${tradesCount} trades`
+                    : scoreConfidence === 'minimal' ? 'Low data' : 'Partial'}
                 </Text>
               </Badge>
             )}
