@@ -70,11 +70,13 @@ export async function POST(request: NextRequest, context: RouteContext) {
       return NextResponse.json({ error: 'Failed to block user' }, { status: 500 })
     }
 
-    // Cascade: remove mutual follows (fire-and-forget)
-    void Promise.all([
+    // Cascade: remove mutual follows — await to ensure consistency
+    const [removeA, removeB] = await Promise.all([
       supabase.from('user_follows').delete().eq('follower_id', user.id).eq('following_id', targetUserId),
       supabase.from('user_follows').delete().eq('follower_id', targetUserId).eq('following_id', user.id),
-    ]).catch(err => logger.warn('[Block] Follow cleanup failed:', err))
+    ])
+    if (removeA.error) logger.warn('[Block] Failed to remove outgoing follow:', removeA.error.message)
+    if (removeB.error) logger.warn('[Block] Failed to remove incoming follow:', removeB.error.message)
 
     return NextResponse.json({ success: true })
   } catch (error: unknown) {
