@@ -126,7 +126,7 @@ export function mapLeaderboardRow(row: Record<string, unknown>): UnifiedTrader {
     maxDrawdown: row.max_drawdown != null ? Number(row.max_drawdown) : null,
     tradesCount: row.trades_count != null ? Number(row.trades_count) : null,
     followers: row.followers != null ? Number(row.followers) : null,
-    copiers: null, // not in leaderboard_ranks
+    copiers: row.copiers != null ? Number(row.copiers) : null,
 
     // Scores
     arenaScore: row.arena_score != null ? Number(row.arena_score) : null,
