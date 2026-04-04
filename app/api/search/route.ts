@@ -462,21 +462,15 @@ export const GET = withPublic(
         platform: effectivePlatform,
       }).catch(() => []),
 
+      // Posts: use ILIKE directly (1K rows, fast) — skip textSearch→ILIKE fallback chain
       features.social
         ? safeQuery(supabase
             .from('posts')
             .select('id, title, author_handle, created_at, view_count')
-            .textSearch('search_vector', sanitizedQuery, { type: 'plain' })
+            .or(`title.ilike.%${sanitizedQuery}%`)
             .eq('visibility', 'public')
             .order('view_count', { ascending: false, nullsFirst: false })
             .limit(limitPerCategory))
-            .then((results: PostRow[]) => results.length > 0 ? results : safeQuery(supabase
-              .from('posts')
-              .select('id, title, author_handle, created_at, view_count')
-              .or(`title.ilike.%${sanitizedQuery}%`)
-              .eq('visibility', 'public')
-              .order('view_count', { ascending: false, nullsFirst: false })
-              .limit(limitPerCategory)))
         : Promise.resolve([]),
 
       safeQuery(supabase
@@ -672,7 +666,7 @@ export const GET = withPublic(
     )
 
     return success(result, 200, {
-      'Cache-Control': 'public, s-maxage=30, stale-while-revalidate=60',
+      'Cache-Control': 'public, s-maxage=300, stale-while-revalidate=600',
     })
   },
   { name: 'unified-search', rateLimit: 'read' }
