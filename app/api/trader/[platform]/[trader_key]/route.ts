@@ -68,17 +68,22 @@ export async function GET(
     }
     const sourceAliases = LEGACY_SOURCE_ALIASES[platform] || [platform]
 
-    // Fetch all data in parallel (pure DB reads, fast)
-    const [profileResult, snapshotsResult, timeseriesResult, jobResult] = await Promise.all([
-      // 1. Profile
+    // Fire ALL queries in a single parallel batch — eliminates 3-round serial cascade.
+    // trader_timeseries is currently empty (0 rows), so legacy equity_curve/asset_breakdown
+    // queries are always needed. Running them upfront saves ~400ms per request.
+    const windows: SnapshotWindow[] = ['7D', '30D', '90D']
+    const [
+      profileResult, snapshotsResult, timeseriesResult, jobResult,
+      lrProfileResult, lrSnap7D, lrSnap30D, lrSnap90D,
+      ecResult, abResult,
+    ] = await Promise.all([
+      // V2 primary queries
       supabase
         .from('trader_profiles_v2')
         .select('id, platform, trader_key, display_name, avatar_url, profile_url, bio, bio_source, tags, followers, copiers, aum, updated_at, last_enriched_at, created_at')
         .eq('platform', platform)
         .eq('trader_key', trader_key)
         .maybeSingle(),
-
-      // 2. Latest snapshot for each window (flat columns are more reliable than metrics JSONB)
       supabase
         .from('trader_snapshots_v2')
         .select('window, roi_pct, pnl_usd, win_rate, max_drawdown, trades_count, followers, copiers, arena_score, sharpe_ratio, beta_btc, beta_eth, alpha, metrics, quality_flags, as_of_ts, updated_at')
@@ -86,8 +91,6 @@ export async function GET(
         .eq('trader_key', trader_key)
         .order('updated_at', { ascending: false })
         .limit(10),
-
-      // 3. Latest timeseries
       supabase
         .from('trader_timeseries')
         .select('series_type, data, as_of_ts, updated_at')
@@ -95,8 +98,6 @@ export async function GET(
         .eq('trader_key', trader_key)
         .order('as_of_ts', { ascending: false })
         .limit(5),
-
-      // 4. Active/recent refresh job
       supabase
         .from('refresh_jobs')
         .select('id, status, attempts, last_error, created_at, updated_at')
@@ -106,6 +107,57 @@ export async function GET(
         .order('created_at', { ascending: false })
         .limit(1)
         .maybeSingle(),
+
+      // Fallback queries — run in parallel with v2 queries
+      supabase
+        .from('leaderboard_ranks')
+        .select('handle, avatar_url, roi, pnl, win_rate, max_drawdown, trades_count, followers, arena_score, rank, computed_at')
+        .eq('source', platform)
+        .eq('source_trader_id', trader_key)
+        .eq('season_id', '90D')
+        .maybeSingle(),
+      supabase
+        .from('leaderboard_ranks')
+        .select('roi, pnl, win_rate, max_drawdown, trades_count, followers, arena_score, rank, computed_at')
+        .eq('source', platform)
+        .eq('source_trader_id', trader_key)
+        .eq('season_id', '7D')
+        .maybeSingle(),
+      supabase
+        .from('leaderboard_ranks')
+        .select('roi, pnl, win_rate, max_drawdown, trades_count, followers, arena_score, rank, computed_at')
+        .eq('source', platform)
+        .eq('source_trader_id', trader_key)
+        .eq('season_id', '30D')
+        .maybeSingle(),
+      supabase
+        .from('leaderboard_ranks')
+        .select('roi, pnl, win_rate, max_drawdown, trades_count, followers, arena_score, rank, computed_at')
+        .eq('source', platform)
+        .eq('source_trader_id', trader_key)
+        .eq('season_id', '90D')
+        .maybeSingle(),
+
+      // Legacy timeseries (trader_timeseries is empty, these are always needed)
+      Promise.resolve(
+        supabase
+          .from('trader_equity_curve')
+          .select('data_date, roi_pct, pnl_usd')
+          .in('source', sourceAliases)
+          .eq('source_trader_id', trader_key)
+          .in('period', ['90D', '30D', '7D'])
+          .order('data_date', { ascending: true })
+          .limit(365)
+      ),
+      Promise.resolve(
+        supabase
+          .from('trader_asset_breakdown')
+          .select('symbol, weight_pct')
+          .in('source', sourceAliases)
+          .eq('source_trader_id', trader_key)
+          .order('weight_pct', { ascending: false })
+          .limit(20)
+      ),
     ])
 
     // Build profile (graceful degradation if missing)
@@ -127,6 +179,12 @@ export async function GET(
       created_at: new Date(0).toISOString(),
     }
 
+    // Fallback: profile from leaderboard_ranks
+    if (!profileResult.data && lrProfileResult.data) {
+      profile.display_name = lrProfileResult.data.handle || null
+      profile.avatar_url = lrProfileResult.data.avatar_url || null
+    }
+
     // Build snapshots map (latest per window)
     const snapshots: Record<SnapshotWindow, SnapshotMetrics | null> = {
       '7D': null,
@@ -137,11 +195,9 @@ export async function GET(
     if (snapshotsResult.data) {
       const seenWindows = new Set<string>()
       for (const snap of snapshotsResult.data) {
-        // Normalize window key: '30d' → '30D'
         const windowKey = snap.window?.toUpperCase() as SnapshotWindow
         if (!windowKey || seenWindows.has(windowKey)) continue
         seenWindows.add(windowKey)
-        // Prefer flat columns over JSONB metrics (flat columns are more consistently updated)
         const m = (snap.metrics || {}) as Record<string, unknown>
         snapshots[windowKey] = {
           roi: snap.roi_pct ?? m.roi ?? null,
@@ -162,6 +218,32 @@ export async function GET(
           stability_score: m.stability_score ?? null,
           rank: m.platform_rank ?? null,
         } as SnapshotMetrics
+      }
+    }
+
+    // Fallback: snapshots from leaderboard_ranks (already fetched in parallel)
+    const hasAnyV2Snapshot = Object.values(snapshots).some(s => s !== null)
+    if (!hasAnyV2Snapshot) {
+      const lrSnapResults = [lrSnap7D, lrSnap30D, lrSnap90D]
+      for (let i = 0; i < windows.length; i++) {
+        const snap = lrSnapResults[i].data
+        if (snap) {
+          const winRate = snap.win_rate != null ? (snap.win_rate <= 1 ? snap.win_rate * 100 : snap.win_rate) : null
+          snapshots[windows[i]] = {
+            roi: snap.roi ?? 0,
+            pnl: snap.pnl ?? 0,
+            win_rate: winRate,
+            max_drawdown: snap.max_drawdown ?? null,
+            trades_count: snap.trades_count ?? null,
+            arena_score: snap.arena_score != null ? parseFloat(String(snap.arena_score)) : null,
+            followers: snap.followers ?? null,
+            aum: null,
+            return_score: null,
+            drawdown_score: null,
+            stability_score: null,
+            rank: snap.rank ?? null,
+          } as SnapshotMetrics
+        }
       }
     }
 
@@ -192,123 +274,26 @@ export async function GET(
       }
     }
 
-    // --- Fallback to legacy tables when V2 tables are empty ---
-
-    // Fallback: profile from leaderboard_ranks (unified data layer)
-    if (!profileResult.data) {
-      const { data: lrProfile } = await supabase
-        .from('leaderboard_ranks')
-        .select('handle, avatar_url')
-        .eq('source', platform)
-        .eq('source_trader_id', trader_key)
-        .eq('season_id', '90D')
-        .limit(1)
-        .maybeSingle()
-
-      if (lrProfile) {
-        profile.display_name = lrProfile.handle || null
-        profile.avatar_url = lrProfile.avatar_url || null
+    // Use legacy equity curve + asset breakdown (already fetched in parallel)
+    if (!timeseries.equity_curve && ecResult?.data && ecResult.data.length > 0) {
+      const byDate = new Map<string, { roi: number; pnl: number }>()
+      for (const p of ecResult.data as Array<{ data_date: string; roi_pct: number | null; pnl_usd: number | null }>) {
+        byDate.set(p.data_date, {
+          roi: p.roi_pct ?? 0,
+          pnl: p.pnl_usd != null ? Number(p.pnl_usd) : 0,
+        })
       }
+      timeseries.equity_curve = [...byDate.entries()]
+        .sort(([a], [b]) => a.localeCompare(b))
+        .map(([date, v]) => ({ date, roi: v.roi, pnl: v.pnl })) as EquityCurvePoint[]
     }
 
-    // Fallback: snapshots from leaderboard_ranks (unified data layer)
-    const hasAnyV2Snapshot = Object.values(snapshots).some(s => s !== null)
-    if (!hasAnyV2Snapshot) {
-      const windows: SnapshotWindow[] = ['7D', '30D', '90D']
-      const lrSnapshotQueries = windows.map(w =>
-        supabase
-          .from('leaderboard_ranks')
-          .select('roi, pnl, win_rate, max_drawdown, trades_count, followers, arena_score, rank, computed_at')
-          .eq('source', platform)
-          .eq('source_trader_id', trader_key)
-          .eq('season_id', w)
-          .maybeSingle()
-      )
-      const lrResults = await Promise.all(lrSnapshotQueries)
-      for (let i = 0; i < windows.length; i++) {
-        const snap = lrResults[i].data
-        if (snap) {
-          // Normalize win_rate: if <= 1, treat as decimal and multiply by 100
-          const winRate = snap.win_rate != null ? (snap.win_rate <= 1 ? snap.win_rate * 100 : snap.win_rate) : null
-          snapshots[windows[i]] = {
-            roi: snap.roi ?? 0,
-            pnl: snap.pnl ?? 0,
-            win_rate: winRate,
-            max_drawdown: snap.max_drawdown ?? null,
-            trades_count: snap.trades_count ?? null,
-            arena_score: snap.arena_score != null ? parseFloat(String(snap.arena_score)) : null,
-            followers: snap.followers ?? null,
-            aum: null,
-            return_score: null,
-            drawdown_score: null,
-            stability_score: null,
-            rank: snap.rank ?? null,
-          } as SnapshotMetrics
-        }
-      }
-    }
-
-    // Fallback: equity curve from trader_equity_curve (old table)
-    // Also fetch asset breakdown from trader_asset_breakdown in parallel
-    const needsEquityCurve = !timeseries.equity_curve
-    const needsAssetBreakdown = !timeseries.asset_breakdown
-
-    if (needsEquityCurve || needsAssetBreakdown) {
-      // Wrap Supabase query builders in Promise.resolve() to satisfy TypeScript
-      // (PostgREST builders are PromiseLike but not Promise<unknown>)
-      const ecQuery = needsEquityCurve
-        ? Promise.resolve(
-            supabase
-              .from('trader_equity_curve')
-              .select('data_date, roi_pct, pnl_usd')
-              .in('source', sourceAliases)
-              .eq('source_trader_id', trader_key)
-              .in('period', ['90D', '30D', '7D'])
-              .order('data_date', { ascending: true })
-              .limit(365)
-          )
-        : Promise.resolve(null)
-
-      const abQuery = needsAssetBreakdown
-        ? Promise.resolve(
-            supabase
-              .from('trader_asset_breakdown')
-              .select('symbol, weight_pct')
-              .in('source', sourceAliases)
-              .eq('source_trader_id', trader_key)
-              .order('weight_pct', { ascending: false })
-              .limit(20)
-          )
-        : Promise.resolve(null)
-
-      const [ecResult, abResult] = await Promise.all([ecQuery, abQuery]) as [
-        { data: Array<{ data_date: string; roi_pct: number | null; pnl_usd: number | null }> | null } | null,
-        { data: Array<{ symbol: string; weight_pct: number }> | null } | null,
-      ]
-
-      // Map equity curve with pnl field — deduplicate by date (multiple periods can have same date)
-      if (ecResult?.data && ecResult.data.length > 0) {
-        const byDate = new Map<string, { roi: number; pnl: number }>()
-        for (const p of ecResult.data) {
-          // Last write wins (data is ordered by data_date asc, so later periods overwrite)
-          byDate.set(p.data_date, {
-            roi: p.roi_pct ?? 0,
-            pnl: p.pnl_usd != null ? Number(p.pnl_usd) : 0,
-          })
-        }
-        timeseries.equity_curve = [...byDate.entries()]
-          .sort(([a], [b]) => a.localeCompare(b))
-          .map(([date, v]) => ({ date, roi: v.roi, pnl: v.pnl })) as EquityCurvePoint[]
-      }
-
-      // Map asset breakdown
-      if (abResult?.data && abResult.data.length > 0) {
-        timeseries.asset_breakdown = abResult.data.map(a => ({
-          symbol: a.symbol,
-          weight_pct: Number(a.weight_pct),
-          count: 0, // legacy table doesn't have trade count per symbol
-        })) as AssetBreakdownPoint[]
-      }
+    if (!timeseries.asset_breakdown && abResult?.data && abResult.data.length > 0) {
+      timeseries.asset_breakdown = (abResult.data as Array<{ symbol: string; weight_pct: number }>).map(a => ({
+        symbol: a.symbol,
+        weight_pct: Number(a.weight_pct),
+        count: 0,
+      })) as AssetBreakdownPoint[]
     }
 
     // Determine staleness from most recent update
