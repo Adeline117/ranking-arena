@@ -339,6 +339,7 @@ async function computeSeason(
     max_drawdown: number | null
     trades_count: number | null
     followers: number | null
+    copiers: number | null
     arena_score: number | null
     captured_at: string
     full_confidence_at: string | null
@@ -430,7 +431,7 @@ async function computeSeason(
         const freshnessISO = freshnessISOBySource(source)
         let { data, error } = await supabase
           .from('trader_snapshots_v2')
-          .select('platform, trader_key, roi_pct, pnl_usd, win_rate, max_drawdown, trades_count, followers, arena_score, updated_at, sharpe_ratio, sortino_ratio, calmar_ratio, volatility_pct, downside_volatility_pct, metrics')
+          .select('platform, trader_key, roi_pct, pnl_usd, win_rate, max_drawdown, trades_count, followers, copiers, arena_score, updated_at, sharpe_ratio, sortino_ratio, calmar_ratio, volatility_pct, downside_volatility_pct, metrics')
           .eq('platform', source)
           .eq('window', v2Window)
           .gte('updated_at', freshnessISO)
@@ -442,7 +443,7 @@ async function computeSeason(
         if ((!data || data.length < FALLBACK_THRESHOLD) && v2Window !== '30D') {
           const fallback = await supabase
             .from('trader_snapshots_v2')
-            .select('platform, trader_key, roi_pct, pnl_usd, win_rate, max_drawdown, trades_count, followers, arena_score, updated_at, sharpe_ratio, sortino_ratio, calmar_ratio, volatility_pct, downside_volatility_pct, metrics')
+            .select('platform, trader_key, roi_pct, pnl_usd, win_rate, max_drawdown, trades_count, followers, copiers, arena_score, updated_at, sharpe_ratio, sortino_ratio, calmar_ratio, volatility_pct, downside_volatility_pct, metrics')
             .eq('platform', source)
             .eq('window', '30D')
             .gte('updated_at', freshnessISO)
@@ -485,6 +486,7 @@ async function computeSeason(
             max_drawdown: col('max_drawdown'),
             trades_count: col('trades_count'),
             followers: col('followers'),
+            copiers: col('copiers'),
             arena_score: col('arena_score'),
             captured_at: d.updated_at as string,
             full_confidence_at: null,
@@ -619,7 +621,10 @@ async function computeSeason(
             if (existing.avg_holding_hours == null && sr.avg_holding_time_hours != null) {
               existing.avg_holding_hours = sr.avg_holding_time_hours
             }
-            // copiers_count from enrichment is now stored as 'copiers' (exchange copy-trade count)
+            // copiers_count from enrichment → exchange copy-trade count
+            if (sr.copiers_count != null && sr.copiers_count > 0 && existing.copiers == null) {
+              existing.copiers = sr.copiers_count
+            }
             // Arena followers come from trader_follows table, applied after scoring
           }
         }
@@ -1188,7 +1193,7 @@ async function computeSeason(
       win_rate: normalizedWinRate,
       max_drawdown: t.max_drawdown,
       followers: 0, // Will be replaced with Arena follower count below
-      copiers: t.followers ?? 0, // Exchange copy-trade follower count
+      copiers: t.copiers ?? 0, // Exchange copy-trade count (from v2 or enrichment stats_detail)
       trades_count: t.trades_count,
       handle: displayHandle,
       // Generate identicon locally when no avatar — eliminates external dicebear.com request per trader
@@ -1442,7 +1447,7 @@ async function computeSeason(
       win_rate: t.win_rate,
       max_drawdown: t.max_drawdown,
       followers: t.followers,
-      copiers: (t as Record<string, unknown>).copiers ?? 0,
+      copiers: t.copiers ?? 0,
       trades_count: t.trades_count,
       handle: t.handle,
       avatar_url: t.avatar_url,

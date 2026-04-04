@@ -510,7 +510,7 @@ export async function upsertTraders(
         sharpe_ratio: t.sharpe_ratio ?? null,
         trades_count: t.trades_count ?? null,
         followers: null, // Arena internal only — do NOT write exchange follower counts
-        copiers: null,  // Arena internal only — do NOT write exchange copier counts
+        copiers: t.copiers ?? null,  // Exchange copy-trade count (from connector API)
         // JSONB metrics — full data for detail views and future use
         metrics: {
           roi: t.roi ?? null,
@@ -518,8 +518,8 @@ export async function upsertTraders(
           win_rate: t.win_rate ?? null,
           max_drawdown: t.max_drawdown ?? null,
           trades_count: t.trades_count ?? null,
-          followers: null,
-          copiers: null,
+          followers: t.followers ?? null,  // exchange followers in JSONB (top-level followers is Arena-only)
+          copiers: t.copiers ?? null,
           sharpe_ratio: t.sharpe_ratio ?? null,
           arena_score: t.arena_score ?? null,
           aum: t.aum || null,
