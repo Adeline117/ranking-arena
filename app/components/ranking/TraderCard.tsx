@@ -75,12 +75,12 @@ export const TraderCard = memo(function TraderCard({
       <Box
         className="ranking-row trader-card-contained glass-card glass-card-hover"
         style={{
-          padding: tokens.spacing[4],
+          padding: `${tokens.spacing[3]} ${tokens.spacing[4]}`,
           borderRadius: tokens.radius.lg,
           cursor: 'pointer',
           display: 'flex',
           flexDirection: 'column',
-          gap: tokens.spacing[3],
+          gap: tokens.spacing[2],
           position: 'relative',
           border: isSelected ? `2px solid ${tokens.colors.accent.primary}` : undefined,
         }}
