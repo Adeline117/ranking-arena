@@ -15,7 +15,7 @@ import { env } from '@/lib/env'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
-export const maxDuration = 60
+export const maxDuration = 120 // 2min — 9 checks including HTTP requests to self
 
 export async function GET(request: NextRequest) {
   const authHeader = request.headers.get('authorization')
