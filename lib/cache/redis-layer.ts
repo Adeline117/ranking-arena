@@ -392,22 +392,23 @@ export async function tieredGetOrSet<T>(
   }
 
   // 缓存未命中，获取新数据
-  const promise = fetcher().catch(err => {
-    inFlightRequests.delete(key)
-    throw err
-  })
+  // CRITICAL: Use try-finally to guarantee inFlightRequests cleanup.
+  // Without this, synchronous throws or unhandled rejections leak Map entries,
+  // causing unbounded memory growth in long-lived serverless functions.
+  const promise = fetcher()
   inFlightRequests.set(key, promise)
-  const freshData = await promise
-  inFlightRequests.delete(key)
+  try {
+    const freshData = await promise
 
-  // 异步写入缓存+ SWR bucket
-  tieredSet(key, freshData, tier, tags).catch((err) => {
-    dataLogger.warn('[RedisLayer] 缓存写入失败:', { key, error: err })
-  })
+    // 异步写入缓存
+    tieredSet(key, freshData, tier, tags).catch((err) => {
+      dataLogger.warn('[RedisLayer] 缓存写入失败:', { key, error: err })
+    })
 
-  // SWR data is now stored in the primary entry with softExpiresAt — no separate swr: bucket needed
-
-  return freshData
+    return freshData
+  } finally {
+    inFlightRequests.delete(key)
+  }
 }
 
 /**
