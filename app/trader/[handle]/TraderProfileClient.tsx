@@ -512,6 +512,8 @@ export default function TraderProfileClient({ data, serverTraderData, claimedUse
           arenaScore={hasMultipleAccounts && activeAccount === 'all' && aggregatedData
             ? aggregatedData.weightedScore
             : (traderPerformance as ExtendedPerformance | null)?.arena_score_90d ?? data.arena_score ?? null}
+          scoreConfidence={(traderPerformance as ExtendedPerformance | null)?.score_confidence as string ?? null}
+          tradesCount={(traderPerformance as ExtendedPerformance | null)?.trades_count as number ?? null}
           rank={data.rank ?? null}
           currentUserId={currentUserId}
           isVerifiedTrader={isVerifiedTrader}
