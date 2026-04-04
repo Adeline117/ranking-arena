@@ -57,32 +57,30 @@ export async function GET(request: NextRequest) {
 async function computeMovers() {
   const supabase = getSupabaseAdmin()
 
-  // Find the two most recent DISTINCT dates using SQL DISTINCT
-  type DateRow = { date: string }
-  let recentDateRows: DateRow[] | null = null
-  try {
-    const { data } = await supabase.rpc('get_recent_snapshot_dates', { n: 2 })
-    recentDateRows = data as unknown as DateRow[] | null
-  } catch { /* RPC not available */ }
+  // Find the two most recent dates efficiently.
+  // idx_daily_snapshots_date (btree date DESC) makes this an index-only scan.
+  const today = new Date().toISOString().slice(0, 10)
+  const { data: latestRow } = await supabase
+    .from('trader_daily_snapshots')
+    .select('date')
+    .lte('date', today)
+    .order('date', { ascending: false })
+    .limit(1)
+    .maybeSingle()
 
-  // Fallback: if RPC doesn't exist, use manual dedup
-  let todayDate: string
-  let yesterdayDate: string
-  if (recentDateRows && recentDateRows.length >= 2) {
-    todayDate = recentDateRows[0].date
-    yesterdayDate = recentDateRows[1].date
-  } else {
-    const { data: fallbackDates } = await supabase
-      .from('trader_daily_snapshots')
-      .select('date')
-      .order('date', { ascending: false })
-      .limit(100)
-    if (!fallbackDates?.length) return { risers: [], fallers: [], period: '90D' }
-    const uniqueDates = [...new Set(fallbackDates.map(r => r.date))].sort().reverse()
-    if (uniqueDates.length < 2) return { risers: [], fallers: [], period: '90D' }
-    todayDate = uniqueDates[0]
-    yesterdayDate = uniqueDates[1]
-  }
+  if (!latestRow) return { risers: [], fallers: [], period: '90D' }
+  const todayDate = latestRow.date
+
+  const { data: prevRow } = await supabase
+    .from('trader_daily_snapshots')
+    .select('date')
+    .lt('date', todayDate)
+    .order('date', { ascending: false })
+    .limit(1)
+    .maybeSingle()
+
+  if (!prevRow) return { risers: [], fallers: [], period: '90D' }
+  const yesterdayDate = prevRow.date
 
   // Get PREVIOUS day's daily snapshots (to compare against current leaderboard)
   const { data: yesterdaySnaps } = await supabase
