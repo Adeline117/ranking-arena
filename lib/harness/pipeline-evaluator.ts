@@ -145,9 +145,43 @@ export class PipelineEvaluator {
     const supabase = getSupabaseAdmin()
     const issues: EvaluationIssue[] = []
 
-    // Query distinct platforms with their latest update via RPC
-    const { data: platformFreshness } = await supabase.rpc('get_platform_freshness')
-      .then(r => r, () => ({ data: null, error: null, count: null, status: 0, statusText: '' }))
+    // Query distinct platforms with their latest computed_at from leaderboard_ranks.
+    // Fallback from RPC (may not exist) to direct query.
+    let platformFreshness: Array<{ platform: string; latest_snapshot: string; trader_count: number }> | null = null
+    try {
+      const { data: rpcData } = await supabase.rpc('get_platform_freshness')
+      if (rpcData && Array.isArray(rpcData) && rpcData.length > 0) {
+        platformFreshness = rpcData as unknown as typeof platformFreshness
+      }
+    } catch { /* RPC not available */ }
+
+    // Fallback: query leaderboard_ranks directly for per-platform freshness
+    if (!platformFreshness) {
+      const { data: lrData } = await supabase
+        .from('leaderboard_ranks')
+        .select('source, computed_at')
+        .eq('season_id', '90D')
+        .not('arena_score', 'is', null)
+        .order('computed_at', { ascending: false })
+        .limit(5000)
+
+      if (lrData && lrData.length > 0) {
+        const byPlatform = new Map<string, { latest: string; count: number }>()
+        for (const row of lrData) {
+          const existing = byPlatform.get(row.source)
+          if (!existing) {
+            byPlatform.set(row.source, { latest: row.computed_at, count: 1 })
+          } else {
+            existing.count++
+          }
+        }
+        platformFreshness = [...byPlatform.entries()].map(([platform, { latest, count }]) => ({
+          platform,
+          latest_snapshot: latest,
+          trader_count: count,
+        }))
+      }
+    }
 
     let staleCount = 0
     let totalPlatforms = 0
@@ -422,25 +456,24 @@ export class PipelineEvaluator {
     const supabase = getSupabaseAdmin()
     const issues: EvaluationIssue[] = []
 
-    // Sample top 500 traders by Arena Score — check enrichment fields
-    const { data: topTraders, count: totalTop } = await supabase
+    // Check enrichment coverage via leaderboard_ranks (win_rate non-null = enriched).
+    // Previously queried nonexistent 'trader_details' table → always returned 0/0.
+    const { count: totalCount } = await supabase
       .from('leaderboard_ranks')
-      .select('source, arena_score', { count: 'exact' })
-      .not('arena_score', 'is', null)
-      .order('arena_score', { ascending: false })
-      .limit(500)
-
-    // Check enrichment in trader_details for these platforms
-    const { count: enrichedCount } = await supabase
-      .from('trader_details')
       .select('*', { count: 'exact', head: true })
+      .eq('season_id', '90D')
+      .not('arena_score', 'is', null)
+
+    const { count: enrichedCount } = await supabase
+      .from('leaderboard_ranks')
+      .select('*', { count: 'exact', head: true })
+      .eq('season_id', '90D')
+      .not('arena_score', 'is', null)
       .not('win_rate', 'is', null)
 
-    const { count: totalDetails } = await supabase
-      .from('trader_details')
-      .select('*', { count: 'exact', head: true })
-
-    const coverage = totalDetails && totalDetails > 0 ? (enrichedCount ?? 0) / totalDetails : 0
+    const total = totalCount ?? 0
+    const enriched = enrichedCount ?? 0
+    const coverage = total > 0 ? enriched / total : 0
     const score = Math.min(100, Math.round(coverage * 100 * 1.5)) // Scale up — 67% coverage = 100 score
 
     if (coverage < 0.50) {
@@ -448,7 +481,7 @@ export class PipelineEvaluator {
         platform: 'all',
         type: 'low_enrichment_coverage',
         severity: coverage < 0.30 ? 'critical' : 'warning',
-        description: `Enrichment coverage (win_rate): ${Math.round(coverage * 100)}% (${enrichedCount}/${totalDetails})`,
+        description: `Enrichment coverage (win_rate): ${Math.round(coverage * 100)}% (${enriched}/${total})`,
         recommendation: 'Check batch-enrich cron — some platforms may be failing silently.',
       })
     }
@@ -459,7 +492,7 @@ export class PipelineEvaluator {
         category: 'completeness',
         passed: coverage >= 0.50,
         score,
-        details: `${enrichedCount ?? 0}/${totalDetails ?? 0} traders enriched (${Math.round(coverage * 100)}%)`,
+        details: `${enriched}/${total} traders enriched (${Math.round(coverage * 100)}%)`,
       },
       issues,
     }
