@@ -75,7 +75,7 @@ export async function GET(request: NextRequest) {
           const chunk = traderKeys.slice(i, i + 100)
           const { data } = await supabase
             .from('leaderboard_ranks')
-            .select('source, source_trader_id, handle, avatar_url, source_type, roi, pnl, win_rate, max_drawdown, trades_count, followers, profitability_score, risk_control_score, execution_score, trading_style, sharpe_ratio, trader_type')
+            .select('source, source_trader_id, handle, avatar_url, source_type, roi, pnl, win_rate, max_drawdown, trades_count, followers, copiers, profitability_score, risk_control_score, execution_score, trading_style, sharpe_ratio, sortino_ratio, profit_factor, calmar_ratio, trader_type')
             .eq('season_id', period)
             .in('source_trader_id', chunk)
 
@@ -139,7 +139,7 @@ export async function GET(request: NextRequest) {
 
     const { data, count, error } = await supabase
       .from('leaderboard_ranks')
-      .select('source_trader_id, handle, roi, pnl, win_rate, max_drawdown, trades_count, followers, source, source_type, avatar_url, arena_score, rank, profitability_score, risk_control_score, execution_score, trading_style, sharpe_ratio, trader_type', { count: 'estimated' })
+      .select('source_trader_id, handle, roi, pnl, win_rate, max_drawdown, trades_count, followers, copiers, source, source_type, avatar_url, arena_score, rank, profitability_score, risk_control_score, execution_score, trading_style, sharpe_ratio, sortino_ratio, profit_factor, calmar_ratio, trader_type', { count: 'estimated' })
       .eq('season_id', period)
       .gt('arena_score', 0)
       .or('is_outlier.is.null,is_outlier.eq.false')
