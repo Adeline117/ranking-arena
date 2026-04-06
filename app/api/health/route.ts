@@ -89,7 +89,30 @@ export async function GET() {
     freshness = { status: 'skip', message: e instanceof Error ? e.message : 'Unknown' }
   }
 
-  const checks = { api, database, redis, freshness }
+  // VPS connectivity check (SG) — WAF-protected platforms depend on this
+  let vps: { status: 'pass' | 'fail' | 'skip'; latency?: number; message?: string }
+  const vpsHost = process.env.VPS_SCRAPER_SG || process.env.VPS_PROXY_SG
+  const vpsKey = process.env.VPS_PROXY_KEY
+  if (vpsHost && vpsKey) {
+    const t2 = Date.now()
+    try {
+      const healthUrl = vpsHost.replace(/:\d+$/, ':3457') + '/health'
+      const res = await fetch(healthUrl, {
+        headers: { 'X-Proxy-Key': vpsKey },
+        signal: AbortSignal.timeout(5_000),
+      })
+      const lat = Date.now() - t2
+      vps = res.ok
+        ? { status: 'pass', latency: lat, message: `VPS SG responding` }
+        : { status: 'fail', latency: lat, message: `VPS SG returned ${res.status}` }
+    } catch (e: unknown) {
+      vps = { status: 'fail', latency: Date.now() - t2, message: e instanceof Error ? e.message : 'Unreachable' }
+    }
+  } else {
+    vps = { status: 'skip', message: 'VPS not configured' }
+  }
+
+  const checks = { api, database, redis, freshness, vps }
 
   // Determine overall status:
   // - All pass → healthy (200)
@@ -98,7 +121,7 @@ export async function GET() {
   let status: 'healthy' | 'degraded' | 'unhealthy' = 'healthy'
   if (database.status === 'fail') {
     status = 'unhealthy'
-  } else if (redis.status === 'fail' || freshness.status === 'fail') {
+  } else if (redis.status === 'fail' || freshness.status === 'fail' || vps.status === 'fail') {
     status = 'degraded'
   }
 
