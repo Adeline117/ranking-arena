@@ -394,6 +394,11 @@ async function computeSeason(
     if (snap.max_drawdown != null && (snap.max_drawdown > 100 || snap.max_drawdown < 0)) {
       snap.max_drawdown = null
     }
+    // MDD=0% with ROI > 50% is almost certainly missing data, not real zero drawdown.
+    // Null it out so Phase 5 estimation can fill a reasonable value.
+    if (snap.max_drawdown === 0 && snap.roi != null && Math.abs(snap.roi) > 50) {
+      snap.max_drawdown = null
+    }
     // Sharpe ratio: must be -20 to 20
     if (snap.sharpe_ratio != null && (snap.sharpe_ratio > 20 || snap.sharpe_ratio < -20)) {
       snap.sharpe_ratio = null
@@ -1239,9 +1244,10 @@ async function computeSeason(
     if (Math.abs(t.roi) > 10000) isOutlier = true
     // PnL > $100M from non-whale sources
     if (t.pnl != null && Math.abs(t.pnl) > 100_000_000 && !['hyperliquid'].includes(t.source)) isOutlier = true
-    // ROI and PnL sign mismatch (positive PnL with hugely negative ROI or vice versa)
-    if (t.pnl != null && t.pnl > 1000 && t.roi < -1000) isOutlier = true
-    if (t.pnl != null && t.pnl < -1000 && t.roi > 1000) isOutlier = true
+    // ROI and PnL sign mismatch — positive ROI with significant negative PnL or vice versa
+    // Lowered from 1000/1000 threshold: audit found ROI=6086% with PnL=-$8K passing through
+    if (t.pnl != null && t.pnl > 500 && t.roi < -50) isOutlier = true
+    if (t.pnl != null && t.pnl < -500 && t.roi > 50) isOutlier = true
     // High ROI but PnL is 0 — data inconsistency (e.g. Bitfinex equity proxy mismatch)
     if (Math.abs(t.roi) > 500 && (t.pnl == null || t.pnl === 0)) isOutlier = true
     // web3_bot entries are DeFi protocols, not traders

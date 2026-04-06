@@ -865,7 +865,7 @@ export async function runEnrichment(params: {
                         if (std > 0) snapshotUpdate.sharpe_ratio = Math.round((mean / std) * Math.sqrt(365) * 100) / 100
                       }
                     }
-                    // Win rate from daily returns if not from stats
+                    // Win rate from daily returns if not from stats (or if stats returned 0 — likely bad data)
                     if (!snapshotUpdate.win_rate && curve.length >= 3) {
                       const dailyReturns: number[] = []
                       for (let j = 1; j < curve.length; j++) {
@@ -879,7 +879,7 @@ export async function runEnrichment(params: {
                         snapshotUpdate.trades_count ??= dailyReturns.length
                       }
                     }
-                    // Max drawdown from equity curve if not from stats
+                    // Max drawdown from equity curve if not from stats (or if stats returned 0 — likely bad data)
                     if (!snapshotUpdate.max_drawdown && curve.length >= 3) {
                       let peak = -Infinity
                       let maxDD = 0
