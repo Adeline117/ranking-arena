@@ -28,6 +28,7 @@ import { generateIdenticonSvg } from '@/lib/utils/avatar'
 import { tieredGet, tieredSet, tieredDel } from '@/lib/cache/redis-layer'
 import { PipelineState } from '@/lib/services/pipeline-state'
 import { env } from '@/lib/env'
+import { sendRateLimitedAlert } from '@/lib/alerts/send-alert'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 300
