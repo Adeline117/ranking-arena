@@ -12,9 +12,9 @@ import { useToast } from '@/app/components/ui/Toast'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import { getCsrfHeaders } from '@/lib/api/client'
 import { DynamicStickerPicker } from '@/app/components/ui/Dynamic'
+import { trackEvent } from '@/lib/analytics/track'
 import type { Sticker } from '@/lib/stickers'
 import { logger } from '@/lib/logger'
-import { trackEvent } from '@/lib/analytics/track'
 import { VisibilitySelector } from '@/app/components/post/components/VisibilitySelector'
 import { ContentWarningToggle } from '@/app/components/post/components/ContentWarningToggle'
 import type { PostVisibility } from '@/lib/types/post'
@@ -525,8 +525,7 @@ export default function NewPostPage() {
       }
 
       clearDraft()
-      // Track post creation for analytics funnel
-      try { (await import('@/lib/analytics/track')).trackEvent('create_post') } catch { /* analytics non-critical */ }
+      trackEvent('create_post')
       showToast(t('publishSuccess'), 'success')
       router.push(`/u/${encodeURIComponent(decodedHandle)}`)
     } catch (_error) {
