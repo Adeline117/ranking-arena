@@ -135,11 +135,13 @@ export async function GET(request: NextRequest) {
   // Checkpoint: resume from last crash point (skip already-enriched platforms)
   const checkpoint = await PipelineCheckpoint.startOrResume('enrich', periodParam)
 
-  // Safety timeout: ensure plog gets called before Vercel kills the function at 300s
+  // Safety timeout: ensure plog gets called before Vercel kills the function at 300s.
+  // Log as SUCCESS with partial note — enrichment resumes from checkpoint next run.
   const SAFETY_TIMEOUT_MS = 280_000 // 280s for 300s limit (20s buffer)
   const safetyTimer = setTimeout(async () => {
     try {
-      await plog.error(new Error('Safety timeout: function approaching 300s limit'), { results })
+      const enriched = results.filter(r => r.status === 'success').reduce((sum, r) => sum + (r.enriched || 0), 0)
+      await plog.success(enriched, { results, note: 'Safety timeout at 280s — partial enrichment, will resume from checkpoint' })
     } catch { /* best effort */ }
   }, SAFETY_TIMEOUT_MS)
 
