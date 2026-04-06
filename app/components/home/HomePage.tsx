@@ -7,12 +7,12 @@ import TopNav from '../layout/TopNav'
 // MobileBottomNav is rendered in root layout.tsx -- do not duplicate here
 import ThreeColumnLayout from '../layout/ThreeColumnLayout'
 const Footer = lazy(() => import('../layout/Footer'))
-import FoundingMemberBanner from './FoundingMemberBanner'
+const FoundingMemberBanner = lazy(() => import('./FoundingMemberBanner'))
 const ExchangePartners = lazy(() => import('./ExchangePartners'))
 const GuestSignupPrompt = lazy(() => import('./GuestSignupPrompt'))
-// HomeHero renders in Phase 2 — safe because Phase 2 is deferred until user interaction
-// (HomePageLoader gates on scroll/click/keypress), so LCP is already locked at SSR time.
-import HomeHero from './HomeHero'
+// HomeHero: lazy-loaded in Phase 2. SSR hero (HomeHeroSSR) is the LCP element.
+// Phase 2 hero adds NumberTicker animation + language switching on top.
+const HomeHero = lazy(() => import('./HomeHero'))
 // WelcomeModal removed — blocks entire page for first-time visitors
 import HomePageClient from './HomePageClient'
 import { SectionErrorBoundary } from '../utils/ErrorBoundary'
@@ -33,13 +33,12 @@ interface HomePageProps {
 
 export default function HomePage({ initialTraders, initialLastUpdated, heroStats }: HomePageProps) {
   // SSR ranking table: hidden by CSS :has(#homepage-interactive) — instant, zero CLS.
-  // SSR hero: NEVER hidden by JS. It IS the LCP element (~1.3s on slow 4G).
-  //   Phase 2 hero renders on top via z-index (same visual content).
-  //   SSR hero stays underneath indefinitely — invisible to user but preserves LCP.
-  // Cleanup: remove SSR shells after idle (safe: Phase 2 is already rendered).
+  // SSR hero: NEVER removed — it IS the LCP element (~1.3s on slow 4G).
+  //   Removing it would cause Lighthouse to measure Phase 2 hero as LCP (~8s).
+  //   Phase 2 hero renders on top via z-index (same visual content + NumberTicker).
+  // Cleanup: only remove SSR ranking table (replaced by interactive table).
   useEffect(() => {
     const cleanup = () => {
-      document.getElementById('ssr-hero-shell')?.remove()
       document.getElementById('ssr-ranking-table')?.remove()
     }
     if ('requestIdleCallback' in window) {
@@ -65,7 +64,7 @@ export default function HomePage({ initialTraders, initialLastUpdated, heroStats
           <Suspense fallback={null}><HomeHero traderCount={heroStats?.traderCount} exchangeCount={heroStats?.exchangeCount} /></Suspense>
         </div>
         <div className="contain-content">
-          <FoundingMemberBanner />
+          <Suspense fallback={null}><FoundingMemberBanner /></Suspense>
         </div>
         {/* ExchangePartners fallback: padding:10px*2 + content~26px + border:1px = 47px.
             Must match actual rendered height to avoid CLS when component loads. */}
