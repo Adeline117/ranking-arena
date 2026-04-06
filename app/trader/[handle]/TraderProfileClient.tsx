@@ -871,7 +871,7 @@ export default function TraderProfileClient({ data, serverTraderData, claimedUse
 
           {/* Stats Tab — lazy: only mount after first visit */}
           <Box style={{ minHeight: 200 }}>
-            {visitedTabs.has('stats') && traderStats ? (
+            {visitedTabs.has('stats') && (traderStats || traderEquityCurve || traderAssetBreakdown) ? (
               <StatsPage
                 stats={traderStats}
                 traderHandle={traderProfile?.handle || data.handle}
