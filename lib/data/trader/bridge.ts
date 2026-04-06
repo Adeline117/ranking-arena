@@ -95,7 +95,17 @@ export function toTraderPageData(detail: TraderDetail): Record<string, unknown> 
       if (enrichTotal != null && periodTrades != null && enrichTotal > periodTrades * 2) {
         return periodTrades > 0 ? periodTrades : undefined
       }
-      return enrichTotal ?? (periodTrades != null && periodTrades > 0 ? periodTrades : undefined)
+      const raw = enrichTotal ?? (periodTrades != null && periodTrades > 0 ? periodTrades : undefined)
+      // Cross-validation: total can never be less than winning positions.
+      // If mismatch, use period trades as the consistent source for both.
+      const winPos = detail.stats?.winningPositions ?? (
+        t.winRate != null && periodTrades != null && periodTrades > 0
+          ? Math.round((t.winRate / 100) * periodTrades) : undefined
+      )
+      if (raw != null && winPos != null && raw < winPos) {
+        return periodTrades != null && periodTrades > 0 ? periodTrades : winPos
+      }
+      return raw
     })(),
     // Per-period winning positions (computed from win_rate * trades_count when not available)
     winning_positions_7d: p7?.winRate != null && p7?.tradesCount != null && p7.tradesCount > 0
