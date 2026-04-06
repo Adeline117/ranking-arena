@@ -214,7 +214,11 @@ export async function GET(request: NextRequest) {
             offset = prevOffset
             // Advance offset for next run; wrap around at 5000 (max reasonable leaderboard size)
             await PipelineState.set(rotationKey, (prevOffset + limit) % 5000)
-          } catch { /* Redis miss — start at 0 */ }
+          } catch (err) {
+            logger.warn(`[batch-enrich] Redis offset rotation failed for ${platform}/${period}, starting at 0`, {
+              error: err instanceof Error ? err.message : String(err),
+            })
+          }
 
           try {
             // Wrap enrichment in a timeout to prevent stuck jobs

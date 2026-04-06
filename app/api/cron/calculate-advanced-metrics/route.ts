@@ -162,8 +162,11 @@ export async function POST(request: NextRequest) {
           dailySnapshotMap.get(row.trader_key)!.push({ date: row.date, daily_return_pct: row.daily_return_pct })
         }
       }
-    } catch {
+    } catch (err) {
       // Tables may not exist yet — dailySnapshotMap stays empty, metrics skip gracefully
+      logger.warn('[calculate-advanced-metrics] equity curve / daily snapshot fetch failed', {
+        error: err instanceof Error ? err.message : String(err),
+      })
     }
 
     // Process each trader
