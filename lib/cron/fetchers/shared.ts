@@ -509,7 +509,7 @@ export async function upsertTraders(
         arena_score: t.arena_score ?? null,  // computed by compute-leaderboard, don't overwrite with placeholder
         sharpe_ratio: t.sharpe_ratio ?? null,
         trades_count: t.trades_count ?? null,
-        followers: null, // Arena internal only — do NOT write exchange follower counts
+        followers: t.followers ?? null,  // Exchange followers (v2 fallback needs this when trader isn't in leaderboard_ranks yet)
         copiers: t.copiers ?? null,  // Exchange copy-trade count (from connector API)
         // JSONB metrics — full data for detail views and future use
         metrics: {
