@@ -100,10 +100,10 @@ export class DydxPerpConnector extends BaseConnector {
     // dYdX indexer /v4/leaderboard/pnl returns 404 globally since ~2026-03.
     // Use Copin API as primary data source for trader discovery.
     // Copin API max limit is 500 per page — paginate to reach desired limit.
-    // NOTE: Copin leaderboard data has ~2 day processing delay.
-    // Using Date.now() returns 0 results. Use 3 days ago as queryDate.
+    // NOTE: Copin leaderboard data has significant processing delay (grew from 3d to 7d+ as of 2026-04).
+    // Using Date.now() returns 0 results. Use 7 days ago as queryDate to ensure data availability.
     const statisticType = window === '7d' ? 'WEEK' : 'MONTH'
-    const queryDate = Date.now() - 3 * 24 * 60 * 60 * 1000
+    const queryDate = Date.now() - 7 * 24 * 60 * 60 * 1000
     const COPIN_PAGE_SIZE = 500
 
     let traders: TraderSource[] = []
