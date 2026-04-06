@@ -289,7 +289,7 @@ async function buildEquityCurveFromSnapshots(
       .order('date', { ascending: true })
       .limit(days)
 
-    if (error || !data || data.length < 2) return []
+    if (error || !data || data.length === 0) return []
 
     return data.map((row: { date: string; roi: number | null; pnl: number | null }) => ({
       date: row.date,
