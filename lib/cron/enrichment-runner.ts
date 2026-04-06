@@ -327,7 +327,7 @@ export const ENRICHMENT_PLATFORM_CONFIGS: Record<string, EnrichmentConfig> = {
     fetchStatsDetail: fetchBinanceStatsDetail,
     fetchCurrentPositions: fetchBinancePositionHistory,
     fetchPositionHistory: fetchBinancePositionHistory,
-    concurrency: 10, delayMs: 500, // Increased from 5/1000 for higher throughput
+    concurrency: 5, delayMs: 800, // Reduced from 10/500: VPS proxy under load causes 100% failure at high concurrency
   },
   // binance_spot: PERMANENTLY REMOVED (2026-03-14) - repeatedly hangs 45-76min, blocks entire pipeline
   // Bybit enrichment re-enabled (2026-03-18) — routes through VPS scraper
@@ -390,7 +390,7 @@ export const ENRICHMENT_PLATFORM_CONFIGS: Record<string, EnrichmentConfig> = {
     platform: 'bybit_spot',
     fetchEquityCurve: fetchBybitEquityCurve,
     fetchStatsDetail: fetchBybitStatsDetail,
-    concurrency: 3, delayMs: 1500, limit: 50,
+    concurrency: 2, delayMs: 2000, limit: 20, // Reduced from 3/1500/50: VPS scraper is slow (~20s/trader), 50 traders = 750s which always times out
   },
   hyperliquid: {
     platform: 'hyperliquid',
@@ -654,9 +654,10 @@ const ONCHAIN_SET = new Set(['gmx', 'dydx', 'jupiter_perps', 'hyperliquid', 'dri
 // 2026-03-22: Added dydx 15s timeout (similar to bitget_futures pattern)
 const PER_TRADER_TIMEOUT_MS: Record<string, number> = {
   'bitget_futures': 18_000,  // 18s per trader - equity 15s + detail 10s run in parallel, 18s is generous
-  'binance_futures': 12_000, // 12s per trader - ultra-short (VPS proxy tested <500ms, 3-8s API timeouts)
+  'binance_futures': 20_000, // 20s per trader - increased from 12s: VPS proxy can be 2-5s under load (was timing out 10/10 during VPS outage)
   'dydx': 15_000, // 15s per trader - 3 APIs × 5-6s timeout + fallback buffer
   'bybit': 45_000, // 45s per trader - VPS Playwright scraper: page load + WAF bypass + 2 API calls
+  'bybit_spot': 45_000, // 45s per trader - same VPS scraper as bybit (was missing, causing 15/15 timeouts)
   'etoro': 20_000, // 20s per trader - CopySim + ranking cache + portfolio fetch
 }
 
@@ -740,7 +741,8 @@ export async function runEnrichment(params: {
     } else {
       // Standard enrichment: read from leaderboard_ranks (canonical, has latest trader keys)
       // LR columns: source → platform, source_trader_id → traderKey, season_id → period
-      const { data: dbTraders, error: fetchError } = await supabase
+      // Primary: fetch by arena_score (most valuable traders first)
+      let { data: dbTraders, error: fetchError } = await supabase
         .from('leaderboard_ranks')
         .select(LR.source_trader_id)
         .eq(LR.source, platformKey)
@@ -748,6 +750,20 @@ export async function runEnrichment(params: {
         .not(LR.arena_score, 'is', null)
         .order(LR.arena_score, { ascending: false })
         .range(offset, offset + limit - 1)
+
+      // Fallback: if no scored traders found, fetch by rank (handles compute-leaderboard lag)
+      if (!fetchError && (!dbTraders || dbTraders.length === 0)) {
+        logger.warn(`[enrich] ${platformKey}/${period}: no scored traders, falling back to rank-based query`)
+        const fallback = await supabase
+          .from('leaderboard_ranks')
+          .select(LR.source_trader_id)
+          .eq(LR.source, platformKey)
+          .eq(LR.season_id, period)
+          .order('rank', { ascending: true })
+          .range(offset, offset + limit - 1)
+        dbTraders = fallback.data
+        fetchError = fallback.error
+      }
 
       if (fetchError || !dbTraders) {
         results[platformKey].errors.push(`Failed to fetch traders: ${fetchError?.message}`)
