@@ -125,6 +125,7 @@ import { captureMessage } from '@/lib/utils/logger'
 import { sendRateLimitedAlert } from '@/lib/alerts/send-alert'
 import { logger } from '@/lib/logger'
 import { PipelineLogger } from '@/lib/services/pipeline-logger'
+import { getSharedRedis } from '@/lib/cache/redis-client'
 import { LR, V2 } from '@/lib/types/schema-mapping'
 
 // Retry config: 3 attempts with shared AbortSignal from per-trader timeout.
@@ -189,7 +190,8 @@ interface DlqEntry {
 }
 
 /** Record an enrichment failure for a trader. Returns true if moved to dead-letter. */
-async function recordEnrichmentFailure(
+// TODO: Wire into per-trader enrichment catch block to enable DLQ tracking
+async function _recordEnrichmentFailure(
   platform: string,
   traderId: string,
   errorMsg: string
@@ -227,7 +229,7 @@ async function recordEnrichmentFailure(
 }
 
 /** Clear failure tracking for a trader after successful enrichment. */
-async function clearEnrichmentFailure(platform: string, traderId: string): Promise<void> {
+async function _clearEnrichmentFailure(platform: string, traderId: string): Promise<void> {
   try {
     const redis = await getSharedRedis()
     if (!redis) return
@@ -238,7 +240,7 @@ async function clearEnrichmentFailure(platform: string, traderId: string): Promi
 }
 
 /** Get trader IDs that previously failed and should be retried (count < MAX_DLQ_RETRIES). */
-async function getRetryableTraders(platform: string): Promise<string[]> {
+async function _getRetryableTraders(platform: string): Promise<string[]> {
   try {
     const redis = await getSharedRedis()
     if (!redis) return []

@@ -44,7 +44,7 @@ interface PositionHistoryItem {
 }
 
 interface ExtendedStatsPageProps {
-  stats: TraderStats
+  stats: TraderStats | null | undefined
   traderHandle: string
   assetBreakdown?: AssetBreakdownData
   equityCurve?: EquityCurveData
@@ -105,9 +105,9 @@ export default function StatsPage({
     )
   }
 
-  const frequentlyTraded = stats.frequentlyTraded || []
-  const trading = stats.trading
-  const additionalStats = stats.additionalStats
+  const frequentlyTraded = stats?.frequentlyTraded || []
+  const trading = stats?.trading
+  const additionalStats = stats?.additionalStats
 
   return (
     <Box
