@@ -132,7 +132,7 @@ export async function getLeaderboard(supabase: SupabaseClient, params: {
 
   if (error) {
     logger.error('[unified.getLeaderboard] Query error:', error.message)
-    return { traders: [], total: 0 }
+    return { traders: [], total: 0, error: error.message }
   }
 
   const traders = (data || []).map((row: Record<string, unknown>) => mapLeaderboardRow(row))
