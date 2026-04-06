@@ -9,6 +9,7 @@
 import { SupabaseClient } from '@supabase/supabase-js'
 import { EnrichedTraderData, PersistResult } from './types'
 import { createLogger } from '@/lib/utils/logger'
+import { SOURCE_TYPE_MAP } from '@/lib/constants/exchanges'
 
 
 const log = createLogger('pipeline:storage')
@@ -84,7 +85,7 @@ export class PipelineStorage {
     const traderRows = traders.map((t) => ({
       platform: t.platform,
       trader_key: t.trader_id,
-      market_type: 'futures' as string,  // EnrichedTraderData doesn't carry market_type; default to futures
+      market_type: SOURCE_TYPE_MAP[t.platform] || 'futures',
       handle: t.display_name,
       avatar_url: t.avatar_url,
       is_active: true,
@@ -121,7 +122,7 @@ export class PipelineStorage {
     // 准备数据
     const snapshots = traders.map((t) => ({
       platform: t.platform,
-      market_type: 'futures' as string,
+      market_type: SOURCE_TYPE_MAP[t.platform] || 'futures',
       trader_key: t.trader_id,
       window: t.window.toUpperCase(), // '7D', '30D', '90D'
       roi_pct: t.roi_pct,
