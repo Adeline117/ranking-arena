@@ -75,7 +75,8 @@ export class BlofinFuturesScraper implements PlatformScraper {
           }
           break // Got data, stop trying other endpoints
         }
-      } catch {
+      } catch (err) {
+        console.warn('[scraper-blofin] endpoint fetch fallback:', err instanceof Error ? err.message : String(err))
         continue
       }
     }

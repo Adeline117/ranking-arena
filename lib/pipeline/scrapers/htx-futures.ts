@@ -72,7 +72,8 @@ export class HtxFuturesScraper implements PlatformScraper {
         if (list.length < pageSize) break
         if (allTraders.length >= 1000) break
         await this.delay(200)
-      } catch {
+      } catch (err) {
+        console.warn('[scraper-htx] page fetch fallback:', err instanceof Error ? err.message : String(err))
         break
       }
     }

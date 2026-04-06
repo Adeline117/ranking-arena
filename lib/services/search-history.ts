@@ -29,7 +29,8 @@ export function getLocalHistory(): string[] {
     const stored = localStorage.getItem(STORAGE_KEY)
     if (!stored) return []
     return JSON.parse(stored)
-  } catch {
+  } catch (err) {
+    logger.debug('[search-history] failed to parse local history:', err instanceof Error ? err.message : String(err))
     return []
   }
 }
@@ -42,8 +43,8 @@ export function saveLocalHistory(history: string[]): void {
 
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(history.slice(0, MAX_HISTORY_ITEMS)))
-  } catch {
-    // Intentionally swallowed: localStorage full or unavailable, search history is non-critical
+  } catch (err) {
+    logger.debug('[search-history] localStorage write failed:', err instanceof Error ? err.message : String(err))
   }
 }
 

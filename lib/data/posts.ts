@@ -544,8 +544,8 @@ export async function createPost(
       .maybeSingle()
     authorScore = result?.data?.reputation_score ?? 0
     authorVerified = result?.data?.is_verified_trader ?? false
-  } catch {
-    // Intentionally swallowed: reputation score lookup failed, post will be created with default score 0
+  } catch (err) {
+    logger.warn('[posts] reputation score lookup failed, using default 0:', err instanceof Error ? err.message : String(err))
   }
 
   const detectedLanguage = input.language || detectPostLanguage((input.title ? input.title + ' ' : '') + input.content)

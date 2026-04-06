@@ -18,8 +18,8 @@ if (typeof globalThis.process !== 'undefined' && typeof globalThis.process.versi
     // eslint-disable-next-line @typescript-eslint/no-require-imports
     const { AsyncLocalStorage } = require('node:async_hooks')
     correlationStore = new AsyncLocalStorage()
-  } catch {
-    // Intentionally swallowed: AsyncLocalStorage unavailable in Edge Runtime, correlation IDs disabled
+  } catch (_err) {
+    // AsyncLocalStorage unavailable in Edge Runtime — correlation IDs disabled
   }
 }
 

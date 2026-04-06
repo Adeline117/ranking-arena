@@ -98,7 +98,8 @@ export class EtoroScraper implements PlatformScraper {
         if (items.length < pageSize) break
         if (allTraders.length >= 2000) break
         await this.delay(300) // eToro rate limits
-      } catch {
+      } catch (err) {
+        console.warn('[scraper-etoro] page fetch fallback:', err instanceof Error ? err.message : String(err))
         break
       }
     }

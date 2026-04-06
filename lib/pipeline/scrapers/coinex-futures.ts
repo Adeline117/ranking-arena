@@ -84,7 +84,8 @@ export class CoinexFuturesScraper implements PlatformScraper {
 
         currentPage++
         await this.delay(200)
-      } catch {
+      } catch (err) {
+        console.warn('[scraper-coinex] page fetch fallback:', err instanceof Error ? err.message : String(err))
         break
       }
     }

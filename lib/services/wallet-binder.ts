@@ -302,7 +302,8 @@ function isValidWalletAddress(address: string, chain: 'evm' | 'solana'): boolean
   try {
     new PublicKey(address)
     return true
-  } catch {
+  } catch (_err) {
+    // Solana PublicKey validation failed — address is invalid
     return false
   }
 }

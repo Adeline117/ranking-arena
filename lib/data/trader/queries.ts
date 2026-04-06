@@ -527,8 +527,9 @@ async function searchTradersInner(supabase: SupabaseClient, params: {
         usedFuzzy = true
       }
     }
-  } catch {
+  } catch (err) {
     // RPC not available (migration not applied), fall through to ILIKE
+    logger.debug('[search] fuzzy RPC unavailable, falling back to ILIKE:', err instanceof Error ? err.message : String(err))
   }
 
   // --- Fallback: ILIKE search using traders table ---
@@ -670,7 +671,8 @@ export async function getSearchSuggestions(supabase: SupabaseClient, query: stri
     return (data as Array<{ suggested_query: string; similarity_score: number }>)
       .filter(d => d.similarity_score > 0.2)
       .map(d => d.suggested_query)
-  } catch {
+  } catch (err) {
+    logger.debug('[search] did-you-mean RPC failed:', err instanceof Error ? err.message : String(err))
     return []
   }
 }
