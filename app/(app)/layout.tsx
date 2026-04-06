@@ -21,6 +21,7 @@ const Analytics = dynamic(() => import("@vercel/analytics/next").then(m => ({ de
 const NetworkStatusBanner = dynamic(() => import("../components/ui/NetworkStatusBanner"));
 const FeedbackWidget = dynamic(() => import("../components/common/FeedbackWidget"));
 const PlausibleAnalytics = dynamic(() => import("../components/PlausibleAnalytics"));
+const SentryInit = dynamic(() => import("../components/Providers/SentryInit"));
 
 /**
  * App layout — wraps ALL pages except the homepage.
@@ -54,6 +55,7 @@ export default function AppLayout({
           </PageErrorBoundary>
           <MobileBottomNav />
           <Suspense fallback={null}>
+            <SentryInit />
             <NetworkStatusBanner />
             <ServiceWorkerRegistration />
             <KeyboardShortcuts />
