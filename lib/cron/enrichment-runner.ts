@@ -1159,5 +1159,12 @@ export async function runEnrichment(params: {
     await plog.success(totalEnriched, { period, duration, totalFailed, note: `${totalFailed} partial failures (acceptable)` })
   }
 
-  return { ok: totalFailed === 0, duration, period, summary: { total, enriched: totalEnriched, failed: totalFailed, suppressedErrors: totalSuppressedErrors }, results }
+  // Report as not-ok if >50% of enriched traders had suppressed API errors
+  // (data returned as empty — charts will show blank)
+  const suppressedRatio = totalEnriched > 0 ? totalSuppressedErrors / totalEnriched : 0
+  const ok = totalFailed === 0 && suppressedRatio < 0.5
+  if (suppressedRatio >= 0.5 && totalSuppressedErrors > 5) {
+    logger.error(`[enrich] ${period}: ${totalSuppressedErrors} suppressed errors in ${totalEnriched} enriched traders (${Math.round(suppressedRatio * 100)}%) — data quality degraded`)
+  }
+  return { ok, duration, period, summary: { total, enriched: totalEnriched, failed: totalFailed, suppressedErrors: totalSuppressedErrors }, results }
 }
