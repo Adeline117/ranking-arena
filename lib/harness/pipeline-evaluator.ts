@@ -58,7 +58,8 @@ export class PipelineEvaluator {
     const issues: EvaluationIssue[] = []
 
     // Run all checks in parallel (they're independent reads)
-    // 9 checks: 6 original + 3 new (frontend, API, data coverage)
+    // 12 checks: 6 original + 6 extended (platform coverage, API, homepage SSR,
+    // frontend core pages, expanded API latency, per-platform data coverage)
     const checkResults = await Promise.allSettled([
       this.checkDataFreshness(platformsHint),
       this.checkRecordCounts(),
@@ -69,6 +70,9 @@ export class PipelineEvaluator {
       this.checkPlatformCoverage(),
       this.checkAPIResponseTime(),
       this.checkHomepageSSR(),
+      this.checkFrontendCorePages(),
+      this.checkExpandedAPILatency(),
+      this.checkPerPlatformDataCoverage(),
     ])
 
     for (const result of checkResults) {
@@ -649,6 +653,178 @@ export class PipelineEvaluator {
         details: `Failed: ${err instanceof Error ? err.message : 'timeout'}` },
         issues: [{ platform: 'frontend', type: 'homepage_down', severity: 'critical',
           description: 'Homepage unreachable', recommendation: 'Check Vercel.' }] }
+    }
+  }
+
+  // ── EXPANDED CHECKS (added 2026-04-05) ──────────────────────
+
+  /**
+   * Check 10: Frontend Core Pages — verify multiple key pages load with SSR data.
+   */
+  private static async checkFrontendCorePages(): Promise<{ check: EvaluationCheck; issues: EvaluationIssue[] }> {
+    const issues: EvaluationIssue[] = []
+    const baseUrl = process.env.NEXT_PUBLIC_SITE_URL
+      || (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : null)
+      || 'http://localhost:3000'
+
+    const pages = [
+      { path: '/rankings/binance_futures', name: 'Rankings', expect: 'binance' },
+      { path: '/market', name: 'Market', expect: 'market' },
+      { path: '/pricing', name: 'Pricing', expect: 'pro' },
+    ]
+
+    let passCount = 0
+    for (const page of pages) {
+      try {
+        const res = await fetch(`${baseUrl}${page.path}`, {
+          signal: AbortSignal.timeout(10_000),
+          headers: { 'User-Agent': 'Mozilla/5.0 ArenaHealthCheck/1.0', Accept: 'text/html' },
+          redirect: 'follow',
+        })
+        if (res.status === 401 || res.status === 403) {
+          // Auth wall from Vercel self-reference — treat as soft pass
+          passCount++
+          continue
+        }
+        const html = await res.text()
+        const hasContent = html.toLowerCase().includes(page.expect)
+        if (res.status < 400 && hasContent) {
+          passCount++
+        } else {
+          issues.push({ platform: 'frontend', type: 'page_degraded', severity: 'warning',
+            description: `${page.name}: ${res.status}, content=${hasContent}`,
+            recommendation: `Check ${page.path} SSR rendering.` })
+        }
+      } catch {
+        issues.push({ platform: 'frontend', type: 'page_timeout', severity: 'warning',
+          description: `${page.name} timed out`, recommendation: `Check ${page.path}.` })
+      }
+    }
+
+    const score = Math.round((passCount / pages.length) * 100)
+    return {
+      check: { name: 'frontend_core_pages', category: 'freshness', passed: score >= 70, score,
+        details: `${passCount}/${pages.length} core pages healthy` },
+      issues,
+    }
+  }
+
+  /**
+   * Check 11: Expanded API Latency — test more endpoints with stricter thresholds.
+   */
+  private static async checkExpandedAPILatency(): Promise<{ check: EvaluationCheck; issues: EvaluationIssue[] }> {
+    const issues: EvaluationIssue[] = []
+    const baseUrl = process.env.NEXT_PUBLIC_SITE_URL
+      || (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : null)
+      || 'http://localhost:3000'
+
+    const endpoints = [
+      { path: '/api/rankings/platform-stats', name: 'Platform Stats', maxMs: 3000 },
+      { path: '/api/rankings/movers', name: 'Movers', maxMs: 3000 },
+      { path: '/api/market/prices', name: 'Market Prices', maxMs: 3000 },
+      { path: '/api/stats', name: 'Site Stats', maxMs: 2000 },
+      { path: '/api/flash-news', name: 'Flash News', maxMs: 3000 },
+    ]
+
+    let totalScore = 0
+    for (const ep of endpoints) {
+      const start = Date.now()
+      try {
+        const res = await fetch(`${baseUrl}${ep.path}`, {
+          signal: AbortSignal.timeout(ep.maxMs * 2),
+          headers: { 'User-Agent': 'PipelineEvaluator/1.0' },
+        })
+        const latency = Date.now() - start
+        if (res.status >= 500) {
+          issues.push({ platform: 'api', type: 'api_error', severity: 'warning',
+            description: `${ep.name} returned ${res.status} (${latency}ms)`,
+            recommendation: `Check ${ep.path}.` })
+        } else if (latency > ep.maxMs) {
+          totalScore += 50
+          issues.push({ platform: 'api', type: 'api_slow', severity: 'info',
+            description: `${ep.name} took ${latency}ms (max: ${ep.maxMs}ms)`,
+            recommendation: `Optimize ${ep.path}.` })
+        } else { totalScore += 100 }
+      } catch {
+        issues.push({ platform: 'api', type: 'api_timeout', severity: 'warning',
+          description: `${ep.name} timed out`, recommendation: `Check ${ep.path}.` })
+      }
+    }
+
+    const score = Math.round(totalScore / endpoints.length)
+    return {
+      check: { name: 'expanded_api_latency', category: 'freshness', passed: score >= 70, score,
+        details: `${endpoints.length} additional endpoints, avg score ${score}/100` },
+      issues,
+    }
+  }
+
+  /**
+   * Check 12: Per-Platform Data Coverage — verify each platform has sufficient enrichment.
+   * Samples top traders per platform and checks field population rates.
+   */
+  private static async checkPerPlatformDataCoverage(): Promise<{ check: EvaluationCheck; issues: EvaluationIssue[] }> {
+    const supabase = getSupabaseAdmin()
+    const issues: EvaluationIssue[] = []
+
+    const PLATFORMS = [
+      'binance_futures', 'bybit', 'okx_futures', 'bitget_futures', 'mexc',
+      'hyperliquid', 'gmx', 'dydx', 'drift', 'jupiter_perps',
+    ]
+
+    let totalCoverage = 0
+    let platformsChecked = 0
+
+    for (const platform of PLATFORMS) {
+      const { data: sample } = await supabase
+        .from('leaderboard_ranks')
+        .select('win_rate, sharpe_ratio, max_drawdown, trades_count')
+        .eq('season_id', '90D')
+        .eq('source', platform)
+        .not('arena_score', 'is', null)
+        .order('arena_score', { ascending: false })
+        .limit(50)
+
+      if (!sample || sample.length === 0) continue
+      platformsChecked++
+
+      // Count fields populated
+      let fieldsPopulated = 0
+      let fieldsTotal = 0
+      for (const row of sample) {
+        if (row.win_rate != null) fieldsPopulated++
+        if (row.sharpe_ratio != null) fieldsPopulated++
+        if (row.max_drawdown != null) fieldsPopulated++
+        if (row.trades_count != null) fieldsPopulated++
+        fieldsTotal += 4
+      }
+
+      const coverage = fieldsTotal > 0 ? fieldsPopulated / fieldsTotal : 0
+      totalCoverage += coverage
+
+      if (coverage < 0.40) {
+        issues.push({
+          platform,
+          type: 'low_field_coverage',
+          severity: coverage < 0.20 ? 'warning' : 'info',
+          description: `${platform}: ${Math.round(coverage * 100)}% field coverage (top 50)`,
+          recommendation: `Check enrichment config for ${platform}.`,
+        })
+      }
+    }
+
+    const avgCoverage = platformsChecked > 0 ? totalCoverage / platformsChecked : 0
+    const score = Math.min(100, Math.round(avgCoverage * 100 * 1.2)) // Slight boost
+
+    return {
+      check: {
+        name: 'per_platform_data_coverage',
+        category: 'completeness',
+        passed: avgCoverage >= 0.50,
+        score,
+        details: `${platformsChecked} platforms checked, avg field coverage ${Math.round(avgCoverage * 100)}%`,
+      },
+      issues,
     }
   }
 
