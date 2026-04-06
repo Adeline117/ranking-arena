@@ -192,6 +192,10 @@ async function aggregateForDate(supabase: any, dateStr: string, _plog: any): Pro
     }
 
     if (snapshotMap.size === 0) {
+      // Zero snapshots for a past date is suspicious — upstream pipeline likely failed
+      if (new Date(dateStr) < new Date(new Date().toISOString().split('T')[0])) {
+        logger.warn(`[aggregate] Zero snapshots for ${dateStr} — possible upstream pipeline failure`)
+      }
       return { inserted: 0, errors: 0 }
     }
 
