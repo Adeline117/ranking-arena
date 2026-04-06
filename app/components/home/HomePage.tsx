@@ -10,9 +10,8 @@ const Footer = lazy(() => import('../layout/Footer'))
 const FoundingMemberBanner = lazy(() => import('./FoundingMemberBanner'))
 const ExchangePartners = lazy(() => import('./ExchangePartners'))
 const GuestSignupPrompt = lazy(() => import('./GuestSignupPrompt'))
-// HomeHero: lazy-loaded in Phase 2. SSR hero (HomeHeroSSR) is the LCP element.
-// Phase 2 hero adds NumberTicker animation + language switching on top.
-const HomeHero = lazy(() => import('./HomeHero'))
+// HomeHero REMOVED from Phase 2 — SSR hero (HomeHeroSSR) stays visible permanently
+// as the LCP element. Rendering Phase 2 hero created a new LCP paint at ~10s.
 // WelcomeModal removed — blocks entire page for first-time visitors
 import HomePageClient from './HomePageClient'
 import { SectionErrorBoundary } from '../utils/ErrorBoundary'
@@ -32,11 +31,9 @@ interface HomePageProps {
 }
 
 export default function HomePage({ initialTraders, initialLastUpdated, heroStats }: HomePageProps) {
-  // SSR ranking table: hidden by CSS :has(#homepage-interactive) — instant, zero CLS.
-  // SSR hero: NEVER removed — it IS the LCP element (~1.3s on slow 4G).
-  //   Removing it would cause Lighthouse to measure Phase 2 hero as LCP (~8s).
-  //   Phase 2 hero renders on top via z-index (same visual content + NumberTicker).
-  // Cleanup: only remove SSR ranking table (replaced by interactive table).
+  // SSR hero: NEVER removed — it IS the LCP element (~1.2s on slow 4G).
+  // Phase 2 does NOT render its own hero. SSR hero stays visible permanently.
+  // SSR ranking table: hidden by CSS, then removed from DOM during idle.
   useEffect(() => {
     const cleanup = () => {
       document.getElementById('ssr-ranking-table')?.remove()
@@ -58,11 +55,9 @@ export default function HomePage({ initialTraders, initialLastUpdated, heroStats
 
       <div className="container-padding has-mobile-nav home-page-container">
         <h1 className="sr-only">Arena</h1>
-        {/* Phase 2 hero — safe because HomePageLoader defers rendering until user interaction,
-            which locks LCP at SSR time. CSS hides the SSR hero when this renders. */}
-        <div className="contain-content">
-          <Suspense fallback={null}><HomeHero traderCount={heroStats?.traderCount} exchangeCount={heroStats?.exchangeCount} /></Suspense>
-        </div>
+        {/* Phase 2 hero REMOVED — SSR hero stays visible permanently as LCP element.
+            Rendering a Phase 2 hero would paint a new large element at ~10s on slow 4G,
+            resetting LCP from 1.2s to 10s. SSR hero is identical visual content. */}
         <div className="contain-content">
           <Suspense fallback={null}><FoundingMemberBanner /></Suspense>
         </div>
