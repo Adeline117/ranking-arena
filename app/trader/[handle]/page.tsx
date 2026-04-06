@@ -53,13 +53,23 @@ const cachedResolveTrader = cache(
 
 // Heavy query (~11 parallel DB queries). Caching this eliminates the dominant
 // TTFB contribution on repeat requests (expected: 973ms -> <200ms on cache hit).
-const cachedGetTraderDetail = unstable_cache(
+// Null results throw to prevent unstable_cache from persisting "no data" for 5min.
+const cachedGetTraderDetailISR = unstable_cache(
   async (platform: string, traderKey: string) => {
-    return getTraderDetail(getSupabaseAdmin(), { platform, traderKey })
+    const result = await getTraderDetail(getSupabaseAdmin(), { platform, traderKey })
+    if (!result) throw new Error('TRADER_DETAIL_NULL')
+    return result
   },
   ['trader-detail'],
   { revalidate: 300, tags: ['trader-profile'] }
 )
+const cachedGetTraderDetail = async (platform: string, traderKey: string) => {
+  try {
+    return await cachedGetTraderDetailISR(platform, traderKey)
+  } catch {
+    return null
+  }
+}
 
 // Cached leaderboard query for OG metadata.
 // Avoids a duplicate DB query between generateMetadata and the page render.
