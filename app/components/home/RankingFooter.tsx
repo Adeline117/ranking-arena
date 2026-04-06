@@ -13,7 +13,7 @@ function isStale(dateStr: string | null | undefined): boolean {
   if (!dateStr) return false
   try {
     const diffMs = Date.now() - new Date(dateStr).getTime()
-    return diffMs > 60 * 60 * 1000 // > 1 hour
+    return diffMs > 2 * 60 * 60 * 1000 // > 2 hours (matches compute-leaderboard hourly cron)
   } catch { return false }
 }
 
@@ -28,6 +28,24 @@ export default function RankingFooter({
 
   return (
     <>
+      {/* Stale data warning banner */}
+      {!loading && stale && (
+        <Box
+          style={{
+            margin: `${tokens.spacing[2]} ${tokens.spacing[3]}`,
+            padding: `${tokens.spacing[1]} ${tokens.spacing[3]}`,
+            borderRadius: '6px',
+            backgroundColor: 'rgba(245, 158, 11, 0.1)',
+            border: '1px solid rgba(245, 158, 11, 0.3)',
+            fontSize: tokens.typography.fontSize.xs,
+            color: 'var(--color-accent-warning, #f59e0b)',
+            textAlign: 'center',
+          }}
+        >
+          {t('dataDelayed') || 'Data may be delayed. Auto-refreshing...'}
+        </Box>
+      )}
+
       {/* Last updated timestamp — exchange sources shown in chip bar above */}
       {!loading && lastUpdated && (
         <Box
