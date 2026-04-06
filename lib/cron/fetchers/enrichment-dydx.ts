@@ -175,7 +175,8 @@ async function fetchEquityCurveFromStats(address: string, days: number): Promise
       { date: start, roi: 0, pnl: 0 },
       { date: today, roi: 0, pnl: totalPnl },
     ]
-  } catch {
+  } catch (err) {
+    logger.warn('[enrichment-dydx] equity curve fetch failed:', err instanceof Error ? err.message : String(err))
     return []
   }
 }
@@ -233,7 +234,7 @@ async function fetchCopinTraderStats(address: string): Promise<CopinTraderDetail
     if (data?.data && data.data.length > 0) {
       return data.data[0]
     }
-  } catch {
+  } catch (_err) {
     // Copin API not available — not critical
   }
   return null

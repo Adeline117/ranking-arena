@@ -28,7 +28,7 @@ try {
   // Dynamic import so the module is not required at build time
   // eslint-disable-next-line @typescript-eslint/no-require-imports
   Sentry = require('@sentry/nextjs')
-} catch {
+} catch (_err) {
   // Sentry not installed or not configured — that is fine
 }
 
