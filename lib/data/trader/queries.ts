@@ -45,7 +45,8 @@ export async function safeQuery<T>(
       return null
     }
     return result.data
-  } catch {
+  } catch (err) {
+    logger.error('[unified] safeQuery unexpected exception:', err instanceof Error ? err.message : String(err))
     return null
   }
 }
