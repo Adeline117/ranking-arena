@@ -1,10 +1,20 @@
 'use client'
 
 import { createContext, useContext, useState, useEffect, useMemo, useCallback, ReactNode } from 'react'
-import { Language, getLanguage, setLanguage as setLang, translations, loadTranslations } from '@/lib/i18n'
+import { type Language, getLanguage, setLanguage as setLang, translations, loadTranslations } from '@/lib/i18n'
 
 // Translation function type - accepts any string but returns the key if not found
 export type TranslationFunction = (key: string) => string
+
+// Eager-load user's saved language at module eval time (before first render).
+// English is already eager-loaded in i18n.ts. This handles non-English users.
+if (typeof window !== 'undefined') {
+  const saved = localStorage.getItem('language') as Language | null
+  if (saved && saved !== 'en') {
+    // eslint-disable-next-line @typescript-eslint/no-floating-promises
+    loadTranslations(saved)
+  }
+}
 
 type LanguageContextType = {
   language: Language
