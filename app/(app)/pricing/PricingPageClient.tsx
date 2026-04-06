@@ -289,16 +289,17 @@ export default function PricingPageClient({ lifetimeCount = 0 }: PricingPageClie
             <div style={{
               marginTop: tokens.spacing[4],
               padding: `${tokens.spacing[3]} ${tokens.spacing[4]}`,
-              background: 'color-mix(in srgb, var(--color-accent-primary) 8%, var(--color-bg-secondary))',
-              border: '1px solid color-mix(in srgb, var(--color-accent-primary) 20%, transparent)',
+              background: 'color-mix(in srgb, var(--color-accent-success, #16c784) 8%, var(--color-bg-secondary))',
+              border: '1px solid color-mix(in srgb, var(--color-accent-success, #16c784) 20%, transparent)',
               borderRadius: 8,
               fontSize: 13,
               color: 'var(--color-text-secondary)',
               textAlign: 'center' as const,
+              fontWeight: 600,
             }}>
               {locale === 'zh'
-                ? '当前为测试环境（Sandbox），支付功能尚未正式上线，请勿使用真实信用卡。'
-                : 'Currently in Sandbox mode. Payment is not live yet — do not use real credit cards.'}
+                ? '所有 Pro 功能限时免费开放中'
+                : 'All Pro features are free for a limited time'}
             </div>
             )}
           </div>
