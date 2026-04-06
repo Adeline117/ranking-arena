@@ -518,7 +518,7 @@ export default function TraderProfileClient({ data, serverTraderData, claimedUse
           currentUserId={currentUserId}
           isVerifiedTrader={isVerifiedTrader}
           isBot={data.source === 'web3_bot'}
-          lastUpdated={traderData?.trackedSince}
+          lastUpdated={traderData?.lastUpdated ?? traderData?.trackedSince}
           claimedBio={claimedUser?.bio || (traderProfile as Record<string, unknown> | null)?.bio as string | undefined}
           claimedAvatarUrl={claimedUser?.avatar_url}
           linkedAccountCount={hasMultipleAccounts ? linkedAccounts.length : undefined}
