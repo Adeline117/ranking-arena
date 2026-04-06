@@ -669,5 +669,5 @@ export const GET = withPublic(
       'Cache-Control': 'public, s-maxage=300, stale-while-revalidate=600',
     })
   },
-  { name: 'unified-search', rateLimit: 'read' }
+  { name: 'unified-search', rateLimit: { requests: 20, window: 60, prefix: 'search' } }
 )

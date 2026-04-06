@@ -155,7 +155,7 @@ export const GET = withPublic(async ({ request }) => {
 
     const response = apiSuccess(result);
     return withCache(response, { maxAge: 60, staleWhileRevalidate: 300 });
-}, { name: 'rankings', rateLimit: 'read' })
+}, { name: 'rankings', rateLimit: { requests: 30, window: 60, prefix: 'rankings' } })
 
 /**
  * Fetch rankings via unified data layer (leaderboard_ranks).
