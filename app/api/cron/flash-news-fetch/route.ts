@@ -107,6 +107,10 @@ async function handleFetch(req: NextRequest) {
   try {
     // Fetch all feeds in parallel
     const feedResults = await Promise.allSettled(RSS_FEEDS.map(fetchRSSFeed))
+    const rejectedFeeds = feedResults.filter(r => r.status === 'rejected')
+    if (rejectedFeeds.length > 0) {
+      logger.warn(`[flash-news-fetch] ${rejectedFeeds.length}/${feedResults.length} feeds failed: ${rejectedFeeds.map(r => (r as PromiseRejectedResult).reason?.message || String((r as PromiseRejectedResult).reason)).join('; ')}`)
+    }
     const allItems = feedResults
       .filter((r): r is PromiseFulfilledResult<Awaited<ReturnType<typeof fetchRSSFeed>>> => r.status === 'fulfilled')
       .flatMap(r => r.value)

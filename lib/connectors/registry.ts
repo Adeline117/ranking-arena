@@ -235,7 +235,7 @@ export async function initializeConnectors(): Promise<void> {
   // crypto_com: DELETED — no copy trading feature on web (2026-03-19)
   lazy('etoro:spot', () => import('./platforms/etoro-spot'), 'EtoroSpotConnector', 'etoro')
   lazy('bitget_spot:spot', () => import('./platforms/bitget-spot'), 'BitgetSpotConnector', 'bitget_spot')
-  lazy('binance_spot:spot', () => import('./platforms/binance-spot'), 'BinanceSpotConnector', 'binance_futures')
+  lazy('binance_spot:spot', () => import('./platforms/binance-spot'), 'BinanceSpotConnector', 'binance_spot')
 
   // DEX Connectors
   lazy('hyperliquid:perp', () => import('./platforms/hyperliquid-perp'), 'HyperliquidPerpConnector', 'hyperliquid')
