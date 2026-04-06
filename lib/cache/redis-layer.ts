@@ -356,7 +356,9 @@ export async function tieredDelByTag(tag: string): Promise<number> {
  * memory bucket, serves stale data immediately and refreshes in background.
  */
 // In-flight request dedup map — prevents cache stampede (thundering herd)
-const inFlightRequests = new Map<string, Promise<unknown>>()
+// Entries include creation time to evict stale/hung promises on warm reuse.
+const inFlightRequests = new Map<string, { promise: Promise<unknown>; createdAt: number }>()
+const IN_FLIGHT_MAX_AGE_MS = 30_000 // Evict entries older than 30s (hung promises)
 
 export async function tieredGetOrSet<T>(
   key: string,
@@ -386,9 +388,15 @@ export async function tieredGetOrSet<T>(
   }
 
   // Coalesce concurrent fetches for the same key (stampede protection)
-  const existing = inFlightRequests.get(key) as Promise<T> | undefined
+  const existing = inFlightRequests.get(key)
   if (existing) {
-    return existing
+    // Evict stale entries from previous invocations (hung promises on warm reuse)
+    if (Date.now() - existing.createdAt > IN_FLIGHT_MAX_AGE_MS) {
+      inFlightRequests.delete(key)
+      dataLogger.warn(`[redis-layer] Evicted stale in-flight request: ${key} (age=${Date.now() - existing.createdAt}ms)`)
+    } else {
+      return existing.promise as Promise<T>
+    }
   }
 
   // 缓存未命中，获取新数据
@@ -396,7 +404,7 @@ export async function tieredGetOrSet<T>(
   // Without this, synchronous throws or unhandled rejections leak Map entries,
   // causing unbounded memory growth in long-lived serverless functions.
   const promise = fetcher()
-  inFlightRequests.set(key, promise)
+  inFlightRequests.set(key, { promise, createdAt: Date.now() })
   try {
     const freshData = await promise
 
