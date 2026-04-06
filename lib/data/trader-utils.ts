@@ -84,6 +84,7 @@ async function findTraderAcrossSourcesInner(
       .limit(10)
 
     if (error) {
+      logger.error('[findTraderAcrossSources] DB query error:', error.message)
       return null
     }
 

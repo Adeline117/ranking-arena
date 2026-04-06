@@ -153,10 +153,16 @@ export async function GET(request: NextRequest) {
     const successful = results.reduce((sum, r) => sum + r.summary.successful, 0)
     const failed = results.reduce((sum, r) => sum + r.summary.failed, 0)
 
-    await plog.success(totalUpserted)
+    if (totalUpserted === 0 && failed > 0) {
+      await plog.error(new Error(`All platforms failed: ${failed} failures, 0 upserted`))
+    } else if (totalUpserted === 0 && platforms.length > 0) {
+      await plog.partialSuccess(0, { warning: 'Zero rows upserted despite platforms running' })
+    } else {
+      await plog.success(totalUpserted)
+    }
 
     return NextResponse.json({
-      success: true,
+      success: totalUpserted > 0 || failed === 0,
       duration_ms: Date.now() - startTime,
       platforms_requested: platforms,
       windows_requested: windows,
