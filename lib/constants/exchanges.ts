@@ -482,3 +482,61 @@ export const SOURCE_TO_CONNECTOR_MAP: Record<string, { platform: string; marketT
   copin: { platform: 'copin', marketType: 'perp' },
   // DEAD (2026-04): rabbitx (DNS dead), vertex (no public leaderboard API), apex_pro (no public leaderboard API, geo-blocked)
 }
+
+// ---------------------------------------------------------------------------
+// validateExchangeConfig – cross-check all config objects for consistency
+// ---------------------------------------------------------------------------
+
+/**
+ * Validates that all platform config objects are consistent with EXCHANGE_CONFIG.
+ * Logs warnings (does not throw) for any mismatches so configuration drift is
+ * caught at startup rather than causing silent failures at runtime.
+ *
+ * Checks:
+ * 1. Every platform in SOURCES_WITH_DATA exists in EXCHANGE_CONFIG
+ * 2. Every platform in SOURCE_TO_CONNECTOR_MAP exists in EXCHANGE_CONFIG
+ * 3. Every platform in ALL_SOURCES exists in EXCHANGE_CONFIG
+ *
+ * Called automatically on module load. Exported for explicit use in tests.
+ */
+export function validateExchangeConfig(): string[] {
+  const warnings: string[] = []
+  const exchangeConfigKeys = new Set(Object.keys(EXCHANGE_CONFIG))
+
+  // Check SOURCES_WITH_DATA
+  for (const source of SOURCES_WITH_DATA) {
+    if (!exchangeConfigKeys.has(source)) {
+      warnings.push(
+        `[ExchangeConfig] SOURCES_WITH_DATA contains "${source}" which is missing from EXCHANGE_CONFIG`
+      )
+    }
+  }
+
+  // Check SOURCE_TO_CONNECTOR_MAP
+  for (const source of Object.keys(SOURCE_TO_CONNECTOR_MAP)) {
+    if (!exchangeConfigKeys.has(source)) {
+      warnings.push(
+        `[ExchangeConfig] SOURCE_TO_CONNECTOR_MAP contains "${source}" which is missing from EXCHANGE_CONFIG`
+      )
+    }
+  }
+
+  // Check ALL_SOURCES
+  for (const source of ALL_SOURCES) {
+    if (!exchangeConfigKeys.has(source)) {
+      warnings.push(
+        `[ExchangeConfig] ALL_SOURCES contains "${source}" which is missing from EXCHANGE_CONFIG`
+      )
+    }
+  }
+
+  // Log warnings
+  for (const w of warnings) {
+    console.warn(w)
+  }
+
+  return warnings
+}
+
+// Run validation at module load time (once on first import)
+validateExchangeConfig()
