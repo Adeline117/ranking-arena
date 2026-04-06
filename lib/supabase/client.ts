@@ -17,4 +17,12 @@ export const supabase: SupabaseClient = createClient(url, anon, {
     autoRefreshToken: true,
     detectSessionInUrl: true,
   },
+  global: {
+    // 15s timeout on all client-side Supabase requests — prevents UI hangs when
+    // Supabase is slow/degraded. Matches the 15s timeout in useSWR.ts fetcher.
+    fetch: (input: RequestInfo | URL, init?: RequestInit) => {
+      const signal = init?.signal ?? AbortSignal.timeout(15_000)
+      return fetch(input, { ...init, signal })
+    },
+  },
 });
