@@ -77,11 +77,13 @@ function shouldSendAlert(issueFingerprint) {
 const DEAD_PLATFORMS = new Set([
   'perpetual_protocol', 'whitebit', 'bitmart', 'btse',
   'kwenta', 'mux', 'synthetix', 'paradex',
-  'kucoin',   // copy trading discontinued 2026-03
-  'phemex',   // API 404 since 2026-04
-  'bingx',    // empty leaderboard data
-  'bingx_spot', // no leaderboard API
-  'weex',     // 75% timeout rate
+  'kucoin',      // copy trading discontinued 2026-03
+  'phemex',      // API 404 since 2026-04
+  'bingx',       // empty leaderboard data
+  'bingx_spot',  // no leaderboard API
+  'bitget_spot', // permanently disabled (no leaderboard API)
+  'lbank',       // API 404 since 2026-04 (copy-trading endpoint removed)
+  'weex',        // 75% timeout rate
   'vertex', 'apex_pro', 'rabbitx', // DNS dead / no API
 ])
 
