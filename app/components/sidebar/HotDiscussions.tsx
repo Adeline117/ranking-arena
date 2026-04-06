@@ -126,13 +126,16 @@ async function fetchHotPosts(_key: string, limit: number, targetLang?: string): 
       if (wasTranslated) p.translated = true
     }
 
-    // Fire-and-forget: translate uncached posts in background
+    // Fire-and-forget: translate uncached posts in background (requires auth)
     if (needsTranslation.length > 0) {
-      fetch('/api/translate', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ items: needsTranslation.slice(0, 20), targetLang }),
-      }).catch(err => console.warn('[HotDiscussions] fetch failed', err))
+      supabase.auth.getSession().then(({ data }) => {
+        if (!data.session) return // Skip translate for unauthenticated users (avoids 401)
+        fetch('/api/translate', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ items: needsTranslation.slice(0, 20), targetLang }),
+        }).catch(() => {}) // Silently fail — translation is non-critical
+      })
     }
   }
 
