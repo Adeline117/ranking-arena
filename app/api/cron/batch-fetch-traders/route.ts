@@ -76,11 +76,11 @@ const GROUPS: Record<string, string[]> = {
 }
 
 // Per-platform leaderboard limits — override the default 2000
-// Binance: 9000+ traders but API returns only 20/page → 100 pages × 3 windows × 0.5s = 150s (exceeds 140s timeout)
-// Reduced to 500 (25 pages × 3 windows × 0.5s = 37s) — still captures top 500 per period
+// Binance: 20/page via VPS proxy (~2s/page) → 10 pages × 3 windows × 2s = 60s
+// Was 500 (75 VPS calls = 150s+) which caused persistent timeouts since 2026-04-04
 const PLATFORM_LIMITS: Record<string, number> = {
-  binance_futures: 500,
-  binance_spot: 500,
+  binance_futures: 200,
+  binance_spot: 200,
   // VPS scraper-dependent platforms: keep low to avoid queue buildup
   bybit: 200,
   bybit_spot: 200,
@@ -163,9 +163,9 @@ export async function GET(request: NextRequest) {
     // VPS scrapers: Playwright slow, need 180s
     bybit: 180000,
     bybit_spot: 180000,
-    // Binance: 500 traders × 3 windows × 25 pages/window via VPS proxy — needs 180s
-    binance_futures: 180000,
-    binance_spot: 180000,
+    // Binance: 200 traders × 3 windows × 10 pages/window via VPS proxy → ~60s
+    binance_futures: 120000,
+    binance_spot: 120000,
     // Fast direct APIs: can finish in 60s
     okx_futures: 60000,
     okx_spot: 60000,
