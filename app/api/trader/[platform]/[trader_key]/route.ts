@@ -86,7 +86,7 @@ export async function GET(
         .maybeSingle(),
       supabase
         .from('trader_snapshots_v2')
-        .select('window, roi_pct, pnl_usd, win_rate, max_drawdown, trades_count, followers, copiers, arena_score, sharpe_ratio, beta_btc, beta_eth, alpha, metrics, quality_flags, as_of_ts, updated_at')
+        .select('window, roi_pct, pnl_usd, win_rate, max_drawdown, trades_count, followers, copiers, arena_score, sharpe_ratio, sortino_ratio, calmar_ratio, return_score, drawdown_score, stability_score, beta_btc, beta_eth, alpha, metrics, quality_flags, as_of_ts, updated_at')
         .eq('platform', platform)
         .eq('trader_key', trader_key)
         .order('updated_at', { ascending: false })
