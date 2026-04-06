@@ -14,8 +14,8 @@ function correlationId(): string | undefined {
       const mod = '@/lib/api/' + 'correlation'
       // eslint-disable-next-line @typescript-eslint/no-require-imports
       _getCorrelationId = require(mod).getCorrelationId
-    } catch {
-      // Intentionally swallowed: correlation module unavailable (Edge Runtime), disable correlation IDs
+    } catch (_err) {
+      /* correlation module unavailable (Edge Runtime) */
       _getCorrelationId = () => undefined
     }
   }
@@ -646,8 +646,8 @@ export async function addBreadcrumb(message: string, level: 'info' | 'warning' |
     if (sentry) {
       sentry.addBreadcrumb({ message, level, data, timestamp: Date.now() / 1000 })
     }
-  } catch {
-    // Intentionally swallowed: breadcrumb recording is non-critical, avoid infinite error loop in logger
+  } catch (_err) {
+    /* breadcrumb recording is non-critical */
   }
 }
 

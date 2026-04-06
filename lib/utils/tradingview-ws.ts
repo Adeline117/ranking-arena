@@ -183,7 +183,7 @@ function createTVClient(): TradingViewClientWrapper {
   let TradingView: TVModule | undefined
   try {
     TradingView = globalThis.require?.('@mathieuc/' + 'tradingview') as TVModule | undefined
-  } catch { /* optional dep */ }
+  } catch (_err) { /* optional dep */ }
 
   const wrapper: TradingViewClientWrapper = {
     prices: new Map(),
@@ -265,14 +265,14 @@ function createTVClient(): TradingViewClientWrapper {
         for (const chart of wrapper.charts.values()) {
           try {
             chart.delete()
-          } catch {
-            // Intentionally swallowed: chart.delete() may fail if already disposed
+          } catch (_err) {
+            /* chart.delete() may fail if already disposed */
           }
         }
         wrapper.charts.clear()
         client.end()
-      } catch {
-        // Intentionally swallowed: destroy cleanup errors are non-critical, resources will be GC'd
+      } catch (_err) {
+        /* destroy cleanup errors are non-critical */
       }
       wrapper.connected = false
     }

@@ -24,7 +24,8 @@ function correlationId(): string | undefined {
       const mod = '@/lib/api/' + 'correlation'
       // eslint-disable-next-line @typescript-eslint/no-require-imports
       _getCorrelationId = require(mod).getCorrelationId
-    } catch {
+    } catch (_err) {
+      /* correlation module unavailable */
       _getCorrelationId = () => undefined
     }
   }
@@ -403,8 +404,8 @@ export async function tieredGetOrSet<T>(
       // SET NX EX — acquire lock atomically
       const lockResult = await lockRedis.set(lockKey, '1', { nx: true, ex: LOCK_TTL_SECONDS })
       lockAcquired = lockResult === 'OK'
-    } catch {
-      // Redis error — proceed without lock (fail-open)
+    } catch (err) {
+      dataLogger.warn('[redis-layer] lock acquire failed:', err instanceof Error ? err.message : String(err))
     }
 
     if (!lockAcquired) {

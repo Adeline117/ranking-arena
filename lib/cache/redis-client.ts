@@ -115,7 +115,8 @@ export async function pingRedis(): Promise<boolean> {
     healthy = true
     consecutiveErrors = 0
     return true
-  } catch {
+  } catch (err) {
+    dataLogger.warn('[Redis] ping failed:', err instanceof Error ? err.message : String(err))
     healthy = false
     return false
   }

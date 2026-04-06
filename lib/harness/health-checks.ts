@@ -207,7 +207,8 @@ export async function checkDataQuality(): Promise<HealthCheck[]> {
       try {
         const { data } = await supabase.rpc('check_leaderboard_duplicates')
         dupeCheck = data as number | null
-      } catch {
+      } catch (_err) {
+        /* RPC not available */
         dupeCheck = null
       }
 

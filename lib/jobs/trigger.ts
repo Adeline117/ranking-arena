@@ -42,7 +42,8 @@ function buildCronRequest(path: string, method = 'GET'): Request {
 async function parseResponse(res: Response): Promise<Record<string, unknown>> {
   try {
     return (await res.json()) as Record<string, unknown>
-  } catch {
+  } catch (_err) {
+    /* JSON parse failed */
     return { status: res.status, statusText: res.statusText }
   }
 }

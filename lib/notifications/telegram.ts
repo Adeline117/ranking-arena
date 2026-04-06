@@ -59,8 +59,8 @@ async function isDeduplicated(key: string, ttlSeconds: number = DEDUP_TTL_SECOND
       await redis.set(`alert:dedup:${key}`, Date.now(), { ex: ttlSeconds })
       return false
     }
-  } catch {
-    // Intentionally swallowed: Redis unavailable for dedup, falling through to in-memory rate limit
+  } catch (err) {
+    console.error('[telegram] Redis dedup failed:', err instanceof Error ? err.message : String(err))
   }
 
   // In-memory fallback (won't survive Vercel cold starts, but better than nothing)
@@ -76,8 +76,8 @@ async function clearDedup(key: string): Promise<void> {
     if (redis) {
       await redis.del(`alert:dedup:${key}`)
     }
-  } catch {
-    // Intentionally swallowed: Redis dedup clear is best-effort, in-memory always cleared below
+  } catch (err) {
+    console.error('[telegram] Redis dedup clear failed:', err instanceof Error ? err.message : String(err))
   }
   inMemoryMap.delete(key)
 }
@@ -138,8 +138,8 @@ export async function sendTelegramAlert(opts: TelegramAlertOptions): Promise<boo
     // Record to Redis for daily digest aggregation
     try {
       await recordWarningForDigest(opts)
-    } catch {
-      // Intentionally swallowed: warning digest recording is best-effort, individual alert still logged above
+    } catch (err) {
+      console.error('[telegram] warning digest recording failed:', err instanceof Error ? err.message : String(err))
     }
     return false
   }
@@ -252,8 +252,8 @@ async function recordWarningForDigest(opts: TelegramAlertOptions): Promise<void>
     const cutoff = Date.now() - 24 * 60 * 60 * 1000
     await redis.zremrangebyscore('alert:warnings:24h', 0, cutoff)
     await redis.zremrangebyrank('alert:warnings:24h', 0, -1001)
-  } catch {
-    // Intentionally swallowed: Redis warning aggregation is best-effort, alerts still sent via primary channel
+  } catch (err) {
+    console.error('[telegram] Redis warning aggregation failed:', err instanceof Error ? err.message : String(err))
   }
 }
 
@@ -269,9 +269,10 @@ async function getBufferedWarnings(): Promise<Array<{ source: string; title: str
     const entries = await redis.zrange('alert:warnings:24h', cutoff, Date.now(), { byScore: true })
     return (entries as string[]).map(e => {
       try { return JSON.parse(e) }
-      catch { return null }
+      catch (_err) { return null }
     }).filter(Boolean)
-  } catch {
+  } catch (err) {
+    console.error('[telegram] getBufferedWarnings failed:', err instanceof Error ? err.message : String(err))
     return []
   }
 }

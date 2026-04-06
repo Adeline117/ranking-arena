@@ -87,8 +87,8 @@ async function fetchTickers(exchangeId: string): Promise<Record<string, Ticker>>
     const entry = { data: tickers, ts: Date.now() }
     tickerCache.set(exchangeId, entry)
     return tickers
-  } catch {
-    // Intentionally swallowed: exchange ticker fetch failed, fall back to cached data
+  } catch (_err) {
+    /* exchange ticker fetch failed, fall back to cached data */
     return cached?.data ?? {}
   }
 }

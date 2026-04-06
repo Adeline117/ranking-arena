@@ -257,7 +257,7 @@ export class TokenBucketRateLimiter {
       try {
         const tokens = await this.redis.hGet(key, 'tokens')
         if (tokens) remaining = parseInt(tokens, 10)
-      } catch { /* Redis read failed; fall through to return default remaining count */ }
+      } catch (_err) { /* Redis read failed; fall through to return default remaining count */ }
     } else {
       const bucket = this.localFallback.get(key)
       if (bucket) remaining = bucket.tokens

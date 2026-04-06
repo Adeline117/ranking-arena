@@ -301,8 +301,8 @@ export function needsProxy(url: string | null | undefined): boolean {
     // Never proxy direct-load domains
     if (DIRECT_LOAD_DOMAINS.some(domain => hostname.includes(domain))) return false
     return PROXY_REQUIRED_DOMAINS.some(domain => hostname.includes(domain))
-  } catch {
-    // Intentionally swallowed: invalid URL format, no proxy needed
+  } catch (_err) {
+    /* invalid URL format */
     return false
   }
 }
@@ -392,8 +392,8 @@ function isLikelyImageUrl(url: string): boolean {
     }
 
     return false
-  } catch {
-    // Intentionally swallowed: invalid URL format, assume not a valid avatar image
+  } catch (_err) {
+    /* invalid URL format */
     return false
   }
 }
@@ -431,8 +431,8 @@ export function getTraderAvatarUrl(avatarUrl: string | null | undefined): string
     if (DIRECT_LOAD_DOMAINS.some(domain => hostname.includes(domain))) {
       return avatarUrl
     }
-  } catch {
-    // Invalid URL — fall through to proxy
+  } catch (_err) {
+    /* invalid URL — fall through to proxy */
   }
 
   // Unknown domains with valid image URLs — proxy for safety (CORS/Referrer)
