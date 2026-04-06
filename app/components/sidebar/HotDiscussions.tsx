@@ -3,7 +3,8 @@
 import Link from 'next/link'
 import Image from 'next/image'
 import useSWR from 'swr'
-import { supabase } from '@/lib/supabase/client'
+// Supabase: dynamic import — only used for auth check in translate call (non-critical)
+const getSb = () => import('@/lib/supabase/client').then(m => m.supabase)
 import { tokens } from '@/lib/design-tokens'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import SidebarCard from './SidebarCard'
@@ -65,6 +66,7 @@ function HotTag({ score }: { score: number }) {
 }
 
 async function fetchHotPosts(_key: string, limit: number, targetLang?: string): Promise<HotPost[]> {
+  const supabase = await getSb()
   const { data } = await supabase
     .from('posts')
     .select('id, title, content, hot_score, like_count, comment_count, created_at, author_handle, author_avatar_url')
@@ -75,7 +77,7 @@ async function fetchHotPosts(_key: string, limit: number, targetLang?: string): 
 
   if (!data) return []
 
-  const posts = data.map(p => ({
+  const posts: HotPost[] = data.map(p => ({
     id: p.id,
     title: p.title,
     content: p.content,
@@ -90,7 +92,7 @@ async function fetchHotPosts(_key: string, limit: number, targetLang?: string): 
 
   // If viewing in non-source language, fetch translations from cache
   if (targetLang) {
-    const postIds = posts.map(p => p.id)
+    const postIds = posts.map((p: HotPost) => p.id)
     const { data: titleCache } = await supabase
       .from('translation_cache')
       .select('content_id, translated_text')
@@ -104,8 +106,8 @@ async function fetchHotPosts(_key: string, limit: number, targetLang?: string): 
       .eq('target_lang', targetLang)
       .in('content_id', postIds)
 
-    const titleMap = new Map((titleCache || []).map(t => [t.content_id, t.translated_text]))
-    const contentMap = new Map((contentCache || []).map(t => [t.content_id, t.translated_text]))
+    const titleMap = new Map((titleCache || []).map((t: { content_id: string; translated_text: string }) => [t.content_id, t.translated_text]))
+    const contentMap = new Map((contentCache || []).map((t: { content_id: string; translated_text: string }) => [t.content_id, t.translated_text]))
 
     // Apply cached translations
     const needsTranslation: Array<{ id: string; text: string; contentType: string; contentId: string }> = []
@@ -128,7 +130,7 @@ async function fetchHotPosts(_key: string, limit: number, targetLang?: string): 
 
     // Fire-and-forget: translate uncached posts in background (requires auth)
     if (needsTranslation.length > 0) {
-      supabase.auth.getSession().then(({ data }) => {
+      getSb().then(sb => sb.auth.getSession()).then(({ data }) => {
         if (!data.session) return // Skip translate for unauthenticated users (avoids 401)
         fetch('/api/translate', {
           method: 'POST',

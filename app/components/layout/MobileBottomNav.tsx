@@ -6,7 +6,11 @@ import { useEffect, useState, useCallback, useMemo, useRef } from 'react'
 import { tokens } from '@/lib/design-tokens'
 import { features } from '@/lib/features'
 import { useLanguage } from '../Providers/LanguageProvider'
-import { supabase } from '@/lib/supabase/client'
+// Supabase: dynamic import to avoid pulling ~50KB into initial client bundle.
+// Only needed for auth state (getSession + onAuthStateChange).
+type SupabaseClient = Awaited<typeof import('@/lib/supabase/client')>['supabase']
+let _sb: SupabaseClient | null = null
+const getSb = () => _sb ? Promise.resolve(_sb) : import('@/lib/supabase/client').then(m => { _sb = m.supabase; return _sb })
 import { useCapacitorHaptics } from '@/lib/hooks/useCapacitor'
 import { useInboxStore } from '@/lib/stores/inboxStore'
 
@@ -166,44 +170,51 @@ function useUserHandle(): string | null {
   useEffect(() => {
     let alive = true
 
-    function loadHandle(userId: string, email?: string | null) {
-      const emailHandle = email?.split('@')[0] || null
-      if (userHandle) return // already cached
-      supabase
-        .from('user_profiles')
-        .select('handle')
-        .eq('id', userId)
-        .maybeSingle()
-        .then(({ data: profile, error: profileError }) => {
-          if (!alive) return
-          const resolved = profileError ? emailHandle : (profile?.handle || emailHandle)
-          setUserHandle(resolved)
-          if (resolved) {
-            try { sessionStorage.setItem(USER_HANDLE_CACHE_KEY, resolved) } catch { /* ignore */ }
-          }
-        })
-    }
+    let subscriptionRef: { unsubscribe: () => void } | null = null
 
-    // Initial load from local session (no network)
-    supabase.auth.getSession()
-      .then(({ data, error }) => {
-        if (!alive || error) return
-        const userId = data.session?.user?.id
-        if (userId) loadHandle(userId, data.session?.user?.email)
-      })
-
-    // Listen for auth changes (login/logout) — clear handle on logout
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+    getSb().then(sb => {
       if (!alive) return
-      if (session?.user?.id) {
-        loadHandle(session.user.id, session.user.email)
-      } else {
-        setUserHandle(null)
-        try { sessionStorage.removeItem(USER_HANDLE_CACHE_KEY) } catch { /* ignore */ }
+
+      function loadHandle(userId: string, email?: string | null) {
+        const emailHandle = email?.split('@')[0] || null
+        if (userHandle) return // already cached
+        sb
+          .from('user_profiles')
+          .select('handle')
+          .eq('id', userId)
+          .maybeSingle()
+          .then(({ data: profile, error: profileError }) => {
+            if (!alive) return
+            const resolved = profileError ? emailHandle : (profile?.handle || emailHandle)
+            setUserHandle(resolved)
+            if (resolved) {
+              try { sessionStorage.setItem(USER_HANDLE_CACHE_KEY, resolved) } catch { /* ignore */ }
+            }
+          })
       }
+
+      // Initial load from local session (no network)
+      sb.auth.getSession()
+        .then(({ data, error }) => {
+          if (!alive || error) return
+          const userId = data.session?.user?.id
+          if (userId) loadHandle(userId, data.session?.user?.email)
+        })
+
+      // Listen for auth changes (login/logout) — clear handle on logout
+      const { data: { subscription } } = sb.auth.onAuthStateChange((_event, session) => {
+        if (!alive) return
+        if (session?.user?.id) {
+          loadHandle(session.user.id, session.user.email)
+        } else {
+          setUserHandle(null)
+          try { sessionStorage.removeItem(USER_HANDLE_CACHE_KEY) } catch { /* ignore */ }
+        }
+      })
+      subscriptionRef = subscription
     })
 
-    return () => { alive = false; subscription.unsubscribe() }
+    return () => { alive = false; subscriptionRef?.unsubscribe() }
   }, [userHandle])
 
   return userHandle
