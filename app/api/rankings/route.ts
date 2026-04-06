@@ -8,7 +8,7 @@
  *   window: '7d' | '30d' | '90d' (required)
  *   category: 'futures' | 'spot' | 'onchain' (optional)
  *   platform: Platform string (optional, overrides category)
- *   limit: number (default 100, max 5000)
+ *   limit: number (default 100, max 500)
  *   offset: number (default 0) — legacy, prefer cursor
  *   cursor: string (optional, format: "score:id" for keyset pagination)
  *   sort_by: 'arena_score' | 'roi' | 'pnl' | 'drawdown' | 'copiers' | 'win_rate' | 'sharpe_ratio' | 'trades_count'
@@ -80,7 +80,7 @@ export const GET = withPublic(async ({ request }) => {
 
     const sortDir = (searchParams.get('sort_dir') || 'desc') as 'asc' | 'desc';
 
-    const limit = Math.min(parseInt(searchParams.get('limit') || '100', 10) || 100, 5000);
+    const limit = Math.min(parseInt(searchParams.get('limit') || '100', 10) || 100, 500);
     const offset = parseInt(searchParams.get('offset') || '0', 10) || 0;
     const cursor = searchParams.get('cursor') || undefined; // format: "score:id" for keyset pagination
     const minPnl = searchParams.get('min_pnl') ? Number(searchParams.get('min_pnl')) : undefined;
