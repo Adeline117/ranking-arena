@@ -49,7 +49,8 @@ export class HtxFuturesConnector extends BaseConnector {
           `https://futures.htx.com/-/x/hbg/v1/futures/copytrading/rank?rankType=1&pageNo=${page}&pageSize=${pageSize}`,
           { method: 'GET', signal: controller.signal }
         )
-      } catch {
+      } catch (err) {
+        this.logger.debug('HTX leaderboard page fallback:', err instanceof Error ? err.message : String(err))
         clearTimeout(timer)
         break // Skip remaining pages on timeout/error — return what we have
       }

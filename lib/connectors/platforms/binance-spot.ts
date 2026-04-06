@@ -113,8 +113,8 @@ export class BinanceSpotConnector extends BaseConnector {
             apiUrl,
             { method: 'POST', headers: this.HEADERS, body: JSON.stringify(requestBody) }
           )
-        } catch {
-          // Both failed
+        } catch (err) {
+          this.logger.debug('Binance spot direct API fallback:', err instanceof Error ? err.message : String(err))
         }
       }
 
@@ -170,7 +170,7 @@ export class BinanceSpotConnector extends BaseConnector {
           perfData = await this.request<Record<string, unknown>>(perfUrl, {
             method: 'GET', headers: this.HEADERS,
           })
-        } catch { /* both failed */ }
+        } catch (err) { this.logger.debug('Binance spot perf direct fallback:', err instanceof Error ? err.message : String(err)) }
       }
 
       if (!perfData?.data) return null
@@ -189,7 +189,7 @@ export class BinanceSpotConnector extends BaseConnector {
           aum = dd.aum != null ? Number(dd.aum) : null
           copiersCount = dd.currentCopyCount != null ? Number(dd.currentCopyCount) : null
         }
-      } catch { /* detail is optional */ }
+      } catch (err) { this.logger.debug('Binance spot detail fallback:', err instanceof Error ? err.message : String(err)) }
 
       const totalOrder = d.totalOrder != null ? Number(d.totalOrder) : null
       const winRate = d.winRate != null ? Number(d.winRate) : null
@@ -229,7 +229,8 @@ export class BinanceSpotConnector extends BaseConnector {
         },
         fetched_at: new Date().toISOString(),
       }
-    } catch {
+    } catch (err) {
+      this.logger.debug('Binance spot snapshot fetch failed:', err instanceof Error ? err.message : String(err))
       return null
     }
   }

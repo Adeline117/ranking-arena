@@ -309,7 +309,8 @@ export class CopinPerpConnector extends BaseConnector {
 
       const quality_flags = this.buildQualityFlags(metrics, window, window !== '90d')
       return { metrics, quality_flags, fetched_at: new Date().toISOString() }
-    } catch {
+    } catch (err) {
+      this.logger.debug('Copin snapshot fetch failed:', err instanceof Error ? err.message : String(err))
       return null
     }
   }

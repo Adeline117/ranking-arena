@@ -278,8 +278,8 @@ export class BinanceFuturesConnector extends BaseConnector {
             apiUrl,
             { method: 'POST', headers: apiHeaders, body: JSON.stringify(requestBody) }
           )
-        } catch {
-          // Both failed
+        } catch (err) {
+          this.logger.debug('Binance futures direct API fallback:', err instanceof Error ? err.message : String(err))
         }
       }
 
@@ -438,8 +438,8 @@ export class BinanceFuturesConnector extends BaseConnector {
         copiers = d.currentCopyCount ?? null
         aum = d.aum ?? null
       }
-    } catch {
-      // Detail endpoint failed — try the base-info endpoint as fallback for social fields
+    } catch (err) {
+      this.logger.debug('Binance futures copy-trade detail fallback:', err instanceof Error ? err.message : String(err))
       try {
         const baseInfoResponse = await this.request<BinanceCopyTradeBaseInfoResponse>(
           `https://www.binance.com/bapi/futures/v2/friendly/future/copy-trade/lead-portfolio/query-lead-base-info`,
@@ -460,8 +460,8 @@ export class BinanceFuturesConnector extends BaseConnector {
           copiers = b.currentCopyCount ?? null
           aum = b.aum ?? null
         }
-      } catch {
-        // Both endpoints failed — continue with basic ROI/PnL only
+      } catch (err) {
+        this.logger.debug('Binance futures base-info fallback:', err instanceof Error ? err.message : String(err))
       }
     }
 

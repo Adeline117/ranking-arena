@@ -122,8 +122,8 @@ export class BitgetSpotConnector extends BaseConnector {
           allTraders.push(this.toTraderSource(entry, id))
         }
       }
-    } catch {
-      // Intentionally swallowed: VPS scraper failed, fall through to direct API strategy
+    } catch (err) {
+      this.logger.debug('Bitget spot VPS scraper fallback:', err instanceof Error ? err.message : String(err))
     }
 
     // Strategy 2: Direct POST to /v1/copy/spot/trader/list (CF protected, works from Vercel hnd1)
@@ -156,7 +156,8 @@ export class BitgetSpotConnector extends BaseConnector {
 
           if (list.length < 20) break
           await new Promise(r => setTimeout(r, 500))
-        } catch {
+        } catch (err) {
+          this.logger.debug('Bitget spot page fetch fallback:', err instanceof Error ? err.message : String(err))
           break
         }
       }
@@ -182,7 +183,8 @@ export class BitgetSpotConnector extends BaseConnector {
 
           if (list.length < 20) break
           await new Promise(r => setTimeout(r, 500))
-        } catch {
+        } catch (err) {
+          this.logger.debug('Bitget spot ranking list fallback:', err instanceof Error ? err.message : String(err))
           break
         }
       }
@@ -228,8 +230,8 @@ export class BitgetSpotConnector extends BaseConnector {
         }
         return { profile, fetched_at: new Date().toISOString() }
       }
-    } catch {
-      // Intentionally swallowed: trader profile enrichment failed, return null to skip
+    } catch (err) {
+      this.logger.debug('Bitget spot profile fetch failed:', err instanceof Error ? err.message : String(err))
     }
 
     return null
@@ -271,8 +273,8 @@ export class BitgetSpotConnector extends BaseConnector {
 
         return { metrics, quality_flags, fetched_at: new Date().toISOString() }
       }
-    } catch {
-      // Intentionally swallowed: historical snapshot fetch failed, return null to skip
+    } catch (err) {
+      this.logger.debug('Bitget spot snapshot fetch failed:', err instanceof Error ? err.message : String(err))
     }
 
     return null

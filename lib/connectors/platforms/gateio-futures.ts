@@ -80,8 +80,8 @@ export class GateioFuturesConnector extends BaseConnector {
             method: 'GET',
             headers: this.getHeaders(),
           })
-        } catch {
-          // Fallback: VPS Playwright scraper (bypasses WAF)
+        } catch (err) {
+          this.logger.debug('Gate.io direct API fallback:', err instanceof Error ? err.message : String(err))
           const vpsData = await this.fetchViaVPS<Record<string, unknown>>('/gateio/leaderboard', {
             cycle, page: String(page),
           })
@@ -161,7 +161,8 @@ export class GateioFuturesConnector extends BaseConnector {
         },
       }
       return { profile, fetched_at: new Date().toISOString() }
-    } catch {
+    } catch (err) {
+      this.logger.debug('Gate.io profile fetch failed:', err instanceof Error ? err.message : String(err))
       return null
     }
   }
@@ -218,7 +219,8 @@ export class GateioFuturesConnector extends BaseConnector {
       }
 
       return { metrics, quality_flags, fetched_at: new Date().toISOString() }
-    } catch {
+    } catch (err) {
+      this.logger.debug('Gate.io snapshot fetch failed:', err instanceof Error ? err.message : String(err))
       return null
     }
   }

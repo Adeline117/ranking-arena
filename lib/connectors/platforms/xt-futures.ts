@@ -148,7 +148,8 @@ export class XtFuturesConnector extends BaseConnector {
         },
       }
       return { profile, fetched_at: new Date().toISOString() }
-    } catch {
+    } catch (err) {
+      this.logger.debug('XT profile fetch failed:', err instanceof Error ? err.message : String(err))
       return null
     }
   }
@@ -199,7 +200,8 @@ export class XtFuturesConnector extends BaseConnector {
       }
 
       return { metrics, quality_flags, fetched_at: new Date().toISOString() }
-    } catch {
+    } catch (err) {
+      this.logger.debug('XT snapshot fetch failed:', err instanceof Error ? err.message : String(err))
       return null
     }
   }

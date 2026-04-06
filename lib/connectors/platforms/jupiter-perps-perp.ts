@@ -220,7 +220,8 @@ export class JupiterPerpsPerpConnector extends BaseConnector {
         },
         fetched_at: new Date().toISOString(),
       }
-    } catch {
+    } catch (err) {
+      this.logger.debug('Jupiter Perps snapshot fetch failed:', err instanceof Error ? err.message : String(err))
       return null
     }
   }

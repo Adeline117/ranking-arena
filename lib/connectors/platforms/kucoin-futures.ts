@@ -69,8 +69,8 @@ export class KucoinFuturesConnector extends BaseConnector {
           const list = dataObj?.items || dataObj?.list
           if (Array.isArray(list)) rawList = list as Record<string, unknown>[]
         }
-      } catch {
-        // POST API failed from this IP
+      } catch (err) {
+        this.logger.debug('KuCoin direct API fallback:', err instanceof Error ? err.message : String(err))
       }
     }
 

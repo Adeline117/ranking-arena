@@ -85,7 +85,8 @@ export class LbankFuturesConnector extends BaseConnector {
       }))
 
       return { traders, total_available: traders.length, window, fetched_at: new Date().toISOString() }
-    } catch {
+    } catch (err) {
+      this.logger.warn('LBank leaderboard fetch failed:', err instanceof Error ? err.message : String(err))
       return { traders: [], total_available: 0, window, fetched_at: new Date().toISOString() }
     }
   }

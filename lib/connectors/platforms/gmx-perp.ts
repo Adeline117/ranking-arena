@@ -227,8 +227,8 @@ export class GmxPerpConnector extends BaseConnector {
           updated_at: new Date().toISOString(),
         })
       }
-    } catch {
-      // Subgraph may not be available, return empty series
+    } catch (err) {
+      this.logger.debug('GMX subgraph timeseries fallback:', err instanceof Error ? err.message : String(err))
     }
 
     return { series, fetched_at: new Date().toISOString() }

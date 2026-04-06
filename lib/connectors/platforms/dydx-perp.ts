@@ -155,8 +155,8 @@ export class DydxPerpConnector extends BaseConnector {
           discovered_at: new Date().toISOString(), last_seen_at: new Date().toISOString(),
           is_active: true, raw: item as Record<string, unknown>,
         }))
-      } catch {
-        // Both Copin and indexer failed
+      } catch (err) {
+        this.logger.debug('dYdX indexer fallback also failed:', err instanceof Error ? err.message : String(err))
         throw copinErr
       }
     }
@@ -212,8 +212,8 @@ export class DydxPerpConnector extends BaseConnector {
           ? (pnl / (volume / 5)) * 100  // Assume ~5x average leverage
           : null
       }
-    } catch {
-      // Copin failed, try to get equity from indexer subaccount endpoint
+    } catch (err) {
+      this.logger.debug('dYdX Copin stats fallback:', err instanceof Error ? err.message : String(err))
     }
 
     // Try to get equity from indexer subaccount (may still work)
@@ -228,8 +228,8 @@ export class DydxPerpConnector extends BaseConnector {
         const startEquity = equity - pnl
         if (startEquity > 0) roi = (pnl / startEquity) * 100
       }
-    } catch {
-      // Subaccount endpoint also unavailable — continue with Copin data only
+    } catch (err) {
+      this.logger.debug('dYdX subaccount fallback:', err instanceof Error ? err.message : String(err))
     }
 
     const metrics: SnapshotMetrics = {
