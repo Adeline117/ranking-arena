@@ -114,10 +114,9 @@ export async function GET() {
       const lat = Date.now() - t2
       vps = res?.ok
         ? { status: 'pass', latency: lat, message: `VPS SG responding` }
-        : { status: 'skip', latency: lat, message: `VPS SG ${res?.status || 'unreachable'} from Vercel (check locally)` }
+        : { status: 'fail', latency: lat, message: `VPS SG returned ${res?.status || 'unreachable'}` }
     } catch (e: unknown) {
-      // VPS is a secondary service — skip, not fail
-      vps = { status: 'skip', latency: Date.now() - t2, message: `VPS unreachable from Vercel: ${e instanceof Error ? e.message : 'unknown'}` }
+      vps = { status: 'fail', latency: Date.now() - t2, message: e instanceof Error ? e.message : 'Unreachable' }
     }
   } else {
     vps = { status: 'skip', message: 'VPS not configured' }
