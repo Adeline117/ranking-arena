@@ -3,16 +3,12 @@
 -- Used by getTraderDetail() for single-trader lookups (WHERE platform=X AND trader_key=Y).
 -- NOT used for leaderboard pagination (leaderboard reads leaderboard_ranks directly for speed).
 --
--- Performance: 2 LEFT JOINs are fast for single-row lookups because:
+-- Performance: 2 LEFT JOINs are fast because:
 -- - leaderboard_ranks has composite index on (source, source_trader_id, season_id)
--- - traders needs (platform, trader_key) index (added below)
--- - trader_profiles_v2 needs (platform, trader_key) index (added below)
-
--- Ensure JOIN columns are indexed (traders table only had single-column indexes)
-CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_traders_platform_trader_key
-  ON traders (platform, trader_key);
-CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_trader_profiles_v2_platform_trader_key
-  ON trader_profiles_v2 (platform, trader_key);
+-- - traders has UNIQUE (platform, trader_key) = implicit btree index
+-- - trader_profiles_v2 has UNIQUE (platform, trader_key) = implicit btree index
+-- Tested: VIEW query (87ms) ≈ direct table query (110ms), Postgres uses Memoize + JOIN elimination.
+-- When SELECT doesn't include bio/display_name, Postgres skips the trader_profiles_v2 JOIN entirely.
 
 CREATE OR REPLACE VIEW trader_unified_view AS
 SELECT
