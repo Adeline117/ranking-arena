@@ -719,9 +719,39 @@ export async function safeExecute<T>(
   }
 }
 
+// ---------------------------------------------------------------------------
+// Fire-and-forget failure tracking
+// ---------------------------------------------------------------------------
+
+/** In-memory failure counts per label, for health check observability */
+const _fireAndForgetFailures = new Map<string, { count: number; lastError: string; lastAt: number }>()
+
+/** Escalation threshold: log at error level after this many consecutive failures */
+const FIRE_AND_FORGET_ERROR_THRESHOLD = 3
+
+/**
+ * Returns a snapshot of all fire-and-forget failure counts.
+ * Useful for health check endpoints to surface silent background failures.
+ */
+export function getFireAndForgetStats(): Record<string, { count: number; lastError: string; lastAt: string }> {
+  const result: Record<string, { count: number; lastError: string; lastAt: string }> = {}
+  for (const [label, data] of _fireAndForgetFailures) {
+    result[label] = {
+      count: data.count,
+      lastError: data.lastError,
+      lastAt: new Date(data.lastAt).toISOString(),
+    }
+  }
+  return result
+}
+
 /**
  * Fire-and-forget：执行异步操作，记录错误但不阻塞
  * 用于替代 `.catch(() => {})` 模式，提供更好的可观测性
+ *
+ * Tracks failure counts per label in-memory. If the same label fails
+ * 3+ times, logs at error level (instead of warn) for visibility.
+ * Use `getFireAndForgetStats()` to inspect failure counts from health endpoints.
  *
  * @param promise - 要执行的 Promise
  * @param context - 描述操作的上下文（用于错误日志）
@@ -740,9 +770,25 @@ export function fireAndForget<T>(
   const log = options?.log ?? logger
   Promise.resolve(promise).catch((error) => {
     const err = error instanceof Error ? error : new Error(String(error))
-    log.warn(`[FireAndForget] ${context} failed:`, err.message)
+
+    // Track failure count
+    const existing = _fireAndForgetFailures.get(context)
+    const count = (existing?.count ?? 0) + 1
+    _fireAndForgetFailures.set(context, {
+      count,
+      lastError: err.message,
+      lastAt: Date.now(),
+    })
+
+    // Escalate to error level after repeated failures
+    if (count >= FIRE_AND_FORGET_ERROR_THRESHOLD) {
+      log.error(`[FireAndForget] ${context} failed (${count}x):`, err.message)
+    } else {
+      log.warn(`[FireAndForget] ${context} failed:`, err.message)
+    }
+
     if (options?.reportToSentry) {
-      void captureError(err, { context, fireAndForget: true })
+      void captureError(err, { context, fireAndForget: true, failureCount: count })
     }
   })
 }
