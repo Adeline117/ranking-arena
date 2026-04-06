@@ -11,11 +11,12 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { PipelineLogger } from '@/lib/services/pipeline-logger'
 import { PipelineEvaluator } from '@/lib/harness/pipeline-evaluator'
+import { PipelineState } from '@/lib/services/pipeline-state'
 import { env } from '@/lib/env'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
-export const maxDuration = 180 // 3min — 12 checks including HTTP requests to self
+export const maxDuration = 240 // 4min — 17 checks including HTTP requests + VPS health
 
 export async function GET(request: NextRequest) {
   const authHeader = request.headers.get('authorization')
@@ -49,6 +50,11 @@ export async function GET(request: NextRequest) {
       )
     }
 
+    // Read trend for response
+    const trend = await PipelineState.get<{
+      recent_avg: number; previous_avg: number; delta: number; direction: string
+    }>('evaluator:trend')
+
     return NextResponse.json({
       ok: result.passed,
       score: result.overall_score,
@@ -57,6 +63,7 @@ export async function GET(request: NextRequest) {
       critical: result.issues.filter(i => i.severity === 'critical').length,
       duration_ms: result.duration_ms,
       trace_id: traceId,
+      trend: trend ? { delta: trend.delta, direction: trend.direction } : null,
       result,
     })
   } catch (error) {

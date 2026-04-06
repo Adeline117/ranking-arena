@@ -58,8 +58,7 @@ export class PipelineEvaluator {
     const issues: EvaluationIssue[] = []
 
     // Run all checks in parallel (they're independent reads)
-    // 12 checks: 6 original + 6 extended (platform coverage, API, homepage SSR,
-    // frontend core pages, expanded API latency, per-platform data coverage)
+    // 17 checks: 6 core + 6 extended + 5 new (trader detail, VPS, cron success, page speed, expanded API)
     const checkResults = await Promise.allSettled([
       this.checkDataFreshness(platformsHint),
       this.checkRecordCounts(),
@@ -73,6 +72,11 @@ export class PipelineEvaluator {
       this.checkFrontendCorePages(),
       this.checkExpandedAPILatency(),
       this.checkPerPlatformDataCoverage(),
+      this.checkTraderDetailIntegrity(),
+      this.checkVPSHealth(),
+      this.checkCronSuccessRate(),
+      this.checkFrontendPageSpeed(),
+      this.checkTraderSearchAccuracy(),
     ])
 
     for (const result of checkResults) {
@@ -842,29 +846,335 @@ export class PipelineEvaluator {
     }
   }
 
-  // ── Feedback Loop ──────────────────────────────────────────────
+  // ── NEW CHECKS (2026-04-06) ───────────────────────────────────
+
+  /**
+   * Check 13: Trader Detail Integrity — fetch top 1 trader from 5 key platforms,
+   * verify the /api/traders/[handle] endpoint returns complete data.
+   */
+  private static async checkTraderDetailIntegrity(): Promise<{ check: EvaluationCheck; issues: EvaluationIssue[] }> {
+    const supabase = getSupabaseAdmin()
+    const issues: EvaluationIssue[] = []
+    const baseUrl = process.env.NEXT_PUBLIC_SITE_URL
+      || (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : null)
+      || 'http://localhost:3000'
+    const PLATFORMS = ['binance_futures', 'bybit', 'hyperliquid', 'okx_futures', 'mexc']
+
+    let passCount = 0
+    for (const platform of PLATFORMS) {
+      const { data: top1 } = await supabase
+        .from('leaderboard_ranks')
+        .select('source_trader_id')
+        .eq('source', platform)
+        .eq('season_id', '90D')
+        .not('arena_score', 'is', null)
+        .order('arena_score', { ascending: false })
+        .limit(1)
+
+      if (!top1?.length) continue
+
+      try {
+        const handle = `${platform}:${top1[0].source_trader_id}`
+        const res = await fetch(`${baseUrl}/api/traders/${encodeURIComponent(handle)}?timeRange=90D`, {
+          signal: AbortSignal.timeout(8000),
+          headers: { 'User-Agent': 'PipelineEvaluator/1.0' },
+        })
+        if (res.status === 200) {
+          const body = await res.json()
+          const hasCore = body.trader?.roi != null && body.trader?.arena_score != null
+          if (hasCore) { passCount++ }
+          else {
+            issues.push({ platform, type: 'trader_detail_incomplete', severity: 'warning',
+              description: `${platform} top trader missing roi or arena_score`,
+              recommendation: `Check /api/traders handler for ${platform}.` })
+          }
+        } else if (res.status === 401 || res.status === 403) {
+          passCount++ // Vercel auth wall
+        } else {
+          issues.push({ platform, type: 'trader_detail_error', severity: 'warning',
+            description: `${platform} trader detail returned ${res.status}`,
+            recommendation: `Check trader detail API.` })
+        }
+      } catch {
+        issues.push({ platform, type: 'trader_detail_timeout', severity: 'info',
+          description: `${platform} trader detail timed out`,
+          recommendation: `Check API latency.` })
+      }
+    }
+
+    const score = Math.round((passCount / PLATFORMS.length) * 100)
+    return {
+      check: { name: 'trader_detail_integrity', category: 'completeness', passed: score >= 70, score,
+        details: `${passCount}/${PLATFORMS.length} trader details complete` },
+      issues,
+    }
+  }
+
+  /**
+   * Check 14: VPS Health — verify both SG and JP VPS are responding with healthy PM2 processes.
+   */
+  private static async checkVPSHealth(): Promise<{ check: EvaluationCheck; issues: EvaluationIssue[] }> {
+    const issues: EvaluationIssue[] = []
+    const vpsHosts = [
+      { name: 'SG', host: process.env.VPS_PROXY_SG },
+      { name: 'JP', host: process.env.VPS_PROXY_JP || process.env.VPS_PROXY_URL },
+    ].filter(v => v.host)
+
+    if (vpsHosts.length === 0) {
+      return {
+        check: { name: 'vps_health', category: 'freshness', passed: true, score: 80,
+          details: 'No VPS hosts configured' },
+        issues: [],
+      }
+    }
+
+    let healthyCount = 0
+    for (const vps of vpsHosts) {
+      try {
+        const res = await fetch(`${vps.host}/health`, {
+          signal: AbortSignal.timeout(5000),
+          headers: { 'X-Proxy-Key': process.env.VPS_PROXY_KEY?.trim() || '' },
+        })
+        if (res.ok) {
+          const body = await res.json() as { status?: string }
+          if (body.status === 'ok') { healthyCount++ }
+          else {
+            issues.push({ platform: `vps_${vps.name.toLowerCase()}`, type: 'vps_degraded', severity: 'warning',
+              description: `VPS ${vps.name} status: ${body.status}`,
+              recommendation: `SSH into VPS ${vps.name} and check PM2.` })
+          }
+        } else {
+          issues.push({ platform: `vps_${vps.name.toLowerCase()}`, type: 'vps_error', severity: 'critical',
+            description: `VPS ${vps.name} returned ${res.status}`,
+            recommendation: `VPS ${vps.name} may be down. Check Vultr console.` })
+        }
+      } catch {
+        issues.push({ platform: `vps_${vps.name.toLowerCase()}`, type: 'vps_unreachable', severity: 'critical',
+          description: `VPS ${vps.name} unreachable`,
+          recommendation: `VPS ${vps.name} is down. Restart via Vultr console.` })
+      }
+    }
+
+    const score = vpsHosts.length > 0 ? Math.round((healthyCount / vpsHosts.length) * 100) : 80
+    return {
+      check: { name: 'vps_health', category: 'freshness', passed: healthyCount === vpsHosts.length, score,
+        details: `${healthyCount}/${vpsHosts.length} VPS healthy` },
+      issues,
+    }
+  }
+
+  /**
+   * Check 15: Cron Success Rate — past 1h success rate across all cron jobs.
+   */
+  private static async checkCronSuccessRate(): Promise<{ check: EvaluationCheck; issues: EvaluationIssue[] }> {
+    const supabase = getSupabaseAdmin()
+    const issues: EvaluationIssue[] = []
+
+    const oneHourAgo = new Date(Date.now() - 3600_000).toISOString()
+    const { data: logs } = await supabase
+      .from('pipeline_logs')
+      .select('job_name, status')
+      .gte('started_at', oneHourAgo)
+      .limit(500)
+
+    if (!logs || logs.length === 0) {
+      return {
+        check: { name: 'cron_success_rate', category: 'consistency', passed: true, score: 80,
+          details: 'No cron runs in past 1h' },
+        issues: [],
+      }
+    }
+
+    const total = logs.length
+    const successes = logs.filter(l => l.status === 'success').length
+    const errors = logs.filter(l => l.status === 'error').length
+    const rate = successes / total
+
+    // Find worst-performing jobs
+    const byJob = new Map<string, { total: number; errors: number }>()
+    for (const log of logs) {
+      const entry = byJob.get(log.job_name) || { total: 0, errors: 0 }
+      entry.total++
+      if (log.status === 'error') entry.errors++
+      byJob.set(log.job_name, entry)
+    }
+
+    for (const [job, stats] of byJob) {
+      const jobRate = (stats.total - stats.errors) / stats.total
+      if (jobRate < 0.5 && stats.errors >= 2) {
+        issues.push({
+          platform: 'cron',
+          type: 'cron_failing',
+          severity: jobRate === 0 ? 'critical' : 'warning',
+          description: `${job}: ${stats.errors}/${stats.total} failed (${Math.round(jobRate * 100)}% success)`,
+          recommendation: `Check logs for ${job}.`,
+        })
+      }
+    }
+
+    const score = Math.round(rate * 100)
+    return {
+      check: { name: 'cron_success_rate', category: 'consistency', passed: rate >= 0.90, score,
+        details: `${successes}/${total} succeeded (${Math.round(rate * 100)}%), ${errors} errors` },
+      issues,
+    }
+  }
+
+  /**
+   * Check 16: Frontend Page Speed — core pages must respond under 3s.
+   */
+  private static async checkFrontendPageSpeed(): Promise<{ check: EvaluationCheck; issues: EvaluationIssue[] }> {
+    const issues: EvaluationIssue[] = []
+    const baseUrl = process.env.NEXT_PUBLIC_SITE_URL
+      || (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : null)
+      || 'http://localhost:3000'
+
+    const pages = [
+      { path: '/', name: 'Homepage', maxMs: 3000 },
+      { path: '/rankings/binance_futures', name: 'Rankings', maxMs: 3000 },
+      { path: '/market', name: 'Market', maxMs: 3000 },
+      { path: '/search?q=btc', name: 'Search', maxMs: 3000 },
+    ]
+
+    let totalScore = 0
+    for (const page of pages) {
+      const start = Date.now()
+      try {
+        const res = await fetch(`${baseUrl}${page.path}`, {
+          signal: AbortSignal.timeout(page.maxMs * 2),
+          headers: { 'User-Agent': 'Mozilla/5.0 ArenaHealthCheck/1.0', Accept: 'text/html' },
+          redirect: 'follow',
+        })
+        const latency = Date.now() - start
+
+        if (res.status === 401 || res.status === 403) {
+          totalScore += 95 // Vercel auth wall — can't measure real speed
+          continue
+        }
+
+        if (res.status >= 500) {
+          issues.push({ platform: 'frontend', type: 'page_error', severity: 'critical',
+            description: `${page.name}: ${res.status}`, recommendation: `Check ${page.path}.` })
+        } else if (latency > page.maxMs) {
+          totalScore += 50
+          issues.push({ platform: 'frontend', type: 'page_slow', severity: 'warning',
+            description: `${page.name}: ${latency}ms (max: ${page.maxMs}ms)`,
+            recommendation: `Optimize ${page.path}. Check ISR/SSG cache.` })
+        } else {
+          totalScore += 100
+        }
+      } catch {
+        issues.push({ platform: 'frontend', type: 'page_timeout', severity: 'warning',
+          description: `${page.name} timed out`, recommendation: `Check ${page.path}.` })
+      }
+    }
+
+    const score = Math.round(totalScore / pages.length)
+    return {
+      check: { name: 'frontend_page_speed', category: 'freshness', passed: score >= 70, score,
+        details: `${pages.length} pages, avg score ${score}/100` },
+      issues,
+    }
+  }
+
+  /**
+   * Check 17: Trader Search Accuracy — verify search returns relevant results.
+   */
+  private static async checkTraderSearchAccuracy(): Promise<{ check: EvaluationCheck; issues: EvaluationIssue[] }> {
+    const issues: EvaluationIssue[] = []
+    const baseUrl = process.env.NEXT_PUBLIC_SITE_URL
+      || (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : null)
+      || 'http://localhost:3000'
+
+    try {
+      const res = await fetch(`${baseUrl}/api/search?q=bitcoin&limit=5`, {
+        signal: AbortSignal.timeout(5000),
+        headers: { 'User-Agent': 'PipelineEvaluator/1.0' },
+      })
+      if (res.status === 401 || res.status === 403) {
+        return { check: { name: 'trader_search_accuracy', category: 'completeness', passed: true, score: 95,
+          details: 'Auth wall — skipped' }, issues }
+      }
+      if (!res.ok) {
+        return { check: { name: 'trader_search_accuracy', category: 'completeness', passed: false, score: 0,
+          details: `Search API returned ${res.status}` },
+          issues: [{ platform: 'api', type: 'search_error', severity: 'critical',
+            description: `Search API returned ${res.status}`, recommendation: 'Check /api/search.' }] }
+      }
+      const body = await res.json()
+      const results = body.results || body.data || []
+      const hasResults = Array.isArray(results) && results.length > 0
+      const score = hasResults ? 100 : 50
+      if (!hasResults) {
+        issues.push({ platform: 'api', type: 'search_empty', severity: 'warning',
+          description: 'Search for "bitcoin" returned 0 results',
+          recommendation: 'Check search index or trigram matching.' })
+      }
+      return { check: { name: 'trader_search_accuracy', category: 'completeness', passed: hasResults, score,
+        details: `Search "bitcoin": ${results.length} results` }, issues }
+    } catch {
+      return { check: { name: 'trader_search_accuracy', category: 'completeness', passed: false, score: 0,
+        details: 'Search timed out' },
+        issues: [{ platform: 'api', type: 'search_timeout', severity: 'warning',
+          description: 'Search API timed out', recommendation: 'Check /api/search.' }] }
+    }
+  }
+
+  // ── Feedback Loop + History ──────────────────────────────────────
 
   /**
    * Write evaluation results to pipeline_state for the Planner to read.
-   * This is the Evaluator → Planner feedback loop.
+   * Also appends to evaluation history for trend tracking.
    */
   private static async writeFeedback(result: EvaluationResult): Promise<void> {
     // Store latest evaluation result
     await PipelineState.set('evaluator:latest', {
       score: result.overall_score,
       passed: result.passed,
+      checks_count: result.checks.length,
       issue_count: result.issues.length,
       critical_count: result.issues.filter(i => i.severity === 'critical').length,
       evaluated_at: result.evaluated_at,
       trace_id: result.trace_id,
     })
 
+    // ── History: append to rolling window (last 50 evaluations) ──
+    const historyKey = 'evaluator:history'
+    const existing = await PipelineState.get<Array<{
+      score: number; passed: boolean; checks: number; issues: number; at: string
+    }>>(historyKey)
+    const history = Array.isArray(existing) ? existing : []
+    history.push({
+      score: result.overall_score,
+      passed: result.passed,
+      checks: result.checks.length,
+      issues: result.issues.length,
+      at: result.evaluated_at,
+    })
+    // Keep last 50 entries
+    if (history.length > 50) history.splice(0, history.length - 50)
+    await PipelineState.set(historyKey, history)
+
+    // Compute trend (last 5 vs previous 5)
+    if (history.length >= 10) {
+      const recent5 = history.slice(-5).reduce((s, h) => s + h.score, 0) / 5
+      const prev5 = history.slice(-10, -5).reduce((s, h) => s + h.score, 0) / 5
+      const trend = recent5 - prev5
+      await PipelineState.set('evaluator:trend', {
+        recent_avg: Math.round(recent5 * 10) / 10,
+        previous_avg: Math.round(prev5 * 10) / 10,
+        delta: Math.round(trend * 10) / 10,
+        direction: trend > 1 ? 'improving' : trend < -1 ? 'declining' : 'stable',
+        computed_at: new Date().toISOString(),
+      })
+    }
+
     // Per-platform feedback for Planner
     for (const issue of result.issues) {
       if (issue.platform === 'all') continue
       const feedbackKey = `evaluator:feedback:${issue.platform}`
-      const existing = await PipelineState.get<{ occurrence_count: number }>(feedbackKey)
-      const occurrenceCount = (existing?.occurrence_count ?? 0) + 1
+      const existingFeedback = await PipelineState.get<{ occurrence_count: number }>(feedbackKey)
+      const occurrenceCount = (existingFeedback?.occurrence_count ?? 0) + 1
 
       await PipelineState.set(feedbackKey, {
         issue_type: issue.type,
@@ -874,7 +1184,6 @@ export class PipelineEvaluator {
         occurrence_count: occurrenceCount,
       })
 
-      // Escalate if same issue repeats 3+ times
       if (occurrenceCount >= 3 && occurrenceCount % 3 === 0) {
         logger.warn(
           `[evaluator] Recurring issue for ${issue.platform}: ${issue.type} (${occurrenceCount} occurrences)`
