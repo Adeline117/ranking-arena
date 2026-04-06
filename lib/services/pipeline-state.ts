@@ -96,6 +96,30 @@ export class PipelineState {
   }
 
   /**
+   * Cleanup stale entries older than the given age.
+   * Removes abandoned checkpoints, old dead counters, stale evaluator feedback.
+   * Returns number of rows deleted.
+   */
+  static async cleanupStale(maxAgeMs: number = 7 * 24 * 3600 * 1000): Promise<number> {
+    try {
+      const supabase = getSupabaseAdmin()
+      const cutoff = new Date(Date.now() - maxAgeMs).toISOString()
+      const { count, error } = await supabase
+        .from('pipeline_state')
+        .delete({ count: 'exact' })
+        .lt('updated_at', cutoff)
+      if (error) {
+        logger.warn(`[PipelineState] cleanupStale failed: ${error.message}`)
+        return 0
+      }
+      return count ?? 0
+    } catch (err) {
+      logger.warn(`[PipelineState] cleanupStale failed: ${err instanceof Error ? err.message : String(err)}`)
+      return 0
+    }
+  }
+
+  /**
    * Get all keys matching a prefix.
    * Useful for listing all dead platform counters, etc.
    */

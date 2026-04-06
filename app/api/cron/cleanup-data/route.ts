@@ -182,6 +182,19 @@ export async function GET(request: NextRequest) {
       logger.warn(`[cleanup-data] liquidations cleanup failed: ${err}`)
     }
 
+    // Cleanup stale pipeline_state entries (>7 days untouched)
+    // Removes abandoned checkpoints, old dead counters, stale evaluator feedback
+    let pipelineStateCleaned = 0
+    try {
+      const { PipelineState } = await import('@/lib/services/pipeline-state')
+      pipelineStateCleaned = await PipelineState.cleanupStale(7 * 24 * 3600 * 1000)
+      if (pipelineStateCleaned > 0) {
+        logger.info(`[cleanup-data] Cleaned up ${pipelineStateCleaned} stale pipeline_state entries (>7d)`)
+      }
+    } catch (err) {
+      logger.warn(`[cleanup-data] pipeline_state cleanup failed: ${err}`)
+    }
+
     // ── Metrics refresh (keep) ────────────────────────────────────
 
     let metricsResult = null
@@ -206,7 +219,7 @@ export async function GET(request: NextRequest) {
     const duration = Date.now() - startTime
     const hasErrors = stepErrors.length > 0
 
-    const totalCleaned = hotTopicsCleaned + flashNewsCleaned + notificationsCleaned + pipelineLogsCleaned + stripeEventsCleaned + liquidationsCleaned
+    const totalCleaned = hotTopicsCleaned + flashNewsCleaned + notificationsCleaned + pipelineLogsCleaned + stripeEventsCleaned + liquidationsCleaned + pipelineStateCleaned
 
     const resultMeta = {
       hotTopicsCleaned,
@@ -215,6 +228,7 @@ export async function GET(request: NextRequest) {
       pipelineLogsCleaned,
       stripeEventsCleaned,
       liquidationsCleaned,
+      pipelineStateCleaned,
       metricsRefresh: metricsResult,
       stepErrors: hasErrors ? stepErrors : undefined,
       note: 'trader snapshots/daily/positions are NEVER deleted (long-term archival)',
