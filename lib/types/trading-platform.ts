@@ -10,17 +10,20 @@
 // ============================================
 
 export const SUPPORTED_PLATFORMS = [
-  'binance_futures',
-  'binance_spot',
-  'bybit',
-  'bitget_futures',
-  'bitget_spot',
-  'mexc',
-  'okx_web3',
-  'kucoin',
-  'coinex',
-  'gmx',
-  'htx_futures',
+  // CEX futures
+  'binance_futures', 'bybit', 'bitget_futures', 'okx_futures',
+  'mexc', 'htx_futures', 'coinex', 'bingx', 'gateio', 'xt',
+  'blofin', 'btcc', 'bitfinex', 'bitunix', 'toobit', 'lbank',
+  'weex', 'phemex', 'kucoin',
+  // CEX spot
+  'binance_spot', 'bybit_spot', 'okx_spot', 'bitget_spot',
+  // Web3 / DEX
+  'binance_web3', 'okx_web3', 'hyperliquid', 'gmx', 'dydx',
+  'gains', 'jupiter_perps', 'aevo', 'drift', 'web3_bot',
+  // Social trading
+  'etoro',
+  // New platforms (Wave 2)
+  'woox', 'polymarket', 'copin',
 ] as const
 
 export type Platform = typeof SUPPORTED_PLATFORMS[number]
