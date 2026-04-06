@@ -104,8 +104,13 @@ export async function getUserFromToken(token: string): Promise<User | null> {
 
     // Check ban/delete status with in-memory cache (avoids 1 DB query per auth check)
     const cached = banStatusCache.get(user.id)
-    if (cached && Date.now() - cached.ts < BAN_CACHE_TTL) {
-      return cached.banned ? null : user
+    const now = Date.now()
+    if (cached) {
+      if (now - cached.ts < BAN_CACHE_TTL) {
+        return cached.banned ? null : user
+      }
+      // Expired — remove stale entry inline
+      banStatusCache.delete(user.id)
     }
 
     const { data: profile } = await supabase
@@ -115,18 +120,13 @@ export async function getUserFromToken(token: string): Promise<User | null> {
       .maybeSingle()
 
     const isBanned = !!(profile?.banned_at || profile?.deleted_at)
-    banStatusCache.set(user.id, { banned: isBanned, ts: Date.now() })
 
-    // Prevent cache from growing unbounded — evict expired entries first (O(n)),
-    // then hard-clear if still too large (avoids O(n log n) sort)
-    if (banStatusCache.size > 10000) {
-      const now = Date.now()
-      for (const [key, val] of banStatusCache) {
-        if (now - val.ts > BAN_CACHE_TTL) banStatusCache.delete(key)
-      }
-      // If still oversized after TTL eviction, clear entirely
-      if (banStatusCache.size > 10000) banStatusCache.clear()
+    // Prevent unbounded growth: clear entire map when oversized.
+    // Serverless instances are short-lived, so a full clear is cheap and avoids O(n) scans.
+    if (banStatusCache.size > 5000) {
+      banStatusCache.clear()
     }
+    banStatusCache.set(user.id, { banned: isBanned, ts: now })
 
     return isBanned ? null : user
   } catch (error) {
