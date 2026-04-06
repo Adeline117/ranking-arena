@@ -156,6 +156,8 @@ export const DEAD_BLOCKED_PLATFORMS: TraderSource[] = [
   'vertex' as TraderSource,    // No public leaderboard API — competition backend DNS dead, SDK has 0 leaderboard endpoints (2026-04-01)
   'apex_pro' as TraderSource,  // No public leaderboard API — tested 8+ endpoint patterns all 404, docs have 0 leaderboard endpoints (2026-04-01)
   'rabbitx' as TraderSource,   // ALL domains DNS dead — rabbitx.io, api.rabbitx.com, api.prod.rabbitx.io all NXDOMAIN (2026-04-01)
+  'lbank',        // Copy-trading API 404 since 2026-04 — endpoint removed
+  'bitget_spot' as TraderSource, // No leaderboard API — permanently disabled
   // 'dydx' — RECOVERED: Heroku + Copin API fallback, 3339 traders in leaderboard_ranks (2026-03-15)
 
   // ═══════════════════════════════════════════════════════════════
