@@ -52,7 +52,7 @@ export async function GET(request: NextRequest) {
       // Filter trivially in app code if needed.
       const { data, error } = await supabase
         .from('trader_snapshots_v2')
-        .select('platform, trader_key, as_of_ts, arena_score, roi_pct, pnl_usd, max_drawdown, win_rate, trades_count, followers, metrics')
+        .select('platform, trader_key, as_of_ts, arena_score, roi_pct, pnl_usd, max_drawdown, win_rate, trades_count, followers')
         .eq('window', seasonId)
         .not('arena_score', 'is', null)
         .gte('as_of_ts', freshnessThreshold)
