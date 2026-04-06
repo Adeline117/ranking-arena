@@ -15,12 +15,19 @@
  * Used by check-data-freshness and daily-digest for monitoring coverage.
  */
 const ACTIVE_PLATFORMS = [
-  'okx_futures', 'htx_futures', 'binance_futures', // binance_spot REMOVED 2026-03-14
-  'binance_web3', 'okx_web3', 'xt', 'bingx', // bitget_futures REMOVED 2026-03-18 (6th stuck)
-  'gateio', 'mexc', 'coinex', 'phemex', 'bybit', 'blofin',
-  'bitfinex', 'toobit', 'drift', 'bitunix', 'btcc', 'web3_bot',
-  'etoro', 'hyperliquid', 'gmx', 'gains', 'jupiter_perps',
-  'aevo', 'dydx', 'kwenta',
+  // CEX futures — matches batch-fetch-traders GROUPS (a1, a2, b1, b2, c, d1, d2, e, f, g)
+  'binance_futures', 'binance_spot', 'okx_futures', 'okx_spot',
+  'bybit', 'bybit_spot', 'bitget_futures', 'bitget_spot',
+  'htx_futures', 'mexc', 'coinex', 'gateio', 'xt',
+  'btcc', 'bitfinex', 'bitunix', 'toobit', 'lbank',
+  // Web3 / DEX
+  'binance_web3', 'okx_web3', 'hyperliquid', 'gmx',
+  'drift', 'jupiter_perps', 'aevo', 'dydx',
+  'gains', 'web3_bot', 'etoro', 'weex',
+  // New platforms (Wave 2)
+  'woox', 'polymarket', 'copin',
+  // Mac Mini / VPS only (not in Vercel cron but actively fetching)
+  // blofin: Mac Mini crontab, phemex: VPS scraper-cron
 ]
 
 /** Returns list of all known active platforms (for monitoring). */
