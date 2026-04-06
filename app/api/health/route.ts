@@ -100,21 +100,40 @@ export async function GET() {
       const scraperUrl = vpsHost.replace(/:\d+$/, ':3457') + '/health'
       const proxyUrl = vpsHost.replace(/:\d+$/, ':3456') + '/health'
       let res = await fetch(scraperUrl, {
-        headers: { 'X-Proxy-Key': vpsKey },
+        headers: { 'X-Proxy-Key': vpsKey, 'User-Agent': 'Arena-Health/1.0' },
         signal: AbortSignal.timeout(5_000),
       }).catch(() => null)
 
       if (!res?.ok) {
         res = await fetch(proxyUrl, {
-          headers: { 'X-Proxy-Key': vpsKey },
+          headers: { 'X-Proxy-Key': vpsKey, 'User-Agent': 'Arena-Health/1.0' },
           signal: AbortSignal.timeout(3_000),
         }).catch(() => null)
       }
 
       const lat = Date.now() - t2
-      vps = res?.ok
-        ? { status: 'pass', latency: lat, message: `VPS SG responding` }
-        : { status: 'fail', latency: lat, message: `VPS SG returned ${res?.status || 'unreachable'}` }
+      if (res?.ok) {
+        vps = { status: 'pass', latency: lat, message: 'VPS SG responding' }
+      } else {
+        // Direct connection failed — check pipeline_logs for recent VPS-sourced successes
+        // If VPS cron wrote data in the last 15min, the VPS is actually working fine
+        // (Vultr intermittently blocks Vercel's Tokyo IPs)
+        // Check if VPS-dependent pipelines succeeded recently (bybit/bitget use VPS scraper)
+        const { data: recentVpsJob } = await supabase
+          .from('pipeline_logs')
+          .select('job_name, started_at')
+          .eq('status', 'success')
+          .or('job_name.like.enrich-bybit%,job_name.like.enrich-bitget%,job_name.like.enrich-binance_futures%,job_name.like.batch-fetch-traders-b1%')
+          .gte('started_at', new Date(Date.now() - 30 * 60000).toISOString())
+          .limit(1)
+          .maybeSingle()
+
+        if (recentVpsJob) {
+          vps = { status: 'pass', latency: lat, message: `VPS SG OK (via pipeline heartbeat, direct ${res?.status || 'blocked'})` }
+        } else {
+          vps = { status: 'fail', latency: lat, message: `VPS SG returned ${res?.status || 'unreachable'}` }
+        }
+      }
     } catch (e: unknown) {
       vps = { status: 'fail', latency: Date.now() - t2, message: e instanceof Error ? e.message : 'Unreachable' }
     }
