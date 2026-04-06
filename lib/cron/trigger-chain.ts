@@ -18,6 +18,9 @@ const logger = createLogger('trigger-chain')
 const DEDUP_KEY = 'trigger-chain:last-run'
 const DEDUP_WINDOW_MS = 5 * 60 * 1000 // 5 minutes — skip if last trigger was <5min ago
 
+// In-memory fallback dedup when Redis is unavailable
+let memoryLastRun = 0
+
 /** Structured metadata passed from upstream job to downstream (Anthropic harness handoff pattern) */
 export interface TraceMetadata {
   trace_id: string
@@ -53,7 +56,15 @@ export function triggerDownstreamRefresh(source: string, trace?: TraceMetadata):
         // Stamp the dedup key before triggering (TTL = 10min, auto-cleanup)
         await redis.set(DEDUP_KEY, Date.now(), { ex: 600 })
       } else {
-        logger.warn('Redis unavailable — skipping dedup, triggering anyway')
+        // In-memory dedup fallback — prevents duplicate triggers within same process
+        if (memoryLastRun && Date.now() - memoryLastRun < DEDUP_WINDOW_MS) {
+          logger.info(
+            `Skipping trigger (memory dedup): last run ${Math.round((Date.now() - memoryLastRun) / 1000)}s ago [source=${source}]`
+          )
+          return
+        }
+        memoryLastRun = Date.now()
+        logger.warn('Redis unavailable — using in-memory dedup fallback')
       }
 
       // ── Resolve base URL ─────────────────────────────────────────
