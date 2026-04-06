@@ -1,7 +1,7 @@
 'use client'
 
 import { createContext, useContext, useState, useEffect, useMemo, useCallback, ReactNode } from 'react'
-import { type Language, getLanguage, setLanguage as setLang, translations, loadTranslations } from '@/lib/i18n'
+import { type Language, getLanguage, setLanguage as setLang, translations, loadTranslations, getTranslationVersion, onTranslationsReady } from '@/lib/i18n'
 
 // Translation function type - accepts any string but returns the key if not found
 export type TranslationFunction = (key: string) => string
@@ -27,21 +27,20 @@ const LanguageContext = createContext<LanguageContextType | undefined>(undefined
 export function LanguageProvider({ children }: { children: ReactNode }) {
   // Start with 'en' to match SSR output — getLanguage() reads localStorage which is only
   // available after hydration. We update in useEffect once mounted.
-  // Previously, `isMounted` state (false→true after hydration) triggered ALL 343 useLanguage()
-  // consumers to re-render on every page load. Removing that state eliminates that mass re-render.
   const [language, setLanguageState] = useState<Language>('en')
+  // Bump when English translations finish async loading — forces t() consumers to re-render
+  const [, setTxnVersion] = useState(() => getTranslationVersion())
 
   useEffect(() => {
-    const savedLanguage = getLanguage()
+    // Re-render once when English translations finish loading (async import on client)
+    const unsub = onTranslationsReady(() => setTxnVersion(v => v + 1))
 
+    const savedLanguage = getLanguage()
     if (savedLanguage !== 'en') {
-      // Only update state if language differs from default — avoids unnecessary re-render
       loadTranslations(savedLanguage).then(() => setLanguageState(savedLanguage))
     }
-    // If 'en', no state update needed — already initialized to 'en'
 
-    // Pre-cache all language files in the background to eliminate flash when switching
-    // Language files are small (~15KB each gzipped), so this is safe to do eagerly
+    // Pre-cache all language files in the background
     const preloadLangs: Language[] = ['zh', 'ja', 'ko']
     if (requestIdleCallback) {
       requestIdleCallback(() => { preloadLangs.forEach(lang => loadTranslations(lang)) })
@@ -58,7 +57,7 @@ export function LanguageProvider({ children }: { children: ReactNode }) {
     }
 
     window.addEventListener('languageChange', handleLanguageChange as EventListener)
-    return () => window.removeEventListener('languageChange', handleLanguageChange as EventListener)
+    return () => { unsub(); window.removeEventListener('languageChange', handleLanguageChange as EventListener) }
   }, [])
 
   const setLanguage = useCallback((lang: Language) => {
