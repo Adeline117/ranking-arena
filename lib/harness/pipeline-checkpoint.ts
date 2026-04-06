@@ -112,7 +112,11 @@ export class PipelineCheckpoint {
     const key = `${CHECKPOINT_PREFIX}${checkpoint.job_type}:${checkpoint.group}`
     checkpoint.current_platform = platform
     checkpoint.last_checkpoint_at = new Date().toISOString()
-    await PipelineState.set(key, checkpoint)
+    try {
+      await PipelineState.set(key, checkpoint)
+    } catch (err) {
+      logger.warn(`[checkpoint] markInProgress failed for ${platform} (Redis down?): ${err instanceof Error ? err.message : String(err)}`)
+    }
   }
 
   /**
@@ -128,7 +132,11 @@ export class PipelineCheckpoint {
     checkpoint.current_platform = null
     checkpoint.records_processed += recordCount
     checkpoint.last_checkpoint_at = new Date().toISOString()
-    await PipelineState.set(key, checkpoint)
+    try {
+      await PipelineState.set(key, checkpoint)
+    } catch (err) {
+      logger.warn(`[checkpoint] markCompleted failed for ${platform} (Redis down?): ${err instanceof Error ? err.message : String(err)}`)
+    }
   }
 
   /**
@@ -143,7 +151,11 @@ export class PipelineCheckpoint {
     checkpoint.failed_platforms.push({ platform, error })
     checkpoint.current_platform = null
     checkpoint.last_checkpoint_at = new Date().toISOString()
-    await PipelineState.set(key, checkpoint)
+    try {
+      await PipelineState.set(key, checkpoint)
+    } catch (err) {
+      logger.warn(`[checkpoint] markFailed failed for ${platform} (Redis down?): ${err instanceof Error ? err.message : String(err)}`)
+    }
   }
 
   /**
@@ -163,7 +175,12 @@ export class PipelineCheckpoint {
     }
 
     // Delete checkpoint (job completed, no need to resume)
-    await PipelineState.del(key)
+    try {
+      await PipelineState.del(key)
+    } catch (err) {
+      logger.warn(`[checkpoint] finalize del failed (Redis down?): ${err instanceof Error ? err.message : String(err)}`)
+      // Non-fatal: stale checkpoint will be discarded after CHECKPOINT_MAX_AGE_MS
+    }
     logger.info(
       `[checkpoint] Finalized ${checkpoint.job_type}:${checkpoint.group} ` +
       `(trace=${checkpoint.trace_id}, platforms=${checkpoint.completed_platforms.length}/${

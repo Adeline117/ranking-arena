@@ -169,7 +169,10 @@ export async function runWorkerInline(): Promise<InlineJobResult> {
                 sharpe_ratio: result.data.metrics.sharpe_ratio,
                 arena_score: arenaScore,
               }, { onConflict: 'platform,market_type,trader_key,window,as_of_ts' })
-              if (snapInsertErr) logger.warn(`[inline-jobs] SNAPSHOT upsert error: ${snapInsertErr.message}`)
+              if (snapInsertErr) {
+                logger.warn(`[inline-jobs] SNAPSHOT upsert error: ${snapInsertErr.message}`)
+                throw new Error(`SNAPSHOT upsert failed: ${snapInsertErr.message}`)
+              }
             }
           }
         } else if (job.job_type === 'PROFILE' && job.trader_key) {
@@ -181,7 +184,10 @@ export async function runWorkerInline(): Promise<InlineJobResult> {
               { ...result.data, market_type: canonicalMT },
               { onConflict: 'platform,market_type,trader_key' }
             )
-            if (profileErr) logger.warn(`[inline-jobs] PROFILE upsert error: ${profileErr.message}`)
+            if (profileErr) {
+              logger.warn(`[inline-jobs] PROFILE upsert error: ${profileErr.message}`)
+              throw new Error(`PROFILE upsert failed: ${profileErr.message}`)
+            }
           }
         }
 
