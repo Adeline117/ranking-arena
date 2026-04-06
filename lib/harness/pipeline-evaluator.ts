@@ -931,28 +931,28 @@ export class PipelineEvaluator {
 
     let healthyCount = 0
     for (const vps of vpsHosts) {
-      try {
-        const res = await fetch(`${vps.host}/health`, {
-          signal: AbortSignal.timeout(5000),
-          headers: { 'X-Proxy-Key': process.env.VPS_PROXY_KEY?.trim() || '' },
-        })
-        if (res.ok) {
-          const body = await res.json() as { status?: string }
-          if (body.status === 'ok') { healthyCount++ }
-          else {
-            issues.push({ platform: `vps_${vps.name.toLowerCase()}`, type: 'vps_degraded', severity: 'warning',
-              description: `VPS ${vps.name} status: ${body.status}`,
-              recommendation: `SSH into VPS ${vps.name} and check PM2.` })
+      // Try configured URL first, then fallback to standard :3456 port
+      const urls = [vps.host!]
+      const stdPort = vps.host!.replace(/:\d+$/, ':3456')
+      if (stdPort !== vps.host) urls.push(stdPort)
+
+      let ok = false
+      for (const url of urls) {
+        try {
+          const res = await fetch(`${url}/health`, {
+            signal: AbortSignal.timeout(5000),
+            headers: { 'X-Proxy-Key': process.env.VPS_PROXY_KEY?.trim() || '' },
+          })
+          if (res.ok) {
+            const body = await res.json() as { status?: string }
+            if (body.status === 'ok') { healthyCount++; ok = true; break }
           }
-        } else {
-          issues.push({ platform: `vps_${vps.name.toLowerCase()}`, type: 'vps_error', severity: 'critical',
-            description: `VPS ${vps.name} returned ${res.status}`,
-            recommendation: `VPS ${vps.name} may be down. Check Vultr console.` })
-        }
-      } catch {
+        } catch { /* try next URL */ }
+      }
+      if (!ok) {
         issues.push({ platform: `vps_${vps.name.toLowerCase()}`, type: 'vps_unreachable', severity: 'critical',
-          description: `VPS ${vps.name} unreachable`,
-          recommendation: `VPS ${vps.name} is down. Restart via Vultr console.` })
+          description: `VPS ${vps.name} unreachable on ${urls.join(' and ')}`,
+          recommendation: `VPS ${vps.name} is down. Check PM2 and Vultr console.` })
       }
     }
 
