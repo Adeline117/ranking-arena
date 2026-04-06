@@ -640,6 +640,7 @@ const PLATFORM_TIMEOUT_MS: Record<string, number> = {
   'bitget_futures': 180_000,  // 3min total - increased for 200 trader limit at concurrency 3
   'binance_spot': 60_000,  // RE-ENABLED 2026-03-19 — 60s per-platform timeout
   'bybit': 240_000, // 4min - VPS Playwright scraper is slow (~20s/trader × 20 traders / 2 concurrent = ~200s)
+  'bybit_spot': 240_000, // 4min - same VPS scraper as bybit (was using default 120s, causing 100% timeout)
   'etoro': 180_000, // 3min - eToro APIs are rate-limited, need generous timeout
   // Batch-cached: instant, but set generous limit
   'bitunix': 30_000, 'xt': 30_000, 'blofin': 60_000,

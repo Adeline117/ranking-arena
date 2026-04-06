@@ -185,6 +185,7 @@ export async function GET(request: NextRequest) {
     okx_spot: 60000,
     bitunix: 120000, // Increased from 60s: VPS proxy adds latency, observed 137s during outage
     coinex: 90000,
+    dydx: 180000, // Copin API: 500/page × 4 pages × 3 windows + DB writes. Was timing out at 90s.
     // Others: default 90s (PLATFORM_TIMEOUT_MS)
   }
 
