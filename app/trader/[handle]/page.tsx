@@ -26,7 +26,13 @@ const EXCHANGE_DISPLAY: Record<string, string> = Object.fromEntries(
 
 const cachedResolveTraderISR = unstable_cache(
   async (handle: string, platform: string | undefined) => {
-    return resolveTrader(getSupabaseAdmin(), { handle, platform })
+    const result = await resolveTrader(getSupabaseAdmin(), { handle, platform })
+    if (!result) {
+      // Throw so unstable_cache does NOT cache null results.
+      // A transient DB timeout should not cause 5 minutes of 404s.
+      throw new Error('TRADER_RESOLVE_NULL')
+    }
+    return result
   },
   ['trader-resolve'],
   { revalidate: 300, tags: ['trader-profile'] }
@@ -34,8 +40,15 @@ const cachedResolveTraderISR = unstable_cache(
 
 // React cache() deduplicates the ISR-cached call within a single request.
 // Both generateMetadata and the page component call this — one DB round-trip.
+// Catches the TRADER_RESOLVE_NULL sentinel so callers get null (not an exception).
 const cachedResolveTrader = cache(
-  (handle: string, platform?: string) => cachedResolveTraderISR(handle, platform)
+  async (handle: string, platform?: string) => {
+    try {
+      return await cachedResolveTraderISR(handle, platform)
+    } catch {
+      return null
+    }
+  }
 )
 
 // Heavy query (~11 parallel DB queries). Caching this eliminates the dominant
