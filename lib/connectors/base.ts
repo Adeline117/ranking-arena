@@ -190,6 +190,8 @@ export abstract class BaseConnector implements PlatformConnector {
 
   protected config: ConnectorConfig
   protected rateLimiter: RateLimiter | null = null
+  /** Logger scoped to this connector — subclasses can use this.logger.debug/warn/error */
+  protected logger = exchangeLogger
 
   /**
    * Get per-platform VPS policy (replaces global static policy).
