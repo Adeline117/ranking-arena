@@ -1,5 +1,4 @@
 import type { Metadata } from 'next'
-import { Suspense } from 'react'
 import { getInitialTraders } from '@/lib/getInitialTraders'
 import { getHeroStats } from '@/lib/data/hero-stats'
 import SSRRankingTable from './components/home/SSRRankingTable'
@@ -86,19 +85,17 @@ export default async function Page({
       {/* Ranking table — 100% SSR. No Phase 2 replacement.
           Controls (time range + pagination) are a tiny client island (~3KB).
           Table rows are pure server HTML — no JS needed to display them. */}
-      <PageErrorBoundary>
-        <div className="ssr-t" style={{ marginTop: 8 }}>
-          <Suspense>
-            <RankingControls
-              activeRange={timeRange}
-              page={page}
-              totalCount={totalCount}
-              perPage={PER_PAGE}
-            />
-          </Suspense>
-          <SSRRankingTable traders={traders} startRank={page * PER_PAGE} />
-        </div>
-      </PageErrorBoundary>
+      {/* No Suspense or ErrorBoundary wrapping the table — prevents hydration
+          repaints that would reset LCP. The table is pure server HTML. */}
+      <div className="ssr-t" style={{ marginTop: 8 }}>
+        <RankingControls
+          activeRange={timeRange}
+          page={page}
+          totalCount={totalCount}
+          perPage={PER_PAGE}
+        />
+        <SSRRankingTable traders={traders} startRank={page * PER_PAGE} />
+      </div>
     </>
   )
 }
