@@ -90,7 +90,7 @@ export class PipelineCalculator {
     const config = ARENA_SCORE_CONFIG[trader.window]
 
     // 收益分：60 × tanh(coeff × roi)^exponent
-    const returnScore = this.calculateReturnScore(trader.roi_pct, config)
+    const returnScore = this.calculateReturnScore(trader.roi_pct, config, trader.window)
 
     // PnL 分：40 × tanh(coeff × ln(1 + pnl/base))
     const pnlScore = this.calculatePnlScore(trader.pnl_usd, config)
@@ -103,18 +103,22 @@ export class PipelineCalculator {
 
   /**
    * 计算收益分 (0-60)
+   * Uses annualized intensity formula matching lib/utils/arena-score.ts
    */
   private calculateReturnScore(
     roiPct: number | null,
-    config: typeof ARENA_SCORE_CONFIG['7d']
+    config: typeof ARENA_SCORE_CONFIG['7d'],
+    window: TimeWindow = '90d'
   ): number {
     if (roiPct === null || roiPct <= 0) return 0
 
-    // ROI 以百分比输入，除以 100 转为小数
     const roiDecimal = roiPct / 100
+    const days = window === '7d' ? 7 : window === '30d' ? 30 : 90
+    // Annualized intensity = (365/days) * ln(1 + roi_decimal)
+    const intensity = (365 / days) * Math.log(1 + Math.max(roiDecimal, -0.99))
 
-    // 60 × tanh(coeff × roi)^exponent
-    const score = 60 * Math.pow(Math.tanh(config.tanhCoeff * roiDecimal * 100), config.roiExponent)
+    // 60 × tanh(coeff × intensity)^exponent
+    const score = 60 * Math.pow(Math.tanh(config.tanhCoeff * intensity), config.roiExponent)
 
     return Math.max(0, Math.min(60, score))
   }
