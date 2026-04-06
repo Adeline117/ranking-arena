@@ -77,6 +77,7 @@ export class PipelineEvaluator {
       this.checkCronSuccessRate(),
       this.checkFrontendPageSpeed(),
       this.checkTraderSearchAccuracy(),
+      this.checkCrossSourceConsistency(),
     ])
 
     for (const result of checkResults) {
@@ -1118,6 +1119,80 @@ export class PipelineEvaluator {
         details: 'Search timed out' },
         issues: [{ platform: 'api', type: 'search_timeout', severity: 'warning',
           description: 'Search API timed out', recommendation: 'Check /api/search.' }] }
+    }
+  }
+
+  /**
+   * Check #18: Cross-source data consistency (LR vs V2 vs API)
+   * Samples 3 traders and verifies ROI/PnL match across leaderboard_ranks and trader_snapshots_v2.
+   */
+  private static async checkCrossSourceConsistency(): Promise<{ check: EvaluationCheck; issues: EvaluationIssue[] }> {
+    const issues: EvaluationIssue[] = []
+    const TOLERANCE = 0.01 // 1%
+
+    try {
+      const supabase = getSupabaseAdmin()
+
+      // Sample 3 traders with high scores (more likely to have data in both tables)
+      const { data: sample } = await supabase
+        .from('leaderboard_ranks')
+        .select('source, source_trader_id, roi, pnl, arena_score')
+        .eq('season_id', '90D')
+        .gt('arena_score', 20)
+        .or('is_outlier.is.null,is_outlier.eq.false')
+        .order('arena_score', { ascending: false })
+        .limit(50)
+
+      if (!sample?.length) {
+        return { check: { name: 'cross_source_consistency', category: 'consistency', passed: true, score: 80,
+          details: 'No sample data available' }, issues }
+      }
+
+      const shuffled = sample.sort(() => Math.random() - 0.5).slice(0, 3)
+      let mismatches = 0
+
+      for (const trader of shuffled) {
+        const { data: v2Row } = await supabase
+          .from('trader_snapshots_v2')
+          .select('roi_pct, pnl_usd')
+          .eq('platform', trader.source)
+          .eq('trader_key', trader.source_trader_id)
+          .eq('window', '90D')
+          .order('created_at', { ascending: false })
+          .limit(1)
+          .maybeSingle()
+
+        if (!v2Row) continue
+
+        const lrRoi = Number(trader.roi)
+        const v2Roi = Number(v2Row.roi_pct)
+        if (lrRoi && v2Roi) {
+          const diff = Math.abs(lrRoi - v2Roi) / Math.max(Math.abs(lrRoi), Math.abs(v2Roi), 1)
+          if (diff > TOLERANCE) {
+            mismatches++
+            issues.push({
+              platform: trader.source,
+              type: 'roi_mismatch',
+              severity: 'warning',
+              description: `${trader.source_trader_id}: LR ROI=${lrRoi.toFixed(2)} vs V2 ROI=${v2Roi.toFixed(2)} (${(diff * 100).toFixed(1)}% diff)`,
+              recommendation: 'Check if compute-leaderboard and enrichment use same ROI source.',
+            })
+          }
+        }
+      }
+
+      const score = mismatches === 0 ? 100 : mismatches === 1 ? 70 : 30
+      return {
+        check: {
+          name: 'cross_source_consistency', category: 'consistency',
+          passed: mismatches === 0, score,
+          details: `${shuffled.length} traders sampled, ${mismatches} ROI mismatches`,
+        },
+        issues,
+      }
+    } catch (err) {
+      return { check: { name: 'cross_source_consistency', category: 'consistency', passed: false, score: 0,
+        details: `Error: ${err instanceof Error ? err.message : String(err)}` }, issues }
     }
   }
 
