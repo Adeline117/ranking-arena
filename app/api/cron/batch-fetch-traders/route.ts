@@ -259,6 +259,23 @@ export async function GET(request: NextRequest) {
         logger.warn(`[batch-fetch-traders-${group}] ${platform}: connector returned SUCCESS but 0 traders — API may have changed`)
       }
 
+      // Per-platform count drop detection: alert if >50% drop from last known good
+      if (totalSaved > 0) {
+        const lastCountKey = `fetch:last-count:${platform}`
+        PipelineState.get(lastCountKey).then(async (prev) => {
+          const prevCount = typeof prev === 'number' ? prev : 0
+          if (prevCount > 50 && totalSaved < prevCount * 0.5) {
+            await sendRateLimitedAlert({
+              title: `${platform} count dropped ${Math.round((1 - totalSaved / prevCount) * 100)}%`,
+              message: `${platform}: ${prevCount} → ${totalSaved} traders (${Math.round((1 - totalSaved / prevCount) * 100)}% drop). May indicate API change or partial outage.`,
+              level: 'warning',
+              details: { platform, prevCount, newCount: totalSaved, group },
+            }, `count-drop:${platform}`, 3 * 3600 * 1000)
+          }
+          await PipelineState.set(lastCountKey, totalSaved)
+        }).catch(() => {/* non-blocking */})
+      }
+
       if ((hasErrors && totalSaved === 0) || (totalSaved === 0 && !hasErrors)) {
         // Track consecutive failure for dead platform detection
         try {
