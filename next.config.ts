@@ -100,6 +100,24 @@ const nextConfig = {
             priority: 25,
             enforce: true,
           },
+          // Supabase: deferred to async — homepage SSR doesn't need client SDK.
+          // useAuthSession + PremiumProvider already use dynamic import().
+          supabase: {
+            test: /[\\/]node_modules[\\/](@supabase)[\\/]/,
+            name: 'supabase',
+            chunks: 'async',
+            priority: 25,
+            enforce: true,
+          },
+          // Sentry: loaded via requestIdleCallback in instrumentation-client.ts.
+          // Force async to prevent withSentryConfig from injecting into initial bundle.
+          sentry: {
+            test: /[\\/]node_modules[\\/](@sentry)[\\/]/,
+            name: 'sentry',
+            chunks: 'async',
+            priority: 25,
+            enforce: true,
+          },
           vendor: {
             test: /[\\/]node_modules[\\/]/,
             name: 'vendor',
