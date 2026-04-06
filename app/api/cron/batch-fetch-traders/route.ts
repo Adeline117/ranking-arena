@@ -163,9 +163,10 @@ export async function GET(request: NextRequest) {
     // VPS scrapers: Playwright slow, need 180s
     bybit: 180000,
     bybit_spot: 180000,
-    // Fast APIs: can finish in 60s
-    binance_futures: 60000,
-    binance_spot: 60000,
+    // Binance: 500 traders × 3 windows × 25 pages/window via VPS proxy — needs 180s
+    binance_futures: 180000,
+    binance_spot: 180000,
+    // Fast direct APIs: can finish in 60s
     okx_futures: 60000,
     okx_spot: 60000,
     bitunix: 60000,
