@@ -236,8 +236,8 @@ export async function fetchBitfinexStatsDetail(
           profitableTradesPct = Math.round((wins / samples.length) * 10000) / 100
         }
       }
-    } catch {
-      // Extended cache fetch failed, proceed without win_rate
+    } catch (err) {
+      logger.warn('[enrichment-bitfinex] extended cache fetch failed:', err instanceof Error ? err.message : String(err))
     }
 
     return {

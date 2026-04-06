@@ -204,8 +204,8 @@ export async function fetchPolymarketStatsDetail(
           }
         }
       }
-    } catch {
-      // Non-critical — proceed without Sharpe
+    } catch (err) {
+      logger.warn('[enrichment-polymarket] Sharpe ratio computation failed:', err instanceof Error ? err.message : String(err))
     }
 
     return {

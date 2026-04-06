@@ -184,7 +184,8 @@ async function fetchBlockscoutNativeBalance(
     const balance = data?.coin_balance
     if (!balance) return 0
     return Number(BigInt(balance)) / 1e18
-  } catch {
+  } catch (err) {
+    logger.warn('[enrichment-wallet] native balance BigInt parse failed:', err instanceof Error ? err.message : String(err))
     return 0
   }
 }
@@ -206,7 +207,7 @@ export async function fetchEvmWalletAUM(
   for (const b of balances) {
     const tokenAddr = b.token.address.toLowerCase()
     const decimals = parseInt(b.token.decimals || '18')
-    const rawValue = (() => { try { return Number(BigInt(String(b.value || '0').split('.')[0])) } catch { return 0 } })() / Math.pow(10, decimals)
+    const rawValue = (() => { try { return Number(BigInt(String(b.value || '0').split('.')[0])) } catch (err) { logger.warn('[enrichment-wallet] BigInt token balance parse failed:', err instanceof Error ? err.message : String(err)); return 0 } })() / Math.pow(10, decimals)
 
     // Stablecoins: direct USD value
     if (chainStables[tokenAddr]) {
@@ -260,7 +261,7 @@ export async function fetchEvmWalletPortfolio(
   for (const b of balances) {
     const tokenAddr = b.token.address.toLowerCase()
     const decimals = parseInt(b.token.decimals || '18')
-    const rawValue = (() => { try { return Number(BigInt(String(b.value || '0').split('.')[0])) } catch { return 0 } })() / Math.pow(10, decimals)
+    const rawValue = (() => { try { return Number(BigInt(String(b.value || '0').split('.')[0])) } catch (err) { logger.warn('[enrichment-wallet] BigInt portfolio balance parse failed:', err instanceof Error ? err.message : String(err)); return 0 } })() / Math.pow(10, decimals)
     if (rawValue <= 0) continue
 
     let usdValue = 0
@@ -406,7 +407,8 @@ export async function fetchSolanaWalletPortfolio(address: string): Promise<Portf
       entryPrice: null,
       pnl: null,
     }))
-  } catch {
+  } catch (err) {
+    logger.warn('[enrichment-wallet] Solana wallet portfolio fetch failed:', err instanceof Error ? err.message : String(err))
     return []
   }
 }
@@ -437,7 +439,8 @@ export async function fetchHyperliquidWalletAUM(address: string): Promise<number
       data.marginSummary?.accountValue || data.crossMarginSummary?.accountValue || '0'
     )
     return equity > 1 ? Math.round(equity * 100) / 100 : null
-  } catch {
+  } catch (err) {
+    logger.warn('[enrichment-wallet] Hyperliquid wallet AUM fetch failed:', err instanceof Error ? err.message : String(err))
     return null
   }
 }
@@ -461,7 +464,8 @@ async function fetchDydxWalletAUM(address: string): Promise<number | null> {
     const data = await resp.json() as { subaccount?: { equity?: string } }
     const equity = parseFloat(data?.subaccount?.equity || '0')
     return equity > 1 ? Math.round(equity * 100) / 100 : null
-  } catch {
+  } catch (err) {
+    logger.warn('[enrichment-wallet] dYdX wallet AUM fetch failed:', err instanceof Error ? err.message : String(err))
     return null
   }
 }

@@ -180,8 +180,9 @@ async function fetchS3DayTrades(authority: string, year: string, yearMonthDay: s
     try {
       // S3 data is gzip-compressed CSV
       text = gunzipSync(buf).toString('utf-8')
-    } catch {
+    } catch (err) {
       // Not gzipped — try as plain text
+      logger.warn('[enrichment-drift] gunzip failed, trying plain text:', err instanceof Error ? err.message : String(err))
       text = buf.toString('utf-8')
     }
 

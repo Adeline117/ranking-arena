@@ -282,8 +282,8 @@ async function fetchGainsNativeStats(addr: string): Promise<StatsDetail | null> 
         winningPositions: totalWin != null && totalWin > 0 ? totalWin : null,
         totalPositions: totalTrades > 0 ? totalTrades : null,
       }
-    } catch {
-      // Try next chain
+    } catch (err) {
+      logger.warn(`[enrichment-copin] Gains native stats fetch failed for ${addr} (${chain.name}):`, err instanceof Error ? err.message : String(err))
       continue
     }
   }
@@ -342,7 +342,8 @@ async function fetchGainsNativeStats(addr: string): Promise<StatsDetail | null> 
         winningPositions: wins > 0 ? wins : null,
         totalPositions: totalTrades > 0 ? totalTrades : null,
       }
-    } catch {
+    } catch (err) {
+      logger.warn(`[enrichment-copin] Gains leaderboard fetch failed for ${addr} (${chain}):`, err instanceof Error ? err.message : String(err))
       continue
     }
   }
@@ -509,8 +510,8 @@ export async function fetchAevoStatsDetail(addr: string): Promise<StatsDetail | 
           copinStats.sharpeRatio = derived.sharpeRatio
         }
       }
-    } catch {
-      // Position history unavailable — Sharpe will be computed from equity curve later
+    } catch (err) {
+      logger.warn('[enrichment-copin] Aevo position history fetch for Sharpe failed:', err instanceof Error ? err.message : String(err))
     }
   }
   return copinStats

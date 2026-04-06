@@ -153,8 +153,8 @@ export async function fetchGainsOnchainPositionHistory(
             if (Math.abs(pnlValue) > 0.001 && Math.abs(pnlValue) < 1e9) {
               pnlUsd = pnlValue
             }
-          } catch {
-            // Intentionally swallowed: PnL value unparseable (invalid format or overflow), leave as null
+          } catch (err) {
+            logger.warn('[enrichment-onchain] BigInt PnL parsing failed:', err instanceof Error ? err.message : String(err))
           }
         }
 
@@ -363,7 +363,7 @@ function parseKwentaEvents(events: BlockscoutLogEntry[], limit: number): Positio
     .filter((e) => e.data && e.data.length > 2 && e.topics.length >= 3)
     .map((e) => {
       const timestamp = parseInt(e.timeStamp, 16) * 1000
-      let marketId = 0; try { marketId = Number(BigInt(e.topics[1])) } catch { /* invalid topic */ }
+      let marketId = 0; try { marketId = Number(BigInt(e.topics[1])) } catch (err) { logger.warn('[enrichment-onchain] marketId BigInt parse failed:', err instanceof Error ? err.message : String(err)) }
       const symbol = SYNTHETIX_MARKETS[marketId] || `MKT-${marketId}`
 
       // Parse data words (10 words: fillPrice, pnl, accruedFunding, sizeDelta, newSize, totalFees, ...)
