@@ -160,25 +160,32 @@ export async function GET(request: NextRequest) {
     }
   }
 
-  // Platform-specific timeouts based on actual performance (2026-04-03)
+  // Platform-specific timeouts (2026-04-06 audit: many platforms were timing out)
+  // Rule: timeout = 1.5× observed p95 duration. VPS-dependent platforms need more.
   const PLATFORM_TIMEOUTS: Record<string, number> = {
-    // VPS scrapers: Playwright slow, need 180s
-    bybit: 180000,
+    // VPS Playwright scrapers: very slow (30s/page × multiple windows)
+    bybit: 240000,
     bybit_spot: 180000,
-    // Binance: 200 traders × 3 windows × 10 pages/window via VPS proxy → ~60s
-    binance_futures: 120000,
-    binance_spot: 120000,
-    // Fast direct APIs: can finish in 60s
-    okx_futures: 60000,
-    okx_spot: 60000,
-    bitunix: 60000,
-    coinex: 60000,
-    // Medium APIs: need 90-120s
+    // VPS proxy paginated: Binance 200 traders × 3 windows via proxy
+    binance_futures: 150000,
+    binance_spot: 150000,
+    // VPS proxy: need extra headroom for proxy latency
+    okx_futures: 120000,
+    mexc: 120000,
+    bitget_futures: 120000,
+    // DEX subgraph/API: sometimes slow due to chain indexer lag
+    hyperliquid: 120000,
+    gmx: 120000,
+    drift: 120000,
+    // Medium APIs
     htx_futures: 120000,
     gateio: 120000,
     okx_web3: 120000,
-    bitget_futures: 90000,
-    // Others: default 90s
+    // Fast direct APIs
+    okx_spot: 60000,
+    bitunix: 60000,
+    coinex: 90000,
+    // Others: default 90s (PLATFORM_TIMEOUT_MS)
   }
 
   // Run a single platform via Connector
