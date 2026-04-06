@@ -624,6 +624,66 @@ async function computeSeason(
   const jupiterCount = sourceCounts.get('jupiter_perps') || 0
   logger.info(`[${season}] ${traderMap.size} unique traders from v2 (jupiter_perps: ${jupiterCount}, sources: ${sourceCounts.size})`)
 
+  // Cross-window backfill: ensure 90D is a superset of 7D and 30D.
+  // Many exchanges return more traders on short-term leaderboards (new traders, short-term activity).
+  // Without this, 7D can have MORE traders than 90D, which confuses users.
+  // Backfill uses shorter-window data with a metrics_estimated flag so Wilson confidence penalizes them.
+  if (season === '90D') {
+    const shorterWindows = ['30D', '7D'] as const
+    let backfillCount = 0
+    for (const fallbackWindow of shorterWindows) {
+      for (let i = 0; i < SOURCES_WITH_DATA.length; i += batchSize) {
+        const batch = SOURCES_WITH_DATA.slice(i, i + batchSize)
+        await Promise.all(batch.map(async (source) => {
+          const freshnessISO = freshnessISOBySource(source)
+          const { data } = await supabase
+            .from('trader_snapshots_v2')
+            .select('platform, trader_key, roi_pct, pnl_usd, win_rate, max_drawdown, trades_count, followers, copiers, arena_score, updated_at, sharpe_ratio, sortino_ratio, calmar_ratio, metrics')
+            .eq('platform', source)
+            .eq('window', fallbackWindow)
+            .gte('updated_at', freshnessISO)
+            .order('updated_at', { ascending: false })
+            .limit(5000)
+          if (!data?.length) return
+          for (const d of data) {
+            const tid = (d.trader_key as string).startsWith('0x')
+              ? (d.trader_key as string).toLowerCase()
+              : d.trader_key as string
+            const key = `${source}:${tid}`
+            if (traderMap.has(key)) continue // already in 90D — skip
+            const m = (d.metrics as Record<string, unknown>) || {}
+            const col = (k: string, jk?: string) => {
+              const v = d[k as keyof typeof d]
+              if (v != null) { const n = Number(v); return Number.isFinite(n) ? n : null }
+              const jv = m[jk || k]
+              return jv != null && Number.isFinite(Number(jv)) ? Number(jv) : null
+            }
+            addToTraderMap({
+              source, source_trader_id: tid,
+              roi: col('roi_pct', 'roi'), pnl: col('pnl_usd', 'pnl'),
+              win_rate: col('win_rate'), max_drawdown: col('max_drawdown'),
+              trades_count: col('trades_count'), followers: col('followers'),
+              copiers: col('copiers'), arena_score: null,
+              captured_at: d.updated_at as string,
+              full_confidence_at: null, profitability_score: null, risk_control_score: null,
+              execution_score: null, score_completeness: null, trading_style: null,
+              avg_holding_hours: null, style_confidence: null,
+              sharpe_ratio: d.sharpe_ratio != null ? Number(d.sharpe_ratio) : null,
+              sortino_ratio: d.sortino_ratio != null ? Number(d.sortino_ratio) : null,
+              profit_factor: null, calmar_ratio: d.calmar_ratio != null ? Number(d.calmar_ratio) : null,
+              trader_type: null,
+              metrics_estimated: true, // flag: data is from shorter window
+            })
+            backfillCount++
+          }
+        }))
+      }
+    }
+    if (backfillCount > 0) {
+      logger.info(`[90D] Cross-window backfill: added ${backfillCount} traders from 30D/7D windows`)
+    }
+  }
+
   // Data freshness check: if ALL platforms are stale (>48h), skip computation
   const staleThresholdMs = 48 * 3600 * 1000
   const now = Date.now()

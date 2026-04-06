@@ -92,10 +92,10 @@ export async function GET(request: NextRequest) {
 
   return NextResponse.json({
     batch: 'batch-5min',
-    status: hasErrors ? 'partial' : 'success',
+    status: failedJobs.length > 0 ? 'partial' : 'success',
     totalDurationMs: totalDuration,
     results,
   }, {
-    status: hasErrors ? 207 : 200,
+    status: failedJobs.length > 0 ? 207 : 200,
   })
 }
