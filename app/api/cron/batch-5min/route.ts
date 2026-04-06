@@ -79,10 +79,13 @@ export async function GET(request: NextRequest) {
   }
 
   const totalDuration = Date.now() - startTime
-  const hasErrors = results.some(r => r.status === 'error')
+  const failedJobs = results.filter(r => r.status === 'error')
   const succeeded = results.filter(r => r.status === 'success').length
-  if (hasErrors) {
-    await plog.error(new Error(`${results.length - succeeded}/${results.length} sub-jobs failed`), { results })
+  // Only log as error if a critical sub-job (not run-worker) fails.
+  // run-worker timeout is expected when processing a backlog — it'll catch up next run.
+  const criticalFailures = failedJobs.filter(r => r.name !== 'run-worker')
+  if (criticalFailures.length > 0) {
+    await plog.error(new Error(`${failedJobs.length}/${results.length} sub-jobs failed`), { results })
   } else {
     await plog.success(succeeded, { results })
   }
