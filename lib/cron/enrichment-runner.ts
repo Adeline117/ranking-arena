@@ -1104,6 +1104,14 @@ export async function runEnrichment(params: {
 
   logger.warn(`[enrich] Completed in ${duration}ms: ${totalEnriched} enriched, ${totalFailed} failed, ${totalSuppressedErrors} API errors suppressed`)
 
+  // Alert on high suppressed error rate (silent data gaps)
+  if (totalSuppressedErrors > 0 && totalEnriched > 0) {
+    const suppressedRatio = totalSuppressedErrors / (totalEnriched * 4) // 4 API calls per trader
+    if (suppressedRatio > 0.3) {
+      logger.error(`[enrich] HIGH suppressed error rate: ${totalSuppressedErrors} suppressed / ${totalEnriched * 4} total API calls (${(suppressedRatio * 100).toFixed(0)}%) — traders have incomplete data`)
+    }
+  }
+
   // Alert on high failure rate
   const total = totalEnriched + totalFailed
   const failureRate = total > 0 ? totalFailed / total : 0
@@ -1141,5 +1149,8 @@ export async function runEnrichment(params: {
     await plog.success(totalEnriched, { period, duration, totalFailed, note: `${totalFailed} partial failures (acceptable)` })
   }
 
-  return { ok: totalFailed === 0, duration, period, summary: { total, enriched: totalEnriched, failed: totalFailed, suppressedErrors: totalSuppressedErrors }, results }
+  // ok=false when failures are high OR suppressed errors indicate widespread data gaps
+  const suppressedRatio = totalEnriched > 0 ? totalSuppressedErrors / (totalEnriched * 4) : 0
+  const isOk = totalFailed === 0 && suppressedRatio < 0.5
+  return { ok: isOk, duration, period, summary: { total, enriched: totalEnriched, failed: totalFailed, suppressedErrors: totalSuppressedErrors }, results }
 }
