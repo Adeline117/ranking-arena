@@ -116,7 +116,7 @@ class ConsentManager {
         ...parsed,
         necessary: true, // 始终确保必要 Cookie 启用
       }
-    } catch {
+    } catch (_err) {
       // Intentionally swallowed: corrupted consent JSON in localStorage, reset to defaults
       return { ...DEFAULT_CONSENT }
     }
@@ -235,7 +235,7 @@ class ConsentManager {
           detail: { enabled: false } 
         })
         window.dispatchEvent(event)
-      } catch { /* Intentionally swallowed: CustomEvent dispatch may fail in restricted environments */ }
+      } catch (_err) { /* Intentionally swallowed: CustomEvent dispatch may fail in restricted environments */ }
     } else {
       // 启用分析
       delete window['ga-disable-GA_MEASUREMENT_ID']
@@ -245,7 +245,7 @@ class ConsentManager {
           detail: { enabled: true }
         })
         window.dispatchEvent(event)
-      } catch { /* Intentionally swallowed: CustomEvent dispatch may fail in restricted environments */ }
+      } catch (_err) { /* Intentionally swallowed: CustomEvent dispatch may fail in restricted environments */ }
     }
   }
 

@@ -107,7 +107,7 @@ export async function fetchUniswapTopTraders(
         prev.count += 1
         addrMap.set(addr, prev)
       }
-    } catch {
+    } catch (_err) {
       // Intentionally swallowed: subgraph pagination limit reached or RPC error, return collected data
       break
     }
@@ -166,7 +166,7 @@ export async function fetchPancakeSwapTopTraders(
         prev.count += 1
         addrMap.set(addr, prev)
       }
-    } catch {
+    } catch (_err) {
       // Intentionally swallowed: subgraph pagination limit reached or API error, return collected data
       break
     }

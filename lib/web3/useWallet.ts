@@ -65,11 +65,11 @@ export function useWallet(): WalletState {
             const { hasNFT: nft } = await res.json()
             setHasNFT(nft)
           }
-        } catch {
+        } catch (_err) {
           // Intentionally swallowed: NFT ownership check is optional enrichment
         }
       }
-    } catch {
+    } catch (_err) {
       // Intentionally swallowed: wallet connection check failed, loading state will clear via finally
     } finally {
       setIsLoading(false)
@@ -97,7 +97,7 @@ export function useWallet(): WalletState {
       setLinkedAddress(null)
       setHasNFT(false)
       return true
-    } catch {
+    } catch (_err) {
       // Intentionally swallowed: wallet unlink API call failed, return false to indicate failure
       return false
     }

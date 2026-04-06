@@ -317,7 +317,8 @@ export function useSavedFilters(options: UseSavedFiltersOptions = {}): UseSavedF
       })
       
       return true
-    } catch {
+    } catch (_err) {
+      /* parse fallback */
       return false
     }
   }, [maxSaved, persistFilters])

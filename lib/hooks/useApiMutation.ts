@@ -263,7 +263,8 @@ export function useApiMutation<TData = unknown, TVariables = void>(
   const mutate = useCallback(async (variables: TVariables): Promise<TData | undefined> => {
     try {
       return await mutateAsync(variables)
-    } catch {
+    } catch (_err) {
+      /* expected: mutate swallows errors, callers use mutateAsync for throws */
       return undefined
     }
   }, [mutateAsync])

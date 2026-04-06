@@ -80,7 +80,7 @@ export function decrypt(encrypted: string, key?: string): string {
       // 尝试 Base64 解码（旧格式）
       try {
         return Buffer.from(encrypted, 'base64').toString('utf-8')
-      } catch {
+      } catch (_err) {
         throw new Error('无法解析加密数据')
       }
     }

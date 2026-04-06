@@ -271,7 +271,7 @@ export function PremiumProvider({ children, initialSubscription }: PremiumProvid
           }
         }
       }
-    } catch {
+    } catch (_err) {
       // Intentionally swallowed: NFT-based premium check is optional, Stripe subscription is primary
     }
   }, []) // stable — subscription read via subscriptionRef to avoid recreation on sub change

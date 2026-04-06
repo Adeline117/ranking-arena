@@ -269,7 +269,7 @@ export async function getUserTokenId(walletAddress: string): Promise<bigint | nu
     })
 
     return tokenId
-  } catch {
+  } catch (_err) {
     // Intentionally swallowed: tokenOfOwnerByIndex call failed, wallet may not own any NFTs
     return null
   }
@@ -305,7 +305,7 @@ function extractTokenIdFromLogs(logs: readonly { topics: readonly string[]; data
       // The tokenId is in topic[3] for ERC721 Transfer
       try {
         return BigInt(log.topics[3])
-      } catch {
+      } catch (_err) {
         // Intentionally swallowed: BigInt parse of topic failed, try next log entry
         continue
       }

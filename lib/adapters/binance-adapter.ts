@@ -120,7 +120,8 @@ export class BinanceAdapter extends BaseAdapter implements ExchangeAdapter {
         '/fapi/v1/time'
       )
       return !!result.serverTime
-    } catch {
+    } catch (_err) {
+      /* non-critical: health check */
       return false
     }
   }

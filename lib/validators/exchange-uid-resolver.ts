@@ -52,7 +52,7 @@ async function resolveBinanceUid(credentials: ExchangeCredentials): Promise<UidR
         return { success: true, uid: String(data.uid) }
       }
     }
-  } catch {
+  } catch (_err) {
     // Intentionally swallowed: futures account UID lookup failed, fall through to next strategy
   }
 
@@ -76,7 +76,7 @@ async function resolveBinanceUid(credentials: ExchangeCredentials): Promise<UidR
         return { success: true, uid: String(data.uid) }
       }
     }
-  } catch {
+  } catch (_err) {
     // Intentionally swallowed: account info UID lookup failed, fall through to next strategy
   }
 

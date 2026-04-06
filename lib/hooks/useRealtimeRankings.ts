@@ -175,7 +175,8 @@ export function useRealtimeRankings({
         flushTimerRef.current = setTimeout(flush, 2000)
 
         dispatch({ type: 'FETCH_SUCCESS', dataSource: json.source || null, lastUpdatedAt: Date.now() })
-      } catch {
+      } catch (_err) {
+        /* non-critical: live rankings fetch failed, will retry on next poll */
         dispatch({ type: 'FETCH_ERROR' })
       } finally {
         dispatch({ type: 'FETCH_END' })

@@ -210,7 +210,7 @@ export function decryptSecure(
 
     try {
       encryptedData = JSON.parse(encrypted)
-    } catch {
+    } catch (_err) {
       // 不是 JSON 格式，可能是旧格式
       // 安全起见，拒绝解密旧格式数据
       throw new Error('不支持的加密格式，请重新加密数据')
@@ -322,7 +322,7 @@ export function isLegacyFormat(encrypted: string): boolean {
   try {
     JSON.parse(encrypted)
     return false // 新 JSON 格式
-  } catch {
+  } catch (_err) {
     // 检查是否为旧的 iv:tag:ciphertext 格式
     const parts = encrypted.split(':')
     if (parts.length === 3) {

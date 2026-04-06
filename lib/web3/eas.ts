@@ -275,7 +275,7 @@ export async function getAttestation(uid: Hex): Promise<AttestationRecord | null
       attester: record.attester,
       data: record.data,
     }
-  } catch {
+  } catch (_err) {
     // Intentionally swallowed: EAS attestation fetch failed (network error or invalid UID)
     return null
   }

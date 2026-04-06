@@ -219,7 +219,8 @@ export function useAuthSession(): AuthSessionReturn {
         return session.access_token
       }
       return null
-    } catch {
+    } catch (_err) {
+      /* non-critical: session lookup failed */
       return null
     }
   }, [])
@@ -269,7 +270,8 @@ export function useAuthSession(): AuthSessionReturn {
       updateFromSession(data.session)
       setGlobalAuthState({ loading: false, authChecked: true })
       return true
-    } catch {
+    } catch (_err) {
+      /* non-critical: session refresh failed */
       return false
     }
   }, [])

@@ -170,7 +170,7 @@ export class FeedManager extends EventEmitter {
     for (const sub of this.subscribers) {
       try {
         sub(event, data)
-      } catch {
+      } catch (_err) {
         // Intentionally swallowed: subscriber callback error must not break iteration over other subscribers
       }
     }
