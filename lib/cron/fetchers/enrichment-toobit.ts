@@ -70,8 +70,8 @@ async function ensureTraderCache(): Promise<Map<string, ToobitTraderData>> {
             map.set(id, entry)
           }
         }
-      } catch {
-        // Individual kind/page fetch failed, continue
+      } catch (err) {
+        logger.warn(`[enrichment-toobit] ranking fetch failed (kind=${kind}, page=${page}):`, err instanceof Error ? err.message : String(err))
         break
       }
     }
@@ -95,8 +95,8 @@ async function ensureTraderCache(): Promise<Map<string, ToobitTraderData>> {
           }
         }
       }
-    } catch {
-      // identity-type-leaders failed, continue with other periods
+    } catch (err) {
+      logger.warn(`[enrichment-toobit] identity-type-leaders fetch failed (dataType=${dataType}):`, err instanceof Error ? err.message : String(err))
     }
   }
 

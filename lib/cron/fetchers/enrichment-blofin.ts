@@ -82,8 +82,8 @@ export async function fetchBlofinStatsDetail(
         { headers: BLOFIN_HEADERS, timeoutMs: 10000 }
       )
       info = data?.data || null
-    } catch {
-      // Direct call failed (likely 401), try CF proxy
+    } catch (err) {
+      logger.warn('[enrichment-blofin] direct API call failed:', err instanceof Error ? err.message : String(err))
     }
 
     // Strategy 2: VPS Playwright scraper (WAF bypass)
@@ -100,8 +100,8 @@ export async function fetchBlofinStatsDetail(
           )
           info = data?.data || null
         }
-      } catch {
-        // VPS scraper also failed
+      } catch (err) {
+        logger.warn('[enrichment-blofin] VPS scraper fetch failed:', err instanceof Error ? err.message : String(err))
       }
     }
 
@@ -114,8 +114,8 @@ export async function fetchBlofinStatsDetail(
           { timeoutMs: 10000 }
         )
         info = data?.data || null
-      } catch {
-        // CF proxy also failed
+      } catch (err) {
+        logger.warn('[enrichment-blofin] CF proxy fetch failed:', err instanceof Error ? err.message : String(err))
       }
     }
 

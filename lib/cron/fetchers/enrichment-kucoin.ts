@@ -79,8 +79,8 @@ async function getLeaderboardCache(): Promise<Map<string, KucoinTrader>> {
               if (id) traders.set(id, item)
             }
           }
-        } catch {
-          // Direct API also failed — expected from datacenter
+        } catch (err) {
+          logger.warn('[enrichment-kucoin] direct API fallback failed:', err instanceof Error ? err.message : String(err))
         }
       }
       break

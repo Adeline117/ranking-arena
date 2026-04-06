@@ -298,7 +298,7 @@ const GMX_VALUE_SCALE = 1e30
 
 function safeBigIntToNum(val: string | number | null | undefined, scale: number): number {
   if (val == null || val === '') return 0
-  try { return Number(BigInt(String(val).split('.')[0])) / scale } catch { return 0 }
+  try { return Number(BigInt(String(val).split('.')[0])) / scale } catch (err) { logger.warn('[enrichment-dex] BigInt conversion failed:', err instanceof Error ? err.message : String(err)); return 0 }
 }
 
 // Common GMX v2 market address → symbol mapping (Arbitrum)

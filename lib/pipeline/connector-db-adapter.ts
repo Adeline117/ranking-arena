@@ -483,41 +483,90 @@ export async function runConnectorBatch(
 
   let anySaved = false
 
-  // Fetch windows sequentially to avoid concurrent upsert deadlocks (40P01)
-  // and statement timeouts (57014) on shared tables (traders, trader_snapshots_v2)
-  const windowResults: Array<PromiseSettledResult<{ windowUpper: string; writeResult?: AdapterResult; error?: string }>> = []
+  // ═══ Phase 1: Fetch all windows, collect DiscoverResults ═══
+  // Sequential to avoid concurrent upsert deadlocks (40P01)
+  const fetchedWindows: Array<{ window: string; windowUpper: string; result?: DiscoverResult; error?: string }> = []
   for (const window of windows) {
     const windowUpper = window.toUpperCase()
     try {
-      // Fetch leaderboard for this window
       const result = await connector.discoverLeaderboard(
         window as '7d' | '30d' | '90d',
         limit
       )
-
-      // Write to DB
-      const writeResult = await writeDiscoverResult(connector, result, {
-        ...options,
-        supabase: supabase || undefined,
-      })
-
-      windowResults.push({ status: 'fulfilled', value: { windowUpper, writeResult } })
+      fetchedWindows.push({ window, windowUpper, result })
     } catch (err) {
       const errMsg = err instanceof Error ? err.message : String(err)
       dataLogger.error(`[${platform}] Failed to fetch ${windowUpper}: ${errMsg}`)
-      windowResults.push({ status: 'fulfilled', value: { windowUpper, error: errMsg } })
+      fetchedWindows.push({ window, windowUpper, error: errMsg })
     }
   }
 
-  // Collect results from sequential execution
-  for (const settled of windowResults) {
-    if (settled.status === 'rejected') continue
-    const { windowUpper, writeResult, error } = settled.value as {
-      windowUpper: string
-      writeResult?: AdapterResult
-      error?: string
+  // ═══ Phase 2: Cross-window union — ensure every trader appears in ALL windows ═══
+  // If a trader appears in 7D but not 90D (common: new traders), clone their entry
+  // into the missing windows so 90D is always a superset of 7D/30D.
+  {
+    // Build union of all trader keys across all fetched windows
+    const traderByKey = new Map<string, import('@/lib/types/leaderboard').TraderSource>()
+    const tradersInWindow = new Map<string, Set<string>>() // window → set of trader_keys
+
+    for (const fw of fetchedWindows) {
+      if (!fw.result?.traders) continue
+      const keySet = new Set<string>()
+      for (const t of fw.result.traders) {
+        const key = t.trader_key.startsWith('0x') ? t.trader_key.toLowerCase() : t.trader_key
+        keySet.add(key)
+        if (!traderByKey.has(key)) traderByKey.set(key, t)
+      }
+      tradersInWindow.set(fw.windowUpper, keySet)
     }
 
+    // For each successfully fetched window, add traders missing from that window
+    let totalBackfilled = 0
+    for (const fw of fetchedWindows) {
+      if (!fw.result?.traders) continue
+      const existingKeys = tradersInWindow.get(fw.windowUpper)!
+      const missingTraders: import('@/lib/types/leaderboard').TraderSource[] = []
+
+      for (const [key, donor] of traderByKey) {
+        if (!existingKeys.has(key)) {
+          // Clone the trader entry for this window (metrics stay from the donor window)
+          missingTraders.push({ ...donor, trader_key: key })
+        }
+      }
+
+      if (missingTraders.length > 0) {
+        fw.result.traders.push(...missingTraders)
+        totalBackfilled += missingTraders.length
+      }
+    }
+
+    if (totalBackfilled > 0) {
+      dataLogger.info(`[${platform}] Cross-window union: backfilled ${totalBackfilled} trader-window entries (${traderByKey.size} unique traders)`)
+    }
+  }
+
+  // ═══ Phase 3: Write all windows to DB ═══
+  const windowResults: Array<{ windowUpper: string; writeResult?: AdapterResult; error?: string }> = []
+  for (const fw of fetchedWindows) {
+    if (fw.error) {
+      windowResults.push({ windowUpper: fw.windowUpper, error: fw.error })
+      continue
+    }
+    if (!fw.result) continue
+    try {
+      const writeResult = await writeDiscoverResult(connector, fw.result, {
+        ...options,
+        supabase: supabase || undefined,
+      })
+      windowResults.push({ windowUpper: fw.windowUpper, writeResult })
+    } catch (err) {
+      const errMsg = err instanceof Error ? err.message : String(err)
+      windowResults.push({ windowUpper: fw.windowUpper, error: errMsg })
+    }
+  }
+
+  // Collect results
+  for (const { windowUpper, writeResult, error } of windowResults) {
     if (error) {
       periods[windowUpper] = { total: 0, saved: 0, error }
       continue
@@ -553,9 +602,9 @@ export async function runConnectorBatch(
     if (hasEnrichmentSupport) {
       // Collect unique trader keys across all windows
       const allTraderKeys = new Set<string>()
-      for (const settled of windowResults) {
-        if (settled.status === 'rejected') continue
-        const { writeResult } = settled.value as { writeResult?: AdapterResult }
+      for (const wr of windowResults) {
+        if (wr.error) continue
+        const { writeResult } = wr
         if (writeResult?.savedTraderKeys) {
           for (const key of writeResult.savedTraderKeys) allTraderKeys.add(key)
         }

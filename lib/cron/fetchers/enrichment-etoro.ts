@@ -158,8 +158,8 @@ export async function fetchEtoroStatsDetail(
       if (portfolio?.AggregatedPositions) {
         positionCount = portfolio.AggregatedPositions.length
       }
-    } catch {
-      // Portfolio fetch is optional
+    } catch (err) {
+      logger.warn('[enrichment-etoro] portfolio fetch failed:', err instanceof Error ? err.message : String(err))
     }
 
     if (!ranking) {
