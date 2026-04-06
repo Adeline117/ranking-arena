@@ -114,8 +114,14 @@ async function getSolPrice(): Promise<number> {
         return price
       }
     }
-  } catch { /* fallback */ }
-  return _solPriceCache?.price ?? 150 // last known or conservative fallback
+  } catch (err) {
+    logger.warn(`[wallet] SOL price fetch failed: ${err instanceof Error ? err.message : String(err)}`)
+  }
+  if (_solPriceCache?.price) return _solPriceCache.price
+  // No cache and API down — return null instead of hardcoded $150 to avoid
+  // silently corrupting all wallet AUM calculations with stale price
+  logger.warn('[wallet] SOL price unavailable (no cache, API down) — wallet AUM will be skipped')
+  return 0 // Callers multiply by this; 0 means AUM won't be computed rather than wrong
 }
 
 // ============================================
