@@ -13,8 +13,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getSupabaseAdmin } from '@/lib/api'
 import {
   calculateArenaScore,
-  debouncedConfidence,
-  ARENA_CONFIG,
+  wilsonConfidenceMultiplier,
   type Period,
 } from '@/lib/utils/arena-score'
 import {
@@ -1164,17 +1163,19 @@ async function computeSeason(
       season
     )
 
-    const effectiveConfidence = debouncedConfidence(
-      scoreResult.scoreConfidence,
-      t.full_confidence_at,
+    // Wilson confidence: smooth curve based on actual data availability
+    // Replaces hardcoded 'full' from calculateArenaScore() which ignored missing metrics
+    const confidenceMultiplier = wilsonConfidenceMultiplier(
+      t.roi, t.pnl, t.max_drawdown, t.win_rate, t.sharpe_ratio
     )
-    const confidenceMultiplier = ARENA_CONFIG.CONFIDENCE_MULTIPLIER[effectiveConfidence]
+    // Extra penalty for estimated metrics (Phase 5 WR/MDD from ROI formula)
+    const estimationPenalty = t.metrics_estimated ? 0.92 : 1.0
     const rawSubScores = scoreResult.returnScore + scoreResult.pnlScore +
                          scoreResult.drawdownScore + scoreResult.stabilityScore
-    // P1-1: Apply source trust weight
-    const trustWeight = SOURCE_TRUST_WEIGHT[t.source] ?? 0.5
+    // Trust weight removed from score formula — same skill shouldn't get different
+    // scores based on exchange. Trust weight used only as tie-breaker in sort below.
     const finalScore = Math.round(
-      Math.max(0, Math.min(100, rawSubScores * confidenceMultiplier * trustWeight)) * 100
+      Math.max(0, Math.min(100, rawSubScores * confidenceMultiplier * estimationPenalty)) * 100
     ) / 100
 
     const info = handleMap.get(`${t.source}:${t.source_trader_id}`) || { handle: null, avatar_url: null }
@@ -1193,7 +1194,7 @@ async function computeSeason(
       win_rate: normalizedWinRate,
       max_drawdown: t.max_drawdown,
       followers: 0, // Will be replaced with Arena follower count below
-      copiers: t.copiers ?? 0, // Exchange copy-trade count (from v2 or enrichment stats_detail)
+      copiers: t.copiers ?? null, // Exchange copy-trade count (from v2 or enrichment stats_detail)
       trades_count: t.trades_count,
       handle: displayHandle,
       // Generate identicon locally when no avatar — eliminates external dicebear.com request per trader
@@ -1447,7 +1448,7 @@ async function computeSeason(
       win_rate: t.win_rate,
       max_drawdown: t.max_drawdown,
       followers: t.followers,
-      copiers: t.copiers ?? 0,
+      copiers: t.copiers ?? null,
       trades_count: t.trades_count,
       handle: t.handle,
       avatar_url: t.avatar_url,
