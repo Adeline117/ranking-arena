@@ -89,9 +89,17 @@ export function triggerDownstreamRefresh(source: string, trace?: TraceMetadata):
         headers,
         signal: AbortSignal.timeout(240_000), // 4min timeout (compute can be slow)
       })
+      const computeBody = await computeRes.json().catch(() => null)
+      const rolledBack = computeBody?.rolled_back as string[] | undefined
       logger.info(
-        `[${source}] compute-leaderboard: ${computeRes.status} (${Date.now() - computeStart}ms, trace=${traceId})`
+        `[${source}] compute-leaderboard: ${computeRes.status} (${Date.now() - computeStart}ms, trace=${traceId})${rolledBack?.length ? ` rolled_back=[${rolledBack.join(',')}]` : ''}`
       )
+
+      // If ALL seasons rolled back due to degradation, skip downstream — data didn't change
+      if (rolledBack && rolledBack.length >= 3) {
+        logger.warn(`[${source}] All seasons rolled back — skipping downstream (warm-cache/evaluate would use stale data)`)
+        return
+      }
 
       // ── 2. Trigger pipeline-evaluate (Anthropic harness: independent Evaluator) ──
       logger.info(`[${source}] Triggering pipeline-evaluate (trace=${traceId})...`)
