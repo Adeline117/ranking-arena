@@ -327,7 +327,8 @@ export const ENRICHMENT_PLATFORM_CONFIGS: Record<string, EnrichmentConfig> = {
     fetchPositionHistory: fetchBinancePositionHistory,
     concurrency: 10, delayMs: 500, // Increased from 5/1000 for higher throughput
   },
-  // binance_spot: PERMANENTLY REMOVED (2026-03-14) - repeatedly hangs 45-76min, blocks entire pipeline
+  // binance_spot: Re-enabled with per-trader timeout safety (config at line ~571).
+  //   Old hang issue (2026-03-14) fixed by AbortController + platform-level timeout.
   // Bybit enrichment re-enabled (2026-03-18) — routes through VPS scraper
   bybit: {
     platform: 'bybit',
@@ -653,8 +654,10 @@ const ONCHAIN_SET = new Set(['gmx', 'dydx', 'jupiter_perps', 'hyperliquid', 'dri
 const PER_TRADER_TIMEOUT_MS: Record<string, number> = {
   'bitget_futures': 18_000,  // 18s per trader - equity 15s + detail 10s run in parallel, 18s is generous
   'binance_futures': 12_000, // 12s per trader - ultra-short (VPS proxy tested <500ms, 3-8s API timeouts)
+  'binance_spot': 15_000, // 15s per trader - VPS proxy (same as binance_futures but with spot detail)
   'dydx': 15_000, // 15s per trader - 3 APIs × 5-6s timeout + fallback buffer
   'bybit': 45_000, // 45s per trader - VPS Playwright scraper: page load + WAF bypass + 2 API calls
+  'bybit_spot': 45_000, // 45s per trader - same VPS Playwright scraper as bybit
   'etoro': 20_000, // 20s per trader - CopySim + ranking cache + portfolio fetch
 }
 
