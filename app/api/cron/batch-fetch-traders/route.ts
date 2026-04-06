@@ -70,10 +70,11 @@ const GROUPS: Record<string, string[]> = {
   f: ['mexc', 'woox', 'polymarket', 'copin', 'weex'],
   // Group G: Copin + Mac Mini (every 8h)
   // bingx_spot: DEAD (no leaderboard), phemex: DEAD (API 404)
+  // lbank: DEAD (API 404 since 2026-04, copy-trading endpoint removed)
   // kucoin: moved to VPS scraper-cron (Vercel hnd1 IP blocked by KuCoin)
   // blofin: moved to Mac Mini crontab (CF challenge requires headless:new Chrome)
   // dydx: RECOVERED 2026-03-31 via Copin API (3339 traders)
-  g: ['lbank', 'dydx'],
+  g: ['dydx'],
 }
 
 // Per-platform leaderboard limits — override the default 2000
