@@ -1128,7 +1128,7 @@ export class PipelineEvaluator {
    */
   private static async checkCrossSourceConsistency(): Promise<{ check: EvaluationCheck; issues: EvaluationIssue[] }> {
     const issues: EvaluationIssue[] = []
-    const TOLERANCE = 0.01 // 1%
+    const TOLERANCE = 0.001 // 0.1% — LR and V2 should have same source data
 
     try {
       const supabase = getSupabaseAdmin()
