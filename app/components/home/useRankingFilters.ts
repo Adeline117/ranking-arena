@@ -548,11 +548,10 @@ export function useRankingFilters({ traders, activeTimeRange, totalCount, catego
     return [...base, ...newResults]
   }, [isPro, advancedFiltered, serverSearchResults, searchQuery])
 
-  // Pro required handler
+  // Pro required handler — show toast instead of redirecting away (jarring UX)
   const handleProRequired = useCallback(() => {
-    showToast(t('proRequired'), 'info')
-    router.push('/pricing')
-  }, [showToast, t, router])
+    showToast(t('proFilterTooltip') || 'Upgrade to Pro to filter by Futures, Spot, and On-chain categories', 'info')
+  }, [showToast, t])
 
   const handleCopyLink = useCallback(() => {
     const url = window.location.href
