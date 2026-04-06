@@ -252,6 +252,58 @@ export async function GET(request: NextRequest) {
       logger.warn('arena_score sync to v2 failed (non-critical):', syncErr)
     }
 
+    // Sync sub-scores + advanced metrics: leaderboard_ranks → trader_snapshots_v2
+    // Fills orphan v2 columns (return_score/drawdown_score/stability_score = 0 rows,
+    // sortino_ratio/calmar_ratio = 247 rows vs LR's 39K+)
+    fireAndForget((async () => {
+      try {
+        const { data: lrRows } = await supabase
+          .from('leaderboard_ranks')
+          .select('source, source_trader_id, season_id, profitability_score, risk_control_score, execution_score, sortino_ratio, calmar_ratio')
+          .not('profitability_score', 'is', null)
+          .limit(5000)
+        if (!lrRows?.length) return
+
+        const scoreMap = new Map<string, typeof lrRows[0]>()
+        for (const r of lrRows) scoreMap.set(`${r.source}:${r.source_trader_id}:${r.season_id}`, r)
+
+        const cutoff = new Date(Date.now() - 7 * 24 * 3600 * 1000).toISOString()
+        const { data: v2Rows } = await supabase
+          .from('trader_snapshots_v2')
+          .select('id, platform, trader_key, window')
+          .is('return_score', null)
+          .not('arena_score', 'is', null)
+          .gte('created_at', cutoff)
+          .limit(2000)
+        if (!v2Rows?.length) return
+
+        const updates: Array<Record<string, unknown>> = []
+        for (const row of v2Rows) {
+          const lr = scoreMap.get(`${row.platform}:${row.trader_key}:${row.window}`)
+          if (lr?.profitability_score != null) {
+            updates.push({
+              id: row.id,
+              return_score: Number(lr.profitability_score),
+              drawdown_score: lr.risk_control_score != null ? Number(lr.risk_control_score) : null,
+              stability_score: lr.execution_score != null ? Number(lr.execution_score) : null,
+              sortino_ratio: lr.sortino_ratio != null ? Number(lr.sortino_ratio) : null,
+              calmar_ratio: lr.calmar_ratio != null ? Number(lr.calmar_ratio) : null,
+            })
+          }
+        }
+
+        let synced = 0
+        for (let i = 0; i < updates.length; i += 100) {
+          const chunk = updates.slice(i, i + 100)
+          const { error } = await supabase.from('trader_snapshots_v2').upsert(chunk, { onConflict: 'id' })
+          if (!error) synced += chunk.length
+        }
+        if (synced > 0) logger.info(`Synced sub-scores to v2: ${synced}/${v2Rows.length} rows`)
+      } catch (e) {
+        logger.warn('Sub-score sync to v2 failed (non-critical):', e)
+      }
+    })(), 'sync-subscores-to-v2')
+
     // Post-compute: derive WR/MDD from historical snapshots for traders missing them
     let wrMddDerived = 0
     try {
@@ -1015,56 +1067,14 @@ async function computeSeason(
     }
   }
 
-  // Phase 5: For remaining nulls, estimate from ROI + trades_count
-  // If a trader has positive ROI and trades_count, we can estimate WR
-  // If ROI is known, MDD can be estimated as a fraction of absolute ROI (conservative)
-  // IMPORTANT: mark these as estimated so frontend can display visual indicator
-  let phase5Count = 0
-  for (const snap of Array.from(traderMap.values())) {
-    if (snap.roi == null) continue
-
-    // Estimate WR from ROI direction + trades_count
-    if (snap.win_rate == null) {
-      if (snap.trades_count != null && snap.trades_count > 0) {
-        // ROI > 0 implies majority wins; ROI < 0 implies majority losses
-        // Use a conservative sigmoid: WR = 50 + 30*tanh(ROI/100)
-        const wr = 50 + 30 * Math.tanh(snap.roi / 100)
-        snap.win_rate = Math.round(Math.max(5, Math.min(95, wr)) * 100) / 100
-        snap.metrics_estimated = true
-        phase5Count++
-      } else if (snap.roi > 0) {
-        // No trades_count but positive ROI — estimate conservatively
-        snap.win_rate = Math.round(Math.max(30, Math.min(80, 50 + 20 * Math.tanh(snap.roi / 200))) * 100) / 100
-        snap.metrics_estimated = true
-        phase5Count++
-      } else {
-        // Negative ROI — below 50%
-        snap.win_rate = Math.round(Math.max(10, Math.min(50, 50 + 20 * Math.tanh(snap.roi / 200))) * 100) / 100
-        snap.metrics_estimated = true
-        phase5Count++
-      }
-    }
-
-    // Estimate MDD from ROI magnitude (conservative)
-    if (snap.max_drawdown == null) {
-      // Traders with high ROI typically experienced significant drawdowns
-      // Conservative estimate: MDD = min(abs(ROI) * 0.3, 80) for positive ROI
-      // For negative ROI: MDD = min(abs(ROI), 95)
-      if (snap.roi >= 0) {
-        snap.max_drawdown = Math.round(Math.min(Math.max(Math.abs(snap.roi) * 0.3, 5), 80) * 100) / 100
-      } else {
-        snap.max_drawdown = Math.round(Math.min(Math.abs(snap.roi), 95) * 100) / 100
-      }
-      snap.metrics_estimated = true
-      phase5Count++
-    }
-  }
-  if (phase5Count > 0) {
-    logger.info(`[${season}] Phase 5: estimated ${phase5Count} WR/MDD values from ROI`)
-  }
+  // Phase 5 removed: WR/MDD estimation from ROI was mathematically incorrect
+  // (e.g. 100% ROI does not imply 73% win rate). Traders with missing WR/MDD
+  // are naturally penalized by the Wilson confidence multiplier in scoring.
+  // win_rate and max_drawdown are left as null when not available from real API data.
 
   const roiThreshold = ROI_ANOMALY_THRESHOLDS[season]
   const uniqueTraders = Array.from(traderMap.values())
+    .filter(t => t.source !== 'web3_bot') // DeFi protocol contracts, not real traders — exclude entirely
     .filter(t => t.roi != null)
     .filter(t => Math.abs(t.roi!) <= roiThreshold)
     .filter(t => t.roi! > -90) // 过滤已爆仓交易员（ROI < -90%），无参考价值
@@ -1250,8 +1260,7 @@ async function computeSeason(
     if (t.pnl != null && t.pnl < -500 && t.roi > 50) isOutlier = true
     // High ROI but PnL is 0 — data inconsistency (e.g. Bitfinex equity proxy mismatch)
     if (Math.abs(t.roi) > 500 && (t.pnl == null || t.pnl === 0)) isOutlier = true
-    // web3_bot entries are DeFi protocols, not traders
-    if (t.source === 'web3_bot') isOutlier = true
+    // web3_bot entries are excluded upstream in uniqueTraders filter, no need to check here
 
     if (isOutlier) {
       ;(t as Record<string, unknown>).is_outlier = true
