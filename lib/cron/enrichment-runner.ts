@@ -232,8 +232,9 @@ async function clearEnrichmentFailure(platform: string, traderId: string): Promi
     const redis = await getSharedRedis()
     if (!redis) return
     await redis.del(`enrichment:failed:${platform}:${traderId}`)
-  } catch {
-    // Best-effort cleanup
+  } catch (err) {
+    // Best-effort cleanup — log but don't fail
+    logger.debug('[enrich] clearEnrichmentFailure Redis error:', err instanceof Error ? err.message : String(err))
   }
 }
 
@@ -1039,8 +1040,9 @@ export async function runEnrichment(params: {
                       if (walletPortfolio.length > 0) {
                         await upsertPortfolio(supabase, platformKey, traderId, walletPortfolio)
                       }
-                    } catch {
+                    } catch (err) {
                       walletEnrichFailCount++
+                      logger.warn(`[enrich] ${platformKey}/${traderId} wallet portfolio failed:`, err instanceof Error ? err.message : String(err))
                     }
                   }
                 }

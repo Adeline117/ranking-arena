@@ -213,7 +213,8 @@ export function isAuthorized(req: Request): boolean {
 export function createSupabaseAdmin(): SupabaseClient | null {
   try {
     return getSupabaseAdmin()
-  } catch {
+  } catch (err) {
+    console.error('[cron/utils] Failed to create Supabase admin client:', err instanceof Error ? err.message : String(err))
     return null
   }
 }

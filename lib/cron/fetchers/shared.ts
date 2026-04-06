@@ -287,7 +287,8 @@ export type PlatformFetcher = (
 export function getSupabaseClient(): SupabaseClient | null {
   try {
     return getSupabaseAdmin()
-  } catch {
+  } catch (err) {
+    console.error('[enrichment/shared] Failed to create Supabase client:', err instanceof Error ? err.message : String(err))
     return null
   }
 }
