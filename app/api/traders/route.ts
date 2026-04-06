@@ -91,6 +91,13 @@ export const GET = withPublic(
     // Data is already sanitized before caching (in the fetcher below)
     const response = NextResponse.json(cachedData)
     response.headers.set('Cache-Control', 'public, s-maxage=60, stale-while-revalidate=300')
+    // Expose data age for monitoring and frontend staleness indicators
+    if (cachedData?.dataAgeMinutes != null) {
+      response.headers.set('X-Data-Age-Minutes', String(cachedData.dataAgeMinutes))
+    }
+    if (cachedData?.isStale) {
+      response.headers.set('X-Data-Stale', 'true')
+    }
     return response
   },
   { name: 'traders', rateLimit: 'read' }
@@ -265,8 +272,12 @@ async function fetchFromLeaderboard(
     availableSourcesCache.set(timeRange, { sources: availableSources, ts: Date.now() })
   }
 
-  // Latest computed_at
+  // Latest computed_at + staleness detection
   const computedAt = data?.[0]?.computed_at || new Date().toISOString()
+  const dataAgeMs = Date.now() - new Date(computedAt).getTime()
+  const dataAgeMinutes = Math.round(dataAgeMs / 60_000)
+  // Data is stale if older than 2 hours (compute-leaderboard runs hourly)
+  const isStale = dataAgeMs > 2 * 60 * 60 * 1000
 
   // Apply profanity filter to all handles before returning
   const sanitizedTraders = dedupedTraders.map((t: { handle: string | null; [key: string]: unknown }) => ({
@@ -280,7 +291,8 @@ async function fetchFromLeaderboard(
     totalCount,
     rankingMode: 'arena_score',
     lastUpdated: computedAt,
-    isStale: false,
+    isStale,
+    dataAgeMinutes,
     // Cursor-based pagination
     nextCursor,
     hasMore,
