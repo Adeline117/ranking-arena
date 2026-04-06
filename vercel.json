@@ -54,7 +54,7 @@
     },
     {
       "path": "/api/cron/pipeline-evaluate",
-      "schedule": "30 */6 * * *"
+      "schedule": "35 */6 * * *"
     },
     {
       "path": "/api/cron/cleanup-deleted-accounts",
@@ -99,7 +99,7 @@
     },
     {
       "path": "/api/cron/generate-activities",
-      "schedule": "30 */6 * * *"
+      "schedule": "35 */6 * * *"
     },
     {
       "path": "/api/cron/fetch-funding-rates",
