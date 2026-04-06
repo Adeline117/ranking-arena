@@ -450,8 +450,12 @@ async function computeSeason(
       snap.max_drawdown = null
     }
     // MDD=0% with ROI > 50% is almost certainly missing data, not real zero drawdown.
-    // Null it out so Phase 5 estimation can fill a reasonable value.
     if (snap.max_drawdown === 0 && snap.roi != null && Math.abs(snap.roi) > 50) {
+      snap.max_drawdown = null
+    }
+    // MDD < 1% with ROI > 500% is physically implausible — enrichment likely computed
+    // from a tiny subset of trades (e.g. 43 out of 523). Null it out.
+    if (snap.max_drawdown != null && snap.max_drawdown < 1 && snap.roi != null && snap.roi > 500) {
       snap.max_drawdown = null
     }
     // Sharpe ratio: must be -20 to 20
