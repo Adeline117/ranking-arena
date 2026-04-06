@@ -602,9 +602,7 @@ export async function runConnectorBatch(
     if (hasEnrichmentSupport) {
       // Collect unique trader keys across all windows
       const allTraderKeys = new Set<string>()
-      for (const wr of windowResults) {
-        if (wr.error) continue
-        const { writeResult } = wr
+      for (const { writeResult } of windowResults) {
         if (writeResult?.savedTraderKeys) {
           for (const key of writeResult.savedTraderKeys) allTraderKeys.add(key)
         }
