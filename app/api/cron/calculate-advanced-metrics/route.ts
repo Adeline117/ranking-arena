@@ -296,7 +296,7 @@ export async function POST(request: NextRequest) {
     })
   } catch (err) {
     logger.apiError('/api/cron/calculate-advanced-metrics', err, {})
-    await plog.error(err)
+    await plog.error(err instanceof Error ? err : new Error(typeof err === 'string' ? err : JSON.stringify(err)))
     return NextResponse.json(
       { error: err instanceof Error ? err.message : 'Unknown error' },
       { status: 500 }
