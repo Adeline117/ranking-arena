@@ -10,8 +10,9 @@ const Footer = lazy(() => import('../layout/Footer'))
 import FoundingMemberBanner from './FoundingMemberBanner'
 const ExchangePartners = lazy(() => import('./ExchangePartners'))
 const GuestSignupPrompt = lazy(() => import('./GuestSignupPrompt'))
-// HomeHero removed from Phase 2 — SSR hero (#ssr-hero-shell) is the sole LCP element.
-// Rendering a client-side hero here caused LCP to reset from 1.2s → 8.7s.
+// HomeHero renders in Phase 2 — safe because Phase 2 is deferred until user interaction
+// (HomePageLoader gates on scroll/click/keypress), so LCP is already locked at SSR time.
+import HomeHero from './HomeHero'
 // WelcomeModal removed — blocks entire page for first-time visitors
 import HomePageClient from './HomePageClient'
 import { SectionErrorBoundary } from '../utils/ErrorBoundary'
@@ -35,9 +36,10 @@ export default function HomePage({ initialTraders, initialLastUpdated, heroStats
   // SSR hero: NEVER hidden by JS. It IS the LCP element (~1.3s on slow 4G).
   //   Phase 2 hero renders on top via z-index (same visual content).
   //   SSR hero stays underneath indefinitely — invisible to user but preserves LCP.
-  // Cleanup: remove SSR ranking table after idle. Hero stays — it IS the LCP element.
+  // Cleanup: remove SSR shells after idle (safe: Phase 2 is already rendered).
   useEffect(() => {
     const cleanup = () => {
+      document.getElementById('ssr-hero-shell')?.remove()
       document.getElementById('ssr-ranking-table')?.remove()
     }
     if ('requestIdleCallback' in window) {
@@ -57,9 +59,11 @@ export default function HomePage({ initialTraders, initialLastUpdated, heroStats
 
       <div className="container-padding has-mobile-nav home-page-container">
         <h1 className="sr-only">Arena</h1>
-        {/* Hero is rendered by SSR (#ssr-hero-shell in page.tsx) and stays visible.
-            Rendering a Phase 2 hero here would reset LCP from 1.2s → 8.7s because
-            LCP = LAST largest paint before user input, not the first. */}
+        {/* Phase 2 hero — safe because HomePageLoader defers rendering until user interaction,
+            which locks LCP at SSR time. CSS hides the SSR hero when this renders. */}
+        <div className="contain-content">
+          <Suspense fallback={null}><HomeHero traderCount={heroStats?.traderCount} exchangeCount={heroStats?.exchangeCount} /></Suspense>
+        </div>
         <div className="contain-content">
           <FoundingMemberBanner />
         </div>

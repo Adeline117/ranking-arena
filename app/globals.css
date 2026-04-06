@@ -6,12 +6,11 @@
 
 /* Two-phase rendering:
    - SSR hero + ranking table rendered as static HTML for instant LCP.
-   - Once Phase 2 (#homepage-interactive) mounts, CSS hides the ranking table
-     (Phase 2 replaces it with the interactive version).
-   - SSR hero is KEPT VISIBLE — hiding it resets LCP from 1.2s to 8.7s because
-     LCP is measured as the LAST largest paint, not the first.
-   - Phase 2 hero renders in front of SSR hero (DOM order + z-index).
-   - JS idle callback removes both SSR DOM nodes for cleanup (after LCP is locked). */
+   - Phase 2 rendering is DEFERRED until user interaction (scroll/click/keypress).
+     This locks LCP at the SSR paint time (~1.2s) because LCP finalizes on first input.
+   - Once Phase 2 (#homepage-interactive) mounts, CSS hides both SSR shells.
+   - JS idle callback removes the SSR DOM nodes for cleanup. */
+:has(#homepage-interactive) #ssr-hero-shell,
 :has(#homepage-interactive) #ssr-ranking-table {
   content-visibility: hidden;
   height: 0;
