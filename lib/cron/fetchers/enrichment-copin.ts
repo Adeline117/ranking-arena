@@ -470,9 +470,13 @@ export async function fetchAevoStatsDetail(addr: string): Promise<StatsDetail | 
     }>(`https://api.aevo.xyz/account/${addr}/statistics`, { timeoutMs: 10000 })
 
     if (nativeStats && (nativeStats.win_rate != null || nativeStats.max_drawdown != null)) {
+      // Aevo API returns win_rate=0 for virtually all traders — don't trust 0.
+      // Let the equity curve fallback compute it instead.
+      const trustableWR = nativeStats.win_rate != null && nativeStats.win_rate > 0
+        ? nativeStats.win_rate * 100 : null
       return {
         totalTrades: nativeStats.total_trades ?? null,
-        profitableTradesPct: nativeStats.win_rate != null ? nativeStats.win_rate * 100 : null,
+        profitableTradesPct: trustableWR,
         avgHoldingTimeHours: null,
         avgProfit: null,
         avgLoss: null,
