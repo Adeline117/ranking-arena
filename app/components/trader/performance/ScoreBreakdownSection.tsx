@@ -227,9 +227,9 @@ export function ScoreBreakdownSection({
         <Box style={{ flex: '0 0 auto', display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
           <CompactErrorBoundary>
             <ScoreRadar
-              profitability={performance.profitability_score ?? ((periodReturnScore ?? 0) / 70) * 35}
-              riskControl={performance.risk_control_score ?? (((periodDrawdownScore ?? 0) / 8 + (periodStabilityScore ?? 0) / 7) / 2) * 40}
-              execution={performance.execution_score ?? ((periodPnlScore ?? 0) / 15) * 25}
+              profitability={performance.profitability_score ?? (periodReturnScore ?? 0)}
+              riskControl={performance.risk_control_score ?? (periodPnlScore ?? 0)}
+              execution={null}
               arenaScore={performance.arena_score_v3 ?? periodArenaScore ?? 0}
               size={130}
             />

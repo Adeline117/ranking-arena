@@ -109,9 +109,8 @@ export const ScoreBreakdown = memo(function ScoreBreakdown(props: ScoreBreakdown
         <Text size="xs" weight="bold" style={{ marginBottom: 8, color: tokens.colors.text.secondary }}>
           {t('scoreBreakdownTitle')}
         </Text>
-        <ScoreBar label={t('scoreProfit')} score={profitability_score} maxScore={35} color="var(--color-score-profitability)" />
+        <ScoreBar label={t('scoreProfit')} score={profitability_score} maxScore={60} color="var(--color-score-profitability)" />
         <ScoreBar label={t('scoreRisk')} score={risk_control_score} maxScore={40} color="var(--color-score-risk)" />
-        <ScoreBar label={t('scoreExecution')} score={execution_score} maxScore={25} color="var(--color-score-execution)" />
 
         {/* 置信度标签 */}
         <Box style={{ marginTop: 8, display: 'flex', flexDirection: 'column', gap: 4 }}>
