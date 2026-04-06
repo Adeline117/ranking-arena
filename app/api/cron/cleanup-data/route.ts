@@ -78,22 +78,34 @@ export async function GET(request: NextRequest) {
       logger.warn(`[cleanup-data] flash_news cleanup failed: ${err}`)
     }
 
-    // Cleanup read notifications (>90 days) — user inbox hygiene
+    // Cleanup read notifications (>90 days) + all notifications (>365 days)
     let notificationsCleaned = 0
     try {
-      const notifCutoff = new Date(Date.now() - 90 * 24 * 3600 * 1000).toISOString()
-      const { count, error: notifErr } = await supabase
+      // Delete read notifications older than 90 days
+      const readCutoff = new Date(Date.now() - 90 * 24 * 3600 * 1000).toISOString()
+      const { count: readCount, error: readErr } = await supabase
         .from('notifications')
         .delete({ count: 'exact' })
         .eq('read', true)
-        .lt('created_at', notifCutoff)
-      if (notifErr) {
-        logger.warn(`[cleanup-data] notifications cleanup error: ${notifErr.message}`)
+        .lt('created_at', readCutoff)
+      if (readErr) {
+        logger.warn(`[cleanup-data] read notifications cleanup error: ${readErr.message}`)
       } else {
-        notificationsCleaned = count ?? 0
-        if (notificationsCleaned > 0) {
-          logger.info(`[cleanup-data] Cleaned up ${notificationsCleaned} old read notifications (>90d)`)
-        }
+        notificationsCleaned += readCount ?? 0
+      }
+      // Delete ALL notifications older than 365 days (including unread)
+      const allCutoff = new Date(Date.now() - 365 * 24 * 3600 * 1000).toISOString()
+      const { count: allCount, error: allErr } = await supabase
+        .from('notifications')
+        .delete({ count: 'exact' })
+        .lt('created_at', allCutoff)
+      if (allErr) {
+        logger.warn(`[cleanup-data] old notifications cleanup error: ${allErr.message}`)
+      } else {
+        notificationsCleaned += allCount ?? 0
+      }
+      if (notificationsCleaned > 0) {
+        logger.info(`[cleanup-data] Cleaned up ${notificationsCleaned} old notifications (read>90d + all>365d)`)
       }
     } catch (err) {
       logger.warn(`[cleanup-data] notifications cleanup failed: ${err}`)
