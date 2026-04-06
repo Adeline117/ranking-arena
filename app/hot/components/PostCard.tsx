@@ -70,7 +70,7 @@ export function PostCard({
         </Text>
         {hotTag && (
           <span style={{
-            fontSize: 10,
+            fontSize: 11,
             fontWeight: 800,
             color: tokens.colors.white,
             background: hotTag.color,
@@ -123,7 +123,7 @@ export function PostCard({
           fontSize: '14px',
           cursor: 'pointer',
           display: '-webkit-box',
-          WebkitLineClamp: 2,
+          WebkitLineClamp: 3,
           WebkitBoxOrient: 'vertical',
           overflow: 'hidden',
           textOverflow: 'ellipsis',
@@ -131,7 +131,7 @@ export function PostCard({
           {translatedTitle || (p.title && p.title !== 'Untitled' && p.title !== 'untitled' ? p.title : (p.body?.slice(0, 80) || ''))}
           {translatedTitle && (
             <span style={{
-              fontSize: 10, fontWeight: 500, marginLeft: 6,
+              fontSize: 11, fontWeight: 500, marginLeft: 6,
               padding: '1px 6px', borderRadius: tokens.radius.sm,
               background: `${'var(--color-text-tertiary)'}15`,
               color: 'var(--color-text-tertiary)',
@@ -177,7 +177,7 @@ export function PostCard({
       <Box className="hot-post-footer" style={{
         display: 'flex',
         gap: tokens.spacing[2],
-        fontSize: '11px',
+        fontSize: '12px',
         color: 'var(--color-text-tertiary)',
         flexWrap: 'wrap',
         alignItems: 'center',

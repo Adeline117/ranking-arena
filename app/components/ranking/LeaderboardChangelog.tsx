@@ -3,6 +3,7 @@
 import { tokens } from '@/lib/design-tokens'
 import { useLanguage } from '../Providers/LanguageProvider'
 import { Box, Text } from '../base'
+import { getTraderAvatarUrl } from '@/lib/utils/avatar'
 
 export interface Mover {
   platform: string
@@ -43,7 +44,7 @@ function MoverRow({ mover, type }: { mover: Mover; type: 'riser' | 'faller' }) {
         {/* Avatar */}
         {mover.avatar_url ? (
           <img
-            src={mover.avatar_url}
+            src={getTraderAvatarUrl(mover.avatar_url) || mover.avatar_url}
             alt={displayName}
             width={24}
             height={24}

@@ -119,8 +119,8 @@ export default function InfoTooltip({ text, size = 12 }: InfoTooltipProps) {
           display: 'inline-flex',
           alignItems: 'center',
           userSelect: 'none',
-          minWidth: 20,
-          minHeight: 20,
+          minWidth: 32,
+          minHeight: 32,
           justifyContent: 'center',
         }}
       >
