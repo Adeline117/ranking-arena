@@ -77,32 +77,24 @@ export default async function Page() {
           The SSR table already shows data — the client fetch can happen lazily. */}
       <JsonLd data={organizationJsonLd} />
 
-      {/* CLS-free two-phase overlay: SSR and Phase 2 share the same grid cell.
-          Grid height = max(SSR height, Phase 2 height), so no layout shift occurs
-          when Phase 2 mounts and SSR becomes invisible.
-          Before Phase 2: SSR visible, Phase 2 null → grid height = SSR height.
-          During Phase 2 load: same → SSR stays visible.
-          After Phase 2 mounts: SSR visibility:hidden (keeps height), Phase 2 renders on top.
-          After idle: SSR DOM removed. */}
-      <div className="homepage-phase-wrapper">
-        <div id="ssr-content-shell">
-          <div id="ssr-hero-shell">
-            <HomeHeroSSR traderCount={heroStats?.traderCount} exchangeCount={heroStats?.exchangeCount} />
-          </div>
-          <div id="ssr-ranking-table">
-            <SSRRankingTable traders={initialTraders} />
-          </div>
-        </div>
-
-        <PageErrorBoundary>
-          {/* Phase 2: Full interactive homepage — loaded with ssr:false via HomePageLoader. */}
-          <HomePageLoader
-            initialTraders={initialTraders}
-            initialLastUpdated={lastUpdated}
-            heroStats={heroStats}
-          />
-        </PageErrorBoundary>
+      {/* Phase 1 (SSR): Hero stays visible as LCP element even after Phase 2 loads.
+          Only the ranking table is hidden (it gets replaced by the interactive table).
+          Hero is kept visible because hiding it resets LCP to Phase 2 hero load time (~11s on slow 4G). */}
+      <div id="ssr-hero-shell">
+        <HomeHeroSSR traderCount={heroStats?.traderCount} exchangeCount={heroStats?.exchangeCount} />
       </div>
+      <div id="ssr-ranking-table">
+        <SSRRankingTable traders={initialTraders} />
+      </div>
+
+      <PageErrorBoundary>
+        {/* Phase 2: Full interactive homepage — loaded with ssr:false via HomePageLoader. */}
+        <HomePageLoader
+          initialTraders={initialTraders}
+          initialLastUpdated={lastUpdated}
+          heroStats={heroStats}
+        />
+      </PageErrorBoundary>
     </>
   )
 }
