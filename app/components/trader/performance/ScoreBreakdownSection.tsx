@@ -111,10 +111,16 @@ export function ScoreBreakdownSection({
             .score-tooltip-trigger:hover .score-tooltip-content {
               display: block !important;
             }
+            .score-label-short { display: none; }
+            @media (max-width: 480px) {
+              .score-badges-row { margin-left: 0 !important; }
+              .score-label-full { display: none !important; }
+              .score-label-short { display: inline !important; }
+            }
           `}</style>
         </Box>
         {/* Arena Score 总分 */}
-        <Box style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: tokens.spacing[2] }}>
+        <Box className="score-badges-row" style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: tokens.spacing[2] }}>
           {arenaScoreV3 != null && (
             <Box
               style={{
@@ -152,7 +158,8 @@ export function ScoreBreakdownSection({
                 border: `1px solid ${arenaScoreColor(periodArenaScore)}30`,
               }}
             >
-              <Text size="xs" color="secondary" weight="bold">Arena Score</Text>
+              <Text className="score-label-full" size="xs" color="secondary" weight="bold">Arena Score</Text>
+              <Text className="score-label-short" size="xs" color="secondary" weight="bold">Score</Text>
               <Text
                 size="sm"
                 weight="black"
