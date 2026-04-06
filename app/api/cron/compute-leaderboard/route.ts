@@ -99,14 +99,23 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
-  // Idempotency: prevent duplicate runs within 5 minutes using atomic SET NX EX
+  // Idempotency: atomic SET NX EX (no race window between get and set)
   const IDEMPOTENCY_KEY = 'cron:compute-leaderboard:running'
-  const cached = await tieredGet(IDEMPOTENCY_KEY, 'hot')
-  if (cached.data) {
-    return NextResponse.json({ ok: true, message: 'Already running, skipped', cached: true })
+  let lockAcquired = false
+  try {
+    const { getSharedRedis } = await import('@/lib/cache/redis-client')
+    const redis = await getSharedRedis()
+    if (redis) {
+      const result = await redis.set(IDEMPOTENCY_KEY, new Date().toISOString(), { nx: true, ex: 300 })
+      lockAcquired = result === 'OK'
+    } else {
+      const cached = await tieredGet(IDEMPOTENCY_KEY, 'hot')
+      if (!cached.data) { await tieredSet(IDEMPOTENCY_KEY, { startedAt: new Date().toISOString() }, 'hot', []); lockAcquired = true }
+    }
+  } catch { lockAcquired = true }
+  if (!lockAcquired) {
+    return NextResponse.json({ ok: true, message: 'Already running (atomic lock)', cached: true })
   }
-  // Set idempotency lock (hot tier has short TTL, auto-expires)
-  await tieredSet(IDEMPOTENCY_KEY, { startedAt: new Date().toISOString() }, 'hot', [])
 
   const supabase = getSupabaseAdmin()
   const startTime = Date.now()
@@ -281,8 +290,8 @@ export async function GET(request: NextRequest) {
       revalidatePath('/') // homepage
     })(), 'revalidate-ranking-pages')
 
-    // Release idempotency lock
-    await tieredDel(IDEMPOTENCY_KEY)
+    // Release idempotency lock (atomic Redis DEL with fallback)
+    try { const { getSharedRedis: r } = await import('@/lib/cache/redis-client'); const c = await r(); if (c) await c.del(IDEMPOTENCY_KEY); else await tieredDel(IDEMPOTENCY_KEY) } catch { await tieredDel(IDEMPOTENCY_KEY).catch(() => {}) }
 
     const totalRanked = Object.values(stats.seasons).reduce((a, b) => a + b, 0)
     // Distinguish between computation FAILUREs (real errors) and degradation SKIPs (auto-recoverable)
@@ -307,8 +316,8 @@ export async function GET(request: NextRequest) {
       wr_mdd_derived: wrMddDerived,
     })
   } catch (error: unknown) {
-    // Release idempotency lock on failure
-    await tieredDel(IDEMPOTENCY_KEY).catch(err => logger.warn('Failed to release idempotency lock on error', { error: err instanceof Error ? err.message : String(err) }))
+    // Release idempotency lock on failure (atomic Redis DEL with fallback)
+    try { const { getSharedRedis: r } = await import('@/lib/cache/redis-client'); const c = await r(); if (c) await c.del(IDEMPOTENCY_KEY); else await tieredDel(IDEMPOTENCY_KEY) } catch { await tieredDel(IDEMPOTENCY_KEY).catch(() => {}) }
     logger.error('Failed to compute leaderboard', error)
     await plog.error(error)
     return NextResponse.json(
