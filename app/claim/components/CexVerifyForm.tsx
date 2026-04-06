@@ -10,7 +10,6 @@ import { trackEvent } from '@/lib/analytics/track'
 import { getCsrfHeaders } from '@/lib/api/client'
 import { useToast } from '@/app/components/ui/Toast'
 import { SearchResult, CEX_PLATFORMS } from './types'
-import { trackEvent } from '@/lib/analytics/track'
 
 export function CexVerifyForm({
   trader,
