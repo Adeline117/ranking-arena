@@ -387,7 +387,40 @@ export async function tieredGetOrSet<T>(
     }
   }
 
-  // Coalesce concurrent fetches for the same key (stampede protection)
+  // Cross-instance stampede protection: distributed Redis lock
+  // When cache misses across multiple Vercel instances simultaneously,
+  // only one instance runs the expensive fetch; others wait and retry cache.
+  const LOCK_TTL_SECONDS = 5
+  const LOCK_MAX_RETRIES = 3
+  const LOCK_RETRY_DELAY_MS = 100
+  const lockKey = `lock:${key}`
+
+  const lockRedis = await initRedis()
+  let lockAcquired = false
+  if (lockRedis) {
+    try {
+      // SET NX EX — acquire lock atomically
+      const lockResult = await lockRedis.set(lockKey, '1', { nx: true, ex: LOCK_TTL_SECONDS })
+      lockAcquired = lockResult === 'OK'
+    } catch {
+      // Redis error — proceed without lock (fail-open)
+    }
+
+    if (!lockAcquired) {
+      // Another instance is fetching — wait and retry cache reads
+      for (let retry = 0; retry < LOCK_MAX_RETRIES; retry++) {
+        await new Promise(resolve => setTimeout(resolve, LOCK_RETRY_DELAY_MS))
+        const { data: retryData } = await tieredGet<T>(key, tier)
+        if (retryData !== null) {
+          return retryData
+        }
+      }
+      // Lock wait exhausted — proceed with fetch anyway (don't block forever)
+      dataLogger.warn(`[redis-layer] Lock wait exhausted for ${key}, proceeding with fetch`)
+    }
+  }
+
+  // Coalesce concurrent fetches for the same key (per-instance stampede protection)
   const existing = inFlightRequests.get(key)
   if (existing) {
     // Evict stale entries from previous invocations (hung promises on warm reuse)
@@ -416,6 +449,10 @@ export async function tieredGetOrSet<T>(
     return freshData
   } finally {
     inFlightRequests.delete(key)
+    // Release distributed lock (best-effort)
+    if (lockRedis && lockAcquired) {
+      lockRedis.del(lockKey).catch(() => {})
+    }
   }
 }
 
