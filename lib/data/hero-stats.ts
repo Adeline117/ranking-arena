@@ -21,6 +21,7 @@ const _CACHE_TTL = 3600 // 1 hour
 export interface HeroStats {
   exchangeCount: number
   traderCount: number
+  isDefault?: boolean
 }
 
 /**
@@ -43,7 +44,7 @@ export async function getHeroStats(): Promise<HeroStats> {
 
     if (!supabaseUrl || !supabaseKey) {
       logger.warn('[getHeroStats] Missing Supabase credentials, using defaults')
-      return DEFAULT_STATS
+      return { ...DEFAULT_STATS, isDefault: true }
     }
 
     const supabase = createClient(supabaseUrl, supabaseKey)
@@ -65,7 +66,7 @@ export async function getHeroStats(): Promise<HeroStats> {
 
         if (countError) {
           logger.warn('[getHeroStats] Count query failed, using defaults', countError)
-          return DEFAULT_STATS
+          return { ...DEFAULT_STATS, isDefault: true }
         }
 
         // 获取 distinct sources
@@ -87,7 +88,7 @@ export async function getHeroStats(): Promise<HeroStats> {
       }
 
       logger.warn('[getHeroStats] RPC failed, using defaults', error)
-      return DEFAULT_STATS
+      return { ...DEFAULT_STATS, isDefault: true }
     }
 
     const rpcData = data as { exchange_count?: number; trader_count?: number } | null
@@ -102,6 +103,6 @@ export async function getHeroStats(): Promise<HeroStats> {
     return stats
   } catch (error) {
     logger.error('[getHeroStats] Unexpected error', error)
-    return DEFAULT_STATS
+    return { ...DEFAULT_STATS, isDefault: true }
   }
 }
