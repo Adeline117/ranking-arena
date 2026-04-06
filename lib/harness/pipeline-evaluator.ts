@@ -915,9 +915,10 @@ export class PipelineEvaluator {
    */
   private static async checkVPSHealth(): Promise<{ check: EvaluationCheck; issues: EvaluationIssue[] }> {
     const issues: EvaluationIssue[] = []
+    // Only check VPS that are explicitly configured — avoid false negatives
     const vpsHosts = [
-      { name: 'SG', host: process.env.VPS_PROXY_SG },
-      { name: 'JP', host: process.env.VPS_PROXY_JP || process.env.VPS_PROXY_URL },
+      { name: 'SG', host: process.env.VPS_PROXY_SG || process.env.VPS_SCRAPER_SG?.replace(':3457', ':3456') },
+      ...(process.env.VPS_PROXY_JP ? [{ name: 'JP', host: process.env.VPS_PROXY_JP }] : []),
     ].filter(v => v.host)
 
     if (vpsHosts.length === 0) {
