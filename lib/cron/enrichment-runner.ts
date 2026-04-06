@@ -4,6 +4,7 @@
  */
 
 import { validatePlatform } from '@/lib/config/platforms'
+import { getSharedRedis } from '@/lib/cache/redis-client'
 import { getSupabaseAdmin } from '@/lib/supabase/server'
 import { raceWithTimeout } from '@/lib/utils/race-with-timeout'
 import {
@@ -170,6 +171,99 @@ async function withRetry<T>(
     }
   }
   throw lastError
+}
+
+
+// ============================================
+// Dead-letter queue (DLQ) for enrichment failures
+// Tracks per-trader failure counts in Redis. After MAX_DLQ_RETRIES consecutive
+// failures the trader is moved to a dead-letter set for manual review.
+// Keys:  enrichment:failed:{platform}:{trader_id}  -> JSON { count, lastError, lastFailedAt }
+// Set:   enrichment:dead-letter  -> set of "{platform}:{trader_id}" strings
+// ============================================
+const MAX_DLQ_RETRIES = 3
+const DLQ_KEY_TTL_SECONDS = 86400 * 7 // 7 days: auto-expire stale failure records
+
+interface DlqEntry {
+  count: number
+  lastError: string
+  lastFailedAt: string
+}
+
+/** Record an enrichment failure for a trader. Returns true if moved to dead-letter. */
+async function recordEnrichmentFailure(
+  platform: string,
+  traderId: string,
+  errorMsg: string,
+): Promise<boolean> {
+  try {
+    const redis = await getSharedRedis()
+    if (!redis) return false
+
+    const key = `enrichment:failed:${platform}:${traderId}`
+    const existing = await redis.get<DlqEntry>(key)
+    const count = (existing?.count ?? 0) + 1
+    const entry: DlqEntry = {
+      count,
+      lastError: errorMsg.slice(0, 200),
+      lastFailedAt: new Date().toISOString(),
+    }
+
+    if (count >= MAX_DLQ_RETRIES) {
+      await redis.sadd('enrichment:dead-letter', `${platform}:${traderId}`)
+      await redis.del(key)
+      logger.warn(
+        `[DLQ] ${platform}/${traderId} moved to dead-letter after ${count} failures: ${errorMsg.slice(0, 100)}`,
+      )
+      return true
+    }
+
+    await redis.set(key, entry, { ex: DLQ_KEY_TTL_SECONDS })
+    return false
+  } catch (dlqErr) {
+    logger.warn(`[DLQ] Failed to record failure for ${platform}/${traderId}`, {
+      error: dlqErr instanceof Error ? dlqErr.message : String(dlqErr),
+    })
+    return false
+  }
+}
+
+/** Clear failure tracking for a trader after successful enrichment. */
+async function clearEnrichmentFailure(platform: string, traderId: string): Promise<void> {
+  try {
+    const redis = await getSharedRedis()
+    if (!redis) return
+    await redis.del(`enrichment:failed:${platform}:${traderId}`)
+  } catch {
+    // Best-effort cleanup
+  }
+}
+
+/** Get trader IDs that previously failed and should be retried (count < MAX_DLQ_RETRIES). */
+async function getRetryableTraders(platform: string): Promise<string[]> {
+  try {
+    const redis = await getSharedRedis()
+    if (!redis) return []
+
+    const retryIds: string[] = []
+    const prefix = `enrichment:failed:${platform}:`
+    let cursor = 0
+    do {
+      const result = await redis.scan(cursor, { match: `${prefix}*`, count: 100 })
+      cursor = typeof result[0] === 'number' ? result[0] : Number(result[0])
+      for (const key of result[1]) {
+        const traderId = (key as string).slice(prefix.length)
+        if (traderId) retryIds.push(traderId)
+      }
+    } while (cursor !== 0)
+
+    return retryIds
+  } catch (dlqErr) {
+    logger.warn(`[DLQ] Failed to get retryable traders for ${platform}`, {
+      error: dlqErr instanceof Error ? dlqErr.message : String(dlqErr),
+    })
+    return []
+  }
 }
 
 /**
@@ -659,6 +753,21 @@ export async function runEnrichment(params: {
       traders = dbTraders
     }
 
+    // DLQ retry: prepend previously-failed traders so they get retried first
+    if (!providedKeys) {
+      const retryIds = await getRetryableTraders(platformKey)
+      if (retryIds.length > 0) {
+        const existingIds = new Set(traders.map((t: { source_trader_id: string }) => t.source_trader_id))
+        const newRetries = retryIds
+          .filter((id: string) => !existingIds.has(id))
+          .map((id: string) => ({ source_trader_id: id }))
+        if (newRetries.length > 0) {
+          traders = [...newRetries, ...traders]
+          logger.info(`[DLQ] ${platformKey}: prepended ${newRetries.length} retry candidates`)
+        }
+      }
+    }
+
     logger.warn(`[enrich] Processing ${traders.length} ${platformKey} traders for ${period} (timeout: ${platformTimeoutMs / 1000}s)`)
 
     for (let i = 0; i < traders.length; i += config.concurrency) {
@@ -948,6 +1057,8 @@ export async function runEnrichment(params: {
                 }
 
                 results[platformKey].enriched++
+                // Clear DLQ tracking on success (trader recovered)
+                clearEnrichmentFailure(platformKey, traderId).catch(() => {})
               })(), traderTimeoutMs, `${platformKey}/${traderId}`)
           } catch (err) {
             results[platformKey].failed++
@@ -955,6 +1066,8 @@ export async function runEnrichment(params: {
             if (results[platformKey].errors.length < 5) {
               results[platformKey].errors.push(`${traderId}: ${errMsg}`)
             }
+            // Record failure for DLQ tracking (best-effort, fire-and-forget)
+            recordEnrichmentFailure(platformKey, traderId, errMsg).catch(() => {})
             throw err // Re-throw to be caught by allSettled
           } finally {
             clearTimeout(traderTimer)
