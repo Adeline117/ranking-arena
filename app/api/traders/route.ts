@@ -43,7 +43,7 @@ const SOURCES_TTL = 30 * 60 * 1000 // 30 min — sources change only on cron run
 const SOURCES_CACHE_MAX = 50 // prevent unbounded growth
 
 // Select only needed columns from leaderboard_ranks (avoid SELECT *)
-const LEADERBOARD_COLUMNS = 'source_trader_id, handle, roi, pnl, win_rate, max_drawdown, trades_count, followers, copiers, source, source_type, avatar_url, arena_score, rank, profitability_score, risk_control_score, execution_score, score_completeness, trading_style, avg_holding_hours, style_confidence, computed_at, season_id, sharpe_ratio, trader_type'
+const LEADERBOARD_COLUMNS = 'source_trader_id, handle, roi, pnl, win_rate, max_drawdown, trades_count, followers, copiers, source, source_type, avatar_url, arena_score, rank, profitability_score, risk_control_score, execution_score, score_completeness, trading_style, avg_holding_hours, style_confidence, computed_at, season_id, sharpe_ratio, sortino_ratio, profit_factor, calmar_ratio, trader_type, is_outlier'
 
 export const GET = withPublic(
   async ({ supabase, request }) => {
@@ -202,9 +202,13 @@ async function fetchFromLeaderboard(
     style_confidence: row.style_confidence != null ? Number(row.style_confidence) : null,
     // Risk metrics
     sharpe_ratio: row.sharpe_ratio != null ? Number(row.sharpe_ratio) : null,
+    sortino_ratio: row.sortino_ratio != null ? Number(row.sortino_ratio) : null,
+    profit_factor: row.profit_factor != null ? Number(row.profit_factor) : null,
+    calmar_ratio: row.calmar_ratio != null ? Number(row.calmar_ratio) : null,
     // Bot classification
     is_bot: row.source === 'web3_bot' || row.trader_type === 'bot',
     trader_type: (row.trader_type as string) || (row.source === 'web3_bot' ? 'bot' : null),
+    is_outlier: row.is_outlier === true,
   }))
 
   // Deduplicate 0x addresses (case-insensitive) — VPS imports may write checksum-case
