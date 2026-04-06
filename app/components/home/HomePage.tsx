@@ -32,14 +32,12 @@ interface HomePageProps {
 }
 
 export default function HomePage({ initialTraders, initialLastUpdated, heroStats }: HomePageProps) {
-  // SSR ranking table: hidden by CSS :has(#homepage-interactive) — instant, zero CLS.
-  // SSR hero: NEVER removed — it IS the LCP element (~1.3s on slow 4G).
-  //   Removing it would cause Lighthouse to measure Phase 2 hero as LCP (~8s).
-  //   Phase 2 hero renders on top via z-index (same visual content + NumberTicker).
-  // Cleanup: only remove SSR ranking table (replaced by interactive table).
+  // SSR content shell: hidden by CSS visibility:hidden via :has(#homepage-interactive).
+  // Grid overlay ensures zero CLS (SSR height maintained until Phase 2 fills the space).
+  // Cleanup: remove entire SSR shell from DOM once Phase 2 is stable.
   useEffect(() => {
     const cleanup = () => {
-      document.getElementById('ssr-ranking-table')?.remove()
+      document.getElementById('ssr-content-shell')?.remove()
     }
     if ('requestIdleCallback' in window) {
       (window as Window).requestIdleCallback(cleanup)
