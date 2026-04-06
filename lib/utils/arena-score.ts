@@ -40,10 +40,10 @@ export interface TraderScoreInput {
 
 export interface ArenaScoreResult {
   totalScore: number      // 总分 (0-100)
-  returnScore: number     // 收益分 (0-70)
-  pnlScore: number        // PnL 分 (0-15)
-  drawdownScore: number   // 回撤分 (0-8)
-  stabilityScore: number  // 稳定分 (0-7)
+  returnScore: number     // 收益分 (0-60)
+  pnlScore: number        // PnL 分 (0-40)
+  drawdownScore: number   // 回撤分 (V3已移除, 恒为0)
+  stabilityScore: number  // 稳定分 (V3已移除, 恒为0)
   scoreConfidence: ScoreConfidence  // 数据完整性标记
 }
 
@@ -227,8 +227,8 @@ export function calculateRoiIntensity(roi: number, period: Period): number {
 }
 
 /**
- * 计算收益分 (0-70)
- * ReturnScore = 70 * tanh(coeff * I)^exponent
+ * 计算收益分 (0-60)
+ * ReturnScore = 60 * tanh(coeff * I)^exponent
  * 
  * ROI 会被 cap 到 ARENA_CONFIG.ROI_CAP 以防止异常值
  * （如 Hyperliquid 百万级 ROI）垄断排行榜。
@@ -304,8 +304,8 @@ export function calculateStabilityScore(winRate: number | null, period: Period):
 }
 
 /**
- * 计算 PnL 分 (0-15)
- * PnlScore = 15 * clip(tanh(coeff * ln(1 + pnl / base)), 0, 1)
+ * 计算 PnL 分 (0-40)
+ * PnlScore = 40 * clip(tanh(coeff * ln(1 + pnl / base)), 0, 1)
  *
  * 使用 log-tanh 压缩：
  * - 小额 PnL（$1K）获得少量分数
@@ -607,10 +607,19 @@ export function calculateArenaScoreV3Legacy(
   const scoreConfidence = getScoreConfidence(maxDrawdown, winRate)
 
   // Simple threshold-based scoring (legacy behavior)
-  const returnScore = calculateReturnScore(Math.min(roi, ARENA_CONFIG.ROI_CAP), _period) * (55 / 70)
-  const pnlScore = calculatePnlScore(pnl, _period) * (12 / 15)
-  const drawdownScore = calculateDrawdownScore(maxDrawdown, _period)
-  const stabilityScore = calculateStabilityScore(winRate, _period) * (5 / 7)
+  // Scale sub-scores to V3 Legacy weight budget: return=55, pnl=12, dd=8, stability=5
+  const returnScore = ARENA_CONFIG.MAX_RETURN_SCORE > 0
+    ? calculateReturnScore(Math.min(roi, ARENA_CONFIG.ROI_CAP), _period) * (55 / ARENA_CONFIG.MAX_RETURN_SCORE)
+    : 0
+  const pnlScore = ARENA_CONFIG.MAX_PNL_SCORE > 0
+    ? calculatePnlScore(pnl, _period) * (12 / ARENA_CONFIG.MAX_PNL_SCORE)
+    : 0
+  const drawdownScore = ARENA_CONFIG.MAX_DRAWDOWN_SCORE > 0
+    ? calculateDrawdownScore(maxDrawdown, _period)
+    : 0
+  const stabilityScore = ARENA_CONFIG.MAX_STABILITY_SCORE > 0
+    ? calculateStabilityScore(winRate, _period) * (5 / ARENA_CONFIG.MAX_STABILITY_SCORE)
+    : 0
 
   let alphaScore = 0
   if (alpha != null && alpha > 0) alphaScore = clip(5 * Math.min(1, alpha / 10), 0, 5)
