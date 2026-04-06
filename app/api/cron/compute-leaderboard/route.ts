@@ -455,6 +455,21 @@ async function computeSeason(
     if (snap.sharpe_ratio != null && (snap.sharpe_ratio > 20 || snap.sharpe_ratio < -20)) {
       snap.sharpe_ratio = null
     }
+    // Win rate sanity: null out contradictory values
+    // - WR=0% with positive ROI is impossible (at least one winning trade)
+    // - WR=100% with negative ROI is impossible
+    // - WR=100% with trades < 2 is statistically meaningless
+    if (snap.win_rate != null && snap.roi != null) {
+      if (snap.win_rate === 0 && snap.roi > 10) snap.win_rate = null
+      if (snap.win_rate >= 100 && snap.roi < -10) snap.win_rate = null
+    }
+    if (snap.win_rate != null && snap.win_rate >= 100 && snap.trades_count != null && snap.trades_count < 2) {
+      snap.win_rate = null
+    }
+    // WR=100% with no trade count info is unverifiable — null it out
+    if (snap.win_rate != null && snap.win_rate >= 100 && (snap.trades_count == null || snap.trades_count === 0)) {
+      snap.win_rate = null
+    }
 
     const key = `${snap.source}:${snap.source_trader_id}`
     if (!traderMap.has(key)) {
@@ -1197,12 +1212,19 @@ async function computeSeason(
     )
     // Estimation penalty kept for future use — currently always 1.0 since Phase 5 estimation was removed
     const estimationPenalty = t.metrics_estimated ? 0.92 : 1.0
+    // Low trade count penalty: traders with very few trades have unreliable metrics
+    // (e.g., 100% WR with 1 trade is meaningless, not skill)
+    // Scale: 0 trades → 0.6x, 1 → 0.7x, 2 → 0.8x, 5 → 0.92x, 10+ → 1.0x
+    let tradeCountPenalty = 1.0
+    if (t.trades_count != null && t.trades_count >= 0 && t.trades_count < 10) {
+      tradeCountPenalty = 0.6 + 0.04 * t.trades_count // 0.6 at 0, 1.0 at 10
+    }
     const rawSubScores = scoreResult.returnScore + scoreResult.pnlScore +
                          scoreResult.drawdownScore + scoreResult.stabilityScore
     // Trust weight removed from score formula — same skill shouldn't get different
     // scores based on exchange. Trust weight used only as tie-breaker in sort below.
     const finalScore = Math.round(
-      Math.max(0, Math.min(100, rawSubScores * confidenceMultiplier * estimationPenalty)) * 100
+      Math.max(0, Math.min(100, rawSubScores * confidenceMultiplier * estimationPenalty * tradeCountPenalty)) * 100
     ) / 100
 
     const info = handleMap.get(`${t.source}:${t.source_trader_id}`) || { handle: null, avatar_url: null }
