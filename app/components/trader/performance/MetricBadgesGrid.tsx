@@ -68,8 +68,12 @@ export function MetricBadgesGrid({
       />
       <MetricBadge
         label={t('winningPositions')}
-        value={winningPositions != null && totalPositions != null ? `${winningPositions}/${totalPositions}` : '—'}
-        tooltip={winningPositions == null ? t('positionStatsNotAvailable') : undefined}
+        value={winningPositions != null && totalPositions != null && totalPositions > 0
+          ? `${winningPositions} / ${totalPositions}`
+          : '—'}
+        tooltip={winningPositions == null
+          ? t('positionStatsNotAvailable')
+          : `${winningPositions} winning out of ${totalPositions} total positions`}
       />
       {sortinoRatio != null && (
         <MetricBadge
