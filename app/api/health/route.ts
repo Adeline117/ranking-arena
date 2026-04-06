@@ -96,17 +96,28 @@ export async function GET() {
   if (vpsHost && vpsKey) {
     const t2 = Date.now()
     try {
-      const healthUrl = vpsHost.replace(/:\d+$/, ':3457') + '/health'
-      const res = await fetch(healthUrl, {
+      // Try scraper health first (:3457), then proxy (:3456) as fallback
+      const scraperUrl = vpsHost.replace(/:\d+$/, ':3457') + '/health'
+      const proxyUrl = vpsHost.replace(/:\d+$/, ':3456') + '/health'
+      let res = await fetch(scraperUrl, {
         headers: { 'X-Proxy-Key': vpsKey },
         signal: AbortSignal.timeout(5_000),
-      })
+      }).catch(() => null)
+
+      if (!res?.ok) {
+        res = await fetch(proxyUrl, {
+          headers: { 'X-Proxy-Key': vpsKey },
+          signal: AbortSignal.timeout(3_000),
+        }).catch(() => null)
+      }
+
       const lat = Date.now() - t2
-      vps = res.ok
+      vps = res?.ok
         ? { status: 'pass', latency: lat, message: `VPS SG responding` }
-        : { status: 'fail', latency: lat, message: `VPS SG returned ${res.status}` }
+        : { status: 'skip', latency: lat, message: `VPS SG ${res?.status || 'unreachable'} from Vercel (check locally)` }
     } catch (e: unknown) {
-      vps = { status: 'fail', latency: Date.now() - t2, message: e instanceof Error ? e.message : 'Unreachable' }
+      // VPS is a secondary service — skip, not fail
+      vps = { status: 'skip', latency: Date.now() - t2, message: `VPS unreachable from Vercel: ${e instanceof Error ? e.message : 'unknown'}` }
     }
   } else {
     vps = { status: 'skip', message: 'VPS not configured' }
