@@ -53,7 +53,8 @@ const GROUPS: Record<string, string[]> = {
   // Group B1: Bybit (VPS Playwright scraper, slow ~20-30s/page) — split for longer per-platform timeout
   b1: ['bybit', 'bybit_spot'],
   // Group B2: Bitget (VPS proxy, faster)
-  b2: ['bitget_futures', 'bitget_spot'],
+  // bitget_spot: DEAD (permanently disabled, no leaderboard API)
+  b2: ['bitget_futures'],
   // Group C: DEX + fast CEX (every 4h) — Hyperliquid, GMX (subgraph), Bitunix
   c: ['hyperliquid', 'gmx', 'bitunix'],
   // Group D1: Fast CEX (every 6h) — split from old group d (8 was too many, caused 524 timeout)
