@@ -30,7 +30,14 @@ interface Props {
 }
 
 export default function SSRRankingTable({ traders, startRank = 0 }: Props) {
-  if (!traders.length) return null
+  if (!traders.length) {
+    return (
+      <div style={{ padding: '48px 16px', textAlign: 'center', color: 'var(--color-text-tertiary, #888)' }}>
+        <p style={{ fontSize: 16, marginBottom: 8 }}>Loading ranking data...</p>
+        <p style={{ fontSize: 13 }}>Data refreshes automatically. Try refreshing in a moment.</p>
+      </div>
+    )
+  }
 
   return (
       <>

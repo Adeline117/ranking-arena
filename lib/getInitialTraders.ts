@@ -115,9 +115,9 @@ export async function fetchLeaderboardFromDB(
   const supabase = getSupabaseAdmin()
   const emptyCounts: CategoryCounts = { all: 0, futures: 0, spot: 0, onchain: 0 }
 
-  // 2s timeout — need to fetch traders + category counts
+  // 5s timeout — paginated queries with OFFSET can be slower than page 0 RPC
   const controller = new AbortController()
-  const timer = setTimeout(() => controller.abort(), 2_000)
+  const timer = setTimeout(() => controller.abort(), 5_000)
 
   try {
     // Fetch traders + category counts in parallel
@@ -146,7 +146,7 @@ export async function fetchLeaderboardFromDB(
     const isTimeout = err instanceof Error &&
       (err.name === 'AbortError' || err.message.includes('timeout'))
     if (isTimeout) {
-      logger.warn('[getInitialTraders] Timed out -- returning empty (ISR will fill on next request)')
+      logger.warn(`[getInitialTraders] Timed out after 5s (page=${page}) -- returning empty (ISR will fill on next request)`)
     } else {
       logger.error('[getInitialTraders] Error:', err)
     }
