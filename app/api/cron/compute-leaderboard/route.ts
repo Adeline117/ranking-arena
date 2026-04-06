@@ -467,8 +467,8 @@ async function computeSeason(
     // - WR=100% with negative ROI is impossible
     // - WR=100% with trades < 2 is statistically meaningless
     if (snap.win_rate != null && snap.roi != null) {
-      if (snap.win_rate === 0 && snap.roi > 10) snap.win_rate = null
-      if (snap.win_rate >= 100 && snap.roi < -10) snap.win_rate = null
+      if (snap.win_rate === 0 && snap.roi > 10) { snap.win_rate = null }
+      else if (snap.win_rate >= 100 && snap.roi < -10) { snap.win_rate = null }
     }
     if (snap.win_rate != null && snap.win_rate >= 100 && snap.trades_count != null && snap.trades_count < 2) {
       snap.win_rate = null
