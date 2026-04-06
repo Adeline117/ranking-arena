@@ -177,7 +177,7 @@ export async function getTraderDetail(supabase: SupabaseClient, params: {
       safeQuery(() =>
         supabase
           .from('trader_snapshots_v2')
-          .select(`${V2.platform}, ${V2.trader_key}, ${V2.window}, ${V2.roi_pct}, ${V2.pnl_usd}, win_rate, max_drawdown, trades_count, followers, copiers, sharpe_ratio, ${V2.arena_score}, created_at`)
+          .select(`${V2.platform}, ${V2.trader_key}, ${V2.window}, ${V2.roi_pct}, ${V2.pnl_usd}, win_rate, max_drawdown, trades_count, followers, copiers, sharpe_ratio, sortino_ratio, calmar_ratio, return_score, drawdown_score, stability_score, ${V2.arena_score}, created_at`)
           .eq(V2.platform, platform)
           .eq(V2.trader_key, traderKey)
           .order('created_at', { ascending: false })

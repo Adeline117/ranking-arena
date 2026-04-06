@@ -212,7 +212,12 @@ export function mapV2Snapshot(row: Record<string, unknown>, period?: TradingPeri
     followers: row.followers != null ? Number(row.followers) : null,
     copiers: row.copiers != null ? Number(row.copiers) : null,
     sharpeRatio: row.sharpe_ratio != null ? Number(row.sharpe_ratio) : null,
+    sortinoRatio: row.sortino_ratio != null ? Number(row.sortino_ratio) : null,
+    calmarRatio: row.calmar_ratio != null ? Number(row.calmar_ratio) : null,
     arenaScore: row.arena_score != null ? Number(row.arena_score) : null,
+    returnScore: row.return_score != null ? Number(row.return_score) : null,
+    drawdownScore: row.drawdown_score != null ? Number(row.drawdown_score) : null,
+    stabilityScore: row.stability_score != null ? Number(row.stability_score) : null,
     period: period || normalizePeriod(row.window as string),
     lastUpdated: (row.created_at as string) || null,
   }
