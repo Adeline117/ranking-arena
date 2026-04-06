@@ -103,9 +103,11 @@ export default function HomePage({ initialTraders, initialLastUpdated, heroStats
           }
         >
           <SectionErrorBoundary>
+            {/* Skeleton min-height matches SSR table (25 rows × 52px + header 40px = 1340px)
+                so mobile-sidebar-widgets button doesn't shift when real content replaces skeleton */}
             <Suspense fallback={
-              <div className="contain-layout-style" style={{ minHeight: '80vh' }}>
-                <div className="skeleton" style={{ minHeight: 800, borderRadius: tokens.radius.lg }} />
+              <div className="contain-layout-style" style={{ minHeight: 1340 }}>
+                <div className="skeleton" style={{ minHeight: 1340, borderRadius: tokens.radius.lg }} />
               </div>
             }>
                 <HomePageClient initialTraders={initialTraders} initialLastUpdated={initialLastUpdated} />
