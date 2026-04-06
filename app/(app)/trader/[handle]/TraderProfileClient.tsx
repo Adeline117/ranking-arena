@@ -100,7 +100,7 @@ type TraderTabKey = 'overview' | 'stats' | 'portfolio' | 'posts'
 
 // NO_PORTFOLIO_PLATFORMS removed — Portfolio tab shown for ALL platforms
 // When no position data exists, the Portfolio component shows an empty state
-type TraderPageData = import('@/app/u/[handle]/components/types').TraderPageData
+type TraderPageData = import('@/app/(app)/u/[handle]/components/types').TraderPageData
 
 // #31: traderFetcher extracted to lib/hooks/traderFetcher.ts (shared with useUserProfile)
 
