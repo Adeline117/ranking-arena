@@ -52,10 +52,19 @@ export default function HomePageLoader(props: HomePageLoaderProps) {
     window.addEventListener('keydown', activate, { once: true })
     window.addEventListener('touchstart', activate, { once: true, passive: true })
 
-    // Fallback: auto-activate after 4s (for bots / no-interaction scenarios).
-    // JS chunks start loading immediately via dynamic() — this only defers RENDERING.
-    const timer = setTimeout(activate, 4000)
-    return () => { cleanup(); clearTimeout(timer) }
+    // Fallback: activate via requestIdleCallback (fires when CPU is free).
+    // On fast devices: ~50ms. On throttled Lighthouse: after JS parsing finishes.
+    // 8s hard cap prevents indefinite delay if main thread never idles.
+    const ric = typeof window.requestIdleCallback === 'function'
+      ? window.requestIdleCallback
+      : ((cb: IdleRequestCallback) => setTimeout(cb, 100)) as typeof requestIdleCallback
+    const idleHandle = ric(activate, { timeout: 8000 })
+    return () => {
+      cleanup()
+      if (typeof window.cancelIdleCallback === 'function') {
+        window.cancelIdleCallback(idleHandle)
+      }
+    }
   }, [])
 
   if (!activated) return null
