@@ -50,7 +50,10 @@ export default function Avatar({
   const backgroundGradient = getAvatarGradient(userId)
   
   const finalAvatarUrl = resolveAvatarUrl(isTrader, avatarUrl, userId, name)
-  
+  // Data URIs (blockie/identicon SVGs) bypass Next.js Image Optimization — they're already tiny.
+  // All other images go through /_next/image for resize + webp conversion (749KB → ~5KB).
+  const isDataUri = !!finalAvatarUrl?.startsWith('data:')
+
   const showDefault = imageError || !finalAvatarUrl
 
   return (
@@ -101,7 +104,7 @@ export default function Avatar({
             width={size}
             height={size}
             sizes={`${size}px`}
-            unoptimized
+            unoptimized={isDataUri}
             style={{
               width: '100%',
               height: '100%',
