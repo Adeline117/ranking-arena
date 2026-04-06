@@ -201,7 +201,10 @@ async function buildEquityCurveFromSnapshots(
       roi: row.roi ?? 0,
       pnl: row.pnl ?? null,
     }))
-  } catch {
+  } catch (err) {
+    logger.warn(`[buildEquityCurveFromSnapshots] Failed for ${source}/${traderId}`, {
+      error: err instanceof Error ? err.message : String(err),
+    })
     return []
   }
 }

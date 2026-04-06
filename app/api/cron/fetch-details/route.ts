@@ -292,6 +292,9 @@ async function processTraders(
         success++
       } else {
         failed++
+        if (result.status === 'rejected') {
+          logger.warn(`[fetch-details] enrichTrader rejected: ${result.reason instanceof Error ? result.reason.message : String(result.reason)}`)
+        }
       }
     }
 
