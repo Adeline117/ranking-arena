@@ -73,7 +73,7 @@ async function ensureLeaderboardCached(period: string): Promise<Map<string, Bitu
   }
 
   const traders = new Map<string, BitunixListEntry>()
-  const maxPages = 10 // 100 per page × 10 = 1000 traders max
+  const maxPages = 18 // 100 per page × 18 = 1800 traders (was 10=1000, caused 50/54 cache misses)
   const pageSize = 100
 
   for (let page = 1; page <= maxPages; page++) {

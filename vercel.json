@@ -123,6 +123,10 @@
       "schedule": "12 */3 * * *"
     },
     {
+      "path": "/api/cron/batch-fetch-traders?group=b1b",
+      "schedule": "14 */3 * * *"
+    },
+    {
       "path": "/api/cron/batch-fetch-traders?group=b2",
       "schedule": "15 */3 * * *"
     },
