@@ -30,6 +30,7 @@ export const dynamic = 'force-dynamic'
 const tradersQuerySchema = z.object({
   timeRange: z.string().toUpperCase().pipe(z.enum(['7D', '30D', '90D'])).catch('90D'),
   exchange: z.string().optional(),
+  category: z.enum(['futures', 'spot', 'onchain']).optional(),
   sortBy: z.enum(['arena_score', 'roi', 'win_rate', 'max_drawdown']).catch('arena_score'),
   order: z.enum(['asc', 'desc']).catch('desc'),
   cursor: z.coerce.number().int().min(0).optional(),
@@ -57,7 +58,7 @@ export const GET = withPublic(
       )
     }
 
-    const { timeRange: timeRangeStr, exchange: exchangeFilter, sortBy, order, limit } = parsed.data
+    const { timeRange: timeRangeStr, exchange: exchangeFilter, category: categoryFilter, sortBy, order, limit } = parsed.data
     const timeRange = timeRangeStr as Period
     const cursor = parsed.data.cursor != null ? String(parsed.data.cursor) : null
     const page = parsed.data.page ?? NaN
@@ -66,7 +67,7 @@ export const GET = withPublic(
     const effectiveSortBy = sortBy || 'arena_score'
 
     // Cache key
-    const cacheKey = `leaderboard:${timeRange}:${exchangeFilter || 'all'}:${effectiveSortBy}:${order}:${cursor || 'start'}:${limit}${useLegacyPaging ? `:p${page}` : ''}`
+    const cacheKey = `leaderboard:${timeRange}:${exchangeFilter || 'all'}:${categoryFilter || 'all'}:${effectiveSortBy}:${order}:${cursor || 'start'}:${limit}${useLegacyPaging ? `:p${page}` : ''}`
 
     const cachedData = await getOrSetWithLock(
       cacheKey,
@@ -74,6 +75,7 @@ export const GET = withPublic(
         return await fetchFromLeaderboard(supabase, {
           timeRange,
           exchangeFilter: exchangeFilter ?? null,
+          categoryFilter: categoryFilter ?? null,
           sortBy: effectiveSortBy,
           order,
           cursor: cursor ? parseInt(cursor, 10) : null,
@@ -116,6 +118,7 @@ async function fetchFromLeaderboard(
   params: {
     timeRange: Period
     exchangeFilter: string | null
+    categoryFilter: string | null
     sortBy: string
     order: 'asc' | 'desc'
     cursor: number | null
@@ -124,18 +127,23 @@ async function fetchFromLeaderboard(
     page: number
   }
 ) {
-  const { timeRange, exchangeFilter, sortBy, order, cursor, limit, useLegacyPaging, page } = params
+  const { timeRange, exchangeFilter, categoryFilter, sortBy, order, cursor, limit, useLegacyPaging, page } = params
 
   // Build query — select only needed columns (avoid SELECT *)
-  // Use 'planned' count (fastest) instead of 'estimated' which adds ~300ms per query.
-  // The totalCount is approximate but sufficient for pagination UI.
+  // Use 'exact' count for correct pagination (was 'planned' which is approximate).
   let query = supabase
     .from('leaderboard_ranks')
-    .select(LEADERBOARD_COLUMNS, { count: 'planned' })
+    .select(LEADERBOARD_COLUMNS, { count: 'exact' })
     .eq('season_id', timeRange)
 
   if (exchangeFilter) {
     query = query.eq('source', exchangeFilter)
+  }
+
+  // Category filter: map frontend category to source_type in DB
+  if (categoryFilter && !exchangeFilter) {
+    const sourceType = categoryFilter === 'onchain' ? 'web3' : categoryFilter
+    query = query.eq('source_type', sourceType)
   }
 
   // Include all scored traders (score > 0 means valid ROI data)

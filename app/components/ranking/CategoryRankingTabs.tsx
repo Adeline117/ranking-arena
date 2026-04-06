@@ -14,6 +14,7 @@ interface CategoryRankingTabsProps {
   onCategoryChange: (category: CategoryType) => void
   isPro: boolean
   onProRequired?: () => void
+  categoryCounts?: { all: number; futures: number; spot: number; onchain: number }
 }
 
 // 锁图标
@@ -37,17 +38,19 @@ export default function CategoryRankingTabs({
   onCategoryChange,
   isPro,
   onProRequired,
+  categoryCounts,
 }: CategoryRankingTabsProps) {
   const { language: _language, t } = useLanguage()
   const { showToast } = useToast()
   const [hoveredTab, setHoveredTab] = useState<CategoryType | null>(null)
 
-  // 使用翻译的分类配置
-  const CATEGORIES: Array<{ value: CategoryType; label: string }> = [
-    { value: 'all', label: t('categoryAll') },
-    { value: 'futures', label: t('categoryFutures') },
-    { value: 'spot', label: t('categorySpot') },
-    { value: 'web3', label: t('categoryWeb3') },
+  const formatCount = (n: number) => n >= 1000 ? `${(n / 1000).toFixed(1)}k` : String(n)
+
+  const CATEGORIES: Array<{ value: CategoryType; label: string; count?: number }> = [
+    { value: 'all', label: t('categoryAll'), count: categoryCounts?.all },
+    { value: 'futures', label: t('categoryFutures'), count: categoryCounts?.futures },
+    { value: 'spot', label: t('categorySpot'), count: categoryCounts?.spot },
+    { value: 'web3', label: t('categoryWeb3'), count: categoryCounts?.onchain },
   ]
 
   const handleTabClick = (category: CategoryType) => {
@@ -130,6 +133,16 @@ export default function CategoryRankingTabs({
             }}
           >
             <span>{cat.label}</span>
+            {cat.count != null && cat.count > 0 && (
+              <span style={{
+                fontSize: 11,
+                opacity: 0.7,
+                background: isActive ? 'rgba(255,255,255,0.2)' : 'var(--color-bg-tertiary)',
+                borderRadius: tokens.radius.full,
+                padding: '1px 6px',
+                fontWeight: 500,
+              }}>{formatCount(cat.count)}</span>
+            )}
             {isLocked && (
               <LockIcon size={12} />
             )}

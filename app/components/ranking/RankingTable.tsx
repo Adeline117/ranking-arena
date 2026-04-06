@@ -102,10 +102,14 @@ function RankingTableInner(props: {
   onSortChange?: (column: 'score' | 'roi' | 'pnl' | 'winrate' | 'mdd' | 'sortino' | 'alpha', dir: 'asc' | 'desc') => void
   onPageChange?: (page: number) => void
   onSearchChange?: (query: string) => void
+  /** Server-side total count for pagination (overrides client-side count) */
+  serverTotalCount?: number
+  /** Category counts from server for tab badges */
+  categoryCounts?: { all: number; futures: number; spot: number; onchain: number }
 }) {
   const { traders: tradersRaw, loading, source, timeRange = '90D', isPro = false, category = 'all', onCategoryChange, onProRequired, onFilterToggle, hasActiveFilters, error, onRetry,
     controlledSortColumn, controlledSortDir, controlledPage, controlledSearchQuery,
-    onSortChange, onPageChange, onSearchChange,
+    onSortChange, onPageChange, onSearchChange, serverTotalCount, categoryCounts,
   } = props
   const { t, language } = useLanguage()
 
@@ -335,9 +339,26 @@ function RankingTableInner(props: {
   }, [traders, sortColumn, sortDir, debouncedSearch, styleFilter, traderTypeFilter])
 
 
-  const totalPages = Math.ceil(sortedTraders.length / itemsPerPage)
-  const startIndex = (currentPage - 1) * itemsPerPage
-  const endIndex = startIndex + itemsPerPage
+  // Server-side pagination: use serverTotalCount for total pages.
+  // When serverTotalCount is available, traders array is already one page from the API.
+  // Compute effective category count for correct pagination per tab.
+  const effectiveTotalCount = serverTotalCount != null
+    ? (category === 'all'
+      ? (categoryCounts?.all ?? serverTotalCount)
+      : category === 'futures'
+        ? (categoryCounts?.futures ?? serverTotalCount)
+        : category === 'spot'
+          ? (categoryCounts?.spot ?? serverTotalCount)
+          : category === 'web3'
+            ? (categoryCounts?.onchain ?? serverTotalCount)
+            : serverTotalCount)
+    : null
+
+  const totalPages = effectiveTotalCount != null
+    ? Math.ceil(effectiveTotalCount / itemsPerPage)
+    : Math.ceil(sortedTraders.length / itemsPerPage)
+  const startIndex = serverTotalCount != null ? 0 : (currentPage - 1) * itemsPerPage
+  const endIndex = serverTotalCount != null ? sortedTraders.length : startIndex + itemsPerPage
   const paginatedTraders = sortedTraders.slice(startIndex, endIndex)
 
   // Reset scroll position on page/sort/filter changes
@@ -404,6 +425,7 @@ function RankingTableInner(props: {
           traders={traders}
           source={source}
           timeRange={timeRange}
+          categoryCounts={categoryCounts}
         />
       )}
 

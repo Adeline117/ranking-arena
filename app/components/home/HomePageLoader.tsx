@@ -2,7 +2,7 @@
 
 import dynamic from 'next/dynamic'
 import { useState, useEffect } from 'react'
-import type { InitialTrader } from '@/lib/getInitialTraders'
+import type { InitialTrader, CategoryCounts } from '@/lib/getInitialTraders'
 
 /**
  * HomePageLoader — defers Phase 2 rendering until user interaction.
@@ -27,6 +27,8 @@ interface HomePageLoaderProps {
   initialTraders?: InitialTrader[]
   initialLastUpdated?: string | null
   heroStats?: { traderCount: number; exchangeCount: number }
+  initialTotalCount?: number
+  initialCategoryCounts?: CategoryCounts
 }
 
 export default function HomePageLoader(props: HomePageLoaderProps) {

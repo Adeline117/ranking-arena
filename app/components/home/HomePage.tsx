@@ -22,15 +22,17 @@ const WatchlistMarket = lazy(() => import('../sidebar/WatchlistMarket'))
 const NewsFlash = lazy(() => import('../sidebar/NewsFlash'))
 const TrendingHashtags = lazy(() => import('../sidebar/TrendingHashtags'))
 
-import type { InitialTrader } from '@/lib/getInitialTraders'
+import type { InitialTrader, CategoryCounts } from '@/lib/getInitialTraders'
 
 interface HomePageProps {
   initialTraders?: InitialTrader[]
   initialLastUpdated?: string | null
   heroStats?: { traderCount: number; exchangeCount: number }
+  initialTotalCount?: number
+  initialCategoryCounts?: CategoryCounts
 }
 
-export default function HomePage({ initialTraders, initialLastUpdated, heroStats }: HomePageProps) {
+export default function HomePage({ initialTraders, initialLastUpdated, heroStats, initialTotalCount, initialCategoryCounts }: HomePageProps) {
   // SSR hero: NEVER removed — it IS the LCP element (~1.2s on slow 4G).
   // Phase 2 does NOT render its own hero. SSR hero stays visible permanently.
   // SSR ranking table: hidden by CSS, then removed from DOM during idle.
@@ -110,7 +112,7 @@ export default function HomePage({ initialTraders, initialLastUpdated, heroStats
                 <div className="skeleton" style={{ minHeight: 1340, borderRadius: tokens.radius.lg }} />
               </div>
             }>
-                <HomePageClient initialTraders={initialTraders} initialLastUpdated={initialLastUpdated} />
+                <HomePageClient initialTraders={initialTraders} initialLastUpdated={initialLastUpdated} initialTotalCount={initialTotalCount} initialCategoryCounts={initialCategoryCounts} />
             </Suspense>
           </SectionErrorBoundary>
         </ThreeColumnLayout>
