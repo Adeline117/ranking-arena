@@ -206,9 +206,14 @@ export class BinanceFuturesConnector extends BaseConnector {
 
   private mapPlatformToWindow(periodType: string): Window | null {
     const mapping: Record<string, Window> = {
+      // Old format (leaderboard performance API)
       'WEEKLY': '7d',
       'MONTHLY': '30d',
       'QUARTERLY': '90d',
+      // New format (copy-trade API, changed ~2026-04-04)
+      '7D': '7d',
+      '30D': '30d',
+      '90D': '90d',
     }
     return mapping[periodType] || null
   }
@@ -372,12 +377,18 @@ export class BinanceFuturesConnector extends BaseConnector {
       return null
     }
 
-    const periodType = this.mapWindowToPlatform(window)
+    // Performance API may return old format (WEEKLY/MONTHLY/QUARTERLY) or
+    // new format (7D/30D/90D). Try both for resilience.
+    const newPeriod = this.mapWindowToPlatform(window)
+    const OLD_TO_NEW: Record<string, string> = { '7D': 'WEEKLY', '30D': 'MONTHLY', '90D': 'QUARTERLY' }
+    const oldPeriod = OLD_TO_NEW[newPeriod]
+    const matchPeriod = (e: { periodType: string }) =>
+      e.periodType === newPeriod || e.periodType === oldPeriod
     const roiEntry = perfResponse.data.find(
-      e => e.periodType === periodType && e.statisticsType === 'ROI'
+      e => matchPeriod(e) && e.statisticsType === 'ROI'
     )
     const pnlEntry = perfResponse.data.find(
-      e => e.periodType === periodType && e.statisticsType === 'PNL'
+      e => matchPeriod(e) && e.statisticsType === 'PNL'
     )
 
     // If no data for this window, return null
