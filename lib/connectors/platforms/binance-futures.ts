@@ -382,7 +382,7 @@ export class BinanceFuturesConnector extends BaseConnector {
     const newPeriod = this.mapWindowToPlatform(window)
     const OLD_TO_NEW: Record<string, string> = { '7D': 'WEEKLY', '30D': 'MONTHLY', '90D': 'QUARTERLY' }
     const oldPeriod = OLD_TO_NEW[newPeriod]
-    const matchPeriod = (e: { periodType: string }) =>
+    const matchPeriod = (e: { periodType?: string }) =>
       e.periodType === newPeriod || e.periodType === oldPeriod
     const roiEntry = perfResponse.data.find(
       e => matchPeriod(e) && e.statisticsType === 'ROI'

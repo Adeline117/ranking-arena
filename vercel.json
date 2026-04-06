@@ -54,7 +54,7 @@
     },
     {
       "path": "/api/cron/pipeline-evaluate",
-      "schedule": "35 */6 * * *"
+      "schedule": "30 */6 * * *"
     },
     {
       "path": "/api/cron/cleanup-deleted-accounts",
