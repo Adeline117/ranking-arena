@@ -70,15 +70,16 @@ export interface InitialTradersResult {
 
 export async function getInitialTraders(
   timeRange: Period = '90D',
-  limit: number = 20
+  limit: number = 20,
+  page: number = 0
 ): Promise<InitialTradersResult> {
   // During Vercel build, Supabase queries hang (iad1 build server -> timeout).
   if (process.env.NEXT_PHASE === 'phase-production-build') {
     return { traders: [], lastUpdated: null, totalCount: 0, categoryCounts: { all: 0, futures: 0, spot: 0, onchain: 0 } }
   }
 
-  // Try Redis cache first (2-minute TTL)
-  const cacheKey = `home-initial-traders-v2:${timeRange}`
+  // Try Redis cache first (2-minute TTL) — only for page 0 (most common)
+  const cacheKey = `home-initial-traders-v2:${timeRange}:p${page}`
   try {
     const cached = await cache.get<InitialTradersResult>(cacheKey)
     if (cached && cached.traders && cached.traders.length > 0 && cached.totalCount > 0) {
@@ -88,7 +89,7 @@ export async function getInitialTraders(
     // Redis unavailable — fall through to DB
   }
 
-  const result = await fetchLeaderboardFromDB(timeRange, limit)
+  const result = await fetchLeaderboardFromDB(timeRange, limit, page)
 
   // Cache the result asynchronously (2-minute TTL)
   if (result.traders.length > 0) {
@@ -108,7 +109,8 @@ export async function getInitialTraders(
  */
 export async function fetchLeaderboardFromDB(
   timeRange: Period = '90D',
-  limit: number = 20
+  limit: number = 20,
+  page: number = 0
 ): Promise<InitialTradersResult> {
   const supabase = getSupabaseAdmin()
   const emptyCounts: CategoryCounts = { all: 0, futures: 0, spot: 0, onchain: 0 }
@@ -121,7 +123,9 @@ export async function fetchLeaderboardFromDB(
     // Fetch traders + category counts in parallel
     const [tradersResult, counts] = await Promise.race([
       Promise.all([
-        fetchViaDiverseRPC(supabase, timeRange, limit),
+        page === 0
+          ? fetchViaDiverseRPC(supabase, timeRange, limit)
+          : fetchPaginatedFromDB(supabase, timeRange, limit, page),
         fetchCategoryCounts(supabase, timeRange),
       ]),
       new Promise<never>((_, reject) => {
@@ -258,6 +262,38 @@ async function fetchViaDiverseRPC(
   }
 
   return fetchLeaderboardLegacy(supabase, timeRange, limit)
+}
+
+/**
+ * Paginated fetch: simple offset-based pagination for page > 0.
+ * Page 0 uses the diverse RPC for better quality. Pages 1+ use straight DB query.
+ */
+async function fetchPaginatedFromDB(
+  supabase: ReturnType<typeof getSupabaseAdmin>,
+  timeRange: Period,
+  limit: number,
+  page: number
+): Promise<{ traders: InitialTrader[]; lastUpdated: string | null }> {
+  const offset = page * limit
+  const { data, error } = await supabase
+    .from('leaderboard_ranks')
+    .select('*')
+    .eq('season_id', timeRange)
+    .gt('arena_score', 0)
+    .or('is_outlier.is.null,is_outlier.eq.false')
+    .order('arena_score', { ascending: false })
+    .range(offset, offset + limit - 1)
+
+  if (error || !data) {
+    logger.error('[fetchPaginatedFromDB] Error:', error?.message)
+    return { traders: [], lastUpdated: null }
+  }
+
+  const unifiedTraders = data.map((row: Record<string, unknown>) => mapLeaderboardRow(row))
+  const initialTraders = unifiedTraders.map(mapUnifiedToInitial)
+  const lastUpdated = unifiedTraders.length > 0 ? unifiedTraders[0].lastUpdated : null
+
+  return { traders: initialTraders, lastUpdated }
 }
 
 /**
