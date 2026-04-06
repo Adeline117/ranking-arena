@@ -277,19 +277,17 @@ async function getConnectorsSection(cronSecret: string | undefined, authHeader: 
       .like('job_name', 'batch-fetch-traders%')
       .gte('started_at', oneDayAgo)
       .order('started_at', { ascending: false }),
+    // Get latest computed_at per source using leaderboard_count_cache
+    // (was: fetch 5000 rows and dedupe in JS)
     supabase
-      .from('leaderboard_ranks')
-      .select('source, computed_at')
-      .eq('season_id', '90D')
-      .order('computed_at', { ascending: false })
-      .limit(5000),
+      .from('leaderboard_count_cache')
+      .select('source, updated_at')
+      .neq('source', '_all'),
   ])
 
   const latestByPlatform = new Map<string, string>()
   for (const row of freshness || []) {
-    if (!latestByPlatform.has(row.source)) {
-      latestByPlatform.set(row.source, row.computed_at)
-    }
+    latestByPlatform.set(row.source, row.updated_at)
   }
 
   const groupStats = new Map<string, { total: number; success: number; errors: string[] }>()
