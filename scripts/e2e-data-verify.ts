@@ -22,7 +22,7 @@ const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_P
 const API_BASE = process.env.NEXT_PUBLIC_SITE_URL || 'https://www.arenafi.org'
 const VERBOSE = process.argv.includes('--verbose')
 const SAMPLE_SIZE = 5
-const TOLERANCE_PCT = 0.01 // 1% tolerance for floating point
+const TOLERANCE_PCT = 0.001 // 0.1% tolerance for floating point rounding only
 
 interface Inconsistency {
   trader: string
