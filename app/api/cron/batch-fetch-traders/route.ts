@@ -50,8 +50,11 @@ const GROUPS: Record<string, string[]> = {
   a1: ['binance_futures', 'binance_spot'],
   // Group A2: OKX (every 3h)
   a2: ['okx_futures', 'okx_spot'],
-  // Group B1: Bybit (VPS Playwright scraper, slow ~20-30s/page) — split for longer per-platform timeout
-  b1: ['bybit', 'bybit_spot'],
+  // Group B1: Bybit futures only (VPS Playwright scraper, slow ~30s/page)
+  // bybit_spot split to b1b to avoid 300s Vercel timeout (was sequential 240s+180s=420s)
+  b1: ['bybit'],
+  // Group B1B: Bybit spot (separated to fit 300s limit)
+  b1b: ['bybit_spot'],
   // Group B2: Bitget (VPS proxy, faster)
   // bitget_spot: DEAD (permanently disabled, no leaderboard API)
   b2: ['bitget_futures'],
@@ -81,11 +84,13 @@ const GROUPS: Record<string, string[]> = {
 // Binance: 20/page via VPS proxy (~2s/page) → 10 pages × 3 windows × 2s = 60s
 // Was 500 (75 VPS calls = 150s+) which caused persistent timeouts since 2026-04-04
 const PLATFORM_LIMITS: Record<string, number> = {
-  binance_futures: 200,
-  binance_spot: 200,
+  // Binance: reduced from 200 to 100 — 200 caused 23 errors/day via VPS proxy timeout
+  // 100 traders × 3 windows = 15 pages × 2s = ~30s (well within 150s timeout)
+  binance_futures: 100,
+  binance_spot: 100,
   // VPS scraper-dependent platforms: keep low to avoid queue buildup
-  bybit: 200,
-  bybit_spot: 200,
+  bybit: 150,
+  bybit_spot: 150,
   // Copin API has max 1000 traders per statisticType — no point requesting 2000
   dydx: 1000,
 }

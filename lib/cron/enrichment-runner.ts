@@ -327,7 +327,7 @@ export const ENRICHMENT_PLATFORM_CONFIGS: Record<string, EnrichmentConfig> = {
     fetchStatsDetail: fetchBinanceStatsDetail,
     fetchCurrentPositions: fetchBinancePositionHistory,
     fetchPositionHistory: fetchBinancePositionHistory,
-    concurrency: 5, delayMs: 800, // Reduced from 10/500: VPS proxy under load causes 100% failure at high concurrency
+    concurrency: 3, delayMs: 1200, // Reduced from 5/800: concurrency 5 caused zombie hangs (16 errors/day)
   },
   // binance_spot: PERMANENTLY REMOVED (2026-03-14) - repeatedly hangs 45-76min, blocks entire pipeline
   // Bybit enrichment re-enabled (2026-03-18) — routes through VPS scraper
