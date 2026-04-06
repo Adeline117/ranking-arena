@@ -1521,6 +1521,35 @@ async function computeSeason(
     }
   }
 
+  // Re-rank ALL rows to fix drift from incremental upserts
+  // Stale traders (outside freshness window) keep old ranks while new traders shift numbering.
+  // This global re-rank ensures rank always matches arena_score DESC ordering.
+  try {
+    const { error: rerankErr } = await supabase.rpc('rerank_leaderboard', { p_season_id: season })
+    if (rerankErr) {
+      // Fallback: direct SQL if RPC doesn't exist
+      if (rerankErr.code === '42883') {
+        // RPC not available — re-rank inline (slower but correct)
+        const { data: allRows } = await supabase
+          .from('leaderboard_ranks')
+          .select('id, arena_score')
+          .eq('season_id', season)
+          .order('arena_score', { ascending: false, nullsFirst: false })
+        if (allRows?.length) {
+          const rerankUpdates = allRows.map((r: { id: string }, idx: number) => ({ id: r.id, rank: idx + 1 }))
+          for (let i = 0; i < rerankUpdates.length; i += 500) {
+            await supabase.from('leaderboard_ranks').upsert(rerankUpdates.slice(i, i + 500), { onConflict: 'id' })
+          }
+          logger.info(`${season}: re-ranked ${rerankUpdates.length} rows (inline fallback)`)
+        }
+      } else {
+        logger.warn(`${season}: re-rank failed: ${rerankErr.message}`)
+      }
+    }
+  } catch (e) {
+    logger.warn(`${season}: re-rank exception (non-critical):`, e)
+  }
+
   // Clean up rows not updated in 14 days (truly abandoned data)
   const cutoff = new Date(Date.now() - 14 * 24 * 60 * 60 * 1000).toISOString()
   const { data: staleRows, error: staleErr } = await supabase
