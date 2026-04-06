@@ -193,6 +193,12 @@ const fetchExchangeTradersSSR = unstable_cache(
     totalCount: number
     top10ForJsonLd: Array<{ trader_key: string; display_name: string | null; avatar_url: string | null }>
   }> => {
+    // During Vercel build, Supabase queries hang (iad1 build server → timeout).
+    // Return empty data so the build succeeds; ISR revalidation from hnd1 fills it.
+    if (process.env.NEXT_PHASE === 'phase-production-build') {
+      return { traders: [], totalCount: 0, top10ForJsonLd: [] }
+    }
+
     const supabase = getSupabaseAdmin()
 
     try {
