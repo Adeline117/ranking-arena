@@ -54,22 +54,34 @@ function mapUnifiedToInitial(t: UnifiedTrader): InitialTrader {
   }
 }
 
+export interface CategoryCounts {
+  all: number
+  futures: number
+  spot: number
+  onchain: number
+}
+
+export interface InitialTradersResult {
+  traders: InitialTrader[]
+  lastUpdated: string | null
+  totalCount: number
+  categoryCounts: CategoryCounts
+}
+
 export async function getInitialTraders(
   timeRange: Period = '90D',
-  limit: number = 50
-): Promise<{ traders: InitialTrader[]; lastUpdated: string | null }> {
+  limit: number = 20
+): Promise<InitialTradersResult> {
   // During Vercel build, Supabase queries hang (iad1 build server -> timeout).
-  // Skip DB call entirely -- ISR (revalidate=60) fills on first real request.
-  // NEXT_PHASE is set by Next.js build process before static page generation.
   if (process.env.NEXT_PHASE === 'phase-production-build') {
-    return { traders: [], lastUpdated: null }
+    return { traders: [], lastUpdated: null, totalCount: 0, categoryCounts: { all: 0, futures: 0, spot: 0, onchain: 0 } }
   }
 
-  // Try Redis cache first (2-minute TTL) — avoids DB roundtrip on cache hit
-  const cacheKey = `home-initial-traders:${timeRange}`
+  // Try Redis cache first (2-minute TTL)
+  const cacheKey = `home-initial-traders-v2:${timeRange}`
   try {
-    const cached = await cache.get<{ traders: InitialTrader[]; lastUpdated: string | null }>(cacheKey)
-    if (cached && cached.traders && cached.traders.length > 0) {
+    const cached = await cache.get<InitialTradersResult>(cacheKey)
+    if (cached && cached.traders && cached.traders.length > 0 && cached.totalCount > 0) {
       return cached
     }
   } catch (_err) {
@@ -96,28 +108,35 @@ export async function getInitialTraders(
  */
 export async function fetchLeaderboardFromDB(
   timeRange: Period = '90D',
-  limit: number = 50
-): Promise<{ traders: InitialTrader[]; lastUpdated: string | null }> {
+  limit: number = 20
+): Promise<InitialTradersResult> {
   const supabase = getSupabaseAdmin()
+  const emptyCounts: CategoryCounts = { all: 0, futures: 0, spot: 0, onchain: 0 }
 
-  // 1s timeout -- aggressive cutoff for SSR LCP (was 2s)
-  // Redis cache handles most requests; this timeout only applies to cache misses
-  // Phase 2 (client HomePage) will fetch fresh data anyway
+  // 2s timeout — need to fetch traders + category counts
   const controller = new AbortController()
-  const timer = setTimeout(() => controller.abort(), 1_000)
+  const timer = setTimeout(() => controller.abort(), 2_000)
 
   try {
-    const result = await Promise.race([
-      fetchViaDiverseRPC(supabase, timeRange, limit),
+    // Fetch traders + category counts in parallel
+    const [tradersResult, counts] = await Promise.race([
+      Promise.all([
+        fetchViaDiverseRPC(supabase, timeRange, limit),
+        fetchCategoryCounts(supabase, timeRange),
+      ]),
       new Promise<never>((_, reject) => {
         controller.signal.addEventListener('abort', () =>
-          reject(new Error('Query timeout after 1000ms'))
+          reject(new Error('Query timeout after 2000ms'))
         )
       }),
     ])
 
     clearTimeout(timer)
-    return result
+    return {
+      ...tradersResult,
+      totalCount: counts.all,
+      categoryCounts: counts,
+    }
   } catch (err: unknown) {
     clearTimeout(timer)
     const isTimeout = err instanceof Error &&
@@ -127,7 +146,56 @@ export async function fetchLeaderboardFromDB(
     } else {
       logger.error('[getInitialTraders] Error:', err)
     }
-    return { traders: [], lastUpdated: null }
+    return { traders: [], lastUpdated: null, totalCount: 0, categoryCounts: emptyCounts }
+  }
+}
+
+/**
+ * Fetch category counts from leaderboard_ranks using a single aggregation query.
+ */
+async function fetchCategoryCounts(
+  supabase: ReturnType<typeof getSupabaseAdmin>,
+  timeRange: Period
+): Promise<CategoryCounts> {
+  const { data, error } = await supabase.rpc('get_leaderboard_category_counts', {
+    p_season_id: timeRange,
+  })
+
+  if (!error && data && Array.isArray(data)) {
+    const counts: CategoryCounts = { all: 0, futures: 0, spot: 0, onchain: 0 }
+    for (const row of data as Array<{ source_type: string; count: number }>) {
+      const ct = Number(row.count)
+      counts.all += ct
+      if (row.source_type === 'futures') counts.futures = ct
+      else if (row.source_type === 'spot') counts.spot = ct
+      else if (row.source_type === 'web3') counts.onchain = ct
+    }
+    return counts
+  }
+
+  // Fallback: 3 parallel count queries
+  if (error) {
+    logger.warn('[getInitialTraders] RPC get_leaderboard_category_counts unavailable, falling back:', error.message)
+  }
+  const baseFilter = () => supabase
+    .from('leaderboard_ranks')
+    .select('*', { count: 'exact', head: true })
+    .eq('season_id', timeRange)
+    .gt('arena_score', 0)
+    .or('is_outlier.is.null,is_outlier.eq.false')
+
+  const [allRes, futRes, spotRes, webRes] = await Promise.all([
+    baseFilter(),
+    baseFilter().eq('source_type', 'futures'),
+    baseFilter().eq('source_type', 'spot'),
+    baseFilter().eq('source_type', 'web3'),
+  ])
+
+  return {
+    all: allRes.count ?? 0,
+    futures: futRes.count ?? 0,
+    spot: spotRes.count ?? 0,
+    onchain: webRes.count ?? 0,
   }
 }
 

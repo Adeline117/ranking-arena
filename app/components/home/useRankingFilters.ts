@@ -70,9 +70,12 @@ function applyAdvancedFilter(list: Trader[], config: FilterConfig): Trader[] {
 interface UseRankingFiltersOptions {
   traders: Trader[]
   activeTimeRange: TimeRange
+  totalCount?: number
+  categoryCounts?: { all: number; futures: number; spot: number; onchain: number }
+  fetchPage?: (page: number, opts?: { category?: string; sortBy?: string; sortDir?: string }) => Promise<void>
 }
 
-export function useRankingFilters({ traders, activeTimeRange }: UseRankingFiltersOptions) {
+export function useRankingFilters({ traders, activeTimeRange, totalCount, categoryCounts, fetchPage }: UseRankingFiltersOptions) {
   const router = useRouter()
   const { showToast } = useToast()
   const { language, t } = useLanguage()
@@ -81,7 +84,7 @@ export function useRankingFilters({ traders, activeTimeRange }: UseRankingFilter
   const { getAuthHeaders } = useAuthSession()
 
   // State
-  const [category, setCategory] = useState<CategoryType>('all')
+  const [category, setCategoryRaw] = useState<CategoryType>('all')
   const [showAdvancedFilter, setShowAdvancedFilter] = useState(false)
   const [showMobileFilter, setShowMobileFilter] = useState(false)
   const [filterConfig, setFilterConfig] = useState<FilterConfig>({})
@@ -92,6 +95,16 @@ export function useRankingFilters({ traders, activeTimeRange }: UseRankingFilter
   const [currentPage, setCurrentPage] = useState(1)
   const [searchQuery, setSearchQuery] = useState('')
   const [selectedExchange, setSelectedExchange] = useState<string | null>(null)
+
+  // Server-side category change: fetch page 0 of the new category
+  const setCategory = useCallback((cat: CategoryType) => {
+    setCategoryRaw(cat)
+    setCurrentPage(1)
+    if (fetchPage) {
+      const apiCategory = cat === 'web3' ? 'onchain' : cat === 'all' ? undefined : cat
+      fetchPage(0, { category: apiCategory })
+    }
+  }, [fetchPage])
 
   // Reset pagination when time range changes
   const prevTimeRange = useRef(activeTimeRange)
@@ -255,18 +268,28 @@ export function useRankingFilters({ traders, activeTimeRange }: UseRankingFilter
     } catch { /* ignore */ }
   }, [syncFilterToUrl])
 
-  // Sort/page/search handlers
+  // Sort/page/search handlers — trigger server-side fetch when fetchPage is available
   const handleSortChange = useCallback((col: 'score' | 'roi' | 'pnl' | 'winrate' | 'mdd' | 'sortino' | 'alpha', dir: 'asc' | 'desc') => {
     setSortColumn(col)
     setSortDir(dir)
     setCurrentPage(1)
     syncStateToUrl({ sort: col, order: dir, page: 1 })
-  }, [syncStateToUrl])
+    if (fetchPage) {
+      const sortByMap: Record<string, string> = { score: 'arena_score', roi: 'roi', pnl: 'pnl', winrate: 'win_rate', mdd: 'max_drawdown' }
+      const apiCategory = category === 'web3' ? 'onchain' : category === 'all' ? undefined : category
+      fetchPage(0, { category: apiCategory, sortBy: sortByMap[col] || 'arena_score', sortDir: dir })
+    }
+  }, [syncStateToUrl, fetchPage, category])
 
   const handlePageChange = useCallback((page: number) => {
     setCurrentPage(page)
     syncStateToUrl({ page })
-  }, [syncStateToUrl])
+    if (fetchPage) {
+      const sortByMap: Record<string, string> = { score: 'arena_score', roi: 'roi', pnl: 'pnl', winrate: 'win_rate', mdd: 'max_drawdown' }
+      const apiCategory = category === 'web3' ? 'onchain' : category === 'all' ? undefined : category
+      fetchPage(page - 1, { category: apiCategory, sortBy: sortByMap[sortColumn] || 'arena_score', sortDir: sortDir })
+    }
+  }, [syncStateToUrl, fetchPage, category, sortColumn, sortDir])
 
   const handleSearchChange = useCallback((q: string) => {
     setSearchQuery(q)
@@ -390,11 +413,15 @@ export function useRankingFilters({ traders, activeTimeRange }: UseRankingFilter
   }, [t])
 
   // Filtering pipeline
+  // With server-side pagination (fetchPage available), category is already filtered by the API.
+  // Skip client-side category filter to avoid double-filtering.
   const categoryFiltered = useMemo(
-    () => category === 'all'
+    () => fetchPage
       ? traders
-      : traders.filter(trader => trader.source && filterByCategory(trader.source, category)),
-    [traders, category]
+      : (category === 'all'
+        ? traders
+        : traders.filter(trader => trader.source && filterByCategory(trader.source, category))),
+    [traders, category, fetchPage]
   )
 
   const exchangeFiltered = useMemo(() => {
@@ -506,7 +533,8 @@ export function useRankingFilters({ traders, activeTimeRange }: UseRankingFilter
   }, [searchQuery, advancedFiltered])
 
   const filteredTraders = useMemo(() => {
-    const base = isPro ? advancedFiltered : advancedFiltered.slice(0, FREE_LEADERBOARD_LIMIT)
+    // With server-side pagination, the API returns one page at a time — no need to slice
+    const base = fetchPage ? advancedFiltered : (isPro ? advancedFiltered : advancedFiltered.slice(0, FREE_LEADERBOARD_LIMIT))
     if (serverSearchResults.length === 0) return base
     const q = searchQuery.trim().toLowerCase()
     if (q.length < 2) return base

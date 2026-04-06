@@ -163,6 +163,8 @@ interface RankingFiltersProps {
   traders: ExportRankingButtonProps['traders']
   source?: string
   timeRange?: string
+  // Server-side category counts for tab badges
+  categoryCounts?: { all: number; futures: number; spot: number; onchain: number }
 }
 
 /**
@@ -175,7 +177,7 @@ export function RankingFilters({
   visibleColumns, showColumnSettings, onShowColumnSettings, onToggleColumn, onResetColumns,
   styleFilter, onStyleFilterChange, hasStyleData,
   traderTypeFilter = 'all', onTraderTypeFilterChange,
-  traders, source, timeRange,
+  traders, source, timeRange, categoryCounts,
 }: RankingFiltersProps) {
   const { t, language } = useLanguage()
   const columnSettingsRef = useRef<HTMLDivElement>(null)
@@ -213,6 +215,7 @@ export function RankingFilters({
             onCategoryChange={onCategoryChange}
             isPro={isPro}
             onProRequired={onProRequired}
+            categoryCounts={categoryCounts}
           />
         </Box>
 

@@ -8,28 +8,28 @@ import { useTraderData } from './hooks'
 import { useAuthSession } from '@/lib/hooks/useAuthSession'
 import { useLanguage } from '../Providers/LanguageProvider'
 import type { TimeRange } from './hooks/useTraderData'
-import type { InitialTrader } from '@/lib/getInitialTraders'
+import type { InitialTrader, CategoryCounts } from '@/lib/getInitialTraders'
 import type { Trader } from '../ranking/RankingTable'
 
 interface HomePageClientProps {
   initialTraders?: InitialTrader[]
   initialLastUpdated?: string | null
+  initialTotalCount?: number
+  initialCategoryCounts?: CategoryCounts
 }
 
 /**
  * 首页客户端组件
  * 处理交互状态和数据同步
- * 数据通过客户端fetch获取，SSR排行榜由SSRRankingTable提供
- * NOTE: ssrTable prop removed — #ssr-homepage-shell handles the Phase 1 fallback via CSS.
- * Passing ssrTable to the client was causing duplicate DOM nodes.
+ * Server-side pagination: SSR provides first page + totalCount.
+ * Client fetches subsequent pages from /api/traders on demand.
  */
-export default function HomePageClient({ initialTraders, initialLastUpdated }: HomePageClientProps) {
+export default function HomePageClient({ initialTraders, initialLastUpdated, initialTotalCount, initialCategoryCounts }: HomePageClientProps) {
   const { isLoggedIn } = useAuthSession()
   const { t } = useLanguage()
   const router = useRouter()
 
   // Convert InitialTrader[] to Trader[] for compatibility
-  // Memoize to prevent new array reference on every render (triggers useTraderData effects)
   const convertedInitialTraders: Trader[] | undefined = useMemo(() =>
     initialTraders?.map(t => ({
       id: t.id,
@@ -47,7 +47,6 @@ export default function HomePageClient({ initialTraders, initialLastUpdated }: H
     [initialTraders]
   )
 
-  // 交易者数据管理 - 传入服务端预获取的数据
   const {
     traders,
     loading,
@@ -60,22 +59,26 @@ export default function HomePageClient({ initialTraders, initialLastUpdated }: H
     deferredFetchFailed,
     retryDeferredFetch,
     isChangingTimeRange,
+    totalCount,
+    categoryCounts,
+    fetchPage,
   } = useTraderData({
     initialTraders: convertedInitialTraders,
     initialLastUpdated,
+    initialTotalCount,
+    initialCategoryCounts,
   })
 
-  // Sync time range with URL on initial load (avoid useSearchParams to keep page static/ISR)
+  // Sync time range with URL on initial load
   useEffect(() => {
     const params = new URLSearchParams(window.location.search)
     const urlTimeRange = params.get('range') as TimeRange | null
     if (urlTimeRange && ['90D', '30D', '7D'].includes(urlTimeRange) && urlTimeRange !== activeTimeRange) {
       changeTimeRange(urlTimeRange)
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- run once on mount to sync URL param
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- run once on mount
   }, [])
 
-  // Custom handler to update both state and URL
   const handleTimeRangeChange = useCallback((range: TimeRange) => {
     changeTimeRange(range)
     const params = new URLSearchParams(window.location.search)
@@ -83,7 +86,6 @@ export default function HomePageClient({ initialTraders, initialLastUpdated }: H
     router.replace(`?${params.toString()}`, { scroll: false })
   }, [changeTimeRange, router])
 
-  // Pull-to-refresh handler (async for PullToRefresh component)
   const handlePullRefresh = async () => {
     if (refresh) {
       await refresh()
@@ -93,7 +95,6 @@ export default function HomePageClient({ initialTraders, initialLastUpdated }: H
   return (
     <PullToRefresh onRefresh={handlePullRefresh} disabled={loading}>
       <div style={{ position: 'relative', zIndex: 1 }}>
-        {/* 排名榜区域 - 单栏布局，侧边栏由父组件处理 */}
         <RankingSection
           traders={traders}
           loading={loading || isChangingTimeRange}
@@ -105,6 +106,9 @@ export default function HomePageClient({ initialTraders, initialLastUpdated }: H
           onRetry={deferredFetchFailed ? retryDeferredFetch : refresh}
           onRefresh={refresh}
           availableSources={availableSources}
+          totalCount={totalCount}
+          categoryCounts={categoryCounts}
+          fetchPage={fetchPage}
         />
       </div>
     </PullToRefresh>

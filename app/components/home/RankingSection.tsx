@@ -4,23 +4,19 @@ import { useState, useEffect } from 'react'
 import dynamic from 'next/dynamic'
 import type { Trader } from '../ranking/RankingTableTypes'
 import type { TimeRange } from './hooks/useTraderData'
+import type { CategoryCounts } from '@/lib/getInitialTraders'
 
-// Dynamic import RankingTable — it's 674 lines + pulls in TraderRow, TraderCard, etc.
-// SSR table is shown in-place as fallback until this loads (zero CLS)
 const RankingTable = dynamic(() => import('../ranking/RankingTable').then(m => ({ default: m.RankingTable })), {
   ssr: false,
 })
 
-// Above-fold: keep eager
 import TimeRangeSelector from './TimeRangeSelector'
 import { useRankingFilters, FREE_LEADERBOARD_LIMIT } from './useRankingFilters'
 
-// Below-fold / non-critical: dynamic import to reduce initial JS bundle
 const AdvancedFilterPanel = dynamic(() => import('./AdvancedFilterPanel'), { ssr: false })
 const FilterStatusMessages = dynamic(() => import('./FilterStatusMessages'), { ssr: false })
 const ProUpgradeCTA = dynamic(() => import('./ProUpgradeCTA'), { ssr: false })
 const RankingFooter = dynamic(() => import('./RankingFooter'), { ssr: false })
-
 const LeaderboardChangelog = dynamic(() => import('../ranking/LeaderboardChangelog'), { ssr: false })
 
 interface RankingSectionProps {
@@ -29,24 +25,16 @@ interface RankingSectionProps {
   isLoggedIn: boolean
   activeTimeRange: TimeRange
   onTimeRangeChange: (range: TimeRange) => void
-  /** 数据最后更新时间 */
   lastUpdated?: string | null
-  /** 错误信息 */
   error?: string | null
-  /** 重试回调 */
   onRetry?: () => void
-  /** Feature 4: Manual refresh callback */
   onRefresh?: () => void
-  /** 所有可用的数据来源 */
   availableSources?: string[]
+  totalCount?: number
+  categoryCounts?: CategoryCounts
+  fetchPage?: (page: number, opts?: { category?: string; sortBy?: string; sortDir?: string }) => Promise<void>
 }
 
-/**
- * 排行榜区域组件
- * 包含时间选择器和排行榜表格
- * NOTE: ssrTable prop removed — the Phase 1 #ssr-homepage-shell handles the SSR fallback.
- * The in-place duplicate caused ~200 extra DOM nodes during the client hydration window.
- */
 export default function RankingSection({
   traders,
   loading,
@@ -57,6 +45,9 @@ export default function RankingSection({
   error,
   onRetry,
   onRefresh,
+  totalCount,
+  categoryCounts,
+  fetchPage,
 }: RankingSectionProps) {
   const {
     language,
@@ -92,12 +83,9 @@ export default function RankingSection({
     handleFilterToggle,
     formatLastUpdated,
     router,
-  } = useRankingFilters({ traders, activeTimeRange })
+  } = useRankingFilters({ traders, activeTimeRange, totalCount, categoryCounts, fetchPage })
 
-  // tableReady / ssrTable tracking removed — the Phase 1 #ssr-homepage-shell in page.tsx
-  // handles the SSR fallback. CSS hides it once #homepage-interactive mounts.
-
-  // Leaderboard movers (risers/fallers) — deferred until browser is idle to reduce TBT
+  // Leaderboard movers
   const [movers, setMovers] = useState<{ risers: Array<{ platform: string; trader_key: string; rank: number; arena_score: number | null; roiDelta: number; handle: string | null; avatar_url: string | null }>; fallers: Array<{ platform: string; trader_key: string; rank: number; arena_score: number | null; roiDelta: number; handle: string | null; avatar_url: string | null }> }>({ risers: [], fallers: [] })
   useEffect(() => {
     const doFetch = () => {
@@ -106,7 +94,6 @@ export default function RankingSection({
         .then(data => { if (data?.risers || data?.fallers) setMovers({ risers: data.risers || [], fallers: data.fallers || [] }) })
         .catch((err) => { if (err instanceof Error && err.name === 'AbortError') return; console.warn('[RankingSection] movers fetch failed:', err) })
     }
-    // Defer movers fetch — it's below-fold, non-critical data
     if ('requestIdleCallback' in window) {
       const id = requestIdleCallback(doFetch, { timeout: 5000 })
       return () => cancelIdleCallback(id)
@@ -117,16 +104,9 @@ export default function RankingSection({
   }, [])
 
   return (
-    <section
-      className="home-ranking-section contain-layout-style"
-      style={{ minWidth: 0 }}
-    >
-      {/* Time range selector (7D / 30D / 90D) */}
+    <section className="home-ranking-section contain-layout-style" style={{ minWidth: 0 }}>
       <div className="ranking-time-range-bar">
-        <TimeRangeSelector
-          activeRange={activeTimeRange}
-          onChange={onTimeRangeChange}
-        />
+        <TimeRangeSelector activeRange={activeTimeRange} onChange={onTimeRangeChange} />
       </div>
 
       <AdvancedFilterPanel
@@ -148,7 +128,7 @@ export default function RankingSection({
         language={language}
         selectedExchange={selectedExchange}
         advancedFilteredCount={advancedFiltered.length}
-        tradersCount={traders.length}
+        tradersCount={totalCount || traders.length}
         hasActiveFilters={hasActiveFilters}
         onResetFilters={handleResetFilters}
       />
@@ -174,9 +154,10 @@ export default function RankingSection({
         onSortChange={handleSortChange}
         onPageChange={handlePageChange}
         onSearchChange={handleSearchChange}
+        serverTotalCount={totalCount}
+        categoryCounts={categoryCounts}
       />
 
-      {/* Leaderboard movers — risers & fallers (below fold, minimal CLS impact) */}
       <div className="contain-layout-style">
         {(movers.risers.length > 0 || movers.fallers.length > 0) && (
           <div style={{ marginTop: 16, marginBottom: 16 }}>
@@ -185,25 +166,13 @@ export default function RankingSection({
         )}
       </div>
 
-      {/* ProUpgradeCTA — reserve space to prevent CLS when it appears */}
       <div className="contain-layout-style" style={{ minHeight: !isPro && !loading && advancedFiltered.length > FREE_LEADERBOARD_LIMIT ? undefined : 0 }}>
         {!isPro && !loading && advancedFiltered.length > FREE_LEADERBOARD_LIMIT && (
-          <ProUpgradeCTA
-            language={language}
-            t={t}
-            freeLimit={FREE_LEADERBOARD_LIMIT}
-            onUpgrade={() => router.push('/pricing')}
-          />
+          <ProUpgradeCTA language={language} t={t} freeLimit={FREE_LEADERBOARD_LIMIT} onUpgrade={() => router.push('/pricing')} />
         )}
       </div>
 
-      <RankingFooter
-        loading={loading}
-        lastUpdated={lastUpdated}
-        formatLastUpdated={formatLastUpdated}
-        t={t}
-        onRefresh={onRefresh}
-      />
+      <RankingFooter loading={loading} lastUpdated={lastUpdated} formatLastUpdated={formatLastUpdated} t={t} onRefresh={onRefresh} />
     </section>
   )
 }
