@@ -205,30 +205,16 @@ export function ScoreBreakdownSection({
           <ScoreBar
             label={t('returnScore')}
             score={periodReturnScore ?? null}
-            maxScore={70}
+            maxScore={60}
             isVisible={isVisible}
             delay={500}
           />
           <ScoreBar
             label={t('pnlScore')}
             score={periodPnlScore ?? null}
-            maxScore={15}
+            maxScore={40}
             isVisible={isVisible}
             delay={550}
-          />
-          <ScoreBar
-            label={t('drawdownScore')}
-            score={periodDrawdownScore ?? null}
-            maxScore={8}
-            isVisible={isVisible}
-            delay={600}
-          />
-          <ScoreBar
-            label={t('stabilityScore')}
-            score={periodStabilityScore ?? null}
-            maxScore={7}
-            isVisible={isVisible}
-            delay={700}
           />
         </Box>
         {/* 雷达图：优先使用V3三维度分数，回退到4维映射 */}
@@ -245,8 +231,8 @@ export function ScoreBreakdownSection({
         </Box>
       </Box>
 
-      {/* 数据置信度提示 */}
-      {performance.score_confidence && performance.score_confidence !== 'full' && (
+      {/* 数据置信度提示 — only show for 'minimal' (no PnL data), not 'partial' which is misleading in V3 */}
+      {performance.score_confidence === 'minimal' && (
         <Box
           style={{
             marginTop: tokens.spacing[3],
