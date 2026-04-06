@@ -57,12 +57,14 @@ export async function getHeroStats(): Promise<HeroStats> {
     if (error) {
       // RPC 不存在时回退到直接查询
       if (error.code === 'PGRST202') {
-        // Count only 90D season to avoid inflated numbers
-        // (same trader appears once per season: 7D + 30D + 90D)
+        // Count only 90D season, matching the same filters as the ranking table
+        // to ensure the hero number matches what users can actually browse.
         const { count, error: countError } = await supabase
           .from('leaderboard_ranks')
           .select('*', { count: 'exact', head: true })
           .eq('season_id', '90D')
+          .gt('arena_score', 0)
+          .or('is_outlier.is.null,is_outlier.eq.false')
 
         if (countError) {
           logger.warn('[getHeroStats] Count query failed, using defaults', countError)
