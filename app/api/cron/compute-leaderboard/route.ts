@@ -112,7 +112,10 @@ export async function GET(request: NextRequest) {
       const cached = await tieredGet(IDEMPOTENCY_KEY, 'hot')
       if (!cached.data) { await tieredSet(IDEMPOTENCY_KEY, { startedAt: new Date().toISOString() }, 'hot', []); lockAcquired = true }
     }
-  } catch { lockAcquired = true }
+  } catch (err) {
+    logger.warn('[compute-leaderboard] Redis lock failed, proceeding without lock:', err instanceof Error ? err.message : String(err))
+    lockAcquired = true
+  }
   if (!lockAcquired) {
     return NextResponse.json({ ok: true, message: 'Already running (atomic lock)', cached: true })
   }

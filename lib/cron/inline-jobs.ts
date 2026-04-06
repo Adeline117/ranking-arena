@@ -72,8 +72,9 @@ export async function runWorkerInline(): Promise<InlineJobResult> {
         return { name, status: 'success', durationMs: Date.now() - start, detail: { skipped: true, reason: 'claim_refresh_job RPC not available' } }
       }
       firstJob = jobs?.[0] ?? null
-    } catch {
-      // RPC function doesn't exist — gracefully skip
+    } catch (err) {
+      // RPC function doesn't exist — gracefully skip, but log the actual error
+      logger.warn('[inline-jobs] claim_refresh_job RPC error:', err instanceof Error ? err.message : String(err))
       return { name, status: 'success', durationMs: Date.now() - start, detail: { skipped: true, reason: 'claim_refresh_job RPC not available' } }
     }
 
