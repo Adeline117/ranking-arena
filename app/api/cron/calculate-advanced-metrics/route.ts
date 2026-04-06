@@ -27,7 +27,7 @@ import { env } from '@/lib/env'
 export const dynamic = 'force-dynamic'
 export const maxDuration = 300 // 5 minutes
 
-const BATCH_SIZE = 50
+const BATCH_SIZE = 500
 
 export async function POST(request: NextRequest) {
   // Verify cron secret
