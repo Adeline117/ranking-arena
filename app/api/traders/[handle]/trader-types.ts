@@ -75,6 +75,7 @@ export interface StatsDetailData {
   copiers_count: number | null
   winning_positions: number | null
   total_positions: number | null
+  total_trades: number | null
   avg_holding_time_hours: number | null
   avg_profit: number | null
   avg_loss: number | null

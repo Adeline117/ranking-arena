@@ -14,6 +14,7 @@ import { usePremium } from '@/lib/premium/hooks'
 import { clearSubscriptionCache } from '@/app/components/home/hooks/useSubscription'
 import { getCsrfHeaders } from '@/lib/api/client'
 import { logger } from '@/lib/logger'
+import { trackEvent } from '@/lib/analytics/track'
 
 // 图标组件
 const CheckCircleIcon = ({ size = 64 }: { size?: number }) => (
@@ -185,6 +186,7 @@ function PaymentSuccessContent() {
         clearSubscriptionCache()
         await refreshPremium()
         setVerificationStatus('success')
+        trackEvent('pro_subscribe')
         showToast(
           t('membershipActivated'),
           'success'
@@ -235,6 +237,7 @@ function PaymentSuccessContent() {
       if (isProNow) {
         await refreshPremium()
         setVerificationStatus('success')
+        trackEvent('pro_subscribe')
         showToast(
           t('membershipActivated'),
           'success'
