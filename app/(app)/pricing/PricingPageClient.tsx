@@ -285,7 +285,6 @@ export default function PricingPageClient({ lifetimeCount = 0 }: PricingPageClie
                 : resolved(t('signUpForPro'), 'signUpForPro', 'Sign Up for Pro')}
             </Link>
 
-            {process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY?.startsWith('pk_test') && (
             <div style={{
               marginTop: tokens.spacing[4],
               padding: `${tokens.spacing[3]} ${tokens.spacing[4]}`,
@@ -298,10 +297,9 @@ export default function PricingPageClient({ lifetimeCount = 0 }: PricingPageClie
               fontWeight: 600,
             }}>
               {locale === 'zh'
-                ? '所有 Pro 功能限时免费开放中'
-                : 'All Pro features are free for a limited time'}
+                ? '所有功能限时免费'
+                : 'All features are free for a limited time'}
             </div>
-            )}
           </div>
         </div>
 

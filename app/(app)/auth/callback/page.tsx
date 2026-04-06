@@ -99,9 +99,8 @@ function AuthCallbackContent() {
         const now = Date.now()
         const isNewUser = now - createdAt < 30_000
 
-        // New users → onboarding (preserve returnUrl so they land on right page after)
-        const onboardingDest = isSafeReturn ? `/onboarding?returnUrl=${encodeURIComponent(returnUrl!)}` : '/onboarding'
-        router.replace(isAddAccount ? '/' : (isNewUser ? onboardingDest : defaultRedirect))
+        // New users → homepage with welcome banner (skip complex onboarding)
+        router.replace(isAddAccount ? '/' : (isNewUser ? '/?welcome=1' : defaultRedirect))
       } else {
         // Wait a moment for supabase to process the hash fragment
         setTimeout(async () => {

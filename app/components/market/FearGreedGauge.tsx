@@ -34,9 +34,9 @@ export default function FearGreedGauge() {
       .then((r) => r.json())
       .then((json) => {
         if (json.current) {
-          // Hide stale data: if timestamp is older than 48 hours, treat as error
+          // Hide stale data: if timestamp is older than 24 hours, hide entirely
           const ts = Number(json.current.timestamp) * 1000
-          if (Date.now() - ts > 48 * 60 * 60 * 1000) {
+          if (Date.now() - ts > 24 * 60 * 60 * 1000) {
             setError('stale')
             return
           }
