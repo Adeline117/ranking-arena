@@ -884,8 +884,14 @@ export async function runEnrichment(params: {
                 const walletAum = fetchResults.walletAum as number | null
 
                 // --- Phase 2: Fallback equity curve from DB snapshots ---
-                if (curve.length === 0) {
-                  curve = await buildEquityCurveFromSnapshots(supabase, platformKey, traderId, days)
+                // If API returned sparse data (<5 points), check if daily snapshots have more.
+                // This catches platforms where the API returns 1-4 points but we've accumulated
+                // 10-20+ daily snapshots over time.
+                if (curve.length < 5) {
+                  const dbCurve = await buildEquityCurveFromSnapshots(supabase, platformKey, traderId, days)
+                  if (dbCurve.length > curve.length) {
+                    curve = dbCurve
+                  }
                 }
 
                 // --- Phase 3: Sequential DB writes (depend on fetch results) ---
