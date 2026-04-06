@@ -65,6 +65,7 @@ export type TraderPageData = {
   equityCurve?: EquityCurveData
   assetBreakdown?: AssetBreakdownData
   trackedSince?: string
+  lastUpdated?: string | null
 }
 
 export type ProfileTabKey = 'overview' | 'stats' | 'portfolio'
