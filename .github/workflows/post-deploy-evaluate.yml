@@ -1,0 +1,38 @@
+name: Post-Deploy Evaluate
+
+on:
+  deployment_status:
+
+jobs:
+  evaluate:
+    if: github.event.deployment_status.state == 'success' && github.event.deployment.environment == 'Production'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Wait for deployment to stabilize
+        run: sleep 30
+
+      - name: Run Pipeline Evaluator
+        id: evaluate
+        run: |
+          RESPONSE=$(curl -s --max-time 240 \
+            -X POST \
+            -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}" \
+            "https://www.arenafi.org/api/hooks/post-deploy?deploy_id=${{ github.event.deployment.id }}")
+
+          echo "$RESPONSE" | jq .
+
+          SCORE=$(echo "$RESPONSE" | jq -r '.score // 0')
+          OK=$(echo "$RESPONSE" | jq -r '.ok // false')
+
+          echo "score=$SCORE" >> $GITHUB_OUTPUT
+          echo "ok=$OK" >> $GITHUB_OUTPUT
+
+          if [ "$OK" != "true" ]; then
+            echo "::warning::Post-deploy score $SCORE/100 is below threshold"
+          fi
+
+      - name: Report result
+        run: |
+          echo "Score: ${{ steps.evaluate.outputs.score }}/100"
+          echo "Passed: ${{ steps.evaluate.outputs.ok }}"
