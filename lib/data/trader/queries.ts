@@ -76,7 +76,7 @@ export async function getLeaderboard(supabase: SupabaseClient, params: {
   minScore?: number
   excludeOutliers?: boolean
   sortBy?: 'rank' | 'arena_score' | 'roi' | 'pnl'
-}): Promise<{ traders: UnifiedTrader[]; total: number }> {
+}): Promise<{ traders: UnifiedTrader[]; total: number; error?: string }> {
   const {
     platform,
     period = '90D',
