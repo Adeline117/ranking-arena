@@ -4,7 +4,6 @@
  */
 
 import { validatePlatform } from '@/lib/config/platforms'
-import { getSharedRedis } from '@/lib/cache/redis-client'
 import { getSupabaseAdmin } from '@/lib/supabase/server'
 import { raceWithTimeout } from '@/lib/utils/race-with-timeout'
 import {
@@ -173,16 +172,15 @@ async function withRetry<T>(
   throw lastError
 }
 
-
 // ============================================
 // Dead-letter queue (DLQ) for enrichment failures
 // Tracks per-trader failure counts in Redis. After MAX_DLQ_RETRIES consecutive
-// failures the trader is moved to a dead-letter set for manual review.
-// Keys:  enrichment:failed:{platform}:{trader_id}  -> JSON { count, lastError, lastFailedAt }
-// Set:   enrichment:dead-letter  -> set of "{platform}:{trader_id}" strings
+// failures, the trader is moved to a dead-letter set for manual review.
+// Keys:  enrichment:failed:{platform}:{trader_id} → JSON { count, lastError, lastFailedAt }
+// Set:   enrichment:dead-letter → set of "{platform}:{trader_id}" strings
 // ============================================
 const MAX_DLQ_RETRIES = 3
-const DLQ_KEY_TTL_SECONDS = 86400 * 7 // 7 days: auto-expire stale failure records
+const DLQ_KEY_TTL_SECONDS = 86400 * 7 // 7 days — auto-expire stale failure records
 
 interface DlqEntry {
   count: number
@@ -194,7 +192,7 @@ interface DlqEntry {
 async function recordEnrichmentFailure(
   platform: string,
   traderId: string,
-  errorMsg: string,
+  errorMsg: string
 ): Promise<boolean> {
   try {
     const redis = await getSharedRedis()
@@ -210,19 +208,19 @@ async function recordEnrichmentFailure(
     }
 
     if (count >= MAX_DLQ_RETRIES) {
+      // Move to dead-letter set and clean up the per-trader key
       await redis.sadd('enrichment:dead-letter', `${platform}:${traderId}`)
       await redis.del(key)
-      logger.warn(
-        `[DLQ] ${platform}/${traderId} moved to dead-letter after ${count} failures: ${errorMsg.slice(0, 100)}`,
-      )
+      logger.warn(`[DLQ] ${platform}/${traderId} moved to dead-letter after ${count} failures: ${errorMsg.slice(0, 100)}`)
       return true
     }
 
     await redis.set(key, entry, { ex: DLQ_KEY_TTL_SECONDS })
     return false
-  } catch (dlqErr) {
+  } catch (err) {
+    // DLQ tracking is best-effort — never block enrichment
     logger.warn(`[DLQ] Failed to record failure for ${platform}/${traderId}`, {
-      error: dlqErr instanceof Error ? dlqErr.message : String(dlqErr),
+      error: err instanceof Error ? err.message : String(err),
     })
     return false
   }
@@ -245,22 +243,25 @@ async function getRetryableTraders(platform: string): Promise<string[]> {
     const redis = await getSharedRedis()
     if (!redis) return []
 
+    // Scan for enrichment:failed:{platform}:* keys
+    // Upstash Redis scan returns [cursor, keys] — iterate until cursor is 0
     const retryIds: string[] = []
     const prefix = `enrichment:failed:${platform}:`
     let cursor = 0
     do {
-      const result = await redis.scan(cursor, { match: `${prefix}*`, count: 100 })
-      cursor = typeof result[0] === 'number' ? result[0] : Number(result[0])
-      for (const key of result[1]) {
+      const [nextCursor, keys] = await redis.scan(cursor, { match: `${prefix}*`, count: 100 })
+      cursor = typeof nextCursor === 'number' ? nextCursor : Number(nextCursor)
+      for (const key of keys) {
+        // Extract trader ID from key
         const traderId = (key as string).slice(prefix.length)
         if (traderId) retryIds.push(traderId)
       }
     } while (cursor !== 0)
 
     return retryIds
-  } catch (dlqErr) {
+  } catch (err) {
     logger.warn(`[DLQ] Failed to get retryable traders for ${platform}`, {
-      error: dlqErr instanceof Error ? dlqErr.message : String(dlqErr),
+      error: err instanceof Error ? err.message : String(err),
     })
     return []
   }
@@ -753,21 +754,6 @@ export async function runEnrichment(params: {
       traders = dbTraders
     }
 
-    // DLQ retry: prepend previously-failed traders so they get retried first
-    if (!providedKeys) {
-      const retryIds = await getRetryableTraders(platformKey)
-      if (retryIds.length > 0) {
-        const existingIds = new Set(traders.map((t: { source_trader_id: string }) => t.source_trader_id))
-        const newRetries = retryIds
-          .filter((id: string) => !existingIds.has(id))
-          .map((id: string) => ({ source_trader_id: id }))
-        if (newRetries.length > 0) {
-          traders = [...newRetries, ...traders]
-          logger.info(`[DLQ] ${platformKey}: prepended ${newRetries.length} retry candidates`)
-        }
-      }
-    }
-
     logger.warn(`[enrich] Processing ${traders.length} ${platformKey} traders for ${period} (timeout: ${platformTimeoutMs / 1000}s)`)
 
     for (let i = 0; i < traders.length; i += config.concurrency) {
@@ -1057,8 +1043,6 @@ export async function runEnrichment(params: {
                 }
 
                 results[platformKey].enriched++
-                // Clear DLQ tracking on success (trader recovered)
-                clearEnrichmentFailure(platformKey, traderId).catch(() => {})
               })(), traderTimeoutMs, `${platformKey}/${traderId}`)
           } catch (err) {
             results[platformKey].failed++
@@ -1066,8 +1050,6 @@ export async function runEnrichment(params: {
             if (results[platformKey].errors.length < 5) {
               results[platformKey].errors.push(`${traderId}: ${errMsg}`)
             }
-            // Record failure for DLQ tracking (best-effort, fire-and-forget)
-            recordEnrichmentFailure(platformKey, traderId, errMsg).catch(() => {})
             throw err // Re-throw to be caught by allSettled
           } finally {
             clearTimeout(traderTimer)
@@ -1159,12 +1141,5 @@ export async function runEnrichment(params: {
     await plog.success(totalEnriched, { period, duration, totalFailed, note: `${totalFailed} partial failures (acceptable)` })
   }
 
-  // Report as not-ok if >50% of enriched traders had suppressed API errors
-  // (data returned as empty — charts will show blank)
-  const suppressedRatio = totalEnriched > 0 ? totalSuppressedErrors / totalEnriched : 0
-  const ok = totalFailed === 0 && suppressedRatio < 0.5
-  if (suppressedRatio >= 0.5 && totalSuppressedErrors > 5) {
-    logger.error(`[enrich] ${period}: ${totalSuppressedErrors} suppressed errors in ${totalEnriched} enriched traders (${Math.round(suppressedRatio * 100)}%) — data quality degraded`)
-  }
-  return { ok, duration, period, summary: { total, enriched: totalEnriched, failed: totalFailed, suppressedErrors: totalSuppressedErrors }, results }
+  return { ok: totalFailed === 0, duration, period, summary: { total, enriched: totalEnriched, failed: totalFailed, suppressedErrors: totalSuppressedErrors }, results }
 }
