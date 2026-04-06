@@ -12,7 +12,9 @@
    - JS idle callback removes the SSR DOM nodes for cleanup.
    - Phase 2 has min-height matching SSR content (~1650px) to prevent CLS
      when SSR shells collapse to 0. */
-:has(#homepage-interactive) #ssr-hero-shell,
+/* SSR hero: NEVER hidden — it IS the LCP element (~1.2s on slow 4G).
+   Phase 2 does NOT render its own hero; SSR hero stays visible permanently.
+   Only the ranking table is collapsed (replaced by Phase 2's interactive table). */
 :has(#homepage-interactive) #ssr-ranking-table {
   content-visibility: hidden;
   height: 0;
