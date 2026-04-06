@@ -100,24 +100,74 @@ export async function GET(request: NextRequest) {
     }
 
     // Cleanup old pipeline_logs (>90 days) — operational logs only
+    // Uses batched delete (50k/batch) to handle backlog if cleanup was missed
     let pipelineLogsCleaned = 0
     try {
       const logsCutoff = new Date(Date.now() - 90 * 24 * 3600 * 1000).toISOString()
-      const { count, error: logsErr } = await supabase
-        .from('pipeline_logs')
-        .delete({ count: 'exact' })
-        .lt('started_at', logsCutoff)
-        .limit(10000)
-      if (logsErr) {
-        logger.warn(`[cleanup-data] pipeline_logs cleanup error: ${logsErr.message}`)
-      } else {
-        pipelineLogsCleaned = count ?? 0
-        if (pipelineLogsCleaned > 0) {
-          logger.info(`[cleanup-data] Cleaned up ${pipelineLogsCleaned} old pipeline_logs (>90d)`)
+      let batchDeleted = 0
+      do {
+        const { count, error: logsErr } = await supabase
+          .from('pipeline_logs')
+          .delete({ count: 'exact' })
+          .lt('started_at', logsCutoff)
+          .limit(50000)
+        if (logsErr) {
+          logger.warn(`[cleanup-data] pipeline_logs cleanup error: ${logsErr.message}`)
+          break
         }
+        batchDeleted = count ?? 0
+        pipelineLogsCleaned += batchDeleted
+      } while (batchDeleted === 50000)
+      if (pipelineLogsCleaned > 0) {
+        logger.info(`[cleanup-data] Cleaned up ${pipelineLogsCleaned} old pipeline_logs (>90d)`)
       }
     } catch (err) {
       logger.warn(`[cleanup-data] pipeline_logs cleanup failed: ${err}`)
+    }
+
+    // Cleanup old stripe_events (>30 days) — Stripe retries within 3 days max
+    let stripeEventsCleaned = 0
+    try {
+      const stripeEventsCutoff = new Date(Date.now() - 30 * 24 * 3600 * 1000).toISOString()
+      const { count, error: stripeErr } = await supabase
+        .from('stripe_events')
+        .delete({ count: 'exact' })
+        .lt('processed_at', stripeEventsCutoff)
+      if (stripeErr) {
+        if (!stripeErr.message?.includes('does not exist')) {
+          logger.warn(`[cleanup-data] stripe_events cleanup error: ${stripeErr.message}`)
+        }
+      } else {
+        stripeEventsCleaned = count ?? 0
+        if (stripeEventsCleaned > 0) {
+          logger.info(`[cleanup-data] Cleaned up ${stripeEventsCleaned} old stripe_events (>30d)`)
+        }
+      }
+    } catch (err) {
+      logger.warn(`[cleanup-data] stripe_events cleanup failed: ${err}`)
+    }
+
+    // Cleanup old liquidations (>180 days) — market sentiment data only
+    let liquidationsCleaned = 0
+    try {
+      const liqCutoff = new Date(Date.now() - 180 * 24 * 3600 * 1000).toISOString()
+      const { count, error: liqErr } = await supabase
+        .from('liquidations')
+        .delete({ count: 'exact' })
+        .lt('created_at', liqCutoff)
+        .limit(50000)
+      if (liqErr) {
+        if (!liqErr.message?.includes('does not exist')) {
+          logger.warn(`[cleanup-data] liquidations cleanup error: ${liqErr.message}`)
+        }
+      } else {
+        liquidationsCleaned = count ?? 0
+        if (liquidationsCleaned > 0) {
+          logger.info(`[cleanup-data] Cleaned up ${liquidationsCleaned} old liquidations (>180d)`)
+        }
+      }
+    } catch (err) {
+      logger.warn(`[cleanup-data] liquidations cleanup failed: ${err}`)
     }
 
     // ── Metrics refresh (keep) ────────────────────────────────────
@@ -144,13 +194,15 @@ export async function GET(request: NextRequest) {
     const duration = Date.now() - startTime
     const hasErrors = stepErrors.length > 0
 
-    const totalCleaned = hotTopicsCleaned + flashNewsCleaned + notificationsCleaned + pipelineLogsCleaned
+    const totalCleaned = hotTopicsCleaned + flashNewsCleaned + notificationsCleaned + pipelineLogsCleaned + stripeEventsCleaned + liquidationsCleaned
 
     const resultMeta = {
       hotTopicsCleaned,
       flashNewsCleaned,
       notificationsCleaned,
       pipelineLogsCleaned,
+      stripeEventsCleaned,
+      liquidationsCleaned,
       metricsRefresh: metricsResult,
       stepErrors: hasErrors ? stepErrors : undefined,
       note: 'trader snapshots/daily/positions are NEVER deleted (long-term archival)',
