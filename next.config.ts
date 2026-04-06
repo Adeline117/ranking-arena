@@ -1,5 +1,8 @@
 import type { NextConfig } from "next";
-import { withSentryConfig } from "@sentry/nextjs";
+// withSentryConfig REMOVED — it injects ~194KB Sentry SDK into every page's
+// initial bundle, blocking LCP. Sentry is now loaded entirely via
+// instrumentation-client.ts (requestIdleCallback + dynamic import).
+// Source maps are uploaded via sentry-cli in CI.
 
 // Bundle Analyzer 条件导入
 /* eslint-disable @typescript-eslint/no-require-imports */
@@ -622,25 +625,6 @@ const nextConfig = {
   },
 };
 
-// 导出配置（Sentry + Bundle Analyzer）
-export default withSentryConfig(withBundleAnalyzer(nextConfig as NextConfig), {
-  org: process.env.SENTRY_ORG,
-  project: process.env.SENTRY_PROJECT,
-  authToken: process.env.SENTRY_AUTH_TOKEN,
-  silent: true,
-  sourcemaps: {
-    deleteSourcemapsAfterUpload: true,
-  },
-  widenClientFileUpload: true,
-  webpack: {
-    treeshake: {
-      removeDebugLogging: true,
-      // Strip Session Replay sub-features from client bundle
-      // Replay is lazy-loaded via instrumentation-client.ts
-      excludeReplayIframe: true,
-      excludeReplayShadowDOM: true,
-      excludeReplayCompressionWorker: true,
-    },
-    automaticVercelMonitors: true,
-  },
-});
+// Export config — Sentry wrapper removed to eliminate 194KB from initial bundle.
+// Sentry SDK loads lazily via instrumentation-client.ts (requestIdleCallback).
+export default withBundleAnalyzer(nextConfig as NextConfig);
