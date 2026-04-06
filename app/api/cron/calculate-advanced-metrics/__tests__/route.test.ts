@@ -128,40 +128,32 @@ describe('POST /api/cron/calculate-advanced-metrics', () => {
       { id: 's1', platform: 'binance_futures', trader_key: 't1', window: '90D', roi_pct: '50', pnl_usd: '10000', max_drawdown: '-10', win_rate: '0.6' },
     ]
 
-    const dailyReturns = Array.from({ length: 30 }, (_, i) => ({
-      date: `2026-02-${String(i + 1).padStart(2, '0')}`,
-      daily_return_pct: String(Math.random() * 2 - 0.5),
+    const eqCurveData = Array.from({ length: 30 }, (_, i) => ({
+      source_trader_id: 't1',
+      data_date: `2026-02-${String(i + 1).padStart(2, '0')}`,
+      roi_pct: String(i * 1.5),
     }))
 
+    // Use chainable for all tables — the query chain is:
+    // trader_snapshots_v2: select → is → not → order → limit (fetch) OR update → eq (write)
+    // trader_equity_curve: select → eq → in → order → limit
+    // trader_daily_snapshots: select → in → gte → order
+    let snapshotsCallCount = 0
     mockFrom.mockImplementation((table: string) => {
       if (table === 'trader_snapshots_v2') {
-        return {
-          select: jest.fn().mockReturnValue({
-            or: jest.fn().mockReturnValue({
-              not: jest.fn().mockReturnValue({
-                order: jest.fn().mockReturnValue({
-                  limit: jest.fn().mockResolvedValue({ data: snapshots, error: null }),
-                }),
-              }),
-            }),
-          }),
-          update: jest.fn().mockReturnValue({
-            eq: jest.fn().mockResolvedValue({ error: null }),
-          }),
+        snapshotsCallCount++
+        if (snapshotsCallCount === 1) {
+          // First call is the fetch query
+          return chainable({ data: snapshots, error: null })
         }
+        // Subsequent calls are updates
+        return chainable({ error: null })
+      }
+      if (table === 'trader_equity_curve') {
+        return chainable({ data: eqCurveData, error: null })
       }
       if (table === 'trader_daily_snapshots') {
-        return {
-          select: jest.fn().mockReturnValue({
-            eq: jest.fn().mockReturnValue({
-              eq: jest.fn().mockReturnValue({
-                gte: jest.fn().mockReturnValue({
-                  order: jest.fn().mockResolvedValue({ data: dailyReturns, error: null }),
-                }),
-              }),
-            }),
-          }),
-        }
+        return chainable({ data: [], error: null })
       }
       return chainable({ data: null, error: null })
     })
@@ -178,17 +170,8 @@ describe('POST /api/cron/calculate-advanced-metrics', () => {
   // ---- Empty data ----------------------------------------------------------
 
   it('handles no snapshots gracefully', async () => {
-    mockFrom.mockImplementation(() => ({
-      select: jest.fn().mockReturnValue({
-        or: jest.fn().mockReturnValue({
-          not: jest.fn().mockReturnValue({
-            order: jest.fn().mockReturnValue({
-              limit: jest.fn().mockResolvedValue({ data: [], error: null }),
-            }),
-          }),
-        }),
-      }),
-    }))
+    // All tables return empty — chainable handles any query chain
+    mockFrom.mockImplementation(() => chainable({ data: [], error: null }))
 
     const res = await POST(createCronRequest(CRON_SECRET))
     const body = await res.json()
@@ -212,28 +195,20 @@ describe('POST /api/cron/calculate-advanced-metrics', () => {
   })
 
   it('falls back when advanced columns do not exist', async () => {
+    // First call returns column-not-exist error, subsequent calls succeed
+    let snapshotsCallCount = 0
     mockFrom.mockImplementation((table: string) => {
       if (table === 'trader_snapshots_v2') {
-        return {
-          select: jest.fn().mockReturnValue({
-            or: jest.fn().mockReturnValue({
-              not: jest.fn().mockReturnValue({
-                order: jest.fn().mockReturnValue({
-                  limit: jest.fn().mockResolvedValue({
-                    data: null,
-                    error: { message: 'column sortino_ratio does not exist', code: '42703' },
-                  }),
-                }),
-              }),
-            }),
-            // Fallback query path
-            not: jest.fn().mockReturnValue({
-              order: jest.fn().mockReturnValue({
-                limit: jest.fn().mockResolvedValue({ data: [], error: null }),
-              }),
-            }),
-          }),
+        snapshotsCallCount++
+        if (snapshotsCallCount === 1) {
+          // Primary query fails with missing column
+          return chainable({
+            data: null,
+            error: { message: 'column sortino_ratio does not exist', code: '42703' },
+          })
         }
+        // Fallback query succeeds with empty data
+        return chainable({ data: [], error: null })
       }
       return chainable({ data: null, error: null })
     })
