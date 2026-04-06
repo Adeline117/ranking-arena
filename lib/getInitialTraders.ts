@@ -72,7 +72,7 @@ export async function getInitialTraders(
     if (cached && cached.traders && cached.traders.length > 0) {
       return cached
     }
-  } catch {
+  } catch (_err) {
     // Redis unavailable — fall through to DB
   }
 
