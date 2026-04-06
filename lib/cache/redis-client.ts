@@ -80,6 +80,20 @@ export function recordRedisError(_error: unknown): void {
     dataLogger.warn(`[Redis] ${consecutiveErrors} consecutive errors, switching to memory cache`)
     healthy = false
     lastHealthCheck = Date.now()
+    // Alert on Redis transition to unhealthy (dynamic import to avoid circular deps)
+    const alertPromise = import('@/lib/alerts/send-alert').then(m =>
+      m.sendRateLimitedAlert(
+        {
+          title: 'Redis DOWN — memory fallback active',
+          message: `Redis failed ${consecutiveErrors} consecutive times. All cache operations using in-memory fallback. Rankings, rate limiting, and dedup affected.`,
+          level: 'critical',
+          details: { consecutiveErrors },
+        },
+        'redis-down',
+        30 * 60 * 1000
+      )
+    ).catch(() => undefined)
+    fireAndForget(alertPromise, 'redis-down-alert')
   }
 }
 
