@@ -123,7 +123,11 @@ export async function getLeaderboard(supabase: SupabaseClient, params: {
 
   query = query.range(offset, offset + limit - 1)
 
-  const { data, error, count } = await query
+  // 10s timeout — leaderboard queries should be fast (indexed table)
+  const { data, error, count } = await withTimeout(
+    query as unknown as Promise<{ data: Record<string, unknown>[] | null; error: { message: string } | null; count: number | null }>,
+    10_000
+  ).catch(() => ({ data: null as Record<string, unknown>[] | null, error: { message: 'Query timeout after 10000ms' }, count: null as number | null }))
 
   if (error) {
     logger.error('[unified.getLeaderboard] Query error:', error.message)
@@ -465,6 +469,21 @@ export async function searchTraders(supabase: SupabaseClient, params: {
   const { query, limit = 10, platform } = params
 
   if (!query || query.length < 1) return []
+
+  // 8s timeout — search should be fast; prevents UI hang on degraded Supabase
+  return withTimeout(searchTradersInner(supabase, { query: query, limit, platform }), 8_000)
+    .catch((err) => {
+      logger.warn('[unified.searchTraders] Timeout or error:', err instanceof Error ? err.message : String(err))
+      return [] as UnifiedTrader[]
+    })
+}
+
+async function searchTradersInner(supabase: SupabaseClient, params: {
+  query: string
+  limit: number
+  platform?: string
+}): Promise<UnifiedTrader[]> {
+  const { query, limit, platform } = params
 
   const sanitizedQuery = query
     .slice(0, 100)
