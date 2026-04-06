@@ -121,6 +121,7 @@ export class PipelineStorage {
     // 准备数据
     const snapshots = traders.map((t) => ({
       platform: t.platform,
+      market_type: 'futures' as string,
       trader_key: t.trader_id,
       window: t.window.toUpperCase(), // '7D', '30D', '90D'
       roi_pct: t.roi_pct,
@@ -129,15 +130,15 @@ export class PipelineStorage {
       max_drawdown: t.max_drawdown_pct,
       followers: t.followers,
       copiers: t.copiers,
-      aum: t.aum_usd,
       trades_count: t.trades_count,
       arena_score: t.arena_score,
-      arena_score_components: t.arena_score_components,
-      platform_rank: t.platform_rank,
-      trader_type: t.trader_type,
-      confidence_level: t.confidence,
       sharpe_ratio: t.sharpe_ratio,
       sortino_ratio: t.sortino_ratio,
+      metrics: {
+        aum: t.aum_usd || null,
+        platform_rank: t.platform_rank || null,
+        arena_score_components: t.arena_score_components || null,
+      },
       as_of_ts: truncateToHour(t.normalized_at),
       updated_at: new Date().toISOString(),
     }))
@@ -171,17 +172,16 @@ export class PipelineStorage {
       source: t.platform,
       source_trader_id: t.trader_id,
       season_id: seasonId,
-      rank: index + 1, // 假设已排序
+      rank: index + 1,
       roi: t.roi_pct,
       pnl: t.pnl_usd,
       win_rate: t.win_rate_pct,
       max_drawdown: t.max_drawdown_pct,
       arena_score: t.arena_score,
-      return_score: t.arena_score_components.return_score,
-      pnl_score: t.arena_score_components.pnl_score,
-      confidence: t.confidence,
+      profitability_score: t.arena_score_components.return_score,
+      score_completeness: t.confidence,
       trader_type: t.trader_type,
-      updated_at: new Date().toISOString(),
+      computed_at: new Date().toISOString(),
     }))
 
     const { error, count } = await supabase
