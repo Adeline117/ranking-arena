@@ -42,7 +42,7 @@ export default function RankingFooter({
             textAlign: 'center',
           }}
         >
-          {t('dataDelayed') || 'Data may be delayed. Auto-refreshing...'}
+          {t('dataStaleWarning') || 'Data may be delayed'}
         </Box>
       )}
 
