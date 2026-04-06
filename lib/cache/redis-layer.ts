@@ -290,10 +290,11 @@ export async function tieredSet<T>(
 
       return true
     } catch (error) {
-      dataLogger.warn('[RedisLayer] Redis 写入失败:', { key, error, correlationId: correlationId() })
+      dataLogger.warn('[RedisLayer] Redis 写入失败 (memory-only):', { key, error: error instanceof Error ? error.message : String(error), correlationId: correlationId() })
+      return false // Redis write failed — data is memory-only, not persisted cross-instance
     }
   }
-  
+
   return true // 内存缓存已写入
 }
 
