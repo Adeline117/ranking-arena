@@ -1280,13 +1280,19 @@ async function computeSeason(
     logger.info(`[${season}] Arena followers: ${arenaFollowersApplied} traders have followers (${arenaFollowerMap.size} unique trader_ids queried)`)
   }
 
-  // Sort by arena_score desc, then by drawdown, then by id
+  // Sort by arena_score desc, then trust weight (higher trust = higher for ties),
+  // then Sharpe ratio (better risk-adjusted), then stable id.
+  // Trust weight removed from score formula (same skill ≠ different score per exchange)
+  // but kept here as tie-breaker for equal-scoring traders.
   scored.sort((a, b) => {
     const diff = b.arena_score - a.arena_score
     if (Math.abs(diff) > 0.01) return diff
-    const mddA = Math.abs(a.max_drawdown ?? 100)
-    const mddB = Math.abs(b.max_drawdown ?? 100)
-    if (mddA !== mddB) return mddA - mddB
+    const twA = SOURCE_TRUST_WEIGHT[a.source] ?? 0.5
+    const twB = SOURCE_TRUST_WEIGHT[b.source] ?? 0.5
+    if (Math.abs(twB - twA) > 0.01) return twB - twA
+    const srA = a.sharpe_ratio ?? -99
+    const srB = b.sharpe_ratio ?? -99
+    if (Math.abs(srB - srA) > 0.01) return srB - srA
     return a.source_trader_id.localeCompare(b.source_trader_id)
   })
 
