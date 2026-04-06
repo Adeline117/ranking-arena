@@ -100,7 +100,7 @@ export async function getTraderDetails(
       .eq('source_trader_id', traderId).eq('period', '7D')
       .order('data_date', { ascending: true }).limit(7)),
     safeQuery(() => supabase.from('trader_stats_detail')
-      .select('sharpe_ratio, copiers_pnl, copiers_count, winning_positions, total_positions, avg_holding_time_hours, avg_profit, avg_loss, aum, period')
+      .select('sharpe_ratio, copiers_pnl, copiers_count, winning_positions, total_positions, total_trades, avg_holding_time_hours, avg_profit, avg_loss, largest_win, largest_loss, aum, period')
       .in('source', getSourceAliases(sourceType)).eq('source_trader_id', traderId)
       .order('captured_at', { ascending: false }).limit(3)),
     // trackedSince from leaderboard_ranks computed_at (placeholder, resolved below)
@@ -525,9 +525,9 @@ function buildPerformanceObj(
     winning_positions: statsDetail90d?.winning_positions ?? undefined,
     winning_positions_30d: statsDetail30d?.winning_positions ?? undefined,
     winning_positions_7d: statsDetail7d?.winning_positions ?? undefined,
-    total_positions: statsDetail90d?.total_positions ?? undefined,
-    total_positions_30d: statsDetail30d?.total_positions ?? undefined,
-    total_positions_7d: statsDetail7d?.total_positions ?? undefined,
+    total_positions: statsDetail90d?.total_positions ?? statsDetail90d?.total_trades ?? undefined,
+    total_positions_30d: statsDetail30d?.total_positions ?? statsDetail30d?.total_trades ?? undefined,
+    total_positions_7d: statsDetail7d?.total_positions ?? statsDetail7d?.total_trades ?? undefined,
   }
 }
 
@@ -612,7 +612,7 @@ function buildTraderResponse(p: {
         avgLoss: p.statsDetail90d?.avg_loss ?? 0,
         profitableTradesPct: normalizeWinRate(p.snapshot?.win_rate ?? null) ?? 0,
         winningPositions: p.statsDetail90d?.winning_positions ?? undefined,
-        totalPositions: p.statsDetail90d?.total_positions ?? undefined,
+        totalPositions: p.statsDetail90d?.total_positions ?? p.statsDetail90d?.total_trades ?? undefined,
       },
       frequentlyTraded: p.assetBreakdown90d.map(item => ({
         symbol: item.symbol,
