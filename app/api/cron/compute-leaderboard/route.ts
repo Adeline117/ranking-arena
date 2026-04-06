@@ -79,10 +79,12 @@ const MIN_TRADES_COUNT = 1 // Allow all traders with at least 1 trade (DEX trade
 const DEGRADATION_THRESHOLD = 0.70 // 70% — block catastrophic drops only; 85% was too tight (7D hovers at 84% due to ROI filters)
 
 // P1-3: ROI anomaly thresholds per period
+// Must align with arena-score.ts ROI_CAP (10000). Previously 90D was 50000,
+// allowing absurd Bitfinex/Hyperliquid ROI through.
 const ROI_ANOMALY_THRESHOLDS: Record<Period, number> = {
   '7D': 2000,
   '30D': 5000,
-  '90D': 50000,
+  '90D': 10000,
 }
 
 export async function GET(request: NextRequest) {
@@ -1343,6 +1345,12 @@ async function computeSeason(
         } catch (e) { logger.warn(`[${season}] skip counter reset failed: ${e instanceof Error ? e.message : String(e)}`) }
       } else {
         logger.error(`${season}: computed ${scored.length} traders (baseline: ${baselineCount}, ratio: ${(ratio * 100).toFixed(1)}%). SKIPPING — below ${DEGRADATION_THRESHOLD * 100}% threshold (skip ${consecutiveSkips}/${MAX_CONSECUTIVE_SKIPS}).`)
+        sendRateLimitedAlert({
+          title: `Leaderboard ${season} degradation skip ${consecutiveSkips}/${MAX_CONSECUTIVE_SKIPS}`,
+          message: `${season}: ${scored.length}/${baselineCount} traders (${(ratio * 100).toFixed(1)}%). Data preserved but stale. Force-compute at skip ${MAX_CONSECUTIVE_SKIPS}.`,
+          level: consecutiveSkips >= 2 ? 'critical' : 'warning',
+          details: { season, scored: scored.length, baseline: baselineCount, ratio, skip: consecutiveSkips },
+        }, `leaderboard-degrade:${season}`, 60 * 60 * 1000).catch(() => {/* non-blocking */})
         return -1
       }
     }
