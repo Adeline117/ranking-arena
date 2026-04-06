@@ -118,10 +118,11 @@ export async function GET() {
   // - All pass → healthy (200)
   // - DB fail → unhealthy (503)
   // - Redis or freshness fail → degraded (202)
+  // - VPS fail → still healthy (VPS is supplementary, not core infrastructure)
   let status: 'healthy' | 'degraded' | 'unhealthy' = 'healthy'
   if (database.status === 'fail') {
     status = 'unhealthy'
-  } else if (redis.status === 'fail' || freshness.status === 'fail' || vps.status === 'fail') {
+  } else if (redis.status === 'fail' || freshness.status === 'fail') {
     status = 'degraded'
   }
 
