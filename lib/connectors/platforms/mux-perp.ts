@@ -118,7 +118,8 @@ export class MuxPerpConnector extends BaseConnector {
       }))
 
       return { traders, total_available: traders.length, window, fetched_at: new Date().toISOString() }
-    } catch {
+    } catch (err) {
+      this.logger.warn('MUX leaderboard fetch failed:', err instanceof Error ? err.message : String(err))
       return { traders: [], total_available: 0, window, fetched_at: new Date().toISOString() }
     }
   }
@@ -173,7 +174,8 @@ export class MuxPerpConnector extends BaseConnector {
         },
       }
       return { profile, fetched_at: new Date().toISOString() }
-    } catch {
+    } catch (err) {
+      this.logger.debug('MUX profile fetch failed:', err instanceof Error ? err.message : String(err))
       return null
     }
   }
@@ -328,7 +330,8 @@ export class MuxPerpConnector extends BaseConnector {
       }
 
       return { metrics, quality_flags, fetched_at: new Date().toISOString() }
-    } catch {
+    } catch (err) {
+      this.logger.debug('MUX snapshot fetch failed:', err instanceof Error ? err.message : String(err))
       return null
     }
   }

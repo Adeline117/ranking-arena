@@ -91,8 +91,8 @@ export class BtccFuturesConnector extends BaseConnector {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(reqBody),
           })
-        } catch {
-          // Direct API may be WAF-blocked from Vercel — fallback to VPS proxy
+        } catch (err) {
+          this.logger.debug('BTCC direct API fallback:', err instanceof Error ? err.message : String(err))
           const vpsData = await this.proxyViaVPS<BtccResponse>(url, {
             method: 'POST',
             body: reqBody,

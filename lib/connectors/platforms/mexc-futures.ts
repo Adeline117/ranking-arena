@@ -59,8 +59,8 @@ export class MexcFuturesConnector extends BaseConnector {
       if (res.ok) {
         _rawLb = await res.json() as Record<string, unknown>
       }
-    } catch {
-      // Mobile UA blocked or network error — try VPS scraper as fallback
+    } catch (err) {
+      this.logger.debug('MEXC mobile UA fallback:', err instanceof Error ? err.message : String(err))
     }
 
     // Fallback: VPS Playwright scraper (slow, may timeout with CF WAF)

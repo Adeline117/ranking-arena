@@ -46,7 +46,8 @@ export class OkxSpotConnector extends BaseConnector {
           `https://www.okx.com/api/v5/copytrading/public-lead-traders?instType=SPOT&sortType=pnl&dataRange=${V5_WINDOW_MAP[window]}&pageNo=${page}&limit=${pageSize}`,
           { method: 'GET' }
         )
-      } catch {
+      } catch (err) {
+        this.logger.debug('OKX spot leaderboard page fallback:', err instanceof Error ? err.message : String(err))
         break
       }
 

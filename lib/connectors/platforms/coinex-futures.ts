@@ -53,8 +53,8 @@ export class CoinexFuturesConnector extends BaseConnector {
       const apiUrl = `https://www.coinex.com/res/copy-trading/public/traders?page=${currentPage}&limit=${pageSize}&sort_by=roi&period=${window}`
       try {
         _rawLb = await this.request<Record<string, unknown>>(apiUrl, { method: 'GET' })
-      } catch {
-        // Fallback: proxy the actual API URL through VPS (CoinEx blocks datacenter IPs)
+      } catch (err) {
+        this.logger.debug('CoinEx direct API fallback:', err instanceof Error ? err.message : String(err))
         const vpsData = await this.proxyViaVPS<Record<string, unknown>>(apiUrl)
         if (!vpsData) throw new Error('Both direct API and VPS proxy failed for coinex')
         _rawLb = vpsData
@@ -88,7 +88,8 @@ export class CoinexFuturesConnector extends BaseConnector {
     let _rawProfile: Record<string, unknown>
     try {
       _rawProfile = await this.request<Record<string, unknown>>(profileUrl, { method: 'GET' })
-    } catch {
+    } catch (err) {
+      this.logger.debug('CoinEx profile direct API fallback:', err instanceof Error ? err.message : String(err))
       const vpsData = await this.proxyViaVPS<Record<string, unknown>>(profileUrl)
       if (!vpsData) return null
       _rawProfile = vpsData
@@ -133,7 +134,8 @@ export class CoinexFuturesConnector extends BaseConnector {
     let _rawSnap: Record<string, unknown>
     try {
       _rawSnap = await this.request<Record<string, unknown>>(snapUrl, { method: 'GET' })
-    } catch {
+    } catch (err) {
+      this.logger.debug('CoinEx snapshot direct API fallback:', err instanceof Error ? err.message : String(err))
       const vpsData = await this.proxyViaVPS<Record<string, unknown>>(snapUrl)
       if (!vpsData) return null
       _rawSnap = vpsData

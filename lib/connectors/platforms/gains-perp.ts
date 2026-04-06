@@ -116,7 +116,8 @@ export class GainsPerpConnector extends BaseConnector {
         },
       }
       return { profile, fetched_at: new Date().toISOString() }
-    } catch {
+    } catch (err) {
+      this.logger.debug('Gains profile fetch failed:', err instanceof Error ? err.message : String(err))
       return null
     }
   }
@@ -143,7 +144,8 @@ export class GainsPerpConnector extends BaseConnector {
             traderData = found
             break
           }
-        } catch {
+        } catch (err) {
+          this.logger.debug('Gains chain leaderboard fallback:', err instanceof Error ? err.message : String(err))
           continue
         }
       }
@@ -186,7 +188,8 @@ export class GainsPerpConnector extends BaseConnector {
       }
 
       return { metrics, quality_flags, fetched_at: new Date().toISOString() }
-    } catch {
+    } catch (err) {
+      this.logger.debug('Gains snapshot fetch failed:', err instanceof Error ? err.message : String(err))
       return null
     }
   }

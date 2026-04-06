@@ -105,7 +105,7 @@ export class BinanceWeb3Connector extends BaseConnector {
           let data: BinanceWeb3Response | null = null
           try {
             data = await this.request<BinanceWeb3Response>(url, { headers })
-          } catch { /* direct may be geo-blocked with empty 200 */ }
+          } catch (err) { this.logger.debug('Binance Web3 direct API fallback:', err instanceof Error ? err.message : String(err)) }
           // Binance returns 200 with empty body for geo-blocked requests — fallback to VPS
           if (!data?.data?.list?.length && !(data?.data as Record<string, unknown>)?.data) {
             data = await this.proxyViaVPS<BinanceWeb3Response>(url, { headers }) || data

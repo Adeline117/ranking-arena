@@ -80,8 +80,8 @@ export class WeexFuturesConnector extends BaseConnector {
           is_active: true, raw: item,
         })
       }
-    } catch {
-      // VPS scraper failed
+    } catch (err) {
+      this.logger.debug('Weex VPS scraper fallback:', err instanceof Error ? err.message : String(err))
     }
 
     return { traders: allTraders.slice(0, limit), total_available: allTraders.length, window, fetched_at: new Date().toISOString() }

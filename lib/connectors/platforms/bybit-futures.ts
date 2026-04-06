@@ -78,7 +78,8 @@ export class BybitFuturesConnector extends BaseConnector {
             `https://api2.bybit.com/fapi/beehive/public/v1/common/dynamic-leader-list?timeRange=${timeRange}&dataType=DATA_ROI&page=${page}&pageSize=${pageSize}`,
             { method: 'GET' }
           )
-        } catch {
+        } catch (err) {
+          this.logger.debug('Bybit direct API fallback:', err instanceof Error ? err.message : String(err))
           break
         }
       }

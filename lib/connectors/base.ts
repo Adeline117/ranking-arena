@@ -286,7 +286,7 @@ export abstract class BaseConnector implements PlatformConnector {
           let proxyBody: unknown = null
           if (options?.body) {
             try { proxyBody = typeof options.body === 'string' ? JSON.parse(options.body) : options.body }
-            catch { proxyBody = options.body }
+            catch { /* parse fallback */ proxyBody = options.body }
           }
           response = await fetch(this.config.proxyUrl, {
             method: 'POST',
@@ -463,8 +463,8 @@ export abstract class BaseConnector implements PlatformConnector {
             headers: { 'X-Proxy-Key': vpsKey, 'Accept': 'application/json' },
             signal: AbortSignal.timeout(timeoutMs),
           });
-        } catch {
-          // Port 3457 might be firewalled from Vercel — try routing through proxy
+        } catch (err) {
+          this.logger.debug('VPS scraper direct fetch fallback:', err instanceof Error ? err.message : String(err))
         }
 
         // Strategy 2: Route through proxy (3456) → scraper (localhost:3457)

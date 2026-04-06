@@ -48,8 +48,8 @@ export class HyperliquidPerpConnector extends BaseConnector {
         'https://stats-data.hyperliquid.xyz/Mainnet/leaderboard',
         { method: 'GET' }
       )
-    } catch {
-      // Fallback to POST info endpoint
+    } catch (err) {
+      this.logger.debug('Hyperliquid stats-data fallback:', err instanceof Error ? err.message : String(err))
       const timeWindow = window === '7d' ? 'day' : window === '30d' ? 'month' : 'allTime'
       _rawLb = await this.request<Record<string, unknown>>(
         'https://api.hyperliquid.xyz/info',
@@ -219,8 +219,8 @@ export class HyperliquidPerpConnector extends BaseConnector {
         }
         if (maxDD > 0.01 && maxDD < 200) fillMDD = Math.round(maxDD * 100) / 100
       }
-    } catch {
-      // Fills fetch is non-critical for snapshot
+    } catch (err) {
+      this.logger.debug('Hyperliquid fills fetch fallback:', err instanceof Error ? err.message : String(err))
     }
 
     const metrics: SnapshotMetrics = {

@@ -107,7 +107,7 @@ export class PolymarketPredictionConnector extends BaseConnector {
         if (Array.isArray(valueRaw) && valueRaw.length > 0) {
           aum = this.num(valueRaw[0].value)
         }
-      } catch { /* portfolio value not available — AUM will be null */ }
+      } catch (err) { this.logger.debug('Polymarket portfolio value fallback:', err instanceof Error ? err.message : String(err)) }
 
       const profile: TraderProfile = {
         platform: 'polymarket',
@@ -126,7 +126,8 @@ export class PolymarketPredictionConnector extends BaseConnector {
         provenance: this.buildProvenance(`${GAMMA_API}/public-profile?address=${traderKey}`),
       }
       return { profile, fetched_at: new Date().toISOString() }
-    } catch {
+    } catch (err) {
+      this.logger.debug('Polymarket profile fetch failed:', err instanceof Error ? err.message : String(err))
       return null
     }
   }

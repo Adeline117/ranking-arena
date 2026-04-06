@@ -107,8 +107,8 @@ export class ToobitFuturesConnector extends BaseConnector {
           allTraders.push(this.toTraderSource(entry, id))
         }
       }
-    } catch {
-      // Intentionally swallowed: VPS proxy failed, fall through to direct API strategies
+    } catch (err) {
+      this.logger.debug('Toobit VPS proxy fallback:', err instanceof Error ? err.message : String(err))
     }
 
     // Strategy 2: Direct ranking API (cycles through kind values)
@@ -124,8 +124,8 @@ export class ToobitFuturesConnector extends BaseConnector {
             seen.add(id)
             allTraders.push(this.toTraderSource(entry, id))
           }
-        } catch {
-          // Intentionally swallowed: individual ranking kind fetch failed, continue with other kinds
+        } catch (err) {
+          this.logger.debug('Toobit ranking kind fetch fallback:', err instanceof Error ? err.message : String(err))
         }
       }
     }
@@ -147,8 +147,8 @@ export class ToobitFuturesConnector extends BaseConnector {
             }
           }
         }
-      } catch {
-        // Intentionally swallowed: identity-type leaders fetch failed, return already-collected results
+      } catch (err) {
+        this.logger.debug('Toobit identity-type leaders fallback:', err instanceof Error ? err.message : String(err))
       }
     }
 

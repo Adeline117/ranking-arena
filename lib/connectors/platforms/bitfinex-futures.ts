@@ -89,8 +89,8 @@ export class BitfinexFuturesConnector extends BaseConnector {
           }
         }
       }
-    } catch {
-      // Equity proxy not critical — ROI will be null for these traders
+    } catch (err) {
+      this.logger.debug('Bitfinex equity proxy fallback:', err instanceof Error ? err.message : String(err))
     }
 
     // Fetch PnL diff (actual PnL in USD) — used for ROI estimation for ALL traders
@@ -129,8 +129,8 @@ export class BitfinexFuturesConnector extends BaseConnector {
           }
         }
       }
-    } catch {
-      // plr data not critical
+    } catch (err) {
+      this.logger.debug('Bitfinex plr ranking fallback:', err instanceof Error ? err.message : String(err))
     }
 
     // Step 2: Build trader entries with cross-referenced PnL + equity for ROI

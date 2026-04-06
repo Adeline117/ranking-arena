@@ -170,7 +170,8 @@ export class DriftPerpConnector extends BaseConnector {
         },
         fetched_at: new Date().toISOString(),
       }
-    } catch {
+    } catch (err) {
+      this.logger.debug('Drift snapshot fetch failed:', err instanceof Error ? err.message : String(err))
       return null
     }
   }
