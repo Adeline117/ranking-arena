@@ -276,7 +276,7 @@ export async function validateRequestBody<T extends z.ZodTypeAny>(
 
   try {
     body = await request.json()
-  } catch {
+  } catch (_err) {
     throw new ApiError('Request body must be valid JSON', {
       code: ErrorCode.INVALID_FORMAT,
     })

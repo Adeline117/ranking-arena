@@ -421,7 +421,8 @@ export class JobRunner {
         stability_score: score.stabilityScore ?? null,
         score_confidence: score.scoreConfidence,
       };
-    } catch {
+    } catch (err) {
+      logger.warn('[job-runner] arena score calculation failed:', err instanceof Error ? err.message : String(err))
       return { arena_score: null, return_score: null, drawdown_score: null, stability_score: null, score_confidence: null };
     }
   }

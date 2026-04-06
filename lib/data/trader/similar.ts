@@ -7,6 +7,7 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 import type { UnifiedTrader } from './types'
 import { mapLeaderboardRow } from './mappers'
 import { LR } from '@/lib/types/schema-mapping'
+import { logger } from '@/lib/logger'
 
 export async function fetchSimilarTraders(
   supabase: SupabaseClient,
@@ -62,7 +63,8 @@ export async function fetchSimilarTraders(
         return true
       })
       .map(row => mapLeaderboardRow(row))
-  } catch {
+  } catch (err) {
+    logger.warn('[similar-traders] lookup failed:', err instanceof Error ? err.message : String(err))
     return []
   }
 }

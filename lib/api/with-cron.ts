@@ -71,7 +71,7 @@ export function withCron(
       try {
         await plog.timeout({ reason: 'safety_timeout', safetyTimeoutMs })
         logger.error(`[${jobName}] Safety timeout fired at ${safetyTimeoutMs}ms`)
-      } catch { /* best effort */ }
+      } catch (err) { /* best effort - Telegram/Sentry alert */ }
     }, safetyTimeoutMs)
 
     // 5. Execute handler

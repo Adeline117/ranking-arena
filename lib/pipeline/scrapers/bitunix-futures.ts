@@ -84,7 +84,8 @@ export class BitunixFuturesScraper implements PlatformScraper {
         if (list.length < pageSize) break
         if (allTraders.length >= 2000) break
         await this.delay(200)
-      } catch {
+      } catch (err) {
+        console.warn('[scraper-bitunix] page fetch fallback:', err instanceof Error ? err.message : String(err))
         break
       }
     }

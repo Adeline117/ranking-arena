@@ -3,6 +3,7 @@
  */
 
 import { SupabaseClient } from '@supabase/supabase-js'
+import { logger } from '@/lib/logger'
 
 export async function getTraderArenaFollowersCount(
   supabase: SupabaseClient,
@@ -15,7 +16,8 @@ export async function getTraderArenaFollowersCount(
       .eq('trader_id', traderId)
 
     return count || 0
-  } catch {
+  } catch (err) {
+    logger.debug('[trader-followers] single count lookup failed:', err instanceof Error ? err.message : String(err))
     return 0
   }
 }
@@ -56,8 +58,8 @@ export async function getTradersArenaFollowersCount(
         }
       }
     }
-  } catch {
-    // Intentionally swallowed: follower count lookup is non-critical, all counts default to 0
+  } catch (err) {
+    logger.debug('[trader-followers] batch count lookup failed:', err instanceof Error ? err.message : String(err))
   }
 
   return resultMap
