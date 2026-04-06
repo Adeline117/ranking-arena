@@ -57,7 +57,7 @@ export default function BetaBanner() {
       </div>
       {/* Inline script: hide if dismissed <24h ago, attach click handler.
           Runs synchronously before paint to avoid flash. */}
-      <script dangerouslySetInnerHTML={{ __html: `(function(){var k='beta-banner-dismissed-at',b=document.getElementById('beta-banner');if(!b)return;try{var d=localStorage.getItem(k);if(d&&Date.now()-Number(d)<864e5){b.style.display='none';return}}catch(e){}var btn=document.getElementById('beta-banner-dismiss');if(btn)btn.onclick=function(){try{localStorage.setItem(k,String(Date.now()))}catch(e){}b.style.display='none'}})()` }} />
+      <script dangerouslySetInnerHTML={{ __html: `(function(){var k='beta-banner-dismissed-at',b=document.getElementById('beta-banner');if(!b)return;try{var d=localStorage.getItem(k);if(d&&Date.now()-Number(d)<2592e6){b.style.display='none';return}}catch(e){}var btn=document.getElementById('beta-banner-dismiss');if(btn)btn.onclick=function(){try{localStorage.setItem(k,String(Date.now()))}catch(e){}b.style.display='none'}})()` }} />
     </>
   )
 }
