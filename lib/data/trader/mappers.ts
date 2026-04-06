@@ -108,15 +108,16 @@ export function getSourceAliases(platform: string): string[] {
  *   pnl              → pnl (already USD)
  */
 export function mapLeaderboardRow(row: Record<string, unknown>): UnifiedTrader {
-  const platform = String(row.source || '')
+  // Support both leaderboard_ranks (source/source_trader_id) and trader_unified_view (platform/trader_key)
+  const platform = String(row.platform || row.source || '')
   return {
     // Identity
     platform,
-    traderKey: String(row.source_trader_id || ''),
-    handle: (row.handle as string) || null,
+    traderKey: String(row.trader_key || row.source_trader_id || ''),
+    handle: (row.display_name as string) || (row.handle as string) || null,
     avatarUrl: (row.avatar_url as string) || null,
-    profileUrl: null, // leaderboard_ranks does not store profile_url
-    marketType: (row.source_type as string) || SOURCE_TYPE_MAP[platform] || null,
+    profileUrl: (row.profile_url as string) || null,
+    marketType: (row.market_type as string) || (row.source_type as string) || SOURCE_TYPE_MAP[platform] || null,
     sourceType: SOURCE_TYPE_MAP[platform] || null,
 
     // Performance — leaderboard_ranks stores roi as percentage already
@@ -137,13 +138,15 @@ export function mapLeaderboardRow(row: Record<string, unknown>): UnifiedTrader {
     profitabilityScore: row.profitability_score != null ? Number(row.profitability_score) : null,
     riskControlScore: row.risk_control_score != null ? Number(row.risk_control_score) : null,
     executionScore: row.execution_score != null ? Number(row.execution_score) : null,
-    scoreConfidence: row.score_completeness != null
-      ? (Number(row.score_completeness) >= 80 ? 'full' : Number(row.score_completeness) >= 50 ? 'partial' : 'minimal')
-      : null,
+    scoreConfidence: typeof row.score_completeness === 'string'
+      ? (row.score_completeness as 'full' | 'partial' | 'minimal')
+      : row.score_completeness != null
+        ? (Number(row.score_completeness) >= 80 ? 'full' : Number(row.score_completeness) >= 50 ? 'partial' : 'minimal')
+        : null,
 
     // Rankings
     rank: row.rank != null ? Number(row.rank) : null,
-    period: normalizePeriod(row.season_id as string),
+    period: normalizePeriod((row.period || row.season_id) as string),
 
     // Advanced metrics
     sharpeRatio: row.sharpe_ratio != null ? Number(row.sharpe_ratio) : null,
