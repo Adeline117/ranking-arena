@@ -1195,7 +1195,7 @@ async function computeSeason(
     const confidenceMultiplier = wilsonConfidenceMultiplier(
       t.roi, t.pnl, t.max_drawdown, t.win_rate, t.sharpe_ratio
     )
-    // Extra penalty for estimated metrics (Phase 5 WR/MDD from ROI formula)
+    // Estimation penalty kept for future use — currently always 1.0 since Phase 5 estimation was removed
     const estimationPenalty = t.metrics_estimated ? 0.92 : 1.0
     const rawSubScores = scoreResult.returnScore + scoreResult.pnlScore +
                          scoreResult.drawdownScore + scoreResult.stabilityScore
