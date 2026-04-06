@@ -274,7 +274,7 @@ export default function LoginPage() {
           if (updateError) logger.error('Error updating handle:', updateError)
         }
         await createUserProfile(user.id, email, handle)
-        router.push('/onboarding')
+        router.push('/?welcome=1')
       } else { router.push('/') }
     } catch (err: unknown) { setError((err instanceof Error ? err.message : undefined) || t('loginSetupFailed')) }
     finally { setLoading(false); submittingRef.current = false }

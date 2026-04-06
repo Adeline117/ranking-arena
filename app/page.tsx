@@ -5,6 +5,7 @@ import SSRRankingTable from './components/home/SSRRankingTable'
 import HomeHeroSSR from './components/home/HomeHeroSSR'
 import RankingControls from './components/home/RankingControls'
 import TopNav from './components/layout/TopNav'
+import WelcomeBanner from './components/home/WelcomeBanner'
 import { JsonLd } from './components/Providers/JsonLd'
 import { PageErrorBoundary } from './components/utils/ErrorBoundary'
 import { BASE_URL } from '@/lib/constants/urls'
@@ -82,6 +83,9 @@ export default async function Page({
 
       {/* TopNav — provides search, login, and navigation on the homepage */}
       <TopNav />
+
+      {/* Welcome banner for new registrations — tiny client island, reads ?welcome=1 */}
+      <WelcomeBanner />
 
       {/* Hero — LCP element. Pure server HTML, zero JS. */}
       <HomeHeroSSR traderCount={heroStats?.traderCount} exchangeCount={heroStats?.exchangeCount} />

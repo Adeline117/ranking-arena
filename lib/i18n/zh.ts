@@ -4907,6 +4907,9 @@ compFieldMaxParticipants: '最大参与人数',
     watchlistConfirmYes: '确认',
     watchlistConfirmNo: '取消',
 
+    // Onboarding
+    welcomeMessage: '欢迎！浏览排行榜找到你感兴趣的交易员并关注他们。',
+
 } as const
 
 export default zh

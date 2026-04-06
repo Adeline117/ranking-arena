@@ -4897,6 +4897,9 @@ compShareTitle: 'Check out this competition on Arena',
     watchlistConfirmYes: 'Yes',
     watchlistConfirmNo: 'No',
 
+    // Onboarding
+    welcomeMessage: 'Welcome! Browse the leaderboard to find traders you\'re interested in and follow them.',
+
 } as const
 
 export default en
