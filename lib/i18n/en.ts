@@ -1126,7 +1126,7 @@ const en = {
     compareTraders: 'Trader Comparison',
     compareDesc: 'Compare up to 10 traders side by side',
     compareAddTrader: 'Add Trader',
-    compareSearchPlaceholder: 'Search trader ID...',
+    // compareSearchPlaceholder: moved to compare section below (line ~1158)
     compareSearchBtn: 'Search',
     compareSearching: 'Searching...',
     compareMax5: 'Maximum 5 traders for comparison',
