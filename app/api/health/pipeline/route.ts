@@ -48,94 +48,81 @@ async function getPlatformHealthData(): Promise<PlatformHealth[]> {
   const sixHoursAgo = new Date(now - 6 * 60 * 60 * 1000).toISOString()
   const sevenDaysAgo = new Date(now - 7 * 24 * 60 * 60 * 1000).toISOString()
 
-  const results: PlatformHealth[] = []
+  // Fetch ALL pipeline_logs once (was: 25 separate LIKE '%platform%' queries = 9.4M ms DB time)
+  const [allLogsRes, ...platformChecks] = await Promise.all([
+    supabase
+      .from('pipeline_logs')
+      .select('job_name, records_processed')
+      .eq('status', 'success')
+      .gte('started_at', sevenDaysAgo)
+      .not('records_processed', 'is', null)
+      .gt('records_processed', 0),
+    // Per-platform snapshot queries (these use indexes, ~1ms each)
+    ...activePlatforms.flatMap(platform => [
+      supabase
+        .from('trader_snapshots_v2')
+        .select('updated_at')
+        .eq('platform', platform)
+        .order('updated_at', { ascending: false })
+        .limit(1)
+        .maybeSingle(),
+      supabase
+        .from('trader_snapshots_v2')
+        .select('id', { count: 'exact', head: true })
+        .eq('platform', platform)
+        .gte('updated_at', sixHoursAgo),
+    ]),
+  ])
 
-  // Query all platforms in parallel
-  const checks = activePlatforms.map(async (platform) => {
+  // Build per-platform avg records from pipeline_logs (JS-side grouping)
+  const platformAvgRecords = new Map<string, number>()
+  const allLogs = allLogsRes.data || []
+  for (const platform of activePlatforms) {
+    const matching = allLogs.filter(l => l.job_name.includes(platform))
+    if (matching.length > 0) {
+      const avg = matching.reduce((sum, r) => sum + (r.records_processed || 0), 0) / matching.length
+      platformAvgRecords.set(platform, avg)
+    }
+  }
+
+  const results: PlatformHealth[] = activePlatforms.map((platform, i) => {
     const config = EXCHANGE_CONFIG[platform as keyof typeof EXCHANGE_CONFIG]
     const displayName = config?.name || platform
+    const latestRes = platformChecks[i * 2] as { data: { updated_at: string } | null }
+    const recentCountRes = platformChecks[i * 2 + 1] as { count: number | null }
 
-    try {
-      // Get latest snapshot timestamp and current count (last 6h)
-      const [latestRes, recentCountRes, avgCountRes] = await Promise.all([
-        // Latest record timestamp
-        supabase
-          .from('trader_snapshots_v2')
-          .select('updated_at')
-          .eq('platform', platform)
-          .order('updated_at', { ascending: false })
-          .limit(1)
-          .maybeSingle(),
-        // Records updated in last 6 hours
-        supabase
-          .from('trader_snapshots_v2')
-          .select('id', { count: 'exact', head: true })
-          .eq('platform', platform)
-          .gte('updated_at', sixHoursAgo),
-        // Average daily record count over last 7 days (from pipeline_logs)
-        supabase
-          .from('pipeline_logs')
-          .select('records_processed')
-          .like('job_name', `%${platform}%`)
-          .eq('status', 'success')
-          .gte('started_at', sevenDaysAgo)
-          .not('records_processed', 'is', null),
-      ])
+    const lastUpdate = latestRes?.data?.updated_at || null
+    const currentCount = recentCountRes?.count || 0
+    const avgCount = platformAvgRecords.get(platform) ?? null
 
-      const lastUpdate = latestRes.data?.updated_at || null
-      const currentCount = recentCountRes.count || 0
+    let ageHours: number | null = null
+    if (lastUpdate) {
+      ageHours = Math.round(((now - new Date(lastUpdate).getTime()) / (1000 * 60 * 60)) * 10) / 10
+    }
 
-      // Calculate average records from pipeline_logs
-      const logRecords = avgCountRes.data || []
-      const avgCount = logRecords.length > 0
-        ? logRecords.reduce((sum, r) => sum + (r.records_processed || 0), 0) / logRecords.length
-        : null
+    const countRatio = avgCount != null && avgCount > 0 ? currentCount / avgCount : null
 
-      // Calculate age
-      let ageHours: number | null = null
-      if (lastUpdate) {
-        ageHours = Math.round(((now - new Date(lastUpdate).getTime()) / (1000 * 60 * 60)) * 10) / 10
-      }
+    let status: 'healthy' | 'warning' | 'critical' = 'healthy'
+    if (ageHours == null || ageHours > 12) {
+      status = 'critical'
+    } else if (ageHours > 6) {
+      status = 'warning'
+    } else if (countRatio != null && countRatio < 0.3) {
+      status = 'warning'
+    }
 
-      // Count ratio (current vs average)
-      const countRatio = avgCount != null && avgCount > 0 ? currentCount / avgCount : null
-
-      // Determine status
-      let status: 'healthy' | 'warning' | 'critical' = 'healthy'
-      if (ageHours == null || ageHours > 12) {
-        status = 'critical'
-      } else if (ageHours > 6) {
-        status = 'warning'
-      } else if (countRatio != null && countRatio < 0.3) {
-        status = 'warning'
-      }
-
-      return {
-        platform,
-        displayName,
-        lastUpdate,
-        ageHours,
-        currentCount,
-        avgCount: avgCount != null ? Math.round(avgCount) : null,
-        countRatio: countRatio != null ? Math.round(countRatio * 100) / 100 : null,
-        status,
-      }
-    } catch {
-      return {
-        platform,
-        displayName,
-        lastUpdate: null,
-        ageHours: null,
-        currentCount: 0,
-        avgCount: null,
-        countRatio: null,
-        status: 'critical' as const,
-      }
+    return {
+      platform,
+      displayName,
+      lastUpdate,
+      ageHours,
+      currentCount,
+      avgCount: avgCount != null ? Math.round(avgCount) : null,
+      countRatio: countRatio != null ? Math.round(countRatio * 100) / 100 : null,
+      status,
     }
   })
 
-  const checked = await Promise.all(checks)
-  results.push(...checked)
   results.sort((a, b) => a.platform.localeCompare(b.platform))
   return results
 }
