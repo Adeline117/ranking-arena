@@ -37,7 +37,7 @@ import { validatePlatform } from '@/lib/config/platforms'
 import { triggerDownstreamRefresh } from '@/lib/cron/trigger-chain'
 
 const DEAD_COUNTER_PREFIX = 'dead:consecutive:'
-const DEAD_THRESHOLD = 10 // consecutive failures before circuit-breaking (restored from 3 — was causing cascade skips)
+const DEAD_THRESHOLD = 20 // consecutive failures before circuit-breaking (increased from 10 — VPS outages cause ~15 failures across 3h cycle, 10 was too aggressive)
 const DEAD_COUNTER_MAX_AGE_MS = 6 * 3600 * 1000 // Auto-reset counters older than 6h
 
 export const runtime = 'nodejs' // Required: edge runtime has 30s timeout, nodejs supports maxDuration
@@ -183,7 +183,7 @@ export async function GET(request: NextRequest) {
     okx_web3: 120000,
     // Fast direct APIs
     okx_spot: 60000,
-    bitunix: 60000,
+    bitunix: 120000, // Increased from 60s: VPS proxy adds latency, observed 137s during outage
     coinex: 90000,
     // Others: default 90s (PLATFORM_TIMEOUT_MS)
   }
