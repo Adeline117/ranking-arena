@@ -107,7 +107,7 @@ export class PolymarketPredictionConnector extends BaseConnector {
         if (Array.isArray(valueRaw) && valueRaw.length > 0) {
           aum = this.num(valueRaw[0].value)
         }
-      } catch { /* non-critical */ }
+      } catch { /* portfolio value not available — AUM will be null */ }
 
       const profile: TraderProfile = {
         platform: 'polymarket',
