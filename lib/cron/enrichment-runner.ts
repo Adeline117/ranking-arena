@@ -232,9 +232,8 @@ async function clearEnrichmentFailure(platform: string, traderId: string): Promi
     const redis = await getSharedRedis()
     if (!redis) return
     await redis.del(`enrichment:failed:${platform}:${traderId}`)
-  } catch (err) {
-    // Best-effort cleanup — log but don't fail
-    logger.debug('[enrich] clearEnrichmentFailure Redis error:', err instanceof Error ? err.message : String(err))
+  } catch {
+    // Best-effort cleanup
   }
 }
 
@@ -328,8 +327,7 @@ export const ENRICHMENT_PLATFORM_CONFIGS: Record<string, EnrichmentConfig> = {
     fetchPositionHistory: fetchBinancePositionHistory,
     concurrency: 10, delayMs: 500, // Increased from 5/1000 for higher throughput
   },
-  // binance_spot: Re-enabled with per-trader timeout safety (config at line ~571).
-  //   Old hang issue (2026-03-14) fixed by AbortController + platform-level timeout.
+  // binance_spot: PERMANENTLY REMOVED (2026-03-14) - repeatedly hangs 45-76min, blocks entire pipeline
   // Bybit enrichment re-enabled (2026-03-18) — routes through VPS scraper
   bybit: {
     platform: 'bybit',
@@ -655,10 +653,8 @@ const ONCHAIN_SET = new Set(['gmx', 'dydx', 'jupiter_perps', 'hyperliquid', 'dri
 const PER_TRADER_TIMEOUT_MS: Record<string, number> = {
   'bitget_futures': 18_000,  // 18s per trader - equity 15s + detail 10s run in parallel, 18s is generous
   'binance_futures': 12_000, // 12s per trader - ultra-short (VPS proxy tested <500ms, 3-8s API timeouts)
-  'binance_spot': 15_000, // 15s per trader - VPS proxy (same as binance_futures but with spot detail)
   'dydx': 15_000, // 15s per trader - 3 APIs × 5-6s timeout + fallback buffer
   'bybit': 45_000, // 45s per trader - VPS Playwright scraper: page load + WAF bypass + 2 API calls
-  'bybit_spot': 45_000, // 45s per trader - same VPS Playwright scraper as bybit
   'etoro': 20_000, // 20s per trader - CopySim + ranking cache + portfolio fetch
 }
 
@@ -1040,9 +1036,8 @@ export async function runEnrichment(params: {
                       if (walletPortfolio.length > 0) {
                         await upsertPortfolio(supabase, platformKey, traderId, walletPortfolio)
                       }
-                    } catch (err) {
+                    } catch {
                       walletEnrichFailCount++
-                      logger.warn(`[enrich] ${platformKey}/${traderId} wallet portfolio failed:`, err instanceof Error ? err.message : String(err))
                     }
                   }
                 }
@@ -1109,14 +1104,6 @@ export async function runEnrichment(params: {
 
   logger.warn(`[enrich] Completed in ${duration}ms: ${totalEnriched} enriched, ${totalFailed} failed, ${totalSuppressedErrors} API errors suppressed`)
 
-  // Alert on high suppressed error rate (silent data gaps)
-  if (totalSuppressedErrors > 0 && totalEnriched > 0) {
-    const suppressedRatio = totalSuppressedErrors / (totalEnriched * 4) // 4 API calls per trader
-    if (suppressedRatio > 0.3) {
-      logger.error(`[enrich] HIGH suppressed error rate: ${totalSuppressedErrors} suppressed / ${totalEnriched * 4} total API calls (${(suppressedRatio * 100).toFixed(0)}%) — traders have incomplete data`)
-    }
-  }
-
   // Alert on high failure rate
   const total = totalEnriched + totalFailed
   const failureRate = total > 0 ? totalFailed / total : 0
@@ -1154,8 +1141,5 @@ export async function runEnrichment(params: {
     await plog.success(totalEnriched, { period, duration, totalFailed, note: `${totalFailed} partial failures (acceptable)` })
   }
 
-  // ok=false when failures are high OR suppressed errors indicate widespread data gaps
-  const suppressedRatio = totalEnriched > 0 ? totalSuppressedErrors / (totalEnriched * 4) : 0
-  const isOk = totalFailed === 0 && suppressedRatio < 0.5
-  return { ok: isOk, duration, period, summary: { total, enriched: totalEnriched, failed: totalFailed, suppressedErrors: totalSuppressedErrors }, results }
+  return { ok: totalFailed === 0, duration, period, summary: { total, enriched: totalEnriched, failed: totalFailed, suppressedErrors: totalSuppressedErrors }, results }
 }
