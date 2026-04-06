@@ -4,30 +4,20 @@
    No CSS hiding needed — React state removes it when client table mounts.
    This eliminates CLS because the swap happens at the same DOM position. */
 
-/* Two-phase CLS-free overlay:
-   SSR shell and Phase 2 share the same grid cell (.homepage-phase-wrapper).
-   Grid height = max(SSR, Phase 2), so no layout shift when Phase 2 appears.
-   - Before Phase 2: SSR visible, grid height = SSR height.
-   - Phase 2 mounts: SSR becomes visibility:hidden (keeps height contribution).
-     Phase 2 renders on top with opaque background. Zero CLS.
-   - JS idle cleanup removes SSR DOM → grid shrinks to Phase 2 height (no CLS,
-     Phase 2 is always >= SSR height by this point). */
-.homepage-phase-wrapper {
-  display: grid;
-}
-.homepage-phase-wrapper > * {
-  grid-row: 1;
-  grid-column: 1;
-}
-/* Phase 2 renders on top (later in DOM = higher stacking order) */
-.homepage-phase-wrapper #homepage-interactive {
-  z-index: 1;
-}
-/* When Phase 2 is present, hide SSR visually but KEEP its height contribution
-   to prevent grid cell from shrinking until Phase 2 is fully rendered. */
-:has(#homepage-interactive) #ssr-content-shell {
-  visibility: hidden;
-  pointer-events: none;
+/* Two-phase rendering:
+   - SSR hero + ranking table rendered as static HTML for instant LCP.
+   - Phase 2 rendering is DEFERRED until user interaction (scroll/click/keypress).
+     This locks LCP at the SSR paint time (~1.2s) because LCP finalizes on first input.
+   - Once Phase 2 (#homepage-interactive) mounts, CSS hides both SSR shells.
+   - JS idle callback removes the SSR DOM nodes for cleanup.
+   - Phase 2 has min-height matching SSR content (~1650px) to prevent CLS
+     when SSR shells collapse to 0. */
+:has(#homepage-interactive) #ssr-hero-shell,
+:has(#homepage-interactive) #ssr-ranking-table {
+  content-visibility: hidden;
+  height: 0;
+  overflow: hidden;
+  contain: strict;
 }
 
 /*
@@ -2292,7 +2282,10 @@ input[type="search"]::-webkit-search-cancel-button:hover {
    ============================================ */
 .contain-content{contain:content}
 .contain-layout-style{contain:layout style}
-.home-page-root{min-height:100vh;background:var(--color-bg-primary);color:var(--color-text-primary);position:relative}
+/* min-height matches SSR hero (~300px) + SSR table (25 rows × 52px + header 40px = 1340px)
+   so when CSS collapses both SSR shells to 0, Phase 2 maintains the same page height.
+   Without this, CLS = (1640px - 100vh) / viewport = 0.278 on mobile. */
+.home-page-root{min-height:max(100vh, 1640px);background:var(--color-bg-primary);color:var(--color-text-primary);position:relative}
 .home-page-container{max-width:1400px;margin:0 auto;position:relative;z-index:1;padding:8px 16px}
 .home-mesh-bg{display:none}
 .flex-between{display:flex;align-items:center;justify-content:space-between}
