@@ -68,7 +68,7 @@ export async function getAuthSession(): Promise<AuthResult> {
       userId: session.user.id,
       accessToken: session.access_token,
     }
-  } catch {
+  } catch (_err) {
     return null
   }
 }
@@ -89,7 +89,7 @@ export async function refreshAuthToken(): Promise<AuthResult> {
       userId: session.user.id,
       accessToken: session.access_token,
     }
-  } catch {
+  } catch (_err) {
     return null
   }
 }

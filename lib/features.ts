@@ -39,7 +39,7 @@ export async function getRuntimeFlags(): Promise<Record<string, boolean>> {
       runtimeFlagsCache = { flags: cached, ts: Date.now() }
       return cached
     }
-  } catch {
+  } catch (_err) {
     // Redis unavailable — fall back to build-time flags
   }
 
