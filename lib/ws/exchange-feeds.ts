@@ -330,7 +330,7 @@ export class ExchangeFeed extends EventEmitter {
         if (ticker) {
           this.emit('ticker', ticker)
         }
-      } catch {
+      } catch (_err) {
         // Intentionally swallowed: malformed WS message (e.g., Bybit pong response), skip non-ticker data
       }
     }
@@ -368,7 +368,7 @@ export class ExchangeFeed extends EventEmitter {
       this.ws.onmessage = null
       this.ws.onclose = null
       this.ws.onerror = null
-      try { this.ws.close() } catch { /* ignore */ }
+      try { this.ws.close() } catch (_err) { /* ignore */ }
       this.ws = null
     }
     this._connected = false

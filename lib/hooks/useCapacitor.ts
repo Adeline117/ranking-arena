@@ -47,7 +47,7 @@ export function useCapacitorSplash() {
     try {
       const { SplashScreen } = await import('@capacitor/splash-screen')
       await SplashScreen.hide({ fadeOutDuration: 300 })
-    } catch {
+    } catch (_err) {
       // Intentionally swallowed: Capacitor plugin not available on this platform
     }
   }, [])
@@ -89,7 +89,7 @@ export function useCapacitorKeyboard() {
           setKeyboardState({ isVisible: false, height: 0 })
         })
         hideListener = hide
-      } catch {
+      } catch (_err) {
         // Intentionally swallowed: Capacitor plugin not available on this platform
       }
     }
@@ -107,7 +107,7 @@ export function useCapacitorKeyboard() {
     try {
       const { Keyboard } = await import('@capacitor/keyboard')
       await Keyboard.hide()
-    } catch {
+    } catch (_err) {
       // Intentionally swallowed: Capacitor plugin unavailable in web browser context
     }
   }, [])
@@ -132,7 +132,7 @@ export function useCapacitorStatusBar() {
         Default: Style.Default,
       }
       await StatusBar.setStyle({ style: styleMap[style] })
-    } catch {
+    } catch (_err) {
       // Intentionally swallowed: Capacitor plugin not available on this platform
     }
   }, [])
@@ -142,7 +142,7 @@ export function useCapacitorStatusBar() {
     try {
       const { StatusBar } = await import('@capacitor/status-bar')
       await StatusBar.setBackgroundColor({ color })
-    } catch {
+    } catch (_err) {
       // Intentionally swallowed: Capacitor plugin not available on this platform
     }
   }, [])
@@ -167,7 +167,8 @@ export function useCapacitorShare() {
         try {
           await navigator.share(options)
           return true
-        } catch {
+        } catch (_err) {
+          /* non-critical: share cancelled or unsupported */
           return false
         }
       }
@@ -178,7 +179,8 @@ export function useCapacitorShare() {
       const { Share } = await import('@capacitor/share')
       await Share.share(options)
       return true
-    } catch {
+    } catch (_err) {
+      /* non-critical: share cancelled or plugin unavailable */
       return false
     }
   }, [])
@@ -204,7 +206,8 @@ export function useCapacitorBrowser() {
         presentationStyle: 'popover',
         toolbarColor: document.documentElement.getAttribute('data-theme') === 'light' ? 'var(--color-on-accent)' : 'var(--color-bg-primary)',
       })
-    } catch {
+    } catch (_err) {
+      /* fallback: open in regular browser tab */
       window.open(url, '_blank')
     }
   }, [])
@@ -248,7 +251,7 @@ export function useCapacitorAppLifecycle(options?: {
           })
           urlListener = listener
         }
-      } catch {
+      } catch (_err) {
         // Intentionally swallowed: Capacitor plugin not available on this platform
       }
     }
@@ -282,7 +285,7 @@ export function useCapacitorHaptics() {
         heavy: ImpactStyle.Heavy,
       }
       await Haptics.impact({ style: styleMap[style] })
-    } catch {
+    } catch (_err) {
       // Intentionally swallowed: Capacitor plugin not available on this platform
     }
   }, [])
@@ -298,7 +301,7 @@ export function useCapacitorHaptics() {
         error: NotificationType.Error,
       }
       await Haptics.notification({ type: typeMap[type] })
-    } catch {
+    } catch (_err) {
       // Intentionally swallowed: Capacitor plugin not available on this platform
     }
   }, [])
@@ -309,7 +312,7 @@ export function useCapacitorHaptics() {
     try {
       const { Haptics } = await import('@capacitor/haptics')
       await Haptics.selectionChanged()
-    } catch {
+    } catch (_err) {
       // Intentionally swallowed: Capacitor plugin not available on this platform
     }
   }, [])
@@ -320,7 +323,7 @@ export function useCapacitorHaptics() {
     try {
       const { Haptics } = await import('@capacitor/haptics')
       await Haptics.vibrate({ duration })
-    } catch {
+    } catch (_err) {
       // Intentionally swallowed: Capacitor plugin not available on this platform
     }
   }, [])
@@ -348,7 +351,8 @@ export function useCapacitorLocalNotifications() {
       const { LocalNotifications } = await import('@capacitor/local-notifications')
       const result = await LocalNotifications.requestPermissions()
       return result.display === 'granted'
-    } catch {
+    } catch (_err) {
+      /* non-critical: plugin unavailable */
       return false
     }
   }, [])
@@ -367,7 +371,7 @@ export function useCapacitorLocalNotifications() {
           extra: options.extra,
         }],
       })
-    } catch {
+    } catch (_err) {
       // Intentionally swallowed: Capacitor plugin not available on this platform
     }
   }, [])
@@ -378,7 +382,7 @@ export function useCapacitorLocalNotifications() {
     try {
       const { LocalNotifications } = await import('@capacitor/local-notifications')
       await LocalNotifications.cancel({ notifications: ids.map(id => ({ id })) })
-    } catch {
+    } catch (_err) {
       // Intentionally swallowed: Capacitor plugin not available on this platform
     }
   }, [])
@@ -439,7 +443,8 @@ export function useCapacitorCamera() {
         source: sourceMap[options.source ?? 'prompt'],
       })
       return image.dataUrl || image.base64String || image.webPath || null
-    } catch {
+    } catch (_err) {
+      /* non-critical: camera cancelled or plugin unavailable */
       return null
     }
   }, [])
@@ -481,7 +486,7 @@ export function useCapacitorBiometric() {
           }
           setBiometryType(typeMap[result.biometryType] || 'fingerprint')
         }
-      } catch {
+      } catch (_err) {
         // Intentionally swallowed: Capacitor plugin not available on this platform
       }
     }
@@ -525,7 +530,8 @@ export function useCapacitorBiometric() {
         password,
       })
       return true
-    } catch {
+    } catch (_err) {
+      /* non-critical: biometric store unavailable */
       return false
     }
   }, [])
@@ -537,7 +543,8 @@ export function useCapacitorBiometric() {
       const { NativeBiometric } = await import('capacitor-native-biometric')
       const credentials = await NativeBiometric.getCredentials({ server })
       return credentials
-    } catch {
+    } catch (_err) {
+      /* non-critical: credentials not found or plugin unavailable */
       return null
     }
   }, [])
@@ -548,7 +555,7 @@ export function useCapacitorBiometric() {
     try {
       const { NativeBiometric } = await import('capacitor-native-biometric')
       await NativeBiometric.deleteCredentials({ server })
-    } catch {
+    } catch (_err) {
       // Intentionally swallowed: Capacitor plugin unavailable in web browser context
     }
   }, [])
@@ -601,7 +608,8 @@ export function useCapacitorPushNotifications(options?: {
       setPermissionGranted(true)
       await PN.register()
       return true
-    } catch {
+    } catch (_err) {
+      /* non-critical: push notification registration failed */
       return false
     }
   }, [])
@@ -649,7 +657,7 @@ export function useCapacitorPushNotifications(options?: {
           )
         })
         listeners.push(actionListener)
-      } catch {
+      } catch (_err) {
         // Intentionally swallowed: Capacitor plugin not available on this platform
       }
     }

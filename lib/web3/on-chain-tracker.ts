@@ -157,7 +157,7 @@ export async function getRecentTransactions(
           let receipt = null
           try {
             receipt = await client.getTransactionReceipt({ hash: tx.hash })
-          } catch {
+          } catch (_err) {
             // Intentionally swallowed: receipt fetch may fail for pending/dropped txs, status will be 'unknown'
           }
 
@@ -175,7 +175,7 @@ export async function getRecentTransactions(
           if (transactions.length >= limit) break
         }
       }
-    } catch {
+    } catch (_err) {
       // Intentionally swallowed: individual block fetch may fail (RPC rate limit), continue with next block
       continue
     }

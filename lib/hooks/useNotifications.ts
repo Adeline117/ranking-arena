@@ -114,7 +114,7 @@ export function useNotifications(options: UseNotificationsOptions = {}): UseNoti
         body: JSON.stringify({ notification_id: id }),
       })
       if (!res.ok) throw new Error('Failed')
-    } catch {
+    } catch (_err) {
       // 回滚
       setNotifications((ns) => ns.map((n) => n.id === id ? { ...n, read: false } : n))
       setUnreadCount(unreadCount)
@@ -142,7 +142,8 @@ export function useNotifications(options: UseNotificationsOptions = {}): UseNoti
         body: JSON.stringify({ mark_all: true }),
       })
       if (!res.ok) throw new Error('Failed')
-    } catch {
+    } catch (_err) {
+      // rollback optimistic update
       setNotifications(prevNotifications)
       setUnreadCount(prevCount)
       setUnreadNotifications(prevCount)
@@ -172,7 +173,8 @@ export function useNotifications(options: UseNotificationsOptions = {}): UseNoti
         body: JSON.stringify({ notification_id: id }),
       })
       if (!res.ok) throw new Error('Failed')
-    } catch {
+    } catch (_err) {
+      // rollback optimistic update
       setNotifications(prev)
       if (target && !target.read) {
         setUnreadCount(unreadCount)

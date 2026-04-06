@@ -78,7 +78,8 @@ export async function addChain(
       params: [buildAddChainParams(config)],
     })
     return true
-  } catch {
+  } catch (_err) {
+    /* non-critical: user rejected or wallet error */
     return false
   }
 }
@@ -92,7 +93,8 @@ export async function getCurrentChainId(
   try {
     const result = await provider.request({ method: 'eth_chainId' })
     return Number(result as string)
-  } catch {
+  } catch (_err) {
+    /* non-critical: wallet not connected */
     return null
   }
 }

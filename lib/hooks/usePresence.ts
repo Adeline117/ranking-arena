@@ -103,7 +103,7 @@ export function usePresence(currentUserId: string | null, watchUserIds: string[]
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ action: 'heartbeat' }),
         })
-      } catch {
+      } catch (_err) {
         // Intentionally swallowed: presence heartbeat is best-effort, missed heartbeats auto-recover
       }
     }, 60000)
@@ -142,7 +142,7 @@ export function usePresence(currentUserId: string | null, watchUserIds: string[]
             return updated
           })
         }
-      } catch {
+      } catch (_err) {
         // Intentionally swallowed: last_seen fetch is non-critical, presence defaults to offline
       }
     }

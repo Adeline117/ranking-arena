@@ -111,7 +111,7 @@ export function useSiweAuth(): UseSiweAuthReturn {
           if (session?.user?.email?.endsWith('@wallet.arena')) {
             await supabase.auth.signOut()
           }
-        } catch {
+        } catch (_err) {
           // Intentionally swallowed: auto sign-out on wallet disconnect is best-effort
         }
       })()

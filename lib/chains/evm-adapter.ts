@@ -206,7 +206,8 @@ export async function getTransactions(
       blockNumber: Number(tx.blockNumber),
       timestamp: Number(tx.timeStamp),
     }))
-  } catch {
+  } catch (_err) {
+    /* non-critical: explorer API unavailable */
     return []
   }
 }

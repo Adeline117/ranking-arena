@@ -102,7 +102,7 @@ export function useMarketFeed(options: UseMarketFeedOptions = {}): MarketFeedSta
             return { ...prev, tickers: newTickers }
           })
         }
-      } catch {
+      } catch (_err) {
         // Intentionally swallowed: malformed SSE JSON event, skip and wait for next tick
       }
     }

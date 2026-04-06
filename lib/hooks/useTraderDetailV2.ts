@@ -177,7 +177,7 @@ function pollForCompletion(
             return
           }
         }
-      } catch {
+      } catch (_err) {
         if (signal.aborted) return
       }
       poll()

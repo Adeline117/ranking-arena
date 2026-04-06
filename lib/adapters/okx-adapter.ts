@@ -135,7 +135,8 @@ export class OkxAdapter extends BaseAdapter implements ExchangeAdapter {
     try {
       const res = await this.okxRequest<{ code: string }>('/api/v5/account/config')
       return res.code === '0'
-    } catch {
+    } catch (_err) {
+      /* non-critical: health check */
       return false
     }
   }

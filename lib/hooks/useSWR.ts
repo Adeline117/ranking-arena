@@ -80,7 +80,8 @@ export async function fetcher<T>(url: string): Promise<T> {
       error.duration = Math.round(performance.now() - startTime)
       try {
         error.info = await response.json()
-      } catch {
+      } catch (_err) {
+        /* parse fallback: response body is not JSON */
         error.info = await response.text()
       }
       throw error

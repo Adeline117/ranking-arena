@@ -102,7 +102,7 @@ export function useRealtimePrices(options: UseRealtimePricesOptions = {}) {
         handleData(mapped)
       }
       setMode('poll')
-    } catch {
+    } catch (_err) {
       if (mountedRef.current) setConnected(false)
     }
   }, [handleData])
@@ -132,7 +132,7 @@ export function useRealtimePrices(options: UseRealtimePricesOptions = {}) {
       try {
         handleData(JSON.parse(event.data))
         setMode('sse')
-      } catch { /* ignore parse errors */ }
+      } catch (_err) { /* ignore parse errors */ }
     }
 
     es.onerror = () => {

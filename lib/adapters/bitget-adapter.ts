@@ -141,7 +141,8 @@ export class BitgetAdapter extends BaseAdapter implements ExchangeAdapter {
         '/api/v2/spot/account/info'
       )
       return res.code === '00000'
-    } catch {
+    } catch (_err) {
+      /* non-critical: health check */
       return false
     }
   }
