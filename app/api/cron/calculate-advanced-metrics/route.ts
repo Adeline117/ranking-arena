@@ -20,7 +20,7 @@ import {
   calculateVolatility,
   calculateDownsideVolatility,
 } from '@/lib/utils/advanced-metrics'
-import { calculateArenaScoreV3Legacy, type Period } from '@/lib/utils/arena-score'
+import type { Period } from '@/lib/utils/arena-score'
 import { logger } from '@/lib/logger'
 import { env } from '@/lib/env'
 
@@ -37,6 +37,7 @@ export async function POST(request: NextRequest) {
   }
 
   const supabase = getSupabaseAdmin()
+  const plog = await PipelineLogger.start('calculate-advanced-metrics')
 
   const startTime = Date.now()
   let processed = 0
@@ -60,14 +61,14 @@ export async function POST(request: NextRequest) {
     const { data: tradersResult, error: fetchError } = await supabase
       .from('trader_snapshots_v2')
       .select('id, platform, trader_key, window, roi_pct, pnl_usd, max_drawdown, win_rate')
-      .or('sortino_ratio.is.null,arena_score.is.null')
+      .is('sortino_ratio', null)
       .not('roi_pct', 'is', null)
       .order('as_of_ts', { ascending: false })
       .limit(BATCH_SIZE * 3)
 
     if (fetchError) {
       // If columns don't exist yet, fall back to simpler query
-      if (fetchError.message?.includes('sortino_ratio') || fetchError.message?.includes('arena_score') || fetchError.code === '42703') {
+      if (fetchError.message?.includes('sortino_ratio') || fetchError.code === '42703') {
         logger.warn('Advanced metric columns not found, using fallback query', {})
         const { data: fallback, error: fallbackError } = await supabase
           .from('trader_snapshots_v2')
@@ -224,26 +225,17 @@ export async function POST(request: NextRequest) {
             downsideVolatilityPct = calculateDownsideVolatility(dailyReturns)
           }
 
-          // Calculate Arena Score V3
-          const v3Result = calculateArenaScoreV3Legacy({
-            roi,
-            pnl,
-            maxDrawdown,
-            winRate,
-            alpha: null,
-            sortinoRatio,
-            calmarRatio,
-            maxConsecutiveWins: null,
-            maxConsecutiveLosses: null,
-          }, window)
-
-          // Update snapshot - handle missing columns gracefully
+          // Update snapshot with advanced metrics only
+          // NOTE: arena_score is NOT written here — compute-leaderboard is the
+          // single source of truth for arena_score.  Previously this cron used
+          // calculateArenaScoreV3Legacy which had broken scaling factors
+          // (55/70 and 12/15 assumed old V2 weights of 70/15, but V2 changed to 60/40),
+          // silently corrupting arena_score in trader_snapshots_v2.
           const updatePayload: Record<string, unknown> = {
             sortino_ratio: sortinoRatio,
             calmar_ratio: calmarRatio,
             volatility_pct: volatilityPct,
             downside_volatility_pct: downsideVolatilityPct,
-            arena_score: v3Result.totalScore,
             metrics_quality: metricsQuality,
             metrics_data_points: dailyReturns.length,
           }
@@ -258,7 +250,6 @@ export async function POST(request: NextRequest) {
             const minimalPayload: Record<string, unknown> = {}
             // Try only columns that are likely to exist
             if (sortinoRatio !== null) minimalPayload.sortino_ratio = sortinoRatio
-            if (v3Result.totalScore !== null) minimalPayload.arena_score = v3Result.totalScore
 
             if (Object.keys(minimalPayload).length > 0) {
               const { error: retryError } = await supabase
@@ -286,7 +277,6 @@ export async function POST(request: NextRequest) {
 
     const duration = Date.now() - startTime
 
-    const plog = await PipelineLogger.start('calculate-advanced-metrics')
     const failureRate = processed > 0 ? errors / processed : 0
     if (failureRate > 0.5 && errors >= 5) {
       await plog.error(new Error(`${errors} errors in ${processed} processed`), { updated, errors })
@@ -303,7 +293,6 @@ export async function POST(request: NextRequest) {
     })
   } catch (err) {
     logger.apiError('/api/cron/calculate-advanced-metrics', err, {})
-    const plog = await PipelineLogger.start('calculate-advanced-metrics')
     await plog.error(err)
     return NextResponse.json(
       { error: err instanceof Error ? err.message : 'Unknown error' },
