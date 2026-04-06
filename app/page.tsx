@@ -1,12 +1,14 @@
 import type { Metadata } from 'next'
+import { Suspense } from 'react'
 import { getInitialTraders } from '@/lib/getInitialTraders'
 import { getHeroStats } from '@/lib/data/hero-stats'
 import SSRRankingTable from './components/home/SSRRankingTable'
 import HomeHeroSSR from './components/home/HomeHeroSSR'
+import RankingControls from './components/home/RankingControls'
 import { JsonLd } from './components/Providers/JsonLd'
-import HomePageLoader from './components/home/HomePageLoader'
 import { PageErrorBoundary } from './components/utils/ErrorBoundary'
 import { BASE_URL } from '@/lib/constants/urls'
+import type { Period } from '@/lib/utils/arena-score'
 
 export const metadata: Metadata = {
   title: 'Arena — Crypto Trader Rankings & Community',
@@ -32,24 +34,8 @@ export const metadata: Metadata = {
 }
 
 // ISR: Revalidate every 5 minutes (300s)
-// CDN serves stale content while revalidating in background
 export const revalidate = 300
 
-/**
- * Homepage — Two-phase rendering for extreme LCP optimization:
- *
- * Phase 1 (SSR): HomeHeroSSR + SSRRankingTable render as pure static HTML.
- *   - Zero JS chunks for the above-fold content
- *   - Hero headline "Track the World's Best Crypto Traders" is the LCP element
- *   - On slow 4G (1.6 Mbps), LCP is ~1-2s instead of 10s+
- *
- * Phase 2 (Client): HomePageLoader uses next/dynamic(ssr:false) to lazy-load
- *   the full interactive HomePage AFTER the browser finishes parsing HTML.
- *   When HomePage mounts, CSS hides the SSR shell (#ssr-homepage-shell).
- *
- * Key: HomePageLoader is a 'use client' wrapper so we can use ssr:false
- * (not allowed directly in Server Components).
- */
 // Site-level JSON-LD structured data
 const organizationJsonLd = {
   '@context': 'https://schema.org',
@@ -61,41 +47,57 @@ const organizationJsonLd = {
   description: 'Arena aggregates trader rankings from 30+ exchanges. Follow top traders, share insights, and level up your trading.',
 }
 
-// WebSite JSON-LD is in layout.tsx (site-wide, with potentialAction)
+const PER_PAGE = 25
+const VALID_RANGES = new Set(['7D', '30D', '90D'])
 
-export default async function Page() {
-  // Fetch data in parallel for optimal performance
-  const [{ traders: initialTraders, lastUpdated, totalCount, categoryCounts }, heroStats] = await Promise.all([
-    getInitialTraders('90D', 20),
+/**
+ * Homepage — Single-phase SSR architecture.
+ *
+ * The ranking table is 100% server-rendered. No client-side re-rendering.
+ * JS is only loaded for interactive controls (time range switch, pagination)
+ * which use router.push() to trigger a new server render.
+ *
+ * LCP = FCP ≈ 1.5s because the table is in the initial HTML payload.
+ * Zero JS needed to see the complete leaderboard.
+ */
+export default async function Page({
+  searchParams,
+}: {
+  searchParams: Promise<{ [key: string]: string | string[] | undefined }>
+}) {
+  const sp = await searchParams
+  const rawRange = typeof sp?.range === 'string' ? sp.range : '90D'
+  const timeRange = (VALID_RANGES.has(rawRange) ? rawRange : '90D') as Period
+  const page = Math.max(0, parseInt(typeof sp?.page === 'string' ? sp.page : '0', 10) || 0)
+
+  // Fetch data in parallel
+  const [{ traders, lastUpdated, totalCount, categoryCounts }, heroStats] = await Promise.all([
+    getInitialTraders(timeRange, PER_PAGE, page),
     getHeroStats(),
   ])
 
   return (
     <>
-      {/* REMOVED: <link rel="preload" as="fetch" href="/api/traders?timeRange=90D&limit=200">
-          This was forcing the browser to download ranking data before any JS initialized.
-          The SSR table already shows data — the client fetch can happen lazily. */}
       <JsonLd data={organizationJsonLd} />
 
-      {/* Phase 1 (SSR): Hero stays visible as LCP element even after Phase 2 loads.
-          Only the ranking table is hidden (it gets replaced by the interactive table).
-          Hero is kept visible because hiding it resets LCP to Phase 2 hero load time (~11s on slow 4G). */}
-      <div id="ssr-hero-shell">
-        <HomeHeroSSR traderCount={heroStats?.traderCount} exchangeCount={heroStats?.exchangeCount} />
-      </div>
-      <div id="ssr-ranking-table">
-        <SSRRankingTable traders={initialTraders} />
-      </div>
+      {/* Hero — LCP element. Pure server HTML, zero JS. */}
+      <HomeHeroSSR traderCount={heroStats?.traderCount} exchangeCount={heroStats?.exchangeCount} />
 
+      {/* Ranking table — 100% SSR. No Phase 2 replacement.
+          Controls (time range + pagination) are a tiny client island (~3KB).
+          Table rows are pure server HTML — no JS needed to display them. */}
       <PageErrorBoundary>
-        {/* Phase 2: Full interactive homepage — loaded with ssr:false via HomePageLoader. */}
-        <HomePageLoader
-          initialTraders={initialTraders}
-          initialLastUpdated={lastUpdated}
-          heroStats={heroStats}
-          initialTotalCount={totalCount}
-          initialCategoryCounts={categoryCounts}
-        />
+        <div className="ssr-t" style={{ marginTop: 8 }}>
+          <Suspense>
+            <RankingControls
+              activeRange={timeRange}
+              page={page}
+              totalCount={totalCount}
+              perPage={PER_PAGE}
+            />
+          </Suspense>
+          <SSRRankingTable traders={traders} startRank={page * PER_PAGE} />
+        </div>
       </PageErrorBoundary>
     </>
   )

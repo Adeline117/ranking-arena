@@ -12,15 +12,8 @@
    - JS idle callback removes the SSR DOM nodes for cleanup.
    - Phase 2 has min-height matching SSR content (~1650px) to prevent CLS
      when SSR shells collapse to 0. */
-/* SSR hero: NEVER hidden — it IS the LCP element (~1.2s on slow 4G).
-   Phase 2 does NOT render its own hero; SSR hero stays visible permanently.
-   Only the ranking table is collapsed (replaced by Phase 2's interactive table). */
-:has(#homepage-interactive) #ssr-ranking-table {
-  content-visibility: hidden;
-  height: 0;
-  overflow: hidden;
-  contain: strict;
-}
+/* Phase 2 eliminated — SSR table is the only rendering path.
+   No CSS hiding needed. Table is always visible. LCP = FCP. */
 
 /*
  * Performance Optimization: CSS files moved to async loading
@@ -2276,6 +2269,20 @@ input[type="search"]::-webkit-search-cancel-button:hover {
 .ssr-wr{text-align:right;font-size:12px;color:var(--color-text-secondary);font-variant-numeric:tabular-nums}
 .ssr-mdd{text-align:right;font-size:12px;color:var(--color-danger);font-variant-numeric:tabular-nums}
 .ssr-r{text-align:right}
+
+/* SSR Ranking Controls — time range + pagination */
+.ssr-controls{display:flex;align-items:center;justify-content:space-between;padding:10px 16px;gap:8px;flex-wrap:wrap;position:relative}
+.ssr-range-bar{display:flex;gap:4px}
+.ssr-range-btn{padding:6px 14px;border-radius:8px;border:1px solid var(--color-border-primary);background:transparent;color:var(--color-text-secondary);font-size:12px;font-weight:600;cursor:pointer;transition:all 0.15s}
+.ssr-range-btn:hover{background:var(--color-bg-hover);color:var(--color-text-primary)}
+.ssr-range-active{background:var(--color-accent-primary-15,rgba(167,139,250,0.15));color:var(--color-accent-primary,#a78bfa);border-color:var(--color-accent-primary-30,rgba(167,139,250,0.3))}
+.ssr-pagination{display:flex;align-items:center;gap:8px}
+.ssr-page-btn{padding:6px 12px;border-radius:6px;border:1px solid var(--color-border-primary);background:transparent;color:var(--color-text-secondary);font-size:12px;cursor:pointer;transition:all 0.15s}
+.ssr-page-btn:hover:not(:disabled){background:var(--color-bg-hover);color:var(--color-text-primary)}
+.ssr-page-btn:disabled{opacity:0.4;cursor:not-allowed}
+.ssr-page-info{font-size:12px;color:var(--color-text-tertiary);font-variant-numeric:tabular-nums;min-width:48px;text-align:center}
+.ssr-loading-bar{position:absolute;top:0;left:0;right:0;height:2px;background:var(--color-accent-primary,#a78bfa);animation:ssr-loading 1s ease-in-out infinite}
+@keyframes ssr-loading{0%{transform:scaleX(0);transform-origin:left}50%{transform:scaleX(1);transform-origin:left}50.1%{transform-origin:right}100%{transform:scaleX(0);transform-origin:right}}
 
 /* ============================================
    Critical-path inline style replacements

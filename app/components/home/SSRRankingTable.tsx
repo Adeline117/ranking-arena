@@ -25,13 +25,15 @@ function getInitial(name: string): string {
 
 interface Props {
   traders: InitialTrader[]
+  /** Rank offset for pagination (page 0 = 0, page 1 = 25, etc.) */
+  startRank?: number
 }
 
-export default function SSRRankingTable({ traders }: Props) {
+export default function SSRRankingTable({ traders, startRank = 0 }: Props) {
   if (!traders.length) return null
 
   return (
-      <div className="ssr-t">
+      <>
         <div className="ssr-hdr">
           <span>RANK</span>
           <span>TRADER</span>
@@ -41,8 +43,8 @@ export default function SSRRankingTable({ traders }: Props) {
           <span className="hide-mobile ssr-r">MDD</span>
         </div>
 
-        {traders.slice(0, 25).map((trader, idx) => {
-          const rank = idx + 1
+        {traders.map((trader, idx) => {
+          const rank = startRank + idx + 1
           const isTop3 = rank <= 3
 
           return (
@@ -101,6 +103,6 @@ export default function SSRRankingTable({ traders }: Props) {
             </a>
           )
         })}
-      </div>
+      </>
   )
 }
