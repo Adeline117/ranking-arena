@@ -27,20 +27,40 @@ const translationCache: Record<Language, Record<string, string>> = {
 
 const loadedLangs = new Set<Language>()
 
-// Eager dynamic import — fires immediately at module load time (not deferred).
-// Resolves in ~50ms (local chunk), well before any component render (~4s Phase 2).
-// eslint-disable-next-line @typescript-eslint/no-floating-promises
-import('./i18n/en').then(m => {
-  const dict = m.default as Record<string, string>
+// Track when translations finish loading (client-side re-render trigger)
+let translationVersion = 0
+const translationListeners = new Set<() => void>()
+export function getTranslationVersion() { return translationVersion }
+export function onTranslationsReady(cb: () => void) { translationListeners.add(cb); return () => { translationListeners.delete(cb) } }
+
+function populateEnglish(dict: Record<string, string>) {
   translationCache.en = dict
-  // Pre-fill other language caches with en as fallback
   for (const lang of ['zh', 'ja', 'ko'] as const) {
     if (!loadedLangs.has(lang)) {
       translationCache[lang] = dict
     }
   }
   loadedLangs.add('en')
-})
+}
+
+if (typeof window === 'undefined') {
+  // Server-side: synchronous require so t() works during SSR.
+  // Server bundles are NOT sent to the client — zero bundle size impact.
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  try { populateEnglish(require('./i18n/en').default) } catch { /* build env fallback: async below */ }
+}
+
+// Client-side: async import for code splitting (saves ~62KB gzipped from initial bundle).
+// Fires immediately at module load time. On client, resolves before Phase 2 hydration (~4s).
+// On server, this is a no-op if require() already populated above.
+if (typeof window !== 'undefined' || !loadedLangs.has('en')) {
+  // eslint-disable-next-line @typescript-eslint/no-floating-promises
+  import('./i18n/en').then(m => {
+    populateEnglish(m.default as Record<string, string>)
+    translationVersion++
+    translationListeners.forEach(cb => cb())
+  })
+}
 
 async function loadLang(lang: Language): Promise<void> {
   if (loadedLangs.has(lang)) return
