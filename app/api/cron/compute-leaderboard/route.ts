@@ -1224,13 +1224,15 @@ async function computeSeason(
   let outlierCount = 0
   for (const t of scored) {
     let isOutlier = false
-    // |ROI| > 50,000% is almost certainly data corruption
-    if (Math.abs(t.roi) > 50000) isOutlier = true
+    // |ROI| > 10,000% is almost certainly data corruption (aligned with ROI_CAP)
+    if (Math.abs(t.roi) > 10000) isOutlier = true
     // PnL > $100M from non-whale sources
     if (t.pnl != null && Math.abs(t.pnl) > 100_000_000 && !['hyperliquid'].includes(t.source)) isOutlier = true
     // ROI and PnL sign mismatch (positive PnL with hugely negative ROI or vice versa)
     if (t.pnl != null && t.pnl > 1000 && t.roi < -1000) isOutlier = true
     if (t.pnl != null && t.pnl < -1000 && t.roi > 1000) isOutlier = true
+    // High ROI but PnL is 0 — data inconsistency (e.g. Bitfinex equity proxy mismatch)
+    if (Math.abs(t.roi) > 500 && (t.pnl == null || t.pnl === 0)) isOutlier = true
     // web3_bot entries are DeFi protocols, not traders
     if (t.source === 'web3_bot') isOutlier = true
 
