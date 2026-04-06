@@ -139,9 +139,10 @@ export class BitfinexFuturesConnector extends BaseConnector {
       const equity = equityMap.get(id)
 
       // Estimate ROI from PnL / equity proxy
+      // Cap at ±10000% to match arena-score ROI_CAP (was 50000%, letting absurd values through)
       let roi: number | null = null
       if (equity != null && Math.abs(equity) > 1 && pnl !== 0) {
-        roi = Math.max(-500, Math.min(50000, (pnl / Math.abs(equity)) * 100))
+        roi = Math.max(-500, Math.min(10000, (pnl / Math.abs(equity)) * 100))
       }
 
       traderMap.set(id, {
