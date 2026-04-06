@@ -119,7 +119,7 @@ export async function GET() {
         // If VPS cron wrote data in the last 15min, the VPS is actually working fine
         // (Vultr intermittently blocks Vercel's Tokyo IPs)
         // Check if VPS-dependent pipelines succeeded recently (bybit/bitget use VPS scraper)
-        const { data: recentVpsJob } = await supabase
+        const { data: recentVpsJob } = await getSupabaseAdmin()
           .from('pipeline_logs')
           .select('job_name, started_at')
           .eq('status', 'success')
