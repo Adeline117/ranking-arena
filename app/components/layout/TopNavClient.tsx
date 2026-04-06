@@ -6,10 +6,12 @@ import dynamic from 'next/dynamic'
 import { tokens } from '@/lib/design-tokens'
 import ThemeToggle from '../ui/ThemeToggle'
 import LanguageSwitcher from '../ui/LanguageToggle'
-import NavSearchBar from './NavSearchBar'
-import MobileSearchButton from './MobileSearchButton'
 import LoginButton from './LoginButton'
 import { useTopNavState } from './useTopNavState'
+
+// Search bar: large component (autocomplete, dropdown, API calls) — defer to reduce initial chunk
+const NavSearchBar = dynamic(() => import('./NavSearchBar'), { ssr: false })
+const MobileSearchButton = dynamic(() => import('./MobileSearchButton'), { ssr: false })
 
 // Auth-dependent components: only needed when logged in, dynamic to reduce initial bundle
 const NotificationButton = dynamic(() => import('./NotificationButton'), { ssr: false })

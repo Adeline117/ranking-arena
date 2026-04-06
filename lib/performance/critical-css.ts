@@ -256,19 +256,14 @@ export function getFontPreloadLinks(): Array<{ href: string; as: string; type: s
  * dns-prefetch: DNS lookup only -- cheaper fallback for browsers that cap preconnects.
  */
 export function getResourceHints(): Array<{ rel: string; href: string; crossOrigin?: 'anonymous' | 'use-credentials' | '' }> {
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://supabase.co'
-
   const hints: Array<{ rel: string; href: string; crossOrigin?: 'anonymous' | 'use-credentials' | '' }> = [
-    // Google Fonts preconnect not needed — next/font inlines font CSS and self-hosts woff2 files.
-    // Supabase -- API calls on every page (rankings, auth, etc.)
-    { rel: 'preconnect', href: supabaseUrl, crossOrigin: 'anonymous' },
-    // cdn.arenafi.org preconnect REMOVED — only used via /api/cdn-proxy for PDFs,
-    // never fetched from browser on initial page load. Wasted connection.
+    // Supabase preconnect REMOVED — homepage SSR fetches server-side only.
+    // Client-side Supabase calls don't start until Phase 2 interaction (~4s+).
+    // Preconnect was wasting a TCP+TLS handshake on initial load.
     // dns-prefetch only (no TCP/TLS) for top exchange avatar CDNs — cheap, saves ~100ms on first avatar
     { rel: 'dns-prefetch', href: 'https://bin.bnbstatic.com' },
     { rel: 'dns-prefetch', href: 'https://www.okx.com' },
     { rel: 'dns-prefetch', href: 'https://public.bnbstatic.com' },
-    // CoinGecko, Sentry, Upstash — server-side only, no client hints needed
   ]
 
   return hints
