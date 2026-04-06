@@ -422,7 +422,7 @@ export class BinanceFuturesConnector extends BaseConnector {
           },
           body: JSON.stringify({
             encryptedUid: traderKey,
-            timeRange: periodType,
+            timeRange: newPeriod,
           }),
         }
       )
