@@ -23,6 +23,7 @@ const TTL_SECONDS = 2 * 60 * 60 // 2 hours
 // Write buffer configuration
 const BUFFER_FLUSH_MS = 1000  // flush every 1s
 const BUFFER_MAX_SIZE = 100   // or when buffer hits 100 items per key
+const BUFFER_MAX_TOTAL_ITEMS = 50000 // hard cap: prevent OOM during Redis outage
 
 function redisKey(period: string): string {
   return `${REDIS_KEY_PREFIX}:${period.toUpperCase()}`
@@ -69,6 +70,10 @@ export async function flushBuffer(): Promise<void> {
 
   const redis = await getSharedRedis()
   if (!redis) {
+    const discarded = [...writeBuffer.values()].reduce((sum, items) => sum + items.length, 0)
+    if (discarded > 0) {
+      logger.warn(`[ranking-store] Redis unavailable, discarding ${discarded} buffered writes`)
+    }
     writeBuffer.clear()
     return
   }
@@ -106,6 +111,13 @@ export async function updateTraderScore(
 ): Promise<void> {
   const key = redisKey(period)
   const member = memberKey(platform, traderKey)
+
+  // Hard cap: if buffer exceeds max total items, force flush to prevent OOM
+  const totalBuffered = [...writeBuffer.values()].reduce((sum, items) => sum + items.length, 0)
+  if (totalBuffered >= BUFFER_MAX_TOTAL_ITEMS) {
+    logger.warn(`[ranking-store] Buffer hit hard cap (${totalBuffered} items), forcing flush`)
+    await flushBuffer()
+  }
 
   if (!writeBuffer.has(key)) writeBuffer.set(key, [])
   writeBuffer.get(key)!.push({ member, score: arenaScore })
