@@ -1211,11 +1211,13 @@ async function computeSeason(
       handle: displayHandle,
       // Generate identicon locally when no avatar — eliminates external dicebear.com request per trader
       avatar_url: info.avatar_url || generateIdenticonSvg(t.source + '_' + t.source_trader_id, 64),
-      // Score sub-components (returnScore/drawdownScore/stabilityScore/pnlScore)
+      // Score sub-components for frontend display
       profitability_score: Math.round(scoreResult.returnScore * 100) / 100,
-      risk_control_score: Math.round(scoreResult.drawdownScore * 100) / 100,
-      execution_score: Math.round(scoreResult.stabilityScore * 100) / 100,
-      score_completeness: Math.round(scoreResult.pnlScore * 100) / 100,
+      risk_control_score: Math.round(scoreResult.pnlScore * 100) / 100,
+      execution_score: null, // V3 removed drawdown/stability sub-scores
+      // Data completeness: derive from which metrics are available
+      score_completeness: (t.max_drawdown != null && t.win_rate != null) ? 'full'
+        : (t.max_drawdown != null || t.win_rate != null) ? 'partial' : 'minimal',
       trading_style: t.trading_style,
       avg_holding_hours: t.avg_holding_hours,
       style_confidence: t.style_confidence,
