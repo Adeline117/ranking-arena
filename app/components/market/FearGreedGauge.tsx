@@ -32,7 +32,17 @@ export default function FearGreedGauge() {
   useEffect(() => {
     fetch('/api/market/fear-greed', { signal: AbortSignal.timeout(15000) })
       .then((r) => r.json())
-      .then((json) => { if (json.current) setData(json.current) })
+      .then((json) => {
+        if (json.current) {
+          // Hide stale data: if timestamp is older than 48 hours, treat as error
+          const ts = Number(json.current.timestamp) * 1000
+          if (Date.now() - ts > 48 * 60 * 60 * 1000) {
+            setError('stale')
+            return
+          }
+          setData(json.current)
+        }
+      })
       .catch((err) => {
         if (err instanceof Error && err.name === 'AbortError') return
         setError(err instanceof Error ? err.message : 'Failed to load')
@@ -74,31 +84,9 @@ export default function FearGreedGauge() {
     )
   }
 
-  if (error && !data) {
-    return (
-      <div style={{ ...cardStyle, display: 'flex', flexDirection: 'column' }}>
-        <div style={{
-          fontSize: tokens.typography.fontSize.base,
-          fontWeight: 700,
-          color: tokens.colors.text.primary,
-          marginBottom: tokens.spacing[2],
-          letterSpacing: '0.3px',
-        }}>
-          {t('fearGreedTitle')}
-        </div>
-        <div style={{
-          flex: 1,
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          color: tokens.colors.text.tertiary,
-          fontSize: tokens.typography.fontSize.sm,
-        }}>
-          {t('sidebarLoadFailed')}
-        </div>
-      </div>
-    )
-  }
+  // Hide entirely when data is stale (>48h) or API is down
+  // — showing outdated Fear & Greed scores is worse than showing nothing
+  if (error && !data) return null
 
   if (!data) return null
 
