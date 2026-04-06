@@ -7,17 +7,21 @@
 **Goal**: New traders get complete profile pages immediately (no waiting for batch-enrich cron).
 
 ### Changes
-1. `enrichment-runner.ts`: Added `traderKeys` + `timeBudgetMs` params to `runEnrichment`
-2. `connector-db-adapter.ts`: `AdapterResult.savedTraderKeys` + `runConnectorBatch` runs enrichment for 90D→30D→7D with time budget
+1. `enrichment-runner.ts`: Added `traderKeys` + `timeBudgetMs` params to `runEnrichment` — allows batch-fetch to pass freshly-fetched keys directly, skipping leaderboard_ranks DB read
+2. `connector-db-adapter.ts`: `AdapterResult` returns `savedTraderKeys`; `runConnectorBatch` collects unique keys across all windows and runs enrichment for 90D→30D→7D with time budget awareness
 3. `batch-fetch-traders/route.ts`: Passes `platformTimeBudgetMs` to `runConnectorBatch`
-4. `inlineEnrich` defaults to `true` — all platforms auto-enrich after fetch
+4. `inlineEnrich` now defaults to `true` (was `false`) — all platforms auto-enrich
 
 ### How It Works
 - After leaderboard fetch+write, remaining platform time budget goes to enrichment
-- Batch-cached platforms (bitunix, xt, coinex, etc.): enrich ALL traders instantly
+- Batch-cached platforms (bitunix, xt, coinex, etc.): enrich ALL traders instantly (0ms delay)
 - API platforms: enrich within time budget, excess deferred to batch-enrich
 - batch-enrich cron continues as safety net for stragglers
 
+### Verification
+- TypeScript: clean ✅
+- Tests: 15/15 adapter tests pass, 2214/2221 total (4 pre-existing failures) ✅
+- No FK constraints on enrichment tables — safe to write before leaderboard_ranks exists ✅
 ---
 
 ## Sharpe Coverage Overhaul (2026-04-02)
@@ -55,11 +59,14 @@ Overall: **46% → 62%** (+16%)
 - enrichment batch limits already 10x'd — not a throughput issue anymore
 - To go higher: lower sharpe threshold from 3→2 days, use unrealized PnL for HL whales, or accept null for truly inactive traders
 
-### Still Low (API limitations)
-- hyperliquid 37%: userFillsByTime helps mid-tier; whales have <5 closing days in 90d
-- blofin 11%: Cloudflare WAF blocks even Playwright stealth
-- bingx 23%: no daily curve in API
-- gains 32%: onchain events sparse
+### Remaining null (verified 2026-04-03, total 47%→59%)
+- **eToro 2911 null**: CopySim works but CF rate limit ~36 req/IP. All 3 IPs burned. Wait 24h then `node /tmp/etoro-browser-blitz.mjs`
+- **HL 3198 null**: whale blitz done, 1417 traders <3d closing. Try clearinghouseState accountValue delta
+- **Drift 2576 null**: <3 snapshots for new/inactive accounts
+- **BloFin 964 null**: SG VPS geo-blocked, Mac CF 403. Need US/EU proxy
+- **BingX 189 null**: no daily curve API. Scraper page timeout
+- **Gains 413 null**: onchain events <3d per trader
+- **Toobit 198 null**: ranking API missing sharpeRatio field
 
 ### Key Bugs Found & Fixed
 1. **Drift**: API returns `{accounts:[{snapshots:[...]}]}` but code did `Array.isArray(response)` = FALSE → snaps=[] for ALL traders
