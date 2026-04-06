@@ -92,12 +92,12 @@ async function aggregateForDate(supabase: any, dateStr: string, _plog: any): Pro
       recentCutoff.setUTCDate(recentCutoff.getUTCDate() - 2)
       const recentCutoffStr = recentCutoff.toISOString()
 
-      // First, get distinct platform names
+      // First, get distinct platform names — use traders table (small, indexed)
+      // instead of scanning 1.5M v2 rows with limit(50000) which misses small platforms
       const { data: platformList, error: platformListError } = await supabase
-        .from('trader_snapshots_v2')
+        .from('traders')
         .select('platform')
-        .gte('updated_at', recentCutoffStr)
-        .limit(50000)
+        .eq('is_active', true)
 
       if (platformListError || !platformList) {
         logger.error(`[aggregate] Failed to fetch platform list for ${dateStr}`, { error: platformListError?.message })
