@@ -150,7 +150,9 @@ if (typeof window !== 'undefined') {
   }
 }
 
-// 导航 instrumentation — 延迟获取
+// Navigation instrumentation — deferred.
+// NOTE: This named export causes Next.js to call it on every route transition.
+// The dynamic import inside is fine — it only loads Sentry when a navigation occurs.
 export const onRouterTransitionStart = (...args: unknown[]) => {
   import('@sentry/nextjs').then(Sentry => {
     Sentry.captureRouterTransitionStart(...(args as Parameters<typeof Sentry.captureRouterTransitionStart>))
