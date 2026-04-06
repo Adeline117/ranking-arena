@@ -57,18 +57,20 @@ async function getPlatformHealthData(): Promise<PlatformHealth[]> {
       .gte('started_at', sevenDaysAgo)
       .not('records_processed', 'is', null)
       .gt('records_processed', 0),
-    // Per-platform snapshot queries (these use indexes, ~1ms each)
+    // Per-platform snapshot queries with 24h filter for partition pruning
+    // (was: 1.3s avg without time filter, now uses idx_snap_v2_platform_updated)
     ...activePlatforms.flatMap(platform => [
       supabase
         .from('trader_snapshots_v2')
         .select('updated_at')
         .eq('platform', platform)
+        .gte('updated_at', new Date(now - 24 * 60 * 60 * 1000).toISOString())
         .order('updated_at', { ascending: false })
         .limit(1)
         .maybeSingle(),
       supabase
         .from('trader_snapshots_v2')
-        .select('id', { count: 'exact', head: true })
+        .select('id', { count: 'planned', head: true })
         .eq('platform', platform)
         .gte('updated_at', sixHoursAgo),
     ]),
@@ -103,7 +105,8 @@ async function getPlatformHealthData(): Promise<PlatformHealth[]> {
     const countRatio = avgCount != null && avgCount > 0 ? currentCount / avgCount : null
 
     let status: 'healthy' | 'warning' | 'critical' = 'healthy'
-    if (ageHours == null || ageHours > 12) {
+    if (ageHours == null || ageHours > 24) {
+      // null means no data in last 24h (query limited to 24h for perf)
       status = 'critical'
     } else if (ageHours > 6) {
       status = 'warning'
