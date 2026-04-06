@@ -12,8 +12,8 @@ import type { Metadata } from 'next'
 import { redirect, notFound } from 'next/navigation'
 import { getSupabaseAdmin } from '@/lib/supabase/server'
 import { resolveTrader as resolveTraderUnified } from '@/lib/data/unified'
-import WrappedCardClient from '@/app/wrapped/[handle]/WrappedCardClient'
-import type { WrappedTraderData } from '@/app/wrapped/[handle]/page'
+import WrappedCardClient from '@/app/(app)/wrapped/[handle]/WrappedCardClient'
+import type { WrappedTraderData } from '@/app/(app)/wrapped/[handle]/page'
 import { BASE_URL } from '@/lib/constants/urls'
 
 export const revalidate = 300

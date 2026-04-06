@@ -315,7 +315,7 @@ export default async function TraderPage({ params, searchParams }: { params: Pro
     <>
       <JsonLd data={jsonLd} />
       <ErrorBoundary pageType="trader-profile">
-        <TraderProfileClient data={traderData} serverTraderData={serverTraderData as import('@/app/u/[handle]/components/types').TraderPageData | null} claimedUser={claimedUserProfile} />
+        <TraderProfileClient data={traderData} serverTraderData={serverTraderData as import('@/app/(app)/u/[handle]/components/types').TraderPageData | null} claimedUser={claimedUserProfile} />
       </ErrorBoundary>
     </>
   )

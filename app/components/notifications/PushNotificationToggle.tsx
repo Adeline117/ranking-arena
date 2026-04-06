@@ -4,7 +4,7 @@ import React, { useState, useEffect, useCallback, useMemo } from 'react'
 import { tokens } from '@/lib/design-tokens'
 import { Box, Text } from '@/app/components/base'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
-import { ToggleSwitch } from '@/app/settings/components/shared'
+import { ToggleSwitch } from '@/app/(app)/settings/components/shared'
 import { logger } from '@/lib/logger'
 
 type PushStatus = 'loading' | 'unsupported' | 'denied' | 'subscribed' | 'unsubscribed'
