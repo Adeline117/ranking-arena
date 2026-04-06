@@ -32,7 +32,7 @@ export async function pingHealthcheck(
       method: 'POST',
       signal: AbortSignal.timeout(5000),
     })
-  } catch {
-    // Non-critical — don't let healthcheck pings break the actual job
+  } catch (_err) {
+    /* non-critical — don't let healthcheck pings break the actual job */
   }
 }

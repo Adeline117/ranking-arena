@@ -119,8 +119,8 @@ export function validateUrl(url: string, locale: Locale = 'zh'): ValidationResul
   try {
     new URL(url)
     return VALID_RESULT
-  } catch {
-    // Intentionally swallowed: URL constructor threw, input is not a valid URL
+  } catch (_err) {
+    /* invalid URL format */
     return invalid(msg(locale).invalidUrl)
   }
 }

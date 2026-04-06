@@ -21,7 +21,8 @@ function correlationId(): string | undefined {
       const mod = '@/lib/api/' + 'correlation'
       // eslint-disable-next-line @typescript-eslint/no-require-imports
       _getCorrelationId = require(mod).getCorrelationId
-    } catch {
+    } catch (_err) {
+      /* correlation module unavailable */
       _getCorrelationId = () => undefined
     }
   }

@@ -82,7 +82,8 @@ export function verifyUnsubscribeToken(token: string): UnsubscribePayload | null
     }
 
     return { userId, type }
-  } catch {
+  } catch (_err) {
+    /* token verification failed */
     return null
   }
 }

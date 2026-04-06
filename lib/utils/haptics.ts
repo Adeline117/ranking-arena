@@ -63,8 +63,8 @@ export function haptic(pattern: HapticPattern = 'light'): boolean {
   try {
     const vibrationPattern = HAPTIC_PATTERNS[pattern]
     return navigator.vibrate(vibrationPattern)
-  } catch {
-    // Intentionally swallowed: vibration API not supported on this device
+  } catch (_err) {
+    /* non-critical: vibration API not supported */
     return false
   }
 }
@@ -79,8 +79,8 @@ export function hapticCustom(pattern: number[]): boolean {
   
   try {
     return navigator.vibrate(pattern)
-  } catch {
-    // Intentionally swallowed: vibration API not supported on this device
+  } catch (_err) {
+    /* non-critical: vibration API not supported */
     return false
   }
 }
@@ -95,8 +95,8 @@ export function hapticStop(): boolean {
   
   try {
     return navigator.vibrate(0)
-  } catch {
-    // Intentionally swallowed: vibration API not supported on this device
+  } catch (_err) {
+    /* non-critical: vibration API not supported */
     return false
   }
 }

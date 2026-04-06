@@ -166,7 +166,7 @@ export class PipelineEvaluator {
       if (rpcData && Array.isArray(rpcData) && rpcData.length > 0) {
         platformFreshness = rpcData as unknown as typeof platformFreshness
       }
-    } catch { /* RPC not available */ }
+    } catch (_err) { /* RPC not available */ }
 
     // Fallback: query leaderboard_ranks directly for per-platform freshness
     if (!platformFreshness) {
@@ -609,7 +609,8 @@ export class PipelineEvaluator {
             description: `${ep.name} took ${latency}ms (max: ${ep.maxMs}ms)`,
             recommendation: `Optimize ${ep.path}.` })
         } else { totalScore += 100 }
-      } catch {
+      } catch (err) {
+        console.warn('[evaluator] API check failed:', err instanceof Error ? err.message : String(err))
         issues.push({ platform: 'api', type: 'api_timeout', severity: 'critical',
           description: `${ep.name} timed out`, recommendation: `Check ${ep.path}.` })
       }
@@ -714,7 +715,8 @@ export class PipelineEvaluator {
             description: `${page.name}: ${res.status}, content=${hasContent}`,
             recommendation: `Check ${page.path} SSR rendering.` })
         }
-      } catch {
+      } catch (err) {
+        console.warn('[evaluator] frontend page check failed:', err instanceof Error ? err.message : String(err))
         issues.push({ platform: 'frontend', type: 'page_timeout', severity: 'warning',
           description: `${page.name} timed out`, recommendation: `Check ${page.path}.` })
       }
@@ -764,7 +766,8 @@ export class PipelineEvaluator {
             description: `${ep.name} took ${latency}ms (max: ${ep.maxMs}ms)`,
             recommendation: `Optimize ${ep.path}.` })
         } else { totalScore += 100 }
-      } catch {
+      } catch (err) {
+        console.warn('[evaluator] expanded API check failed:', err instanceof Error ? err.message : String(err))
         issues.push({ platform: 'api', type: 'api_timeout', severity: 'warning',
           description: `${ep.name} timed out`, recommendation: `Check ${ep.path}.` })
       }
@@ -896,7 +899,8 @@ export class PipelineEvaluator {
             description: `${platform} trader detail returned ${res.status}`,
             recommendation: `Check trader detail API.` })
         }
-      } catch {
+      } catch (err) {
+        console.warn('[evaluator] trader detail check failed:', err instanceof Error ? err.message : String(err))
         issues.push({ platform, type: 'trader_detail_timeout', severity: 'info',
           description: `${platform} trader detail timed out`,
           recommendation: `Check API latency.` })
@@ -948,7 +952,7 @@ export class PipelineEvaluator {
             const body = await res.json() as { status?: string }
             if (body.status === 'ok') { healthyCount++; ok = true; break }
           }
-        } catch { /* try next URL */ }
+        } catch (_err) { /* try next URL */ }
       }
       if (!ok) {
         issues.push({ platform: `vps_${vps.name.toLowerCase()}`, type: 'vps_unreachable', severity: 'critical',
@@ -1065,7 +1069,8 @@ export class PipelineEvaluator {
         } else {
           totalScore += 100
         }
-      } catch {
+      } catch (err) {
+        console.warn('[evaluator] page speed check failed:', err instanceof Error ? err.message : String(err))
         issues.push({ platform: 'frontend', type: 'page_timeout', severity: 'warning',
           description: `${page.name} timed out`, recommendation: `Check ${page.path}.` })
       }
@@ -1114,7 +1119,8 @@ export class PipelineEvaluator {
       }
       return { check: { name: 'trader_search_accuracy', category: 'completeness', passed: hasResults, score,
         details: `Search "bitcoin": ${results.length} results` }, issues }
-    } catch {
+    } catch (err) {
+      console.warn('[evaluator] search accuracy check failed:', err instanceof Error ? err.message : String(err))
       return { check: { name: 'trader_search_accuracy', category: 'completeness', passed: false, score: 0,
         details: 'Search timed out' },
         issues: [{ platform: 'api', type: 'search_timeout', severity: 'warning',

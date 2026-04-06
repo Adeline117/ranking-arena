@@ -166,8 +166,8 @@ export function sanitizeUrl(dirty: string): string {
     }
     
     return url.toString()
-  } catch {
-    // Intentionally swallowed: invalid URL format, return empty string for safety
+  } catch (_err) {
+    /* invalid URL format */
     return ''
   }
 }
@@ -223,8 +223,8 @@ export function sanitizeJson(dirty: string): string {
     // 解析并重新序列化，移除潜在的危险内容
     const parsed = JSON.parse(dirty)
     return JSON.stringify(parsed)
-  } catch {
-    // Intentionally swallowed: malformed JSON input, return empty object for safety
+  } catch (_err) {
+    /* malformed JSON */
     return '{}'
   }
 }
