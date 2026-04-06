@@ -318,7 +318,7 @@ export async function getTraderDetail(supabase: SupabaseClient, params: {
       // Stats detail (all periods) — enrichment tables use v1 naming
       safeQuery(() =>
         supabase.from('trader_stats_detail')
-          .select('sharpe_ratio, copiers_pnl, copiers_count, winning_positions, total_positions, avg_holding_time_hours, avg_profit, avg_loss, largest_win, largest_loss, aum, period')
+          .select('sharpe_ratio, copiers_pnl, copiers_count, winning_positions, total_positions, total_trades, profitable_trades_pct, avg_holding_time_hours, avg_profit, avg_loss, largest_win, largest_loss, aum, period')
           .in(ENRICH.source, sourceAliases).eq(ENRICH.source_trader_id, traderKey)
           .order('captured_at', { ascending: false }).limit(3)
       ),
@@ -379,12 +379,13 @@ export async function getTraderDetail(supabase: SupabaseClient, params: {
   type StatsRow = {
     sharpe_ratio: number | null; copiers_pnl: number | null; copiers_count: number | null
     winning_positions: number | null; total_positions: number | null
+    total_trades: number | null; profitable_trades_pct: number | null
     avg_holding_time_hours: number | null; avg_profit: number | null; avg_loss: number | null
     largest_win: number | null; largest_loss: number | null; aum: number | null; period: string | null
   }
   const statsRows = (statsDetailResult || []) as StatsRow[]
   // Prefer 90D row with actual data (non-null fields) over empty newer rows
-  const hasData = (s: StatsRow) => s.avg_profit != null || s.largest_win != null || s.sharpe_ratio != null || s.winning_positions != null
+  const hasData = (s: StatsRow) => s.avg_profit != null || s.largest_win != null || s.sharpe_ratio != null || s.winning_positions != null || s.total_trades != null
   const statsPrimary = statsRows.find(s => s.period === '90D' && hasData(s))
     || statsRows.find(s => s.period === '90D')
     || statsRows.find(s => hasData(s))
@@ -395,7 +396,8 @@ export async function getTraderDetail(supabase: SupabaseClient, params: {
     copiersPnl: statsPrimary.copiers_pnl,
     copiersCount: statsPrimary.copiers_count,
     winningPositions: statsPrimary.winning_positions,
-    totalPositions: statsPrimary.total_positions,
+    // Fallback: total_positions → total_trades (131K rows have total_trades but not total_positions)
+    totalPositions: statsPrimary.total_positions ?? statsPrimary.total_trades,
     avgHoldingHours: statsPrimary.avg_holding_time_hours,
     avgProfit: statsPrimary.avg_profit,
     avgLoss: statsPrimary.avg_loss,
