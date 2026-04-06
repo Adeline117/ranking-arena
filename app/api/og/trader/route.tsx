@@ -420,6 +420,45 @@ export async function GET(request: NextRequest) {
     )
   } catch (e) {
     logger.error('[OG Trader] Error:', e)
-    return new Response('Failed to generate image', { status: 500 })
+    // Return a minimal fallback OG image instead of a 500 error.
+    // A broken OG image means no social preview on Twitter/Discord — unacceptable.
+    const fallbackHandle = new URL(request.url).searchParams.get('handle') || 'Trader'
+    try {
+      return new ImageResponse(
+        (
+          <div style={{
+            width: 1200, height: 630, display: 'flex', flexDirection: 'column',
+            alignItems: 'center', justifyContent: 'center',
+            background: 'linear-gradient(135deg, #0A0A0F 0%, #1a1525 50%, #0A0A0F 100%)',
+            fontFamily: 'Inter, system-ui, sans-serif',
+          }}>
+            <div style={{
+              width: 88, height: 88, borderRadius: '50%',
+              background: 'linear-gradient(135deg, #8B5CF6, #6366f1)',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              fontSize: 36, fontWeight: 800, color: '#fff', marginBottom: 24,
+            }}>
+              {fallbackHandle.charAt(0).toUpperCase()}
+            </div>
+            <span style={{ fontSize: 36, fontWeight: 900, color: '#fff', marginBottom: 12 }}>
+              {fallbackHandle.length > 24 ? fallbackHandle.slice(0, 24) + '...' : fallbackHandle}
+            </span>
+            <span style={{ fontSize: 18, color: '#D4AF37', fontWeight: 700, letterSpacing: '1.5px' }}>
+              ARENA — Crypto Trader Rankings
+            </span>
+            <span style={{ fontSize: 14, color: 'rgba(255,255,255,0.5)', marginTop: 8 }}>
+              arenafi.org
+            </span>
+          </div>
+        ),
+        {
+          width: 1200, height: 630,
+          headers: { 'Cache-Control': 'public, s-maxage=60, stale-while-revalidate=300' },
+        }
+      )
+    } catch {
+      // Even fallback image generation failed — return a plain 500
+      return new Response('Failed to generate image', { status: 500 })
+    }
   }
 }
