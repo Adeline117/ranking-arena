@@ -92,23 +92,22 @@ function createCronRequest(secret?: string): NextRequest {
 
 /** Create a chainable Supabase query proxy that resolves to given data */
 function chainProxy(resolvedValue: { data: unknown; error: unknown }) {
+  // Thenable functions stored outside proxy so get trap can return them
+  const thenFn = (resolve: (v: unknown) => void) => Promise.resolve(resolvedValue).then(resolve)
+  const catchFn = (reject: (v: unknown) => void) => Promise.resolve(resolvedValue).catch(reject)
+
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const proxy: any = new Proxy({}, {
     get(_, prop) {
-      if (prop === 'then') return undefined // not a Promise
+      // Make proxy thenable so `await` resolves to { data, error }
+      if (prop === 'then') return thenFn
+      if (prop === 'catch') return catchFn
       return jest.fn().mockImplementation((..._args: unknown[]) => {
-        // Terminal methods that return the result
         if (prop === 'single' || prop === 'maybeSingle') return Promise.resolve(resolvedValue)
-        // If the resolved value has a `then`, it's the last in chain
-        // But we need the chain to be flexible, so always return proxy
-        // except check if next call should resolve
         return proxy
       })
     },
   })
-  // Make the proxy thenable so await works at any point in chain
-  proxy.then = (resolve: (v: unknown) => void) => Promise.resolve(resolvedValue).then(resolve)
-  proxy.catch = (reject: (v: unknown) => void) => Promise.resolve(resolvedValue).catch(reject)
   return proxy
 }
 
@@ -185,13 +184,16 @@ describe('GET /api/cron/precompute-composite', () => {
     })
 
     // The route calls fetchWindow 3 times (7D, 30D, 90D) in parallel
-    // Use a single proxy that always returns combined rows (test verifies composite logic, not per-window splits)
+    // Create a fresh proxy per call to avoid shared state between concurrent awaits
     const allRows = [...rows7d, ...rows30d, ...rows90d]
-    const snapshotQuery = snapshotQueryFor(allRows)
 
     mockSupabaseFrom.mockImplementation((table: string) => {
-      if (table === 'trader_snapshots_v2') return snapshotQuery
-      if (table === 'trader_sources') return traderSourcesQuery
+      if (table === 'trader_snapshots_v2') return snapshotQueryFor(allRows)
+      if (table === 'trader_sources') return chainProxy({ data: [
+        { source: 'binance-futures', source_trader_id: 'trader1', handle: 'CryptoKing', avatar_url: 'https://img/1.png' },
+        { source: 'binance-futures', source_trader_id: 'trader2', handle: 'TraderJoe', avatar_url: null },
+        { source: 'hyperliquid', source_trader_id: 'trader3', handle: 'DeFiWhale', avatar_url: null },
+      ], error: null })
       return chainProxy({ data: [], error: null })
     })
 
