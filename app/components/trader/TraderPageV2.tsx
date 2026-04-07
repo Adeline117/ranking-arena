@@ -347,10 +347,10 @@ function SnapshotCard({ window, metrics }: { window: SnapshotWindow; metrics: Sn
             <span className="text-sm" style={{ color: tokens.colors.text.primary }}>{metrics.win_rate.toFixed(1)}%</span>
           </div>
         )}
-        {metrics.max_drawdown != null && Math.abs(metrics.max_drawdown) <= 100 && (
+        {metrics.max_drawdown != null && Number.isFinite(metrics.max_drawdown) && (
           <div className="flex justify-between">
             <span className="text-xs" style={{ color: tokens.colors.text.secondary }}>{t('mddLabel')}</span>
-            <span className="text-sm" style={{ color: tokens.colors.accent.error }}>{Math.abs(metrics.max_drawdown) < 0.05 ? '< 0.1%' : `-${Math.abs(metrics.max_drawdown).toFixed(1)}%`}</span>
+            <span className="text-sm" style={{ color: tokens.colors.accent.error }}>{Math.abs(metrics.max_drawdown) < 0.05 ? '< 0.1%' : `-${Math.min(Math.abs(metrics.max_drawdown), 100).toFixed(1)}%`}</span>
           </div>
         )}
         {metrics.sharpe_ratio != null && (
@@ -432,7 +432,9 @@ function SimpleChart({ data, mode = 'roi' }: { data: EquityCurvePoint[]; mode?: 
   const height = 120
   const padding = 8
 
-  const values = data.map(d => mode === 'pnl' ? ((d as EquityCurvePoint).pnl ?? d.roi) : d.roi)
+  const rawValues = data.map(d => mode === 'pnl' ? ((d as EquityCurvePoint).pnl ?? d.roi) : d.roi)
+  // Filter out NaN/Infinity to prevent chart rendering from breaking
+  const values = rawValues.map(v => Number.isFinite(v) ? v : 0)
   const minVal = Math.min(...values)
   const maxVal = Math.max(...values)
   const range = maxVal - minVal || 1
