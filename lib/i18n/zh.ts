@@ -4913,14 +4913,6 @@ compFieldMaxParticipants: '最大参与人数',
     // Onboarding
     welcomeMessage: '欢迎！浏览排行榜找到你感兴趣的交易员并关注他们。',
 
-    // AI Analysis
-    aiAnalyze: 'AI 分析',
-    aiAnalyzeLoading: '分析中...',
-    aiAnalyzeError: '分析失败，请稍后重试。',
-    aiAnalyzeStrengths: '优势',
-    aiAnalyzeRisks: '风险',
-    aiAnalyzeDisclaimer: 'AI 生成的分析，不构成投资建议。',
-
 } as const
 
 export default zh
