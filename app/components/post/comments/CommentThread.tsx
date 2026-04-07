@@ -141,6 +141,7 @@ export function CommentThread({
           {/* Actions */}
           <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginTop: 6 }}>
             <button
+              className="interactive-scale"
               onClick={(e) => { e.stopPropagation(); onToggleCommentLike(postId, comment.id) }}
               disabled={commentLikeLoading[comment.id]}
               style={{
@@ -148,15 +149,16 @@ export function CommentThread({
                 display: 'flex',
                 alignItems: 'center',
                 gap: 4,
-                borderRadius: tokens.radius.sm,
                 color: comment.user_liked ? ARENA_PURPLE : tokens.colors.text.tertiary,
+                background: comment.user_liked ? 'var(--color-accent-primary-12)' : 'transparent',
               }}
             >
               <ThumbsUpIcon size={14} />
-              {(comment.like_count || 0) > 0 && <span>{comment.like_count}</span>}
+              {(comment.like_count || 0) > 0 && <span style={{ fontVariantNumeric: 'tabular-nums' }}>{comment.like_count}</span>}
             </button>
 
             <button
+              className="interactive-scale"
               onClick={(e) => { e.stopPropagation(); onToggleCommentDislike?.(postId, comment.id) }}
               disabled={commentLikeLoading[comment.id]}
               style={{
@@ -164,12 +166,12 @@ export function CommentThread({
                 display: 'flex',
                 alignItems: 'center',
                 gap: 4,
-                borderRadius: tokens.radius.sm,
                 color: comment.user_disliked ? tokens.colors.accent.error : tokens.colors.text.tertiary,
+                background: comment.user_disliked ? 'var(--color-accent-error-12)' : 'transparent',
               }}
             >
               <ThumbsDownIcon size={14} />
-              {(comment.dislike_count || 0) > 0 && <span>{comment.dislike_count}</span>}
+              {(comment.dislike_count || 0) > 0 && <span style={{ fontVariantNumeric: 'tabular-nums' }}>{comment.dislike_count}</span>}
             </button>
 
             {!isReply && (

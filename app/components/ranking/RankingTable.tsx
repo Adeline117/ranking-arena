@@ -655,6 +655,7 @@ function RankingTableInner(props: {
       ) : (
         <>
           <Box
+            className="content-appear"
             style={{
               display: 'flex', flexDirection: 'column', gap: 0, position: 'relative', contain: 'layout style paint',
             }}
