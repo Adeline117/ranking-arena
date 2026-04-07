@@ -445,7 +445,7 @@ export async function upsertTraders(
     return { saved: 0, error: `All ${deduped.length} traders failed snapshot validation` }
   }
 
-  const BATCH = 50 // Reduced from 500→200→50 to avoid Supabase statement timeout (57014) + deadlock (40P01)
+  const BATCH = 25 // Reduced from 500→200→50→25 to avoid Supabase statement timeout (57014) on binance (100 traders × 2 tables)
 
   let saved = 0
   const writeErrors: string[] = []
