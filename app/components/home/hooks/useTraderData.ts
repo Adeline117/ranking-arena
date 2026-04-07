@@ -151,17 +151,17 @@ export function useTraderData(options: UseTraderDataOptions = {}) {
   // re-render cascade through 5 useMemo chains → 50 TraderRow memo checks.
   const dataFingerprintRef = useRef('')
 
-  // Read time range preference from URL or localStorage
+  // Read time range preference from URL param only (deep-linking).
+  // localStorage is NOT restored on mount — doing so would discard SSR data
+  // for '90D' and trigger a fetch+skeleton flash for 200-800ms.
+  // The time range is saved to localStorage on change (see below), so it
+  // persists for explicit user actions, but the initial load always uses
+  // the SSR-provided '90D' data to avoid layout shift.
   useEffect(() => {
     const params = new URLSearchParams(window.location.search)
     const urlWindow = params.get('window')?.toUpperCase()
     if (urlWindow === '90D' || urlWindow === '30D' || urlWindow === '7D') {
       dispatch({ type: 'SET_TIME_RANGE', timeRange: urlWindow })
-      return
-    }
-    const saved = localStorage.getItem(TIME_RANGE_STORAGE_KEY)
-    if (saved === '90D' || saved === '30D' || saved === '7D') {
-      dispatch({ type: 'SET_TIME_RANGE', timeRange: saved })
     }
   }, [])
 
