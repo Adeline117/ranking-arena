@@ -165,12 +165,14 @@ export const TraderRow = memo(function TraderRow({
   const handleMouseEnter = useCallback(() => {
     if (hoverTimerRef.current) clearTimeout(hoverTimerRef.current)
     hoverTimerRef.current = setTimeout(async () => {
-      const detailUrl = `/api/traders/${encodeURIComponent(traderHandle)}`
-      const [{ mutate: swrMutate }, { fetcher: swrFetcher }] = await Promise.all([
-        import('swr'),
-        import('@/lib/hooks/useSWR'),
-      ])
-      swrMutate(detailUrl, swrFetcher<{ success: boolean; data: unknown }>(detailUrl).then(r => r && typeof r === 'object' && 'data' in r ? r.data : r), { revalidate: false })
+      try {
+        const detailUrl = `/api/traders/${encodeURIComponent(traderHandle)}`
+        const [{ mutate: swrMutate }, { fetcher: swrFetcher }] = await Promise.all([
+          import('swr'),
+          import('@/lib/hooks/useSWR'),
+        ])
+        swrMutate(detailUrl, swrFetcher<{ success: boolean; data: unknown }>(detailUrl).then(r => r && typeof r === 'object' && 'data' in r ? r.data : r), { revalidate: false })
+      } catch { /* prefetch is best-effort */ }
     }, 100)
   }, [traderHandle])
   const handleMouseLeave = useCallback(() => {
@@ -364,7 +366,7 @@ export const TraderRow = memo(function TraderRow({
               </Text>
               {isAddress && <CopyButton text={traderHandle} />}
               {/* Mobile Score Badge */}
-              {trader.arena_score != null && (
+              {trader.arena_score != null && Number.isFinite(Number(trader.arena_score)) && (
                 <span className="mobile-score-badge" style={{ display: 'inline-flex', alignItems: 'center', gap: 3, flexShrink: 0 }}>
                   <span style={{
                     width: 6, height: 6, borderRadius: '50%',

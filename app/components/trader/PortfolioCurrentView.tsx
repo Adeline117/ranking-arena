@@ -102,7 +102,7 @@ export default function PortfolioCurrentView({
                     <Box
                       style={{
                         height: '100%',
-                        width: `${Math.min(item.invested, 100)}%`,
+                        width: `${Number.isFinite(item.invested) ? Math.min(item.invested, 100) : 0}%`,
                         background: `linear-gradient(90deg, ${tokens.colors.accent.primary}, ${tokens.colors.accent.brand})`,
                         borderRadius: tokens.radius.full,
                         transition: 'width 0.5s ease',

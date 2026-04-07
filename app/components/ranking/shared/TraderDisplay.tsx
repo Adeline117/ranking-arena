@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState, useRef, useEffect, useMemo } from 'react'
+import React, { useState, useRef, useEffect, useMemo, memo } from 'react'
 import { createPortal } from 'react-dom'
 import Image from 'next/image'
 import { tokens } from '@/lib/design-tokens'
@@ -302,7 +302,7 @@ export function MetricStat({ label, value, color, nullTooltip }: {
  * Displays score as a color-coded circle with hover tooltip breakdown
  * Colors: green (70+), yellow-orange (40-69), red (<40)
  */
-export function ArenaScoreCircle({
+export const ArenaScoreCircle = memo(function ArenaScoreCircle({
   score,
   roi,
   pnl,
@@ -467,4 +467,4 @@ export function ArenaScoreCircle({
         : null}
     </div>
   )
-}
+}, (prev, next) => prev.score === next.score && prev.roi === next.roi && prev.pnl === next.pnl && prev.showConfidence === next.showConfidence && prev.trader?.id === next.trader?.id && prev.trader?.score_confidence === next.trader?.score_confidence)
