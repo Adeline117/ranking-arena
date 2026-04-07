@@ -170,24 +170,21 @@ footer,.sidebar-contained{content-visibility:auto;contain-intrinsic-size:auto 30
 @media(min-width:640px){.ranking-table-grid{grid-template-columns:40px 1fr 80px 60px 80px !important}.ranking-table-grid .col-score,.ranking-table-grid .col-pnl{display:flex !important}}
 @media(min-width:768px){.ranking-table-grid{grid-template-columns:44px minmax(140px,1.5fr) 80px 80px 70px 70px 64px !important}.ranking-table-grid .col-score,.ranking-table-grid .col-pnl,.ranking-table-grid .col-winrate,.ranking-table-grid .col-mdd{display:flex !important}}
 
-/* SSR ranking table — CANONICAL styles (single source of truth)
-   These are inlined in <head> so the first frame is correct.
-   Removed from globals.css to prevent flash from conflicting overrides. */
+/* SSR ranking table — simple flex rows (no grid columns)
+   Each row: [Rank] [Avatar+Name (flex:1)] [Score] [ROI+PnL]
+   Same layout on mobile and desktop — no hide-mobile needed. */
 .ssr-t{background:var(--color-bg-secondary);border-radius:16px;border:1px solid var(--color-border-primary);overflow:hidden}
-.ssr-hdr{display:grid;grid-template-columns:40px 1fr 60px 80px;padding:10px 16px;font-size:10px;font-weight:700;color:var(--color-text-quaternary,var(--color-text-tertiary));border-bottom:1px solid var(--color-border-primary);gap:8px;text-transform:uppercase;letter-spacing:0.05em;position:sticky;top:0;z-index:10;background:var(--color-bg-secondary)}
-.ssr-row{display:grid;grid-template-columns:40px 1fr 60px 80px;padding:10px 16px;gap:8px;align-items:center;text-decoration:none;color:inherit;border-bottom:1px solid var(--color-border-primary);min-height:52px}
-@media(min-width:768px){.ssr-hdr,.ssr-row{grid-template-columns:40px 1fr 60px 80px 60px 60px}}
+.ssr-row{display:flex;align-items:center;gap:12px;padding:10px 16px;text-decoration:none;color:inherit;border-bottom:1px solid var(--color-border-primary);min-height:52px}
 .ssr-row:hover{background:var(--color-bg-hover,#252232)}
 .ssr-row:focus-visible{outline:2px solid var(--color-brand);outline-offset:-2px;border-radius:4px}
 .ssr-row:active{transform:scale(0.998)}
 .ssr-row-gold{background:linear-gradient(135deg,rgba(255,215,0,0.10) 0%,rgba(255,215,0,0.03) 40%,transparent 80%);box-shadow:inset 3px 0 0 var(--color-rank-gold,#FFD700)}
 .ssr-row-silver{background:linear-gradient(135deg,rgba(192,192,192,0.08) 0%,rgba(192,192,192,0.02) 40%,transparent 80%);box-shadow:inset 3px 0 0 var(--color-rank-silver,#C0C0C0)}
 .ssr-row-bronze{background:linear-gradient(135deg,rgba(205,127,50,0.08) 0%,rgba(205,127,50,0.02) 40%,transparent 80%);box-shadow:inset 3px 0 0 var(--color-rank-bronze,#CD7F32)}
-.ssr-rank{font-size:13px;font-weight:800;text-align:center;display:flex;align-items:center;justify-content:center}
+.ssr-rank{font-size:13px;font-weight:800;text-align:center;display:flex;align-items:center;justify-content:center;min-width:36px}
 .ssr-rank-default{color:var(--color-text-tertiary)}
 .ssr-rank-circle{width:28px;height:28px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;color:var(--color-bg-primary,#0B0A10)}
-.ssr-r{text-align:right}
-.ssr-info{display:flex;align-items:center;gap:10px;min-width:0}
+.ssr-info{display:flex;align-items:center;gap:10px;min-width:0;flex:1}
 .ssr-av{width:36px;height:36px;min-width:36px;aspect-ratio:1;border-radius:50%;background:linear-gradient(135deg,var(--color-accent-primary-30),var(--color-pro-gold-border,#a78bfa));display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:700;color:var(--color-on-accent,#fff);overflow:hidden;position:relative;contain:layout style paint}
 .ssr-av img{width:100%;height:100%;object-fit:cover;border-radius:50%;position:absolute;inset:0}
 .ssr-name{font-size:13px;font-weight:600;color:var(--color-text-primary);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
@@ -198,8 +195,7 @@ footer,.sidebar-contained{content-visibility:auto;contain-intrinsic-size:auto 30
 .ssr-roi-val{font-size:13px;font-weight:600}
 .ssr-roi-pos{color:var(--color-success)}.ssr-roi-neg{color:var(--color-danger)}
 .ssr-pnl{font-size:10px;color:var(--color-text-tertiary)}
-.ssr-wr{text-align:right;font-size:12px;color:var(--color-text-secondary);font-variant-numeric:tabular-nums}
-.ssr-mdd{text-align:right;font-size:12px;color:var(--color-danger);font-variant-numeric:tabular-nums}
+/* .ssr-wr and .ssr-mdd removed — table simplified to Rank+Trader+Score+ROI */
 .ssr-controls{display:flex;align-items:center;justify-content:space-between;padding:10px 16px;gap:8px;flex-wrap:wrap;position:relative}
 .ssr-range-bar{display:flex;gap:4px}
 .ssr-range-btn{padding:6px 14px;border-radius:8px;border:1px solid var(--color-border-primary);background:transparent;color:var(--color-text-secondary);font-size:12px;font-weight:600;cursor:pointer;transition:all 0.15s}

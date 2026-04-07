@@ -410,9 +410,12 @@ export function getTraderAvatarUrl(avatarUrl: string | null | undefined): string
   if (
     avatarUrl.includes('t.co') ||
     avatarUrl.includes('/banner/') ||
-    avatarUrl.includes('placeholder')
+    avatarUrl.includes('placeholder') ||
+    avatarUrl.includes('dicebear.com') ||
+    avatarUrl.includes('identicon') ||
+    avatarUrl.includes('robohash.org')
   ) {
-    return null
+    return null // Reject generated avatars — fall back to gradient + initial letter
   }
 
   // 如果是已知交易所域名，信任并直接代理（不需要 isLikelyImageUrl 检查）
