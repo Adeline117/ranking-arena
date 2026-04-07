@@ -39,7 +39,7 @@ import { triggerDownstreamRefresh } from '@/lib/cron/trigger-chain'
 
 const DEAD_COUNTER_PREFIX = 'dead:consecutive:'
 const DEAD_THRESHOLD = 20 // consecutive failures before circuit-breaking (increased from 10 — VPS outages cause ~15 failures across 3h cycle, 10 was too aggressive)
-const DEAD_COUNTER_MAX_AGE_MS = 6 * 3600 * 1000 // Auto-reset counters older than 6h
+const DEAD_COUNTER_MAX_AGE_MS = 2 * 3600 * 1000 // Auto-reset counters older than 2h (was 6h — too slow for VPS overload recovery)
 
 export const runtime = 'nodejs' // Required: edge runtime has 30s timeout, nodejs supports maxDuration
 export const dynamic = 'force-dynamic'
@@ -133,6 +133,15 @@ export async function GET(request: NextRequest) {
   }
 
   const group = request.nextUrl.searchParams.get('group') || 'a'
+  // Manual circuit breaker reset: ?reset=bybit to clear dead counter before running
+  const resetPlatform = request.nextUrl.searchParams.get('reset')
+  if (resetPlatform) {
+    try {
+      await PipelineState.del(`${DEAD_COUNTER_PREFIX}${resetPlatform}`)
+      logger.info(`[batch-fetch-traders] Manual reset of dead counter for ${resetPlatform}`)
+    } catch { /* non-blocking */ }
+  }
+
   const groupPlatforms = GROUPS[group]
   if (!groupPlatforms) {
     return NextResponse.json({ error: `Unknown group: ${group}`, available: Object.keys(GROUPS) }, { status: 400 })
