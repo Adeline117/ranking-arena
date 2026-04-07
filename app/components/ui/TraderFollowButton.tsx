@@ -79,6 +79,8 @@ export default function TraderFollowButton({ traderId, userId, initialFollowing 
 
   // Loading state for follow action
   const [isLoading, setIsLoading] = useState(false)
+  // Pulse animation on follow state change
+  const [showPulse, setShowPulse] = useState(false)
 
   // 刷新关注状态（从服务器获取真实状态）
   const refreshFollowState = useCallback(async () => {
@@ -140,6 +142,10 @@ export default function TraderFollowButton({ traderId, userId, initialFollowing 
 
       setFollowing(data.following)
       onFollowChange?.(data.following)
+
+      // Trigger pulse animation
+      setShowPulse(true)
+      setTimeout(() => setShowPulse(false), 600)
 
       // Analytics tracking
       if (data.following) {
@@ -336,7 +342,7 @@ export default function TraderFollowButton({ traderId, userId, initialFollowing 
       aria-label={following ? t('unfollowTrader') : t('followTrader')}
       aria-pressed={following}
       aria-busy={isLoading}
-      className="interactive-scale"
+      className={`interactive-scale${showPulse ? ' follow-pulse' : ''}`}
       style={{
         width: 'auto',
         padding: `${tokens.spacing[3]} ${tokens.spacing[4]}`,
