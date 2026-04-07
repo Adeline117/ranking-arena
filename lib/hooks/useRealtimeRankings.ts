@@ -215,7 +215,8 @@ export function useRealtimeRankings({
       supabase.removeChannel(channel)
       if (flushTimerRef.current) clearTimeout(flushTimerRef.current)
       if (pulseTimerRef.current) clearTimeout(pulseTimerRef.current)
-      flush() // Flush remaining buffered updates
+      // Don't flush during cleanup — calling onUpdateRef after unmount can
+      // trigger setState on an unmounted component. Buffered updates are discarded.
     }
   }, [period, limit, enabled, pollInterval, flush])
 
