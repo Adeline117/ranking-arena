@@ -12,8 +12,6 @@
  *   handle   - filter to a specific trader handle (for trader profile timeline)
  */
 
-export const dynamic = 'force-dynamic'
-
 import { NextRequest } from 'next/server'
 import {
   getSupabaseAdmin,
@@ -93,7 +91,7 @@ export async function GET(request: NextRequest) {
         hasMore,
         nextCursor,
       },
-    })
+    }, 200, { 'Cache-Control': 'public, s-maxage=60, stale-while-revalidate=300' })
   } catch (err) {
     return handleError(err)
   }
