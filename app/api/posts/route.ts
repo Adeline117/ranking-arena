@@ -83,7 +83,7 @@ export async function GET(request: NextRequest) {
     const author_handle = validateString(searchParams.get('author_handle')) ?? undefined
     const sort_by = validateEnum(
       searchParams.get('sort_by'),
-      ['created_at', 'hot_score', 'like_count', 'personalized'] as const
+      ['created_at', 'hot_score', 'like_count', 'personalized', 'following'] as const
     ) ?? 'created_at'
     const sort_order = validateEnum(
       searchParams.get('sort_order'),
@@ -146,6 +146,36 @@ export async function GET(request: NextRequest) {
           viewer_id: user?.id, language: langFilter,
         })
       }
+    }
+
+    // Following feed: posts from users the current user follows (Mastodon home timeline pattern)
+    if (sort_by === 'following') {
+      if (user) {
+        const { data: followData } = await supabase
+          .from('user_follows')
+          .select('following_id')
+          .eq('follower_id', user.id)
+
+        const followingIds = (followData || []).map((f: { following_id: string }) => f.following_id)
+
+        if (followingIds.length > 0) {
+          posts = await getPosts(supabase, {
+            limit, offset,
+            sort_by: 'created_at', sort_order: 'desc',
+            viewer_id: user.id, language: langFilter,
+            author_ids: followingIds,
+          })
+        }
+      }
+
+      // Fallback to hot if not logged in or no follows
+      if (!posts || posts.length === 0) {
+        posts = await getPosts(supabase, {
+          limit, offset,
+          sort_by: 'hot_score', sort_order: 'desc',
+          viewer_id: user?.id, language: langFilter,
+        })
+      }
 
       // Attach user state
       let userReactions: Map<string, 'up' | 'down'> = new Map()
@@ -203,13 +233,15 @@ export async function GET(request: NextRequest) {
         })
       } else {
         // Use standard posts query
+        // Note: 'personalized' and 'following' sort_by values return early above,
+        // so sort_by is narrowed to the three DB-supported values here.
         posts = await getPosts(supabase, {
           limit: isHotQuery ? 50 : limit, // Fetch more for hot posts to populate Redis cache
           offset,
           group_id,
           group_ids,
           author_handle,
-          sort_by,
+          sort_by: sort_by as 'created_at' | 'hot_score' | 'like_count',
           sort_order,
           viewer_id: user?.id,
           language: langFilter,
