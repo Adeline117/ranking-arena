@@ -7,6 +7,7 @@ import type { UploadedImage } from '../types'
 interface ImageUploaderProps {
   images: UploadedImage[]
   uploading: boolean
+  uploadProgress?: number
   fileInputRef: React.RefObject<HTMLInputElement | null>
   onUpload: (e: React.ChangeEvent<HTMLInputElement>) => void
   onRemove: (index: number) => void
@@ -16,7 +17,8 @@ interface ImageUploaderProps {
 }
 
 export function ImageUploader({
-  images, uploading, fileInputRef,
+  images, uploading, uploadProgress,
+  fileInputRef,
   onUpload, onRemove, onInsert,
   language: _language, t,
 }: ImageUploaderProps): React.ReactElement {
@@ -135,7 +137,14 @@ export function ImageUploader({
             }}
           >
             {uploading ? (
-              <Text size="xs" color="secondary">{t('uploadingImage')}</Text>
+              <Box style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4, padding: '0 8px' }}>
+                <Text size="xs" color="secondary">{uploadProgress ? `${uploadProgress}%` : t('uploadingImage')}</Text>
+                {typeof uploadProgress === 'number' && uploadProgress > 0 && (
+                  <Box style={{ width: '100%', height: 3, background: tokens.colors.bg.tertiary, borderRadius: 2, overflow: 'hidden' }}>
+                    <Box style={{ width: `${uploadProgress}%`, height: '100%', background: tokens.colors.accent.primary, transition: 'width 0.2s ease' }} />
+                  </Box>
+                )}
+              </Box>
             ) : (
               <>
                 <Text size="2xl" color="secondary" style={{ lineHeight: 1 }}>+</Text>

@@ -55,6 +55,7 @@ export default function NewGroupPostPage(): React.ReactElement {
   // Media state
   const [images, setImages] = useState<UploadedImage[]>([])
   const [uploading, setUploading] = useState(false)
+  const [uploadProgress, setUploadProgress] = useState(0)
   const [videos, setVideos] = useState<UploadedVideo[]>([])
   const [videoUploading, setVideoUploading] = useState(false)
   const [videoUploadProgress, setVideoUploadProgress] = useState(0)
@@ -258,8 +259,11 @@ export default function NewGroupPostPage(): React.ReactElement {
     }
 
     setUploading(true)
+    setUploadProgress(0)
     const newImages: UploadedImage[] = []
+    const totalFiles = Array.from(files).filter(f => ALLOWED_IMAGE_TYPES.includes(f.type) && f.size <= 5 * 1024 * 1024).length
 
+    let completed = 0
     for (const file of Array.from(files)) {
       if (!ALLOWED_IMAGE_TYPES.includes(file.type)) {
         showToast(`${file.name} ${t('formatNotSupported')}`, 'error')
@@ -278,21 +282,35 @@ export default function NewGroupPostPage(): React.ReactElement {
         formData.append('file', compressed)
         formData.append('userId', userId)
 
-        const response = await fetch('/api/posts/upload-image', {
-          method: 'POST',
-          headers: getCsrfHeaders(),
-          body: formData,
+        // Use XHR for upload progress tracking
+        const data = await new Promise<{ url: string; fileName: string }>((resolve, reject) => {
+          const xhr = new XMLHttpRequest()
+          xhr.open('POST', '/api/posts/upload-image')
+          const csrfHeaders = getCsrfHeaders()
+          Object.entries(csrfHeaders).forEach(([k, v]) => xhr.setRequestHeader(k, v as string))
+
+          xhr.upload.onprogress = (e) => {
+            if (e.lengthComputable) {
+              const fileProgress = e.loaded / e.total
+              setUploadProgress(Math.round(((completed + fileProgress) / totalFiles) * 100))
+            }
+          }
+          xhr.onload = () => {
+            try {
+              const result = JSON.parse(xhr.responseText)
+              if (xhr.status >= 200 && xhr.status < 300) resolve(result)
+              else reject(new Error(result.error || `Upload failed (${xhr.status})`))
+            } catch { reject(new Error('Invalid response')) }
+          }
+          xhr.onerror = () => reject(new Error('Network error'))
+          xhr.send(formData)
         })
 
-        if (!response.ok) {
-          const data = await response.json().catch(() => ({}))
-          showToast(`${file.name}: ${data.error || `${t('uploadFailed')} (${response.status})`}`, 'error')
-          continue
-        }
-
-        const data = await response.json()
         newImages.push({ url: data.url, fileName: data.fileName })
+        completed++
+        setUploadProgress(Math.round((completed / totalFiles) * 100))
       } catch (error) {
+        completed++
         const errorMsg = error instanceof Error ? error.message : t('networkError')
         showToast(`${file.name}: ${errorMsg}`, 'error')
       }
@@ -589,6 +607,7 @@ export default function NewGroupPostPage(): React.ReactElement {
           <ImageUploader
             images={images}
             uploading={uploading}
+            uploadProgress={uploadProgress}
             fileInputRef={fileInputRef}
             onUpload={handleImageUpload}
             onRemove={removeImage}
