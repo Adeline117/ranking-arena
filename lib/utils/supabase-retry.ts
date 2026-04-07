@@ -34,26 +34,31 @@ function isRetryableError(error: unknown): boolean {
   const err = error as Record<string, unknown>
   const message = String(err.message || err.error || error)
   const code = err.code || err.status || err.statusCode
-  
+
   // Cloudflare 502 Bad Gateway
   if (code === 502 || message.includes('502') || message.includes('Bad gateway')) {
     return true
   }
-  
+
   // Other transient errors
   if (code === 503 || message.includes('503') || message.includes('Service unavailable')) {
     return true
   }
-  
+
   if (code === 504 || message.includes('504') || message.includes('Gateway timeout')) {
     return true
   }
-  
+
+  // PostgreSQL statement timeout (57014) — can be transient under load
+  if (code === '57014' || message.includes('57014') || message.includes('statement timeout')) {
+    return true
+  }
+
   // Network errors
   if (message.includes('ECONNRESET') || message.includes('ETIMEDOUT')) {
     return true
   }
-  
+
   return false
 }
 
