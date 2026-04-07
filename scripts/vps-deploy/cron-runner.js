@@ -152,7 +152,7 @@ async function runPlatform(platform) {
     const scraperUrl = `${SCRAPER_URL}/${platform.handler}?${params}`
     const rawData = await fetchJson(scraperUrl, {
       headers: { 'X-Proxy-Key': SCRAPER_KEY },
-      timeout: 120000,
+      timeout: 180000, // 3 minutes — batch requests with 3 windows can take 90-120s
     })
 
     if (rawData.error) {
