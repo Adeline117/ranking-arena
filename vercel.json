@@ -164,7 +164,7 @@
     },
     {
       "path": "/api/cron/batch-enrich?period=30D",
-      "schedule": "25 */4 * * *"
+      "schedule": "35 */4 * * *"
     },
     {
       "path": "/api/cron/batch-enrich?period=7D",

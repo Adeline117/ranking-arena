@@ -65,6 +65,7 @@ const PLATFORM_LIMITS: Record<string, { limit90: number; limit30: number; limit7
   polymarket: { limit90: 100, limit30: 80, limit7: 80 },
   // VPS scrapers (slow — ~18s/trader via Playwright, max 5 in 90s timeout)
   bybit: { limit90: 5, limit30: 5, limit7: 5 },
+  bybit_spot: { limit90: 5, limit30: 5, limit7: 5 },
   // DEAD/DISABLED:
   // phemex: DEAD (API 404 since 2026-04)
   // bingx: DEAD (empty data since 2026-04)
@@ -85,7 +86,7 @@ const MEDIUM_PRIORITY = [
   'binance_web3', 'binance_spot', 'polymarket', // added for full coverage
   // REMOVED: phemex (API 404), bingx (empty data)
 ]
-const LOW_PRIORITY = ['bybit'] // VPS scrapers, run last
+const LOW_PRIORITY = ['bybit', 'bybit_spot'] // VPS scrapers, run last
 // REMOVED: weex (75% timeout), bingx_spot (no enrichment API)
 const LOWER_PRIORITY: string[] = []
 
@@ -140,13 +141,18 @@ export async function GET(request: NextRequest) {
   // Fires at 250s (was 280s) to leave 50s for plog.success() to complete reliably.
   // Previous 280s left only 20s which wasn't enough under heavy load, causing 'running' entries
   // that got cleaned up as timeout by cleanup-stuck-logs after 30+ minutes.
-  const SAFETY_TIMEOUT_MS = 250_000 // 250s for 300s limit (50s buffer)
+  const SAFETY_TIMEOUT_MS = 240_000 // 240s for 300s limit (60s buffer for plog + cleanup)
   const safetyTimer = setTimeout(async () => {
     try {
       const enriched = results.filter(r => r.status === 'success').reduce((sum, r) => sum + (r.enriched || 0), 0)
-      await plog.success(enriched, { results, note: 'Safety timeout at 250s — partial enrichment, will resume from checkpoint' })
+      // Race plog.success with a 30s timeout — if Supabase connection pool is exhausted from
+      // enrichment queries, plog.success() hangs and pipeline_logs entry stays as 'running' forever.
+      // This was the root cause of batch-enrich-30D 100% timeout for 24h+.
+      await Promise.race([
+        plog.success(enriched, { results, note: 'Safety timeout at 240s — partial enrichment, will resume from checkpoint' }),
+        new Promise<void>((resolve) => setTimeout(resolve, 30_000)),
+      ])
     } catch (err) {
-      // Last resort: try error log if success fails
       try { await plog.error(new Error(`Safety timeout + plog.success failed: ${err}`)) } catch { /* truly best effort */ }
     }
   }, SAFETY_TIMEOUT_MS)
