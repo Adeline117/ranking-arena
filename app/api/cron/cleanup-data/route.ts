@@ -195,25 +195,36 @@ export async function GET(request: NextRequest) {
       logger.warn(`[cleanup-data] pipeline_state cleanup failed: ${err}`)
     }
 
-    // ── Metrics refresh (keep) ────────────────────────────────────
+    // ── Metrics refresh (with timeout to prevent hang) ────────────
 
     let metricsResult = null
     try {
-      metricsResult = await refreshComputedMetrics(supabase)
+      metricsResult = await Promise.race([
+        refreshComputedMetrics(supabase),
+        new Promise<never>((_, reject) =>
+          setTimeout(() => reject(new Error('Metrics refresh timed out after 120s')), 120_000)
+        ),
+      ])
       logger.info(`[cleanup-data] Metrics refresh: sharpe=${metricsResult.sharpeUpdated}, wr=${metricsResult.winRateUpdated}, mdd=${metricsResult.maxDrawdownUpdated}, score=${metricsResult.arenaScoreUpdated}`)
     } catch (err) {
       logger.warn(`[cleanup-data] Metrics refresh failed: ${err}`)
       stepErrors.push(`metrics_refresh: ${err instanceof Error ? err.message : String(err)}`)
     }
 
-    // ── VACUUM/ANALYZE on large tables ────────────────────────────
+    // ── ANALYZE on large tables (with per-table timeout) ─────────
     // Run ANALYZE periodically to keep planner stats fresh on growing tables
-    try {
-      await supabase.rpc('exec_sql', { sql: 'ANALYZE trader_snapshots_v2' })
-      await supabase.rpc('exec_sql', { sql: 'ANALYZE trader_daily_snapshots' })
-      logger.info('[cleanup-data] ANALYZE on snapshot tables completed')
-    } catch (analyzeErr) {
-      logger.warn(`[cleanup-data] ANALYZE failed: ${analyzeErr}`)
+    for (const table of ['trader_snapshots_v2', 'trader_daily_snapshots']) {
+      try {
+        await Promise.race([
+          supabase.rpc('exec_sql', { sql: `ANALYZE ${table}` }),
+          new Promise<never>((_, reject) =>
+            setTimeout(() => reject(new Error(`ANALYZE ${table} timed out after 30s`)), 30_000)
+          ),
+        ])
+        logger.info(`[cleanup-data] ANALYZE ${table} completed`)
+      } catch (analyzeErr) {
+        logger.warn(`[cleanup-data] ANALYZE ${table} failed: ${analyzeErr}`)
+      }
     }
 
     const duration = Date.now() - startTime
