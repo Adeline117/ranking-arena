@@ -62,20 +62,9 @@ export async function POST(request: NextRequest, context: RouteContext) {
     // 切换置顶状态
     const newPinnedState = !post.is_pinned
 
-    // 更新当前帖子的置顶状态（先执行主操作）
-    const { error: updateError } = await supabase
-      .from('posts')
-      .update({ is_pinned: newPinnedState })
-      .eq('id', postId)
-
-    if (updateError) {
-      throw new Error('Failed to update pin status: ' + updateError.message)
-    }
-
-    // If pinning, unpin other posts in the same context
+    // If pinning, unpin other posts FIRST to prevent multiple pinned posts (race condition fix)
     if (newPinnedState) {
       if (post.group_id) {
-        // In a group, only one pinned post per group
         const { error: unpinError } = await supabase
           .from('posts')
           .update({ is_pinned: false })
@@ -87,7 +76,6 @@ export async function POST(request: NextRequest, context: RouteContext) {
           logger.error('Failed to unpin other posts:', unpinError)
         }
       } else {
-        // Personal pin: unpin user's other posts
         const { error: unpinError } = await supabase
           .from('posts')
           .update({ is_pinned: false })
@@ -99,6 +87,16 @@ export async function POST(request: NextRequest, context: RouteContext) {
           logger.error('Failed to unpin other posts:', unpinError)
         }
       }
+    }
+
+    // Now pin/unpin the target post
+    const { error: updateError } = await supabase
+      .from('posts')
+      .update({ is_pinned: newPinnedState })
+      .eq('id', postId)
+
+    if (updateError) {
+      throw new Error('Failed to update pin status: ' + updateError.message)
     }
 
     return success({
