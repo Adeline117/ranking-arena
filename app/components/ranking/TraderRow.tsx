@@ -36,20 +36,20 @@ const ACTION_WIDTH = 140
 const HERO_STYLE_RANK_1: React.CSSProperties = {
   background: 'linear-gradient(135deg, rgba(255,215,0,0.13) 0%, rgba(255,215,0,0.04) 40%, transparent 80%)',
   boxShadow: 'inset 3px 0 0 var(--color-rank-gold), 0 2px 20px rgba(255,215,0,0.08)',
-  borderRadius: 10,
-  margin: '3px 4px',
+  borderRadius: 12,
+  margin: '4px',
 }
 const HERO_STYLE_RANK_2: React.CSSProperties = {
   background: 'linear-gradient(135deg, rgba(192,192,192,0.10) 0%, rgba(192,192,192,0.03) 40%, transparent 80%)',
   boxShadow: 'inset 3px 0 0 var(--color-rank-silver), 0 2px 16px rgba(192,192,192,0.06)',
-  borderRadius: 10,
-  margin: '3px 4px',
+  borderRadius: 12,
+  margin: '4px',
 }
 const HERO_STYLE_RANK_3: React.CSSProperties = {
   background: 'linear-gradient(135deg, rgba(205,127,50,0.10) 0%, rgba(205,127,50,0.03) 40%, transparent 80%)',
   boxShadow: 'inset 3px 0 0 var(--color-rank-bronze), 0 2px 16px rgba(205,127,50,0.06)',
-  borderRadius: 10,
-  margin: '3px 4px',
+  borderRadius: 12,
+  margin: '4px',
 }
 
 const ScoreBreakdownLazy = dynamic(
@@ -361,7 +361,7 @@ export const TraderRow = memo(function TraderRow({
             rank={rank}
             size={rank <= 3 ? 42 : 36}
           />
-          <Box style={{ display: 'flex', flexDirection: 'column', gap: 3, minWidth: 0, flex: 1 }}>
+          <Box style={{ display: 'flex', flexDirection: 'column', gap: 4, minWidth: 0, flex: 1 }}>
             <Box style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
               <Text size="sm" weight="bold" style={{ color: tokens.colors.text.primary, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: rank <= 3 ? '15px' : '14px', letterSpacing: rank <= 3 ? '-0.01em' : undefined }}>
                 <HighlightedName text={displayName} query={searchQuery} />

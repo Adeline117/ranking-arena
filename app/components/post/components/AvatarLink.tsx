@@ -68,7 +68,7 @@ export function AvatarLink({ handle, avatarUrl, isPro, showProBadge = true, isOf
         </span>
         {shouldShowBadge && <ProBadgeOverlay position="bottom-right" />}
       </span>
-      <span style={{ fontWeight: 700, fontSize: 12, color: tokens.colors.text.secondary, letterSpacing: '-0.01em', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0, display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+      <span title={handle} style={{ fontWeight: 700, fontSize: tokens.typography.fontSize.xs, color: tokens.colors.text.secondary, letterSpacing: '-0.01em', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0, display: 'inline-flex', alignItems: 'center', gap: 4 }}>
         {handle}
         {isOfficial && (
           <span style={{
