@@ -340,12 +340,66 @@ function renderTextWithHashtags(text: string, keyPrefix: string): ReactNode[] {
 }
 
 /**
+ * Lightweight inline Markdown renderer (no external library).
+ * Supports: **bold**, *italic*, `code`, ~~strikethrough~~
+ * Pattern from Discourse/Mastodon — inline formatting only, not block-level.
+ */
+function renderInlineMarkdown(text: string, keyPrefix: string): ReactNode[] {
+  const nodes: ReactNode[] = []
+  // Order matters: bold before italic (** before *)
+  const pattern = /(\*\*(.+?)\*\*)|(\*(.+?)\*)|(`(.+?)`)|(\~\~(.+?)\~\~)/g
+  let lastIdx = 0
+  let match: RegExpExecArray | null
+
+  while ((match = pattern.exec(text)) !== null) {
+    if (match.index > lastIdx) {
+      nodes.push(createElement('span', { key: `${keyPrefix}-md${lastIdx}` }, text.slice(lastIdx, match.index)))
+    }
+
+    if (match[1]) {
+      // **bold**
+      nodes.push(createElement('strong', { key: `${keyPrefix}-b${match.index}` }, match[2]))
+    } else if (match[3]) {
+      // *italic*
+      nodes.push(createElement('em', { key: `${keyPrefix}-i${match.index}` }, match[4]))
+    } else if (match[5]) {
+      // `code`
+      nodes.push(createElement('code', {
+        key: `${keyPrefix}-c${match.index}`,
+        style: {
+          background: 'var(--color-bg-tertiary)',
+          padding: '1px 4px',
+          borderRadius: 4,
+          fontSize: '0.9em',
+          fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
+        },
+      }, match[6]))
+    } else if (match[7]) {
+      // ~~strikethrough~~
+      nodes.push(createElement('del', {
+        key: `${keyPrefix}-s${match.index}`,
+        style: { opacity: 0.6 },
+      }, match[8]))
+    }
+
+    lastIdx = match.index + match[0].length
+  }
+
+  if (lastIdx === 0) return [createElement('span', { key: keyPrefix }, text)]
+  if (lastIdx < text.length) {
+    nodes.push(createElement('span', { key: `${keyPrefix}-md${lastIdx}` }, text.slice(lastIdx)))
+  }
+  return nodes
+}
+
+/**
  * Render @mention tokens within a plain text string as clickable links.
  */
 function renderTextWithMentions(text: string, keyPrefix: string): ReactNode[] {
   const mentionRegex = /@(\w+)/g
   if (!mentionRegex.test(text)) {
-    return [createElement('span', { key: keyPrefix }, text)]
+    // No mentions — apply inline markdown
+    return renderInlineMarkdown(text, keyPrefix)
   }
 
   const nodes: ReactNode[] = []
@@ -354,7 +408,8 @@ function renderTextWithMentions(text: string, keyPrefix: string): ReactNode[] {
   mentionRegex.lastIndex = 0
   while ((m = mentionRegex.exec(text)) !== null) {
     if (m.index > lastIdx) {
-      nodes.push(createElement('span', { key: `${keyPrefix}-mt${lastIdx}` }, text.slice(lastIdx, m.index)))
+      // Apply inline markdown to text between mentions
+      nodes.push(...renderInlineMarkdown(text.slice(lastIdx, m.index), `${keyPrefix}-mt${lastIdx}`))
     }
     nodes.push(createElement('a', {
       key: `${keyPrefix}-m${m.index}`,
@@ -364,7 +419,7 @@ function renderTextWithMentions(text: string, keyPrefix: string): ReactNode[] {
     lastIdx = m.index + m[0].length
   }
   if (lastIdx < text.length) {
-    nodes.push(createElement('span', { key: `${keyPrefix}-mt${lastIdx}` }, text.slice(lastIdx)))
+    nodes.push(...renderInlineMarkdown(text.slice(lastIdx), `${keyPrefix}-mt${lastIdx}`))
   }
   return nodes
 }
