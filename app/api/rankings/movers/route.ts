@@ -18,7 +18,6 @@ import { createLogger } from '@/lib/utils/logger'
 
 const log = createLogger('api:movers')
 
-export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
 
 interface Mover {
