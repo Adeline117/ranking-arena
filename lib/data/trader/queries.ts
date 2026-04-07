@@ -113,6 +113,12 @@ export async function getLeaderboard(supabase: SupabaseClient, params: {
     query = query.gt('arena_score', minScore)
   }
 
+  // Freshness predicate: never serve leaderboard data older than 6 hours.
+  // If compute-leaderboard hasn't run for 6h, rows are filtered out instead of shown stale.
+  const MAX_LEADERBOARD_AGE_HOURS = 6
+  const freshnessCutoff = new Date(Date.now() - MAX_LEADERBOARD_AGE_HOURS * 3600_000).toISOString()
+  query = query.gte('computed_at', freshnessCutoff)
+
   // Sorting
   const sortColumn = sortBy === 'arena_score' ? 'arena_score'
     : sortBy === 'roi' ? 'roi'

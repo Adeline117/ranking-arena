@@ -15,6 +15,7 @@ import { OkxAdapter } from '@/lib/adapters/okx-adapter'
 import { BitgetAdapter } from '@/lib/adapters/bitget-adapter'
 import { logger } from '@/lib/logger'
 import { calculateArenaScore } from '@/lib/utils/arena-score'
+import { sanitizeRow, logRejectedWrites } from '@/lib/pipeline/validate-before-write'
 import type { Period } from '@/lib/utils/arena-score'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import type { TraderData } from '@/lib/adapters/types'
@@ -319,26 +320,27 @@ async function storeSyncedData(
     period
   )
 
-  // Insert/update snapshot
+  // Insert/update snapshot — validated by gatekeeper
+  const syncPayload = {
+    platform: authorization.platform,
+    trader_key: authorization.trader_id,
+    window: period,
+    roi_pct: traderData.roi,
+    pnl_usd: traderData.pnl,
+    followers: traderData.followers,
+    copiers: traderData.followers,
+    trades_count: traderData.tradesCount,
+    win_rate: traderData.winRate,
+    max_drawdown: traderData.maxDrawdown,
+    arena_score: arenaScore.totalScore,
+    as_of_ts: truncateToHour(),
+    updated_at: new Date().toISOString(),
+  }
+  const { row: sanitizedSync, rejected: syncRejected } = sanitizeRow(syncPayload as Record<string, unknown>, 'trader_snapshots_v2')
+  if (syncRejected.length) logRejectedWrites(syncRejected, supabase)
   const { error } = await supabase.from('trader_snapshots_v2').upsert(
-    {
-      platform: authorization.platform,
-      trader_key: authorization.trader_id,
-      window: period,
-      roi_pct: traderData.roi,
-      pnl_usd: traderData.pnl,
-      followers: traderData.followers,
-      copiers: traderData.followers,
-      trades_count: traderData.tradesCount,
-      win_rate: traderData.winRate,
-      max_drawdown: traderData.maxDrawdown,
-      arena_score: arenaScore.totalScore,
-      as_of_ts: truncateToHour(),
-      updated_at: new Date().toISOString(),
-    },
-    {
-      onConflict: 'platform,market_type,trader_key,window,as_of_ts',
-    }
+    sanitizedSync,
+    { onConflict: 'platform,market_type,trader_key,window,as_of_ts' }
   )
 
   if (error) {

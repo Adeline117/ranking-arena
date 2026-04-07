@@ -245,6 +245,34 @@ export async function writeDiscoverResult(
     }
   }
 
+  // Connector health check: compare against previous run to detect degradation
+  try {
+    const { checkConnectorHealth } = await import('./connector-health-monitor')
+    const healthCheck = await checkConnectorHealth(platform, window, traderDataArray as unknown as Record<string, unknown>[])
+    if (healthCheck.severity === 'critical') {
+      dataLogger.error(`[adapter] BLOCKED write for ${platform}/${window}: ${healthCheck.reasons.join('; ')}`)
+      try {
+        const { sendRateLimitedAlert } = await import('@/lib/alerts/send-alert')
+        await sendRateLimitedAlert({
+          title: `Connector 退化: ${platform}/${window}`,
+          message: healthCheck.reasons.join('\n'),
+          level: 'critical',
+          details: { platform, window, rowCount: traderDataArray.length },
+        }, `connector-degrade:${platform}:${window}`, 3600_000)
+      } catch { /* alert non-critical */ }
+      return {
+        source: platform, window, total: traderDataArray.length, saved: 0,
+        skipped: traderDataArray.length, error: 'Blocked by health monitor: ' + healthCheck.reasons[0],
+        savedTraderKeys: [],
+      }
+    }
+    if (healthCheck.severity === 'warning') {
+      dataLogger.warn(`[adapter] Health warning for ${platform}/${window}: ${healthCheck.reasons.join('; ')}`)
+    }
+  } catch (err) {
+    dataLogger.warn(`[adapter] Health check failed (non-blocking): ${err instanceof Error ? err.message : String(err)}`)
+  }
+
   // Write to DB via shared upsertTraders()
   const { saved, error, write_consistency } = await upsertTraders(supabase, traderDataArray)
 

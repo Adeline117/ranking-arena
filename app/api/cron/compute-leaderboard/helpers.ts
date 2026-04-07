@@ -162,8 +162,10 @@ export async function deriveWinRateMDD(supabase: ReturnType<typeof getSupabaseAd
     const results = await Promise.all(
       batch.map(upd => {
         const updateFields: Record<string, number> = {}
-        if (upd.win_rate != null) updateFields.win_rate = upd.win_rate
-        if (upd.max_drawdown != null) updateFields.max_drawdown = upd.max_drawdown
+        // Validate against VALIDATION_BOUNDS before write
+        if (upd.win_rate != null && upd.win_rate >= 0 && upd.win_rate <= 100) updateFields.win_rate = upd.win_rate
+        if (upd.max_drawdown != null && upd.max_drawdown >= 0 && upd.max_drawdown <= 100) updateFields.max_drawdown = upd.max_drawdown
+        if (Object.keys(updateFields).length === 0) return Promise.resolve({ error: null })
         return supabase.from('leaderboard_ranks').update(updateFields)
           .eq('source', upd.source).eq('source_trader_id', upd.source_trader_id).eq('season_id', upd.season_id)
       })
