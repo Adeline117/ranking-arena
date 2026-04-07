@@ -106,29 +106,53 @@ export function usePostComments({
 
     submittingCommentRef.current = true
     setSubmittingComment(true)
+
+    // Optimistic: show comment immediately with temp ID
+    const tempId = `temp_${Date.now()}_${Math.random().toString(36).slice(2)}`
+    const optimisticComment: Comment = {
+      id: tempId,
+      content: newComment.trim(),
+      created_at: new Date().toISOString(),
+    }
+    setComments(prev => [...prev, optimisticComment])
+    const savedContent = newComment.trim()
+    setNewComment('')
+    onCommentCountChange?.(postId, 1)
+
     try {
       const { ok, status, data } = await authedFetch<{ success: boolean; error?: string; data?: { comment: Comment } }>(
         `/api/posts/${postId}/comments`,
         'POST',
         accessToken,
-        { content: newComment.trim() }
+        { content: savedContent }
       )
 
       if (!ok) {
+        // Rollback optimistic comment
+        setComments(prev => prev.filter(c => c.id !== tempId))
+        setNewComment(savedContent)
+        onCommentCountChange?.(postId, -1)
         showToast(getHttpErrorMessage(status, data?.error || t('commentFailedRetry')), 'error')
         return
       }
 
       if (data?.success && data.data?.comment) {
-        const newComment = data.data.comment
-        setComments(prev => [...prev, newComment])
-        setNewComment('')
-        usePostStore.getState().addComment(postId, toCommentData(newComment))
-        onCommentCountChange?.(postId, 1)
+        // Replace optimistic comment with server response
+        const serverComment = data.data.comment
+        setComments(prev => prev.map(c => c.id === tempId ? serverComment : c))
+        usePostStore.getState().addComment(postId, toCommentData(serverComment))
       } else {
+        // Rollback optimistic comment
+        setComments(prev => prev.filter(c => c.id !== tempId))
+        setNewComment(savedContent)
+        onCommentCountChange?.(postId, -1)
         showToast(data?.error || t('commentFailedRetry'), 'error')
       }
     } catch {
+      // Rollback optimistic comment
+      setComments(prev => prev.filter(c => c.id !== tempId))
+      setNewComment(savedContent)
+      onCommentCountChange?.(postId, -1)
       showToast(t('networkError'), 'error')
     } finally {
       submittingCommentRef.current = false
@@ -220,28 +244,58 @@ export function usePostComments({
 
     submittingReplyRef.current = true
     setSubmittingReply(true)
+
+    // Optimistic: show reply immediately
+    const tempId = `temp_${Date.now()}_${Math.random().toString(36).slice(2)}`
+    const optimisticReply: Comment = {
+      id: tempId,
+      content: replyContent.trim(),
+      created_at: new Date().toISOString(),
+    }
+    const savedContent = replyContent.trim()
+    setComments(prev => prev.map(c =>
+      c.id === parentId ? { ...c, replies: [...(c.replies || []), optimisticReply] } : c
+    ))
+    setReplyContent('')
+    setReplyingTo(null)
+    setExpandedReplies(prev => ({ ...prev, [parentId]: true }))
+    onCommentCountChange?.(postId, 1)
+
     try {
       const { ok, data } = await authedFetch<{ success: boolean; error?: string; data?: { comment: Comment } }>(
         `/api/posts/${postId}/comments`,
         'POST',
         accessToken,
-        { content: replyContent.trim(), parent_id: parentId }
+        { content: savedContent, parent_id: parentId }
       )
 
       if (ok && data?.success && data.data?.comment) {
-        const newReply = data.data.comment
+        // Replace optimistic reply with server response
+        const serverReply = data.data.comment
         setComments(prev => prev.map(c =>
-          c.id === parentId ? { ...c, replies: [...(c.replies || []), newReply] } : c
+          c.id === parentId
+            ? { ...c, replies: (c.replies || []).map(r => r.id === tempId ? serverReply : r) }
+            : c
         ))
-        setReplyContent('')
-        setReplyingTo(null)
-        setExpandedReplies(prev => ({ ...prev, [parentId]: true }))
-        onCommentCountChange?.(postId, 1)
         showToast(t('replied'), 'success')
       } else {
+        // Rollback optimistic reply
+        setComments(prev => prev.map(c =>
+          c.id === parentId
+            ? { ...c, replies: (c.replies || []).filter(r => r.id !== tempId) }
+            : c
+        ))
+        onCommentCountChange?.(postId, -1)
         showToast(data?.error || t('operationFailed'), 'error')
       }
     } catch {
+      // Rollback optimistic reply
+      setComments(prev => prev.map(c =>
+        c.id === parentId
+          ? { ...c, replies: (c.replies || []).filter(r => r.id !== tempId) }
+          : c
+      ))
+      onCommentCountChange?.(postId, -1)
       showToast(t('operationFailed'), 'error')
     } finally {
       submittingReplyRef.current = false
