@@ -78,6 +78,8 @@ export interface CreatePostInput {
   is_sensitive?: boolean
   content_warning?: string
   language?: string
+  /** Pre-fetched reputation — skips DB lookup when provided */
+  authorReputation?: { score: number; verified: boolean }
 }
 
 export interface PostListOptions {
@@ -533,19 +535,21 @@ export async function createPost(
   userHandle: string,
   input: CreatePostInput
 ): Promise<Post> {
-  // Fetch author's reputation data for weighted feed
-  let authorScore = 0
-  let authorVerified = false
-  try {
-    const result = await supabase
-      .from('user_profiles')
-      .select('reputation_score, is_verified_trader')
-      .eq('id', userId)
-      .maybeSingle()
-    authorScore = result?.data?.reputation_score ?? 0
-    authorVerified = result?.data?.is_verified_trader ?? false
-  } catch (err) {
-    logger.warn('[posts] reputation score lookup failed, using default 0:', err instanceof Error ? err.message : String(err))
+  // Use pre-fetched reputation or fetch from DB
+  let authorScore = input.authorReputation?.score ?? 0
+  let authorVerified = input.authorReputation?.verified ?? false
+  if (!input.authorReputation) {
+    try {
+      const result = await supabase
+        .from('user_profiles')
+        .select('reputation_score, is_verified_trader')
+        .eq('id', userId)
+        .maybeSingle()
+      authorScore = result?.data?.reputation_score ?? 0
+      authorVerified = result?.data?.is_verified_trader ?? false
+    } catch (err) {
+      logger.warn('[posts] reputation score lookup failed, using default 0:', err instanceof Error ? err.message : String(err))
+    }
   }
 
   const detectedLanguage = input.language || detectPostLanguage((input.title ? input.title + ' ' : '') + input.content)
