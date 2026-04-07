@@ -54,7 +54,9 @@ const DEFAULT_UA =
 // ---------------------------------------------------------------------------
 
 /** @type {import('playwright').Browser | null} */
-let browser = null
+let sharedBrowser = null
+let contextCounter = 0
+const BROWSER_RECYCLE_AFTER = 50 // Relaunch after 50 contexts to prevent memory leaks
 
 /** @type {{ context: import('playwright').BrowserContext, busy: boolean, id: number }[]} */
 let contextPool = []
@@ -67,19 +69,39 @@ let totalErrors = 0
 let activeRequests = 0
 const startedAt = new Date().toISOString()
 
+// CF cookie cache: platform → { cookies: [], expiresAt: number }
+const cfCookieCache = new Map()
+
 // ---------------------------------------------------------------------------
 // Browser & Context Pool Management
 // ---------------------------------------------------------------------------
 
+async function ensureSharedBrowser() {
+  // Recycle browser after N contexts to prevent memory leaks
+  if (sharedBrowser && contextCounter >= BROWSER_RECYCLE_AFTER) {
+    log(`Recycling browser after ${contextCounter} contexts`)
+    try { await sharedBrowser.close() } catch {}
+    sharedBrowser = null
+    contextCounter = 0
+  }
+  if (!sharedBrowser || !sharedBrowser.isConnected()) {
+    sharedBrowser = await chromium.launch({ headless: true, args: BROWSER_ARGS })
+    contextCounter = 0
+    log('Shared browser launched')
+  }
+  return sharedBrowser
+}
+
 async function ensureBrowser() {
-  // No shared browser — each request launches its own (v15 pattern for WAF isolation)
-  // Just ensure the concurrency slots are initialized
+  // Initialize concurrency slots
   if (contextPool.length === 0) {
     for (let i = 0; i < POOL_SIZE; i++) {
       contextPool.push({ context: null, busy: false, id: i })
     }
-    log(`${POOL_SIZE} concurrency slots ready (fresh browser per request)`)
+    log(`${POOL_SIZE} concurrency slots ready (shared browser + per-request context)`)
   }
+  // Pre-launch shared browser
+  await ensureSharedBrowser()
 }
 
 /**
@@ -150,18 +172,27 @@ function processQueue() {
 async function executeRequest(slot, item) {
   const { handler, params } = item
 
-  // Launch FRESH browser per request (v15 pattern — full WAF/fingerprint isolation)
-  const reqBrowser = await chromium.launch({ headless: true, args: BROWSER_ARGS })
-  const context = await reqBrowser.newContext({
+  // Shared browser + fresh context per request (v17 pattern)
+  // Context provides cookie/state isolation without 2s browser launch overhead
+  const browser = await ensureSharedBrowser()
+  const context = await browser.newContext({
     userAgent: DEFAULT_UA,
     viewport: { width: 1280, height: 720 },
     ignoreHTTPSErrors: true,
   })
+  contextCounter++
   slot.context = context
 
-  // Per-request timeout
+  // Inject cached CF cookies if available (saves 5-15s CF challenge)
+  const platform = handler.split('/')[0]
+  const cachedCF = cfCookieCache.get(platform)
+  if (cachedCF && Date.now() < cachedCF.expiresAt) {
+    try { await context.addCookies(cachedCF.cookies) } catch {}
+  }
+
+  // Per-request timeout — closes context (not browser)
   const timeout = setTimeout(() => {
-    reqBrowser.close().catch(() => {})
+    context.close().catch(() => {})
   }, REQUEST_TIMEOUT_MS)
 
   try {
@@ -171,13 +202,23 @@ async function executeRequest(slot, item) {
     const page = await context.newPage()
     try {
       const result = await handlerFn(page, params)
+
+      // Cache CF cookies for future requests (10-minute TTL)
+      try {
+        const cookies = await context.cookies()
+        const cfCookies = cookies.filter(c => c.name.startsWith('cf_') || c.name === '__cf_bm' || c.name.includes('challenge'))
+        if (cfCookies.length > 0) {
+          cfCookieCache.set(platform, { cookies: cfCookies, expiresAt: Date.now() + 10 * 60 * 1000 })
+        }
+      } catch {}
+
       return result
     } finally {
       await page.close().catch(() => {})
     }
   } finally {
     clearTimeout(timeout)
-    await reqBrowser.close().catch(() => {})
+    await context.close().catch(() => {})
   }
 }
 
@@ -1366,7 +1407,9 @@ const server = http.createServer(async (req, res) => {
           heapUsed: Math.round(memUsage.heapUsed / 1024 / 1024),
           heapTotal: Math.round(memUsage.heapTotal / 1024 / 1024),
         },
-        browserMode: 'fresh-per-request',
+        browserMode: 'shared-browser-per-request-context',
+        contextCounter,
+        cfCookieCachePlatforms: [...cfCookieCache.keys()],
       })
     )
     return
@@ -1439,10 +1482,10 @@ async function shutdown(signal) {
     if (item) item.reject(new Error('Server shutting down'))
   }
 
-  // No shared browser to close (fresh per request)
-  if (false) {
+  // Close shared browser
+  if (sharedBrowser) {
     try {
-      await browser.close()
+      await sharedBrowser.close()
     } catch {
       // Already closed
     }

@@ -59,8 +59,10 @@ const GROUPS: Record<string, string[]> = {
   // Group B2: Bitget (VPS proxy, faster)
   // bitget_spot: DEAD (permanently disabled, no leaderboard API)
   b2: ['bitget_futures'],
-  // Group C: DEX + fast CEX (every 4h) — Hyperliquid, GMX (subgraph), Bitunix
-  c: ['hyperliquid', 'gmx', 'bitunix'],
+  // Group C: DEX (every 4h) — GMX (subgraph), Bitunix
+  c: ['gmx', 'bitunix'],
+  // Group C_HL: Hyperliquid solo (every 1h) — #1 DEX by trader count (33K+), API has 99.98% rate limit headroom
+  c_hl: ['hyperliquid'],
   // Group D1: Fast CEX (every 6h) — split from old group d (8 was too many, caused 524 timeout)
   d1: ['gains', 'htx_futures', 'bitfinex', 'coinex'],
   // Group D2: Web3 + Gate.io + BTCC (every 6h)

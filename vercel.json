@@ -135,6 +135,10 @@
       "schedule": "4 */4 * * *"
     },
     {
+      "path": "/api/cron/batch-fetch-traders?group=c_hl",
+      "schedule": "8 * * * *"
+    },
+    {
       "path": "/api/cron/batch-fetch-traders?group=d1",
       "schedule": "20 */6 * * *"
     },
