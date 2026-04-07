@@ -123,8 +123,10 @@ export async function writeDiscoverResult(
       const rawSharpe = safeNum(normalized.sharpe_ratio)
 
       // --- Boundary validation with warning logging ---
-      // ROI: reject values outside [-100%, 100000%] (null out, not clamp — bad data)
-      const roi = validateBound(rawRoi, -100, 100000, 'roi', platform, trader.trader_key, boundaryWarnings)
+      // ROI: reject values outside [-10000%, 100000%] (null out, not clamp — bad data)
+      // Negative ROI can exceed -100% with leverage (e.g., -8393% from liquidation + re-deposit).
+      // Previously capped at -100%, which silently discarded real data.
+      const roi = validateBound(rawRoi, -10000, 100000, 'roi', platform, trader.trader_key, boundaryWarnings)
       if (roi === BOUNDARY_VIOLATED) { boundaryWarnings++; }
       const roiVal = roi === BOUNDARY_VIOLATED ? null : roi
 

@@ -459,8 +459,10 @@ async function computeSeason(
     if (snap.metrics_estimated == null) snap.metrics_estimated = false
 
     // --- Boundary sanitization (safety net for all data sources) ---
-    // ROI: null out extreme values (> 100,000% or < -100%)
-    if (snap.roi != null && (snap.roi > 100000 || snap.roi < -100)) {
+    // ROI: only null out extreme POSITIVE values (> 100,000%)
+    // Negative ROI is kept as-is — traders with -8393% ROI should display the
+    // real value, not be nulled. calculateReturnScore() returns 0 for negative ROI.
+    if (snap.roi != null && snap.roi > 100000) {
       snap.roi = null
     }
     // Win rate: must be 0-100%
@@ -1592,7 +1594,7 @@ async function computeSeason(
       for (const { source, id } of batch) {
         const { error: zeroErr } = await supabase
           .from('leaderboard_ranks')
-          .update({ arena_score: 0, roi: null, pnl: null, computed_at: new Date().toISOString() })
+          .update({ arena_score: 0, computed_at: new Date().toISOString() })
           .eq('season_id', season)
           .eq('source', source)
           .eq('source_trader_id', id)
