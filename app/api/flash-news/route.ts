@@ -43,6 +43,10 @@ const MAX_ITEMS_PER_PAGE = 50
  * 支持分页、分类筛选、重要性筛选
  */
 export async function GET(request: NextRequest) {
+  // 限流
+  const rateLimitResponse = await checkRateLimit(request, RateLimitPresets.public)
+  if (rateLimitResponse) return rateLimitResponse
+
   try {
     const supabase = getSupabaseAdmin()
     const { searchParams } = new URL(request.url)
@@ -62,7 +66,7 @@ export async function GET(request: NextRequest) {
       // 构建查询
       let query = supabase
         .from('flash_news')
-        .select('*', { count: 'exact' })
+        .select('id, title, title_zh, title_en, source, category, importance, published_at, tags, image_url, slug', { count: 'exact' })
         .order('published_at', { ascending: false })
         .range(offset, offset + limit - 1)
 
