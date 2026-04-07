@@ -32,7 +32,12 @@ import { t as i18nTFn } from '@/lib/i18n'
 const SWIPE_THRESHOLD = 50
 const ACTION_WIDTH = 140
 
-// Module-level style constants — avoid allocating new objects on every render (defeats React.memo)
+// ────────────────────────────────────────────────────────────────────────────
+// Module-level style constants — avoid allocating new objects on every render
+// (defeats React.memo; ~750-1000 throwaway objects per 50-row render pass → ~0)
+// ────────────────────────────────────────────────────────────────────────────
+
+// Hero row gradient styles (top 3)
 const HERO_STYLE_RANK_1: React.CSSProperties = {
   background: 'linear-gradient(135deg, rgba(255,215,0,0.13) 0%, rgba(255,215,0,0.04) 40%, transparent 80%)',
   boxShadow: 'inset 3px 0 0 var(--color-rank-gold), 0 2px 20px rgba(255,215,0,0.08)',
@@ -52,20 +57,11 @@ const HERO_STYLE_RANK_3: React.CSSProperties = {
   margin: '4px',
 }
 
-const ScoreBreakdownLazy = dynamic(
-  () => import('./ScoreBreakdown'),
-  { ssr: false, loading: () => <div style={LAZY_LOADING_STYLE}>...</div> }
-)
+// Lazy-loading placeholder styles (must be before dynamic() calls)
+const LAZY_LOADING_STYLE: React.CSSProperties = { padding: 16, textAlign: 'center', opacity: 0.5 }
+const LAZY_ICON_STYLE: React.CSSProperties = { width: 14, height: 14, display: 'inline-block' }
 
-const ScoreBreakdownTooltip = dynamic(
-  () => import('./ScoreBreakdownTooltip').then(m => ({ default: m.ScoreBreakdownTooltip })),
-  {
-    loading: () => <span style={LAZY_ICON_STYLE} />,
-    ssr: false,
-  }
-)
-
-// Hoisted static styles — prevents allocating new objects on every TraderRow render
+// Core layout styles
 const NA_STYLE: React.CSSProperties = { fontSize: tokens.typography.fontSize.xs, color: TRADER_TEXT_TERTIARY, opacity: 0.4, letterSpacing: 1, cursor: 'help' }
 const NA_DASH_STYLE: React.CSSProperties = { fontSize: tokens.typography.fontSize.xs, color: TRADER_TEXT_TERTIARY, opacity: 0.4 }
 const ROW_BASE_STYLE: React.CSSProperties = { display: 'grid', alignItems: 'center', gap: tokens.spacing[3], padding: `${tokens.spacing[3]} ${tokens.spacing[4]}`, cursor: 'pointer', position: 'relative' as const }
@@ -74,10 +70,6 @@ const SCORE_CELL_STYLE: React.CSSProperties = { textAlign: 'center', display: 'f
 const ROI_CELL_STYLE: React.CSSProperties = { textAlign: 'right', display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 2 }
 const PNL_CELL_STYLE: React.CSSProperties = { textAlign: 'right', display: 'flex', alignItems: 'center', justifyContent: 'flex-end' }
 const RIGHT_CELL_STYLE: React.CSSProperties = { textAlign: 'right', alignItems: 'center', justifyContent: 'flex-end' }
-
-// Lazy-loading placeholder styles
-const LAZY_LOADING_STYLE: React.CSSProperties = { padding: 16, textAlign: 'center', opacity: 0.5 }
-const LAZY_ICON_STYLE: React.CSSProperties = { width: 14, height: 14, display: 'inline-block' }
 
 // Trader info sub-layout styles
 const NAME_COLUMN_STYLE: React.CSSProperties = { display: 'flex', flexDirection: 'column', gap: 4, minWidth: 0, flex: 1 }
@@ -119,12 +111,26 @@ const BOT_BADGE_STYLE: React.CSSProperties = {
 }
 const BOT_EMOJI_STYLE: React.CSSProperties = { fontSize: 10 }
 
+// Trading style chip base (colors merged at render time)
+const TRADING_STYLE_BASE_STYLE: React.CSSProperties = {
+  padding: '1px 6px',
+  borderRadius: tokens.radius.md,
+  fontSize: 12,
+  fontWeight: 600,
+  lineHeight: 1.4,
+}
+
 // "also on" text style
 const ALSO_ON_STYLE: React.CSSProperties = { fontSize: tokens.typography.fontSize.xs, color: TRADER_TEXT_TERTIARY, lineHeight: 1.2 }
 
-// Tabular-nums text styles for stat columns
+// Tabular-nums text style for stat columns (followers, trades count)
 const STAT_TEXT_TERTIARY_STYLE: React.CSSProperties = { color: TRADER_TEXT_TERTIARY, lineHeight: 1.2, fontSize: tokens.typography.fontSize.sm, fontVariantNumeric: 'tabular-nums' }
-const SHARPE_TEXT_TERTIARY_STYLE: React.CSSProperties = { color: TRADER_TEXT_TERTIARY, lineHeight: 1.2, fontSize: tokens.typography.fontSize.sm, fontVariantNumeric: 'tabular-nums' }
+
+// MDD text base style (opacity merged at render time)
+const MDD_TEXT_BASE_STYLE: React.CSSProperties = { color: TRADER_ACCENT_ERROR, lineHeight: 1.2, fontSize: tokens.typography.fontSize.sm, fontVariantNumeric: 'tabular-nums' }
+
+// AnimatedROI base style (color merged at render time)
+const ROI_TEXT_BASE_STYLE: React.CSSProperties = { lineHeight: 1.2, fontSize: '16px', maxWidth: '100%', overflow: 'hidden', textOverflow: 'ellipsis', fontVariantNumeric: 'tabular-nums', fontFeatureSettings: '"tnum" 1' }
 
 // Expand button style
 const EXPAND_BTN_STYLE: React.CSSProperties = {
@@ -134,6 +140,10 @@ const EXPAND_BTN_STYLE: React.CSSProperties = {
   borderRadius: tokens.radius.sm,
 }
 
+// Expand chevron styles
+const CHEVRON_EXPANDED_STYLE: React.CSSProperties = { transform: 'rotate(180deg)', transition: 'transform 0.2s' }
+const CHEVRON_COLLAPSED_STYLE: React.CSSProperties = { transform: 'rotate(0deg)', transition: 'transform 0.2s' }
+
 // Swipe action button styles
 const SWIPE_COMPARE_BTN_STYLE: React.CSSProperties = { background: tokens.colors.accent.primary }
 const SWIPE_SHARE_BTN_STYLE: React.CSSProperties = { background: tokens.colors.accent.brand }
@@ -141,14 +151,29 @@ const SWIPE_SHARE_BTN_STYLE: React.CSSProperties = { background: tokens.colors.a
 // Link base style
 const LINK_BASE_STYLE: React.CSSProperties = { textDecoration: 'none', display: 'block' }
 
+// ────────────────────────────────────────────────────────────────────────────
+
+const ScoreBreakdownLazy = dynamic(
+  () => import('./ScoreBreakdown'),
+  { ssr: false, loading: () => <div style={LAZY_LOADING_STYLE}>...</div> }
+)
+
+const ScoreBreakdownTooltip = dynamic(
+  () => import('./ScoreBreakdownTooltip').then(m => ({ default: m.ScoreBreakdownTooltip })),
+  {
+    loading: () => <span style={LAZY_ICON_STYLE} />,
+    ssr: false,
+  }
+)
+
 // Reusable N/A indicator for missing data with platform-specific tooltip
 function NaIndicator({ source, metricType }: { source?: string; metricType: 'winRate' | 'drawdown' }) {
   // Get platform-specific note or use default
   const platformNote = source ? getPlatformNote(source) : undefined
-  const defaultNote = metricType === 'winRate' 
-    ? i18nT('winRateNotAvailable') 
+  const defaultNote = metricType === 'winRate'
+    ? i18nT('winRateNotAvailable')
     : i18nT('drawdownNotAvailable')
-  
+
   return (
     <span title={platformNote || defaultNote} style={NA_STYLE}>
       &mdash;
@@ -165,7 +190,7 @@ function AnimatedROI({ roi, roiColor, animate }: { roi: number; roiColor: string
       size="md"
       weight="black"
       className="roi-value"
-      style={{ color: roiColor, lineHeight: 1.2, fontSize: '16px', maxWidth: '100%', overflow: 'hidden', textOverflow: 'ellipsis', fontVariantNumeric: 'tabular-nums', fontFeatureSettings: '"tnum" 1' }}
+      style={{ ...ROI_TEXT_BASE_STYLE, color: roiColor }}
       title={`${roi >= 0 ? '+' : ''}${Number(roi).toFixed(2)}%`}
     >
       {formatROI(displayValue)}
@@ -440,11 +465,11 @@ export const TraderRow = memo(function TraderRow({
                     width: 6, height: 6, borderRadius: '50%',
                     background: getScoreColor(trader.arena_score),
                   }} />
-                  <span style={{ fontSize: tokens.typography.fontSize.xs, fontWeight: 700, color: TRADER_TEXT_TERTIARY }}>{Number(trader.arena_score).toFixed(0)}</span>
+                  <span style={MOBILE_BADGE_TEXT_STYLE}>{Number(trader.arena_score).toFixed(0)}</span>
                 </span>
               )}
             </Box>
-            <Box style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+            <Box style={TAGS_ROW_STYLE}>
               <Box className="source-tag" style={{ background: `${sourceInfo.typeColor}15`, border: `1px solid ${sourceInfo.typeColor}30` }}>
                 <Text size="xs" weight="bold" style={{ color: sourceInfo.typeColor, fontSize: tokens.typography.fontSize.xs, lineHeight: 1.2 }}>
                   {sourceInfo.type}
@@ -454,59 +479,31 @@ export const TraderRow = memo(function TraderRow({
               {trader.is_verified && (
                 <span
                   title={i18nT('verifiedTooltip')}
-                  style={{
-                    padding: '1px 6px',
-                    borderRadius: tokens.radius.md,
-                    fontSize: 12,
-                    fontWeight: 600,
-                    color: '#22d3ee',
-                    background: 'rgba(34, 211, 238, 0.12)',
-                    border: '1px solid rgba(34, 211, 238, 0.25)',
-                    lineHeight: 1.4,
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    gap: 3,
-                  }}>
+                  style={VERIFIED_BADGE_STYLE}>
                   <svg width="10" height="10" viewBox="0 0 20 20" fill="currentColor"><path d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z"/></svg>
                   {i18nT('verifiedBadge')}
                 </span>
               )}
               {/* Bot Badge */}
               {(trader.is_bot || trader.trader_type === 'bot') && (
-                <span style={{
-                  padding: '1px 6px',
-                  borderRadius: tokens.radius.md,
-                  fontSize: 12,
-                  fontWeight: 600,
-                  color: '#a78bfa',
-                  background: 'rgba(167, 139, 250, 0.12)',
-                  border: '1px solid rgba(167, 139, 250, 0.25)',
-                  lineHeight: 1.4,
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: 3,
-                }}>
-                  <span style={{ fontSize: 10 }}>{'⚡'}</span>
+                <span style={BOT_BADGE_STYLE}>
+                  <span style={BOT_EMOJI_STYLE}>{'⚡'}</span>
                   {i18nT('botLabel')}
                 </span>
               )}
               {/* Trading Style Chip */}
               {tradingStyleInfo && (
                 <span style={{
-                  padding: '1px 6px',
-                  borderRadius: tokens.radius.md,
-                  fontSize: 12,
-                  fontWeight: 600,
+                  ...TRADING_STYLE_BASE_STYLE,
                   color: tradingStyleInfo.color,
                   background: tradingStyleInfo.bgColor,
                   border: `1px solid ${tradingStyleInfo.borderColor}`,
-                  lineHeight: 1.4,
                 }}>
                   {localizedLabel(tradingStyleInfo.label, tradingStyleInfo.labelEn, language)}
                 </span>
               )}
               {trader.also_on && trader.also_on.length > 0 && (
-                <Text size="xs" style={{ fontSize: tokens.typography.fontSize.xs, color: TRADER_TEXT_TERTIARY, lineHeight: 1.2 }}>
+                <Text size="xs" style={ALSO_ON_STYLE}>
                   also on: {[...new Set(trader.also_on.map(s => EXCHANGE_NAMES[s] || s.split('_')[0]))].join(', ')}
                 </Text>
               )}
@@ -544,7 +541,7 @@ export const TraderRow = memo(function TraderRow({
           const pnlColor = hasPnl
             ? (pnl >= 0 ? tokens.colors.accent.success : TRADER_ACCENT_ERROR)
             : TRADER_TEXT_TERTIARY
-          const pnlText = hasPnl ? formatPnL(pnl) : '—'
+          const pnlText = hasPnl ? formatPnL(pnl) : '\u2014'
           return (
             <Box className="col-pnl" style={PNL_CELL_STYLE}>
               <Text
@@ -574,7 +571,7 @@ export const TraderRow = memo(function TraderRow({
         {/* MDD */}
         <Box className="col-mdd" style={RIGHT_CELL_STYLE}>
           {trader.max_drawdown != null && Number.isFinite(Number(trader.max_drawdown)) ? (
-            <Text size="sm" weight="semibold" style={{ color: TRADER_ACCENT_ERROR, lineHeight: 1.2, fontSize: tokens.typography.fontSize.sm, fontVariantNumeric: 'tabular-nums', opacity: trader.metrics_estimated ? 0.5 : 1 }} title={trader.metrics_estimated ? t('estimatedFromRoi') : undefined}>
+            <Text size="sm" weight="semibold" style={{ ...MDD_TEXT_BASE_STYLE, opacity: trader.metrics_estimated ? 0.5 : 1 }} title={trader.metrics_estimated ? t('estimatedFromRoi') : undefined}>
               {trader.metrics_estimated ? '~' : ''}{Math.abs(Number(trader.max_drawdown)) < 0.05 ? '< 0.1' : `-${Math.abs(Number(trader.max_drawdown)).toFixed(1)}`}%
             </Text>
           ) : (
@@ -596,7 +593,7 @@ export const TraderRow = memo(function TraderRow({
         {/* Followers (P1-2) */}
         <Box className="col-followers" style={RIGHT_CELL_STYLE}>
           {trader.followers != null ? (
-            <Text size="sm" weight="semibold" style={{ color: TRADER_TEXT_TERTIARY, lineHeight: 1.2, fontSize: tokens.typography.fontSize.sm, fontVariantNumeric: 'tabular-nums' }}>
+            <Text size="sm" weight="semibold" style={STAT_TEXT_TERTIARY_STYLE}>
               {Number(trader.followers) >= 1000 ? `${(Number(trader.followers) / 1000).toFixed(1)}K` : trader.followers}
             </Text>
           ) : (
@@ -607,7 +604,7 @@ export const TraderRow = memo(function TraderRow({
         {/* Trades Count (P1-4) */}
         <Box className="col-trades" style={RIGHT_CELL_STYLE}>
           {trader.trades_count != null ? (
-            <Text size="sm" weight="semibold" style={{ color: TRADER_TEXT_TERTIARY, lineHeight: 1.2, fontSize: tokens.typography.fontSize.sm, fontVariantNumeric: 'tabular-nums' }}>
+            <Text size="sm" weight="semibold" style={STAT_TEXT_TERTIARY_STYLE}>
               {Number(trader.trades_count) >= 1000 ? `${(Number(trader.trades_count) / 1000).toFixed(1)}K` : trader.trades_count}
             </Text>
           ) : (
@@ -620,17 +617,12 @@ export const TraderRow = memo(function TraderRow({
       {onToggleExpand && (trader.profitability_score != null || trader.risk_control_score != null || trader.execution_score != null) && (
         <Box
           onClick={(e: React.MouseEvent) => { e.preventDefault(); e.stopPropagation(); onToggleExpand(trader.id) }}
-          style={{
-            position: 'absolute', right: 4, top: '50%', transform: 'translateY(-50%)',
-            width: 28, height: 28, display: 'flex', alignItems: 'center', justifyContent: 'center',
-            cursor: 'pointer', opacity: 0.6, transition: 'opacity 0.15s',
-            borderRadius: tokens.radius.sm,
-          }}
+          style={EXPAND_BTN_STYLE}
           className="expand-btn"
           title={t('expandScoreDetails')}
         >
           <svg width={10} height={10} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"
-            style={{ transform: isExpanded ? 'rotate(180deg)' : 'rotate(0deg)', transition: 'transform 0.2s' }}>
+            style={isExpanded ? CHEVRON_EXPANDED_STYLE : CHEVRON_COLLAPSED_STYLE}>
             <path d="M6 9l6 6 6-6" />
           </svg>
         </Box>
