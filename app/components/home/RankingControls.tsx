@@ -7,7 +7,7 @@
  */
 
 import { useRouter } from 'next/navigation'
-import { useTransition } from 'react'
+import { useTransition, useState, useEffect, useRef, useCallback } from 'react'
 
 const RANGES = ['90D', '30D', '7D'] as const
 
@@ -21,21 +21,80 @@ interface Props {
 export default function RankingControls({ activeRange, page, totalCount, perPage }: Props) {
   const router = useRouter()
   const [isPending, startTransition] = useTransition()
+  const [isOffline, setIsOffline] = useState(false)
+  const [navError, setNavError] = useState(false)
+  const navTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const totalPages = Math.max(1, Math.ceil(totalCount / perPage))
 
-  const navigate = (range: string, pg: number) => {
+  // Detect online/offline status
+  useEffect(() => {
+    const goOffline = () => setIsOffline(true)
+    const goOnline = () => { setIsOffline(false); setNavError(false) }
+    // Check initial state
+    if (typeof navigator !== 'undefined' && !navigator.onLine) setIsOffline(true)
+    window.addEventListener('offline', goOffline)
+    window.addEventListener('online', goOnline)
+    return () => {
+      window.removeEventListener('offline', goOffline)
+      window.removeEventListener('online', goOnline)
+    }
+  }, [])
+
+  // Clear nav error when transition completes successfully
+  useEffect(() => {
+    if (!isPending && navTimerRef.current) {
+      clearTimeout(navTimerRef.current)
+      navTimerRef.current = null
+    }
+  }, [isPending])
+
+  const navigate = useCallback((range: string, pg: number) => {
+    if (isOffline) {
+      setNavError(true)
+      return
+    }
+    setNavError(false)
+
     const params = new URLSearchParams()
     if (range !== '90D') params.set('range', range)
     if (pg > 0) params.set('page', String(pg))
     const qs = params.toString()
+
+    // Timeout: if transition takes >8s, show error (likely offline or network issue)
+    navTimerRef.current = setTimeout(() => {
+      setNavError(true)
+    }, 8000)
+
     startTransition(() => {
       router.push(qs ? `/?${qs}` : '/', { scroll: false })
     })
-  }
+  }, [isOffline, router, startTransition])
 
   return (
     <div className="ssr-controls">
+      {(isOffline || navError) && (
+        <div style={{
+          width: '100%',
+          padding: '8px 12px',
+          borderRadius: 8,
+          fontSize: 12,
+          fontWeight: 500,
+          color: 'var(--color-text-primary, #fff)',
+          background: 'rgba(251, 146, 60, 0.15)',
+          border: '1px solid rgba(251, 146, 60, 0.3)',
+          display: 'flex',
+          alignItems: 'center',
+          gap: 6,
+          order: -1,
+        }}>
+          <span style={{ fontSize: 14 }}>⚠</span>
+          {isOffline
+            ? 'You are offline. Rankings data is still visible but cannot be updated.'
+            : 'Network issue — please check your connection and try again.'}
+        </div>
+      )}
+
       <div className="ssr-range-bar">
         {RANGES.map(r => (
           <button
