@@ -153,8 +153,9 @@ export function TraderAvatar({ traderId, displayName, avatarUrl, rank, size = 36
 // Determine score confidence level based on available data
 function getScoreConfidence(trader: Trader): 'full' | 'partial' | 'minimal' {
   if (trader.score_confidence) return trader.score_confidence
-  if (!trader.win_rate && !trader.max_drawdown) return 'minimal'
-  if (!trader.win_rate || !trader.max_drawdown) return 'partial'
+  // Use != null instead of falsy check — win_rate=0 and max_drawdown=0 are valid data
+  if (trader.win_rate == null && trader.max_drawdown == null) return 'minimal'
+  if (trader.win_rate == null || trader.max_drawdown == null) return 'partial'
   return 'full'
 }
 
