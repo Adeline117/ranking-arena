@@ -18,6 +18,7 @@ import {
 import { createLogger } from '@/lib/utils/logger'
 import { getCorsOrigin } from '@/lib/utils/cors'
 import { getOrSetWithLock } from '@/lib/cache'
+import { checkRateLimit, RateLimitPresets } from '@/lib/utils/rate-limit'
 
 // 必须使用 Node.js 运行时
 export const runtime = 'nodejs'
@@ -30,6 +31,9 @@ let snapshotCache: { ts: number; data: RealtimeSnapshot } | null = null
 const SNAPSHOT_TTL_MS = 2000
 
 export async function GET(request: NextRequest) {
+  // Rate limit to prevent SSE connection pool exhaustion
+  const rateLimitResp = await checkRateLimit(request, RateLimitPresets.realtime)
+  if (rateLimitResp) return rateLimitResp
 
   const { searchParams } = new URL(request.url)
   const isStream = searchParams.get('stream') === '1'
