@@ -135,6 +135,10 @@ export async function GET(request: NextRequest) {
   }
 
   const group = request.nextUrl.searchParams.get('group') || 'a'
+  // Single-window mode: ?windows=7D to only fetch one window (Phase 4: staggered refresh)
+  // Reduces per-run time by 66% while maintaining same refresh frequency per window
+  const windowsParam = request.nextUrl.searchParams.get('windows')
+  const windowFilter = windowsParam ? windowsParam.split(',').map(w => w.trim().toLowerCase()) : null
   // Manual circuit breaker reset: ?reset=bybit to clear dead counter before running
   const resetPlatform = request.nextUrl.searchParams.get('reset')
   if (resetPlatform) {
@@ -269,7 +273,7 @@ export async function GET(request: NextRequest) {
 
     try {
       const result = await Promise.race([
-        runConnectorBatch(connector, { supabase, windows: ['7d', '30d', '90d'], sourceOverride: platform, platformTimeBudgetMs: timeoutMs, limit: PLATFORM_LIMITS[platform] }),
+        runConnectorBatch(connector, { supabase, windows: windowFilter || ['7d', '30d', '90d'], sourceOverride: platform, platformTimeBudgetMs: timeoutMs, limit: PLATFORM_LIMITS[platform] }),
         new Promise<never>((_, reject) =>
           setTimeout(() => reject(new Error(`Platform ${platform} timed out after ${timeoutMs / 1000}s`)), timeoutMs)
         ),
