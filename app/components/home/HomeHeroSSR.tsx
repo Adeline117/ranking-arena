@@ -77,7 +77,7 @@ export default function HomeHeroSSR({ traderCount = 34000, exchangeCount = 27 }:
         {/* Left: Headline + subtitle */}
         <div style={{ flex: '1 1 400px', minWidth: 0 }}>
           {/* LCP element: this headline is the largest above-fold text in the SSR HTML */}
-          <h2 style={{
+          <h1 style={{
             fontSize: 'clamp(18px, 2.5vw, 24px)',
             fontWeight: 900,
             color: 'var(--color-text-primary, #fff)',
@@ -85,7 +85,7 @@ export default function HomeHeroSSR({ traderCount = 34000, exchangeCount = 27 }:
             lineHeight: 1.2,
           }}>
             {headline}
-          </h2>
+          </h1>
           <p style={{
             fontSize: '0.875rem',
             color: 'var(--color-text-secondary, rgba(255,255,255,0.7))',
