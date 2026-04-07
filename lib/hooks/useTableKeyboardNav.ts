@@ -172,7 +172,7 @@ export function useTableKeyboardNav({
   return {
     containerProps: enabled ? containerProps : {
       role: 'grid' as const,
-      tabIndex: 0,
+      tabIndex: 0 as const,
       onKeyDown: () => {},
       onBlur: () => {},
       'aria-activedescendant': undefined,
