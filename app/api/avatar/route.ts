@@ -36,6 +36,16 @@ export async function GET(request: Request) {
       return new NextResponse('Invalid URL encoding', { status: 400 })
     }
 
+    // Data URIs should never be proxied — return 1x1 transparent PNG so the
+    // browser shows the CSS fallback (gradient + initial) without 400 errors.
+    if (decodedUrl.startsWith('data:')) {
+      const transparentPng = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAAC0lEQVQI12NgAAIABQABNjN9GQAAAABJRU5ErkJggg==', 'base64')
+      return new NextResponse(transparentPng, {
+        status: 200,
+        headers: { 'Content-Type': 'image/png', 'Cache-Control': `public, max-age=${CACHE_MAX_AGE}, immutable` },
+      })
+    }
+
     // Reject non-HTTP(S) URLs
     if (!decodedUrl.startsWith('http://') && !decodedUrl.startsWith('https://')) {
       return new NextResponse('Only HTTP(S) URLs allowed', { status: 400 })
