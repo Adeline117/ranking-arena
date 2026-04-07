@@ -2,7 +2,7 @@ import type { Metadata } from 'next'
 import { getInitialTraders } from '@/lib/getInitialTraders'
 import { getHeroStats } from '@/lib/data/hero-stats'
 import SSRRankingTable from './components/home/SSRRankingTable'
-// HomeHeroSSR removed — hero is rendered by Phase 2 HomePage only
+import HomeHeroSSR from './components/home/HomeHeroSSR'
 import RankingControls from './components/home/RankingControls'
 import TopNav from './components/layout/TopNav'
 import WelcomeBanner from './components/home/WelcomeBanner'
@@ -88,6 +88,14 @@ export default async function Page({
       </div>
 
       <WelcomeBanner />
+
+      {/* SSR Hero — visible until Phase 2 replaces it */}
+      <div id="ssr-hero-shell">
+        <HomeHeroSSR
+          traderCount={heroStats?.traderCount}
+          exchangeCount={heroStats?.exchangeCount}
+        />
+      </div>
 
       {/* SSR ranking table — visible until Phase 2 replaces it */}
       <div id="ssr-ranking-table">
