@@ -187,7 +187,7 @@
       "schedule": "45 */4 * * *"
     },
     {
-      "path": "/api/cron/backfill-data?type=all&limit=200",
+      "path": "/api/cron/backfill-data?type=snapshots&limit=50",
       "schedule": "40 */2 * * *"
     },
     {
