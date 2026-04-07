@@ -57,24 +57,33 @@ type FollowingResult = { items: FollowItem[]; traderCount: number; userCount: nu
 async function fetchFollowingItems(userId: string): Promise<FollowingResult> {
   const supabase = getSupabaseAdmin()
 
-  // 并行获取关注的交易员和用户
-  const [traderFollowsResult, userFollowsResult] = await Promise.all([
-    supabase
-      .from('trader_follows')
-      .select('trader_id, source, created_at')
-      .eq('user_id', userId),
-    supabase
-      .from('user_follows')
-      .select(`
-        created_at,
-        following:user_profiles!user_follows_following_id_fkey(
-          id,
-          handle,
-          bio,
-          avatar_url
-        )
-      `)
-      .eq('follower_id', userId)
+  const QUERY_TIMEOUT_MS = 5000
+
+  // 并行获取关注的交易员和用户 (with 5s timeout + limit 500)
+  const [traderFollowsResult, userFollowsResult] = await Promise.race([
+    Promise.all([
+      supabase
+        .from('trader_follows')
+        .select('trader_id, source, created_at')
+        .eq('user_id', userId)
+        .limit(500),
+      supabase
+        .from('user_follows')
+        .select(`
+          created_at,
+          following:user_profiles!user_follows_following_id_fkey(
+            id,
+            handle,
+            bio,
+            avatar_url
+          )
+        `)
+        .eq('follower_id', userId)
+        .limit(500)
+    ]),
+    new Promise<never>((_, reject) =>
+      setTimeout(() => reject(new Error('Following queries timed out after 5s')), QUERY_TIMEOUT_MS)
+    ),
   ])
 
   const traderFollows = traderFollowsResult.data || []
