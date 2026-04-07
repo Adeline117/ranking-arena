@@ -26,6 +26,7 @@ import type {
   SnapshotMetricsLegacy,
 } from '@/lib/types/leaderboard';
 import { logger } from '@/lib/logger'
+import { sanitizeRow, logRejectedWrites } from '@/lib/pipeline/validate-before-write'
 
 // Derive market_type from platform name for v2 table upserts
 function getMarketType(platform: string): 'perp' | 'spot' {
@@ -227,6 +228,19 @@ export class JobRunner {
       };
 
       const marketType = getMarketType(job.platform);
+      // Data gatekeeper: validate before write
+      const writeRow = {
+        platform: job.platform, trader_key: job.trader_key,
+        roi_pct: metrics.roi_pct, pnl_usd: metrics.pnl_usd,
+        max_drawdown: metrics.max_drawdown_pct, win_rate: metrics.win_rate_pct,
+        sharpe_ratio: (enrichedMetrics as Record<string, unknown>).sharpe_ratio ?? null,
+        arena_score: arenaScores.arena_score,
+      }
+      const { row: sanitized, rejected } = sanitizeRow(writeRow as Record<string, unknown>, 'trader_snapshots_v2')
+      if (rejected.length) {
+        const { getSupabaseAdmin } = await import('@/lib/supabase/server')
+        logRejectedWrites(rejected, getSupabaseAdmin())
+      }
       await query(
         `INSERT INTO trader_snapshots_v2
            (platform, market_type, trader_key, "window", as_of_ts, metrics, quality,
@@ -238,8 +252,8 @@ export class JobRunner {
         [
           job.platform, marketType, job.trader_key, window, snapshot.as_of_ts,
           JSON.stringify(enrichedMetrics), JSON.stringify(snapshot.quality),
-          arenaScores.arena_score, metrics.roi_pct, metrics.pnl_usd,
-          metrics.max_drawdown_pct, metrics.win_rate_pct,
+          sanitized.arena_score, sanitized.roi_pct, sanitized.pnl_usd,
+          sanitized.max_drawdown, sanitized.win_rate,
           metrics.trades_count, metrics.copier_count,
         ],
       );
