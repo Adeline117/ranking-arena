@@ -28,6 +28,9 @@ const POOL_SIZE = parseInt(process.env.POOL_SIZE || '3', 10)
 const REQUEST_TIMEOUT_MS = parseInt(process.env.REQUEST_TIMEOUT || '120000', 10)
 const VERSION = '16.0.0'
 
+const MAX_QUEUE_SIZE = parseInt(process.env.MAX_QUEUE_SIZE || '50', 10)
+const MEMORY_WARNING_MB = parseInt(process.env.MEMORY_WARNING_MB || '400', 10)
+
 const BROWSER_ARGS = [
   '--no-sandbox',
   '--disable-setuid-sandbox',
@@ -104,6 +107,9 @@ function releaseContext(slot) {
 // ---------------------------------------------------------------------------
 
 function enqueue(handler, params) {
+  if (requestQueue.length >= MAX_QUEUE_SIZE) {
+    return Promise.reject(new Error(`Queue full (${MAX_QUEUE_SIZE}). Scraper overloaded — reject to prevent memory leak.`))
+  }
   return new Promise((resolve, reject) => {
     requestQueue.push({ handler, params, resolve, reject, enqueuedAt: Date.now() })
     processQueue()
@@ -181,23 +187,29 @@ async function executeRequest(slot, item) {
 
 /**
  * Setup API response interception on a page (v15 pattern).
- * Returns array of captured { url, data, size } objects.
+ * Returns { captured, cleanup } — call cleanup() when done to remove listener.
+ * Captured array is capped at 10 entries to prevent memory growth.
  */
+const MAX_CAPTURED_RESPONSES = 10
 function setupInterception(page, matchFn) {
   const captured = []
-  page.on('response', async (response) => {
+  const handler = async (response) => {
     try {
+      if (captured.length >= MAX_CAPTURED_RESPONSES) return // cap memory
       const url = response.url()
       if (url.match(/\.(js|css|png|jpg|svg|woff|ico|gif|webp)(\?|$)/)) return
       const ct = response.headers()['content-type'] || ''
       if (!ct.includes('json') || response.status() !== 200) return
       if (!matchFn(url)) return
       const text = await response.text()
-      if (text.length > 100) {
+      if (text.length > 100 && text.length < 5_000_000) { // skip >5MB responses
         captured.push({ url, data: JSON.parse(text), size: text.length })
       }
     } catch { /* consumed or network error */ }
-  })
+  }
+  page.on('response', handler)
+  // Explicit cleanup to prevent listener leak if page.close() fails
+  captured.cleanup = () => { try { page.off('response', handler) } catch {} }
   return captured
 }
 
@@ -1438,9 +1450,21 @@ process.on('unhandledRejection', (reason) => {
 // ---------------------------------------------------------------------------
 
 server.listen(PORT, '0.0.0.0', () => {
-  log(`Scraper v${VERSION} listening on :${PORT} (pool: ${POOL_SIZE} contexts)`)
+  log(`Scraper v${VERSION} listening on :${PORT} (pool: ${POOL_SIZE} contexts, maxQueue: ${MAX_QUEUE_SIZE})`)
   // Pre-launch browser
   ensureBrowser().catch((err) => {
     log(`Browser pre-launch failed: ${err.message} (will retry on first request)`)
   })
+
+  // Periodic memory monitoring — detect leaks before PM2 kills at 500M
+  setInterval(() => {
+    const mem = process.memoryUsage()
+    const rssMB = Math.round(mem.rss / 1024 / 1024)
+    const heapMB = Math.round(mem.heapUsed / 1024 / 1024)
+    if (rssMB > MEMORY_WARNING_MB) {
+      log(`⚠️  MEMORY WARNING: RSS=${rssMB}MB heap=${heapMB}MB (threshold=${MEMORY_WARNING_MB}MB) queue=${requestQueue.length} active=${activeRequests}`)
+      // Force GC if available (node --expose-gc)
+      if (global.gc) { global.gc(); log('Forced GC') }
+    }
+  }, 60_000) // check every 60s
 })
