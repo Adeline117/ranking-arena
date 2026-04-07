@@ -23,7 +23,7 @@ function formatCount(n: number): string {
   return `${n}+`
 }
 
-export default function HomeHeroSSR({ traderCount = 34000, exchangeCount = 27 }: HomeHeroSSRProps) {
+export default function HomeHeroSSR({ traderCount = 17000, exchangeCount = 27 }: HomeHeroSSRProps) {
   const traderCountStr = formatCount(traderCount)
   const exchangeCountStr = `${exchangeCount}+`
 
