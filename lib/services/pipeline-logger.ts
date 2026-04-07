@@ -103,11 +103,9 @@ export class PipelineLogger {
     'auto-post-insights',
     'auto-post-twitter',
     'daily-digest',
-    'ranking-change-notifications',
 
-    // Subscriptions & competitions
+    // Subscriptions
     'subscription-expiry',
-    'update-competitions',
   ])
 
   /** Derive healthcheck slug from job name (strip group suffixes like -a, -90D) */

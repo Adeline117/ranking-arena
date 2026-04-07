@@ -63,11 +63,9 @@ const EXPECTED_INTERVALS: Record<string, number> = {
   'auto-post-insights': 1440,
   'auto-post-twitter': 1440,
   'daily-digest': 1440,
-  'ranking-change-notifications': 1440,
 
   // Subscriptions
   'subscription-expiry': 1440,
-  'update-competitions': 60,
 }
 
 export async function GET(request: Request) {
