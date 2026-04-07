@@ -12,8 +12,16 @@
    - JS idle callback removes the SSR DOM nodes for cleanup.
    - Phase 2 has min-height matching SSR content (~1650px) to prevent CLS
      when SSR shells collapse to 0. */
-/* Phase 2 eliminated — SSR table is the only rendering path.
-   No CSS hiding needed. Table is always visible. LCP = FCP. */
+/* Phase 2 RESTORED — three-column layout with sidebars loads after user interaction.
+   SSR hero stays visible permanently (LCP element).
+   SSR ranking table is hidden once Phase 2 mounts (replaced by interactive table). */
+:has(#homepage-interactive) #ssr-ranking-table,
+:has(#homepage-interactive) #ssr-topnav {
+  content-visibility: hidden;
+  height: 0;
+  overflow: hidden;
+  contain: strict;
+}
 
 /*
  * Performance Optimization: CSS files moved to async loading
