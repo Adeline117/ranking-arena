@@ -86,17 +86,6 @@ export async function POST(request: NextRequest, context: RouteContext) {
       return NextResponse.json({ error: 'Authentication failed' }, { status: 401 })
     }
 
-    // 检查帖子是否存在
-    const { data: post } = await supabase
-      .from('posts')
-      .select('id')
-      .eq('id', id)
-      .maybeSingle()
-
-    if (!post) {
-      return NextResponse.json({ error: 'Post not found' }, { status: 404 })
-    }
-
     // 获取请求体中的 folder_id（提前获取，用于判断是移动收藏夹还是取消收藏）
     let folder_id: string | null = null
     try {
@@ -114,13 +103,24 @@ export async function POST(request: NextRequest, context: RouteContext) {
       // Intentionally swallowed: no request body or invalid JSON, proceed with default folder / toggle bookmark
     }
 
-    // 检查是否已收藏
-    const { data: existingBookmark } = await supabase
-      .from('post_bookmarks')
-      .select('id, folder_id')
-      .eq('post_id', id)
-      .eq('user_id', user.id)
-      .maybeSingle()
+    // 并行检查帖子是否存在 + 是否已收藏
+    const [{ data: post }, { data: existingBookmark }] = await Promise.all([
+      supabase
+        .from('posts')
+        .select('id')
+        .eq('id', id)
+        .maybeSingle(),
+      supabase
+        .from('post_bookmarks')
+        .select('id, folder_id')
+        .eq('post_id', id)
+        .eq('user_id', user.id)
+        .maybeSingle(),
+    ])
+
+    if (!post) {
+      return NextResponse.json({ error: 'Post not found' }, { status: 404 })
+    }
 
     if (existingBookmark) {
       // 如果指定了 folder_id，则是移动到其他收藏夹，不是取消收藏
