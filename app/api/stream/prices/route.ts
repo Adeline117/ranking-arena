@@ -3,7 +3,9 @@
  * Reads arena:latest hash (populated by VPS bridge) and pushes to clients
  */
 
+import { NextRequest } from 'next/server'
 import { getCorsOrigin } from '@/lib/utils/cors'
+import { checkRateLimit, RateLimitPresets } from '@/lib/utils/rate-limit'
 
 export const runtime = 'edge'
 export const dynamic = 'force-dynamic'
@@ -38,7 +40,11 @@ async function getLatestPrices(): Promise<Record<string, PriceData>> {
   return prices
 }
 
-export async function GET(request: Request) {
+export async function GET(request: NextRequest) {
+  // Rate limit SSE connections to prevent connection pool exhaustion
+  const rateLimitResp = await checkRateLimit(request, RateLimitPresets.realtime)
+  if (rateLimitResp) return rateLimitResp
+
   const origin = request.headers.get('Origin')
   const encoder = new TextEncoder()
   let closed = false
