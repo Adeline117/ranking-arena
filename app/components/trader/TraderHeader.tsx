@@ -210,6 +210,7 @@ export default function TraderHeader({
   // Relative time formatting for "Updated X ago"
   const getRelativeTime = (iso: string): string => {
     const diff = Date.now() - new Date(iso).getTime()
+    if (diff < 0) return t('justNow') || 'just now'
     const mins = Math.floor(diff / 60000)
     if (mins < 1) return t('justNow') || 'just now'
     if (mins < 60) return t('minutesAgoShort').replace('{n}', String(mins))
@@ -358,7 +359,7 @@ export default function TraderHeader({
         {/* Name + badges + subtitle */}
         <Box style={{ flex: 1, minWidth: 0 }}>
           {/* Line 1: Name + exchange badge + score badge */}
-          <Box className="trader-name-badges-row" style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'nowrap', overflow: 'hidden' }}>
+          <Box className="trader-name-badges-row" style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
             <Text
               as="h1"
               size="lg"
