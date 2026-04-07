@@ -209,7 +209,9 @@ export default function TraderHeader({
 
   // Relative time formatting for "Updated X ago"
   const getRelativeTime = (iso: string): string => {
-    const diff = Date.now() - new Date(iso).getTime()
+    const ts = new Date(iso).getTime()
+    if (!Number.isFinite(ts)) return ''
+    const diff = Date.now() - ts
     if (diff < 0) return t('justNow') || 'just now'
     const mins = Math.floor(diff / 60000)
     if (mins < 1) return t('justNow') || 'just now'
