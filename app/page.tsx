@@ -2,7 +2,7 @@ import type { Metadata } from 'next'
 import { getInitialTraders } from '@/lib/getInitialTraders'
 import { getHeroStats } from '@/lib/data/hero-stats'
 import SSRRankingTable from './components/home/SSRRankingTable'
-import HomeHeroSSR from './components/home/HomeHeroSSR'
+// HomeHeroSSR removed — hero is rendered by Phase 2 HomePage only
 import RankingControls from './components/home/RankingControls'
 import TopNav from './components/layout/TopNav'
 import WelcomeBanner from './components/home/WelcomeBanner'
@@ -88,11 +88,6 @@ export default async function Page({
       </div>
 
       <WelcomeBanner />
-
-      {/* Phase 1 (SSR): Hero stays visible as LCP element even after Phase 2 loads. */}
-      <div id="ssr-hero-shell">
-        <HomeHeroSSR traderCount={heroStats?.traderCount} exchangeCount={heroStats?.exchangeCount} />
-      </div>
 
       {/* SSR ranking table — visible until Phase 2 replaces it */}
       <div id="ssr-ranking-table">
