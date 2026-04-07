@@ -22,6 +22,8 @@ export const commentStyles = {
     display: 'inline-flex',
     alignItems: 'center',
     justifyContent: 'center',
+    transition: 'color 0.15s ease, background-color 0.15s ease, transform 0.15s ease',
+    borderRadius: tokens.radius.sm,
   } satisfies CSSProperties,
   input: {
     flex: 1,

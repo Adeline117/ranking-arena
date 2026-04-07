@@ -31,7 +31,7 @@ export function Action({
     e.preventDefault()
     e.stopPropagation()
     setIsAnimating(true)
-    setTimeout(() => setIsAnimating(false), 300)
+    setTimeout(() => setIsAnimating(false), 450)
     onClick(e)
   }
 
@@ -71,11 +71,12 @@ export function Action({
       }}
     >
       <span
+        className={isAnimating ? 'like-bounce' : undefined}
         style={{
           display: 'inline-flex',
           alignItems: 'center',
           transition: 'transform 0.2s ease',
-          transform: active ? 'scale(1.1)' : isAnimating ? 'scale(1.2)' : 'scale(1)',
+          transform: active ? 'scale(1.1)' : 'scale(1)',
         }}
       >
         {icon}

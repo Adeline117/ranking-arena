@@ -872,7 +872,7 @@ export default function TraderProfileClient({ data, serverTraderData, claimedUse
           </Box>
 
           {/* Stats Tab — lazy: only mount after first visit */}
-          <Box style={{ minHeight: 200 }}>
+          <Box style={{ minHeight: 200 }} className="tab-pane-enter">
             {visitedTabs.has('stats') && (traderStats || traderEquityCurve || traderAssetBreakdown) ? (
               <StatsPage
                 stats={traderStats}
@@ -901,7 +901,7 @@ export default function TraderProfileClient({ data, serverTraderData, claimedUse
           </Box>
 
           {/* Portfolio Tab — lazy: only mount after first visit */}
-          <Box style={{ minHeight: 200 }}>
+          <Box style={{ minHeight: 200 }} className="tab-pane-enter">
             {!visitedTabs.has('portfolio') ? (
               <RankingSkeleton />
             ) : traderPortfolio.length === 0 && traderPositionHistory.length === 0 ? (
@@ -945,7 +945,7 @@ export default function TraderProfileClient({ data, serverTraderData, claimedUse
 
           {/* Posts Tab (only for claimed traders) */}
           {claimedUser && (
-            <Box style={{ minHeight: 200 }}>
+            <Box style={{ minHeight: 200 }} className="tab-pane-enter">
               {activeTab === 'posts' && (
                 <Box bg="secondary" p={4} radius="lg" border="primary" style={{ maxWidth: 900 }}>
                   <Box style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: tokens.spacing[4] }}>
