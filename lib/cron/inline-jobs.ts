@@ -100,6 +100,9 @@ export async function runWorkerInline(): Promise<InlineJobResult> {
       if (!job) break
 
       try {
+        // Per-job deadline: 60s max per refresh job (prevents one slow connector from blocking batch)
+        const jobDeadline = Date.now() + 60_000
+
         // Check circuit breaker
         const { data: health } = await supabase
           .from('platform_health')
@@ -122,7 +125,13 @@ export async function runWorkerInline(): Promise<InlineJobResult> {
         if (job.job_type === 'DISCOVER') {
           const windows: Window[] = ['7d', '30d', '90d']
           for (const window of windows) {
-            const result = await connector.discoverLeaderboard(window, 100)
+            if (Date.now() > jobDeadline) { logger.warn(`[inline-jobs] job deadline exceeded for ${job.platform} DISCOVER`); break }
+            const result = await Promise.race([
+              connector.discoverLeaderboard(window, 100),
+              new Promise<{ success: false; data: null }>((resolve) =>
+                setTimeout(() => resolve({ success: false, data: null }), Math.max(1000, jobDeadline - Date.now()))
+              ),
+            ])
             if (result.success && result.data?.length) {
               await upsertLeaderboardData(supabase, job.platform as Platform, job.market_type as MarketType, window, result.data, result.provenance)
             }
@@ -139,7 +148,13 @@ export async function runWorkerInline(): Promise<InlineJobResult> {
 
           const windows: Window[] = ['7d', '30d', '90d']
           for (const window of windows) {
-            const result = await connector.fetchTraderSnapshot(job.trader_key, window)
+            if (Date.now() > jobDeadline) { logger.warn(`[inline-jobs] job deadline exceeded for ${job.platform} SNAPSHOT`); break }
+            const result = await Promise.race([
+              connector.fetchTraderSnapshot(job.trader_key, window),
+              new Promise<{ success: false; data: null }>((resolve) =>
+                setTimeout(() => resolve({ success: false, data: null }), Math.max(1000, jobDeadline - Date.now()))
+              ),
+            ])
             if (result.success && result.data) {
               // Pre-validate before scoring (uses unified gatekeeper)
               const preCheck = sanitizeRow({
