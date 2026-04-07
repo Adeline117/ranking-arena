@@ -120,6 +120,31 @@ export default function RootLayout({
             'query-input': 'required name=search_term_string',
           },
         }} />
+        {/* Speculation Rules — pre-render likely navigation targets for near-zero LCP.
+            Inspired by cal.com's SpeculationRules pattern. Chrome 121+ only;
+            other browsers safely ignore the script type. */}
+        <script type="speculationrules" dangerouslySetInnerHTML={{ __html: JSON.stringify({
+          prerender: [{
+            where: {
+              and: [
+                { href_matches: "/*" },
+                { not: { href_matches: "/api/*" } },
+                { not: { href_matches: "/auth/*" } },
+                { not: { selector_matches: "[rel~=nofollow]" } },
+              ]
+            },
+            eagerness: "moderate",
+          }],
+          prefetch: [{
+            where: {
+              and: [
+                { href_matches: "/*" },
+                { not: { href_matches: "/api/*" } },
+              ]
+            },
+            eagerness: "moderate",
+          }],
+        }) }} />
       </head>
       <body
         className="font-sans antialiased"
