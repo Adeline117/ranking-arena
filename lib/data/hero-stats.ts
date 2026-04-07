@@ -10,9 +10,10 @@ import { tieredGet, tieredSet } from '@/lib/cache/redis-layer'
 import { logger } from '@/lib/logger'
 
 // 默认值 - 当缓存和数据库都不可用时的回退
+// Must be close to actual 90D ranked count (~17K) to avoid inflated display.
 const DEFAULT_STATS = {
-  exchangeCount: 34,
-  traderCount: 32000, // Approximate unique traders in 90D season
+  exchangeCount: 27,
+  traderCount: 17000,
 }
 
 const CACHE_KEY = 'hero-stats:v1'
@@ -71,16 +72,23 @@ export async function getHeroStats(): Promise<HeroStats> {
           return { ...DEFAULT_STATS, isDefault: true }
         }
 
-        // 获取 distinct sources
-        const { data: sources } = await supabase
-          .from('leaderboard_ranks')
-          .select('source')
-          .limit(100)
-
-        const uniqueSources = new Set(sources?.map(s => s.source) || [])
+        // Get distinct exchange count from count cache (avoids full table scan)
+        let exchangeCount = DEFAULT_STATS.exchangeCount
+        try {
+          const { data: cacheSources } = await supabase
+            .from('leaderboard_count_cache')
+            .select('source')
+            .eq('season_id', '90D')
+            .neq('source', '_all')
+          if (cacheSources && cacheSources.length > 0) {
+            exchangeCount = cacheSources.length
+          }
+        } catch {
+          // Non-critical — use default
+        }
 
         const stats: HeroStats = {
-          exchangeCount: uniqueSources.size || DEFAULT_STATS.exchangeCount,
+          exchangeCount,
           traderCount: count || DEFAULT_STATS.traderCount,
         }
 

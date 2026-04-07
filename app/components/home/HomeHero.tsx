@@ -23,7 +23,7 @@ export interface HomeHeroProps {
 export default function HomeHero({ traderCount: traderCountProp, exchangeCount: exchangeCountProp }: HomeHeroProps) {
   useLanguage() // subscribe to language changes for re-render
 
-  const traderNum = traderCountProp ?? 34000
+  const traderNum = traderCountProp ?? 17000
   const exchangeNum = exchangeCountProp ?? 27
   const traderCountStr = formatCount(traderNum)
   const exchangeCountStr = `${exchangeNum}+`
