@@ -525,6 +525,7 @@ export default function TraderProfileClient({ data, serverTraderData, claimedUse
           linkedPlatforms={hasMultipleAccounts ? linkedAccounts.map(a => a.platform) : undefined}
           platform={effectivePlatform}
           traderKey={data.source_trader_id}
+          tradingStyle={(traderPerformance as Record<string, unknown> | null)?.tradingStyle as string ?? (traderPerformance as ExtendedPerformance | null)?.trading_style ?? null}
         />
         </div>
 
