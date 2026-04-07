@@ -170,33 +170,49 @@ footer,.sidebar-contained{content-visibility:auto;contain-intrinsic-size:auto 30
 @media(min-width:640px){.ranking-table-grid{grid-template-columns:40px 1fr 80px 60px 80px !important}.ranking-table-grid .col-score,.ranking-table-grid .col-pnl{display:flex !important}}
 @media(min-width:768px){.ranking-table-grid{grid-template-columns:44px minmax(140px,1.5fr) 80px 80px 70px 70px 64px !important}.ranking-table-grid .col-score,.ranking-table-grid .col-pnl,.ranking-table-grid .col-winrate,.ranking-table-grid .col-mdd{display:flex !important}}
 
-/* SSR ranking table — inline compact layout to prevent CLS before Phase 2 */
-.ssr-t{display:flex;flex-direction:column;gap:0}
-.ssr-hdr{display:grid;grid-template-columns:36px 1fr 50px 70px;gap:8px;padding:8px 12px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;color:var(--text-tertiary,#6B6B7B);border-bottom:1px solid var(--border-primary,#2A2836)}
-.ssr-row{display:grid;grid-template-columns:36px 1fr 50px 70px;gap:8px;padding:8px 12px;align-items:center;text-decoration:none;color:inherit;border-bottom:1px solid var(--border-primary,rgba(42,40,54,0.5));min-height:52px;contain:layout style}
-@media(min-width:768px){.ssr-hdr,.ssr-row{grid-template-columns:36px 1fr 50px 70px 50px 50px}}
+/* SSR ranking table — CANONICAL styles (single source of truth)
+   These are inlined in <head> so the first frame is correct.
+   Removed from globals.css to prevent flash from conflicting overrides. */
+.ssr-t{background:var(--color-bg-secondary);border-radius:16px;border:1px solid var(--color-border-primary);overflow:hidden}
+.ssr-hdr{display:grid;grid-template-columns:40px 1fr 60px 80px;padding:10px 16px;font-size:10px;font-weight:700;color:var(--color-text-quaternary,var(--color-text-tertiary));border-bottom:1px solid var(--color-border-primary);gap:8px;text-transform:uppercase;letter-spacing:0.05em;position:sticky;top:0;z-index:10;background:var(--color-bg-secondary)}
+.ssr-row{display:grid;grid-template-columns:40px 1fr 60px 80px;padding:10px 16px;gap:8px;align-items:center;text-decoration:none;color:inherit;border-bottom:1px solid var(--color-border-primary);min-height:52px}
+@media(min-width:768px){.ssr-hdr,.ssr-row{grid-template-columns:40px 1fr 60px 80px 60px 60px}}
+.ssr-row:hover{background:var(--color-bg-hover,#252232)}
+.ssr-row:focus-visible{outline:2px solid var(--color-brand);outline-offset:-2px;border-radius:4px}
+.ssr-row:active{transform:scale(0.998)}
+.ssr-row-gold{background:linear-gradient(135deg,rgba(255,215,0,0.10) 0%,rgba(255,215,0,0.03) 40%,transparent 80%);box-shadow:inset 3px 0 0 var(--color-rank-gold,#FFD700)}
+.ssr-row-silver{background:linear-gradient(135deg,rgba(192,192,192,0.08) 0%,rgba(192,192,192,0.02) 40%,transparent 80%);box-shadow:inset 3px 0 0 var(--color-rank-silver,#C0C0C0)}
+.ssr-row-bronze{background:linear-gradient(135deg,rgba(205,127,50,0.08) 0%,rgba(205,127,50,0.02) 40%,transparent 80%);box-shadow:inset 3px 0 0 var(--color-rank-bronze,#CD7F32)}
+.ssr-rank{font-size:13px;font-weight:800;text-align:center;display:flex;align-items:center;justify-content:center}
+.ssr-rank-default{color:var(--color-text-tertiary)}
+.ssr-rank-circle{width:28px;height:28px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;color:var(--color-bg-primary,#0B0A10)}
 .ssr-r{text-align:right}
-.ssr-rank{text-align:center;font-weight:700;font-size:13px;color:var(--text-secondary)}
-.ssr-info{display:flex;align-items:center;gap:8px;min-width:0}
-.ssr-av{width:36px;height:36px;border-radius:50%;overflow:hidden;flex-shrink:0;position:relative;display:flex;align-items:center;justify-content:center;background:var(--bg-tertiary,#1C1926);font-weight:700;font-size:14px;color:var(--text-tertiary)}
-.ssr-name{font-weight:600;font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:var(--text-primary)}
-.ssr-src{font-size:11px;color:var(--text-tertiary);text-transform:capitalize}
-.ssr-score{font-weight:800;font-size:14px;text-align:center;font-variant-numeric:tabular-nums}
-.ssr-roi-val{font-weight:700;font-size:13px;text-align:right;font-variant-numeric:tabular-nums}
-.ssr-roi-pos{color:var(--color-success,#2fe57d)}
-.ssr-roi-neg{color:var(--color-error,#ff7c7c)}
-.ssr-pnl{font-size:11px;color:var(--text-tertiary);text-align:right}
-.ssr-wr,.ssr-mdd{font-size:12px;color:var(--text-secondary);text-align:right;font-variant-numeric:tabular-nums}
-.ssr-score-s{color:#2fe57d}
-.ssr-score-a{color:#7dd87d}
-.ssr-score-b{color:#d4c952}
-.ssr-score-c{color:#e8a83e}
-.ssr-score-d{color:#ff7c7c}
-.ssr-rank-circle{display:inline-flex;align-items:center;justify-content:center;width:24px;height:24px;border-radius:50%;color:#000;font-weight:900;font-size:12px}
-.ssr-rank-default{color:var(--text-tertiary)}
-.ssr-row-gold{background:linear-gradient(90deg,rgba(255,215,0,0.06) 0%,transparent 60%)}
-.ssr-row-silver{background:linear-gradient(90deg,rgba(192,192,192,0.05) 0%,transparent 60%)}
-.ssr-row-bronze{background:linear-gradient(90deg,rgba(205,127,50,0.04) 0%,transparent 60%)}
+.ssr-info{display:flex;align-items:center;gap:10px;min-width:0}
+.ssr-av{width:36px;height:36px;min-width:36px;aspect-ratio:1;border-radius:50%;background:linear-gradient(135deg,var(--color-accent-primary-30),var(--color-pro-gold-border,#a78bfa));display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:700;color:var(--color-on-accent,#fff);overflow:hidden;position:relative;contain:layout style paint}
+.ssr-av img{width:100%;height:100%;object-fit:cover;border-radius:50%;position:absolute;inset:0}
+.ssr-name{font-size:13px;font-weight:600;color:var(--color-text-primary);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ssr-src{font-size:11px;color:var(--color-text-tertiary);text-transform:capitalize}
+.ssr-score{text-align:right;font-size:13px;font-weight:700;font-variant-numeric:tabular-nums}
+.ssr-score-s{color:var(--color-accent-success,#22c55e)}.ssr-score-a{color:var(--color-score-a,#4ade80)}.ssr-score-b{color:var(--color-accent-primary,#a78bfa)}.ssr-score-c{color:var(--color-text-secondary,#94a3b8)}.ssr-score-d{color:var(--color-text-tertiary,#64748b)}
+.ssr-roi{text-align:right;font-variant-numeric:tabular-nums}
+.ssr-roi-val{font-size:13px;font-weight:600}
+.ssr-roi-pos{color:var(--color-success)}.ssr-roi-neg{color:var(--color-danger)}
+.ssr-pnl{font-size:10px;color:var(--color-text-tertiary)}
+.ssr-wr{text-align:right;font-size:12px;color:var(--color-text-secondary);font-variant-numeric:tabular-nums}
+.ssr-mdd{text-align:right;font-size:12px;color:var(--color-danger);font-variant-numeric:tabular-nums}
+.ssr-controls{display:flex;align-items:center;justify-content:space-between;padding:10px 16px;gap:8px;flex-wrap:wrap;position:relative}
+.ssr-range-bar{display:flex;gap:4px}
+.ssr-range-btn{padding:6px 14px;border-radius:8px;border:1px solid var(--color-border-primary);background:transparent;color:var(--color-text-secondary);font-size:12px;font-weight:600;cursor:pointer;transition:all 0.15s}
+.ssr-range-btn:hover{background:var(--color-bg-hover);color:var(--color-text-primary)}
+.ssr-range-active{background:var(--color-accent-primary-15,rgba(167,139,250,0.15));color:var(--color-accent-primary,#a78bfa);border-color:var(--color-accent-primary-30,rgba(167,139,250,0.3))}
+.ssr-pagination{display:flex;align-items:center;gap:8px}
+.ssr-page-btn{padding:6px 12px;border-radius:6px;border:1px solid var(--color-border-primary);background:transparent;color:var(--color-text-secondary);font-size:12px;cursor:pointer;transition:all 0.15s}
+.ssr-page-btn:hover:not(:disabled){background:var(--color-bg-hover);color:var(--color-text-primary)}
+.ssr-page-btn:disabled{opacity:0.4;cursor:not-allowed}
+.ssr-page-info{font-size:12px;color:var(--color-text-tertiary);font-variant-numeric:tabular-nums;min-width:48px;text-align:center}
+.ssr-loading-bar{position:absolute;top:0;left:0;right:0;height:2px;background:var(--color-accent-primary,#a78bfa);animation:ssr-loading 1s ease-in-out infinite}
+@keyframes ssr-loading{0%{transform:scaleX(0);transform-origin:left}50%{transform:scaleX(1);transform-origin:left}50.1%{transform-origin:right}100%{transform:scaleX(0);transform-origin:right}}
+[data-theme='light'] .ssr-t{box-shadow:0 1px 3px rgba(0,0,0,0.05)}
 
 /* Global tabular-nums for all number displays — prevents CLS from digit width shifts */
 td,th,.ranking-row,.ssr-row,.ssr-score,.ssr-roi-val,.ssr-wr,.ssr-mdd,.col-score,.col-pnl,.col-roi,.col-winrate,.col-mdd,.stat-value,.price-value,.pnl-value,.percentage-value,.rank-number,.roi-value,.metric-value,.number-display,[data-value]{font-variant-numeric:tabular-nums}
