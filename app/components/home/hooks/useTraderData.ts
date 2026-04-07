@@ -146,6 +146,11 @@ export function useTraderData(options: UseTraderDataOptions = {}) {
   // (adding state.totalCount to fetchPage's deps caused a re-fetch loop)
   const totalCountRef = useRef(initialTotalCount)
 
+  // Fingerprint to skip dispatching LOAD_SUCCESS when auto-refresh data is identical.
+  // Without this, every 5-min refresh creates a new array reference → triggers full
+  // re-render cascade through 5 useMemo chains → 50 TraderRow memo checks.
+  const dataFingerprintRef = useRef('')
+
   // Read time range preference from URL or localStorage
   useEffect(() => {
     const params = new URLSearchParams(window.location.search)
@@ -239,6 +244,17 @@ export function useTraderData(options: UseTraderDataOptions = {}) {
         calmar_ratio: t.calmar_ratio != null ? Number(t.calmar_ratio) : null,
         profit_factor: t.profit_factor != null ? Number(t.profit_factor) : null,
       }))
+
+      // Fingerprint check: skip dispatch if data is identical to current state.
+      // This prevents the full 50-row re-render cascade on auto-refresh when
+      // the leaderboard hasn't changed (which is most of the time).
+      const fingerprint = traders.map(t => `${t.id}:${t.arena_score}:${t.roi}`).join('|')
+      if (fingerprint === dataFingerprintRef.current) {
+        // Data unchanged — skip dispatch to avoid unnecessary re-renders
+        dispatch({ type: 'SET_LOADING', loading: false })
+        return
+      }
+      dataFingerprintRef.current = fingerprint
 
       startTransition(() => {
         dispatch({
