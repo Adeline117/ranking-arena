@@ -1,9 +1,11 @@
 'use client'
 
+import { useRef, useState, useCallback } from 'react'
 import { Box, Text } from '@/app/components/base'
 import { tokens } from '@/lib/design-tokens'
 import { renderContentWithLinks } from '@/lib/utils/content'
 import { DynamicStickerPicker } from '@/app/components/ui/Dynamic'
+import { MentionAutocomplete } from '@/app/components/post/components/MentionAutocomplete'
 import type { Sticker } from '@/lib/stickers'
 import Image from 'next/image'
 import { CharCount, inputStyle } from './FormControls'
@@ -24,6 +26,7 @@ interface ContentEditorProps {
   linkPreviewUrlRef: React.MutableRefObject<string | null>
   language: string
   t: (key: string) => string
+  accessToken?: string | null
 }
 
 export function ContentEditor({
@@ -33,7 +36,36 @@ export function ContentEditor({
   draftSaved,
   linkPreview, setLinkPreview, linkPreviewLoading, linkPreviewUrlRef,
   language: _language, t,
+  accessToken,
 }: ContentEditorProps): React.ReactElement {
+  const textareaRef = useRef<HTMLTextAreaElement>(null)
+  const [cursorPos, setCursorPos] = useState(0)
+  const [showMention, setShowMention] = useState(false)
+
+  const handleContentChange = useCallback((e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    const newContent = e.target.value.slice(0, CONTENT_MAX_LENGTH)
+    setContent(newContent)
+    const pos = e.target.selectionStart || 0
+    setCursorPos(pos)
+    // Check if in @mention context
+    const before = newContent.slice(0, pos)
+    setShowMention(/@\w{0,30}$/.test(before))
+  }, [setContent])
+
+  const handleMentionSelect = useCallback((handle: string, start: number, end: number) => {
+    const newText = content.slice(0, start) + `@${handle} ` + content.slice(end)
+    setContent(newText)
+    setShowMention(false)
+    // Focus back and set cursor after the inserted mention
+    setTimeout(() => {
+      if (textareaRef.current) {
+        const newPos = start + handle.length + 2 // @handle + space
+        textareaRef.current.focus()
+        textareaRef.current.setSelectionRange(newPos, newPos)
+      }
+    }, 0)
+  }, [content, setContent])
+
   return (
     <Box>
       <Box style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: tokens.spacing[2] }}>
@@ -124,16 +156,30 @@ export function ContentEditor({
           {content ? renderContentWithLinks(content) : <Text color="tertiary">{t('previewPlaceholder')}</Text>}
         </Box>
       ) : (
-        <textarea
-          placeholder={t('enterContent')}
-          value={content}
-          onChange={(e) => setContent(e.target.value.slice(0, CONTENT_MAX_LENGTH))}
-          maxLength={CONTENT_MAX_LENGTH}
-          rows={12}
-          aria-label={t('contentLabel')}
-          className="post-editor-input"
-          style={{ ...inputStyle, padding: tokens.spacing[4], resize: 'vertical', lineHeight: 1.7, transition: 'border-color 0.2s, box-shadow 0.2s', minHeight: 240 }}
-        />
+        <div style={{ position: 'relative' }}>
+          <textarea
+            ref={textareaRef}
+            placeholder={t('enterContent')}
+            value={content}
+            onChange={handleContentChange}
+            onSelect={(e) => setCursorPos((e.target as HTMLTextAreaElement).selectionStart || 0)}
+            maxLength={CONTENT_MAX_LENGTH}
+            rows={12}
+            aria-label={t('contentLabel')}
+            className="post-editor-input"
+            style={{ ...inputStyle, padding: tokens.spacing[4], resize: 'vertical', lineHeight: 1.7, transition: 'border-color 0.2s, box-shadow 0.2s', minHeight: 240 }}
+          />
+          {showMention && (
+            <MentionAutocomplete
+              text={content}
+              cursorPosition={cursorPos}
+              onSelect={handleMentionSelect}
+              onClose={() => setShowMention(false)}
+              accessToken={accessToken ?? null}
+              style={{ bottom: 'auto', top: '100%', marginTop: 4, marginBottom: 0 }}
+            />
+          )}
+        </div>
       )}
 
       {/* UF15: Link Preview Card */}
