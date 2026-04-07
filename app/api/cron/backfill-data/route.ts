@@ -259,9 +259,6 @@ export async function GET(req: NextRequest) {
 
   const supabase = getSupabaseAdmin()
 
-  // Initialize connectors for backfill
-  await initializeConnectors()
-
   const platformParam = req.nextUrl.searchParams.get('platform')
   const periodParam = req.nextUrl.searchParams.get('period')
   const limit = parseInt(req.nextUrl.searchParams.get('limit') || '100')
@@ -275,66 +272,134 @@ export async function GET(req: NextRequest) {
     ? [periodParam].filter((p) => TIME_PERIODS.includes(p))
     : TIME_PERIODS
 
+  // Pipeline logging — start early so timeout still gets logged
+  const plog = await PipelineLogger.start(`backfill-data-${type}`, { platforms: platformParam, period: periodParam })
+
+  // Time budget: stop after 240s (leave 60s buffer for maxDuration=300)
+  const TIME_BUDGET_MS = 240_000
+  const elapsed = () => Date.now() - startTime
+  const hasTimeBudget = () => elapsed() < TIME_BUDGET_MS
+
+  // Initialize connectors for backfill
+  try {
+    await initializeConnectors()
+  } catch (err) {
+    logger.warn(`[backfill] Connector initialization failed: ${err}`)
+    await plog.error(err instanceof Error ? err : new Error(String(err)))
+    return NextResponse.json({ ok: false, error: 'Connector initialization failed' }, { status: 500 })
+  }
+
   const results: BackfillResult[] = []
   let totalProcessed = 0
   let totalSuccess = 0
   let totalFailed = 0
   let gapsFound = 0
+  const skippedPlatforms: string[] = []
+  const failedPlatforms: string[] = []
+  let timedOut = false
 
   // Process each platform and period
   for (const platform of platforms) {
-    for (const period of periods) {
-      // Find and backfill snapshot gaps
-      if (type === 'all' || type === 'snapshots') {
-        const missingSnapshotTraders = await findMissingSnapshotTraders(supabase, platform, period, limit)
+    // Time budget check before each platform
+    if (!hasTimeBudget()) {
+      const remaining = platforms.slice(platforms.indexOf(platform))
+      skippedPlatforms.push(...remaining)
+      timedOut = true
+      logger.warn(`[backfill] Time budget exceeded at ${Math.round(elapsed() / 1000)}s, processed ${results.length} results, skipping ${remaining.length} platforms`)
+      break
+    }
 
-        if (missingSnapshotTraders.length > 0) {
-          gapsFound += missingSnapshotTraders.length
-          logger.warn(`[backfill] Found ${missingSnapshotTraders.length} traders missing ${period} snapshots for ${platform}`)
+    try {
+      for (const period of periods) {
+        // Time budget check before each period
+        if (!hasTimeBudget()) {
+          timedOut = true
+          logger.warn(`[backfill] Time budget exceeded during ${platform}/${period} at ${Math.round(elapsed() / 1000)}s`)
+          break
+        }
 
-          const snapshotResult = await backfillSnapshots(supabase, platform, period, missingSnapshotTraders)
-          results.push(snapshotResult)
-          totalProcessed += snapshotResult.tradersProcessed
-          totalSuccess += snapshotResult.success
-          totalFailed += snapshotResult.failed
+        // Find and backfill snapshot gaps
+        if (type === 'all' || type === 'snapshots') {
+          try {
+            const missingSnapshotTraders = await findMissingSnapshotTraders(supabase, platform, period, limit)
 
-          // Small delay between operations
-          await sleep(1000)
+            if (missingSnapshotTraders.length > 0) {
+              gapsFound += missingSnapshotTraders.length
+              logger.warn(`[backfill] Found ${missingSnapshotTraders.length} traders missing ${period} snapshots for ${platform}`)
+
+              const snapshotResult = await backfillSnapshots(supabase, platform, period, missingSnapshotTraders)
+              results.push(snapshotResult)
+              totalProcessed += snapshotResult.tradersProcessed
+              totalSuccess += snapshotResult.success
+              totalFailed += snapshotResult.failed
+
+              // Small delay between operations
+              await sleep(500)
+            }
+          } catch (err) {
+            logger.warn(`[backfill] ${platform}/${period} snapshot backfill failed: ${err}`)
+            failedPlatforms.push(`${platform}/${period}/snapshots`)
+          }
+        }
+
+        // Find and backfill enrichment gaps
+        if (type === 'all' || type === 'enrichment') {
+          // Skip platforms that don't support enrichment
+          if (NO_ENRICHMENT_PLATFORMS.has(platform)) {
+            continue
+          }
+
+          // Time budget check before enrichment
+          if (!hasTimeBudget()) {
+            timedOut = true
+            break
+          }
+
+          try {
+            const missingEnrichmentTraders = await findMissingEnrichmentTraders(supabase, platform, period, limit)
+
+            if (missingEnrichmentTraders.length > 0) {
+              gapsFound += missingEnrichmentTraders.length
+              logger.warn(`[backfill] Found ${missingEnrichmentTraders.length} traders missing ${period} enrichment for ${platform}`)
+
+              const enrichResult = await backfillEnrichment(supabase, platform, period, missingEnrichmentTraders)
+              results.push(enrichResult)
+              totalProcessed += enrichResult.tradersProcessed
+              totalSuccess += enrichResult.success
+              totalFailed += enrichResult.failed
+
+              // Small delay between operations
+              await sleep(500)
+            }
+          } catch (err) {
+            logger.warn(`[backfill] ${platform}/${period} enrichment backfill failed: ${err}`)
+            failedPlatforms.push(`${platform}/${period}/enrichment`)
+          }
         }
       }
 
-      // Find and backfill enrichment gaps
-      if (type === 'all' || type === 'enrichment') {
-        // Skip platforms that don't support enrichment
-        if (NO_ENRICHMENT_PLATFORMS.has(platform)) {
-          logger.info(`[backfill] Skipping enrichment for ${platform} (not supported)`)
-          continue
-        }
-
-        const missingEnrichmentTraders = await findMissingEnrichmentTraders(supabase, platform, period, limit)
-
-        if (missingEnrichmentTraders.length > 0) {
-          gapsFound += missingEnrichmentTraders.length
-          logger.warn(`[backfill] Found ${missingEnrichmentTraders.length} traders missing ${period} enrichment for ${platform}`)
-
-          const enrichResult = await backfillEnrichment(supabase, platform, period, missingEnrichmentTraders)
-          results.push(enrichResult)
-          totalProcessed += enrichResult.tradersProcessed
-          totalSuccess += enrichResult.success
-          totalFailed += enrichResult.failed
-
-          // Small delay between operations
-          await sleep(1000)
-        }
-      }
+      if (timedOut) break
+    } catch (err) {
+      // Per-platform catch: one platform's unexpected error doesn't kill the job
+      logger.warn(`[backfill] Platform ${platform} failed unexpectedly: ${err}`)
+      failedPlatforms.push(platform)
     }
   }
 
   const duration = Date.now() - startTime
 
-  // Pipeline logging
-  const plog = await PipelineLogger.start(`backfill-data-${type}`, { platforms: platformParam, period: periodParam })
-  if (totalFailed > 0) {
+  // Pipeline logging with proper partial/success tracking
+  const hasPartialResults = timedOut || failedPlatforms.length > 0
+  if (hasPartialResults) {
+    const failedItems = [
+      ...skippedPlatforms.map(p => `skipped:${p}`),
+      ...failedPlatforms.map(p => `failed:${p}`),
+    ]
+    await plog.partialSuccess(totalSuccess, failedItems, {
+      totalFailed, gapsFound, timedOut, skippedPlatforms, failedPlatforms,
+      elapsedMs: duration,
+    })
+  } else if (totalFailed > 0) {
     await plog.error(new Error(`${totalFailed} failures`), { totalSuccess, totalFailed, gapsFound })
   } else {
     await plog.success(totalSuccess, { gapsFound })
@@ -344,17 +409,20 @@ export async function GET(req: NextRequest) {
   const hasMoreGaps = gapsFound > 0 && totalSuccess < gapsFound
 
   return NextResponse.json({
-    ok: totalFailed === 0,
+    ok: totalFailed === 0 && !timedOut,
     duration,
+    timedOut,
     hasMoreGaps,
     gapsFound,
+    skippedPlatforms: skippedPlatforms.length > 0 ? skippedPlatforms : undefined,
+    failedPlatforms: failedPlatforms.length > 0 ? failedPlatforms : undefined,
     summary: {
       processed: totalProcessed,
       success: totalSuccess,
       failed: totalFailed,
     },
     results,
-    nextAction: hasMoreGaps
+    nextAction: hasMoreGaps || timedOut
       ? 'Call this endpoint again to continue backfilling'
       : 'All gaps have been filled or no gaps found',
   })
