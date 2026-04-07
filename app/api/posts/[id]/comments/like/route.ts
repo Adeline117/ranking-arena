@@ -79,18 +79,19 @@ export async function POST(request: NextRequest, _context: RouteContext) {
       if (actionType === 'like') { liked = true } else { disliked = true }
     }
 
-    // Recount from source of truth to avoid race conditions with stale counts
-    const { count: likeCount } = await supabase
-      .from('comment_likes')
-      .select('id', { count: 'exact', head: true })
-      .eq('comment_id', commentId)
-      .eq('reaction_type', 'like')
-
-    const { count: dislikeCount } = await supabase
-      .from('comment_likes')
-      .select('id', { count: 'exact', head: true })
-      .eq('comment_id', commentId)
-      .eq('reaction_type', 'dislike')
+    // Recount from source of truth to avoid race conditions with stale counts (parallel)
+    const [{ count: likeCount }, { count: dislikeCount }] = await Promise.all([
+      supabase
+        .from('comment_likes')
+        .select('id', { count: 'exact', head: true })
+        .eq('comment_id', commentId)
+        .eq('reaction_type', 'like'),
+      supabase
+        .from('comment_likes')
+        .select('id', { count: 'exact', head: true })
+        .eq('comment_id', commentId)
+        .eq('reaction_type', 'dislike'),
+    ])
 
     // Update counts atomically from recount
     await supabase
