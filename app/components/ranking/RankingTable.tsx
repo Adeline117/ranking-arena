@@ -359,6 +359,9 @@ function RankingTableInner(props: {
   const startIndex = serverTotalCount != null ? 0 : (currentPage - 1) * itemsPerPage
   const endIndex = serverTotalCount != null ? sortedTraders.length : startIndex + itemsPerPage
   const paginatedTraders = sortedTraders.slice(startIndex, endIndex)
+  // Rank offset: in server-side pagination, traders array is already one page,
+  // but rank display must account for which page we're on.
+  const rankOffset = serverTotalCount != null ? (currentPage - 1) * itemsPerPage : startIndex
 
   // Reset scroll position on page/sort/filter changes
   const tableScrollRef = useRef<HTMLDivElement>(null)
@@ -632,7 +635,7 @@ function RankingTableInner(props: {
             }}
           >
             {sortedTraders.slice(0, cardVisibleCount).map((trader, idx) => {
-              const positionRank = idx + 1
+              const positionRank = rankOffset + idx + 1
               const rank = positionRank
               return (
                 <SectionErrorBoundary key={`${trader.id}-${trader.source || 'unknown'}`}>
@@ -687,7 +690,7 @@ function RankingTableInner(props: {
             {...kbContainerProps}
           >
             {paginatedTraders.map((trader, idx) => {
-              const positionRank = startIndex + idx + 1
+              const positionRank = rankOffset + idx + 1
               const rank = positionRank
               return (
                 <div key={`${trader.id}-${trader.source || 'unknown'}-${startIndex + idx}`} {...kbGetRowProps(idx)}>
