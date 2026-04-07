@@ -17,6 +17,7 @@ import { getSupabaseAdmin } from '@/lib/supabase/server'
 import { checkHealth as checkCacheHealth, getCacheStats } from '@/lib/cache'
 import { getSupportedPlatforms } from '@/lib/cron/utils'
 import { DEAD_BLOCKED_PLATFORMS } from '@/lib/constants/exchanges'
+import { getFireAndForgetStats } from '@/lib/utils/logger'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -472,6 +473,12 @@ export async function GET(request: NextRequest) {
       cron: cronStatus,
     }
 
+    // Surface fire-and-forget background failures (inspired by Uptime Kuma's
+    // approach to making hidden failures visible). These are operations like
+    // cache invalidation, analytics tracking, etc. that run in the background
+    // and may silently fail without anyone noticing.
+    const backgroundFailures = getFireAndForgetStats()
+
     const response: DetailedHealthResponse = {
       status: calculateStatus(checks),
       timestamp: new Date().toISOString(),
@@ -483,6 +490,7 @@ export async function GET(request: NextRequest) {
         // 这些指标需要单独的监控系统收集
         // 这里只提供占位
       },
+      ...(Object.keys(backgroundFailures).length > 0 ? { backgroundFailures } : {}),
     }
 
     const httpStatus = response.status === 'healthy' ? 200 : response.status === 'degraded' ? 200 : 503
