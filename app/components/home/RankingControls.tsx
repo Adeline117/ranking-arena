@@ -53,6 +53,14 @@ export default function RankingControls({ activeRange, page, totalCount, perPage
         <div className="ssr-pagination">
           <button
             className="ssr-page-btn"
+            onClick={() => navigate(activeRange, 0)}
+            disabled={page <= 0 || isPending}
+            title="First page"
+          >
+            «
+          </button>
+          <button
+            className="ssr-page-btn"
             onClick={() => navigate(activeRange, page - 1)}
             disabled={page <= 0 || isPending}
           >
@@ -67,6 +75,14 @@ export default function RankingControls({ activeRange, page, totalCount, perPage
             disabled={page >= totalPages - 1 || isPending}
           >
             Next ›
+          </button>
+          <button
+            className="ssr-page-btn"
+            onClick={() => navigate(activeRange, totalPages - 1)}
+            disabled={page >= totalPages - 1 || isPending}
+            title="Last page"
+          >
+            »
           </button>
         </div>
       )}
