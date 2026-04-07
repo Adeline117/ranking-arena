@@ -97,17 +97,28 @@ export default async function Page({
         />
       </div>
 
-      {/* SSR ranking table — visible until Phase 2 replaces it */}
-      <div id="ssr-ranking-table">
-        <div className="ssr-t" style={{ marginTop: 8 }}>
-          <RankingControls
-            activeRange={timeRange}
-            page={page}
-            totalCount={totalCount}
-            perPage={PER_PAGE}
-          />
-          <SSRRankingTable traders={traders} startRank={page * PER_PAGE} />
+      {/* SSR three-column shell — same grid as Phase 2 ThreeColumnLayout.
+          Prevents CLS when Phase 2 mounts by matching the exact same column widths.
+          Sidebar placeholders reserve space so center column doesn't jump. */}
+      <div id="ssr-ranking-table" className="three-col-layout">
+        {/* Left sidebar placeholder — hidden on mobile via .three-col-left */}
+        <div className="three-col-left hide-tablet" style={{ minHeight: 400 }} />
+
+        {/* Center: ranking table */}
+        <div className="three-col-center">
+          <div className="ssr-t" style={{ marginTop: 8 }}>
+            <RankingControls
+              activeRange={timeRange}
+              page={page}
+              totalCount={totalCount}
+              perPage={PER_PAGE}
+            />
+            <SSRRankingTable traders={traders} startRank={page * PER_PAGE} />
+          </div>
         </div>
+
+        {/* Right sidebar placeholder — hidden on mobile */}
+        <div className="three-col-right hide-mobile" style={{ minHeight: 400 }} />
       </div>
 
       {/* Phase 2: Full interactive three-column layout with sidebars.
