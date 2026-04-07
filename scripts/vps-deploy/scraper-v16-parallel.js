@@ -214,15 +214,26 @@ function setupInterception(page, matchFn) {
 }
 
 /**
- * Wait for Cloudflare challenge to complete.
+ * Wait for Cloudflare challenge to complete — only if actually challenged.
+ * Old version always waited 20s + 2s. New version detects CF in <500ms
+ * and only waits if challenge is present, saving 2-22s per request.
  */
-async function waitForCF(page, timeoutMs = 20000) {
+async function waitForCF(page, timeoutMs = 15000) {
   try {
+    // Quick check: is CF challenge present? (< 500ms)
+    const hasCF = await page.evaluate(() => {
+      return document.title.includes('Just a moment') || !!document.querySelector('#challenge-running')
+    }).catch(() => false)
+
+    if (!hasCF) return // No challenge — skip entirely (saves 2-20s)
+
+    log('CF challenge detected — waiting up to ' + (timeoutMs / 1000) + 's')
     await page.waitForFunction(() => {
       return !document.title.includes('Just a moment') && !document.querySelector('#challenge-running')
     }, { timeout: timeoutMs })
+    // Brief settle after challenge completes
+    await page.waitForTimeout(500)
   } catch { /* timeout — proceed anyway */ }
-  await page.waitForTimeout(2000)
 }
 
 const HANDLERS = {
@@ -235,7 +246,8 @@ const HANDLERS = {
     await page.goto('https://www.bybitglobal.com/copyTrading/en/leaderboard-master', {
       waitUntil: 'domcontentloaded', timeout: 45000,
     })
-    await page.waitForTimeout(2000)
+    // Wait for page JS to initialize (needed for session cookies) — 500ms is enough
+    await page.waitForTimeout(500)
 
     // Same-origin relative path — no CORS issues
     const apiPath = `/x-api/fapi/beehive/public/v1/common/dynamic-leader-list?pageNo=${pageNo}&pageSize=${pageSize}&dataDuration=${duration}&sortField=LEADER_SORT_FIELD_SORT_ROI`
@@ -259,7 +271,7 @@ const HANDLERS = {
     await page.goto('https://www.bybitglobal.com/copyTrading/en/leaderboard-master', {
       waitUntil: 'domcontentloaded', timeout: 45000,
     })
-    await page.waitForTimeout(2000)
+    await page.waitForTimeout(500)
 
     // Fetch trader detail via same-origin x-api (bypasses Akamai WAF)
     const data = await page.evaluate(async (mark) => {
@@ -292,18 +304,19 @@ const HANDLERS = {
     await page.goto('https://www.bybitglobal.com/copyTrading/en/leaderboard-master', {
       waitUntil: 'domcontentloaded', timeout: 45000,
     })
-    await page.waitForTimeout(2000)
+    await page.waitForTimeout(500)
 
+    // Parallel fetch all durations instead of sequential (saves ~1-2s per duration)
     const results = await page.evaluate(async (opts) => {
       const out = {}
-      for (const dur of opts.durations) {
+      await Promise.all(opts.durations.map(async (dur) => {
         const d = dur.trim()
         try {
           const path = `/x-api/fapi/beehive/public/v1/common/dynamic-leader-list?pageNo=1&pageSize=${opts.pageSize}&dataDuration=${d}&sortField=LEADER_SORT_FIELD_SORT_ROI`
           const r = await fetch(path)
           out[d] = r.ok ? await r.json() : { error: 'HTTP ' + r.status }
         } catch (e) { out[d] = { error: e.message } }
-      }
+      }))
       return out
     }, { durations, pageSize }).catch(() => ({}))
 
@@ -341,10 +354,13 @@ const HANDLERS = {
     }, { pageNo, pageSize, period }).catch(() => null)
 
     if (data?.code === '00000' && (data?.data?.rows?.length > 0 || data?.data?.traderList?.length > 0)) {
+      captured.cleanup?.()
       return data
     }
 
-    await page.waitForTimeout(5000)
+    // Fallback: wait briefly for intercepted response (was 5000ms, reduced to 1500ms)
+    await page.waitForTimeout(1500)
+    captured.cleanup?.()
     if (captured.length > 0) return captured[0].data
     return { error: 'No API response captured' }
   },
@@ -361,7 +377,7 @@ const HANDLERS = {
     await page.goto('https://www.gate.com/copy-trading', {
       waitUntil: 'domcontentloaded', timeout: 30000,
     })
-    await page.waitForTimeout(3000)
+    await page.waitForTimeout(1000)
 
     const data = await page.evaluate(async (opts) => {
       try {
@@ -375,9 +391,13 @@ const HANDLERS = {
       } catch { return null }
     }, { cycle, pageNum }).catch(() => null)
 
-    if (data?.list?.length > 0 || data?.data?.list?.length > 0) return data
+    if (data?.list?.length > 0 || data?.data?.list?.length > 0) {
+      captured.cleanup?.()
+      return data
+    }
 
-    await page.waitForTimeout(5000)
+    await page.waitForTimeout(1500)
+    captured.cleanup?.()
     if (captured.length > 0) return captured[0].data
     return { error: 'No API response captured' }
   },
@@ -446,9 +466,10 @@ const HANDLERS = {
     await page.goto('https://www.coinex.com/en/copy-trading/futures', {
       waitUntil: 'domcontentloaded', timeout: 45000,
     })
-    await page.waitForTimeout(8000)
+    // Wait for initial SPA render (was 8s, use networkidle with 3s cap)
+    await page.waitForLoadState('networkidle').catch(() => {})
     await page.evaluate(() => window.scrollTo(0, 500)).catch(() => {})
-    await page.waitForTimeout(3000)
+    await page.waitForTimeout(1500)
 
     // Check intercepted responses first
     const traderResponses = captured.filter(c => {
@@ -502,7 +523,7 @@ const HANDLERS = {
     await page.goto('https://bingx.com/en/CopyTrading/leaderBoard', {
       waitUntil: 'domcontentloaded', timeout: 45000,
     })
-    await page.waitForTimeout(3000)
+    await page.waitForTimeout(1000)
     await page.evaluate(() => window.scrollTo(0, 300)).catch(() => {})
 
     // Wait for multi-rank response and read body directly (don't use setupInterception)
@@ -538,7 +559,7 @@ const HANDLERS = {
     await page.goto('https://www.blofin.com/copy-trading', {
       waitUntil: 'domcontentloaded', timeout: 30000,
     })
-    await page.waitForTimeout(3000)
+    await page.waitForTimeout(1000)
 
     const data = await page.evaluate(async (opts) => {
       try {
@@ -550,7 +571,7 @@ const HANDLERS = {
 
     if (data?.data?.length > 0) return data
 
-    await page.waitForTimeout(5000)
+    await page.waitForTimeout(1500)
     if (captured.length > 0) return captured[0].data
     return { error: 'No API response captured' }
   },
@@ -566,9 +587,9 @@ const HANDLERS = {
     await page.goto('https://www.bitunix.com/copy-trading', {
       waitUntil: 'domcontentloaded', timeout: 30000,
     })
-    await page.waitForTimeout(3000)
+    await page.waitForTimeout(1000)
     await page.evaluate(() => window.scrollBy(0, 500))
-    await page.waitForTimeout(3000)
+    await page.waitForTimeout(1000)
 
     if (captured.length === 0) {
       const data = await page.evaluate(async (opts) => {
@@ -662,9 +683,9 @@ const HANDLERS = {
       waitUntil: 'domcontentloaded', timeout: 60000,
     })
     await waitForCF(page, 20000)
-    await page.waitForTimeout(3000)
+    await page.waitForTimeout(1000)
     await page.evaluate(() => window.scrollTo(0, 500)).catch(() => {})
-    await page.waitForTimeout(5000)
+    await page.waitForTimeout(1500)
 
     if (captured.length > 0) {
       captured.sort((a, b) => b.size - a.size)
@@ -710,9 +731,9 @@ const HANDLERS = {
     })
 
     await waitForCF(page, 20000)
-    await page.waitForTimeout(8000)
+    await page.waitForLoadState('networkidle').catch(() => {})
     await page.evaluate(() => window.scrollTo(0, 500)).catch(() => {})
-    await page.waitForTimeout(3000)
+    await page.waitForTimeout(1000)
 
     if (captured.length > 0) {
       captured.sort((a, b) => b.size - a.size)
@@ -765,11 +786,11 @@ const HANDLERS = {
     await waitForCF(page, 25000)
 
     // Wait for SPA to load and fire API calls
-    await page.waitForTimeout(5000)
+    await page.waitForTimeout(1500)
 
     // Scroll to trigger lazy-loaded content
     await page.evaluate(() => window.scrollTo(0, 500)).catch(() => {})
-    await page.waitForTimeout(3000)
+    await page.waitForTimeout(1000)
 
     // Check if we captured API responses via interception
     if (captured.length > 0) {
@@ -883,9 +904,9 @@ const HANDLERS = {
     }).catch(() => {})
 
     await waitForCF(page, 25000)
-    await page.waitForTimeout(8000)
+    await page.waitForLoadState('networkidle').catch(() => {})
     await page.evaluate(() => window.scrollTo(0, 500)).catch(() => {})
-    await page.waitForTimeout(3000)
+    await page.waitForTimeout(1000)
 
     if (captured.length > 0) {
       captured.sort((a, b) => b.size - a.size)
@@ -972,7 +993,7 @@ const HANDLERS = {
     await page.goto(`https://phemex.com/copy-trading/trader/${uid}`, {
       waitUntil: 'domcontentloaded', timeout: 30000,
     })
-    await page.waitForTimeout(3000)
+    await page.waitForTimeout(1000)
 
     const data = await page.evaluate(async (traderId) => {
       try {
