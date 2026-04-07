@@ -19,7 +19,7 @@ const http = require('http')
 const SCRAPER_URL = process.env.SCRAPER_URL || 'http://localhost:3457'
 const SCRAPER_KEY = process.env.PROXY_KEY || 'arena-proxy-sg-2026'
 const INGEST_URL = process.env.INGEST_URL || 'https://www.arenafi.org/api/pipeline/ingest'
-const INGEST_KEY = process.env.VPS_PROXY_KEY || process.env.CRON_SECRET || SCRAPER_KEY
+const INGEST_KEY = process.env.CRON_SECRET || process.env.VPS_PROXY_KEY || SCRAPER_KEY
 
 // Platforms that need VPS scraper (geo-blocked or WAF-protected)
 const PLATFORMS = [
