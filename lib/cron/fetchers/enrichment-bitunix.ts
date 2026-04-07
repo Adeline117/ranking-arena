@@ -63,20 +63,16 @@ const leaderboardCache = new Map<string, CacheEntry>()
 const CACHE_TTL_MS = 10 * 60 * 1000 // 10 minutes
 
 /**
- * Fetch all pages of the Bitunix leaderboard and cache them.
- * Returns a Map of uid -> trader entry for O(1) lookups.
+ * Fetch a single page with retry logic.
+ * Retries up to maxRetries times with exponential backoff on transient errors.
  */
-async function ensureLeaderboardCached(period: string): Promise<Map<string, BitunixListEntry>> {
-  const existing = leaderboardCache.get(period)
-  if (existing && Date.now() - existing.fetchedAt < CACHE_TTL_MS) {
-    return existing.traders
-  }
-
-  const traders = new Map<string, BitunixListEntry>()
-  const maxPages = 18 // 100 per page × 18 = 1800 traders (was 10=1000, caused 50/54 cache misses)
-  const pageSize = 100
-
-  for (let page = 1; page <= maxPages; page++) {
+async function fetchPageWithRetry(
+  period: string,
+  page: number,
+  pageSize: number,
+  maxRetries: number = 2,
+): Promise<BitunixListEntry[]> {
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
     try {
       const res = await fetch(`${API_BASE}/trader/list`, {
         method: 'POST',
@@ -85,25 +81,83 @@ async function ensureLeaderboardCached(period: string): Promise<Map<string, Bitu
         signal: AbortSignal.timeout(15000),
       })
 
+      if (res.status === 429) {
+        // Rate limited — wait longer and retry
+        const waitMs = 2000 * (attempt + 1)
+        logger.warn(`[bitunix] Rate limited on page ${page}, waiting ${waitMs}ms (attempt ${attempt + 1}/${maxRetries + 1})`)
+        if (attempt < maxRetries) {
+          await new Promise(r => setTimeout(r, waitMs))
+          continue
+        }
+        return []
+      }
+
       if (!res.ok) {
-        logger.warn(`[bitunix] List API page ${page} returned ${res.status}`)
-        break
+        logger.warn(`[bitunix] List API page ${page} returned ${res.status} (attempt ${attempt + 1})`)
+        if (attempt < maxRetries) {
+          await new Promise(r => setTimeout(r, 1000 * (attempt + 1)))
+          continue
+        }
+        return []
       }
 
       const json = (await res.json()) as BitunixListResponse
-      const records = json?.data?.records || []
-
-      if (records.length === 0) break
-
-      for (const entry of records) {
-        const uid = String(entry.uid || '')
-        if (uid) traders.set(uid, entry)
-      }
-
-      if (records.length < pageSize) break // Last page
+      return json?.data?.records || []
     } catch (err) {
-      logger.warn(`[bitunix] List API page ${page} failed: ${err instanceof Error ? err.message : String(err)}`)
-      break
+      const msg = err instanceof Error ? err.message : String(err)
+      logger.warn(`[bitunix] List API page ${page} failed (attempt ${attempt + 1}/${maxRetries + 1}): ${msg}`)
+      if (attempt < maxRetries) {
+        await new Promise(r => setTimeout(r, 1000 * (attempt + 1)))
+        continue
+      }
+    }
+  }
+  return []
+}
+
+/**
+ * Fetch all pages of the Bitunix leaderboard and cache them.
+ * Returns a Map of uid -> trader entry for O(1) lookups.
+ *
+ * Resilience improvements:
+ * - Per-page retry with exponential backoff (handles transient errors + rate limits)
+ * - Continues past failed pages instead of breaking (a gap doesn't invalidate other pages)
+ * - Small delay between pages to avoid triggering rate limits
+ * - Consecutive empty page detection to stop early (API exhausted)
+ */
+async function ensureLeaderboardCached(period: string): Promise<Map<string, BitunixListEntry>> {
+  const existing = leaderboardCache.get(period)
+  if (existing && Date.now() - existing.fetchedAt < CACHE_TTL_MS) {
+    return existing.traders
+  }
+
+  const traders = new Map<string, BitunixListEntry>()
+  const maxPages = 20 // 100 per page × 20 = 2000 traders max
+  const pageSize = 100
+  let consecutiveEmpty = 0
+
+  for (let page = 1; page <= maxPages; page++) {
+    const records = await fetchPageWithRetry(period, page, pageSize)
+
+    if (records.length === 0) {
+      consecutiveEmpty++
+      // If 2 consecutive pages return empty, assume we've hit the end
+      if (consecutiveEmpty >= 2) break
+      continue
+    }
+
+    consecutiveEmpty = 0 // Reset on successful page
+
+    for (const entry of records) {
+      const uid = String(entry.uid || '')
+      if (uid) traders.set(uid, entry)
+    }
+
+    if (records.length < pageSize) break // Last page
+
+    // Small delay between pages to avoid rate limiting (100ms)
+    if (page < maxPages) {
+      await new Promise(r => setTimeout(r, 100))
     }
   }
 
