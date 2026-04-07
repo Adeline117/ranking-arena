@@ -8,8 +8,7 @@ import { BETA_PRO_FEATURES_FREE } from '@/lib/premium/hooks'
 import { Box, Text } from '../base'
 import { useLanguage } from '../Providers/LanguageProvider'
 import { useToast } from '../ui/Toast'
-import CategoryRankingTabs, { type CategoryType } from './CategoryRankingTabs'
-import { ProLabel } from '../premium/PremiumGate'
+import { type CategoryType } from './CategoryRankingTabs'
 import {
   FilterIcon, CompareIcon, TableViewIcon, CardViewIcon, SettingsIcon, LockIconSmall,
 } from './Icons'
@@ -196,29 +195,15 @@ export function RankingFilters({
 
   return (
     <>
-      {/* Category tabs row */}
+      {/* Toolbar row — category tabs removed, unified single list */}
       <Box className="ranking-toolbar-row" style={{
         padding: `${tokens.spacing[2]} ${tokens.spacing[4]}`,
-        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+        display: 'flex', alignItems: 'center', justifyContent: 'flex-end',
         gap: tokens.spacing[2],
         borderBottom: '1px solid var(--glass-border-light)',
         background: tokens.glass.bg.light,
-        borderRadius: 0, flexWrap: 'wrap',
+        borderRadius: 0,
       }}>
-        <Box style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[2], flex: 1, minWidth: 0, flexWrap: 'wrap' }}>
-          <Box style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[1], flexShrink: 0 }}>
-            <Text size="xs" weight="bold" color="secondary">{t('categoryType')}</Text>
-            <ProLabel size="xs" />
-          </Box>
-          <CategoryRankingTabs
-            currentCategory={category}
-            onCategoryChange={onCategoryChange}
-            isPro={isPro}
-            onProRequired={onProRequired}
-            categoryCounts={categoryCounts}
-          />
-        </Box>
-
         {/* Tool buttons */}
         <Box style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[1], flexShrink: 0 }}>
           {/* View toggle */}
