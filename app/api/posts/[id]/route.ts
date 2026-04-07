@@ -65,14 +65,18 @@ export async function GET(request: NextRequest, context: RouteContext) {
         logger.error('[posts/[id]] RPC view count error:', err)
       })
 
-    // 如果用户已登录，获取用户的点赞和投票状态
+    // 如果用户已登录，并行获取用户的点赞和投票状态
     let user_reaction: 'up' | 'down' | null = null
     let user_vote: 'bull' | 'bear' | 'wait' | null = null
 
     const user = await getAuthUser(request)
     if (user) {
-      user_reaction = await getUserPostReaction(supabase, id, user.id)
-      user_vote = await getUserPostVote(supabase, id, user.id)
+      const [reaction, vote] = await Promise.all([
+        getUserPostReaction(supabase, id, user.id),
+        getUserPostVote(supabase, id, user.id),
+      ])
+      user_reaction = reaction
+      user_vote = vote
     }
 
     return success({
