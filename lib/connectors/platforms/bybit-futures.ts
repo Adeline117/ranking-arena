@@ -66,7 +66,7 @@ export class BybitFuturesConnector extends BaseConnector {
         dataDuration: SCRAPER_DURATION_MAP[window],
         pageNo: String(page),
         pageSize: String(pageSize),
-      }, 120000)
+      }, 70000) // 70s per VPS call — 3 calls (1 page/window × 3 windows) must fit in 240s budget
 
       let _rawLb: Record<string, unknown>
       if (vpsData) {
