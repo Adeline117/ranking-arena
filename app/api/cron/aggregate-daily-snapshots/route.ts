@@ -16,6 +16,7 @@ import { logger } from '@/lib/logger'
 import { getSupabaseAdmin } from '@/lib/supabase/server'
 import { PipelineLogger } from '@/lib/services/pipeline-logger'
 import { env } from '@/lib/env'
+import { validateBeforeWrite, logRejectedWrites } from '@/lib/pipeline/validate-before-write'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 300
@@ -285,15 +286,20 @@ async function aggregateForDate(supabase: any, dateStr: string, _plog: any): Pro
 
     for (let i = 0; i < records.length; i += UPSERT_BATCH) {
       const batch = records.slice(i, i + UPSERT_BATCH)
+      // Data gatekeeper
+      const { valid: validBatch, rejected } = validateBeforeWrite(batch as Record<string, unknown>[], 'trader_daily_snapshots')
+      if (rejected.length) logRejectedWrites(rejected, supabase)
+
+      if (validBatch.length === 0) { errors += batch.length; continue }
       const { error: upsertError } = await supabase
         .from('trader_daily_snapshots')
-        .upsert(batch, { onConflict: 'platform,trader_key,date' })
+        .upsert(validBatch, { onConflict: 'platform,trader_key,date' })
 
       if (upsertError) {
-        logger.dbError('upsert-daily-snapshots-batch', upsertError, { batchStart: i, batchSize: batch.length })
-        errors += batch.length
+        logger.dbError('upsert-daily-snapshots-batch', upsertError, { batchStart: i, batchSize: validBatch.length })
+        errors += validBatch.length
       } else {
-        inserted += batch.length
+        inserted += validBatch.length
       }
     }
 

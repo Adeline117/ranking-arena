@@ -29,6 +29,7 @@ import { tieredGet, tieredSet, tieredDel } from '@/lib/cache/redis-layer'
 import { PipelineState } from '@/lib/services/pipeline-state'
 import { env } from '@/lib/env'
 import { sendRateLimitedAlert } from '@/lib/alerts/send-alert'
+import { validateBeforeWrite, logRejectedWrites } from '@/lib/pipeline/validate-before-write'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 300
@@ -1568,13 +1569,19 @@ async function computeSeason(
       is_outlier: (t as Record<string, unknown>).is_outlier === true ? true : false,
     }})
 
-    const { error } = await supabase
-      .from('leaderboard_ranks')
-      .upsert(batch, { onConflict: 'season_id,source,source_trader_id' })
+    // Data gatekeeper: validate batch before write
+    const { valid: validBatch, rejected } = validateBeforeWrite(batch as Record<string, unknown>[], 'leaderboard_ranks')
+    if (rejected.length) logRejectedWrites(rejected, supabase)
 
-    if (error) {
-      logger.error(`Upsert error for ${season} batch ${i}:`, error)
-      upsertErrors += batch.length
+    if (validBatch.length > 0) {
+      const { error } = await supabase
+        .from('leaderboard_ranks')
+        .upsert(validBatch, { onConflict: 'season_id,source,source_trader_id' })
+
+      if (error) {
+        logger.error(`Upsert error for ${season} batch ${i}:`, error)
+        upsertErrors += validBatch.length
+      }
     }
   }
 

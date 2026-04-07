@@ -13,6 +13,7 @@ import { decrypt } from '@/lib/crypto/encryption'
 import { SOURCE_TYPE_MAP } from '@/lib/constants/exchanges'
 import { BybitAdapter } from '@/lib/adapters/bybit-adapter'
 import { logger } from '@/lib/logger'
+import { sanitizeRow, logRejectedWrites, type ValidationFailure } from '@/lib/pipeline/validate-before-write'
 import { validateSnapshot } from '@/lib/pipeline/validate-snapshot'
 import { createLogger } from '@/lib/utils/logger'
 import { calculateArenaScore } from '@/lib/utils/arena-score'
@@ -157,7 +158,7 @@ export async function runWorkerInline(): Promise<InlineJobResult> {
               const arenaScore = result.data.metrics.roi_pct != null
                 ? calculateArenaScoreV1(result.data.metrics.roi_pct, result.data.metrics.pnl_usd, result.data.metrics.max_drawdown, result.data.metrics.win_rate, window)
                 : null
-              const { error: snapInsertErr } = await supabase.from('trader_snapshots_v2').upsert({
+              const writePayload = {
                 ...result.data, as_of_ts: truncateToHour(),
                 market_type: canonicalMT,
                 roi_pct: result.data.metrics.roi_pct,
@@ -169,7 +170,12 @@ export async function runWorkerInline(): Promise<InlineJobResult> {
                 copiers: result.data.metrics.copiers,
                 sharpe_ratio: result.data.metrics.sharpe_ratio,
                 arena_score: arenaScore,
-              }, { onConflict: 'platform,market_type,trader_key,window,as_of_ts' })
+              }
+              const { row: sanitized, rejected } = sanitizeRow(writePayload as Record<string, unknown>, 'trader_snapshots_v2')
+              if (rejected.length) logRejectedWrites(rejected, supabase)
+              const { error: snapInsertErr } = await supabase.from('trader_snapshots_v2').upsert(
+                sanitized, { onConflict: 'platform,market_type,trader_key,window,as_of_ts' }
+              )
               if (snapInsertErr) {
                 logger.warn(`[inline-jobs] SNAPSHOT upsert error: ${snapInsertErr.message}`)
                 throw new Error(`SNAPSHOT upsert failed: ${snapInsertErr.message}`)
@@ -276,15 +282,22 @@ async function upsertLeaderboardData(
       }
     })
   
-  // Batch upsert snapshots with smaller batch size
+  // Batch upsert snapshots with validation gatekeeper
+  const allRejected: ValidationFailure[] = []
   for (let i = 0; i < snapshots.length; i += BATCH_SIZE) {
     const batch = snapshots.slice(i, i + BATCH_SIZE)
+    const sanitizedBatch = batch.map(row => {
+      const { row: s, rejected } = sanitizeRow(row as Record<string, unknown>, 'trader_snapshots_v2')
+      if (rejected.length) allRejected.push(...rejected)
+      return s
+    })
     const { error: batchErr } = await supabase.from('trader_snapshots_v2').upsert(
-      batch,
+      sanitizedBatch,
       { onConflict: 'platform,market_type,trader_key,window,as_of_ts' }
     )
     if (batchErr) logger.warn(`[inline-jobs] DISCOVER upsert batch ${i} error: ${batchErr.message}`)
   }
+  if (allRejected.length) logRejectedWrites(allRejected, supabase)
 }
 
 // ---------------------------------------------------------------------------
@@ -436,14 +449,19 @@ export async function syncTradersInline(): Promise<InlineJobResult> {
         const arenaScoreResult = calculateArenaScore({ roi: traderData.roi, pnl: traderData.pnl, maxDrawdown: traderData.maxDrawdown, winRate: traderData.winRate }, period)
 
         // Write to v2 only (v1 writes removed 2026-03-18)
-        const { error: snapErr } = await supabase.from('trader_snapshots_v2').upsert({
+        const syncSnapRow = {
           platform: auth.platform, market_type: 'futures', trader_key: auth.trader_id, window: period, as_of_ts: truncateToHour(),
           roi_pct: traderData.roi, pnl_usd: traderData.pnl, followers: traderData.followers,
           trades_count: traderData.tradesCount,
           win_rate: traderData.winRate, max_drawdown: traderData.maxDrawdown,
           arena_score: arenaScoreResult.totalScore,
           updated_at: new Date().toISOString(),
-        }, { onConflict: 'platform,market_type,trader_key,window,as_of_ts' })
+        }
+        const { row: syncSanitized, rejected: syncRejected } = sanitizeRow(syncSnapRow as Record<string, unknown>, 'trader_snapshots_v2')
+        if (syncRejected.length) logRejectedWrites(syncRejected, supabase)
+        const { error: snapErr } = await supabase.from('trader_snapshots_v2').upsert(
+          syncSanitized, { onConflict: 'platform,market_type,trader_key,window,as_of_ts' }
+        )
         if (snapErr) logger.warn(`[Sync] snapshot upsert failed for ${auth.platform}/${auth.trader_id}: ${snapErr.message}`)
 
         const { error: srcErr } = await supabase.from('trader_sources').upsert({
