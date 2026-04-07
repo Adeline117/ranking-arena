@@ -16,6 +16,14 @@ function truncateToHour(): string {
   return d.toISOString()
 }
 
+/** Start of the next hour — used as exclusive upper bound for hour-range queries */
+function nextHour(): string {
+  const d = new Date()
+  d.setUTCMinutes(0, 0, 0)
+  d.setUTCHours(d.getUTCHours() + 1)
+  return d.toISOString()
+}
+
 export async function upsertEquityCurve(
   supabase: SupabaseClient,
   source: string,
@@ -80,16 +88,22 @@ export async function upsertEquityCurve(
       const v2Window = windowMap[period]
 
       if (v2Window) {
-        await supabase
+        const { error: v2Err, count: v2Count } = await supabase
           .from('trader_snapshots_v2')
-          .update(v2Update)
+          .update(v2Update, { count: 'exact' })
           .eq('platform', source)
           .eq('trader_key', traderId)
           .eq('window', v2Window)
-          .eq('as_of_ts', truncateToHour())
-          .then(({ error: v2Err }) => {
-            if (v2Err) log.warn(`equity ROI sync failed for ${source}/${traderId}/${v2Window}`, { error: v2Err.message })
-          })
+          .gte('as_of_ts', truncateToHour())
+          .lt('as_of_ts', nextHour())
+          .order('as_of_ts', { ascending: false })
+          .limit(1)
+
+        if (v2Err) {
+          log.warn(`equity ROI sync failed for ${source}/${traderId}/${v2Window}`, { error: v2Err.message })
+        } else if (v2Count === 0) {
+          log.warn(`equity ROI sync matched 0 rows for ${source}/${traderId}/${v2Window} (hour range ${truncateToHour()} — no snapshot found)`)
+        }
       }
     }
   }
@@ -209,15 +223,21 @@ export async function upsertStatsDetail(
     // so stale win_rate values get refreshed with latest enrichment data)
     // Only run update if there are valid fields to sync
     if (Object.keys(v2Update).length > 0) {
-      await supabase
+      const { error: v2Err, count: v2Count } = await supabase
         .from('trader_snapshots_v2')
-        .update(v2Update)
+        .update(v2Update, { count: 'exact' })
         .eq('platform', source)
         .eq('trader_key', traderId)
-        .eq('as_of_ts', truncateToHour())
-        .then(({ error: v2Err }) => {
-          if (v2Err) log.warn(`v2 sync failed for ${source}/${traderId}`, { error: v2Err.message })
-        })
+        .gte('as_of_ts', truncateToHour())
+        .lt('as_of_ts', nextHour())
+        .order('as_of_ts', { ascending: false })
+        .limit(1)
+
+      if (v2Err) {
+        log.warn(`v2 stats sync failed for ${source}/${traderId}`, { error: v2Err.message })
+      } else if (v2Count === 0) {
+        log.warn(`v2 stats sync matched 0 rows for ${source}/${traderId} (hour range ${truncateToHour()} — no snapshot found)`)
+      }
     }
   }
 
