@@ -72,7 +72,7 @@ export default function HomeHero({ traderCount: traderCountProp, exchangeCount: 
       }}>
         {/* Left: Headline + subtitle */}
         <div style={{ flex: '1 1 400px', minWidth: 0 }}>
-          <h2 style={{
+          <h1 style={{
             fontSize: 'clamp(18px, 2.5vw, 24px)',
             fontWeight: tokens.typography.fontWeight.black,
             color: 'var(--color-text-primary)',
@@ -80,7 +80,7 @@ export default function HomeHero({ traderCount: traderCountProp, exchangeCount: 
             lineHeight: tokens.typography.lineHeight.tight,
           }}>
             {t('heroHeadline' as Parameters<typeof t>[0])}
-          </h2>
+          </h1>
 
           <p style={{
             fontSize: tokens.typography.fontSize.sm,
