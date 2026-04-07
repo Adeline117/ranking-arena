@@ -340,9 +340,13 @@ export function useTraderData(options: UseTraderDataOptions = {}) {
     }
   }, [autoRefreshInterval, fetchPage])
 
-  // Time range switching with debounce
+  // Ref for activeTimeRange to keep changeTimeRange identity stable
+  const activeTimeRangeRef = useRef(state.activeTimeRange)
+  useEffect(() => { activeTimeRangeRef.current = state.activeTimeRange }, [state.activeTimeRange])
+
+  // Time range switching with debounce (stable identity — no state in deps)
   const changeTimeRange = useCallback((range: TimeRange) => {
-    if (range === state.activeTimeRange) return
+    if (range === activeTimeRangeRef.current) return
     dispatch({ type: 'SET_CHANGING_TIME_RANGE', isChanging: true })
 
     if (timeRangeDebounceTimer !== null) clearTimeout(timeRangeDebounceTimer)
@@ -358,7 +362,7 @@ export function useTraderData(options: UseTraderDataOptions = {}) {
       timeRangeDebounceTimer = null
       dispatch({ type: 'SET_TIME_RANGE', timeRange: range })
     }, 300)
-  }, [state.activeTimeRange])
+  }, [])
 
   const refresh = useCallback(() => {
     return fetchPage(0)
