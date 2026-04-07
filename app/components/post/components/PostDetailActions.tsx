@@ -185,7 +185,7 @@ export function PostDetailActions({
             try {
               await navigator.clipboard.writeText(shareUrl)
               showToast(t('linkCopied'), 'success')
-            } catch { /* clipboard also unavailable */ }
+            } catch { showToast(t('shareFailed') || 'Unable to share', 'warning') }
           }
         }}
         active={false}

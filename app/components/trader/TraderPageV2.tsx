@@ -300,9 +300,9 @@ function SnapshotCard({ window, metrics }: { window: SnapshotWindow; metrics: Sn
     )
   }
 
-  const roi = metrics.roi ?? 0
-  const pnl = metrics.pnl ?? 0
-  const roiColor = roi >= 0 ? tokens.colors.accent.success : tokens.colors.accent.error
+  const roi = metrics.roi
+  const pnl = metrics.pnl
+  const roiColor = roi != null && roi >= 0 ? tokens.colors.accent.success : roi != null ? tokens.colors.accent.error : tokens.colors.text.tertiary
 
   return (
     <div className="p-4 rounded-xl" style={{ backgroundColor: tokens.colors.bg.secondary }}>
@@ -337,7 +337,7 @@ function SnapshotCard({ window, metrics }: { window: SnapshotWindow; metrics: Sn
         </div>
         <div className="flex justify-between">
           <span className="text-xs" style={{ color: tokens.colors.text.secondary }}>PnL</span>
-          <span className="text-sm font-medium" style={{ color: pnl >= 0 ? tokens.colors.accent.success : tokens.colors.accent.error }}>
+          <span className="text-sm font-medium" style={{ color: pnl != null && pnl >= 0 ? tokens.colors.accent.success : pnl != null ? tokens.colors.accent.error : tokens.colors.text.tertiary }}>
             {formatPnL(pnl)}
           </span>
         </div>
