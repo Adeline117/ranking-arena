@@ -281,10 +281,16 @@ export const TraderRow = memo(function TraderRow({
     e.preventDefault()
     e.stopPropagation()
     closeSwipe()
+    const shareUrl = `${window.location.origin}${href}`
     if (typeof navigator !== 'undefined' && navigator.share) {
-      void navigator.share({ title: displayName, url: `${window.location.origin}${href}` }).catch(() => {}) // eslint-disable-line no-restricted-syntax -- fire-and-forget
+      void navigator.share({ title: displayName, url: shareUrl }).catch(() => {
+        // Share cancelled or failed — fall back to clipboard
+        navigator.clipboard?.writeText(shareUrl).catch(() => {
+          console.warn('[TraderRow] share and clipboard both failed')
+        })
+      })
     } else if (typeof navigator !== 'undefined') {
-      navigator.clipboard.writeText(`${window.location.origin}${href}`).catch(() => {
+      navigator.clipboard.writeText(shareUrl).catch(() => {
         console.warn('[TraderRow] clipboard.writeText failed')
       })
     }
@@ -494,8 +500,8 @@ export const TraderRow = memo(function TraderRow({
 
         {/* Win% */}
         <Box className="col-winrate" style={{ textAlign: 'right', alignItems: 'center', justifyContent: 'flex-end' }}>
-          {trader.win_rate != null ? (
-            <Text size="sm" weight="semibold" style={{ color: trader.win_rate > 50 ? tokens.colors.accent.success : TRADER_TEXT_TERTIARY, lineHeight: 1.2, fontSize: tokens.typography.fontSize.sm, fontVariantNumeric: 'tabular-nums', opacity: trader.metrics_estimated ? 0.5 : 1 }} title={trader.metrics_estimated ? t('estimatedFromRoi') : undefined}>
+          {trader.win_rate != null && Number.isFinite(Number(trader.win_rate)) ? (
+            <Text size="sm" weight="semibold" style={{ color: Number(trader.win_rate) > 50 ? tokens.colors.accent.success : TRADER_TEXT_TERTIARY, lineHeight: 1.2, fontSize: tokens.typography.fontSize.sm, fontVariantNumeric: 'tabular-nums', opacity: trader.metrics_estimated ? 0.5 : 1 }} title={trader.metrics_estimated ? t('estimatedFromRoi') : undefined}>
               {trader.metrics_estimated ? '~' : ''}{Number(trader.win_rate).toFixed(1)}%
             </Text>
           ) : (
@@ -505,7 +511,7 @@ export const TraderRow = memo(function TraderRow({
 
         {/* MDD */}
         <Box className="col-mdd" style={{ textAlign: 'right', alignItems: 'center', justifyContent: 'flex-end' }}>
-          {trader.max_drawdown != null ? (
+          {trader.max_drawdown != null && Number.isFinite(Number(trader.max_drawdown)) ? (
             <Text size="sm" weight="semibold" style={{ color: TRADER_ACCENT_ERROR, lineHeight: 1.2, fontSize: tokens.typography.fontSize.sm, fontVariantNumeric: 'tabular-nums', opacity: trader.metrics_estimated ? 0.5 : 1 }} title={trader.metrics_estimated ? t('estimatedFromRoi') : undefined}>
               {trader.metrics_estimated ? '~' : ''}{Math.abs(Number(trader.max_drawdown)) < 0.05 ? '< 0.1' : `-${Math.abs(Number(trader.max_drawdown)).toFixed(1)}`}%
             </Text>
@@ -516,8 +522,8 @@ export const TraderRow = memo(function TraderRow({
 
         {/* Sharpe Ratio (P1-3) */}
         <Box className="col-sharpe" style={{ textAlign: 'right', alignItems: 'center', justifyContent: 'flex-end' }}>
-          {trader.sharpe_ratio != null ? (
-            <Text size="sm" weight="semibold" style={{ color: trader.sharpe_ratio >= 1 ? tokens.colors.accent.success : TRADER_TEXT_TERTIARY, lineHeight: 1.2, fontSize: tokens.typography.fontSize.sm, fontVariantNumeric: 'tabular-nums' }}>
+          {trader.sharpe_ratio != null && Number.isFinite(Number(trader.sharpe_ratio)) ? (
+            <Text size="sm" weight="semibold" style={{ color: Number(trader.sharpe_ratio) >= 1 ? tokens.colors.accent.success : TRADER_TEXT_TERTIARY, lineHeight: 1.2, fontSize: tokens.typography.fontSize.sm, fontVariantNumeric: 'tabular-nums' }}>
               {Number(trader.sharpe_ratio).toFixed(2)}
             </Text>
           ) : (
