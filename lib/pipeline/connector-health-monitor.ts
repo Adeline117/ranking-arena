@@ -73,11 +73,17 @@ function computeSnapshot(
 
 /**
  * Check if the current batch shows degradation vs the previous run.
+ *
+ * @param configuredLimit  The PLATFORM_LIMITS value configured for this platform.
+ *   When provided, row-count drops caused by an intentional limit reduction are
+ *   treated as a baseline reset instead of degradation.  E.g. limit reduced from
+ *   200 → 100 means current.rowCount ≈ 100 is expected — not a data outage.
  */
 export async function checkConnectorHealth(
   platform: string,
   window: string,
   currentRows: Array<Record<string, unknown>>,
+  configuredLimit?: number,
 ): Promise<DegradationCheck> {
   const reasons: string[] = []
   let severity = 'none' as string
@@ -100,7 +106,21 @@ export async function checkConnectorHealth(
   }
 
   // ── Row count drop ──
-  if (previous.rowCount >= 50 && current.rowCount < previous.rowCount * 0.5) {
+  // If a configuredLimit is set and the current count is within 30% of that
+  // limit, the drop is due to an intentional limit change — reset the baseline
+  // instead of flagging degradation.
+  const isIntentionalLimitReduction =
+    configuredLimit != null &&
+    current.rowCount > 0 &&
+    current.rowCount >= configuredLimit * 0.7
+
+  if (isIntentionalLimitReduction && current.rowCount < previous.rowCount * 0.5) {
+    // Intentional limit change — log info and reset baseline, not a degradation
+    logger.info(
+      `[connector-health] ${platform}/${window}: row count dropped ${previous.rowCount} → ${current.rowCount} ` +
+      `but configuredLimit=${configuredLimit} — treating as baseline reset`
+    )
+  } else if (previous.rowCount >= 50 && current.rowCount < previous.rowCount * 0.5) {
     reasons.push(`Row count dropped ${previous.rowCount} → ${current.rowCount} (>${50}% drop)`)
     severity = 'critical'
   } else if (previous.rowCount >= 20 && current.rowCount < previous.rowCount * 0.7) {

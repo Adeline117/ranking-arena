@@ -53,6 +53,12 @@ export interface AdapterOptions {
    * E.g., connector platform='htx' but DB source='htx_futures'.
    */
   sourceOverride?: string
+  /**
+   * Configured platform limit (from PLATFORM_LIMITS in batch-fetch-traders).
+   * Passed to health monitor so intentional limit reductions are not flagged
+   * as critical degradation.
+   */
+  configuredLimit?: number
 }
 
 export interface AdapterResult {
@@ -248,7 +254,7 @@ export async function writeDiscoverResult(
   // Connector health check: compare against previous run to detect degradation
   try {
     const { checkConnectorHealth } = await import('./connector-health-monitor')
-    const healthCheck = await checkConnectorHealth(platform, window, traderDataArray as unknown as Record<string, unknown>[])
+    const healthCheck = await checkConnectorHealth(platform, window, traderDataArray as unknown as Record<string, unknown>[], options.configuredLimit)
     if (healthCheck.severity === 'critical') {
       dataLogger.error(`[adapter] BLOCKED write for ${platform}/${window}: ${healthCheck.reasons.join('; ')}`)
       try {
