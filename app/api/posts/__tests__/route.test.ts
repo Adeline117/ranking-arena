@@ -50,8 +50,29 @@ jest.mock('@/lib/utils/rate-limit', () => ({
 const mockGetAuthUser = jest.fn()
 const mockRequireAuth = jest.fn()
 const mockGetUserHandle = jest.fn()
+// Chainable mock for Supabase client (select/eq/maybeSingle return PromiseLike)
+const mockChain = () => {
+  const chain: Record<string, unknown> = {}
+  chain.select = jest.fn().mockReturnValue(chain)
+  chain.eq = jest.fn().mockReturnValue(chain)
+  chain.neq = jest.fn().mockReturnValue(chain)
+  chain.in = jest.fn().mockReturnValue(chain)
+  chain.or = jest.fn().mockReturnValue(chain)
+  chain.is = jest.fn().mockReturnValue(chain)
+  chain.not = jest.fn().mockReturnValue(chain)
+  chain.ilike = jest.fn().mockReturnValue(chain)
+  chain.order = jest.fn().mockReturnValue(chain)
+  chain.range = jest.fn().mockReturnValue(chain)
+  chain.limit = jest.fn().mockReturnValue(chain)
+  chain.maybeSingle = jest.fn().mockReturnValue(chain)
+  chain.single = jest.fn().mockReturnValue(chain)
+  chain.then = jest.fn((cb: (v: unknown) => unknown) => Promise.resolve(cb({ data: null, error: null })))
+  chain.catch = jest.fn().mockReturnValue(chain)
+  return chain
+}
+const mockSupabase = { from: jest.fn().mockReturnValue(mockChain()), rpc: jest.fn().mockResolvedValue({ data: null, error: null }) }
 jest.mock('@/lib/supabase/server', () => ({
-  getSupabaseAdmin: jest.fn(() => ({})),
+  getSupabaseAdmin: jest.fn(() => mockSupabase),
   getAuthUser: (...args: unknown[]) => mockGetAuthUser(...args),
   requireAuth: (...args: unknown[]) => mockRequireAuth(...args),
   getUserHandle: (...args: unknown[]) => mockGetUserHandle(...args),
