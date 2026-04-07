@@ -67,23 +67,31 @@ export async function GET() {
   // which caused statement_timeout on 75K+ rows without a covering index.
   let freshness: { status: 'pass' | 'fail' | 'skip'; latency?: number; message?: string }
   try {
-    const supabaseFresh = getSupabaseAdmin()
     const t1 = Date.now()
-    const { data: lastCompute, error: freshErr } = await supabaseFresh
-      .from('pipeline_logs')
-      .select('started_at')
-      .eq('job_name', 'compute-leaderboard')
-      .eq('status', 'success')
-      .order('started_at', { ascending: false })
-      .limit(1)
-      .maybeSingle()
+    // Race the DB query against a 5s timeout to prevent the entire health endpoint from hanging.
+    // Previous: leaderboard_ranks ORDER BY computed_at hung for 8s+ causing 504.
+    // Current: pipeline_logs query + 5s hard cap.
+    const result = await Promise.race([
+      getSupabaseAdmin()
+        .from('pipeline_logs')
+        .select('started_at')
+        .eq('job_name', 'compute-leaderboard')
+        .eq('status', 'success')
+        .order('started_at', { ascending: false })
+        .limit(1)
+        .maybeSingle()
+        .then(r => r),
+      new Promise<{ data: null; error: { message: string } }>((resolve) =>
+        setTimeout(() => resolve({ data: null, error: { message: 'Freshness query timed out (5s)' } }), 5000)
+      ),
+    ])
     const latency = Date.now() - t1
-    if (freshErr) {
-      freshness = { status: 'fail', message: freshErr.message, latency }
-    } else if (!lastCompute?.started_at) {
+    if (result.error) {
+      freshness = { status: 'fail', message: result.error.message, latency }
+    } else if (!result.data?.started_at) {
       freshness = { status: 'fail', message: 'No compute-leaderboard success found', latency }
     } else {
-      const ageMs = Date.now() - new Date(lastCompute.started_at).getTime()
+      const ageMs = Date.now() - new Date(result.data.started_at).getTime()
       const ageHours = ageMs / (1000 * 60 * 60)
       freshness = ageHours <= 2
         ? { status: 'pass', latency, message: `${ageHours.toFixed(1)}h old` }
