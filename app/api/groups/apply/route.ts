@@ -79,24 +79,24 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // 检查是否已有待审核的申请
-    const { data: existingApplication } = await supabase
-      .from('group_applications')
-      .select('id')
-      .eq('applicant_id', user.id)
-      .eq('status', 'pending')
-      .maybeSingle()
+    // 并行检查：待审核申请 + 小组名重复
+    const [{ data: existingApplication }, { data: existingGroup }] = await Promise.all([
+      supabase
+        .from('group_applications')
+        .select('id')
+        .eq('applicant_id', user.id)
+        .eq('status', 'pending')
+        .maybeSingle(),
+      supabase
+        .from('groups')
+        .select('id')
+        .eq('name', name.trim())
+        .maybeSingle(),
+    ])
 
     if (existingApplication) {
       return NextResponse.json({ error: 'You already have a pending group application' }, { status: 400 })
     }
-
-    // 检查小组名是否已存在
-    const { data: existingGroup } = await supabase
-      .from('groups')
-      .select('id')
-      .eq('name', name.trim())
-      .maybeSingle()
 
     if (existingGroup) {
       return NextResponse.json({ error: 'This group name is already taken' }, { status: 400 })
@@ -158,23 +158,30 @@ export async function POST(request: NextRequest) {
       .select('id')
       .single()
 
-    if (!groupError && newGroup) {
-      // Add creator as owner member
-      await supabase.from('group_members').insert({
-        group_id: newGroup.id,
-        user_id: user.id,
-        role: 'owner',
-      })
-
-      // 实时通知
-      notifyNewGroup(user.email ?? null, name.trim())
+    if (groupError) {
+      logger.dbError('create-group', groupError, { userId: user.id, groupName: name })
+      return NextResponse.json({ error: 'Failed to create group' }, { status: 500 })
     }
+
+    // Add creator as owner member
+    const { error: memberError } = await supabase.from('group_members').insert({
+      group_id: newGroup.id,
+      user_id: user.id,
+      role: 'owner',
+    })
+
+    if (memberError) {
+      logger.dbError('add-group-owner', memberError, { groupId: newGroup.id, userId: user.id })
+    }
+
+    // 实时通知 (fire-and-forget)
+    notifyNewGroup(user.email ?? null, name.trim())
 
     return NextResponse.json({
       success: true,
       message: 'Group created successfully!',
       application,
-      group: newGroup || null,
+      group: newGroup,
     })
 
   } catch (error: unknown) {
