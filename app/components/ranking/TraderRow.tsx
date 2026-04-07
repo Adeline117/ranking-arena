@@ -54,13 +54,13 @@ const HERO_STYLE_RANK_3: React.CSSProperties = {
 
 const ScoreBreakdownLazy = dynamic(
   () => import('./ScoreBreakdown'),
-  { ssr: false, loading: () => <div style={{ padding: 16, textAlign: 'center', opacity: 0.5 }}>...</div> }
+  { ssr: false, loading: () => <div style={LAZY_LOADING_STYLE}>...</div> }
 )
 
 const ScoreBreakdownTooltip = dynamic(
   () => import('./ScoreBreakdownTooltip').then(m => ({ default: m.ScoreBreakdownTooltip })),
   {
-    loading: () => <span style={{ width: 14, height: 14, display: 'inline-block' }} />,
+    loading: () => <span style={LAZY_ICON_STYLE} />,
     ssr: false,
   }
 )
@@ -74,6 +74,72 @@ const SCORE_CELL_STYLE: React.CSSProperties = { textAlign: 'center', display: 'f
 const ROI_CELL_STYLE: React.CSSProperties = { textAlign: 'right', display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 2 }
 const PNL_CELL_STYLE: React.CSSProperties = { textAlign: 'right', display: 'flex', alignItems: 'center', justifyContent: 'flex-end' }
 const RIGHT_CELL_STYLE: React.CSSProperties = { textAlign: 'right', alignItems: 'center', justifyContent: 'flex-end' }
+
+// Lazy-loading placeholder styles
+const LAZY_LOADING_STYLE: React.CSSProperties = { padding: 16, textAlign: 'center', opacity: 0.5 }
+const LAZY_ICON_STYLE: React.CSSProperties = { width: 14, height: 14, display: 'inline-block' }
+
+// Trader info sub-layout styles
+const NAME_COLUMN_STYLE: React.CSSProperties = { display: 'flex', flexDirection: 'column', gap: 4, minWidth: 0, flex: 1 }
+const NAME_ROW_STYLE: React.CSSProperties = { display: 'flex', alignItems: 'center', gap: 6 }
+const TAGS_ROW_STYLE: React.CSSProperties = { display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }
+
+// Mobile score badge styles
+const MOBILE_BADGE_STYLE: React.CSSProperties = { display: 'inline-flex', alignItems: 'center', gap: 3, flexShrink: 0 }
+const MOBILE_BADGE_TEXT_STYLE: React.CSSProperties = { fontSize: tokens.typography.fontSize.xs, fontWeight: 700, color: TRADER_TEXT_TERTIARY }
+
+// Verified badge style
+const VERIFIED_BADGE_STYLE: React.CSSProperties = {
+  padding: '1px 6px',
+  borderRadius: tokens.radius.md,
+  fontSize: 12,
+  fontWeight: 600,
+  color: '#22d3ee',
+  background: 'rgba(34, 211, 238, 0.12)',
+  border: '1px solid rgba(34, 211, 238, 0.25)',
+  lineHeight: 1.4,
+  display: 'inline-flex',
+  alignItems: 'center',
+  gap: 3,
+}
+
+// Bot badge style
+const BOT_BADGE_STYLE: React.CSSProperties = {
+  padding: '1px 6px',
+  borderRadius: tokens.radius.md,
+  fontSize: 12,
+  fontWeight: 600,
+  color: '#a78bfa',
+  background: 'rgba(167, 139, 250, 0.12)',
+  border: '1px solid rgba(167, 139, 250, 0.25)',
+  lineHeight: 1.4,
+  display: 'inline-flex',
+  alignItems: 'center',
+  gap: 3,
+}
+const BOT_EMOJI_STYLE: React.CSSProperties = { fontSize: 10 }
+
+// "also on" text style
+const ALSO_ON_STYLE: React.CSSProperties = { fontSize: tokens.typography.fontSize.xs, color: TRADER_TEXT_TERTIARY, lineHeight: 1.2 }
+
+// Tabular-nums text styles for stat columns
+const STAT_TEXT_TERTIARY_STYLE: React.CSSProperties = { color: TRADER_TEXT_TERTIARY, lineHeight: 1.2, fontSize: tokens.typography.fontSize.sm, fontVariantNumeric: 'tabular-nums' }
+const SHARPE_TEXT_TERTIARY_STYLE: React.CSSProperties = { color: TRADER_TEXT_TERTIARY, lineHeight: 1.2, fontSize: tokens.typography.fontSize.sm, fontVariantNumeric: 'tabular-nums' }
+
+// Expand button style
+const EXPAND_BTN_STYLE: React.CSSProperties = {
+  position: 'absolute', right: 4, top: '50%', transform: 'translateY(-50%)',
+  width: 28, height: 28, display: 'flex', alignItems: 'center', justifyContent: 'center',
+  cursor: 'pointer', opacity: 0.6, transition: 'opacity 0.15s',
+  borderRadius: tokens.radius.sm,
+}
+
+// Swipe action button styles
+const SWIPE_COMPARE_BTN_STYLE: React.CSSProperties = { background: tokens.colors.accent.primary }
+const SWIPE_SHARE_BTN_STYLE: React.CSSProperties = { background: tokens.colors.accent.brand }
+
+// Link base style
+const LINK_BASE_STYLE: React.CSSProperties = { textDecoration: 'none', display: 'block' }
 
 // Reusable N/A indicator for missing data with platform-specific tooltip
 function NaIndicator({ source, metricType }: { source?: string; metricType: 'winRate' | 'drawdown' }) {
@@ -308,7 +374,7 @@ export const TraderRow = memo(function TraderRow({
       <div className="swipe-row-actions">
         <button
           onClick={(e) => { e.preventDefault(); e.stopPropagation(); closeSwipe(); handleCompareToggle(e) }}
-          style={{ background: tokens.colors.accent.primary }}
+          style={SWIPE_COMPARE_BTN_STYLE}
           title={i18nTFn('compare')}
         >
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M18 20V10M12 20V4M6 20v-6"/></svg>
@@ -316,7 +382,7 @@ export const TraderRow = memo(function TraderRow({
         </button>
         <button
           onClick={handleShare}
-          style={{ background: tokens.colors.accent.brand }}
+          style={SWIPE_SHARE_BTN_STYLE}
           title={i18nTFn('share')}
         >
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>
@@ -329,7 +395,7 @@ export const TraderRow = memo(function TraderRow({
       href={href}
       prefetch={false}
       className="ranking-row-link"
-      style={{ textDecoration: 'none', display: 'block', '--row-index': rank } as React.CSSProperties}
+      style={{ ...LINK_BASE_STYLE, '--row-index': rank } as React.CSSProperties}
       aria-label={`#${rank} ${displayName}, ROI ${Number(trader.roi ?? 0) >= 0 ? '+' : ''}${Number(trader.roi ?? 0).toFixed(2)}%`}
       tabIndex={0}
       onMouseEnter={handleMouseEnter}
@@ -361,15 +427,15 @@ export const TraderRow = memo(function TraderRow({
             rank={rank}
             size={rank <= 3 ? 42 : 36}
           />
-          <Box style={{ display: 'flex', flexDirection: 'column', gap: 4, minWidth: 0, flex: 1 }}>
-            <Box style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+          <Box style={NAME_COLUMN_STYLE}>
+            <Box style={NAME_ROW_STYLE}>
               <Text size="sm" weight="bold" style={{ color: tokens.colors.text.primary, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: rank <= 3 ? '15px' : '14px', letterSpacing: rank <= 3 ? '-0.01em' : undefined }}>
                 <HighlightedName text={displayName} query={searchQuery} />
               </Text>
               {isAddress && <CopyButton text={traderHandle} />}
               {/* Mobile Score Badge */}
               {trader.arena_score != null && Number.isFinite(Number(trader.arena_score)) && (
-                <span className="mobile-score-badge" style={{ display: 'inline-flex', alignItems: 'center', gap: 3, flexShrink: 0 }}>
+                <span className="mobile-score-badge" style={MOBILE_BADGE_STYLE}>
                   <span style={{
                     width: 6, height: 6, borderRadius: '50%',
                     background: getScoreColor(trader.arena_score),
