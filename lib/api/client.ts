@@ -1,4 +1,5 @@
 import { logger } from '@/lib/logger'
+import { tokenRefreshCoordinator } from '@/lib/auth/token-refresh'
 /**
  * 客户端 API 请求工具
  * 自动处理 CSRF Token 和通用配置
@@ -327,6 +328,7 @@ export type FetchResult<T> = {
  * - CSRF headers (for mutating methods)
  * - Content-Type: application/json (for mutating methods)
  * - JSON response parsing
+ * - 401 token refresh + retry via centralized coordinator
  *
  * Returns the raw HTTP status and parsed JSON, making it suitable
  * for hooks that need status-code-level control (e.g. mapping 401/429
@@ -354,6 +356,21 @@ export async function authedFetch<T>(
     headers,
     body: body ? JSON.stringify(body) : undefined,
   })
+
+  // On 401 with an auth token, attempt refresh and retry once
+  if (response.status === 401 && accessToken && typeof window !== 'undefined') {
+    const newToken = await tokenRefreshCoordinator.forceRefresh()
+    if (newToken) {
+      headers['Authorization'] = `Bearer ${newToken}`
+      const retryResponse = await fetch(url, {
+        method,
+        headers,
+        body: body ? JSON.stringify(body) : undefined,
+      })
+      const retryData = await retryResponse.json().catch(() => null)
+      return { ok: retryResponse.ok, status: retryResponse.status, data: retryData }
+    }
+  }
 
   const data = await response.json().catch(() => null)
   return { ok: response.ok, status: response.status, data }
