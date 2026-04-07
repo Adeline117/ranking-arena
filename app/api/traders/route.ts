@@ -84,7 +84,7 @@ export const GET = withPublic(
           page: useLegacyPaging ? Math.max(0, page) : 0,
         })
       },
-      { ttl: 60, lockTtl: 10 }
+      { ttl: 300, lockTtl: 10 }
     )
 
     // Dev-only: validate output shape to catch response drift early (no-op in prod)
@@ -92,7 +92,7 @@ export const GET = withPublic(
 
     // Data is already sanitized before caching (in the fetcher below)
     const response = NextResponse.json(cachedData)
-    response.headers.set('Cache-Control', 'public, s-maxage=60, stale-while-revalidate=300')
+    response.headers.set('Cache-Control', 'public, s-maxage=300, stale-while-revalidate=600')
     // Expose data age for monitoring and frontend staleness indicators
     if (cachedData?.dataAgeMinutes != null) {
       response.headers.set('X-Data-Age-Minutes', String(cachedData.dataAgeMinutes))
@@ -130,10 +130,11 @@ async function fetchFromLeaderboard(
   const { timeRange, exchangeFilter, categoryFilter, sortBy, order, cursor, limit, useLegacyPaging, page } = params
 
   // Build query — select only needed columns (avoid SELECT *)
-  // Use 'exact' count for correct pagination (was 'planned' which is approximate).
+  // Only request exact count for legacy page-based pagination (needed for totalCount).
+  // Cursor-based pagination determines hasMore from result length, saving ~50-100ms on 32K+ rows.
   let query = supabase
     .from('leaderboard_ranks')
-    .select(LEADERBOARD_COLUMNS, { count: 'exact' })
+    .select(LEADERBOARD_COLUMNS, useLegacyPaging ? { count: 'exact' } : { count: undefined })
     .eq('season_id', timeRange)
 
   if (exchangeFilter) {
