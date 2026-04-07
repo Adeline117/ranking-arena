@@ -88,9 +88,10 @@ const PLATFORM_LIMITS: Record<string, number> = {
   // 100 traders × 3 windows = 15 pages × 2s = ~30s (well within 150s timeout)
   binance_futures: 100,
   binance_spot: 100,
-  // VPS scraper-dependent platforms: keep low to avoid queue buildup
-  bybit: 150,
-  bybit_spot: 150,
+  // VPS scraper-dependent platforms: limit to 100 (1 page/window × 3 windows = 3 VPS calls)
+  // Was 150 → 2 pages/window × 3 windows = 6 calls × 120s = 720s >> 240s budget → 100% timeout
+  bybit: 100,
+  bybit_spot: 100,
   // Copin API has max 1000 traders per statisticType — no point requesting 2000
   dydx: 1000,
 }
@@ -179,7 +180,7 @@ export async function GET(request: NextRequest) {
     // VPS proxy: need extra headroom for proxy latency
     okx_futures: 120000,
     mexc: 120000,
-    bitget_futures: 120000,
+    bitget_futures: 200000, // Was 120s: 3 windows × 1 VPS call/window × 60s = 180s needed
     // DEX subgraph/API: sometimes slow due to chain indexer lag
     hyperliquid: 120000,
     gmx: 120000,
