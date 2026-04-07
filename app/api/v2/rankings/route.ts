@@ -32,8 +32,10 @@ import { VALID_TRADING_STYLES, TRADING_STYLE_LEGACY_MAP, type TradingStyle } fro
 import { LEADERBOARD_PLATFORMS, WINDOWS } from '@/lib/types/leaderboard'
 import { SOURCE_TYPE_MAP } from '@/lib/constants/exchanges'
 import { withPublic } from '@/lib/api/middleware'
+import { getOrSetWithLock } from '@/lib/cache'
 
-export const dynamic = 'force-dynamic'
+// Removed force-dynamic — it contradicted revalidate and prevented CDN caching.
+// With Redis cache + CDN s-maxage headers, this route is fast and scalable.
 export const revalidate = 600  // ISR: revalidate every 10 minutes (data refreshes via cron every 30 min)
 
 // ── Input validation schema ──────────────────────────────────────────────────
@@ -88,6 +90,13 @@ export const GET = withPublic(async ({ supabase, request }) => {
   const normalizedStyle = tradingStyle
     ? (TRADING_STYLE_LEGACY_MAP[tradingStyle as keyof typeof TRADING_STYLE_LEGACY_MAP] || tradingStyle as TradingStyle)
     : null
+
+  // Redis cache — 120s TTL (data refreshes via cron every 30 min, 2-min cache is safe)
+  const cacheKey = `v2-rankings:${platform}:${window}:${sort}:${offset}:${limit}:${tradingStyle || ''}:${minRoi ?? ''}:${minPnl ?? ''}:${minWinRate ?? ''}:${maxDrawdown ?? ''}:${minScore ?? ''}:${minSortino ?? ''}`
+
+  const cached = await getOrSetWithLock<RankingsResponse>(
+    cacheKey,
+    async () => {
 
   // Database query — use leaderboard_ranks (precomputed, unified source of truth)
   // instead of trader_snapshots v1 which has stale/inconsistent data
@@ -164,10 +173,7 @@ export const GET = withPublic(async ({ supabase, request }) => {
   }
 
   if (error) {
-    return NextResponse.json(
-      { error: 'Database query failed' },
-      { status: 500 }
-    )
+    throw new Error('Database query failed')
   }
 
   // leaderboard_ranks already has handle + avatar_url — no need for separate
@@ -230,7 +236,7 @@ export const GET = withPublic(async ({ supabase, request }) => {
     }
   })
 
-  const response: RankingsResponse = {
+  return {
     traders,
     meta: {
       platform: platform as LeaderboardPlatform,
@@ -240,9 +246,13 @@ export const GET = withPublic(async ({ supabase, request }) => {
       updated_at: latestUpdate.toISOString(),
       staleness_seconds: stalenessSeconds,
     },
-  }
+  } as RankingsResponse
 
-  return NextResponse.json(response, {
+    }, // end fetcher
+    { ttl: 120 }
+  ) // end getOrSetWithLock
+
+  return NextResponse.json(cached, {
     headers: {
       'Cache-Control': 'public, s-maxage=60, stale-while-revalidate=300',
     },
