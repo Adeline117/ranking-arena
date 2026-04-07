@@ -25,8 +25,7 @@ function resolveAvatarUrl(
   if (isTrader) {
     const resolved = getTraderAvatarUrl(avatarUrl)
     if (resolved) return resolved
-    // For on-chain traders (0x.../Solana addresses), generate blockie avatar
-    if (isWalletAddress(userId)) return generateBlockieSvg(userId, 128)
+    // No generated avatars (dicebear/blockie) — always gradient + initial letter
     return null
   }
   if (avatarUrl?.trim()) return avatarUrl
