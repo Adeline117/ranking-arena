@@ -685,7 +685,7 @@ export async function verifyAll(): Promise<VerifyResult[]> {
             platform: p,
             healthy: false,
             latencyMs: 0,
-            failureReason: 'unknown' as FailureReason,
+            failureReason: classifyFetchError(err),
             details: err instanceof Error ? err.message : String(err),
             checkedAt: new Date().toISOString(),
           }
