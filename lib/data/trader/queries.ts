@@ -298,6 +298,7 @@ export async function getTraderDetail(supabase: SupabaseClient, params: {
     positionHistoryResult,
     trackedSinceResult,
     similarTradersResult,
+    positionSummaryResult,
   ] = await withTimeout(
     Promise.all([
       // Equity curves — all periods in single query, split client-side
@@ -348,6 +349,13 @@ export async function getTraderDetail(supabase: SupabaseClient, params: {
       ),
       // Similar traders (by arena score range)
       fetchSimilarTraders(supabase, platform, traderKey, trader.arenaScore, trader.roi),
+      // Position summary (avg leverage, long/short counts)
+      safeQuery(() =>
+        supabase.from('trader_position_summary')
+          .select('avg_leverage, long_positions, short_positions, total_positions, total_margin_usd, total_unrealized_pnl')
+          .eq('platform', platform).eq('trader_key', traderKey)
+          .maybeSingle()
+      ),
     ]),
     20000 // 20s: parallel queries compete for Supabase pool; 10s was too tight
   )
@@ -442,6 +450,16 @@ export async function getTraderDetail(supabase: SupabaseClient, params: {
   // Tracked since
   const trackedSince = (trackedSinceResult as Record<string, unknown> | null)?.created_at as string | null ?? null
 
+  // Position summary (live positions: avg leverage, long/short)
+  const posSummary = positionSummaryResult as {
+    avg_leverage?: number | null
+    long_positions?: number | null
+    short_positions?: number | null
+    total_positions?: number | null
+    total_margin_usd?: number | null
+    total_unrealized_pnl?: number | null
+  } | null
+
   return {
     trader,
     periods,
@@ -453,6 +471,14 @@ export async function getTraderDetail(supabase: SupabaseClient, params: {
     similarTraders: similarTradersResult || [],
     trackedSince,
     bio: (profileV2?.bio as string) || null,
+    positionSummary: posSummary ? {
+      avgLeverage: posSummary.avg_leverage ?? null,
+      longPositions: posSummary.long_positions ?? null,
+      shortPositions: posSummary.short_positions ?? null,
+      totalPositions: posSummary.total_positions ?? null,
+      totalMarginUsd: posSummary.total_margin_usd ?? null,
+      totalUnrealizedPnl: posSummary.total_unrealized_pnl ?? null,
+    } : null,
   }
 }
 

@@ -160,4 +160,13 @@ export interface TraderDetail {
   trackedSince: string | null
   /** Exchange-level bio from trader_profiles_v2 */
   bio: string | null
+  /** Live position summary (avg leverage, long/short ratio) from trader_position_summary */
+  positionSummary?: {
+    avgLeverage: number | null
+    longPositions: number | null
+    shortPositions: number | null
+    totalPositions: number | null
+    totalMarginUsd: number | null
+    totalUnrealizedPnl: number | null
+  } | null
 }
