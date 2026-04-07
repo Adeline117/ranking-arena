@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useRef, memo, useCallback, useMemo, useDeferredValue } from 'react'
 import { useLoginModal } from '@/lib/hooks/useLoginModal'
+import { useTableKeyboardNav } from '@/lib/hooks/useTableKeyboardNav'
 import { tokens } from '@/lib/design-tokens'
 import { RankingSkeleton } from '../ui/Skeleton'
 import EmptyState from '../ui/EmptyState'
@@ -380,6 +381,21 @@ function RankingTableInner(props: {
     setCurrentPage(page)
   }, [setCurrentPage])
 
+  // Keyboard navigation for table rows (Arrow Up/Down, Enter, Home/End, Escape)
+  const getRowHref = useCallback(
+    (index: number) => {
+      const trader = paginatedTraders[index]
+      if (!trader) return ''
+      return `/trader/${encodeURIComponent(trader.id)}${trader.source ? `?platform=${encodeURIComponent(trader.source)}` : ''}`
+    },
+    [paginatedTraders]
+  )
+  const { containerProps: kbContainerProps, getRowProps: kbGetRowProps } = useTableKeyboardNav({
+    rowCount: paginatedTraders.length,
+    getRowHref,
+    enabled: viewMode === 'table' && !loading && paginatedTraders.length > 0,
+  })
+
   return (
     <>
     {/* Preload top trader avatars for faster LCP */}
@@ -657,23 +673,27 @@ function RankingTableInner(props: {
       ) : (
         <>
           <Box
-            className="content-appear"
+            className="content-appear ranking-table-rows"
             style={{
               display: 'flex', flexDirection: 'column', gap: 0, position: 'relative', contain: 'layout style paint',
+              outline: 'none',
             }}
+            {...kbContainerProps}
           >
             {paginatedTraders.map((trader, idx) => {
               const positionRank = startIndex + idx + 1
               const rank = positionRank
               return (
-                <SectionErrorBoundary key={`${trader.id}-${trader.source || 'unknown'}-${startIndex + idx}`}>
-                  <TraderRow
-                    trader={trader} rank={rank} source={source} language={language}
-                    searchQuery={debouncedSearch}
-                    getMedalGlowClass={getMedalGlowClass} parseSourceInfo={parseSourceInfoWithT} getPnLTooltipFn={getPnLTooltip}
-                    isExpanded={expandedRowId === trader.id}
-                    onToggleExpand={handleToggleExpand} />
-                </SectionErrorBoundary>
+                <div key={`${trader.id}-${trader.source || 'unknown'}-${startIndex + idx}`} {...kbGetRowProps(idx)}>
+                  <SectionErrorBoundary>
+                    <TraderRow
+                      trader={trader} rank={rank} source={source} language={language}
+                      searchQuery={debouncedSearch}
+                      getMedalGlowClass={getMedalGlowClass} parseSourceInfo={parseSourceInfoWithT} getPnLTooltipFn={getPnLTooltip}
+                      isExpanded={expandedRowId === trader.id}
+                      onToggleExpand={handleToggleExpand} />
+                  </SectionErrorBoundary>
+                </div>
               )
             })}
           </Box>

@@ -471,3 +471,44 @@
     touch-action: pan-y;
   }
 }
+
+/* ============================================================
+   Keyboard Navigation — Focus Ring
+   When a row has data-kb-focused="true", show a visible focus ring
+   so keyboard users can see which row is active.
+   ============================================================ */
+
+/* Remove default outline from the grid container itself */
+.ranking-table-rows:focus {
+  outline: none;
+}
+
+/* Focus ring on the focused row's inner ranking-row */
+[data-kb-focused="true"] .ranking-row {
+  outline: 2px solid var(--color-accent-primary, #8b6fa8);
+  outline-offset: -2px;
+  border-radius: 8px;
+  z-index: 1;
+  position: relative;
+}
+
+/* Ensure focus ring is visible on hero rows too (top 3) */
+[data-kb-focused="true"] .ranking-row.rank-1,
+[data-kb-focused="true"] .ranking-row.rank-2,
+[data-kb-focused="true"] .ranking-row.rank-3 {
+  outline: 2px solid var(--color-accent-primary, #8b6fa8);
+  outline-offset: -2px;
+}
+
+/* Subtle background tint on focused row for extra visibility */
+[data-kb-focused="true"] .ranking-row-link {
+  background: var(--color-accent-primary-08, rgba(139, 111, 168, 0.08));
+}
+
+/* Respect reduced motion — skip any transition on focus ring */
+@media (prefers-reduced-motion: reduce) {
+  [data-kb-focused="true"] .ranking-row {
+    outline-offset: -2px;
+    transition: none;
+  }
+}
