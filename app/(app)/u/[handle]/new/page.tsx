@@ -11,6 +11,7 @@ import { tokens } from '@/lib/design-tokens'
 import { useToast } from '@/app/components/ui/Toast'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import { getCsrfHeaders } from '@/lib/api/client'
+import { compressImage } from '@/lib/utils/image-compress'
 import { DynamicStickerPicker } from '@/app/components/ui/Dynamic'
 import { trackEvent } from '@/lib/analytics/track'
 import type { Sticker } from '@/lib/stickers'
@@ -156,8 +157,10 @@ export default function NewPostPage() {
       }
 
       try {
+        // Compress image before upload (resize to 1920px, 85% quality)
+        const compressed = await compressImage(file)
         const formData = new FormData()
-        formData.append('file', file)
+        formData.append('file', compressed)
         formData.append('userId', userId)
 
         const response = await fetch('/api/posts/upload-image', {
