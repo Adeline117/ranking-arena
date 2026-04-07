@@ -248,8 +248,10 @@ describe('HyperliquidPerpConnector', () => {
 
     const validLeaderboardWithTrader = {
       leaderboardRows: [
-        { ethAddress: '0xabc123', displayName: 'TestWhale', roi: '0.35', pnl: '120000' },
-        { ethAddress: '0xother', displayName: 'Other', roi: '0.10', pnl: '5000' },
+        { ethAddress: '0xabc123', displayName: 'TestWhale', accountValue: '250000',
+          windowPerformances: [['day', { roi: 0.15, pnl: 30000 }], ['week', { roi: 0.25, pnl: 60000 }], ['month', { roi: 0.35, pnl: 120000 }], ['allTime', { roi: 0.50, pnl: 200000 }]] },
+        { ethAddress: '0xother', displayName: 'Other', accountValue: '50000',
+          windowPerformances: [['month', { roi: 0.10, pnl: 5000 }]] },
       ],
     }
 
@@ -266,7 +268,8 @@ describe('HyperliquidPerpConnector', () => {
       const result = await connector.fetchTraderSnapshot('0xabc123', '30d')
 
       expect(result).not.toBeNull()
-      expect(result!.metrics.pnl).toBe(50000)
+      // PnL from leaderboard (month window): 120000
+      expect(result!.metrics.pnl).toBe(120000)
       expect(result!.metrics.aum).toBe(250000)
       // ROI from leaderboard: 0.35 * 100 = 35
       expect(result!.metrics.roi).toBe(35)
@@ -357,15 +360,20 @@ describe('HyperliquidPerpConnector', () => {
 
       await connector.fetchTraderSnapshot('0xabc123', '30d')
 
-      // At minimum 2 parallel requests: clearinghouse + leaderboard + fills attempt
+      // At minimum 2 parallel requests: clearinghouse (POST) + leaderboard (GET) + fills attempt
       expect(mockFetch).toHaveBeenCalledTimes(3)
+
+      // Verify clearinghouse call is a POST with correct body
       const bodies = mockFetch.mock.calls.map((call: unknown[]) => {
         try { return JSON.parse((call[1] as { body: string }).body) } catch { return null }
       }).filter(Boolean)
       const clearinghouseCall = bodies.find((b: Record<string, unknown>) => b.type === 'clearinghouseState')
-      const leaderboardCall = bodies.find((b: Record<string, unknown>) => b.type === 'leaderboard')
       expect(clearinghouseCall).toEqual({ type: 'clearinghouseState', user: '0xabc123' })
-      expect(leaderboardCall).toEqual({ type: 'leaderboard', timeWindow: 'month' })
+
+      // Verify leaderboard call is a GET to stats-data endpoint (no POST body)
+      const urls = mockFetch.mock.calls.map((call: unknown[]) => String(call[0]))
+      const leaderboardUrl = urls.find((u: string) => u.includes('leaderboard'))
+      expect(leaderboardUrl).toBeDefined()
     })
   })
 
