@@ -240,6 +240,8 @@ export function toTraderPageData(detail: TraderDetail): Record<string, unknown> 
   return {
     profile,
     performance,
+    rank: t.rank ?? null,
+    source_trader_id: t.traderKey,
     stats: detail.stats ? stats : null,
     portfolio,
     positionHistory,

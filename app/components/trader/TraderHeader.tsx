@@ -90,6 +90,8 @@ interface TraderHeaderProps {
   isAuthorized?: boolean
   /** When the authorization was last verified */
   authorizedSince?: string | null
+  /** Trading style classification (day_trader, swing_trader, scalper, etc.) */
+  tradingStyle?: string | null
 }
 
 // Helpers extracted to ./TraderHeaderHelpers.tsx
@@ -180,6 +182,7 @@ export default function TraderHeader({
   dataSource,
   isAuthorized = false,
   authorizedSince,
+  tradingStyle,
 }: TraderHeaderProps): React.ReactElement {
   const [userId, setUserId] = useState<string | null>(externalUserId ?? null)
   const [mounted, setMounted] = useState(false)
@@ -463,6 +466,32 @@ export default function TraderHeader({
             {rank != null && rank > 0 && source && (
               <RankPercentileBadge rank={rank} platform={source} />
             )}
+
+            {/* Trading Style Tag */}
+            {tradingStyle && tradingStyle !== 'unknown' && (() => {
+              const styleConfig: Record<string, { label: string; icon: string; color: string }> = {
+                day_trader: { label: 'Day Trader', icon: '⚡', color: '#60a5fa' },
+                swing_trader: { label: 'Swing Trader', icon: '📈', color: '#34d399' },
+                scalper: { label: 'Scalper', icon: '⏱', color: '#f472b6' },
+                position_trader: { label: 'Position Trader', icon: '🏔', color: '#a78bfa' },
+                high_frequency: { label: 'High Frequency', icon: '🔥', color: '#fb923c' },
+              }
+              const cfg = styleConfig[tradingStyle]
+              if (!cfg) return null
+              return (
+                <Badge
+                  key="trading-style"
+                  color={`${cfg.color}20`}
+                  style={{ padding: '2px 8px', flexShrink: 0, border: `1px solid ${cfg.color}40` }}
+                  title={cfg.label}
+                >
+                  <span style={{ fontSize: 10, marginRight: 2 }}>{cfg.icon}</span>
+                  <Text size="xs" weight="bold" style={{ color: cfg.color, fontSize: 11, letterSpacing: '0.3px' }}>
+                    {cfg.label}
+                  </Text>
+                </Badge>
+              )
+            })()}
 
             {isBot && (
               <Badge key="bot" color="var(--color-brand)" style={{ padding: '2px 8px', flexShrink: 0 }} title={t('botTooltip')}>
