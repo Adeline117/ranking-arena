@@ -625,6 +625,7 @@ export default function TraderProfileClient({ data, serverTraderData, claimedUse
                     equityCurve={traderEquityCurve?.['90D']}
                     allEquityCurves={traderEquityCurve as Record<string, Array<{ date: string; roi: number; pnl: number }>> | undefined}
                     source={traderProfile?.source || data.source}
+                    positionSummary={traderData?.positionSummary as { avgLeverage: number | null; longPositions: number | null; shortPositions: number | null } | null | undefined}
                   />
                 ) : (
                   <Box style={{

@@ -248,6 +248,7 @@ export function toTraderPageData(detail: TraderDetail): Record<string, unknown> 
     similarTraders,
     equityCurve,
     assetBreakdown,
+    positionSummary: detail.positionSummary ?? null,
     trackedSince: detail.trackedSince,
     lastUpdated: t.lastUpdated ?? null,
   }

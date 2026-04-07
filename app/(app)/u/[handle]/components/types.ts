@@ -64,6 +64,14 @@ export type TraderPageData = {
   similarTraders?: (TraderProfile & { roi_90d?: number; arena_score?: number })[]
   equityCurve?: EquityCurveData
   assetBreakdown?: AssetBreakdownData
+  positionSummary?: {
+    avgLeverage: number | null
+    longPositions: number | null
+    shortPositions: number | null
+    totalPositions: number | null
+    totalMarginUsd: number | null
+    totalUnrealizedPnl: number | null
+  } | null
   trackedSince?: string
   lastUpdated?: string | null
 }

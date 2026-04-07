@@ -17,6 +17,9 @@ export interface MetricBadgesGridProps {
   tradesCount: number | undefined
   avgHoldingTimeHours: number | undefined
   copiersPnl?: number | undefined
+  avgLeverage?: number | undefined
+  longPositions?: number | undefined
+  shortPositions?: number | undefined
   isVisible: boolean
 }
 
@@ -32,6 +35,9 @@ export function MetricBadgesGrid({
   tradesCount,
   avgHoldingTimeHours,
   copiersPnl,
+  avgLeverage,
+  longPositions,
+  shortPositions,
   isVisible,
 }: MetricBadgesGridProps) {
   const { t } = useLanguage()
@@ -118,6 +124,21 @@ export function MetricBadgesGrid({
           value={`${copiersPnl >= 0 ? '+' : ''}$${Math.abs(copiersPnl).toLocaleString('en-US', { maximumFractionDigits: 0 })}`}
           highlight={copiersPnl > 0}
           negative={copiersPnl < 0}
+        />
+      )}
+      {avgLeverage != null && avgLeverage > 0 && (
+        <MetricBadge
+          label={t('avgLeverage') || 'Avg Leverage'}
+          value={`${avgLeverage.toFixed(1)}x`}
+          highlight={avgLeverage >= 10}
+          tooltip={t('avgLeverageTooltip') || 'Average leverage across current open positions'}
+        />
+      )}
+      {longPositions != null && shortPositions != null && (longPositions + shortPositions) > 0 && (
+        <MetricBadge
+          label={t('longShort') || 'Long/Short'}
+          value={`${longPositions}/${shortPositions}`}
+          tooltip={t('longShortTooltip') || `${longPositions} long and ${shortPositions} short positions currently open`}
         />
       )}
     </Box>

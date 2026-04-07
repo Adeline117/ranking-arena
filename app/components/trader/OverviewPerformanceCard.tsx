@@ -71,6 +71,12 @@ export interface OverviewPerformanceCardProps {
   lastUpdated?: string
   // Data source for period mapping notes
   source?: string
+  /** Live position summary (avg leverage, long/short counts) */
+  positionSummary?: {
+    avgLeverage: number | null
+    longPositions: number | null
+    shortPositions: number | null
+  } | null
 }
 
 /**
@@ -84,6 +90,7 @@ export default function OverviewPerformanceCard({
   allEquityCurves,
   lastUpdated,
   source,
+  positionSummary,
 }: OverviewPerformanceCardProps) {
   void profitableWeeksPct
   const [period, setPeriod] = useState<Period>('90D')
@@ -246,6 +253,9 @@ export default function OverviewPerformanceCard({
             alpha={alpha}
             tradesCount={tradesCount}
             avgHoldingTimeHours={avgHoldingTimeHours}
+            avgLeverage={positionSummary?.avgLeverage ?? undefined}
+            longPositions={positionSummary?.longPositions ?? undefined}
+            shortPositions={positionSummary?.shortPositions ?? undefined}
             isVisible={isVisible}
           />
 
