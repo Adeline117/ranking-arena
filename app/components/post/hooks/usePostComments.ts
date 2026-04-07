@@ -94,7 +94,7 @@ export function usePostComments({
       // Sync with postStore as single source of truth
       usePostStore.getState().setComments(postId, loaded.map(toCommentData))
     } catch {
-      setComments([])
+      // Don't clear existing comments on refresh failure — preserve what users already see
     } finally {
       setLoadingComments(false)
     }

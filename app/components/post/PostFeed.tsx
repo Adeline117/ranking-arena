@@ -221,6 +221,8 @@ export default function PostFeed(props: PostFeedProps = {}): React.ReactNode {
     } catch (err) {
       if (err instanceof Error && err.name === 'AbortError') return
       logger.error('加载更多失败:', err)
+      // Stop infinite retry — IntersectionObserver would keep firing without this
+      setHasMore(false)
     } finally { setLoadingMore(false) }
   // eslint-disable-next-line react-hooks/exhaustive-deps -- actions/t are stable refs; posts read from postsRef (#38)
   }, [loadingMore, hasMore, loading, offset, pageSize, props.sortBy, sortType, props.authorHandle, props.groupId, props.groupIds, accessToken])

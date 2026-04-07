@@ -26,6 +26,7 @@ import { AvatarPreload } from '../ui/AvatarPreload'
 import { SortIndicator } from './Icons'
 import { getPnLTooltip, parseSourceInfo as parseSourceInfoUtil, getMedalGlowClass } from './utils'
 import { classifyStyle, type TradingStyle } from '@/lib/utils/trading-style'
+import { SectionErrorBoundary } from '../utils/ErrorBoundary'
 
 // CSS animations loaded async to avoid render-blocking (medal glow, hover effects, pagination)
 // Critical layout styles (grid, responsive columns) are already in critical-css.ts and responsive.css
@@ -610,13 +611,14 @@ function RankingTableInner(props: {
           >
             {sortedTraders.slice(0, cardVisibleCount).map((trader, idx) => {
               const positionRank = idx + 1
-              // Always use position-based rank — trader.rank is platform-level (not global)
               const rank = positionRank
               return (
-                <TraderCard key={`${trader.id}-${trader.source || 'unknown'}`}
-                  trader={trader} rank={rank} source={source} language={language}
-                  searchQuery={debouncedSearch}
-                  getMedalGlowClass={getMedalGlowClass} parseSourceInfo={parseSourceInfoWithT} />
+                <SectionErrorBoundary key={`${trader.id}-${trader.source || 'unknown'}`}>
+                  <TraderCard
+                    trader={trader} rank={rank} source={source} language={language}
+                    searchQuery={debouncedSearch}
+                    getMedalGlowClass={getMedalGlowClass} parseSourceInfo={parseSourceInfoWithT} />
+                </SectionErrorBoundary>
               )
             })}
           </Box>
@@ -662,16 +664,16 @@ function RankingTableInner(props: {
           >
             {paginatedTraders.map((trader, idx) => {
               const positionRank = startIndex + idx + 1
-              // Always use position-based rank — trader.rank is platform-level (not global),
-              // so multiple traders from different exchanges share rank 1/2/3
               const rank = positionRank
               return (
-                <TraderRow key={`${trader.id}-${trader.source || 'unknown'}-${startIndex + idx}`}
-                  trader={trader} rank={rank} source={source} language={language}
-                  searchQuery={debouncedSearch}
-                  getMedalGlowClass={getMedalGlowClass} parseSourceInfo={parseSourceInfoWithT} getPnLTooltipFn={getPnLTooltip}
-                  isExpanded={expandedRowId === trader.id}
-                  onToggleExpand={handleToggleExpand} />
+                <SectionErrorBoundary key={`${trader.id}-${trader.source || 'unknown'}-${startIndex + idx}`}>
+                  <TraderRow
+                    trader={trader} rank={rank} source={source} language={language}
+                    searchQuery={debouncedSearch}
+                    getMedalGlowClass={getMedalGlowClass} parseSourceInfo={parseSourceInfoWithT} getPnLTooltipFn={getPnLTooltip}
+                    isExpanded={expandedRowId === trader.id}
+                    onToggleExpand={handleToggleExpand} />
+                </SectionErrorBoundary>
               )
             })}
           </Box>
