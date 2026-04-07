@@ -112,20 +112,21 @@ async function aggregateForDate(supabase: any, dateStr: string, _plog: any): Pro
       // Fetch per-platform: each platform gets its own query with a per-platform limit
       // This ensures small platforms (bingx: 228, toobit: 1597) aren't crowded out by
       // large platforms (gmx: 156K, hyperliquid: 155K)
-      const PER_PLATFORM_LIMIT = 5000
+      const PER_PLATFORM_LIMIT = 2000
       for (const platform of distinctPlatforms) {
-        const { data: platformData, error: platformError } = await supabase
-          .from('trader_snapshots_v2')
-          .select('platform, trader_key, window, roi_pct, pnl_usd, win_rate, max_drawdown, followers, trades_count, as_of_ts')
-          .eq('platform', platform)
-          .gte('updated_at', recentCutoffStr)
-          .order('updated_at', { ascending: false })
-          .limit(PER_PLATFORM_LIMIT)
+        try {
+          const { data: platformData, error: platformError } = await supabase
+            .from('trader_snapshots_v2')
+            .select('platform, trader_key, window, roi_pct, pnl_usd, win_rate, max_drawdown, followers, trades_count, as_of_ts')
+            .eq('platform', platform)
+            .gte('updated_at', recentCutoffStr)
+            .order('updated_at', { ascending: false })
+            .limit(PER_PLATFORM_LIMIT)
 
-        if (platformError || !platformData) {
-          logger.warn(`[aggregate] Failed to fetch platform ${platform}: ${platformError?.message}`)
-          continue
-        }
+          if (platformError || !platformData) {
+            logger.warn(`[aggregate] Failed to fetch platform ${platform}: ${platformError?.message}`)
+            continue
+          }
 
         // Deduplicate: keep latest per (platform, trader_key)
         for (const s of platformData) {
@@ -142,6 +143,9 @@ async function aggregateForDate(supabase: any, dateStr: string, _plog: any): Pro
               trades_count: s.trades_count,
             })
           }
+        }
+        } catch (err) {
+          logger.warn(`[aggregate] Platform ${platform} query failed: ${err instanceof Error ? err.message : String(err)}`)
         }
       }
 
