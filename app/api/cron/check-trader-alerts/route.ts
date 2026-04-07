@@ -82,18 +82,10 @@ interface Snapshot {
 /**
  * GET - 健康检查
  */
-export async function GET() {
-  return NextResponse.json({
-    ok: true,
-    message: 'Trader alerts cron endpoint ready',
-    description: 'Checks trader changes and sends alerts to Pro users',
-  })
-}
-
 /**
- * POST - 执行交易员变动检测
+ * GET - Vercel cron calls this endpoint. Execute trader alert checks.
  */
-export async function POST(req: Request) {
+export async function GET(req: Request) {
   const startTime = Date.now()
   const plog = await PipelineLogger.start('check-trader-alerts')
 
