@@ -194,7 +194,7 @@ export class BinanceSpotConnector extends BaseConnector {
       const totalOrder = d.totalOrder != null ? Number(d.totalOrder) : null
       const winRate = d.winRate != null ? Number(d.winRate) : null
       const mdd = d.mdd != null ? Math.abs(Number(d.mdd)) : null
-      const sharpe = d.sharpRatio != null && Math.abs(Number(d.sharpRatio)) <= 20
+      const sharpe = d.sharpRatio != null && Math.abs(Number(d.sharpRatio)) <= 10
         ? Number(d.sharpRatio) : null
 
       const missing: string[] = []

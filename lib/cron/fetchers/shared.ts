@@ -257,7 +257,7 @@ export const TraderDataSchema = z.object({
   trades_count: z.number().finite().nonnegative().nullable().optional(),
   arena_score: z.number().finite().nullable(),
   captured_at: z.string().min(1),
-  sharpe_ratio: z.number().finite().min(-20).max(20).nullable().optional(),
+  sharpe_ratio: z.number().finite().min(-10).max(10).nullable().optional(),
   aum: z.number().finite().nonnegative().nullable().optional(),
   avatar_url: z.string().nullable().optional(),
 })

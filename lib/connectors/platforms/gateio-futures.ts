@@ -188,7 +188,7 @@ export class GateioFuturesConnector extends BaseConnector {
       }
 
       const rawSharpe = this.num((info as Record<string, unknown>).sharp_ratio ?? (info as Record<string, unknown>).sharpRatio ?? (info as Record<string, unknown>).sharpe_ratio)
-      const sharpe_ratio = rawSharpe != null ? Math.max(-20, Math.min(20, Math.round(rawSharpe * 100) / 100)) : null
+      const sharpe_ratio = rawSharpe != null ? Math.max(-10, Math.min(10, Math.round(rawSharpe * 100) / 100)) : null
 
       const metrics: SnapshotMetrics = {
         roi: this.num(info.roi),
@@ -267,7 +267,7 @@ export class GateioFuturesConnector extends BaseConnector {
       aum: null,
       sharpe_ratio: (() => {
         const s = this.num(raw.sharp_ratio ?? raw.sharpRatio ?? raw.sharpe_ratio)
-        return s != null ? Math.max(-20, Math.min(20, Math.round(s * 100) / 100)) : null
+        return s != null ? Math.max(-10, Math.min(10, Math.round(s * 100) / 100)) : null
       })(),
       platform_rank: null,
       // Extra: equity curve from leaderboard API (profit_list is array of daily ROI ratios)

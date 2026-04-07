@@ -198,7 +198,7 @@ export async function upsertStatsDetail(
     if (stats.totalTrades != null && stats.totalTrades >= 0) {
       v2Update.trades_count = stats.totalTrades
     }
-    if (stats.sharpeRatio != null && Math.abs(stats.sharpeRatio) <= 20) {
+    if (stats.sharpeRatio != null && Math.abs(stats.sharpeRatio) <= 10) {
       v2Update.sharpe_ratio = stats.sharpeRatio
     }
     // Note: copiersCount is kept in stats_detail.copiers_count but NOT synced to v2.followers.

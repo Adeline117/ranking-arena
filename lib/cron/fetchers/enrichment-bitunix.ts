@@ -160,7 +160,7 @@ export async function fetchBitunixStatsDetail(
         const std = Math.sqrt(returns.reduce((a, b) => a + (b - mean) ** 2, 0) / returns.length)
         if (std > 0) {
           const raw = Math.round((mean / std) * Math.sqrt(365) * 100) / 100
-          sharpeRatio = Math.max(-20, Math.min(20, raw))
+          sharpeRatio = Math.max(-10, Math.min(10, raw))
         }
       }
 
