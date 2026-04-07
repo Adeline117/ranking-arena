@@ -94,6 +94,8 @@ export async function GET(request: NextRequest) {
 
     // Delete pipeline_logs older than 30 days to prevent unbounded growth
     let oldLogsDeleted = 0
+    let rotationFailed = false
+    let rotationError: string | null = null
     try {
       const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString()
       const MAX_LOG_CLEANUP_BATCHES = 5 // max 25K rows per run
@@ -104,7 +106,9 @@ export async function GET(request: NextRequest) {
           .lt('started_at', thirtyDaysAgo)
           .limit(5000)
         if (deleteErr) {
-          logger.warn('[cleanup-stuck-logs] Failed to delete old pipeline_logs:', deleteErr.message)
+          rotationFailed = true
+          rotationError = deleteErr.message
+          logger.error('[cleanup-stuck-logs] Failed to delete old pipeline_logs:', { error: deleteErr.message })
           break
         }
         const deleted = deletedCount ?? 0
@@ -115,10 +119,29 @@ export async function GET(request: NextRequest) {
         logger.info(`[cleanup-stuck-logs] Deleted ${oldLogsDeleted} pipeline_logs older than 30 days`)
       }
     } catch (deleteErr) {
-      logger.warn('[cleanup-stuck-logs] pipeline_logs rotation failed:', deleteErr)
+      rotationFailed = true
+      rotationError = deleteErr instanceof Error ? deleteErr.message : String(deleteErr)
+      logger.error('[cleanup-stuck-logs] pipeline_logs rotation failed:', {}, deleteErr)
     }
 
-    await plog.success(cleaned, { jobs: stuckLogs.map(l => l.job_name), oldLogsDeleted })
+    // Report rotation failure visibly — don't hide it behind plog.success()
+    if (rotationFailed) {
+      await plog.success(cleaned, {
+        jobs: stuckLogs.map(l => l.job_name),
+        oldLogsDeleted,
+        rotationFailed: true,
+        rotationError,
+      })
+      // Alert on rotation failure — unbounded pipeline_logs growth is a ticking bomb
+      await sendRateLimitedAlert({
+        title: 'Pipeline logs 轮转失败',
+        message: `pipeline_logs 30天清理失败: ${rotationError}\n旧日志未被删除，表将无限增长。`,
+        level: 'warning',
+        details: { rotationError, oldLogsDeleted },
+      }, 'cleanup:rotation-failed', 12 * 60 * 60 * 1000) // 12h cooldown
+    } else {
+      await plog.success(cleaned, { jobs: stuckLogs.map(l => l.job_name), oldLogsDeleted })
+    }
 
     // Only alert if many jobs stuck (>3) — occasional 1-2 stuck is normal timeout
     // Rate-limited: same stuck jobs won't re-alert for 6 hours
