@@ -97,14 +97,15 @@ export default async function Page({
         />
       </div>
 
-      {/* SSR three-column shell — same grid as Phase 2 ThreeColumnLayout.
-          Prevents CLS when Phase 2 mounts by matching the exact same column widths.
-          Sidebar placeholders reserve space so center column doesn't jump. */}
+      {/* SSR ranking table in three-col-layout grid.
+          Uses same CSS grid as Phase 2 — center column renders at final width.
+          No sidebar content rendered (avoids empty placeholders hurting Speed Index).
+          CSS grid reserves sidebar column space without visible empty areas. */}
+      {/* SSR three-col grid — matches Phase 2 exactly. Sidebar grid tracks are
+          reserved by empty divs (no height, just grid placement) so center column
+          renders at the correct width from frame 1. Zero CLS on Phase 2 swap. */}
       <div id="ssr-ranking-table" className="three-col-layout">
-        {/* Left sidebar placeholder — hidden on mobile via .three-col-left */}
-        <div className="three-col-left hide-tablet" style={{ minHeight: 400 }} />
-
-        {/* Center: ranking table */}
+        <div className="three-col-left hide-tablet" aria-hidden="true" />
         <div className="three-col-center">
           <div className="ssr-t" style={{ marginTop: 8 }}>
             <RankingControls
@@ -116,9 +117,7 @@ export default async function Page({
             <SSRRankingTable traders={traders} startRank={page * PER_PAGE} />
           </div>
         </div>
-
-        {/* Right sidebar placeholder — hidden on mobile */}
-        <div className="three-col-right hide-mobile" style={{ minHeight: 400 }} />
+        <div className="three-col-right hide-mobile" aria-hidden="true" />
       </div>
 
       {/* Phase 2: Full interactive three-column layout with sidebars.
