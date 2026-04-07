@@ -76,7 +76,7 @@ function getFreshnessHours(source: string): number {
   const sourceType = SOURCE_TYPE_MAP[source]
   return sourceType === 'web3' ? DATA_FRESHNESS_HOURS_DEX : DATA_FRESHNESS_HOURS_CEX
 }
-const MIN_TRADES_COUNT = 1 // Allow all traders with at least 1 trade (DEX traders may have 1-2 high-quality trades)
+const MIN_TRADES_COUNT = 5 // Require 5+ trades for ranking — 1-trade wonders have meaningless stats
 const DEGRADATION_THRESHOLD = 0.70 // 70% — block catastrophic drops only; 85% was too tight (7D hovers at 84% due to ROI filters)
 
 // P1-3: ROI anomaly thresholds per period
@@ -1576,6 +1576,35 @@ async function computeSeason(
     }
   }
 
+  // Zero out excluded traders: traders in leaderboard_ranks whose V2 data is
+  // fresh but who got excluded from computation (negative ROI, <5 trades, etc.)
+  // must not retain old high scores. This was the root cause of stale traders
+  // sitting at #1 for days after their ROI went deeply negative.
+  const computedTraderIds = new Set(uniqueTraders.map(t => `${t.source}:${t.source_trader_id}`))
+  const allInTraderMap = new Set(Array.from(traderMap.values()).map(t => `${t.source}:${t.source_trader_id}`))
+  // Traders in traderMap but NOT in uniqueTraders = filtered out (bad ROI, too few trades, etc.)
+  const excludedTraders = Array.from(allInTraderMap).filter(k => !computedTraderIds.has(k))
+  if (excludedTraders.length > 0) {
+    const excludedPairs = excludedTraders.map(k => { const [source, ...rest] = k.split(':'); return { source, id: rest.join(':') } })
+    let zeroed = 0
+    for (let i = 0; i < excludedPairs.length; i += 100) {
+      const batch = excludedPairs.slice(i, i + 100)
+      for (const { source, id } of batch) {
+        const { error: zeroErr } = await supabase
+          .from('leaderboard_ranks')
+          .update({ arena_score: 0, roi: null, pnl: null, computed_at: new Date().toISOString() })
+          .eq('season_id', season)
+          .eq('source', source)
+          .eq('source_trader_id', id)
+          .gt('arena_score', 0) // Only touch rows that actually have a non-zero score
+        if (!zeroErr) zeroed++
+      }
+    }
+    if (zeroed > 0) {
+      logger.info(`${season}: zeroed out ${zeroed} excluded traders (fresh V2 data but failed filters)`)
+    }
+  }
+
   // Re-rank ALL rows to fix drift from incremental upserts
   // Stale traders (outside freshness window) keep old ranks while new traders shift numbering.
   // This global re-rank ensures rank always matches arena_score DESC ordering.
@@ -1605,8 +1634,10 @@ async function computeSeason(
     logger.warn(`${season}: re-rank exception (non-critical):`, e)
   }
 
-  // Clean up rows not updated in 14 days (truly abandoned data)
-  const cutoff = new Date(Date.now() - 14 * 24 * 60 * 60 * 1000).toISOString()
+  // Clean up rows not updated in 5 days (was 14 — stale traders with old high scores
+  // were persisting for weeks at the top of rankings because excluded traders' rows
+  // were never re-computed, keeping outdated scores).
+  const cutoff = new Date(Date.now() - 5 * 24 * 60 * 60 * 1000).toISOString()
   const { data: staleRows, error: staleErr } = await supabase
     .from('leaderboard_ranks')
     .select('id')
@@ -1618,7 +1649,7 @@ async function computeSeason(
     for (let i = 0; i < staleIds.length; i += 500) {
       await supabase.from('leaderboard_ranks').delete().in('id', staleIds.slice(i, i + 500))
     }
-    logger.info(`${season}: cleaned ${staleIds.length} stale rows (>14d old)`)
+    logger.info(`${season}: cleaned ${staleIds.length} stale rows (>5d old)`)
   }
 
   // Store the last scored count in DB so the degradation check uses a realistic baseline
