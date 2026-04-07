@@ -7,7 +7,6 @@ import RankingControls from './components/home/RankingControls'
 import TopNav from './components/layout/TopNav'
 import WelcomeBanner from './components/home/WelcomeBanner'
 import HomePageLoader from './components/home/HomePageLoader'
-import Providers from './components/Providers'
 import { JsonLd } from './components/Providers/JsonLd'
 import { PageErrorBoundary } from './components/utils/ErrorBoundary'
 import { BASE_URL } from '@/lib/constants/urls'
@@ -111,19 +110,16 @@ export default async function Page({
       {/* Phase 2: Full interactive three-column layout with sidebars.
           Loaded via next/dynamic(ssr:false) — deferred until user interaction.
           Left: HotDiscussions | Center: Interactive rankings | Right: Watchlist + FlashNews
-          Wrapped in Providers — homepage root layout has no Providers for LCP optimization,
-          but Phase 2 needs ToastProvider, QueryClient, etc. */}
-      <Providers>
-        <PageErrorBoundary>
-          <HomePageLoader
-            initialTraders={traders}
-            initialLastUpdated={lastUpdated}
-            heroStats={heroStats}
-            initialTotalCount={totalCount}
-            initialCategoryCounts={categoryCounts}
-          />
-        </PageErrorBoundary>
-      </Providers>
+          Providers are inside HomePageLoader (client-side only) to avoid hydration mismatch. */}
+      <PageErrorBoundary>
+        <HomePageLoader
+          initialTraders={traders}
+          initialLastUpdated={lastUpdated}
+          heroStats={heroStats}
+          initialTotalCount={totalCount}
+          initialCategoryCounts={categoryCounts}
+        />
+      </PageErrorBoundary>
     </>
   )
 }

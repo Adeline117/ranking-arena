@@ -2,6 +2,7 @@
 
 import dynamic from 'next/dynamic'
 import { useState, useEffect } from 'react'
+import Providers from '../Providers'
 import type { InitialTrader, CategoryCounts } from '@/lib/getInitialTraders'
 
 /**
@@ -70,5 +71,7 @@ export default function HomePageLoader(props: HomePageLoaderProps) {
   }, [])
 
   if (!activated) return null
-  return <HomePage {...props} />
+  // Homepage root layout has no Providers (for LCP optimization).
+  // Phase 2 needs ToastProvider, QueryClient, etc. — wrap here on client only.
+  return <Providers><HomePage {...props} /></Providers>
 }
