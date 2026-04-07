@@ -76,7 +76,7 @@ export function toTraderPageData(detail: TraderDetail): Record<string, unknown> 
     winning_positions: (() => {
       // Use enrichment stats, but validate: winning can never exceed total trades
       const enrichWin = detail.stats?.winningPositions
-      const enrichTotal = detail.stats?.totalPositions
+      const _enrichTotal = detail.stats?.totalPositions
       const periodTrades = t.tradesCount
       // If enrichment winning > period trades, enrichment is lifetime data — compute from period instead
       if (enrichWin != null && periodTrades != null && enrichWin > periodTrades) {
@@ -89,7 +89,7 @@ export function toTraderPageData(detail: TraderDetail): Record<string, unknown> 
       )
     })(),
     total_positions: (() => {
-      const enrichTotal = detail.stats?.totalPositions
+      const _enrichTotal = detail.stats?.totalPositions
       const periodTrades = t.tradesCount
       // If enrichment total >> period trades, use period trades (more accurate for display period)
       if (enrichTotal != null && periodTrades != null && enrichTotal > periodTrades * 2) {
