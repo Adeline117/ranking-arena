@@ -12,6 +12,7 @@
 import { NextRequest } from 'next/server'
 import { getSupabaseAdmin } from '@/lib/supabase/server'
 import { getCorsOrigin } from '@/lib/utils/cors'
+import { checkRateLimit, RateLimitPresets } from '@/lib/utils/rate-limit'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -42,6 +43,10 @@ async function fetchTopRankings(period: string): Promise<RankingRow[]> {
 }
 
 export async function GET(request: NextRequest) {
+  // Rate limit SSE connections to prevent connection pool exhaustion
+  const rateLimitResp = await checkRateLimit(request, RateLimitPresets.realtime)
+  if (rateLimitResp) return rateLimitResp
+
   const rawPeriod = (request.nextUrl.searchParams.get('period') || '90D').toUpperCase()
   const period = rawPeriod === '7D' || rawPeriod === '30D' || rawPeriod === '90D' ? rawPeriod : '90D'
   const origin = request.headers.get('Origin')
