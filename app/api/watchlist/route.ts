@@ -67,8 +67,9 @@ export async function GET(request: NextRequest) {
         const { data: ranks } = await admin
           .from('leaderboard_ranks')
           .select('source, source_trader_id, roi, pnl, rank, arena_score, win_rate, avatar_url')
-          .eq('time_range', '90D')
+          .eq('season_id', '90D')
           .in('source', [...new Set(watchlist.map(w => w.source))])
+          .in('source_trader_id', [...new Set(watchlist.map(w => w.source_trader_id))])
 
         if (ranks && ranks.length > 0) {
           const rankMap = new Map(ranks.map(r => [`${r.source}:${r.source_trader_id}`, r]))
