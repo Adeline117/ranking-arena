@@ -18,94 +18,57 @@ export const GET = withAdminAuth(
     const yesterday = new Date(today.getTime() - 24 * 60 * 60 * 1000)
     const weekAgo = new Date(today.getTime() - 7 * 24 * 60 * 60 * 1000)
 
-    // User statistics
-    const { count: totalUsers } = await supabase
-      .from('user_profiles')
-      .select('id', { count: 'exact', head: true })
+    // Run ALL count queries in parallel instead of sequential (14 queries → 1 round-trip)
+    const [
+      { count: totalUsers },
+      { count: newUsersToday },
+      { count: newUsersYesterday },
+      { count: bannedUsers },
+      { count: totalPosts },
+      { count: newPostsToday },
+      { count: newPostsYesterday },
+      { count: totalComments },
+      { count: newCommentsToday },
+      { count: pendingReports },
+      { count: reportsThisWeek },
+      { count: totalGroups },
+      { count: pendingGroupApplications },
+      { count: totalTraders },
+      { count: snapshots24h },
+      { count: totalLibraryItems },
+      { count: libraryWithPdf },
+    ] = await Promise.all([
+      supabase.from('user_profiles').select('id', { count: 'exact', head: true }),
+      supabase.from('user_profiles').select('id', { count: 'exact', head: true }).gte('created_at', today.toISOString()),
+      supabase.from('user_profiles').select('id', { count: 'exact', head: true }).gte('created_at', yesterday.toISOString()).lt('created_at', today.toISOString()),
+      supabase.from('user_profiles').select('id', { count: 'exact', head: true }).not('banned_at', 'is', null),
+      supabase.from('posts').select('id', { count: 'exact', head: true }),
+      supabase.from('posts').select('id', { count: 'exact', head: true }).gte('created_at', today.toISOString()),
+      supabase.from('posts').select('id', { count: 'exact', head: true }).gte('created_at', yesterday.toISOString()).lt('created_at', today.toISOString()),
+      supabase.from('comments').select('id', { count: 'exact', head: true }),
+      supabase.from('comments').select('id', { count: 'exact', head: true }).gte('created_at', today.toISOString()),
+      supabase.from('content_reports').select('id', { count: 'exact', head: true }).eq('status', 'pending'),
+      supabase.from('content_reports').select('id', { count: 'exact', head: true }).gte('created_at', weekAgo.toISOString()),
+      supabase.from('groups').select('id', { count: 'exact', head: true }),
+      supabase.from('group_applications').select('id', { count: 'exact', head: true }).eq('status', 'pending'),
+      supabase.from('leaderboard_ranks').select('source_trader_id', { count: 'exact', head: true }).eq('season_id', '90D'),
+      supabase.from('trader_snapshots_v2').select('id', { count: 'exact', head: true }).gte('created_at', yesterday.toISOString()),
+      supabase.from('library_items').select('id', { count: 'exact', head: true }),
+      supabase.from('library_items').select('id', { count: 'exact', head: true }).not('pdf_url', 'is', null),
+    ])
 
-    const { count: newUsersToday } = await supabase
-      .from('user_profiles')
-      .select('id', { count: 'exact', head: true })
-      .gte('created_at', today.toISOString())
-
-    const { count: newUsersYesterday } = await supabase
-      .from('user_profiles')
-      .select('id', { count: 'exact', head: true })
-      .gte('created_at', yesterday.toISOString())
-      .lt('created_at', today.toISOString())
-
-    const { count: bannedUsers } = await supabase
-      .from('user_profiles')
-      .select('id', { count: 'exact', head: true })
-      .not('banned_at', 'is', null)
-
-    // Post statistics
-    const { count: totalPosts } = await supabase
-      .from('posts')
-      .select('id', { count: 'exact', head: true })
-
-    const { count: newPostsToday } = await supabase
-      .from('posts')
-      .select('id', { count: 'exact', head: true })
-      .gte('created_at', today.toISOString())
-
-    const { count: newPostsYesterday } = await supabase
-      .from('posts')
-      .select('id', { count: 'exact', head: true })
-      .gte('created_at', yesterday.toISOString())
-      .lt('created_at', today.toISOString())
-
-    // Comment statistics
-    const { count: totalComments } = await supabase
-      .from('comments')
-      .select('id', { count: 'exact', head: true })
-
-    const { count: newCommentsToday } = await supabase
-      .from('comments')
-      .select('id', { count: 'exact', head: true })
-      .gte('created_at', today.toISOString())
-
-    // Report statistics
-    const { count: pendingReports } = await supabase
-      .from('content_reports')
-      .select('id', { count: 'exact', head: true })
-      .eq('status', 'pending')
-
-    const { count: reportsThisWeek } = await supabase
-      .from('content_reports')
-      .select('id', { count: 'exact', head: true })
-      .gte('created_at', weekAgo.toISOString())
-
-    // Group statistics
-    const { count: totalGroups } = await supabase
-      .from('groups')
-      .select('id', { count: 'exact', head: true })
-
-    const { count: pendingGroupApplications } = await supabase
-      .from('group_applications')
-      .select('id', { count: 'exact', head: true })
-      .eq('status', 'pending')
-
-    // Scraper health summary — use leaderboard_ranks computed_at for freshness
+    // Scraper health — use leaderboard_count_cache instead of full table scan
     const scraperHealth = { fresh: 0, stale: 0, critical: 0 }
     try {
-      const { data: lrFreshness } = await supabase
-        .from('leaderboard_ranks')
-        .select('source, computed_at')
-        .eq('season_id', '90D')
+      const { data: platformFreshness } = await supabase
+        .from('leaderboard_count_cache')
+        .select('source, updated_at')
+        .neq('source', '_all')
 
-      if (lrFreshness) {
+      if (platformFreshness) {
         const nowMs = Date.now()
-        const grouped = new Map<string, Date>()
-        for (const s of lrFreshness) {
-          const existing = grouped.get(s.source)
-          const updated = new Date(s.computed_at)
-          if (!existing || updated > existing) {
-            grouped.set(s.source, updated)
-          }
-        }
-        for (const [, lastUpdate] of grouped) {
-          const ageHours = (nowMs - lastUpdate.getTime()) / (1000 * 60 * 60)
+        for (const p of platformFreshness) {
+          const ageHours = (nowMs - new Date(p.updated_at).getTime()) / (1000 * 60 * 60)
           if (ageHours < 12) scraperHealth.fresh++
           else if (ageHours < 24) scraperHealth.stale++
           else scraperHealth.critical++
@@ -115,38 +78,21 @@ export const GET = withAdminAuth(
       logger.warn('Error computing scraper health', { error: e })
     }
 
-    // Trader statistics — use leaderboard_ranks for active trader count
-    const { count: totalTraders } = await supabase
-      .from('leaderboard_ranks')
-      .select('source_trader_id', { count: 'exact', head: true })
-      .eq('season_id', '90D')
-
-    // Traders per platform
-    const { data: tradersByPlatformRaw } = await supabase
-      .from('leaderboard_ranks')
-      .select('source')
-      .eq('season_id', '90D')
-
+    // Traders per platform — use leaderboard_count_cache instead of full table scan
     const tradersByPlatform: Record<string, number> = {}
-    for (const row of tradersByPlatformRaw || []) {
-      tradersByPlatform[row.source] = (tradersByPlatform[row.source] || 0) + 1
+    try {
+      const { data: countCache } = await supabase
+        .from('leaderboard_count_cache')
+        .select('source, count')
+        .neq('source', '_all')
+      if (countCache) {
+        for (const row of countCache) {
+          tradersByPlatform[row.source] = row.count
+        }
+      }
+    } catch (e: unknown) {
+      logger.warn('Error fetching platform counts', { error: e })
     }
-
-    // Snapshots in last 24h
-    const { count: snapshots24h } = await supabase
-      .from('trader_snapshots_v2')
-      .select('id', { count: 'exact', head: true })
-      .gte('created_at', yesterday.toISOString())
-
-    // Library items
-    const { count: totalLibraryItems } = await supabase
-      .from('library_items')
-      .select('id', { count: 'exact', head: true })
-
-    const { count: libraryWithPdf } = await supabase
-      .from('library_items')
-      .select('id', { count: 'exact', head: true })
-      .not('pdf_url', 'is', null)
 
     return apiSuccess({
       stats: {
