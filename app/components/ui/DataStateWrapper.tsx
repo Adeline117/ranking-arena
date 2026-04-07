@@ -5,6 +5,7 @@ import { tokens } from '@/lib/design-tokens'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import { getErrorMessage, isRetryableError } from '@/lib/utils/error-handling'
 import LoadingSkeleton from '@/app/components/ui/LoadingSkeleton'
+import Button from '@/app/components/base/Button'
 
 interface EmptyAction {
   label: string
@@ -120,16 +121,9 @@ export default function DataStateWrapper({
             {errorMsg}
           </p>
           {canRetry && (
-            <button
-              onClick={onRetry}
-              className="px-4 py-2 rounded-lg text-sm font-medium transition-colors"
-              style={{
-                backgroundColor: tokens.colors.accent.brand + '15',
-                color: tokens.colors.accent.brand,
-              }}
-            >
+            <Button variant="secondary" size="sm" onClick={onRetry}>
               {t('retry')}
-            </button>
+            </Button>
           )}
         </div>
       </div>
@@ -156,21 +150,14 @@ export default function DataStateWrapper({
           {emptyActions && emptyActions.length > 0 && (
             <div className="flex gap-2 mt-2">
               {emptyActions.map((action, i) => (
-                <button
+                <Button
                   key={i}
                   onClick={action.onClick}
-                  className="px-4 py-2 rounded-lg text-sm font-medium transition-colors"
-                  style={{
-                    backgroundColor: action.variant === 'primary' 
-                      ? tokens.colors.accent.brand 
-                      : tokens.colors.accent.brand + '15',
-                    color: action.variant === 'primary' 
-                      ? 'var(--color-on-accent)' 
-                      : tokens.colors.accent.brand,
-                  }}
+                  variant={action.variant === 'primary' ? 'primary' : 'secondary'}
+                  size="sm"
                 >
                   {action.label}
-                </button>
+                </Button>
               ))}
             </div>
           )}
