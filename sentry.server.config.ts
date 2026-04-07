@@ -59,26 +59,45 @@ Sentry.init({
       delete event.user.ip_address
       delete event.user.email // 服务端不上报邮箱
     }
-    
+
     // 过滤敏感数据
     if (event.request?.headers) {
       delete event.request.headers['authorization']
       delete event.request.headers['cookie']
     }
-    
+
     // 不上报 4xx 客户端错误（401/403/404 等）
     const statusCode = (hint?.originalException as { statusCode?: number })?.statusCode
       ?? (hint?.originalException as { status?: number })?.status
     if (statusCode && statusCode >= 400 && statusCode < 500) {
       return null
     }
-    
+
     // 不上报外部 API 网络错误（上游服务不可用不是我们的 bug）
     const message = event.message || (hint?.originalException as Error)?.message || ''
     if (/^(ECONNREFUSED|ENOTFOUND|ETIMEDOUT|UND_ERR)/.test(message)) {
       return null
     }
-    
+
+    // Custom fingerprinting to reduce alert fatigue (inspired by Sentry best practices):
+    // Group exchange connector errors by exchange name so "binance timeout" and
+    // "binance rate limit" create 1 issue instead of N. Same for enrichment/pipeline.
+    const errorMsg = message.toLowerCase()
+    const exchangeMatch = errorMsg.match(/\b(binance|bybit|okx|bitget|mexc|kucoin|htx|coinex|hyperliquid|gmx|dydx|gateio|bingx)\b/)
+    if (exchangeMatch) {
+      const exchange = exchangeMatch[1]
+      const isTimeout = /timeout|timed out|ETIMEDOUT/.test(errorMsg)
+      const isRateLimit = /rate.?limit|429|too many/i.test(errorMsg)
+      const errorType = isTimeout ? 'timeout' : isRateLimit ? 'ratelimit' : 'error'
+      event.fingerprint = ['exchange-connector', exchange, errorType]
+    }
+
+    // Group pipeline/cron errors by job name
+    const cronMatch = errorMsg.match(/\b(batch-fetch|batch-enrich|compute-leaderboard|fetch-details|aggregate)/i)
+    if (cronMatch) {
+      event.fingerprint = ['pipeline', cronMatch[1].toLowerCase()]
+    }
+
     return event
   },
   
