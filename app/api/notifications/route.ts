@@ -24,23 +24,32 @@ import {
   deleteNotification,
 } from '@/lib/data/notifications'
 import { features } from '@/lib/features'
+import { getOrSet } from '@/lib/cache'
 
 const SOCIAL_NOTIFICATION_TYPES = ['post_reply', 'new_follower', 'group_update', 'like', 'comment', 'follow', 'mention']
 
 export async function GET(request: NextRequest) {
   try {
     const user = await requireAuth(request)
-    const supabase = getSupabaseAdmin()
     const { searchParams } = new URL(request.url)
-    
+
     const limit = validateNumber(searchParams.get('limit'), { min: 1, max: 100 }) ?? 50
     const offset = validateNumber(searchParams.get('offset'), { min: 0 }) ?? 0
     const unread_only = searchParams.get('unread_only') === 'true'
 
-    const [initialNotifications, unreadCount] = await Promise.all([
-      getUserNotifications(supabase, user.id, { limit, offset, unread_only }),
-      getUnreadNotificationCount(supabase, user.id),
-    ])
+    const cacheKey = `notifications:${user.id}:${limit}:${offset}:${unread_only}`
+    const { notifications: initialNotifications, unreadCount } = await getOrSet(
+      cacheKey,
+      async () => {
+        const supabase = getSupabaseAdmin()
+        const [notifs, count] = await Promise.all([
+          getUserNotifications(supabase, user.id, { limit, offset, unread_only }),
+          getUnreadNotificationCount(supabase, user.id),
+        ])
+        return { notifications: notifs, unreadCount: count }
+      },
+      { ttl: 30 }
+    )
     let notifications = initialNotifications
 
     // When social features are off, filter out social notification types
