@@ -30,6 +30,10 @@ interface MessageInputProps {
   t: (key: string) => string
   language: string
   inputRef: React.RefObject<HTMLTextAreaElement | null>
+  /** Called when user starts typing — for typing indicator */
+  onTyping?: () => void
+  /** Called when input is cleared / message sent — stop typing indicator */
+  onStopTyping?: () => void
 }
 
 function formatFileSize(bytes: number) {
@@ -57,6 +61,8 @@ export default function MessageInput({
   t,
   language: _language,
   inputRef,
+  onTyping,
+  onStopTyping,
 }: MessageInputProps) {
   const fileInputRef = useRef<HTMLInputElement>(null)
 
@@ -184,6 +190,8 @@ export default function MessageInput({
           value={newMessage}
           onChange={(e) => {
             setNewMessage(e.target.value)
+            if (e.target.value.length > 0) onTyping?.()
+            else onStopTyping?.()
             const el = e.target
             el.style.height = 'auto'
             el.style.height = `${Math.min(el.scrollHeight, 100)}px`
