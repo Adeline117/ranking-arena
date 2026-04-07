@@ -3,9 +3,10 @@
  * 解决跨域和 referrer 限制问题
  */
 
-import { NextResponse } from 'next/server'
+import { NextRequest, NextResponse } from 'next/server'
 import logger from '@/lib/logger'
 import { getCorsOrigin } from '@/lib/utils/cors'
+import { checkRateLimit, RateLimitPresets } from '@/lib/utils/rate-limit'
 
 // Avatar proxy is a read-only, cacheable operation — do NOT force-dynamic.
 // Removing force-dynamic allows Vercel's CDN to cache each unique avatar URL
@@ -19,7 +20,11 @@ export const preferredRegion = 'hnd1'
 // This prevents repeat requests to the serverless function for the same avatar.
 const CACHE_MAX_AGE = 60 * 60 * 24 * 365
 
-export async function GET(request: Request) {
+export async function GET(request: NextRequest) {
+  // Rate limit: 60 req/min per IP (avatar proxy is public but must not be abused)
+  const rateLimitResp = await checkRateLimit(request, RateLimitPresets.search)
+  if (rateLimitResp) return rateLimitResp
+
   const { searchParams } = new URL(request.url)
   const url = searchParams.get('url')
 
@@ -146,15 +151,19 @@ export async function GET(request: Request) {
     ]
     
     const urlObj = new URL(decodedUrl)
-    const isAllowed = allowedDomains.some(domain => urlObj.hostname.includes(domain))
+    // Strict suffix match: hostname must equal or be a subdomain of an allowed domain.
+    // e.g. "cdn.bnbstatic.com" matches "bnbstatic.com", but "evil-bnbstatic.com" does not.
+    const isAllowed = allowedDomains.some(
+      domain => urlObj.hostname === domain || urlObj.hostname.endsWith('.' + domain)
+    )
     
     if (!isAllowed) {
       return new NextResponse('Domain not allowed', { status: 403 })
     }
 
-    // 请求图片 - 模拟浏览器请求（10s timeout 防止 function 挂起）
+    // 请求图片 - 模拟浏览器请求（5s timeout 防止 function 挂起 + SSRF mitigation）
     const controller = new AbortController()
-    const timeout = setTimeout(() => controller.abort(), 10_000)
+    const timeout = setTimeout(() => controller.abort(), 5_000)
 
     const response = await fetch(decodedUrl, {
       signal: controller.signal,
@@ -173,7 +182,7 @@ export async function GET(request: Request) {
     if (!response.ok && (response.status === 403 || response.status === 401 || response.status === 502 || response.status === 503)) {
       // Retry with minimal headers — some CDNs block specific header combos
       const controller2 = new AbortController()
-      const timeout2 = setTimeout(() => controller2.abort(), 8_000)
+      const timeout2 = setTimeout(() => controller2.abort(), 5_000)
       try {
         const retryResponse = await fetch(decodedUrl, {
           signal: controller2.signal,
