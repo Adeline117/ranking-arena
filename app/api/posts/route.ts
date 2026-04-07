@@ -287,8 +287,17 @@ export async function POST(request: NextRequest) {
     const { title, content, poll_enabled, visibility, is_sensitive, content_warning } = parsed.data
     const group_id = parsed.data.group_id ?? undefined
 
-    // 获取用户 handle
-    const userHandle = await getUserHandle(user.id, user.email)
+    // 并行获取用户 handle + reputation data
+    const [userHandle, reputationResult] = await Promise.all([
+      getUserHandle(user.id, user.email),
+      supabase
+        .from('user_profiles')
+        .select('reputation_score, is_verified_trader')
+        .eq('id', user.id)
+        .maybeSingle()
+        .then(r => ({ score: r.data?.reputation_score ?? 0, verified: r.data?.is_verified_trader ?? false }))
+        .catch(() => ({ score: 0, verified: false })),
+    ])
 
     const post = await createPost(supabase, user.id, userHandle, {
       title,
@@ -298,6 +307,7 @@ export async function POST(request: NextRequest) {
       visibility: group_id ? 'group' : visibility,
       is_sensitive,
       content_warning: content_warning ?? undefined,
+      authorReputation: reputationResult,
     })
 
     // Extract and sync hashtags (fire-and-forget to not block response)
