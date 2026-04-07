@@ -19,6 +19,7 @@ import {
   ErrorCode,
 } from '@/lib/api'
 import { getPostComments, createComment, deleteComment, type CommentSortMode } from '@/lib/data/comments'
+import { createNotificationDeduped } from '@/lib/data/notifications'
 import { checkRateLimit, RateLimitPresets } from '@/lib/utils/rate-limit'
 import { socialFeatureGuard } from '@/lib/features'
 import { getUserHandle } from '@/lib/supabase/server'
@@ -145,21 +146,16 @@ export async function POST(request: NextRequest, context: RouteContext) {
         .single()
 
       if (postData?.author_id && postData.author_id !== user.id) {
-        supabase
-          .from('notifications')
-          .insert({
-            user_id: postData.author_id,
-            type: 'comment',
-            title: `${userHandle} commented on your post`,
-            message: content.slice(0, 100),
-            actor_id: user.id,
-            link: `/post/${id}`,
-            reference_id: id,
-            read: false,
-          })
-          .then(({ error: notifError }) => {
-            if (notifError) logger.warn('[comments] Post author notification failed:', notifError)
-          })
+        createNotificationDeduped(supabase, {
+          user_id: postData.author_id,
+          type: 'comment',
+          title: `${userHandle} commented on your post`,
+          message: content.slice(0, 100),
+          actor_id: user.id,
+          link: `/post/${id}`,
+          reference_id: id,
+          read: false,
+        }).catch(err => logger.warn('[comments] Post author notification failed:', err))
       }
 
       // If this is a reply, also notify the parent comment author
@@ -171,21 +167,16 @@ export async function POST(request: NextRequest, context: RouteContext) {
           .single()
 
         if (parentComment?.user_id && parentComment.user_id !== user.id && parentComment.user_id !== postData?.author_id) {
-          supabase
-            .from('notifications')
-            .insert({
-              user_id: parentComment.user_id,
-              type: 'post_reply',
-              title: `${userHandle} replied to your comment`,
-              message: content.slice(0, 100),
-              actor_id: user.id,
-              link: `/post/${id}`,
-              reference_id: id,
-              read: false,
-            })
-            .then(({ error: notifError }) => {
-              if (notifError) logger.warn('[comments] Parent comment notification failed:', notifError)
-            })
+          createNotificationDeduped(supabase, {
+            user_id: parentComment.user_id,
+            type: 'post_reply',
+            title: `${userHandle} replied to your comment`,
+            message: content.slice(0, 100),
+            actor_id: user.id,
+            link: `/post/${id}`,
+            reference_id: id,
+            read: false,
+          }).catch(err => logger.warn('[comments] Parent comment notification failed:', err))
         }
       }
     } catch (notifErr) {
