@@ -164,6 +164,24 @@ export function usePostComments({
     if (!requireAuth() || commentLikeLoading[commentId]) return
 
     setCommentLikeLoading(prev => ({ ...prev, [commentId]: true }))
+
+    // Optimistic update: toggle like immediately
+    const updateOptimistic = (comment: Comment): Comment => {
+      if (comment.id === commentId) {
+        const wasLiked = comment.user_liked
+        return {
+          ...comment,
+          user_liked: !wasLiked,
+          like_count: (comment.like_count || 0) + (wasLiked ? -1 : 1),
+          // If switching from dislike to like, clear dislike
+          ...(comment.user_disliked && !wasLiked ? { user_disliked: false, dislike_count: Math.max(0, (comment.dislike_count || 0) - 1) } : {}),
+        }
+      }
+      if (comment.replies) return { ...comment, replies: comment.replies.map(updateOptimistic) }
+      return comment
+    }
+    setComments(prev => prev.map(updateOptimistic))
+
     try {
       const { ok, status, data } = await authedFetch<{ success: boolean; error?: string; data?: { like_count: number; liked: boolean } }>(
         `/api/posts/${postId}/comments/like`,
@@ -173,8 +191,9 @@ export function usePostComments({
       )
 
       if (ok && data?.success) {
+        // Reconcile with server counts
         const d = data.data!
-        const updateCommentLike = (comment: Comment): Comment => {
+        const reconcile = (comment: Comment): Comment => {
           if (comment.id === commentId) {
             return {
               ...comment,
@@ -183,13 +202,12 @@ export function usePostComments({
               ...('dislike_count' in d ? { dislike_count: (d as Record<string, unknown>).dislike_count as number, user_disliked: (d as Record<string, unknown>).disliked as boolean } : {}),
             }
           }
-          if (comment.replies) {
-            return { ...comment, replies: comment.replies.map(updateCommentLike) }
-          }
+          if (comment.replies) return { ...comment, replies: comment.replies.map(reconcile) }
           return comment
         }
-        setComments(prev => prev.map(updateCommentLike))
+        setComments(prev => prev.map(reconcile))
       } else {
+        // Rollback: re-fetch to get correct state
         showToast(getHttpErrorMessage(status, data?.error || t('operationFailed')), status === 429 ? 'warning' : 'error')
       }
     } catch {
@@ -203,6 +221,24 @@ export function usePostComments({
     if (!requireAuth() || commentLikeLoading[commentId]) return
 
     setCommentLikeLoading(prev => ({ ...prev, [commentId]: true }))
+
+    // Optimistic update: toggle dislike immediately
+    const updateOptimistic = (comment: Comment): Comment => {
+      if (comment.id === commentId) {
+        const wasDisliked = comment.user_disliked
+        return {
+          ...comment,
+          user_disliked: !wasDisliked,
+          dislike_count: (comment.dislike_count || 0) + (wasDisliked ? -1 : 1),
+          // If switching from like to dislike, clear like
+          ...(comment.user_liked && !wasDisliked ? { user_liked: false, like_count: Math.max(0, (comment.like_count || 0) - 1) } : {}),
+        }
+      }
+      if (comment.replies) return { ...comment, replies: comment.replies.map(updateOptimistic) }
+      return comment
+    }
+    setComments(prev => prev.map(updateOptimistic))
+
     try {
       const { ok, status, data } = await authedFetch<{ success: boolean; error?: string; data?: { dislike_count: number; disliked: boolean; like_count: number; liked: boolean } }>(
         `/api/posts/${postId}/comments/like`,
@@ -212,7 +248,8 @@ export function usePostComments({
       )
 
       if (ok && data?.success) {
-        const updateComment = (comment: Comment): Comment => {
+        // Reconcile with server counts
+        const reconcile = (comment: Comment): Comment => {
           if (comment.id === commentId) {
             return {
               ...comment,
@@ -222,12 +259,10 @@ export function usePostComments({
               user_liked: data.data!.liked,
             }
           }
-          if (comment.replies) {
-            return { ...comment, replies: comment.replies.map(updateComment) }
-          }
+          if (comment.replies) return { ...comment, replies: comment.replies.map(reconcile) }
           return comment
         }
-        setComments(prev => prev.map(updateComment))
+        setComments(prev => prev.map(reconcile))
       } else {
         showToast(getHttpErrorMessage(status, data?.error || t('operationFailed')), status === 429 ? 'warning' : 'error')
       }
