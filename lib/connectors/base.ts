@@ -246,6 +246,12 @@ export abstract class BaseConnector implements PlatformConnector {
 
   abstract fetchTimeseries(traderKey: string): Promise<TimeseriesResult>
 
+  /**
+   * Normalize raw API data into the standard NormalizedTrader shape.
+   * MUST return fields defined in NormalizedTrader interface.
+   * Use normalizeRoiFormat() for ROI decimal/percentage detection.
+   * Use safeNum()/parsePercent() for safe numeric extraction.
+   */
   abstract normalize(raw: unknown): Record<string, unknown>
 
   // ============================================

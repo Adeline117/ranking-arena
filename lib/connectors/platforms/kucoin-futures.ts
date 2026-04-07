@@ -3,6 +3,7 @@
  */
 
 import { BaseConnector } from '../base'
+import { normalizeRoiFormat } from '../normalize-contract'
 import { warnValidate } from '../schemas'
 import { KucoinFuturesDetailResponseSchema } from './schemas'
 import type {
@@ -139,7 +140,7 @@ export class KucoinFuturesConnector extends BaseConnector {
   normalize(raw: Record<string, unknown>): Record<string, unknown> {
     // New POST API returns thirtyDayPnlRatio as decimal (2.80 = 280%)
     const rawRoi = this.num(raw.thirtyDayPnlRatio ?? raw.totalPnlRatio ?? raw.roi ?? raw.returnRate)
-    const roi = rawRoi != null ? (Math.abs(rawRoi) <= 10 ? rawRoi * 100 : rawRoi) : null
+    const roi = normalizeRoiFormat(rawRoi)
     return {
       trader_key: raw.leadConfigId || raw.uid,
       display_name: raw.nickName || raw.name,

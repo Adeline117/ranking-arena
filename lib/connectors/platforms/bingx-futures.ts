@@ -11,6 +11,7 @@
  */
 
 import { BaseConnector } from '../base'
+import { normalizeRoiFormat } from '../normalize-contract'
 import { warnValidate } from '../schemas'
 import {
   BingxFuturesDetailResponseSchema,
@@ -226,7 +227,7 @@ export class BingxFuturesConnector extends BaseConnector {
     const info = raw.traderInfoVo as Record<string, unknown> | undefined
 
     const rawRoi = this.num(raw.roi ?? raw.roiRate ?? raw.returnRate ?? raw.pnlRatio ?? raw.cumulativePnlRate7Days)
-    const roi = rawRoi != null ? (Math.abs(rawRoi) <= 1 ? rawRoi * 100 : rawRoi) : null
+    const roi = normalizeRoiFormat(rawRoi)
     const rawWr = this.num(raw.winRate)
     const winRate = rawWr != null ? (rawWr <= 1 ? rawWr * 100 : rawWr) : null
     const rawMdd = this.num(raw.maxDrawdown)

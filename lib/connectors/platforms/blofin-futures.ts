@@ -11,6 +11,7 @@
  */
 
 import { BaseConnector } from '../base'
+import { normalizeRoiFormat } from '../normalize-contract'
 import { warnValidate } from '../schemas'
 import { safeNumber, safeNonNeg, safeStr, safeMdd } from '../utils'
 import {
@@ -228,7 +229,7 @@ export class BlofinFuturesConnector extends BaseConnector {
   normalize(raw: Record<string, unknown>): Record<string, unknown> {
     // ROI: decimal ratio → percentage (0.27 → 27%)
     const rawRoi = safeNumber(raw.roi ?? raw.returnRate ?? raw.pnlRatio)
-    const roi = rawRoi != null ? (Math.abs(rawRoi) <= 1 ? rawRoi * 100 : rawRoi) : null
+    const roi = normalizeRoiFormat(rawRoi)
     // Win rate: decimal ratio → percentage
     const rawWr = safeNumber(raw.winRate)
     const winRate = rawWr != null ? (rawWr <= 1 ? rawWr * 100 : rawWr) : null
