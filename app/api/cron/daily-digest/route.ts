@@ -19,7 +19,7 @@ import { getSupportedInlinePlatforms } from '@/lib/cron/fetchers'
 import { env } from '@/lib/env'
 
 export const dynamic = 'force-dynamic'
-export const maxDuration = 60
+export const maxDuration = 120
 
 export async function GET(request: NextRequest) {
   const authHeader = request.headers.get('authorization')
@@ -53,15 +53,24 @@ export async function GET(request: NextRequest) {
     // causing all platforms to show 999.0h in the daily report.
     const latestByPlatform = new Map<string, string>()
     const freshnessChecks = activePlatforms.map(async (platform) => {
-      const { data } = await supabase
-        .from('trader_snapshots_v2')
-        .select('updated_at')
-        .eq('platform', platform)
-        .order('updated_at', { ascending: false })
-        .limit(1)
-        .maybeSingle()
-      if (data?.updated_at) {
-        latestByPlatform.set(platform, data.updated_at)
+      try {
+        const { data } = await Promise.race([
+          supabase
+            .from('trader_snapshots_v2')
+            .select('updated_at')
+            .eq('platform', platform)
+            .order('updated_at', { ascending: false })
+            .limit(1)
+            .maybeSingle(),
+          new Promise<never>((_, reject) =>
+            setTimeout(() => reject(new Error(`Freshness query timeout for ${platform}`)), 15_000)
+          ),
+        ])
+        if (data?.updated_at) {
+          latestByPlatform.set(platform, data.updated_at)
+        }
+      } catch {
+        // Individual platform timeout — skip it, will show as 999h
       }
     })
     await Promise.all(freshnessChecks)
