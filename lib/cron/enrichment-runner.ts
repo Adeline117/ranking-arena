@@ -657,8 +657,8 @@ const PER_TRADER_TIMEOUT_MS: Record<string, number> = {
   'bitget_futures': 18_000,  // 18s per trader - equity 15s + detail 10s run in parallel, 18s is generous
   'binance_futures': 20_000, // 20s per trader - increased from 12s: VPS proxy can be 2-5s under load (was timing out 10/10 during VPS outage)
   'dydx': 15_000, // 15s per trader - 3 APIs × 5-6s timeout + fallback buffer
-  'bybit': 45_000, // 45s per trader - VPS Playwright scraper: page load + WAF bypass + 2 API calls
-  'bybit_spot': 45_000, // 45s per trader - same VPS scraper as bybit (was missing, causing 15/15 timeouts)
+  'bybit': 75_000, // 75s per trader — VPS fetch has 60s timeout, was 45s which always fired first killing all requests (81% error rate)
+  'bybit_spot': 75_000, // 75s per trader — same VPS scraper as bybit
   'etoro': 20_000, // 20s per trader - CopySim + ranking cache + portfolio fetch
 }
 
