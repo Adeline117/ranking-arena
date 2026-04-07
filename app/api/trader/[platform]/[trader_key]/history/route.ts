@@ -73,13 +73,22 @@ export async function GET(
     }
     
     // 获取历史快照数据 from trader_snapshots_v2
-    const { data: snapshots, error } = await supabase
+    // Limit to 365 rows — after daily aggregation we only need ~90 data points
+    const queryPromise = supabase
       .from('trader_snapshots_v2')
       .select('created_at, roi_pct, pnl_usd, arena_score, win_rate, max_drawdown')
       .eq('platform', platform)
       .eq('trader_key', traderId)
       .gte('created_at', periods['90D'].toISOString())
       .order('created_at', { ascending: true })
+      .limit(365)
+
+    // 5-second timeout to prevent runaway queries
+    const timeoutPromise = new Promise<never>((_, reject) =>
+      setTimeout(() => reject(new Error('Snapshot query timed out after 5s')), 5000)
+    )
+
+    const { data: snapshots, error } = await Promise.race([queryPromise, timeoutPromise])
     
     if (error) {
       logger.error('Failed to fetch trader history:', error)
