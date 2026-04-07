@@ -35,10 +35,13 @@ async function main() {
   check('SSR ranking table container', html.includes('ssr-ranking-table'), null)
 
   // SSR has actual trader data (not just empty structure)
-  // Look for arena score numbers in SSR rows
-  const hasTraderData = (html.match(/ssr-score-val|ssr-roi-val/g) || []).length >= 5
-  check('SSR table has trader data (≥5 rows)', hasTraderData,
-    `found ${(html.match(/ssr-score-val|ssr-roi-val/g) || []).length} score/roi elements`)
+  // Check for trader links, ROI values, or row elements
+  const traderLinks = (html.match(/href="\/trader\//g) || []).length
+  const ssrRows = (html.match(/class="ssr-row/g) || []).length
+  const roiVals = (html.match(/ssr-roi-val/g) || []).length
+  const dataCount = Math.max(traderLinks, ssrRows, roiVals)
+  check('SSR table has trader data (≥5 rows)', dataCount >= 5,
+    `${traderLinks} trader links, ${ssrRows} ssr-rows, ${roiVals} roi values`)
 
   // TopNav present
   check('TopNav present', html.includes('ssr-topnav'), null)
