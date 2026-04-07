@@ -9,7 +9,8 @@
  *   group=b → bybit, bybit_spot, bitget_futures (every 3h, VPS scraper)
  *   group=c → hyperliquid, gmx, bitunix (every 4h, DEX + fast CEX)
  *   group=d → gains, htx_futures, bitfinex, coinex, binance_web3, okx_web3, gateio, btcc (every 6h)
- *   group=e → drift, jupiter_perps, aevo, web3_bot, toobit, xt, etoro, dydx (every 6h)
+ *   group=e1 → drift, aevo, web3_bot, toobit (every 8h)
+ *   group=e2 → jupiter_perps, xt, etoro (every 8h, +2min stagger)
  *   group=f → mexc, bingx, weex, woox, polymarket, copin (every 6h, VPS scraper slow)
  * Dead/blocked platforms:
  *   kucoin (copy trading discontinued 2026-03), bingx (empty data 2026-04), bingx_spot,
