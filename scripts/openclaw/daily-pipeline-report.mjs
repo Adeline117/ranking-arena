@@ -8,8 +8,14 @@
  *   node scripts/openclaw/daily-pipeline-report.mjs
  */
 
-const CRON_SECRET = process.env.CRON_SECRET || 'arena-cron-secret-2025'
-const API_URL = 'https://www.arenafi.org/api/health/pipeline'
+import path from 'path'
+import { fileURLToPath } from 'url'
+import { config as dotenvConfig } from 'dotenv'
+const __dirname = path.dirname(fileURLToPath(import.meta.url))
+dotenvConfig({ path: path.resolve(__dirname, '../../.env') })
+
+const CRON_SECRET = process.env.CRON_SECRET
+const API_URL = process.env.ARENA_URL ? `${process.env.ARENA_URL}/api/health/pipeline` : 'https://www.arenafi.org/api/health/pipeline'
 
 async function generateDailyReport() {
   try {
