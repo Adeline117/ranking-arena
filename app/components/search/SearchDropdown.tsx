@@ -158,6 +158,11 @@ export default function SearchDropdown({ open, query, onClose }: SearchDropdownP
               onClose={onClose}
               t={t}
             />
+          ) : !searchData && !searching ? (
+            <SearchEmptyState
+              onClose={onClose}
+              t={t}
+            />
           ) : searchData ? (
             <>
               {searchData.matchedExchange && (
