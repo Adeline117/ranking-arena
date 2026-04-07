@@ -70,6 +70,7 @@ const SwipeableView = dynamic(() => import('@/app/components/ui/SwipeableView'),
 const LinkedAccountTabs = dynamic(() => import('@/app/components/trader/LinkedAccountTabs'), { ssr: false })
 const AggregatedStats = dynamic(() => import('@/app/components/trader/AggregatedStats'), { ssr: false })
 const ExchangeLinksBar = dynamic(() => import('@/app/components/trader/ExchangeLinksBar'), { ssr: false })
+const AiAnalysisPanel = dynamic(() => import('@/app/components/trader/AiAnalysisPanel'), { ssr: false })
 
 /** @deprecated UI-specific. Will be replaced by UnifiedTrader adapter. */
 export interface UnregisteredTraderData {
@@ -528,6 +529,12 @@ export default function TraderProfileClient({ data, serverTraderData, claimedUse
           tradingStyle={(traderPerformance as Record<string, unknown> | null)?.tradingStyle as string ?? (traderPerformance as ExtendedPerformance | null)?.trading_style ?? null}
         />
         </div>
+
+        {/* AI Analysis Panel */}
+        <AiAnalysisPanel
+          handle={data.handle}
+          platform={data.source}
+        />
 
         {/* Rank sparkline — 7-day rank trajectory */}
         {rankSparklineData.length >= 2 && (
