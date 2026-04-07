@@ -142,6 +142,10 @@ export function useTraderData(options: UseTraderDataOptions = {}) {
 
   const { broadcast, on } = useTraderDataSync()
 
+  // Ref to access latest totalCount inside fetchPage without adding it as a dependency
+  // (adding state.totalCount to fetchPage's deps caused a re-fetch loop)
+  const totalCountRef = useRef(initialTotalCount)
+
   // Read time range preference from URL or localStorage
   useEffect(() => {
     const params = new URLSearchParams(window.location.search)
@@ -155,6 +159,9 @@ export function useTraderData(options: UseTraderDataOptions = {}) {
       dispatch({ type: 'SET_TIME_RANGE', timeRange: saved })
     }
   }, [])
+
+  // Keep totalCount ref in sync with state
+  useEffect(() => { totalCountRef.current = state.totalCount }, [state.totalCount])
 
   // Multi-tab sync
   useEffect(() => {
@@ -239,7 +246,7 @@ export function useTraderData(options: UseTraderDataOptions = {}) {
           traders,
           lastUpdated: data.lastUpdated || data.as_of || null,
           availableSources: data.availableSources || [],
-          totalCount: data.totalCount ?? state.totalCount,
+          totalCount: data.totalCount ?? totalCountRef.current,
         })
       })
 
@@ -259,7 +266,11 @@ export function useTraderData(options: UseTraderDataOptions = {}) {
     } finally {
       abortControllers.delete(cancelKey)
     }
-  }, [state.activeTimeRange, state.totalCount, broadcast])
+  }, [state.activeTimeRange, broadcast])
+  // NOTE: state.totalCount was deliberately REMOVED from this dependency array.
+  // Including it caused a re-fetch loop: each LOAD_SUCCESS updates totalCount →
+  // fetchPage gets new identity → useEffect re-runs → triggers another fetch → loop.
+  // totalCount is only used as a fallback default (line 242) which is safe to be stale.
 
   // Seed cache with initial data
   const initialDataSeeded = useRef(false)
