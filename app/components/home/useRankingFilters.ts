@@ -384,14 +384,14 @@ export function useRankingFilters({ traders, activeTimeRange, totalCount, catego
     }
   }
 
-  // Check for active filters
-  const hasActiveFilters = Object.keys(filterConfig).some(key => {
+  // Check for active filters (memoized to avoid recomputation on every render)
+  const hasActiveFilters = useMemo(() => Object.keys(filterConfig).some(key => {
     const value = filterConfig[key as keyof FilterConfig]
     if (Array.isArray(value)) return value.length > 0
     return value != null
-  })
+  }), [filterConfig])
 
-  const source = traders.length > 0 ? traders[0].source : 'all'
+  const source = useMemo(() => traders.length > 0 ? traders[0].source : 'all', [traders])
 
   // Format last updated time
   const formatLastUpdated = useCallback((dateStr: string | null | undefined) => {
