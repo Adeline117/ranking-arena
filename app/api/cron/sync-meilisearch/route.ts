@@ -4,6 +4,11 @@
  *
  * Syncs leaderboard_ranks → Meilisearch traders index for instant search.
  * Syncs all 3 seasons (7D, 30D, 90D) with compound document IDs.
+ *
+ * Resilience:
+ * - Per-window try/catch: one window's timeout doesn't kill the whole sync
+ * - Time budget: stops processing after 90s to stay within maxDuration
+ * - Reduced page size (500) and page limit (10) to avoid statement_timeout
  */
 
 import { NextRequest, NextResponse } from 'next/server'
@@ -24,6 +29,9 @@ const MEILI_URL = process.env.MEILISEARCH_URL
 const MEILI_KEY = process.env.MEILISEARCH_ADMIN_KEY
 
 const SEASONS = ['7D', '30D', '90D'] as const
+
+/** Time budget: stop syncing new seasons after this many ms to stay within maxDuration */
+const TIME_BUDGET_MS = 90_000 // 90s — leaves 30s buffer for response + cleanup
 
 async function meiliRequest(path: string, method: string, body?: unknown) {
   if (!MEILI_URL || !MEILI_KEY) throw new Error('MEILISEARCH_URL or MEILISEARCH_ADMIN_KEY not configured')
@@ -77,90 +85,138 @@ export async function GET(request: NextRequest) {
 
     let totalSynced = 0
     const seasonCounts: Record<string, number> = {}
+    const seasonErrors: Record<string, string> = {}
 
     for (const season of SEASONS) {
-      // Paginated fetch from leaderboard_ranks (incremental: only changed since lastSync)
-      const allData: Record<string, unknown>[] = []
-      let offset = 0
-      const pageSize = 1000
-      const MAX_PAGES = 20  // 20K traders per season is plenty for search
-      let pageCount = 0
-      while (true) {
-        if (++pageCount > MAX_PAGES) {
-          logger.warn(`Reached MAX_PAGES (${MAX_PAGES}) for season ${season}, breaking`)
-          break
-        }
-        // Uses idx_leaderboard_ranks_sync: (season_id, computed_at DESC)
-        // WHERE arena_score > 0 AND (is_outlier IS NULL OR is_outlier = false)
-        // The is_outlier filter is baked into the partial index, no need for .or() in query.
-        let query = supabase
-          .from('leaderboard_ranks')
-          .select('source, source_trader_id, handle, avatar_url, roi, pnl, arena_score, win_rate, max_drawdown, followers, rank, trader_type, computed_at')
-          .eq('season_id', season)
-          .gt('arena_score', 0)
-          .eq('is_outlier', false)  // All 44K active rows are false; .or() defeats index
-
-        // Incremental: only fetch traders updated since last sync
-        if (!isFull) {
-          query = query.gte('computed_at', lastSync)
-        }
-
-        const { data, error } = await query
-          .order('computed_at', { ascending: false })
-          .range(offset, offset + pageSize - 1)
-
-        if (error) throw new Error(`Supabase query failed (${season}): ${error.message}`)
-        if (!data || data.length === 0) break
-        allData.push(...data)
-        if (data.length < pageSize) break
-        offset += pageSize
+      // Time budget check: stop starting new seasons if we're running low
+      const elapsed = Date.now() - startTime
+      if (elapsed > TIME_BUDGET_MS) {
+        logger.warn(`Time budget exhausted (${elapsed}ms > ${TIME_BUDGET_MS}ms), skipping season ${season}`)
+        seasonErrors[season] = 'skipped: time budget exhausted'
+        continue
       }
 
-      // Map to Meilisearch documents with compound ID including season
-      const traders = allData.map((r) => ({
-        id: `${String(r.source)}--${String(r.source_trader_id || '').replace(/[^a-zA-Z0-9_-]/g, '_')}--${season}`,
-        handle: String(r.handle || r.source_trader_id || ''),
-        platform: String(r.source || ''),
-        platform_name: EXCHANGE_CONFIG[r.source as keyof typeof EXCHANGE_CONFIG]?.name || String(r.source || ''),
-        season_id: season,
-        roi: Number(r.roi ?? 0),
-        pnl: Number(r.pnl ?? 0),
-        arena_score: Number(r.arena_score ?? 0),
-        win_rate: r.win_rate != null ? Number(r.win_rate) : null,
-        max_drawdown: r.max_drawdown != null ? Number(r.max_drawdown) : null,
-        followers: r.followers != null ? Number(r.followers) : null,
-        rank: Number(r.rank ?? 0),
-        trader_type: r.trader_type ? String(r.trader_type) : null,
-        avatar_url: r.avatar_url ? String(r.avatar_url) : null,
-        updated_at: String(r.computed_at || new Date().toISOString()),
-      }))
+      try {
+        // Paginated fetch from leaderboard_ranks (incremental: only changed since lastSync)
+        const allData: Record<string, unknown>[] = []
+        let offset = 0
+        const pageSize = 500  // Reduced from 1000 to avoid statement_timeout on large windows
+        const MAX_PAGES = 10  // 5K traders per season is plenty for search (reduced from 20)
+        let pageCount = 0
+        while (true) {
+          // Check time budget before each page fetch
+          if (Date.now() - startTime > TIME_BUDGET_MS) {
+            logger.warn(`Time budget hit during ${season} pagination at page ${pageCount}, using ${allData.length} traders fetched so far`)
+            break
+          }
 
-      // Batch upload to Meilisearch
-      for (let i = 0; i < traders.length; i += 5000) {
-        const chunk = traders.slice(i, i + 5000)
-        await meiliRequest('/indexes/traders/documents', 'POST', chunk)
+          if (++pageCount > MAX_PAGES) {
+            logger.warn(`Reached MAX_PAGES (${MAX_PAGES}) for season ${season}, breaking`)
+            break
+          }
+          // Uses idx_leaderboard_ranks_sync: (season_id, computed_at DESC)
+          // WHERE arena_score > 0 AND (is_outlier IS NULL OR is_outlier = false)
+          // The is_outlier filter is baked into the partial index, no need for .or() in query.
+          let query = supabase
+            .from('leaderboard_ranks')
+            .select('source, source_trader_id, handle, avatar_url, roi, pnl, arena_score, win_rate, max_drawdown, followers, rank, trader_type, computed_at')
+            .eq('season_id', season)
+            .gt('arena_score', 0)
+            .eq('is_outlier', false)  // All 44K active rows are false; .or() defeats index
+
+          // Incremental: only fetch traders updated since last sync
+          if (!isFull) {
+            query = query.gte('computed_at', lastSync)
+          }
+
+          const { data, error } = await query
+            .order('computed_at', { ascending: false })
+            .range(offset, offset + pageSize - 1)
+
+          if (error) {
+            // If statement timeout, log and break out of this season (don't crash the whole sync)
+            if (error.message.includes('statement timeout') || error.message.includes('canceling statement')) {
+              logger.warn(`Statement timeout on season ${season} page ${pageCount}, using ${allData.length} traders fetched so far`)
+              break
+            }
+            throw new Error(`Supabase query failed (${season}): ${error.message}`)
+          }
+          if (!data || data.length === 0) break
+          allData.push(...data)
+          if (data.length < pageSize) break
+          offset += pageSize
+        }
+
+        // Map to Meilisearch documents with compound ID including season
+        const traders = allData.map((r) => ({
+          id: `${String(r.source)}--${String(r.source_trader_id || '').replace(/[^a-zA-Z0-9_-]/g, '_')}--${season}`,
+          handle: String(r.handle || r.source_trader_id || ''),
+          platform: String(r.source || ''),
+          platform_name: EXCHANGE_CONFIG[r.source as keyof typeof EXCHANGE_CONFIG]?.name || String(r.source || ''),
+          season_id: season,
+          roi: Number(r.roi ?? 0),
+          pnl: Number(r.pnl ?? 0),
+          arena_score: Number(r.arena_score ?? 0),
+          win_rate: r.win_rate != null ? Number(r.win_rate) : null,
+          max_drawdown: r.max_drawdown != null ? Number(r.max_drawdown) : null,
+          followers: r.followers != null ? Number(r.followers) : null,
+          rank: Number(r.rank ?? 0),
+          trader_type: r.trader_type ? String(r.trader_type) : null,
+          avatar_url: r.avatar_url ? String(r.avatar_url) : null,
+          updated_at: String(r.computed_at || new Date().toISOString()),
+        }))
+
+        // Batch upload to Meilisearch
+        for (let i = 0; i < traders.length; i += 5000) {
+          const chunk = traders.slice(i, i + 5000)
+          await meiliRequest('/indexes/traders/documents', 'POST', chunk)
+        }
+
+        seasonCounts[season] = traders.length
+        totalSynced += traders.length
+      } catch (seasonErr: unknown) {
+        const msg = seasonErr instanceof Error ? seasonErr.message : String(seasonErr)
+        logger.error(`Meilisearch sync failed for season ${season}: ${msg}`)
+        seasonErrors[season] = msg
+        // Continue to next season — don't let one window's failure kill the whole sync
       }
-
-      seasonCounts[season] = traders.length
-      totalSynced += traders.length
     }
 
     // If no changes found (incremental sync), return early
     if (totalSynced === 0 && !isFull) {
       const elapsed = Date.now() - startTime
       logger.info(`Meilisearch incremental sync: no changes since ${lastSync} (${elapsed}ms)`)
-      await plog.success(0, { elapsed_ms: elapsed, message: 'no changes' })
-      return NextResponse.json({ ok: true, traders: 0, message: 'no changes', elapsed_ms: elapsed })
+      await plog.success(0, { elapsed_ms: elapsed, message: 'no changes', errors: seasonErrors })
+      return NextResponse.json({ ok: true, traders: 0, message: 'no changes', elapsed_ms: elapsed, errors: seasonErrors })
     }
 
     // Update last sync timestamp in DB (persistent, no TTL expiry risk)
-    await PipelineState.set(LAST_SYNC_KEY, syncStartTime)
+    // Only update if at least one season succeeded
+    if (totalSynced > 0) {
+      await PipelineState.set(LAST_SYNC_KEY, syncStartTime)
+    }
 
     const elapsed = Date.now() - startTime
-    logger.info(`Meilisearch synced: ${totalSynced} traders (${JSON.stringify(seasonCounts)}) in ${elapsed}ms${isFull ? ' [full]' : ' [incremental]'}`)
-    await plog.success(totalSynced, { elapsed_ms: elapsed, seasons: seasonCounts, mode: isFull ? 'full' : 'incremental' })
+    const hasErrors = Object.keys(seasonErrors).length > 0
+    logger.info(`Meilisearch synced: ${totalSynced} traders (${JSON.stringify(seasonCounts)}) in ${elapsed}ms${isFull ? ' [full]' : ' [incremental]'}${hasErrors ? ` errors: ${JSON.stringify(seasonErrors)}` : ''}`)
 
-    return NextResponse.json({ ok: true, traders: totalSynced, seasons: seasonCounts, elapsed_ms: elapsed, mode: isFull ? 'full' : 'incremental' })
+    if (hasErrors && totalSynced > 0) {
+      // Partial success — log as success with warnings
+      await plog.success(totalSynced, { elapsed_ms: elapsed, seasons: seasonCounts, errors: seasonErrors, mode: isFull ? 'full' : 'incremental' })
+    } else if (hasErrors) {
+      await plog.error(new Error(`All seasons failed: ${JSON.stringify(seasonErrors)}`), { elapsed_ms: elapsed, seasons: seasonCounts })
+    } else {
+      await plog.success(totalSynced, { elapsed_ms: elapsed, seasons: seasonCounts, mode: isFull ? 'full' : 'incremental' })
+    }
+
+    return NextResponse.json({
+      ok: !hasErrors || totalSynced > 0,
+      traders: totalSynced,
+      seasons: seasonCounts,
+      errors: hasErrors ? seasonErrors : undefined,
+      elapsed_ms: elapsed,
+      mode: isFull ? 'full' : 'incremental',
+    })
   } catch (err: unknown) {
     const errorMessage = err instanceof Error ? err.message : String(err)
     logger.error('Meilisearch sync failed:', err)
