@@ -92,11 +92,14 @@ export async function POST(
         return NextResponse.json({ error: 'Failed to join' }, { status: 500 })
       }
 
-      await supabase.rpc('increment_member_count', { p_group_id: groupId, p_delta: 1 })
+      // Increment count + notify owner (fire-and-forget, don't block response)
+      supabase.rpc('increment_member_count', { p_group_id: groupId, p_delta: 1 })
+        .then(({ error: rpcErr }) => {
+          if (rpcErr) logger.error('increment_member_count failed:', rpcErr)
+        })
 
-      // Notify owner
       if (group.created_by && group.created_by !== user.id) {
-        await supabase.from('notifications').insert({
+        supabase.from('notifications').insert({
           user_id: group.created_by,
           type: 'system',
           title: 'New member joined',
@@ -104,6 +107,8 @@ export async function POST(
           link: `/groups/${groupId}`,
           actor_id: user.id,
           reference_id: groupId,
+        }).then(({ error: notifErr }) => {
+          if (notifErr) logger.warn('Join notification failed:', notifErr)
         })
       }
 
@@ -127,7 +132,11 @@ export async function POST(
         return NextResponse.json({ error: 'Failed to leave' }, { status: 500 })
       }
 
-      await supabase.rpc('increment_member_count', { p_group_id: groupId, p_delta: -1 })
+      // Decrement count (fire-and-forget)
+      supabase.rpc('increment_member_count', { p_group_id: groupId, p_delta: -1 })
+        .then(({ error: rpcErr }) => {
+          if (rpcErr) logger.error('decrement_member_count failed:', rpcErr)
+        })
 
       return NextResponse.json({ success: true, action: 'left' })
     }
