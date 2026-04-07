@@ -65,49 +65,29 @@ async function handlePopularTokens(): Promise<NextResponse> {
       'rankings:popular-tokens',
       async () => {
         const supabase = getSupabaseAdmin()
-        const cutoff = new Date()
-        cutoff.setDate(cutoff.getDate() - 90)
 
-        // Fetch recent positions with symbols
-        const { data, error } = await supabase
-          .from('trader_position_history')
-          .select('symbol, source, source_trader_id, pnl_usd')
-          .gte('close_time', cutoff.toISOString())
-          .not('pnl_usd', 'is', null)
-          .limit(50000)
+        // Use AbortController with 10s timeout
+        const controller = new AbortController()
+        const timeout = setTimeout(() => controller.abort(), 10_000)
 
-        if (error) throw new Error(error.message)
-        if (!data || data.length === 0) return []
+        try {
+          // Use SQL aggregate via RPC — avoids fetching 50K rows into JS memory
+          const { data, error } = await supabase
+            .rpc('get_popular_tokens', { lookback_days: 90, max_tokens: 50 })
+            .abortSignal(controller.signal)
 
-        // Aggregate by base token
-        const tokenMap = new Map<string, {
-          tradeCount: number
-          traders: Set<string>
-          totalPnl: number
-        }>()
+          if (error) throw new Error(error.message)
+          if (!data || data.length === 0) return []
 
-        for (const row of data as Array<{ symbol: string; source: string; source_trader_id: string; pnl_usd: number | null }>) {
-          const baseToken = extractBaseToken(row.symbol)
-          if (!baseToken || baseToken.length > 10) continue
-
-          if (!tokenMap.has(baseToken)) {
-            tokenMap.set(baseToken, { tradeCount: 0, traders: new Set(), totalPnl: 0 })
-          }
-          const acc = tokenMap.get(baseToken)!
-          acc.tradeCount++
-          acc.traders.add(`${row.source}:${row.source_trader_id}`)
-          acc.totalPnl += Number(row.pnl_usd) || 0
-        }
-
-        return [...tokenMap.entries()]
-          .map(([token, acc]) => ({
-            token,
-            trade_count: acc.tradeCount,
-            trader_count: acc.traders.size,
-            total_pnl: Math.round(acc.totalPnl * 100) / 100,
+          return (data as Array<{ token: string; trade_count: number; trader_count: number; total_pnl: number }>).map(row => ({
+            token: row.token,
+            trade_count: Number(row.trade_count),
+            trader_count: Number(row.trader_count),
+            total_pnl: Number(row.total_pnl),
           }))
-          .sort((a, b) => b.trade_count - a.trade_count)
-          .slice(0, 50) // Top 50 tokens
+        } finally {
+          clearTimeout(timeout)
+        }
       },
       'cold',
       ['rankings', 'popular-tokens']
