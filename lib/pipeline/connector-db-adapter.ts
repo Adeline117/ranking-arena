@@ -13,6 +13,7 @@
  */
 
 import type { SupabaseClient } from '@supabase/supabase-js'
+import { VALIDATION_BOUNDS as VB } from './types'
 import type { PlatformConnector } from '@/lib/connectors/types'
 import type { DiscoverResult } from '@/lib/types/leaderboard'
 import {
@@ -123,10 +124,8 @@ export async function writeDiscoverResult(
       const rawSharpe = safeNum(normalized.sharpe_ratio)
 
       // --- Boundary validation with warning logging ---
-      // ROI: reject values outside [-10000%, 100000%] (null out, not clamp — bad data)
-      // Negative ROI can exceed -100% with leverage (e.g., -8393% from liquidation + re-deposit).
-      // Previously capped at -100%, which silently discarded real data.
-      const roi = validateBound(rawRoi, -10000, 100000, 'roi', platform, trader.trader_key, boundaryWarnings)
+      // Bounds imported from VALIDATION_BOUNDS (single source of truth in types.ts)
+      const roi = validateBound(rawRoi, VB.roi_pct.min, VB.roi_pct.max, 'roi', platform, trader.trader_key, boundaryWarnings)
       if (roi === BOUNDARY_VIOLATED) { boundaryWarnings++; }
       const roiVal = roi === BOUNDARY_VIOLATED ? null : roi
 
@@ -137,17 +136,17 @@ export async function writeDiscoverResult(
       const pnl = rawPnl
 
       // Win Rate: must be 0-100%, null out if outside
-      const winRate = validateBound(rawWinRate, 0, 100, 'win_rate', platform, trader.trader_key, boundaryWarnings)
+      const winRate = validateBound(rawWinRate, VB.win_rate_pct.min, VB.win_rate_pct.max, 'win_rate', platform, trader.trader_key, boundaryWarnings)
       if (winRate === BOUNDARY_VIOLATED) { boundaryWarnings++; }
       const winRateVal = winRate === BOUNDARY_VIOLATED ? null : winRate
 
       // Max Drawdown: must be 0-100%, null out if outside
-      const mdd = validateBound(rawMaxDrawdown, 0, 100, 'max_drawdown', platform, trader.trader_key, boundaryWarnings)
+      const mdd = validateBound(rawMaxDrawdown, VB.max_drawdown_pct.min, VB.max_drawdown_pct.max, 'max_drawdown', platform, trader.trader_key, boundaryWarnings)
       if (mdd === BOUNDARY_VIOLATED) { boundaryWarnings++; }
       const maxDrawdown = mdd === BOUNDARY_VIOLATED ? null : mdd
 
       // Sharpe Ratio: reject if |sharpe| > 20 (unreasonable)
-      const sharpe = validateBound(rawSharpe, -20, 20, 'sharpe_ratio', platform, trader.trader_key, boundaryWarnings)
+      const sharpe = validateBound(rawSharpe, VB.sharpe_ratio.min, VB.sharpe_ratio.max, 'sharpe_ratio', platform, trader.trader_key, boundaryWarnings)
       if (sharpe === BOUNDARY_VIOLATED) { boundaryWarnings++; }
       const sharpeRatio = sharpe === BOUNDARY_VIOLATED ? null : sharpe
 

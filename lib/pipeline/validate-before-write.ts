@@ -16,6 +16,7 @@
  */
 
 import { logger } from '@/lib/logger'
+import { VALIDATION_BOUNDS } from './types'
 
 // ═══════════════════════════════════════════════════════
 // Types
@@ -37,23 +38,25 @@ export interface ValidationResult<T> {
 }
 
 // ═══════════════════════════════════════════════════════
-// Validation Rules
+// Validation Rules — derived from VALIDATION_BOUNDS (single source of truth)
 // ═══════════════════════════════════════════════════════
 
+const B = VALIDATION_BOUNDS
 const RULES = {
-  ROI_MIN: -10000,
-  ROI_MAX: 10000,
-  PNL_MIN: -10_000_000,
-  PNL_MAX: 100_000_000,
+  ROI_MIN: B.roi_pct.min,
+  ROI_MAX: B.roi_pct.max,
+  PNL_MIN: B.pnl_usd.min,
+  PNL_MAX: B.pnl_usd.max,
   PNL_WHALE_EXEMPT_PLATFORMS: new Set(['hyperliquid', 'gmx', 'dydx', 'drift']),
-  WIN_RATE_MIN: 0,
-  WIN_RATE_MAX: 100,
-  MDD_MIN: 0,
-  MDD_MAX: 100,
-  SHARPE_MIN: -10,
-  SHARPE_MAX: 10,
-  // Spike detection: if value changed by more than this factor, flag it
-  SPIKE_THRESHOLD_PCT: 1000,
+  PNL_WHALE_MAX: B.pnl_usd_dex_whale.max,
+  WIN_RATE_MIN: B.win_rate_pct.min,
+  WIN_RATE_MAX: B.win_rate_pct.max,
+  MDD_MIN: B.max_drawdown_pct.min,
+  MDD_MAX: B.max_drawdown_pct.max,
+  SHARPE_MIN: B.sharpe_ratio.min,
+  SHARPE_MAX: B.sharpe_ratio.max,
+  ARENA_SCORE_MIN: B.arena_score.min,
+  ARENA_SCORE_MAX: B.arena_score.max,
 } as const
 
 // ═══════════════════════════════════════════════════════
@@ -122,7 +125,7 @@ function validateRow(
   const pnl = getField(row, 'pnl_usd', 'pnl')
   if (pnl != null) {
     const isWhaleExempt = RULES.PNL_WHALE_EXEMPT_PLATFORMS.has(platform)
-    const pnlMax = isWhaleExempt ? RULES.PNL_MAX * 10 : RULES.PNL_MAX // 1B for DEX whales
+    const pnlMax = isWhaleExempt ? RULES.PNL_WHALE_MAX : RULES.PNL_MAX
     if (pnl < RULES.PNL_MIN || pnl > pnlMax) {
       fail('pnl', pnl, `PnL $${pnl} outside [${RULES.PNL_MIN}, ${pnlMax}]`)
     }

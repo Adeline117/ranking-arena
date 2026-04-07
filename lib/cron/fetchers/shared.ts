@@ -10,7 +10,7 @@ import { dataLogger, fireAndForget } from '@/lib/utils/logger'
 import { SOURCE_TYPE_MAP } from '@/lib/constants/exchanges'
 import { syncToClickHouse } from '@/lib/analytics/dual-write'
 import { retryUpsert } from '@/lib/utils/supabase-retry'
-import { validateSnapshot } from '@/lib/pipeline/validate-snapshot'
+import { sanitizeRow } from '@/lib/pipeline/validate-before-write'
 
 /** Resolve market_type from SOURCE_TYPE_MAP for trader_profiles_v2 */
 
@@ -405,24 +405,25 @@ export async function upsertTraders(
     dataLogger.warn(`[upsert] Deduped ${validated.length - deduped.length} duplicate traders for ${validated[0]?.source}`)
   }
 
-  // Validate snapshots before DB writes — catch ROI/PnL confusion, extreme outliers, missing fields
+  // Validate snapshots before DB writes — uses unified gatekeeper
   let snapshotRejected = 0
   const snapshotValidated = deduped.filter(t => {
-    const { valid, reasons } = validateSnapshot({
+    const { rejected } = sanitizeRow({
       platform: t.source,
       trader_key: t.source_trader_id,
       roi_pct: t.roi,
       pnl_usd: t.pnl,
       win_rate: t.win_rate,
       max_drawdown: t.max_drawdown,
-    })
-    if (!valid) {
+    } as Record<string, unknown>, 'trader_snapshots_v2')
+    const hasRequiredFieldError = rejected.some(r => r.field === 'platform' || r.field === 'trader_key')
+    if (hasRequiredFieldError) {
       snapshotRejected++
       if (snapshotRejected <= 10) {
-        dataLogger.warn(`[upsert] Skipping invalid snapshot for ${t.source}/${t.source_trader_id}: ${reasons.join(', ')}`)
+        dataLogger.warn(`[upsert] Skipping invalid snapshot for ${t.source}/${t.source_trader_id}: ${rejected.map(r => r.reason).join(', ')}`)
       }
     }
-    return valid
+    return !hasRequiredFieldError
   })
   if (snapshotRejected > 0) {
     dataLogger.warn(`[upsert] Snapshot validation rejected ${snapshotRejected}/${deduped.length} traders for ${deduped[0]?.source}`)
