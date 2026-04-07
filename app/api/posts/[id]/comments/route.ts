@@ -100,13 +100,20 @@ export async function POST(request: NextRequest, context: RouteContext) {
     const user = await requireAuth(request)
     const supabase = getSupabaseAdmin()
 
-    // Check if the post belongs to a group and if user is muted
-    const { data: post } = await supabase
-      .from('posts')
-      .select('group_id')
-      .eq('id', id)
-      .single()
+    // Parse body and check mute status in parallel
+    const [body, { data: post }] = await Promise.all([
+      request.json(),
+      supabase.from('posts').select('group_id').eq('id', id).single(),
+    ])
 
+    const parsed = CreateCommentSchema.safeParse(body)
+    if (!parsed.success) {
+      throw ApiError.validation('Invalid input', { errors: parsed.error.flatten() })
+    }
+    const { content } = parsed.data
+    const parent_id = parsed.data.parent_id ?? undefined
+
+    // Check if user is muted in group
     if (post?.group_id) {
       const { data: membership } = await supabase
         .from('group_members')
@@ -119,14 +126,6 @@ export async function POST(request: NextRequest, context: RouteContext) {
         throw ApiError.forbidden('You have been muted')
       }
     }
-
-    const body = await request.json()
-    const parsed = CreateCommentSchema.safeParse(body)
-    if (!parsed.success) {
-      throw ApiError.validation('Invalid input', { errors: parsed.error.flatten() })
-    }
-    const { content } = parsed.data
-    const parent_id = parsed.data.parent_id ?? undefined
 
     const comment = await createComment(supabase, user.id, {
       post_id: id,
