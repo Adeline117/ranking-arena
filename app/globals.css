@@ -2480,25 +2480,16 @@ input[type="search"]::-webkit-search-cancel-button:hover {
 }
 
 /* ============================================
-   ABSOLUTE NO HORIZONTAL SCROLL - Nuclear option
+   NO HORIZONTAL SCROLL — Targeted approach
    ============================================ */
 
-/* Every element must respect viewport width */
-*, *::before, *::after {
+/* Apply max-width only to layout containers, not universally.
+   The previous `*, *::before, *::after { max-width: 100vw }` rule
+   forced the browser to evaluate layout constraints on EVERY element
+   (thousands in the ranking table), severely degrading scroll/render perf. */
+html, body, main, #main-content {
   max-width: 100vw;
-}
-
-/* Except elements that are explicitly scrollable containers */
-.swipe-container *,
-.tabs-scroll *,
-[data-allow-overflow] *,
-table *,
-thead *,
-tbody *,
-tr *,
-td *,
-th * {
-  max-width: none;
+  overflow-x: hidden;
 }
 
 @media (max-width: 767px) {
