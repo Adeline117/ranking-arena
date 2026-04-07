@@ -2,10 +2,10 @@
 # P0 batch fix: fix all constraint violations in April partition
 # Runs 500-row batches to stay within 90s timeout
 
-set -e
 source /Users/adelinewen/ranking-arena/.env.local
 DIRECT_URL=$(echo "$DATABASE_URL" | sed 's/:6543/:5432/')
 BATCH=500
+MAX_RETRIES=3
 
 fix_column() {
   local label="$1"
@@ -14,6 +14,7 @@ fix_column() {
   local total=0
 
   echo "=== Fixing: $label ==="
+  local retries=0
   while true; do
     result=$(psql "$DIRECT_URL" -t -c "
       SET statement_timeout = '90s';
@@ -28,8 +29,22 @@ fix_column() {
       );
     " 2>&1)
 
-    # Extract row count from "UPDATE N"
-    count=$(echo "$result" | grep -oP 'UPDATE \K\d+' || echo "0")
+    # Check for errors
+    if echo "$result" | grep -q "ERROR"; then
+      retries=$((retries + 1))
+      if [ "$retries" -ge "$MAX_RETRIES" ]; then
+        echo "  ERROR after $MAX_RETRIES retries: $result"
+        break
+      fi
+      echo "  Retry $retries: $(echo "$result" | grep ERROR | head -1)"
+      sleep 2
+      continue
+    fi
+    retries=0
+
+    # Extract row count from "UPDATE N" (macOS-compatible)
+    count=$(echo "$result" | sed -n 's/.*UPDATE \([0-9]*\).*/\1/p' | tail -1)
+    count=${count:-0}
 
     if [ "$count" = "0" ] || [ -z "$count" ]; then
       echo "  Done. Total: $total"
