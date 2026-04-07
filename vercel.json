@@ -10,7 +10,7 @@
     },
     {
       "path": "/api/cron/sync-meilisearch",
-      "schedule": "5,35 * * * *"
+      "schedule": "8,38 * * * *"
     },
     {
       "path": "/api/cron/daily-digest",
@@ -22,23 +22,23 @@
     },
     {
       "path": "/api/cron/flash-news-fetch",
-      "schedule": "15,45 * * * *"
+      "schedule": "18,48 * * * *"
     },
     {
       "path": "/api/cron/check-data-freshness",
-      "schedule": "3 */3 * * *"
+      "schedule": "13 */3 * * *"
     },
     {
       "path": "/api/cron/verify-fetchers",
-      "schedule": "30 */3 * * *"
+      "schedule": "43 */3 * * *"
     },
     {
       "path": "/api/cron/meta-monitor",
-      "schedule": "10 * * * *"
+      "schedule": "23 * * * *"
     },
     {
       "path": "/api/cron/fetch-details?tier=hot&concurrency=20&limit=50",
-      "schedule": "*/30 * * * *"
+      "schedule": "7,37 * * * *"
     },
     {
       "path": "/api/cron/fetch-details?tier=normal&concurrency=10&limit=200",
@@ -46,15 +46,15 @@
     },
     {
       "path": "/api/cron/batch-5min",
-      "schedule": "*/5 * * * *"
+      "schedule": "3,13,23,33,43,53 * * * *"
     },
     {
       "path": "/api/cron/warm-cache",
-      "schedule": "1,16,31,46 * * * *"
+      "schedule": "4,19,34,49 * * * *"
     },
     {
       "path": "/api/cron/pipeline-evaluate",
-      "schedule": "30 */6 * * *"
+      "schedule": "47 */6 * * *"
     },
     {
       "path": "/api/cron/cleanup-deleted-accounts",
@@ -62,24 +62,23 @@
     },
     {
       "path": "/api/cron/cleanup-stuck-logs",
-      "schedule": "7 * * * *"
+      "schedule": "27 * * * *"
     },
     {
       "path": "/api/cron/batch-discover",
       "schedule": "56 */6 * * *"
     },
-
     {
       "path": "/api/cron/subscription-expiry",
-      "schedule": "4 0 * * *"
+      "schedule": "9 0 * * *"
     },
     {
       "path": "/api/cron/fetch-market-data?type=prices",
-      "schedule": "10 */1 * * *"
+      "schedule": "14 */1 * * *"
     },
     {
       "path": "/api/cron/calculate-advanced-metrics",
-      "schedule": "35 */4 * * *"
+      "schedule": "50 */4 * * *"
     },
     {
       "path": "/api/cron/aggregate-daily-snapshots",
@@ -91,7 +90,7 @@
     },
     {
       "path": "/api/cron/cleanup-data",
-      "schedule": "0 1 * * *"
+      "schedule": "6 1 * * *"
     },
     {
       "path": "/api/cron/snapshot-ranks",
@@ -99,17 +98,16 @@
     },
     {
       "path": "/api/cron/generate-activities",
-      "schedule": "35 */6 * * *"
+      "schedule": "41 */6 * * *"
     },
     {
       "path": "/api/cron/fetch-funding-rates",
-      "schedule": "40 */4 * * *"
+      "schedule": "26 */4 * * *"
     },
     {
       "path": "/api/cron/fetch-open-interest",
-      "schedule": "5 */2 * * *"
+      "schedule": "16 */2 * * *"
     },
-
     {
       "path": "/api/cron/batch-fetch-traders?group=a1&windows=30d",
       "schedule": "2 */2 * * *"
@@ -120,7 +118,7 @@
     },
     {
       "path": "/api/cron/batch-fetch-traders?group=a2",
-      "schedule": "4 */2 * * *"
+      "schedule": "5 */2 * * *"
     },
     {
       "path": "/api/cron/batch-fetch-traders?group=b1",
@@ -136,11 +134,11 @@
     },
     {
       "path": "/api/cron/batch-fetch-traders?group=c",
-      "schedule": "4 */4 * * *"
+      "schedule": "28 */4 * * *"
     },
     {
       "path": "/api/cron/batch-fetch-traders?group=c_hl",
-      "schedule": "8 * * * *"
+      "schedule": "11 * * * *"
     },
     {
       "path": "/api/cron/batch-fetch-traders?group=d1",
@@ -148,7 +146,7 @@
     },
     {
       "path": "/api/cron/batch-fetch-traders?group=d2",
-      "schedule": "26 */4 * * *"
+      "schedule": "24 */4 * * *"
     },
     {
       "path": "/api/cron/batch-fetch-traders?group=e1",
@@ -156,11 +154,11 @@
     },
     {
       "path": "/api/cron/batch-fetch-traders?group=e2",
-      "schedule": "38 */6 * * *"
+      "schedule": "39 */6 * * *"
     },
     {
       "path": "/api/cron/batch-fetch-traders?group=f",
-      "schedule": "48 */6 * * *"
+      "schedule": "46 */6 * * *"
     },
     {
       "path": "/api/cron/batch-fetch-traders?group=g",
@@ -176,7 +174,7 @@
     },
     {
       "path": "/api/cron/batch-enrich?period=7D",
-      "schedule": "40 */6 * * *"
+      "schedule": "44 */6 * * *"
     },
     {
       "path": "/api/cron/check-trader-alerts",
@@ -184,7 +182,7 @@
     },
     {
       "path": "/api/cron/check-data-gaps",
-      "schedule": "45 */4 * * *"
+      "schedule": "52 */4 * * *"
     },
     {
       "path": "/api/cron/backfill-data?type=snapshots&limit=50",
@@ -200,11 +198,11 @@
     },
     {
       "path": "/api/cron/precompute-composite",
-      "schedule": "12 */2 * * *"
+      "schedule": "21 */2 * * *"
     },
     {
       "path": "/api/cron/backfill-avatars?platform=drift,toobit,bitfinex,bybit_spot,etoro,web3_bot,gains&limit=400",
-      "schedule": "30 2 * * *"
+      "schedule": "35 2 * * *"
     },
     {
       "path": "/api/cron/generate-profiles?limit=500",
@@ -224,7 +222,7 @@
     },
     {
       "path": "/api/cron/snapshot-positions",
-      "schedule": "15 * * * *"
+      "schedule": "17 * * * *"
     },
     {
       "path": "/api/cron/fetch-traders/blofin",
@@ -232,7 +230,7 @@
     },
     {
       "path": "/api/cron/health-check-all",
-      "schedule": "20,50 * * * *"
+      "schedule": "25,55 * * * *"
     }
   ],
   "headers": [
