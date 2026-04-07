@@ -30,6 +30,7 @@ import { PipelineState } from '@/lib/services/pipeline-state'
 import { env } from '@/lib/env'
 import { sendRateLimitedAlert } from '@/lib/alerts/send-alert'
 import { validateBeforeWrite, logRejectedWrites } from '@/lib/pipeline/validate-before-write'
+import { VALIDATION_BOUNDS as VB } from '@/lib/pipeline/types'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 300
@@ -459,19 +460,14 @@ async function computeSeason(
     // Ensure metrics_estimated is initialized (v1 snapshots don't have this field)
     if (snap.metrics_estimated == null) snap.metrics_estimated = false
 
-    // --- Boundary sanitization (safety net for all data sources) ---
-    // ROI: only null out extreme POSITIVE values (> 100,000%)
-    // Negative ROI is kept as-is — traders with -8393% ROI should display the
-    // real value, not be nulled. calculateReturnScore() returns 0 for negative ROI.
-    if (snap.roi != null && snap.roi > 100000) {
+    // --- Boundary sanitization — uses VALIDATION_BOUNDS (single source of truth) ---
+    if (snap.roi != null && (snap.roi < VB.roi_pct.min || snap.roi > VB.roi_pct.max)) {
       snap.roi = null
     }
-    // Win rate: must be 0-100%
-    if (snap.win_rate != null && (snap.win_rate > 100 || snap.win_rate < 0)) {
+    if (snap.win_rate != null && (snap.win_rate < VB.win_rate_pct.min || snap.win_rate > VB.win_rate_pct.max)) {
       snap.win_rate = null
     }
-    // Max drawdown: must be 0-100%
-    if (snap.max_drawdown != null && (snap.max_drawdown > 100 || snap.max_drawdown < 0)) {
+    if (snap.max_drawdown != null && (snap.max_drawdown < VB.max_drawdown_pct.min || snap.max_drawdown > VB.max_drawdown_pct.max)) {
       snap.max_drawdown = null
     }
     // MDD=0% with ROI > 50% is almost certainly missing data, not real zero drawdown.
@@ -483,8 +479,8 @@ async function computeSeason(
     if (snap.max_drawdown != null && snap.max_drawdown < 1 && snap.roi != null && snap.roi > 500) {
       snap.max_drawdown = null
     }
-    // Sharpe ratio: must be -20 to 20
-    if (snap.sharpe_ratio != null && (snap.sharpe_ratio > 20 || snap.sharpe_ratio < -20)) {
+    // Sharpe ratio: uses VALIDATION_BOUNDS (was hardcoded ±20, now ±10)
+    if (snap.sharpe_ratio != null && (snap.sharpe_ratio < VB.sharpe_ratio.min || snap.sharpe_ratio > VB.sharpe_ratio.max)) {
       snap.sharpe_ratio = null
     }
     // Win rate sanity: null out contradictory values
