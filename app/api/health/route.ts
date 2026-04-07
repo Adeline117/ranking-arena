@@ -100,13 +100,13 @@ export async function GET() {
       const scraperUrl = vpsHost.replace(/:\d+$/, ':3457') + '/health'
       const proxyUrl = vpsHost.replace(/:\d+$/, ':3456') + '/health'
       let res = await fetch(scraperUrl, {
-        headers: { 'X-Proxy-Key': vpsKey, 'User-Agent': 'Arena-Health/1.0' },
+        headers: { 'x-api-key': vpsKey, 'X-Proxy-Key': vpsKey, 'User-Agent': 'Arena-Health/1.0' },
         signal: AbortSignal.timeout(5_000),
       }).catch(() => null)
 
       if (!res?.ok) {
         res = await fetch(proxyUrl, {
-          headers: { 'X-Proxy-Key': vpsKey, 'User-Agent': 'Arena-Health/1.0' },
+          headers: { 'x-api-key': vpsKey, 'X-Proxy-Key': vpsKey, 'User-Agent': 'Arena-Health/1.0' },
           signal: AbortSignal.timeout(3_000),
         }).catch(() => null)
       }
