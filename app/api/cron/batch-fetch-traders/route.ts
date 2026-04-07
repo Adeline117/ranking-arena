@@ -64,9 +64,12 @@ const GROUPS: Record<string, string[]> = {
   d1: ['gains', 'htx_futures', 'bitfinex', 'coinex'],
   // Group D2: Web3 + Gate.io + BTCC (every 6h)
   d2: ['binance_web3', 'okx_web3', 'gateio', 'btcc'],
-  // Group E: DEX + social trading (every 6h) — Solana DEX, eToro
-  // DEAD removed 2026-04-01: vertex (no API), apex_pro (no API), rabbitx (DNS dead)
-  e: ['drift', 'jupiter_perps', 'aevo', 'web3_bot', 'toobit', 'xt', 'etoro'],
+  // Group E1: DEX + social (every 8h) — split from E (7 platforms exceeded 300s limit)
+  // drift(120s) + aevo(90s) + web3_bot(90s) + toobit(90s) = ~120s with concurrency=3
+  e1: ['drift', 'aevo', 'web3_bot', 'toobit'],
+  // Group E2: CEX scrapers (every 8h) — jupiter + xt + etoro
+  // jupiter(90s) + xt(90s) + etoro(90s) = ~90s with concurrency=3
+  e2: ['jupiter_perps', 'xt', 'etoro'],
   // Group F: VPS scraper slow platforms (every 6h)
   // bingx: DEAD (empty_data)
   // weex: RE-ENABLED — 117 traders in leaderboard, fresh data in snapshots_v2
@@ -88,10 +91,12 @@ const PLATFORM_LIMITS: Record<string, number> = {
   // 100 traders × 3 windows = 15 pages × 2s = ~30s (well within 150s timeout)
   binance_futures: 100,
   binance_spot: 100,
-  // VPS scraper-dependent platforms: limit to 100 (1 page/window × 3 windows = 3 VPS calls)
-  // Was 150 → 2 pages/window × 3 windows = 6 calls × 120s = 720s >> 240s budget → 100% timeout
-  bybit: 100,
-  bybit_spot: 100,
+  // VPS scraper: pool=5 browsers, ~30s/page. Keep limit low to avoid saturating pool.
+  // Was 100 → 100 traders × 3 windows = ~6 VPS calls, each takes 30-120s.
+  // With pool=5 and queue, this creates 30+ minutes of VPS work per job.
+  // Reduced to 50: 50 traders × 3 windows = ~3 VPS calls = ~90s (fits 240s timeout)
+  bybit: 50,
+  bybit_spot: 50,
   // Copin API has max 1000 traders per statisticType — no point requesting 2000
   dydx: 1000,
 }
