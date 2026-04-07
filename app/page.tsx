@@ -6,6 +6,7 @@ import HomeHeroSSR from './components/home/HomeHeroSSR'
 import RankingControls from './components/home/RankingControls'
 import TopNav from './components/layout/TopNav'
 import WelcomeBanner from './components/home/WelcomeBanner'
+import HomePageLoader from './components/home/HomePageLoader'
 import { JsonLd } from './components/Providers/JsonLd'
 import { PageErrorBoundary } from './components/utils/ErrorBoundary'
 import { BASE_URL } from '@/lib/constants/urls'
@@ -52,14 +53,14 @@ const PER_PAGE = 25
 const VALID_RANGES = new Set(['7D', '30D', '90D'])
 
 /**
- * Homepage — Single-phase SSR architecture.
+ * Homepage — Two-phase SSR + interactive rendering.
  *
- * The ranking table is 100% server-rendered. No client-side re-rendering.
- * JS is only loaded for interactive controls (time range switch, pagination)
- * which use router.push() to trigger a new server render.
+ * Phase 1 (SSR): Hero + ranking table render as pure HTML in the initial payload.
+ *   LCP = FCP ≈ 1.5s. Zero JS needed to see above-fold content.
  *
- * LCP = FCP ≈ 1.5s because the table is in the initial HTML payload.
- * Zero JS needed to see the complete leaderboard.
+ * Phase 2 (Client): HomePageLoader defers the full interactive three-column layout
+ *   (discussions, watchlist, flash news) until user interaction or idle callback.
+ *   When Phase 2 mounts, it replaces the SSR ranking table with the interactive version.
  */
 export default async function Page({
   searchParams,
@@ -81,29 +82,43 @@ export default async function Page({
     <>
       <JsonLd data={organizationJsonLd} />
 
-      {/* TopNav — provides search, login, and navigation on the homepage */}
-      <TopNav />
+      {/* SSR TopNav — hidden when Phase 2 mounts (HomePage renders its own) */}
+      <div id="ssr-topnav">
+        <TopNav />
+      </div>
 
-      {/* Welcome banner for new registrations — tiny client island, reads ?welcome=1 */}
       <WelcomeBanner />
 
-      {/* Hero — LCP element. Pure server HTML, zero JS. */}
-      <HomeHeroSSR traderCount={heroStats?.traderCount} exchangeCount={heroStats?.exchangeCount} />
-
-      {/* Ranking table — 100% SSR. No Phase 2 replacement.
-          Controls (time range + pagination) are a tiny client island (~3KB).
-          Table rows are pure server HTML — no JS needed to display them. */}
-      {/* No Suspense or ErrorBoundary wrapping the table — prevents hydration
-          repaints that would reset LCP. The table is pure server HTML. */}
-      <div className="ssr-t" style={{ marginTop: 8 }}>
-        <RankingControls
-          activeRange={timeRange}
-          page={page}
-          totalCount={totalCount}
-          perPage={PER_PAGE}
-        />
-        <SSRRankingTable traders={traders} startRank={page * PER_PAGE} />
+      {/* Phase 1 (SSR): Hero stays visible as LCP element even after Phase 2 loads. */}
+      <div id="ssr-hero-shell">
+        <HomeHeroSSR traderCount={heroStats?.traderCount} exchangeCount={heroStats?.exchangeCount} />
       </div>
+
+      {/* SSR ranking table — visible until Phase 2 replaces it */}
+      <div id="ssr-ranking-table">
+        <div className="ssr-t" style={{ marginTop: 8 }}>
+          <RankingControls
+            activeRange={timeRange}
+            page={page}
+            totalCount={totalCount}
+            perPage={PER_PAGE}
+          />
+          <SSRRankingTable traders={traders} startRank={page * PER_PAGE} />
+        </div>
+      </div>
+
+      {/* Phase 2: Full interactive three-column layout with sidebars.
+          Loaded via next/dynamic(ssr:false) — deferred until user interaction.
+          Left: HotDiscussions | Center: Interactive rankings | Right: Watchlist + FlashNews */}
+      <PageErrorBoundary>
+        <HomePageLoader
+          initialTraders={traders}
+          initialLastUpdated={lastUpdated}
+          heroStats={heroStats}
+          initialTotalCount={totalCount}
+          initialCategoryCounts={categoryCounts}
+        />
+      </PageErrorBoundary>
     </>
   )
 }
