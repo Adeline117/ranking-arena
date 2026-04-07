@@ -12,6 +12,7 @@ import {
   validateEnum,
 } from '@/lib/api'
 import { togglePostReaction, getPostById } from '@/lib/data/posts'
+import { createNotificationDeduped } from '@/lib/data/notifications'
 import { deleteServerCacheByPrefix } from '@/lib/utils/server-cache'
 import { validateCsrfToken, CSRF_COOKIE_NAME, CSRF_HEADER_NAME } from '@/lib/utils/csrf'
 import { checkRateLimit, RateLimitPresets } from '@/lib/utils/rate-limit'
@@ -71,25 +72,20 @@ export async function POST(request: NextRequest, context: RouteContext) {
       dislikeCount = null
     }
 
-    // Send like notification (fire-and-forget, don't block response)
+    // Send like notification (fire-and-forget, deduped — same actor+post within 1h won't send again)
     if (result.action === 'added' && reactionType === 'up' && post?.author_id && post.author_id !== user.id) {
       getUserHandle(user.id, user.email ?? undefined)
         .then(userHandle => {
-          supabase
-            .from('notifications')
-            .insert({
-              user_id: post!.author_id,
-              type: 'like',
-              title: `${userHandle} liked your post`,
-              message: (post!.title || '').slice(0, 100) || 'your post',
-              actor_id: user.id,
-              link: `/post/${id}`,
-              reference_id: id,
-              read: false,
-            })
-            .then(({ error: notifError }) => {
-              if (notifError) logger.warn('[posts/[id]/like] Notification insert failed:', notifError)
-            })
+          createNotificationDeduped(supabase, {
+            user_id: post!.author_id,
+            type: 'like',
+            title: `${userHandle} liked your post`,
+            message: (post!.title || '').slice(0, 100) || 'your post',
+            actor_id: user.id,
+            link: `/post/${id}`,
+            reference_id: id,
+            read: false,
+          })
         })
         .catch(notifErr => {
           logger.warn('[posts/[id]/like] Notification error:', notifErr)

@@ -203,6 +203,51 @@ export async function createNotification(
 }
 
 /**
+ * 去重通知：同一 actor + type + reference 在 1 小时内不重复发送
+ * 用于 like/comment/follow 等高频操作，防止通知轰炸
+ */
+export async function createNotificationDeduped(
+  supabase: SupabaseClient,
+  notification: {
+    user_id: string
+    type: NotificationType
+    title: string
+    message: string
+    link?: string
+    actor_id?: string
+    reference_id?: string
+    read?: boolean
+  }
+): Promise<void> {
+  // Check for recent duplicate (same actor + type + reference within 1 hour)
+  if (notification.actor_id && notification.reference_id) {
+    const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000).toISOString()
+    const { data: existing } = await supabase
+      .from('notifications')
+      .select('id')
+      .eq('user_id', notification.user_id)
+      .eq('type', notification.type)
+      .eq('actor_id', notification.actor_id)
+      .eq('reference_id', notification.reference_id)
+      .gte('created_at', oneHourAgo)
+      .limit(1)
+      .maybeSingle()
+
+    if (existing) {
+      return // Duplicate within window — skip
+    }
+  }
+
+  const { error } = await supabase
+    .from('notifications')
+    .insert(notification)
+
+  if (error) {
+    logger.warn('[notifications] Deduped insert failed:', error.message)
+  }
+}
+
+/**
  * 删除通知
  */
 export async function deleteNotification(
