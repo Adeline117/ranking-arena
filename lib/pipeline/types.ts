@@ -239,7 +239,7 @@ export const OVERALL_WEIGHTS: Record<TimeWindow, number> = {
 // =============================================================================
 
 export const VALIDATION_BOUNDS = {
-  roi_pct: { min: -100, max: 10000 },
+  roi_pct: { min: -10000, max: 10000 },
   win_rate_pct: { min: 0, max: 100 },
   max_drawdown_pct: { min: 0, max: 100 },
   arena_score: { min: 0, max: 100 },
