@@ -49,10 +49,13 @@ function truncateToHour(): string {
 }
 
 export async function POST(request: NextRequest) {
-  // Auth: require VPS proxy key
+  // Auth: accept either VPS proxy key or CRON_SECRET
   const proxyKey = request.headers.get('x-proxy-key') || request.headers.get('authorization')?.replace('Bearer ', '')
-  const expectedKey = (env as unknown as Record<string, string | undefined>).VPS_PROXY_KEY || env.CRON_SECRET
-  if (!expectedKey || proxyKey !== expectedKey) {
+  const validKeys = [
+    (env as unknown as Record<string, string | undefined>).VPS_PROXY_KEY,
+    env.CRON_SECRET,
+  ].filter(Boolean)
+  if (validKeys.length === 0 || !validKeys.includes(proxyKey || '')) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
