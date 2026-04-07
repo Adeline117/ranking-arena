@@ -378,6 +378,15 @@ function RankingTableInner(props: {
     setCurrentPage(page)
   }, [setCurrentPage])
 
+  // Stable callbacks for filter changes (avoids inline arrows that defeat React.memo)
+  const handleStyleFilterChange = useCallback((s: TradingStyle | 'all') => {
+    setStyleFilter(s); setCurrentPage(1); setCardVisibleCount(50)
+  }, [setCurrentPage])
+
+  const handleTraderTypeFilterChange = useCallback((type: 'all' | 'human' | 'bot') => {
+    setTraderTypeFilter(type); setCurrentPage(1); setCardVisibleCount(50)
+  }, [setCurrentPage])
+
   // Keyboard navigation for table rows (Arrow Up/Down, Enter, Home/End, Escape)
   const getRowHref = useCallback(
     (index: number) => {
@@ -433,10 +442,10 @@ function RankingTableInner(props: {
           onToggleColumn={toggleColumn}
           onResetColumns={resetColumns}
           styleFilter={styleFilter}
-          onStyleFilterChange={(s) => { setStyleFilter(s); setCurrentPage(1); setCardVisibleCount(50) }}
+          onStyleFilterChange={handleStyleFilterChange}
           hasStyleData={hasStyleData}
           traderTypeFilter={traderTypeFilter}
-          onTraderTypeFilterChange={(type) => { setTraderTypeFilter(type); setCurrentPage(1); setCardVisibleCount(50) }}
+          onTraderTypeFilterChange={handleTraderTypeFilterChange}
           traders={traders}
           source={source}
           timeRange={timeRange}
