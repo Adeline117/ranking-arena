@@ -88,6 +88,8 @@ export interface PostListOptions {
   group_id?: string
   group_ids?: string[]
   author_handle?: string
+  /** Filter posts by specific author IDs (for following feed) */
+  author_ids?: string[]
   sort_by?: 'created_at' | 'hot_score' | 'like_count'
   sort_order?: 'asc' | 'desc'
   viewer_id?: string
@@ -240,6 +242,7 @@ export async function getPosts(
     group_id,
     group_ids,
     author_handle,
+    author_ids,
     sort_by = 'created_at',
     sort_order = 'desc',
     viewer_id,
@@ -256,6 +259,11 @@ export async function getPosts(
     query = query.eq('group_id', group_id)
   } else if (group_ids && group_ids.length > 0) {
     query = query.in('group_id', group_ids)
+  }
+
+  // Following feed: filter to specific author IDs
+  if (author_ids && author_ids.length > 0) {
+    query = query.in('author_id', author_ids)
   }
 
   // Visibility filtering: unauthenticated users only see public posts

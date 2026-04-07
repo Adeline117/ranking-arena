@@ -4,19 +4,21 @@ import { tokens } from '@/lib/design-tokens'
 
 const ARENA_PURPLE = tokens.colors.accent.brand
 
-export type SortType = 'time' | 'likes' | 'personalized'
+export type SortType = 'time' | 'likes' | 'personalized' | 'following'
 
 interface SortButtonsProps {
   sortType: SortType
   setSortType: (type: SortType) => void
   t: (key: string) => string
+  /** Whether the user is logged in (following tab requires auth) */
+  isLoggedIn?: boolean
 }
 
 /**
  * Sort buttons for post feed
  * Allows switching between latest and hot sorting
  */
-export function SortButtons({ sortType, setSortType, t }: SortButtonsProps): React.ReactNode {
+export function SortButtons({ sortType, setSortType, t, isLoggedIn }: SortButtonsProps): React.ReactNode {
   const getSortButtonStyle = (isActive: boolean) => ({
     padding: `${tokens.spacing[1]} ${tokens.spacing[3]}`,
     borderRadius: tokens.radius.md,
@@ -39,6 +41,11 @@ export function SortButtons({ sortType, setSortType, t }: SortButtonsProps): Rea
       <button onClick={() => setSortType('personalized')} style={getSortButtonStyle(sortType === 'personalized')}>
         {t('recommended')}
       </button>
+      {isLoggedIn && (
+        <button onClick={() => setSortType('following')} style={getSortButtonStyle(sortType === 'following')}>
+          {t('following')}
+        </button>
+      )}
     </div>
   )
 }
