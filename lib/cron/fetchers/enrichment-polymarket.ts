@@ -200,7 +200,7 @@ export async function fetchPolymarketStatsDetail(
           const std = Math.sqrt(dailyReturns.reduce((a, r) => a + (r - mean) ** 2, 0) / dailyReturns.length)
           if (std > 0) {
             const s = Math.round((mean / std) * Math.sqrt(365) * 100) / 100
-            if (s > -20 && s < 20) sharpeRatio = s
+            if (s > -10 && s < 10) sharpeRatio = s
           }
         }
       }

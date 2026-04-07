@@ -145,7 +145,7 @@ export async function writeDiscoverResult(
       if (mdd === BOUNDARY_VIOLATED) { boundaryWarnings++; }
       const maxDrawdown = mdd === BOUNDARY_VIOLATED ? null : mdd
 
-      // Sharpe Ratio: reject if |sharpe| > 20 (unreasonable)
+      // Sharpe Ratio: uses VALIDATION_BOUNDS (±10)
       const sharpe = validateBound(rawSharpe, VB.sharpe_ratio.min, VB.sharpe_ratio.max, 'sharpe_ratio', platform, trader.trader_key, boundaryWarnings)
       if (sharpe === BOUNDARY_VIOLATED) { boundaryWarnings++; }
       const sharpeRatio = sharpe === BOUNDARY_VIOLATED ? null : sharpe

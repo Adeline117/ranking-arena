@@ -114,7 +114,7 @@ export async function fetchBingxStatsDetail(
       (data as Record<string, unknown>)?.sharpe ?? (data as Record<string, unknown>)?.sharpRatio
     )
     // BingX sharpe values should be in reasonable range (-20 to 20)
-    const sharpeRatio = rawSharpe != null && rawSharpe >= -20 && rawSharpe <= 20 ? rawSharpe : null
+    const sharpeRatio = rawSharpe != null && rawSharpe >= -10 && rawSharpe <= 10 ? rawSharpe : null
 
     return {
       totalTrades: totalTrades != null ? Math.round(totalTrades) : null,

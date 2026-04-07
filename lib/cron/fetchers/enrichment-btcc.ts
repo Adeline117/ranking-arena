@@ -88,7 +88,7 @@ export async function fetchBtccStatsDetail(
       const std = Math.sqrt(returns.reduce((a, r) => a + (r - mean) ** 2, 0) / returns.length)
       if (std <= 0) return null
       const sharpe = Math.round((mean / std) * Math.sqrt(365) * 100) / 100
-      return sharpe > -20 && sharpe < 20 ? sharpe : null
+      return sharpe > -10 && sharpe < 10 ? sharpe : null
     })(),
     maxDrawdown,
     currentDrawdown: null,

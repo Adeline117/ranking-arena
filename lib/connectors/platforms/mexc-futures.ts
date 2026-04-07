@@ -191,7 +191,7 @@ export class MexcFuturesConnector extends BaseConnector {
       const std = Math.sqrt(returns.reduce((a, r) => a + (r - mean) ** 2, 0) / returns.length)
       if (std > 0) {
         const raw_sharpe = Math.round((mean / std) * Math.sqrt(365) * 100) / 100
-        sharpe = Math.max(-20, Math.min(20, raw_sharpe))
+        sharpe = Math.max(-10, Math.min(10, raw_sharpe))
       }
     }
 

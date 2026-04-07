@@ -163,7 +163,7 @@ export class HtxFuturesConnector extends BaseConnector {
         const std = Math.sqrt(returns.reduce((a, r) => a + (r - mean) ** 2, 0) / returns.length)
         if (std <= 0) return null
         const sharpe = Math.round((mean / std) * Math.sqrt(365) * 100) / 100
-        return Math.max(-20, Math.min(20, sharpe))
+        return Math.max(-10, Math.min(10, sharpe))
       })(),
       platform_rank: safeNumber(raw.no ?? raw.order ?? raw.rank),
       // Extra: equity curve from profitList (30-day daily cumulative returns)

@@ -203,7 +203,7 @@ export class CoinexFuturesConnector extends BaseConnector {
         const std = Math.sqrt(returns.reduce((a, r) => a + (r - mean) ** 2, 0) / returns.length)
         if (std <= 0) return null
         const sharpe = Math.round((mean / std) * Math.sqrt(365) * 100) / 100
-        return Math.max(-20, Math.min(20, sharpe))
+        return Math.max(-10, Math.min(10, sharpe))
       })(),
       platform_rank: null,
       // Extra: equity curve from profit_rate_series
