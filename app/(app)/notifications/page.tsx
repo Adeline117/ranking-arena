@@ -13,6 +13,7 @@ import { useToast } from '@/app/components/ui/Toast'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import { useAuthSession } from '@/lib/hooks/useAuthSession'
 import { getCsrfHeaders } from '@/lib/api/client'
+import { useNotificationsRealtime } from '@/lib/hooks/useRealtime'
 import PullToRefreshWrapper from '@/app/components/ui/PullToRefreshWrapper'
 import { features } from '@/lib/features'
 
@@ -260,6 +261,25 @@ export default function NotificationsPage() {
       router.push('/login')
     }
   }, [authChecked, accessToken, router])
+
+  // Realtime: auto-prepend new notifications as they arrive
+  const [userId, setUserId] = useState<string | undefined>()
+  useEffect(() => {
+    if (!accessToken) return
+    import('@/lib/supabase/client').then(({ supabase }) => {
+      supabase.auth.getUser(accessToken).then(({ data }) => {
+        if (data?.user?.id) setUserId(data.user.id)
+      })
+    })
+  }, [accessToken])
+
+  useNotificationsRealtime(userId, useCallback((newNotif: Record<string, unknown>) => {
+    const notif = newNotif as unknown as Notification
+    setNotifications(prev => {
+      if (prev.some(n => n.id === notif.id)) return prev
+      return [notif, ...prev]
+    })
+  }, []))
 
   // 加载通知 — 初始加载 30 条，滚动加载更多
   const NOTIFICATION_PAGE_SIZE = 30
