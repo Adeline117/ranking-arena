@@ -72,14 +72,15 @@ export class BitgetFuturesConnector extends BaseConnector {
       // Bitget is CF-protected; proxy forwards get empty responses.
       // Try VPS Playwright scraper first, fall back to direct API.
       let _rawLb: Record<string, unknown>
+      const pageSize = 100 // Bitget API max per page — was passing limit (2000) causing huge VPS scraper load
       const vpsData = await this.fetchViaVPS<Record<string, unknown>>('/bitget/leaderboard', {
-        period: VPS_PERIOD_MAP[window], pageNo: String(currentPage), pageSize: String(limit),
+        period: VPS_PERIOD_MAP[window], pageNo: String(currentPage), pageSize: String(pageSize),
       }, 60000) // 60s per page (reduced from 120s)
       if (vpsData) {
         _rawLb = vpsData
       } else {
         _rawLb = await this.request<Record<string, unknown>>(
-          `https://www.bitget.com/v1/trigger/trace/public/currentTrader/list?pageNo=${currentPage}&pageSize=${limit}&sortType=2&timeRange=${timeRange}`,
+          `https://www.bitget.com/v1/trigger/trace/public/currentTrader/list?pageNo=${currentPage}&pageSize=${pageSize}&sortType=2&timeRange=${timeRange}`,
           { method: 'GET' }
         )
       }
@@ -103,7 +104,7 @@ export class BitgetFuturesConnector extends BaseConnector {
       }))
       allTraders.push(...traders)
 
-      if (list.length < limit) break
+      if (list.length < pageSize) break
       currentPage++
       await new Promise(r => setTimeout(r, 500))
     }
