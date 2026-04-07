@@ -47,6 +47,11 @@ jest.mock('@/lib/services/pipeline-logger', () => ({
   },
 }))
 
+jest.mock('@/lib/pipeline/validate-before-write', () => ({
+  validateBeforeWrite: jest.fn((records: Record<string, unknown>[]) => ({ valid: records, rejected: [] })),
+  logRejectedWrites: jest.fn(),
+}))
+
 jest.mock('@/lib/cron/metrics-backfill', () => ({
   refreshComputedMetrics: jest.fn().mockResolvedValue({
     sharpeUpdated: 0,
