@@ -1,9 +1,13 @@
 /**
  * 客户端认证工具
  * 提供统一的 auth token 获取、刷新和错误处理
+ *
+ * Token refresh is delegated to the centralized TokenRefreshCoordinator
+ * for thundering herd prevention across all code paths.
  */
 
 import { supabase } from '@/lib/supabase/client'
+import { tokenRefreshCoordinator } from '@/lib/auth/token-refresh'
 
 /**
  * 消息发送失败原因枚举
@@ -41,32 +45,23 @@ export type AuthResult = {
 
 /**
  * 获取当前有效的 auth session
- * 如果 token 过期会自动刷新
+ * Delegates to the centralized TokenRefreshCoordinator which handles
+ * proactive expiry detection and thundering herd prevention.
  * @returns AuthResult 或 null（未登录时）
  */
 export async function getAuthSession(): Promise<AuthResult> {
   try {
-    const { data: { session }, error } = await supabase.auth.getSession()
+    // Use coordinator for proactive refresh (refreshes if token expires within 60s)
+    const token = await tokenRefreshCoordinator.getValidToken()
+    if (!token) return null
 
-    if (error || !session) {
-      return null
-    }
-
-    // 检查 token 是否即将过期（5分钟内），提前刷新
-    const expiresAt = session.expires_at
-    if (expiresAt) {
-      const nowSeconds = Math.floor(Date.now() / 1000)
-      const timeUntilExpiry = expiresAt - nowSeconds
-      if (timeUntilExpiry < 300) {
-        // Token 即将过期，尝试刷新
-        const refreshed = await refreshAuthToken()
-        if (refreshed) return refreshed
-      }
-    }
+    // Get user info from current session
+    const { data: { session } } = await supabase.auth.getSession()
+    if (!session?.user) return null
 
     return {
       userId: session.user.id,
-      accessToken: session.access_token,
+      accessToken: token,
     }
   } catch (_err) {
     return null
@@ -75,19 +70,20 @@ export async function getAuthSession(): Promise<AuthResult> {
 
 /**
  * 刷新 auth token
+ * Delegates to the centralized coordinator for thundering herd prevention.
  * @returns 新的 AuthResult 或 null
  */
 export async function refreshAuthToken(): Promise<AuthResult> {
   try {
-    const { data: { session }, error } = await supabase.auth.refreshSession()
+    const token = await tokenRefreshCoordinator.forceRefresh()
+    if (!token) return null
 
-    if (error || !session) {
-      return null
-    }
+    const { data: { session } } = await supabase.auth.getSession()
+    if (!session?.user) return null
 
     return {
       userId: session.user.id,
-      accessToken: session.access_token,
+      accessToken: token,
     }
   } catch (_err) {
     return null
