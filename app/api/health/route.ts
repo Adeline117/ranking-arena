@@ -19,12 +19,25 @@ const version = process.env.npm_package_version || '0.1.0'
 // Deploy timestamp from env (set at build time), fallback to module load time
 const deployTime = process.env.NEXT_PUBLIC_DEPLOY_TIME ? parseInt(process.env.NEXT_PUBLIC_DEPLOY_TIME, 10) : startTime
 
-async function checkDatabase(): Promise<{ status: 'pass' | 'fail' | 'skip'; latency?: number; message?: string }> {
-  const supabase = getSupabaseAdmin()
+/** Race any check against a 5s timeout to prevent health endpoint from hanging */
+function withTimeout<T>(promise: Promise<T> | PromiseLike<T>, fallback: T, label: string): Promise<T> {
+  return Promise.race([
+    promise,
+    new Promise<T>((resolve) => setTimeout(() => {
+      console.warn(`[health] ${label} timed out after 5s`)
+      resolve(fallback)
+    }, 5000)),
+  ])
+}
 
+async function checkDatabase(): Promise<{ status: 'pass' | 'fail' | 'skip'; latency?: number; message?: string }> {
   const t0 = Date.now()
   try {
-    const { error } = await supabase.from('library_items').select('id').limit(1)
+    const { error } = await withTimeout(
+      getSupabaseAdmin().from('library_items').select('id').limit(1).then(r => r),
+      { data: null, error: { message: 'DB check timed out (5s)' } } as { data: null; error: { message: string } },
+      'checkDatabase'
+    )
     const latency = Date.now() - t0
     if (error) return { status: 'fail', message: error.message, latency }
     return { status: 'pass', latency }
@@ -38,7 +51,11 @@ async function checkRedis(): Promise<{ status: 'pass' | 'fail' | 'skip'; latency
   try {
     const redis = await getSharedRedis()
     if (!redis) return { status: 'skip', message: 'Not configured' }
-    const pong = await redis.ping()
+    const pong = await withTimeout(
+      redis.ping(),
+      'TIMEOUT' as string,
+      'checkRedis'
+    )
     const latency = Date.now() - t0
     return pong === 'PONG' ? { status: 'pass', latency } : { status: 'fail', message: `Got: ${pong}`, latency }
   } catch (e: unknown) {
