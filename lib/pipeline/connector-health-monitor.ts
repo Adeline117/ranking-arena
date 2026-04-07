@@ -17,6 +17,7 @@ export interface ConnectorHealthSnapshot {
   medianRoi: number | null
   roiNonNullPct: number
   pnlNonNullPct: number
+  responseFingerprint: string // sorted JSON key paths from first 3 entries — detects API schema changes
 }
 
 export interface DegradationCheck {
@@ -30,6 +31,24 @@ function median(arr: number[]): number | null {
   const sorted = [...arr].sort((a, b) => a - b)
   const mid = Math.floor(sorted.length / 2)
   return sorted.length % 2 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2
+}
+
+function computeFingerprint(rows: Array<Record<string, unknown>>): string {
+  // Hash the key structure of the first 3 rows to detect API schema changes
+  const sample = rows.slice(0, 3)
+  const keys = new Set<string>()
+  for (const row of sample) {
+    for (const key of Object.keys(row)) {
+      keys.add(key)
+      const val = row[key]
+      if (val && typeof val === 'object' && !Array.isArray(val)) {
+        for (const subKey of Object.keys(val as Record<string, unknown>)) {
+          keys.add(`${key}.${subKey}`)
+        }
+      }
+    }
+  }
+  return [...keys].sort().join(',')
 }
 
 function computeSnapshot(
@@ -48,6 +67,7 @@ function computeSnapshot(
     medianRoi: median(rois),
     roiNonNullPct: rows.length > 0 ? (rois.length / rows.length) * 100 : 0,
     pnlNonNullPct: rows.length > 0 ? (pnls.length / rows.length) * 100 : 0,
+    responseFingerprint: computeFingerprint(rows),
   }
 }
 
@@ -104,6 +124,19 @@ export async function checkConnectorHealth(
   if (previous.roiNonNullPct > 80 && current.roiNonNullPct < 20) {
     reasons.push(`ROI completeness dropped ${previous.roiNonNullPct.toFixed(0)}% → ${current.roiNonNullPct.toFixed(0)}%`)
     severity = 'critical'
+  }
+
+  // ── API schema change (response fingerprint) ──
+  if (previous.responseFingerprint && current.responseFingerprint &&
+      previous.responseFingerprint !== current.responseFingerprint) {
+    const prevKeys = new Set(previous.responseFingerprint.split(','))
+    const currKeys = new Set(current.responseFingerprint.split(','))
+    const removed = [...prevKeys].filter(k => !currKeys.has(k))
+    const added = [...currKeys].filter(k => !prevKeys.has(k))
+    if (removed.length > 0 || added.length > 0) {
+      reasons.push(`API schema changed: removed=[${removed.slice(0, 5).join(',')}] added=[${added.slice(0, 5).join(',')}]`)
+      if (severity !== 'critical') severity = 'warning'
+    }
   }
 
   if (reasons.length > 0) {
