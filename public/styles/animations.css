@@ -329,10 +329,7 @@
    12. Dropdown animations
    ============================================ */
 
-.dropdown-enter {
-  animation: fadeInDown 0.2s cubic-bezier(0.4, 0, 0.2, 1) forwards;
-  transform-origin: top center;
-}
+/* .dropdown-enter is defined in globals.css (canonical) — uses dropdownEnter keyframe with scale */
 
 .dropdown-exit {
   animation: fadeOut 0.15s ease-out forwards;

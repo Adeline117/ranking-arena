@@ -139,17 +139,6 @@ export default function MasonryPostCard({ post, language = 'zh', onLike, onComme
           </Box>
         </Box>
 
-        <style jsx>{`
-          @media (hover: hover) {
-            .masonry-card:hover {
-              transform: scale(1.02);
-              box-shadow: ${tokens.shadow.lg};
-            }
-          }
-          .masonry-card:active {
-            transform: scale(0.98);
-          }
-        `}</style>
       </Box>
     </Link>
   )

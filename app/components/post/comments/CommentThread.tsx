@@ -142,6 +142,7 @@ export function CommentThread({
           <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginTop: 6 }}>
             <button
               className="interactive-scale"
+              aria-label={t('upvote')}
               onClick={(e) => { e.stopPropagation(); onToggleCommentLike(postId, comment.id) }}
               disabled={commentLikeLoading[comment.id]}
               style={{
@@ -159,6 +160,7 @@ export function CommentThread({
 
             <button
               className="interactive-scale"
+              aria-label={t('downvote')}
               onClick={(e) => { e.stopPropagation(); onToggleCommentDislike?.(postId, comment.id) }}
               disabled={commentLikeLoading[comment.id]}
               style={{
