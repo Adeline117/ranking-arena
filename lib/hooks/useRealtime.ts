@@ -488,6 +488,26 @@ export function useMessagesRealtime(
   })
 }
 
+/**
+ * 订阅评论更新（当用户在查看帖子详情时）
+ */
+export function useCommentsRealtime(
+  postId: string | undefined,
+  callbacks?: {
+    onInsert?: (comment: Record<string, unknown>) => void
+    onDelete?: (comment: Record<string, unknown>) => void
+  }
+) {
+  return useRealtime({
+    table: 'comments',
+    event: '*',
+    filter: postId ? `post_id=eq.${postId}` : undefined,
+    onInsert: callbacks?.onInsert,
+    onDelete: callbacks?.onDelete,
+    enabled: !!postId,
+  })
+}
+
 // ============================================
 // 在线状态 Hook — use usePresence from './usePresence' for full-featured presence
 // ============================================

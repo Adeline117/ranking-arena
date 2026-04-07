@@ -13,7 +13,7 @@ import { usePostStore, type PostData } from '@/lib/stores/postStore'
 import { usePostComments } from './hooks/usePostComments'
 import { usePostTranslation } from './hooks/usePostTranslation'
 import { usePostActions } from './hooks/usePostActions'
-import { usePostsRealtime } from '@/lib/hooks/useRealtime'
+import { usePostsRealtime, useCommentsRealtime } from '@/lib/hooks/useRealtime'
 import { SectionErrorBoundary } from '../utils/ErrorBoundary'
 import { PostSkeleton } from '../ui/Skeleton'
 import { SortButtons, type SortType, PostDetailView } from './components'
@@ -123,6 +123,20 @@ export default function PostFeed(props: PostFeedProps = {}): React.ReactNode {
         setNewPostCount(prev => prev + 1)
       }
     }, []),
+  })
+
+  // Realtime: auto-add comments from other users when viewing post detail
+  useCommentsRealtime(openPost?.id, {
+    onInsert: useCallback((newComment: Record<string, unknown>) => {
+      // Only add if not from current user (our own comments are already optimistically added)
+      if (newComment.user_id === currentUserId) return
+      const comment = newComment as unknown as import('./hooks/usePostComments').Comment
+      if (!comment.id) return
+      setComments(prev => {
+        if (prev.some(c => c.id === comment.id)) return prev
+        return [...prev, comment]
+      })
+    }, [currentUserId, setComments]),
   })
 
   // Actions hook
