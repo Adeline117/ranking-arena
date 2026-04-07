@@ -11,6 +11,7 @@
  */
 
 import { BaseConnector } from '../base'
+import { normalizeRoiFormat } from '../normalize-contract'
 import { warnValidate } from '../schemas'
 import { LbankFuturesLeaderboardResponseSchema } from './schemas'
 import type {
@@ -142,7 +143,7 @@ export class LbankFuturesConnector extends BaseConnector {
    */
   normalize(raw: Record<string, unknown>): Record<string, unknown> {
     const rawRoi = this.num(raw.roi ?? raw.returnRate ?? raw.profitRate)
-    const roi = rawRoi != null ? (Math.abs(rawRoi) <= 1 ? rawRoi * 100 : rawRoi) : null
+    const roi = normalizeRoiFormat(rawRoi)
     const rawWr = this.num(raw.winRate)
     const winRate = rawWr != null ? (rawWr <= 1 ? rawWr * 100 : rawWr) : null
     const rawMdd = this.num(raw.maxDrawdown ?? raw.mdd)

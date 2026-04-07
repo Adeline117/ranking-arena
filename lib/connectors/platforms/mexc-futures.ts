@@ -6,6 +6,7 @@
  */
 
 import { BaseConnector } from '../base'
+import { normalizeRoiFormat } from '../normalize-contract'
 import { warnValidate } from '../schemas'
 import { MexcFuturesDetailResponseSchema } from './schemas'
 import type {
@@ -171,7 +172,7 @@ export class MexcFuturesConnector extends BaseConnector {
    */
   normalize(raw: Record<string, unknown>): Record<string, unknown> {
     const rawRoi = this.num(raw.yield ?? raw.roi ?? raw.totalRoi ?? raw.pnlRate)
-    const roi = rawRoi != null ? (Math.abs(rawRoi) <= 1 ? rawRoi * 100 : rawRoi) : null
+    const roi = normalizeRoiFormat(rawRoi)
     const rawWr = this.num(raw.winRate ?? raw.totalWinRate)
     const winRate = rawWr != null ? (rawWr <= 1 ? rawWr * 100 : rawWr) : null
     // Current MEXC API uses maxDrawdown7 (7-day MDD), maxRetrace, or mdd
