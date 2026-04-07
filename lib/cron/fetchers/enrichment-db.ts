@@ -5,6 +5,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import type { EquityCurvePoint, PositionHistoryItem, StatsDetail, AssetBreakdown, PortfolioPosition } from './enrichment-types'
 import { createLogger } from '@/lib/utils/logger'
+import { VALIDATION_BOUNDS } from '@/lib/pipeline/types'
 
 const log = createLogger('enrichment-db')
 
@@ -26,15 +27,17 @@ export async function upsertEquityCurve(
 
   const capturedAt = new Date().toISOString()
 
-  const records = curve.map((point) => ({
-    source,
-    source_trader_id: traderId,
-    period,
-    data_date: point.date,
-    roi_pct: point.roi,
-    pnl_usd: point.pnl,
-    captured_at: capturedAt,
-  }))
+  const B = VALIDATION_BOUNDS
+  const records = curve
+    .map((point) => ({
+      source,
+      source_trader_id: traderId,
+      period,
+      data_date: point.date,
+      roi_pct: point.roi != null && (point.roi < B.roi_pct.min || point.roi > B.roi_pct.max) ? null : point.roi,
+      pnl_usd: point.pnl != null && (point.pnl < B.pnl_usd.min || point.pnl > B.pnl_usd.max) ? null : point.pnl,
+      captured_at: capturedAt,
+    }))
 
   // Use batch upsert instead of DELETE+INSERT
   const BATCH_SIZE = 25
@@ -64,9 +67,9 @@ export async function upsertEquityCurve(
     const periodRoi = lastPoint.roi
     const periodPnl = lastPoint.pnl
 
-    if (periodRoi != null) {
+    if (periodRoi != null && periodRoi >= B.roi_pct.min && periodRoi <= B.roi_pct.max) {
       const v2Update: Record<string, unknown> = { roi_pct: periodRoi }
-      if (periodPnl != null) v2Update.pnl_usd = periodPnl
+      if (periodPnl != null && periodPnl >= B.pnl_usd.min && periodPnl <= B.pnl_usd.max) v2Update.pnl_usd = periodPnl
 
       // Map enrichment period names to v2 window column values
       const windowMap: Record<string, string> = {
