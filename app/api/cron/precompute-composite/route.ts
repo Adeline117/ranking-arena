@@ -65,11 +65,11 @@ export async function GET(request: NextRequest) {
       return data || []
     }
 
-    const [rows7d, rows30d, rows90d] = await Promise.all([
-      fetchWindow('7D'),
-      fetchWindow('30D'),
-      fetchWindow('90D'),
-    ])
+    // Fetch sequentially to avoid concurrent statement_timeout on 90D partition scan.
+    // 90D is the largest partition; concurrent fetches exhaust Supabase statement timeout budget.
+    const rows7d = await fetchWindow('7D')
+    const rows30d = await fetchWindow('30D')
+    const rows90d = await fetchWindow('90D')
 
     // Build maps keyed by platform:trader_key
     type SnapshotRow = typeof rows7d[number]

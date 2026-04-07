@@ -18,6 +18,24 @@ import { sendAlert, sendRateLimitedAlert } from '@/lib/alerts/send-alert'
 import { syncPipelineLog } from '@/lib/analytics/dual-write'
 import { pingHealthcheck } from '@/lib/utils/healthcheck'
 
+/** Wrap a DB write with a 15s timeout to prevent plog from hanging forever.
+ *  Root cause: Supabase connection pool exhaustion causes await to hang indefinitely,
+ *  leaving pipeline_logs entries as 'running' for 30+ minutes until cleanup-stuck-logs
+ *  marks them as timeout. This affected compute-leaderboard, enrich-*, batch-enrich, etc. */
+/** Wrap a DB write (or any thenable) with a 15s timeout to prevent plog from hanging forever.
+ *  Accepts Supabase query builders (PromiseLike) as well as native Promises. */
+async function withDbTimeout<T>(thenable: PromiseLike<T>, label: string): Promise<T | null> {
+  try {
+    return await Promise.race([
+      Promise.resolve(thenable),
+      new Promise<never>((_, reject) => setTimeout(() => reject(new Error(`plog DB write timed out after 15s (${label})`)), 15_000)),
+    ])
+  } catch (err) {
+    logger.warn(`[PipelineLogger] ${label}: ${err instanceof Error ? err.message : String(err)}`)
+    return null
+  }
+}
+
 function getClient() {
   return getSupabaseAdmin()
 }
@@ -149,15 +167,19 @@ export class PipelineLogger {
       async success(recordsProcessed = 0, meta) {
         const durationMs = Date.now() - startedAt
         const endedAt = new Date().toISOString()
-        await client
-          .from('pipeline_logs')
-          .update({
-            status: 'success',
-            ended_at: endedAt,
-            records_processed: recordsProcessed,
-            ...(meta ? { metadata: { ...metadata, ...meta, duration_ms: durationMs } } : { metadata: { ...metadata, duration_ms: durationMs } }),
-          })
-          .eq('id', logId)
+        await withDbTimeout(
+          client
+            .from('pipeline_logs')
+            .update({
+              status: 'success',
+              ended_at: endedAt,
+              records_processed: recordsProcessed,
+              ...(meta ? { metadata: { ...metadata, ...meta, duration_ms: durationMs } } : { metadata: { ...metadata, duration_ms: durationMs } }),
+            })
+            .eq('id', logId)
+            .then(r => r),
+          `${jobName}:success`
+        )
         // Ping healthchecks.io success (fire-and-forget)
         if (hcSlug) pingHealthcheck(hcSlug, 'success').catch((err) => {
           logger.warn(`[PipelineLogger] Healthcheck success ping failed for ${hcSlug}: ${err instanceof Error ? err.message : String(err)}`)
@@ -176,16 +198,20 @@ export class PipelineLogger {
       async partialSuccess(recordsProcessed = 0, failedItems: string[] = [], meta?: Record<string, unknown>) {
         const durationMs = Date.now() - startedAt
         const endedAt = new Date().toISOString()
-        await client
-          .from('pipeline_logs')
-          .update({
-            status: 'partial_success',
-            ended_at: endedAt,
-            records_processed: recordsProcessed,
-            error_message: failedItems.length > 0 ? `${failedItems.length} items failed: ${failedItems.slice(0, 20).join(', ')}` : null,
-            metadata: { ...metadata, ...meta, duration_ms: durationMs, failed_items: failedItems.slice(0, 50) },
-          })
-          .eq('id', logId)
+        await withDbTimeout(
+          client
+            .from('pipeline_logs')
+            .update({
+              status: 'partial_success',
+              ended_at: endedAt,
+              records_processed: recordsProcessed,
+              error_message: failedItems.length > 0 ? `${failedItems.length} items failed: ${failedItems.slice(0, 20).join(', ')}` : null,
+              metadata: { ...metadata, ...meta, duration_ms: durationMs, failed_items: failedItems.slice(0, 50) },
+            })
+            .eq('id', logId)
+            .then(r => r),
+          `${jobName}:partial`
+        )
         // Ping healthchecks.io success (partial is still considered alive)
         if (hcSlug) pingHealthcheck(hcSlug, 'success').catch((err) => {
           logger.warn(`[PipelineLogger] Healthcheck success ping failed for ${hcSlug}: ${err instanceof Error ? err.message : String(err)}`)
@@ -215,15 +241,19 @@ export class PipelineLogger {
         const durationMs = Date.now() - startedAt
         const errorMessage = err instanceof Error ? err.message : String(err)
         const endedAt = new Date().toISOString()
-        await client
-          .from('pipeline_logs')
-          .update({
-            status: 'error',
-            ended_at: endedAt,
-            error_message: errorMessage.slice(0, 2000),
-            ...(meta ? { metadata: { ...metadata, ...meta, duration_ms: durationMs } } : { metadata: { ...metadata, duration_ms: durationMs } }),
-          })
-          .eq('id', logId)
+        await withDbTimeout(
+          client
+            .from('pipeline_logs')
+            .update({
+              status: 'error',
+              ended_at: endedAt,
+              error_message: errorMessage.slice(0, 2000),
+              ...(meta ? { metadata: { ...metadata, ...meta, duration_ms: durationMs } } : { metadata: { ...metadata, duration_ms: durationMs } }),
+            })
+            .eq('id', logId)
+            .then(r => r),
+          `${jobName}:error`
+        )
         // Ping healthchecks.io failure (fire-and-forget)
         if (hcSlug) pingHealthcheck(hcSlug, 'fail').catch((err) => {
           logger.warn(`[PipelineLogger] Healthcheck fail ping failed for ${hcSlug}: ${err instanceof Error ? err.message : String(err)}`)
@@ -249,14 +279,18 @@ export class PipelineLogger {
       async timeout(meta) {
         const durationMs = Date.now() - startedAt
         const endedAt = new Date().toISOString()
-        await client
-          .from('pipeline_logs')
-          .update({
-            status: 'timeout',
-            ended_at: endedAt,
-            ...(meta ? { metadata: { ...metadata, ...meta, duration_ms: durationMs } } : { metadata: { ...metadata, duration_ms: durationMs } }),
-          })
-          .eq('id', logId)
+        await withDbTimeout(
+          client
+            .from('pipeline_logs')
+            .update({
+              status: 'timeout',
+              ended_at: endedAt,
+              ...(meta ? { metadata: { ...metadata, ...meta, duration_ms: durationMs } } : { metadata: { ...metadata, duration_ms: durationMs } }),
+            })
+            .eq('id', logId)
+            .then(r => r),
+          `${jobName}:timeout`
+        )
         // Ping healthchecks.io failure on timeout (fire-and-forget)
         if (hcSlug) pingHealthcheck(hcSlug, 'fail').catch((err) => {
           logger.warn(`[PipelineLogger] Healthcheck fail ping failed for ${hcSlug}: ${err instanceof Error ? err.message : String(err)}`)
