@@ -110,7 +110,7 @@ export default function PortfolioCurrentView({
                     />
                   </Box>
                   <Text size="sm" weight="bold" style={{ color: tokens.colors.text.secondary, minWidth: 40, textAlign: 'right' }}>
-                    {item.invested.toFixed(1)}%
+                    {Number.isFinite(item.invested) ? item.invested.toFixed(1) : '—'}%
                   </Text>
                 </Box>
               </td>
@@ -119,11 +119,11 @@ export default function PortfolioCurrentView({
                   size="sm"
                   weight="black"
                   style={{
-                    color: item.pnl >= 0 ? tokens.colors.accent.success : tokens.colors.accent.error,
+                    color: Number.isFinite(item.pnl) ? (item.pnl >= 0 ? tokens.colors.accent.success : tokens.colors.accent.error) : tokens.colors.text.tertiary,
                     fontFamily: tokens.typography.fontFamily.mono.join(', '),
                   }}
                 >
-                  {item.pnl >= 0 ? '+' : ''}{item.pnl.toFixed(2)}%
+                  {Number.isFinite(item.pnl) ? `${item.pnl >= 0 ? '+' : ''}${item.pnl.toFixed(2)}%` : '—'}
                 </Text>
               </td>
             </tr>
