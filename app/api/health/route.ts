@@ -63,23 +63,27 @@ export async function GET() {
   }
 
   // Data freshness check: verify that leaderboard data is recent (< 2 hours)
+  // Uses pipeline_logs (indexed, small table) instead of leaderboard_ranks ORDER BY computed_at
+  // which caused statement_timeout on 75K+ rows without a covering index.
   let freshness: { status: 'pass' | 'fail' | 'skip'; latency?: number; message?: string }
   try {
     const supabaseFresh = getSupabaseAdmin()
     const t1 = Date.now()
-    const { data: latestRow, error: freshErr } = await supabaseFresh
-      .from('leaderboard_ranks')
-      .select('computed_at')
-      .order('computed_at', { ascending: false })
+    const { data: lastCompute, error: freshErr } = await supabaseFresh
+      .from('pipeline_logs')
+      .select('started_at')
+      .eq('job_name', 'compute-leaderboard')
+      .eq('status', 'success')
+      .order('started_at', { ascending: false })
       .limit(1)
       .maybeSingle()
     const latency = Date.now() - t1
     if (freshErr) {
       freshness = { status: 'fail', message: freshErr.message, latency }
-    } else if (!latestRow?.computed_at) {
-      freshness = { status: 'fail', message: 'No leaderboard data found', latency }
+    } else if (!lastCompute?.started_at) {
+      freshness = { status: 'fail', message: 'No compute-leaderboard success found', latency }
     } else {
-      const ageMs = Date.now() - new Date(latestRow.computed_at).getTime()
+      const ageMs = Date.now() - new Date(lastCompute.started_at).getTime()
       const ageHours = ageMs / (1000 * 60 * 60)
       freshness = ageHours <= 2
         ? { status: 'pass', latency, message: `${ageHours.toFixed(1)}h old` }
