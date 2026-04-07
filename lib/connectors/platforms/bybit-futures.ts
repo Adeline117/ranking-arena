@@ -79,7 +79,12 @@ export class BybitFuturesConnector extends BaseConnector {
             { method: 'GET' }
           )
         } catch (err) {
-          this.logger.debug('Bybit direct API fallback:', err instanceof Error ? err.message : String(err))
+          const errMsg = err instanceof Error ? err.message : String(err)
+          // On first page failure, throw explicit error so pipeline can track it
+          if (page === 1 + Math.floor(offset / pageSize) && allTraders.length === 0) {
+            throw new Error(`Bybit: VPS scraper unavailable and direct API blocked (${errMsg}). Check VPS_SCRAPER_SG connectivity.`)
+          }
+          this.logger.debug('Bybit direct API fallback:', errMsg)
           break
         }
       }

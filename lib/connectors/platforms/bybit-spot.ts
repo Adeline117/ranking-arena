@@ -59,6 +59,9 @@ export class BybitSpotConnector extends BaseConnector {
       const leaderDetails = resultObj?.leaderDetails as unknown[] | undefined
       const dataArr = resultObj?.data as unknown[] | undefined
       list = (leaderDetails?.length ? leaderDetails : dataArr?.length ? dataArr : []) as Record<string, unknown>[]
+    } else {
+      // VPS scraper unavailable — throw explicit error for pipeline tracking
+      throw new Error('Bybit Spot: VPS scraper unavailable and no direct API fallback. Check VPS_SCRAPER_SG connectivity.')
     }
 
     const traders: TraderSource[] = list.map((item) => ({
