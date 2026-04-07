@@ -33,13 +33,13 @@ function withTimeout<T>(promise: Promise<T> | PromiseLike<T>, fallback: T, label
 async function checkDatabase(): Promise<{ status: 'pass' | 'fail' | 'skip'; latency?: number; message?: string }> {
   const t0 = Date.now()
   try {
-    const { error } = await withTimeout(
-      getSupabaseAdmin().from('library_items').select('id').limit(1).then(r => r),
-      { data: null, error: { message: 'DB check timed out (5s)' } } as { data: null; error: { message: string } },
+    const result = await withTimeout(
+      getSupabaseAdmin().from('library_items').select('id').limit(1).then(r => ({ ok: !r.error, msg: r.error?.message })),
+      { ok: false, msg: 'DB check timed out (5s)' },
       'checkDatabase'
     )
     const latency = Date.now() - t0
-    if (error) return { status: 'fail', message: error.message, latency }
+    if (!result.ok) return { status: 'fail', message: result.msg, latency }
     return { status: 'pass', latency }
   } catch (e: unknown) {
     return { status: 'fail', message: e instanceof Error ? e.message : 'Unknown', latency: Date.now() - t0 }
