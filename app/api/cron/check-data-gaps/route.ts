@@ -125,39 +125,39 @@ export async function GET(req: NextRequest) {
       const totalTraders = traders?.length || 0
       const traderIds = traders?.map((t) => t.source_trader_id) || []
 
-      // Check snapshots for each period
+      // Check snapshots for each period — use count queries instead of full selects
+      // Previous version fetched ALL rows (100K+ for large platforms), causing 65min+ hangs
       const periodCoverage: PlatformGapReport['periodCoverage'] = {}
 
       for (const period of TIME_PERIODS) {
-        const { data: snapshots } = await supabase
+        // Total count for this platform/period
+        const { count: totalCount } = await supabase
           .from('trader_snapshots_v2')
-          .select('trader_key, roi_pct, pnl_usd, win_rate, max_drawdown, followers')
+          .select('*', { count: 'exact', head: true })
           .eq('platform', platform)
           .eq('window', period)
 
-        const _snapshotMap = new Map(snapshots?.map((s) => [s.trader_key, s]) || [])
-
-        let missingRoi = 0
-        let missingPnl = 0
-        let missingWinRate = 0
-        let missingDrawdown = 0
-        let missingFollowers = 0
-
-        for (const snap of snapshots || []) {
-          if (snap.roi_pct == null) missingRoi++
-          if (snap.pnl_usd == null) missingPnl++
-          if (snap.win_rate == null) missingWinRate++
-          if (snap.max_drawdown == null) missingDrawdown++
-          if (snap.followers == null) missingFollowers++
-        }
+        // Count nulls for each metric using separate count queries
+        const [roiNull, pnlNull, winRateNull, drawdownNull, followersNull] = await Promise.all([
+          supabase.from('trader_snapshots_v2').select('*', { count: 'exact', head: true })
+            .eq('platform', platform).eq('window', period).is('roi_pct', null),
+          supabase.from('trader_snapshots_v2').select('*', { count: 'exact', head: true })
+            .eq('platform', platform).eq('window', period).is('pnl_usd', null),
+          supabase.from('trader_snapshots_v2').select('*', { count: 'exact', head: true })
+            .eq('platform', platform).eq('window', period).is('win_rate', null),
+          supabase.from('trader_snapshots_v2').select('*', { count: 'exact', head: true })
+            .eq('platform', platform).eq('window', period).is('max_drawdown', null),
+          supabase.from('trader_snapshots_v2').select('*', { count: 'exact', head: true })
+            .eq('platform', platform).eq('window', period).is('followers', null),
+        ])
 
         periodCoverage[period] = {
-          count: snapshots?.length || 0,
-          missingRoi,
-          missingPnl,
-          missingWinRate,
-          missingDrawdown,
-          missingFollowers,
+          count: totalCount || 0,
+          missingRoi: roiNull.count || 0,
+          missingPnl: pnlNull.count || 0,
+          missingWinRate: winRateNull.count || 0,
+          missingDrawdown: drawdownNull.count || 0,
+          missingFollowers: followersNull.count || 0,
         }
       }
 
@@ -206,40 +206,29 @@ export async function GET(req: NextRequest) {
 
       enrichmentCoverage.positionHistory = positionCount || 0
 
-      // Calculate missing periods
-      const tradersWithPeriods = new Map<string, Set<string>>()
+      // Calculate missing periods using count queries instead of fetching all trader_keys
+      // Previous version fetched ALL trader_keys per platform/period into memory — O(n²) for large platforms
+      const [count7D, count30D, count90D] = await Promise.all(
+        TIME_PERIODS.map(period =>
+          supabase
+            .from('trader_snapshots_v2')
+            .select('*', { count: 'exact', head: true })
+            .eq('platform', platform)
+            .eq('window', period)
+        )
+      )
 
-      for (const period of TIME_PERIODS) {
-        const { data: periodSnaps } = await supabase
-          .from('trader_snapshots_v2')
-          .select('trader_key')
-          .eq('platform', platform)
-          .eq('window', period)
+      const snap7D = count7D.count || 0
+      const snap30D = count30D.count || 0
+      const snap90D = count90D.count || 0
 
-        for (const snap of periodSnaps || []) {
-          if (!tradersWithPeriods.has(snap.trader_key)) {
-            tradersWithPeriods.set(snap.trader_key, new Set())
-          }
-          tradersWithPeriods.get(snap.trader_key)!.add(period)
-        }
-      }
-
-      let missing7D = 0
-      let missing30D = 0
-      let missing90D = 0
-      let missingAll3 = 0
-
-      for (const [, periods] of tradersWithPeriods) {
-        if (!periods.has('7D')) missing7D++
-        if (!periods.has('30D')) missing30D++
-        if (!periods.has('90D')) missing90D++
-        if (periods.size === 0) missingAll3++
-      }
-
-      // Also count traders that don't appear in any snapshot
-      const tradersInSnapshots = new Set(tradersWithPeriods.keys())
-      const tradersNotInAnySnapshot = traderIds.filter((id) => !tradersInSnapshots.has(id))
-      missingAll3 += tradersNotInAnySnapshot.length
+      // Approximate missing: traders in source but not in snapshot for that period
+      const missing7D = Math.max(0, totalTraders - snap7D)
+      const missing30D = Math.max(0, totalTraders - snap30D)
+      const missing90D = Math.max(0, totalTraders - snap90D)
+      // Traders not in any snapshot: those in trader_sources but no snapshot at all
+      const maxSnap = Math.max(snap7D, snap30D, snap90D)
+      const missingAll3 = Math.max(0, totalTraders - maxSnap)
 
       const report: PlatformGapReport = {
         platform,

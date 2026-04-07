@@ -84,12 +84,25 @@ export async function GET(request: NextRequest) {
       status = 'healthy'
     }
 
+    // Fetch detailed connection breakdown for diagnostics
+    let connectionStats: Array<{ state: string; count: number; oldest_query_seconds: number }> | null = null
+    if (status !== 'healthy') {
+      // Only fetch details when pool is under pressure (saves a query in normal case)
+      try {
+        const { data: statsData } = await supabase.rpc('get_connection_stats')
+        if (statsData) connectionStats = statsData as typeof connectionStats
+      } catch {
+        // Non-critical — main count is enough
+      }
+    }
+
     return NextResponse.json({
       active_connections: activeConnections,
       max_connections: MAX_CONNECTIONS,
       utilization_pct: utilizationPct,
       status,
       checked_at: new Date().toISOString(),
+      ...(connectionStats ? { connection_breakdown: connectionStats } : {}),
     })
   } catch (err) {
     log.error('Error', { error: err instanceof Error ? err.message : String(err) })
