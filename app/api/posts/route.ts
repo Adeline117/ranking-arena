@@ -290,11 +290,13 @@ export async function POST(request: NextRequest) {
     // 并行获取用户 handle + reputation data
     const [userHandle, reputationResult] = await Promise.all([
       getUserHandle(user.id, user.email),
-      supabase
-        .from('user_profiles')
-        .select('reputation_score, is_verified_trader')
-        .eq('id', user.id)
-        .maybeSingle()
+      Promise.resolve(
+        supabase
+          .from('user_profiles')
+          .select('reputation_score, is_verified_trader')
+          .eq('id', user.id)
+          .maybeSingle()
+      )
         .then(r => ({ score: r.data?.reputation_score ?? 0, verified: r.data?.is_verified_trader ?? false }))
         .catch(() => ({ score: 0, verified: false })),
     ])
