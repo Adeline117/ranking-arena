@@ -621,7 +621,13 @@ export class PipelineEvaluator {
   }
 
   /**
-   * Check 9: Homepage SSR — homepage has server-rendered trader data.
+   * Check 9: Homepage SSR — homepage has server-rendered hero + ranking table.
+   *
+   * Verifies structural integrity of the SSR output, not just HTTP status:
+   * - h1 headline present (LCP element)
+   * - ssr-t (table container) + ssr-row (data rows) present
+   * - ssr-controls (time range + pagination) present
+   * - Minimum 10 trader rows rendered (not a bare skeleton)
    */
   private static async checkHomepageSSR(): Promise<{ check: EvaluationCheck; issues: EvaluationIssue[] }> {
     const issues: EvaluationIssue[] = []
@@ -630,7 +636,6 @@ export class PipelineEvaluator {
       || 'http://localhost:3000'
     const start = Date.now()
     try {
-      // Use production URL to avoid self-referencing issues within Vercel functions
       const checkUrl = process.env.NEXT_PUBLIC_SITE_URL || baseUrl
       const res = await fetch(checkUrl, {
         signal: AbortSignal.timeout(10_000),
@@ -642,37 +647,103 @@ export class PipelineEvaluator {
       })
       const latency = Date.now() - start
 
-      // 401/403 from within Vercel = deployment protection, not a real failure.
-      // Production site is publicly accessible — this only happens on internal
-      // Vercel-to-Vercel requests. Score 95 (not 100 since we can't verify SSR).
+      // 401/403 from Vercel deployment protection — can't verify SSR content.
+      // Fallback: verify SSR structure from production URL via external fetch.
       if (res.status === 401 || res.status === 403) {
+        // Try fetching from the canonical production URL if different from checkUrl
+        const prodUrl = 'https://www.arenafi.org'
+        if (checkUrl !== prodUrl) {
+          try {
+            const prodRes = await fetch(prodUrl, {
+              signal: AbortSignal.timeout(8_000),
+              headers: { 'User-Agent': 'Mozilla/5.0 ArenaHealthCheck/1.0', 'Accept': 'text/html' },
+              redirect: 'follow',
+            })
+            if (prodRes.ok) {
+              const html = await prodRes.text()
+              return PipelineEvaluator.verifySSRContent(html, Date.now() - start)
+            }
+          } catch { /* fall through to 95 score */ }
+        }
         return { check: { name: 'homepage_ssr', category: 'freshness', passed: true, score: 95,
-          details: `${res.status} ${latency}ms (Vercel deployment protection — site is public)` }, issues }
+          details: `${res.status} ${latency}ms (deployment protection — content not verified)` }, issues }
+      }
+
+      if (res.status >= 500) {
+        issues.push({ platform: 'frontend', type: 'homepage_error', severity: 'critical',
+          description: `Homepage returned ${res.status}`, recommendation: 'Check Next.js build.' })
+        return { check: { name: 'homepage_ssr', category: 'freshness', passed: false, score: 0,
+          details: `${res.status} ${latency}ms` }, issues }
       }
 
       const html = await res.text()
-      const hasHero = html.toLowerCase().includes('track') || html.toLowerCase().includes('trader')
-      let score = 100
-      if (res.status >= 500) {
-        score = 0
-        issues.push({ platform: 'frontend', type: 'homepage_error', severity: 'critical',
-          description: `Homepage returned ${res.status}`, recommendation: 'Check Next.js build.' })
-      } else if (!hasHero && res.status === 200) {
-        score = 50
-        issues.push({ platform: 'frontend', type: 'homepage_empty', severity: 'warning',
-          description: 'Missing hero content', recommendation: 'Check SSR.' })
-      } else if (latency > 5000) {
-        score = 50
-        issues.push({ platform: 'frontend', type: 'homepage_slow', severity: 'warning',
-          description: `Homepage took ${latency}ms`, recommendation: 'Check ISR cache.' })
-      }
-      return { check: { name: 'homepage_ssr', category: 'freshness', passed: score >= 70, score,
-        details: `${res.status} ${latency}ms, hero=${hasHero}` }, issues }
+      return PipelineEvaluator.verifySSRContent(html, latency)
     } catch (err) {
       return { check: { name: 'homepage_ssr', category: 'freshness', passed: false, score: 0,
         details: `Failed: ${err instanceof Error ? err.message : 'timeout'}` },
         issues: [{ platform: 'frontend', type: 'homepage_down', severity: 'critical',
           description: 'Homepage unreachable', recommendation: 'Check Vercel.' }] }
+    }
+  }
+
+  /** Verify SSR HTML contains required structural elements */
+  private static verifySSRContent(html: string, latencyMs: number): { check: EvaluationCheck; issues: EvaluationIssue[] } {
+    const issues: EvaluationIssue[] = []
+    let score = 100
+    const missing: string[] = []
+
+    // 1. h1 headline (LCP element from HomeHeroSSR)
+    const hasH1 = /<h1[\s>]/i.test(html)
+    if (!hasH1) { score -= 15; missing.push('h1') }
+
+    // 2. SSR table container (ssr-t class)
+    const hasTable = html.includes('ssr-t')
+    if (!hasTable) { score -= 20; missing.push('ssr-t') }
+
+    // 3. SSR data rows (ssr-row class — at least 10 traders)
+    const rowCount = (html.match(/ssr-row(?=[ "'])/g) || []).length
+    if (rowCount === 0) {
+      score -= 25; missing.push('ssr-row(0)')
+    } else if (rowCount < 10) {
+      score -= 10; missing.push(`ssr-row(${rowCount}<10)`)
+    }
+
+    // 4. SSR controls (time range + pagination)
+    const hasControls = html.includes('ssr-controls')
+    if (!hasControls) { score -= 10; missing.push('ssr-controls') }
+
+    // 5. Trader names present (ssr-name class)
+    const nameCount = (html.match(/ssr-name/g) || []).length
+    if (nameCount === 0) { score -= 15; missing.push('ssr-name(0)') }
+
+    // 6. Score badges present (ssr-score class)
+    const hasScores = html.includes('ssr-score')
+    if (!hasScores) { score -= 10; missing.push('ssr-score') }
+
+    // 7. Latency check
+    if (latencyMs > 5000) { score -= 5; missing.push(`slow(${latencyMs}ms)`) }
+
+    score = Math.max(0, score)
+
+    if (missing.length > 0) {
+      issues.push({
+        platform: 'frontend',
+        type: 'homepage_ssr_incomplete',
+        severity: score < 50 ? 'critical' : 'warning',
+        description: `Missing SSR elements: ${missing.join(', ')}`,
+        recommendation: 'Check page.tsx renders HomeHeroSSR + SSRRankingTable with data. Verify critical-css.ts has all .ssr-* classes.',
+      })
+    }
+
+    return {
+      check: {
+        name: 'homepage_ssr',
+        category: 'freshness',
+        passed: score >= 70,
+        score,
+        details: `${latencyMs}ms, h1=${hasH1}, table=${hasTable}, rows=${rowCount}, controls=${hasControls}, names=${nameCount}, scores=${hasScores}${missing.length > 0 ? ` | MISSING: ${missing.join(', ')}` : ''}`,
+      },
+      issues,
     }
   }
 
