@@ -150,7 +150,7 @@ export function useTableKeyboardNav({
 
   const containerProps = {
     role: 'grid' as const,
-    tabIndex: 0,
+    tabIndex: 0 as const,
     onKeyDown: handleKeyDown,
     onBlur: handleBlur,
     'aria-activedescendant':
