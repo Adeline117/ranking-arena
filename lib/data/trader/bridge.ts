@@ -89,7 +89,7 @@ export function toTraderPageData(detail: TraderDetail): Record<string, unknown> 
       )
     })(),
     total_positions: (() => {
-      const _enrichTotal = detail.stats?.totalPositions
+      const enrichTotal = detail.stats?.totalPositions
       const periodTrades = t.tradesCount
       // If enrichment total >> period trades, use period trades (more accurate for display period)
       if (enrichTotal != null && periodTrades != null && enrichTotal > periodTrades * 2) {
