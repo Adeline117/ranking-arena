@@ -212,9 +212,11 @@ async function fetchViaDiverseRPC(
   timeRange: Period,
   limit: number
 ): Promise<{ traders: InitialTrader[]; lastUpdated: string | null }> {
-  // Fetch more rows with lower per-platform cap, then enforce JS-side category diversity.
+  // Fetch more rows with per-platform cap, then enforce JS-side category diversity.
   // Without this, DEX platforms (high ROI → high score) dominate all 50 slots.
-  const MAX_PER_PLATFORM = 5
+  // Aligned with API route (0.4) — SSR uses slightly tighter 0.3 to keep diversity
+  // but avoids the jarring composition shift when the first API refresh arrives.
+  const MAX_PER_PLATFORM = Math.max(5, Math.ceil(limit * 0.3))
 
   // Try the SQL RPC first — fetch 2x limit to have room for diversity enforcement
   const { data, error } = await supabase.rpc('get_diverse_leaderboard', {
