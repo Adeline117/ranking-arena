@@ -52,7 +52,10 @@ export function useProStatus(): ProStatus {
   const check = useCallback(async (force = false) => {
     try {
       const supabase = await getSupabase()
-      const { data: { user } } = await supabase.auth.getUser()
+      // Use getSession() instead of getUser() — getSession() reads from local storage
+      // while getUser() makes a network request to Supabase Auth server every time
+      const { data: { session } } = await supabase.auth.getSession()
+      const user = session?.user ?? null
 
       if (!user) {
         if (isMountedRef.current) {
