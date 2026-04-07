@@ -15,6 +15,10 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import type { User, Session } from '@supabase/supabase-js'
 import { logger } from '@/lib/logger'
+import {
+  tokenRefreshCoordinator,
+  registerAuthStateSetter,
+} from '@/lib/auth/token-refresh'
 
 // Lazy-load Supabase client to avoid pulling ~50KB into the initial client bundle.
 // The actual import happens on first use (initializeAuth), which is deferred.
@@ -31,12 +35,6 @@ function getSupabase(): Promise<LazySupabaseClient> {
     })
   }
   return _supabasePromise
-}
-
-// Synchronous getter — only works after lazy init resolves.
-// Falls back to null before that (callers must handle).
-function _getSupabaseSync() {
-  return _supabase
 }
 
 export type AuthState = {
@@ -97,6 +95,10 @@ function initializeAuth() {
   if (initialized) return
   initialized = true
 
+  // Register setGlobalAuthState with the centralized token refresh coordinator
+  // so it can update auth state when tokens are refreshed or sessions expire.
+  registerAuthStateSetter((state) => setGlobalAuthState(state))
+
   // Lazy-load Supabase then initialize auth
   getSupabase().then((sb) => {
     // Get initial session
@@ -154,7 +156,6 @@ function updateFromSession(session: Session | null) {
 export function useAuthSession(): AuthSessionReturn {
   const [state, setState] = useState<AuthState>(globalAuthState)
   const stateRef = useRef(state)
-  const refreshingRef = useRef(false)
 
   useEffect(() => {
     stateRef.current = state
@@ -178,51 +179,11 @@ export function useAuthSession(): AuthSessionReturn {
     }
   }, [])
 
-  // Get a fresh token, refreshing if close to expiry (within 60s)
+  // Get a fresh token, refreshing if close to expiry (within 60s).
+  // Delegates to the centralized TokenRefreshCoordinator which handles
+  // thundering herd prevention (concurrent callers share one in-flight refresh).
   const getToken = useCallback(async (): Promise<string | null> => {
-    // Prevent concurrent refresh attempts
-    if (refreshingRef.current) {
-      await new Promise(resolve => setTimeout(resolve, 100))
-      return stateRef.current.accessToken
-    }
-
-    try {
-      const sb = await getSupabase()
-      const { data: { session } } = await sb.auth.getSession()
-      if (session?.access_token) {
-        // Check if token is close to expiry (within 60s)
-        const expiresAt = session.expires_at
-        const now = Math.floor(Date.now() / 1000)
-        if (expiresAt && (expiresAt - now) < 60) {
-          // Token about to expire, refresh
-          refreshingRef.current = true
-          try {
-            const { data: { session: refreshed }, error: refreshError } = await sb.auth.refreshSession()
-            if (refreshed) {
-              updateFromSession(refreshed)
-              setGlobalAuthState({ loading: false, authChecked: true })
-              return refreshed.access_token
-            }
-            // Refresh failed — clear stale auth state so UI prompts re-login
-            if (refreshError) {
-              logger.warn('[getToken] Token refresh failed:', refreshError.message)
-            }
-            setGlobalAuthState({
-              user: null, userId: null, email: null, accessToken: null,
-              isLoggedIn: false, loading: false, authChecked: true,
-            })
-            return null
-          } finally {
-            refreshingRef.current = false
-          }
-        }
-        return session.access_token
-      }
-      return null
-    } catch (_err) {
-      /* non-critical: session lookup failed */
-      return null
-    }
+    return tokenRefreshCoordinator.getValidToken()
   }, [])
 
   const getAuthHeaders = useCallback((): Record<string, string> | null => {
@@ -262,18 +223,11 @@ export function useAuthSession(): AuthSessionReturn {
     return { 'Authorization': `Bearer ${accessToken}` }
   }, [])
 
+  // Force a token refresh via the centralized coordinator.
+  // Returns true if refresh succeeded, false otherwise.
   const refreshSession = useCallback(async (): Promise<boolean> => {
-    try {
-      const sb = await getSupabase()
-      const { data, error } = await sb.auth.refreshSession()
-      if (error || !data.session) return false
-      updateFromSession(data.session)
-      setGlobalAuthState({ loading: false, authChecked: true })
-      return true
-    } catch (_err) {
-      /* non-critical: session refresh failed */
-      return false
-    }
+    const token = await tokenRefreshCoordinator.forceRefresh()
+    return token !== null
   }, [])
 
   const categorizeError = useCallback((status: number, body?: { error?: string }): AuthError | null => {
@@ -318,7 +272,11 @@ export function useAuthSession(): AuthSessionReturn {
 
 /**
  * Utility: Make an authenticated API request with proper error handling.
- * Handles token refresh on 401, categorizes errors properly.
+ *
+ * On 401, delegates to the centralized TokenRefreshCoordinator which:
+ * - Coalesces concurrent refresh requests (thundering herd prevention)
+ * - Retries the original request with the fresh token
+ * - Clears auth state on unrecoverable failure
  */
 export async function authFetch(
   url: string,
@@ -326,45 +284,28 @@ export async function authFetch(
 ): Promise<Response> {
   const { requireAuth: needsAuth = true, ...fetchOptions } = options
 
-  // Get current access token
-  const sb = await getSupabase()
-  const { data: { session } } = await sb.auth.getSession()
+  // Get a valid token (proactively refreshes if near expiry)
+  const token = await tokenRefreshCoordinator.getValidToken()
 
-  if (needsAuth && !session?.access_token) {
+  if (needsAuth && !token) {
     throw Object.assign(new Error('Not authenticated'), { authError: { type: 'NOT_AUTHENTICATED' as const, message: '请先登录' } })
   }
 
   const headers = new Headers(fetchOptions.headers)
-  if (session?.access_token) {
-    headers.set('Authorization', `Bearer ${session.access_token}`)
+  if (token) {
+    headers.set('Authorization', `Bearer ${token}`)
   }
 
   const response = await fetch(url, { ...fetchOptions, headers })
 
-  // Handle token expiry: try to refresh and retry once
-  if (response.status === 401 && session) {
-    try {
-      const { data: refreshData, error: refreshError } = await sb.auth.refreshSession()
-      if (refreshData.session) {
-        updateFromSession(refreshData.session)
-        headers.set('Authorization', `Bearer ${refreshData.session.access_token}`)
-        return fetch(url, { ...fetchOptions, headers })
-      }
-      // Refresh failed — session is dead, clear auth state so UI updates
-      if (refreshError) {
-        logger.warn('[authFetch] Token refresh failed, clearing auth state:', refreshError.message)
-      }
-      setGlobalAuthState({
-        user: null, userId: null, email: null, accessToken: null,
-        isLoggedIn: false, loading: false, authChecked: true,
-      })
-    } catch (refreshErr) {
-      logger.warn('[authFetch] Token refresh threw, clearing auth state:', refreshErr)
-      setGlobalAuthState({
-        user: null, userId: null, email: null, accessToken: null,
-        isLoggedIn: false, loading: false, authChecked: true,
-      })
+  // Handle 401: refresh via coordinator (queues concurrent requests) and retry once
+  if (response.status === 401 && token) {
+    const newToken = await tokenRefreshCoordinator.forceRefresh()
+    if (newToken) {
+      headers.set('Authorization', `Bearer ${newToken}`)
+      return fetch(url, { ...fetchOptions, headers })
     }
+    // Refresh failed — coordinator already cleared auth state
   }
 
   return response
