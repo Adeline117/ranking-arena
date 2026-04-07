@@ -198,61 +198,78 @@ export async function GET(request: NextRequest) {
       }
     }
 
+    // Time budget: skip non-critical post-processing if <60s remaining (prevents 300s timeout)
+    const TIME_BUDGET_MS = (maxDuration - 20) * 1000 // 280s safety margin
+    const remainingMs = () => TIME_BUDGET_MS - (Date.now() - startTime)
+
     // Refresh leaderboard count cache after all seasons computed
-    try {
-      const { query: dbQuery } = await import('@/lib/db')
-      await dbQuery('SELECT refresh_leaderboard_count_cache()', [])
-      logger.info('Refreshed leaderboard_count_cache')
-    } catch (cacheErr) {
-      logger.warn('Failed to refresh leaderboard_count_cache:', cacheErr)
+    if (remainingMs() > 30_000) {
+      try {
+        const { query: dbQuery } = await import('@/lib/db')
+        await dbQuery('SELECT refresh_leaderboard_count_cache()', [])
+        logger.info('Refreshed leaderboard_count_cache')
+      } catch (cacheErr) {
+        logger.warn('Failed to refresh leaderboard_count_cache:', cacheErr)
+      }
+    } else {
+      logger.warn(`Skipping leaderboard_count_cache refresh — only ${Math.round(remainingMs() / 1000)}s remaining`)
     }
 
     // Sync arena_score from leaderboard_ranks → trader_snapshots_v2 flat column
     // This ensures the v2 table has scores matching the freshly computed leaderboard
-    try {
-      const recentCutoff = new Date(Date.now() - 7 * 24 * 3600 * 1000).toISOString()
-      // Fetch recent v2 rows missing scores
-      const { data: missingScores } = await supabase
-        .from('trader_snapshots_v2')
-        .select('id, platform, trader_key, window')
-        .is('arena_score', null)
-        .gte('created_at', recentCutoff)
-        .limit(1000)
+    // Gated by time budget: this can take 30-60s for large batches
+    if (remainingMs() > 60_000) {
+      try {
+        const recentCutoff = new Date(Date.now() - 7 * 24 * 3600 * 1000).toISOString()
+        // Fetch recent v2 rows missing scores
+        const { data: missingScores } = await supabase
+          .from('trader_snapshots_v2')
+          .select('id, platform, trader_key, window')
+          .is('arena_score', null)
+          .gte('created_at', recentCutoff)
+          .limit(1000)
 
-      if (missingScores && missingScores.length > 0) {
-        // Batch lookup from leaderboard_ranks
-        const traderKeys = [...new Set(missingScores.map(r => r.trader_key))]
-        const { data: ranks } = await supabase
-          .from('leaderboard_ranks')
-          .select('source, source_trader_id, season_id, arena_score')
-          .in('source_trader_id', traderKeys.slice(0, 500))
-          .not('arena_score', 'is', null)
+        if (missingScores && missingScores.length > 0) {
+          // Batch lookup from leaderboard_ranks
+          const traderKeys = [...new Set(missingScores.map(r => r.trader_key))]
+          const { data: ranks } = await supabase
+            .from('leaderboard_ranks')
+            .select('source, source_trader_id, season_id, arena_score')
+            .in('source_trader_id', traderKeys.slice(0, 500))
+            .not('arena_score', 'is', null)
 
-        if (ranks && ranks.length > 0) {
-          const scoreMap = new Map(ranks.map(r => [`${r.source}:${r.source_trader_id}:${r.season_id}`, r.arena_score]))
-          // Batch updates instead of N+1 individual queries
-          const updates: { id: string; arena_score: number }[] = []
-          for (const row of missingScores) {
-            const key = `${row.platform}:${row.trader_key}:${row.window}`
-            const score = scoreMap.get(key)
-            if (score != null && score > 0) {
-              updates.push({ id: row.id, arena_score: score })
+          if (ranks && ranks.length > 0) {
+            const scoreMap = new Map(ranks.map(r => [`${r.source}:${r.source_trader_id}:${r.season_id}`, r.arena_score]))
+            // Batch updates instead of N+1 individual queries
+            const updates: { id: string; arena_score: number }[] = []
+            for (const row of missingScores) {
+              const key = `${row.platform}:${row.trader_key}:${row.window}`
+              const score = scoreMap.get(key)
+              if (score != null && score > 0) {
+                updates.push({ id: row.id, arena_score: score })
+              }
             }
+            // Execute in batches of 100, abort if time budget low
+            let synced = 0
+            for (let i = 0; i < updates.length; i += 100) {
+              if (remainingMs() < 30_000) {
+                logger.warn(`arena_score sync aborted at batch ${i} — only ${Math.round(remainingMs() / 1000)}s remaining`)
+                break
+              }
+              const chunk = updates.slice(i, i + 100)
+              const { error: upsertErr } = await supabase
+                .from('trader_snapshots_v2')
+                .upsert(chunk, { onConflict: 'id' })
+              if (!upsertErr) synced += chunk.length
+            }
+            logger.info(`Synced arena_score to v2: ${synced}/${missingScores.length} rows (${updates.length} updates, batched)`)
           }
-          // Execute in batches of 100
-          let synced = 0
-          for (let i = 0; i < updates.length; i += 100) {
-            const chunk = updates.slice(i, i + 100)
-            const { error: upsertErr } = await supabase
-              .from('trader_snapshots_v2')
-              .upsert(chunk, { onConflict: 'id' })
-            if (!upsertErr) synced += chunk.length
-          }
-          logger.info(`Synced arena_score to v2: ${synced}/${missingScores.length} rows (${updates.length} updates, batched)`)
         }
+      } catch (syncErr) {
+        logger.warn('arena_score sync to v2 failed (non-critical):', syncErr)
       }
-    } catch (syncErr) {
-      logger.warn('arena_score sync to v2 failed (non-critical):', syncErr)
+    } else {
+      logger.warn(`Skipping arena_score v2 sync — only ${Math.round(remainingMs() / 1000)}s remaining`)
     }
 
     // Sync sub-scores + advanced metrics: leaderboard_ranks → trader_snapshots_v2
@@ -308,12 +325,17 @@ export async function GET(request: NextRequest) {
     })(), 'sync-subscores-to-v2')
 
     // Post-compute: derive WR/MDD from historical snapshots for traders missing them
+    // Gated by time budget: this queries historical data and can be slow
     let wrMddDerived = 0
-    try {
-      wrMddDerived = await deriveWinRateMDD(supabase)
-      if (wrMddDerived > 0) logger.info(`Derived WR/MDD for ${wrMddDerived} traders`)
-    } catch (e) {
-      logger.warn('WR/MDD derivation failed (non-critical):', e)
+    if (remainingMs() > 40_000) {
+      try {
+        wrMddDerived = await deriveWinRateMDD(supabase)
+        if (wrMddDerived > 0) logger.info(`Derived WR/MDD for ${wrMddDerived} traders`)
+      } catch (e) {
+        logger.warn('WR/MDD derivation failed (non-critical):', e)
+      }
+    } else {
+      logger.warn(`Skipping WR/MDD derivation — only ${Math.round(remainingMs() / 1000)}s remaining`)
     }
 
     // Fire-and-forget: warm Redis cache with top 100 for each season
