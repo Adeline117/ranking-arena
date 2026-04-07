@@ -8,6 +8,7 @@
 import useSWR, { SWRConfiguration, mutate as globalMutate, SWRResponse } from 'swr'
 import useSWRInfinite, { SWRInfiniteConfiguration } from 'swr/infinite'
 import { t } from '@/lib/i18n'
+import { tokenRefreshCoordinator } from '@/lib/auth/token-refresh'
 
 // ============================================
 // 请求超时配置
@@ -117,6 +118,24 @@ export async function fetcherWithAuth<T>(url: string, token?: string): Promise<T
       credentials: 'include',
       headers,
     })
+
+    // On 401 with a token, attempt refresh via coordinator and retry once
+    if (response.status === 401 && token && typeof window !== 'undefined') {
+      const newToken = await tokenRefreshCoordinator.forceRefresh()
+      if (newToken) {
+        const retryHeaders: HeadersInit = { 'Authorization': `Bearer ${newToken}` }
+        const retryResponse = await fetchWithTimeout(url, {
+          credentials: 'include',
+          headers: retryHeaders,
+        })
+        if (!retryResponse.ok) {
+          const error = new Error(t('errorRequestFailed')) as Error & { status: number }
+          error.status = retryResponse.status
+          throw error
+        }
+        return retryResponse.json()
+      }
+    }
 
     if (!response.ok) {
       const error = new Error(t('errorRequestFailed')) as Error & { status: number }
