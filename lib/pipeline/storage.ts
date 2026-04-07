@@ -10,6 +10,7 @@ import { SupabaseClient } from '@supabase/supabase-js'
 import { EnrichedTraderData, PersistResult } from './types'
 import { createLogger } from '@/lib/utils/logger'
 import { SOURCE_TYPE_MAP } from '@/lib/constants/exchanges'
+import { validateBeforeWrite, logRejectedWrites } from './validate-before-write'
 
 
 const log = createLogger('pipeline:storage')
@@ -144,10 +145,19 @@ export class PipelineStorage {
       updated_at: new Date().toISOString(),
     }))
 
-    // Upsert
+    // Data gatekeeper: validate before write
+    const { valid: validSnapshots, rejected } = validateBeforeWrite(
+      snapshots as unknown as Record<string, unknown>[],
+      'trader_snapshots_v2'
+    )
+    if (rejected.length) logRejectedWrites(rejected, supabase)
+
+    if (validSnapshots.length === 0) return { count: 0 }
+
+    // Upsert only validated rows
     const { error, count } = await supabase
       .from('trader_snapshots_v2')
-      .upsert(snapshots, {
+      .upsert(validSnapshots, {
         onConflict: 'platform,market_type,trader_key,window,as_of_ts',
         ignoreDuplicates: false,
         count: 'exact',
@@ -155,10 +165,10 @@ export class PipelineStorage {
 
     if (error) {
       log.error('upsertSnapshots error', { error: error instanceof Error ? error.message : String(error) })
-      throw error // 这个错误需要抛出
+      throw error
     }
 
-    return { count: count ?? snapshots.length }
+    return { count: count ?? validSnapshots.length }
   }
 
   /**

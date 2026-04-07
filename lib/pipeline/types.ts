@@ -238,9 +238,22 @@ export const OVERALL_WEIGHTS: Record<TimeWindow, number> = {
 // Validation Bounds
 // =============================================================================
 
+/**
+ * Canonical validation bounds — THE SINGLE SOURCE OF TRUTH.
+ *
+ * Every validator (validate-before-write, connector-db-adapter, compute-leaderboard)
+ * MUST import from here. These match the DB CHECK constraints exactly.
+ * If you change a bound here, also update the DB constraint migration.
+ */
 export const VALIDATION_BOUNDS = {
   roi_pct: { min: -10000, max: 10000 },
+  pnl_usd: { min: -10_000_000, max: 100_000_000 },
+  pnl_usd_dex_whale: { min: -10_000_000, max: 1_000_000_000 },
   win_rate_pct: { min: 0, max: 100 },
   max_drawdown_pct: { min: 0, max: 100 },
+  sharpe_ratio: { min: -10, max: 10 },
   arena_score: { min: 0, max: 100 },
-}
+  trades_count: { min: 0 },
+  followers: { min: 0 },
+  copiers: { min: 0 },
+} as const
