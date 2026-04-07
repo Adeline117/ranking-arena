@@ -137,6 +137,7 @@ export default function SearchDropdown({ open, query, onClose }: SearchDropdownP
       id="search-dropdown-listbox"
       role="listbox"
       aria-label="Search results"
+      className="dropdown-enter"
       style={{
         position: 'absolute', top: 'calc(100% + 8px)', left: 0, right: 0,
         background: tokens.colors.bg.secondary,
