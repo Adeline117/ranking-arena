@@ -222,7 +222,11 @@ export function usePostComments({ postId, pageSize = 10 }: UsePostCommentsOption
 
 /**
  * Unified reaction hook (like/dislike).
- * Uses server ACK - only updates UI after server confirms.
+ * Optimistic update pattern (like Mastodon/Discourse):
+ * 1. Immediately update UI with predicted state
+ * 2. Send request to server in background
+ * 3. On success: reconcile with server counts
+ * 4. On failure: rollback to previous state + show error
  */
 export function usePostReaction() {
   const { getAuthHeaders, isLoggedIn } = useAuthSession()
@@ -234,6 +238,10 @@ export function usePostReaction() {
     options?: {
       onSuccess?: (result: { like_count: number; dislike_count: number; reaction: 'up' | 'down' | null }) => void
       onError?: (error: string) => void
+      /** Current state for optimistic rollback */
+      currentReaction?: 'up' | 'down' | null
+      currentLikeCount?: number
+      currentDislikeCount?: number
     }
   ): Promise<{ like_count: number; dislike_count: number; reaction: 'up' | 'down' | null } | null> => {
     const authHeaders = getAuthHeaders()
@@ -242,6 +250,33 @@ export function usePostReaction() {
       useLoginModal.getState().openLoginModal()
       return null
     }
+
+    // Compute optimistic result before server call
+    const prevReaction = options?.currentReaction ?? null
+    const prevLike = options?.currentLikeCount ?? 0
+    const prevDislike = options?.currentDislikeCount ?? 0
+
+    let optimisticReaction: 'up' | 'down' | null
+    let optimisticLike = prevLike
+    let optimisticDislike = prevDislike
+
+    if (prevReaction === reactionType) {
+      // Toggle off (undo)
+      optimisticReaction = null
+      if (reactionType === 'up') optimisticLike = Math.max(0, prevLike - 1)
+      else optimisticDislike = Math.max(0, prevDislike - 1)
+    } else {
+      // Switch or add
+      optimisticReaction = reactionType
+      if (prevReaction === 'up') optimisticLike = Math.max(0, prevLike - 1)
+      if (prevReaction === 'down') optimisticDislike = Math.max(0, prevDislike - 1)
+      if (reactionType === 'up') optimisticLike++
+      else optimisticDislike++
+    }
+
+    // Fire optimistic update immediately
+    const optimistic = { like_count: optimisticLike, dislike_count: optimisticDislike, reaction: optimisticReaction }
+    options?.onSuccess?.(optimistic)
 
     setLoading(prev => ({ ...prev, [postId]: true }))
 
@@ -259,15 +294,20 @@ export function usePostReaction() {
       const json = await response.json()
 
       if (response.ok && json.success) {
-        const result = json.data as { like_count: number; dislike_count: number; reaction: 'up' | 'down' | null }
-        options?.onSuccess?.(result)
-        return result
+        // Reconcile with server truth (counts may differ from optimistic)
+        const serverResult = json.data as { like_count: number; dislike_count: number; reaction: 'up' | 'down' | null }
+        options?.onSuccess?.(serverResult)
+        return serverResult
       } else {
+        // Rollback to previous state
+        options?.onSuccess?.({ like_count: prevLike, dislike_count: prevDislike, reaction: prevReaction })
         options?.onError?.(json.error || '操作失败')
         return null
       }
     } catch (err) {
+      // Rollback on network error
       logger.error('[usePostReaction] Failed:', err)
+      options?.onSuccess?.({ like_count: prevLike, dislike_count: prevDislike, reaction: prevReaction })
       options?.onError?.('网络错误')
       return null
     } finally {
