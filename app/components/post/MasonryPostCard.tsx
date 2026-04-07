@@ -34,13 +34,12 @@ export default function MasonryPostCard({ post, language = 'zh', onLike, onComme
       style={{ textDecoration: 'none', color: 'inherit' }}
     >
       <Box
-        className="masonry-card"
+        className="masonry-card glass-card-hover"
         style={{
           borderRadius: tokens.radius.xl,
           background: tokens.colors.bg.secondary,
           border: `1px solid ${tokens.colors.border.primary}`,
           overflow: 'hidden',
-          transition: `all ${tokens.transition.base}`,
           cursor: 'pointer',
         }}
       >
