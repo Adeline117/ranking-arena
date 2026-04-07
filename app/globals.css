@@ -14,14 +14,9 @@
      when SSR shells collapse to 0. */
 /* Phase 2 RESTORED — three-column layout with sidebars loads after user interaction.
    SSR hero stays visible permanently (LCP element).
-   SSR ranking table is hidden once Phase 2 mounts (replaced by interactive table). */
-:has(#homepage-interactive) #ssr-ranking-table,
-:has(#homepage-interactive) #ssr-topnav {
-  content-visibility: hidden;
-  height: 0;
-  overflow: hidden;
-  contain: strict;
-}
+   SSR ranking table + topnav are removed by JS (requestIdleCallback in HomePage.tsx)
+   AFTER Phase 2's interactive content is ready. No CSS hiding — avoids showing
+   "Loading..." flash when Phase 2 mounts but hasn't fetched data yet. */
 
 /*
  * Performance Optimization: CSS files moved to async loading

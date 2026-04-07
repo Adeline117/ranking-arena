@@ -35,10 +35,11 @@ interface HomePageProps {
 export default function HomePage({ initialTraders, initialLastUpdated, heroStats, initialTotalCount, initialCategoryCounts }: HomePageProps) {
   // SSR hero: NEVER removed — it IS the LCP element (~1.2s on slow 4G).
   // Phase 2 does NOT render its own hero. SSR hero stays visible permanently.
-  // SSR ranking table: hidden by CSS, then removed from DOM during idle.
+  // SSR ranking table + topnav: removed from DOM during idle (Phase 2 renders its own).
   useEffect(() => {
     const cleanup = () => {
       document.getElementById('ssr-ranking-table')?.remove()
+      document.getElementById('ssr-topnav')?.remove()
     }
     if ('requestIdleCallback' in window) {
       (window as Window).requestIdleCallback(cleanup)
