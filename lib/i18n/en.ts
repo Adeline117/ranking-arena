@@ -4903,14 +4903,6 @@ compShareTitle: 'Check out this competition on Arena',
     // Onboarding
     welcomeMessage: 'Welcome! Browse the leaderboard to find traders you\'re interested in and follow them.',
 
-    // AI Analysis
-    aiAnalyze: 'AI Analyze',
-    aiAnalyzeLoading: 'Analyzing...',
-    aiAnalyzeError: 'Analysis failed. Please try again later.',
-    aiAnalyzeStrengths: 'Strengths',
-    aiAnalyzeRisks: 'Risks',
-    aiAnalyzeDisclaimer: 'AI-generated analysis. Not financial advice.',
-
 } as const
 
 export default en
