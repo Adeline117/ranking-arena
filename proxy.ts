@@ -37,6 +37,7 @@ const CSRF_EXEMPT_ROUTES = [
   '/api/messages',         // 消息 API 需要认证
   '/api/notifications',    // 通知 API 需要认证
   '/api/upload-profile-image', // 头像/背景图上传 API，通过 userId 验证
+  '/api/pipeline',             // VPS pipeline ingest — authenticated via X-Proxy-Key
 ]
 
 // 需要认证的路由前缀
