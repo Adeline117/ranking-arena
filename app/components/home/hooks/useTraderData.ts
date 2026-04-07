@@ -14,7 +14,7 @@ export type SortOrder = 'asc' | 'desc'
 
 const TIME_RANGE_STORAGE_KEY = 'ranking_time_range'
 const STALE_THRESHOLD_MS = FIVE_MINUTES_MS
-const PAGE_SIZE = 20
+const PAGE_SIZE = 50
 
 interface UseTraderDataOptions {
   autoRefreshInterval?: number

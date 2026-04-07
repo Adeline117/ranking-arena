@@ -49,7 +49,7 @@ const organizationJsonLd = {
   description: 'Arena aggregates trader rankings from 30+ exchanges. Follow top traders, share insights, and level up your trading.',
 }
 
-const PER_PAGE = 25
+const PER_PAGE = 50
 const VALID_RANGES = new Set(['7D', '30D', '90D'])
 
 /**

@@ -132,13 +132,10 @@ function RankingTableInner(props: {
   const [internalSortDir, setInternalSortDir] = useState<'asc' | 'desc'>('desc')
   const [justSortedColumn, setJustSortedColumn] = useState<string | null>(null)
   const [_sortAnimationKey, setSortAnimationKey] = useState(0)
-  // Reduced from 50 to 20: each TraderRow has Zustand subscriptions, useLanguage, event
-  // handlers, and memo checks. 20 rows renders in ~120ms vs 50 rows in ~350ms (TBT reduction).
-  // Users see pagination for more — matches mobile card view which also loads 20 initially.
-  const itemsPerPage = 20
+  const itemsPerPage = 50
 
   // Mobile card view: load more instead of pagination
-  const [cardVisibleCount, setCardVisibleCount] = useState(20)
+  const [cardVisibleCount, setCardVisibleCount] = useState(50)
 
   const [internalSearchQuery, setInternalSearchQuery] = useState('')
   const searchQuery = controlledSearchQuery ?? internalSearchQuery
@@ -277,14 +274,14 @@ function RankingTableInner(props: {
     if (onSortChange) { onSortChange(col, newDir) }
     else { setInternalSortColumn(col); setInternalSortDir(newDir) }
     setCurrentPage(1)
-    setCardVisibleCount(20)
+    setCardVisibleCount(50)
   }
 
   const _handleSearchInput = (value: string) => {
     if (onSearchChange) onSearchChange(value)
     else setInternalSearchQuery(value)
     setCurrentPage(1)
-    setCardVisibleCount(20)
+    setCardVisibleCount(50)
   }
 
   const hasStyleData = React.useMemo(
@@ -436,10 +433,10 @@ function RankingTableInner(props: {
           onToggleColumn={toggleColumn}
           onResetColumns={resetColumns}
           styleFilter={styleFilter}
-          onStyleFilterChange={(s) => { setStyleFilter(s); setCurrentPage(1); setCardVisibleCount(20) }}
+          onStyleFilterChange={(s) => { setStyleFilter(s); setCurrentPage(1); setCardVisibleCount(50) }}
           hasStyleData={hasStyleData}
           traderTypeFilter={traderTypeFilter}
-          onTraderTypeFilterChange={(type) => { setTraderTypeFilter(type); setCurrentPage(1); setCardVisibleCount(20) }}
+          onTraderTypeFilterChange={(type) => { setTraderTypeFilter(type); setCurrentPage(1); setCardVisibleCount(50) }}
           traders={traders}
           source={source}
           timeRange={timeRange}
