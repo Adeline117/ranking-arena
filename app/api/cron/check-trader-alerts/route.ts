@@ -111,6 +111,7 @@ export async function GET(req: Request) {
     }
 
     if (!alerts || alerts.length === 0) {
+      await plog.success(0, { message: 'No active alerts to process' })
       return NextResponse.json({
         ok: true,
         message: 'No active alerts to process',
