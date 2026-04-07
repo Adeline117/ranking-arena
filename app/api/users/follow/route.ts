@@ -78,26 +78,26 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Missing followingId' }, { status: 400 })
     }
 
-    // 检查 A 是否关注 B
-    const { data: followData, error: followError } = await supabase
-      .from('user_follows')
-      .select('id')
-      .eq('follower_id', followerId)
-      .eq('following_id', followingId)
-      .maybeSingle()
+    // 并行检查双向关注状态
+    const [{ data: followData, error: followError }, { data: reverseData }] = await Promise.all([
+      supabase
+        .from('user_follows')
+        .select('id')
+        .eq('follower_id', followerId)
+        .eq('following_id', followingId)
+        .maybeSingle(),
+      supabase
+        .from('user_follows')
+        .select('id')
+        .eq('follower_id', followingId)
+        .eq('following_id', followerId)
+        .maybeSingle(),
+    ])
 
     if (followError && !followError.message?.includes('Could not find')) {
       logger.error('[User Follow API] 查询错误:', followError)
       return NextResponse.json({ error: 'Failed to check follow status' }, { status: 500 })
     }
-
-    // 检查是否互相关注
-    const { data: reverseData } = await supabase
-      .from('user_follows')
-      .select('id')
-      .eq('follower_id', followingId)
-      .eq('following_id', followerId)
-      .maybeSingle()
 
     return NextResponse.json({
       following: !!followData,
@@ -168,24 +168,29 @@ export async function POST(request: NextRequest) {
       // Update follower/following counts (best-effort, recount from source of truth)
       fireAndForget(updateFollowCounts(supabase, followerId, followingId), 'Update follow counts')
 
-      // Send follow notification (best-effort)
-      const { data: followerProfile } = await supabase
-        .from('user_profiles')
-        .select('handle')
-        .eq('id', followerId)
-        .maybeSingle()
+      // Send follow notification (fire-and-forget)
+      fireAndForget(
+        (async () => {
+          const { data: followerProfile } = await supabase
+            .from('user_profiles')
+            .select('handle')
+            .eq('id', followerId)
+            .maybeSingle()
 
-      const followerHandle = followerProfile?.handle || 'Someone'
-      await supabase
-        .from('notifications')
-        .insert({
-          user_id: followingId,
-          type: 'new_follower',
-          title: 'New Follower',
-          message: `${followerHandle} started following you`,
-          actor_id: followerId,
-          link: `/u/${followerHandle}`,
-        })
+          const followerHandle = followerProfile?.handle || 'Someone'
+          await supabase
+            .from('notifications')
+            .insert({
+              user_id: followingId,
+              type: 'new_follower',
+              title: 'New Follower',
+              message: `${followerHandle} started following you`,
+              actor_id: followerId,
+              link: `/u/${followerHandle}`,
+            })
+        })(),
+        'Send follow notification'
+      )
 
       return NextResponse.json({ 
         success: true, 
