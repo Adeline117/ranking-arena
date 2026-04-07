@@ -13,6 +13,7 @@ import { usePostStore, type PostData } from '@/lib/stores/postStore'
 import { usePostComments } from './hooks/usePostComments'
 import { usePostTranslation } from './hooks/usePostTranslation'
 import { usePostActions } from './hooks/usePostActions'
+import { usePostsRealtime } from '@/lib/hooks/useRealtime'
 import { SectionErrorBoundary } from '../utils/ErrorBoundary'
 import { PostSkeleton } from '../ui/Skeleton'
 import { SortButtons, type SortType, PostDetailView } from './components'
@@ -83,6 +84,8 @@ export default function PostFeed(props: PostFeedProps = {}): React.ReactNode {
   const [mobileViewMode, setMobileViewMode] = useState<'list' | 'masonry'>('list')
 
   const feedRefreshTrigger = usePostStore(s => s.feedRefreshTrigger)
+  // Track new posts arriving via realtime
+  const [newPostCount, setNewPostCount] = useState(0)
   const auth = useUnifiedAuth({ onUnauthenticated: () => showToast(t('pleaseLogin'), 'warning') })
   const accessToken = auth.accessToken
   const currentUserId = auth.userId
@@ -108,6 +111,19 @@ export default function PostFeed(props: PostFeedProps = {}): React.ReactNode {
   const { translatedListPosts, translatedContent, showingOriginal, setShowingOriginal, translating,
     isChineseText, removeImagesFromContent, translateContent, translateListPosts, translateComments,
     setTranslatedContent, translatedComments } = translation
+
+  // Realtime: listen for new posts and show a "new posts" banner
+  const realtimePostIdsRef = useRef(new Set<string>())
+  usePostsRealtime({
+    onInsert: useCallback((newPost: Record<string, unknown>) => {
+      // Only count posts not already in the feed
+      const postId = newPost.id as string
+      if (postId && !realtimePostIdsRef.current.has(postId)) {
+        realtimePostIdsRef.current.add(postId)
+        setNewPostCount(prev => prev + 1)
+      }
+    }, []),
+  })
 
   // Actions hook
   const actions = usePostActions({
@@ -198,6 +214,7 @@ export default function PostFeed(props: PostFeedProps = {}): React.ReactNode {
   useEffect(() => { return () => { if (abortControllerRef.current) abortControllerRef.current.abort() } }, [])
 
   const handleRefresh = useCallback(async () => {
+    setNewPostCount(0); realtimePostIdsRef.current.clear()
     setRefreshing(true); await loadPosts(); setRefreshing(false); showToast(t('refreshed'), 'success')
   // eslint-disable-next-line react-hooks/exhaustive-deps -- t is excluded; read at call time via language dep instead
   }, [loadPosts, showToast, language])
@@ -339,6 +356,26 @@ export default function PostFeed(props: PostFeedProps = {}): React.ReactNode {
         </div>
       )}
       {props.showSortButtons && <SortButtons sortType={sortType} setSortType={setSortType} t={t} />}
+      {newPostCount > 0 && (
+        <button
+          onClick={() => { setNewPostCount(0); realtimePostIdsRef.current.clear(); loadPosts() }}
+          style={{
+            width: '100%',
+            padding: `${tokens.spacing[2]} ${tokens.spacing[4]}`,
+            marginBottom: tokens.spacing[2],
+            background: `${tokens.colors.accent.primary}15`,
+            border: `1px solid ${tokens.colors.accent.primary}40`,
+            borderRadius: tokens.radius.md,
+            color: tokens.colors.accent.primary,
+            fontSize: tokens.typography.fontSize.sm,
+            fontWeight: 600,
+            cursor: 'pointer',
+            transition: 'all 0.15s ease',
+          }}
+        >
+          {newPostCount === 1 ? t('newPostAvailable') || '1 new post' : `${newPostCount} ${t('newPostsAvailable') || 'new posts'}`}
+        </button>
+      )}
       {props.layout === 'masonry' && (
         <div className="mobile-only" style={{ display: 'none', justifyContent: 'flex-end', marginBottom: 8 }}>
           <button onClick={() => setMobileViewMode(prev => prev === 'list' ? 'masonry' : 'list')} aria-label={mobileViewMode === 'list' ? t('postSwitchToGrid') : t('postSwitchToList')} style={{ padding: '10px 14px', borderRadius: tokens.radius.md, border: `1px solid ${tokens.colors.border.primary}`, background: 'transparent', color: tokens.colors.text.secondary, fontSize: 13, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4, minHeight: 44 }}>
