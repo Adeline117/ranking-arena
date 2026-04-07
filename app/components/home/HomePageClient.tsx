@@ -69,6 +69,13 @@ export default function HomePageClient({ initialTraders, initialLastUpdated, ini
     initialCategoryCounts,
   })
 
+  // Remove SSR ranking table now that the interactive version has rendered with data.
+  // This prevents the flash of empty content that occurred when HomePage removed SSR
+  // before the client had finished loading.
+  useEffect(() => {
+    document.getElementById('ssr-ranking-table')?.remove()
+  }, [])
+
   // Sync time range with URL on initial load
   useEffect(() => {
     const params = new URLSearchParams(window.location.search)
