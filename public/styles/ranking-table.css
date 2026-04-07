@@ -58,12 +58,26 @@
 }
 
 /* ============================================================
+   Active sort column highlight — subtle bg tint on data cells
+   ============================================================ */
+.ranking-table-container[data-sort-col="score"] .col-score,
+.ranking-table-container[data-sort-col="roi"] .roi-cell,
+.ranking-table-container[data-sort-col="pnl"] .col-pnl,
+.ranking-table-container[data-sort-col="winrate"] .col-winrate,
+.ranking-table-container[data-sort-col="mdd"] .col-mdd,
+.ranking-table-container[data-sort-col="sortino"] .col-sortino,
+.ranking-table-container[data-sort-col="alpha"] .col-alpha {
+  background: var(--color-accent-primary-08);
+  border-radius: 6px;
+}
+
+/* ============================================================
    Row Base — The fundamental visual unit
    ============================================================ */
 
 .ranking-row {
   position: relative;
-  transition: background 0.15s ease;
+  transition: background 0.15s ease, transform 0.15s ease;
 }
 
 /* Gradient separator — simplified to solid border for performance.

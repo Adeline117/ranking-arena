@@ -179,5 +179,5 @@ export default function DataStateWrapper({
     )
   }
 
-  return <div style={containerStyle}>{children}</div>
+  return <div style={containerStyle} className="content-appear">{children}</div>
 }

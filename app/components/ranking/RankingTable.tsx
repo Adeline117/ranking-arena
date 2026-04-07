@@ -390,6 +390,7 @@ function RankingTableInner(props: {
     <style>{gridStyleCSS}</style>
     <Box
       className="ranking-table-container"
+      data-sort-col={sortColumn}
       p={0}
       radius="none"
       style={{
