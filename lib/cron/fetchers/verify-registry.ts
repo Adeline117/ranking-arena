@@ -276,9 +276,11 @@ const VERIFY_REGISTRY: Record<string, VerifyFn> = {
   htx: () =>
     verifyEndpoint(
       'htx',
-      'https://futures.htx.com/-/x/hbg/v1/futures/copytrading/rank?pageNo=1&pageSize=1&sortField=roi&sortType=desc',
+      'https://futures.htx.com/-/x/hbg/v1/futures/copytrading/rank?pageNo=1&pageSize=1&rankType=1',
       {
-        validateResponse: (d: ApiResponse) => !!d?.data,
+        timeoutMs: 15000, // HTX behind Cloudflare — can be slow from US regions
+        validateResponse: (d: ApiResponse) =>
+          !!d?.data && (Array.isArray(d.data.itemList) || Array.isArray(d.data.list)),
       }
     ),
 

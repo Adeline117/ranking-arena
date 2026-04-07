@@ -40,6 +40,7 @@ export type FailureReason =
   | 'endpoint_gone'    // 404 — API changed
   | 'rate_limited'     // 429 — too many requests
   | 'timeout'          // Request timed out
+  | 'server_error'     // 5xx — upstream server error (transient)
   | 'empty_data'       // 200 but no usable data
   | 'parse_error'      // Response couldn't be parsed
   | 'unknown'
@@ -65,8 +66,10 @@ export function classifyFetchError(
   const hasCfRay = !!responseHeaders?.['cf-ray']
   const isHtml = body.trimStart().startsWith('<') || body.includes('<!DOCTYPE')
 
-  // Timeout
-  if (msg.includes('abort') || msg.includes('timeout') || msg.includes('ETIMEDOUT')) {
+  // Timeout / network errors
+  if (msg.includes('abort') || msg.includes('timeout') || msg.includes('ETIMEDOUT')
+    || msg.includes('ECONNREFUSED') || msg.includes('ECONNRESET')
+    || msg.includes('fetch failed') || msg.includes('ENETUNREACH')) {
     return 'timeout'
   }
 
@@ -111,6 +114,16 @@ export function classifyFetchError(
   // Generic 403 (likely geo or WAF)
   if (responseStatus === 403 || msg.includes('403')) {
     return 'geo_blocked'
+  }
+
+  // Server error (5xx) — transient upstream failure
+  if (
+    (responseStatus && responseStatus >= 500) ||
+    /HTTP 5\d\d/.test(msg) ||
+    msg.includes('Server error') ||
+    msg.includes('502') || msg.includes('503') || msg.includes('500')
+  ) {
+    return 'server_error'
   }
 
   return 'unknown'
