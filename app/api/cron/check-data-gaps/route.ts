@@ -87,40 +87,66 @@ async function analyzePlatform(
 
   const total = totalTraders || 0
 
-  // Get snapshot counts per period (3 queries in parallel)
-  const periodCountResults = await Promise.all(
-    TIME_PERIODS.map(period =>
-      supabase
+  // Get snapshot counts per period — run sequentially to avoid parallel DB pressure
+  // Each count query can be heavy on trader_snapshots_v2 (millions of rows)
+  const periodCounts: Record<string, number> = {}
+  for (const period of TIME_PERIODS) {
+    try {
+      const { count, error } = await supabase
         .from('trader_snapshots_v2')
         .select('*', { count: 'exact', head: true })
         .eq('platform', platform)
         .eq('window', period)
-    )
-  )
-
-  const periodCounts: Record<string, number> = {}
-  TIME_PERIODS.forEach((period, i) => {
-    periodCounts[period] = periodCountResults[i].count || 0
-  })
+      if (error) {
+        logger.warn(`[check-data-gaps] ${platform} ${period} snapshot count error: ${error.message}`)
+        periodCounts[period] = 0
+      } else {
+        periodCounts[period] = count || 0
+      }
+    } catch (err) {
+      logger.warn(`[check-data-gaps] ${platform} ${period} snapshot count failed: ${err}`)
+      periodCounts[period] = 0
+    }
+  }
 
   // Get enrichment counts for 90D only (most important) + position history
-  const [curve90D, stats90D, positions] = await Promise.all([
-    supabase.from('trader_equity_curve').select('*', { count: 'exact', head: true })
-      .eq('source', platform).eq('period', '90D'),
-    supabase.from('trader_stats_detail').select('*', { count: 'exact', head: true })
-      .eq('source', platform).eq('period', '90D'),
-    supabase.from('trader_position_history').select('*', { count: 'exact', head: true })
-      .eq('source', platform),
-  ])
+  // Run sequentially to avoid parallel DB pressure on large tables
+  let equityCurve90D = 0
+  let statsDetail90D = 0
+  let positionHistory = 0
+
+  try {
+    const curve90D = await supabase.from('trader_equity_curve').select('*', { count: 'exact', head: true })
+      .eq('source', platform).eq('period', '90D')
+    equityCurve90D = curve90D.count || 0
+  } catch (err) {
+    logger.warn(`[check-data-gaps] ${platform} equity_curve count failed: ${err}`)
+  }
+
+  try {
+    const stats90D = await supabase.from('trader_stats_detail').select('*', { count: 'exact', head: true })
+      .eq('source', platform).eq('period', '90D')
+    statsDetail90D = stats90D.count || 0
+  } catch (err) {
+    logger.warn(`[check-data-gaps] ${platform} stats_detail count failed: ${err}`)
+  }
+
+  try {
+    const positions = await supabase.from('trader_position_history').select('*', { count: 'exact', head: true })
+      .eq('source', platform)
+    positionHistory = positions.count || 0
+  } catch (err) {
+    logger.warn(`[check-data-gaps] ${platform} position_history count failed: ${err}`)
+  }
 
   return {
     platform,
     totalTraders: total,
     periodCounts,
     enrichmentCounts: {
-      equityCurve90D: curve90D.count || 0,
-      statsDetail90D: stats90D.count || 0,
-      positionHistory: positions.count || 0,
+      equityCurve90D,
+      statsDetail90D,
+      positionHistory,
     },
     missingPeriods: {
       missing7D: Math.max(0, total - (periodCounts['7D'] || 0)),
@@ -147,11 +173,12 @@ export async function GET(req: NextRequest) {
 
   const plog = await PipelineLogger.start('check-data-gaps')
 
-  // Safety timeout: log partial results before Vercel kills us
-  let timedOut = false
-  const safetyTimer = setTimeout(() => { timedOut = true }, 100_000) // 100s for 120s maxDuration
+  // Time budget: stop after 90s (leave 30s buffer for maxDuration=120)
+  const TIME_BUDGET_MS = 90_000
 
   const reports: PlatformGapReport[] = []
+  const failedPlatforms: string[] = []
+  const skippedPlatforms: string[] = []
   const summary = {
     totalTraders: 0,
     totalGaps: 0,
@@ -159,11 +186,16 @@ export async function GET(req: NextRequest) {
     platformsAnalyzed: 0,
   }
 
-  // Process platforms in parallel batches of 5 (was sequential before)
-  const BATCH_SIZE = 5
+  // Process platforms in batches of 2 (reduced from 5 to avoid DB connection pressure)
+  const BATCH_SIZE = 2
+  let timedOut = false
   for (let i = 0; i < platforms.length; i += BATCH_SIZE) {
-    if (timedOut) {
-      logger.warn(`[check-data-gaps] Safety timeout at ${Math.round((Date.now() - startTime) / 1000)}s, ${i}/${platforms.length} platforms analyzed`)
+    const elapsed = Date.now() - startTime
+    if (elapsed > TIME_BUDGET_MS) {
+      const remaining = platforms.slice(i).map(p => p)
+      skippedPlatforms.push(...remaining)
+      timedOut = true
+      logger.warn(`[check-data-gaps] Time budget exceeded at ${Math.round(elapsed / 1000)}s, skipping ${remaining.length} platforms: ${remaining.join(', ')}`)
       break
     }
 
@@ -172,7 +204,8 @@ export async function GET(req: NextRequest) {
       batch.map(platform => analyzePlatform(supabase, platform))
     )
 
-    for (const result of batchResults) {
+    for (let j = 0; j < batchResults.length; j++) {
+      const result = batchResults[j]
       if (result.status === 'fulfilled' && result.value) {
         const report = result.value
         reports.push(report)
@@ -188,20 +221,33 @@ export async function GET(req: NextRequest) {
         if (hasIssues) {
           summary.platformsWithIssues.push(report.platform)
         }
+      } else if (result.status === 'rejected') {
+        failedPlatforms.push(batch[j])
+        logger.warn(`[check-data-gaps] Platform ${batch[j]} analysis failed: ${result.reason}`)
       }
     }
     summary.platformsAnalyzed = reports.length
   }
 
-  clearTimeout(safetyTimer)
   const duration = Date.now() - startTime
 
-  await plog.success(reports.length, { summary, timedOut })
+  const hasPartialResults = timedOut || failedPlatforms.length > 0
+  if (hasPartialResults) {
+    await plog.partialSuccess(
+      reports.length,
+      [...skippedPlatforms.map(p => `skipped:${p}`), ...failedPlatforms.map(p => `failed:${p}`)],
+      { summary, timedOut, skippedPlatforms, failedPlatforms }
+    )
+  } else {
+    await plog.success(reports.length, { summary })
+  }
 
   return NextResponse.json({
     ok: true,
     duration,
     timedOut,
+    skippedPlatforms: skippedPlatforms.length > 0 ? skippedPlatforms : undefined,
+    failedPlatforms: failedPlatforms.length > 0 ? failedPlatforms : undefined,
     summary,
     reports: reports.map((r) => ({
       platform: r.platform,
