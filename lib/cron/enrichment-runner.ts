@@ -655,11 +655,15 @@ const ONCHAIN_SET = new Set(['gmx', 'dydx', 'jupiter_perps', 'hyperliquid', 'dri
 // 2026-03-22: Added dydx 15s timeout (similar to bitget_futures pattern)
 const PER_TRADER_TIMEOUT_MS: Record<string, number> = {
   'bitget_futures': 18_000,  // 18s per trader - equity 15s + detail 10s run in parallel, 18s is generous
-  'binance_futures': 20_000, // 20s per trader - increased from 12s: VPS proxy can be 2-5s under load (was timing out 10/10 during VPS outage)
+  'binance_futures': 30_000, // 30s per trader (was 20s) — Binance API intermittently slow under load
+  'binance_spot': 30_000,    // 30s per trader — same as binance_futures
   'dydx': 15_000, // 15s per trader - 3 APIs × 5-6s timeout + fallback buffer
-  'bybit': 75_000, // 75s per trader — VPS fetch has 60s timeout, was 45s which always fired first killing all requests (81% error rate)
+  'bybit': 75_000, // 75s per trader — VPS fetch has 60s timeout
   'bybit_spot': 75_000, // 75s per trader — same VPS scraper as bybit
   'etoro': 20_000, // 20s per trader - CopySim + ranking cache + portfolio fetch
+  'woox': 25_000, // 25s per trader (was default 15s) — woox API consistently slow, was 100% failure
+  'okx_spot': 30_000, // 30s per trader — OKX API intermittently slow
+  'okx_futures': 30_000, // 30s per trader — same as spot
 }
 
 function getPlatformTimeout(platform: string): number {
