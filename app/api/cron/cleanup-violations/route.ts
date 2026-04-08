@@ -28,21 +28,31 @@ export async function GET(request: NextRequest) {
     const maxBatches = 10
 
     for (let i = 0; i < maxBatches; i++) {
-      const { data, error } = await supabase.rpc('cleanup_snapshot_violations', {
+      // Clean all 3 tables: snapshots_v2, daily_snapshots, equity_curve
+      const { data, error } = await supabase.rpc('cleanup_all_data_violations', {
         batch_limit: 5,
       })
 
       if (error) {
-        // If first batch errors, return error; otherwise return partial results
-        if (i === 0) return NextResponse.json({ error: error.message }, { status: 500 })
-        break
+        // Fallback to old function if new one doesn't exist yet
+        const { data: fallback, error: fbErr } = await supabase.rpc('cleanup_snapshot_violations', {
+          batch_limit: 5,
+        })
+        if (fbErr) {
+          if (i === 0) return NextResponse.json({ error: fbErr.message }, { status: 500 })
+          break
+        }
+        const fbResults = (fallback || []) as Array<{ issue: string; fixed: number }>
+        totalFixed += fbResults.reduce((s: number, r: { fixed: number }) => s + r.fixed, 0)
+        if (totalFixed === 0) break
+        continue
       }
 
-      const results = (data || []) as Array<{ issue: string; fixed: number }>
+      const results = (data || []) as Array<{ issue: string; fixed: number; target_table?: string }>
       const batchFixed = results.reduce((s: number, r: { fixed: number }) => s + r.fixed, 0)
       totalFixed += batchFixed
 
-      if (batchFixed === 0) break // No more violations
+      if (batchFixed === 0) break // No more violations in any table
     }
 
     if (totalFixed === 0) {

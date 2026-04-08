@@ -388,10 +388,23 @@ export async function upsertTraders(
   }
   if (rejected > 0) {
     // Log total + first issue summary to detect systemic API format changes
-    const severity = rejected > traders.length * 0.5 ? 'error' : 'warn'
+    const rejectionRate = rejected / traders.length
     const msg = `[validation] ${rejected}/${traders.length} traders rejected (source: ${traders[0]?.source})`
-    if (severity === 'error') dataLogger.error(msg)
-    else dataLogger.warn(msg)
+    if (rejectionRate > 0.5) {
+      dataLogger.error(msg)
+      // >50% rejected = likely API format change or broken connector
+      // Alert immediately so the connector bug is fixed at the source
+      import('@/lib/alerts/send-alert').then(({ sendRateLimitedAlert }) =>
+        sendRateLimitedAlert({
+          title: `Connector 异常: ${traders[0]?.source} ${Math.round(rejectionRate * 100)}% 数据被拒`,
+          message: `${msg}\n可能原因: 交易所 API 格式变更、scraper 故障、字段映射错误`,
+          level: 'critical',
+          details: { source: traders[0]?.source, rejected, total: traders.length },
+        }, `connector-reject-${traders[0]?.source}`, 60 * 60 * 1000)
+      ).catch(() => {})
+    } else {
+      dataLogger.warn(msg)
+    }
   }
   if (validated.length === 0) return { saved: 0, error: `All ${traders.length} traders failed validation` }
 
@@ -443,6 +456,31 @@ export async function upsertTraders(
   }
   if (snapshotValidated.length === 0) {
     return { saved: 0, error: `All ${deduped.length} traders failed snapshot validation` }
+  }
+
+  // Distribution sanity check: detect connector-level bugs like decimal confusion
+  // If median |ROI| of this batch is <0.5% AND we have >20 traders, likely a ÷100 bug
+  {
+    const rois = snapshotValidated
+      .map(t => t.roi)
+      .filter((r): r is number => r != null && r !== 0)
+    if (rois.length > 20) {
+      rois.sort((a, b) => Math.abs(a) - Math.abs(b))
+      const medianAbsRoi = Math.abs(rois[Math.floor(rois.length / 2)])
+      if (medianAbsRoi < 0.5) {
+        // Median |ROI| < 0.5% across 20+ traders is suspicious (likely decimal ratio bug)
+        const source = snapshotValidated[0]?.source
+        dataLogger.warn(`[sanity] ${source}: median |ROI| = ${medianAbsRoi.toFixed(3)}% across ${rois.length} traders — possible decimal bug`)
+        import('@/lib/alerts/send-alert').then(({ sendRateLimitedAlert }) =>
+          sendRateLimitedAlert({
+            title: `数据异常: ${source} ROI 中位数仅 ${medianAbsRoi.toFixed(3)}%`,
+            message: `${rois.length} 个交易员的 |ROI| 中位数异常低，可能是小数/百分比混淆（如 0.155 应该是 15.5%）`,
+            level: 'warning',
+            details: { source, medianAbsRoi, traderCount: rois.length },
+          }, `sanity-roi-${source}`, 6 * 60 * 60 * 1000)
+        ).catch(() => {})
+      }
+    }
   }
 
   const BATCH = 25 // Reduced from 500→200→50→25 to avoid Supabase statement timeout (57014) on binance (100 traders × 2 tables)
