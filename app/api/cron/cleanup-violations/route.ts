@@ -27,7 +27,7 @@ export async function GET(request: NextRequest) {
 
   try {
     const { data, error } = await supabase.rpc('cleanup_snapshot_violations', {
-      batch_limit: 50,
+      batch_limit: 30,
     })
 
     if (error) {
