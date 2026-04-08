@@ -10,7 +10,7 @@
  */
 
 import { NextRequest } from 'next/server'
-import { getSupabaseAdmin } from '@/lib/supabase/server'
+import { getOrSet } from '@/lib/cache'
 import { getCorsOrigin } from '@/lib/utils/cors'
 import { checkRateLimit, RateLimitPresets } from '@/lib/utils/rate-limit'
 
@@ -28,18 +28,32 @@ interface RankingRow {
   trader_type: string | null
 }
 
+/**
+ * Fetch top rankings from Redis cache (populated by compute-leaderboard warmup).
+ * Falls back to DB query only on cache miss — eliminates per-SSE-tick DB connections.
+ */
 async function fetchTopRankings(period: string): Promise<RankingRow[]> {
-  const supabase = getSupabaseAdmin()
-  const { data } = await supabase
-    .from('leaderboard_ranks')
-    .select('source, source_trader_id, arena_score, rank, roi, handle, avatar_url, trader_type')
-    .eq('season_id', period)
-    .gt('arena_score', 0)
-    .or('is_outlier.is.null,is_outlier.eq.false')
-    .order('rank', { ascending: true })
-    .limit(50)
+  const cacheKey = `sse:rankings:${period}`
 
-  return (data as RankingRow[] | null) || []
+  return getOrSet<RankingRow[]>(
+    cacheKey,
+    async () => {
+      // Cache miss: fall back to DB (lazy import to avoid loading Supabase on cache hit)
+      const { getSupabaseAdmin } = await import('@/lib/supabase/server')
+      const supabase = getSupabaseAdmin()
+      const { data } = await supabase
+        .from('leaderboard_ranks')
+        .select('source, source_trader_id, arena_score, rank, roi, handle, avatar_url, trader_type')
+        .eq('season_id', period)
+        .gt('arena_score', 0)
+        .or('is_outlier.is.null,is_outlier.eq.false')
+        .order('rank', { ascending: true })
+        .limit(50)
+
+      return (data as RankingRow[] | null) || []
+    },
+    { ttl: 120, staleTtl: 300 },
+  )
 }
 
 export async function GET(request: NextRequest) {
