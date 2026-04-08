@@ -45,11 +45,12 @@ async function getPlatformHealthData(): Promise<PlatformHealth[]> {
   const deadSet = new Set<string>([...DEAD_BLOCKED_PLATFORMS])
   const activePlatforms = getSupportedPlatforms().filter(p => !deadSet.has(p))
   const now = Date.now()
-  const sixHoursAgo = new Date(now - 6 * 60 * 60 * 1000).toISOString()
   const sevenDaysAgo = new Date(now - 7 * 24 * 60 * 60 * 1000).toISOString()
 
-  // Fetch ALL pipeline_logs once (was: 25 separate LIKE '%platform%' queries = 9.4M ms DB time)
-  const [allLogsRes, ...platformChecks] = await Promise.all([
+  // ROOT CAUSE FIX (2026-04-08): Was firing 62 parallel queries (31 platforms × 2)
+  // which overwhelmed Supabase pooler → all returned null → all platforms appeared
+  // critical with age=None. Use leaderboard_ranks (44k rows, fast) for freshness check.
+  const [allLogsRes, lbRanksRes] = await Promise.all([
     supabase
       .from('pipeline_logs')
       .select('job_name, records_processed')
@@ -57,24 +58,22 @@ async function getPlatformHealthData(): Promise<PlatformHealth[]> {
       .gte('started_at', sevenDaysAgo)
       .not('records_processed', 'is', null)
       .gt('records_processed', 0),
-    // Per-platform snapshot queries with 24h filter for partition pruning
-    // (was: 1.3s avg without time filter, now uses idx_snap_v2_platform_updated)
-    ...activePlatforms.flatMap(platform => [
-      supabase
-        .from('trader_snapshots_v2')
-        .select('updated_at')
-        .eq('platform', platform)
-        .gte('updated_at', new Date(now - 24 * 60 * 60 * 1000).toISOString())
-        .order('updated_at', { ascending: false })
-        .limit(1)
-        .maybeSingle(),
-      supabase
-        .from('trader_snapshots_v2')
-        .select('id', { count: 'planned', head: true })
-        .eq('platform', platform)
-        .gte('updated_at', sixHoursAgo),
-    ]),
+    // One query for all platforms via leaderboard_ranks ordered by computed_at
+    supabase
+      .from('leaderboard_ranks')
+      .select('source, computed_at')
+      .gte('computed_at', new Date(now - 7 * 24 * 60 * 60 * 1000).toISOString())
+      .order('computed_at', { ascending: false })
+      .limit(50000),
   ])
+
+  // Build platform → latest computed_at map (JS-side dedup since DISTINCT ON not supported)
+  const platformLastUpdate = new Map<string, string>()
+  for (const row of (lbRanksRes.data || []) as Array<{ source: string; computed_at: string }>) {
+    if (!platformLastUpdate.has(row.source)) {
+      platformLastUpdate.set(row.source, row.computed_at)
+    }
+  }
 
   // Build per-platform avg records from pipeline_logs (JS-side grouping)
   const platformAvgRecords = new Map<string, number>()
@@ -87,14 +86,12 @@ async function getPlatformHealthData(): Promise<PlatformHealth[]> {
     }
   }
 
-  const results: PlatformHealth[] = activePlatforms.map((platform, i) => {
+  const results: PlatformHealth[] = activePlatforms.map((platform) => {
     const config = EXCHANGE_CONFIG[platform as keyof typeof EXCHANGE_CONFIG]
     const displayName = config?.name || platform
-    const latestRes = platformChecks[i * 2] as { data: { updated_at: string } | null }
-    const recentCountRes = platformChecks[i * 2 + 1] as { count: number | null }
 
-    const lastUpdate = latestRes?.data?.updated_at || null
-    const currentCount = recentCountRes?.count || 0
+    const lastUpdate = platformLastUpdate.get(platform) || null
+    const currentCount = 0 // Skipped to reduce DB load — was 31 extra count queries
     const avgCount = platformAvgRecords.get(platform) ?? null
 
     let ageHours: number | null = null
