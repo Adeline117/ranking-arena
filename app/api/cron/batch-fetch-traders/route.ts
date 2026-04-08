@@ -64,8 +64,8 @@ const GROUPS: Record<string, string[]> = {
   // Group C_HL: Hyperliquid solo (every 1h) — #1 DEX by trader count (33K+), API has 99.98% rate limit headroom
   c_hl: ['hyperliquid'],
   // Group D1: Fast CEX (every 6h) — split from old group d (8 was too many, caused 524 timeout)
-  // gains removed 2026-04-07 — leaderboard endpoint 404 across all 3 chains (arbitrum/base/polygon)
-  d1: ['htx_futures', 'bitfinex', 'coinex'],
+  // gains resurrected 2026-04-08 — now uses /open-trades endpoint (leaderboard was 404)
+  d1: ['gains', 'htx_futures', 'bitfinex', 'coinex'],
   // Group D2: Web3 + Gate.io + BTCC (every 6h)
   d2: ['binance_web3', 'okx_web3', 'gateio', 'btcc'],
   // Group E1: DEX + social (every 8h) — split from E (7 platforms exceeded 300s limit)
