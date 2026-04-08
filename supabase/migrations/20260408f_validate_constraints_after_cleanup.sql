@@ -1,0 +1,18 @@
+-- Run AFTER cleanup-violations cron returns done=true.
+-- Promotes NOT VALID constraints to VALID so the query planner can use them.
+--
+-- NOTE: Each VALIDATE scans the entire table. Run via psql with no timeout:
+--   SET statement_timeout = '0';
+--
+-- The DB trigger (trg_sanitize_snapshot) already enforces data quality on all
+-- writes, so VALIDATE is an optimization, not a correctness requirement.
+
+-- Uncomment and run manually:
+-- ALTER TABLE trader_snapshots_v2 VALIDATE CONSTRAINT chk_v2_roi_pct;
+-- ALTER TABLE trader_snapshots_v2 VALIDATE CONSTRAINT chk_v2_sharpe_ratio;
+-- ALTER TABLE trader_snapshots_v2 VALIDATE CONSTRAINT chk_v2_max_drawdown;
+-- ALTER TABLE trader_snapshots_v2 VALIDATE CONSTRAINT chk_v2_win_rate;
+-- ALTER TABLE trader_snapshots_v2 VALIDATE CONSTRAINT chk_v2_arena_score;
+-- ALTER TABLE trader_snapshots_v2 VALIDATE CONSTRAINT chk_v2_followers;
+-- ALTER TABLE trader_snapshots_v2 VALIDATE CONSTRAINT chk_v2_copiers;
+-- ALTER TABLE trader_snapshots_v2 VALIDATE CONSTRAINT chk_v2_trades_count;
