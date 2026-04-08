@@ -129,7 +129,6 @@
       "schedule": "5 */2 * * *"
     },
     {
-      "_note": "bybit uses VPS scraper; falls back to DB seed list refresh when VPS unavailable (enables enrich-bybit to keep updating known traders even when discovery fails)",
       "path": "/api/cron/batch-fetch-traders?group=b1",
       "schedule": "12 */3 * * *"
     },
