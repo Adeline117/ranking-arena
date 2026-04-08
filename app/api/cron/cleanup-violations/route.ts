@@ -46,24 +46,13 @@ export async function GET(request: NextRequest) {
     }
 
     if (totalFixed === 0) {
-      // All violations cleaned! Try to VALIDATE the NOT VALID constraints.
-      // This makes Postgres enforce them on existing data, not just new writes.
-      try {
-        const constraints = [
-          'chk_v2_roi_pct', 'chk_v2_sharpe_ratio', 'chk_v2_max_drawdown',
-          'chk_v2_win_rate', 'chk_v2_arena_score', 'chk_v2_followers',
-          'chk_v2_copiers', 'chk_v2_trades_count',
-        ]
-        for (const c of constraints) {
-          await supabase.rpc('exec_sql', {
-            query: `ALTER TABLE trader_snapshots_v2 VALIDATE CONSTRAINT ${c}`,
-          }).catch(() => {}) // Best-effort — may timeout on large table, will succeed on next run
-        }
-      } catch {
-        // VALIDATE is best-effort — the trigger handles enforcement anyway
-      }
-
-      return NextResponse.json({ done: true, message: 'No more violations to fix' })
+      // All violations cleaned! The DB trigger (trg_sanitize_snapshot) now enforces
+      // data quality on ALL future writes. The NOT VALID constraints can be promoted
+      // to VALID via psql: ALTER TABLE trader_snapshots_v2 VALIDATE CONSTRAINT chk_v2_*
+      return NextResponse.json({
+        done: true,
+        message: 'All violations cleaned. Trigger enforces quality. Run VALIDATE CONSTRAINT via psql for query planner optimization.',
+      })
     }
 
     // Monitoring: check pipeline_rejected_writes for fresh connector issues
