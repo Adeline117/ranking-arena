@@ -241,8 +241,9 @@
       "schedule": "25,55 * * * *"
     },
     {
+      "_disabled_pending_index": "Was every 1min causing 90-200s table scans on 1.18GB partition. Re-enable after partial index on (sharpe_ratio, roi_pct, max_drawdown, win_rate) is added.",
       "path": "/api/cron/cleanup-violations",
-      "schedule": "*/1 * * * *"
+      "schedule": "0 4 * * *"
     }
   ],
   "headers": [
