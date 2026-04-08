@@ -84,6 +84,7 @@ const DEAD_PLATFORMS = new Set([
   'bitget_spot', // permanently disabled (no leaderboard API)
   'lbank',       // API 404 since 2026-04 (copy-trading endpoint removed)
   'weex',        // 75% timeout rate
+  'gains',       // leaderboard endpoint 404 since 2026-04-07 (all 3 chains)
   'vertex', 'apex_pro', 'rabbitx', // DNS dead / no API
 ])
 
