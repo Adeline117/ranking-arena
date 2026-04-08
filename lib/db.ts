@@ -64,13 +64,14 @@ export function getPool(): Pool {
 
     const config: PoolConfig = {
       connectionString,
-      // Production: 10 connections per function instance.
-      // Supabase has a global limit (~60-200 connections depending on plan).
-      // Multiple serverless function instances share this limit, so per-instance
-      // max must stay moderate. Was 5 (too low → timeouts), tried 20 (too high →
-      // exhausted Supabase global limit when multiple functions run concurrently).
-      max: isProduction ? 10 : 10,
-      idleTimeoutMillis: isProduction ? 10000 : 30000,
+      // Production: 3 connections per function instance.
+      // Supabase max_connections = 60 (verified 2026-04-08 via SHOW max_connections).
+      // With ~10-20 concurrent serverless function instances during cron storms,
+      // 10 per instance × 20 instances = 200 connections → MaxClientsInSessionMode error.
+      // Reduced to 3 per instance: 3 × 20 = 60, fits within limit.
+      // Idle timeout shortened so connections release faster between cron runs.
+      max: isProduction ? 3 : 10,
+      idleTimeoutMillis: isProduction ? 5000 : 30000,
       connectionTimeoutMillis: isProduction ? 15000 : 10000,
       // Keep connections alive through load balancer/pooler
       keepAlive: true,
