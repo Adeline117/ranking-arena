@@ -575,7 +575,25 @@ async function computeSeason(
           }
         }
 
-        if (error || !data?.length) return rows
+        if (error) {
+          // Retry once after 2s with smaller limit to recover from transient statement_timeout.
+          logger.error(`[${season}] Query failed for ${source}: ${error.message} (code=${error.code}) — retrying with limit=1000`, { source, window: v2Window })
+          await new Promise(r => setTimeout(r, 2000))
+          const retry = await supabase
+            .from('trader_snapshots_v2')
+            .select('platform, trader_key, roi_pct, pnl_usd, win_rate, max_drawdown, trades_count, followers, copiers, arena_score, updated_at, sharpe_ratio, sortino_ratio, calmar_ratio, volatility_pct, downside_volatility_pct, metrics')
+            .eq('platform', source)
+            .eq('window', v2Window)
+            .gte('updated_at', freshnessISO)
+            .order('updated_at', { ascending: false })
+            .limit(1000)
+          if (retry.error) {
+            logger.error(`[${season}] Retry also failed for ${source}: ${retry.error.message} — data NOT loaded (will cause false "stale" downstream)`)
+            return rows
+          }
+          data = retry.data
+        }
+        if (!data?.length) return rows
 
         let totalJsonbFallbacks = 0
         for (const d of data) {
@@ -658,26 +676,60 @@ async function computeSeason(
   // runConnectorBatch() builds a union of all traders across all windows and ensures
   // every trader has entries for ALL windows in trader_snapshots_v2.
 
-  // Data freshness check: if ALL platforms are stale (>48h), skip computation
+  // Data freshness check: if ALL platforms are stale (>48h), skip computation.
+  //
+  // ROOT CAUSE FIX (2026-04-08): Previously iterated traderMap which could be empty
+  // due to upstream query failures → false "All 35 platforms stale" error.
+  // Now we distinguish 3 cases:
+  //   - Platform has data in traderMap → use its captured_at
+  //   - Platform has NO data in traderMap but IS fresh in DB → query-failed, skip
+  //   - Platform has NO data anywhere → truly stale
   const staleThresholdMs = 48 * 3600 * 1000
   const now = Date.now()
   const stalePlatforms: string[] = []
   const freshPlatforms: string[] = []
+  const queryFailedPlatforms: string[] = []
   for (const source of SOURCES_WITH_DATA) {
     const sourceTraders = Array.from(traderMap.values()).filter(t => t.source === source)
-    if (sourceTraders.length === 0) {
-      stalePlatforms.push(source)
+    if (sourceTraders.length > 0) {
+      const latestCaptured = Math.max(...sourceTraders.map(t => new Date(t.captured_at).getTime()))
+      if (now - latestCaptured > staleThresholdMs) {
+        stalePlatforms.push(source)
+      } else {
+        freshPlatforms.push(source)
+      }
       continue
     }
-    const latestCaptured = Math.max(...sourceTraders.map(t => new Date(t.captured_at).getTime()))
-    if (now - latestCaptured > staleThresholdMs) {
-      stalePlatforms.push(source)
-    } else {
-      freshPlatforms.push(source)
+    // traderMap empty for this source — check DB directly to distinguish
+    // "query failed" (retry later) from "actually stale" (really no data)
+    try {
+      const { data: dbCheck } = await supabase
+        .from('trader_snapshots_v2')
+        .select('updated_at')
+        .eq('platform', source)
+        .gte('updated_at', new Date(now - staleThresholdMs).toISOString())
+        .order('updated_at', { ascending: false })
+        .limit(1)
+        .maybeSingle()
+      if (dbCheck) {
+        // DB has fresh data but we failed to load it — query-failed, not stale
+        queryFailedPlatforms.push(source)
+      } else {
+        stalePlatforms.push(source)
+      }
+    } catch {
+      queryFailedPlatforms.push(source)
     }
+  }
+  if (queryFailedPlatforms.length > 0) {
+    logger.warn(`[${season}] ${queryFailedPlatforms.length} platforms had query failures but DB has fresh data: ${queryFailedPlatforms.join(', ')}`)
   }
 
   if (freshPlatforms.length === 0 && SOURCES_WITH_DATA.length > 0) {
+    if (queryFailedPlatforms.length > 0) {
+      logger.error(`[${season}] No fresh platforms loaded but ${queryFailedPlatforms.length} had DB fresh-data (query failures). Transient Supabase issue — skipping this run.`, { queryFailedPlatforms, stalePlatforms })
+      throw new Error(`Query failures prevented loading ${queryFailedPlatforms.length} fresh platforms — will retry next cron cycle.`)
+    }
     logger.error(`[${season}] ALL platforms are stale (>48h). Skipping computation to prevent stale leaderboard.`, { stalePlatforms })
     throw new Error(`All ${stalePlatforms.length} platforms are stale (>48h). Blocking computation.`)
   }

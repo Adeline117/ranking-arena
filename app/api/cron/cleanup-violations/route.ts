@@ -2,12 +2,14 @@
  * GET /api/cron/cleanup-violations
  *
  * Incremental cleanup of historical data quality violations.
- * Fixes 200 rows per invocation to avoid timeout/OOM on the 1.18GB April partition.
+ * Fixes 30 rows per invocation via server-side RPC.
  *
- * At 200 rows/call, 1 call/min: cleans ~12k/hour, ~103k violations in ~9 hours.
+ * MONITORING: After cleanup, checks if any FRESH violations exist (created in last 2 hours).
+ * If yes, a connector is actively producing bad data → triggers Telegram alert.
+ *
  * Self-disabling: returns { done: true } when no more violations remain.
  *
- * Schedule: Every 1 minute (Vercel cron)
+ * Schedule: Every 5 minutes (Vercel cron)
  */
 
 import { NextRequest, NextResponse } from 'next/server'
@@ -41,7 +43,31 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ done: true, message: 'No more violations to fix' })
     }
 
-    return NextResponse.json({ fixed: totalFixed, details: results })
+    // MONITORING: Check if any recently-created rows have violations.
+    // If violations exist in data < 2 hours old, a connector is ACTIVELY producing bad data.
+    const twoHoursAgo = new Date(Date.now() - 2 * 3600 * 1000).toISOString()
+    const { count: freshViolations } = await supabase
+      .from('trader_snapshots_v2')
+      .select('id', { count: 'exact', head: true })
+      .gte('created_at', twoHoursAgo)
+      .or('sharpe_ratio.gt.10,sharpe_ratio.lt.-10,roi_pct.gt.10000,roi_pct.lt.-10000,max_drawdown.gt.100,max_drawdown.lt.0,win_rate.gt.100,win_rate.lt.0')
+
+    if (freshViolations && freshViolations > 0) {
+      // Connector is producing bad data NOW — alert
+      try {
+        const { sendRateLimitedAlert } = await import('@/lib/alerts/send-alert')
+        await sendRateLimitedAlert({
+          title: `数据质量告警: ${freshViolations} 条新违规数据`,
+          message: `最近2小时内写入了 ${freshViolations} 条违反校验规则的快照。某个 connector 可能在产出脏数据。\n已自动清理 ${totalFixed} 条历史违规。`,
+          level: 'critical',
+          details: { freshViolations, historicalFixed: totalFixed },
+        }, 'cleanup-violations-fresh', 30 * 60 * 1000) // Rate limit: 1 alert per 30 min
+      } catch {
+        // Alert delivery is best-effort
+      }
+    }
+
+    return NextResponse.json({ fixed: totalFixed, freshViolations: freshViolations ?? 0, details: results })
   } catch (err) {
     return NextResponse.json(
       { error: err instanceof Error ? err.message : String(err) },
