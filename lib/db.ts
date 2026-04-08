@@ -64,9 +64,12 @@ export function getPool(): Pool {
 
     const config: PoolConfig = {
       connectionString,
-      // Production: 20 connections to handle 53 cron jobs + 3 SSE endpoints
-      // (was 5, causing statement timeouts under contention)
-      max: isProduction ? 20 : 10,
+      // Production: 10 connections per function instance.
+      // Supabase has a global limit (~60-200 connections depending on plan).
+      // Multiple serverless function instances share this limit, so per-instance
+      // max must stay moderate. Was 5 (too low → timeouts), tried 20 (too high →
+      // exhausted Supabase global limit when multiple functions run concurrently).
+      max: isProduction ? 10 : 10,
       idleTimeoutMillis: isProduction ? 10000 : 30000,
       connectionTimeoutMillis: isProduction ? 15000 : 10000,
       // Keep connections alive through load balancer/pooler
