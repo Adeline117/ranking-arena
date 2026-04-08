@@ -101,8 +101,17 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
+  // Accept ?season=7D|30D|90D to process a single season (staggered cron)
+  // When no season param, process all seasons (fallback / legacy behavior)
+  const seasonParam = request.nextUrl.searchParams.get('season')?.toUpperCase() as Period | undefined
+  const targetSeasons: Period[] = seasonParam && SEASONS.includes(seasonParam)
+    ? [seasonParam]
+    : SEASONS
+
   // Idempotency: atomic SET NX EX (no race window between get and set)
-  const IDEMPOTENCY_KEY = 'cron:compute-leaderboard:running'
+  // Per-season lock when running single season to allow parallel staggered runs
+  const lockSuffix = targetSeasons.length === 1 ? `:${targetSeasons[0]}` : ''
+  const IDEMPOTENCY_KEY = `cron:compute-leaderboard:running${lockSuffix}`
   let lockAcquired = false
   try {
     const { getSharedRedis } = await import('@/lib/cache/redis-client')
@@ -119,7 +128,7 @@ export async function GET(request: NextRequest) {
     lockAcquired = true
   }
   if (!lockAcquired) {
-    return NextResponse.json({ ok: true, message: 'Already running (atomic lock)', cached: true })
+    return NextResponse.json({ ok: true, message: `Already running (atomic lock${lockSuffix})`, cached: true })
   }
 
   const supabase = getSupabaseAdmin()
@@ -127,12 +136,12 @@ export async function GET(request: NextRequest) {
   const stats = { seasons: {} as Record<string, number> }
   const warnings: string[] = []
   const rolledBack: string[] = []
-  const plog = await PipelineLogger.start('compute-leaderboard')
+  const plog = await PipelineLogger.start(`compute-leaderboard${lockSuffix}`)
 
   try {
     // P0-2: Record current counts before computing
     const previousCounts: Record<string, number> = {}
-    for (const season of SEASONS) {
+    for (const season of targetSeasons) {
       const { count } = await supabase
         .from('leaderboard_ranks')
         .select('id', { count: 'exact', head: true })
@@ -151,9 +160,9 @@ export async function GET(request: NextRequest) {
       logger.warn('fill_null_pnl_from_siblings failed (non-critical):', e)
     }
 
-    // Phase 2: Parallelize season computation (300s → 120s)
+    // Compute target seasons (single season when staggered, all when fallback)
     const results = await Promise.all(
-      SEASONS.map(async (season) => {
+      targetSeasons.map(async (season) => {
         try {
           const count = await computeSeason(supabase, season, previousCounts[season], forceWrite)
           return { season, count, error: null }
