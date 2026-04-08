@@ -129,12 +129,14 @@
       "schedule": "5 */2 * * *"
     },
     {
+      "_disabled_2026_04_08": "bybit VPS scraper unreachable (connection refused), bybit direct API returns 404. Re-enable when VPS restored or alternate scraper added.",
       "path": "/api/cron/batch-fetch-traders?group=b1",
-      "schedule": "12 */3 * * *"
+      "schedule": "12 3 * * 0"
     },
     {
+      "_disabled_2026_04_08": "bybit_spot same as b1 — VPS scraper down",
       "path": "/api/cron/batch-fetch-traders?group=b1b",
-      "schedule": "42 */3 * * *"
+      "schedule": "42 3 * * 0"
     },
     {
       "path": "/api/cron/batch-fetch-traders?group=b2",
@@ -241,9 +243,8 @@
       "schedule": "25,55 * * * *"
     },
     {
-      "_disabled_pending_index": "Was every 1min causing 90-200s table scans on 1.18GB partition. Re-enable after partial index on (sharpe_ratio, roi_pct, max_drawdown, win_rate) is added.",
       "path": "/api/cron/cleanup-violations",
-      "schedule": "0 4 * * *"
+      "schedule": "*/5 * * * *"
     }
   ],
   "headers": [

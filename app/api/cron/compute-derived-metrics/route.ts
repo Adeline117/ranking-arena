@@ -37,7 +37,11 @@ export async function GET(request: NextRequest) {
       .limit(1)
 
     // Get distinct platforms from daily snapshots (more reliable)
-    const ninetyDaysAgo = new Date(Date.now() - 90 * 24 * 3600 * 1000).toISOString().split('T')[0]
+    // Data quality boundary: data before 2026-04-01 was written without validation
+    // (validate-snapshot.ts added 2026-04-01). Use the later of 90-days-ago or the quality boundary.
+    const DATA_QUALITY_BOUNDARY = '2026-04-01'
+    const rawNinetyDaysAgo = new Date(Date.now() - 90 * 24 * 3600 * 1000).toISOString().split('T')[0]
+    const ninetyDaysAgo = rawNinetyDaysAgo > DATA_QUALITY_BOUNDARY ? rawNinetyDaysAgo : DATA_QUALITY_BOUNDARY
 
     // Fetch all platform names from recent daily snapshots
     const { data: distinctPlatforms } = await supabase
