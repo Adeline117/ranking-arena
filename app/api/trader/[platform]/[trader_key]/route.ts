@@ -278,8 +278,11 @@ export async function GET(
     if (!timeseries.equity_curve && ecResult?.data && ecResult.data.length > 0) {
       const byDate = new Map<string, { roi: number; pnl: number }>()
       for (const p of ecResult.data as Array<{ data_date: string; roi_pct: number | null; pnl_usd: number | null }>) {
+        // Skip points with null ROI — they're "unknown", not "zero return"
+        // Displaying them as 0 creates false flat-lines and cliff jumps in the chart
+        if (p.roi_pct == null) continue
         byDate.set(p.data_date, {
-          roi: p.roi_pct ?? 0,
+          roi: Number(p.roi_pct),
           pnl: p.pnl_usd != null ? Number(p.pnl_usd) : 0,
         })
       }
