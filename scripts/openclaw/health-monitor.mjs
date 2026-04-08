@@ -85,6 +85,7 @@ const DEAD_PLATFORMS = new Set([
   'lbank',       // API 404 since 2026-04 (copy-trading endpoint removed)
   'weex',        // 75% timeout rate
   'gains',       // leaderboard endpoint 404 since 2026-04-07 (all 3 chains)
+  'bybit', 'bybit_spot', // VPS scraper down 2026-04-08, direct API 404
   'vertex', 'apex_pro', 'rabbitx', // DNS dead / no API
 ])
 

@@ -147,12 +147,13 @@ export async function GET() {
         // Direct connection failed — check pipeline_logs for recent VPS-sourced successes
         // If VPS cron wrote data in the last 15min, the VPS is actually working fine
         // (Vultr intermittently blocks Vercel's Tokyo IPs)
-        // Check if VPS-dependent pipelines succeeded recently (bybit/bitget use VPS scraper)
+        // Check if any VPS-dependent pipeline succeeded recently
+        // Note: bybit removed 2026-04-08 (dead platform), kept bitget + binance_futures
         const { data: recentVpsJob } = await getSupabaseAdmin()
           .from('pipeline_logs')
           .select('job_name, started_at')
           .eq('status', 'success')
-          .or('job_name.like.enrich-bybit%,job_name.like.enrich-bitget%,job_name.like.enrich-binance_futures%,job_name.like.batch-fetch-traders-b1%')
+          .or('job_name.like.enrich-bitget%,job_name.like.enrich-binance_futures%,job_name.like.batch-fetch-traders-b2%,job_name.like.batch-fetch-traders-a1%')
           .gte('started_at', new Date(Date.now() - 30 * 60000).toISOString())
           .limit(1)
           .maybeSingle()
