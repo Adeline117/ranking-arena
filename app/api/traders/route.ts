@@ -174,12 +174,17 @@ async function fetchFromLeaderboard(
     query = query.order(sortColumn, { ascending, nullsFirst: false })
   }
 
-  // Pagination
+  // Pagination — fetch 2x to compensate for diversity filter trimming + dedup losses.
+  // Without this, diversity filter could reduce 50→35 traders without backfill, leaving
+  // gaps below the requested limit. Fetch more, then trim to limit after filtering.
+  const fetchLimit = (!exchangeFilter && sortBy === 'arena_score' && !cursor && limit <= 100)
+    ? limit * 2
+    : limit
   if (useLegacyPaging) {
     const startIdx = page * limit
-    query = query.range(startIdx, startIdx + limit - 1)
+    query = query.range(startIdx, startIdx + fetchLimit - 1)
   } else {
-    query = query.limit(limit)
+    query = query.limit(fetchLimit)
   }
 
   const { data, error, count } = await query
@@ -247,6 +252,8 @@ async function fetchFromLeaderboard(
       platformCounts.set(t.source, count + 1)
       return true
     })
+    // Trim back to requested limit (we fetched 2x to compensate for filter losses)
+    dedupedTraders = dedupedTraders.slice(0, limit)
   }
 
   // Next cursor
