@@ -13,6 +13,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { PipelineLogger } from '@/lib/services/pipeline-logger'
 import { runEnrichment, type EnrichmentResult } from '@/lib/cron/enrichment-runner'
+import { getSupabaseAdmin } from '@/lib/supabase/server'
 import { createLogger } from '@/lib/utils/logger'
 import { env } from '@/lib/env'
 import { triggerDownstreamRefresh } from '@/lib/cron/trigger-chain'
@@ -220,14 +221,34 @@ export async function GET(request: NextRequest) {
 
           // Offset rotation: each run enriches a different slice of the leaderboard
           // Counter stored in PipelineState, incremented per platform per period
+          //
+          // ROOT CAUSE FIX (2026-04-08): Previously wrapped at hardcoded 5000.
+          // Many platforms have <2000 traders → offset > total → 0 enriched but
+          // status=success → critical platforms because no data is updated.
+          // Now we query the actual leaderboard size and wrap at the real count.
           let offset = 0
+          let leaderboardSize: number | null = null
+          try {
+            const supabase = getSupabaseAdmin()
+            const { count } = await supabase
+              .from('leaderboard_ranks')
+              .select('id', { count: 'exact', head: true })
+              .eq('source', platform)
+              .eq('season_id', period)
+              .not('arena_score', 'is', null)
+            leaderboardSize = count ?? null
+          } catch (err) {
+            logger.warn(`[batch-enrich] Failed to count leaderboard for ${platform}/${period}`, { error: err instanceof Error ? err.message : String(err) })
+          }
+
           try {
             const { PipelineState } = await import('@/lib/services/pipeline-state')
             const rotationKey = `enrich:offset:${platform}:${period}`
             const prevOffset = await PipelineState.get<number>(rotationKey) ?? 0
-            offset = prevOffset
-            // Advance offset for next run; wrap around at 5000 (max reasonable leaderboard size)
-            await PipelineState.set(rotationKey, (prevOffset + limit) % 5000)
+            // Wrap at actual leaderboard size (or 5000 fallback). Reset to 0 if prev offset already exceeds size.
+            const wrapAt = leaderboardSize && leaderboardSize > 0 ? leaderboardSize : 5000
+            offset = prevOffset >= wrapAt ? 0 : prevOffset
+            await PipelineState.set(rotationKey, (offset + limit) % wrapAt)
           } catch (err) {
             logger.warn(`[batch-enrich] Redis offset rotation failed for ${platform}/${period}, starting at 0`, {
               error: err instanceof Error ? err.message : String(err),
