@@ -144,15 +144,18 @@ export async function POST(request: NextRequest) {
       }
 
       // Fallback: also check trader_daily_snapshots for any traders not in equity_curve
+      // Data quality boundary: pre-2026-04-01 data was unvalidated (validate-snapshot.ts added 04-01)
+      const DATA_QUALITY_BOUNDARY = '2026-04-01'
       const missingTraders = allTraderKeys.filter(k => !dailySnapshotMap.has(k))
       if (missingTraders.length > 0) {
         const earliestStart = new Date()
         earliestStart.setDate(earliestStart.getDate() - 90)
+        const earliestDateStr = earliestStart.toISOString().split('T')[0]
         const { data: allDailySnaps } = await supabase
           .from('trader_daily_snapshots')
           .select('trader_key, date, daily_return_pct')
           .in('trader_key', missingTraders)
-          .gte('date', earliestStart.toISOString().split('T')[0])
+          .gte('date', earliestDateStr > DATA_QUALITY_BOUNDARY ? earliestDateStr : DATA_QUALITY_BOUNDARY)
           .order('date', { ascending: true })
 
         for (const row of allDailySnaps ?? []) {
