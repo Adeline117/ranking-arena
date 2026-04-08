@@ -307,8 +307,8 @@ async function aggregateForDate(supabase: any, dateStr: string, _plog: any): Pro
       const isTransient = errMsg.includes('statement timeout') || errMsg.includes('canceling') || errMsg.includes('57014') || errMsg.includes('connection')
       if (isTransient && validBatch.length > 50) {
         const mid = Math.floor(validBatch.length / 2)
-        const a = await safeUpsert(validBatch.slice(0, mid) as typeof batch)
-        const b = await safeUpsert(validBatch.slice(mid) as typeof batch)
+        const a = await safeUpsert(validBatch.slice(0, mid) as unknown as typeof batch)
+        const b = await safeUpsert(validBatch.slice(mid) as unknown as typeof batch)
         return { ok: a.ok && b.ok, sub_inserted: a.sub_inserted + b.sub_inserted, sub_errors: a.sub_errors + b.sub_errors }
       }
       logger.dbError('upsert-daily-snapshots-batch', upsertError, { batchSize: validBatch.length })
