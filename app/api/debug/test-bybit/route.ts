@@ -1,6 +1,5 @@
 /**
  * Debug endpoint — test new Bybit endpoints from Vercel to find what's not WAF-blocked.
- * Delete after testing.
  */
 import { NextRequest, NextResponse } from 'next/server'
 import { env } from '@/lib/env'
@@ -8,10 +7,8 @@ import { env } from '@/lib/env'
 export const runtime = 'nodejs'
 export const maxDuration = 30
 
-const USER_AGENT = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
-
 const HEADERS: Record<string, string> = {
-  'User-Agent': USER_AGENT,
+  'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
   'Accept': 'application/json',
   'Accept-Language': 'en-US,en;q=0.9',
   'Referer': 'https://www.bybit.com/copyTrade/',
@@ -35,16 +32,12 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
-  const endTimeE3 = Math.floor(Date.now() / 1000) * 1000 // seconds × 10^3
+  const endTimeE3 = Math.floor(Date.now() / 1000) * 1000
 
   const urls = [
-    // Candidate public endpoints found in copyTrade JS chunk
     `https://api2.bybit.com/fapi/beehive/public/v1/common/leaderboard-info`,
     `https://api2.bybit.com/fapi/beehive/public/v1/common/trader-leaderboard?rankingForm=RANKING_FORM_TRADERS_PNL&period=PERIOD_30D&endTimeE3=${endTimeE3}`,
     `https://api2.bybit.com/fapi/beehive/public/v1/common/trader-leaderboard?rankingForm=RANKING_FORM_TRADERS_ROI&period=PERIOD_30D&endTimeE3=${endTimeE3}`,
-    // Original that was blocked
-    `https://api2.bybit.com/fapi/beehive/public/v1/common/dynamic-leader-list?pageNo=1&pageSize=5&dataDuration=DATA_DURATION_THIRTY_DAY&sortField=LEADER_SORT_FIELD_SORT_ROI`,
-    // Alternative paths
     `https://api2.bybit.com/fapi/beehive/public/v1/common/symbol-list`,
     `https://api2.bybit.com/fapi/beehive/public/v1/common/tags`,
   ]
