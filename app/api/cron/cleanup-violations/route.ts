@@ -2,12 +2,7 @@
  * GET /api/cron/cleanup-violations
  *
  * Incremental cleanup of historical data quality violations.
- * Fixes 30 rows per invocation via server-side RPC.
- *
- * MONITORING: After cleanup, checks if any FRESH violations exist (created in last 2 hours).
- * If yes, a connector is actively producing bad data → triggers Telegram alert.
- *
- * Self-disabling: returns { done: true } when no more violations remain.
+ * Uses server-side RPC with small batch to fit within Supabase 10s timeout.
  *
  * Schedule: Every 5 minutes (Vercel cron)
  */
@@ -28,25 +23,33 @@ export async function GET(request: NextRequest) {
   const supabase = getSupabaseAdmin()
 
   try {
-    const { data, error } = await supabase.rpc('cleanup_snapshot_violations', {
-      batch_limit: 30,
-    })
+    // Run multiple small batches within one cron invocation
+    let totalFixed = 0
+    const maxBatches = 5
 
-    if (error) {
-      return NextResponse.json({ error: error.message }, { status: 500 })
+    for (let i = 0; i < maxBatches; i++) {
+      const { data, error } = await supabase.rpc('cleanup_snapshot_violations', {
+        batch_limit: 10,
+      })
+
+      if (error) {
+        // If first batch errors, return error; otherwise return partial results
+        if (i === 0) return NextResponse.json({ error: error.message }, { status: 500 })
+        break
+      }
+
+      const results = (data || []) as Array<{ issue: string; fixed: number }>
+      const batchFixed = results.reduce((s: number, r: { fixed: number }) => s + r.fixed, 0)
+      totalFixed += batchFixed
+
+      if (batchFixed === 0) break // No more violations
     }
-
-    const results = (data || []) as Array<{ issue: string; fixed: number }>
-    const totalFixed = results.reduce((s: number, r: { fixed: number }) => s + r.fixed, 0)
 
     if (totalFixed === 0) {
       return NextResponse.json({ done: true, message: 'No more violations to fix' })
     }
 
-    // MONITORING: Check if cleanup is finding violations in FRESH data.
-    // Use pipeline_rejected_writes table instead of scanning trader_snapshots_v2
-    // (the v2 table scan is too slow). If validateBeforeWrite rejects fresh rows,
-    // it logs them there — so we just check recent rejections.
+    // Monitoring: check pipeline_rejected_writes for fresh connector issues
     let freshViolations = 0
     try {
       const oneHourAgo = new Date(Date.now() - 3600 * 1000).toISOString()
@@ -61,16 +64,16 @@ export async function GET(request: NextRequest) {
         const { sendRateLimitedAlert } = await import('@/lib/alerts/send-alert')
         await sendRateLimitedAlert({
           title: `数据质量告警: ${freshViolations} 条被拦截`,
-          message: `最近1小时内 validateBeforeWrite 拦截了 ${freshViolations} 条脏快照。某个 connector 可能在产出脏数据。\n已自动清理 ${totalFixed} 条历史违规。`,
+          message: `最近1小时内 validateBeforeWrite 拦截了 ${freshViolations} 条脏快照。\n已自动清理 ${totalFixed} 条历史违规。`,
           level: 'critical',
           details: { freshViolations, historicalFixed: totalFixed },
         }, 'cleanup-violations-fresh', 30 * 60 * 1000)
       }
     } catch {
-      // Monitoring is best-effort — don't block cleanup
+      // Monitoring is best-effort
     }
 
-    return NextResponse.json({ fixed: totalFixed, freshViolations, details: results })
+    return NextResponse.json({ fixed: totalFixed, freshViolations })
   } catch (err) {
     return NextResponse.json(
       { error: err instanceof Error ? err.message : String(err) },
