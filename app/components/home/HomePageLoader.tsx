@@ -1,7 +1,7 @@
 'use client'
 
 import dynamic from 'next/dynamic'
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useLayoutEffect } from 'react'
 import Providers from '../Providers'
 import type { InitialTrader, CategoryCounts } from '@/lib/getInitialTraders'
 
@@ -69,6 +69,24 @@ export default function HomePageLoader(props: HomePageLoaderProps) {
       }
     }
   }, [])
+
+  // Hide SSR elements BEFORE the browser paints Phase 2 (useLayoutEffect runs
+  // synchronously after DOM mutations, before paint). Without this, both SSR
+  // content (~2600px) and Phase 2 content coexist for one frame, then SSR
+  // removal causes a massive layout shift (the real source of 0.778 CLS).
+  useLayoutEffect(() => {
+    if (!activated) return
+    const ssrTable = document.getElementById('ssr-ranking-table')
+    const ssrNav = document.getElementById('ssr-topnav')
+    // display:none removes from layout instantly, before paint
+    if (ssrTable) ssrTable.style.display = 'none'
+    if (ssrNav) ssrNav.style.display = 'none'
+    // Fully remove from DOM after paint (cleanup, not layout-impacting)
+    requestAnimationFrame(() => {
+      ssrTable?.remove()
+      ssrNav?.remove()
+    })
+  }, [activated])
 
   if (!activated) return null
   // Homepage root layout has no Providers (for LCP optimization).

@@ -1,7 +1,7 @@
 
 'use client'
 
-import { Suspense, lazy, useEffect } from 'react'
+import { Suspense, lazy } from 'react'
 import { tokens } from '@/lib/design-tokens'
 import TopNav from '../layout/TopNav'
 // MobileBottomNav is rendered in root layout.tsx -- do not duplicate here
@@ -35,18 +35,8 @@ interface HomePageProps {
 export default function HomePage({ initialTraders, initialLastUpdated, heroStats, initialTotalCount, initialCategoryCounts }: HomePageProps) {
   // SSR hero: NEVER removed — it IS the LCP element (~1.2s on slow 4G).
   // Phase 2 does NOT render its own hero. SSR hero stays visible permanently.
-  // SSR topnav: removed when Phase 2 renders its own.
-  // SSR ranking table: removed by HomePageClient AFTER it has rendered data.
-  useEffect(() => {
-    const cleanup = () => {
-      document.getElementById('ssr-topnav')?.remove()
-    }
-    if ('requestIdleCallback' in window) {
-      (window as Window).requestIdleCallback(cleanup)
-    } else {
-      setTimeout(cleanup, 100)
-    }
-  }, [])
+  // SSR topnav + ranking table: removed by HomePageLoader.useLayoutEffect
+  // (centralized, runs before paint to prevent CLS)
 
   return (
     <div
