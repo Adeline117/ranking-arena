@@ -212,9 +212,9 @@ export async function GET(request: NextRequest) {
     gateio: 120000,
     okx_web3: 120000,
     // Fast direct APIs
-    okx_spot: 60000,
+    okx_spot: 120000, // Was 60s — too tight: fetch + enrich both need budget. Observed enrich timing out at 22s
     bitunix: 120000, // Increased from 60s: VPS proxy adds latency, observed 137s during outage
-    coinex: 90000,
+    coinex: 120000,  // Was 90s — same enrichment squeeze pattern
     dydx: 240000, // Copin API: 500/page × 2 pages × 3 windows + DB writes (upsert 3000 rows). Needs generous timeout.
     // Others: default 90s (PLATFORM_TIMEOUT_MS)
   }

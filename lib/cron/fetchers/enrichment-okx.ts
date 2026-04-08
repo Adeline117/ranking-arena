@@ -31,7 +31,7 @@ export async function fetchOkxCurrentPositions(
   try {
     const data = await fetchJson<OkxSubPositionResponse>(
       `https://www.okx.com/api/v5/copytrading/public-current-subpositions?instType=SWAP&uniqueCode=${traderId}&limit=50`,
-      { timeoutMs: 15000 }
+      { timeoutMs: 30000 }
     )
 
     if (data.code !== '0' || !data.data?.length) return []
@@ -77,7 +77,7 @@ export async function fetchOkxEquityCurve(
   try {
     const data = await fetchJson<OkxWeeklyPnlResponse>(
       `https://www.okx.com/api/v5/copytrading/public-weekly-pnl?instType=SWAP&uniqueCode=${traderId}`,
-      { timeoutMs: 15000 }
+      { timeoutMs: 30000 }
     )
 
     if (data.code !== '0' || !data.data?.length) return []
@@ -137,7 +137,7 @@ export async function fetchOkxPositionHistory(
       }>
     }>(
       `https://www.okx.com/priapi/v5/ecotrade/public/position-history?uniqueName=${traderId}&limit=${limit}`,
-      { timeoutMs: 15000 }
+      { timeoutMs: 30000 }
     )
 
     if (data.code !== '0' || !data.data?.length) return []
@@ -195,7 +195,7 @@ export async function fetchOkxStatsDetail(
       `https://www.okx.com/api/v5/copytrading/public-lead-traders?instType=SWAP&uniqueCode=${traderId}`,
       {
         headers: { Accept: '*/*', 'Accept-Language': 'en-US,en;q=0.9' },
-        timeoutMs: 15000,
+        timeoutMs: 30000,
       }
     )
 
