@@ -64,10 +64,11 @@ export function getPool(): Pool {
 
     const config: PoolConfig = {
       connectionString,
-      // Serverless-optimized: fewer connections, shorter timeouts
-      max: isProduction ? 5 : 10,
+      // Production: 20 connections to handle 53 cron jobs + 3 SSE endpoints
+      // (was 5, causing statement timeouts under contention)
+      max: isProduction ? 20 : 10,
       idleTimeoutMillis: isProduction ? 10000 : 30000,
-      connectionTimeoutMillis: 10000,
+      connectionTimeoutMillis: isProduction ? 15000 : 10000,
       // Keep connections alive through load balancer/pooler
       keepAlive: true,
       keepAliveInitialDelayMillis: 10000,
