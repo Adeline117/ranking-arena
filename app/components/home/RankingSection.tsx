@@ -6,9 +6,10 @@ import type { Trader } from '../ranking/RankingTableTypes'
 import type { TimeRange } from './hooks/useTraderData'
 import type { CategoryCounts } from '@/lib/getInitialTraders'
 
-const RankingTable = dynamic(() => import('../ranking/RankingTable').then(m => ({ default: m.RankingTable })), {
-  ssr: false,
-})
+// Static import — RankingTable is LCP-critical. Dynamic import created a secondary
+// chunk waterfall: HomePage.js loads → then RankingTable.js loads → blank gap → CLS.
+// Bundling it with HomePage eliminates the gap.
+import { RankingTable } from '../ranking/RankingTable'
 
 import TimeRangeSelector from './TimeRangeSelector'
 import { useRankingFilters, FREE_LEADERBOARD_LIMIT } from './useRankingFilters'

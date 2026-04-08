@@ -70,23 +70,15 @@ export default function HomePageLoader(props: HomePageLoaderProps) {
     }
   }, [])
 
-  // Hide SSR ranking table BEFORE the browser paints Phase 2 (useLayoutEffect
-  // runs synchronously after DOM mutations, before paint). Without this, both
-  // SSR content (~2600px) and Phase 2 content coexist for one frame → CLS.
-  //
-  // #ssr-topnav is NOT hidden — Phase 2 portals its interactive TopNav into it.
-  // This keeps the 56px container in place, preventing a separate CLS source.
+  // Clear SSR topnav HTML so Phase 2 can portal into the container.
+  // #ssr-topnav container stays in place (56px) — Phase 2 portals into it.
+  // #ssr-ranking-table is NOT hidden here — it's hidden by HomePageClient's
+  // useLayoutEffect AFTER Phase 2 content has rendered, preventing CLS from
+  // hiding SSR before Phase 2 JS has loaded.
   useLayoutEffect(() => {
     if (!activated) return
-    const ssrTable = document.getElementById('ssr-ranking-table')
-    if (ssrTable) ssrTable.style.display = 'none'
-    // Clear SSR topnav HTML so Phase 2 can portal into the empty container
     const ssrNav = document.getElementById('ssr-topnav')
     if (ssrNav) ssrNav.innerHTML = ''
-    // Fully remove ranking table from DOM after paint
-    requestAnimationFrame(() => {
-      ssrTable?.remove()
-    })
   }, [activated])
 
   if (!activated) return null
