@@ -60,8 +60,39 @@ export class BybitSpotConnector extends BaseConnector {
       const dataArr = resultObj?.data as unknown[] | undefined
       list = (leaderDetails?.length ? leaderDetails : dataArr?.length ? dataArr : []) as Record<string, unknown>[]
     } else {
-      // VPS scraper unavailable — throw explicit error for pipeline tracking
-      throw new Error('Bybit Spot: VPS scraper unavailable and no direct API fallback. Check VPS_SCRAPER_SG connectivity.')
+      // NEW 2026-04-08: fallback to DB seed list when VPS unavailable.
+      // Enrichment endpoints are NOT WAF-blocked, so we can still refresh existing traders.
+      this.logger.warn('[bybit_spot] VPS scraper unavailable — falling back to DB seed list')
+      try {
+        const { getSupabaseAdmin } = await import('@/lib/supabase/server')
+        const supabase = getSupabaseAdmin()
+        const { data: existingTraders } = await supabase
+          .from('trader_snapshots_v2')
+          .select('trader_key')
+          .eq('platform', 'bybit_spot')
+          .eq('window', window.toUpperCase())
+          .gte('updated_at', new Date(Date.now() - 30 * 24 * 3600 * 1000).toISOString())
+          .order('updated_at', { ascending: false })
+          .limit(limit)
+
+        if (existingTraders && existingTraders.length > 0) {
+          const seedTraders: TraderSource[] = existingTraders.map((t) => ({
+            platform: 'bybit_spot' as const,
+            market_type: 'spot' as const,
+            trader_key: String(t.trader_key),
+            display_name: null,
+            profile_url: `https://www.bybit.com/copyTrade/trade-center/detail?leaderMark=${t.trader_key}`,
+            discovered_at: new Date().toISOString(),
+            last_seen_at: new Date().toISOString(),
+            is_active: true,
+            raw: { _source: 'db_seed' } as Record<string, unknown>,
+          }))
+          return { traders: seedTraders, total_available: seedTraders.length, window, fetched_at: new Date().toISOString() }
+        }
+      } catch (err) {
+        this.logger.warn('[bybit_spot] DB seed fallback failed:', err instanceof Error ? err.message : String(err))
+      }
+      throw new Error('Bybit Spot: VPS scraper unavailable and no DB seed list. Check VPS_SCRAPER_SG connectivity.')
     }
 
     const traders: TraderSource[] = list.map((item) => ({
