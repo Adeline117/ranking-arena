@@ -245,6 +245,10 @@
     {
       "path": "/api/cron/cleanup-violations",
       "schedule": "*/5 * * * *"
+    },
+    {
+      "path": "/api/cron/scan-data-quality",
+      "schedule": "0 6 * * *"
     }
   ],
   "headers": [

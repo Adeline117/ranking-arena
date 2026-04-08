@@ -178,12 +178,16 @@ async function fetchFromLeaderboard(
     query = query.order(sortColumn, { ascending, nullsFirst: false })
   }
 
-  // Pagination
+  // Pagination — fetch 2x rows when diversity filter will trim
+  // This is now safe because the underlying query is ~20ms (was 5707ms before
+  // the ORDER BY arena_score fix). Diversity filter then trims back to limit.
+  const willApplyDiversity = !exchangeFilter && sortBy === 'arena_score' && !cursor && limit <= 100
+  const fetchLimit = willApplyDiversity ? Math.min(limit * 2, 200) : limit
   if (useLegacyPaging) {
     const startIdx = page * limit
-    query = query.range(startIdx, startIdx + limit - 1)
+    query = query.range(startIdx, startIdx + fetchLimit - 1)
   } else {
-    query = query.limit(limit)
+    query = query.limit(fetchLimit)
   }
 
   const { data, error } = await query
@@ -253,7 +257,7 @@ async function fetchFromLeaderboard(
 
   // Platform diversity: when viewing overall (no exchange filter) with small limits,
   // cap per-platform to prevent a single platform from monopolizing the first page
-  if (!exchangeFilter && sortBy === 'arena_score' && !cursor && limit <= 100) {
+  if (willApplyDiversity) {
     const MAX_PER_PLATFORM = Math.max(5, Math.ceil(limit * 0.4))
     const platformCounts = new Map<string, number>()
     dedupedTraders = dedupedTraders.filter((t: { source: string }) => {
@@ -262,6 +266,8 @@ async function fetchFromLeaderboard(
       platformCounts.set(t.source, count + 1)
       return true
     })
+    // Trim back to requested limit (we fetched 2x to compensate for filter losses)
+    dedupedTraders = dedupedTraders.slice(0, limit)
   }
 
   // Next cursor
