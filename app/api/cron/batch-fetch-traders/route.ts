@@ -39,7 +39,7 @@ import { triggerDownstreamRefresh } from '@/lib/cron/trigger-chain'
 
 const DEAD_COUNTER_PREFIX = 'dead:consecutive:'
 const DEAD_THRESHOLD = 20 // consecutive failures before circuit-breaking (increased from 10 — VPS outages cause ~15 failures across 3h cycle, 10 was too aggressive)
-const DEAD_COUNTER_MAX_AGE_MS = 2 * 3600 * 1000 // Auto-reset counters older than 2h (was 6h — too slow for VPS overload recovery)
+const DEAD_COUNTER_MAX_AGE_MS = 30 * 60 * 1000 // Auto-reset counters older than 30min (was 2h — too slow; single transient failure caused 2h data gap)
 
 export const runtime = 'nodejs' // Required: edge runtime has 30s timeout, nodejs supports maxDuration
 export const dynamic = 'force-dynamic'
