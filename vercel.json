@@ -5,8 +5,20 @@
   ],
   "crons": [
     {
+      "path": "/api/cron/compute-leaderboard?season=90D",
+      "schedule": "0 * * * *"
+    },
+    {
+      "path": "/api/cron/compute-leaderboard?season=30D",
+      "schedule": "15 * * * *"
+    },
+    {
+      "path": "/api/cron/compute-leaderboard?season=7D",
+      "schedule": "30 * * * *"
+    },
+    {
       "path": "/api/cron/compute-leaderboard",
-      "schedule": "0,30 * * * *"
+      "schedule": "45 * * * *"
     },
     {
       "path": "/api/cron/sync-meilisearch",
