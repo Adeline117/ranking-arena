@@ -129,14 +129,13 @@
       "schedule": "5 */2 * * *"
     },
     {
-      "_disabled_2026_04_08": "bybit VPS scraper unreachable (connection refused), bybit direct API returns 404. Re-enable when VPS restored or alternate scraper added.",
+      "_note": "bybit uses VPS scraper; falls back to DB seed list refresh when VPS unavailable (enables enrich-bybit to keep updating known traders even when discovery fails)",
       "path": "/api/cron/batch-fetch-traders?group=b1",
-      "schedule": "12 3 * * 0"
+      "schedule": "12 */3 * * *"
     },
     {
-      "_disabled_2026_04_08": "bybit_spot same as b1 — VPS scraper down",
       "path": "/api/cron/batch-fetch-traders?group=b1b",
-      "schedule": "42 3 * * 0"
+      "schedule": "42 */3 * * *"
     },
     {
       "path": "/api/cron/batch-fetch-traders?group=b2",

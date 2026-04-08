@@ -72,21 +72,54 @@ export class BybitFuturesConnector extends BaseConnector {
       if (vpsData) {
         _rawLb = vpsData
       } else {
-        // Fallback: try direct API (rarely works from datacenter IPs)
-        try {
-          _rawLb = await this.request<Record<string, unknown>>(
-            `https://api2.bybit.com/fapi/beehive/public/v1/common/dynamic-leader-list?timeRange=${timeRange}&dataType=DATA_ROI&page=${page}&pageSize=${pageSize}`,
-            { method: 'GET' }
-          )
-        } catch (err) {
-          const errMsg = err instanceof Error ? err.message : String(err)
-          // On first page failure, throw explicit error so pipeline can track it
-          if (page === 1 + Math.floor(offset / pageSize) && allTraders.length === 0) {
-            throw new Error(`Bybit: VPS scraper unavailable and direct API blocked (${errMsg}). Check VPS_SCRAPER_SG connectivity.`)
+        // NEW 2026-04-08: dynamic-leader-list is WAF-blocked but leader-details is NOT.
+        // We use the DB as "seed list" of known bybit traders and refresh their snapshots.
+        // Discovery of NEW traders requires VPS scraper — when VPS is down, we gracefully
+        // return existing traders from DB instead of throwing.
+        if (page === 1 + Math.floor(offset / pageSize) && allTraders.length === 0) {
+          this.logger.warn('[bybit] VPS scraper unavailable — falling back to DB seed list (will refresh existing traders but no new ones)')
+          try {
+            const { getSupabaseAdmin } = await import('@/lib/supabase/server')
+            const supabase = getSupabaseAdmin()
+            const { data: existingTraders } = await supabase
+              .from('trader_snapshots_v2')
+              .select('trader_key, metrics')
+              .eq('platform', 'bybit')
+              .eq('window', window.toUpperCase())
+              .gte('updated_at', new Date(Date.now() - 30 * 24 * 3600 * 1000).toISOString())
+              .order('updated_at', { ascending: false })
+              .limit(limit)
+
+            if (existingTraders && existingTraders.length > 0) {
+              const seedTraders: TraderSource[] = existingTraders.map((t) => {
+                const metrics = (t.metrics as Record<string, unknown>) || {}
+                return {
+                  platform: 'bybit' as const,
+                  market_type: 'futures' as const,
+                  trader_key: String(t.trader_key),
+                  display_name: (metrics.nickName as string) || null,
+                  profile_url: `https://www.bybit.com/copyTrade/trade-center/detail?leaderMark=${t.trader_key}`,
+                  discovered_at: new Date().toISOString(),
+                  last_seen_at: new Date().toISOString(),
+                  is_active: true,
+                  raw: { _source: 'db_seed' } as Record<string, unknown>,
+                }
+              })
+              this.logger.info(`[bybit] DB seed list returned ${seedTraders.length} known traders for ${window}`)
+              return {
+                traders: seedTraders,
+                total_available: seedTraders.length,
+                window,
+                fetched_at: new Date().toISOString(),
+              }
+            }
+          } catch (err) {
+            this.logger.warn('[bybit] DB seed fallback failed:', err instanceof Error ? err.message : String(err))
           }
-          this.logger.debug('Bybit direct API fallback:', errMsg)
-          break
+          throw new Error(`Bybit: VPS scraper unavailable and no DB seed list available. Check VPS_SCRAPER_SG connectivity.`)
         }
+        this.logger.debug('Bybit: VPS unavailable on later page, stopping pagination')
+        break
       }
 
       const resultObj = (_rawLb as Record<string, unknown>)?.result as Record<string, unknown> | undefined
