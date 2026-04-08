@@ -90,11 +90,13 @@ function traderDataReducer(state: TraderDataState, action: TraderDataAction): Tr
         categoryCounts: action.categoryCounts ?? state.categoryCounts,
       }
     case 'LOAD_ERROR':
+      // If we already have traders (from SSR or previous fetch), silently keep them
+      // instead of showing error UI — prevents CLS from error box replacing content
       return {
         ...state,
         loading: false,
         isChangingTimeRange: false,
-        error: action.error,
+        error: state.currentTraders.length > 0 ? null : action.error,
       }
     case 'LOAD_ABORT':
       return { ...state, loading: false, isChangingTimeRange: false }
@@ -211,7 +213,10 @@ export function useTraderData(options: UseTraderDataOptions = {}) {
         url += `&sortBy=${sortBy}&order=${sortDir}`
       }
 
+      // 8s timeout prevents indefinite hang if API is slow
+      const timeoutId = setTimeout(() => controller.abort(), 8_000)
       const response = await fetch(url, { signal: controller.signal })
+      clearTimeout(timeoutId)
       if (!response.ok) {
         throw new Error(`${tRef.current('loadFailed')} (${response.status})`)
       }

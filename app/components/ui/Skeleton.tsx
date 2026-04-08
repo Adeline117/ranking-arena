@@ -43,12 +43,10 @@ export function Skeleton({
   const getAnimationStyle = (): React.CSSProperties => {
     switch (animation) {
       case 'shimmer':
+        // Uses .skeleton CSS class with ::after pseudo-element for GPU-composited animation
+        // (transform: translateX instead of background-position)
         return {
-          backgroundImage: `linear-gradient(90deg, ${tokens.colors.bg.tertiary} 0%, var(--glass-bg-light, var(--glass-bg-light)) 50%, ${tokens.colors.bg.tertiary} 100%)`,
-          backgroundSize: '200% 100%',
-          backgroundRepeat: 'no-repeat',
           backgroundColor: tokens.colors.bg.tertiary,
-          animation: 'shimmer 1.5s ease-in-out infinite',
         }
       case 'pulse':
         return {
