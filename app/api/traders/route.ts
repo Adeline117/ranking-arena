@@ -130,11 +130,13 @@ async function fetchFromLeaderboard(
   const { timeRange, exchangeFilter, categoryFilter, sortBy, order, cursor, limit, useLegacyPaging, page } = params
 
   // Build query — select only needed columns (avoid SELECT *)
-  // Only request exact count for legacy page-based pagination (needed for totalCount).
-  // Cursor-based pagination determines hasMore from result length, saving ~50-100ms on 32K+ rows.
+  // ROOT CAUSE FIX: count: 'exact' was taking 47 SECONDS on this 73K-row table
+  // because Index Only Scan needed heap fetches when visibility map was stale.
+  // Solution: read pre-computed count from leaderboard_count_cache (updated by
+  // compute-leaderboard cron) instead of running count(*) on every request.
   let query = supabase
     .from('leaderboard_ranks')
-    .select(LEADERBOARD_COLUMNS, useLegacyPaging ? { count: 'exact' } : { count: undefined })
+    .select(LEADERBOARD_COLUMNS)
     .eq('season_id', timeRange)
 
   if (exchangeFilter) {
@@ -182,14 +184,25 @@ async function fetchFromLeaderboard(
     query = query.limit(limit)
   }
 
-  const { data, error, count } = await query
+  const { data, error } = await query
 
   if (error) {
     logger.error('leaderboard_ranks query error:', error)
     throw new Error(`leaderboard_ranks query failed: ${error.message}`)
   }
 
-  const totalCount = count ?? 0
+  // Read totalCount from pre-computed cache (instant) instead of count: 'exact' (47s)
+  let totalCount = 0
+  if (useLegacyPaging) {
+    const countSource = exchangeFilter || '_all'
+    const { data: cacheRow } = await supabase
+      .from('leaderboard_count_cache')
+      .select('total_count')
+      .eq('season_id', timeRange)
+      .eq('source', countSource)
+      .maybeSingle()
+    totalCount = cacheRow?.total_count ?? 0
+  }
 
   // Map to trader response format (compatible with existing frontend)
   const traders = (data || []).map((row: Record<string, unknown>) => ({
