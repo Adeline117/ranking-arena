@@ -330,5 +330,9 @@ async function fetchFromLeaderboard(
     page: useLegacyPaging ? page : undefined,
     limit,
     availableSources,
+    // Deploy verification marker — bumped 2026-04-08T21:50
+    _v: 'count-cache-fix-v2',
+    _fetchLimit: fetchLimit,
+    _willApplyDiversity: willApplyDiversity,
   }
 }
