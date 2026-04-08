@@ -257,3 +257,18 @@ export const VALIDATION_BOUNDS = {
   followers: { min: 0 },
   copiers: { min: 0 },
 } as const
+
+/**
+ * Data quality boundary — the date before which snapshot data was unvalidated.
+ *
+ * validate-snapshot.ts was added 2026-04-01. ALL data written before this date
+ * may contain invalid values (extreme ROI, ROI=PnL, wrong decimal scale, etc.).
+ *
+ * Consumers computing derived metrics (Sharpe, WR, MDD, Beta) MUST use this
+ * as a lower bound for their date range queries. Import from here — do NOT
+ * hardcode '2026-04-01' in individual files.
+ *
+ * This boundary becomes irrelevant once it's >90 days old (falls off the
+ * rolling window). Can be removed after 2026-07-01.
+ */
+export const DATA_QUALITY_BOUNDARY = '2026-04-01'

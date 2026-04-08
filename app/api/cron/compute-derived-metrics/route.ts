@@ -12,6 +12,7 @@ import { logger } from '@/lib/logger'
 import { getSupabaseAdmin } from '@/lib/supabase/server'
 import { PipelineLogger } from '@/lib/services/pipeline-logger'
 import { env } from '@/lib/env'
+import { DATA_QUALITY_BOUNDARY } from '@/lib/pipeline/types'
 import { calculateBeta, calculateAlpha } from '@/lib/utils/market-correlation'
 
 export const dynamic = 'force-dynamic'
@@ -37,9 +38,7 @@ export async function GET(request: NextRequest) {
       .limit(1)
 
     // Get distinct platforms from daily snapshots (more reliable)
-    // Data quality boundary: data before 2026-04-01 was written without validation
-    // (validate-snapshot.ts added 2026-04-01). Use the later of 90-days-ago or the quality boundary.
-    const DATA_QUALITY_BOUNDARY = '2026-04-01'
+    // Use the later of 90-days-ago or DATA_QUALITY_BOUNDARY (imported from lib/pipeline/types.ts)
     const rawNinetyDaysAgo = new Date(Date.now() - 90 * 24 * 3600 * 1000).toISOString().split('T')[0]
     const ninetyDaysAgo = rawNinetyDaysAgo > DATA_QUALITY_BOUNDARY ? rawNinetyDaysAgo : DATA_QUALITY_BOUNDARY
 

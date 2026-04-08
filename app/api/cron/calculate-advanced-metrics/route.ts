@@ -12,6 +12,7 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server'
+import { DATA_QUALITY_BOUNDARY } from '@/lib/pipeline/types'
 import { PipelineLogger } from '@/lib/services/pipeline-logger'
 import { getSupabaseAdmin } from '@/lib/supabase/server'
 import {
@@ -144,8 +145,7 @@ export async function POST(request: NextRequest) {
       }
 
       // Fallback: also check trader_daily_snapshots for any traders not in equity_curve
-      // Data quality boundary: pre-2026-04-01 data was unvalidated (validate-snapshot.ts added 04-01)
-      const DATA_QUALITY_BOUNDARY = '2026-04-01'
+      // DATA_QUALITY_BOUNDARY imported from lib/pipeline/types.ts
       const missingTraders = allTraderKeys.filter(k => !dailySnapshotMap.has(k))
       if (missingTraders.length > 0) {
         const earliestStart = new Date()
