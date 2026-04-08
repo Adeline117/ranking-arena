@@ -285,26 +285,43 @@ async function aggregateForDate(supabase: any, dateStr: string, _plog: any): Pro
     }
 
     // Step 5: Batch upsert daily snapshots
+    // ROOT CAUSE FIX (2026-04-08): UPSERT_BATCH was 500 → exceeded Supabase
+    // statement_timeout (30s) on busy DB. Reduced batch + retry with smaller
+    // sub-batches on timeout to ensure progress.
     let inserted = 0
     let errors = 0
 
-    for (let i = 0; i < records.length; i += UPSERT_BATCH) {
-      const batch = records.slice(i, i + UPSERT_BATCH)
-      // Data gatekeeper
+    const safeUpsert = async (batch: typeof records): Promise<{ ok: boolean; sub_inserted: number; sub_errors: number }> => {
       const { valid: validBatch, rejected } = validateBeforeWrite(batch as Record<string, unknown>[], 'trader_daily_snapshots')
       if (rejected.length) logRejectedWrites(rejected, supabase)
+      if (validBatch.length === 0) return { ok: false, sub_inserted: 0, sub_errors: batch.length }
 
-      if (validBatch.length === 0) { errors += batch.length; continue }
       const { error: upsertError } = await supabase
         .from('trader_daily_snapshots')
         .upsert(validBatch, { onConflict: 'platform,trader_key,date' })
 
-      if (upsertError) {
-        logger.dbError('upsert-daily-snapshots-batch', upsertError, { batchStart: i, batchSize: validBatch.length })
-        errors += validBatch.length
-      } else {
-        inserted += validBatch.length
+      if (!upsertError) return { ok: true, sub_inserted: validBatch.length, sub_errors: 0 }
+
+      // Retry path: split in half on timeout / connection error
+      const errMsg = upsertError.message || ''
+      const isTransient = errMsg.includes('statement timeout') || errMsg.includes('canceling') || errMsg.includes('57014') || errMsg.includes('connection')
+      if (isTransient && validBatch.length > 50) {
+        const mid = Math.floor(validBatch.length / 2)
+        const a = await safeUpsert(validBatch.slice(0, mid) as typeof batch)
+        const b = await safeUpsert(validBatch.slice(mid) as typeof batch)
+        return { ok: a.ok && b.ok, sub_inserted: a.sub_inserted + b.sub_inserted, sub_errors: a.sub_errors + b.sub_errors }
       }
+      logger.dbError('upsert-daily-snapshots-batch', upsertError, { batchSize: validBatch.length })
+      return { ok: false, sub_inserted: 0, sub_errors: validBatch.length }
+    }
+
+    // Reduced from 500 to 250 — empirically fits within 30s statement_timeout
+    const ACTUAL_UPSERT_BATCH = 250
+    for (let i = 0; i < records.length; i += ACTUAL_UPSERT_BATCH) {
+      const batch = records.slice(i, i + ACTUAL_UPSERT_BATCH)
+      const result = await safeUpsert(batch)
+      inserted += result.sub_inserted
+      errors += result.sub_errors
     }
 
     return { inserted, errors }
