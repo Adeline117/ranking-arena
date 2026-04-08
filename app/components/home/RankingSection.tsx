@@ -33,6 +33,7 @@ interface RankingSectionProps {
   totalCount?: number
   categoryCounts?: CategoryCounts
   fetchPage?: (page: number, opts?: { category?: string; sortBy?: string; sortDir?: string }) => Promise<void>
+  lastRefreshFailed?: boolean
 }
 
 export default function RankingSection({
@@ -48,6 +49,7 @@ export default function RankingSection({
   totalCount,
   categoryCounts,
   fetchPage,
+  lastRefreshFailed,
 }: RankingSectionProps) {
   const {
     language,
@@ -172,7 +174,7 @@ export default function RankingSection({
         )}
       </div>
 
-      <RankingFooter loading={loading} lastUpdated={lastUpdated} formatLastUpdated={formatLastUpdated} t={t} onRefresh={onRefresh} />
+      <RankingFooter loading={loading} lastUpdated={lastUpdated} formatLastUpdated={formatLastUpdated} t={t} onRefresh={onRefresh} lastRefreshFailed={lastRefreshFailed} />
     </section>
   )
 }

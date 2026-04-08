@@ -62,6 +62,7 @@ export default function HomePageClient({ initialTraders, initialLastUpdated, ini
     totalCount,
     categoryCounts,
     fetchPage,
+    lastRefreshFailed,
   } = useTraderData({
     initialTraders: convertedInitialTraders,
     initialLastUpdated,
@@ -112,6 +113,7 @@ export default function HomePageClient({ initialTraders, initialLastUpdated, ini
           totalCount={totalCount}
           categoryCounts={categoryCounts}
           fetchPage={fetchPage}
+          lastRefreshFailed={lastRefreshFailed}
         />
       </div>
     </PullToRefresh>

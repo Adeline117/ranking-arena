@@ -41,6 +41,7 @@ interface TraderDataState {
   activeTimeRange: TimeRange
   totalCount: number
   categoryCounts: CategoryCounts
+  lastRefreshFailed: boolean
 }
 
 type TraderDataAction =
@@ -88,15 +89,18 @@ function traderDataReducer(state: TraderDataState, action: TraderDataAction): Tr
         availableSources: action.availableSources,
         totalCount: action.totalCount ?? state.totalCount,
         categoryCounts: action.categoryCounts ?? state.categoryCounts,
+        lastRefreshFailed: false,
       }
     case 'LOAD_ERROR':
       // If we already have traders (from SSR or previous fetch), silently keep them
-      // instead of showing error UI — prevents CLS from error box replacing content
+      // instead of showing error UI — prevents CLS from error box replacing content.
+      // Set lastRefreshFailed so footer can show subtle staleness indicator.
       return {
         ...state,
         loading: false,
         isChangingTimeRange: false,
         error: state.currentTraders.length > 0 ? null : action.error,
+        lastRefreshFailed: state.currentTraders.length > 0,
       }
     case 'LOAD_ABORT':
       return { ...state, loading: false, isChangingTimeRange: false }
@@ -140,6 +144,7 @@ export function useTraderData(options: UseTraderDataOptions = {}) {
     activeTimeRange: '90D',
     totalCount: initialTotalCount,
     categoryCounts: initialCategoryCounts,
+    lastRefreshFailed: false,
   })
 
   const { broadcast, on } = useTraderDataSync()
@@ -412,10 +417,12 @@ export function useTraderData(options: UseTraderDataOptions = {}) {
     totalCount: state.totalCount,
     categoryCounts: state.categoryCounts,
     fetchPage,
+    lastRefreshFailed: state.lastRefreshFailed,
   }), [
     state.currentTraders, state.loading, state.error, state.activeTimeRange,
     state.lastUpdated, state.availableSources, state.deferredFetchFailed,
     state.isChangingTimeRange, state.totalCount, state.categoryCounts,
+    state.lastRefreshFailed,
     changeTimeRange, refresh, retryDeferredFetch, fetchPage,
   ])
 
