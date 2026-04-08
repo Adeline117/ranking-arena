@@ -170,8 +170,10 @@ async function fetchFromLeaderboard(
   const ascending = order === 'asc'
 
   if (sortBy === 'arena_score') {
-    // Use pre-computed rank order
-    query = query.order('rank', { ascending: true })
+    // ROOT CAUSE FIX: ORDER BY rank used wrong index path (5707ms).
+    // ORDER BY arena_score uses idx_leaderboard_ranks_ssr_v2 (376ms).
+    // Both produce identical ordering since rank is computed from arena_score DESC.
+    query = query.order('arena_score', { ascending: false, nullsFirst: false })
   } else {
     query = query.order(sortColumn, { ascending, nullsFirst: false })
   }
