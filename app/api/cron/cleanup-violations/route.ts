@@ -25,11 +25,11 @@ export async function GET(request: NextRequest) {
   try {
     // Run multiple small batches within one cron invocation
     let totalFixed = 0
-    const maxBatches = 5
+    const maxBatches = 10
 
     for (let i = 0; i < maxBatches; i++) {
       const { data, error } = await supabase.rpc('cleanup_snapshot_violations', {
-        batch_limit: 10,
+        batch_limit: 5,
       })
 
       if (error) {
