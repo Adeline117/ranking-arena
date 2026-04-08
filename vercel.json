@@ -17,10 +17,6 @@
       "schedule": "30 * * * *"
     },
     {
-      "path": "/api/cron/compute-leaderboard",
-      "schedule": "45 * * * *"
-    },
-    {
       "path": "/api/cron/sync-meilisearch",
       "schedule": "8,38 * * * *"
     },
