@@ -47,10 +47,10 @@ async function getPlatformHealthData(): Promise<PlatformHealth[]> {
   const now = Date.now()
   const sevenDaysAgo = new Date(now - 7 * 24 * 60 * 60 * 1000).toISOString()
 
-  // ROOT CAUSE FIX (2026-04-08): Was firing 62 parallel queries (31 platforms × 2)
-  // which overwhelmed Supabase pooler → all returned null → all platforms appeared
-  // critical with age=None. Use leaderboard_ranks (44k rows, fast) for freshness check.
-  const [allLogsRes, lbRanksRes] = await Promise.all([
+  // ROOT CAUSE FIX (2026-04-08): Was firing 62 parallel queries which exhausted
+  // Supabase pool (60 connections). Now uses RPC with GROUP BY (1 query, returns
+  // 1 row per platform — ~31 rows total, fast).
+  const [allLogsRes, lbLatestRes] = await Promise.all([
     supabase
       .from('pipeline_logs')
       .select('job_name, records_processed')
@@ -58,20 +58,27 @@ async function getPlatformHealthData(): Promise<PlatformHealth[]> {
       .gte('started_at', sevenDaysAgo)
       .not('records_processed', 'is', null)
       .gt('records_processed', 0),
-    // One query for all platforms via leaderboard_ranks ordered by computed_at
-    supabase
-      .from('leaderboard_ranks')
-      .select('source, computed_at')
-      .gte('computed_at', new Date(now - 7 * 24 * 60 * 60 * 1000).toISOString())
-      .order('computed_at', { ascending: false })
-      .limit(50000),
+    // RPC executes server-side GROUP BY — returns one row per platform.
+    // Falls back to 50000-row query if RPC doesn't exist.
+    supabase.rpc('get_leaderboard_latest_by_source').then(
+      r => r.error ? supabase
+        .from('leaderboard_ranks')
+        .select('source, computed_at')
+        .gte('computed_at', new Date(now - 24 * 60 * 60 * 1000).toISOString())
+        .order('computed_at', { ascending: false })
+        .limit(50000)
+      : r
+    ),
   ])
 
-  // Build platform → latest computed_at map (JS-side dedup since DISTINCT ON not supported)
+  // Build platform → latest computed_at map
   const platformLastUpdate = new Map<string, string>()
-  for (const row of (lbRanksRes.data || []) as Array<{ source: string; computed_at: string }>) {
-    if (!platformLastUpdate.has(row.source)) {
-      platformLastUpdate.set(row.source, row.computed_at)
+  const lbData = (lbLatestRes.data || []) as Array<{ source: string; computed_at?: string; latest?: string }>
+  for (const row of lbData) {
+    const ts = row.computed_at || row.latest
+    if (!ts) continue
+    if (!platformLastUpdate.has(row.source) || (platformLastUpdate.get(row.source) ?? '') < ts) {
+      platformLastUpdate.set(row.source, ts)
     }
   }
 
