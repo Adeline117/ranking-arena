@@ -109,8 +109,8 @@ main{min-height:100vh;background:var(--bg-primary,#0B0A10)}
    关键动画 - Only essential for LCP
    ============================================ */
 @keyframes shimmer{
-  0%{background-position:-1000px 0}
-  100%{background-position:1000px 0}
+  0%{transform:translateX(-100%)}
+  100%{transform:translateX(100%)}
 }
 @keyframes fadeIn{
   from{opacity:0;transform:translateY(-4px)}
@@ -118,11 +118,19 @@ main{min-height:100vh;background:var(--bg-primary,#0B0A10)}
 }
 @keyframes spin{to{transform:rotate(360deg)}}
 
-/* 骨架屏 */
+/* 骨架屏 — GPU-composited via transform (not background-position) */
 .skeleton{
-  background:linear-gradient(90deg,rgba(255,255,255,0.05) 25%,rgba(255,255,255,0.1) 50%,rgba(255,255,255,0.05) 75%);
-  background-size:1000px 100%;
+  position:relative;
+  overflow:hidden;
+  background:rgba(255,255,255,0.05);
+}
+.skeleton::after{
+  content:'';
+  position:absolute;
+  inset:0;
+  background:linear-gradient(90deg,transparent 25%,rgba(255,255,255,0.08) 50%,transparent 75%);
   animation:shimmer 2s infinite linear;
+  will-change:transform;
 }
 
 /* mesh-gradient-bg disabled for performance — expensive fixed-position compositor layer */

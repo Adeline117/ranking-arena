@@ -139,21 +139,12 @@ export function SkeletonLoader({
         width,
         height,
         borderRadius,
-        background: `linear-gradient(90deg, 
-          ${tokens.colors.bg.secondary} 25%, 
-          ${tokens.colors.bg.tertiary} 50%, 
-          ${tokens.colors.bg.secondary} 75%
-        )`,
-        backgroundSize: '200% 100%',
-        animation: 'skeleton-shimmer 1.5s infinite',
+        background: tokens.colors.bg.secondary,
+        position: 'relative' as const,
+        overflow: 'hidden',
       }}
+      className="skeleton"
     >
-      <style>{`
-        @keyframes skeleton-shimmer {
-          0% { background-position: 200% 0; }
-          100% { background-position: -200% 0; }
-        }
-      `}</style>
     </div>
   )
 }

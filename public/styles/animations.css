@@ -212,8 +212,8 @@
    8. Skeleton loading
    ============================================ */
 
+/* .skeleton shimmer is handled by critical-css.ts (::after pseudo-element with transform) */
 .skeleton {
-  animation: shimmer 1.5s infinite;
   border-radius: 4px;
 }
 

@@ -93,7 +93,7 @@ export async function getInitialTraders(
 
   // Cache the result asynchronously (2-minute TTL)
   if (result.traders.length > 0) {
-    fireAndForget(cache.set(cacheKey, result, { ttl: 120 }), 'cache-set-initial-traders')
+    fireAndForget(cache.set(cacheKey, result, { ttl: 300 }), 'cache-set-initial-traders')
   }
 
   return result
