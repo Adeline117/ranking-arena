@@ -1496,6 +1496,34 @@ async function computeSeason(
           level: consecutiveSkips >= 2 ? 'critical' : 'warning',
           details: { season, scored: scored.length, baseline: baselineCount, ratio, skip: consecutiveSkips },
         }, `leaderboard-degrade:${season}`, 60 * 60 * 1000).catch(() => {/* non-blocking */})
+
+        // ROOT CAUSE FIX: Run stale-row cleanup EVEN ON DEGRADATION SKIP.
+        // Previously, if degradation was detected, we returned immediately and
+        // the cleanup at line ~1707 was skipped. This meant stale high-score
+        // rows from weeks ago persisted at the top of rankings FOREVER, because
+        // compute-leaderboard never got past the degradation guard.
+        //
+        // Cleanup is independent of upsert success — it just removes rows that
+        // haven't been touched in 5 days (any upsert resets computed_at).
+        try {
+          const cutoff = new Date(Date.now() - 5 * 24 * 60 * 60 * 1000).toISOString()
+          const { data: staleRows } = await supabase
+            .from('leaderboard_ranks')
+            .select('id')
+            .eq('season_id', season)
+            .lt('computed_at', cutoff)
+            .limit(5000)
+          if (staleRows && staleRows.length > 0) {
+            const staleIds = staleRows.map((r: { id: string }) => r.id)
+            for (let i = 0; i < staleIds.length; i += 500) {
+              await supabase.from('leaderboard_ranks').delete().in('id', staleIds.slice(i, i + 500))
+            }
+            logger.info(`${season}: cleaned ${staleIds.length} stale rows (>5d old) despite degradation skip`)
+          }
+        } catch (cleanupErr) {
+          logger.warn(`${season}: cleanup-on-degradation failed: ${cleanupErr instanceof Error ? cleanupErr.message : String(cleanupErr)}`)
+        }
+
         return -1
       }
     }
