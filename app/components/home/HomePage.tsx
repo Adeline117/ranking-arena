@@ -1,7 +1,8 @@
 
 'use client'
 
-import { Suspense, lazy } from 'react'
+import { Suspense, lazy, useLayoutEffect, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { tokens } from '@/lib/design-tokens'
 import TopNav from '../layout/TopNav'
 // MobileBottomNav is rendered in root layout.tsx -- do not duplicate here
@@ -35,16 +36,23 @@ interface HomePageProps {
 export default function HomePage({ initialTraders, initialLastUpdated, heroStats, initialTotalCount, initialCategoryCounts }: HomePageProps) {
   // SSR hero: NEVER removed — it IS the LCP element (~1.2s on slow 4G).
   // Phase 2 does NOT render its own hero. SSR hero stays visible permanently.
-  // SSR topnav + ranking table: removed by HomePageLoader.useLayoutEffect
-  // (centralized, runs before paint to prevent CLS)
+  // SSR ranking table: hidden by HomePageLoader.useLayoutEffect (before paint).
+  // SSR topnav: container kept alive — Phase 2 portals interactive TopNav into it
+  // to prevent 56px CLS from container removal.
+  const [navPortal, setNavPortal] = useState<HTMLElement | null>(null)
+  useLayoutEffect(() => {
+    const el = document.getElementById('ssr-topnav')
+    if (el) setNavPortal(el)
+  }, [])
 
   return (
-    <div
-      id="homepage-interactive"
-      suppressHydrationWarning
-      className="home-page-root"
-    >
-      <TopNav email={null} />
+    <>
+      {navPortal && createPortal(<TopNav email={null} />, navPortal)}
+      <div
+        id="homepage-interactive"
+        suppressHydrationWarning
+        className="home-page-root"
+      >
 
       <div className="container-padding has-mobile-nav home-page-container">
         <h1 className="sr-only">Arena</h1>
@@ -116,5 +124,6 @@ export default function HomePage({ initialTraders, initialLastUpdated, heroStats
       <Suspense fallback={null}><GuestSignupPrompt /></Suspense>
       {/* WelcomeModal removed — homepage content IS the onboarding */}
     </div>
+    </>
   )
 }

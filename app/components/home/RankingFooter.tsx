@@ -7,6 +7,7 @@ interface RankingFooterProps {
   formatLastUpdated: (dateStr: string | null | undefined) => string | null
   t: (key: string) => string
   onRefresh?: () => void
+  lastRefreshFailed?: boolean
 }
 
 function isStale(dateStr: string | null | undefined): boolean {
@@ -23,6 +24,7 @@ export default function RankingFooter({
   formatLastUpdated,
   t,
   onRefresh,
+  lastRefreshFailed,
 }: RankingFooterProps) {
   const stale = isStale(lastUpdated)
 
@@ -66,6 +68,11 @@ export default function RankingFooter({
             <path d="M12 6v6l4 2" />
           </svg>
           <span suppressHydrationWarning>{formatLastUpdated(lastUpdated)}</span>
+          {lastRefreshFailed && (
+            <span title={t('refreshFailed') || 'Auto-refresh failed'} style={{ color: 'var(--color-accent-warning, #f59e0b)', display: 'inline-flex' }}>
+              <svg width={10} height={10} viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z"/></svg>
+            </span>
+          )}
           {onRefresh && (
             <button
               onClick={onRefresh}
