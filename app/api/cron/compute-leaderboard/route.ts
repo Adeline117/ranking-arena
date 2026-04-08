@@ -30,7 +30,7 @@ import { PipelineState } from '@/lib/services/pipeline-state'
 import { env } from '@/lib/env'
 import { sendRateLimitedAlert } from '@/lib/alerts/send-alert'
 import { validateBeforeWrite, logRejectedWrites } from '@/lib/pipeline/validate-before-write'
-import { VALIDATION_BOUNDS as VB } from '@/lib/pipeline/types'
+import { VALIDATION_BOUNDS as VB, DATA_QUALITY_BOUNDARY } from '@/lib/pipeline/types'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 300
@@ -1033,6 +1033,7 @@ async function computeSeason(
               .select('trader_key, date, daily_return_pct, roi')
               .eq('platform', source)
               .in('trader_key', chunk)
+              .gte('date', DATA_QUALITY_BOUNDARY)
               .order('date', { ascending: true })
               .limit(10000)
             if (!dsRows?.length) continue

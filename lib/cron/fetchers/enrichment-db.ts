@@ -6,6 +6,7 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 import type { EquityCurvePoint, PositionHistoryItem, StatsDetail, AssetBreakdown, PortfolioPosition } from './enrichment-types'
 import { createLogger } from '@/lib/utils/logger'
 import { VALIDATION_BOUNDS } from '@/lib/pipeline/types'
+import { sanitizeRow, logRejectedWrites } from '@/lib/pipeline/validate-before-write'
 
 const log = createLogger('enrichment-db')
 
@@ -75,9 +76,17 @@ export async function upsertEquityCurve(
     const periodRoi = lastPoint.roi
     const periodPnl = lastPoint.pnl
 
-    if (periodRoi != null && periodRoi >= B.roi_pct.min && periodRoi <= B.roi_pct.max) {
-      const v2Update: Record<string, unknown> = { roi_pct: periodRoi }
-      if (periodPnl != null && periodPnl >= B.pnl_usd.min && periodPnl <= B.pnl_usd.max) v2Update.pnl_usd = periodPnl
+    if (periodRoi != null) {
+      // Validate through centralized gatekeeper before syncing to v2
+      const v2Candidate = { platform: source, trader_key: traderId, roi_pct: periodRoi, pnl_usd: periodPnl }
+      const { row: sanitized, rejected } = sanitizeRow(v2Candidate, 'trader_snapshots_v2')
+      if (rejected.length > 0) {
+        logRejectedWrites(rejected, supabase)
+      }
+      const v2Update: Record<string, unknown> = {}
+      if (sanitized.roi_pct != null) v2Update.roi_pct = sanitized.roi_pct
+      if (sanitized.pnl_usd != null) v2Update.pnl_usd = sanitized.pnl_usd
+      if (Object.keys(v2Update).length === 0) return { saved } // all fields rejected
 
       // Map enrichment period names to v2 window column values
       const windowMap: Record<string, string> = {
@@ -218,6 +227,22 @@ export async function upsertStatsDetail(
     // Note: copiersCount is kept in stats_detail.copiers_count but NOT synced to v2.followers.
     // v2.followers is reserved for Arena internal follower counts (from trader_follows table).
     // Exchange copy-trade counts flow via compute-leaderboard → leaderboard_ranks.copiers.
+
+    // Final safety net: run through centralized gatekeeper to catch ROI≈PnL, sign mismatches, etc.
+    const { row: sanitizedStats, rejected: statsRejected } = sanitizeRow(
+      { platform: source, trader_key: traderId, ...v2Update },
+      'trader_snapshots_v2',
+    )
+    if (statsRejected.length > 0) {
+      logRejectedWrites(statsRejected, supabase)
+      // Remove rejected fields from the update
+      for (const r of statsRejected) {
+        if (r.field === 'win_rate') delete v2Update.win_rate
+        if (r.field === 'max_drawdown') delete v2Update.max_drawdown
+        if (r.field === 'sharpe_ratio') delete v2Update.sharpe_ratio
+        if (r.field === 'roi' || r.field === 'roi_equals_pnl') delete v2Update.roi_pct
+      }
+    }
 
     // Update all matching v2 rows (removed .is('win_rate', null) guard
     // so stale win_rate values get refreshed with latest enrichment data)
