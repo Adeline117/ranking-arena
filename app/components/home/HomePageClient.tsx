@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useMemo, useCallback } from 'react'
+import { useEffect, useLayoutEffect, useMemo, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import RankingSection from './RankingSection'
 import PullToRefresh from '../ui/PullToRefresh'
@@ -70,8 +70,18 @@ export default function HomePageClient({ initialTraders, initialLastUpdated, ini
     initialCategoryCounts,
   })
 
-  // SSR element removal is now centralized in HomePageLoader.useLayoutEffect
-  // (runs before paint, preventing CLS from double-content frame)
+  // Hide SSR ranking table AFTER Phase 2 content has rendered (this component
+  // + RankingTable are now statically imported → ready in this render frame).
+  // useLayoutEffect runs before paint → browser only shows Phase 2, never
+  // the double-content state. Must be here (not HomePageLoader) because
+  // HomePageLoader's effect fires before HomePage's dynamic import resolves.
+  useLayoutEffect(() => {
+    const ssrTable = document.getElementById('ssr-ranking-table')
+    if (ssrTable) {
+      ssrTable.style.display = 'none'
+      requestAnimationFrame(() => ssrTable.remove())
+    }
+  }, [])
 
   // Sync time range with URL on initial load
   useEffect(() => {
