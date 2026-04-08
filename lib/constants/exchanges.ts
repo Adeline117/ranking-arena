@@ -158,7 +158,6 @@ export const DEAD_BLOCKED_PLATFORMS: TraderSource[] = [
   'rabbitx' as TraderSource,   // ALL domains DNS dead — rabbitx.io, api.rabbitx.com, api.prod.rabbitx.io all NXDOMAIN (2026-04-01)
   'lbank',        // Copy-trading API 404 since 2026-04 — endpoint removed
   'bitget_spot' as TraderSource, // No leaderboard API — permanently disabled
-  'gains',        // Leaderboard endpoint 404 across all 3 chains — 2026-04-08
   'bybit',        // VPS scraper unreachable + direct API 404 — 2026-04-08
   'bybit_spot',   // Same as bybit — VPS scraper down
   // 'dydx' — RECOVERED: Heroku + Copin API fallback, 3339 traders in leaderboard_ranks (2026-03-15)

@@ -44,51 +44,66 @@ export class GainsPerpConnector extends BaseConnector {
   }
 
   /**
-   * Discover traders from Gains leaderboard API across 3 chains.
-   * Uses /leaderboard endpoint (ranked by performance) instead of /open-trades
-   * to match inline fetcher behavior.
+   * Discover traders from Gains /open-trades endpoint across 3 chains.
+   *
+   * HISTORY: /leaderboard endpoint was removed by Gains ~2026-04. We now use
+   * /open-trades which is the only remaining public endpoint that lists trader
+   * addresses (each trade has trade.user = wallet address). We aggregate unique
+   * traders and sort by position size (sum of collateralAmount * leverage).
    */
   async discoverLeaderboard(window: Window, limit = 2000, _offset = 0): Promise<DiscoverResult> {
     const chains = ['arbitrum', 'polygon', 'base']
-    const seen = new Set<string>()
-    const allTraders: TraderSource[] = []
+    type TradeEntry = { trade?: { user?: string; collateralAmount?: string; leverage?: string } }
+    // Aggregate by trader address: sum position size across all open trades
+    const traderStats = new Map<string, { address: string; chain: string; totalSize: number; tradeCount: number }>()
 
     for (const chain of chains) {
       try {
-        const data = await this.request<Array<Record<string, unknown>>>(
-          `https://backend-${chain}.gains.trade/leaderboard`,
+        const data = await this.request<TradeEntry[]>(
+          `https://backend-${chain}.gains.trade/open-trades`,
           { method: 'GET', headers: this.getHeaders() }
         )
-
         if (!Array.isArray(data)) continue
 
         for (const entry of data) {
-          const address = String(entry.address || entry.trader || '').toLowerCase()
-          if (!address || seen.has(address)) continue
-          seen.add(address)
+          const address = String(entry?.trade?.user || '').toLowerCase()
+          if (!address) continue
 
-          allTraders.push({
-            platform: 'gains',
-            market_type: 'perp' as const,
-            trader_key: address,
-            display_name: `${address.slice(0, 6)}...${address.slice(-4)}`,
-            profile_url: `https://gains.trade/trader/${address}`,
-            discovered_at: new Date().toISOString(),
-            last_seen_at: new Date().toISOString(),
-            is_active: true,
-            raw: { ...entry, _chain: chain },
-          })
+          // Position size = collateralAmount * leverage (both scaled, but relative size only matters for ranking)
+          const collateral = Number(entry?.trade?.collateralAmount || 0)
+          const leverage = Number(entry?.trade?.leverage || 0)
+          const size = collateral * leverage
 
-          if (allTraders.length >= limit) break
+          const existing = traderStats.get(address)
+          if (existing) {
+            existing.totalSize += size
+            existing.tradeCount += 1
+          } else {
+            traderStats.set(address, { address, chain, totalSize: size, tradeCount: 1 })
+          }
         }
       } catch (err) {
-        if (allTraders.length === 0 && chain === chains[chains.length - 1]) throw err
+        if (traderStats.size === 0 && chain === chains[chains.length - 1]) throw err
         // Continue with other chains
       }
-      if (allTraders.length >= limit) break
     }
 
-    return { traders: allTraders.slice(0, limit), total_available: allTraders.length, window, fetched_at: new Date().toISOString() }
+    // Sort by position size descending (proxy for "top trader")
+    const ranked = Array.from(traderStats.values()).sort((a, b) => b.totalSize - a.totalSize)
+
+    const allTraders: TraderSource[] = ranked.slice(0, limit).map((t) => ({
+      platform: 'gains' as const,
+      market_type: 'perp' as const,
+      trader_key: t.address,
+      display_name: `${t.address.slice(0, 6)}...${t.address.slice(-4)}`,
+      profile_url: `https://gains.trade/trader/${t.address}`,
+      discovered_at: new Date().toISOString(),
+      last_seen_at: new Date().toISOString(),
+      is_active: true,
+      raw: { _chain: t.chain, totalSize: String(t.totalSize), tradeCount: t.tradeCount },
+    }))
+
+    return { traders: allTraders, total_available: traderStats.size, window, fetched_at: new Date().toISOString() }
   }
 
   async fetchTraderProfile(traderKey: string): Promise<ProfileResult | null> {
