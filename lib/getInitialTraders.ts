@@ -130,7 +130,7 @@ export async function fetchLeaderboardFromDB(
       ]),
       new Promise<never>((_, reject) => {
         controller.signal.addEventListener('abort', () =>
-          reject(new Error('Query timeout after 2000ms'))
+          reject(new Error('Query timeout after 5000ms'))
         )
       }),
     ])
@@ -218,12 +218,29 @@ async function fetchViaDiverseRPC(
   // but avoids the jarring composition shift when the first API refresh arrives.
   const MAX_PER_PLATFORM = Math.max(5, Math.ceil(limit * 0.3))
 
-  // Try the SQL RPC first — fetch 2x limit to have room for diversity enforcement
-  const { data, error } = await supabase.rpc('get_diverse_leaderboard', {
-    p_season_id: timeRange,
-    p_per_platform: MAX_PER_PLATFORM,
-    p_total_limit: limit * 2,
-  })
+  // Try the SQL RPC first — fetch 2x limit to have room for diversity enforcement.
+  // 2s timeout: the RPC uses a non-covering index (idx_leaderboard_ranks_diverse)
+  // which requires 70K+ heap fetches on bloated tables. If slow, fall back to
+  // fetchLeaderboardLegacy which uses the covering index (28ms).
+  let data: Record<string, unknown>[] | null = null
+  let error: { message: string } | null = null
+  try {
+    const rpcResult = await Promise.race([
+      supabase.rpc('get_diverse_leaderboard', {
+        p_season_id: timeRange,
+        p_per_platform: MAX_PER_PLATFORM,
+        p_total_limit: limit * 2,
+      }),
+      new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error('Diverse RPC timeout (2s)')), 2_000)
+      ),
+    ])
+    data = rpcResult.data as Record<string, unknown>[] | null
+    error = rpcResult.error
+  } catch (err) {
+    logger.warn('[getInitialTraders] Diverse RPC slow (>2s), falling back to covering-index query')
+    return fetchLeaderboardLegacy(supabase, timeRange, limit)
+  }
 
   if (!error && data && Array.isArray(data) && data.length > 0) {
     const unifiedTraders = data.map((row: Record<string, unknown>) => mapLeaderboardRow(row))
