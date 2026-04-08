@@ -178,11 +178,14 @@ async function fetchFromLeaderboard(
     query = query.order(sortColumn, { ascending, nullsFirst: false })
   }
 
-  // Pagination — fetch 2x rows when diversity filter will trim
-  // This is now safe because the underlying query is ~20ms (was 5707ms before
-  // the ORDER BY arena_score fix). Diversity filter then trims back to limit.
+  // Pagination — fetch 4x rows when diversity filter will trim.
+  // 2x wasn't enough for 7D where gmx dominates 77/100 of top scores,
+  // leaving only 43/50 after diversity cap. 4x covers even the most
+  // extreme platform concentration (gmx was 113/200 but with other
+  // platforms filling in, post-cap result is 76 → slice to 50 = ok).
+  // Query is ~20-30ms regardless, thanks to ORDER BY arena_score fix.
   const willApplyDiversity = !exchangeFilter && sortBy === 'arena_score' && !cursor && limit <= 100
-  const fetchLimit = willApplyDiversity ? Math.min(limit * 2, 200) : limit
+  const fetchLimit = willApplyDiversity ? Math.min(limit * 4, 200) : limit
   if (useLegacyPaging) {
     const startIdx = page * limit
     query = query.range(startIdx, startIdx + fetchLimit - 1)
