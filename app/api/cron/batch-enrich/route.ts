@@ -141,16 +141,16 @@ export async function GET(request: NextRequest) {
   // Fires at 250s (was 280s) to leave 50s for plog.success() to complete reliably.
   // Previous 280s left only 20s which wasn't enough under heavy load, causing 'running' entries
   // that got cleaned up as timeout by cleanup-stuck-logs after 30+ minutes.
-  const SAFETY_TIMEOUT_MS = 240_000 // 240s for 300s limit (60s buffer for plog + cleanup)
+  const SAFETY_TIMEOUT_MS = 240_000 // 240s for 300s limit (60s buffer)
   const safetyTimer = setTimeout(async () => {
     try {
       const enriched = results.filter(r => r.status === 'success').reduce((sum, r) => sum + (r.enriched || 0), 0)
-      // Race plog.success with a 30s timeout — if Supabase connection pool is exhausted from
-      // enrichment queries, plog.success() hangs and pipeline_logs entry stays as 'running' forever.
-      // This was the root cause of batch-enrich-30D 100% timeout for 24h+.
+      // Timeout the plog.success() call itself — if Supabase connection pool is exhausted,
+      // plog.success() hangs and the pipeline_logs entry stays as 'running' forever.
+      // Previous: no timeout → Vercel kills function at 300s → plog never finalizes → cleanup-stuck-logs marks as timeout after 30min
       await Promise.race([
         plog.success(enriched, { results, note: 'Safety timeout at 240s — partial enrichment, will resume from checkpoint' }),
-        new Promise<void>((resolve) => setTimeout(resolve, 30_000)),
+        new Promise<void>((resolve) => setTimeout(resolve, 30_000)), // 30s timeout for DB write
       ])
     } catch (err) {
       try { await plog.error(new Error(`Safety timeout + plog.success failed: ${err}`)) } catch { /* truly best effort */ }
