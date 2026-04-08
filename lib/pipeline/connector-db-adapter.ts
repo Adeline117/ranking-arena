@@ -520,14 +520,40 @@ export async function runConnectorBatch(
 
   // ═══ Phase 1: Fetch all windows, collect DiscoverResults ═══
   // Sequential to avoid concurrent upsert deadlocks (40P01)
+  //
+  // ROOT CAUSE FIX (2026-04-08): Per-window deadline prevents runaway pagination.
+  // Without this, a connector could retry × pages × backoff for minutes, even
+  // though the platform-level Promise.race timeout already fired — the inner
+  // fetch() keeps running silently because Promise.race doesn't cancel.
+  //
+  // Divide remaining time budget among unfetched windows so if 7D is slow,
+  // we still have time for 30D and 90D. Hard minimum 20s per window.
+  const phase1Start = Date.now()
   const fetchedWindows: Array<{ window: string; windowUpper: string; result?: DiscoverResult; error?: string }> = []
   for (const window of windows) {
     const windowUpper = window.toUpperCase()
+    const remaining = windows.length - fetchedWindows.length
+    const elapsed = Date.now() - phase1Start
+    // Reserve 30% of total budget for enrichment + write phases
+    const phase1Budget = platformTimeBudgetMs * 0.7
+    const windowBudget = Math.max(20_000, (phase1Budget - elapsed) / remaining)
+
+    if (elapsed > phase1Budget) {
+      dataLogger.warn(`[${platform}] Phase 1 budget exceeded, skipping ${windowUpper}`)
+      fetchedWindows.push({ window, windowUpper, error: 'phase1 budget exceeded' })
+      continue
+    }
+
     try {
-      const result = await connector.discoverLeaderboard(
-        window as '7d' | '30d' | '90d',
-        limit
-      )
+      const result = await Promise.race([
+        connector.discoverLeaderboard(window as '7d' | '30d' | '90d', limit),
+        new Promise<never>((_, reject) =>
+          setTimeout(
+            () => reject(new Error(`[${platform}] ${windowUpper} window timed out after ${Math.round(windowBudget / 1000)}s`)),
+            windowBudget
+          )
+        ),
+      ])
       fetchedWindows.push({ window, windowUpper, result })
     } catch (err) {
       const errMsg = err instanceof Error ? err.message : String(err)
