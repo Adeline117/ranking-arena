@@ -43,12 +43,18 @@ export class CoinexFuturesConnector extends BaseConnector {
 
     // Auto-paginate: fetch all pages (CoinEx has ~176 traders across 4 pages)
     // CoinEx API rejects limit > 50 with "Invalid Parameter" — use 50 per page
+    // Time budget: 60s total — prevents runaway pagination from blocking batch-fetch
+    const DEADLINE_MS = Date.now() + 60_000
     const pageSize = 50
     const allTraders: TraderSource[] = []
     let currentPage = Math.floor(offset / pageSize) + 1
     const maxPages = Math.ceil(limit / pageSize)
 
     while (currentPage <= maxPages) {
+      if (Date.now() > DEADLINE_MS) {
+        this.logger.warn(`[coinex] 60s deadline exceeded at page ${currentPage}, returning ${allTraders.length} traders`)
+        break
+      }
       let _rawLb: Record<string, unknown>
       const apiUrl = `https://www.coinex.com/res/copy-trading/public/traders?page=${currentPage}&limit=${pageSize}&sort_by=roi&period=${window}`
       try {
