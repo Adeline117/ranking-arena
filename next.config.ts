@@ -621,11 +621,21 @@ const nextConfig = {
       { source: '/account', destination: '/settings', permanent: true },
       // /rankings (bare) → / (homepage has the main ranking table)
       { source: '/rankings', destination: '/', permanent: true },
-      // /rankings/traders → / (must come BEFORE the :exchange wildcard below,
-      // otherwise it would match /?exchange=traders which is invalid)
+      // /rankings/traders → / (legacy). The :exchange wildcard below now
+      // excludes this via negative lookahead, but keeping the explicit rule
+      // for clarity and as an extra safety net.
       { source: '/rankings/traders', destination: '/', permanent: true },
-      // Exchange ranking pages removed — homepage exchange filter replaces them
-      { source: '/rankings/:exchange', destination: '/?exchange=:exchange', permanent: true },
+      // Exchange ranking pages removed — homepage exchange filter replaces them.
+      //
+      // CRITICAL: the :exchange pattern must NOT match real routes under
+      // /rankings/* (bots, tokens, traders). Previously this wildcard caught
+      // /rankings/bots → /?exchange=bots, making the real /rankings/bots and
+      // /rankings/tokens pages unreachable. Negative lookahead fixes it.
+      {
+        source: '/rankings/:exchange((?!bots|tokens|traders)[^/]+)',
+        destination: '/?exchange=:exchange',
+        permanent: true,
+      },
     ];
   },
 };

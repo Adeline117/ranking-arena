@@ -31,9 +31,18 @@ import { ApiError } from '@/lib/api/errors';
 import { success as apiSuccess, withCache } from '@/lib/api/response';
 import { withPublic } from '@/lib/api/middleware'
 
-// availableSources cache is now distributed via Redis (tieredGetOrSet, warm tier).
-// Previously per-instance in-memory only, which meant every cold Vercel serverless
-// instance re-fired the leaderboard_ranks distinct-source query.
+// availableSources cache via Redis (tieredGetOrSet, warm tier).
+//
+// IMPORTANT: reads from leaderboard_count_cache (one row per source) instead
+// of doing `SELECT source FROM leaderboard_ranks LIMIT 200`. The old query
+// returned physically-ordered rows, which on a (season_id, source) composite
+// index meant all 200 matching rows came from the FIRST source lexicographically
+// (e.g. just ['aevo']) — the bug was hidden by per-instance in-memory caching
+// (different instances had different partial orderings) until we moved to
+// shared Redis in task 17 and everyone saw the same broken cache entry.
+//
+// leaderboard_count_cache is maintained by refresh_leaderboard_count_cache()
+// at the end of compute-leaderboard cron, so it's always fresh.
 async function getAvailableSources(
   supabase: ReturnType<typeof import('@/lib/supabase/server').getSupabaseAdmin>,
   seasonId: string,
@@ -42,12 +51,17 @@ async function getAvailableSources(
     `rankings:available-sources:${seasonId}`,
     async () => {
       const { data: sourceRows } = await supabase
-        .from('leaderboard_ranks')
+        .from('leaderboard_count_cache')
         .select('source')
         .eq('season_id', seasonId)
-        .not('arena_score', 'is', null)
-        .limit(200);
-      return [...new Set((sourceRows || []).map((r: { source: string }) => r.source))].sort();
+        .gt('total_count', 0)
+        .not('source', 'eq', '_all')
+        .not('source', 'like', '%_gt0');
+      return [
+        ...new Set((sourceRows || [])
+          .map((r: { source: string }) => r.source)
+          .filter((s): s is string => typeof s === 'string' && !!s)),
+      ].sort();
     },
     'warm', // 2min memory / 15min Redis — shared across instances
     ['rankings', 'available-sources'],
@@ -269,13 +283,23 @@ async function getRankingsFallback(rankingsQuery: RankingsQuery, _cursor?: strin
 
   if (safeLimit <= CHUNK_SIZE) {
     // Single request — NO count (exact count takes 25s+ on 314k rows with OR filters)
-    // Total count is obtained separately from cached/estimated source
-    const result = await buildBaseQuery()
-      .range(offset, offset + safeLimit - 1);
+    // Total count is read from leaderboard_count_cache (maintained by cron)
+    // in parallel with the main query to avoid sequential round-trips.
+    const cacheCountKey = platformFilter || '_all'
+    const [result, countResult] = await Promise.all([
+      buildBaseQuery().range(offset, offset + safeLimit - 1),
+      supabase
+        .from('leaderboard_count_cache')
+        .select('total_count')
+        .eq('season_id', seasonId)
+        .eq('source', cacheCountKey)
+        .maybeSingle(),
+    ]);
     rows = (result.data || []) as Record<string, unknown>[];
     error = result.error;
-    // Estimate total: if we got a full page, there are more; otherwise this is the last page
-    totalCount = rows.length === safeLimit ? safeLimit * 10 : offset + rows.length;
+    // Use cached total. Fallback to offset + rows.length if cache is empty
+    // (first deploy / cron hasn't run yet).
+    totalCount = countResult.data?.total_count ?? (offset + rows.length);
   } else {
     // Chunked fetch: first chunk, no count
     const firstResult = await buildBaseQuery()
