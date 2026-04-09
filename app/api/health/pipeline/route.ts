@@ -15,6 +15,7 @@ import { DEAD_BLOCKED_PLATFORMS, EXCHANGE_CONFIG } from '@/lib/constants/exchang
 import { getSupportedPlatforms } from '@/lib/cron/fetchers'
 import { getSupabaseAdmin } from '@/lib/supabase/server'
 import { tieredGetOrSet } from '@/lib/cache/redis-layer'
+import { getFireAndForgetStats } from '@/lib/utils/logger'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -223,6 +224,27 @@ export async function GET(req: NextRequest) {
           ? activeStats.reduce((sum, j) => sum + (j.success_rate || 0), 0) / activeStats.length
           : 0
 
+        // Background task failures — surface silent fireAndForget errors that
+        // would otherwise only live in the serverless instance's memory. Only
+        // labels with >= 3 failures (the escalation threshold) are included —
+        // single transient failures are expected and not actionable.
+        // Retro 2026-04-09: OpenClaw never saw these before this change.
+        const rawFfStats = getFireAndForgetStats()
+        const backgroundFailures = Object.entries(rawFfStats)
+          .filter(([, s]) => s.count >= 3)
+          .map(([label, s]) => ({
+            label,
+            count: s.count,
+            lastError: s.lastError,
+            lastAt: s.lastAt,
+          }))
+          .sort((a, b) => b.count - a.count)
+
+        // Escalate status if many silent background failures detected
+        if (backgroundFailures.length >= 5 && overallStatus === 'healthy') {
+          overallStatus = 'degraded'
+        }
+
         return {
           status: overallStatus,
           timestamp: new Date().toISOString(),
@@ -237,11 +259,13 @@ export async function GET(req: NextRequest) {
             platformWarning,
             platformCritical,
             totalPlatforms: platformHealth.length,
+            backgroundFailureCount: backgroundFailures.length,
           },
           platformHealth,
           jobs: jobStatuses,
           stats: jobStats,
           recentFailures,
+          backgroundFailures,
         }
       },
       'warm', // warm tier: 2 min memory, 15 min Redis (we override with custom TTL via tier)
