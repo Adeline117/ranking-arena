@@ -184,7 +184,9 @@ async function getRankingsFallback(rankingsQuery: RankingsQuery, _cursor?: strin
     trader_type,
   } = rankingsQuery;
 
-  const supabase = getSupabaseAdmin();
+  // Use read replica for ranking reads (falls back to primary if no replica configured)
+  const { getReadReplica } = await import('@/lib/supabase/read-replica')
+  const supabase = getReadReplica();
   const safeLimit = Math.min(limit, 5000);
   const seasonId = window.toUpperCase() as TradingPeriod;
 
