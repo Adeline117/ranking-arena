@@ -13,6 +13,7 @@ import { RankingTable } from '../ranking/RankingTable'
 
 import TimeRangeSelector from './TimeRangeSelector'
 import { useRankingFilters, FREE_LEADERBOARD_LIMIT } from './useRankingFilters'
+import CategoryRankingTabs from '../ranking/CategoryRankingTabs'
 
 const AdvancedFilterPanel = dynamic(() => import('./AdvancedFilterPanel'), { ssr: false })
 const FilterStatusMessages = dynamic(() => import('./FilterStatusMessages'), { ssr: false })
@@ -111,6 +112,14 @@ export default function RankingSection({
       <div className="ranking-time-range-bar">
         <TimeRangeSelector activeRange={activeTimeRange} onChange={onTimeRangeChange} />
       </div>
+
+      <CategoryRankingTabs
+        currentCategory={category}
+        onCategoryChange={setCategory}
+        isPro={isPro}
+        onProRequired={handleProRequired}
+        categoryCounts={categoryCounts}
+      />
 
       <AdvancedFilterPanel
         showAdvancedFilter={showAdvancedFilter}
