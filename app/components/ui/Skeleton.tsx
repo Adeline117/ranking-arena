@@ -130,6 +130,111 @@ export function SkeletonCard() {
   )
 }
 
+/**
+ * ChartSkeleton — structured skeleton for dynamic chart fallbacks.
+ *
+ * Replaces bare animated divs (`<div style={{minHeight:200}}/>`) on
+ * Suspense fallbacks for EquityCurveSection, DailyReturnsChart, etc.
+ * Hints at chart structure (title + gridlines + wave) so users know
+ * it's a chart loading, not just a blank box.
+ */
+export function ChartSkeleton({
+  height = 200,
+  showTitle = true,
+  variant = 'line',
+}: {
+  height?: number
+  showTitle?: boolean
+  variant?: 'line' | 'bar'
+} = {}) {
+  const plotHeight = height - (showTitle ? 48 : 16)
+  const gridLines = 4
+
+  return (
+    <Box
+      role="status"
+      aria-label="Loading chart"
+      style={{
+        minHeight: height,
+        borderRadius: tokens.radius.lg,
+        background: tokens.colors.bg.secondary,
+        border: `1px solid ${tokens.colors.border.primary}`,
+        overflow: 'hidden',
+        position: 'relative',
+      }}
+    >
+      {showTitle && (
+        <div style={{ padding: `${tokens.spacing[3]} ${tokens.spacing[4]}`, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <Skeleton width="120px" height="14px" variant="rounded" animation="pulse" />
+          <Skeleton width="60px" height="12px" variant="rounded" animation="pulse" />
+        </div>
+      )}
+      {/* Plot area with gridlines */}
+      <div
+        style={{
+          position: 'relative',
+          height: plotHeight,
+          margin: `0 ${tokens.spacing[4]} ${tokens.spacing[3]}`,
+        }}
+      >
+        {/* Horizontal gridlines */}
+        {Array.from({ length: gridLines }).map((_, i) => (
+          <div
+            key={`grid-${i}`}
+            style={{
+              position: 'absolute',
+              left: 0,
+              right: 0,
+              top: `${((i + 1) / (gridLines + 1)) * 100}%`,
+              height: 1,
+              background: tokens.colors.border.primary,
+              opacity: 0.3,
+            }}
+          />
+        ))}
+        {/* Wave/bar shape to hint at data */}
+        {variant === 'line' ? (
+          <svg
+            width="100%"
+            height="100%"
+            viewBox="0 0 400 100"
+            preserveAspectRatio="none"
+            style={{ position: 'absolute', inset: 0, animation: 'skeletonPulse 1.5s ease-in-out infinite' }}
+            aria-hidden="true"
+          >
+            <path
+              d="M0,70 C60,40 100,80 160,50 C220,20 260,60 320,30 C360,10 380,25 400,15 L400,100 L0,100 Z"
+              fill={tokens.colors.bg.tertiary}
+              opacity="0.6"
+            />
+            <path
+              d="M0,70 C60,40 100,80 160,50 C220,20 260,60 320,30 C360,10 380,25 400,15"
+              fill="none"
+              stroke={tokens.colors.bg.tertiary}
+              strokeWidth="2"
+            />
+          </svg>
+        ) : (
+          <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'flex-end', gap: 4, animation: 'skeletonPulse 1.5s ease-in-out infinite' }} aria-hidden="true">
+            {Array.from({ length: 12 }).map((_, i) => (
+              <div
+                key={i}
+                style={{
+                  flex: 1,
+                  height: `${30 + Math.sin(i * 0.8) * 30 + 20}%`,
+                  background: tokens.colors.bg.tertiary,
+                  borderRadius: `${tokens.radius.sm} ${tokens.radius.sm} 0 0`,
+                  opacity: 0.6,
+                }}
+              />
+            ))}
+          </div>
+        )}
+      </div>
+    </Box>
+  )
+}
+
 export function RankingSkeleton({ rows = 10 }: { rows?: number } = {}) {
   return (
     <Box 

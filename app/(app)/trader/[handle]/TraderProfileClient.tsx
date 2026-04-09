@@ -23,7 +23,7 @@ import TraderTabs from '@/app/components/trader/TraderTabs'
 import OverviewPerformanceCard, { type ExtendedPerformance } from '@/app/components/trader/OverviewPerformanceCard'
 const AdvancedMetricsCard = dynamic(() => import('@/app/components/trader/AdvancedMetricsCard'), { ssr: false })
 // MarketCorrelationCard removed -- beta_btc/beta_eth/alpha never computed by pipeline (P0-5)
-import { RankingSkeleton } from '@/app/components/ui/Skeleton'
+import { RankingSkeleton, ChartSkeleton } from '@/app/components/ui/Skeleton'
 import { formatDisplayName, formatROI } from '@/app/components/ranking/utils'
 import { getAvatarGradient } from '@/lib/utils/avatar'
 import { JsonLd } from '@/app/components/Providers/JsonLd'
@@ -36,20 +36,22 @@ import {
 import { BASE_URL } from '@/lib/constants/urls'
 import { features } from '@/lib/features'
 
-const DailyReturnsChart = dynamic(() => import('@/app/components/trader/charts/DailyReturnsChart').then(m => ({ default: m.DailyReturnsChart })), { ssr: false })
-const DrawdownChart = dynamic(() => import('@/app/components/trader/charts/DrawdownChart').then(m => ({ default: m.DrawdownChart })), { ssr: false })
+const DailyReturnsChart = dynamic(() => import('@/app/components/trader/charts/DailyReturnsChart').then(m => ({ default: m.DailyReturnsChart })), {
+  ssr: false,
+  loading: () => <ChartSkeleton variant="bar" />,
+})
+const DrawdownChart = dynamic(() => import('@/app/components/trader/charts/DrawdownChart').then(m => ({ default: m.DrawdownChart })), {
+  ssr: false,
+  loading: () => <ChartSkeleton />,
+})
 const EquityCurveSection = dynamic(() => import('@/app/components/trader/stats/components/EquityCurveSection').then(m => ({ default: m.EquityCurveSection })), {
   ssr: false,
-  loading: () => (
-    <div style={{ minHeight: 200, borderRadius: 16, background: 'var(--color-bg-secondary, #1a1a2e)', border: '1px solid var(--color-border-primary, #2a2a3e)', overflow: 'hidden' }}>
-      <div style={{ padding: '16px 20px' }}>
-        <div style={{ width: 120, height: 14, borderRadius: 4, background: 'var(--color-bg-tertiary, #252540)', animation: 'pulse 1.5s ease-in-out infinite' }} />
-      </div>
-      <div style={{ height: 160, margin: '0 20px 16px', borderRadius: 8, background: 'var(--color-bg-tertiary, #252540)', animation: 'pulse 1.5s ease-in-out infinite', animationDelay: '0.2s' }} />
-    </div>
-  ),
+  loading: () => <ChartSkeleton />,
 })
-const TradingStyleRadar = dynamic(() => import('@/app/components/trader/TradingStyleRadar'), { ssr: false })
+const TradingStyleRadar = dynamic(() => import('@/app/components/trader/TradingStyleRadar'), {
+  ssr: false,
+  loading: () => <ChartSkeleton showTitle={false} height={260} />,
+})
 const SimilarTraders = dynamic(() => import('@/app/components/trader/SimilarTraders'), { ssr: false })
 import { RankSparkline } from '@/app/components/ranking/RankSparkline'
 const CopyTradeSimulator = dynamic(() => import('@/app/components/trader/CopyTradeSimulator'), { ssr: false })
