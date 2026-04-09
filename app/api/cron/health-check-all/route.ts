@@ -35,7 +35,18 @@ export async function GET(request: NextRequest) {
       || (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : null)
       || request.nextUrl.origin
 
-    const report = await runFullHealthCheck(baseUrl)
+    // Safety timeout: race the full health check against a 45s deadline so
+    // plog always has at least 15s to finalize before Vercel kills the fn.
+    // Root cause: individual checks honor 10s timeouts but catastrophic DB
+    // stalls (seen: seq scan on leaderboard_ranks under load) caused the
+    // aggregate to exceed 60s, leaving pipeline_logs as 'running'.
+    const HEALTH_CHECK_BUDGET_MS = 45_000
+    const report = await Promise.race([
+      runFullHealthCheck(baseUrl),
+      new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error(`runFullHealthCheck exceeded ${HEALTH_CHECK_BUDGET_MS}ms budget`)), HEALTH_CHECK_BUDGET_MS)
+      ),
+    ])
 
     // Store result for dashboard
     await PipelineState.set('health:latest', {
