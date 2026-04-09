@@ -63,8 +63,8 @@ export function formatDisplayName(name: string, platform?: string): string {
 
   let formatted: string
 
-  // Copin format: "protocol:0xAddr" or "protocol:addr" → extract address part
-  if (name.includes(':') && /^[a-z_]+:/i.test(name)) {
+  // Copin format: "protocol:0xAddr" or "protocol:addr" or "gmx_v2:0x..." → extract address part
+  if (name.includes(':') && /^[a-z0-9_]+:/i.test(name)) {
     const colonIdx = name.indexOf(':')
     const addr = name.slice(colonIdx + 1)
     if (addr.startsWith('0x') && addr.length > 20) {
