@@ -60,11 +60,23 @@ export function parseSourceInfo(src: string, t: (key: string) => string): Source
  */
 export function formatDisplayName(name: string, platform?: string): string {
   if (!name || name === 'null' || name === 'undefined') return 'Unknown'
-  
+
   let formatted: string
-  
+
+  // Copin format: "protocol:0xAddr" or "protocol:addr" → extract address part
+  if (name.includes(':') && /^[a-z_]+:/i.test(name)) {
+    const colonIdx = name.indexOf(':')
+    const addr = name.slice(colonIdx + 1)
+    if (addr.startsWith('0x') && addr.length > 20) {
+      formatted = `${addr.substring(0, 6)}...${addr.substring(addr.length - 4)}`
+    } else if (addr.length > 20) {
+      formatted = `${addr.substring(0, 8)}...${addr.substring(addr.length - 4)}`
+    } else {
+      formatted = addr
+    }
+  }
   // Wallet addresses (0x...)
-  if (name.startsWith('0x') && name.length > 20) {
+  else if (name.startsWith('0x') && name.length > 20) {
     formatted = `${name.substring(0, 6)}...${name.substring(name.length - 4)}`
   }
   // Filter out known placeholder / test-data patterns
