@@ -34,4 +34,4 @@ export const POST = withPublic(async ({ user, supabase, request }) => {
   }
 
   return NextResponse.json({ ok: true })
-}, { name: 'post-feedback', rateLimit: 'sensitive' })
+}, { name: 'post-feedback', rateLimit: 'sensitive', readsAuth: true })
