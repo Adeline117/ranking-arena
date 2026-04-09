@@ -23,7 +23,7 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_KEY)
 
 const DRY_RUN = process.argv.includes('--dry-run')
 const BATCH_SIZE = 100
-const SHARPE_CAP = 10
+const SHARPE_CAP = 20
 const MIN_DATA_POINTS = 7
 
 interface EquityPoint {
