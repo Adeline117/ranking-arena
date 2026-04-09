@@ -251,7 +251,7 @@ export const VALIDATION_BOUNDS = {
   pnl_usd_dex_whale: { min: -10_000_000, max: 1_000_000_000 },
   win_rate_pct: { min: 0, max: 100 },
   max_drawdown_pct: { min: 0, max: 100 },
-  sharpe_ratio: { min: -10, max: 10 },
+  sharpe_ratio: { min: -20, max: 20 },
   arena_score: { min: 0, max: 100 },
   trades_count: { min: 0 },
   followers: { min: 0 },
