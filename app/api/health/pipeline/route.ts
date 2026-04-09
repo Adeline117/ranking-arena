@@ -18,12 +18,28 @@ import { tieredGetOrSet } from '@/lib/cache/redis-layer'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
+export const maxDuration = 60
 
 function verifyAuth(req: NextRequest): boolean {
   const auth = req.headers.get('authorization')
   const cronSecret = env.CRON_SECRET
   if (!cronSecret) return false
   return auth === `Bearer ${cronSecret}`
+}
+
+/**
+ * Race any promise against a hard timeout — returns fallback if it exceeds the deadline.
+ * Critical: /api/health/pipeline must never hang the monitor. Each sub-query gets a cap.
+ * Accepts PromiseLike so Supabase query builders can be passed directly.
+ */
+async function withDeadline<T>(promise: PromiseLike<T>, ms: number, fallback: T, label: string): Promise<T> {
+  return Promise.race([
+    Promise.resolve(promise),
+    new Promise<T>((resolve) => setTimeout(() => {
+      console.warn(`[health/pipeline] ${label} exceeded ${ms}ms, returning fallback`)
+      resolve(fallback)
+    }, ms)),
+  ])
 }
 
 export interface PlatformHealth {
@@ -50,24 +66,40 @@ async function getPlatformHealthData(): Promise<PlatformHealth[]> {
   // ROOT CAUSE FIX (2026-04-08): Was firing 62 parallel queries which exhausted
   // Supabase pool (60 connections). Now uses RPC with GROUP BY (1 query, returns
   // 1 row per platform — ~31 rows total, fast).
+  //
+  // ROOT CAUSE FIX (2026-04-09): Added per-query 10s deadlines. The RPC
+  // occasionally hangs 30s+ under load and was causing the entire endpoint
+  // (and therefore the external monitor) to time out. Individual queries must
+  // fail fast so the overall response still returns within the monitor budget.
+  const emptyResponse = { data: [] as unknown[], error: null } as unknown
   const [allLogsRes, lbLatestRes] = await Promise.all([
-    supabase
-      .from('pipeline_logs')
-      .select('job_name, records_processed')
-      .eq('status', 'success')
-      .gte('started_at', sevenDaysAgo)
-      .not('records_processed', 'is', null)
-      .gt('records_processed', 0),
+    withDeadline(
+      supabase
+        .from('pipeline_logs')
+        .select('job_name, records_processed')
+        .eq('status', 'success')
+        .gte('started_at', sevenDaysAgo)
+        .not('records_processed', 'is', null)
+        .gt('records_processed', 0) as unknown as PromiseLike<{ data: Array<{ job_name: string; records_processed: number }> | null; error: unknown }>,
+      10_000,
+      emptyResponse as { data: Array<{ job_name: string; records_processed: number }> | null; error: unknown },
+      'pipeline_logs records_processed'
+    ),
     // RPC executes server-side GROUP BY — returns one row per platform.
     // Falls back to 50000-row query if RPC doesn't exist.
-    supabase.rpc('get_leaderboard_latest_by_source').then(
-      r => r.error ? supabase
-        .from('leaderboard_ranks')
-        .select('source, computed_at')
-        .gte('computed_at', new Date(now - 24 * 60 * 60 * 1000).toISOString())
-        .order('computed_at', { ascending: false })
-        .limit(50000)
-      : r
+    withDeadline(
+      supabase.rpc('get_leaderboard_latest_by_source').then(
+        r => r.error ? supabase
+          .from('leaderboard_ranks')
+          .select('source, computed_at')
+          .gte('computed_at', new Date(now - 24 * 60 * 60 * 1000).toISOString())
+          .order('computed_at', { ascending: false })
+          .limit(50000)
+        : r
+      ) as unknown as PromiseLike<{ data: Array<{ source: string; computed_at?: string; latest?: string }> | null; error: unknown }>,
+      10_000,
+      emptyResponse as { data: Array<{ source: string; computed_at?: string; latest?: string }> | null; error: unknown },
+      'leaderboard_latest_by_source'
     ),
   ])
 
@@ -144,11 +176,13 @@ export async function GET(req: NextRequest) {
     const result = await tieredGetOrSet(
       CACHE_KEY,
       async () => {
+        // Hard per-query deadlines: if any one query gets stuck, we still return
+        // a (partial) response instead of hanging the monitor's fetch.
         const [jobStatuses, jobStats, recentFailuresRaw, platformHealth] = await Promise.all([
-          PipelineLogger.getJobStatuses(),
-          PipelineLogger.getJobStats(),
-          PipelineLogger.getRecentFailures(10),
-          getPlatformHealthData(),
+          withDeadline(PipelineLogger.getJobStatuses(), 15_000, [], 'getJobStatuses'),
+          withDeadline(PipelineLogger.getJobStats(), 15_000, [], 'getJobStats'),
+          withDeadline(PipelineLogger.getRecentFailures(10), 10_000, [], 'getRecentFailures'),
+          withDeadline(getPlatformHealthData(), 20_000, [] as PlatformHealth[], 'getPlatformHealthData'),
         ])
 
         // Filter out dead/blocked platforms from failure counts
