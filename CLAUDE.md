@@ -133,7 +133,7 @@ Arena Score = (ReturnScore + PnlScore) * confidenceMultiplier * trustWeight
 
 ### Database
 - Always use RLS policies (enabled on all tables)
-- Migrations numbered: `00XXX_description.sql`
+- Migrations named: `YYYYMMDDHHMMSS_description.sql` — always generate via `scripts/new-migration.sh <description>` (collision-proof)
 - Use `source` + `source_trader_id` as composite key for traders
 
 ### Components
@@ -293,7 +293,7 @@ try {
 ## Quick Reference
 | Action | Command/Location |
 |--------|------------------|
-| Add migration | `supabase/migrations/00XXX_name.sql` |
+| Add migration | `scripts/new-migration.sh <description>` |
 | Add API route | `app/api/{name}/route.ts` |
 | Add connector | `lib/connectors/{exchange}.ts` |
 | Add cron job | `vercel.json` crons array |
