@@ -214,8 +214,9 @@ footer,.sidebar-contained{content-visibility:auto;contain-intrinsic-size:auto 30
 .ssr-page-btn:hover:not(:disabled){background:var(--color-bg-hover);color:var(--color-text-primary)}
 .ssr-page-btn:disabled{opacity:0.4;cursor:not-allowed}
 .ssr-page-info{font-size:12px;color:var(--color-text-tertiary);font-variant-numeric:tabular-nums;min-width:48px;text-align:center}
-.ssr-loading-bar{position:absolute;top:0;left:0;right:0;height:2px;background:var(--color-accent-primary,#a78bfa);animation:ssr-loading 1s ease-in-out infinite}
-@keyframes ssr-loading{0%{transform:scaleX(0);transform-origin:left}50%{transform:scaleX(1);transform-origin:left}50.1%{transform-origin:right}100%{transform:scaleX(0);transform-origin:right}}
+.ssr-loading-bar{position:fixed;top:0;left:0;right:0;height:3px;background:linear-gradient(90deg,transparent 0%,var(--color-accent-primary,#a78bfa) 30%,var(--color-accent-primary,#a78bfa) 70%,transparent 100%);z-index:9999;animation:ssr-loading 1.2s ease-in-out infinite;box-shadow:0 0 8px var(--color-accent-primary,#a78bfa)}
+@keyframes ssr-loading{0%{transform:translateX(-100%)}100%{transform:translateX(100%)}}
+.ssr-controls[data-pending="true"] ~ .ssr-t,.ssr-controls[data-pending="true"]~table{opacity:0.6;transition:opacity 0.2s;pointer-events:none}
 [data-theme='light'] .ssr-t{box-shadow:0 1px 3px rgba(0,0,0,0.05)}
 
 /* Global tabular-nums for all number displays — prevents CLS from digit width shifts */
