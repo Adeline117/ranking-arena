@@ -538,12 +538,19 @@ async function computeSeason(
   // Fetch v2 FIRST so it gets dedup priority (v2 is newer, more reliable)
   // Column mapping: platform→source, trader_key→source_trader_id, window→season_id,
   //                  roi_pct→roi, pnl_usd→pnl, created_at→captured_at
-  const batchSize = 10
+  // ROOT CAUSE FIX (2026-04-09): batchSize was 10 → 10 concurrent queries on 1.5M table
+  // caused statement_timeout cascade. Reduced to 3 sequential batches for connection pooling.
+  // Also added time budget check per batch to ensure we complete within maxDuration.
+  const batchSize = 3
   const v2Window = season // V2 uses same format as v1: '7D', '30D', '90D'
-  // Minimum trader threshold: if a platform has fewer than this many traders
-  // in the requested window, fall back to 30D data (most platforms fetch 30D)
   const FALLBACK_THRESHOLD = 50
+  const phase1Start = Date.now()
   for (let i = 0; i < SOURCES_WITH_DATA.length; i += batchSize) {
+    // Time budget: stop if >200s elapsed (leave 100s for scoring + upsert)
+    if (Date.now() - phase1Start > 200_000) {
+      logger.warn(`[${season}] Phase 1 time budget exceeded at platform ${i}/${SOURCES_WITH_DATA.length}, proceeding with ${traderMap.size} traders`)
+      break
+    }
     const batch = SOURCES_WITH_DATA.slice(i, i + batchSize)
     const results = await Promise.all(
       batch.map(async (source) => {
@@ -1613,7 +1620,7 @@ async function computeSeason(
 
   // Upsert only changed rows in batches
   let upsertErrors = 0
-  const batchUpsertSize = 500
+  const batchUpsertSize = 200 // Reduced from 500 — 500 exceeds 30s statement_timeout under load
   for (let i = 0; i < changedTraders.length; i += batchUpsertSize) {
     const batch = changedTraders.slice(i, i + batchUpsertSize).map((t) => {
       const key = `${t.source}:${t.source_trader_id}`
@@ -1872,7 +1879,7 @@ async function deriveWinRateMDD(supabase: ReturnType<typeof getSupabaseAdmin>): 
 
   // Batch upsert all leaderboard_ranks updates (single query per batch of 500)
   let derived = 0
-  const UPSERT_BATCH = 500
+  const UPSERT_BATCH = 200
   for (let i = 0; i < leaderboardUpdates.length; i += UPSERT_BATCH) {
     const batch = leaderboardUpdates.slice(i, i + UPSERT_BATCH)
     // Use individual updates grouped in Promise.all with larger batches
