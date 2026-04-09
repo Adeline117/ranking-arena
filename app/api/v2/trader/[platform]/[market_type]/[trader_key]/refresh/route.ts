@@ -78,9 +78,11 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
   }
 
   // Check queue depth for backpressure
+  // Estimated — this is a backpressure threshold (>1000 → reject) and
+  // estimated_wait minute display, neither of which needs an exact tally.
   const { count: queueDepth } = await supabase
     .from('refresh_jobs')
-    .select('id', { count: 'exact', head: true })
+    .select('id', { count: 'estimated', head: true })
     .eq('status', 'pending')
 
   const estimatedWait = queueDepth ? Math.min(queueDepth * 5, 300) : 30  // 5s per job, max 5min

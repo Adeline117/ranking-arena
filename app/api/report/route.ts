@@ -72,6 +72,9 @@ export async function POST(req: NextRequest) {
     }
 
     // Auto-hide: check total report count and hide if threshold reached
+    // KEEP 'exact' — drives the auto-hide threshold; scoped per content
+    // via (content_type, content_id, status) index. Must be accurate
+    // to fire at POST_REPORT_THRESHOLD and not one report too early/late.
     try {
       const { count } = await supabase
         .from('content_reports')

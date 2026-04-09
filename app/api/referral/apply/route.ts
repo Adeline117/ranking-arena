@@ -74,6 +74,9 @@ export async function POST(req: NextRequest) {
     }
 
     // Count total referrals for the referrer (including this new one)
+    // KEEP 'exact' — drives the REFERRAL_REWARD_THRESHOLD Pro-extension
+    // grant. Must be accurate to fire the reward on the exact Nth
+    // referral and not double-grant.
     const { count: referralCount } = await supabase
       .from('user_profiles')
       .select('id', { count: 'exact', head: true })
