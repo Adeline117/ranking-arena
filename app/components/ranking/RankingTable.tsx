@@ -277,7 +277,25 @@ function RankingTableInner(props: {
     [traders]
   )
 
+  // Fingerprint of traders[] content — used to short-circuit sortedTraders
+  // useMemo when autorefresh creates a new array reference with identical
+  // content. Without this, every 5-min polling refresh triggers a full sort
+  // + filter pass + downstream re-render cascade even when nothing changed.
+  const tradersFingerprint = React.useMemo(
+    () => traders.map(t => `${t.id}:${t.arena_score ?? ''}:${t.roi ?? ''}:${t.pnl ?? ''}`).join('|'),
+    [traders]
+  )
+  const prevSortedRef = React.useRef<{ fp: string; key: string; data: Trader[] } | null>(null)
+
   const sortedTraders = React.useMemo(() => {
+    // Cache key includes all the factors that affect the output. If same as
+    // last computation AND content fingerprint unchanged, reuse the cached
+    // reference (identity stable → downstream components can bail out of
+    // re-render via React.memo / reference equality).
+    const key = `${sortColumn}|${sortDir}|${debouncedSearch}|${styleFilter}|${traderTypeFilter}`
+    if (prevSortedRef.current && prevSortedRef.current.fp === tradersFingerprint && prevSortedRef.current.key === key) {
+      return prevSortedRef.current.data
+    }
     let data = [...traders]
     if (debouncedSearch.trim()) {
       const q = debouncedSearch.trim().toLowerCase()
@@ -305,7 +323,7 @@ function RankingTableInner(props: {
         return style === styleFilter
       })
     }
-    return [...data].sort((a, b) => {
+    const sorted = [...data].sort((a, b) => {
       // Use null to distinguish "no data" from actual 0 — nulls always sort last
       let aRaw: number | null = null, bRaw: number | null = null
       switch (sortColumn) {
@@ -323,7 +341,9 @@ function RankingTableInner(props: {
       if (bRaw === null) return -1
       return sortDir === 'desc' ? bRaw - aRaw : aRaw - bRaw
     })
-  }, [traders, sortColumn, sortDir, debouncedSearch, styleFilter, traderTypeFilter])
+    prevSortedRef.current = { fp: tradersFingerprint, key, data: sorted }
+    return sorted
+  }, [traders, sortColumn, sortDir, debouncedSearch, styleFilter, traderTypeFilter, tradersFingerprint])
 
 
   // Server-side pagination: use serverTotalCount for total pages.
@@ -395,10 +415,14 @@ function RankingTableInner(props: {
 
   return (
     <>
-    {/* Preload top trader avatars for faster LCP */}
+    {/* Preload top-3 trader avatars for faster LCP. Card view on mobile
+        only shows top-3 medals above the fold, and table view uses
+        loading="lazy" on rows 4+. Previously preloaded 10 which opened
+        10 HTTP connections + wasted ~50-200KB on slow networks during
+        the LCP window. */}
     <AvatarPreload
-      avatarUrls={traders.slice(0, 10).map(t => t.avatar_url)}
-      maxPreload={10}
+      avatarUrls={traders.slice(0, 3).map(t => t.avatar_url)}
+      maxPreload={3}
     />
     <Box
       className="ranking-table-container"
