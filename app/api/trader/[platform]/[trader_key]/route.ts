@@ -68,13 +68,19 @@ export async function GET(
     }
     const sourceAliases = LEGACY_SOURCE_ALIASES[platform] || [platform]
 
-    // Fire ALL queries in a single parallel batch — eliminates 3-round serial cascade.
-    // trader_timeseries is currently empty (0 rows), so legacy equity_curve/asset_breakdown
-    // queries are always needed. Running them upfront saves ~400ms per request.
+    // Phase 1: fire the 6 always-needed queries in parallel.
+    //
+    // v2 snapshots table has 1.4M+ rows — most traders DO have v2 data, so the
+    // 4 leaderboard_ranks fallback queries from the old code (profile, 7D, 30D,
+    // 90D) were wasted work 95%+ of the time. We defer them to Phase 2, firing
+    // only on the rare miss. trader_timeseries is still empty so legacy
+    // equity_curve + asset_breakdown stay in Phase 1 unconditionally.
+    //
+    // Common case: 6 queries. Cold case (no v2 data): 6 + 1 = 7 queries (the
+    // fallback is a single merged .in('season_id', ...) query instead of 4).
     const windows: SnapshotWindow[] = ['7D', '30D', '90D']
     const [
       profileResult, snapshotsResult, timeseriesResult, jobResult,
-      lrProfileResult, lrSnap7D, lrSnap30D, lrSnap90D,
       ecResult, abResult,
     ] = await Promise.all([
       // V2 primary queries
@@ -108,57 +114,62 @@ export async function GET(
         .limit(1)
         .maybeSingle(),
 
-      // Fallback queries — run in parallel with v2 queries
-      supabase
-        .from('leaderboard_ranks')
-        .select('handle, avatar_url, roi, pnl, win_rate, max_drawdown, trades_count, followers, arena_score, rank, computed_at')
-        .eq('source', platform)
-        .eq('source_trader_id', trader_key)
-        .eq('season_id', '90D')
-        .maybeSingle(),
-      supabase
-        .from('leaderboard_ranks')
-        .select('roi, pnl, win_rate, max_drawdown, trades_count, followers, arena_score, rank, computed_at')
-        .eq('source', platform)
-        .eq('source_trader_id', trader_key)
-        .eq('season_id', '7D')
-        .maybeSingle(),
-      supabase
-        .from('leaderboard_ranks')
-        .select('roi, pnl, win_rate, max_drawdown, trades_count, followers, arena_score, rank, computed_at')
-        .eq('source', platform)
-        .eq('source_trader_id', trader_key)
-        .eq('season_id', '30D')
-        .maybeSingle(),
-      supabase
-        .from('leaderboard_ranks')
-        .select('roi, pnl, win_rate, max_drawdown, trades_count, followers, arena_score, rank, computed_at')
-        .eq('source', platform)
-        .eq('source_trader_id', trader_key)
-        .eq('season_id', '90D')
-        .maybeSingle(),
-
-      // Legacy timeseries (trader_timeseries is empty, these are always needed)
-      Promise.resolve(
-        supabase
-          .from('trader_equity_curve')
-          .select('data_date, roi_pct, pnl_usd')
-          .in('source', sourceAliases)
-          .eq('source_trader_id', trader_key)
-          .in('period', ['90D', '30D', '7D'])
-          .order('data_date', { ascending: true })
-          .limit(365)
-      ),
-      Promise.resolve(
-        supabase
-          .from('trader_asset_breakdown')
-          .select('symbol, weight_pct')
-          .in('source', sourceAliases)
-          .eq('source_trader_id', trader_key)
-          .order('weight_pct', { ascending: false })
-          .limit(20)
-      ),
+      // Legacy timeseries (trader_timeseries is empty, always needed).
+      // Use .eq('source', ...) when only 1 alias — .in() adds BitmapOr plan overhead.
+      sourceAliases.length === 1
+        ? supabase
+            .from('trader_equity_curve')
+            .select('data_date, roi_pct, pnl_usd')
+            .eq('source', sourceAliases[0])
+            .eq('source_trader_id', trader_key)
+            .in('period', ['90D', '30D', '7D'])
+            .order('data_date', { ascending: true })
+            .limit(365)
+        : supabase
+            .from('trader_equity_curve')
+            .select('data_date, roi_pct, pnl_usd')
+            .in('source', sourceAliases)
+            .eq('source_trader_id', trader_key)
+            .in('period', ['90D', '30D', '7D'])
+            .order('data_date', { ascending: true })
+            .limit(365),
+      sourceAliases.length === 1
+        ? supabase
+            .from('trader_asset_breakdown')
+            .select('symbol, weight_pct')
+            .eq('source', sourceAliases[0])
+            .eq('source_trader_id', trader_key)
+            .order('weight_pct', { ascending: false })
+            .limit(20)
+        : supabase
+            .from('trader_asset_breakdown')
+            .select('symbol, weight_pct')
+            .in('source', sourceAliases)
+            .eq('source_trader_id', trader_key)
+            .order('weight_pct', { ascending: false })
+            .limit(20),
     ])
+
+    // Phase 2: leaderboard_ranks fallback — only fire if v2 data is missing.
+    // Merged into 1 query (instead of 4) via .in('season_id', ...). Common case
+    // (v2 data present) skips this entirely.
+    const needsLrFallback = !profileResult.data || !snapshotsResult.data || snapshotsResult.data.length === 0
+    type LrRow = { season_id: string; handle: string | null; avatar_url: string | null; roi: number | null; pnl: number | null; win_rate: number | null; max_drawdown: number | null; trades_count: number | null; followers: number | null; arena_score: number | null; rank: number | null; computed_at: string | null }
+    const lrRows: LrRow[] = needsLrFallback
+      ? ((
+          await supabase
+            .from('leaderboard_ranks')
+            .select('season_id, handle, avatar_url, roi, pnl, win_rate, max_drawdown, trades_count, followers, arena_score, rank, computed_at')
+            .eq('source', platform)
+            .eq('source_trader_id', trader_key)
+            .in('season_id', ['7D', '30D', '90D'])
+        ).data ?? []) as LrRow[]
+      : []
+    const lrByWindow = new Map<string, LrRow>()
+    for (const row of lrRows) {
+      lrByWindow.set(row.season_id, row)
+    }
+    const lrProfileRow = lrByWindow.get('90D') ?? lrByWindow.get('30D') ?? lrByWindow.get('7D') ?? null
 
     // Build profile (graceful degradation if missing)
     const profile: TraderProfileRow = (profileResult.data as TraderProfileRow) || {
@@ -179,10 +190,10 @@ export async function GET(
       created_at: new Date(0).toISOString(),
     }
 
-    // Fallback: profile from leaderboard_ranks
-    if (!profileResult.data && lrProfileResult.data) {
-      profile.display_name = lrProfileResult.data.handle || null
-      profile.avatar_url = lrProfileResult.data.avatar_url || null
+    // Fallback: profile from leaderboard_ranks (Phase 2 result)
+    if (!profileResult.data && lrProfileRow) {
+      profile.display_name = lrProfileRow.handle || null
+      profile.avatar_url = lrProfileRow.avatar_url || null
     }
 
     // Build snapshots map (latest per window)
@@ -221,15 +232,14 @@ export async function GET(
       }
     }
 
-    // Fallback: snapshots from leaderboard_ranks (already fetched in parallel)
+    // Fallback: snapshots from leaderboard_ranks (Phase 2 — only fired on miss)
     const hasAnyV2Snapshot = Object.values(snapshots).some(s => s !== null)
-    if (!hasAnyV2Snapshot) {
-      const lrSnapResults = [lrSnap7D, lrSnap30D, lrSnap90D]
-      for (let i = 0; i < windows.length; i++) {
-        const snap = lrSnapResults[i].data
+    if (!hasAnyV2Snapshot && lrRows.length > 0) {
+      for (const win of windows) {
+        const snap = lrByWindow.get(win)
         if (snap) {
           const winRate = snap.win_rate != null ? (snap.win_rate <= 1 ? snap.win_rate * 100 : snap.win_rate) : null
-          snapshots[windows[i]] = {
+          snapshots[win] = {
             roi: snap.roi ?? 0,
             pnl: snap.pnl ?? 0,
             win_rate: winRate,
