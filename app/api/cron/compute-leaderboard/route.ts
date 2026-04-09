@@ -1663,7 +1663,7 @@ async function computeSeason(
 
   // Upsert only changed rows in batches
   let upsertErrors = 0
-  const batchUpsertSize = 200 // Reduced from 500 — 500 exceeds 30s statement_timeout under load
+  const batchUpsertSize = 50 // Reduced from 200 — DB pool exhaustion causes upsert timeouts; 50 rows fits within statement_timeout
   for (let i = 0; i < changedTraders.length; i += batchUpsertSize) {
     if (isOutOfTime(20_000)) {
       logger.warn(`[${season}] upsert loop aborted at ${i}/${changedTraders.length} — only ${Math.round(timeLeftMs() / 1000)}s left`)
@@ -1954,7 +1954,7 @@ async function deriveWinRateMDD(supabase: ReturnType<typeof getSupabaseAdmin>): 
 
   // Batch upsert all leaderboard_ranks updates (single query per batch of 500)
   let derived = 0
-  const UPSERT_BATCH = 200
+  const UPSERT_BATCH = 50
   for (let i = 0; i < leaderboardUpdates.length; i += UPSERT_BATCH) {
     const batch = leaderboardUpdates.slice(i, i + UPSERT_BATCH)
     // Use individual updates grouped in Promise.all with larger batches
