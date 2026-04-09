@@ -22,6 +22,9 @@ export const GET = withAdminAuth(
 
     const offset = (page - 1) * limit
 
+    // KEEP 'exact' — powers admin user-browser pagination ("Showing X-Y of Z
+    // users"). user_profiles is relatively small and the admin needs to know
+    // the correct total when paging through ban/search filters.
     let query = supabase
       .from('user_profiles')
       .select('id, handle, email, avatar_url, bio, follower_count, following_count, role, banned_at, banned_reason, banned_by, created_at, updated_at', { count: 'exact' })

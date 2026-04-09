@@ -36,7 +36,11 @@ const PLATFORM_LIMITS: Record<string, { limit90: number; limit30: number; limit7
   // Batch-cached (no per-trader API calls, instant) — can be higher
   bitunix: { limit90: 300, limit30: 300, limit7: 300 },
   xt: { limit90: 100, limit30: 100, limit7: 100 },
-  blofin: { limit90: 200, limit30: 200, limit7: 200 },
+  // blofin: REMOVED 2026-04-09 — openapi.blofin.com returns 401 without auth,
+  //         VPS SG is geo-blocked, CF Worker fallback chain ~70% failure rate.
+  //         Data now comes exclusively from Mac Mini (scripts/openclaw/fetch-blofin.mjs)
+  //         via headless:'new' Chrome + residential IP. Same pattern as phemex/lbank.
+  //         Already in PLATFORM_ROUTES as mac_mini-only (lib/connectors/route-config.ts).
   bitfinex: { limit90: 120, limit30: 120, limit7: 120 },
   toobit: { limit90: 100, limit30: 100, limit7: 100 },
   coinex: { limit90: 200, limit30: 200, limit7: 200 },
@@ -68,16 +72,18 @@ const PLATFORM_LIMITS: Record<string, { limit90: number; limit30: number; limit7
   bybit: { limit90: 5, limit30: 5, limit7: 5 },
   bybit_spot: { limit90: 5, limit30: 5, limit7: 5 },
   // DEAD/DISABLED:
-  // phemex: DEAD (API 404 since 2026-04)
+  // phemex: DEAD (API 404 since 2026-04) — Mac Mini scraper only
   // bingx: DEAD (empty data since 2026-04)
   // weex: DISABLED (75% timeout)
   // kucoin: DEAD (copy trading discontinued)
   // bingx_spot: REMOVED (no enrichment API)
+  // blofin: REMOVED (401 auth + geo-block) — Mac Mini scraper only, see note above
+  // lbank: Mac Mini scraper only (VPS scraper returns empty data)
 }
 
 // 2026-03-20: Full coverage — batch-cached first (instant), then API-per-trader
 const HIGH_PRIORITY = [
-  'bitunix', 'xt', 'blofin', 'bitfinex', 'toobit', 'coinex', // batch-cached: instant
+  'bitunix', 'xt', 'bitfinex', 'toobit', 'coinex', // batch-cached: instant
   'binance_futures', 'okx_futures', 'hyperliquid', 'jupiter_perps', // fast APIs
 ]
 const MEDIUM_PRIORITY = [
@@ -85,7 +91,7 @@ const MEDIUM_PRIORITY = [
   'bitget_futures', 'btcc', 'etoro', 'okx_spot', 'okx_web3',
   'dydx', 'aevo', // re-enabled via Copin + indexer
   'binance_web3', 'binance_spot', 'polymarket', // added for full coverage
-  // REMOVED: phemex (API 404), bingx (empty data)
+  // REMOVED: phemex (API 404), bingx (empty data), blofin (auth + geo-block — Mac Mini only)
 ]
 const LOW_PRIORITY = ['bybit', 'bybit_spot'] // VPS scrapers, run last
 // REMOVED: weex (75% timeout), bingx_spot (no enrichment API)
@@ -202,7 +208,7 @@ export async function GET(request: NextRequest) {
   //   - Slow CEX/onchain: 120s
   //   - VPS scrapers: 180s (Playwright)
   const ONCHAIN_PLATFORMS = new Set(['gmx', 'jupiter_perps', 'hyperliquid', 'drift', 'aevo', 'gains'])
-  const BATCH_CACHED = new Set(['bitunix', 'xt', 'blofin', 'bitfinex', 'toobit', 'coinex'])
+  const BATCH_CACHED = new Set(['bitunix', 'xt', 'bitfinex', 'toobit', 'coinex']) // blofin removed 2026-04-09 (Mac Mini only)
   const VPS_SCRAPERS = new Set(['bybit'])
   
   function getPlatformTimeout(platform: string): number {

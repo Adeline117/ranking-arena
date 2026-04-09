@@ -68,11 +68,13 @@ export async function GET(request: NextRequest) {
         getRouteFailureCounts(platform),
       ])
 
-      // Also get recent record count
+      // Also get recent record count — estimated to avoid per-platform
+      // exact scans of trader_snapshots_v2 (~70M rows). Used for a
+      // healthy/warning/critical band; approximate is sufficient.
       const sixHoursAgo = new Date(now - 6 * 60 * 60 * 1000).toISOString()
       const { count: recentCount } = await supabase
         .from('trader_snapshots_v2')
-        .select('id', { count: 'exact', head: true })
+        .select('id', { count: 'estimated', head: true })
         .eq('platform', platform)
         .gte('updated_at', sixHoursAgo)
 
