@@ -84,7 +84,21 @@ export default function HomePageLoader(props: HomePageLoaderProps) {
   // SSR ranking table is hidden by HomePageClient's useLayoutEffect
   // AFTER Phase 2 content has rendered (prevents CLS).
 
-  if (!activated) return null
+  if (!activated) {
+    // Subtle top-of-viewport progress bar while Phase 2 loads.
+    // SSR content is fully visible + interactive during this window;
+    // the bar just signals that interactive features are coming.
+    // Fades out automatically when Phase 2 mounts and this component
+    // re-renders with activated=true.
+    return (
+      <div
+        className="ssr-loading-bar"
+        aria-hidden="true"
+        role="progressbar"
+        aria-label="Loading interactive features"
+      />
+    )
+  }
   // Homepage root layout has no Providers (for LCP optimization).
   // Phase 2 needs ToastProvider, QueryClient, etc. — wrap here on client only.
   return <Providers><HomePage {...props} /></Providers>
