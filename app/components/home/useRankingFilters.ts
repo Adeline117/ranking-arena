@@ -96,6 +96,16 @@ export function useRankingFilters({ traders, activeTimeRange, totalCount, catego
   const [searchQuery, setSearchQuery] = useState('')
   const [selectedExchange, setSelectedExchange] = useState<string | null>(null)
 
+  // Listen for exchange filter events from ExchangePartners bar
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const exchange = (e as CustomEvent).detail?.exchange
+      if (exchange) setSelectedExchange(exchange)
+    }
+    window.addEventListener('arena:filter-exchange', handler)
+    return () => window.removeEventListener('arena:filter-exchange', handler)
+  }, [])
+
   // Server-side category change: fetch page 0 of the new category
   const setCategory = useCallback((cat: CategoryType) => {
     setCategoryRaw(cat)
