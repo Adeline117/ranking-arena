@@ -81,12 +81,16 @@ export class BybitFuturesConnector extends BaseConnector {
           try {
             const { getSupabaseAdmin } = await import('@/lib/supabase/server')
             const supabase = getSupabaseAdmin()
+            // 2026-04-09: dropped the 30-day updated_at filter. With repeated VPS
+            // outages it's possible bybit hasn't been refreshed in > 30 days, in
+            // which case the filtered query returned 0 rows → connector threw →
+            // batch-fetch-traders-b1 logged "1/1 platforms failed" indefinitely.
+            // Without the cutoff we always have *some* seed list to refresh.
             const { data: existingTraders } = await supabase
               .from('trader_snapshots_v2')
               .select('trader_key, metrics')
               .eq('platform', 'bybit')
               .eq('window', window.toUpperCase())
-              .gte('updated_at', new Date(Date.now() - 30 * 24 * 3600 * 1000).toISOString())
               .order('updated_at', { ascending: false })
               .limit(limit)
 

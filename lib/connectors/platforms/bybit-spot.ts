@@ -66,12 +66,13 @@ export class BybitSpotConnector extends BaseConnector {
       try {
         const { getSupabaseAdmin } = await import('@/lib/supabase/server')
         const supabase = getSupabaseAdmin()
+        // 2026-04-09: dropped 30-day updated_at filter (same fix as bybit-futures.ts).
+        // After repeated VPS outages the filter ages-out the seed list completely.
         const { data: existingTraders } = await supabase
           .from('trader_snapshots_v2')
           .select('trader_key')
           .eq('platform', 'bybit_spot')
           .eq('window', window.toUpperCase())
-          .gte('updated_at', new Date(Date.now() - 30 * 24 * 3600 * 1000).toISOString())
           .order('updated_at', { ascending: false })
           .limit(limit)
 
