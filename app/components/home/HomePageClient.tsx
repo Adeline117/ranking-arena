@@ -70,14 +70,24 @@ export default function HomePageClient({ initialTraders, initialLastUpdated, ini
     initialCategoryCounts,
   })
 
-  // Hide SSR ranking table AFTER Phase 2 content has rendered (this component
-  // + RankingTable are now statically imported → ready in this render frame).
-  // useLayoutEffect runs before paint → browser only shows Phase 2, never
-  // the double-content state. Must be here (not HomePageLoader) because
-  // HomePageLoader's effect fires before HomePage's dynamic import resolves.
+  // Hide SSR ranking table AFTER Phase 2 content has rendered.
+  //
+  // Previously: ssrTable.remove() caused layout recalc + a visible gap if
+  // Phase 2 hadn't painted yet (the 1340px element disappearing shifts
+  // everything below it). Now we use display:none which is repaint-only
+  // and avoids the layout thrash. A single CSS class also lets us defer
+  // the removal until the NEXT frame if needed for a crossfade.
+  //
+  // useLayoutEffect still runs before paint → browser sees a single
+  // consistent frame, never the double-content state.
   useLayoutEffect(() => {
     const ssrTable = document.getElementById('ssr-ranking-table')
-    if (ssrTable) ssrTable.remove() // Sync removal — no requestAnimationFrame race
+    if (ssrTable) {
+      // display:none is cheaper than .remove() (no DOM mutation, just
+      // style invalidation). Also keeps the element around in case of
+      // hydration errors that would benefit from fallback content.
+      ;(ssrTable as HTMLElement).style.display = 'none'
+    }
   }, [])
 
   // Sync time range with URL on initial load
