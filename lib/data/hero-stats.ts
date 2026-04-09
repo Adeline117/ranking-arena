@@ -39,7 +39,7 @@ export async function getHeroStats(): Promise<HeroStats> {
       return cached
     }
 
-    // 2. 从数据库查询
+    // 2. 从数据库查询 (with 3s timeout — SSR must never hang)
     const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
     const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
 
@@ -50,54 +50,21 @@ export async function getHeroStats(): Promise<HeroStats> {
 
     const supabase = createClient(supabaseUrl, supabaseKey)
 
-    // 使用高效的聚合查询
-    const { data, error } = await supabase
-      .rpc('get_hero_stats')
-      .single()
+    // 使用高效的聚合查询 — 3s timeout to prevent SSR hang
+    const rpcPromise = supabase.rpc('get_hero_stats').single()
+    const timeoutPromise = new Promise<{ data: null; error: { code: string; message: string } }>((resolve) =>
+      setTimeout(() => resolve({ data: null, error: { code: 'TIMEOUT', message: 'SSR hero stats timeout' } }), 3000)
+    )
+    const { data, error } = await Promise.race([rpcPromise, timeoutPromise])
 
     if (error) {
-      // RPC 不存在时回退到直接查询
-      if (error.code === 'PGRST202') {
-        // Count only 90D season, matching the same filters as the ranking table
-        // to ensure the hero number matches what users can actually browse.
-        const { count, error: countError } = await supabase
-          .from('leaderboard_ranks')
-          .select('*', { count: 'exact', head: true })
-          .eq('season_id', '90D')
-          .gt('arena_score', 0)
-          .or('is_outlier.is.null,is_outlier.eq.false')
-
-        if (countError) {
-          logger.warn('[getHeroStats] Count query failed, using defaults', countError)
-          return { ...DEFAULT_STATS, isDefault: true }
-        }
-
-        // Get distinct exchange count from count cache (avoids full table scan)
-        let exchangeCount = DEFAULT_STATS.exchangeCount
-        try {
-          const { data: cacheSources } = await supabase
-            .from('leaderboard_count_cache')
-            .select('source')
-            .eq('season_id', '90D')
-            .neq('source', '_all')
-          if (cacheSources && cacheSources.length > 0) {
-            exchangeCount = cacheSources.length
-          }
-        } catch {
-          // Non-critical — use default
-        }
-
-        const stats: HeroStats = {
-          exchangeCount,
-          traderCount: count || DEFAULT_STATS.traderCount,
-        }
-
-        // 缓存结果
-        await tieredSet(CACHE_KEY, stats, 'warm', ['hero-stats'])
-        return stats
+      // RPC failed (not available, timeout, etc.) — use defaults immediately
+      // DO NOT fall back to count(exact) which takes 25s+ and causes SSR timeout
+      if (error.code === 'TIMEOUT' || error.code === 'PGRST202') {
+        logger.warn(`[getHeroStats] RPC unavailable (${error.code}), using defaults`)
+        return { ...DEFAULT_STATS, isDefault: true }
       }
-
-      logger.warn('[getHeroStats] RPC failed, using defaults', error)
+      logger.warn(`[getHeroStats] RPC failed (${error.code}), using defaults`)
       return { ...DEFAULT_STATS, isDefault: true }
     }
 
