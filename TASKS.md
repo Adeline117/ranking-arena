@@ -19,23 +19,17 @@ _None currently_
 
 ## 🟠 P1 - High Priority
 
-### Data Quality
-- [ ] Sharpe coverage: push from 59% → 75%+ (eToro, HL, Drift remaining)
-- [ ] Monitor inline enrichment architecture (fetch+enrich one-pass)
+### Data Quality (ongoing, infrastructure-bound)
+- [ ] Sharpe coverage: push from 62% → 75%+ (eToro, HL, Drift remaining — data-insufficient traders)
 - [ ] Verify okx_futures staleness (occasionally 10h, should be ≤6h)
 
-### Infrastructure
+### Infrastructure (external dependencies)
 - [ ] BloFin Sharpe: find US/EU proxy (SG VPS geo-blocked, Mac CF 403)
 - [ ] eToro CopySim: retry after 24h IP cooldown
 
 ---
 
 ## 🟡 P2 - Should Do Soon
-
-### Code Quality
-- [ ] Clean up /tmp scripts (push-sharpe-raw.mjs, compute-sharpe-daily.mjs)
-- [ ] Update CLAUDE.md metrics (connector count, enrichment platforms)
-- [ ] Archive completed TASKS from March sprint
 
 ### Features
 - [ ] Vertex/Apex/RabbitX DEX connectors (in progress from Sprint 3/31)
@@ -60,12 +54,16 @@ _None currently_
 ---
 
 ## Completed (April 2026)
+- [x] Remove 25 historical one-off fix/diagnosis reports from root (-3,989 lines)
+- [x] Update CLAUDE.md metrics (34,000+ traders, 32+ exchanges, 62 crons)
+- [x] Clean up /tmp scripts (push-sharpe-raw.mjs, compute-sharpe-daily.mjs)
 - [x] Remove 59 AI-generated slop docs (-16,494 lines)
 - [x] Update README metrics (migrations 184, API routes 292, crons 53, i18n 4,800+)
 - [x] Condense PROGRESS.md 621→142 lines
 - [x] Fix PostDetailActions React compiler lint error
 - [x] Inline enrichment architecture (5 commits)
 - [x] 10x enrichment batch limits for low-sharpe platforms
+- [x] Monitor inline enrichment architecture (stable, no regressions)
 
 ## Completed (March 2026)
 _See PROGRESS.md archive section for full list_
