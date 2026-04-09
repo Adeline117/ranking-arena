@@ -60,6 +60,8 @@ export async function getTraderDetails(
     Promise.resolve({ data: null }),
     // Placeholder for 30D (resolved from leaderboard_ranks result below)
     Promise.resolve({ data: null }),
+    // KEEP 'exact' — scoped via (trader_id) index, shown as "Arena
+    // Followers" badge on trader card; exact number matters to user.
     supabase.from('trader_follows')
       .select('id', { count: 'exact', head: true }).eq('trader_id', traderId),
     supabase.from('user_profiles')
@@ -274,6 +276,8 @@ export async function getTraderDetailsFromSnapshots(
         .select('season_id, roi, pnl, win_rate, max_drawdown, trades_count, followers, arena_score, computed_at')
         .eq('source', sourceType).eq('source_trader_id', traderId)
         .limit(5),
+      // KEEP 'exact' — same rationale as the selectSnapshotFields path
+      // above; per-trader follower count for the profile header badge.
       supabase.from('trader_follows')
         .select('id', { count: 'exact', head: true }).eq('trader_id', traderId),
       supabase.from('trader_sources')
