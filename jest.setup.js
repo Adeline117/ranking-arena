@@ -44,6 +44,12 @@ if (typeof Response === 'undefined') {
   }
 }
 
+// Polyfill Response.json static helper — node <20 and the jest Response stub
+// don't ship with it, but next/server's NextResponse.json() calls into it.
+if (typeof Response !== 'undefined' && typeof Response.json !== 'function') {
+  Response.json = (body, init = {}) => new Response(JSON.stringify(body), init)
+}
+
 if (typeof Headers === 'undefined') {
   global.Headers = class Headers extends Map {}
 }
