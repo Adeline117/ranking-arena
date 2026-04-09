@@ -77,11 +77,14 @@ export async function POST(request: NextRequest) {
     const uniquePlatforms = [...new Set(profiles.map(p => p.platform))]
 
     // Get total trader count per platform (for percentile tags)
+    // Estimated is fine — percentile bands are coarse (Top 1%, Top 5%, etc.)
+    // and pg_class.reltuples is within ~5% accuracy. Avoids per-platform
+    // exact count on trader_profiles_v2 which can be slow under cron load.
     await Promise.all(
       uniquePlatforms.map(async (platform) => {
         const { count } = await supabase
           .from('trader_profiles_v2')
-          .select('*', { count: 'exact', head: true })
+          .select('*', { count: 'estimated', head: true })
           .eq('platform', platform)
 
         platformCounts[platform] = count ?? 0

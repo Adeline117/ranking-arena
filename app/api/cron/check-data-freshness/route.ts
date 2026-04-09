@@ -133,10 +133,12 @@ export async function buildFreshnessReport(): Promise<FreshnessReport> {
         logger.dbError('query-platform-freshness', error, { platform })
       }
 
-      // 获取记录数量
+      // 获取记录数量 — estimated to avoid full scans of trader_snapshots_v2
+      // (~70M rows). This is a health check; approximate count is sufficient
+      // to decide "stale vs fresh" and the job runs every 3h.
       const { count } = await supabase
         .from('trader_snapshots_v2')
-        .select('id', { count: 'exact', head: true })
+        .select('id', { count: 'estimated', head: true })
         .eq('platform', platform)
 
       const lastUpdate = data?.created_at || null
