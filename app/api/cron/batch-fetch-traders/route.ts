@@ -204,7 +204,7 @@ export async function GET(request: NextRequest) {
     mexc: 120000,
     bitget_futures: 200000, // Was 120s: 3 windows × 1 VPS call/window × 60s = 180s needed
     // DEX subgraph/API: sometimes slow due to chain indexer lag
-    hyperliquid: 120000,
+    hyperliquid: 240000, // Was 120s — HL API consistently >120s with 2000 trader limit
     gmx: 120000,
     drift: 120000,
     // Medium APIs
