@@ -19,14 +19,22 @@ const version = process.env.npm_package_version || '0.1.0'
 // Deploy timestamp from env (set at build time), fallback to module load time
 const deployTime = process.env.NEXT_PUBLIC_DEPLOY_TIME ? parseInt(process.env.NEXT_PUBLIC_DEPLOY_TIME, 10) : startTime
 
-/** Race any check against a 5s timeout to prevent health endpoint from hanging */
-function withTimeout<T>(promise: Promise<T> | PromiseLike<T>, fallback: T, label: string): Promise<T> {
+/**
+ * Race any check against a timeout to prevent health endpoint from hanging.
+ *
+ * ROOT CAUSE FIX (2026-04-09): 5s cap was too tight for cold-start scenarios.
+ * Vercel serverless instances can take 3-5s for Supabase client init + first
+ * query on a cold start, which flipped the cap and produced alternating
+ * healthy/unhealthy responses from the monitor depending on instance warmth.
+ * 8s gives enough headroom for cold start without masking real DB issues.
+ */
+function withTimeout<T>(promise: Promise<T> | PromiseLike<T>, fallback: T, label: string, ms: number = 8000): Promise<T> {
   return Promise.race([
     promise,
     new Promise<T>((resolve) => setTimeout(() => {
-      console.warn(`[health] ${label} timed out after 5s`)
+      console.warn(`[health] ${label} timed out after ${ms}ms`)
       resolve(fallback)
-    }, 5000)),
+    }, ms)),
   ])
 }
 
@@ -35,7 +43,7 @@ async function checkDatabase(): Promise<{ status: 'pass' | 'fail' | 'skip'; late
   try {
     const result = await withTimeout(
       getSupabaseAdmin().from('library_items').select('id').limit(1).then(r => ({ ok: !r.error, msg: r.error?.message })),
-      { ok: false, msg: 'DB check timed out (5s)' },
+      { ok: false, msg: 'DB check timed out (8s)' },
       'checkDatabase'
     )
     const latency = Date.now() - t0
@@ -95,7 +103,9 @@ export async function GET() {
   let freshness: { status: 'pass' | 'fail' | 'skip'; latency?: number; message?: string }
   try {
     const t1 = Date.now()
-    // Race the DB query against a 5s timeout to prevent the entire health endpoint from hanging.
+    // Race the DB query against an 8s timeout — matches withTimeout() cap for
+    // consistent cold-start tolerance. Previous 5s cap flipped on cold boots
+    // where Supabase client init + query could take 3-5s.
     const result = await Promise.race([
       getSupabaseAdmin()
         .from('pipeline_logs')
@@ -108,7 +118,7 @@ export async function GET() {
         .maybeSingle()
         .then(r => r),
       new Promise<{ data: null; error: { message: string } }>((resolve) =>
-        setTimeout(() => resolve({ data: null, error: { message: 'Freshness query timed out (5s)' } }), 5000)
+        setTimeout(() => resolve({ data: null, error: { message: 'Freshness query timed out (8s)' } }), 8000)
       ),
     ])
     const latency = Date.now() - t1
