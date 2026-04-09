@@ -7,21 +7,20 @@ import { PageErrorBoundary } from "../components/utils/ErrorBoundary";
 import BetaBanner from "../components/layout/BetaBanner";
 import { AsyncStylesheets } from "../components/Providers/AsyncStylesheets";
 
-const KeyboardShortcuts = dynamic(() => import("../components/Providers/KeyboardShortcuts"));
+// GlobalProgress / MobileBottomNav stay separate — needed sooner after mount
+// for navigation responsiveness.
 const GlobalProgress = dynamic(() => import("../components/ui/GlobalProgress").then(m => ({ default: m.GlobalProgress })));
-const ServiceWorkerRegistration = dynamic(() => import("../components/Providers/ServiceWorkerRegistration").then(m => ({ default: m.ServiceWorkerRegistration })));
-const CookieConsent = dynamic(() => import("../components/ui/CookieConsent"));
-const CompareFloatingBar = dynamic(() => import("../components/trader/CompareFloatingBar"));
-const ScrollToTop = dynamic(() => import("../components/ui/ScrollToTop"));
-const ScrollRestoration = dynamic(() => import("../components/Providers/ScrollRestoration"));
 const MobileBottomNav = dynamic(() => import("../components/layout/MobileBottomNav"));
+// Vercel Analytics / WebVitals stay separate because they're loaded from
+// node_modules chunks that webpack may split differently.
 const WebVitals = dynamic(() => import("../components/Providers/WebVitals").then(m => ({ default: m.WebVitals })));
 const SpeedInsights = dynamic(() => import("@vercel/speed-insights/next").then(m => ({ default: m.SpeedInsights })));
 const Analytics = dynamic(() => import("@vercel/analytics/next").then(m => ({ default: m.Analytics })));
-const NetworkStatusBanner = dynamic(() => import("../components/ui/NetworkStatusBanner"));
-const FeedbackWidget = dynamic(() => import("../components/common/FeedbackWidget"));
-const PlausibleAnalytics = dynamic(() => import("../components/PlausibleAnalytics"));
-const SentryInit = dynamic(() => import("../components/Providers/SentryInit"));
+// DeferredLayoutWidgets groups 10 non-critical widgets (Sentry, network
+// banner, SW, keyboard shortcuts, compare bar, scroll-to-top, feedback,
+// Plausible, scroll restoration, cookie consent) into a SINGLE async chunk
+// instead of 10 separate ones — saves ~100-300ms of chunk negotiation on 4G.
+const DeferredLayoutWidgets = dynamic(() => import("../components/layout/DeferredLayoutWidgets"));
 
 /**
  * App layout — wraps ALL pages except the homepage.
@@ -55,16 +54,7 @@ export default function AppLayout({
           </PageErrorBoundary>
           <MobileBottomNav />
           <Suspense fallback={null}>
-            <SentryInit />
-            <NetworkStatusBanner />
-            <ServiceWorkerRegistration />
-            <KeyboardShortcuts />
-            <CompareFloatingBar />
-            <ScrollToTop />
-            <FeedbackWidget />
-            <PlausibleAnalytics />
-            <ScrollRestoration />
-            <CookieConsent />
+            <DeferredLayoutWidgets />
           </Suspense>
         </CapacitorProvider>
       </Providers>
