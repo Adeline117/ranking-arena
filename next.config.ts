@@ -621,6 +621,9 @@ const nextConfig = {
       { source: '/account', destination: '/settings', permanent: true },
       // /rankings (bare) → / (homepage has the main ranking table)
       { source: '/rankings', destination: '/', permanent: true },
+      // /rankings/traders → / (must come BEFORE the :exchange wildcard below,
+      // otherwise it would match /?exchange=traders which is invalid)
+      { source: '/rankings/traders', destination: '/', permanent: true },
       // Exchange ranking pages removed — homepage exchange filter replaces them
       { source: '/rankings/:exchange', destination: '/?exchange=:exchange', permanent: true },
     ];
