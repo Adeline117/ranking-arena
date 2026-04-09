@@ -36,7 +36,17 @@ export default function HomePageLoader(props: HomePageLoaderProps) {
   const [activated, setActivated] = useState(false)
 
   useEffect(() => {
-    // Render Phase 2 on first user interaction (locks LCP at SSR time)
+    // Render Phase 2 on first user interaction (locks LCP at SSR time).
+    //
+    // Critical: do NOT listen for `scroll` or `touchstart` — on mobile, the first
+    // scroll gesture fires touchstart immediately, which would activate Phase 2
+    // mid-gesture. Phase 2 chunks loading + SSR table swap in the middle of a
+    // scroll interrupts the user's motion and feels janky.
+    //
+    // Instead: listen for `pointermove` (fires on hover/drag AFTER acquisition),
+    // `pointerdown` on non-scroll elements (buttons), and `keydown`. Scroll itself
+    // is handled by the idle-callback fallback below, which preloads Phase 2
+    // during idle time BEFORE the user scrolls.
     let done = false
     const activate = () => {
       if (done) return
@@ -45,23 +55,23 @@ export default function HomePageLoader(props: HomePageLoaderProps) {
       cleanup()
     }
     const cleanup = () => {
-      window.removeEventListener('scroll', activate)
+      window.removeEventListener('pointermove', activate)
       window.removeEventListener('click', activate)
       window.removeEventListener('keydown', activate)
-      window.removeEventListener('touchstart', activate)
     }
-    window.addEventListener('scroll', activate, { once: true, passive: true })
+    window.addEventListener('pointermove', activate, { once: true, passive: true })
     window.addEventListener('click', activate, { once: true })
     window.addEventListener('keydown', activate, { once: true })
-    window.addEventListener('touchstart', activate, { once: true, passive: true })
 
-    // Fallback: activate via requestIdleCallback (fires when CPU is free).
-    // On fast devices: ~50ms. On throttled Lighthouse: after JS parsing finishes.
-    // 4s hard cap — shorter timeout reduces Lighthouse LCP (Phase 2 renders sooner).
+    // Preload Phase 2 proactively during idle time.
+    // On fast devices: fires almost immediately after LCP paint, so Phase 2 is
+    // ready by the time the user scrolls. On throttled devices (Lighthouse,
+    // slow CPUs): 2.5s hard cap. Shorter than the previous 4s so Phase 2 is
+    // usually ready before the first real user interaction.
     const ric = typeof window.requestIdleCallback === 'function'
       ? window.requestIdleCallback
       : ((cb: IdleRequestCallback) => setTimeout(cb, 100)) as typeof requestIdleCallback
-    const idleHandle = ric(activate, { timeout: 4000 })
+    const idleHandle = ric(activate, { timeout: 2500 })
     return () => {
       cleanup()
       if (typeof window.cancelIdleCallback === 'function') {
