@@ -241,30 +241,18 @@ function RankingTableInner(props: {
     return template
   }, [visibleColumns])
 
-  // Memoize grid CSS string to avoid injecting new style on every render
-  const gridStyleCSS = React.useMemo(() => {
-    const hiddenCols = [
-      !visibleColumns.includes('score') && '.ranking-table-grid-custom .col-score { display: none !important; }',
-      !visibleColumns.includes('winrate') && '.ranking-table-grid-custom .col-winrate { display: none !important; }',
-      !visibleColumns.includes('mdd') && '.ranking-table-grid-custom .col-mdd { display: none !important; }',
-      !visibleColumns.includes('roi') && '.ranking-table-grid-custom .roi-cell { display: none !important; }',
-      !visibleColumns.includes('pnl') && '.ranking-table-grid-custom .col-pnl { display: none !important; }',
-      !visibleColumns.includes('sharpe') && '.ranking-table-grid-custom .col-sharpe { display: none !important; }',
-      !visibleColumns.includes('sortino') && '.ranking-table-grid-custom .col-sortino { display: none !important; }',
-      !visibleColumns.includes('alpha') && '.ranking-table-grid-custom .col-alpha { display: none !important; }',
-      !visibleColumns.includes('style') && '.ranking-table-grid-custom .col-style { display: none !important; }',
-      !visibleColumns.includes('followers') && '.ranking-table-grid-custom .col-followers { display: none !important; }',
-      !visibleColumns.includes('trades') && '.ranking-table-grid-custom .col-trades { display: none !important; }',
-    ].filter(Boolean).join('\n        ')
-    return `
-      @media (min-width: 768px) {
-        .ranking-table-grid-custom {
-          grid-template-columns: ${desktopGridTemplate} !important;
-        }
-        ${hiddenCols}
-      }
-    `
-  }, [visibleColumns, desktopGridTemplate])
+  // Grid template + hidden-column flags are driven by a CSS variable and
+  // data-attributes on the .ranking-table-container element (see globals.css).
+  // Previously this was a runtime <style>{...}</style> element that React
+  // reconciled on every render, causing StyleSheet recalc on column toggles.
+  const hiddenColAttrs = React.useMemo(() => {
+    const attrs: Record<string, '' | undefined> = {}
+    const cols = ['score', 'winrate', 'mdd', 'roi', 'pnl', 'sharpe', 'sortino', 'alpha', 'style', 'followers', 'trades'] as const
+    for (const col of cols) {
+      if (!visibleColumns.includes(col)) attrs[`data-hide-${col}`] = ''
+    }
+    return attrs
+  }, [visibleColumns])
 
   const handleSort = (col: 'score' | 'roi' | 'pnl' | 'winrate' | 'mdd' | 'sortino' | 'alpha') => {
     const newDir = sortColumn === col ? (sortDir === 'desc' ? 'asc' : 'desc') : 'desc'
@@ -412,11 +400,10 @@ function RankingTableInner(props: {
       avatarUrls={traders.slice(0, 10).map(t => t.avatar_url)}
       maxPreload={10}
     />
-    {/* Dynamic grid template override — memoized to avoid style recalc on re-render */}
-    <style>{gridStyleCSS}</style>
     <Box
       className="ranking-table-container"
       data-sort-col={sortColumn}
+      {...hiddenColAttrs}
       p={0}
       radius="none"
       style={{
@@ -424,6 +411,8 @@ function RankingTableInner(props: {
         overflow: viewMode === 'card' ? 'visible' : 'hidden',
         background: 'var(--color-bg-secondary, #14121C)',
         border: tokens.glass.border.light,
+        // Dynamic grid template via CSS variable — no <style> element needed.
+        ['--ranking-grid-cols' as string]: desktopGridTemplate,
       }}
     >
       {/* Category Tabs + Tool buttons (extracted to RankingFilters) */}
