@@ -66,12 +66,15 @@ export async function GET(request: NextRequest) {
     }
 
     // Monitoring: check pipeline_rejected_writes for fresh connector issues
+    // Estimated count — this is a threshold check (>10 triggers alert).
+    // pipeline_rejected_writes rotates at 7d (~126k rows typical) and the
+    // 1h window is a tiny subset; planner estimate via EXPLAIN is fine.
     let freshViolations = 0
     try {
       const oneHourAgo = new Date(Date.now() - 3600 * 1000).toISOString()
       const { count } = await supabase
         .from('pipeline_rejected_writes')
-        .select('id', { count: 'exact', head: true })
+        .select('id', { count: 'estimated', head: true })
         .gte('created_at', oneHourAgo)
         .eq('target_table', 'trader_snapshots_v2')
 

@@ -20,6 +20,10 @@ export async function autoCleanupStuckJobs() {
     const thresholdTime = new Date(Date.now() - STUCK_THRESHOLD_HOURS * 60 * 60 * 1000).toISOString()
     
     // 1. 查询stuck任务数量
+    // KEEP 'exact' — uses partial index idx_pipeline_logs_running
+    // (WHERE status = 'running'), which scopes to a tiny subset (<100 rows
+    // typical). The count drives the 50-stuck-job alert threshold so an
+    // estimated value from the planner would be unreliable.
     const { count: stuckCount, error: countError } = await supabase
       .from('pipeline_logs')
       .select('*', { count: 'exact', head: true })

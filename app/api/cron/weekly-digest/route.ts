@@ -72,15 +72,18 @@ export async function GET(request: NextRequest) {
     }))
 
     // 3. New traders this week
+    // Estimated is fine — this is a marketing email headline number, not
+    // a financial report. Exact on trader_sources (~34k rows) can be slow
+    // under cron contention.
     const { count: newTraders } = await supabase
       .from('trader_sources')
-      .select('id', { count: 'exact', head: true })
+      .select('id', { count: 'estimated', head: true })
       .gte('created_at', weekAgoIso)
 
-    // 4. Total tracked
+    // 4. Total tracked (estimated — marketing headline)
     const { count: totalTracked } = await supabase
       .from('trader_sources')
-      .select('id', { count: 'exact', head: true })
+      .select('id', { count: 'estimated', head: true })
 
     // 5. Week range string
     const now = new Date()

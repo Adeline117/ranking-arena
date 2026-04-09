@@ -87,16 +87,18 @@ export async function GET(request: NextRequest) {
       }
     })
 
-    // Snapshot counts
+    // Snapshot counts — estimated to avoid full scans of trader_snapshots_v2
+    // (~70M rows). Daily digest only compares the two numbers for a
+    // "snapshots up/down today" chart; approximate is fine.
     const { count: snapshotCount24h } = await supabase
       .from('trader_snapshots_v2')
-      .select('*', { count: 'exact', head: true })
+      .select('*', { count: 'estimated', head: true })
       .gte('as_of_ts', oneDayAgo)
 
     const twoDaysAgo = new Date(Date.now() - 48 * 60 * 60 * 1000).toISOString()
     const { count: snapshotCountYesterday } = await supabase
       .from('trader_snapshots_v2')
-      .select('*', { count: 'exact', head: true })
+      .select('*', { count: 'estimated', head: true })
       .gte('as_of_ts', twoDaysAgo)
       .lt('as_of_ts', oneDayAgo)
 

@@ -37,16 +37,16 @@ export async function GET(request: NextRequest) {
       .sort((a, b) => b.error_count - a.error_count)
       .slice(0, 5)
 
-    // 2. 本周新增交易员
+    // 2. 本周新增交易员 — estimated (weekly internal report, approximate is fine)
     const { count: newTraders } = await supabase
       .from('trader_sources')
-      .select('id', { count: 'exact', head: true })
+      .select('id', { count: 'estimated', head: true })
       .gte('created_at', weekAgo)
 
-    // 3. 交易员总数
+    // 3. 交易员总数 — estimated (pg_class.reltuples, O(1))
     const { count: totalTraders } = await supabase
       .from('trader_sources')
-      .select('id', { count: 'exact', head: true })
+      .select('id', { count: 'estimated', head: true })
 
     // 4. 最近失败 — 7 day window for a weekly report (default window is 2h for
     // real-time health alerts; weekly retrospective needs a longer horizon)
@@ -68,10 +68,10 @@ export async function GET(request: NextRequest) {
       .sort(([, a], [, b]) => b - a)
       .slice(0, 5)
 
-    // 6. 用户增长
+    // 6. 用户增长 — estimated (weekly report, approximate headline number)
     const { count: newUsers } = await supabase
       .from('user_profiles')
-      .select('id', { count: 'exact', head: true })
+      .select('id', { count: 'estimated', head: true })
       .gte('created_at', weekAgo)
 
     // 构建报告

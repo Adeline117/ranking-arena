@@ -189,21 +189,24 @@ async function generateExchangeCompare(supabase: AnySupabase): Promise<{ title: 
 }
 
 async function generateDataFact(supabase: AnySupabase): Promise<{ title: string; content: string }> {
-  // Count traders by various criteria
+  // Count traders by various criteria.
+  // Marketing copy only (AI-generated social post) — approximate counts are
+  // fine. 'estimated' uses pg_class.reltuples which is O(1) and avoids
+  // scanning leaderboard_ranks (~300k rows) three times per post.
   const { count: totalTraders } = await supabase
     .from('leaderboard_ranks')
-    .select('*', { count: 'exact', head: true })
+    .select('*', { count: 'estimated', head: true })
     .eq('season_id', '30D')
 
   const { count: score80Plus } = await supabase
     .from('leaderboard_ranks')
-    .select('*', { count: 'exact', head: true })
+    .select('*', { count: 'estimated', head: true })
     .eq('season_id', '30D')
     .gte('arena_score', 80)
 
   const { count: score90Plus } = await supabase
     .from('leaderboard_ranks')
-    .select('*', { count: 'exact', head: true })
+    .select('*', { count: 'estimated', head: true })
     .eq('season_id', '30D')
     .gte('arena_score', 90)
 
@@ -230,9 +233,10 @@ async function generateWeeklyRecap(supabase: AnySupabase): Promise<{ title: stri
     .order('arena_score', { ascending: false })
     .limit(1)
 
+  // Weekly-recap marketing copy — approximate count is fine (pg_class.reltuples)
   const { count: total } = await supabase
     .from('leaderboard_ranks')
-    .select('*', { count: 'exact', head: true })
+    .select('*', { count: 'estimated', head: true })
     .eq('season_id', '30D')
 
   const { data: profitable } = await supabase
