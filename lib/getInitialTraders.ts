@@ -301,9 +301,14 @@ async function fetchPaginatedFromDB(
   page: number
 ): Promise<{ traders: InitialTrader[]; lastUpdated: string | null }> {
   const offset = page * limit
+  // Explicit column list (not select('*')) so Postgres can use the
+  // idx_leaderboard_ranks_api_default covering index with index-only scan.
+  // SELECT * forces heap fetch for the ~10 columns we don't actually read
+  // (raw_data, metrics_estimated, internal flags, etc.) adding 30-80ms.
+  const SSR_COLS = 'source_trader_id, handle, source, source_type, roi, pnl, win_rate, max_drawdown, trades_count, followers, copiers, arena_score, avatar_url, rank, computed_at, profitability_score, risk_control_score, execution_score, score_completeness, trading_style, avg_holding_hours, sharpe_ratio, sortino_ratio, profit_factor, calmar_ratio, trader_type, is_outlier, season_id'
   const { data, error } = await supabase
     .from('leaderboard_ranks')
-    .select('*')
+    .select(SSR_COLS)
     .eq('season_id', timeRange)
     .gt('arena_score', 0)
     .or('is_outlier.is.null,is_outlier.eq.false')
