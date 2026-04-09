@@ -19,7 +19,9 @@ export class OkxSpotConnector extends BaseConnector {
   readonly marketType = 'spot' as const
 
   constructor(config?: Partial<import('../types').ConnectorConfig>) {
-    super({ timeout: 10000, maxRetries: 0, ...config })
+    // 2026-04-09: same fix as okx_futures — bump maxRetries to allow transient
+    // failures from Vercel hnd1 → OKX to be retried with exponential backoff.
+    super({ timeout: 15000, maxRetries: 2, retryBaseDelay: 1500, ...config })
   }
 
   readonly capabilities: PlatformCapabilities = {
