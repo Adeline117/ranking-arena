@@ -562,14 +562,14 @@ async function computeSeason(
   //                  roi_pct→roi, pnl_usd→pnl, created_at→captured_at
   // ROOT CAUSE FIX (2026-04-09): Sequential single-platform queries.
   // Concurrent batches (even 3) still exhaust DB pool under cron storms.
-  // Sequential = 1 query at a time, predictable timing, no pool competition.
-  const batchSize = 1
+  // Batch 3 sources in parallel — 3x faster than sequential with acceptable pool usage
+  const batchSize = 3
   const v2Window = season // V2 uses same format as v1: '7D', '30D', '90D'
   const FALLBACK_THRESHOLD = 50
   const phase1Start = Date.now()
   for (let i = 0; i < SOURCES_WITH_DATA.length; i += batchSize) {
-    // Time budget: stop if >200s elapsed (leave 100s for scoring + upsert)
-    if (Date.now() - phase1Start > 200_000) {
+    // Time budget: 150s (leave 150s for scoring + upsert + enrichment)
+    if (Date.now() - phase1Start > 150_000) {
       logger.warn(`[${season}] Phase 1 time budget exceeded at platform ${i}/${SOURCES_WITH_DATA.length}, proceeding with ${traderMap.size} traders`)
       break
     }

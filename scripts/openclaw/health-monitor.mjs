@@ -218,6 +218,17 @@ async function runHealthCheck() {
       issues.push(`⚠️ Pipeline degraded: ${failedJobs} failed, ${staleJobs} stale`)
       categories.add('pipeline:degraded')
     }
+
+    // Surface silent background failures (fireAndForget escalations).
+    // Retro 2026-04-09: before this, they only lived in-memory per instance
+    // and were invisible to OpenClaw.
+    if (pipelineHealth.backgroundFailures?.length) {
+      const top = pipelineHealth.backgroundFailures.slice(0, 3)
+      for (const bf of top) {
+        issues.push(`  ⚠️ Background: ${bf.label} (${bf.count}x): ${(bf.lastError || '').slice(0, 80)}`)
+      }
+      categories.add(`pipeline:background-failures:${pipelineHealth.backgroundFailures.length}`)
+    }
   } catch (err) {
     issues.push(`⚠️ Pipeline check failed: ${err.message}`)
     categories.add('pipeline:check-failed')
