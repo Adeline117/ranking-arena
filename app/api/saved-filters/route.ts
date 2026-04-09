@@ -128,6 +128,8 @@ export const POST = withAuth(async ({ user, supabase, request }) => {
   } else {
     // 创建新配置 - check count and insert; if race causes over-limit,
     // the insert still succeeds (acceptable minor overshoot vs. data loss)
+    // KEEP 'exact' — MAX_SAVED_FILTERS limit enforcement. Scoped per-
+    // user via (user_id) index → tiny row set, must be accurate.
     const { count } = await supabase
       .from('saved_filters')
       .select('id', { count: 'exact', head: true })

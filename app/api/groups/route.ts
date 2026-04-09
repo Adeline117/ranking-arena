@@ -37,6 +37,8 @@ export async function GET(request: NextRequest) {
             .select(`id, name, name_en, description, avatar_url, member_count`)
             .order('member_count', { ascending: false, nullsFirst: false })
             .range(offset, offset + limit - 1),
+          // KEEP 'exact' — groups list pagination "X of Y"; groups
+          // table is small (~hundreds) so count is fast.
           supabase
             .from('groups')
             .select('id', { count: 'exact', head: true }),

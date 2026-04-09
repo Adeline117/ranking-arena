@@ -24,6 +24,8 @@ export const GET = withPublic(
         .eq('status', status)
         .order('start_at', { ascending: status === 'upcoming' })
         .range(offset, offset + limit - 1),
+      // KEEP 'exact' — pagination for competitions list; small
+      // table (tens of comps) and (status) index makes this free.
       supabase
         .from('competitions')
         .select('id', { count: 'exact', head: true })
