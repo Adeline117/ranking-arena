@@ -2,7 +2,7 @@
  * OKX Spot enrichment — reuses OKX futures logic with instType=SPOT
  */
 
-import { fetchJson } from './shared'
+import { fetchJsonWithRetry } from './shared'
 import { logger } from '@/lib/logger'
 import type { EquityCurvePoint, PositionHistoryItem, StatsDetail } from './enrichment-types'
 
@@ -11,12 +11,15 @@ export async function fetchOkxSpotEquityCurve(
   _days = 90
 ): Promise<EquityCurvePoint[]> {
   try {
-    const data = await fetchJson<{
+    // 2026-04-09: switch from fetchJson → fetchJsonWithRetry. The OKX direct
+    // API intermittently fails from Vercel hnd1 (5xx / network blips) and was
+    // causing ~70% enrich failure rates with no retry budget.
+    const data = await fetchJsonWithRetry<{
       code: string
       data?: Array<{ beginTs?: string; pnl?: string; pnlRatio?: string }>
     }>(
       `https://www.okx.com/api/v5/copytrading/public-weekly-pnl?instType=SPOT&uniqueCode=${encodeURIComponent(traderId)}`,
-      { timeoutMs: 15000 }
+      { timeoutMs: 12000, maxRetries: 2 }
     )
     if (data.code !== '0' || !data.data?.length) return []
 
@@ -38,7 +41,7 @@ export async function fetchOkxSpotEquityCurve(
 
 export async function fetchOkxSpotStatsDetail(traderId: string): Promise<StatsDetail | null> {
   try {
-    const data = await fetchJson<{
+    const data = await fetchJsonWithRetry<{
       code: string
       data?: Array<{
         uniqueCode?: string; pnlRatio?: string; pnl?: string; winRatio?: string
@@ -48,7 +51,7 @@ export async function fetchOkxSpotStatsDetail(traderId: string): Promise<StatsDe
       }>
     }>(
       `https://www.okx.com/api/v5/copytrading/public-lead-traders?instType=SPOT&uniqueCode=${encodeURIComponent(traderId)}`,
-      { headers: { Accept: '*/*' }, timeoutMs: 15000 }
+      { headers: { Accept: '*/*' }, timeoutMs: 12000, maxRetries: 2 }
     )
     if (data.code !== '0' || !data.data?.length) return null
 
@@ -76,7 +79,7 @@ export async function fetchOkxSpotStatsDetail(traderId: string): Promise<StatsDe
 
 export async function fetchOkxSpotCurrentPositions(traderId: string): Promise<PositionHistoryItem[]> {
   try {
-    const data = await fetchJson<{
+    const data = await fetchJsonWithRetry<{
       code: string
       data?: Array<{
         instId?: string; posSide?: string; openAvgPx?: string; openTime?: string
@@ -84,7 +87,7 @@ export async function fetchOkxSpotCurrentPositions(traderId: string): Promise<Po
       }>
     }>(
       `https://www.okx.com/api/v5/copytrading/public-current-subpositions?instType=SPOT&uniqueCode=${encodeURIComponent(traderId)}&limit=50`,
-      { timeoutMs: 15000 }
+      { timeoutMs: 12000, maxRetries: 2 }
     )
     if (data.code !== '0' || !data.data?.length) return []
 
