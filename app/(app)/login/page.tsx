@@ -467,8 +467,9 @@ export default function LoginPage() {
           />
         )}
 
-        {/* Switch login/register */}
+        {/* Switch login/register — hover + focus states handled in globals.css */}
         <button
+          className="login-switch-btn"
           onClick={() => { setIsRegister(!isRegister); resetForm() }}
           style={{
             width: '100%', padding: '14px 16px', borderRadius: tokens.radius.lg,
@@ -476,8 +477,6 @@ export default function LoginPage() {
             color: 'var(--color-text-secondary)', fontWeight: 600, fontSize: 14, cursor: 'pointer',
             transition: `all ${tokens.transition.base}`,
           }}
-          onMouseEnter={(e) => { e.currentTarget.style.borderColor = 'var(--color-accent-primary-60)'; e.currentTarget.style.color = 'var(--color-brand-accent)' }}
-          onMouseLeave={(e) => { e.currentTarget.style.borderColor = 'var(--color-accent-primary-30)'; e.currentTarget.style.color = 'var(--color-text-tertiary)' }}
         >
           {isRegister ? t('loginSwitchToLogin') : t('loginSwitchToRegister')}
         </button>

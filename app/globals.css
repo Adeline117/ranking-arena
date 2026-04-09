@@ -1264,6 +1264,15 @@ select:focus-visible {
   box-shadow: 0 0 20px var(--color-accent-primary-30);
 }
 
+/* Login page: switch register/login button. Hover + focus-visible via CSS
+ * instead of onMouseEnter handlers (accessibility: keyboard focus now works). */
+.login-switch-btn:hover,
+.login-switch-btn:focus-visible {
+  border-color: var(--color-accent-primary-60) !important;
+  color: var(--color-brand-accent) !important;
+  outline: none;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .top-nav-logo-link:hover,
   .top-nav-link:hover,
