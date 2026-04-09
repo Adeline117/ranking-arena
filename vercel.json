@@ -10,11 +10,11 @@
     },
     {
       "path": "/api/cron/compute-leaderboard?season=30D",
-      "schedule": "15 * * * *"
+      "schedule": "20 * * * *"
     },
     {
       "path": "/api/cron/compute-leaderboard?season=7D",
-      "schedule": "30 * * * *"
+      "schedule": "40 * * * *"
     },
     {
       "path": "/api/cron/sync-meilisearch",
@@ -138,7 +138,7 @@
     },
     {
       "path": "/api/cron/batch-fetch-traders?group=b2",
-      "schedule": "15 */3 * * *"
+      "schedule": "45 */3 * * *"
     },
     {
       "path": "/api/cron/batch-fetch-traders?group=c",
@@ -182,11 +182,11 @@
     },
     {
       "path": "/api/cron/batch-enrich?period=30D",
-      "schedule": "35 */4 * * *"
+      "schedule": "30 */4 * * *"
     },
     {
       "path": "/api/cron/batch-enrich?period=7D",
-      "schedule": "44 */6 * * *"
+      "schedule": "53 */6 * * *"
     },
     {
       "path": "/api/cron/check-trader-alerts",
@@ -234,7 +234,7 @@
     },
     {
       "path": "/api/cron/snapshot-positions",
-      "schedule": "17 * * * *"
+      "schedule": "48 * * * *"
     },
     {
       "path": "/api/cron/fetch-traders/blofin",
