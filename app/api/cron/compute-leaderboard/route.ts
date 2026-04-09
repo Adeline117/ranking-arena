@@ -143,14 +143,17 @@ export async function GET(request: NextRequest) {
   const plog = await PipelineLogger.start(`compute-leaderboard${lockSuffix}`)
 
   try {
-    // P0-2: Record current counts before computing
+    // P0-2: Record current counts from pre-computed cache (instant)
+    // PERF FIX: was count:exact (25s+ per season × 3 = 75s wasted)
     const previousCounts: Record<string, number> = {}
     for (const season of targetSeasons) {
-      const { count } = await supabase
-        .from('leaderboard_ranks')
-        .select('id', { count: 'exact', head: true })
+      const { data: cacheRow } = await supabase
+        .from('leaderboard_count_cache')
+        .select('total_count')
         .eq('season_id', season)
-      previousCounts[season] = count || 0
+        .eq('source', '_all')
+        .maybeSingle()
+      previousCounts[season] = cacheRow?.total_count || 0
     }
 
     const forceWrite = request.nextUrl.searchParams.get('force') === '1'
@@ -1736,27 +1739,35 @@ async function computeSeason(
     // Traders in traderMap but NOT in uniqueTraders = filtered out (bad ROI, too few trades, etc.)
     const excludedTraders = Array.from(allInTraderMap).filter(k => !computedTraderIds.has(k))
     if (excludedTraders.length > 0) {
-      const excludedPairs = excludedTraders.map(k => { const [source, ...rest] = k.split(':'); return { source, id: rest.join(':') } })
+      // PERF FIX: was N+1 individual UPDATEs (30-120s). Now batched by source.
+      const excludedBySource = new Map<string, string[]>()
+      for (const k of excludedTraders) {
+        const [source, ...rest] = k.split(':')
+        const id = rest.join(':')
+        if (!excludedBySource.has(source)) excludedBySource.set(source, [])
+        excludedBySource.get(source)!.push(id)
+      }
       let zeroed = 0
-      outer: for (let i = 0; i < excludedPairs.length; i += 100) {
+      for (const [source, ids] of excludedBySource) {
         if (isOutOfTime(20_000)) {
-          logger.warn(`[${season}] zero-out aborted at ${i}/${excludedPairs.length}`)
-          break outer
+          logger.warn(`[${season}] zero-out aborted after ${zeroed} traders`)
+          break
         }
-        const batch = excludedPairs.slice(i, i + 100)
-        for (const { source, id } of batch) {
+        // Batch update all excluded traders for this source in one query
+        for (let i = 0; i < ids.length; i += 200) {
+          const batch = ids.slice(i, i + 200)
           const { error: zeroErr } = await supabase
             .from('leaderboard_ranks')
             .update({ arena_score: 0, computed_at: new Date().toISOString() })
             .eq('season_id', season)
             .eq('source', source)
-            .eq('source_trader_id', id)
-            .gt('arena_score', 0) // Only touch rows that actually have a non-zero score
-          if (!zeroErr) zeroed++
+            .in('source_trader_id', batch)
+            .gt('arena_score', 0)
+          if (!zeroErr) zeroed += batch.length
         }
       }
       if (zeroed > 0) {
-        logger.info(`${season}: zeroed out ${zeroed} excluded traders (fresh V2 data but failed filters)`)
+        logger.info(`${season}: zeroed out ${zeroed} excluded traders (batched by source)`)
       }
     }
   }
