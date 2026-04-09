@@ -47,6 +47,8 @@ export async function POST(
     }
 
     // Check total member count
+    // KEEP 'exact' — 50 member cap enforcement. Scoped per-channel via
+    // (channel_id) index. Must be accurate to block the 51st add.
     const { count } = await supabase
       .from('channel_members')
       .select('id', { count: 'exact', head: true })

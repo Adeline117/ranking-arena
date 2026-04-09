@@ -135,6 +135,8 @@ export async function POST(request: NextRequest, context: RouteContext) {
     }
 
     // Rate limit: max 10 invites per hour per user
+    // KEEP 'exact' — rate-limit enforcement, scoped per-user + 1h
+    // window. Must be accurate to block the 11th invite.
     const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000)
     const { count: recentInviteCount } = await supabase
       .from('group_invites')

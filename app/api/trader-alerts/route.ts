@@ -116,6 +116,8 @@ export const POST = withAuth(async ({ user, supabase, request }) => {
     .maybeSingle()
 
   // Enforce max 50 alerts per user
+  // KEEP 'exact' — hard limit enforcement, scoped per-user via
+  // (user_id) index. Must be accurate to block the 51st add.
   if (!existing) {
     const { count } = await supabase
       .from('trader_alerts')

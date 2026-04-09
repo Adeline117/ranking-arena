@@ -36,6 +36,8 @@ export async function GET(req: NextRequest) {
     }
 
     // Count referred users
+    // KEEP 'exact' — referral dashboard exact number ("You've referred
+    // N friends"). Scoped via (referred_by) index.
     const { count: referralCount, error: countError } = await supabase
       .from('user_profiles')
       .select('id', { count: 'exact', head: true })

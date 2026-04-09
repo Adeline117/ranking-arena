@@ -80,6 +80,9 @@ export async function POST(request: NextRequest, _context: RouteContext) {
     }
 
     // Recount from source of truth to avoid race conditions with stale counts (parallel)
+    // KEEP 'exact' on both — this is the write path that rebuilds the
+    // cached like_count / dislike_count columns on comments. Scoped
+    // per-comment via (comment_id, reaction_type) index.
     const [{ count: likeCount }, { count: dislikeCount }] = await Promise.all([
       supabase
         .from('comment_likes')
