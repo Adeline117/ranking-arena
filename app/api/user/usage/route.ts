@@ -20,6 +20,9 @@ export async function GET(request: NextRequest) {
     const supabase = getSupabaseAdmin()
 
     // Get followed traders count
+    // KEEP 'exact' — drives the usage widget Pro quota progress bar
+    // ("42 / 50 traders followed"). Scoped per-user via (user_id)
+    // index → cheap; must be accurate for the quota display.
     const { count: followedTraders } = await supabase
       .from('trader_follows')
       .select('id', { count: 'exact', head: true })

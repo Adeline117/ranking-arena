@@ -130,6 +130,8 @@ export async function POST(request: NextRequest) {
     }
 
     // Enforce max watchlist size (200)
+    // KEEP 'exact' — limit enforcement, scoped per-user via (user_id)
+    // index. Must be accurate to block the 201st add.
     const { count } = await supabase
       .from('trader_watchlist')
       .select('id', { count: 'exact', head: true })

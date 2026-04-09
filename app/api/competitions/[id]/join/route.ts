@@ -63,6 +63,8 @@ export async function POST(
   }
 
   // Check max participants
+  // KEEP 'exact' — max_participants enforcement. Scoped per-comp
+  // via (competition_id) index. Must be accurate to block overfill.
   const { count } = await supabase
     .from('competition_entries')
     .select('id', { count: 'exact', head: true })
