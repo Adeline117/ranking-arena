@@ -211,7 +211,7 @@ async function getRankingsFallback(rankingsQuery: RankingsQuery, _cursor?: strin
        profitability_score, risk_control_score, execution_score, score_completeness,
        trading_style, avg_holding_hours, sharpe_ratio, sortino_ratio, calmar_ratio, profit_factor, trader_type, is_outlier, metrics_estimated`
 
-  function buildBaseQuery(opts?: { count?: 'exact' }) {
+  function buildBaseQuery(opts?: { count?: 'exact' | 'planned' | 'estimated' }) {
     let q = supabase
       .from('leaderboard_ranks')
       .select(SELECT_COLS, opts ? { count: opts.count } : undefined)
@@ -253,15 +253,16 @@ async function getRankingsFallback(rankingsQuery: RankingsQuery, _cursor?: strin
   let error: { message: string } | null = null;
 
   if (safeLimit <= CHUNK_SIZE) {
-    // Single request — include count
-    const result = await buildBaseQuery({ count: 'exact' })
+    // Single request — use 'estimated' count to avoid 25s full table scan
+    // (exact count on 314k rows with OR filters is extremely slow)
+    const result = await buildBaseQuery({ count: 'estimated' })
       .range(offset, offset + safeLimit - 1);
     rows = (result.data || []) as Record<string, unknown>[];
     totalCount = result.count;
     error = result.error;
   } else {
     // Chunked fetch: first chunk gets count, rest fetch in parallel
-    const firstResult = await buildBaseQuery({ count: 'exact' })
+    const firstResult = await buildBaseQuery({ count: 'estimated' })
       .range(offset, offset + CHUNK_SIZE - 1);
     if (firstResult.error) {
       error = firstResult.error;
