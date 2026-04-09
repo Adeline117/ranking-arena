@@ -92,7 +92,8 @@ export async function GET() {
       getSupabaseAdmin()
         .from('pipeline_logs')
         .select('started_at')
-        .eq('job_name', 'compute-leaderboard')
+        // Per-season crons use job_name like 'compute-leaderboard:90D'
+        .like('job_name', 'compute-leaderboard%')
         .eq('status', 'success')
         .order('started_at', { ascending: false })
         .limit(1)
