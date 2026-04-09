@@ -33,10 +33,17 @@ export async function GET(request: NextRequest) {
   const plog = await PipelineLogger.start('warm-cache')
 
   try {
-    // Warm the SSR homepage cache — this keeps the Redis key fresh so page.tsx
-    // getInitialTraders() always hits cache instead of doing a cold DB query.
-    // fetchLeaderboardFromDB also does the DB warm-up query as a side-effect.
-    const { traders } = await fetchLeaderboardFromDB('90D', 50)
+    // Warm the SSR homepage cache — 10s timeout to prevent hang during DB spikes
+    let traders: Awaited<ReturnType<typeof fetchLeaderboardFromDB>>['traders'] = []
+    try {
+      const result = await Promise.race([
+        fetchLeaderboardFromDB('90D', 50),
+        new Promise<never>((_, reject) => setTimeout(() => reject(new Error('warm-cache DB timeout')), 10000)),
+      ])
+      traders = result.traders
+    } catch (err) {
+      logger.warn(`[warm-cache] DB fetch failed: ${err instanceof Error ? err.message : err}`)
+    }
 
     // Pre-warm high-traffic API caches to prevent 3s cold starts
     const baseUrl = request.nextUrl.origin
