@@ -578,29 +578,50 @@ async function computeSeason(
       batch.map(async (source) => {
         const rows: TraderRow[] = []
         const freshnessISO = freshnessISOBySource(source)
-        let { data, error } = await supabase
-          .from('trader_snapshots_v2')
-          .select('platform, trader_key, roi_pct, pnl_usd, win_rate, max_drawdown, trades_count, followers, copiers, arena_score, updated_at, sharpe_ratio, sortino_ratio, calmar_ratio, volatility_pct, downside_volatility_pct, metrics')
-          .eq('platform', source)
-          .eq('window', v2Window)
-          .gte('updated_at', freshnessISO)
-          .order('updated_at', { ascending: false })
-          .limit(2000)
+        // Per-source 15s timeout: skip slow sources instead of blocking the entire run
+        const queryWithTimeout = async <T>(promise: PromiseLike<T>): Promise<T> => {
+          return Promise.race([
+            promise,
+            new Promise<never>((_, reject) => setTimeout(() => reject(new Error(`${source} query timeout`)), 15_000)),
+          ])
+        }
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        let data: any[] | null = null
+        let error: { message: string; code?: string } | null = null
+        try {
+          const result = await queryWithTimeout(supabase
+            .from('trader_snapshots_v2')
+            .select('platform, trader_key, roi_pct, pnl_usd, win_rate, max_drawdown, trades_count, followers, copiers, arena_score, updated_at, sharpe_ratio, sortino_ratio, calmar_ratio, volatility_pct, downside_volatility_pct, metrics')
+            .eq('platform', source)
+            .eq('window', v2Window)
+            .gte('updated_at', freshnessISO)
+            .order('updated_at', { ascending: false })
+            .limit(2000))
+          data = result.data as TraderRow[] | null
+          error = result.error
+        } catch (e) {
+          logger.warn(`[${season}] ${source}: Phase 1 query timeout, skipping`)
+          return []
+        }
 
         // Fallback: if this window has too few traders, use 30D data
         // (many platforms only fetch one window; 30D is the most common)
         if ((!data || data.length < FALLBACK_THRESHOLD) && v2Window !== '30D') {
-          const fallback = await supabase
-            .from('trader_snapshots_v2')
-            .select('platform, trader_key, roi_pct, pnl_usd, win_rate, max_drawdown, trades_count, followers, copiers, arena_score, updated_at, sharpe_ratio, sortino_ratio, calmar_ratio, volatility_pct, downside_volatility_pct, metrics')
-            .eq('platform', source)
-            .eq('window', '30D')
-            .gte('updated_at', freshnessISO)
-            .order('updated_at', { ascending: false })
-            .limit(2000)
-          if (!fallback.error && fallback.data && fallback.data.length > (data?.length || 0)) {
-            data = fallback.data
-            error = fallback.error
+          try {
+            const fallback = await queryWithTimeout(supabase
+              .from('trader_snapshots_v2')
+              .select('platform, trader_key, roi_pct, pnl_usd, win_rate, max_drawdown, trades_count, followers, copiers, arena_score, updated_at, sharpe_ratio, sortino_ratio, calmar_ratio, volatility_pct, downside_volatility_pct, metrics')
+              .eq('platform', source)
+              .eq('window', '30D')
+              .gte('updated_at', freshnessISO)
+              .order('updated_at', { ascending: false })
+              .limit(2000))
+            if (!fallback.error && fallback.data && fallback.data.length > (data?.length || 0)) {
+              data = fallback.data
+              error = fallback.error as typeof error
+            }
+          } catch {
+            // Fallback also timed out — use primary result
           }
         }
 
