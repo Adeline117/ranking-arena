@@ -670,12 +670,25 @@ export async function runConnectorBatch(
       }
 
       if (allTraderKeys.size > 0) {
-        const traderKeys = Array.from(allTraderKeys)
+        const allKeys = Array.from(allTraderKeys)
         const fetchElapsed = Date.now() - startTime
         const enrichBudgetMs = Math.max(10_000, platformTimeBudgetMs - fetchElapsed - 5_000)
 
+        // Cap inline enrichment volume so it can't burn the entire platform
+        // budget and trip the 280s safety timeout. The remaining traders are
+        // covered by batch-enrich cron on its regular schedule.
+        // 2026-04-09: was unbounded, hyperliquid (33k traders) was running
+        //   500+ enrichments inline and hitting safety timeout in c_hl group.
+        // Roughly: budget (s) × concurrency × throughput. Use a conservative
+        // floor of 50 for slow APIs and let larger budgets unlock more.
+        const INLINE_ENRICH_HARD_CAP = Math.min(
+          allKeys.length,
+          Math.max(50, Math.floor(enrichBudgetMs / 2000))  // ~2s per trader budget
+        )
+        const traderKeys = allKeys.slice(0, INLINE_ENRICH_HARD_CAP)
+
         dataLogger.info(
-          `[adapter] Inline enrichment for ${platform}: ${traderKeys.length} traders, ` +
+          `[adapter] Inline enrichment for ${platform}: ${traderKeys.length}/${allKeys.length} traders, ` +
           `budget ${Math.round(enrichBudgetMs / 1000)}s (fetch took ${Math.round(fetchElapsed / 1000)}s)`
         )
 
