@@ -50,12 +50,19 @@ export async function GET(
       )
     }
 
+    // Unified Cache-Control for HIT + MISS paths. Previously the MISS path
+    // used s-maxage=30, swr=120 while HIT used s-maxage=60, swr=300 — that
+    // asymmetry halved the Vercel edge cache lifetime for cache misses,
+    // causing 2x edge re-validation traffic on endpoints that were missing
+    // the Redis cache. Align both paths: 60s fresh + 300s SWR.
+    const CACHE_CONTROL = 'public, s-maxage=60, stale-while-revalidate=300'
+
     // Check cache first (warm tier - 5min TTL)
     const cacheKey = `trader:${platform}:${trader_key}`
     const cached = await tieredGet<TraderDetailResponse>(cacheKey)
     if (cached.data) {
       return NextResponse.json(cached.data, {
-        headers: { 'X-Cache': 'HIT', 'Cache-Control': 'public, s-maxage=60, stale-while-revalidate=300' },
+        headers: { 'X-Cache': 'HIT', 'Cache-Control': CACHE_CONTROL },
       })
     }
 
@@ -343,7 +350,7 @@ export async function GET(
     )
 
     const res = NextResponse.json(response)
-    res.headers.set('Cache-Control', 'public, s-maxage=30, stale-while-revalidate=120')
+    res.headers.set('Cache-Control', CACHE_CONTROL)
     res.headers.set('X-Cache', 'MISS')
     return res
   }, { name: 'trader-detail' })
