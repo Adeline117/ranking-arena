@@ -94,20 +94,25 @@ if (!CRON_SECRET) {
 }
 
 async function checkBasicHealth() {
+  // 30s timeout — /api/health runs DB + Redis + freshness + VPS checks,
+  // each with 5s internal cap, so worst case ~20s. 15s was too tight.
   const res = await fetch(`${ARENA_URL}/api/health`, {
     headers: { 'Cache-Control': 'no-cache' },
-    signal: AbortSignal.timeout(15000),
+    signal: AbortSignal.timeout(30000),
   })
   return res.json()
 }
 
 async function checkPipelineHealth() {
+  // 60s timeout: /api/health/pipeline does 4 parallel DB queries + RPC; under load
+  // the 30s ceiling was too tight and caused false "Pipeline check failed: timeout"
+  // alerts. The route itself caches results for 2min so this is mostly a cache-miss guard.
   const res = await fetch(`${ARENA_URL}/api/health/pipeline`, {
     headers: {
       Authorization: `Bearer ${CRON_SECRET}`,
       'Cache-Control': 'no-cache',
     },
-    signal: AbortSignal.timeout(30000),
+    signal: AbortSignal.timeout(60000),
   })
   return res.json()
 }
@@ -140,8 +145,24 @@ function formatDuration(ms) {
   return `${(ms / 1000).toFixed(1)}s`
 }
 
+/**
+ * Check if a job name matches a dead platform — used as a local safety net
+ * so that even if the server-side DEAD_BLOCKED_PLATFORMS list is missing a
+ * platform, the monitor still won't spam alerts for known-dead enrichers/fetchers.
+ */
+function isDeadPlatformJob(jobName) {
+  if (!jobName) return false
+  const lower = jobName.toLowerCase()
+  for (const dead of DEAD_PLATFORMS) {
+    if (lower.includes(dead.toLowerCase())) return true
+  }
+  return false
+}
+
 async function runHealthCheck() {
   const issues = []
+  // categories: stable fingerprint keys that don't change with counts/job lists
+  const categories = new Set()
   let basicHealth, pipelineHealth
 
   // 1. Basic health
@@ -149,11 +170,23 @@ async function runHealthCheck() {
     basicHealth = await checkBasicHealth()
     if (basicHealth.status === 'unhealthy') {
       issues.push(`🚨 System UNHEALTHY: DB=${basicHealth.checks?.database?.status}, Redis=${basicHealth.checks?.redis?.status}`)
+      categories.add('system:unhealthy')
     } else if (basicHealth.status === 'degraded') {
-      issues.push(`⚠️ System degraded: ${JSON.stringify(basicHealth.checks)}`)
+      // Summarize which sub-check failed instead of dumping full JSON blob —
+      // the JSON blob caused unstable fingerprints (latency numbers kept changing).
+      const failed = Object.entries(basicHealth.checks || {})
+        .filter(([, v]) => v?.status === 'fail')
+        .map(([k, v]) => `${k}=${v.message?.slice(0, 80) || 'fail'}`)
+        .join(', ')
+      issues.push(`⚠️ System degraded: ${failed || 'unknown'}`)
+      // fingerprint by which checks failed, not by latency numbers
+      for (const [k, v] of Object.entries(basicHealth.checks || {})) {
+        if (v?.status === 'fail') categories.add(`system:degraded:${k}`)
+      }
     }
   } catch (err) {
     issues.push(`🚨 Arena UNREACHABLE: ${err.message}`)
+    categories.add('system:unreachable')
   }
 
   // 2. Pipeline health
@@ -163,32 +196,46 @@ async function runHealthCheck() {
     if (pipelineHealth.status === 'critical') {
       const { failedJobs, stuckJobs, staleJobs } = pipelineHealth.summary || {}
       issues.push(`🚨 Pipeline CRITICAL: ${failedJobs} failed, ${stuckJobs} stuck, ${staleJobs} stale`)
+      categories.add('pipeline:critical')
 
-      // List specific failures
+      // List specific failures — filter dead platforms client-side as defense-in-depth
+      // (server-side already filters via DEAD_BLOCKED_PLATFORMS in /api/health/pipeline,
+      // but this catches any drift between the two lists)
       if (pipelineHealth.recentFailures?.length) {
-        for (const f of pipelineHealth.recentFailures.slice(0, 5)) {
+        const liveFailures = pipelineHealth.recentFailures
+          .filter(f => !isDeadPlatformJob(f.job_name))
+        for (const f of liveFailures.slice(0, 5)) {
           issues.push(`  ❌ ${f.job_name}: ${f.error_message?.slice(0, 100) || 'unknown'}`)
+        }
+        if (liveFailures.length === 0 && pipelineHealth.recentFailures.length > 0) {
+          // All failures were on dead platforms — downgrade
+          categories.delete('pipeline:critical')
+          categories.add('pipeline:critical:dead-only')
         }
       }
     } else if (pipelineHealth.status === 'degraded') {
       const { failedJobs, staleJobs } = pipelineHealth.summary || {}
       issues.push(`⚠️ Pipeline degraded: ${failedJobs} failed, ${staleJobs} stale`)
+      categories.add('pipeline:degraded')
     }
   } catch (err) {
     issues.push(`⚠️ Pipeline check failed: ${err.message}`)
+    categories.add('pipeline:check-failed')
   }
 
   // 3. Send alert if issues found (with dedup)
   if (issues.length > 0) {
-    // Fingerprint = sorted issue types (ignore specific timestamps/details)
-    const fingerprint = issues.map(i => i.replace(/\d+/g, 'N').slice(0, 60)).sort().join('|')
+    // Fingerprint is category-based only — ignore counts, job lists, and specific
+    // error text. This means any "Pipeline CRITICAL" condition dedupes to a single
+    // alert per 2h, regardless of which specific jobs are failing that run.
+    const fingerprint = [...categories].sort().join('|') || 'unknown'
 
     if (shouldSendAlert(fingerprint)) {
       const msg = `<b>🏟 Arena Health Alert</b>\n\n${issues.join('\n')}\n\n<i>${new Date().toISOString()}</i>`
       await sendTelegram(msg)
       console.log('ALERT SENT:', issues.join(' | '))
     } else {
-      console.log('ALERT DEDUPED (same issue within 2h):', issues.join(' | '))
+      console.log('ALERT DEDUPED (same category within 2h):', issues.join(' | '))
     }
 
     // 4. Trigger auto-fix if --with-auto-fix flag is set
