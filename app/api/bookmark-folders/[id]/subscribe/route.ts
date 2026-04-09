@@ -109,6 +109,8 @@ export async function POST(request: NextRequest, context: RouteContext) {
     }
 
     // 获取更新后的订阅者数量（如果列存在）
+    // KEEP 'exact' — returned to the client as the updated subscriber
+    // count right after subscribe; must reflect the new row.
     let subscriberCount = 0
     try {
       const { count } = await supabase
@@ -164,6 +166,7 @@ export async function DELETE(request: NextRequest, context: RouteContext) {
     }
 
     // 获取更新后的订阅者数量
+    // KEEP 'exact' — same rationale as the POST handler above.
     let subscriberCount = 0
     try {
       const { count } = await supabase

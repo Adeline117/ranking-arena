@@ -50,6 +50,8 @@ export async function GET(request: NextRequest, context: RouteContext) {
     }
 
     // 获取订阅者数量（通过计数订阅表）
+    // KEEP 'exact' — displayed as the exact subscriber count on the
+    // folder page. Scoped via (folder_id) index → cheap.
     let subscriberCount = 0
     try {
       const { count } = await supabase
