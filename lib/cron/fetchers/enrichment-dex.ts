@@ -9,6 +9,7 @@
 import { fetchJson } from './shared'
 import { logger } from '@/lib/logger'
 import type { EquityCurvePoint, PositionHistoryItem, PortfolioPosition, StatsDetail } from './enrichment-types'
+import { createTraderResponseCache } from './trader-response-cache'
 
 // ============================================
 // Shared: compute stats from position history
@@ -184,28 +185,18 @@ interface HyperliquidFill {
  * that produced 30+ concurrent userFillsByTime requests against the same public
  * endpoint → 50%+ enrichment failure rate due to rate limiting.
  *
- * Cache by (address, days). 2 minute TTL is enough to span a single
- * runEnrichment invocation but short enough to avoid stale data on rerun.
- * Also coalesces concurrent in-flight requests (thundering herd guard).
+ * Cache by (address, days). 2 minute TTL spans a single runEnrichment cycle but
+ * is short enough to avoid stale data on rerun. Also coalesces concurrent
+ * in-flight requests (thundering herd guard). Backed by the shared
+ * createTraderResponseCache() helper.
  */
-interface HlFillsCacheEntry {
-  fills: HyperliquidFill[]
-  cachedAt: number
-}
-const HL_FILLS_CACHE_TTL_MS = 2 * 60 * 1000
-const hlFillsCache = new Map<string, HlFillsCacheEntry>()
-const hlFillsInflight = new Map<string, Promise<HyperliquidFill[]>>()
+const hlFillsCache = createTraderResponseCache<HyperliquidFill[]>({
+  name: 'hyperliquid-fills',
+})
 
 async function fetchHyperliquidFills(address: string, days = 90): Promise<HyperliquidFill[]> {
   const cacheKey = `${address}:${days}`
-  const cached = hlFillsCache.get(cacheKey)
-  if (cached && Date.now() - cached.cachedAt < HL_FILLS_CACHE_TTL_MS) {
-    return cached.fills
-  }
-  const inflight = hlFillsInflight.get(cacheKey)
-  if (inflight) return inflight
-
-  const fetchPromise = (async (): Promise<HyperliquidFill[]> => {
+  return hlFillsCache.getOrFetch(cacheKey, async () => {
     // Use userFillsByTime with startTime for full time range coverage
     // userFills only returns latest 2000 which for active traders covers < 5 days
     const startTime = Date.now() - days * 86400000
@@ -218,22 +209,8 @@ async function fetchHyperliquidFills(address: string, days = 90): Promise<Hyperl
         timeoutMs: 15000,
       }
     )
-    const result = Array.isArray(fills) ? fills : []
-    hlFillsCache.set(cacheKey, { fills: result, cachedAt: Date.now() })
-    // Bound the cache: keep at most 2000 entries
-    if (hlFillsCache.size > 2000) {
-      const firstKey = hlFillsCache.keys().next().value
-      if (firstKey) hlFillsCache.delete(firstKey)
-    }
-    return result
-  })()
-
-  hlFillsInflight.set(cacheKey, fetchPromise)
-  try {
-    return await fetchPromise
-  } finally {
-    hlFillsInflight.delete(cacheKey)
-  }
+    return Array.isArray(fills) ? fills : []
+  })
 }
 
 function parseFillsToPositions(fills: HyperliquidFill[], limit = 2000): PositionHistoryItem[] {
