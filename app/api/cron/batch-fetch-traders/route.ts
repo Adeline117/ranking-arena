@@ -171,8 +171,15 @@ export async function GET(request: NextRequest) {
   const overallStart = Date.now()
   const plog = await PipelineLogger.start(`batch-fetch-traders-${group}`, { group, platforms })
 
-  // Safety timeout: ensure plog gets called before Vercel kills the function at 600s
+  // Safety timeout: ensure plog gets called before Vercel kills the function at 300s.
+  // 2026-04-09: track via plogFinalized so the post-completion finalization
+  // (success/partialSuccess/error below) does not double-log on top of the
+  // safety-timeout entry. Without this we got both a "Safety timeout" error
+  // log AND a subsequent success log for the same run, polluting alerts.
+  let plogFinalized = false
   const safetyTimer = setTimeout(async () => {
+    if (plogFinalized) return
+    plogFinalized = true
     try {
       await plog.error(new Error('Safety timeout: function approaching 300s limit'))
     } catch { /* best effort */ }
@@ -410,17 +417,23 @@ export async function GET(request: NextRequest) {
   // ── Finalize checkpoint → produce trace metadata for downstream ──
   const traceMetadata = await PipelineCheckpoint.finalize(checkpoint, Date.now() - overallStart)
 
-  if (failed === 0) {
-    await plog.success(succeeded, { results, trace_id: traceMetadata.trace_id })
-  } else if (succeeded > 0) {
-    // Partial success: some platforms failed but others worked — log as success with warning
-    await plog.success(succeeded, { results, warning: `${failed}/${results.length} platforms failed`, trace_id: traceMetadata.trace_id })
+  if (plogFinalized) {
+    // Safety timer already wrote a "Safety timeout" entry — don't double-log.
+    logger.warn(`[batch-fetch-traders-${group}] Skipping plog finalization, safety timer already finalized`)
   } else {
-    // Total failure: all platforms failed
-    await plog.error(
-      new Error(`${failed}/${results.length} platforms failed`),
-      { results, trace_id: traceMetadata.trace_id }
-    )
+    plogFinalized = true
+    if (failed === 0) {
+      await plog.success(succeeded, { results, trace_id: traceMetadata.trace_id })
+    } else if (succeeded > 0) {
+      // Partial success: some platforms failed but others worked — log as success with warning
+      await plog.success(succeeded, { results, warning: `${failed}/${results.length} platforms failed`, trace_id: traceMetadata.trace_id })
+    } else {
+      // Total failure: all platforms failed
+      await plog.error(
+        new Error(`${failed}/${results.length} platforms failed`),
+        { results, trace_id: traceMetadata.trace_id }
+      )
+    }
   }
 
   // Trigger downstream refresh with trace metadata (structured handoff)
