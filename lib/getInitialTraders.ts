@@ -35,18 +35,31 @@ export interface InitialTrader {
  * Map a UnifiedTrader to the InitialTrader interface used by frontend components.
  */
 function mapUnifiedToInitial(t: UnifiedTrader): InitialTrader {
-  const rawHandle = (t.handle && t.handle.trim()) || t.traderKey
-  const displayHandle = sanitizeDisplayName(rawHandle)
+  // For copin aggregator: extract real platform from trader_key (e.g., "hyperliquid:0x..." → "hyperliquid")
+  let displayPlatform = t.platform
+  let displayKey = t.traderKey
+  if (t.platform === 'copin' && t.traderKey?.includes(':')) {
+    const [realPlatform, ...rest] = t.traderKey.split(':')
+    displayPlatform = realPlatform
+    displayKey = rest.join(':')
+  }
+
+  const rawHandle = (t.handle && t.handle.trim()) || displayKey
+  // Format 0x addresses nicely: 0x880ac484a174... → 0x880a...a174
+  let displayHandle = sanitizeDisplayName(rawHandle)
+  if (displayHandle.startsWith('0x') && displayHandle.length > 14) {
+    displayHandle = `${displayHandle.slice(0, 6)}...${displayHandle.slice(-4)}`
+  }
 
   return {
-    id: t.traderKey,
+    id: displayKey,
     handle: displayHandle,
     roi: t.roi ?? 0,
     pnl: t.pnl ?? 0,
     win_rate: t.winRate,
     max_drawdown: t.maxDrawdown,
     followers: t.followers ?? 0,
-    source: t.platform,
+    source: displayPlatform,
     source_type: (t.sourceType as 'futures' | 'spot' | 'web3') || 'futures',
     avatar_url: t.avatarUrl,
     arena_score: t.arenaScore ?? 0,
