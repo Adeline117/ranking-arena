@@ -15,6 +15,53 @@ import { logger } from '@/lib/logger'
 
 const TRADES_API = 'https://perps-api.jup.ag/v1/trades'
 
+/**
+ * Per-trader cache for Jupiter trades. Each trader's enrichment historically
+ * fired 3 separate /v1/trades calls (positionHistory + equityCurve + statsDetail
+ * which all internally call fetchJupiterPositionHistory). At concurrency=2 this
+ * generates 6 in-flight requests every cycle and Solana-backed APIs reliably
+ * 429 under that load → ~65% enrichment failure rate.
+ *
+ * Cache by walletAddress. 2-minute TTL spans one runEnrichment invocation.
+ * Also coalesces concurrent in-flight requests (thundering herd guard).
+ */
+interface JupiterTradesCacheEntry {
+  positions: PositionHistoryItem[]
+  cachedAt: number
+}
+const JUP_CACHE_TTL_MS = 2 * 60 * 1000
+const jupiterTradesCache = new Map<string, JupiterTradesCacheEntry>()
+const jupiterTradesInflight = new Map<string, Promise<PositionHistoryItem[]>>()
+
+// Always fetch the largest size (500) once and slice locally for smaller asks.
+// This guarantees a single API call per trader regardless of how many internal
+// callers (positionHistory + equityCurve + statsDetail) ask with different limits.
+const JUP_FETCH_LIMIT = 500
+
+async function fetchJupiterPositionsCached(walletAddress: string, requestedLimit = 200): Promise<PositionHistoryItem[]> {
+  const key = walletAddress // canonical, ignore limit
+  const cached = jupiterTradesCache.get(key)
+  if (cached && Date.now() - cached.cachedAt < JUP_CACHE_TTL_MS) {
+    return cached.positions.slice(0, requestedLimit)
+  }
+  const inflight = jupiterTradesInflight.get(key)
+  if (inflight) return (await inflight).slice(0, requestedLimit)
+
+  const promise = fetchJupiterPositionHistoryRaw(walletAddress, JUP_FETCH_LIMIT)
+  jupiterTradesInflight.set(key, promise)
+  try {
+    const positions = await promise
+    jupiterTradesCache.set(key, { positions, cachedAt: Date.now() })
+    if (jupiterTradesCache.size > 2000) {
+      const firstKey = jupiterTradesCache.keys().next().value
+      if (firstKey) jupiterTradesCache.delete(firstKey)
+    }
+    return positions.slice(0, requestedLimit)
+  } finally {
+    jupiterTradesInflight.delete(key)
+  }
+}
+
 interface JupiterTrade {
   action: string // 'Increase' | 'Decrease' | 'Liquidation' | 'ClosePosition'
   pnl: string | null
@@ -36,8 +83,19 @@ interface JupiterTradesResponse {
 /**
  * Fetch position history from Jupiter /v1/trades endpoint.
  * Filters to closing trades (Decrease, ClosePosition, Liquidation) that have PnL.
+ *
+ * Public wrapper goes through fetchJupiterPositionsCached() so the equity curve
+ * + stats detail callers within the same runEnrichment cycle hit a single API
+ * request instead of three.
  */
 export async function fetchJupiterPositionHistory(
+  walletAddress: string,
+  limit = 200
+): Promise<PositionHistoryItem[]> {
+  return fetchJupiterPositionsCached(walletAddress, limit)
+}
+
+async function fetchJupiterPositionHistoryRaw(
   walletAddress: string,
   limit = 200
 ): Promise<PositionHistoryItem[]> {
