@@ -118,7 +118,8 @@ async function fetchUserProfile(handle: string): Promise<UserProfileData | null>
   // Parallel lookup: by handle + by UUID (if applicable)
   const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
   // Only select columns that actually exist in user_profiles table
-  const selectFields = 'id, handle, bio, avatar_url, cover_url, show_followers, show_following, subscription_tier, show_pro_badge, role'
+  // follower_count / following_count are cached columns — avoid re-counting.
+  const selectFields = 'id, handle, bio, avatar_url, cover_url, show_followers, show_following, subscription_tier, show_pro_badge, role, follower_count, following_count'
 
   const [handleResult, handleIlikeResult, uuidResult] = await Promise.all([
     supabase.from('user_profiles').select(selectFields).eq('handle', decodedHandle).maybeSingle(),
@@ -141,16 +142,19 @@ async function fetchUserProfile(handle: string): Promise<UserProfileData | null>
   let hasClaimedTrader = false
   let traderHandle: string | undefined
 
+  // followers / following served from the cached columns above.
+  // trader_follows is scoped to a single user so the count stays cheap,
+  // but we switch to estimated to keep page SSR bounded under DB load —
+  // the "following N traders" display is a rounded marketing number.
+  followers = (userProfile as { follower_count?: number | null }).follower_count ?? 0
+  following = (userProfile as { following_count?: number | null }).following_count ?? 0
+
   try {
-    const [followersRes, followingRes, tradersRes, subscriptionData, claimedTraderRes] = await Promise.all([
-      supabase.from('user_follows').select('id', { count: 'exact', head: true }).eq('following_id', userProfile.id),
-      supabase.from('user_follows').select('id', { count: 'exact', head: true }).eq('follower_id', userProfile.id),
-      supabase.from('trader_follows').select('id', { count: 'exact', head: true }).eq('user_id', userProfile.id),
+    const [tradersRes, subscriptionData, claimedTraderRes] = await Promise.all([
+      supabase.from('trader_follows').select('id', { count: 'estimated', head: true }).eq('user_id', userProfile.id),
       supabase.from('subscriptions').select('tier, status').eq('user_id', userProfile.id).in('status', ['active', 'trialing']).order('created_at', { ascending: false }).limit(1).maybeSingle(),
       supabase.from('trader_authorizations').select('id, trader_id').eq('user_id', userProfile.id).eq('status', 'active').limit(1).maybeSingle(),
     ])
-    followers = followersRes.count || 0
-    following = followingRes.count || 0
     tradersCount = tradersRes.count || 0
     hasPro = hasPro || subscriptionData?.data?.tier === 'pro'
     hasClaimedTrader = !!claimedTraderRes?.data

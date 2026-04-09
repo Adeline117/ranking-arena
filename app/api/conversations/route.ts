@@ -55,9 +55,12 @@ export const GET = withAuth(
         .select('id, handle, avatar_url, bio')
         .in('id', uniqueOtherUserIds),
       // 一次性获取所有会话的未读计数（排除已删除消息）
+      // Removed `count: 'exact'` — the count value is never read; we
+      // iterate data[] to build an unreadMap below, so the extra
+      // COUNT(*) round-trip was pure waste.
       supabase
         .from('direct_messages')
-        .select('conversation_id', { count: 'exact' })
+        .select('conversation_id')
         .eq('receiver_id', userId)
         .eq('read', false)
         .is('deleted_at', null)

@@ -192,9 +192,13 @@ export async function GET(
     const authUser = await getAuthUser(request)
     const requesterId = authUser?.id ?? null
 
+    // Fetch cached follower/following counts directly from user_profiles.
+    // These columns are kept in sync by updateFollowCounts() in
+    // app/api/users/follow/route.ts after every follow/unfollow write,
+    // so we don't need to re-count user_follows on every read.
     const { data: targetUser, error: userError } = await supabase
       .from('user_profiles')
-      .select('id, handle, show_followers, show_following')
+      .select('id, handle, show_followers, show_following, follower_count, following_count')
       .eq('handle', handle)
       .maybeSingle()
 
@@ -209,15 +213,10 @@ export async function GET(
       return getFollowingList(supabase, targetUser, requesterId)
     }
 
-    // Default: return both counts
-    const [followersCount, followingCount] = await Promise.all([
-      supabase.from('user_follows').select('id', { count: 'exact', head: true }).eq('following_id', targetUser.id),
-      supabase.from('user_follows').select('id', { count: 'exact', head: true }).eq('follower_id', targetUser.id),
-    ])
-
+    // Default: return both counts — served from the cached columns
     return NextResponse.json({
-      followers_count: followersCount.count ?? 0,
-      following_count: followingCount.count ?? 0,
+      followers_count: targetUser.follower_count ?? 0,
+      following_count: targetUser.following_count ?? 0,
     })
   } catch (error: unknown) {
     logger.apiError('/api/users/[handle]/follow', error, { handle: (await params).handle })

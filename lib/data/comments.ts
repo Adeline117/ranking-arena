@@ -323,6 +323,9 @@ export async function getCommentCount(
   supabase: SupabaseClient,
   postId: string
 ): Promise<number> {
+  // KEEP 'exact' — scoped to a single post via (post_id) index and
+  // shown as the exact comment count on the post card. Per-post row
+  // sets are small (<<1k typical) so the count is cheap.
   const { count, error } = await supabase
     .from('comments')
     .select('id', { count: 'exact', head: true })

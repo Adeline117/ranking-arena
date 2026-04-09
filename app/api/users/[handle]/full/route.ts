@@ -41,12 +41,15 @@ export async function GET(
       getTraderStats(handle).catch(() => null),
       // 持仓数据
       getTraderPortfolio(handle).catch(() => []),
-      // 订阅状态（如果是用户）
+      // 订阅状态 + 粉丝/关注缓存计数（如果是用户）
+      // follower_count / following_count are cached columns kept in sync by
+      // updateFollowCounts() on every follow/unfollow, so we read them
+      // here instead of issuing two COUNT(*) queries on user_follows.
       (async () => {
         try {
           const { data } = await getSupabaseAdmin()
             .from('user_profiles')
-            .select('subscription_tier, show_pro_badge')
+            .select('subscription_tier, show_pro_badge, follower_count, following_count')
             .eq('handle', handle)
             .maybeSingle()
           return data
@@ -74,24 +77,14 @@ export async function GET(
       similarTraders = similar || []
     }
 
-    // 获取粉丝和关注数
-    const [followersResult, followingResult] = await Promise.all([
-      getSupabaseAdmin()
-        .from('user_follows')
-        .select('id', { count: 'exact', head: true })
-        .eq('following_id', profile.id),
-      getSupabaseAdmin()
-        .from('user_follows')
-        .select('id', { count: 'exact', head: true })
-        .eq('follower_id', profile.id),
-    ])
-
-    // 构建响应
+    // 粉丝/关注数 — served from cached columns fetched above
+    // (subscriptionData). Falls back to profile.followers (trader row)
+    // for handles that don't have a user_profiles entry.
     const response = {
       profile: {
         ...profile,
-        followers: followersResult.count || profile.followers || 0,
-        following: followingResult.count || 0,
+        followers: subscriptionData?.follower_count ?? profile.followers ?? 0,
+        following: subscriptionData?.following_count ?? 0,
         subscription_tier: subscriptionData?.subscription_tier || 'free',
         show_pro_badge: subscriptionData?.show_pro_badge ?? true,
       },

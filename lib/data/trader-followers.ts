@@ -10,6 +10,9 @@ export async function getTraderArenaFollowersCount(
   traderId: string
 ): Promise<number> {
   try {
+    // KEEP 'exact' — scoped to a single trader via eq(trader_id), which
+    // hits the (trader_id) index and returns a tiny row set. The exact
+    // number is shown as the "Arena Followers" badge on the trader card.
     const { count } = await supabase
       .from('trader_follows')
       .select('*', { count: 'exact', head: true })

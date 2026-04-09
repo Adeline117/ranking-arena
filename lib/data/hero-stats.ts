@@ -5,7 +5,7 @@
  * 使用 Redis 缓存，TTL 1 小时（数据变化不频繁）
  */
 
-import { createClient } from '@supabase/supabase-js'
+import { getSupabaseAdmin } from '@/lib/supabase/server'
 import { tieredGet, tieredSet } from '@/lib/cache/redis-layer'
 import { logger } from '@/lib/logger'
 
@@ -39,16 +39,10 @@ export async function getHeroStats(): Promise<HeroStats> {
       return cached
     }
 
-    // 2. 从数据库查询 (with 3s timeout — SSR must never hang)
-    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
-    const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
-
-    if (!supabaseUrl || !supabaseKey) {
-      logger.warn('[getHeroStats] Missing Supabase credentials, using defaults')
-      return { ...DEFAULT_STATS, isDefault: true }
-    }
-
-    const supabase = createClient(supabaseUrl, supabaseKey)
+    // 2. 从数据库查询 (with 3s timeout — SSR must never hang).
+    // Reuse the shared admin client instead of createClient() per-call —
+    // avoids re-parsing URL/cert + object allocation on every cold call.
+    const supabase = getSupabaseAdmin()
 
     // 使用高效的聚合查询 — 3s timeout to prevent SSR hang
     const rpcPromise = supabase.rpc('get_hero_stats').single()

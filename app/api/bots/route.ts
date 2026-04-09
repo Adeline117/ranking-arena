@@ -86,7 +86,7 @@ export async function GET(request: NextRequest) {
           launch_date,
           is_active
         )
-      `, { count: 'exact' })
+      `, { count: 'exact' }) // KEEP exact: powers /bots pagination UI; bot_sources is small (<1k rows)
       .eq('season_id', window)
       .eq('bot_sources.is_active', true)
 

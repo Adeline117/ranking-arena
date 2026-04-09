@@ -89,6 +89,9 @@ export async function extractAndSyncHashtags(
     }
 
     // Simpler approach: just count from join table for accuracy
+    // KEEP 'exact' — this loop recomputes the cached
+    // hashtags.post_count column from the join table source-of-truth.
+    // Scoped per-hashtag via (hashtag_id) index → cheap.
     for (const h of hashtagRows) {
       const { count } = await supabase
         .from('post_hashtags')
@@ -149,6 +152,8 @@ export async function getPostsByHashtag(
   if (!hashtag) return { posts: [], total: 0 }
 
   // Get post IDs from join table
+  // KEEP 'exact' — powers pagination for the /tag/:name posts listing.
+  // Scoped to a single hashtag via (hashtag_id) index → cheap.
   const { data: joinRows, count } = await supabase
     .from('post_hashtags')
     .select('post_id', { count: 'exact' })

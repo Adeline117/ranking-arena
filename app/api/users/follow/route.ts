@@ -22,6 +22,10 @@ async function updateFollowCounts(
   followerId: string,
   followingId: string
 ): Promise<void> {
+  // KEEP 'exact' — this is the write-path that rebuilds the cached
+  // user_profiles.follower_count/following_count columns after a
+  // follow/unfollow. The count MUST be exact here since downstream
+  // reads trust those cached columns.
   const [followerCountRes, followingCountRes] = await Promise.all([
     supabase.from('user_follows').select('id', { count: 'exact', head: true }).eq('following_id', followingId),
     supabase.from('user_follows').select('id', { count: 'exact', head: true }).eq('follower_id', followerId),
