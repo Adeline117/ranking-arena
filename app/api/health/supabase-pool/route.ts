@@ -41,12 +41,14 @@ export async function GET(request: NextRequest) {
     const { data, error } = await supabase.rpc('get_active_connections')
 
     if (error || !data) {
-      // Fallback: use a raw count query via PostgREST-compatible approach
-      // If the RPC doesn't exist, we estimate from a lightweight query
-      const { count, error: countError } = await supabase
+      // Fallback: cheapest possible liveness probe — fetch one row and
+      // ignore the result. Previously used count: 'exact' which forced
+      // a full scan of pipeline_logs just to prove the pool was alive.
+      const { data: probe, error: countError } = await supabase
         .from('pipeline_logs')
-        .select('id', { count: 'exact', head: true })
-        .limit(0)
+        .select('id')
+        .limit(1)
+      const dbReachable = !countError && probe !== null
 
       if (countError) {
         return NextResponse.json(
@@ -68,7 +70,7 @@ export async function GET(request: NextRequest) {
         status: 'degraded',
         message: 'RPC get_active_connections() not found. Create it for accurate pool monitoring.',
         migration_sql: `CREATE OR REPLACE FUNCTION get_active_connections() RETURNS INTEGER AS $$ SELECT count(*)::integer FROM pg_stat_activity WHERE datname = current_database(); $$ LANGUAGE sql SECURITY DEFINER;`,
-        db_reachable: count !== null,
+        db_reachable: dbReachable,
       })
     }
 

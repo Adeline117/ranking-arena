@@ -258,11 +258,14 @@ export class PipelineEvaluator {
     // Use leaderboard_ranks count (more reliable than trader_snapshots_v2 which
     // can return null on large tables). leaderboard_ranks is the user-facing table.
     // Fallback: count from 90D leaderboard (smaller, count always works).
+    // Estimated — pipeline evaluator is a health/score check; the
+    // absolute count matters only as a "is it roughly where we expect"
+    // signal, not an exact tally.
     let currentCount: number | null = null
 
     const { count: lrCount } = await supabase
       .from('leaderboard_ranks')
-      .select('*', { count: 'exact', head: true })
+      .select('*', { count: 'estimated', head: true })
     currentCount = lrCount
 
     // If count returned null (Supabase plan limit), estimate via sampling
@@ -330,6 +333,9 @@ export class PipelineEvaluator {
     // Previously checked trader_snapshots_v2 (raw data) which always has thousands
     // of extreme values → permanently scored 20/100. The evaluator should check
     // what users actually see.
+    // KEEP 'exact' — the count directly drives the pipeline score band
+    // (<5 → 80, <20 → 50, ≥20 → 20). Highly selective filter on
+    // (arena_score NOT NULL + roi extremes) makes this cheap.
     const { data: anomalies, count: anomalyCount } = await supabase
       .from('leaderboard_ranks')
       .select('source, source_trader_id, roi', { count: 'exact' })
@@ -382,14 +388,16 @@ export class PipelineEvaluator {
     const issues: EvaluationIssue[] = []
 
     // Total in leaderboard
+    // Estimated — this is a coverage-ratio health check
+    // (scored/total ≥ 90%), absolute counts don't matter.
     const { count: totalCount } = await supabase
       .from('leaderboard_ranks')
-      .select('*', { count: 'exact', head: true })
+      .select('*', { count: 'estimated', head: true })
 
-    // With non-null arena_score
+    // With non-null arena_score (estimated — ratio check)
     const { count: scoredCount } = await supabase
       .from('leaderboard_ranks')
-      .select('*', { count: 'exact', head: true })
+      .select('*', { count: 'estimated', head: true })
       .not('arena_score', 'is', null)
 
     // Handle edge case: totalCount may return null from Supabase count queries
@@ -431,9 +439,11 @@ export class PipelineEvaluator {
     // Check for duplicate (source, source_trader_id, season_id) in leaderboard_ranks
     // Supabase JS doesn't support GROUP BY/HAVING, so do a simpler check:
     // Compare total rows vs distinct (source, source_trader_id, season_id) rows
+    // Estimated — this value is only used to decide "do we have data"
+    // before sampling the top 1000 rows for the real dupe check.
     const { count: totalRows } = await supabase
       .from('leaderboard_ranks')
-      .select('*', { count: 'exact', head: true })
+      .select('*', { count: 'estimated', head: true })
 
     // Get approximate distinct count via a different approach:
     // If total rows exist, check for any obvious duplicates by sampling

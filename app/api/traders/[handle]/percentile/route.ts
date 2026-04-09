@@ -38,18 +38,23 @@ async function calculatePercentileSQL(
   if (myScore == null) return 50
 
   // Count traders with score below mine
+  // Estimated is fine — the final display is a rounded whole-number
+  // percentile (e.g. "Top 12%"), not an exact rank. Running 2 exact
+  // counts × 4 score columns = 8 serial scans of leaderboard_ranks
+  // (~300k rows) per profile view previously blew through the 30s
+  // budget under cron load.
   const { count: belowCount } = await supabase
     .from('leaderboard_ranks')
-    .select('id', { count: 'exact', head: true })
+    .select('id', { count: 'estimated', head: true })
     .eq('season_id', '90D')
     .ilike('source', `%${categoryFilter}%`)
     .not(column, 'is', null)
     .lt(column, myScore)
 
-  // Count total traders with this score
+  // Count total traders with this score (estimated — same rationale)
   const { count: totalCount } = await supabase
     .from('leaderboard_ranks')
-    .select('id', { count: 'exact', head: true })
+    .select('id', { count: 'estimated', head: true })
     .eq('season_id', '90D')
     .ilike('source', `%${categoryFilter}%`)
     .not(column, 'is', null)
@@ -116,10 +121,12 @@ export async function GET(
       categoryFilter = 'futures'
     }
 
-    // Get total count in category
+    // Get total count in category — estimated (see comment in
+    // calculatePercentileSQL above; this is the "you're ranked X out of
+    // ~N futures traders" display, approximate N is fine)
     const { count: totalInCategory } = await supabase
       .from('leaderboard_ranks')
-      .select('id', { count: 'exact', head: true })
+      .select('id', { count: 'estimated', head: true })
       .eq('season_id', '90D')
       .ilike('source', `%${categoryFilter}%`)
       .not('arena_score', 'is', null)

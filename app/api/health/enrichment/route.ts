@@ -61,16 +61,20 @@ export async function GET(req: NextRequest) {
     try {
       // Get total traders in leaderboard for this platform+period
       // and count of traders with equity curve data (enriched)
+      // Estimated counts — this is a health endpoint showing a coverage
+      // ratio (enriched / total) and delta is what matters. Exact scans of
+      // leaderboard_ranks (~300k) + trader_equity_curve (large) per
+      // platform × parallel = previously dominated the request latency.
       const [totalRes, enrichedRes, lastEnrichRes] = await Promise.all([
         supabase
           .from('leaderboard_ranks')
-          .select('source_trader_id', { count: 'exact', head: true })
+          .select('source_trader_id', { count: 'estimated', head: true })
           .eq('source', platform)
           .eq('season_id', period),
         // Count distinct traders with equity curve data
         supabase
           .from('trader_equity_curve')
-          .select('source_trader_id', { count: 'exact', head: true })
+          .select('source_trader_id', { count: 'estimated', head: true })
           .eq('source', platform)
           .eq('period', period),
         // Get latest enrichment timestamp
