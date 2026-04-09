@@ -31,18 +31,27 @@ import { ApiError } from '@/lib/api/errors';
 import { success as apiSuccess, withCache } from '@/lib/api/response';
 import { withPublic } from '@/lib/api/middleware'
 
-// In-memory cache for availableSources (TTL 5 minutes)
-const sourcesCache = new Map<string, { sources: string[]; ts: number }>();
-const SOURCES_CACHE_TTL = 30 * 60 * 1000; // 30 minutes — sources change only on cron runs
-
-function getCachedSources(seasonId: string): string[] | null {
-  const entry = sourcesCache.get(seasonId);
-  if (entry && Date.now() - entry.ts < SOURCES_CACHE_TTL) return entry.sources;
-  return null;
-}
-
-function setCachedSources(seasonId: string, sources: string[]) {
-  sourcesCache.set(seasonId, { sources, ts: Date.now() });
+// availableSources cache is now distributed via Redis (tieredGetOrSet, warm tier).
+// Previously per-instance in-memory only, which meant every cold Vercel serverless
+// instance re-fired the leaderboard_ranks distinct-source query.
+async function getAvailableSources(
+  supabase: ReturnType<typeof import('@/lib/supabase/server').getSupabaseAdmin>,
+  seasonId: string,
+): Promise<string[]> {
+  return tieredGetOrSet<string[]>(
+    `rankings:available-sources:${seasonId}`,
+    async () => {
+      const { data: sourceRows } = await supabase
+        .from('leaderboard_ranks')
+        .select('source')
+        .eq('season_id', seasonId)
+        .not('arena_score', 'is', null)
+        .limit(200);
+      return [...new Set((sourceRows || []).map((r: { source: string }) => r.source))].sort();
+    },
+    'warm', // 2min memory / 15min Redis — shared across instances
+    ['rankings', 'available-sources'],
+  );
 }
 
 const VALID_WINDOWS: (RankingWindow | 'composite')[] = ['7d', '30d', '90d', 'composite'];
@@ -308,22 +317,9 @@ async function getRankingsFallback(rankingsQuery: RankingsQuery, _cursor?: strin
     return true;
   });
 
-  // Get available sources (with memory cache)
+  // Get available sources (cached via Redis, shared across instances)
   const seasonIdUpper = seasonId;
-  let availableSources: string[];
-  const cached = getCachedSources(seasonIdUpper);
-  if (cached) {
-    availableSources = cached;
-  } else {
-    const { data: sourceRows } = await supabase
-      .from('leaderboard_ranks')
-      .select('source')
-      .eq('season_id', seasonIdUpper)
-      .not('arena_score', 'is', null)
-      .limit(200);
-    availableSources = [...new Set((sourceRows || []).map((r: { source: string }) => r.source))].sort();
-    setCachedSources(seasonIdUpper, availableSources);
-  }
+  const availableSources = await getAvailableSources(supabase, seasonIdUpper);
 
   // Freshness check from computed_at
   let latestCapturedAt: number;
