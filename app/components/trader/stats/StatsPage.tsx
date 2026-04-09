@@ -1,16 +1,26 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import dynamic from 'next/dynamic'
 import { tokens } from '@/lib/design-tokens'
 import { Box, Text } from '../../base'
 import type { TraderStats } from '@/lib/data/trader'
 import { useLanguage } from '../../Providers/LanguageProvider'
-import {
-  TradingSection,
-  EquityCurveSection,
-  ComparePortfolioSection,
-  BreakdownSection,
-} from './components'
+import { TradingSection } from './components/TradingSection'
+import { EquityCurveSection } from './components/EquityCurveSection'
+import { BreakdownSection } from './components/BreakdownSection'
+// ComparePortfolioSection pulls lightweight-charts (~70KB). Lazy-load it so it
+// only downloads when the Stats tab is opened, and only for traders with
+// enough equity-curve data for the compare view to render.
+const ComparePortfolioSection = dynamic(
+  () => import('./components/ComparePortfolioSection').then(m => ({ default: m.ComparePortfolioSection })),
+  {
+    ssr: false,
+    loading: () => (
+      <Box style={{ height: 280, borderRadius: tokens.radius.xl, background: tokens.colors.bg.secondary, border: `1px solid ${tokens.colors.border.primary}` }} />
+    ),
+  },
+)
 import { SectionErrorBoundary } from '../../utils/ErrorBoundary'
 import { PnlCalendarHeatmap } from '../charts/PnlCalendarHeatmap'
 
