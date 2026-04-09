@@ -135,6 +135,25 @@ function checkFetcherErrorHandling() {
 // 2. 检查数据新鲜度
 // ============================================
 
+// Platforms intentionally not fetched (in DEAD_BLOCKED_PLATFORMS or
+// otherwise not part of any active fetch group). Skip these in the freshness
+// check so they don't show up as false-positive 🔴 critical alerts.
+//
+// Keep in sync with lib/constants/exchanges.ts → DEAD_BLOCKED_PLATFORMS,
+// plus platforms that exist in DB but compute-leaderboard ignores them.
+const FRESHNESS_SKIP_PLATFORMS = new Set([
+  // Dead/blocked
+  'perpetual_protocol', 'whitebit', 'bitmart', 'btse', 'vertex', 'apex_pro',
+  'rabbitx', 'lbank', 'bitget_spot',
+  // Excluded from leaderboard_ranks but still has scattered snapshot rows
+  'web3_bot',
+  // Mac Mini only — pipeline-health-check.mjs has no visibility into
+  // residential-IP scrapers so they always look stale from this script.
+  'phemex', 'blofin', 'kucoin',
+  // Not in the active fetch groups currently
+  'paradex', 'kwenta', 'mux', 'synthetix',
+])
+
 async function checkDataFreshness() {
   console.log('\n=== 2. 数据新鲜度检查 ===\n')
 
@@ -165,9 +184,13 @@ async function checkDataFreshness() {
       // RPC success — use the structured response
       const rpcData = await res.json()
       const now = Date.now()
-      let freshCount = 0, staleCount = 0, criticalCount = 0
+      let freshCount = 0, staleCount = 0, criticalCount = 0, skippedCount = 0
 
       for (const row of rpcData) {
+        if (FRESHNESS_SKIP_PLATFORMS.has(row.platform)) {
+          skippedCount++
+          continue
+        }
         const ageHours = (now - new Date(row.latest_snapshot).getTime()) / (1000 * 60 * 60)
         let status = 'FRESH'
         let icon = '🟢'
@@ -189,7 +212,7 @@ async function checkDataFreshness() {
         console.log(`${icon} ${row.platform.padEnd(20)} ${Math.round(ageHours)}h ago  (${row.trader_count} traders)`)
       }
 
-      console.log(`\n总计: ${freshCount} 新鲜, ${staleCount} 陈旧, ${criticalCount} 严重`)
+      console.log(`\n总计: ${freshCount} 新鲜, ${staleCount} 陈旧, ${criticalCount} 严重${skippedCount > 0 ? `, ${skippedCount} 已跳过(dead/mac-mini)` : ''}`)
       return { freshCount, staleCount, criticalCount }
     } else {
       // Fallback: Query each known platform's latest snapshot individually
@@ -205,9 +228,11 @@ async function checkDataFreshness() {
         'kucoin', 'weex', 'blofin', 'phemex'
       ]
 
-      // Fetch latest timestamp per platform in parallel (one row each)
+      // Fetch latest timestamp per platform in parallel (one row each).
+      // Skip dead/mac-mini-only platforms — they always look stale from this script.
+      const ACTIVE_PLATFORMS = KNOWN_PLATFORMS.filter(p => !FRESHNESS_SKIP_PLATFORMS.has(p))
       const platformResults = await Promise.all(
-        KNOWN_PLATFORMS.map(async (p) => {
+        ACTIVE_PLATFORMS.map(async (p) => {
           try {
             const r = await fetch(
               `${SUPABASE_URL}/rest/v1/trader_snapshots_v2?select=platform,as_of_ts&platform=eq.${p}&order=as_of_ts.desc&limit=1`,
