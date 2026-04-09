@@ -177,22 +177,63 @@ interface HyperliquidFill {
 }
 
 /**
- * Fetch raw fills from Hyperliquid API (cached for reuse across position history + equity curve + stats).
+ * Per-trader cache for Hyperliquid fills.
+ *
+ * Each trader's enrichment historically fired 3 separate fetchHyperliquidFills()
+ * calls (positionHistory + equityCurve + statsDetail), and with concurrency=10
+ * that produced 30+ concurrent userFillsByTime requests against the same public
+ * endpoint → 50%+ enrichment failure rate due to rate limiting.
+ *
+ * Cache by (address, days). 2 minute TTL is enough to span a single
+ * runEnrichment invocation but short enough to avoid stale data on rerun.
+ * Also coalesces concurrent in-flight requests (thundering herd guard).
  */
+interface HlFillsCacheEntry {
+  fills: HyperliquidFill[]
+  cachedAt: number
+}
+const HL_FILLS_CACHE_TTL_MS = 2 * 60 * 1000
+const hlFillsCache = new Map<string, HlFillsCacheEntry>()
+const hlFillsInflight = new Map<string, Promise<HyperliquidFill[]>>()
+
 async function fetchHyperliquidFills(address: string, days = 90): Promise<HyperliquidFill[]> {
-  // Use userFillsByTime with startTime for full time range coverage
-  // userFills only returns latest 2000 which for active traders covers < 5 days
-  const startTime = Date.now() - days * 86400000
-  const fills = await fetchJson<HyperliquidFill[]>(
-    'https://api.hyperliquid.xyz/info',
-    {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: { type: 'userFillsByTime', user: address, startTime },
-      timeoutMs: 15000,
+  const cacheKey = `${address}:${days}`
+  const cached = hlFillsCache.get(cacheKey)
+  if (cached && Date.now() - cached.cachedAt < HL_FILLS_CACHE_TTL_MS) {
+    return cached.fills
+  }
+  const inflight = hlFillsInflight.get(cacheKey)
+  if (inflight) return inflight
+
+  const fetchPromise = (async (): Promise<HyperliquidFill[]> => {
+    // Use userFillsByTime with startTime for full time range coverage
+    // userFills only returns latest 2000 which for active traders covers < 5 days
+    const startTime = Date.now() - days * 86400000
+    const fills = await fetchJson<HyperliquidFill[]>(
+      'https://api.hyperliquid.xyz/info',
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: { type: 'userFillsByTime', user: address, startTime },
+        timeoutMs: 15000,
+      }
+    )
+    const result = Array.isArray(fills) ? fills : []
+    hlFillsCache.set(cacheKey, { fills: result, cachedAt: Date.now() })
+    // Bound the cache: keep at most 2000 entries
+    if (hlFillsCache.size > 2000) {
+      const firstKey = hlFillsCache.keys().next().value
+      if (firstKey) hlFillsCache.delete(firstKey)
     }
-  )
-  return Array.isArray(fills) ? fills : []
+    return result
+  })()
+
+  hlFillsInflight.set(cacheKey, fetchPromise)
+  try {
+    return await fetchPromise
+  } finally {
+    hlFillsInflight.delete(cacheKey)
+  }
 }
 
 function parseFillsToPositions(fills: HyperliquidFill[], limit = 2000): PositionHistoryItem[] {
