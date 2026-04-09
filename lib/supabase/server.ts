@@ -33,6 +33,14 @@ function correlationId(): string | undefined {
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://placeholder.supabase.co'
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || 'placeholder-service-key'
 
+// Admin client query timeout.
+// Bumped from 30s → 60s (2026-04-09) because cron jobs run under contention at
+// :00/:15/:17/:30 quarter-hour marks (compute-leaderboard 7D/30D/90D +
+// snapshot-positions + batch-enrich) and need more headroom than public SSR
+// queries. The public anon client in lib/supabase/client.ts keeps its shorter
+// timeout (15s) so user-facing SSR still fails fast when Supabase is degraded.
+const ADMIN_QUERY_TIMEOUT_MS = 60_000
+
 // 缓存 admin 客户端实例（单例模式，复用连接）
 let adminClientInstance: SupabaseClient | null = null
 
@@ -57,11 +65,12 @@ export function getSupabaseAdmin(): SupabaseClient {
         persistSession: false,
         autoRefreshToken: false,
       },
-      // Edge Runtime 优化 + 30s query timeout to prevent hung Vercel functions
+      // Edge Runtime 优化 + 60s query timeout to prevent hung Vercel functions
+      // (admin context — see ADMIN_QUERY_TIMEOUT_MS above for rationale)
       global: {
         fetch: (input: RequestInfo | URL, init?: RequestInit) => {
-          // 30s timeout + correlation ID injection
-          const signal = init?.signal ?? AbortSignal.timeout(30_000)
+          // Admin query timeout + correlation ID injection
+          const signal = init?.signal ?? AbortSignal.timeout(ADMIN_QUERY_TIMEOUT_MS)
           const cid = correlationId()
           if (cid) {
             const headers = new Headers(init?.headers)
