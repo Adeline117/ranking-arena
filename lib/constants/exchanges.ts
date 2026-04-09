@@ -158,6 +158,7 @@ export const DEAD_BLOCKED_PLATFORMS: TraderSource[] = [
   'rabbitx' as TraderSource,   // ALL domains DNS dead — rabbitx.io, api.rabbitx.com, api.prod.rabbitx.io all NXDOMAIN (2026-04-01)
   'lbank',        // Copy-trading API 404 since 2026-04 — endpoint removed
   'bitget_spot' as TraderSource, // No leaderboard API — permanently disabled
+  'web3_bot',     // Not in leaderboard_ranks (compute-leaderboard doesn't process it)
   // 'bybit' — RECOVERED 2026-04-08: DB seed fallback keeps existing traders fresh via leader-details API (which is NOT WAF-blocked, only dynamic-leader-list is)
   // 'bybit_spot' — RECOVERED 2026-04-08: same DB seed pattern
   // 'dydx' — RECOVERED: Heroku + Copin API fallback, 3339 traders in leaderboard_ranks (2026-03-15)

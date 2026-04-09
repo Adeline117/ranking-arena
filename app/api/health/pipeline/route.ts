@@ -98,7 +98,9 @@ async function getPlatformHealthData(): Promise<PlatformHealth[]> {
     const displayName = config?.name || platform
 
     const lastUpdate = platformLastUpdate.get(platform) || null
-    const currentCount = 0 // Skipped to reduce DB load — was 31 extra count queries
+    // Count queries removed to reduce DB load (was 31 extra queries).
+    // countRatio check disabled — it always triggered false warning when currentCount=0.
+    const currentCount = 0
     const avgCount = platformAvgRecords.get(platform) ?? null
 
     let ageHours: number | null = null
@@ -106,15 +108,12 @@ async function getPlatformHealthData(): Promise<PlatformHealth[]> {
       ageHours = Math.round(((now - new Date(lastUpdate).getTime()) / (1000 * 60 * 60)) * 10) / 10
     }
 
-    const countRatio = avgCount != null && avgCount > 0 ? currentCount / avgCount : null
+    const countRatio = null // Disabled: no count data available without per-platform queries
 
     let status: 'healthy' | 'warning' | 'critical' = 'healthy'
     if (ageHours == null || ageHours > 24) {
-      // null means no data in last 24h (query limited to 24h for perf)
       status = 'critical'
     } else if (ageHours > 6) {
-      status = 'warning'
-    } else if (countRatio != null && countRatio < 0.3) {
       status = 'warning'
     }
 
