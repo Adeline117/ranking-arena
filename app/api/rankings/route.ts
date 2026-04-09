@@ -384,25 +384,11 @@ async function getRankingsFallback(rankingsQuery: RankingsQuery, _cursor?: strin
       rank: (row.rank as number) ?? offset + idx + 1,
       rank_change: (row.rank_change as number) ?? null,
       is_new: (row.is_new as boolean) ?? false,
-      metrics: {
-        roi,
-        pnl,
-        win_rate: row.win_rate != null ? Number(row.win_rate) : null,
-        max_drawdown: row.max_drawdown != null ? Number(row.max_drawdown) : null,
-        trades_count: (row.trades_count as number) ?? null,
-        followers: (row.followers as number) ?? null,
-        copiers: row.copiers != null ? Number(row.copiers) : null,
-        aum: null,
-        arena_score: arenaScore,
-        return_score: row.profitability_score != null ? Number(row.profitability_score) : null,
-        drawdown_score: row.risk_control_score != null ? Number(row.risk_control_score) : null,
-        stability_score: row.execution_score != null ? Number(row.execution_score) : null,
-        sharpe_ratio: row.sharpe_ratio != null ? Number(row.sharpe_ratio) : null,
-        sortino_ratio: row.sortino_ratio != null ? Number(row.sortino_ratio) : null,
-        calmar_ratio: row.calmar_ratio != null ? Number(row.calmar_ratio) : null,
-        profit_factor: row.profit_factor != null ? Number(row.profit_factor) : null,
-        platform_rank: (row.rank as number) ?? offset + idx + 1,
-      },
+      // Nested `metrics: { ... }` duplicate removed — all fields are already
+      // exposed at the top level and no consumer read from the nested shape
+      // (verified by repo-wide grep for `\.metrics\.roi` etc. in app/ and
+      // lib/hooks/ — only lib/connectors/* uses that shape internally).
+      // Saved ~30-40% response payload size.
       quality_flags: { is_suspicious: false, suspicion_reasons: [], data_completeness: 1.0 },
       updated_at: (row.computed_at as string) || null,
       profitability_score: row.profitability_score != null ? Number(row.profitability_score) : null,
@@ -420,6 +406,10 @@ async function getRankingsFallback(rankingsQuery: RankingsQuery, _cursor?: strin
   return {
     traders,
     window: seasonId as '7D' | '30D' | '90D' | 'COMPOSITE',
+    // totalCount (camelCase) is what the frontend actually reads
+    // (useTraderData.ts:275: `data.totalCount ?? totalCountRef.current`).
+    // totalcount + total_count kept for backward compat with tests/older clients.
+    totalCount: totalCount || 0,
     totalcount: totalCount || 0,
     total_count: totalCount || 0,
     as_of: new Date(latestCapturedAt).toISOString(),
