@@ -59,7 +59,16 @@ export const metadata: Metadata = {
   },
   appleWebApp: { capable: true, statusBarStyle: "black-translucent", title: "Arena" },
   formatDetection: { telephone: false },
-  alternates: { canonical: BASE_URL },
+  alternates: {
+    canonical: BASE_URL,
+    languages: {
+      'en': BASE_URL,
+      'zh-CN': BASE_URL,
+      'ja': BASE_URL,
+      'ko': BASE_URL,
+      'x-default': BASE_URL,
+    },
+  },
   openGraph: {
     type: "website",
     title: "Arena ranks everything in crypto",
