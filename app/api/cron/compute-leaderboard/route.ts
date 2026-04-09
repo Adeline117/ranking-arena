@@ -304,7 +304,7 @@ export async function GET(request: NextRequest) {
           .from('leaderboard_ranks')
           .select('source, source_trader_id, season_id, profitability_score, risk_control_score, execution_score, sortino_ratio, calmar_ratio')
           .not('profitability_score', 'is', null)
-          .limit(2000)
+          .limit(1000)
         if (!lrRows?.length) return
 
         const scoreMap = new Map<string, typeof lrRows[0]>()
@@ -317,7 +317,7 @@ export async function GET(request: NextRequest) {
           .is('return_score', null)
           .not('arena_score', 'is', null)
           .gte('created_at', cutoff)
-          .limit(2000)
+          .limit(1000)
         if (!v2Rows?.length) return
 
         const updates: Array<Record<string, unknown>> = []
@@ -563,8 +563,8 @@ async function computeSeason(
   // ROOT CAUSE FIX (2026-04-09): Sequential single-platform queries.
   // Concurrent batches (even 3) still exhaust DB pool under cron storms.
   // Batch 3 sources in parallel — 3x faster than sequential with acceptable pool usage
-  const batchSize = 3
-  const v2Window = season // V2 uses same format as v1: '7D', '30D', '90D'
+  const batchSize = 1 // Sequential: 1 query at a time to avoid DB pool exhaustion
+  const v2Window = season
   const FALLBACK_THRESHOLD = 50
   const phase1Start = Date.now()
   for (let i = 0; i < SOURCES_WITH_DATA.length; i += batchSize) {
@@ -582,7 +582,7 @@ async function computeSeason(
         const queryWithTimeout = async <T>(promise: PromiseLike<T>): Promise<T> => {
           return Promise.race([
             promise,
-            new Promise<never>((_, reject) => setTimeout(() => reject(new Error(`${source} query timeout`)), 15_000)),
+            new Promise<never>((_, reject) => setTimeout(() => reject(new Error(`${source} query timeout`)), 30_000)),
           ])
         }
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -596,7 +596,7 @@ async function computeSeason(
             .eq('window', v2Window)
             .gte('updated_at', freshnessISO)
             .order('updated_at', { ascending: false })
-            .limit(2000))
+            .limit(1000))
           data = result.data as TraderRow[] | null
           error = result.error
         } catch (e) {
@@ -615,7 +615,7 @@ async function computeSeason(
               .eq('window', '30D')
               .gte('updated_at', freshnessISO)
               .order('updated_at', { ascending: false })
-              .limit(2000))
+              .limit(1000))
             if (!fallback.error && fallback.data && fallback.data.length > (data?.length || 0)) {
               data = fallback.data
               error = fallback.error as typeof error
@@ -817,7 +817,7 @@ async function computeSeason(
             .eq('source', source)
             .in('source_trader_id', chunk)
             .order('captured_at', { ascending: false })
-            .limit(2000)
+            .limit(1000)
           if (!statsRows) continue
           // Dedup: keep the best row per trader (prefer matching season, then most recent)
           const bestPerTrader = new Map<string, typeof statsRows[0]>()
@@ -893,7 +893,7 @@ async function computeSeason(
             .eq('source', source)
             .in('source_trader_id', chunk)
             .order('data_date', { ascending: true })
-            .limit(2000)
+            .limit(1000)
           if (!eqRows?.length) continue
 
           // Group by trader
@@ -975,7 +975,7 @@ async function computeSeason(
               .eq('source', source)
               .in('source_trader_id', chunk)
               .order('data_date', { ascending: true })
-              .limit(2000)
+              .limit(1000)
             if (!eqRows?.length) continue
 
             // Group by trader
@@ -1579,7 +1579,7 @@ async function computeSeason(
             .select('id')
             .eq('season_id', season)
             .lt('computed_at', cutoff)
-            .limit(2000)
+            .limit(1000)
           if (staleRows && staleRows.length > 0) {
             const staleIds = staleRows.map((r: { id: string }) => r.id)
             for (let i = 0; i < staleIds.length; i += 500) {
@@ -1876,7 +1876,7 @@ async function deriveWinRateMDD(supabase: ReturnType<typeof getSupabaseAdmin>): 
   const { data: missing } = await supabase.from('leaderboard_ranks')
     .select('source, source_trader_id, win_rate, max_drawdown, season_id')
     .or('win_rate.is.null,max_drawdown.is.null')
-    .limit(2000) // Process up to 2000 per run to stay within timeout
+    .limit(1000) // Process up to 2000 per run to stay within timeout
 
   if (!missing?.length) return 0
 
