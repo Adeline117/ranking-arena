@@ -17,7 +17,10 @@ const DEFAULT_STATS = {
 }
 
 const CACHE_KEY = 'hero-stats:v1'
-// Uses 'cold' tier → Redis TTL 1h, memory 5min, SWR 5min (hero stats only changes on cron runs)
+// Success path: 'cold' tier → 1h Redis TTL (stats only change on cron runs).
+// Fallback path: 'hot' tier → 5min Redis TTL. Short-lived so real recovery
+// isn't masked, but long enough to prevent thundering herd on concurrent SSR
+// during compute-leaderboard contention windows.
 
 export interface HeroStats {
   exchangeCount: number
@@ -53,13 +56,18 @@ export async function getHeroStats(): Promise<HeroStats> {
 
     if (error) {
       // RPC failed (not available, timeout, etc.) — use defaults immediately
+      // AND cache them briefly to prevent thundering herd on concurrent SSR.
       // DO NOT fall back to count(exact) which takes 25s+ and causes SSR timeout
       if (error.code === 'TIMEOUT' || error.code === 'PGRST202') {
         logger.warn(`[getHeroStats] RPC unavailable (${error.code}), using defaults`)
-        return { ...DEFAULT_STATS, isDefault: true }
+      } else {
+        logger.warn(`[getHeroStats] RPC failed (${error.code}), using defaults`)
       }
-      logger.warn(`[getHeroStats] RPC failed (${error.code}), using defaults`)
-      return { ...DEFAULT_STATS, isDefault: true }
+      const fallback: HeroStats = { ...DEFAULT_STATS, isDefault: true }
+      // Short-TTL cache to bound retry frequency to ~1/minute per instance.
+      // Uses hot tier so memory + Redis layers dedup the stampede.
+      void tieredSet(CACHE_KEY, fallback, 'hot', ['hero-stats', 'fallback']).catch(() => {})
+      return fallback
     }
 
     const rpcData = data as { exchange_count?: number; trader_count?: number } | null
