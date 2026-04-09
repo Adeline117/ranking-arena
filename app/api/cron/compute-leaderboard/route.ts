@@ -304,7 +304,7 @@ export async function GET(request: NextRequest) {
           .from('leaderboard_ranks')
           .select('source, source_trader_id, season_id, profitability_score, risk_control_score, execution_score, sortino_ratio, calmar_ratio')
           .not('profitability_score', 'is', null)
-          .limit(5000)
+          .limit(2000)
         if (!lrRows?.length) return
 
         const scoreMap = new Map<string, typeof lrRows[0]>()
@@ -560,10 +560,10 @@ async function computeSeason(
   // Fetch v2 FIRST so it gets dedup priority (v2 is newer, more reliable)
   // Column mapping: platform→source, trader_key→source_trader_id, window→season_id,
   //                  roi_pct→roi, pnl_usd→pnl, created_at→captured_at
-  // ROOT CAUSE FIX (2026-04-09): batchSize was 10 → 10 concurrent queries on 1.5M table
-  // caused statement_timeout cascade. Reduced to 3 sequential batches for connection pooling.
-  // Also added time budget check per batch to ensure we complete within maxDuration.
-  const batchSize = 3
+  // ROOT CAUSE FIX (2026-04-09): Sequential single-platform queries.
+  // Concurrent batches (even 3) still exhaust DB pool under cron storms.
+  // Sequential = 1 query at a time, predictable timing, no pool competition.
+  const batchSize = 1
   const v2Window = season // V2 uses same format as v1: '7D', '30D', '90D'
   const FALLBACK_THRESHOLD = 50
   const phase1Start = Date.now()
@@ -585,7 +585,7 @@ async function computeSeason(
           .eq('window', v2Window)
           .gte('updated_at', freshnessISO)
           .order('updated_at', { ascending: false })
-          .limit(5000)
+          .limit(2000)
 
         // Fallback: if this window has too few traders, use 30D data
         // (many platforms only fetch one window; 30D is the most common)
@@ -597,7 +597,7 @@ async function computeSeason(
             .eq('window', '30D')
             .gte('updated_at', freshnessISO)
             .order('updated_at', { ascending: false })
-            .limit(5000)
+            .limit(2000)
           if (!fallback.error && fallback.data && fallback.data.length > (data?.length || 0)) {
             data = fallback.data
             error = fallback.error
@@ -872,7 +872,7 @@ async function computeSeason(
             .eq('source', source)
             .in('source_trader_id', chunk)
             .order('data_date', { ascending: true })
-            .limit(5000)
+            .limit(2000)
           if (!eqRows?.length) continue
 
           // Group by trader
@@ -954,7 +954,7 @@ async function computeSeason(
               .eq('source', source)
               .in('source_trader_id', chunk)
               .order('data_date', { ascending: true })
-              .limit(5000)
+              .limit(2000)
             if (!eqRows?.length) continue
 
             // Group by trader
@@ -1558,7 +1558,7 @@ async function computeSeason(
             .select('id')
             .eq('season_id', season)
             .lt('computed_at', cutoff)
-            .limit(5000)
+            .limit(2000)
           if (staleRows && staleRows.length > 0) {
             const staleIds = staleRows.map((r: { id: string }) => r.id)
             for (let i = 0; i < staleIds.length; i += 500) {
