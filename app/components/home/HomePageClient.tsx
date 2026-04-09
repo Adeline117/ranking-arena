@@ -77,10 +77,7 @@ export default function HomePageClient({ initialTraders, initialLastUpdated, ini
   // HomePageLoader's effect fires before HomePage's dynamic import resolves.
   useLayoutEffect(() => {
     const ssrTable = document.getElementById('ssr-ranking-table')
-    if (ssrTable) {
-      ssrTable.style.display = 'none'
-      requestAnimationFrame(() => ssrTable.remove())
-    }
+    if (ssrTable) ssrTable.remove() // Sync removal — no requestAnimationFrame race
   }, [])
 
   // Sync time range with URL on initial load

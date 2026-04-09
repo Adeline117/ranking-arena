@@ -61,7 +61,7 @@ function SettingsContent() {
       h.setUserId(data.user?.id ?? null)
       if (!data.user) { router.push('/login?redirect=/settings'); return }
       h.loadProfile(data.user.id)
-    }).catch(() => { /* Auth check failure on settings page */ }) // eslint-disable-line no-restricted-syntax -- intentional fire-and-forget
+    }).catch((err) => { console.warn('[settings] Auth check failed:', err?.message) })
   }, [router]) // eslint-disable-line react-hooks/exhaustive-deps -- run once on mount; h methods are stable refs defined in useSettingsHandlers
 
   // ===== Lazy-load sessions and blocked users =====
