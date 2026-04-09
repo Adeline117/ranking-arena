@@ -11,6 +11,7 @@
 
 import type { EquityCurvePoint, StatsDetail, PositionHistoryItem } from './enrichment-types'
 import { logger } from '@/lib/logger'
+import { createTraderResponseCache } from './trader-response-cache'
 
 // Hard timeout for ALL fetch calls — uses AbortSignal.timeout() which works at runtime level
 // even when TCP hangs (unlike setTimeout + AbortController which can fail on TCP stalls)
@@ -70,6 +71,55 @@ interface CopinPositionDetail {
 }
 
 /**
+ * Per-trader caches for Copin-backed dYdX enrichment.
+ *
+ * Previously each trader fired up to four Copin requests per enrichment cycle:
+ *   - position/filter (status=CLOSE)  from fetchDydxEquityCurve
+ *   - position/filter (no status)     from fetchDydxV4PositionHistory
+ *   - statistic/filter MONTH          from fetchDydxStatsDetail
+ *   - statistic/filter MONTH/WEEK     from fetchEquityCurveFromStats (fallback)
+ *
+ * Callers within the same runEnrichment cycle now share results via the shared
+ * trader-response-cache helper (TTL + in-flight dedup + bounded FIFO). The
+ * position cache is keyed by the full URL so the two URL variants (status=CLOSE
+ * vs no filter) stay independent but each variant is shared across all callers
+ * that request it. Stats cache is keyed by (address, statisticType).
+ *
+ * Common-path reduction: 4 Copin calls per trader → 2 (one positions call +
+ * one statistic call). Stats-only path: 2 → 1.
+ */
+const dydxPositionCache = createTraderResponseCache<CopinPositionDetail[]>({
+  name: 'dydx-copin-positions',
+})
+const dydxStatsCache = createTraderResponseCache<CopinTraderDetail | null>({
+  name: 'dydx-copin-stats',
+})
+
+async function fetchDydxPositionsByUrl(url: string): Promise<CopinPositionDetail[]> {
+  return dydxPositionCache.getOrFetch(url, async () => {
+    const data = await hardFetch<{ data?: CopinPositionDetail[] }>(url)
+    return data?.data ?? []
+  })
+}
+
+async function fetchDydxStatsByType(
+  address: string,
+  statisticType: 'WEEK' | 'MONTH' | 'D60'
+): Promise<CopinTraderDetail | null> {
+  const cacheKey = `${address}:${statisticType}`
+  return dydxStatsCache.getOrFetch(cacheKey, async () => {
+    try {
+      const url = `${COPIN_BASE}/DYDX/position/statistic/filter?accounts=${address}&statisticType=${statisticType}`
+      const data = await hardFetch<{ data?: CopinTraderDetail[] }>(url)
+      if (data?.data && data.data.length > 0) return data.data[0]
+    } catch (_err) {
+      // Copin API not available — not critical
+    }
+    return null
+  })
+}
+
+/**
  * Fetch equity curve from Copin position history.
  * Builds daily PnL curve from closed positions.
  */
@@ -80,14 +130,12 @@ export async function fetchDydxEquityCurve(
   try {
     // Copin position list — get closed positions for this trader
     const url = `${COPIN_BASE}/DYDX/position/filter?accounts=${address}&status=CLOSE&limit=500&sort_by=closeBlockTime&sort_type=desc`
-    const data = await hardFetch<{ data?: CopinPositionDetail[] }>(url)
+    const positions = await fetchDydxPositionsByUrl(url)
 
-    if (!data?.data || data.data.length === 0) {
+    if (positions.length === 0) {
       // Fallback: try stats endpoint for at least a 2-point curve
       return await fetchEquityCurveFromStats(address, days)
     }
-
-    const positions = data.data
 
     // Build daily cumulative PnL from closed positions
     const cutoffDate = new Date()
@@ -157,12 +205,9 @@ export async function fetchDydxEquityCurve(
 async function fetchEquityCurveFromStats(address: string, days: number): Promise<EquityCurvePoint[]> {
   try {
     const statisticType = days <= 7 ? 'WEEK' : 'MONTH'
-    const url = `${COPIN_BASE}/DYDX/position/statistic/filter?accounts=${address}&statisticType=${statisticType}`
-    const data = await hardFetch<{ data?: CopinTraderDetail[] }>(url)
+    const stats = await fetchDydxStatsByType(address, statisticType)
+    if (!stats) return []
 
-    if (!data?.data || data.data.length === 0) return []
-
-    const stats = data.data[0]
     const totalPnl = stats.totalPnl ?? stats.totalRealisedPnl ?? 0
     if (totalPnl === 0) return []
 
@@ -189,7 +234,7 @@ export async function fetchDydxStatsDetail(
   address: string
 ): Promise<StatsDetail | null> {
   try {
-    const copinStats = await fetchCopinTraderStats(address)
+    const copinStats = await fetchDydxStatsByType(address, 'MONTH')
     if (!copinStats) return null
 
     const totalTrades = copinStats.totalTrade ?? null
@@ -227,19 +272,6 @@ export async function fetchDydxStatsDetail(
   }
 }
 
-async function fetchCopinTraderStats(address: string): Promise<CopinTraderDetail | null> {
-  try {
-    const url = `${COPIN_BASE}/DYDX/position/statistic/filter?accounts=${address}&statisticType=MONTH`
-    const data = await hardFetch<{ data?: CopinTraderDetail[] }>(url)
-    if (data?.data && data.data.length > 0) {
-      return data.data[0]
-    }
-  } catch (_err) {
-    // Copin API not available — not critical
-  }
-  return null
-}
-
 // ============================================
 // dYdX Position History via Copin
 // ============================================
@@ -253,11 +285,11 @@ export async function fetchDydxV4PositionHistory(
 ): Promise<PositionHistoryItem[]> {
   try {
     const url = `${COPIN_BASE}/DYDX/position/filter?accounts=${address}&limit=100&sort_by=closeBlockTime&sort_type=desc`
-    const data = await hardFetch<{ data?: CopinPositionDetail[] }>(url)
+    const positions = await fetchDydxPositionsByUrl(url)
 
-    if (!data?.data || data.data.length === 0) return []
+    if (positions.length === 0) return []
 
-    return data.data.map((pos) => ({
+    return positions.map((pos) => ({
       symbol: pos.pair || 'UNKNOWN',
       direction: pos.isLong ? 'long' as const : 'short' as const,
       positionType: 'perpetual',
