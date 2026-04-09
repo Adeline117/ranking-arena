@@ -93,9 +93,11 @@ async function fetchExchangeData(exchange: string): Promise<{ traders: TopTrader
     logger.error('[OG Exchange] Error fetching top traders:', topErr)
   }
 
+  // Estimated — OG exchange image shows "N traders tracked" as a
+  // marketing tile; rounded marketing headline.
   const { count, error: countErr } = await supabase
     .from('leaderboard_ranks')
-    .select('*', { count: 'exact', head: true })
+    .select('*', { count: 'estimated', head: true })
     .eq('source', exchange)
     .eq('season_id', '90D')
     .not('arena_score', 'is', null)

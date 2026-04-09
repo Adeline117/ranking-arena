@@ -89,9 +89,11 @@ async function fetchWrappedData(handle: string, platform?: string, windowParam =
       .maybeSingle()
 
     // Fetch total traders on this platform for percentile
+    // Estimated — wrapped/year-in-review page shows a rounded "ranked
+    // X of ~N" headline; N is a marketing number.
     const { count } = await supabase
       .from('leaderboard_ranks')
-      .select('*', { count: 'exact', head: true })
+      .select('*', { count: 'estimated', head: true })
       .eq('source', resolved.platform)
       .eq('season_id', seasonId)
 
