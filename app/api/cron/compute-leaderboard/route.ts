@@ -71,8 +71,12 @@ const SEASONS: Period[] = ['7D', '30D', '90D']
 /** Per-platform freshness thresholds: CEX=48h, DEX=72h
  *  Tightened from 168h (7d) now that all fetcher groups run every 3-6h.
  *  If a platform's data is >2-3 days old, it's genuinely stale. */
-const DATA_FRESHNESS_HOURS_CEX = 48
-const DATA_FRESHNESS_HOURS_DEX = 72
+// ROOT CAUSE FIX (2026-04-09): Was 48h/72h → queried ALL 55K rows per platform.
+// Reduced to 6h/12h — data is fetched every 2-6h, so 6h covers a full cycle.
+// This drops query result set from 55K to ~5K per platform → 10x faster.
+// The stale check (line 687) still uses 48h threshold for correctness.
+const DATA_FRESHNESS_HOURS_CEX = 6
+const DATA_FRESHNESS_HOURS_DEX = 12
 
 function getFreshnessHours(source: string): number {
   const sourceType = SOURCE_TYPE_MAP[source]
