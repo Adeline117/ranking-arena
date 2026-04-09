@@ -77,7 +77,13 @@ const GROUPS: Record<string, string[]> = {
   // Group F: VPS scraper slow platforms (every 6h)
   // bingx: DEAD (empty_data)
   // weex: RE-ENABLED — 117 traders in leaderboard, fresh data in snapshots_v2
+  // 2026-04-09: SPLIT into f1/f2 — 5 platforms at concurrency=3 plus VPS pool
+  //   contention was tripping the 280s safety timeout. f1 = mexc/woox/polymarket
+  //   (fits one concurrency round), f2 = copin/weex (slow scrapers).
+  //   `f` kept as a legacy alias for any manual invocations / backfills.
   f: ['mexc', 'woox', 'polymarket', 'copin', 'weex'],
+  f1: ['mexc', 'woox', 'polymarket'],
+  f2: ['copin', 'weex'],
   // Group G: Copin + Mac Mini (every 8h)
   // bingx_spot: DEAD (no leaderboard), phemex: DEAD (API 404)
   // lbank: DEAD (API 404 since 2026-04, copy-trading endpoint removed)
