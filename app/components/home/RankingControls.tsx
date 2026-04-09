@@ -72,7 +72,7 @@ export default function RankingControls({ activeRange, page, totalCount, perPage
   }, [isOffline, router, startTransition])
 
   return (
-    <div className="ssr-controls">
+    <div className="ssr-controls" data-pending={isPending ? 'true' : undefined}>
       {(isOffline || navError) && (
         <div style={{
           width: '100%',
