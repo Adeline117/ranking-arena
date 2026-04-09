@@ -132,31 +132,67 @@ export async function GET(request: NextRequest) {
   }
 
   const results: BatchResult[] = []
+  const startedAt = Date.now()
   const plog = await PipelineLogger.start(`batch-enrich-${periodParam}`, { period: periodParam, enrichAll, platforms })
 
   // Checkpoint: resume from last crash point (skip already-enriched platforms)
   const checkpoint = await PipelineCheckpoint.startOrResume('enrich', periodParam)
 
-  // Safety timeout: ensure plog gets called before Vercel kills the function at 300s.
-  // Log as SUCCESS with partial note — enrichment resumes from checkpoint next run.
-  // Fires at 250s (was 280s) to leave 50s for plog.success() to complete reliably.
-  // Previous 280s left only 20s which wasn't enough under heavy load, causing 'running' entries
-  // that got cleaned up as timeout by cleanup-stuck-logs after 30+ minutes.
-  const SAFETY_TIMEOUT_MS = 240_000 // 240s for 300s limit (60s buffer)
-  const safetyTimer = setTimeout(async () => {
+  // ────────────────────────────────────────────────────────────────
+  // Time budget + hard-deadline watchdog
+  // ────────────────────────────────────────────────────────────────
+  // Shared elapsed helper used by the soft per-platform budget check and the
+  // hard-deadline watchdog below.
+  //
+  // Root cause we are guarding against: a per-platform enrichment can hang
+  // inside runEnrichment() (CF proxy stall, VPS scraper Playwright lock-up,
+  // OKX retry storm, etc.) past the per-platform timeout wrapper — or the
+  // cumulative time across batches can push total runtime past Vercel's
+  // 300s maxDuration before the soft budget check between batches has a
+  // chance to bail. When that happens the function gets killed mid-query,
+  // plog never finalizes, and cleanup-stuck-logs sweeps it 30 min later as
+  // "enrich-<platform> stuck >30min".
+  //
+  // Fix: (1) soft gate — skip remaining platforms if not enough budget
+  // remains (already enforced by the periodBudget check below); (2) hard
+  // gate — a setTimeout watchdog at 270s that forcibly finalizes plog with
+  // partialSuccess so cleanup-stuck-logs never sees it. The main flow
+  // clears the watchdog on normal exit and checks `plogFinalized` before
+  // any downstream finalization so we never double-log the plog entry.
+  const TIME_BUDGET_MS = 240_000 // soft gate — 60s buffer
+  const HARD_DEADLINE_MS = 270_000 // hard gate — 30s buffer for plog write
+  const elapsed = () => Date.now() - startedAt
+  const isOutOfTime = (buffer: number = 10_000) => elapsed() + buffer >= TIME_BUDGET_MS
+  let plogFinalized = false
+  const watchdog = setTimeout(async () => {
+    if (plogFinalized) return
+    plogFinalized = true
+    logger.error(`[batch-enrich] HARD DEADLINE hit at ${Math.round(elapsed() / 1000)}s — finalizing plog as partialSuccess`)
     try {
-      const enriched = results.filter(r => r.status === 'success').reduce((sum, r) => sum + (r.enriched || 0), 0)
-      // Timeout the plog.success() call itself — if Supabase connection pool is exhausted,
-      // plog.success() hangs and the pipeline_logs entry stays as 'running' forever.
-      // Previous: no timeout → Vercel kills function at 300s → plog never finalizes → cleanup-stuck-logs marks as timeout after 30min
+      const enriched = results
+        .filter(r => r.status === 'success')
+        .reduce((sum, r) => sum + (r.enriched || 0), 0)
+      const failedItems = results
+        .filter(r => r.status === 'error')
+        .map(r => `${r.platform}/${r.period}: ${r.error || 'unknown'}`)
+      // Timeout the plog write itself — if Supabase connection pool is
+      // exhausted, plog.partialSuccess() hangs and the pipeline_logs entry
+      // stays 'running' forever (the exact symptom this patch fixes).
       await Promise.race([
-        plog.success(enriched, { results, note: 'Safety timeout at 240s — partial enrichment, will resume from checkpoint' }),
-        new Promise<void>((resolve) => setTimeout(resolve, 30_000)), // 30s timeout for DB write
+        plog.partialSuccess(enriched, failedItems, {
+          results,
+          reason: 'hard_deadline_watchdog',
+          elapsedMs: elapsed(),
+          note: 'Hard deadline at 270s — partial enrichment, will resume from checkpoint',
+        }),
+        new Promise<void>((resolve) => setTimeout(resolve, 20_000)),
       ])
     } catch (err) {
-      try { await plog.error(new Error(`Safety timeout + plog.success failed: ${err}`)) } catch { /* truly best effort */ }
+      try {
+        await plog.error(new Error(`Hard deadline + plog finalize failed: ${err instanceof Error ? err.message : String(err)}`))
+      } catch { /* truly best effort */ }
     }
-  }, SAFETY_TIMEOUT_MS)
+  }, HARD_DEADLINE_MS)
 
   // Per-platform enrichment timeout (2026-04-03 optimization)
   // Previous: 90s CEX / 120s onchain caused frequent timeouts
@@ -176,16 +212,14 @@ export async function GET(request: NextRequest) {
     return 60_000 // Default for CEX APIs
   }
 
-  const functionStart = Date.now()
   // Budget per period: divide 240s (leaving 60s buffer from 300s total) by number of periods
-  const PER_PERIOD_BUDGET_MS = Math.floor(240_000 / periodsToRun.length)
+  const PER_PERIOD_BUDGET_MS = Math.floor(TIME_BUDGET_MS / periodsToRun.length)
 
   // Run each period sequentially (when period=all, this runs 90D → 30D → 7D)
   for (const period of periodsToRun) {
-    // Bail early if we're running low on time (leave 30s for cleanup/logging)
-    const elapsed = Date.now() - functionStart
-    if (elapsed > 240_000) {
-      results.push({ platform: '*', period, status: 'error', durationMs: 0, error: `Skipped: ${Math.round(elapsed / 1000)}s elapsed, <60s remaining (budget: 300s)` })
+    // Bail early if we're running low on time (leave 60s buffer from 300s total)
+    if (isOutOfTime(60_000)) {
+      results.push({ platform: '*', period, status: 'error', durationMs: 0, error: `Skipped: ${Math.round(elapsed() / 1000)}s elapsed, <60s remaining (budget: 300s)` })
       continue
     }
 
@@ -196,6 +230,16 @@ export async function GET(request: NextRequest) {
     // batch-cached platforms (bitunix, xt, etc.) complete in <5s, freeing time for API-per-trader ones.
     const BATCH_CONCURRENCY = 7
     for (let i = 0; i < platforms.length; i += BATCH_CONCURRENCY) {
+      // Hard budget gate: if we're within 30s of the hard deadline, skip the
+      // rest of this period entirely so the watchdog doesn't have to fire.
+      // This is the top-level version of the per-platform budget check below.
+      if (isOutOfTime(30_000)) {
+        const remaining = platforms.slice(i)
+        for (const p of remaining) {
+          results.push({ platform: p, period, status: 'error', durationMs: 0, error: `Skipped: hard budget ${Math.round((TIME_BUDGET_MS - 30_000) / 1000)}s reached (${Math.round(elapsed() / 1000)}s elapsed)` })
+        }
+        break
+      }
       // Check per-period budget before starting next batch
       if (Date.now() - periodStart > PER_PERIOD_BUDGET_MS) {
         const remaining = platforms.slice(i)
@@ -307,26 +351,36 @@ export async function GET(request: NextRequest) {
     }
   }
 
-  clearTimeout(safetyTimer)
+  // Main flow finished normally — clear the hard-deadline watchdog so it
+  // doesn't fire after we've already finalized below.
+  clearTimeout(watchdog)
+
   const succeeded = results.filter(r => r.status === 'success').length
   const failed = results.length - succeeded
   const failedItems = results.filter(r => r.status === 'error').map(r => `${r.platform}/${r.period}: ${r.error || 'unknown'}`)
 
-  if (failed === 0) {
-    await plog.success(succeeded, { results })
-  } else if (succeeded > 0) {
-    // Partial success: some platforms failed (including budget-exhausted) but others worked
-    await plog.partialSuccess(succeeded, failedItems, { results })
-  } else {
-    // Total failure: all platforms failed
-    await plog.error(
-      new Error(`${failed}/${results.length} enrichments failed`),
-      { results }
-    )
+  // If the watchdog already finalized plog (race: it fired while we were
+  // wrapping up the last batch), skip re-finalization — plog state is
+  // terminal after the first call and a second write would either be a
+  // no-op or produce a duplicate row.
+  if (!plogFinalized) {
+    plogFinalized = true
+    if (failed === 0) {
+      await plog.success(succeeded, { results })
+    } else if (succeeded > 0) {
+      // Partial success: some platforms failed (including budget-exhausted) but others worked
+      await plog.partialSuccess(succeeded, failedItems, { results })
+    } else {
+      // Total failure: all platforms failed
+      await plog.error(
+        new Error(`${failed}/${results.length} enrichments failed`),
+        { results }
+      )
+    }
   }
 
   // Finalize checkpoint and trigger downstream with trace metadata from checkpoint
-  const traceMetadata = await PipelineCheckpoint.finalize(checkpoint, Date.now() - functionStart)
+  const traceMetadata = await PipelineCheckpoint.finalize(checkpoint, elapsed())
   if (succeeded > 0) {
     triggerDownstreamRefresh(`batch-enrich-${periodParam}`, traceMetadata)
   }
