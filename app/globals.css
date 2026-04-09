@@ -3142,3 +3142,27 @@ td[data-numeric],
 .follow-btn { transition: transform 0.2s ease, background-color 0.2s ease; cursor: pointer; border: none; font-weight: 600; font-size: 13px; padding: 6px 16px; border-radius: 8px; }
 .follow-btn:hover { transform: scale(1.03); }
 
+/* ============================================================
+   RankingTable — dynamic column visibility + grid template
+   Moved here from a runtime <style>{...}</style> element that
+   React had to reconcile on every render. Now driven by a CSS
+   variable (--ranking-grid-cols) + data-attributes on the
+   .ranking-table-container parent, so no <style> tag in JSX.
+   ============================================================ */
+@media (min-width: 768px) {
+  .ranking-table-container .ranking-table-grid-custom {
+    grid-template-columns: var(--ranking-grid-cols, 40px minmax(140px, 1.4fr) 58px 80px 64px 64px) !important;
+  }
+  .ranking-table-container[data-hide-score] .col-score { display: none !important; }
+  .ranking-table-container[data-hide-winrate] .col-winrate { display: none !important; }
+  .ranking-table-container[data-hide-mdd] .col-mdd { display: none !important; }
+  .ranking-table-container[data-hide-roi] .roi-cell { display: none !important; }
+  .ranking-table-container[data-hide-pnl] .col-pnl { display: none !important; }
+  .ranking-table-container[data-hide-sharpe] .col-sharpe { display: none !important; }
+  .ranking-table-container[data-hide-sortino] .col-sortino { display: none !important; }
+  .ranking-table-container[data-hide-alpha] .col-alpha { display: none !important; }
+  .ranking-table-container[data-hide-style] .col-style { display: none !important; }
+  .ranking-table-container[data-hide-followers] .col-followers { display: none !important; }
+  .ranking-table-container[data-hide-trades] .col-trades { display: none !important; }
+}
+
