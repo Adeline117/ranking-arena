@@ -91,25 +91,37 @@ export async function getInitialTraders(
     return { traders: [], lastUpdated: null, totalCount: 0, categoryCounts: { all: 0, futures: 0, spot: 0, onchain: 0 } }
   }
 
-  // Try Redis cache first (2-minute TTL) — only for page 0 (most common)
+  // Try Redis cache first — serve stale data rather than timing out SSR
   const cacheKey = `home-initial-traders-v2:${timeRange}:p${page}`
   try {
     const cached = await cache.get<InitialTradersResult>(cacheKey)
-    if (cached && cached.traders && cached.traders.length > 0 && cached.totalCount > 0) {
+    if (cached && cached.traders && cached.traders.length > 0) {
       return cached
     }
   } catch (_err) {
     // Redis unavailable — fall through to DB
   }
 
-  const result = await fetchLeaderboardFromDB(timeRange, limit, page)
+  // DB fetch with 5s timeout — SSR must never hang
+  const TIMEOUT_MS = 5000
+  try {
+    const result = await Promise.race([
+      fetchLeaderboardFromDB(timeRange, limit, page),
+      new Promise<InitialTradersResult>((_, reject) =>
+        setTimeout(() => reject(new Error('SSR DB timeout')), TIMEOUT_MS)
+      ),
+    ])
 
-  // Cache the result asynchronously (2-minute TTL)
-  if (result.traders.length > 0) {
-    fireAndForget(cache.set(cacheKey, result, { ttl: 300 }), 'cache-set-initial-traders')
+    // Cache successful result (5-minute TTL)
+    if (result.traders.length > 0) {
+      fireAndForget(cache.set(cacheKey, result, { ttl: 300 }), 'cache-set-initial-traders')
+    }
+    return result
+  } catch (err) {
+    logger.warn(`[getInitialTraders] DB fetch failed/timed out: ${err instanceof Error ? err.message : err}`)
+    // Return empty — Phase 2 client will fetch from API
+    return { traders: [], lastUpdated: null, totalCount: 0, categoryCounts: { all: 0, futures: 0, spot: 0, onchain: 0 } }
   }
-
-  return result
 }
 
 /**
