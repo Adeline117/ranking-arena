@@ -1,8 +1,7 @@
 
 'use client'
 
-import { Suspense, lazy, useLayoutEffect, useState } from 'react'
-import { createPortal } from 'react-dom'
+import { Suspense, lazy, useLayoutEffect } from 'react'
 import { tokens } from '@/lib/design-tokens'
 import TopNav from '../layout/TopNav'
 // MobileBottomNav is rendered in root layout.tsx -- do not duplicate here
@@ -34,20 +33,16 @@ interface HomePageProps {
 }
 
 export default function HomePage({ initialTraders, initialLastUpdated, heroStats, initialTotalCount, initialCategoryCounts }: HomePageProps) {
-  // SSR hero: NEVER removed — it IS the LCP element (~1.2s on slow 4G).
-  // Phase 2 does NOT render its own hero. SSR hero stays visible permanently.
-  // SSR ranking table: hidden by HomePageLoader.useLayoutEffect (before paint).
-  // SSR topnav: container kept alive — Phase 2 portals interactive TopNav into it
-  // to prevent 56px CLS from container removal.
-  const [navPortal, setNavPortal] = useState<HTMLElement | null>(null)
+  // Remove SSR topnav and render Phase 2 TopNav directly.
+  // Portal approach was silently failing — container emptied but nothing rendered.
   useLayoutEffect(() => {
-    const el = document.getElementById('ssr-topnav')
-    if (el) setNavPortal(el)
+    const ssrNav = document.getElementById('ssr-topnav')
+    if (ssrNav) ssrNav.remove()
   }, [])
 
   return (
     <>
-      {navPortal && createPortal(<TopNav email={null} />, navPortal)}
+      <TopNav email={null} />
       <div
         id="homepage-interactive"
         suppressHydrationWarning

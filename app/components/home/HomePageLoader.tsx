@@ -1,7 +1,7 @@
 'use client'
 
 import dynamic from 'next/dynamic'
-import { useState, useEffect, useLayoutEffect } from 'react'
+import { useState, useEffect } from 'react'
 import Providers from '../Providers'
 import type { InitialTrader, CategoryCounts } from '@/lib/getInitialTraders'
 
@@ -70,16 +70,9 @@ export default function HomePageLoader(props: HomePageLoaderProps) {
     }
   }, [])
 
-  // Clear SSR topnav HTML so Phase 2 can portal into the container.
-  // #ssr-topnav container stays in place (56px) — Phase 2 portals into it.
-  // #ssr-ranking-table is NOT hidden here — it's hidden by HomePageClient's
-  // useLayoutEffect AFTER Phase 2 content has rendered, preventing CLS from
-  // hiding SSR before Phase 2 JS has loaded.
-  useLayoutEffect(() => {
-    if (!activated) return
-    const ssrNav = document.getElementById('ssr-topnav')
-    if (ssrNav) ssrNav.innerHTML = ''
-  }, [activated])
+  // SSR topnav removal is handled by HomePage.useLayoutEffect.
+  // SSR ranking table is hidden by HomePageClient's useLayoutEffect
+  // AFTER Phase 2 content has rendered (prevents CLS).
 
   if (!activated) return null
   // Homepage root layout has no Providers (for LCP optimization).
