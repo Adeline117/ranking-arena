@@ -24,7 +24,12 @@ export class OkxFuturesConnector extends BaseConnector {
   readonly marketType = 'futures' as const
 
   constructor(config?: Partial<import('../types').ConnectorConfig>) {
-    super({ timeout: 10000, maxRetries: 0, ...config }) // No retries: 5 pages × 3 windows must fit in CF 100s timeout
+    // 2026-04-09: maxRetries=0 caused 66h+ data staleness when Vercel hnd1
+    // → OKX direct hits an intermittent failure (no retry, no fallback). Bump
+    // to maxRetries=2 with the existing exponential backoff. Per-window budget
+    // in connector-db-adapter (Phase 1 deadline) caps total time anyway.
+    // Timeout bumped 10s→15s to allow retries to land within the page budget.
+    super({ timeout: 15000, maxRetries: 2, retryBaseDelay: 1500, ...config })
   }
 
   readonly capabilities: PlatformCapabilities = {
