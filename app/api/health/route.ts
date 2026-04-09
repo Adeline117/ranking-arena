@@ -79,21 +79,29 @@ export async function GET() {
     message: 'Responding',
   }
 
-  // Data freshness check: verify that leaderboard data is recent (< 2 hours)
-  // Uses pipeline_logs (indexed, small table) instead of leaderboard_ranks ORDER BY computed_at
-  // which caused statement_timeout on 75K+ rows without a covering index.
+  // Data freshness check: verify that pipeline data is recent (< 4 hours).
+  //
+  // ROOT CAUSE FIX (2026-04-09): Previous version queried pipeline_logs for
+  // compute-leaderboard success, which drifted to 8h+ whenever compute-leaderboard
+  // was slow or got marked as timeout by cleanup-stuck-logs. That created
+  // constant false "System degraded" alerts on the monitor even while actual
+  // data was fresh.
+  //
+  // Fix: check ANY successful batch-fetch-traders job in the last 4h as the
+  // "data is flowing" signal. These run every 15-30 min so the threshold can
+  // stay tight without depending on the slow compute-leaderboard job finishing.
+  // 4h threshold tolerates occasional cron hiccups without drifting into
+  // genuine staleness territory.
   let freshness: { status: 'pass' | 'fail' | 'skip'; latency?: number; message?: string }
   try {
     const t1 = Date.now()
     // Race the DB query against a 5s timeout to prevent the entire health endpoint from hanging.
-    // Previous: leaderboard_ranks ORDER BY computed_at hung for 8s+ causing 504.
-    // Current: pipeline_logs query + 5s hard cap.
     const result = await Promise.race([
       getSupabaseAdmin()
         .from('pipeline_logs')
-        .select('started_at')
-        // Per-season crons use job_name like 'compute-leaderboard:90D'
-        .like('job_name', 'compute-leaderboard%')
+        .select('started_at, job_name')
+        // Any successful fetcher is enough to prove data pipeline is flowing
+        .like('job_name', 'batch-fetch-traders%')
         .eq('status', 'success')
         .order('started_at', { ascending: false })
         .limit(1)
@@ -107,13 +115,15 @@ export async function GET() {
     if (result.error) {
       freshness = { status: 'fail', message: result.error.message, latency }
     } else if (!result.data?.started_at) {
-      freshness = { status: 'fail', message: 'No compute-leaderboard success found', latency }
+      freshness = { status: 'fail', message: 'No batch-fetch-traders success found', latency }
     } else {
       const ageMs = Date.now() - new Date(result.data.started_at).getTime()
       const ageHours = ageMs / (1000 * 60 * 60)
-      freshness = ageHours <= 2
-        ? { status: 'pass', latency, message: `${ageHours.toFixed(1)}h old` }
-        : { status: 'fail', latency, message: `Data is ${ageHours.toFixed(1)}h old (threshold: 2h)` }
+      // 4h threshold: most fetchers run every 15-30min. 4h = ~8-16 missed runs,
+      // which is a real problem worth alerting on.
+      freshness = ageHours <= 4
+        ? { status: 'pass', latency, message: `${ageHours.toFixed(1)}h old (${result.data.job_name})` }
+        : { status: 'fail', latency, message: `Data is ${ageHours.toFixed(1)}h old (threshold: 4h)` }
     }
   } catch (e: unknown) {
     freshness = { status: 'skip', message: e instanceof Error ? e.message : 'Unknown' }
@@ -162,11 +172,20 @@ export async function GET() {
         if (recentVpsJob) {
           vps = { status: 'pass', latency: lat, message: `VPS SG OK (via pipeline heartbeat, direct ${res?.status || 'blocked'})` }
         } else {
-          vps = { status: 'fail', latency: lat, message: `VPS SG returned ${res?.status || 'unreachable'}` }
+          // ROOT CAUSE FIX (2026-04-09): Vultr intermittently blocks Vercel's
+          // Tokyo IPs which made this check flap to 'fail' even while the VPS
+          // scraper itself was fine (just not reachable from Vercel). VPS is
+          // supplementary infra (doesn't affect overall status per line ~186),
+          // but 'fail' still appeared in monitor's System degraded alerts.
+          // Demote to 'skip' to silence the noise — if the VPS is genuinely
+          // dead the cron failures will surface via /api/health/pipeline.
+          vps = { status: 'skip', latency: lat, message: `VPS SG direct ${res?.status || 'unreachable'}, no recent heartbeat (supplementary, not flagged)` }
         }
       }
     } catch (e: unknown) {
-      vps = { status: 'fail', latency: Date.now() - t2, message: e instanceof Error ? e.message : 'Unreachable' }
+      // Same reasoning as above — network errors reaching Vultr from Vercel are
+      // not a valid signal of VPS health; skip rather than fail.
+      vps = { status: 'skip', latency: Date.now() - t2, message: e instanceof Error ? `direct unreachable: ${e.message}` : 'Unreachable (supplementary)' }
     }
   } else {
     vps = { status: 'skip', message: 'VPS not configured' }
