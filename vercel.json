@@ -165,8 +165,12 @@
       "schedule": "39 */6 * * *"
     },
     {
-      "path": "/api/cron/batch-fetch-traders?group=f",
+      "path": "/api/cron/batch-fetch-traders?group=f1",
       "schedule": "46 */6 * * *"
+    },
+    {
+      "path": "/api/cron/batch-fetch-traders?group=f2",
+      "schedule": "52 */6 * * *"
     },
     {
       "path": "/api/cron/batch-fetch-traders?group=g",
