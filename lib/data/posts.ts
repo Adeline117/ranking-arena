@@ -414,6 +414,9 @@ export async function searchPosts(
 ): Promise<{ posts: PostWithAuthor[]; total: number }> {
   const { limit = 20, offset = 0, viewer_id } = options
 
+  // KEEP 'exact' — powers the post search pagination UI. Text-search
+  // hit set is usually small (<<100k), so COUNT(*) is fast via the
+  // tsvector GIN index.
   let queryBuilder = supabase
     .from('posts')
     .select(POST_SELECT_FIELDS, { count: 'exact' })

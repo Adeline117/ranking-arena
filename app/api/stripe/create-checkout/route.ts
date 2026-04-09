@@ -129,6 +129,8 @@ export async function POST(request: NextRequest) {
       }
 
       // Enforce 200-spot limit
+      // KEEP 'exact' — billing-critical scarcity check. Must be accurate
+      // to prevent overselling the 200 lifetime founding member spots.
       const LIFETIME_SPOTS_TOTAL = 200
       const { count: lifetimeCount } = await getSupabaseAdmin()
         .from('user_profiles')

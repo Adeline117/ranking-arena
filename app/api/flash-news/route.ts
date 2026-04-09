@@ -64,6 +64,9 @@ export async function GET(request: NextRequest) {
     // Core DB fetch logic — extracted so it can be called with or without cache
     const fetchFromDb = async () => {
       // 构建查询
+      // KEEP 'exact' — powers the flash-news pagination UI. flash_news
+      // is rotated at 365d (bounded size) so exact COUNT(*) is cheap
+      // (indexed published_at DESC).
       let query = supabase
         .from('flash_news')
         .select('id, title, title_zh, title_en, source, category, importance, published_at, tags', { count: 'exact' })

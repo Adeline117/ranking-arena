@@ -126,6 +126,9 @@ export async function getUnreadNotificationCount(
   supabase: SupabaseClient,
   userId: string
 ): Promise<number> {
+  // KEEP 'exact' — scoped to a single user via (user_id, read) index,
+  // tiny row set per user, and the exact number is shown as the
+  // notification badge (e.g. "3 unread").
   const { count, error } = await supabase
     .from('notifications')
     .select('id', { count: 'exact', head: true })

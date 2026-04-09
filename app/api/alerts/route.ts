@@ -31,6 +31,9 @@ export async function GET(request: NextRequest) {
     const limit = Math.min(parseInt(searchParams.get('limit') || '50', 10), 100)
     const offset = parseInt(searchParams.get('offset') || '0', 10)
 
+    // KEEP 'exact' — per-user alert history pagination. Scoped via
+    // eq(user_id) to a single user's small row set, cheap via (user_id,
+    // triggered_at DESC) index.
     let query = supabase
       .from('alert_history')
       .select('*', { count: 'exact' })

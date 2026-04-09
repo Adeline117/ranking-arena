@@ -29,6 +29,10 @@ export async function GET(request: NextRequest) {
         .eq('user_id', user.id)
         .in('status', ['active', 'trialing'])
         .maybeSingle(),
+      // KEEP 'exact' — this count is compared against the user's Pro
+      // tier follow limit (billing enforcement). Scoped to one user
+      // via (user_id) index → cheap. Must be accurate to block the
+      // (limit+1)th follow attempt.
       supabase
         .from('trader_follows')
         .select('id', { count: 'exact', head: true })
