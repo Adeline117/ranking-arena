@@ -15,6 +15,7 @@ const GuestSignupPrompt = lazy(() => import('./GuestSignupPrompt'))
 // WelcomeModal removed — blocks entire page for first-time visitors
 import HomePageClient from './HomePageClient'
 import { SectionErrorBoundary } from '../utils/ErrorBoundary'
+import { RankingSkeleton } from '../ui/Skeleton'
 import { features } from '@/lib/features'
 // Lazy-load sidebar widgets
 const HotDiscussions = lazy(() => import('../sidebar/HotDiscussions'))
@@ -94,11 +95,13 @@ export default function HomePage({ initialTraders, initialLastUpdated, heroStats
           }
         >
           <SectionErrorBoundary>
-            {/* Skeleton min-height matches SSR table (25 rows × 52px + header 40px = 1340px)
-                so mobile-sidebar-widgets button doesn't shift when real content replaces skeleton */}
+            {/* Structured ranking skeleton (header row + 25 table rows) instead of a
+                flat shimmer block — better hints at the real content structure and
+                reduces perceived jank. min-height is preserved by the wrapping div
+                so mobile-sidebar-widgets button doesn't shift on content swap. */}
             <Suspense fallback={
               <div className="contain-layout-style" style={{ minHeight: 1340 }}>
-                <div className="skeleton" style={{ minHeight: 1340, borderRadius: tokens.radius.lg }} />
+                <RankingSkeleton rows={25} />
               </div>
             }>
                 <HomePageClient initialTraders={initialTraders} initialLastUpdated={initialLastUpdated} initialTotalCount={initialTotalCount} initialCategoryCounts={initialCategoryCounts} />
