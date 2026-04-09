@@ -62,6 +62,12 @@ interface CacheEntry {
 const leaderboardCache = new Map<string, CacheEntry>()
 const CACHE_TTL_MS = 10 * 60 * 1000 // 10 minutes
 
+// In-flight promise registry to prevent thundering-herd cache warm-up.
+// With concurrency=50 in batch-enrich, 50 workers would otherwise each
+// trigger a parallel 20-page pagination (1000 concurrent requests), tripping
+// Bitunix rate-limits and causing 100% enrichment failure rate.
+const inflightFetches = new Map<string, Promise<Map<string, BitunixListEntry>>>()
+
 /**
  * Fetch a single page with retry logic.
  * Retries up to maxRetries times with exponential backoff on transient errors.
@@ -131,39 +137,53 @@ async function ensureLeaderboardCached(period: string): Promise<Map<string, Bitu
     return existing.traders
   }
 
-  const traders = new Map<string, BitunixListEntry>()
-  const maxPages = 20 // 100 per page × 20 = 2000 traders max
-  const pageSize = 100
-  let consecutiveEmpty = 0
+  // Coalesce concurrent warm-ups: if another worker is already fetching this
+  // period, await the same promise instead of starting a parallel pagination.
+  const inflight = inflightFetches.get(period)
+  if (inflight) return inflight
 
-  for (let page = 1; page <= maxPages; page++) {
-    const records = await fetchPageWithRetry(period, page, pageSize)
+  const fetchPromise = (async (): Promise<Map<string, BitunixListEntry>> => {
+    const traders = new Map<string, BitunixListEntry>()
+    const maxPages = 20 // 100 per page × 20 = 2000 traders max
+    const pageSize = 100
+    let consecutiveEmpty = 0
 
-    if (records.length === 0) {
-      consecutiveEmpty++
-      // If 2 consecutive pages return empty, assume we've hit the end
-      if (consecutiveEmpty >= 2) break
-      continue
+    for (let page = 1; page <= maxPages; page++) {
+      const records = await fetchPageWithRetry(period, page, pageSize)
+
+      if (records.length === 0) {
+        consecutiveEmpty++
+        // If 2 consecutive pages return empty, assume we've hit the end
+        if (consecutiveEmpty >= 2) break
+        continue
+      }
+
+      consecutiveEmpty = 0 // Reset on successful page
+
+      for (const entry of records) {
+        const uid = String(entry.uid || '')
+        if (uid) traders.set(uid, entry)
+      }
+
+      if (records.length < pageSize) break // Last page
+
+      // Small delay between pages to avoid rate limiting (100ms)
+      if (page < maxPages) {
+        await new Promise(r => setTimeout(r, 100))
+      }
     }
 
-    consecutiveEmpty = 0 // Reset on successful page
+    logger.info(`[bitunix] Cached ${traders.size} traders for period ${period}`)
+    leaderboardCache.set(period, { traders, fetchedAt: Date.now() })
+    return traders
+  })()
 
-    for (const entry of records) {
-      const uid = String(entry.uid || '')
-      if (uid) traders.set(uid, entry)
-    }
-
-    if (records.length < pageSize) break // Last page
-
-    // Small delay between pages to avoid rate limiting (100ms)
-    if (page < maxPages) {
-      await new Promise(r => setTimeout(r, 100))
-    }
+  inflightFetches.set(period, fetchPromise)
+  try {
+    return await fetchPromise
+  } finally {
+    inflightFetches.delete(period)
   }
-
-  logger.info(`[bitunix] Cached ${traders.size} traders for period ${period}`)
-  leaderboardCache.set(period, { traders, fetchedAt: Date.now() })
-  return traders
 }
 
 /**
