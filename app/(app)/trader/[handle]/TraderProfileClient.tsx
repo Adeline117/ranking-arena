@@ -71,7 +71,10 @@ const PostFeed = dynamic(() => import('@/app/components/post/PostFeed'), {
 const SwipeableView = dynamic(() => import('@/app/components/ui/SwipeableView'), { ssr: false })
 const LinkedAccountTabs = dynamic(() => import('@/app/components/trader/LinkedAccountTabs'), { ssr: false })
 const AggregatedStats = dynamic(() => import('@/app/components/trader/AggregatedStats'), { ssr: false })
-const ExchangeLinksBar = dynamic(() => import('@/app/components/trader/ExchangeLinksBar'), { ssr: false })
+// ExchangeLinksBar — static import (no client-only deps). Previously dynamic
+// with ssr:false, which caused a 30-80px CLS pop-in above the fold on every
+// trader page load. Static import eliminates the flash + reduces chunk count.
+import ExchangeLinksBar from '@/app/components/trader/ExchangeLinksBar'
 
 /** @deprecated UI-specific. Will be replaced by UnifiedTrader adapter. */
 export interface UnregisteredTraderData {
