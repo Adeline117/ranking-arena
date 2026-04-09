@@ -48,6 +48,25 @@ jest.mock('@/lib/cron/enrichment-runner', () => ({
   runEnrichment: (...args: unknown[]) => mockRunEnrichment(...args),
 }))
 
+// Mock Supabase admin so leaderboard count queries don't hit the real DB.
+// Route calls `.from('leaderboard_ranks').select(...).eq(...).eq(...).not(...)`
+// which must resolve to `{ count, error }`.
+jest.mock('@/lib/supabase/server', () => {
+  const terminal = Promise.resolve({ count: 100, error: null })
+  // Chain returns itself on non-terminal ops, resolves on await.
+  const chain: Record<string, unknown> = new Proxy(terminal, {
+    get(target, prop) {
+      if (prop === 'then' || prop === 'catch' || prop === 'finally') {
+        return (target as unknown as Record<string, unknown>)[prop as string]
+      }
+      return () => chain
+    },
+  }) as unknown as Record<string, unknown>
+  return {
+    getSupabaseAdmin: jest.fn(() => ({ from: jest.fn(() => chain) })),
+  }
+})
+
 jest.mock('@/lib/services/pipeline-state', () => ({
   PipelineState: {
     get: jest.fn().mockResolvedValue(null),
@@ -115,6 +134,7 @@ function createCronRequest(secret?: string, params?: Record<string, string>): Ne
 // ---------------------------------------------------------------------------
 
 describe('GET /api/cron/batch-enrich', () => {
+  jest.setTimeout(60_000) // Route has 270s budget + per-platform loops; give mocks room
   const CRON_SECRET = 'test-secret'
 
   beforeAll(() => {

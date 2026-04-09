@@ -75,6 +75,11 @@ jest.mock('@/lib/utils/logger', () => ({
   captureMessage: jest.fn(),
 }))
 
+// Cache layer: bypass by always invoking the factory and returning its result.
+jest.mock('@/lib/cache', () => ({
+  getOrSet: jest.fn(async (_key: string, factory: () => Promise<unknown>) => factory()),
+}))
+
 import { NextRequest } from 'next/server'
 import { GET } from '../route'
 
