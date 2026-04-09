@@ -234,36 +234,26 @@ export default function TraderProfileClient({ data, serverTraderData, claimedUse
   }, [searchParams, pathname, router])
 
   // ── P7: Merged trader detail fetch (bundles claim + aggregate + rank_history) ──
-  // We need linked accounts for activeAccountParsed, but linked accounts also depend
-  // on traderData for bundled aggregate. Break the cycle: useLinkedAccounts fires its
-  // own SWR on the first render; once traderData arrives with bundled aggregate, the
-  // hook suppresses the duplicate fetch on subsequent renders.
+  // Fetch order: primary trader detail → then linked accounts (with bundled aggregate).
+  // This breaks the prior waterfall: the old code read a ref that wasn't populated
+  // until after useLinkedAccounts had already fired its own duplicate fetch.
+  //
+  // The URL only depends on `data` + `activeAccount` (parsed inline, no lookup),
+  // so it doesn't need linkedAccounts. handle-vs-traderKey is resolved separately
+  // below for display purposes.
 
-  // Step 1: First pass of useLinkedAccounts (may fire its own fetch before bundled data is ready)
-  // The bundled aggregate from traderData is passed as third arg — undefined on first render,
-  // then populated once traderData loads, which suppresses the separate /api/traders/aggregate call.
-  // We forward-declare a ref to hold the bundled aggregate and update it after SWR resolves.
-  const bundledAggregateRef = useRef<{ aggregated: unknown; accounts: unknown[]; totalAccounts: number } | null | undefined>(undefined)
-  const { linkedAccounts, aggregatedData, hasMultipleAccounts } = useLinkedAccounts(
-    data.source,
-    data.source_trader_id,
-    bundledAggregateRef.current,
-  )
-
-  // Parse active account into platform + traderKey for per-account data fetching
-  const activeAccountParsed = useMemo(() => {
+  // Parse activeAccount string "platform:traderKey" without needing linkedAccounts.
+  const activeAccountRaw = useMemo(() => {
     if (activeAccount === 'all' || !activeAccount.includes(':')) return null
     const [platform, ...rest] = activeAccount.split(':')
-    const traderKey = rest.join(':')
-    const account = linkedAccounts.find(a => a.platform === platform && a.traderKey === traderKey)
-    return account ? { platform, traderKey, handle: account.handle } : null
-  }, [activeAccount, linkedAccounts])
+    return { platform, traderKey: rest.join(':') }
+  }, [activeAccount])
 
   // SWR for full trader data — switches URL when account tab changes
   // P7: When fetching primary account, bundle claim/aggregate/rank_history via include param (4→1 API call)
-  const effectivePlatform = activeAccountParsed?.platform || searchParams?.get('platform') || data.source || ''
-  const effectiveHandle = activeAccountParsed?.handle || activeAccountParsed?.traderKey || data.handle || data.source_trader_id
-  const isPrimaryAccount = !activeAccountParsed
+  const effectivePlatform = activeAccountRaw?.platform || searchParams?.get('platform') || data.source || ''
+  const effectiveHandle = activeAccountRaw?.traderKey || data.handle || data.source_trader_id
+  const isPrimaryAccount = !activeAccountRaw
   const traderApiUrl = useMemo(() => {
     const base = effectivePlatform
       ? `/api/traders/${encodeURIComponent(effectiveHandle)}?source=${encodeURIComponent(effectivePlatform)}`
@@ -298,10 +288,16 @@ export default function TraderProfileClient({ data, serverTraderData, claimedUse
   const bundledClaimData = traderData?.claim_status
   const bundledRankHistory = traderData?.rank_history
 
-  // P7: Update bundled aggregate ref so useLinkedAccounts can use it on next render
-  if (traderData?.aggregate) {
-    bundledAggregateRef.current = traderData.aggregate
-  }
+  // Now safe to call useLinkedAccounts — bundled aggregate is passed directly,
+  // no ref gymnastics. On first render (before SWR resolves), undefined → hook
+  // fires its own fetch. After SWR resolves, bundled data suppresses duplicate fetch.
+  // The key improvement vs the old ref-based code: the suppression happens on the
+  // first render where bundled data is available (not the render AFTER that).
+  const { linkedAccounts, aggregatedData, hasMultipleAccounts } = useLinkedAccounts(
+    data.source,
+    data.source_trader_id,
+    traderData?.aggregate,
+  )
 
   // Check if this trader is verified (claimed) and if current user is the owner.
   // P7: Skip separate fetch when bundled claim data is available from merged endpoint
