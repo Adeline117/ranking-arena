@@ -89,7 +89,10 @@ export function calculateMaxDrawdown(curve: EquityCurvePoint[]): number | null {
  * Calculate Sharpe ratio from equity curve (simplified, risk-free rate = 0)
  */
 export function calculateSharpeRatio(curve: EquityCurvePoint[], _period: string): number | null {
-  if (curve.length < 5) return null
+  // Require ≥4 equity points (→3 daily returns) — enough for a meaningful
+  // std-dev estimate without excluding short-tenure traders. Lowered from 5
+  // to push sharpe coverage from ~62% toward 75%+.
+  if (curve.length < 4) return null
 
   const returns = dailyReturns(extractValues(curve))
   if (returns.length < 3) return null
@@ -110,7 +113,7 @@ export function calculateSharpeRatio(curve: EquityCurvePoint[], _period: string)
  * Calculate Sortino ratio from equity curve (like Sharpe but only penalizes downside volatility)
  */
 export function calculateSortinoRatio(curve: EquityCurvePoint[], _period: string): number | null {
-  if (curve.length < 5) return null
+  if (curve.length < 4) return null
 
   const returns = dailyReturns(extractValues(curve))
   if (returns.length < 3) return null
@@ -134,7 +137,7 @@ export function calculateSortinoRatio(curve: EquityCurvePoint[], _period: string
  * Calculate Calmar ratio from equity curve (annualized return / max drawdown)
  */
 export function calculateCalmarRatio(curve: EquityCurvePoint[], _period: string): number | null {
-  if (curve.length < 5) return null
+  if (curve.length < 4) return null
 
   const values = extractValues(curve)
   const totalReturn = values[values.length - 1] - values[0]
@@ -244,15 +247,15 @@ export function enhanceStatsWithDerivedMetrics(
     }
   }
 
-  if (!stats.sharpeRatio && curve.length >= 3) {
+  if (!stats.sharpeRatio && curve.length >= 4) {
     stats.sharpeRatio = calculateSharpeRatio(curve, period)
   }
 
-  if (!stats.sortinoRatio && curve.length >= 3) {
+  if (!stats.sortinoRatio && curve.length >= 4) {
     stats.sortinoRatio = calculateSortinoRatio(curve, period)
   }
 
-  if (!stats.calmarRatio && curve.length >= 3) {
+  if (!stats.calmarRatio && curve.length >= 4) {
     stats.calmarRatio = calculateCalmarRatio(curve, period)
   }
 
