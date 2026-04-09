@@ -67,6 +67,9 @@ export async function GET(request: NextRequest) {
     const offset = Math.max(0, parseInt(searchParams.get('offset') || '0', 10) || 0)
 
     // Build query
+    // KEEP 'exact' — manipulation_alerts is a moderation queue actionable
+    // by admins; they need a real "N unresolved alerts" badge and correct
+    // pagination. Table is small (rolling alerts, low write rate).
     let query = supabase
       .from('manipulation_alerts')
       .select('*', { count: 'exact' })

@@ -61,11 +61,13 @@ export async function GET(req: NextRequest) {
       .order('updated_at', { ascending: false })
       .limit(200),
 
-    // 3. Leaderboard counts per season
+    // 3. Leaderboard counts per season — estimated (admin observability
+    // tile, approximate is fine). Exact counts on leaderboard_ranks
+    // (~300k rows) under cron load can stall the dashboard.
     ...((['7D', '30D', '90D'] as const).map(season =>
       supabase
         .from('leaderboard_ranks')
-        .select('*', { count: 'exact', head: true })
+        .select('*', { count: 'estimated', head: true })
         .eq('season_id', season)
     )),
 

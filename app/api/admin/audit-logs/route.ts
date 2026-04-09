@@ -24,6 +24,9 @@ export const GET = withAdminAuth(
     const to = searchParams.get('to') || null
 
     // Query admin_logs
+    // KEEP 'exact' — powers pagination "Page X of Y" in the admin audit log
+    // viewer. admin_logs is small (<100k rows, write-only operational log)
+    // and the UI needs a correct total_pages for range navigation.
     let adminQuery = supabase
       .from('admin_logs')
       .select('id, admin_id, action, target_type, target_id, details, created_at', { count: 'exact' })
@@ -49,6 +52,7 @@ export const GET = withAdminAuth(
     }
 
     // Query group_audit_log
+    // KEEP 'exact' — same pagination reason as admin_logs above.
     let groupQuery = supabase
       .from('group_audit_log')
       .select('id, group_id, actor_id, action, target_id, details, created_at', { count: 'exact' })

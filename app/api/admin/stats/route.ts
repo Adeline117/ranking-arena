@@ -37,24 +37,33 @@ export const GET = withAdminAuth(
       { count: snapshots24h },
       { count: totalLibraryItems },
       { count: libraryWithPdf },
+    // Admin dashboard numbers — approximate is fine. 17 parallel exact
+    // counts on user_profiles/posts/comments/leaderboard_ranks/
+    // trader_snapshots_v2 (~70M rows) can stall the whole dashboard when
+    // the DB is under cron load. pg_class.reltuples / EXPLAIN estimate is
+    // within ~5% which is plenty for an internal metrics tile.
+    // content_reports pending count kept exact — it's a moderation queue
+    // actionable by staff where "3 vs 3000" matters.
     ] = await Promise.all([
-      supabase.from('user_profiles').select('id', { count: 'exact', head: true }),
-      supabase.from('user_profiles').select('id', { count: 'exact', head: true }).gte('created_at', today.toISOString()),
-      supabase.from('user_profiles').select('id', { count: 'exact', head: true }).gte('created_at', yesterday.toISOString()).lt('created_at', today.toISOString()),
-      supabase.from('user_profiles').select('id', { count: 'exact', head: true }).not('banned_at', 'is', null),
-      supabase.from('posts').select('id', { count: 'exact', head: true }),
-      supabase.from('posts').select('id', { count: 'exact', head: true }).gte('created_at', today.toISOString()),
-      supabase.from('posts').select('id', { count: 'exact', head: true }).gte('created_at', yesterday.toISOString()).lt('created_at', today.toISOString()),
-      supabase.from('comments').select('id', { count: 'exact', head: true }),
-      supabase.from('comments').select('id', { count: 'exact', head: true }).gte('created_at', today.toISOString()),
+      supabase.from('user_profiles').select('id', { count: 'estimated', head: true }),
+      supabase.from('user_profiles').select('id', { count: 'estimated', head: true }).gte('created_at', today.toISOString()),
+      supabase.from('user_profiles').select('id', { count: 'estimated', head: true }).gte('created_at', yesterday.toISOString()).lt('created_at', today.toISOString()),
+      supabase.from('user_profiles').select('id', { count: 'estimated', head: true }).not('banned_at', 'is', null),
+      supabase.from('posts').select('id', { count: 'estimated', head: true }),
+      supabase.from('posts').select('id', { count: 'estimated', head: true }).gte('created_at', today.toISOString()),
+      supabase.from('posts').select('id', { count: 'estimated', head: true }).gte('created_at', yesterday.toISOString()).lt('created_at', today.toISOString()),
+      supabase.from('comments').select('id', { count: 'estimated', head: true }),
+      supabase.from('comments').select('id', { count: 'estimated', head: true }).gte('created_at', today.toISOString()),
+      // KEEP 'exact' — moderation queue actionable by staff
       supabase.from('content_reports').select('id', { count: 'exact', head: true }).eq('status', 'pending'),
-      supabase.from('content_reports').select('id', { count: 'exact', head: true }).gte('created_at', weekAgo.toISOString()),
-      supabase.from('groups').select('id', { count: 'exact', head: true }),
+      supabase.from('content_reports').select('id', { count: 'estimated', head: true }).gte('created_at', weekAgo.toISOString()),
+      supabase.from('groups').select('id', { count: 'estimated', head: true }),
+      // KEEP 'exact' — moderation queue
       supabase.from('group_applications').select('id', { count: 'exact', head: true }).eq('status', 'pending'),
-      supabase.from('leaderboard_ranks').select('source_trader_id', { count: 'exact', head: true }).eq('season_id', '90D'),
-      supabase.from('trader_snapshots_v2').select('id', { count: 'exact', head: true }).gte('created_at', yesterday.toISOString()),
-      supabase.from('library_items').select('id', { count: 'exact', head: true }),
-      supabase.from('library_items').select('id', { count: 'exact', head: true }).not('pdf_url', 'is', null),
+      supabase.from('leaderboard_ranks').select('source_trader_id', { count: 'estimated', head: true }).eq('season_id', '90D'),
+      supabase.from('trader_snapshots_v2').select('id', { count: 'estimated', head: true }).gte('created_at', yesterday.toISOString()),
+      supabase.from('library_items').select('id', { count: 'estimated', head: true }),
+      supabase.from('library_items').select('id', { count: 'estimated', head: true }).not('pdf_url', 'is', null),
     ])
 
     // Scraper health — use leaderboard_count_cache instead of full table scan
