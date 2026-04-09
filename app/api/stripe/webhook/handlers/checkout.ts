@@ -4,6 +4,8 @@ import { joinProOfficialGroup } from '@/app/api/pro-official-group/route'
 import { getSupabase, withRetry, logger } from './shared'
 import { updateUserSubscription } from './subscription'
 import { mintNFTForUser } from './nft'
+import { sendAlert } from '@/lib/alerts/send-alert'
+import { fireAndForget } from '@/lib/utils/logger'
 
 export async function handleCheckoutComplete(session: Stripe.Checkout.Session) {
   const userId = session.metadata?.userId || session.metadata?.supabase_user_id
@@ -71,6 +73,24 @@ export async function handleCheckoutComplete(session: Stripe.Checkout.Session) {
     await mintNFTForUser(userId, plan || 'monthly')
 
     logger.info(`Checkout completed for user ${userId}`, { plan, subscriptionId })
+
+    // Celebrate every new paying subscriber on Telegram. Fire-and-forget so
+    // this can never break the checkout flow. Retro 2026-04-09: CEO review
+    // flagged that the first paying signal was invisible — this is the fix.
+    fireAndForget(
+      sendAlert({
+        title: '🎉 New paying subscriber',
+        message: `Plan: ${plan || 'monthly'} · Subscription: ${subscriptionId}`,
+        level: 'info',
+        details: {
+          userId,
+          plan: plan || 'monthly',
+          subscriptionId,
+          status: subscription.status,
+        },
+      }),
+      'stripe-new-subscriber-alert',
+    )
   } catch (err: unknown) {
     logger.error('Failed to process checkout completion', { error: err })
     await withRetry(async () => {
@@ -204,4 +224,15 @@ async function handleLifetimePayment(userId: string, customerId: string) {
   await mintNFTForUser(userId, 'lifetime')
 
   logger.info(`Lifetime payment processed for user ${userId}`)
+
+  // Celebrate the lifetime purchase on Telegram (same rationale as above).
+  fireAndForget(
+    sendAlert({
+      title: '🎉 New lifetime subscriber',
+      message: `User ${userId} bought a lifetime plan`,
+      level: 'info',
+      details: { userId, customerId, plan: 'lifetime' },
+    }),
+    'stripe-new-lifetime-alert',
+  )
 }
