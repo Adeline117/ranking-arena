@@ -276,7 +276,16 @@ export default function TraderProfileClient({ data, serverTraderData, claimedUse
     traderFetcher,
     {
       revalidateOnFocus: false,
-      refreshInterval: 5 * 60 * 1000, // 5 min auto-refresh
+      // Pause auto-refresh when the tab is hidden to save bandwidth/CPU/battery.
+      // SWR's default (refreshWhenHidden: false) skips ticks when hidden, but
+      // returning 0 from this function halts the timer entirely. The interval
+      // resumes automatically on visibilitychange because SWR re-evaluates
+      // this function on revalidation.
+      refreshInterval: () =>
+        typeof document !== 'undefined' && document.visibilityState === 'hidden'
+          ? 0
+          : 5 * 60 * 1000,
+      refreshWhenHidden: false,
       dedupingInterval: 5000,
       errorRetryCount: 2,
       fallbackData: isPrimaryAccount ? (serverTraderData ?? undefined) : undefined,
