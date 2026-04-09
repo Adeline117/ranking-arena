@@ -12,6 +12,7 @@ import type { EquityCurvePoint, PositionHistoryItem, StatsDetail } from './enric
 import { buildEquityCurveFromPositions, computeStatsFromPositions } from './enrichment-dex'
 import { fetchJson } from './shared'
 import { logger } from '@/lib/logger'
+import { createTraderResponseCache } from './trader-response-cache'
 
 const TRADES_API = 'https://perps-api.jup.ag/v1/trades'
 
@@ -22,44 +23,23 @@ const TRADES_API = 'https://perps-api.jup.ag/v1/trades'
  * generates 6 in-flight requests every cycle and Solana-backed APIs reliably
  * 429 under that load → ~65% enrichment failure rate.
  *
- * Cache by walletAddress. 2-minute TTL spans one runEnrichment invocation.
- * Also coalesces concurrent in-flight requests (thundering herd guard).
+ * Cache by walletAddress (ignoring requested limit so every caller hits the
+ * same entry). 2-minute TTL spans one runEnrichment invocation and the shared
+ * helper handles in-flight dedup + bounded FIFO eviction.
  */
-interface JupiterTradesCacheEntry {
-  positions: PositionHistoryItem[]
-  cachedAt: number
-}
-const JUP_CACHE_TTL_MS = 2 * 60 * 1000
-const jupiterTradesCache = new Map<string, JupiterTradesCacheEntry>()
-const jupiterTradesInflight = new Map<string, Promise<PositionHistoryItem[]>>()
-
 // Always fetch the largest size (500) once and slice locally for smaller asks.
 // This guarantees a single API call per trader regardless of how many internal
 // callers (positionHistory + equityCurve + statsDetail) ask with different limits.
 const JUP_FETCH_LIMIT = 500
+const jupiterTradesCache = createTraderResponseCache<PositionHistoryItem[]>({
+  name: 'jupiter-trades',
+})
 
 async function fetchJupiterPositionsCached(walletAddress: string, requestedLimit = 200): Promise<PositionHistoryItem[]> {
-  const key = walletAddress // canonical, ignore limit
-  const cached = jupiterTradesCache.get(key)
-  if (cached && Date.now() - cached.cachedAt < JUP_CACHE_TTL_MS) {
-    return cached.positions.slice(0, requestedLimit)
-  }
-  const inflight = jupiterTradesInflight.get(key)
-  if (inflight) return (await inflight).slice(0, requestedLimit)
-
-  const promise = fetchJupiterPositionHistoryRaw(walletAddress, JUP_FETCH_LIMIT)
-  jupiterTradesInflight.set(key, promise)
-  try {
-    const positions = await promise
-    jupiterTradesCache.set(key, { positions, cachedAt: Date.now() })
-    if (jupiterTradesCache.size > 2000) {
-      const firstKey = jupiterTradesCache.keys().next().value
-      if (firstKey) jupiterTradesCache.delete(firstKey)
-    }
-    return positions.slice(0, requestedLimit)
-  } finally {
-    jupiterTradesInflight.delete(key)
-  }
+  const positions = await jupiterTradesCache.getOrFetch(walletAddress, () =>
+    fetchJupiterPositionHistoryRaw(walletAddress, JUP_FETCH_LIMIT)
+  )
+  return positions.slice(0, requestedLimit)
 }
 
 interface JupiterTrade {
