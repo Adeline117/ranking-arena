@@ -17,7 +17,7 @@ const DEFAULT_STATS = {
 }
 
 const CACHE_KEY = 'hero-stats:v1'
-const _CACHE_TTL = 3600 // 1 hour
+// Uses 'cold' tier → Redis TTL 1h, memory 5min, SWR 5min (hero stats only changes on cron runs)
 
 export interface HeroStats {
   exchangeCount: number
@@ -34,7 +34,7 @@ export interface HeroStats {
 export async function getHeroStats(): Promise<HeroStats> {
   try {
     // 1. 尝试从缓存读取
-    const { data: cached } = await tieredGet<HeroStats>(CACHE_KEY, 'warm')
+    const { data: cached } = await tieredGet<HeroStats>(CACHE_KEY, 'cold')
     if (cached) {
       return cached
     }
@@ -75,7 +75,7 @@ export async function getHeroStats(): Promise<HeroStats> {
     }
 
     // 3. 缓存结果
-    await tieredSet(CACHE_KEY, stats, 'warm', ['hero-stats'])
+    await tieredSet(CACHE_KEY, stats, 'cold', ['hero-stats'])
 
     return stats
   } catch (error) {
