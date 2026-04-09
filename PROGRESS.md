@@ -2,6 +2,13 @@
 
 > Auto-read by Claude Code at session start. Keep concise — archive completed items weekly.
 
+## Docs cleanup sweep (2026-04-09)
+- Removed 25 historical one-off fix reports from root (-3,989 lines) + `OPTIMIZATION_PLAN.md` (-234 lines, all P0 items shipped)
+- Verified P0-4 Compare toggle (`TraderHeader.tsx:694`), P0-1 bitget_futures cron (group b2), P0-2 lbank in NO_ENRICHMENT_PLATFORMS, P0-3 diagnostic scripts on v2
+- P1-8/P1-10 already done: `lib/utils/copy-trade.ts` has all 9 previously-missing exchanges (MEXC, Gate, BingX, Phemex, Blofin, Coinex, BTCC, Bitfinex, XT) and both `CopyTradeButton` + `ExchangeLinksBar` import from it
+- P2-2 hreflang: added `alternates.languages` (en/zh-CN/ja/ko/x-default) in `app/layout.tsx` — single-URL model, Google can now associate all 4 locales with canonical URL
+- Refreshed CLAUDE.md metrics: 32→62 crons, 27→32 exchanges, 32k→34k+ traders
+
 ## Inline Enrichment — Fetch+Enrich in One Pass (2026-04-02)
 
 **Goal**: New traders get complete profile pages immediately (no waiting for batch-enrich cron).
