@@ -48,8 +48,9 @@ export async function GET(request: NextRequest) {
       .from('trader_sources')
       .select('id', { count: 'exact', head: true })
 
-    // 4. 最近失败
-    const recentFailures = await PipelineLogger.getRecentFailures(10)
+    // 4. 最近失败 — 7 day window for a weekly report (default window is 2h for
+    // real-time health alerts; weekly retrospective needs a longer horizon)
+    const recentFailures = await PipelineLogger.getRecentFailures(10, 7 * 24 * 60)
     const uniqueFailedJobs = new Set(recentFailures.map(f => f.job_name))
 
     // 5. 数据新鲜度 — 过期数据源
