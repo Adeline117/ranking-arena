@@ -359,10 +359,12 @@ async function handleStats(chatId: number, lang: BotLang): Promise<void> {
   const supabase = getSupabaseAdmin()
 
   // Get trader count and exchange count from leaderboard_ranks
+  // Estimated — this is a /stats Telegram bot command showing a rough
+  // headline number. Exact scan of leaderboard_ranks (~300k) is overkill.
   const [traderResult, exchangeResult] = await Promise.all([
     supabase
       .from('leaderboard_ranks')
-      .select('source_trader_id', { count: 'exact', head: true })
+      .select('source_trader_id', { count: 'estimated', head: true })
       .eq('season_id', '90D'),
     supabase
       .from('leaderboard_ranks')

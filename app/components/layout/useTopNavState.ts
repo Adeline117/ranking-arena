@@ -62,6 +62,11 @@ export function useTopNavState() {
         const userId = data.session.user.id
         setMyId(userId)
 
+        // KEEP 'exact' on the two count queries below — the top-nav
+        // badge shows the literal number (e.g. "3 unread") and is
+        // scoped to a single user via eq(user_id/receiver_id) + eq(read),
+        // which uses the (user_id, read) index and returns <100 rows
+        // in the typical case.
         const [profileResult, notificationsResult, messagesResult] = await Promise.all([
           supabase
             .from('user_profiles')
