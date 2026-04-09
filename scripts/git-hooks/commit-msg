@@ -1,0 +1,48 @@
+#!/bin/sh
+# commit-msg hook — enforce no-debug-commit rule
+#
+# Blocks commit messages that look like throwaway debug / trigger-redeploy /
+# empty marker commits. The retro 2026-04-09 found 20+ of these had landed
+# on main over a 2-week window. Policy: debugging goes through preview
+# deploys, not main.
+#
+# Install:
+#   cp scripts/git-hooks/commit-msg .git/hooks/commit-msg
+#   chmod +x .git/hooks/commit-msg
+#
+# Allowed formats: feat|fix|perf|refactor|docs|chore|test|style|build|ci|revert
+# Blocked: ^debug:, ^chore: (force|trigger) redeploy, ^chore:.*marker
+
+MSG_FILE="$1"
+FIRST_LINE=$(head -n1 "$MSG_FILE")
+
+# Skip merge commits
+if echo "$FIRST_LINE" | grep -qE '^Merge '; then
+  exit 0
+fi
+
+# Block debug: prefix
+if echo "$FIRST_LINE" | grep -qiE '^debug:'; then
+  echo "commit-msg hook: 'debug:' commits are banned on main."
+  echo "  Offending message: $FIRST_LINE"
+  echo "  Route debugging through a preview deploy instead."
+  echo "  Override: git commit --no-verify (discouraged)"
+  exit 1
+fi
+
+# Block chore: trigger/force redeploy commits
+if echo "$FIRST_LINE" | grep -qiE '^chore: *(force|trigger) +redeploy'; then
+  echo "commit-msg hook: trigger-redeploy commits are banned."
+  echo "  Offending message: $FIRST_LINE"
+  echo "  Use a meaningful fix/perf/refactor commit or redeploy via the Vercel dashboard."
+  exit 1
+fi
+
+# Block "chore: ... marker" empty commits
+if echo "$FIRST_LINE" | grep -qiE '^chore:.*marker'; then
+  echo "commit-msg hook: marker/no-op chore commits are banned."
+  echo "  Offending message: $FIRST_LINE"
+  exit 1
+fi
+
+exit 0
