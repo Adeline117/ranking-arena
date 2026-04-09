@@ -16,7 +16,8 @@ import { useAuthSession } from '@/lib/hooks/useAuthSession'
 import { useLinkedAccounts } from '@/lib/hooks/useLinkedAccounts'
 import { EXCHANGE_NAMES } from '@/lib/constants/exchanges'
 import { Box, Text } from '@/app/components/base'
-import TopNav from '@/app/components/layout/TopNav'
+// TopNav is now rendered by app/(app)/trader/[handle]/layout.tsx
+// (was pulled into this client bundle unnecessarily before).
 import Breadcrumb from '@/app/components/ui/Breadcrumb'
 import TraderHeader from '@/app/components/trader/TraderHeader'
 import TraderTabs from '@/app/components/trader/TraderTabs'
@@ -380,7 +381,6 @@ export default function TraderProfileClient({ data, serverTraderData, claimedUse
   if (isInitialLoading) {
     return (
       <Box style={{ minHeight: '100vh', background: tokens.colors.bg.primary, color: tokens.colors.text.primary }}>
-        <TopNav />
         <Box style={{ maxWidth: 1200, margin: '0 auto', padding: tokens.spacing[6] }}>
           <RankingSkeleton />
         </Box>
@@ -392,7 +392,6 @@ export default function TraderProfileClient({ data, serverTraderData, claimedUse
   if (traderError && !traderData) {
     return (
       <Box style={{ minHeight: '100vh', background: tokens.colors.bg.primary, color: tokens.colors.text.primary }}>
-        <TopNav />
         <Box style={{ maxWidth: 1200, margin: '0 auto', padding: tokens.spacing[6], textAlign: 'center', paddingTop: tokens.spacing[8] }}>
           <div style={{ fontSize: 48, marginBottom: tokens.spacing[4] }}>⚠️</div>
           <Text size="xl" weight="bold" style={{ marginBottom: tokens.spacing[2] }}>
@@ -447,7 +446,7 @@ export default function TraderProfileClient({ data, serverTraderData, claimedUse
       }}
     >
       <JsonLd data={structuredData} />
-      <TopNav />
+      {/* TopNav is rendered by the parent layout.tsx (server component) */}
 
       <Box className="page-container" style={{ maxWidth: 1200, margin: '0 auto', padding: tokens.spacing[6], paddingBottom: 100 }}>
         <Breadcrumb items={[
