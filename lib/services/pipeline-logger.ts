@@ -363,18 +363,27 @@ export class PipelineLogger {
 
   /**
    * Get recent failures across all jobs
+   *
+   * ROOT CAUSE FIX (2026-04-09): Previously had no time filter, so old
+   * historical failures (hours/days stale) kept showing up in
+   * /api/health/pipeline alerts even after the underlying job recovered.
+   * Default 120min window means once a job has been healthy for 2h, its
+   * old failures drop out of the alert payload. Callers can pass a custom
+   * window if needed (e.g., daily report may want 24h).
    */
-  static async getRecentFailures(limit = 20): Promise<Array<{
+  static async getRecentFailures(limit = 20, withinMinutes = 120): Promise<Array<{
     job_name: string
     started_at: string
     error_message: string | null
     metadata: Record<string, unknown>
   }>> {
     const client = getClient()
+    const cutoff = new Date(Date.now() - withinMinutes * 60 * 1000).toISOString()
     const { data, error } = await client
       .from('pipeline_logs')
       .select('job_name, started_at, error_message, metadata')
       .in('status', ['error', 'timeout'])
+      .gte('started_at', cutoff)
       .order('started_at', { ascending: false })
       .limit(limit)
 
