@@ -63,9 +63,11 @@ async function resolveTraderForWrapped(
       .eq('season_id', seasonId)
       .maybeSingle()
 
+    // Estimated — displayed as "Rank X of ~N" on a shareable rank card;
+    // N is a marketing number, rounded integer percentile is unaffected.
     const { count } = await supabase
       .from('leaderboard_ranks')
-      .select('*', { count: 'exact', head: true })
+      .select('*', { count: 'estimated', head: true })
       .eq('source', resolved.platform)
       .eq('season_id', seasonId)
 
