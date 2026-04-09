@@ -140,15 +140,36 @@ export async function GET(request: Request) {
       }, `meta-monitor:${jobKey}`, 3 * 60 * 60 * 1000)
     }
 
-    await plog.success(stuckJobs.length, { stuck_jobs: stuckJobs.map(j => j.job) })
+    // Check if historical data cleanup is complete
+    let cleanupComplete = false
+    try {
+      const { data: cleanupStatus } = await supabase.from('pipeline_logs').select('*').eq('job_name', 'cleanup-violations').order('started_at', { ascending: false }).limit(1).single()
+      if (cleanupStatus?.metadata && typeof cleanupStatus.metadata === 'object') {
+        const meta = cleanupStatus.metadata as Record<string, unknown>
+        if (meta.done === true || meta.fixed === 0) {
+          cleanupComplete = true
+          await sendRateLimitedAlert({
+            title: '历史数据清理完成!',
+            message: '所有历史违规数据已清理完毕。请运行:\nbash scripts/post-cleanup-orchestrate.sh\n\n此脚本将: VALIDATE 约束 → 重算指标 → 重算 composite',
+            level: 'info',
+            details: { action: 'run post-cleanup-orchestrate.sh' },
+          }, 'cleanup-complete', 24 * 60 * 60 * 1000) // Once per day max
+        }
+      }
+    } catch {
+      // Best-effort check
+    }
 
-    logger.info(`[meta-monitor] Checked ${Object.keys(EXPECTED_INTERVALS).length} jobs, ${stuckJobs.length} stuck`)
+    await plog.success(stuckJobs.length, { stuck_jobs: stuckJobs.map(j => j.job), cleanupComplete })
+
+    logger.info(`[meta-monitor] Checked ${Object.keys(EXPECTED_INTERVALS).length} jobs, ${stuckJobs.length} stuck, cleanup=${cleanupComplete ? 'done' : 'running'}`)
 
     return NextResponse.json({
       ok: true,
       monitored: Object.keys(EXPECTED_INTERVALS).length,
       stuck: stuckJobs.length,
       stuckJobs,
+      cleanupComplete,
     })
   } catch (error) {
     await plog.error(error)

@@ -1,7 +1,7 @@
 
 'use client'
 
-import { Suspense, lazy, useLayoutEffect } from 'react'
+import { Suspense, lazy } from 'react'
 import { tokens } from '@/lib/design-tokens'
 import TopNav from '../layout/TopNav'
 // MobileBottomNav is rendered in root layout.tsx -- do not duplicate here
@@ -33,16 +33,11 @@ interface HomePageProps {
 }
 
 export default function HomePage({ initialTraders, initialLastUpdated, heroStats, initialTotalCount, initialCategoryCounts }: HomePageProps) {
-  // Remove SSR topnav and render Phase 2 TopNav directly.
-  // Portal approach was silently failing — container emptied but nothing rendered.
-  useLayoutEffect(() => {
-    const ssrNav = document.getElementById('ssr-topnav')
-    if (ssrNav) ssrNav.remove()
-  }, [])
+  // SSR TopNav stays visible permanently (no portal, no removal).
+  // globals.css no longer hides #ssr-topnav when Phase 2 loads.
 
   return (
     <>
-      <TopNav email={null} />
       <div
         id="homepage-interactive"
         suppressHydrationWarning
