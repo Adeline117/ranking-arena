@@ -165,10 +165,13 @@ export async function GET(request: NextRequest) {
     }
 
     // Compute target seasons (single season when staggered, all when fallback)
+    // Shared deadline: leave 30s at the end for finalization + post-processing.
+    // When one season runs alone (staggered case), it gets the full budget.
+    const computeDeadline = startTime + (maxDuration - 30) * 1000
     const results = await Promise.all(
       targetSeasons.map(async (season) => {
         try {
-          const count = await computeSeason(supabase, season, previousCounts[season], forceWrite)
+          const count = await computeSeason(supabase, season, previousCounts[season], forceWrite, computeDeadline)
           return { season, count, error: null }
         } catch (err) {
           logger.error(`[${season}] computeSeason failed:`, err)
@@ -424,7 +427,17 @@ async function computeSeason(
   season: Period,
   previousCount?: number,
   forceWrite?: boolean,
+  deadlineMs: number = Date.now() + 270_000,
 ): Promise<number> {
+  // Deadline helpers — any phase can call these to abort early when time runs out.
+  // Prevents cumulative Phase 3/4/4b/4b2 enrichment queries from blowing past
+  // Vercel's 300s maxDuration and leaving pipeline_logs as 'running' until
+  // cleanup-stuck-logs sweeps them 30 min later.
+  const timeLeftMs = () => deadlineMs - Date.now()
+  const isOutOfTime = (minMs: number = 10_000) => timeLeftMs() < minMs
+  // Upsert abort flag (set inside the upsert loop when time runs out, consumed
+  // by the zero-out phase below to skip its expensive N+1 cleanup path).
+  let upsertAborted = false
   // Per-source freshness thresholds
   const freshnessISOBySource = (source: string): string => {
     const threshold = new Date()
@@ -752,9 +765,14 @@ async function computeSeason(
   // Phase 3: Fill missing metrics from trader_stats_detail (enrichment table)
   // This catches data from enrichment runs that wrote to stats_detail but not back to snapshots
   // Now also fills: sharpe, sortino, calmar, trades_count, avg_holding_hours
-  const tradersNeedingEnrichment = Array.from(traderMap.values())
-    .filter(t => t.win_rate == null || t.max_drawdown == null || t.sharpe_ratio == null ||
-                 t.sortino_ratio == null || t.calmar_ratio == null || t.trades_count == null)
+  if (isOutOfTime(90_000)) {
+    logger.warn(`[${season}] SKIPPING Phase 3 (stats_detail enrichment) — only ${Math.round(timeLeftMs() / 1000)}s left`)
+  }
+  const tradersNeedingEnrichment = isOutOfTime(90_000)
+    ? []
+    : Array.from(traderMap.values())
+        .filter(t => t.win_rate == null || t.max_drawdown == null || t.sharpe_ratio == null ||
+                     t.sortino_ratio == null || t.calmar_ratio == null || t.trades_count == null)
   if (tradersNeedingEnrichment.length > 0) {
     const enrichBySource = new Map<string, string[]>()
     for (const t of tradersNeedingEnrichment) {
@@ -765,6 +783,7 @@ async function computeSeason(
     await Promise.all(
       Array.from(enrichBySource.entries()).map(async ([source, traderIds]) => {
         for (let i = 0; i < traderIds.length; i += 100) {
+          if (isOutOfTime(60_000)) break // leave time for scoring + upsert
           const chunk = traderIds.slice(i, i + 100)
           const { data: statsRows } = await supabase
             .from('trader_stats_detail')
@@ -822,8 +841,12 @@ async function computeSeason(
 
   // Phase 4: Derive win_rate/max_drawdown from equity_curve (daily PnL) as universal fallback
   // This covers ALL platforms that have equity curve data but no native WR/MDD
-  const stillNeedingData = Array.from(traderMap.values())
-    .filter(t => t.win_rate == null || t.max_drawdown == null)
+  if (isOutOfTime(75_000)) {
+    logger.warn(`[${season}] SKIPPING Phase 4 (equity_curve WR/MDD derivation) — only ${Math.round(timeLeftMs() / 1000)}s left`)
+  }
+  const stillNeedingData = isOutOfTime(75_000)
+    ? []
+    : Array.from(traderMap.values()).filter(t => t.win_rate == null || t.max_drawdown == null)
   if (stillNeedingData.length > 0) {
     const eqBySource = new Map<string, string[]>()
     for (const t of stillNeedingData) {
@@ -836,6 +859,7 @@ async function computeSeason(
       Array.from(eqBySource.entries()).map(async ([source, traderIds]) => {
         // Query equity curves for these traders (all periods, prefer 90D)
         for (let i = 0; i < traderIds.length; i += 50) {
+          if (isOutOfTime(60_000)) break
           const chunk = traderIds.slice(i, i + 50)
           const { data: eqRows } = await supabase
             .from('trader_equity_curve')
@@ -901,7 +925,9 @@ async function computeSeason(
 
   // Phase 4b: Compute sharpe/sortino/calmar/profit_factor from equity_curve for traders still missing them
   // Also estimate trades_count from equity curve points for platforms that don't provide it
-  {
+  if (isOutOfTime(60_000)) {
+    logger.warn(`[${season}] SKIPPING Phase 4b (advanced metrics from equity_curve) — only ${Math.round(timeLeftMs() / 1000)}s left`)
+  } else {
     const needAdvanced = Array.from(traderMap.values())
       .filter(t => t.roi != null && (t.sharpe_ratio == null || t.sortino_ratio == null || t.calmar_ratio == null || t.profit_factor == null || t.trades_count == null))
     if (needAdvanced.length > 0) {
@@ -915,6 +941,7 @@ async function computeSeason(
       await Promise.all(
         Array.from(advBySource.entries()).map(async ([source, traderIds]) => {
           for (let i = 0; i < traderIds.length; i += 50) {
+            if (isOutOfTime(50_000)) break
             const chunk = traderIds.slice(i, i + 50)
             const { data: eqRows } = await supabase
               .from('trader_equity_curve')
@@ -1024,7 +1051,9 @@ async function computeSeason(
 
   // Phase 4b2: Fallback — compute from trader_daily_snapshots for traders still missing
   // This covers traders not reached by enrichment (which only processes top N by score)
-  {
+  if (isOutOfTime(50_000)) {
+    logger.warn(`[${season}] SKIPPING Phase 4b2 (advanced metrics from daily_snapshots) — only ${Math.round(timeLeftMs() / 1000)}s left`)
+  } else {
     const stillNeedAdvanced = Array.from(traderMap.values())
       .filter(t => t.roi != null && (t.sharpe_ratio == null || t.sortino_ratio == null || t.calmar_ratio == null || t.profit_factor == null))
     if (stillNeedAdvanced.length > 0) {
@@ -1038,6 +1067,7 @@ async function computeSeason(
       await Promise.all(
         Array.from(dsBySource.entries()).map(async ([source, traderIds]) => {
           for (let i = 0; i < traderIds.length; i += 100) {
+            if (isOutOfTime(40_000)) break
             const chunk = traderIds.slice(i, i + 100)
             const { data: dsRows } = await supabase
               .from('trader_daily_snapshots')
@@ -1560,6 +1590,10 @@ async function computeSeason(
         logger.warn(`Reached MAX_PAGES (${MAX_PAGES}) for season ${season}, breaking`)
         break
       }
+      if (isOutOfTime(45_000)) {
+        logger.warn(`[${season}] aborting currentScoreMap fetch at page ${pageCount} — only ${Math.round(timeLeftMs() / 1000)}s left`)
+        break
+      }
       const { data: currentScores } = await supabase
         .from('leaderboard_ranks')
         .select('source, source_trader_id, arena_score, rank, handle, avatar_url, sharpe_ratio, sortino_ratio, calmar_ratio, profit_factor, trading_style')
@@ -1626,6 +1660,11 @@ async function computeSeason(
   let upsertErrors = 0
   const batchUpsertSize = 200 // Reduced from 500 — 500 exceeds 30s statement_timeout under load
   for (let i = 0; i < changedTraders.length; i += batchUpsertSize) {
+    if (isOutOfTime(20_000)) {
+      logger.warn(`[${season}] upsert loop aborted at ${i}/${changedTraders.length} — only ${Math.round(timeLeftMs() / 1000)}s left`)
+      upsertAborted = true
+      break
+    }
     const batch = changedTraders.slice(i, i + batchUpsertSize).map((t) => {
       const key = `${t.source}:${t.source_trader_id}`
       const newRank = rankMap.get(key) ?? 0
@@ -1686,35 +1725,49 @@ async function computeSeason(
   // fresh but who got excluded from computation (negative ROI, <5 trades, etc.)
   // must not retain old high scores. This was the root cause of stale traders
   // sitting at #1 for days after their ROI went deeply negative.
-  const computedTraderIds = new Set(uniqueTraders.map(t => `${t.source}:${t.source_trader_id}`))
-  const allInTraderMap = new Set(Array.from(traderMap.values()).map(t => `${t.source}:${t.source_trader_id}`))
-  // Traders in traderMap but NOT in uniqueTraders = filtered out (bad ROI, too few trades, etc.)
-  const excludedTraders = Array.from(allInTraderMap).filter(k => !computedTraderIds.has(k))
-  if (excludedTraders.length > 0) {
-    const excludedPairs = excludedTraders.map(k => { const [source, ...rest] = k.split(':'); return { source, id: rest.join(':') } })
-    let zeroed = 0
-    for (let i = 0; i < excludedPairs.length; i += 100) {
-      const batch = excludedPairs.slice(i, i + 100)
-      for (const { source, id } of batch) {
-        const { error: zeroErr } = await supabase
-          .from('leaderboard_ranks')
-          .update({ arena_score: 0, computed_at: new Date().toISOString() })
-          .eq('season_id', season)
-          .eq('source', source)
-          .eq('source_trader_id', id)
-          .gt('arena_score', 0) // Only touch rows that actually have a non-zero score
-        if (!zeroErr) zeroed++
+  // Skip if upsert aborted OR running out of time — this phase does N+1 individual
+  // UPDATEs which is the most expensive cleanup in the route.
+  if (upsertAborted || isOutOfTime(25_000)) {
+    if (upsertAborted) logger.warn(`[${season}] SKIPPING zero-out (upsert aborted)`)
+    else logger.warn(`[${season}] SKIPPING zero-out — only ${Math.round(timeLeftMs() / 1000)}s left`)
+  } else {
+    const computedTraderIds = new Set(uniqueTraders.map(t => `${t.source}:${t.source_trader_id}`))
+    const allInTraderMap = new Set(Array.from(traderMap.values()).map(t => `${t.source}:${t.source_trader_id}`))
+    // Traders in traderMap but NOT in uniqueTraders = filtered out (bad ROI, too few trades, etc.)
+    const excludedTraders = Array.from(allInTraderMap).filter(k => !computedTraderIds.has(k))
+    if (excludedTraders.length > 0) {
+      const excludedPairs = excludedTraders.map(k => { const [source, ...rest] = k.split(':'); return { source, id: rest.join(':') } })
+      let zeroed = 0
+      outer: for (let i = 0; i < excludedPairs.length; i += 100) {
+        if (isOutOfTime(20_000)) {
+          logger.warn(`[${season}] zero-out aborted at ${i}/${excludedPairs.length}`)
+          break outer
+        }
+        const batch = excludedPairs.slice(i, i + 100)
+        for (const { source, id } of batch) {
+          const { error: zeroErr } = await supabase
+            .from('leaderboard_ranks')
+            .update({ arena_score: 0, computed_at: new Date().toISOString() })
+            .eq('season_id', season)
+            .eq('source', source)
+            .eq('source_trader_id', id)
+            .gt('arena_score', 0) // Only touch rows that actually have a non-zero score
+          if (!zeroErr) zeroed++
+        }
       }
-    }
-    if (zeroed > 0) {
-      logger.info(`${season}: zeroed out ${zeroed} excluded traders (fresh V2 data but failed filters)`)
+      if (zeroed > 0) {
+        logger.info(`${season}: zeroed out ${zeroed} excluded traders (fresh V2 data but failed filters)`)
+      }
     }
   }
 
   // Re-rank ALL rows to fix drift from incremental upserts
   // Stale traders (outside freshness window) keep old ranks while new traders shift numbering.
   // This global re-rank ensures rank always matches arena_score DESC ordering.
-  try {
+  // Skip if running out of time — re-rank can run on next cycle.
+  if (isOutOfTime(15_000)) {
+    logger.warn(`[${season}] SKIPPING re-rank — only ${Math.round(timeLeftMs() / 1000)}s left`)
+  } else try {
     const { error: rerankErr } = await supabase.rpc('rerank_leaderboard', { p_season_id: season })
     if (rerankErr) {
       // Fallback: direct SQL if RPC doesn't exist
@@ -1743,19 +1796,24 @@ async function computeSeason(
   // Clean up rows not updated in 5 days (was 14 — stale traders with old high scores
   // were persisting for weeks at the top of rankings because excluded traders' rows
   // were never re-computed, keeping outdated scores).
-  const cutoff = new Date(Date.now() - 5 * 24 * 60 * 60 * 1000).toISOString()
-  const { data: staleRows, error: staleErr } = await supabase
-    .from('leaderboard_ranks')
-    .select('id')
-    .eq('season_id', season)
-    .lt('computed_at', cutoff)
-    .limit(5000)
-  if (!staleErr && staleRows && staleRows.length > 0) {
-    const staleIds = staleRows.map((r: { id: string }) => r.id)
-    for (let i = 0; i < staleIds.length; i += 500) {
-      await supabase.from('leaderboard_ranks').delete().in('id', staleIds.slice(i, i + 500))
+  // Skip if running out of time — cleanup will run on next cycle.
+  if (isOutOfTime(10_000)) {
+    logger.warn(`[${season}] SKIPPING stale-row cleanup — only ${Math.round(timeLeftMs() / 1000)}s left`)
+  } else {
+    const cutoff = new Date(Date.now() - 5 * 24 * 60 * 60 * 1000).toISOString()
+    const { data: staleRows, error: staleErr } = await supabase
+      .from('leaderboard_ranks')
+      .select('id')
+      .eq('season_id', season)
+      .lt('computed_at', cutoff)
+      .limit(5000)
+    if (!staleErr && staleRows && staleRows.length > 0) {
+      const staleIds = staleRows.map((r: { id: string }) => r.id)
+      for (let i = 0; i < staleIds.length; i += 500) {
+        await supabase.from('leaderboard_ranks').delete().in('id', staleIds.slice(i, i + 500))
+      }
+      logger.info(`${season}: cleaned ${staleIds.length} stale rows (>5d old)`)
     }
-    logger.info(`${season}: cleaned ${staleIds.length} stale rows (>5d old)`)
   }
 
   // Store the last scored count in DB so the degradation check uses a realistic baseline
