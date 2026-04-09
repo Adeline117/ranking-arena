@@ -45,19 +45,19 @@ function mockFetchNetworkError(message = 'Network error') {
 
 describe('GainsPerpConnector', () => {
   describe('discoverLeaderboard', () => {
-    // The connector uses /leaderboard endpoint — returns array of {address, ...}
-    const validLeaderboardResponse = [
-      { address: '0xABC123DEF456', totalPnl: 50000, count: 100, count_win: 65 },
-      { address: '0x999888777666', totalPnl: 25000, count: 80, count_win: 50 },
-      { address: '0xDEF789ABC012', totalPnl: 10000, count: 30, count_win: 18 },
+    // The connector uses /open-trades — returns array of {trade: {user, collateralAmount, leverage}}
+    const validOpenTradesResponse = [
+      { trade: { user: '0xABC123DEF456', collateralAmount: '1000', leverage: '10' } },
+      { trade: { user: '0x999888777666', collateralAmount: '500', leverage: '5' } },
+      { trade: { user: '0xDEF789ABC012', collateralAmount: '200', leverage: '3' } },
     ]
 
     test('returns unique traders from leaderboard response', async () => {
       const connector = createConnector()
-      // 3 chains: arbitrum, polygon, base — first chain succeeds, others throw
-      mockFetchResponse(validLeaderboardResponse)  // arbitrum
-      mockFetchNetworkError()  // polygon fails
-      mockFetchNetworkError()  // base fails
+      // 3 chains: arbitrum, polygon, base — first chain succeeds, others empty
+      mockFetchResponse(validOpenTradesResponse)  // arbitrum
+      mockFetchResponse([])                        // polygon empty
+      mockFetchResponse([])                        // base empty
 
       const result = await connector.discoverLeaderboard('7d', 100)
 
@@ -65,20 +65,20 @@ describe('GainsPerpConnector', () => {
       expect(result.window).toBe('7d')
 
       const first = result.traders[0]
-      expect(first.trader_key).toBe('0xabc123def456')  // lowercase
+      expect(first.trader_key).toBe('0xabc123def456')  // lowercase, highest collateral*leverage
       expect(first.platform).toBe('gains')
       expect(first.market_type).toBe('perp')
       expect(first.is_active).toBe(true)
     })
 
-    test('returns empty when all chains fail', async () => {
+    test('throws when all chains fail', async () => {
       const connector = createConnector()
       // All 3 chains throw
       mockFetchNetworkError()
       mockFetchNetworkError()
       mockFetchNetworkError()
 
-      // All chains fail — connector throws on last chain when allTraders is empty
+      // All chains fail — connector throws on last chain when traderStats is empty
       await expect(connector.discoverLeaderboard('7d')).rejects.toThrow()
     })
 
@@ -95,8 +95,9 @@ describe('GainsPerpConnector', () => {
 
     test('respects limit parameter', async () => {
       const connector = createConnector()
-      mockFetchResponse(validLeaderboardResponse)  // arbitrum
-      // after limit is reached, loop breaks — other chains not called
+      mockFetchResponse(validOpenTradesResponse)  // arbitrum
+      mockFetchResponse([])                        // polygon empty
+      mockFetchResponse([])                        // base empty
 
       const result = await connector.discoverLeaderboard('7d', 1)
 
@@ -105,10 +106,12 @@ describe('GainsPerpConnector', () => {
 
     test('deduplicates addresses across chains', async () => {
       const connector = createConnector()
-      const chain1 = [{ address: '0xDUPLICATE', totalPnl: 1000 }]
-      const chain2 = [{ address: '0xDUPLICATE', totalPnl: 1000 }]  // same address on polygon
+      // Same address appears on both arbitrum and polygon — should aggregate to 1 trader
+      const chain1 = [{ trade: { user: '0xDUPLICATE', collateralAmount: '1000', leverage: '5' } }]
+      const chain2 = [{ trade: { user: '0xDUPLICATE', collateralAmount: '1000', leverage: '5' } }]
       mockFetchResponse(chain1)  // arbitrum
       mockFetchResponse(chain2)  // polygon
+      mockFetchResponse([])      // base empty
 
       const result = await connector.discoverLeaderboard('7d', 100)
 

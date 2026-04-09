@@ -17,10 +17,12 @@ const DEFAULT_STATS = {
 }
 
 const CACHE_KEY = 'hero-stats:v1'
-// Success path: 'cold' tier → 1h Redis TTL (stats only change on cron runs).
-// Fallback path: 'hot' tier → 5min Redis TTL. Short-lived so real recovery
-// isn't masked, but long enough to prevent thundering herd on concurrent SSR
-// during compute-leaderboard contention windows.
+const FALLBACK_MARKER_KEY = 'hero-stats:v1:fallback-marker'
+// Success path ('cold' tier): 1h Redis TTL on CACHE_KEY (stats only change on cron runs).
+// Fallback path: a SEPARATE marker key with 60s TTL, NOT overwriting CACHE_KEY.
+// Previously we wrote defaults to CACHE_KEY, which meant a single RPC failure
+// would evict the last known-good real value for 5 min. Now the real cache
+// stays intact; the marker just tracks "tried recently" for stampede control.
 
 export interface HeroStats {
   exchangeCount: number
@@ -36,18 +38,25 @@ export interface HeroStats {
  */
 export async function getHeroStats(): Promise<HeroStats> {
   try {
-    // 1. 尝试从缓存读取
+    // 1. Try cache (real data only — defaults are never written to CACHE_KEY)
     const { data: cached } = await tieredGet<HeroStats>(CACHE_KEY, 'cold')
-    if (cached) {
+    if (cached && !cached.isDefault) {
       return cached
     }
 
-    // 2. 从数据库查询 (with 3s timeout — SSR must never hang).
-    // Reuse the shared admin client instead of createClient() per-call —
-    // avoids re-parsing URL/cert + object allocation on every cold call.
-    const supabase = getSupabaseAdmin()
+    // 2. Stampede control: if a previous request recently failed, skip the
+    // RPC and return defaults. Without this, every concurrent SSR would
+    // race the slow RPC. The marker auto-expires in ~60s.
+    const { data: marker } = await tieredGet<{ failedAt: number }>(FALLBACK_MARKER_KEY, 'hot')
+    if (marker) {
+      // A prior request failed recently. Prefer STALE real data (if any)
+      // over defaults so the UI keeps the last known-good number.
+      if (cached) return cached
+      return { ...DEFAULT_STATS, isDefault: true }
+    }
 
-    // 使用高效的聚合查询 — 3s timeout to prevent SSR hang
+    // 3. Query DB (3s timeout — SSR must never hang)
+    const supabase = getSupabaseAdmin()
     const rpcPromise = supabase.rpc('get_hero_stats').single()
     const timeoutPromise = new Promise<{ data: null; error: { code: string; message: string } }>((resolve) =>
       setTimeout(() => resolve({ data: null, error: { code: 'TIMEOUT', message: 'SSR hero stats timeout' } }), 3000)
@@ -55,19 +64,17 @@ export async function getHeroStats(): Promise<HeroStats> {
     const { data, error } = await Promise.race([rpcPromise, timeoutPromise])
 
     if (error) {
-      // RPC failed (not available, timeout, etc.) — use defaults immediately
-      // AND cache them briefly to prevent thundering herd on concurrent SSR.
-      // DO NOT fall back to count(exact) which takes 25s+ and causes SSR timeout
       if (error.code === 'TIMEOUT' || error.code === 'PGRST202') {
         logger.warn(`[getHeroStats] RPC unavailable (${error.code}), using defaults`)
       } else {
         logger.warn(`[getHeroStats] RPC failed (${error.code}), using defaults`)
       }
-      const fallback: HeroStats = { ...DEFAULT_STATS, isDefault: true }
-      // Short-TTL cache to bound retry frequency to ~1/minute per instance.
-      // Uses hot tier so memory + Redis layers dedup the stampede.
-      void tieredSet(CACHE_KEY, fallback, 'hot', ['hero-stats', 'fallback']).catch(() => {})
-      return fallback
+      // Write ONLY the marker — leave CACHE_KEY untouched so the last
+      // known-good value is preserved for the next request.
+      void tieredSet(FALLBACK_MARKER_KEY, { failedAt: Date.now() }, 'hot', ['hero-stats', 'fallback']).catch(() => {})
+      // Prefer stale real data if available, otherwise defaults.
+      if (cached) return cached
+      return { ...DEFAULT_STATS, isDefault: true }
     }
 
     const rpcData = data as { exchange_count?: number; trader_count?: number } | null
@@ -76,7 +83,7 @@ export async function getHeroStats(): Promise<HeroStats> {
       traderCount: rpcData?.trader_count || DEFAULT_STATS.traderCount,
     }
 
-    // 3. 缓存结果
+    // 4. Cache success result
     await tieredSet(CACHE_KEY, stats, 'cold', ['hero-stats'])
 
     return stats
