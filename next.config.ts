@@ -621,6 +621,8 @@ const nextConfig = {
       { source: '/account', destination: '/settings', permanent: true },
       // /rankings (bare) → / (homepage has the main ranking table)
       { source: '/rankings', destination: '/', permanent: true },
+      // Exchange ranking pages removed — homepage exchange filter replaces them
+      { source: '/rankings/:exchange', destination: '/?exchange=:exchange', permanent: true },
     ];
   },
 };

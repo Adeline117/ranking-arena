@@ -111,15 +111,21 @@ export default function ExchangePartners() {
             transition: `background-color ${tokens.transition.base}, color ${tokens.transition.base}`,
           }
           return source ? (
-            <Link
+            <a
               key={`${ex.key}-${i}`}
-              href={`/rankings/${source}`}
-              prefetch={false}
+              href={`/?exchange=${source}`}
+              onClick={(e) => {
+                e.preventDefault()
+                // Scroll to ranking table and trigger exchange filter
+                const event = new CustomEvent('arena:filter-exchange', { detail: { exchange: source } })
+                window.dispatchEvent(event)
+                document.querySelector('.home-ranking-section')?.scrollIntoView({ behavior: 'smooth' })
+              }}
               className="exchange-item"
-              style={sharedStyle}
+              style={{ ...sharedStyle, cursor: 'pointer' }}
             >
               {content}
-            </Link>
+            </a>
           ) : (
             <span
               key={`${ex.key}-${i}`}
