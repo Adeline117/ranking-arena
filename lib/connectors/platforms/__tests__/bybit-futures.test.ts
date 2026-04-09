@@ -5,6 +5,24 @@
  * fetchTimeseries, normalize, and error handling with mocked HTTP responses.
  */
 
+// Mock Supabase admin client so the DB-seed fallback in discoverLeaderboard
+// returns an empty list instead of reaching out to the real database.
+jest.mock('@/lib/supabase/server', () => ({
+  getSupabaseAdmin: jest.fn(() => ({
+    from: () => ({
+      select: () => ({
+        eq: () => ({
+          eq: () => ({
+            order: () => ({
+              limit: async () => ({ data: [], error: null }),
+            }),
+          }),
+        }),
+      }),
+    }),
+  })),
+}))
+
 import { BybitFuturesConnector } from '../bybit-futures'
 import { ConnectorError } from '../../base'
 
@@ -128,14 +146,13 @@ describe('BybitFuturesConnector', () => {
       }
     })
 
-    test('returns empty result on network error (VPS null + fallback catch)', async () => {
+    test('throws when network error + DB seed empty (VPS null + fallback catch)', async () => {
       const connector = createConnector()
       mockFetchNetworkError()
 
-      // discoverLeaderboard is resilient: fetchViaVPS returns null when VPS not configured,
-      // then direct API fallback catches errors and breaks. Returns empty traders array.
-      const result = await connector.discoverLeaderboard('7d')
-      expect(result.traders).toEqual([])
+      // VPS null → direct API errors → extracted list empty →
+      // DB seed fallback → empty list → throw.
+      await expect(connector.discoverLeaderboard('7d')).rejects.toThrow(/VPS scraper unavailable/)
     })
 
     test('throws ConnectorError on rate limit via fetchTraderProfile (direct API)', async () => {
@@ -388,7 +405,7 @@ describe('BybitFuturesConnector', () => {
   // ============================================
 
   describe('error handling', () => {
-    test('returns empty result on server error (500) (VPS null + fallback catch)', async () => {
+    test('throws loudly when VPS unavailable and DB seed is empty', async () => {
       const connector = createConnector()
       mockFetch.mockResolvedValueOnce({
         ok: false,
@@ -397,10 +414,10 @@ describe('BybitFuturesConnector', () => {
         json: async () => ({ error: 'Internal Server Error' }),
       })
 
-      // discoverLeaderboard is resilient: fetchViaVPS returns null when VPS not configured,
-      // then direct API fallback catches errors and breaks. Returns empty traders array.
-      const result = await connector.discoverLeaderboard('7d')
-      expect(result.traders).toEqual([])
+      // Bybit discoverLeaderboard 2026-04-09: when VPS is unavailable AND
+      // the DB seed list is empty the connector throws so batch-fetch-traders
+      // surfaces the failure instead of silently reporting 0 traders.
+      await expect(connector.discoverLeaderboard('7d')).rejects.toThrow(/VPS scraper unavailable/)
     })
 
     test('throws ConnectorError on client error (400) via fetchTraderProfile', async () => {
@@ -416,13 +433,13 @@ describe('BybitFuturesConnector', () => {
       await expect(connector.fetchTraderProfile('BYBIT_LEADER_1')).rejects.toThrow(ConnectorError)
     })
 
-    test('handles malformed response gracefully', async () => {
+    test('handles malformed response by throwing via DB-seed empty path', async () => {
       const connector = createConnector()
       mockFetchResponse({ completely: 'wrong', structure: true })
 
-      // warnValidate provides graceful degradation
-      const result = await connector.discoverLeaderboard('7d')
-      expect(result.traders).toHaveLength(0)
+      // Malformed response → extracted list is empty → VPS treated as unavailable
+      // on page 1 → DB seed fallback → empty list → throw.
+      await expect(connector.discoverLeaderboard('7d')).rejects.toThrow(/VPS scraper unavailable/)
     })
   })
 

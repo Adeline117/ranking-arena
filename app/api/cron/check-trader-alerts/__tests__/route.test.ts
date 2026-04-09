@@ -60,7 +60,7 @@ jest.mock('@/lib/services/email', () => ({
   buildTraderAlertEmail: jest.fn().mockReturnValue('<html>alert</html>'),
 }))
 
-import { POST, GET } from '../route'
+import { GET } from '../route'
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -107,25 +107,16 @@ describe('check-trader-alerts cron', () => {
     jest.clearAllMocks()
   })
 
-  // ---- GET health check ----------------------------------------------------
-
-  it('GET returns health check response', async () => {
-    const res = await GET()
-    const body = await res.json()
-
-    expect(res.status).toBe(200)
-    expect(body.ok).toBe(true)
-  })
-
   // ---- Auth ----------------------------------------------------------------
+  // Route is now GET-only (Vercel cron posts via GET with Bearer auth)
 
-  it('POST returns 401 when CRON_SECRET is missing', async () => {
-    const res = await POST(createRequest('POST'))
+  it('returns 401 when CRON_SECRET is missing', async () => {
+    const res = await GET(createRequest('GET'))
     expect(res.status).toBe(401)
   })
 
-  it('POST returns 401 when secret does not match', async () => {
-    const res = await POST(createRequest('POST', 'wrong'))
+  it('returns 401 when secret does not match', async () => {
+    const res = await GET(createRequest('GET', 'wrong'))
     expect(res.status).toBe(401)
   })
 
@@ -145,7 +136,7 @@ describe('check-trader-alerts cron', () => {
       return chainable({ data: null, error: null })
     })
 
-    const res = await POST(createRequest('POST', CRON_SECRET))
+    const res = await GET(createRequest('GET', CRON_SECRET))
     const body = await res.json()
 
     expect(res.status).toBe(200)
@@ -248,7 +239,7 @@ describe('check-trader-alerts cron', () => {
       return chainable({ data: null, error: null })
     })
 
-    const res = await POST(createRequest('POST', CRON_SECRET))
+    const res = await GET(createRequest('GET', CRON_SECRET))
     const body = await res.json()
 
     expect(res.status).toBe(200)
@@ -274,7 +265,7 @@ describe('check-trader-alerts cron', () => {
       return chainable({ data: null, error: null })
     })
 
-    const res = await POST(createRequest('POST', CRON_SECRET))
+    const res = await GET(createRequest('GET', CRON_SECRET))
     expect(res.status).toBe(500)
   })
 
@@ -283,7 +274,7 @@ describe('check-trader-alerts cron', () => {
       throw new Error('Connection failed')
     })
 
-    const res = await POST(createRequest('POST', CRON_SECRET))
+    const res = await GET(createRequest('GET', CRON_SECRET))
     expect(res.status).toBe(500)
     const body = await res.json()
     expect(body.error).toContain('Connection failed')
