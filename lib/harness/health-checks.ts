@@ -248,17 +248,32 @@ export async function checkDataQuality(): Promise<HealthCheck[]> {
     })(),
 
     // Check 3: Platform coverage — all active platforms have data
+    // Use the platform_stats materialized view / RPC if available instead of
+    // scanning 50K leaderboard_ranks rows (which repeatedly timed out at 30s
+    // under DB load and blew the 60s health-check-all budget). Falls back to
+    // a DISTINCT via sampling top 5K rows, which is enough for coverage.
     (async () => {
       const start = Date.now()
-      const { data: platforms } = await supabase
-        .from('leaderboard_ranks')
-        .select('source')
-        .eq('season_id', '90D')
-        .not('arena_score', 'is', null)
-        .limit(50000)
+      // Try RPC first — ideally a cheap COUNT(DISTINCT source) query
+      let count = 0
+      try {
+        const { data: rpcData } = await supabase.rpc('count_platforms_with_data', { p_season_id: '90D' })
+        if (typeof rpcData === 'number' && rpcData > 0) count = rpcData
+      } catch { /* RPC not available, fall through */ }
 
-      const uniquePlatforms = new Set((platforms || []).map(p => p.source))
-      const count = uniquePlatforms.size
+      if (count === 0) {
+        // Fallback: sample top 5000 rows instead of full 50K scan. Any active
+        // platform will be in the top few hundred rows by arena_score, so 5K
+        // is far more than enough to detect coverage gaps.
+        const { data: platforms } = await supabase
+          .from('leaderboard_ranks')
+          .select('source')
+          .eq('season_id', '90D')
+          .not('arena_score', 'is', null)
+          .order('arena_score', { ascending: false })
+          .limit(5000)
+        count = new Set((platforms || []).map(p => p.source)).size
+      }
 
       return {
         name: 'dq:platform_coverage',
@@ -335,20 +350,25 @@ export async function checkDataQuality(): Promise<HealthCheck[]> {
     })(),
 
     // Check 6: 7D/30D/90D consistency — trader count shouldn't vary wildly
+    // Use count: 'estimated' instead of 'exact' — 3x exact counts on a 50K+
+    // leaderboard_ranks table can take >30s under DB load and blow the 60s
+    // budget. 'estimated' uses pg_class.reltuples (near-instant, ~5% accurate
+    // which is plenty for a ratio-based consistency check).
     (async () => {
       const start = Date.now()
       const counts: Record<string, number> = {}
 
-      for (const period of ['7D', '30D', '90D']) {
+      const countResults = await Promise.all(['7D', '30D', '90D'].map(async (period) => {
         const { count } = await supabase
           .from('leaderboard_ranks')
-          .select('*', { count: 'exact', head: true })
+          .select('*', { count: 'estimated', head: true })
           .eq('season_id', period)
           .not('arena_score', 'is', null)
-        counts[period] = count ?? 0
-      }
+        return [period, count ?? 0] as const
+      }))
+      for (const [period, c] of countResults) counts[period] = c
 
-      // 7D should be at least 50% of 90D (some traders may not have 7D data)
+      // 7D should be at least 30% of 90D (some traders may not have 7D data)
       const ratio7d = counts['90D'] > 0 ? counts['7D'] / counts['90D'] : 1
       const isConsistent = ratio7d >= 0.3
 
