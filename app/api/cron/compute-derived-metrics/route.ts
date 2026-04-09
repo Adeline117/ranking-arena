@@ -12,7 +12,7 @@ import { logger } from '@/lib/logger'
 import { getSupabaseAdmin } from '@/lib/supabase/server'
 import { PipelineLogger } from '@/lib/services/pipeline-logger'
 import { env } from '@/lib/env'
-import { DATA_QUALITY_BOUNDARY } from '@/lib/pipeline/types'
+import { DATA_QUALITY_BOUNDARY, VALIDATION_BOUNDS } from '@/lib/pipeline/types'
 import { calculateBeta, calculateAlpha } from '@/lib/utils/market-correlation'
 
 export const dynamic = 'force-dynamic'
@@ -126,7 +126,7 @@ export async function GET(request: NextRequest) {
         const stdDev = Math.sqrt(variance)
         if (stdDev > 0) {
           const sharpe = (mean / stdDev) * Math.sqrt(365)
-          if (sharpe >= -10 && sharpe <= 10) {
+          if (sharpe >= VALIDATION_BOUNDS.sharpe_ratio.min && sharpe <= VALIDATION_BOUNDS.sharpe_ratio.max) {
             sharpeUpdates.push({
               source: platform,
               source_trader_id: trader_key,

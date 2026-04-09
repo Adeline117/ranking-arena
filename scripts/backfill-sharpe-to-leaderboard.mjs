@@ -15,7 +15,7 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY
 )
 
-const SHARPE_CAP = 10
+const SHARPE_CAP = 20
 const PAGE = 1000
 
 function computeSharpe(points) {

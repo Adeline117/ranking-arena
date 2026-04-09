@@ -40,7 +40,7 @@ const BATCH_SIZE = 100
 const LOG_INTERVAL = 500
 const PAGE_SIZE = 5000
 const MIN_DATA_POINTS = 7
-const SHARPE_CAP = 5
+const SHARPE_CAP = 20
 const WINDOWS = ['7D', '30D', '90D'] as const
 
 const DEX_PLATFORMS = [

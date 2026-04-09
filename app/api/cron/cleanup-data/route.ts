@@ -175,6 +175,27 @@ export async function GET(request: NextRequest) {
       skippedSteps.push('pipeline_logs')
     }
 
+    // Cleanup old pipeline_rejected_writes (>7 days) — diagnostic data, ~18k rows/day
+    let rejectedWritesCleaned = 0
+    if (hasTimeBudget()) {
+      try {
+        const rejectedCutoff = new Date(Date.now() - 7 * 24 * 3600 * 1000).toISOString()
+        const { count, error: rejErr } = await supabase
+          .from('pipeline_rejected_writes')
+          .delete({ count: 'exact' })
+          .lt('created_at', rejectedCutoff)
+          .limit(5000)
+        if (!rejErr && count) rejectedWritesCleaned = count
+        if (rejectedWritesCleaned > 0) {
+          logger.info(`[cleanup-data] Cleaned ${rejectedWritesCleaned} old pipeline_rejected_writes (>7d)`)
+        }
+      } catch (err) {
+        logger.warn(`[cleanup-data] pipeline_rejected_writes cleanup failed: ${err}`)
+      }
+    } else {
+      skippedSteps.push('pipeline_rejected_writes')
+    }
+
     // Cleanup old stripe_events (>30 days) — Stripe retries within 3 days max
     let stripeEventsCleaned = 0
     if (hasTimeBudget()) {
