@@ -15,6 +15,7 @@
 import type { EquityCurvePoint, PositionHistoryItem, StatsDetail } from './enrichment-types'
 import { fetchJson } from './shared'
 import { logger } from '@/lib/logger'
+import { createTraderResponseCache } from './trader-response-cache'
 
 const COPIN_BASE = 'https://api.copin.io'
 
@@ -396,14 +397,36 @@ export async function fetchGainsPositionHistory(_addr: string): Promise<Position
   return []
 }
 
-// Aevo — native API provides stats, Copin provides position data for equity curves
+// ============================================
+// Aevo — native API provides stats, Copin provides position data
+// ============================================
+//
+// Before caching, each Aevo trader fired three Copin AEVO/position/filter
+// requests per enrichment cycle (equity curve closed-list + stats detail
+// Sharpe fallback + position history), all of them independent even though
+// the latter two were byte-identical. aevoCopinPositionsCache (shared helper)
+// keys by full URL so the two variants (status=CLOSE vs unfiltered) stay
+// independent but each variant dedupes across callers within one cycle.
+// Common-path reduction: 3 Copin calls → 2, and for the stats-only fallback
+// path 2 identical calls → 1.
+const aevoCopinPositionsCache = createTraderResponseCache<CopinPositionDetail[]>({
+  name: 'aevo-copin-positions',
+})
+
+async function fetchAevoCopinPositions(url: string): Promise<CopinPositionDetail[]> {
+  return aevoCopinPositionsCache.getOrFetch(url, async () => {
+    const data = await fetchJson<{ data?: CopinPositionDetail[] }>(url, { timeoutMs: 10000 })
+    return data?.data ?? []
+  })
+}
+
 export async function fetchAevoEquityCurve(addr: string, days: number): Promise<EquityCurvePoint[]> {
   // Try Copin position data to build equity curve (same approach as dYdX)
   try {
     const url = `${COPIN_BASE}/AEVO/position/filter?accounts=${addr}&status=CLOSE&limit=500&sort_by=closeBlockTime&sort_type=desc`
-    const data = await fetchJson<{ data?: CopinPositionDetail[] }>(url, { timeoutMs: 10000 })
+    const positions = await fetchAevoCopinPositions(url)
 
-    if (!data?.data || data.data.length === 0) return []
+    if (positions.length === 0) return []
 
     const cutoffDate = new Date()
     cutoffDate.setDate(cutoffDate.getDate() - days)
@@ -411,7 +434,7 @@ export async function fetchAevoEquityCurve(addr: string, days: number): Promise<
 
     // Build daily cumulative PnL
     const dailyPnl = new Map<string, number>()
-    for (const pos of data.data) {
+    for (const pos of positions) {
       const closeTime = pos.closeBlockTime
       if (!closeTime || closeTime < cutoff) continue
       const date = closeTime.split('T')[0]
@@ -443,7 +466,7 @@ export async function fetchAevoEquityCurve(addr: string, days: number): Promise<
     }
 
     // Estimate ROI from total volume
-    const totalVolume = data.data.reduce((sum, pos) => sum + Math.abs(pos.size ?? pos.collateral ?? 0), 0)
+    const totalVolume = positions.reduce((sum, pos) => sum + Math.abs(pos.size ?? pos.collateral ?? 0), 0)
     const estimatedCapital = totalVolume > 0 ? totalVolume / 5 : Math.abs(cumPnl) * 5
     if (estimatedCapital > 0) {
       for (const p of points) {
@@ -520,11 +543,11 @@ export async function fetchAevoStatsDetail(addr: string): Promise<StatsDetail | 
 export async function fetchAevoPositionHistory(addr: string): Promise<PositionHistoryItem[]> {
   try {
     const url = `${COPIN_BASE}/AEVO/position/filter?accounts=${addr}&limit=100&sort_by=closeBlockTime&sort_type=desc`
-    const data = await fetchJson<{ data?: CopinPositionDetail[] }>(url, { timeoutMs: 10000 })
+    const positions = await fetchAevoCopinPositions(url)
 
-    if (!data?.data || data.data.length === 0) return []
+    if (positions.length === 0) return []
 
-    return data.data.map((pos) => ({
+    return positions.map((pos) => ({
       symbol: pos.pair || 'UNKNOWN',
       direction: pos.isLong ? 'long' as const : 'short' as const,
       positionType: 'perpetual',
