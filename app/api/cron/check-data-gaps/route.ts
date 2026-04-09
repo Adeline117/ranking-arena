@@ -74,10 +74,13 @@ async function analyzePlatform(
   supabase: ReturnType<typeof getSupabaseAdmin>,
   platform: string
 ): Promise<PlatformGapReport | null> {
-  // Get trader count
+  // Use count: 'estimated' (pg_class.reltuples, near-instant, ~5% accurate)
+  // instead of 'exact' — this job is a gap-report health check, not a
+  // financial audit. 6 x exact counts on multi-million row tables per
+  // platform × 19 platforms was blowing the 120s maxDuration.
   const { count: totalTraders, error: tradersError } = await supabase
     .from('trader_sources')
-    .select('*', { count: 'exact', head: true })
+    .select('*', { count: 'estimated', head: true })
     .eq('source', platform)
 
   if (tradersError) {
@@ -87,57 +90,62 @@ async function analyzePlatform(
 
   const total = totalTraders || 0
 
-  // Get snapshot counts per period — run sequentially to avoid parallel DB pressure
-  // Each count query can be heavy on trader_snapshots_v2 (millions of rows)
+  // Get snapshot counts per period — run in parallel (safe now that we use
+  // estimated counts which don't lock large portions of the table).
   const periodCounts: Record<string, number> = {}
-  for (const period of TIME_PERIODS) {
+  const periodResults = await Promise.all(TIME_PERIODS.map(async (period) => {
     try {
       const { count, error } = await supabase
         .from('trader_snapshots_v2')
-        .select('*', { count: 'exact', head: true })
+        .select('*', { count: 'estimated', head: true })
         .eq('platform', platform)
         .eq('window', period)
       if (error) {
         logger.warn(`[check-data-gaps] ${platform} ${period} snapshot count error: ${error.message}`)
-        periodCounts[period] = 0
-      } else {
-        periodCounts[period] = count || 0
+        return [period, 0] as const
       }
+      return [period, count || 0] as const
     } catch (err) {
       logger.warn(`[check-data-gaps] ${platform} ${period} snapshot count failed: ${err}`)
-      periodCounts[period] = 0
+      return [period, 0] as const
     }
-  }
+  }))
+  for (const [period, c] of periodResults) periodCounts[period] = c
 
   // Get enrichment counts for 90D only (most important) + position history
-  // Run sequentially to avoid parallel DB pressure on large tables
-  let equityCurve90D = 0
-  let statsDetail90D = 0
-  let positionHistory = 0
-
-  try {
-    const curve90D = await supabase.from('trader_equity_curve').select('*', { count: 'exact', head: true })
-      .eq('source', platform).eq('period', '90D')
-    equityCurve90D = curve90D.count || 0
-  } catch (err) {
-    logger.warn(`[check-data-gaps] ${platform} equity_curve count failed: ${err}`)
-  }
-
-  try {
-    const stats90D = await supabase.from('trader_stats_detail').select('*', { count: 'exact', head: true })
-      .eq('source', platform).eq('period', '90D')
-    statsDetail90D = stats90D.count || 0
-  } catch (err) {
-    logger.warn(`[check-data-gaps] ${platform} stats_detail count failed: ${err}`)
-  }
-
-  try {
-    const positions = await supabase.from('trader_position_history').select('*', { count: 'exact', head: true })
-      .eq('source', platform)
-    positionHistory = positions.count || 0
-  } catch (err) {
-    logger.warn(`[check-data-gaps] ${platform} position_history count failed: ${err}`)
-  }
+  // Run in parallel (estimated counts are cheap enough to parallelize).
+  const [equityCurve90D, statsDetail90D, positionHistory] = await Promise.all([
+    (async () => {
+      try {
+        const r = await supabase.from('trader_equity_curve').select('*', { count: 'estimated', head: true })
+          .eq('source', platform).eq('period', '90D')
+        return r.count || 0
+      } catch (err) {
+        logger.warn(`[check-data-gaps] ${platform} equity_curve count failed: ${err}`)
+        return 0
+      }
+    })(),
+    (async () => {
+      try {
+        const r = await supabase.from('trader_stats_detail').select('*', { count: 'estimated', head: true })
+          .eq('source', platform).eq('period', '90D')
+        return r.count || 0
+      } catch (err) {
+        logger.warn(`[check-data-gaps] ${platform} stats_detail count failed: ${err}`)
+        return 0
+      }
+    })(),
+    (async () => {
+      try {
+        const r = await supabase.from('trader_position_history').select('*', { count: 'estimated', head: true })
+          .eq('source', platform)
+        return r.count || 0
+      } catch (err) {
+        logger.warn(`[check-data-gaps] ${platform} position_history count failed: ${err}`)
+        return 0
+      }
+    })(),
+  ])
 
   return {
     platform,
