@@ -6,7 +6,7 @@
 **Architecture change**: Also read `DECISIONS.md`
 
 ## Project Overview
-Crypto trader ranking platform. 32,000+ traders across 27+ CEX/DEX exchanges.
+Crypto trader ranking platform. 34,000+ traders across 32+ CEX/DEX exchanges.
 Live site: https://www.arenafi.org
 
 ## Tech Stack
@@ -86,7 +86,7 @@ stripe_customers        # Stripe integration
 ```
 
 ## Data Pipeline
-27 Vercel cron jobs refresh trader data continuously:
+62 Vercel cron jobs refresh trader data continuously:
 - `batch-fetch-traders` (groups a-f): Fetch rankings from exchanges
 - `batch-enrich`: Enrich trader details (7D, 30D periods)
 - `compute-leaderboard`: Compute Arena Scores
