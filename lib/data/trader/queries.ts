@@ -89,6 +89,11 @@ export async function getLeaderboard(supabase: SupabaseClient, params: {
 
   // Build query against leaderboard_ranks (uses v1 column names: source, source_trader_id, season_id)
   // See LR constants and LEADERBOARD_RANKS_FIELDS in schema-mapping.ts for column→field mapping
+  // NOTE: Do NOT use { count: 'exact' } here. leaderboard_ranks has ~314k rows
+  // and an exact COUNT(*) can take 3-25s, which can cause homepage SSR to blank
+  // out when this function is hit via the fallback path. Callers that need a
+  // total should use /api/rankings (which returns estimated counts) or query
+  // leaderboard_count_cache directly.
   let query = supabase
     .from('leaderboard_ranks')
     .select(
@@ -96,8 +101,7 @@ export async function getLeaderboard(supabase: SupabaseClient, params: {
        trades_count, followers, copiers, ${LR.arena_score}, ${LR.avatar_url}, ${LR.rank}, computed_at,
        profitability_score, risk_control_score, execution_score, score_completeness,
        trading_style, avg_holding_hours, sharpe_ratio, sortino_ratio, profit_factor, calmar_ratio,
-       trader_type, is_outlier, ${LR.season_id}`,
-      { count: 'exact' }
+       trader_type, is_outlier, ${LR.season_id}`
     )
     .eq(LR.season_id, period)
 
@@ -131,10 +135,10 @@ export async function getLeaderboard(supabase: SupabaseClient, params: {
   query = query.range(offset, offset + limit - 1)
 
   // 10s timeout — leaderboard queries should be fast (indexed table)
-  const { data, error, count } = await withTimeout(
-    query as unknown as Promise<{ data: Record<string, unknown>[] | null; error: { message: string } | null; count: number | null }>,
+  const { data, error } = await withTimeout(
+    query as unknown as Promise<{ data: Record<string, unknown>[] | null; error: { message: string } | null }>,
     10_000
-  ).catch(() => ({ data: null as Record<string, unknown>[] | null, error: { message: 'Query timeout after 10000ms' }, count: null as number | null }))
+  ).catch(() => ({ data: null as Record<string, unknown>[] | null, error: { message: 'Query timeout after 10000ms' } }))
 
   if (error) {
     logger.error('[unified.getLeaderboard] Query error:', error.message)
@@ -143,7 +147,9 @@ export async function getLeaderboard(supabase: SupabaseClient, params: {
 
   const traders = (data || []).map((row: Record<string, unknown>) => mapLeaderboardRow(row))
 
-  return { traders, total: count ?? traders.length }
+  // Return traders.length as the "total" — callers that need an accurate total
+  // should not use this function. See note above about exact count cost.
+  return { traders, total: traders.length }
 }
 
 /**
