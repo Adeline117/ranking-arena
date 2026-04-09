@@ -22,7 +22,9 @@ export async function GET(request: NextRequest) {
   const { data: tr } = await q.maybeSingle()
   if (!tr) return NextResponse.json({ error: 'Not found' }, { status: 404 })
   const { data: lr } = await sb.from('leaderboard_ranks').select('rank, roi, win_rate, arena_score').eq('source', tr.source).eq('source_trader_id', tr.source_trader_id).eq('season_id', sId).maybeSingle()
-  const { count } = await sb.from('leaderboard_ranks').select('*', { count: 'exact', head: true }).eq('source', tr.source).eq('season_id', sId)
+  // PERF FIX: was count:exact (25s+). Read from pre-computed cache instead.
+  const { data: countCache } = await sb.from('leaderboard_count_cache').select('total_count').eq('source', tr.source).eq('season_id', sId).maybeSingle()
+  const count = countCache?.total_count ?? null
   const name = tr.handle || handle, rank = lr?.rank ?? 0, total = count ?? 0, roi = lr?.roi, score = lr?.arena_score, winRate = lr?.win_rate
   const rv = roi != null && !isNaN(roi), sv = score != null && !isNaN(score), wv = winRate != null && !isNaN(winRate)
   const rc = rv && roi >= 0 ? C.success : C.error, rs = rv ? fmtRoi(roi) : '--', tp = rank > 0 && total > 0 ? topPct(rank, total) : ''

@@ -113,7 +113,6 @@ export const GET = withPublic(async ({ supabase, request }) => {
        sharpe_ratio,
        profitability_score, risk_control_score, execution_score, score_completeness,
        trading_style, avg_holding_hours, trader_type`,
-      { count: 'exact' }
     )
     .eq('source', platform)
     .eq('season_id', seasonId)
