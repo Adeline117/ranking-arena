@@ -16,10 +16,12 @@
    SSR three-col-layout matches Phase 2 grid exactly → zero CLS on swap.
    Using display:none (not content-visibility) to ensure no residual space. */
 :has(#homepage-interactive) #ssr-ranking-table,
-:has(#homepage-interactive) #ssr-topnav,
 :has(#homepage-interactive) #ssr-hero-shell {
   display: none !important;
 }
+/* #ssr-topnav is NOT hidden — SSR TopNav stays visible permanently.
+   Phase 2 TopNav renders inside HomePage (after #homepage-interactive).
+   Hiding #ssr-topnav caused the nav to disappear entirely. */
 
 /*
  * Performance Optimization: CSS files moved to async loading
