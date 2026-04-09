@@ -253,22 +253,23 @@ async function getRankingsFallback(rankingsQuery: RankingsQuery, _cursor?: strin
   let error: { message: string } | null = null;
 
   if (safeLimit <= CHUNK_SIZE) {
-    // Single request — use 'estimated' count to avoid 25s full table scan
-    // (exact count on 314k rows with OR filters is extremely slow)
-    const result = await buildBaseQuery({ count: 'estimated' })
+    // Single request — NO count (exact count takes 25s+ on 314k rows with OR filters)
+    // Total count is obtained separately from cached/estimated source
+    const result = await buildBaseQuery()
       .range(offset, offset + safeLimit - 1);
     rows = (result.data || []) as Record<string, unknown>[];
-    totalCount = result.count;
     error = result.error;
+    // Estimate total: if we got a full page, there are more; otherwise this is the last page
+    totalCount = rows.length === safeLimit ? safeLimit * 10 : offset + rows.length;
   } else {
-    // Chunked fetch: first chunk gets count, rest fetch in parallel
-    const firstResult = await buildBaseQuery({ count: 'estimated' })
+    // Chunked fetch: first chunk, no count
+    const firstResult = await buildBaseQuery()
       .range(offset, offset + CHUNK_SIZE - 1);
     if (firstResult.error) {
       error = firstResult.error;
     } else {
       rows = (firstResult.data || []) as Record<string, unknown>[];
-      totalCount = firstResult.count;
+      totalCount = null; // Will be set after all chunks
 
       // Calculate remaining chunks needed
       const remaining = safeLimit - CHUNK_SIZE;
