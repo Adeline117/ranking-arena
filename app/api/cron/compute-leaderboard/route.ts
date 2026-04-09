@@ -171,17 +171,19 @@ export async function GET(request: NextRequest) {
     // Shared deadline: leave 30s at the end for finalization + post-processing.
     // When one season runs alone (staggered case), it gets the full budget.
     const computeDeadline = startTime + (maxDuration - 30) * 1000
-    const results = await Promise.all(
-      targetSeasons.map(async (season) => {
-        try {
-          const count = await computeSeason(supabase, season, previousCounts[season], forceWrite, computeDeadline)
-          return { season, count, error: null }
-        } catch (err) {
-          logger.error(`[${season}] computeSeason failed:`, err)
-          return { season, count: -1, error: err }
-        }
-      })
-    )
+    // PERF FIX: sequential instead of parallel to prevent connection pool saturation.
+    // With staggered cron (single season per invocation), this loop runs once.
+    // The parallel path caused 3× peak connection usage → pool exhaustion → 30-57min timeouts.
+    const results: Array<{ season: string; count: number; error: unknown }> = []
+    for (const season of targetSeasons) {
+      try {
+        const count = await computeSeason(supabase, season, previousCounts[season], forceWrite, computeDeadline)
+        results.push({ season, count, error: null })
+      } catch (err) {
+        logger.error(`[${season}] computeSeason failed:`, err)
+        results.push({ season, count: -1, error: err })
+      }
+    }
 
     for (const { season, count, error } of results) {
       stats.seasons[season] = count
