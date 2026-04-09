@@ -188,6 +188,8 @@ export default function TraderHeader({
   const [mounted, setMounted] = useState(false)
   const [avatarHovered, setAvatarHovered] = useState(false)
   const [avatarError, setAvatarError] = useState(false)
+  // Fade-in state: show gradient initial underneath until real avatar loads
+  const [avatarLoaded, setAvatarLoaded] = useState(false)
   const [followerCount, setFollowerCount] = useState(followers)
   // #34: Track follower count changes for animation
   const [followerAnimating, setFollowerAnimating] = useState(false)
@@ -314,7 +316,11 @@ export default function TraderHeader({
               width: 48,
               height: 48,
               borderRadius: tokens.radius.full,
-              background: effectiveAvatarUrl ? tokens.colors.bg.secondary : getAvatarGradient(traderId),
+              // Always use the gradient as background — it shows through as a blur
+              // placeholder until the real avatar image loads (and then gets covered).
+              // Previously the bg was flat bg.secondary (gray box) when avatarUrl
+              // existed, causing a jarring pop-in.
+              background: getAvatarGradient(traderId),
               border: `2px solid ${avatarHovered ? tokens.colors.accent.primary : tokens.colors.border.primary}`,
               display: 'grid',
               placeItems: 'center',
@@ -328,8 +334,27 @@ export default function TraderHeader({
               transition: 'all 0.3s ease',
               transform: avatarHovered ? 'scale(1.05)' : 'scale(1)',
               cursor: 'pointer',
+              position: 'relative',
             }}
           >
+            {/* Initial letter shows behind the avatar until it loads */}
+            {effectiveAvatarUrl && !avatarError && !avatarLoaded && (
+              <Text
+                weight="black"
+                style={{
+                  position: 'absolute',
+                  inset: 0,
+                  display: 'grid',
+                  placeItems: 'center',
+                  color: tokens.colors.white,
+                  fontSize: '20px',
+                  lineHeight: '1',
+                  pointerEvents: 'none',
+                }}
+              >
+                {getAvatarInitial(handle)}
+              </Text>
+            )}
             {effectiveAvatarUrl && !avatarError ? (
               <Image
                 src={`/api/avatar?url=${encodeURIComponent(effectiveAvatarUrl)}`}
@@ -338,7 +363,15 @@ export default function TraderHeader({
                 height={48}
                 sizes="(max-width: 640px) 40px, 48px"
                 priority
-                style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                style={{
+                  width: '100%',
+                  height: '100%',
+                  objectFit: 'cover',
+                  position: 'relative',
+                  opacity: avatarLoaded ? 1 : 0,
+                  transition: 'opacity 0.3s ease-out',
+                }}
+                onLoad={() => setAvatarLoaded(true)}
                 onError={() => setAvatarError(true)}
               />
             ) : isWalletAddress(traderId) ? (
