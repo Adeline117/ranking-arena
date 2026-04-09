@@ -120,29 +120,38 @@ export default function RootLayout({
             'query-input': 'required name=search_term_string',
           },
         }} />
-        {/* Speculation Rules — pre-render likely navigation targets for near-zero LCP.
-            Inspired by cal.com's SpeculationRules pattern. Chrome 121+ only;
-            other browsers safely ignore the script type. */}
+        {/* Speculation Rules — pre-render/prefetch likely navigation targets for near-zero LCP.
+            Chrome 121+ only; other browsers safely ignore the script type.
+            SCOPED: prerender only top-level nav (not /trader/* — homepage has ~50 trader links
+            that would steal main-thread CPU/network during LCP window). Trader profiles are
+            prefetched on conservative hover, not prerendered. */}
         <script type="speculationrules" dangerouslySetInnerHTML={{ __html: JSON.stringify({
           prerender: [{
             where: {
               and: [
-                { href_matches: "/*" },
-                { not: { href_matches: "/api/*" } },
-                { not: { href_matches: "/auth/*" } },
+                { href_matches: "/rankings" },
                 { not: { selector_matches: "[rel~=nofollow]" } },
               ]
             },
-            eagerness: "moderate",
+            eagerness: "conservative",
+          }, {
+            where: {
+              and: [
+                { href_matches: "/market" },
+                { not: { selector_matches: "[rel~=nofollow]" } },
+              ]
+            },
+            eagerness: "conservative",
           }],
           prefetch: [{
             where: {
               and: [
                 { href_matches: "/*" },
                 { not: { href_matches: "/api/*" } },
+                { not: { href_matches: "/auth/*" } },
               ]
             },
-            eagerness: "moderate",
+            eagerness: "conservative",
           }],
         }) }} />
       </head>
