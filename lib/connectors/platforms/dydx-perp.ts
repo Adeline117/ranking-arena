@@ -100,10 +100,14 @@ export class DydxPerpConnector extends BaseConnector {
     // dYdX indexer /v4/leaderboard/pnl returns 404 globally since ~2026-03.
     // Use Copin API as primary data source for trader discovery.
     // Copin API max limit is 500 per page — paginate to reach desired limit.
-    // NOTE: Copin leaderboard data has significant processing delay (grew from 3d to 7d+ as of 2026-04).
-    // Using Date.now() returns 0 results. Use 7 days ago as queryDate to ensure data availability.
+    // NOTE: Copin DYDX leaderboard processing delay keeps growing.
+    //   2026-03: 3 days
+    //   2026-04 (mid): 7 days
+    //   2026-04-09: 14 days (verified empty for queryDate < 14 days, 973+ traders at 14d).
+    // Use 14 days to stay ahead of the moving target. If this stops working,
+    // bump again — alternatives are spinning up our own indexer.
     const statisticType = window === '7d' ? 'WEEK' : 'MONTH'
-    const queryDate = Date.now() - 7 * 24 * 60 * 60 * 1000
+    const queryDate = Date.now() - 14 * 24 * 60 * 60 * 1000
     const COPIN_PAGE_SIZE = 500
 
     let traders: TraderSource[] = []
@@ -190,8 +194,9 @@ export class DydxPerpConnector extends BaseConnector {
 
     try {
       // Fetch from Copin position stats for this trader
-      // Copin has ~2 day processing delay — use 3 days ago
-      const queryDate = Date.now() - 3 * 24 * 60 * 60 * 1000
+      // Copin DYDX processing delay grew to 14 days as of 2026-04-09
+      // (verified empty under 14d, full 1000-row set at 14d+).
+      const queryDate = Date.now() - 14 * 24 * 60 * 60 * 1000
       const copinUrl = `https://api.copin.io/leaderboards/page?protocol=DYDX&statisticType=${statisticType}&queryDate=${queryDate}&limit=1000&offset=0&sort_by=ranking&sort_type=asc`
       const copinData = await this.request<Record<string, unknown>>(copinUrl, { method: 'GET' })
       const copinList = (copinData?.data || []) as Record<string, unknown>[]
