@@ -7,42 +7,54 @@ This directory contains SQL migration files for the Supabase/PostgreSQL database
 ## Naming Convention
 
 ```
-NNNNN_description.sql
+YYYYMMDDHHMMSS_description.sql
 ```
 
-- `NNNNN` — 5-digit sequential version number (e.g., `00001`)
+- `YYYYMMDDHHMMSS` — 14-digit UTC timestamp, minute+second precision
 - `description` — Short snake_case description of the change
 
 Examples:
 ```
-00001_initial_schema.sql
-00002_add_trader_alerts_table.sql
-00003_add_hot_score_index.sql
+20260409150432_add_trader_alerts_table.sql
+20260409161205_add_hot_score_index.sql
 ```
+
+### Legacy format (pre-2026-04-10, do not use for new files)
+
+Older files use `YYYYMMDD<letter>_description.sql` (e.g. `20260408h_foo.sql`).
+This format is retained for existing files but **must not be used for new
+migrations** — two agents independently guessing the next letter suffix for
+the same day will collide and fail the pre-commit duplicate check. The
+collision that forced this convention change was `20260408h_sharpe_cap_20.sql`
+vs `20260408h2_sharpe_cap_20.sql` (see commit `5c8541143`).
+
+New files sort AFTER legacy letter-suffix files as long as the date is
+strictly greater than the latest legacy date.
 
 ## Creating a New Migration
 
-1. Find the next version number:
-   ```bash
-   ls supabase/migrations/*.sql | tail -1
-   ```
+**Always use the helper script** — it generates a collision-proof timestamped
+filename and seeds the file with boilerplate:
 
-2. Create the migration file:
-   ```bash
-   touch supabase/migrations/NNNNN_description.sql
-   ```
+```bash
+scripts/new-migration.sh add_trader_stats_index
+# → supabase/migrations/20260409161205_add_trader_stats_index.sql
+```
 
-3. Write your SQL. Always include both the change and a comment:
-   ```sql
-   -- Migration: NNNNN_description
-   -- Description: What this migration does
-   -- Author: Your Name
-   -- Date: YYYY-MM-DD
+The helper handles rare same-second collisions by retrying with +1s offsets
+(up to 10 retries) and finally falls back to a random 4-digit suffix.
 
-   -- Up
-   ALTER TABLE traders ADD COLUMN verified BOOLEAN DEFAULT FALSE;
-   CREATE INDEX idx_traders_verified ON traders(verified) WHERE verified = TRUE;
-   ```
+Then edit the generated file:
+
+```sql
+-- Migration: 20260409161205_add_trader_stats_index
+-- Created: 2026-04-09T16:12:05Z
+-- Description: What this migration does and why
+
+-- Up
+ALTER TABLE traders ADD COLUMN verified BOOLEAN DEFAULT FALSE;
+CREATE INDEX idx_traders_verified ON traders(verified) WHERE verified = TRUE;
+```
 
 ## Applying Migrations
 
@@ -63,11 +75,14 @@ psql $DATABASE_URL -f supabase/migrations/NNNNN_description.sql
 
 ## Rules
 
-1. **Never modify an existing migration** that has been applied to staging/production
-2. **Always test locally first** using `supabase db reset`
-3. **One concern per migration** — don't mix unrelated changes
-4. **Include rollback comments** for complex changes (as SQL comments)
-5. **CI checks** for duplicate version numbers (see `.github/workflows/ci.yml`)
+1. **Always use `scripts/new-migration.sh`** to generate filenames — never write a raw filename
+2. **Never modify an existing migration** that has been applied to staging/production
+3. **Always test locally first** using `supabase db reset`
+4. **One concern per migration** — don't mix unrelated changes
+5. **Include rollback comments** for complex changes (as SQL comments)
+6. **Pre-commit hook** (`.git/hooks/pre-commit`) blocks commits with duplicate
+   version prefixes — if you see that error, you likely created a filename by
+   hand instead of running the helper script
 
 ## Local Development
 
