@@ -45,6 +45,12 @@ type ApiHandler<T = unknown> = (ctx: ApiContext) => Promise<NextResponse | T>
 interface MiddlewareOptions {
   /** 是否需要认证 */
   requireAuth?: boolean
+  /**
+   * 非强制认证路由是否仍需读取 user（例如 /feedback 想记录可选 user_id）。
+   * 默认 false — 绝大多数公开路由根本不读 ctx.user，却因带 Authorization 头
+   * 被迫走一次 Supabase Auth 查询，每请求 +50-150ms。opt-in 设为 true 才查。
+   */
+  readsAuth?: boolean
   /** 限流配置 */
   rateLimit?: RateLimitConfig | keyof typeof RateLimitPresets | false
   /** API 名称（用于日志） */
@@ -144,6 +150,7 @@ export function withApiMiddleware<T>(
 ): (request: NextRequest) => Promise<NextResponse> {
   const {
     requireAuth: needsAuth = false,
+    readsAuth = false,
     rateLimit = needsAuth ? 'authenticated' : 'public',
     name = 'api',
     versioning = true,
@@ -205,8 +212,9 @@ export function withApiMiddleware<T>(
           }
           return withCid(errorResponse)
         }
-      } else {
-        // Only attempt auth lookup if Authorization header is present (avoid 2 wasted DB calls on public requests)
+      } else if (readsAuth) {
+        // Opt-in: only routes that actually read ctx.user (e.g. /feedback) pay the ~50-150ms
+        // Supabase Auth round-trip. Public hot-path routes like /rankings and /trader skip this.
         const authHeader = request.headers.get('authorization')
         if (authHeader) {
           user = await getAuthUser(request)
