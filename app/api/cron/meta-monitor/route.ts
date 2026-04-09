@@ -10,6 +10,7 @@ import { PipelineLogger } from '@/lib/services/pipeline-logger'
 import { sendRateLimitedAlert } from '@/lib/alerts/send-alert'
 import { env } from '@/lib/env'
 import { logger } from '@/lib/logger'
+import { getSupabaseAdmin } from '@/lib/supabase/server'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -143,6 +144,7 @@ export async function GET(request: Request) {
     // Check if historical data cleanup is complete
     let cleanupComplete = false
     try {
+      const supabase = getSupabaseAdmin()
       const { data: cleanupStatus } = await supabase.from('pipeline_logs').select('*').eq('job_name', 'cleanup-violations').order('started_at', { ascending: false }).limit(1).single()
       if (cleanupStatus?.metadata && typeof cleanupStatus.metadata === 'object') {
         const meta = cleanupStatus.metadata as Record<string, unknown>

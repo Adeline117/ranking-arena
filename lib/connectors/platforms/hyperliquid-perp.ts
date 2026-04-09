@@ -187,6 +187,9 @@ export class HyperliquidPerpConnector extends BaseConnector {
       if (perf?.roi != null) {
         const rawRoi = Number(perf.roi)
         roi = Math.abs(rawRoi) <= 10 ? rawRoi * 100 : rawRoi
+        // Cap extreme ROI (same as discoverLeaderboard line 100)
+        if (roi > 10000) roi = 10000
+        if (roi < -10000) roi = -10000
       }
       if (perf?.pnl != null) {
         pnlFromLb = Number(perf.pnl)

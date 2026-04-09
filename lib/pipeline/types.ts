@@ -270,5 +270,8 @@ export const VALIDATION_BOUNDS = {
  *
  * This boundary becomes irrelevant once it's >90 days old (falls off the
  * rolling window). Can be removed after 2026-07-01.
+ *
+ * TODO(2026-07-01): Remove this constant and all references to it.
+ * Grep for DATA_QUALITY_BOUNDARY to find all consumers.
  */
 export const DATA_QUALITY_BOUNDARY = '2026-04-01'
