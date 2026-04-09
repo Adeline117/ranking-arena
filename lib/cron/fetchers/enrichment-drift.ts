@@ -17,6 +17,7 @@ import type { EquityCurvePoint, PositionHistoryItem, StatsDetail } from './enric
 import { computeStatsFromPositions, buildEquityCurveFromPositions } from './enrichment-dex'
 import { fetchJson } from './shared'
 import { logger } from '@/lib/logger'
+import { createTraderResponseCache } from './trader-response-cache'
 
 const DATA_API = 'https://data.api.drift.trade'
 const S3_BASE = 'https://drift-historical-data-v2.s3.eu-west-1.amazonaws.com'
@@ -45,6 +46,23 @@ interface _DriftUserStats {
   fees?: number
 }
 
+/**
+ * Drift snapshots API response item.
+ * The snapshots/trading endpoint returns daily snapshots with cumulative PnL.
+ */
+interface DriftSnapshot {
+  epochTs?: number
+  ts?: number  // API actually returns 'ts', not 'epochTs'
+  cumulativeRealizedPnl?: number | string
+  cumulativePerpPnl?: number | string
+  allTimeTotalPnl?: number | string
+}
+
+interface DriftSnapshotsResponse {
+  success?: boolean
+  accounts?: Array<{ accountId?: string; snapshots?: DriftSnapshot[]; metrics?: unknown }>
+}
+
 // Market index to symbol mapping (common Drift perp markets)
 const DRIFT_MARKETS: Record<number, string> = {
   0: 'SOL', 1: 'BTC', 2: 'ETH', 3: 'APT', 4: 'BONK',
@@ -57,18 +75,74 @@ const DRIFT_MARKETS: Record<number, string> = {
 }
 
 /**
+ * Per-trader caches for Drift enrichment.
+ *
+ * Previously each trader fired up to five Drift API calls per cycle:
+ *   - /fills/{authority}           from fetchDriftPositionHistory (public)
+ *   - /fills/{authority}           from fetchDriftEquityCurve fallback
+ *   - /fills/{authority}           from fetchDriftStatsDetail fills fallback
+ *   - /snapshots/trading?days=X    from fetchDriftEquityCurve
+ *   - /snapshots/trading?days=90   from fetchDriftStatsDetail
+ *
+ * Caches:
+ * - `driftFillsCache` always fetches the biggest slice (DRIFT_FILLS_FETCH_LIMIT)
+ *   once per authority and local-slices for smaller asks, so all three fills
+ *   callers share a single /fills request per trader per cycle.
+ * - `driftSnapshotsCache` is keyed by (authority, days). When equity curve is
+ *   asked for 90 days (common path) this collapses two snapshots requests to
+ *   one. Non-90-day requests stay independent.
+ *
+ * Both caches use the shared createTraderResponseCache helper for TTL +
+ * in-flight dedup + bounded FIFO eviction.
+ */
+const DRIFT_FILLS_FETCH_LIMIT = 500
+const driftFillsCache = createTraderResponseCache<DriftFill[]>({
+  name: 'drift-fills',
+})
+const driftSnapshotsCache = createTraderResponseCache<DriftSnapshot[]>({
+  name: 'drift-snapshots',
+})
+
+async function fetchDriftFillsCached(authority: string): Promise<DriftFill[]> {
+  return driftFillsCache.getOrFetch(authority, async () => {
+    const url = `${DATA_API}/fills/${authority}?limit=${DRIFT_FILLS_FETCH_LIMIT}`
+    const fills = await fetchJson<DriftFill[]>(url, { timeoutMs: 15000 })
+    return Array.isArray(fills) ? fills : []
+  })
+}
+
+async function fetchDriftSnapshotsCached(authority: string, days: number): Promise<DriftSnapshot[]> {
+  const key = `${authority}:${days}`
+  return driftSnapshotsCache.getOrFetch(key, async () => {
+    const snapUrl = `${DATA_API}/authority/${authority}/snapshots/trading?days=${days}`
+    const resp = await fetchJson<DriftSnapshotsResponse>(snapUrl, { timeoutMs: 15000 })
+    const collected: DriftSnapshot[] = []
+    if (resp?.accounts && Array.isArray(resp.accounts)) {
+      for (const acct of resp.accounts) {
+        if (Array.isArray(acct.snapshots)) collected.push(...acct.snapshots)
+      }
+    } else if (Array.isArray(resp)) {
+      collected.push(...(resp as unknown as DriftSnapshot[]))
+    }
+    return collected
+  })
+}
+
+/**
  * Fetch position history from Drift fill data.
  * Enhanced: includes PnL and proper symbol names.
+ *
+ * Always pulls the full cached fills slice and locally caps to `limit`, so all
+ * internal callers (position history, equity curve fallback, stats fallback)
+ * collapse to a single /fills request per trader per enrichment cycle.
  */
 export async function fetchDriftPositionHistory(
   authority: string,
   limit = 200
 ): Promise<PositionHistoryItem[]> {
   try {
-    const url = `${DATA_API}/fills/${authority}?limit=${limit}`
-    const fills = await fetchJson<DriftFill[]>(url, { timeoutMs: 15000 })
-
-    if (!Array.isArray(fills) || fills.length === 0) return []
+    const fills = await fetchDriftFillsCached(authority)
+    if (fills.length === 0) return []
 
     return fills
       .filter((f) => f.baseAssetAmount && f.quoteAssetAmount)
@@ -358,23 +432,6 @@ export async function fetchDriftPositionHistoryFromS3(
 }
 
 /**
- * Drift snapshots API response item.
- * The snapshots/trading endpoint returns daily snapshots with cumulative PnL.
- */
-interface DriftSnapshot {
-  epochTs?: number
-  ts?: number  // API actually returns 'ts', not 'epochTs'
-  cumulativeRealizedPnl?: number | string
-  cumulativePerpPnl?: number | string
-  allTimeTotalPnl?: number | string
-}
-
-interface DriftSnapshotsResponse {
-  success?: boolean
-  accounts?: Array<{ accountId?: string; snapshots?: DriftSnapshot[]; metrics?: unknown }>
-}
-
-/**
  * Fetch Drift equity curve from snapshots API (preferred — gives daily PnL curve).
  * Fallback: build from fill history.
  */
@@ -391,18 +448,7 @@ export async function fetchDriftEquityCurve(
     try {
       // Strategy 1: Use snapshots/trading API for accurate daily equity curve
       try {
-        const snapUrl = `${DATA_API}/authority/${authority}/snapshots/trading?days=${days}`
-        const resp = await fetchJson<DriftSnapshotsResponse>(snapUrl, { timeoutMs: 15000 })
-
-        // Extract snapshots from nested accounts structure
-        const allSnaps: DriftSnapshot[] = []
-        if (resp?.accounts && Array.isArray(resp.accounts)) {
-          for (const acct of resp.accounts) {
-            if (Array.isArray(acct.snapshots)) allSnaps.push(...acct.snapshots)
-          }
-        } else if (Array.isArray(resp)) {
-          allSnaps.push(...(resp as unknown as DriftSnapshot[]))
-        }
+        const allSnaps = await fetchDriftSnapshotsCached(authority, days)
 
         if (allSnaps.length >= 2) {
           const points: EquityCurvePoint[] = allSnaps
@@ -478,22 +524,8 @@ export async function fetchDriftStatsDetail(
       let totalDays = 0
 
       try {
-        const snapUrl = `${DATA_API}/authority/${authority}/snapshots/trading?days=90`
-        // API returns { success, accounts: [{ snapshots: [...] }] }
-        const resp = await fetchJson<DriftSnapshotsResponse>(snapUrl, { timeoutMs: 15000 })
-
-        // Extract snapshots from nested accounts structure
-        const allSnapshots: DriftSnapshot[] = []
-        if (resp?.accounts && Array.isArray(resp.accounts)) {
-          for (const acct of resp.accounts) {
-            if (Array.isArray(acct.snapshots)) {
-              allSnapshots.push(...acct.snapshots)
-            }
-          }
-        } else if (Array.isArray(resp)) {
-          // Fallback: flat array format (legacy)
-          allSnapshots.push(...(resp as unknown as DriftSnapshot[]))
-        }
+        // Shared with fetchDriftEquityCurve when equityCurve asks for 90d
+        const allSnapshots = await fetchDriftSnapshotsCached(authority, 90)
 
         const snaps = allSnapshots
           .filter((s) => (s.ts ?? s.epochTs) != null)
