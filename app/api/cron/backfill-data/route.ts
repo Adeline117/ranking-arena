@@ -276,14 +276,33 @@ export async function GET(req: NextRequest) {
   const plog = await PipelineLogger.start(`backfill-data-${type}`, { platforms: platformParam, period: periodParam })
 
   // Time budget: stop after 240s (leave 60s buffer for maxDuration=300)
+  // Hard deadline: a single slow connector call can ignore the soft budget
+  // check between iterations. If we hit the hard deadline, the watchdog below
+  // will finalize plog with partialSuccess so cleanup-stuck-logs doesn't
+  // mark the job as timeout 30 min later.
   const TIME_BUDGET_MS = 240_000
+  const HARD_DEADLINE_MS = 270_000 // leave 30s buffer for plog finalization
   const elapsed = () => Date.now() - startTime
   const hasTimeBudget = () => elapsed() < TIME_BUDGET_MS
+  let watchdogFired = false
+  const watchdog = setTimeout(async () => {
+    watchdogFired = true
+    logger.error(`[backfill] HARD DEADLINE hit at ${Math.round(elapsed() / 1000)}s — finalizing plog as partialSuccess`)
+    try {
+      await plog.partialSuccess(0, ['hard_deadline_exceeded'], {
+        elapsedMs: elapsed(),
+        reason: 'hard_deadline_watchdog',
+      })
+    } catch (e) {
+      logger.warn(`[backfill] watchdog plog finalize failed: ${e instanceof Error ? e.message : String(e)}`)
+    }
+  }, HARD_DEADLINE_MS)
 
   // Initialize connectors for backfill
   try {
     await initializeConnectors()
   } catch (err) {
+    clearTimeout(watchdog)
     logger.warn(`[backfill] Connector initialization failed: ${err}`)
     await plog.error(err instanceof Error ? err : new Error(String(err)))
     return NextResponse.json({ ok: false, error: 'Connector initialization failed' }, { status: 500 })
@@ -386,7 +405,23 @@ export async function GET(req: NextRequest) {
     }
   }
 
+  // Clear the hard-deadline watchdog — we finished normally
+  clearTimeout(watchdog)
+
   const duration = Date.now() - startTime
+
+  // If the watchdog already fired plog.partialSuccess, skip re-finalization
+  // to avoid a duplicate plog update (plog state is terminal after first call).
+  if (watchdogFired) {
+    return NextResponse.json({
+      ok: false,
+      duration,
+      timedOut: true,
+      reason: 'hard_deadline',
+      summary: { processed: totalProcessed, success: totalSuccess, failed: totalFailed },
+      results,
+    })
+  }
 
   // Pipeline logging with proper partial/success tracking
   const hasPartialResults = timedOut || failedPlatforms.length > 0
