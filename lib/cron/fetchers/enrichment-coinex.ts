@@ -123,6 +123,11 @@ const traderCache = new Map<string, CoinexTraderItem>()
 let cacheTimestamp = 0
 const CACHE_TTL = 5 * 60 * 1000
 
+// Coalesce concurrent warm-ups: with concurrency=20 in batch-enrich, 20 workers
+// would otherwise trigger 20 parallel 5-page paginations on cold start, slamming
+// the CoinEx API and tripping CF/rate limits → 100% enrichment failure.
+let populateInflight: Promise<void> | null = null
+
 async function findTraderInRanking(traderId: string): Promise<CoinexTraderItem | null> {
   if (traderCache.has(traderId) && Date.now() - cacheTimestamp < CACHE_TTL) {
     return traderCache.get(traderId) || null
@@ -133,6 +138,17 @@ async function findTraderInRanking(traderId: string): Promise<CoinexTraderItem |
 }
 
 async function populateTraderCache(): Promise<void> {
+  if (Date.now() - cacheTimestamp < CACHE_TTL) return
+  if (populateInflight) return populateInflight
+  populateInflight = doPopulateTraderCache()
+  try {
+    await populateInflight
+  } finally {
+    populateInflight = null
+  }
+}
+
+async function doPopulateTraderCache(): Promise<void> {
   if (Date.now() - cacheTimestamp < CACHE_TTL) return
 
   traderCache.clear()

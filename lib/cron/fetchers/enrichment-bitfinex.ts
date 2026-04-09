@@ -42,6 +42,13 @@ interface BitfinexRankingsCache {
 let rankingsCache: BitfinexRankingsCache | null = null
 const CACHE_TTL_MS = 10 * 60 * 1000 // 10 minutes
 
+// Coalesce concurrent warm-ups: with concurrency=20 in batch-enrich, 20 workers
+// would otherwise trigger 20 parallel rankings fetches (5 timeframes each = 100
+// concurrent requests) on cold start, slamming the Bitfinex public API and
+// causing all enrichments to fail.
+let rankingsInflight: Promise<BitfinexRankingsCache> | null = null
+let extendedInflight: Promise<typeof extendedCache> | null = null
+
 type BitfinexRow = [number, unknown, string, number, unknown, unknown, number, ...unknown[]]
 
 async function fetchRankings(key: string, timeframe: string): Promise<Map<string, BitfinexRankingEntry>> {
@@ -80,40 +87,57 @@ async function ensureExtendedCache(): Promise<typeof extendedCache> {
   if (extendedCache && Date.now() - extendedCache.fetchedAt < CACHE_TTL_MS) {
     return extendedCache
   }
+  if (extendedInflight) return extendedInflight
 
-  const [pluDiff1d, pluDiff3d, plr1w] = await Promise.all([
-    fetchRankings('plu_diff', '1d'),
-    fetchRankings('plu_diff', '3d'),
-    fetchRankings('plr', '1w'),
-  ])
+  extendedInflight = (async () => {
+    const [pluDiff1d, pluDiff3d, plr1w] = await Promise.all([
+      fetchRankings('plu_diff', '1d'),
+      fetchRankings('plu_diff', '3d'),
+      fetchRankings('plr', '1w'),
+    ])
 
-  extendedCache = { pluDiff1d, pluDiff3d, plr1w, fetchedAt: Date.now() }
-  return extendedCache
+    extendedCache = { pluDiff1d, pluDiff3d, plr1w, fetchedAt: Date.now() }
+    return extendedCache
+  })()
+
+  try {
+    return await extendedInflight
+  } finally {
+    extendedInflight = null
+  }
 }
 
 async function ensureRankingsCache(): Promise<BitfinexRankingsCache> {
   if (rankingsCache && Date.now() - rankingsCache.fetchedAt < CACHE_TTL_MS) {
     return rankingsCache
   }
+  if (rankingsInflight) return rankingsInflight
 
-  const [pluDiff7d, pluDiff1m, plr7d, plr1m, plu1m] = await Promise.all([
-    fetchRankings('plu_diff', '1w'),
-    fetchRankings('plu_diff', '1M'),
-    fetchRankings('plr', '1w'),
-    fetchRankings('plr', '1M'),
-    fetchRankings('plu', '1M'),
-  ])
+  rankingsInflight = (async () => {
+    const [pluDiff7d, pluDiff1m, plr7d, plr1m, plu1m] = await Promise.all([
+      fetchRankings('plu_diff', '1w'),
+      fetchRankings('plu_diff', '1M'),
+      fetchRankings('plr', '1w'),
+      fetchRankings('plr', '1M'),
+      fetchRankings('plu', '1M'),
+    ])
 
-  rankingsCache = {
-    pluDiff7d,
-    pluDiff1m,
-    plr7d,
-    plr1m,
-    plu1m,
-    fetchedAt: Date.now(),
+    rankingsCache = {
+      pluDiff7d,
+      pluDiff1m,
+      plr7d,
+      plr1m,
+      plu1m,
+      fetchedAt: Date.now(),
+    }
+    return rankingsCache
+  })()
+
+  try {
+    return await rankingsInflight
+  } finally {
+    rankingsInflight = null
   }
-
-  return rankingsCache
 }
 
 // ============================================
