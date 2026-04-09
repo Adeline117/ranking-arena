@@ -5,9 +5,48 @@
  * Public endpoint — used by trader profile pages to show multi-account data.
  */
 
-import { NextRequest } from 'next/server'
-import { getSupabaseAdmin, success, handleError, checkRateLimit, RateLimitPresets } from '@/lib/api'
+import { NextRequest, NextResponse } from 'next/server'
+import { getSupabaseAdmin, handleError, checkRateLimit, RateLimitPresets } from '@/lib/api'
 import { getAggregatedStats, findUserByTrader } from '@/lib/data/linked-traders'
+import { tieredGetOrSet } from '@/lib/cache/redis-layer'
+
+// Shape is inferred from buildResponse so we don't duplicate getAggregatedStats's types.
+type AggregatedResponse = Awaited<ReturnType<typeof buildResponse>>
+
+async function buildResponse(
+  supabase: ReturnType<typeof getSupabaseAdmin>,
+  userId: string,
+) {
+  const stats = await getAggregatedStats(supabase, userId)
+  if (!stats) {
+    return {
+      aggregated: null,
+      accounts: [] as NonNullable<Awaited<ReturnType<typeof getAggregatedStats>>>['accounts'],
+      totalAccounts: 0,
+    }
+  }
+  return {
+    aggregated: {
+      combinedPnl: stats.combinedPnl,
+      bestRoi: stats.bestRoi,
+      weightedScore: stats.weightedScore,
+    },
+    accounts: stats.accounts,
+    totalAccounts: stats.totalAccounts,
+  }
+}
+
+const EMPTY_RESPONSE: AggregatedResponse = {
+  aggregated: null,
+  accounts: [],
+  totalAccounts: 0,
+}
+
+// Cache headers: edge CDN 5min + SWR 10min. Data only changes when a user
+// links/unlinks a trader account (rare) or trader snapshots refresh (~5min).
+const CACHE_HEADERS = {
+  'Cache-Control': 'public, s-maxage=300, stale-while-revalidate=600',
+}
 
 export async function GET(request: NextRequest) {
   const rateLimitResponse = await checkRateLimit(request, RateLimitPresets.read)
@@ -41,45 +80,25 @@ export async function GET(request: NextRequest) {
     }
 
     if (!userId) {
-      return success({
-        aggregated: null,
-        accounts: [],
-        totalAccounts: 0,
-      })
+      return NextResponse.json(
+        { success: true, data: EMPTY_RESPONSE },
+        { headers: CACHE_HEADERS },
+      )
     }
 
-    const stats = await getAggregatedStats(supabase, userId)
+    // Redis-cached: stampede-protected, warm tier (15min Redis, 2min memory)
+    const cacheKey = `aggregate:user:${userId}`
+    const data = await tieredGetOrSet<AggregatedResponse>(
+      cacheKey,
+      () => buildResponse(supabase, userId!),
+      'warm',
+      ['aggregate', `user:${userId}`],
+    )
 
-    if (!stats) {
-      return success({
-        aggregated: null,
-        accounts: [],
-        totalAccounts: 0,
-      })
-    }
-
-    return success({
-      aggregated: {
-        combinedPnl: stats.combinedPnl,
-        bestRoi: stats.bestRoi,
-        weightedScore: stats.weightedScore,
-      },
-      accounts: stats.accounts.map((a) => ({
-        id: a.id,
-        platform: a.platform,
-        traderKey: a.traderKey,
-        handle: a.handle,
-        label: a.label,
-        isPrimary: a.isPrimary,
-        roi: a.roi,
-        pnl: a.pnl,
-        arenaScore: a.arenaScore,
-        winRate: a.winRate,
-        maxDrawdown: a.maxDrawdown,
-        rank: a.rank,
-      })),
-      totalAccounts: stats.totalAccounts,
-    })
+    return NextResponse.json(
+      { success: true, data },
+      { headers: CACHE_HEADERS },
+    )
   } catch (error: unknown) {
     return handleError(error, 'traders/aggregate GET')
   }
