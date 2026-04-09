@@ -242,7 +242,7 @@
     },
     {
       "path": "/api/cron/cleanup-violations",
-      "schedule": "*/5 * * * *"
+      "schedule": "0 */6 * * *"
     },
     {
       "path": "/api/cron/scan-data-quality",
