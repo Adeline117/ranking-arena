@@ -342,6 +342,27 @@ export default function TraderProfileClient({ data, serverTraderData, claimedUse
   const traderAssetBreakdown = traderData?.assetBreakdown
   const traderSimilar = traderData?.similarTraders ?? []
 
+  // Structured data for SEO — memoized so combineSchemas doesn't re-run on every
+  // unrelated render (was being recomputed on every tab click, period switch, etc.)
+  // Must be called before any early-return to satisfy rules-of-hooks.
+  const structuredData = useMemo(() => combineSchemas(
+    generateTraderProfilePageSchema({
+      handle: data.handle,
+      id: data.source_trader_id,
+      source: data.source,
+      roi90d: data.roi ?? undefined,
+      winRate: data.win_rate ?? undefined,
+      maxDrawdown: data.max_drawdown ?? undefined,
+      arenaScore: data.arena_score ?? undefined,
+      avatarUrl: data.avatar_url ?? undefined,
+    }),
+    generateBreadcrumbSchema([
+      { name: 'Home', url: BASE_URL },
+      { name: 'Ranking', url: `${BASE_URL}/rankings` },
+      { name: data.handle },
+    ])
+  ), [data.handle, data.source_trader_id, data.source, data.roi, data.win_rate, data.max_drawdown, data.arena_score, data.avatar_url])
+
   // Loading state: only when SWR is loading AND no server fallback
   const isInitialLoading = traderLoading && !serverTraderData
   if (isInitialLoading) {
@@ -402,24 +423,7 @@ export default function TraderProfileClient({ data, serverTraderData, claimedUse
   // #24: Stale data banner — show when SWR errored but cached/stale data is still available
   const showStaleBanner = !!traderError && !!traderData
 
-  // Structured data for SEO
-  const structuredData = combineSchemas(
-    generateTraderProfilePageSchema({
-      handle: data.handle,
-      id: data.source_trader_id,
-      source: data.source,
-      roi90d: data.roi ?? undefined,
-      winRate: data.win_rate ?? undefined,
-      maxDrawdown: data.max_drawdown ?? undefined,
-      arenaScore: data.arena_score ?? undefined,
-      avatarUrl: data.avatar_url ?? undefined,
-    }),
-    generateBreadcrumbSchema([
-      { name: 'Home', url: BASE_URL },
-      { name: 'Ranking', url: `${BASE_URL}/rankings` },
-      { name: data.handle },
-    ])
-  )
+  // (structuredData memoized earlier, before the early-return for loading state)
 
   return (
     <Box
