@@ -355,24 +355,47 @@ async function getRankingsFallback(rankingsQuery: RankingsQuery, _cursor?: strin
 
   const traders = paginatedRows.map((row: Record<string, unknown>, idx: number) => {
     const traderId = row.source_trader_id as string
+    // For copin aggregator: extract real platform from trader_key (e.g., "hyperliquid:0x..." → "hyperliquid")
+    let displayPlatform = row.source as string
+    let displayTraderKey = traderId
+    if (displayPlatform === 'copin' && traderId?.includes(':')) {
+      const [realPlatform, ...rest] = traderId.split(':')
+      displayPlatform = realPlatform
+      displayTraderKey = rest.join(':')
+    }
+
+    const roi = row.roi != null ? Number(row.roi) : null
+    const pnl = row.pnl != null ? Number(row.pnl) : null
+    const arenaScore = row.arena_score != null ? Number(row.arena_score) : null
+
     return {
-      platform: row.source as Platform,
-      trader_key: traderId,
-      display_name: formatDisplayName(row.handle as string | null, traderId),
+      platform: displayPlatform as Platform,
+      trader_key: displayTraderKey,
+      display_name: formatDisplayName(row.handle as string | null, displayTraderKey),
       avatar_url: (row.avatar_url as string) || null,
+      // Top-level metrics for frontend compatibility
+      roi,
+      pnl,
+      arena_score: arenaScore,
+      win_rate: row.win_rate != null ? Number(row.win_rate) : null,
+      max_drawdown: row.max_drawdown != null ? Number(row.max_drawdown) : null,
+      sharpe_ratio: row.sharpe_ratio != null ? Number(row.sharpe_ratio) : null,
+      trades_count: (row.trades_count as number) ?? null,
+      followers: (row.followers as number) ?? null,
+      copiers: row.copiers != null ? Number(row.copiers) : null,
       rank: (row.rank as number) ?? offset + idx + 1,
       rank_change: (row.rank_change as number) ?? null,
       is_new: (row.is_new as boolean) ?? false,
       metrics: {
-        roi: row.roi != null ? Number(row.roi) : null,
-        pnl: row.pnl != null ? Number(row.pnl) : null,
+        roi,
+        pnl,
         win_rate: row.win_rate != null ? Number(row.win_rate) : null,
         max_drawdown: row.max_drawdown != null ? Number(row.max_drawdown) : null,
         trades_count: (row.trades_count as number) ?? null,
         followers: (row.followers as number) ?? null,
         copiers: row.copiers != null ? Number(row.copiers) : null,
         aum: null,
-        arena_score: row.arena_score != null ? Number(row.arena_score) : null,
+        arena_score: arenaScore,
         return_score: row.profitability_score != null ? Number(row.profitability_score) : null,
         drawdown_score: row.risk_control_score != null ? Number(row.risk_control_score) : null,
         stability_score: row.execution_score != null ? Number(row.execution_score) : null,
