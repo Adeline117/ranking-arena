@@ -20,15 +20,16 @@ test.describe('交易员详情页 - 周期切换 (period switch)', () => {
     await dismissOverlays(page)
     await page.waitForLoadState('domcontentloaded')
 
-    // Navigate to first trader from the ranking
-    const traderLinks = page.locator('a[href*="/trader/"]')
+    // Navigate to first trader from the ranking. Filter out .ssr-row
+    // links — those get display:none'd after Phase 2 hydration.
+    const traderLinks = page.locator('a[href*="/trader/"]:not(.ssr-row)')
     await traderLinks.first().waitFor({ state: 'visible', timeout: 30_000 }).catch(() => {})
     if (await traderLinks.count() === 0) {
       test.skip()
       return
     }
 
-    await traderLinks.first().click()
+    await traderLinks.first().click({ force: true })
     await page.waitForLoadState('networkidle', { timeout: 15_000 }).catch(() => {})
 
     // Find period switch buttons. TraderProfileClient renders them via
@@ -83,7 +84,7 @@ test.describe('交易员详情页 - 周期切换 (period switch)', () => {
     await dismissOverlays(page)
     await page.waitForLoadState('domcontentloaded')
 
-    const traderLinks = page.locator('a[href*="/trader/"]')
+    const traderLinks = page.locator('a[href*="/trader/"]:not(.ssr-row)')
     await traderLinks.first().waitFor({ state: 'visible', timeout: 30_000 }).catch(() => {})
     if (await traderLinks.count() === 0) {
       test.skip()
@@ -96,12 +97,11 @@ test.describe('交易员详情页 - 周期切换 (period switch)', () => {
       return
     }
 
-    // Visit directly with ?period=30D (or ?range=30D — both are used across
-    // the codebase). Verify it renders without error.
+    // Visit directly with ?period=30D. Use waitUntil:'domcontentloaded' so
+    // we don't wait for all sub-chunks (some never finish loading).
     const testUrl = `${href}${href.includes('?') ? '&' : '?'}period=30D`
-    await page.goto(testUrl)
+    await page.goto(testUrl, { waitUntil: 'domcontentloaded' })
     await dismissOverlays(page)
-    await page.waitForLoadState('domcontentloaded')
 
     // Page must render non-blank content
     const body = await page.textContent('body')

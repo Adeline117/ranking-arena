@@ -102,7 +102,11 @@ export interface UnregisteredTraderData {
   is_platform_dead?: boolean
 }
 
-type TraderTabKey = 'overview' | 'stats' | 'portfolio' | 'posts'
+// TraderTabKey moved to ./hooks/useTraderTabs (re-imported below for compat)
+import type { TraderTabKey } from './hooks/useTraderTabs'
+import { useTraderPeriodSync } from './hooks/useTraderPeriodSync'
+import { useTraderActiveAccount } from './hooks/useTraderActiveAccount'
+import { useTraderTabs } from './hooks/useTraderTabs'
 
 // NO_PORTFOLIO_PLATFORMS removed — Portfolio tab shown for ALL platforms
 // When no position data exists, the Portfolio component shows an empty state
@@ -131,51 +135,17 @@ export default function TraderProfileClient({ data, serverTraderData, claimedUse
   const { t, language: _language } = useLanguage()
   const { isPro } = useSubscription()
   const { userId: currentUserId } = useAuthSession()
-  const selectedPeriod = usePeriodStore(s => s.period)
 
-  // P1-7: Read initial period from URL param and sync store on mount
-  const urlPeriod = searchParams.get('period')
-  const setPeriod = usePeriodStore(s => s.setPeriod)
-  useEffect(() => {
-    if (urlPeriod && ['7D', '30D', '90D'].includes(urlPeriod)) {
-      setPeriod(urlPeriod as '7D' | '30D' | '90D')
-    }
-  }, []) // eslint-disable-line react-hooks/exhaustive-deps -- only on mount
-
-  // P1-7: Sync period changes to URL
-  // Skip the very first invocation (mount) — the store default may differ from URL param,
-  // and the init effect above hasn't propagated the URL value into the store yet.
-  // On mount, both effects fire in order but setPeriod won't update selectedPeriod until
-  // the next render, so the sync effect would incorrectly strip the period param from URL.
-  const periodSyncCountRef = useRef(0)
-  useEffect(() => {
-    // Skip the first fire (mount) — let the init effect take over first
-    if (periodSyncCountRef.current === 0) {
-      periodSyncCountRef.current = 1
-      return
-    }
-    const params = new URLSearchParams(searchParams.toString())
-    if (selectedPeriod === '90D') {
-      params.delete('period')
-    } else {
-      params.set('period', selectedPeriod)
-    }
-    const qs = params.toString()
-    const newPath = `${pathname}${qs ? `?${qs}` : ''}`
-    const currentPath = `${pathname}${searchParams.toString() ? `?${searchParams.toString()}` : ''}`
-    if (newPath !== currentPath) {
-      router.replace(newPath, { scroll: false })
-    }
-  }, [selectedPeriod]) // eslint-disable-line react-hooks/exhaustive-deps -- only sync when period changes
+  // Period URL ↔ store sync extracted into hook (see ./hooks/useTraderPeriodSync)
+  const selectedPeriod = useTraderPeriodSync()
 
   const [isVerifiedTrader, setIsVerifiedTrader] = useState(false)
   const [isOwner, setIsOwner] = useState(false)
 
-  // Multi-account linked traders (SWR-based)
-  // P7: bundled aggregate data will be passed once traderData loads (see below)
-  // Restore active account from URL param for deep-link support
-  const urlAccount = searchParams.get('account')
-  const [activeAccount, setActiveAccount] = useState<string>(urlAccount || 'all')
+  // Active account state machine extracted into hook (./hooks/useTraderActiveAccount).
+  // Owns: activeAccount string, parsed activeAccountRaw, change handler. Critical
+  // invariant: parses platform:traderKey inline without needing linkedAccounts.
+  const { activeAccount, activeAccountRaw, handleAccountChange } = useTraderActiveAccount()
 
   const displayName = formatDisplayName(data.handle, data.source)
   const _exchangeName = EXCHANGE_NAMES[data.source] || data.source
@@ -194,50 +164,9 @@ export default function TraderProfileClient({ data, serverTraderData, claimedUse
     return () => obs.disconnect()
   }, [])
 
-  // Tabs — always show overview + stats + portfolio; conditionally include 'posts' for claimed traders
-  const tabKeys: TraderTabKey[] = useMemo(() => {
-    const keys: TraderTabKey[] = ['overview', 'stats', 'portfolio']
-    if (claimedUser) keys.push('posts')
-    return keys
-  }, [claimedUser])
-  const urlTab = searchParams.get('tab')
-  const initialTab = urlTab && tabKeys.includes(urlTab as TraderTabKey) ? urlTab as TraderTabKey : 'overview'
-  const [activeTab, setActiveTab] = useState<TraderTabKey>(initialTab)
-
-  // Track which tabs have been visited — only render tab content after first visit.
-  // This avoids mounting heavy components (StatsPage, PortfolioTable, charts) for
-  // tabs the user hasn't viewed yet, while SwipeableView still lays out placeholders.
-  const [visitedTabs, setVisitedTabs] = useState<Set<TraderTabKey>>(() => new Set([initialTab]))
-
-  const handleAccountChange = useCallback((account: string) => {
-    setActiveAccount(account)
-    const params = new URLSearchParams(searchParams.toString())
-    if (account === 'all') {
-      params.delete('account')
-    } else {
-      params.set('account', account)
-    }
-    const qs = params.toString()
-    router.replace(`${pathname}${qs ? `?${qs}` : ''}`, { scroll: false })
-  }, [searchParams, pathname, router])
-
-  const handleTabChange = useCallback((tab: TraderTabKey) => {
-    setActiveTab(tab)
-    setVisitedTabs(prev => {
-      if (prev.has(tab)) return prev
-      const next = new Set(prev)
-      next.add(tab)
-      return next
-    })
-    const params = new URLSearchParams(searchParams.toString())
-    if (tab === 'overview') {
-      params.delete('tab')
-    } else {
-      params.set('tab', tab)
-    }
-    const qs = params.toString()
-    router.replace(`${pathname}${qs ? `?${qs}` : ''}`, { scroll: false })
-  }, [searchParams, pathname, router])
+  // Tabs state extracted into hook (./hooks/useTraderTabs). Owns tabKeys list,
+  // active tab, visited-tab tracking (for lazy mount), and URL change handler.
+  const { tabKeys, activeTab, visitedTabs, handleTabChange } = useTraderTabs(claimedUser)
 
   // ── P7: Merged trader detail fetch (bundles claim + aggregate + rank_history) ──
   // Fetch order: primary trader detail → then linked accounts (with bundled aggregate).
@@ -247,13 +176,6 @@ export default function TraderProfileClient({ data, serverTraderData, claimedUse
   // The URL only depends on `data` + `activeAccount` (parsed inline, no lookup),
   // so it doesn't need linkedAccounts. handle-vs-traderKey is resolved separately
   // below for display purposes.
-
-  // Parse activeAccount string "platform:traderKey" without needing linkedAccounts.
-  const activeAccountRaw = useMemo(() => {
-    if (activeAccount === 'all' || !activeAccount.includes(':')) return null
-    const [platform, ...rest] = activeAccount.split(':')
-    return { platform, traderKey: rest.join(':') }
-  }, [activeAccount])
 
   // SWR for full trader data — switches URL when account tab changes
   // P7: When fetching primary account, bundle claim/aggregate/rank_history via include param (4→1 API call)
