@@ -54,9 +54,17 @@ export class OkxFuturesConnector extends BaseConnector {
     for (let page = Math.floor(offset / pageSize) + 1; page <= maxPages + Math.floor(offset / pageSize); page++) {
       let _rawLb: Record<string, unknown>
       try {
-        _rawLb = await this.request<Record<string, unknown>>(
+        // ROOT CAUSE FIX (2026-04-09): switched from this.request() to
+        // fetchWithSmartRoute() so the connector honors PLATFORM_ROUTES
+        // (direct → vps_sg → vps_jp). Direct from Vercel hnd1 has been
+        // intermittently failing for okx_futures (likely datacenter IP rate
+        // limiting), and this.request() has no fallback. The smart router
+        // tries direct first, then falls through to VPS proxy on failure,
+        // which historically works fine for OKX.
+        _rawLb = await this.fetchWithSmartRoute<Record<string, unknown>>(
           `https://www.okx.com/api/v5/copytrading/public-lead-traders?instType=SWAP&sortType=pnl&dataRange=${V5_WINDOW_MAP[window]}&pageNo=${page}&limit=${pageSize}`,
-          { method: 'GET' }
+          { method: 'GET' },
+          this.config.timeout
         )
       } catch (err) {
         log.warn(`Page ${page} failed: ${err instanceof Error ? err.message : String(err)}`)

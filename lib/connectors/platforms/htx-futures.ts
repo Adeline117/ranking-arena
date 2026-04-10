@@ -41,20 +41,23 @@ export class HtxFuturesConnector extends BaseConnector {
       // Bail out early if we're running close to budget
       if (Date.now() - startedAt > PAGE_TIMEOUT_MS * (page - Math.floor(offset / pageSize))) break
 
-      const controller = new AbortController()
-      const timer = setTimeout(() => controller.abort(), PAGE_TIMEOUT_MS)
       let _rawLb: Record<string, unknown>
       try {
-        _rawLb = await this.request<Record<string, unknown>>(
+        // ROOT CAUSE FIX (2026-04-09): switched from this.request() to
+        // fetchWithSmartRoute() so the connector honors PLATFORM_ROUTES
+        // (direct → vps_sg). HTX has been silently failing from Vercel hnd1
+        // for ~7 days (167h stale), and this.request() has no fallback. The
+        // smart router tries direct first, falls through to VPS proxy on
+        // failure. The endpoint itself is alive (200ms from local Mac).
+        _rawLb = await this.fetchWithSmartRoute<Record<string, unknown>>(
           `https://futures.htx.com/-/x/hbg/v1/futures/copytrading/rank?rankType=1&pageNo=${page}&pageSize=${pageSize}`,
-          { method: 'GET', signal: controller.signal }
+          { method: 'GET' },
+          PAGE_TIMEOUT_MS
         )
       } catch (err) {
         this.logger.debug('HTX leaderboard page fallback:', err instanceof Error ? err.message : String(err))
-        clearTimeout(timer)
         break // Skip remaining pages on timeout/error — return what we have
       }
-      clearTimeout(timer)
 
       const data = warnValidate(HtxFuturesLeaderboardResponseSchema, _rawLb, 'htx-futures/leaderboard')
       // New endpoint returns { code: 200, data: { itemList: [...], totalPage, totalNum } }
