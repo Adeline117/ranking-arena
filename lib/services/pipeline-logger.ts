@@ -315,7 +315,18 @@ export class PipelineLogger {
   }
 
   /**
-   * Get the latest status for each job
+   * Get the latest status for each job (last 24h)
+   *
+   * ROOT CAUSE FIX (2026-04-09): Previously queried the `pipeline_job_status`
+   * VIEW which used `DISTINCT ON (job_name) ORDER BY job_name, started_at DESC`
+   * over the entire pipeline_logs table (44k rows). Under cron contention this
+   * consistently hit Postgres statement_timeout (>30s). Verified empirically
+   * via direct Supabase query (78s parallel for both views).
+   *
+   * Fix: use the new `get_pipeline_job_statuses_recent()` RPC (migration
+   * 20260409173747) which scopes the scan to the last 24h via an explicit
+   * WHERE clause, then DISTINCT ON in SQL. Server-side aggregation also
+   * bypasses the PostgREST 1000-row cap. Returns ~100 rows in 1-3s.
    */
   static async getJobStatuses(): Promise<Array<{
     job_name: string
@@ -326,19 +337,31 @@ export class PipelineLogger {
     health_status: string
   }>> {
     const client = getClient()
-    const { data, error } = await client
-      .from('pipeline_job_status')
-      .select('job_name, started_at, status, records_processed, error_message, health_status')
+    const { data, error } = await client.rpc('get_pipeline_job_statuses_recent')
 
     if (error) {
       logger.warn(`[PipelineLogger] Failed to get job statuses: ${error.message}`)
       return []
     }
-    return data || []
+    return (data as Array<{
+      job_name: string
+      started_at: string
+      status: string
+      records_processed: number
+      error_message: string | null
+      health_status: string
+    }>) || []
   }
 
   /**
-   * Get job stats for the last 7 days
+   * Get job stats for the last 7 days (success rate, error count, avg duration)
+   *
+   * ROOT CAUSE FIX (2026-04-09): Same root cause as getJobStatuses — the
+   * `pipeline_job_stats` view scanned 7 days of pipeline_logs (~10k rows) with
+   * GROUP BY + COUNT FILTER aggregates and hit statement_timeout under load.
+   *
+   * Fix: use the new `get_pipeline_job_stats_recent()` RPC. Returns ~133 rows
+   * in 3-5s. Same time bound + GROUP BY but isolated from view contention.
    */
   static async getJobStats(): Promise<Array<{
     job_name: string
@@ -350,15 +373,21 @@ export class PipelineLogger {
     last_run_at: string
   }>> {
     const client = getClient()
-    const { data, error } = await client
-      .from('pipeline_job_stats')
-      .select('job_name, total_runs, success_count, error_count, success_rate, avg_duration_ms, last_run_at')
+    const { data, error } = await client.rpc('get_pipeline_job_stats_recent')
 
     if (error) {
       logger.warn(`[PipelineLogger] Failed to get job stats: ${error.message}`)
       return []
     }
-    return data || []
+    return (data as Array<{
+      job_name: string
+      total_runs: number
+      success_count: number
+      error_count: number
+      success_rate: number
+      avg_duration_ms: number
+      last_run_at: string
+    }>) || []
   }
 
   /**
