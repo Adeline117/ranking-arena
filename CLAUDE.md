@@ -167,6 +167,21 @@ STRIPE_SECRET_KEY
    `/tmp/arena-git-push.lock` + auto-rebase on divergence. Raw `git push origin
    main` is safe. For scripted pushes, `scripts/git-push-safe.sh` provides the
    same behavior as a standalone wrapper.
+5. **Stale staged files leaking into commits**: when a commit fails (pre-commit
+   hook OR `git reset --soft HEAD^`) the previously-staged files REMAIN in the
+   index. The next `git add foo && git commit` then bundles those leftover
+   files into the new commit. Use `scripts/git-commit-safe.sh` for guaranteed
+   clean staging — it always `git reset HEAD` first, then stages only the
+   explicitly-listed files, then restores any pre-existing staged state after
+   the commit completes. Pattern:
+   ```bash
+   scripts/git-commit-safe.sh "$(cat <<'EOF'
+   commit subject
+
+   body paragraph
+   EOF
+   )" path/to/file1 path/to/file2
+   ```
 
 ## Claude Code Resources
 See `.claude/ARENA_SKILL_SYSTEM.md` for full list of agents, skills, and slash commands.
