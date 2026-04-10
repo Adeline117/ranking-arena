@@ -418,7 +418,21 @@ export async function proxy(request: NextRequest) {
 
   // 生成请求 ID 用于追踪
   const requestId = generateRequestId()
-  
+
+  // Redirect deleted scope-audit routes → /
+  // 2026-04-09: /frame deleted (per docs/reviews/scope-audit-2026-04-09.md).
+  // Other Phase 1 candidates (/kol /tip /channels) were NOT deleted because
+  // each has live consumers the audit missed:
+  //   - /tip/success is the Stripe success_url for tipping in groups
+  //   - /channels/[id] is linked from inbox + create-group flow
+  //   - /kol/apply writes to kol_applications which is read by /admin/kol
+  if (pathname === '/frame' || pathname.startsWith('/frame/')) {
+    const url = request.nextUrl.clone()
+    url.pathname = '/'
+    url.search = ''
+    return NextResponse.redirect(url, 308)
+  }
+
   // Redirect logged-in users away from /login
   if (pathname === '/login') {
     const hasSession = hasSessionCookie(request)
