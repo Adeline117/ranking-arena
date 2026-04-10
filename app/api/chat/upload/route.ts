@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { checkRateLimit, RateLimitPresets } from '@/lib/utils/rate-limit'
 import { getAuthUser, getSupabaseAdmin } from '@/lib/supabase/server'
+import { sniffImageFile } from '@/lib/utils/image-magic-bytes'
 import logger from '@/lib/logger'
 
 // Supported file types
@@ -88,6 +89,25 @@ export async function POST(request: NextRequest) {
       }, { status: 400 })
     }
 
+    // SECURITY (audit P1-SEC-2 follow-up): for the image category, sniff
+    // magic bytes — file.type is client-controlled. SVG-as-image XSS is the
+    // primary risk; PDFs/docs/zip from untrusted users are inherently
+    // executable in many viewers but mitigating that requires opening them
+    // in a sandbox which is out of scope here. Video files use container
+    // formats that browsers don't execute scripts in.
+    let sniffedMime: string | null = null
+    let sniffedExt: string | null = null
+    if (fileCategory === 'image') {
+      const sniffed = await sniffImageFile(file, ['jpeg', 'png', 'gif', 'webp', 'avif'])
+      if (!sniffed) {
+        return NextResponse.json({
+          error: 'Image content does not match a supported format. Try jpg, png, gif, webp, avif.',
+        }, { status: 400 })
+      }
+      sniffedMime = sniffed.mime
+      sniffedExt = sniffed.extension
+    }
+
     // Create Supabase client with service key
     const supabase = getSupabaseAdmin()
 
@@ -116,18 +136,22 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Generate unique filename
+    // Generate unique filename. For images, force SERVER-derived extension
+    // from the sniffed magic bytes — never echo the client-supplied name
+    // back to disk in a path that could be served as text/html or SVG.
     const timestamp = Date.now()
     const randomStr = Math.random().toString(36).substring(2, 15)
-    const _fileExt = file.name.split('.').pop()?.toLowerCase() || 'bin'
     const safeOriginalName = file.name.replace(/[^a-zA-Z0-9.-]/g, '_').substring(0, 50)
-    const fileName = `${conversationId}/${fileCategory}/${timestamp}-${randomStr}-${safeOriginalName}`
+    const fileName = sniffedExt
+      ? `${conversationId}/${fileCategory}/${timestamp}-${randomStr}.${sniffedExt}`
+      : `${conversationId}/${fileCategory}/${timestamp}-${randomStr}-${safeOriginalName}`
 
-    // Upload to Supabase Storage
+    // Upload to Supabase Storage with sniffed Content-Type for images,
+    // declared type for video/file (out of scope for sniffing — see comment above)
     const { data, error } = await supabase.storage
       .from('chat')
       .upload(fileName, file, {
-        contentType: file.type,
+        contentType: sniffedMime || file.type,
         upsert: false,
       })
 
