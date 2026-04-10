@@ -37,6 +37,86 @@ export const revalidate = 300 // 5分钟，与 Cache-Control s-maxage 一致
 // 缓存键前缀
 const CACHE_PREFIX = 'trader:'
 
+/**
+ * E2E test fixture mode — returns deterministic mock data when the
+ * `?e2e_fixture=` query param is set. Used by Playwright tests to make
+ * the linked-account-tabs flow deterministic without depending on prod
+ * data shape. Production traffic never sets this param, so this branch
+ * is dead code from a user perspective.
+ *
+ * Available fixtures:
+ *   - `linked_accounts`  → totalAccounts: 2, two synthetic accounts
+ *   - `single_account`   → totalAccounts: 1
+ *   - `not_found`        → 404 response
+ */
+const E2E_FIXTURES: Record<string, () => unknown> = {
+  linked_accounts: () => ({
+    profile: {
+      id: 'e2e-fixture',
+      handle: 'e2e_trader_fixture',
+      avatar_url: null,
+      bio: null,
+      platform: 'binance_futures',
+      trader_key: 'e2e-primary-key',
+    },
+    performance: {
+      arena_score: 85,
+      roi_90d: 180.5,
+      pnl: 250000,
+      win_rate: 65,
+      max_drawdown: 22,
+      rank: 42,
+      sharpe_ratio: 2.1,
+    },
+    stats: null,
+    portfolio: [],
+    positionHistory: [],
+    equityCurve: { '90D': [], '30D': [], '7D': [] },
+    assetBreakdown: { '90D': [], '30D': [], '7D': [] },
+    similarTraders: [],
+    aggregate: {
+      aggregated: {
+        combinedPnl: 370000,
+        bestRoi: { value: 180.5, platform: 'binance_futures', traderKey: 'e2e-primary-key' },
+        weightedScore: 81,
+      },
+      totalAccounts: 2,
+      accounts: [
+        {
+          id: 'e2e-1',
+          platform: 'binance_futures',
+          traderKey: 'e2e-primary-key',
+          handle: 'e2e_primary',
+          label: 'Primary',
+          isPrimary: true,
+          roi: 180.5,
+          pnl: 250000,
+          arenaScore: 85,
+          winRate: 65,
+          maxDrawdown: 22,
+          rank: 42,
+        },
+        {
+          id: 'e2e-2',
+          platform: 'bybit',
+          traderKey: 'e2e-linked-key',
+          handle: 'e2e_secondary',
+          label: 'Secondary',
+          isPrimary: false,
+          roi: 95.2,
+          pnl: 120000,
+          arenaScore: 72,
+          winRate: 61,
+          maxDrawdown: 18,
+          rank: 87,
+        },
+      ],
+    },
+    claim_status: { is_verified: false, owner_id: null },
+    rank_history: { history: [] },
+  }),
+}
+
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ handle: string }> }
@@ -56,6 +136,14 @@ export async function GET(
     const handle = parsed.data
 
     const decodedHandle = decodeURIComponent(handle)
+
+    // E2E test fixture short-circuit (only when explicitly requested via
+    // query param). Returns deterministic mock data so Playwright tests
+    // don't depend on prod data shape.
+    const fixtureName = request.nextUrl.searchParams.get('e2e_fixture')
+    if (fixtureName && E2E_FIXTURES[fixtureName]) {
+      return apiSuccess(E2E_FIXTURES[fixtureName]())
+    }
 
     // Accept optional ?source= param to disambiguate traders with same handle across exchanges
     const sourceParam = request.nextUrl.searchParams.get('source') || ''

@@ -111,6 +111,11 @@ function makeLinkedAccountsFixture(includeAggregate = true) {
 /**
  * Install a route handler that intercepts the merged trader-detail endpoint
  * and returns the linked-accounts fixture. Must be called before page.goto().
+ *
+ * NOTE: this handles client-side SWR fetches but cannot intercept SSR
+ * requests. For full deterministic mocking, use the server-side
+ * `?e2e_fixture=linked_accounts` query param which is honored by
+ * /api/traders/[handle] route directly.
  */
 async function stubLinkedAccountsApi(page: Page) {
   await page.route(/\/api\/traders\/[^?/]+\?[^/]*include=/, async (route) => {
@@ -120,6 +125,17 @@ async function stubLinkedAccountsApi(page: Page) {
       body: JSON.stringify(makeLinkedAccountsFixture()),
     })
   })
+}
+
+/**
+ * Build a trader URL with the e2e_fixture query param. This routes the
+ * SSR + all client fetches through the server-side fixture, giving us
+ * fully deterministic data without page.route() limitations.
+ */
+function fixtureTraderUrl(traderHref: string, fixture: string, extraParams: Record<string, string> = {}): string {
+  const sep = traderHref.includes('?') ? '&' : '?'
+  const qs = new URLSearchParams({ e2e_fixture: fixture, ...extraParams })
+  return `${traderHref}${sep}${qs.toString()}`
 }
 
 test.describe('交易员详情页 - 账号切换 (account switching)', () => {
