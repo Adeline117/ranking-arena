@@ -125,7 +125,6 @@ import { captureMessage } from '@/lib/utils/logger'
 import { sendRateLimitedAlert } from '@/lib/alerts/send-alert'
 import { logger } from '@/lib/logger'
 import { PipelineLogger } from '@/lib/services/pipeline-logger'
-import { getSharedRedis } from '@/lib/cache/redis-client'
 import { LR, V2 } from '@/lib/types/schema-mapping'
 
 // Retry config: 3 attempts with shared AbortSignal from per-trader timeout.
@@ -171,102 +170,6 @@ async function withRetry<T>(
     }
   }
   throw lastError
-}
-
-// ============================================
-// Dead-letter queue (DLQ) for enrichment failures
-// Tracks per-trader failure counts in Redis. After MAX_DLQ_RETRIES consecutive
-// failures, the trader is moved to a dead-letter set for manual review.
-// Keys:  enrichment:failed:{platform}:{trader_id} → JSON { count, lastError, lastFailedAt }
-// Set:   enrichment:dead-letter → set of "{platform}:{trader_id}" strings
-// ============================================
-const MAX_DLQ_RETRIES = 3
-const DLQ_KEY_TTL_SECONDS = 86400 * 7 // 7 days — auto-expire stale failure records
-
-interface DlqEntry {
-  count: number
-  lastError: string
-  lastFailedAt: string
-}
-
-/** Record an enrichment failure for a trader. Returns true if moved to dead-letter. */
-// TODO: Wire into per-trader enrichment catch block to enable DLQ tracking
-async function _recordEnrichmentFailure(
-  platform: string,
-  traderId: string,
-  errorMsg: string
-): Promise<boolean> {
-  try {
-    const redis = await getSharedRedis()
-    if (!redis) return false
-
-    const key = `enrichment:failed:${platform}:${traderId}`
-    const existing = await redis.get<DlqEntry>(key)
-    const count = (existing?.count ?? 0) + 1
-    const entry: DlqEntry = {
-      count,
-      lastError: errorMsg.slice(0, 200),
-      lastFailedAt: new Date().toISOString(),
-    }
-
-    if (count >= MAX_DLQ_RETRIES) {
-      // Move to dead-letter set and clean up the per-trader key
-      await redis.sadd('enrichment:dead-letter', `${platform}:${traderId}`)
-      await redis.del(key)
-      logger.warn(`[DLQ] ${platform}/${traderId} moved to dead-letter after ${count} failures: ${errorMsg.slice(0, 100)}`)
-      return true
-    }
-
-    await redis.set(key, entry, { ex: DLQ_KEY_TTL_SECONDS })
-    return false
-  } catch (err) {
-    // DLQ tracking is best-effort — never block enrichment
-    logger.warn(`[DLQ] Failed to record failure for ${platform}/${traderId}`, {
-      error: err instanceof Error ? err.message : String(err),
-    })
-    return false
-  }
-}
-
-/** Clear failure tracking for a trader after successful enrichment. */
-async function _clearEnrichmentFailure(platform: string, traderId: string): Promise<void> {
-  try {
-    const redis = await getSharedRedis()
-    if (!redis) return
-    await redis.del(`enrichment:failed:${platform}:${traderId}`)
-  } catch (_err) {
-    // Best-effort Redis cleanup
-  }
-}
-
-/** Get trader IDs that previously failed and should be retried (count < MAX_DLQ_RETRIES). */
-async function _getRetryableTraders(platform: string): Promise<string[]> {
-  try {
-    const redis = await getSharedRedis()
-    if (!redis) return []
-
-    // Scan for enrichment:failed:{platform}:* keys
-    // Upstash Redis scan returns [cursor, keys] — iterate until cursor is 0
-    const retryIds: string[] = []
-    const prefix = `enrichment:failed:${platform}:`
-    let cursor = 0
-    do {
-      const [nextCursor, keys] = await redis.scan(cursor, { match: `${prefix}*`, count: 100 })
-      cursor = typeof nextCursor === 'number' ? nextCursor : Number(nextCursor)
-      for (const key of keys) {
-        // Extract trader ID from key
-        const traderId = (key as string).slice(prefix.length)
-        if (traderId) retryIds.push(traderId)
-      }
-    } while (cursor !== 0)
-
-    return retryIds
-  } catch (err) {
-    logger.warn(`[DLQ] Failed to get retryable traders for ${platform}`, {
-      error: err instanceof Error ? err.message : String(err),
-    })
-    return []
-  }
 }
 
 /**
