@@ -61,6 +61,42 @@ export default function TopNavClient({ email = null }: { email?: string | null }
     }
   }, [router])
 
+  // PROD P1-PROD-3 (audit): Cmd+K / Ctrl+K focuses the search input from
+  // anywhere on the page. The search bar's placeholder already advertises
+  // ⌘K but the keyboard listener was missing. On mobile, opens the
+  // mobile search overlay instead since the desktop search bar is hidden.
+  useEffect(() => {
+    function onKeyDown(e: KeyboardEvent) {
+      // Cmd+K (Mac) or Ctrl+K (Win/Linux). Ignore when typing in an input
+      // unless the input is the search bar itself (re-focus is harmless).
+      if (e.key !== 'k' || !(e.metaKey || e.ctrlKey)) return
+      const target = e.target as HTMLElement | null
+      const inEditableField =
+        target &&
+        (target.tagName === 'INPUT' ||
+          target.tagName === 'TEXTAREA' ||
+          (target as HTMLElement).isContentEditable)
+      // Allow Cmd+K to refocus the search input if it's already focused;
+      // block when user is in any OTHER editable field.
+      const isSearchInput = target instanceof HTMLInputElement && target.type === 'search'
+      if (inEditableField && !isSearchInput) return
+
+      e.preventDefault()
+      // Desktop: focus the search input inside searchRef.
+      const searchEl = searchRef.current?.querySelector<HTMLInputElement>('input[type="search"]')
+      if (searchEl && searchEl.offsetParent !== null) {
+        searchEl.focus()
+        searchEl.select()
+        setShowSearchDropdown(true)
+        return
+      }
+      // Mobile: search input is hidden — open the mobile overlay instead.
+      setShowMobileSearch(true)
+    }
+    window.addEventListener('keydown', onKeyDown)
+    return () => window.removeEventListener('keydown', onKeyDown)
+  }, [searchRef, setShowSearchDropdown, setShowMobileSearch])
+
   return (
     <>
       {/* Center: Search (desktop) */}
