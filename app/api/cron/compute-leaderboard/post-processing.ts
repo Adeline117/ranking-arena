@@ -107,3 +107,39 @@ export async function revalidateRankingPages(): Promise<void> {
   }
   revalidatePath('/') // homepage
 }
+
+/**
+ * Pre-populate the exact Redis cache keys that /api/traders uses for the
+ * arena_score-desc top-50 query of each season. Without this warmup the first
+ * post-leaderboard request pays a cold cache penalty.
+ *
+ * Key pattern: leaderboard:{season}:{exchange}:{sort}:{order}:{cursor}:{limit}
+ */
+export async function warmupLeaderboardCache(
+  supabase: SupabaseAdmin,
+  seasons: readonly string[],
+): Promise<void> {
+  const { tieredSet } = await import('@/lib/cache/redis-layer')
+  const defaultLimit = 50
+
+  await Promise.all(
+    seasons.map(async (season) => {
+      const key = `leaderboard:${season}:all:arena_score:desc:start:${defaultLimit}`
+      const { data, error } = await supabase
+        .from('leaderboard_ranks')
+        .select(
+          'source, source_trader_id, rank, arena_score, roi, pnl, win_rate, max_drawdown, handle, avatar_url, followers, copiers, trades_count, sharpe_ratio, trader_type, source_type, season_id',
+        )
+        .eq('season_id', season)
+        .not('arena_score', 'is', null)
+        .gt('arena_score', 0)
+        .order('arena_score', { ascending: false })
+        .limit(defaultLimit)
+
+      if (error || !data?.length) return
+
+      await tieredSet(key, data, 'warm', ['rankings', `season:${season}`])
+      logger.info(`[warmup] Cached ${data.length} rows → ${key}`)
+    }),
+  )
+}
