@@ -25,6 +25,13 @@ const __fixdir = path.dirname(fileURLToPath(import.meta.url))
 dotenvConfig({ path: path.resolve(__fixdir, '../../.env') })
 
 const ARENA_DIR = process.env.ARENA_DIR || process.cwd()
+// OPENCLAW_WORKTREE: dedicated git worktree for autonomous Claude fix sessions.
+// Defaults to ~/arena-openclaw on branch openclaw/auto-fix. Running fixes in
+// a separate worktree keeps autonomous commits OFF main until a human merges
+// them, avoiding N-way push races with interactive sessions.
+// Falls back to ARENA_DIR if the worktree doesn't exist (opt-in upgrade).
+const OPENCLAW_WORKTREE = process.env.OPENCLAW_WORKTREE || path.resolve(process.env.HOME || '', 'arena-openclaw')
+const FIX_CWD = fs.existsSync(OPENCLAW_WORKTREE) ? OPENCLAW_WORKTREE : ARENA_DIR
 const API_URL = process.env.ARENA_API_URL || 'https://www.arenafi.org'
 const CRON_SECRET = process.env.CRON_SECRET || ''
 const TELEGRAM_TOKEN = process.env.TELEGRAM_BOT_TOKEN || ''
@@ -203,6 +210,7 @@ async function runClaudeCodeFix(platform, diagnosis) {
   console.log(`[auto-fix] Launching Claude Code for ${platform}...`)
   console.log(`[auto-fix] 策略: ${diagnosis.strategy}`)
   console.log(`[auto-fix] 风险: ${diagnosis.risk}`)
+  console.log(`[auto-fix] working dir: ${FIX_CWD}${FIX_CWD === OPENCLAW_WORKTREE ? ' (isolated worktree)' : ' (main checkout — no isolation)'}`)
 
   return new Promise((resolve) => {
     const startTime = Date.now()
@@ -213,7 +221,7 @@ async function runClaudeCodeFix(platform, diagnosis) {
       '--dangerously-skip-permissions',
       prompt,
     ], {
-      cwd: ARENA_DIR,
+      cwd: FIX_CWD,
       timeout: FIX_TIMEOUT_MS,
       env: { ...process.env },
     })
@@ -259,7 +267,9 @@ RULES:
 - Keep changes minimal and focused
 - Test your fix by checking that the code compiles: run "npx tsc --noEmit --pretty"
 - After fixing, commit with message "fix(${platform}): <description>"
-- Do NOT push to remote`
+- You are running in an isolated worktree on branch openclaw/auto-fix.
+  Push your commit to origin/openclaw/auto-fix (NOT main). A human/cron
+  will merge to main separately via scripts/openclaw/merge-autofix-to-main.sh.`
 
   const strategyPrompts = {
     'proxy_fallback': `${basePrompt}
