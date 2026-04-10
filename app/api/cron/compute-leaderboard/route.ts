@@ -33,6 +33,7 @@ import { detectTraderType, getFreshnessHours, deriveWinRateMDD } from './helpers
 import { type TraderRow, makeAddToTraderMap } from './trader-row'
 import { computeLastResortCalmar, classifyTradingStyle, markOutliers, applyArenaFollowers } from './scoring-helpers'
 import { checkPlatformFreshness } from './freshness-check'
+import { fetchHandleAvatarMap } from './fetch-handles'
 import { PipelineLogger } from '@/lib/services/pipeline-logger'
 import { sanitizeDisplayName } from '@/lib/utils/profanity'
 import { generateIdenticonSvg } from '@/lib/utils/avatar'
@@ -998,77 +999,9 @@ async function computeSeason(
     return 0
   }
 
-  // Batch fetch handles and avatars from unified `traders` table
-  // (replaces two-step trader_sources + trader_profiles_v2 fallback)
-  const handleMap = new Map<string, { handle: string | null; avatar_url: string | null }>()
-
-  const bySource = new Map<string, string[]>()
-  for (const t of uniqueTraders) {
-    const ids = bySource.get(t.source) || []
-    ids.push(t.source_trader_id)
-    bySource.set(t.source, ids)
-  }
-
-  // Step 1: Query trader_profiles_v2 first (primary source)
-  await Promise.all(
-    Array.from(bySource.entries()).map(async ([source, traderIds]) => {
-      for (let i = 0; i < traderIds.length; i += 500) {
-        const chunk = traderIds.slice(i, i + 500)
-        const { data: v2Data } = await supabase
-          .from('trader_profiles_v2')
-          .select('trader_key, display_name, avatar_url')
-          .eq('platform', source)
-          .in('trader_key', chunk)
-
-        v2Data?.forEach((s: { trader_key: string; display_name: string | null; avatar_url: string | null }) => {
-          const tid = s.trader_key.startsWith('0x') ? s.trader_key.toLowerCase() : s.trader_key
-          handleMap.set(`${source}:${tid}`, {
-            handle: s.display_name,
-            avatar_url: s.avatar_url || null,
-          })
-        })
-      }
-    })
-  )
-
-  // Step 2: Targeted fallback — only query traders table for keys with NULL handles
-  const missingHandleBySource = new Map<string, string[]>()
-  for (const t of uniqueTraders) {
-    const tid = t.source_trader_id.startsWith('0x') ? t.source_trader_id.toLowerCase() : t.source_trader_id
-    const key = `${t.source}:${tid}`
-    const entry = handleMap.get(key)
-    if (!entry || !entry.handle) {
-      const ids = missingHandleBySource.get(t.source) || []
-      ids.push(t.source_trader_id)
-      missingHandleBySource.set(t.source, ids)
-    }
-  }
-
-  if (missingHandleBySource.size > 0) {
-    await Promise.all(
-      Array.from(missingHandleBySource.entries()).map(async ([source, traderIds]) => {
-        for (let i = 0; i < traderIds.length; i += 500) {
-          const chunk = traderIds.slice(i, i + 500)
-          const { data: fallbackData } = await supabase
-            .from('traders')
-            .select('trader_key, handle, avatar_url')
-            .eq('platform', source)
-            .in('trader_key', chunk)
-
-          fallbackData?.forEach((s: { trader_key: string; handle: string | null; avatar_url: string | null }) => {
-            const tid = s.trader_key.startsWith('0x') ? s.trader_key.toLowerCase() : s.trader_key
-            const key = `${source}:${tid}`
-            if (!handleMap.has(key) || (!handleMap.get(key)!.handle && s.handle)) {
-              handleMap.set(key, {
-                handle: handleMap.get(key)?.handle || s.handle,
-                avatar_url: handleMap.get(key)?.avatar_url || s.avatar_url || null,
-              })
-            }
-          })
-        }
-      })
-    )
-  }
+  // Batch fetch handles + avatars: trader_profiles_v2 primary, traders table
+  // fallback for any key still missing a handle. Logic in fetch-handles.ts.
+  const handleMap = await fetchHandleAvatarMap(supabase, uniqueTraders)
 
   // Calculate arena_score and rank
   const scored = uniqueTraders.map(t => {
