@@ -38,15 +38,22 @@ export const ANOMALY_RULES: AnomalyRule[] = [
   },
   
   {
-    id: 'mdd_positive',
-    name: '最大回撤为正数',
-    description: 'max_drawdown > 0 (should be negative or zero)',
+    // CONVENTION FLIP (2026-04-09): max_drawdown is stored as a POSITIVE
+    // percentage in [0, 100] (e.g. 25 = "25% drawdown"). Originally this
+    // rule blocked positive values and force-flipped them to negative,
+    // but the writer convention changed. The on-disk data is now 100%
+    // positive (verified: 37,829 rows, min=0, max=100, zero negatives)
+    // and the score formula uses Math.abs() so it's sign-agnostic.
+    // See migration 20260409180432.
+    id: 'mdd_negative',
+    name: '最大回撤为负数',
+    description: 'max_drawdown < 0 (should be positive percentage 0-100)',
     severity: 'critical',
     action: 'block',
-    check: (t) => t.max_drawdown != null && t.max_drawdown > 0,
+    check: (t) => t.max_drawdown != null && t.max_drawdown < 0,
     autoFix: (t) => ({
       ...t,
-      max_drawdown: -Math.abs(t.max_drawdown!),
+      max_drawdown: Math.abs(t.max_drawdown!),
     }),
   },
   

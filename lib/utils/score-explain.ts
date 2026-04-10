@@ -42,8 +42,11 @@ export function generateExplanation(result: ScoreResult): string {
   }
 
   // 补充风险提示
+  // max_drawdown is stored as a positive percentage [0, 100] (see migration
+  // 20260409180432). Display as "-25%" to match user expectation that
+  // drawdown is a negative move from peak.
   if (result.max_drawdown != null && Math.abs(result.max_drawdown) > 30) {
-    parts.push(`注意最大回撤偏高(${result.max_drawdown > 0 ? '-' : ''}${Math.abs(result.max_drawdown).toFixed(0)}%)`)
+    parts.push(`注意最大回撤偏高(-${Math.abs(result.max_drawdown).toFixed(0)}%)`)
   }
 
   if (result.score_completeness === 'minimal') {
