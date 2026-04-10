@@ -438,6 +438,13 @@ async function computeSeason(
     if (snap.max_drawdown != null && (snap.max_drawdown < VB.max_drawdown_pct.min || snap.max_drawdown > VB.max_drawdown_pct.max)) {
       snap.max_drawdown = null
     }
+    // Copin aggregator returns default WIN=80%/MDD=80% for traders without real data.
+    // Detect: both are exactly 80 AND source is copin (trader_key has "protocol:" prefix).
+    if (snap.win_rate === 80 && snap.max_drawdown === 80 && snap.source?.includes(':')) {
+      snap.win_rate = null
+      snap.max_drawdown = null
+      snap.metrics_estimated = true
+    }
     // MDD=0% with ROI > 50% is almost certainly missing data, not real zero drawdown.
     if (snap.max_drawdown === 0 && snap.roi != null && Math.abs(snap.roi) > 50) {
       snap.max_drawdown = null
