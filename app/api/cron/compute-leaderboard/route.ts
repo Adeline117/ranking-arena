@@ -22,6 +22,12 @@ import {
   SOURCE_TRUST_WEIGHT,
 } from '@/lib/constants/exchanges'
 import { createLogger, fireAndForget } from '@/lib/utils/logger'
+import {
+  syncSubscoresToV2,
+  warmupSsrHomepageCache,
+  syncRedisSortedSet,
+  revalidateRankingPages,
+} from './post-processing'
 import { PipelineLogger } from '@/lib/services/pipeline-logger'
 import { sanitizeDisplayName } from '@/lib/utils/profanity'
 import { generateIdenticonSvg } from '@/lib/utils/avatar'
@@ -295,57 +301,9 @@ export async function GET(request: NextRequest) {
       logger.warn(`Skipping arena_score v2 sync — only ${Math.round(remainingMs() / 1000)}s remaining`)
     }
 
-    // Sync sub-scores + advanced metrics: leaderboard_ranks → trader_snapshots_v2
-    // Fills orphan v2 columns (return_score/drawdown_score/stability_score = 0 rows,
-    // sortino_ratio/calmar_ratio = 247 rows vs LR's 39K+)
-    fireAndForget((async () => {
-      try {
-        const { data: lrRows } = await supabase
-          .from('leaderboard_ranks')
-          .select('source, source_trader_id, season_id, profitability_score, risk_control_score, execution_score, sortino_ratio, calmar_ratio')
-          .not('profitability_score', 'is', null)
-          .limit(1000)
-        if (!lrRows?.length) return
-
-        const scoreMap = new Map<string, typeof lrRows[0]>()
-        for (const r of lrRows) scoreMap.set(`${r.source}:${r.source_trader_id}:${r.season_id}`, r)
-
-        const cutoff = new Date(Date.now() - 7 * 24 * 3600 * 1000).toISOString()
-        const { data: v2Rows } = await supabase
-          .from('trader_snapshots_v2')
-          .select('id, platform, trader_key, window')
-          .is('return_score', null)
-          .not('arena_score', 'is', null)
-          .gte('created_at', cutoff)
-          .limit(1000)
-        if (!v2Rows?.length) return
-
-        const updates: Array<Record<string, unknown>> = []
-        for (const row of v2Rows) {
-          const lr = scoreMap.get(`${row.platform}:${row.trader_key}:${row.window}`)
-          if (lr?.profitability_score != null) {
-            updates.push({
-              id: row.id,
-              return_score: Number(lr.profitability_score),
-              drawdown_score: lr.risk_control_score != null ? Number(lr.risk_control_score) : null,
-              stability_score: lr.execution_score != null ? Number(lr.execution_score) : null,
-              sortino_ratio: lr.sortino_ratio != null ? Number(lr.sortino_ratio) : null,
-              calmar_ratio: lr.calmar_ratio != null ? Number(lr.calmar_ratio) : null,
-            })
-          }
-        }
-
-        let synced = 0
-        for (let i = 0; i < updates.length; i += 100) {
-          const chunk = updates.slice(i, i + 100)
-          const { error } = await supabase.from('trader_snapshots_v2').upsert(chunk, { onConflict: 'id' })
-          if (!error) synced += chunk.length
-        }
-        if (synced > 0) logger.info(`Synced sub-scores to v2: ${synced}/${v2Rows.length} rows`)
-      } catch (e) {
-        logger.warn('Sub-score sync to v2 failed (non-critical):', e)
-      }
-    })(), 'sync-subscores-to-v2')
+    // Sync sub-scores + advanced metrics: leaderboard_ranks → trader_snapshots_v2.
+    // Extracted to post-processing.ts to shrink this file per Retro 2026-04-09.
+    fireAndForget(syncSubscoresToV2(supabase), 'sync-subscores-to-v2')
 
     // Post-compute: derive WR/MDD from historical snapshots for traders missing them
     // Gated by time budget: this queries historical data and can be slow
@@ -364,31 +322,10 @@ export async function GET(request: NextRequest) {
     // Fire-and-forget: warm Redis cache with top 100 for each season
     fireAndForget(warmupLeaderboardCache(supabase), 'warmup-leaderboard-cache')
 
-    // Fire-and-forget: warm the SSR homepage cache (home-initial-traders:90D)
-    // This keeps getInitialTraders() hitting Redis instead of doing a cold DB query on page load
-    fireAndForget((async () => {
-      const { fetchLeaderboardFromDB } = await import('@/lib/getInitialTraders')
-      await fetchLeaderboardFromDB('90D', 50)
-      logger.info('[warmup] Refreshed home-initial-traders:90D SSR cache')
-    })(), 'warmup-ssr-homepage-cache')
-
-    // Fire-and-forget: sync Redis sorted sets for near-real-time rankings
-    fireAndForget((async () => {
-      const { syncSortedSetFromLeaderboard } = await import('@/lib/realtime/ranking-store')
-      for (const season of SEASONS) {
-        await syncSortedSetFromLeaderboard(supabase, season)
-      }
-    })(), 'sync-redis-sorted-set')
-
-    // Fire-and-forget: revalidate top exchange ranking pages so ISR picks up fresh data
-    fireAndForget((async () => {
-      const { revalidatePath } = await import('next/cache')
-      const topExchanges = ['binance_futures', 'bybit', 'hyperliquid', 'okx_futures', 'bitget_futures']
-      for (const exchange of topExchanges) {
-        revalidatePath(`/rankings/${exchange}`)
-      }
-      revalidatePath('/') // homepage
-    })(), 'revalidate-ranking-pages')
+    // Post-processing blocks extracted to post-processing.ts.
+    fireAndForget(warmupSsrHomepageCache(), 'warmup-ssr-homepage-cache')
+    fireAndForget(syncRedisSortedSet(supabase, SEASONS), 'sync-redis-sorted-set')
+    fireAndForget(revalidateRankingPages(), 'revalidate-ranking-pages')
 
     // Release idempotency lock (atomic Redis DEL with fallback)
     try { const { getSharedRedis: r } = await import('@/lib/cache/redis-client'); const c = await r(); if (c) await c.del(IDEMPOTENCY_KEY); else await tieredDel(IDEMPOTENCY_KEY) } catch { await tieredDel(IDEMPOTENCY_KEY).catch(() => {}) }
