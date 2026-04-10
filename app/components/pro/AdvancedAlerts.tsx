@@ -641,7 +641,7 @@ export default function AdvancedAlerts({
     <PremiumGate
       isPro={isPro}
       isLoggedIn={isLoggedIn}
-      featureName={t('advancedAlerts')}
+      featureKey="advancedAlerts"
       blurAmount={10}
       minHeight={300}
     >
