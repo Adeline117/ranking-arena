@@ -35,6 +35,7 @@ import { computeLastResortCalmar, classifyTradingStyle, markOutliers, applyArena
 import { checkPlatformFreshness } from './freshness-check'
 import { fetchHandleAvatarMap } from './fetch-handles'
 import { enrichFromStatsDetail } from './enrich-stats-detail'
+import { deriveWrMddFromEquityCurve, deriveAdvancedFromEquityCurve } from './enrich-equity-curve'
 import { PipelineLogger } from '@/lib/services/pipeline-logger'
 import { sanitizeDisplayName } from '@/lib/utils/profanity'
 import { generateIdenticonSvg } from '@/lib/utils/avatar'
@@ -562,212 +563,26 @@ async function computeSeason(
     }
   }
 
-  // Phase 4: Derive win_rate/max_drawdown from equity_curve (daily PnL) as universal fallback
-  // This covers ALL platforms that have equity curve data but no native WR/MDD
+  // Phase 4: Derive win_rate/max_drawdown from trader_equity_curve (daily PnL).
+  // Universal fallback for platforms that don't provide WR/MDD natively.
+  // Logic in enrich-equity-curve.ts.
   if (isOutOfTime(75_000)) {
     logger.warn(`[${season}] SKIPPING Phase 4 (equity_curve WR/MDD derivation) — only ${Math.round(timeLeftMs() / 1000)}s left`)
-  }
-  const stillNeedingData = isOutOfTime(75_000)
-    ? []
-    : Array.from(traderMap.values()).filter(t => t.win_rate == null || t.max_drawdown == null)
-  if (stillNeedingData.length > 0) {
-    const eqBySource = new Map<string, string[]>()
-    for (const t of stillNeedingData) {
-      const ids = eqBySource.get(t.source) || []
-      ids.push(t.source_trader_id)
-      eqBySource.set(t.source, ids)
+  } else {
+    const derived = await deriveWrMddFromEquityCurve(supabase, traderMap, isOutOfTime)
+    if (derived > 0) {
+      logger.info(`[${season}] Derived ${derived} WR/MDD values from equity curves`)
     }
-    let derived = 0
-    await Promise.all(
-      Array.from(eqBySource.entries()).map(async ([source, traderIds]) => {
-        // Query equity curves for these traders (all periods, prefer 90D)
-        for (let i = 0; i < traderIds.length; i += 50) {
-          if (isOutOfTime(60_000)) break
-          const chunk = traderIds.slice(i, i + 50)
-          const { data: eqRows } = await supabase
-            .from('trader_equity_curve')
-            .select('source_trader_id, pnl_usd, roi_pct, data_date')
-            .eq('source', source)
-            .in('source_trader_id', chunk)
-            .order('data_date', { ascending: true })
-            .limit(1000)
-          if (!eqRows?.length) continue
-
-          // Group by trader
-          const byTrader = new Map<string, Array<{ pnl: number | null; roi: number | null }>>()
-          for (const row of eqRows) {
-            const tid = row.source_trader_id.startsWith('0x') ? row.source_trader_id.toLowerCase() : row.source_trader_id
-            const arr = byTrader.get(tid) || []
-            arr.push({ pnl: row.pnl_usd, roi: row.roi_pct })
-            byTrader.set(tid, arr)
-          }
-
-          for (const [tid, points] of byTrader) {
-            const existing = traderMap.get(`${source}:${tid}`)
-            if (!existing) continue
-
-            // Derive win_rate from daily PnL direction (lowered from 3 to 2 points)
-            if (existing.win_rate == null && points.length >= 2) {
-              let wins = 0, total = 0
-              for (let j = 1; j < points.length; j++) {
-                const prevPnl = points[j - 1].pnl ?? 0
-                const currPnl = points[j].pnl ?? 0
-                const dailyPnl = currPnl - prevPnl
-                if (dailyPnl > 0) wins++
-                if (Math.abs(dailyPnl) > 0.01) total++
-              }
-              if (total >= 1) {
-                existing.win_rate = Math.round((wins / total) * 10000) / 100
-                derived++
-              }
-            }
-
-            // Derive max_drawdown from cumulative PnL or ROI curve (lowered from 3 to 2 points)
-            if (existing.max_drawdown == null && points.length >= 2) {
-              let peak = 0, maxDD = 0
-              // Try ROI first, fall back to PnL
-              const values = points.map(p => p.roi ?? p.pnl ?? 0)
-              for (const v of values) {
-                if (v > peak) peak = v
-                if (peak > 0) {
-                  const dd = ((peak - v) / Math.abs(peak)) * 100
-                  if (dd > maxDD) maxDD = dd
-                }
-              }
-              if (maxDD > 0.01 && maxDD <= 100) {
-                existing.max_drawdown = Math.round(maxDD * 100) / 100
-                derived++
-              }
-            }
-          }
-        }
-      })
-    )
-    logger.info(`[${season}] Derived ${derived} WR/MDD values from equity curves`)
   }
 
-  // Phase 4b: Compute sharpe/sortino/calmar/profit_factor from equity_curve for traders still missing them
-  // Also estimate trades_count from equity curve points for platforms that don't provide it
+  // Phase 4b: Compute sharpe / sortino / calmar / profit_factor from
+  // trader_equity_curve. Also estimates trades_count from equity-curve point
+  // count for platforms that don't return one. Logic in enrich-equity-curve.ts.
   if (isOutOfTime(60_000)) {
     logger.warn(`[${season}] SKIPPING Phase 4b (advanced metrics from equity_curve) — only ${Math.round(timeLeftMs() / 1000)}s left`)
   } else {
-    const needAdvanced = Array.from(traderMap.values())
-      .filter(t => t.roi != null && (t.sharpe_ratio == null || t.sortino_ratio == null || t.calmar_ratio == null || t.profit_factor == null || t.trades_count == null))
-    if (needAdvanced.length > 0) {
-      const advBySource = new Map<string, string[]>()
-      for (const t of needAdvanced) {
-        const ids = advBySource.get(t.source) || []
-        ids.push(t.source_trader_id)
-        advBySource.set(t.source, ids)
-      }
-      let advancedDerived = 0
-      await Promise.all(
-        Array.from(advBySource.entries()).map(async ([source, traderIds]) => {
-          for (let i = 0; i < traderIds.length; i += 50) {
-            if (isOutOfTime(50_000)) break
-            const chunk = traderIds.slice(i, i + 50)
-            const { data: eqRows } = await supabase
-              .from('trader_equity_curve')
-              .select('source_trader_id, roi_pct, pnl_usd, data_date')
-              .eq('source', source)
-              .in('source_trader_id', chunk)
-              .order('data_date', { ascending: true })
-              .limit(1000)
-            if (!eqRows?.length) continue
-
-            // Group by trader
-            const byTrader = new Map<string, Array<{ roi: number; pnl: number | null; date: string }>>()
-            for (const row of eqRows) {
-              const tid = row.source_trader_id.startsWith('0x') ? row.source_trader_id.toLowerCase() : row.source_trader_id
-              const arr = byTrader.get(tid) || []
-              if (row.roi_pct != null) arr.push({ roi: Number(row.roi_pct), pnl: row.pnl_usd != null ? Number(row.pnl_usd) : null, date: row.data_date })
-              byTrader.set(tid, arr)
-            }
-
-            for (const [tid, points] of byTrader) {
-              const existing = traderMap.get(`${source}:${tid}`)
-              if (!existing) continue
-
-              // Estimate trades_count from equity curve data points (each point = a day with activity)
-              if (existing.trades_count == null && points.length >= 2) {
-                existing.trades_count = points.length
-                advancedDerived++
-              }
-
-              if (points.length < 7) continue
-
-              // Compute daily returns from cumulative ROI
-              const dailyReturns: number[] = []
-              for (let j = 1; j < points.length; j++) {
-                dailyReturns.push(points[j].roi - points[j - 1].roi)
-              }
-
-              // Compute daily PnL changes for avg_profit/avg_loss/largest_win/largest_loss
-              const dailyPnlChanges: number[] = []
-              for (let j = 1; j < points.length; j++) {
-                const prevPnl = points[j - 1].pnl
-                const currPnl = points[j].pnl
-                if (prevPnl != null && currPnl != null) {
-                  const change = currPnl - prevPnl
-                  if (Math.abs(change) > 0.01) dailyPnlChanges.push(change)
-                }
-              }
-
-              // Sharpe ratio = (mean daily return / std dev of daily returns) * sqrt(365)
-              if (existing.sharpe_ratio == null && dailyReturns.length >= 7) {
-                const decimalReturns = dailyReturns.map(r => r / 100)
-                const mean = decimalReturns.reduce((a, b) => a + b, 0) / decimalReturns.length
-                const variance = decimalReturns.reduce((s, r) => s + (r - mean) ** 2, 0) / decimalReturns.length
-                const stdDev = Math.sqrt(variance)
-                if (stdDev > 0) {
-                  const sharpe = (mean / stdDev) * Math.sqrt(365)
-                  existing.sharpe_ratio = Math.round(Math.max(-20, Math.min(20, sharpe)) * 10000) / 10000
-                  advancedDerived++
-                }
-              }
-
-              // Sortino ratio
-              if (existing.sortino_ratio == null && dailyReturns.length >= 3) {
-                const decimalReturns = dailyReturns.map(r => r / 100)
-                const negReturns = decimalReturns.filter(r => r < 0)
-                if (negReturns.length > 0) {
-                  const avgReturn = decimalReturns.reduce((a, b) => a + b, 0) / decimalReturns.length
-                  const downsideDev = Math.sqrt(negReturns.reduce((s, r) => s + r * r, 0) / decimalReturns.length)
-                  if (downsideDev > 0) {
-                    const sortino = Math.max(-10, Math.min(10, (avgReturn / downsideDev) * Math.sqrt(365)))
-                    existing.sortino_ratio = Math.round(sortino * 10000) / 10000
-                    advancedDerived++
-                  }
-                } else {
-                  existing.sortino_ratio = 10 // No negative returns
-                  advancedDerived++
-                }
-              }
-
-              // Calmar ratio = annualized ROI / |MDD|
-              if (existing.calmar_ratio == null && existing.roi != null && existing.max_drawdown != null && existing.max_drawdown > 0) {
-                const periodDays = season === '7D' ? 7 : season === '30D' ? 30 : 90
-                const annualizedRoi = existing.roi * (365 / periodDays)
-                const calmar = annualizedRoi / Math.abs(existing.max_drawdown)
-                existing.calmar_ratio = Math.round(Math.max(-10, Math.min(10, calmar)) * 10000) / 10000
-                advancedDerived++
-              }
-
-              // Profit factor from daily returns (gross wins / gross losses)
-              if (existing.profit_factor == null && dailyReturns.length >= 3) {
-                const grossWin = dailyReturns.filter(r => r > 0).reduce((s, r) => s + r, 0)
-                const grossLoss = Math.abs(dailyReturns.filter(r => r < 0).reduce((s, r) => s + r, 0))
-                if (grossLoss > 0) {
-                  existing.profit_factor = Math.round(Math.min(10, grossWin / grossLoss) * 10000) / 10000
-                } else if (grossWin > 0) {
-                  existing.profit_factor = 10
-                }
-                advancedDerived++
-              }
-            }
-          }
-        })
-      )
+    const advancedDerived = await deriveAdvancedFromEquityCurve(supabase, traderMap, season, isOutOfTime)
+    if (advancedDerived > 0) {
       logger.info(`[${season}] Derived ${advancedDerived} sharpe/sortino/calmar/PF/trades values from equity curves`)
     }
   }
