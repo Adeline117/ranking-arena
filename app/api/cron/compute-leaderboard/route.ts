@@ -32,6 +32,7 @@ import {
 import { detectTraderType, getFreshnessHours, deriveWinRateMDD } from './helpers'
 import { type TraderRow, makeAddToTraderMap } from './trader-row'
 import { computeLastResortCalmar, classifyTradingStyle, markOutliers } from './scoring-helpers'
+import { checkPlatformFreshness } from './freshness-check'
 import { PipelineLogger } from '@/lib/services/pipeline-logger'
 import { sanitizeDisplayName } from '@/lib/utils/profanity'
 import { generateIdenticonSvg } from '@/lib/utils/avatar'
@@ -524,51 +525,12 @@ async function computeSeason(
   // runConnectorBatch() builds a union of all traders across all windows and ensures
   // every trader has entries for ALL windows in trader_snapshots_v2.
 
-  // Data freshness check: if ALL platforms are stale (>48h), skip computation.
-  //
-  // ROOT CAUSE FIX (2026-04-08): Previously iterated traderMap which could be empty
-  // due to upstream query failures → false "All 35 platforms stale" error.
-  // Now we distinguish 3 cases:
-  //   - Platform has data in traderMap → use its captured_at
-  //   - Platform has NO data in traderMap but IS fresh in DB → query-failed, skip
-  //   - Platform has NO data anywhere → truly stale
-  const staleThresholdMs = 48 * 3600 * 1000
-  const now = Date.now()
-  const stalePlatforms: string[] = []
-  const freshPlatforms: string[] = []
-  const queryFailedPlatforms: string[] = []
-  for (const source of SOURCES_WITH_DATA) {
-    const sourceTraders = Array.from(traderMap.values()).filter(t => t.source === source)
-    if (sourceTraders.length > 0) {
-      const latestCaptured = Math.max(...sourceTraders.map(t => new Date(t.captured_at).getTime()))
-      if (now - latestCaptured > staleThresholdMs) {
-        stalePlatforms.push(source)
-      } else {
-        freshPlatforms.push(source)
-      }
-      continue
-    }
-    // traderMap empty for this source — check DB directly to distinguish
-    // "query failed" (retry later) from "actually stale" (really no data)
-    try {
-      const { data: dbCheck } = await supabase
-        .from('trader_snapshots_v2')
-        .select('updated_at')
-        .eq('platform', source)
-        .gte('updated_at', new Date(now - staleThresholdMs).toISOString())
-        .order('updated_at', { ascending: false })
-        .limit(1)
-        .maybeSingle()
-      if (dbCheck) {
-        // DB has fresh data but we failed to load it — query-failed, not stale
-        queryFailedPlatforms.push(source)
-      } else {
-        stalePlatforms.push(source)
-      }
-    } catch {
-      queryFailedPlatforms.push(source)
-    }
-  }
+  // Data freshness check: classify each source as fresh / stale / query-failed.
+  // If ALL platforms are stale (>48h) we skip computation to avoid publishing
+  // a stale leaderboard. Logic lives in freshness-check.ts.
+  const { freshPlatforms, stalePlatforms, queryFailedPlatforms } =
+    await checkPlatformFreshness(supabase, traderMap)
+
   if (queryFailedPlatforms.length > 0) {
     logger.warn(`[${season}] ${queryFailedPlatforms.length} platforms had query failures but DB has fresh data: ${queryFailedPlatforms.join(', ')}`)
   }
