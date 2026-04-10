@@ -32,47 +32,28 @@ test.describe('交易员详情页 - 周期切换 (period switch)', () => {
     await traderLinks.first().click({ force: true })
     await page.waitForLoadState('networkidle', { timeout: 15_000 }).catch(() => {})
 
-    // Find period switch buttons. TraderProfileClient renders them via
-    // usePeriodStore — the exact selector depends on the button component,
-    // but they typically carry the period label text.
-    const periodButtons = page.locator('button').filter({
-      hasText: /^(7[Dd]|30[Dd]|90[Dd])$/,
-    })
-
-    // If the trader has no chart data, period switch may not render
-    if ((await periodButtons.count()) < 2) {
-      test.skip()
-      return
-    }
-
-    // Find the 30D button specifically
-    const d30Button = periodButtons.filter({ hasText: /^30[Dd]$/ }).first()
-    if (!(await d30Button.isVisible({ timeout: 2000 }).catch(() => false))) {
+    // PeriodSelector renders buttons with aria-label="30D period" — stable
+    // selector. The buttons exist regardless of chart data presence (they're
+    // in OverviewPerformanceCard which renders for every trader page).
+    const d30Button = page.locator('button[aria-label="30D period"]').first()
+    if (!(await d30Button.isVisible({ timeout: 5000 }).catch(() => false))) {
+      // PeriodSelector dynamic-imported but didn't mount in time
       test.skip()
       return
     }
 
     const urlBefore = page.url()
-    await d30Button.click()
-    await page.waitForTimeout(600) // router.replace + React re-render
+    await d30Button.click({ force: true })
+    await page.waitForTimeout(800) // router.replace + React re-render
 
-    // Either the URL param is set to 30D OR the store updated in-place
-    // and the active-button class changed. Accept either as proof of
-    // state propagation.
+    // After click, the 30D button should have aria-pressed="true"
+    const isPressed = await d30Button.getAttribute('aria-pressed')
+    expect(isPressed).toBe('true')
+
+    // URL should reflect the period change (?period=30D)
     const urlAfter = page.url()
-    const d30IsActive = await d30Button.evaluate((el) => {
-      return (
-        el.classList.contains('active') ||
-        el.getAttribute('aria-pressed') === 'true' ||
-        el.getAttribute('data-active') === 'true' ||
-        // Check if any child element got a styling that indicates active
-        getComputedStyle(el).fontWeight === '700' ||
-        getComputedStyle(el).fontWeight === 'bold'
-      )
-    })
-
-    const urlChanged = urlAfter !== urlBefore && /period|range|window/i.test(urlAfter)
-    expect(d30IsActive || urlChanged).toBeTruthy()
+    expect(urlAfter).not.toBe(urlBefore)
+    expect(urlAfter).toContain('period=30D')
   })
 
   test('period persists across tab reload', async ({ page }) => {
