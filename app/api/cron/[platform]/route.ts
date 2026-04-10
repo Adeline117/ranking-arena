@@ -115,8 +115,14 @@ export async function POST(
       if (actual.length !== expected.length) {
         return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
       }
-      const { timingSafeEqual } = await import('node:crypto')
-      if (!timingSafeEqual(Buffer.from(actual), Buffer.from(expected))) {
+      // BUILD FIX (2026-04-09): node:crypto is not available in Edge runtime
+      // (this route is `runtime = 'edge'`). Implement a constant-time string
+      // compare manually instead — same security guarantee, Edge-compatible.
+      let mismatch = 0
+      for (let i = 0; i < actual.length; i++) {
+        mismatch |= actual.charCodeAt(i) ^ expected.charCodeAt(i)
+      }
+      if (mismatch !== 0) {
         return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
       }
     }
