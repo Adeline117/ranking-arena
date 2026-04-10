@@ -13,10 +13,6 @@
  * from the OpenClaw scheduler and post the result to Telegram.
  *
  * Known limitations (2026-04-09):
- *   - Trust ratio query times out at Supabase's 30s statement limit because
- *     leaderboard_ranks top-10 lookup doesn't find a usable index path under
- *     the current bloat state. Script handles this gracefully; fix requires a
- *     dedicated RPC or materialized top-10 view.
  *   - WAU relies on user_activity table being populated by client tracking,
  *     which may be sparse if analytics aren't firing on all pages.
  *
@@ -109,36 +105,30 @@ async function fetchPayingSubscribers() {
  * Top-10 trust ratio: of the top-10 traders in the 90D leaderboard, how many
  * have score_confidence='full' on the joined trader_sources row.
  *
+ * Calls the get_top_trust_ratio() RPC (single round-trip + planner-friendly
+ * JOIN), replacing the old N+1 REST loop that timed out at Supabase's 30s
+ * statement limit. See migration 20260409173653_get_top_trust_ratio_rpc.sql.
+ *
  * Returns { fullCount, totalCount, ratio }.
  */
 async function fetchTop10TrustRatio() {
-  // 1. Top 10 in 90D — uses (season_id, rank ASC) composite index directly
-  // via order+limit. Filtering by rank=lte.10 sometimes bypasses the index
-  // if the planner picks a different path; keep it simple.
-  const { data: top } = await supabase(
-    `leaderboard_ranks?select=source,source_trader_id,rank&season_id=eq.90D&rank=not.is.null&order=rank.asc&limit=10`,
-    { prefer: 'count=none' },
+  const { data } = await supabase(
+    `rpc/get_top_trust_ratio`,
+    {
+      method: 'POST',
+      body: JSON.stringify({ p_season_id: '90D', p_top_n: 10 }),
+      prefer: 'count=none',
+    },
   )
-  if (!top || top.length === 0) return { fullCount: 0, totalCount: 0, ratio: 0 }
 
-  // 2. Fetch confidence for each via trader_sources
-  // REST doesn't support composite-key IN — iterate (max 10 requests).
-  let fullCount = 0
-  for (const t of top) {
-    try {
-      const { data: srcRows } = await supabase(
-        `trader_sources?select=score_confidence&source=eq.${encodeURIComponent(t.source)}&source_trader_id=eq.${encodeURIComponent(t.source_trader_id)}&limit=1`,
-        { prefer: 'count=none' },
-      )
-      if (srcRows?.[0]?.score_confidence === 'full') fullCount += 1
-    } catch (err) {
-      console.warn(`[trust] ${t.source}:${t.source_trader_id} failed:`, err.message)
-    }
-  }
+  // RPC returns an array of rows; we expect exactly one.
+  const row = Array.isArray(data) ? data[0] : data
+  if (!row) return { fullCount: 0, totalCount: 0, ratio: 0 }
+
   return {
-    fullCount,
-    totalCount: top.length,
-    ratio: top.length > 0 ? fullCount / top.length : 0,
+    fullCount: Number(row.full_count) || 0,
+    totalCount: Number(row.total_count) || 0,
+    ratio: Number(row.ratio) || 0,
   }
 }
 
