@@ -5,6 +5,10 @@
   ],
   "crons": [
     {
+      "path": "/api/cron/weekly-metrics",
+      "schedule": "0 9 * * 5"
+    },
+    {
       "path": "/api/cron/compute-leaderboard?season=90D",
       "schedule": "0 * * * *"
     },
