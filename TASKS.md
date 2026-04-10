@@ -36,20 +36,30 @@
 - [ ] eToro CopySim: retry after 24h IP cooldown
 
 ### Follow-ups from 5-agent review 2026-04-09
-- [ ] TraderHeader complete decomp: extract avatar block + actions block
-      (badge row already extracted in b11eeeea1). 40-prop interface still
-      needs trimming.
-- [ ] compute-leaderboard main loop split: computeSeason + main season loop
-      still in route.ts (2000 lines). Post-processing already extracted in
-      fc9142bee.
-- [ ] Execute scope audit P0 deletions: `/frame`, `/kol`, `/tip`,
-      `/channels`. Spec at `docs/reviews/scope-audit-2026-04-09.md`.
-- [ ] PostHog instrumentation on pricing checkout funnel — signup rate /
-      paywall hit rate / cart abandonment. weekly-metrics only sees the
-      result, not the funnel.
-- [ ] Trust ratio metric: needs dedicated RPC or materialized view. Current
-      query against `leaderboard_ranks` times out at 30s Supabase statement
-      limit (known in weekly-metrics.mjs). Add `get_top_trust_ratio()` RPC.
+- [x] TraderHeader complete decomp: badge row → b11eeeea1; avatar +
+      actions blocks → b2ff1ff59 (581→370 lines). 40-prop interface
+      still big — defer trim until data-flow refactor.
+- [x] compute-leaderboard cleanup: 2033 → 1775 lines via post-processing.ts
+      (fc9142bee), warmupLeaderboardCache extract (f7f7645c6), and helpers.ts
+      dedupe (1a0f6b7a2). computeSeason main loop (~1400 lines) still
+      monolithic — defer to dedicated session.
+- [x] Scope audit P0 deletions: /frame and /kol deleted (a0535f99e,
+      c123bf429, 68e421aba). /tip and /channels CANNOT delete — both
+      have live consumers the audit missed (Stripe success_url, group
+      chat). proxy.ts has the redirect for /frame and /kol.
+- [x] Plausible instrumentation on pricing funnel: click_upgrade_cta +
+      start_checkout events shipped via b2ff1ff59. Combined funnel:
+      view_pricing → click_upgrade_cta → start_checkout → pro_subscribe.
+- [x] Trust ratio RPC: get_top_trust_ratio() shipped in
+      20260409173653_get_top_trust_ratio_rpc.sql. Both
+      scripts/openclaw/weekly-metrics.mjs and /api/cron/weekly-metrics
+      now call it (no more 30s timeouts).
+
+### Open follow-ups
+- [ ] computeSeason main loop split (~1400 lines still in route.ts)
+- [ ] TraderHeader 40-prop interface trim (requires data-flow changes)
+- [ ] paywall_blocked tracking — fires when free user hits a Pro feature
+      gate. Useful complement to view_pricing → click_upgrade_cta funnel.
 
 ---
 
