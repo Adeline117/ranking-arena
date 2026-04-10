@@ -91,10 +91,13 @@ export async function getInitialTraders(
     return { traders: [], lastUpdated: null, totalCount: 0, categoryCounts: { all: 0, futures: 0, spot: 0, onchain: 0 } }
   }
 
-  // Try Redis cache first — serve stale data rather than timing out SSR
+  // Try Redis cache first — fresh hit returns immediately. Keep a reference
+  // to the cached value (even if stale/empty) so we can fall back to it
+  // when the DB query times out below.
   const cacheKey = `home-initial-traders-v2:${timeRange}:p${page}`
+  let cached: InitialTradersResult | null = null
   try {
-    const cached = await cache.get<InitialTradersResult>(cacheKey)
+    cached = await cache.get<InitialTradersResult>(cacheKey)
     if (cached && cached.traders && cached.traders.length > 0) {
       return cached
     }
@@ -119,7 +122,15 @@ export async function getInitialTraders(
     return result
   } catch (err) {
     logger.warn(`[getInitialTraders] DB fetch failed/timed out: ${err instanceof Error ? err.message : err}`)
-    // Return empty — Phase 2 client will fetch from API
+    // Stale cache fallback — during compute-leaderboard cron contention the
+    // diverse RPC + category counts spike to 15-30s. Returning empty zeros
+    // produces user-visible "0 traders" flash on the homepage. Stale data
+    // (even minutes old) is much better than nothing.
+    if (cached && cached.traders && cached.traders.length > 0) {
+      logger.info(`[getInitialTraders] Serving STALE cache after DB timeout (page=${page}, traders=${cached.traders.length})`)
+      return cached
+    }
+    // No cache either — Phase 2 client will fetch from API on hydration.
     return { traders: [], lastUpdated: null, totalCount: 0, categoryCounts: { all: 0, futures: 0, spot: 0, onchain: 0 } }
   }
 }
