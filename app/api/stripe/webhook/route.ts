@@ -53,13 +53,31 @@ export async function POST(request: NextRequest) {
       })
 
     if (idempotencyError) {
-      // Unique constraint violation = already processed
+      // Unique constraint violation = already processed (the safe path)
       if (idempotencyError.code === '23505') {
         logger.info(`Event ${event.id} already processed, skipping`, { type: event.type })
         return NextResponse.json({ received: true, skipped: true })
       }
-      logger.warn('Idempotency insert failed', { eventId: event.id, error: idempotencyError.message })
-      // Continue processing — better to risk double-process than miss an event
+      // SECURITY (audit P1-9, 2026-04-09): non-23505 errors are transient
+      // (DB pool exhaustion, network blip, statement timeout). Returning 500
+      // makes Stripe retry the webhook with exponential backoff. The
+      // alternative — proceeding without the idempotency row — risks
+      // double-processing this event AND any future delivery of the same
+      // event_id, which for payment events means double crediting,
+      // double-issuing entitlements, double notifications, etc.
+      // It is strictly safer to drop a delivery and let Stripe retry than
+      // to process without the idempotency guard.
+      logger.error('Idempotency insert failed — returning 500 to trigger Stripe retry', {
+        eventId: event.id,
+        eventType: event.type,
+        errorCode: idempotencyError.code,
+        errorMessage: idempotencyError.message,
+        correlationId,
+      })
+      return NextResponse.json(
+        { error: 'Idempotency check failed, please retry' },
+        { status: 500 },
+      )
     }
 
     logger.info(`[Stripe Webhook] Processing ${event.type}`, { eventId: event.id, correlationId })
