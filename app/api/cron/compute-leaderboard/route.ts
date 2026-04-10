@@ -34,6 +34,7 @@ import { type TraderRow, makeAddToTraderMap } from './trader-row'
 import { computeLastResortCalmar, classifyTradingStyle, markOutliers, applyArenaFollowers } from './scoring-helpers'
 import { checkPlatformFreshness } from './freshness-check'
 import { fetchHandleAvatarMap } from './fetch-handles'
+import { enrichFromStatsDetail } from './enrich-stats-detail'
 import { PipelineLogger } from '@/lib/services/pipeline-logger'
 import { sanitizeDisplayName } from '@/lib/utils/profanity'
 import { generateIdenticonSvg } from '@/lib/utils/avatar'
@@ -549,81 +550,16 @@ async function computeSeason(
     logger.warn(`[${season}] ${stalePlatforms.length} platforms have stale data (>48h): ${stalePlatforms.join(', ')}. Computing with ${freshPlatforms.length} fresh platforms.`)
   }
 
-  // Phase 3: Fill missing metrics from trader_stats_detail (enrichment table)
-  // This catches data from enrichment runs that wrote to stats_detail but not back to snapshots
-  // Now also fills: sharpe, sortino, calmar, trades_count, avg_holding_hours
+  // Phase 3: Fill missing metrics from trader_stats_detail (enrichment table).
+  // Catches data from the enrichment cron that was written to stats_detail but
+  // never propagated back to trader_snapshots_v2. Logic in enrich-stats-detail.ts.
   if (isOutOfTime(90_000)) {
     logger.warn(`[${season}] SKIPPING Phase 3 (stats_detail enrichment) — only ${Math.round(timeLeftMs() / 1000)}s left`)
-  }
-  const tradersNeedingEnrichment = isOutOfTime(90_000)
-    ? []
-    : Array.from(traderMap.values())
-        .filter(t => t.win_rate == null || t.max_drawdown == null || t.sharpe_ratio == null ||
-                     t.sortino_ratio == null || t.calmar_ratio == null || t.trades_count == null)
-  if (tradersNeedingEnrichment.length > 0) {
-    const enrichBySource = new Map<string, string[]>()
-    for (const t of tradersNeedingEnrichment) {
-      const ids = enrichBySource.get(t.source) || []
-      ids.push(t.source_trader_id)
-      enrichBySource.set(t.source, ids)
+  } else {
+    const enrichedCount = await enrichFromStatsDetail(supabase, traderMap, season, isOutOfTime)
+    if (enrichedCount > 0) {
+      logger.info(`[${season}] Enriched ${enrichedCount} traders from stats_detail`)
     }
-    await Promise.all(
-      Array.from(enrichBySource.entries()).map(async ([source, traderIds]) => {
-        for (let i = 0; i < traderIds.length; i += 100) {
-          if (isOutOfTime(60_000)) break // leave time for scoring + upsert
-          const chunk = traderIds.slice(i, i + 100)
-          const { data: statsRows } = await supabase
-            .from('trader_stats_detail')
-            .select('source_trader_id, profitable_trades_pct, max_drawdown, sharpe_ratio, winning_positions, total_positions, total_trades, avg_holding_time_hours, volatility, copiers_count, aum, period')
-            .eq('source', source)
-            .in('source_trader_id', chunk)
-            .order('captured_at', { ascending: false })
-            .limit(1000)
-          if (!statsRows) continue
-          // Dedup: keep the best row per trader (prefer matching season, then most recent)
-          const bestPerTrader = new Map<string, typeof statsRows[0]>()
-          for (const sr of statsRows) {
-            const tid = sr.source_trader_id.startsWith('0x') ? sr.source_trader_id.toLowerCase() : sr.source_trader_id
-            const existing = bestPerTrader.get(tid)
-            if (!existing || (sr.period === season && existing.period !== season)) {
-              bestPerTrader.set(tid, sr)
-            }
-          }
-          for (const [tid, sr] of bestPerTrader) {
-            const existing = traderMap.get(`${source}:${tid}`)
-            if (!existing) continue
-            // Validate enrichment values before applying (stats_detail may have bad data)
-            if (sr.profitable_trades_pct != null && existing.win_rate == null &&
-                sr.profitable_trades_pct >= 0 && sr.profitable_trades_pct <= 100) {
-              existing.win_rate = sr.profitable_trades_pct
-            }
-            if (sr.max_drawdown != null && existing.max_drawdown == null &&
-                sr.max_drawdown >= 0 && sr.max_drawdown <= 100) {
-              existing.max_drawdown = sr.max_drawdown
-            }
-            if (sr.sharpe_ratio != null && existing.sharpe_ratio == null &&
-                sr.sharpe_ratio >= -20 && sr.sharpe_ratio <= 20) {
-              existing.sharpe_ratio = sr.sharpe_ratio
-            }
-            // Fill trades_count from total_trades or total_positions
-            if (existing.trades_count == null) {
-              const tc = sr.total_trades ?? sr.total_positions
-              if (tc != null && tc > 0) existing.trades_count = tc
-            }
-            // Fill avg_holding_hours (used for trading_style classification)
-            if (existing.avg_holding_hours == null && sr.avg_holding_time_hours != null) {
-              existing.avg_holding_hours = sr.avg_holding_time_hours
-            }
-            // copiers_count from enrichment → exchange copy-trade count
-            if (sr.copiers_count != null && sr.copiers_count > 0 && existing.copiers == null) {
-              existing.copiers = sr.copiers_count
-            }
-            // Arena followers come from trader_follows table, applied after scoring
-          }
-        }
-      })
-    )
-    logger.info(`[${season}] Enriched ${tradersNeedingEnrichment.length} traders from stats_detail`)
   }
 
   // Phase 4: Derive win_rate/max_drawdown from equity_curve (daily PnL) as universal fallback
