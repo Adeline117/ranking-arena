@@ -58,8 +58,8 @@
 ### Open follow-ups
 - [ ] computeSeason main loop split (~1400 lines still in route.ts)
 - [ ] TraderHeader 40-prop interface trim (requires data-flow changes)
-- [ ] paywall_blocked tracking — fires when free user hits a Pro feature
-      gate. Useful complement to view_pricing → click_upgrade_cta funnel.
+- [x] paywall_blocked tracking shipped in 8f1da3fbf — wired into
+      home filter, trader-detail tab gate, and claimed-profile tab gate
 
 ---
 
