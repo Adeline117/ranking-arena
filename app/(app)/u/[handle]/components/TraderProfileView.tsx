@@ -13,6 +13,7 @@ import { Box, Text } from '@/app/components/base'
 import { RankingSkeleton } from '@/app/components/ui/Skeleton'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import { useLinkedAccounts } from '@/lib/hooks/useLinkedAccounts'
+import { trackEvent } from '@/lib/analytics/track'
 import OverviewPerformanceCard, { type ExtendedPerformance } from '@/app/components/trader/OverviewPerformanceCard'
 
 import type { ServerProfile, ProfileTabKey, TraderPageData } from './types'
@@ -155,7 +156,10 @@ export default function TraderProfileView({
           activeTab={traderActiveTab}
           onTabChange={(tab) => onTabChange(tab as ProfileTabKey)}
           isPro={isPro}
-          onProRequired={() => router.push('/pricing')}
+          onProRequired={() => {
+            trackEvent('paywall_blocked', { source: 'claimed_profile_tab' })
+            router.push('/pricing')
+          }}
           extraTabs={showPosts ? ['posts'] : undefined}
         />
 

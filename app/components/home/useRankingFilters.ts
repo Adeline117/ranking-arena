@@ -14,6 +14,7 @@ import { getScoreGradeLetter } from '@/lib/utils/score-explain'
 import { type PresetId, PRESETS, isValidPresetId } from '../ranking/FilterPresets'
 import { useAuthSession } from '@/lib/hooks/useAuthSession'
 import { getCsrfHeaders } from '@/lib/api/client'
+import { trackEvent } from '@/lib/analytics/track'
 
 // localStorage keys for user preferences
 const LS_KEY_SORT_COLUMN = 'ranking-sort-column'
@@ -560,6 +561,10 @@ export function useRankingFilters({ traders, activeTimeRange, totalCount, catego
 
   // Pro required handler — show toast instead of redirecting away (jarring UX)
   const handleProRequired = useCallback(() => {
+    // paywall_blocked: a free user just hit a Pro-gated affordance.
+    // Pairs with view_pricing → click_upgrade_cta → start_checkout → pro_subscribe
+    // for a complete funnel from "blocked" to "paid".
+    trackEvent('paywall_blocked', { source: 'home_ranking_filters' })
     showToast(t('proFilterTooltip') || 'Upgrade to Pro to filter by Futures, Spot, and On-chain categories', 'info')
   }, [showToast, t])
 
