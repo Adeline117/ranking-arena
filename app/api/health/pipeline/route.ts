@@ -105,10 +105,14 @@ async function getPlatformHealthData(): Promise<PlatformHealth[]> {
   ])
 
   // Build platform → latest computed_at map
+  // Debug: track if pg Pool query returned data
+  const pgQueryResult = lbLatestRes as { data: unknown[] | null; error: unknown }
   const platformLastUpdate = new Map<string, string>()
-  const lbData = (lbLatestRes.data || []) as Array<{ source: string; computed_at?: string; latest?: string }>
+  const lbData = (pgQueryResult.data || []) as Array<{ source: string; computed_at?: string | Date; latest?: string }>
   for (const row of lbData) {
-    const ts = row.computed_at || row.latest
+    // pg Pool returns Date objects; Supabase REST returns ISO strings
+    const rawTs = row.computed_at || row.latest
+    const ts = rawTs instanceof Date ? rawTs.toISOString() : typeof rawTs === 'string' ? rawTs : null
     if (!ts) continue
     if (!platformLastUpdate.has(row.source) || (platformLastUpdate.get(row.source) ?? '') < ts) {
       platformLastUpdate.set(row.source, ts)
