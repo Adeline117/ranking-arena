@@ -63,9 +63,24 @@ const cachedGetTraderDetailISR = unstable_cache(
   ['trader-detail'],
   { revalidate: 300, tags: ['trader-profile'] }
 )
+
+// SSR hard timeout — must complete within 4s or page renders without
+// detail data. Without this, during compute-leaderboard cron contention
+// the underlying queries spike to 15-30s, the entire page.tsx await
+// chain blocks, and Next.js never streams past the Suspense placeholders.
+// Search bots see <main><!--$?--><template id="B:1"></template><!--/$--></main>
+// with NO content and NO JSON-LD. Falling back to null lets the page
+// render the SSR shell + JsonLd immediately, and TraderProfileClient
+// fetches fresh data client-side.
+const SSR_DETAIL_TIMEOUT_MS = 4000
 const cachedGetTraderDetail = async (platform: string, traderKey: string) => {
   try {
-    return await cachedGetTraderDetailISR(platform, traderKey)
+    return await Promise.race([
+      cachedGetTraderDetailISR(platform, traderKey),
+      new Promise<null>((resolve) =>
+        setTimeout(() => resolve(null), SSR_DETAIL_TIMEOUT_MS)
+      ),
+    ])
   } catch {
     return null
   }
