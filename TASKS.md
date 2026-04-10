@@ -56,7 +56,15 @@
       now call it (no more 30s timeouts).
 
 ### Open follow-ups
-- [ ] computeSeason main loop split (~1400 lines still in route.ts)
+- [~] computeSeason main loop split: 1775 → 972 lines in route.ts (-45%)
+      via 9 extractions in 2026-04-09 session. New files:
+      trader-row.ts (TraderRow + sanitize/merge), scoring-helpers.ts
+      (calmar/style/outliers/arena-followers), freshness-check.ts,
+      fetch-handles.ts, enrich-stats-detail.ts, enrich-equity-curve.ts
+      (Phase 4 + 4b), enrich-daily-snapshots.ts (Phase 4b2), fetch-phase1.ts.
+      Remaining in route.ts: scoring loop, degradation check, upsert,
+      zero-out, re-rank, stale cleanup — all higher-risk and explicitly
+      deferred. Next session can target ~972 → ~600.
 - [ ] TraderHeader 40-prop interface trim (requires data-flow changes)
 - [x] paywall_blocked tracking shipped in 8f1da3fbf — wired into
       home filter, trader-detail tab gate, and claimed-profile tab gate
