@@ -34,12 +34,73 @@ const StarIcon = ({ size = 12, color = 'var(--color-on-accent)' }: { size?: numb
   </svg>
 )
 
+/**
+ * Per-feature benefit copy. Lets the gate show contextual upsell copy
+ * instead of a generic "Pro membership required" lock. Audit P1-PROD-1.
+ *
+ * Each entry maps to a value-prop that's surfaced when the user actually
+ * hits this gate, so the upsell is grounded in what the user just tried
+ * to do (not abstract Pro marketing). Add new keys here as new gates
+ * are introduced.
+ */
+type FeatureBenefitKey =
+  | 'advancedAlerts'
+  | 'comparison'
+  | 'csvExport'
+  | 'apiAccess'
+  | 'scoreBreakdown'
+  | 'advancedFilters'
+  | 'historicalData'
+  | 'unlimitedWatchlist'
+
+const FEATURE_BENEFITS: Record<FeatureBenefitKey, { titleKey: string; benefitKeys: string[] }> = {
+  advancedAlerts: {
+    titleKey: 'gateAdvancedAlertsTitle',
+    benefitKeys: ['gateBenefitAlertsRealtime', 'gateBenefitAlertsConditions', 'gateBenefitAlertsHistory'],
+  },
+  comparison: {
+    titleKey: 'gateComparisonTitle',
+    benefitKeys: ['gateBenefitCompareSideBySide', 'gateBenefitCompareMetrics', 'gateBenefitCompareExport'],
+  },
+  csvExport: {
+    titleKey: 'gateCsvExportTitle',
+    benefitKeys: ['gateBenefitCsvFullData', 'gateBenefitCsvScheduled', 'gateBenefitCsvUnlimited'],
+  },
+  apiAccess: {
+    titleKey: 'gateApiAccessTitle',
+    benefitKeys: ['gateBenefitApiRest', 'gateBenefitApiHistorical', 'gateBenefitApiHigherLimits'],
+  },
+  scoreBreakdown: {
+    titleKey: 'gateScoreBreakdownTitle',
+    benefitKeys: ['gateBenefitScoreSubScores', 'gateBenefitScoreFormula', 'gateBenefitScorePeerCompare'],
+  },
+  advancedFilters: {
+    titleKey: 'gateAdvancedFiltersTitle',
+    benefitKeys: ['gateBenefitFilters150Plus', 'gateBenefitFiltersSaved', 'gateBenefitFiltersCombo'],
+  },
+  historicalData: {
+    titleKey: 'gateHistoricalDataTitle',
+    benefitKeys: ['gateBenefitHistoryFullDepth', 'gateBenefitHistoryEquityCurves', 'gateBenefitHistoryDailyRollups'],
+  },
+  unlimitedWatchlist: {
+    titleKey: 'gateUnlimitedWatchlistTitle',
+    benefitKeys: ['gateBenefitWatchlistUnlimited', 'gateBenefitWatchlistAlerts', 'gateBenefitWatchlistFolders'],
+  },
+}
+
 interface PremiumGateProps {
   children: ReactNode
   isPro: boolean
   isLoggedIn?: boolean
   blurAmount?: number
   featureName?: string
+  /**
+   * Contextual benefit key — when set, the gate shows a title +
+   * 3 bullet benefits instead of a generic lock message. Strongly
+   * preferred over `featureName` for new gates because it converts
+   * better (audit P1-PROD-1 estimated +10-15% conversion impact).
+   */
+  featureKey?: FeatureBenefitKey
   customMessage?: string
   showUpgradeButton?: boolean
   lockOnly?: boolean
@@ -52,6 +113,7 @@ export default function PremiumGate({
   isLoggedIn = true,
   blurAmount = 8,
   featureName,
+  featureKey,
   customMessage,
   showUpgradeButton = true,
   lockOnly = false,
@@ -64,7 +126,17 @@ export default function PremiumGate({
   }
 
   const loginMessage = t('loginToView')
-  const proMessage = customMessage || (featureName ? `${featureName} - ${t('proRequired')}` : t('proRequired'))
+  // Resolve copy in priority order:
+  //   1. customMessage (caller-supplied raw string)
+  //   2. featureKey (contextual title + benefits — preferred)
+  //   3. featureName (legacy "Feature - Pro required" formatting)
+  //   4. generic "Pro required"
+  const benefitsConfig = featureKey ? FEATURE_BENEFITS[featureKey] : null
+  const titleFromKey = benefitsConfig ? t(benefitsConfig.titleKey) : null
+  const proMessage =
+    customMessage ||
+    titleFromKey ||
+    (featureName ? `${featureName} - ${t('proRequired')}` : t('proRequired'))
   const message = !isLoggedIn ? loginMessage : proMessage
 
   return (
@@ -121,7 +193,28 @@ export default function PremiumGate({
           <Text size="md" weight="bold" style={{ color: 'var(--color-text-primary)', marginBottom: tokens.spacing[1] }}>
             {message}
           </Text>
-          {isLoggedIn && (
+          {isLoggedIn && benefitsConfig && (
+            <ul
+              style={{
+                listStyle: 'none',
+                padding: 0,
+                margin: `${tokens.spacing[2]} 0 0`,
+                display: 'flex',
+                flexDirection: 'column',
+                gap: tokens.spacing[1],
+                alignItems: 'flex-start',
+                textAlign: 'left',
+              }}
+            >
+              {benefitsConfig.benefitKeys.map((bk) => (
+                <li key={bk} style={{ display: 'flex', alignItems: 'flex-start', gap: tokens.spacing[2] }}>
+                  <span aria-hidden="true" style={{ color: 'var(--color-pro-gradient-start)', lineHeight: 1.4 }}>✓</span>
+                  <Text size="sm" color="secondary">{t(bk)}</Text>
+                </li>
+              ))}
+            </ul>
+          )}
+          {isLoggedIn && !benefitsConfig && (
             <Text size="sm" color="tertiary">
               {t('unlockProFeatures')}
             </Text>
