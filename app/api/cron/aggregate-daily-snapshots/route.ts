@@ -302,17 +302,64 @@ async function aggregateForDate(supabase: any, dateStr: string, _plog: any): Pro
 
       if (!upsertError) return { ok: true, sub_inserted: validBatch.length, sub_errors: 0 }
 
-      // Retry path: split in half on timeout / connection error
+      // ROOT CAUSE FIX (2026-04-09): Previously transient errors triggered split-and-retry
+      // but non-transient errors (numeric overflow, NULL violation, check constraint) caused
+      // the entire batch (250 rows) to be counted as errors and skipped — single bad row
+      // poisoned 250 records. Audit found pipeline_logs reporting 998 errors / day with NO
+      // detail on which rows. Fix: any persistent error triggers split-down to isolate the
+      // bad row, log full error + sample row payload to logger.dbError + pipeline_rejected_writes,
+      // then continue with remaining good rows.
       const errMsg = upsertError.message || ''
-      const isTransient = errMsg.includes('statement timeout') || errMsg.includes('canceling') || errMsg.includes('57014') || errMsg.includes('connection')
-      if (isTransient && validBatch.length > 50) {
+
+      // For batches > 1, split-and-retry regardless of error transience.
+      // Splits happen log2(250) ≈ 8 times max → bounded extra round trips.
+      if (validBatch.length > 1) {
         const mid = Math.floor(validBatch.length / 2)
         const a = await safeUpsert(validBatch.slice(0, mid) as unknown as typeof batch)
         const b = await safeUpsert(validBatch.slice(mid) as unknown as typeof batch)
         return { ok: a.ok && b.ok, sub_inserted: a.sub_inserted + b.sub_inserted, sub_errors: a.sub_errors + b.sub_errors }
       }
-      logger.dbError('upsert-daily-snapshots-batch', upsertError, { batchSize: validBatch.length })
-      return { ok: false, sub_inserted: 0, sub_errors: validBatch.length }
+
+      // Single-row failure: this is the bad row. Log it + record in pipeline_rejected_writes
+      // so we can see exactly what's failing without grepping vercel logs.
+      const badRow = validBatch[0] as Record<string, unknown>
+      logger.dbError('upsert-daily-snapshots-row', upsertError, {
+        row: {
+          platform: badRow.platform,
+          trader_key: badRow.trader_key,
+          date: badRow.date,
+          roi: badRow.roi,
+          pnl: badRow.pnl,
+          daily_return_pct: badRow.daily_return_pct,
+          win_rate: badRow.win_rate,
+          max_drawdown: badRow.max_drawdown,
+          followers: badRow.followers,
+          trades_count: badRow.trades_count,
+          cumulative_pnl: badRow.cumulative_pnl,
+        },
+        errorCode: upsertError.code,
+        errorMessage: errMsg.slice(0, 200),
+      })
+      // Best-effort persist to pipeline_rejected_writes — non-blocking on failure
+      try {
+        await supabase.from('pipeline_rejected_writes').insert({
+          platform: String(badRow.platform ?? 'unknown'),
+          trader_key: String(badRow.trader_key ?? 'unknown'),
+          target_table: 'trader_daily_snapshots',
+          field: '*',
+          value: JSON.stringify({
+            roi: badRow.roi,
+            pnl: badRow.pnl,
+            daily_return_pct: badRow.daily_return_pct,
+            win_rate: badRow.win_rate,
+            max_drawdown: badRow.max_drawdown,
+            cumulative_pnl: badRow.cumulative_pnl,
+          }).slice(0, 500),
+          reason: `upsert failed: ${errMsg.slice(0, 180)}`,
+          metadata: { code: upsertError.code, date: badRow.date },
+        })
+      } catch (_persistErr) { /* don't block on logging failure */ }
+      return { ok: false, sub_inserted: 0, sub_errors: 1 }
     }
 
     // Reduced from 500 to 250 — empirically fits within 30s statement_timeout
