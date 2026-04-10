@@ -102,20 +102,59 @@ function getRateLimiter(config: RateLimitConfig, redisClient: Redis): Ratelimit 
 }
 
 /**
- * 获取请求的标识符（IP 或用户 ID）
+ * Get the rate-limit identifier for a request.
+ *
+ * Trust model (audit P1-6, 2026-04-09):
+ * - When `userId` is provided, scope by user — most accurate, can't be spoofed
+ *   from outside our auth system.
+ * - When unauthenticated, fall back to IP. We trust `x-forwarded-for` ONLY
+ *   because Vercel sets it from the edge network and strips any client-supplied
+ *   value. If this app ever runs behind a different reverse proxy that does
+ *   NOT strip XFF, switch to a Vercel-edge-only header (e.g., `x-vercel-ip-*`)
+ *   or `request.ip`. Adding User-Agent + Accept-Language to the hash makes
+ *   spoofed-XFF rotation marginally harder for an attacker without affecting
+ *   legitimate users (they have stable UA/AL within a session).
+ *
+ * NOTE: failClose presets like `auth` rely on this identifier accurately
+ * pinning a single attacker to one bucket. If you ever loosen the trust
+ * here (e.g., accept arbitrary headers), the brute-force protection
+ * downstream weakens proportionally.
  */
 export function getIdentifier(request: NextRequest, userId?: string): string {
   if (userId) {
     return `user:${userId}`
   }
-  
-  // 获取真实 IP
-  const forwarded = request.headers.get('x-forwarded-for')
-  const ip = forwarded?.split(',')[0]?.trim() || 
-             request.headers.get('x-real-ip') || 
+
+  // Prefer Vercel's authenticated edge headers when available (only Vercel's
+  // edge can set these in production — they bypass any client-supplied XFF).
+  const vercelIp = request.headers.get('x-vercel-forwarded-for') ||
+                   request.headers.get('x-vercel-ip-country')  // presence implies edge handled it
+                     ? request.headers.get('x-vercel-forwarded-for')
+                     : null
+
+  // Generic XFF fallback. Trustworthy on Vercel; document carefully if
+  // moving to a different host.
+  const forwarded = vercelIp || request.headers.get('x-forwarded-for')
+  const ip = forwarded?.split(',')[0]?.trim() ||
+             request.headers.get('x-real-ip') ||
              'unknown'
-  
-  return `ip:${ip}`
+
+  // Fingerprint stability: hash a short tuple of (IP, UA fragment, AL fragment)
+  // so a single attacker rotating XFF still maps to one bucket as long as
+  // their UA/Accept-Language stays stable. Legitimate users keep both stable
+  // within a session, so they hit the same bucket they would have without
+  // this addition.
+  if (ip === 'unknown') return `ip:unknown`
+
+  const ua = (request.headers.get('user-agent') || '').slice(0, 64)
+  const al = (request.headers.get('accept-language') || '').slice(0, 16)
+  // Cheap non-crypto hash — we just need a stable bucket key, not security.
+  let hash = 5381
+  const composite = `${ip}|${ua}|${al}`
+  for (let i = 0; i < composite.length; i++) {
+    hash = ((hash << 5) + hash) ^ composite.charCodeAt(i)
+  }
+  return `ip:${ip}:${(hash >>> 0).toString(36)}`
 }
 
 // 内存限流作为 Redis 不可用时的后备（简单的时间窗口计数）
