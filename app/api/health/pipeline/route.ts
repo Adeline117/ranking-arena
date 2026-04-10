@@ -179,12 +179,24 @@ export async function GET(req: NextRequest) {
     // Fix: read cache first; if miss, compute; if computed result is degraded
     // (all queries returned empty fallbacks), return directly WITHOUT writing
     // to cache so the next request retries the underlying queries.
-    const CACHE_KEY = 'api:health:pipeline'
+    // Cache key bumped 2026-04-09 v2 to bust the previous degraded entries that
+    // got persisted before the skip-cache-on-degraded fix landed.
+    const CACHE_KEY = 'api:health:pipeline:v2'
     const cached = await tieredGet(CACHE_KEY, 'warm')
     if (cached.data !== null) {
-      return NextResponse.json(cached.data, {
-        headers: { 'Cache-Control': 'no-store', 'X-Cache': 'HIT' },
-      })
+      // Defensive: even on cache hit, validate the cached entry isn't degraded.
+      // Belt-and-suspenders for any stale entries written by older code paths.
+      const cachedTyped = cached.data as { jobs?: unknown[]; stats?: unknown[]; platformHealth?: unknown[] }
+      const cachedDegraded =
+        (cachedTyped?.jobs?.length ?? 0) === 0 &&
+        (cachedTyped?.stats?.length ?? 0) === 0 &&
+        (cachedTyped?.platformHealth?.length ?? 0) === 0
+      if (!cachedDegraded) {
+        return NextResponse.json(cached.data, {
+          headers: { 'Cache-Control': 'no-store', 'X-Cache': 'HIT' },
+        })
+      }
+      // Fall through to recompute; degraded cache entries are ignored.
     }
 
     const compute = async () => {
