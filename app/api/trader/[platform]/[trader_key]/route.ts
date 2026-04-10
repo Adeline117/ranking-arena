@@ -19,6 +19,7 @@ import type {
 } from '@/lib/types/trading-platform'
 import { getStalenessSeconds, STALENESS_THRESHOLDS } from '@/lib/types/trading-platform'
 import { tieredGet, tieredSet } from '@/lib/cache/redis-layer'
+import { after } from 'next/server'
 import { ALL_SOURCES } from '@/lib/constants/exchanges'
 import { createLogger } from '@/lib/utils/logger'
 
@@ -344,10 +345,18 @@ export async function GET(
       refresh_job: refreshJob,
     }
 
-    // Cache to Redis (warm tier - 5min TTL, async)
-    void tieredSet(cacheKey, response, 'warm', ['trader', platform]).catch(err =>
-      log.warn('cache write failed', { error: err instanceof Error ? err.message : String(err) })
-    )
+    // Cache to Redis (warm tier - 5min TTL). Use next/server `after()` so the
+    // serverless function waits for the write to complete BEFORE Vercel
+    // tears down the execution context. Previous `void tieredSet(...).catch()`
+    // pattern leaked writes when the function returned faster than Redis,
+    // causing 5-15% cache miss inflation under load.
+    after(async () => {
+      try {
+        await tieredSet(cacheKey, response, 'warm', ['trader', platform])
+      } catch (err) {
+        log.warn('cache write failed', { error: err instanceof Error ? err.message : String(err) })
+      }
+    })
 
     const res = NextResponse.json(response)
     res.headers.set('Cache-Control', CACHE_CONTROL)
