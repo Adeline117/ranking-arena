@@ -730,7 +730,17 @@ export async function resolveTrader(supabase: SupabaseClient, params: {
   platform?: string
 }): Promise<{ platform: string; traderKey: string; handle: string | null; avatarUrl: string | null } | null> {
   // Sanitize handle for PostgREST .or() filter safety — reject chars that break filter syntax
-  const decodedHandle = decodeURIComponent(params.handle).replace(/[(),]/g, '')
+  let decodedHandle = decodeURIComponent(params.handle).replace(/[(),]/g, '')
+
+  // ETH-address normalization: incoming URLs sometimes carry mixed-case
+  // checksum addresses (0x880Ac484...) but the DB always stores lowercase.
+  // Postgres .eq() is case-sensitive → lookup misses → notFound() → 404.
+  // Lowercase any handle matching ETH address shape before querying.
+  // This is safe because lowercase ETH addresses are still valid identifiers.
+  if (/^0x[a-fA-F0-9]{40}$/.test(decodedHandle)) {
+    decodedHandle = decodedHandle.toLowerCase()
+  }
+
   const platformFilter = params.platform
 
   // Steps 1+2 combined: Try traders table by handle OR trader_key (single query)
