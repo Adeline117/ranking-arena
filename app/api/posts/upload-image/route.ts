@@ -3,6 +3,7 @@ import { getAuthUser, getSupabaseAdmin } from '@/lib/supabase/server'
 import { checkRateLimit, RateLimitPresets } from '@/lib/utils/rate-limit'
 import logger from '@/lib/logger'
 import { socialFeatureGuard } from '@/lib/features'
+import { sniffImageFile } from '@/lib/utils/image-magic-bytes'
 
 export async function POST(request: NextRequest) {
   const guard = socialFeatureGuard()
@@ -26,16 +27,26 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'No file provided' }, { status: 400 })
     }
 
-    // 验证文件类型
-    const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/webp']
-    if (!allowedTypes.includes(file.type)) {
-      return NextResponse.json({ error: 'Invalid file type. Only jpg, png, gif, webp are allowed.' }, { status: 400 })
-    }
-
-    // 验证文件大小 (5MB)
+    // 验证文件大小 (5MB) — check size BEFORE sniffing so we don't load
+    // a 100MB attacker payload into memory just to read its magic bytes.
     const maxSize = 5 * 1024 * 1024 // 5MB
     if (file.size > maxSize) {
       return NextResponse.json({ error: 'File too large. Maximum size is 5MB.' }, { status: 400 })
+    }
+
+    // SECURITY (audit P1-SEC-2): sniff magic bytes — DO NOT trust client
+    // file.type or file.name extension. A malicious uploader can send
+    // file.type='image/jpeg' with PHP/HTML/SVG content and the bucket would
+    // serve it back as the claimed type, enabling stored XSS or hosted
+    // phishing on our origin. We override storage Content-Type with the
+    // sniffed value below to make sure the bucket honors our verdict, not
+    // the client's claim.
+    const sniffed = await sniffImageFile(file, ['jpeg', 'png', 'gif', 'webp', 'avif'])
+    if (!sniffed) {
+      return NextResponse.json(
+        { error: 'Invalid file type. Only jpg, png, gif, webp, avif images are allowed.' },
+        { status: 400 },
+      )
     }
 
     // 创建 Supabase 客户端（使用 service key 以绕过 RLS）
@@ -59,17 +70,18 @@ export async function POST(request: NextRequest) {
       }, { status: 503 })
     }
 
-    // 生成唯一文件名
+    // 生成唯一文件名 — use SERVER-derived extension from sniffed magic
+    // bytes, NOT the client-supplied filename. Prevents .php / .html /
+    // .svg uploads that pass the type check via spoofed file.type.
     const timestamp = Date.now()
     const randomStr = Math.random().toString(36).substring(2, 15)
-    const fileExt = file.name.split('.').pop()?.toLowerCase() || 'jpg'
-    const fileName = `${userId}/${timestamp}-${randomStr}.${fileExt}`
+    const fileName = `${userId}/${timestamp}-${randomStr}.${sniffed.extension}`
 
-    // 上传到 Supabase Storage
+    // 上传到 Supabase Storage with SNIFFED Content-Type, not client-supplied.
     const { data, error } = await supabase.storage
       .from('posts')
       .upload(fileName, file, {
-        contentType: file.type,
+        contentType: sniffed.mime,
         upsert: false,
       })
 
