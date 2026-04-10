@@ -161,6 +161,12 @@ STRIPE_SECRET_KEY
 1. **Geo-blocking**: Binance/OKX APIs blocked in some regions. Use cloudflare-worker proxy or VPS.
 2. **Memory**: Dev server needs `--max-old-space-size=3584` (configured in npm scripts)
 3. **Build time**: Full build takes significant time; use Turbopack in dev
+4. **Concurrent push races**: Arena runs up to 7 `claude` sessions + openclaw cron
+   jobs simultaneously, all pushing to main with the same git identity. The
+   pre-push hook (`.git/hooks/pre-push`) auto-serializes via `flock` on
+   `/tmp/arena-git-push.lock` + auto-rebase on divergence. Raw `git push origin
+   main` is safe. For scripted pushes, `scripts/git-push-safe.sh` provides the
+   same behavior as a standalone wrapper.
 
 ## Claude Code Resources
 See `.claude/ARENA_SKILL_SYSTEM.md` for full list of agents, skills, and slash commands.
