@@ -179,17 +179,19 @@ export async function GET(req: NextRequest) {
     // Fix: read cache first; if miss, compute; if computed result is degraded
     // (all queries returned empty fallbacks), return directly WITHOUT writing
     // to cache so the next request retries the underlying queries.
-    // Cache key bumped 2026-04-09 v2 to bust the previous degraded entries that
-    // got persisted before the skip-cache-on-degraded fix landed.
-    const CACHE_KEY = 'api:health:pipeline:v2'
+    // Cache key bumped 2026-04-09 v3 to bust the previous degraded entries
+    // that got persisted before the OR-based degraded check landed (v2 used
+    // AND which let partially-degraded responses through).
+    const CACHE_KEY = 'api:health:pipeline:v3'
     const cached = await tieredGet(CACHE_KEY, 'warm')
     if (cached.data !== null) {
       // Defensive: even on cache hit, validate the cached entry isn't degraded.
-      // Belt-and-suspenders for any stale entries written by older code paths.
+      // ANY of the three lists empty == degraded (production has 100+ jobs and
+      // 30+ platforms; legitimately empty is impossible).
       const cachedTyped = cached.data as { jobs?: unknown[]; stats?: unknown[]; platformHealth?: unknown[] }
       const cachedDegraded =
-        (cachedTyped?.jobs?.length ?? 0) === 0 &&
-        (cachedTyped?.stats?.length ?? 0) === 0 &&
+        (cachedTyped?.jobs?.length ?? 0) === 0 ||
+        (cachedTyped?.stats?.length ?? 0) === 0 ||
         (cachedTyped?.platformHealth?.length ?? 0) === 0
       if (!cachedDegraded) {
         return NextResponse.json(cached.data, {
@@ -294,12 +296,12 @@ export async function GET(req: NextRequest) {
 
     const result = await compute()
 
-    // Detect degraded response: all underlying queries returned their empty
-    // fallback, meaning per-query deadlines fired or PostgREST was unreachable.
-    // Skip cache write so the next request retries the actual queries.
+    // Detect degraded response. ANY of these signals → degraded → skip cache.
+    // Production has 100+ active cron jobs and 30+ platforms, so legitimately
+    // empty jobs[] / stats[] is impossible. Empty == query failure.
     const isDegraded =
-      result.jobs.length === 0 &&
-      result.stats.length === 0 &&
+      result.jobs.length === 0 ||
+      result.stats.length === 0 ||
       result.platformHealth.length === 0
 
     if (!isDegraded) {
