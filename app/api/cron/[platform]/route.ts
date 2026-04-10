@@ -98,13 +98,25 @@ export async function POST(
         return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
       }
     } else {
-      // Require CRON_SECRET auth
+      // Require CRON_SECRET auth — no dev bypass.
+      // SECURITY FIX (2026-04-09, audit P0-SEC-5): the previous dev-mode
+      // fallthrough allowed unauthenticated POSTs whenever NODE_ENV
+      // happened to be 'development' AND CRON_SECRET was unset, which
+      // means a misconfigured preview/staging deploy could expose the
+      // entire fetcher fleet (writing to trader_snapshots) without auth.
+      // Also use timing-safe compare so the secret isn't leaked through
+      // response-time side channels.
       const authHeader = request.headers.get('authorization')
       if (!env.CRON_SECRET) {
-        if (process.env.NODE_ENV !== 'development') {
-          return NextResponse.json({ error: 'CRON_SECRET not configured' }, { status: 500 })
-        }
-      } else if (authHeader !== `Bearer ${env.CRON_SECRET}`) {
+        return NextResponse.json({ error: 'CRON_SECRET not configured' }, { status: 500 })
+      }
+      const expected = `Bearer ${env.CRON_SECRET}`
+      const actual = authHeader ?? ''
+      if (actual.length !== expected.length) {
+        return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+      }
+      const { timingSafeEqual } = await import('node:crypto')
+      if (!timingSafeEqual(Buffer.from(actual), Buffer.from(expected))) {
         return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
       }
     }
