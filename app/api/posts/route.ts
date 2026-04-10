@@ -51,6 +51,18 @@ const CreatePostSchema = z.object({
 const POSTS_CACHE_PREFIX = 'posts:'
 
 // 生成缓存键
+//
+// SECURITY (audit P1-8, 2026-04-09): MUST include viewer_id when getPosts
+// is called with viewer_id, otherwise user A's filtered result (which
+// excludes posts visible only to A's followers/groups) could be served to
+// user B from the in-memory cache. The viewer parameter is what
+// determines visibility filtering downstream — sharing across viewers is
+// a cross-tenant leak.
+//
+// Cache hit rate trade-off: scoping by viewer reduces hit rate (separate
+// bucket per logged-in user). The 'public' bucket (viewer = anon) is the
+// most-cached path and still gets full sharing across anonymous visitors,
+// which is where the cache pays for itself anyway.
 function getCacheKey(params: {
   limit: number
   offset: number
@@ -60,8 +72,11 @@ function getCacheKey(params: {
   sort_order: string
   enable_weight?: boolean
   weight_factor?: number
+  viewer_id?: string | null
+  language?: string
 }): string {
-  return `${POSTS_CACHE_PREFIX}${params.sort_by}:${params.sort_order}:${params.limit}:${params.offset}:${params.group_id || ''}:${params.author_handle || ''}:${params.enable_weight || false}:${params.weight_factor || 0}`
+  const viewer = params.viewer_id || 'anon'
+  return `${POSTS_CACHE_PREFIX}${params.sort_by}:${params.sort_order}:${params.limit}:${params.offset}:${params.group_id || ''}:${params.author_handle || ''}:${params.enable_weight || false}:${params.weight_factor || 0}:${viewer}:${params.language || ''}`
 }
 
 export async function GET(request: NextRequest) {
@@ -98,16 +113,20 @@ export async function GET(request: NextRequest) {
     // 检查用户登录状态
     const user = await getAuthUser(request)
     
-    // 生成缓存键
-    const cacheKey = getCacheKey({ 
-      limit, 
-      offset, 
-      group_id: group_id || (group_ids ? group_ids.join(',') : undefined), 
-      author_handle, 
-      sort_by, 
+    // 生成缓存键 — must include viewer_id for visibility-correct caching
+    // (audit P1-8). Anonymous users share a single bucket; logged-in users
+    // each get their own to prevent cross-user filtered-result leakage.
+    const cacheKey = getCacheKey({
+      limit,
+      offset,
+      group_id: group_id || (group_ids ? group_ids.join(',') : undefined),
+      author_handle,
+      sort_by,
       sort_order,
       enable_weight,
-      weight_factor
+      weight_factor,
+      viewer_id: user?.id ?? null,
+      language: langFilter,
     })
     
     // For hot posts (first page, no filters), check Redis cache first
