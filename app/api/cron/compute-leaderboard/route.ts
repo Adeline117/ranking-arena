@@ -29,7 +29,7 @@ import {
   revalidateRankingPages,
   warmupLeaderboardCache,
 } from './post-processing'
-import { detectTraderType, getFreshnessHours, deriveWinRateMDD } from './helpers'
+import { detectTraderType, deriveWinRateMDD } from './helpers'
 import { type TraderRow, makeAddToTraderMap } from './trader-row'
 import { computeLastResortCalmar, classifyTradingStyle, markOutliers, applyArenaFollowers } from './scoring-helpers'
 import { checkPlatformFreshness } from './freshness-check'
@@ -37,6 +37,7 @@ import { fetchHandleAvatarMap } from './fetch-handles'
 import { enrichFromStatsDetail } from './enrich-stats-detail'
 import { deriveWrMddFromEquityCurve, deriveAdvancedFromEquityCurve } from './enrich-equity-curve'
 import { deriveAdvancedFromDailySnapshots } from './enrich-daily-snapshots'
+import { fetchPhase1FromV2 } from './fetch-phase1'
 import { PipelineLogger } from '@/lib/services/pipeline-logger'
 import { sanitizeDisplayName } from '@/lib/utils/profanity'
 import { generateIdenticonSvg } from '@/lib/utils/avatar'
@@ -50,7 +51,8 @@ export const dynamic = 'force-dynamic'
 export const maxDuration = 300
 
 // detectTraderType, getFreshnessHours, deriveWinRateMDD all live in ./helpers.ts
-// (single source of truth — duplicates removed 2026-04-09).
+// (single source of truth — duplicates removed 2026-04-09). getFreshnessHours
+// is now consumed only by fetch-phase1.ts.
 
 const logger = createLogger('compute-leaderboard')
 
@@ -345,173 +347,19 @@ async function computeSeason(
   // Upsert abort flag (set inside the upsert loop when time runs out, consumed
   // by the zero-out phase below to skip its expensive N+1 cleanup path).
   let upsertAborted = false
-  // Per-source freshness thresholds
-  const freshnessISOBySource = (source: string): string => {
-    const threshold = new Date()
-    threshold.setHours(threshold.getHours() - getFreshnessHours(source))
-    return threshold.toISOString()
-  }
-
   // Stream directly into traderMap instead of accumulating allSnapshots array
   // This reduces peak memory from ~200MB to ~50MB by avoiding intermediate array.
   // TraderRow shape + addToTraderMap sanitize/merge logic live in ./trader-row.ts.
   const traderMap = new Map<string, TraderRow>()
-  const v2CountBySource = new Map<string, number>()
   const addToTraderMap = makeAddToTraderMap(traderMap)
 
-  // Fetch v2 FIRST so it gets dedup priority (v2 is newer, more reliable)
-  // Column mapping: platform→source, trader_key→source_trader_id, window→season_id,
-  //                  roi_pct→roi, pnl_usd→pnl, created_at→captured_at
-  // ROOT CAUSE FIX (2026-04-09): Sequential single-platform queries.
-  // Concurrent batches (even 3) still exhaust DB pool under cron storms.
-  // Batch 3 sources in parallel — 3x faster than sequential with acceptable pool usage
-  const batchSize = 1 // Sequential: 1 query at a time to avoid DB pool exhaustion
-  const v2Window = season
-  const FALLBACK_THRESHOLD = 50
-  const phase1Start = Date.now()
-  for (let i = 0; i < SOURCES_WITH_DATA.length; i += batchSize) {
-    // Time budget: 150s (leave 150s for scoring + upsert + enrichment)
-    if (Date.now() - phase1Start > 150_000) {
-      logger.warn(`[${season}] Phase 1 time budget exceeded at platform ${i}/${SOURCES_WITH_DATA.length}, proceeding with ${traderMap.size} traders`)
-      break
-    }
-    const batch = SOURCES_WITH_DATA.slice(i, i + batchSize)
-    const results = await Promise.all(
-      batch.map(async (source) => {
-        const rows: TraderRow[] = []
-        const freshnessISO = freshnessISOBySource(source)
-        // Per-source 15s timeout: skip slow sources instead of blocking the entire run
-        const queryWithTimeout = async <T>(promise: PromiseLike<T>): Promise<T> => {
-          return Promise.race([
-            promise,
-            new Promise<never>((_, reject) => setTimeout(() => reject(new Error(`${source} query timeout`)), 30_000)),
-          ])
-        }
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        let data: any[] | null = null
-        let error: { message: string; code?: string } | null = null
-        try {
-          const result = await queryWithTimeout(supabase
-            .from('trader_snapshots_v2')
-            .select('platform, trader_key, roi_pct, pnl_usd, win_rate, max_drawdown, trades_count, followers, copiers, arena_score, updated_at, sharpe_ratio, sortino_ratio, calmar_ratio, volatility_pct, downside_volatility_pct, metrics')
-            .eq('platform', source)
-            .eq('window', v2Window)
-            .gte('updated_at', freshnessISO)
-            .order('updated_at', { ascending: false })
-            .limit(1000))
-          data = result.data as TraderRow[] | null
-          error = result.error
-        } catch (e) {
-          logger.warn(`[${season}] ${source}: Phase 1 query timeout, skipping`)
-          return []
-        }
-
-        // Fallback: if this window has too few traders, use 30D data
-        // (many platforms only fetch one window; 30D is the most common)
-        if ((!data || data.length < FALLBACK_THRESHOLD) && v2Window !== '30D') {
-          try {
-            const fallback = await queryWithTimeout(supabase
-              .from('trader_snapshots_v2')
-              .select('platform, trader_key, roi_pct, pnl_usd, win_rate, max_drawdown, trades_count, followers, copiers, arena_score, updated_at, sharpe_ratio, sortino_ratio, calmar_ratio, volatility_pct, downside_volatility_pct, metrics')
-              .eq('platform', source)
-              .eq('window', '30D')
-              .gte('updated_at', freshnessISO)
-              .order('updated_at', { ascending: false })
-              .limit(1000))
-            if (!fallback.error && fallback.data && fallback.data.length > (data?.length || 0)) {
-              data = fallback.data
-              error = fallback.error as typeof error
-            }
-          } catch {
-            // Fallback also timed out — use primary result
-          }
-        }
-
-        if (error) {
-          // Retry once after 2s with smaller limit to recover from transient statement_timeout.
-          logger.error(`[${season}] Query failed for ${source}: ${error.message} (code=${error.code}) — retrying with limit=1000`, { source, window: v2Window })
-          await new Promise(r => setTimeout(r, 2000))
-          const retry = await supabase
-            .from('trader_snapshots_v2')
-            .select('platform, trader_key, roi_pct, pnl_usd, win_rate, max_drawdown, trades_count, followers, copiers, arena_score, updated_at, sharpe_ratio, sortino_ratio, calmar_ratio, volatility_pct, downside_volatility_pct, metrics')
-            .eq('platform', source)
-            .eq('window', v2Window)
-            .gte('updated_at', freshnessISO)
-            .order('updated_at', { ascending: false })
-            .limit(1000)
-          if (retry.error) {
-            logger.error(`[${season}] Retry also failed for ${source}: ${retry.error.message} — data NOT loaded (will cause false "stale" downstream)`)
-            return rows
-          }
-          data = retry.data
-        }
-        if (!data?.length) return rows
-
-        let totalJsonbFallbacks = 0
-        for (const d of data) {
-          // Supabase returns `numeric` columns as strings for high-precision values.
-          // Must use Number() to convert, not `as number` (which is just a TS type assertion).
-          // Fallback to metrics JSONB when columns are NULL (some platforms write only to JSONB).
-          const m = (d.metrics as Record<string, unknown>) || {}
-          let jsonbFallbackCount = 0
-          const col = (key: string, jsonKey?: string) => {
-            const v = d[key as keyof typeof d]
-            if (v != null) { const n = Number(v); return Number.isFinite(n) ? n : null }
-            const jk = jsonKey || key
-            const jv = m[jk]
-            if (jv != null) {
-              const n = Number(jv)
-              if (!Number.isFinite(n)) return null
-              jsonbFallbackCount++
-              return n
-            }
-            return null
-          }
-          rows.push({
-            source: d.platform as string,
-            source_trader_id: d.trader_key as string,
-            roi: col('roi_pct', 'roi'),
-            pnl: col('pnl_usd', 'pnl'),
-            win_rate: col('win_rate'),
-            max_drawdown: col('max_drawdown'),
-            trades_count: col('trades_count'),
-            followers: col('followers'),
-            copiers: col('copiers'),
-            arena_score: col('arena_score'),
-            captured_at: d.updated_at as string,
-            full_confidence_at: null,
-            profitability_score: null,
-            risk_control_score: null,
-            execution_score: null,
-            score_completeness: null,
-            trading_style: null,
-            avg_holding_hours: null,
-            style_confidence: null,
-            sharpe_ratio: d.sharpe_ratio != null ? Number(d.sharpe_ratio) : null,
-            sortino_ratio: d.sortino_ratio != null ? Number(d.sortino_ratio) : null,
-            profit_factor: null,
-            calmar_ratio: d.calmar_ratio != null ? Number(d.calmar_ratio) : null,
-            trader_type: null,
-            metrics_estimated: false,
-          })
-          if (jsonbFallbackCount > 0) totalJsonbFallbacks++
-        }
-        if (totalJsonbFallbacks > 0) {
-          logger.warn(`[${source}] ${totalJsonbFallbacks}/${data.length} traders used JSONB metrics fallback`)
-        }
-        return rows
-      })
-    )
-    results.forEach((rows, idx) => {
-      const batchSource = batch[idx]
-      if (rows.length > 0) {
-        v2CountBySource.set(rows[0].source, rows.length)
-      } else if (batchSource) {
-        logger.warn(`[${season}] ${batchSource}: 0 traders fetched from snapshots_v2 (window=${v2Window}, fallback checked)`)
-      }
-      rows.forEach(addToTraderMap)
-    })
-  }
+  // Phase 1: Fetch fresh trader rows from trader_snapshots_v2, one platform
+  // at a time. Sequential to avoid DB pool exhaustion under cron storms.
+  // Per-source 30s timeout, 30D fallback for sparse windows, JSONB fallback
+  // for platforms that write columns sparsely. Logic in fetch-phase1.ts.
+  // The returned per-source row counts aren't currently consumed downstream
+  // — kept for parity with the pre-refactor diagnostic surface.
+  await fetchPhase1FromV2(supabase, season, addToTraderMap)
 
   // V1 fetch removed — v2 backfill (migration 20260319b) ensures v2 has full coverage.
   // upsertTraders() writes to both v1 and v2 on every cron run, so v2 stays current.
