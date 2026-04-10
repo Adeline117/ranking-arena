@@ -133,8 +133,12 @@
       "schedule": "5 */2 * * *"
     },
     {
-      "path": "/api/cron/batch-fetch-traders?group=b1",
+      "path": "/api/cron/batch-fetch-traders?group=b1&windows=30d",
       "schedule": "12 */3 * * *"
+    },
+    {
+      "path": "/api/cron/batch-fetch-traders?group=b1&windows=7d,90d",
+      "schedule": "27 */3 * * *"
     },
     {
       "path": "/api/cron/batch-fetch-traders?group=b1b",
