@@ -271,14 +271,17 @@ export default function TraderProfileClient({ data, serverTraderData, claimedUse
   )
   const rankSparklineData = (bundledRankHistory?.history ?? rankHistoryData?.history)?.map(h => ({ rank: h.rank })) ?? []
 
-  const traderProfile = traderData?.profile ?? null
-  const traderPerformance = traderData?.performance ?? null
-  const traderStats = traderData?.stats ?? null
-  const traderPortfolio = traderData?.portfolio ?? []
-  const traderPositionHistory = traderData?.positionHistory ?? []
+  // Stable references for derived SWR data — memoize so child components
+  // wrapped in React.memo can bail out of re-render when traderData
+  // identity changes but the underlying field hasn't.
+  const traderProfile = useMemo(() => traderData?.profile ?? null, [traderData?.profile])
+  const traderPerformance = useMemo(() => traderData?.performance ?? null, [traderData?.performance])
+  const traderStats = useMemo(() => traderData?.stats ?? null, [traderData?.stats])
+  const traderPortfolio = useMemo(() => traderData?.portfolio ?? [], [traderData?.portfolio])
+  const traderPositionHistory = useMemo(() => traderData?.positionHistory ?? [], [traderData?.positionHistory])
   const traderEquityCurve = traderData?.equityCurve
   const traderAssetBreakdown = traderData?.assetBreakdown
-  const traderSimilar = traderData?.similarTraders ?? []
+  const traderSimilar = useMemo(() => traderData?.similarTraders ?? [], [traderData?.similarTraders])
 
   // Structured data for SEO — memoized so combineSchemas doesn't re-run on every
   // unrelated render (was being recomputed on every tab click, period switch, etc.)
