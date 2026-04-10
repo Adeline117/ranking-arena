@@ -275,20 +275,30 @@ export async function GET(request: NextRequest) {
           // ROOT CAUSE FIX (2026-04-08): Previously wrapped at hardcoded 5000.
           // Many platforms have <2000 traders → offset > total → 0 enriched but
           // status=success → critical platforms because no data is updated.
-          // Now we query the actual leaderboard size and wrap at the real count.
+          // Now we read the actual leaderboard size from leaderboard_count_cache.
+          //
+          // PERF FIX (2026-04-09): Previously this issued count:exact on
+          // leaderboard_ranks (~314k rows) per platform × period — 81 exact
+          // counts per cycle, 200ms-25s each. Audit flagged 30-60s/run cron
+          // savings + frequent fetch safety-timeouts. leaderboard_count_cache
+          // is maintained by compute-leaderboard via refresh_leaderboard_count_cache RPC
+          // and is refreshed every cron cycle, so it's always at most a few
+          // minutes stale — fine for offset wrap calculation.
           let offset = 0
           let leaderboardSize: number | null = null
           try {
             const supabase = getSupabaseAdmin()
-            const { count } = await supabase
-              .from('leaderboard_ranks')
-              .select('id', { count: 'exact', head: true })
-              .eq('source', platform)
+            // Use the _gt0 variant which counts only traders with arena_score > 0
+            // (equivalent in spirit to the prior `.not('arena_score', 'is', null)`).
+            const { data: cacheRow } = await supabase
+              .from('leaderboard_count_cache')
+              .select('total_count')
               .eq('season_id', period)
-              .not('arena_score', 'is', null)
-            leaderboardSize = count ?? null
+              .eq('source', `${platform}_gt0`)
+              .maybeSingle()
+            leaderboardSize = cacheRow?.total_count ?? null
           } catch (err) {
-            logger.warn(`[batch-enrich] Failed to count leaderboard for ${platform}/${period}`, { error: err instanceof Error ? err.message : String(err) })
+            logger.warn(`[batch-enrich] Failed to read leaderboard_count_cache for ${platform}/${period}`, { error: err instanceof Error ? err.message : String(err) })
           }
 
           try {
