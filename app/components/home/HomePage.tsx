@@ -15,6 +15,7 @@ const GuestSignupPrompt = lazy(() => import('./GuestSignupPrompt'))
 // WelcomeModal removed — blocks entire page for first-time visitors
 import HomePageClient from './HomePageClient'
 import { SectionErrorBoundary } from '../utils/ErrorBoundary'
+import DeferredMount from '../utils/DeferredMount'
 import { RankingSkeleton } from '../ui/Skeleton'
 import { features } from '@/lib/features'
 // Lazy-load sidebar widgets
@@ -22,6 +23,19 @@ const HotDiscussions = lazy(() => import('../sidebar/HotDiscussions'))
 const WatchlistMarket = lazy(() => import('../sidebar/WatchlistMarket'))
 const NewsFlash = lazy(() => import('../sidebar/NewsFlash'))
 const TrendingHashtags = lazy(() => import('../sidebar/TrendingHashtags'))
+
+// PERF P1-PERF-2 (audit): stagger widget mounts so each widget's SWR fetch
+// fires on a different tick, preventing the simultaneous 4-way network burst
+// that competes with the LCP repaint. Watchlist is highest priority (renders
+// in the right column where the user looks first), so it gets 0ms delay.
+// Others stagger by ~800ms each. Total spread: 0 → 2400ms which is well
+// under any reasonable user-first-interaction window.
+const WIDGET_DELAYS = {
+  watchlist: 0,         // first to mount — most visible above the fold
+  hotDiscussions: 800,  // left column, social, secondary priority
+  trendingHashtags: 1600,
+  newsFlash: 2400,      // bottom of right column, lowest priority
+}
 
 import type { InitialTrader, CategoryCounts } from '@/lib/getInitialTraders'
 
@@ -60,9 +74,14 @@ export default function HomePage({ initialTraders, initialLastUpdated, heroStats
           leftSidebar={
             features.social ? (
               <SectionErrorBoundary>
-                <Suspense fallback={<div className="skeleton contain-layout-style" style={{ minHeight: 400, borderRadius: tokens.radius.lg }} />}>
-                  <HotDiscussions />
-                </Suspense>
+                <DeferredMount
+                  delayMs={WIDGET_DELAYS.hotDiscussions}
+                  fallback={<div className="skeleton contain-layout-style" style={{ minHeight: 400, borderRadius: tokens.radius.lg }} />}
+                >
+                  <Suspense fallback={<div className="skeleton contain-layout-style" style={{ minHeight: 400, borderRadius: tokens.radius.lg }} />}>
+                    <HotDiscussions />
+                  </Suspense>
+                </DeferredMount>
               </SectionErrorBoundary>
             ) : null
           }
@@ -70,25 +89,40 @@ export default function HomePage({ initialTraders, initialLastUpdated, heroStats
             <div className="contain-layout-style" style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
               <div style={{ flexShrink: 0 }}>
                 <SectionErrorBoundary>
-                  <Suspense fallback={<div className="skeleton contain-layout-style" style={{ minHeight: 200, borderRadius: tokens.radius.lg }} />}>
-                    <WatchlistMarket />
-                  </Suspense>
+                  <DeferredMount
+                    delayMs={WIDGET_DELAYS.watchlist}
+                    fallback={<div className="skeleton contain-layout-style" style={{ minHeight: 200, borderRadius: tokens.radius.lg }} />}
+                  >
+                    <Suspense fallback={<div className="skeleton contain-layout-style" style={{ minHeight: 200, borderRadius: tokens.radius.lg }} />}>
+                      <WatchlistMarket />
+                    </Suspense>
+                  </DeferredMount>
                 </SectionErrorBoundary>
               </div>
               {features.social && (
                 <div style={{ flexShrink: 0 }}>
                   <SectionErrorBoundary>
-                    <Suspense fallback={<div className="skeleton contain-layout-style" style={{ minHeight: 120, borderRadius: tokens.radius.lg }} />}>
-                      <TrendingHashtags />
-                    </Suspense>
+                    <DeferredMount
+                      delayMs={WIDGET_DELAYS.trendingHashtags}
+                      fallback={<div className="skeleton contain-layout-style" style={{ minHeight: 120, borderRadius: tokens.radius.lg }} />}
+                    >
+                      <Suspense fallback={<div className="skeleton contain-layout-style" style={{ minHeight: 120, borderRadius: tokens.radius.lg }} />}>
+                        <TrendingHashtags />
+                      </Suspense>
+                    </DeferredMount>
                   </SectionErrorBoundary>
                 </div>
               )}
               <div style={{ flex: 1, minHeight: 0 }}>
                 <SectionErrorBoundary>
-                  <Suspense fallback={<div className="skeleton contain-layout-style" style={{ minHeight: 300, borderRadius: tokens.radius.lg }} />}>
-                    <NewsFlash />
-                  </Suspense>
+                  <DeferredMount
+                    delayMs={WIDGET_DELAYS.newsFlash}
+                    fallback={<div className="skeleton contain-layout-style" style={{ minHeight: 300, borderRadius: tokens.radius.lg }} />}
+                  >
+                    <Suspense fallback={<div className="skeleton contain-layout-style" style={{ minHeight: 300, borderRadius: tokens.radius.lg }} />}>
+                      <NewsFlash />
+                    </Suspense>
+                  </DeferredMount>
                 </SectionErrorBoundary>
               </div>
             </div>
