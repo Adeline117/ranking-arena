@@ -31,7 +31,7 @@ import {
 } from './post-processing'
 import { detectTraderType, getFreshnessHours, deriveWinRateMDD } from './helpers'
 import { type TraderRow, makeAddToTraderMap } from './trader-row'
-import { computeLastResortCalmar, classifyTradingStyle, markOutliers } from './scoring-helpers'
+import { computeLastResortCalmar, classifyTradingStyle, markOutliers, applyArenaFollowers } from './scoring-helpers'
 import { checkPlatformFreshness } from './freshness-check'
 import { PipelineLogger } from '@/lib/services/pipeline-logger'
 import { sanitizeDisplayName } from '@/lib/utils/profanity'
@@ -1162,44 +1162,11 @@ async function computeSeason(
     logger.info(`[${season}] Marked ${outlierCount} outliers (kept in leaderboard with is_outlier=true)`)
   }
 
-  // Phase: Replace exchange followers with Arena internal follower counts from trader_follows
+  // Phase: Replace exchange followers with Arena internal follower counts.
+  // Logic + RPC fallback live in scoring-helpers.applyArenaFollowers.
   {
-    const allTraderIds = [...new Set(scored.map(t => t.source_trader_id))]
-    const arenaFollowerMap = new Map<string, number>()
-    // Query trader_follows in chunks of 500
-    for (let i = 0; i < allTraderIds.length; i += 500) {
-      const chunk = allTraderIds.slice(i, i + 500)
-      try {
-        const { data, error } = await supabase
-          .rpc('count_trader_followers', { trader_ids: chunk })
-        if (!error && data) {
-          for (const row of data as { trader_id: string; cnt: number }[]) {
-            arenaFollowerMap.set(row.trader_id, (arenaFollowerMap.get(row.trader_id) || 0) + row.cnt)
-          }
-        }
-      } catch (e) {
-        logger.warn(`[${season}] arena follower batch query failed, using fallback: ${e instanceof Error ? e.message : String(e)}`)
-        // Fallback: individual count query
-        const { data: fallbackData } = await supabase
-          .from('trader_follows')
-          .select('trader_id')
-          .in('trader_id', chunk)
-          .limit(10000)
-        if (fallbackData) {
-          for (const row of fallbackData) {
-            arenaFollowerMap.set(row.trader_id, (arenaFollowerMap.get(row.trader_id) || 0) + 1)
-          }
-        }
-      }
-    }
-    // Apply Arena follower counts to scored array
-    let arenaFollowersApplied = 0
-    for (const t of scored) {
-      const count = arenaFollowerMap.get(t.source_trader_id) || 0
-      t.followers = count
-      if (count > 0) arenaFollowersApplied++
-    }
-    logger.info(`[${season}] Arena followers: ${arenaFollowersApplied} traders have followers (${arenaFollowerMap.size} unique trader_ids queried)`)
+    const { applied, uniqueIds } = await applyArenaFollowers(supabase, scored, season)
+    logger.info(`[${season}] Arena followers: ${applied} traders have followers (${uniqueIds} unique trader_ids queried)`)
   }
 
   // Sort by arena_score desc, then trust weight (higher trust = higher for ties),
