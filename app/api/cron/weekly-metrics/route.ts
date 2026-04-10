@@ -91,11 +91,13 @@ export async function GET(request: NextRequest) {
         `<i>${new Date().toISOString()}</i>`,
       ]
 
+      // level: 'report' — bypasses 'info' (log-only) and 'warning' (digest)
+      // so the weekly push is guaranteed to reach Telegram.
       await sendTelegramAlert({
+        level: 'report',
+        source: 'weekly-metrics',
         title: 'Arena Weekly Metrics',
         message: lines.join('\n'),
-        level: 'info' as const,
-        details: {},
       })
 
       return {
