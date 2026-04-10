@@ -33,10 +33,7 @@ _None currently_
 
 ## 🟡 P2 - Should Do Soon
 
-### Features
-- [ ] Trading signal alerts refinement — position change detection already
-      lives in `lib/services/trading-signals.ts`, needs UX pass on alert
-      frequency + noise reduction
+_None currently — see Retired below_
 
 ---
 
@@ -77,6 +74,9 @@ _None currently_
 - ~~Increase bybit/weex enrichment concurrency from 1~~ — bybit already
   runs at concurrency 2 (`enrichment-runner.ts:338`); weex disabled entirely
   2026-04-01 (75% timeout rate).
+- ~~Trading signal alerts refinement~~ — `lib/services/trading-signals.ts`
+  was completely orphaned dead code (zero importers). Deleted in 578a909a0.
+  Re-add only when there's a UX decision to actually ship the feature.
 
 ## Completed (March 2026)
 _See PROGRESS.md archive section for full list_
