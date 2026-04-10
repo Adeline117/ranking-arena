@@ -15,6 +15,7 @@ import { useSubscription } from '@/app/components/home/hooks/useSubscription'
 import { useAuthSession } from '@/lib/hooks/useAuthSession'
 import { useLinkedAccounts } from '@/lib/hooks/useLinkedAccounts'
 import { EXCHANGE_NAMES } from '@/lib/constants/exchanges'
+import { trackEvent } from '@/lib/analytics/track'
 import { Box, Text } from '@/app/components/base'
 // TopNav is now rendered by app/(app)/trader/[handle]/layout.tsx
 // (was pulled into this client bundle unnecessarily before).
@@ -505,7 +506,10 @@ export default function TraderProfileClient({ data, serverTraderData, claimedUse
           activeTab={activeTab}
           onTabChange={handleTabChange}
           isPro={isPro}
-          onProRequired={() => router.push('/pricing')}
+          onProRequired={() => {
+            trackEvent('paywall_blocked', { source: 'trader_detail_tab' })
+            router.push('/pricing')
+          }}
           extraTabs={claimedUser ? ['posts'] : undefined}
           hideTabs={undefined}
         />
