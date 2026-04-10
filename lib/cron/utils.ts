@@ -6,7 +6,7 @@
 
 import { SupabaseClient } from '@supabase/supabase-js'
 import { getSupabaseAdmin } from '@/lib/supabase/server'
-import { exec } from 'child_process'
+import { execFile } from 'child_process'
 import { promisify } from 'util'
 import {
   getCircuitBreaker,
@@ -19,7 +19,14 @@ import { createLogger } from '@/lib/utils/logger'
 import { recordScrapeMetrics } from '@/lib/scraper/telemetry'
 import { getPlatformConfig } from '@/lib/scraper/config'
 
-const execAsync = promisify(exec)
+// SECURITY (audit P1-11, 2026-04-09): use execFile not exec.
+// execFile spawns the binary directly without invoking a shell, so any
+// metacharacters in the args (`;`, `&&`, `|`, backticks, $()) are passed
+// as literal argv tokens instead of being interpreted by /bin/sh. Today
+// the args come from a static PLATFORM_SCRIPTS table — but if any future
+// code path takes user/admin/env input into args, exec() would be a
+// command-injection vector. Switching to execFile preempts that.
+const execFileAsync = promisify(execFile)
 const cronLogger = createLogger('Cron')
 
 // 脚本执行超时时间（毫秒）
@@ -252,9 +259,9 @@ async function executeScriptInternal(
   env: Record<string, string>
 ): Promise<{ stdout: string; stderr: string }> {
   const { script, args } = scriptConfig
-  const command = `node ${script}${args.length > 0 ? ` ${args.join(' ')}` : ''}`
-
-  return execAsync(command, {
+  // Spawn `node` with the script + args as an argv array. No shell, so
+  // metacharacters in args are inert. See execFileAsync comment above.
+  return execFileAsync('node', [script, ...args], {
     cwd: process.cwd(),
     timeout: SCRIPT_TIMEOUT,
     env: {
