@@ -86,22 +86,14 @@ async function getPlatformHealthData(): Promise<PlatformHealth[]> {
       emptyResponse as { data: Array<{ job_name: string; records_processed: number }> | null; error: unknown },
       'pipeline_logs records_processed'
     ),
-    // ROOT CAUSE FIX (2026-04-10): Use pg Pool directly instead of Supabase REST.
-    // PostgREST connection pool gets overwhelmed during cron storms → RPC times out
-    // → all platforms return null → all show as critical.
-    // pg Pool on port 6543 (transaction mode) is much more reliable.
-    (async () => {
-      try {
-        const { query: dbQuery } = await import('@/lib/db')
-        const result = await dbQuery(
-          `SELECT source, MAX(computed_at) as computed_at FROM leaderboard_ranks WHERE computed_at >= NOW() - INTERVAL '7 days' GROUP BY source`,
-          []
-        )
-        return { data: result.rows, error: null }
-      } catch (err) {
-        return { data: null, error: err }
-      }
-    })() as unknown as PromiseLike<{ data: Array<{ source: string; computed_at?: string }> | null; error: unknown }>,
+    // Use Supabase RPC with 25s deadline. The RPC itself takes 24ms but PostgREST
+    // needs a connection from its pool, which can take seconds during cron storms.
+    withDeadline(
+      supabase.rpc('get_leaderboard_latest_by_source') as unknown as PromiseLike<{ data: Array<{ source: string; computed_at: string }> | null; error: unknown }>,
+      25_000,
+      emptyResponse as { data: Array<{ source: string; computed_at: string }> | null; error: unknown },
+      'leaderboard_latest_by_source'
+    ),
   ])
 
   // Build platform → latest computed_at map
