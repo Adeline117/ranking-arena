@@ -192,8 +192,33 @@ export function getSupabaseEnv() {
 }
 
 /**
+ * Constant-time string compare. Returns true iff both strings are equal,
+ * with a comparison time that depends on `expected.length` only — not on
+ * how many characters of `actual` match `expected`. Defeats the timing
+ * side-channel that lets an attacker recover a secret one byte at a time
+ * via repeated requests measuring response latency.
+ *
+ * Hand-rolled instead of crypto.timingSafeEqual because some routes here
+ * run on the Edge runtime, which doesn't expose node:crypto. See
+ * commit a3f5814ec for context.
+ */
+function timingSafeStringEqual(a: string, b: string): boolean {
+  if (a.length !== b.length) return false
+  let mismatch = 0
+  for (let i = 0; i < a.length; i++) {
+    mismatch |= a.charCodeAt(i) ^ b.charCodeAt(i)
+  }
+  return mismatch === 0
+}
+
+/**
  * 验证 Cron 请求授权
  * Vercel Cron 使用 Authorization: Bearer <CRON_SECRET> 格式
+ *
+ * SECURITY (audit P1-1, 2026-04-09): uses constant-time compare to prevent
+ * CRON_SECRET recovery via response-time side channels. This helper is used
+ * by ~49 cron routes — the time-side-channel was the same class of bug as
+ * P0-SEC-5 in app/api/cron/[platform]/route.ts which was fixed in 44bc401ff.
  */
 export function isAuthorized(req: Request): boolean {
   const authHeader = req.headers.get('authorization')
@@ -204,7 +229,7 @@ export function isAuthorized(req: Request): boolean {
     return false
   }
 
-  return authHeader === `Bearer ${cronSecret}`
+  return timingSafeStringEqual(authHeader ?? '', `Bearer ${cronSecret}`)
 }
 
 /**
