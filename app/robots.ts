@@ -32,7 +32,6 @@ export default function robots(): MetadataRoute.Robots {
           "/tip",
           "/pricing/success",
           "/governance",
-          "/frame/",
         ],
       },
     ],
