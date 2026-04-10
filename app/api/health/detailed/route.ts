@@ -441,6 +441,31 @@ export async function GET(request: NextRequest) {
     return getDependenciesSection()
   }
 
+  // SECURITY (audit P1-10, 2026-04-09): the default branch returns
+  // recon-grade detail (cron summaries, dependency status, version,
+  // environment, memory metrics, fire-and-forget failure stats) and was
+  // previously unauthenticated. That's a free pipeline-mapping vector for
+  // anyone scanning our infrastructure.
+  //
+  // Gate behind CRON_SECRET — used by openclaw + monitoring scripts.
+  // Public liveness probes should hit /api/health (basic, no internals).
+  const authHeader = request.headers.get('authorization') || ''
+  const expectedBearer = env.CRON_SECRET ? `Bearer ${env.CRON_SECRET}` : null
+  let authorized = false
+  if (expectedBearer && authHeader.length === expectedBearer.length) {
+    let mismatch = 0
+    for (let i = 0; i < authHeader.length; i++) {
+      mismatch |= authHeader.charCodeAt(i) ^ expectedBearer.charCodeAt(i)
+    }
+    if (mismatch === 0) authorized = true
+  }
+  if (!authorized) {
+    return NextResponse.json(
+      { error: 'Unauthorized — use /api/health for public liveness' },
+      { status: 401 },
+    )
+  }
+
   // Default: full detailed health check
   try {
     // 并行执行检查
