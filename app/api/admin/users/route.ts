@@ -29,13 +29,28 @@ export const GET = withAdminAuth(
       .from('user_profiles')
       .select('id, handle, email, avatar_url, bio, follower_count, following_count, role, banned_at, banned_reason, banned_by, created_at, updated_at', { count: 'exact' })
 
-    // Apply search filter (sanitize to prevent PostgREST filter injection)
+    // Apply search filter — defense in depth.
+    //
+    // SECURITY (audit P1-7, 2026-04-09): the previous implementation
+    // string-interpolated the user-supplied search term into a PostgREST
+    // .or() filter DSL. The sanitization stripped backslash, %, _, ., , ()
+    // — but `or()` parsing also recognizes commas as field separators and
+    // colons as operator separators, so a search like `,role.eq.admin`
+    // would historically have been a filter-injection vector. Sanitization
+    // already kills the obvious chars, but constructing the filter from a
+    // user string is a footgun.
+    //
+    // Stricter approach: aggressively strip the search term to a tight
+    // alphanumeric+space+@+. allowlist (covering email and handle chars),
+    // then restrict to a reasonable max length. Any remaining query is
+    // safe to interpolate.
     if (search) {
       const sanitizedSearch = search
-        .slice(0, 100)
-        .replace(/[\\%_]/g, c => `\\${c}`)
-        .replace(/[.,()]/g, '')
-      if (sanitizedSearch) {
+        .slice(0, 80)
+        // Allowlist: a-z A-Z 0-9 dash underscore dot @ + space (handles + emails)
+        .replace(/[^a-zA-Z0-9_\-.@\s]/g, '')
+        .trim()
+      if (sanitizedSearch.length > 0 && sanitizedSearch.length <= 80) {
         query = query.or(`handle.ilike.%${sanitizedSearch}%,email.ilike.%${sanitizedSearch}%`)
       }
     }
