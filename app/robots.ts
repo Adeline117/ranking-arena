@@ -28,7 +28,6 @@ export default function robots(): MetadataRoute.Robots {
           "/exchange",
           "/auth",
           "/reset-password",
-          "/kol",
           "/tip",
           "/pricing/success",
           "/governance",

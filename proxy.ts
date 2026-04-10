@@ -420,13 +420,14 @@ export async function proxy(request: NextRequest) {
   const requestId = generateRequestId()
 
   // Redirect deleted scope-audit routes → /
-  // 2026-04-09: /frame deleted (per docs/reviews/scope-audit-2026-04-09.md).
-  // Other Phase 1 candidates (/kol /tip /channels) were NOT deleted because
-  // each has live consumers the audit missed:
+  // 2026-04-09: /frame and /kol deleted (per docs/reviews/scope-audit-2026-04-09.md).
+  // /tip and /channels were NOT deleted — each has live consumers the audit missed:
   //   - /tip/success is the Stripe success_url for tipping in groups
   //   - /channels/[id] is linked from inbox + create-group flow
-  //   - /kol/apply writes to kol_applications which is read by /admin/kol
-  if (pathname === '/frame' || pathname.startsWith('/frame/')) {
+  if (
+    pathname === '/frame' || pathname.startsWith('/frame/') ||
+    pathname === '/kol' || pathname.startsWith('/kol/')
+  ) {
     const url = request.nextUrl.clone()
     url.pathname = '/'
     url.search = ''
