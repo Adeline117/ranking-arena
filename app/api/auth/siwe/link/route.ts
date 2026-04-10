@@ -6,6 +6,9 @@ import { getSupabaseAdmin, getAuthUser } from '@/lib/supabase/server'
 import { checkRateLimit, RateLimitPresets } from '@/lib/utils/rate-limit'
 import logger from '@/lib/logger'
 
+// Must match the verify route's chainId — Base mainnet.
+const EXPECTED_CHAIN_ID = 8453
+
 /**
  * POST /api/auth/siwe/link
  *
@@ -35,13 +38,34 @@ export async function POST(request: NextRequest) {
     }
 
     const siweMessage = new SiweMessage(message)
-    const { data: fields, success } = await siweMessage.verify({
+    const { data: fields, success, error } = await siweMessage.verify({
       signature,
       nonce: storedNonce,
     })
 
-    if (!success) {
+    if (!success || error) {
       return NextResponse.json({ error: 'Invalid signature' }, { status: 401 })
+    }
+
+    // SECURITY (audit P1-SEC-3): validate domain/uri/chainId to prevent
+    // cross-site signature relay. Previously the link route trusted any
+    // SIWE message that verified against the stored nonce, so an attacker
+    // who phished a victim into signing a SIWE message for phishing.com
+    // (or any other origin) could replay that signature here and link the
+    // victim's wallet to the attacker's logged-in Supabase session,
+    // hijacking the victim's wallet identity in Arena. The /verify route
+    // already does this — link must mirror it.
+    const requestHost = request.headers.get('host')
+    const requestOrigin = request.headers.get('origin')
+    if (!requestHost || !requestOrigin) {
+      return NextResponse.json({ error: 'Missing required Host or Origin header' }, { status: 400 })
+    }
+    if (
+      fields.domain !== requestHost ||
+      fields.uri !== requestOrigin ||
+      fields.chainId !== EXPECTED_CHAIN_ID
+    ) {
+      return NextResponse.json({ error: 'Domain or chain mismatch' }, { status: 400 })
     }
 
     const walletAddress = fields.address.toLowerCase()
