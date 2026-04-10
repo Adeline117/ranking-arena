@@ -45,6 +45,38 @@ function isUsingProxy(): boolean {
 export class DydxPerpConnector extends BaseConnector {
   readonly platform = 'dydx' as const
   readonly marketType = 'perp' as const
+
+  // ROOT CAUSE FIX (2026-04-09):
+  // batch-fetch-traders-g was failing 100% with safety timeout because
+  // fetchTraderSnapshot called the Copin /leaderboards/page endpoint
+  // (limit=1000) for EVERY trader to find that trader's row. With 1000
+  // discovered traders that's 1000 round trips for the same data, easily
+  // 200+ seconds → safety timeout @ 280s.
+  //
+  // Fix: cache the Copin leaderboard response per (window, queryDate)
+  // for 5 minutes inside the connector instance. The first trader fetch
+  // populates the cache; the next 999 are O(1) Map lookups. Cache is
+  // intentionally per-instance (not module-global) so concurrent cron
+  // invocations don't share state in unsafe ways.
+  private _copinLbCache = new Map<string, { entries: Map<string, Record<string, unknown>>; expiresAt: number }>()
+  private async getCopinLeaderboard(window: Window): Promise<Map<string, Record<string, unknown>>> {
+    const statisticType = window === '7d' ? 'WEEK' : 'MONTH'
+    const queryDate = Date.now() - 14 * 24 * 60 * 60 * 1000
+    // Bucket cache key by 5-min window so each cron cycle gets a fresh fetch
+    const bucket = Math.floor(queryDate / (5 * 60 * 1000))
+    const cacheKey = `${window}:${bucket}`
+    const cached = this._copinLbCache.get(cacheKey)
+    if (cached && cached.expiresAt > Date.now()) return cached.entries
+
+    const url = `https://api.copin.io/leaderboards/page?protocol=DYDX&statisticType=${statisticType}&queryDate=${queryDate}&limit=1000&offset=0&sort_by=ranking&sort_type=asc`
+    const data = await this.request<Record<string, unknown>>(url, { method: 'GET' })
+    const list = (data?.data || []) as Record<string, unknown>[]
+    const map = new Map<string, Record<string, unknown>>()
+    for (const item of list) map.set(String(item.account || ''), item)
+    this._copinLbCache.set(cacheKey, { entries: map, expiresAt: Date.now() + 5 * 60 * 1000 })
+    return map
+  }
+
   readonly capabilities: PlatformCapabilities = {
     platform: 'dydx',
     market_types: ['perp'],
@@ -184,7 +216,6 @@ export class DydxPerpConnector extends BaseConnector {
 
   async fetchTraderSnapshot(traderKey: string, window: Window): Promise<SnapshotResult | null> {
     // Primary: Use Copin API for trader stats (indexer leaderboard endpoint is dead since 2026-03)
-    const statisticType = window === '7d' ? 'WEEK' : 'MONTH'
     let pnl: number | null = null
     let roi: number | null = null
     let winRate: number | null = null
@@ -193,14 +224,13 @@ export class DydxPerpConnector extends BaseConnector {
     let equity: number | null = null
 
     try {
-      // Fetch from Copin position stats for this trader
-      // Copin DYDX processing delay grew to 14 days as of 2026-04-09
-      // (verified empty under 14d, full 1000-row set at 14d+).
-      const queryDate = Date.now() - 14 * 24 * 60 * 60 * 1000
-      const copinUrl = `https://api.copin.io/leaderboards/page?protocol=DYDX&statisticType=${statisticType}&queryDate=${queryDate}&limit=1000&offset=0&sort_by=ranking&sort_type=asc`
-      const copinData = await this.request<Record<string, unknown>>(copinUrl, { method: 'GET' })
-      const copinList = (copinData?.data || []) as Record<string, unknown>[]
-      const entry = copinList.find((item: Record<string, unknown>) => String(item.account) === traderKey)
+      // Look up entry from the per-instance leaderboard cache. The first
+      // call per (window, 5-min bucket) issues one Copin request; the next
+      // N-1 trader snapshots are O(1) Map lookups. Previously this issued
+      // a fresh limit=1000 Copin call per trader (1000 round trips for the
+      // same data) which blew the 280s safety budget on every cron cycle.
+      const lb = await this.getCopinLeaderboard(window)
+      const entry = lb.get(traderKey)
 
       if (entry) {
         pnl = Number(entry.totalPnl ?? entry.totalRealisedPnl) || null
