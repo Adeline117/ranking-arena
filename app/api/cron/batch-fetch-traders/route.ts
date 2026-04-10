@@ -65,7 +65,12 @@ const GROUPS: Record<string, string[]> = {
   c_hl: ['hyperliquid'],
   // Group D1: Fast CEX (every 6h) — split from old group d (8 was too many, caused 524 timeout)
   // gains resurrected 2026-04-08 — now uses /open-trades endpoint (leaderboard was 404)
+  // 2026-04-09: SPLIT into d1a/d1b — 4 platforms × ~120s each was tripping the
+  //   280s safety timeout (gains 90s, htx 120s, bitfinex 90s, coinex 120s).
+  //   `d1` kept as a legacy alias for any manual invocations / backfills.
   d1: ['gains', 'htx_futures', 'bitfinex', 'coinex'],
+  d1a: ['gains', 'bitfinex'],
+  d1b: ['htx_futures', 'coinex'],
   // Group D2: Web3 + Gate.io + BTCC (every 6h)
   d2: ['binance_web3', 'okx_web3', 'gateio', 'btcc'],
   // Group E1: DEX + social (every 8h) — split from E (7 platforms exceeded 300s limit)
