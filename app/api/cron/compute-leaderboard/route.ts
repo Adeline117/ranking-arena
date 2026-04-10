@@ -38,6 +38,7 @@ import { enrichFromStatsDetail } from './enrich-stats-detail'
 import { deriveWrMddFromEquityCurve, deriveAdvancedFromEquityCurve } from './enrich-equity-curve'
 import { deriveAdvancedFromDailySnapshots } from './enrich-daily-snapshots'
 import { fetchPhase1FromV2 } from './fetch-phase1'
+import { rerankAllRows, cleanupStaleRows } from './rerank-cleanup'
 import { PipelineLogger } from '@/lib/services/pipeline-logger'
 import { sanitizeDisplayName } from '@/lib/utils/profanity'
 import { generateIdenticonSvg } from '@/lib/utils/avatar'
@@ -890,59 +891,26 @@ async function computeSeason(
     }
   }
 
-  // Re-rank ALL rows to fix drift from incremental upserts
-  // Stale traders (outside freshness window) keep old ranks while new traders shift numbering.
-  // This global re-rank ensures rank always matches arena_score DESC ordering.
-  // Skip if running out of time — re-rank can run on next cycle.
+  // Re-rank ALL rows to fix drift from incremental upserts. Stale traders
+  // (outside freshness window) keep old ranks while new traders shift numbering;
+  // this global re-rank ensures rank always matches arena_score DESC ordering.
+  // Skip if running out of time — next cron cycle will catch up. Logic in
+  // rerank-cleanup.ts.
   if (isOutOfTime(15_000)) {
     logger.warn(`[${season}] SKIPPING re-rank — only ${Math.round(timeLeftMs() / 1000)}s left`)
-  } else try {
-    const { error: rerankErr } = await supabase.rpc('rerank_leaderboard', { p_season_id: season })
-    if (rerankErr) {
-      // Fallback: direct SQL if RPC doesn't exist
-      if (rerankErr.code === '42883') {
-        // RPC not available — re-rank inline (slower but correct)
-        const { data: allRows } = await supabase
-          .from('leaderboard_ranks')
-          .select('id, arena_score')
-          .eq('season_id', season)
-          .order('arena_score', { ascending: false, nullsFirst: false })
-        if (allRows?.length) {
-          const rerankUpdates = allRows.map((r: { id: string }, idx: number) => ({ id: r.id, rank: idx + 1 }))
-          for (let i = 0; i < rerankUpdates.length; i += 500) {
-            await supabase.from('leaderboard_ranks').upsert(rerankUpdates.slice(i, i + 500), { onConflict: 'id' })
-          }
-          logger.info(`${season}: re-ranked ${rerankUpdates.length} rows (inline fallback)`)
-        }
-      } else {
-        logger.warn(`${season}: re-rank failed: ${rerankErr.message}`)
-      }
-    }
-  } catch (e) {
-    logger.warn(`${season}: re-rank exception (non-critical):`, e)
+  } else {
+    await rerankAllRows(supabase, season)
   }
 
-  // Clean up rows not updated in 5 days (was 14 — stale traders with old high scores
-  // were persisting for weeks at the top of rankings because excluded traders' rows
-  // were never re-computed, keeping outdated scores).
-  // Skip if running out of time — cleanup will run on next cycle.
+  // Clean up rows not updated in 5 days. Excluded traders (negative ROI,
+  // <5 trades, etc.) never get re-computed, so their stale high-scores
+  // would persist at the top of rankings forever without this cleanup.
+  // Logic in rerank-cleanup.ts.
   if (isOutOfTime(10_000)) {
     logger.warn(`[${season}] SKIPPING stale-row cleanup — only ${Math.round(timeLeftMs() / 1000)}s left`)
   } else {
-    const cutoff = new Date(Date.now() - 5 * 24 * 60 * 60 * 1000).toISOString()
-    const { data: staleRows, error: staleErr } = await supabase
-      .from('leaderboard_ranks')
-      .select('id')
-      .eq('season_id', season)
-      .lt('computed_at', cutoff)
-      .limit(5000)
-    if (!staleErr && staleRows && staleRows.length > 0) {
-      const staleIds = staleRows.map((r: { id: string }) => r.id)
-      for (let i = 0; i < staleIds.length; i += 500) {
-        await supabase.from('leaderboard_ranks').delete().in('id', staleIds.slice(i, i + 500))
-      }
-      logger.info(`${season}: cleaned ${staleIds.length} stale rows (>5d old)`)
-    }
+    const cleaned = await cleanupStaleRows(supabase, season)
+    if (cleaned > 0) logger.info(`${season}: cleaned ${cleaned} stale rows (>5d old)`)
   }
 
   // Store the last scored count in DB so the degradation check uses a realistic baseline
