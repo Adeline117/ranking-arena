@@ -108,6 +108,8 @@ import type { TraderTabKey } from './hooks/useTraderTabs'
 import { useTraderPeriodSync } from './hooks/useTraderPeriodSync'
 import { useTraderActiveAccount } from './hooks/useTraderActiveAccount'
 import { useTraderTabs } from './hooks/useTraderTabs'
+import { TraderProfileError } from './components/TraderProfileError'
+import { TraderStaleBanner, TraderPlatformDeadBanner } from './components/TraderStatusBanners'
 
 // NO_PORTFOLIO_PLATFORMS removed — Portfolio tab shown for ALL platforms
 // When no position data exists, the Portfolio component shows an empty state
@@ -313,45 +315,7 @@ export default function TraderProfileClient({ data, serverTraderData, claimedUse
 
   // Error state: only when SWR errored AND no cached data available
   if (traderError && !traderData) {
-    return (
-      <Box style={{ minHeight: '100vh', background: tokens.colors.bg.primary, color: tokens.colors.text.primary }}>
-        <Box style={{ maxWidth: 1200, margin: '0 auto', padding: tokens.spacing[6], textAlign: 'center', paddingTop: tokens.spacing[8] }}>
-          <div style={{ fontSize: 48, marginBottom: tokens.spacing[4] }}>⚠️</div>
-          <Text size="xl" weight="bold" style={{ marginBottom: tokens.spacing[2] }}>
-            {t('loadFailedRetryMsg')}
-          </Text>
-          <Text size="sm" color="tertiary" style={{ marginBottom: tokens.spacing[5] }}>
-            {traderError?.message || t('networkError')}
-          </Text>
-          <Box style={{ display: 'flex', gap: tokens.spacing[3], justifyContent: 'center' }}>
-            <button
-              onClick={() => window.location.reload()}
-              style={{
-                padding: `${tokens.spacing[3]} ${tokens.spacing[5]}`,
-                borderRadius: tokens.radius.lg,
-                border: 'none',
-                background: tokens.colors.accent.brand,
-                color: tokens.colors.white,
-                fontWeight: 700,
-                cursor: 'pointer',
-              }}
-            >
-              {t('retry')}
-            </button>
-            <Link href="/rankings" style={{
-              padding: `${tokens.spacing[3]} ${tokens.spacing[5]}`,
-              borderRadius: tokens.radius.lg,
-              border: `1px solid ${tokens.colors.border.primary}`,
-              color: tokens.colors.text.secondary,
-              textDecoration: 'none',
-              fontWeight: 600,
-            }}>
-              {t('leaderboardBreadcrumb')}
-            </Link>
-          </Box>
-        </Box>
-      </Box>
-    )
+    return <TraderProfileError t={t} errorMessage={traderError?.message} />
   }
 
   // #24: Stale data banner — show when SWR errored but cached/stale data is still available
@@ -377,40 +341,8 @@ export default function TraderProfileClient({ data, serverTraderData, claimedUse
           { label: displayName },
         ]} />
 
-        {/* #24: Stale data banner */}
-        {showStaleBanner && (
-          <Box style={{
-            padding: `${tokens.spacing[2]} ${tokens.spacing[4]}`,
-            marginBottom: tokens.spacing[3],
-            background: `${tokens.colors.accent.warning}12`,
-            border: `1px solid ${tokens.colors.accent.warning}30`,
-            borderRadius: tokens.radius.md,
-            display: 'flex',
-            alignItems: 'center',
-            gap: tokens.spacing[2],
-          }}>
-            <Text size="xs" style={{ color: tokens.colors.accent.warning }}>
-              {t('dataOutdatedBanner') || 'Data may be outdated. Refresh to get the latest.'}
-            </Text>
-          </Box>
-        )}
-
-        {data.is_platform_dead && (
-          <Box style={{
-            padding: `${tokens.spacing[3]} ${tokens.spacing[4]}`,
-            marginBottom: tokens.spacing[3],
-            background: `${tokens.colors.accent.error}10`,
-            border: `1px solid ${tokens.colors.accent.error}25`,
-            borderRadius: tokens.radius.md,
-            display: 'flex',
-            alignItems: 'center',
-            gap: tokens.spacing[2],
-          }}>
-            <Text size="sm" style={{ color: tokens.colors.accent.error }}>
-              {t('platformDataUnavailable') || `Data for ${EXCHANGE_NAMES[data.source] || data.source} is temporarily unavailable. Historical data shown below may be outdated.`}
-            </Text>
-          </Box>
-        )}
+        <TraderStaleBanner show={showStaleBanner} t={t} />
+        <TraderPlatformDeadBanner show={!!data.is_platform_dead} source={data.source} t={t} />
 
         {/* Sticky mini header for mobile */}
         <div className={`trader-sticky-mini-header${showMiniHeader ? ' visible' : ''}`}>
