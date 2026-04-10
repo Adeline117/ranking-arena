@@ -86,23 +86,22 @@ async function getPlatformHealthData(): Promise<PlatformHealth[]> {
       emptyResponse as { data: Array<{ job_name: string; records_processed: number }> | null; error: unknown },
       'pipeline_logs records_processed'
     ),
-    // RPC executes server-side GROUP BY (24ms) — but needs DB connection from pool.
-    // During cron storms, pool may be exhausted → connection wait adds seconds.
-    // 20s deadline to handle pool wait time.
-    withDeadline(
-      supabase.rpc('get_leaderboard_latest_by_source').then(
-        r => r.error ? supabase
-          .from('leaderboard_ranks')
-          .select('source, computed_at')
-          .gte('computed_at', new Date(now - 24 * 60 * 60 * 1000).toISOString())
-          .order('computed_at', { ascending: false })
-          .limit(50000)
-        : r
-      ) as unknown as PromiseLike<{ data: Array<{ source: string; computed_at?: string; latest?: string }> | null; error: unknown }>,
-      20_000,
-      emptyResponse as { data: Array<{ source: string; computed_at?: string; latest?: string }> | null; error: unknown },
-      'leaderboard_latest_by_source'
-    ),
+    // ROOT CAUSE FIX (2026-04-10): Use pg Pool directly instead of Supabase REST.
+    // PostgREST connection pool gets overwhelmed during cron storms → RPC times out
+    // → all platforms return null → all show as critical.
+    // pg Pool on port 6543 (transaction mode) is much more reliable.
+    (async () => {
+      try {
+        const { query: dbQuery } = await import('@/lib/db')
+        const result = await dbQuery(
+          `SELECT source, MAX(computed_at) as computed_at FROM leaderboard_ranks WHERE computed_at >= NOW() - INTERVAL '7 days' GROUP BY source`,
+          []
+        )
+        return { data: result.rows, error: null }
+      } catch (err) {
+        return { data: null, error: err }
+      }
+    })() as unknown as PromiseLike<{ data: Array<{ source: string; computed_at?: string }> | null; error: unknown }>,
   ])
 
   // Build platform → latest computed_at map
