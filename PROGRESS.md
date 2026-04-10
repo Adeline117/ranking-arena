@@ -2,6 +2,12 @@
 
 > Auto-read by Claude Code at session start. Keep concise — archive completed items weekly.
 
+## Retro 2026-04-09 (first on file)
+1009 commits / 7 days, 49.5% fixes, type-check clean, 2212/2235 tests pass,
+27/27 platforms fresh. compute-leaderboard split 1775→940 lines this session.
+Top hotspot: route.ts (54 changes/wk, expected to drop next week post-split).
+Action items in `docs/retros/retro-2026-04-09.md`.
+
 ## Agent-Team Deep Optimization Session (2026-04-09)
 
 **Trigger**: User invoked `/agent team 深度优化` requesting parallel review across 5 dimensions (perf, data, security, product, infra).

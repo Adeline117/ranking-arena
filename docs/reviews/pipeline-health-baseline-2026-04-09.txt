@@ -1,0 +1,41 @@
+╔══════════════════════════════════════════╗
+║     Arena Pipeline 健康检查              ║
+╚══════════════════════════════════════════╝
+时间: 2026-04-10T01:47:25.292Z
+模式: 快速
+
+=== 2. 数据新鲜度检查 ===
+
+🟢 binance_futures      2h ago
+🟢 binance_spot         2h ago
+🟢 binance_web3         1h ago
+🟢 bybit                1h ago
+🟢 bybit_spot           2h ago
+🟢 okx_futures          1h ago
+🟢 okx_spot             1h ago
+🟢 okx_web3             1h ago
+🟢 bitget_futures       1h ago
+🟢 hyperliquid          1h ago
+🟢 gmx                  1h ago
+🟢 bitunix              1h ago
+🟢 gains                1h ago
+🟢 bitfinex             1h ago
+🟢 coinex               1h ago
+🟢 mexc                 1h ago
+🟢 bingx                1h ago
+🟢 bingx_spot           1h ago
+🟢 gateio               1h ago
+🟢 btcc                 1h ago
+🟢 jupiter_perps        2h ago
+🟢 aevo                 2h ago
+🟢 dydx                 1h ago
+🟢 toobit               2h ago
+🟢 xt                   8h ago
+🟢 etoro                2h ago
+🟢 weex                 1h ago
+
+总计: 27 新鲜, 0 陈旧, 0 严重
+
+=== 3. 修复建议 ===
+
+🎉 无需修复！所有 pipeline 状态正常。
