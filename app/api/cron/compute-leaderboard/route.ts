@@ -1605,18 +1605,13 @@ async function computeSeason(
   const rankMap = new Map<string, number>()
   scored.forEach((t, idx) => rankMap.set(`${t.source}:${t.source_trader_id}`, idx + 1))
 
-  // Fetch previous ranks to compute rank_change
+  // Build prev-rank lookup from currentScoreMap (already fetched above with rank column).
+  // Previously this ran a second leaderboard_ranks query for just (source, source_trader_id, rank)
+  // limited to 5000 rows — duplicate work, 200-600ms per cycle, and subtly different coverage
+  // than currentScoreMap. Using the map we already built keeps the data consistent and removes a round trip.
   const prevRankMap = new Map<string, number>()
-  const { data: prevRanks } = await supabase
-    .from('leaderboard_ranks')
-    .select('source, source_trader_id, rank')
-    .eq('season_id', season)
-    .not('rank', 'is', null)
-    .limit(5000)
-  if (prevRanks) {
-    for (const row of prevRanks) {
-      prevRankMap.set(`${row.source}:${row.source_trader_id}`, row.rank)
-    }
+  for (const [key, current] of currentScoreMap) {
+    if (current.rank != null) prevRankMap.set(key, current.rank)
   }
 
   // Upsert only changed rows in batches

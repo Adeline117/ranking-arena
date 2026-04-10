@@ -58,7 +58,7 @@
     },
     {
       "path": "/api/cron/warm-cache",
-      "schedule": "4,19,34,49 * * * *"
+      "schedule": "*/5 * * * *"
     },
     {
       "path": "/api/cron/pipeline-evaluate",
