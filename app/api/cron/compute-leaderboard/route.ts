@@ -27,6 +27,7 @@ import {
   warmupSsrHomepageCache,
   syncRedisSortedSet,
   revalidateRankingPages,
+  warmupLeaderboardCache,
 } from './post-processing'
 import { PipelineLogger } from '@/lib/services/pipeline-logger'
 import { sanitizeDisplayName } from '@/lib/utils/profanity'
@@ -319,10 +320,8 @@ export async function GET(request: NextRequest) {
       logger.warn(`Skipping WR/MDD derivation — only ${Math.round(remainingMs() / 1000)}s remaining`)
     }
 
-    // Fire-and-forget: warm Redis cache with top 100 for each season
-    fireAndForget(warmupLeaderboardCache(supabase), 'warmup-leaderboard-cache')
-
     // Post-processing blocks extracted to post-processing.ts.
+    fireAndForget(warmupLeaderboardCache(supabase, SEASONS), 'warmup-leaderboard-cache')
     fireAndForget(warmupSsrHomepageCache(), 'warmup-ssr-homepage-cache')
     fireAndForget(syncRedisSortedSet(supabase, SEASONS), 'sync-redis-sorted-set')
     fireAndForget(revalidateRankingPages(), 'revalidate-ranking-pages')
@@ -1939,34 +1938,4 @@ async function deriveWinRateMDD(supabase: ReturnType<typeof getSupabaseAdmin>): 
  * Runs as fire-and-forget after leaderboard computation so it doesn't
  * block the cron response. TTL = 30 min (matches cron schedule).
  */
-async function warmupLeaderboardCache(
-  supabase: ReturnType<typeof getSupabaseAdmin>
-): Promise<void> {
-  const { tieredSet } = await import('@/lib/cache/redis-layer')
-
-  // Pre-populate the exact cache keys that /api/traders uses
-  // Key pattern: leaderboard:{season}:{exchange}:{sort}:{order}:{cursor}:{limit}
-  const defaultLimit = 50
-  const warmupTargets = SEASONS.map(season => ({
-    season,
-    key: `leaderboard:${season}:all:arena_score:desc:start:${defaultLimit}`,
-  }))
-
-  await Promise.all(
-    warmupTargets.map(async ({ season, key }) => {
-      const { data, error } = await supabase
-        .from('leaderboard_ranks')
-        .select('source, source_trader_id, rank, arena_score, roi, pnl, win_rate, max_drawdown, handle, avatar_url, followers, copiers, trades_count, sharpe_ratio, trader_type, source_type, season_id')
-        .eq('season_id', season)
-        .not('arena_score', 'is', null)
-        .gt('arena_score', 0)
-        .order('arena_score', { ascending: false })
-        .limit(defaultLimit)
-
-      if (error || !data?.length) return
-
-      await tieredSet(key, data, 'warm', ['rankings', `season:${season}`])
-      logger.info(`[warmup] Cached ${data.length} rows → ${key}`)
-    })
-  )
-}
+// warmupLeaderboardCache extracted to ./post-processing.ts
