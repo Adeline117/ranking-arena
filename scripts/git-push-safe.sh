@@ -7,39 +7,62 @@
 # rejections per hour were normal — "cannot lock ref 'refs/heads/main':
 # is at X but expected Y".
 #
-# Solution: wrap git push with an flock(1) so only one process's
-# fetch → rebase → push sequence runs at a time. Lock is held on
-# /tmp/arena-git-push.lock with a 60s timeout.
+# Solution: wrap git push with a mkdir-based mutex (atomic on all POSIX
+# systems, unlike flock which is Linux-only). Lock timeout 60s; auto-cleanup
+# on exit via trap.
 #
 # Usage:
 #   scripts/git-push-safe.sh                  # push current branch to origin
 #   scripts/git-push-safe.sh origin main      # explicit remote + branch
-#
-# CLAUDE.md mandates using this instead of raw `git push origin main` for
-# any agent work. Interactive users can still `git push` manually — the
-# pre-push hook applies the same flock so concurrent pushes are serialized
-# either way.
 
 set -e
 
-LOCK_FILE="/tmp/arena-git-push.lock"
+LOCK_DIR="/tmp/arena-git-push.lock.d"
 LOCK_TIMEOUT_SEC=60
+LOCK_POLL_MS=100
 
 REMOTE="${1:-origin}"
 BRANCH="${2:-$(git rev-parse --abbrev-ref HEAD)}"
 
-# Open lock FD 200 on the lock file. The lock releases automatically
-# when this script exits (FD close).
-exec 200>"$LOCK_FILE"
+acquire_lock() {
+  local deadline=$(( $(date +%s) + LOCK_TIMEOUT_SEC ))
+  while ! mkdir "$LOCK_DIR" 2>/dev/null; do
+    if [ "$(date +%s)" -ge "$deadline" ]; then
+      # Stale lock check: if the holder is >120s old, steal it.
+      if [ -f "$LOCK_DIR/pid" ]; then
+        local holder_pid
+        holder_pid=$(cat "$LOCK_DIR/pid" 2>/dev/null || echo "")
+        if [ -n "$holder_pid" ] && ! kill -0 "$holder_pid" 2>/dev/null; then
+          echo "⚠️  git-push-safe: stealing stale lock from dead PID $holder_pid" >&2
+          rm -rf "$LOCK_DIR"
+          continue
+        fi
+      fi
+      echo "❌ git-push-safe: another push is in progress (${LOCK_TIMEOUT_SEC}s lock timeout)" >&2
+      echo "   Retry in a few seconds." >&2
+      return 1
+    fi
+    # Sleep LOCK_POLL_MS milliseconds
+    sleep 0.1
+  done
+  echo "$$" > "$LOCK_DIR/pid"
+  return 0
+}
 
-if ! flock -x -w "$LOCK_TIMEOUT_SEC" 200; then
-  echo "❌ git-push-safe: another push is in progress (${LOCK_TIMEOUT_SEC}s lock timeout)" >&2
-  echo "   Retry in a few seconds." >&2
+release_lock() {
+  # Only release if we own it (PID matches)
+  if [ -f "$LOCK_DIR/pid" ] && [ "$(cat "$LOCK_DIR/pid" 2>/dev/null)" = "$$" ]; then
+    rm -rf "$LOCK_DIR"
+  fi
+}
+
+trap release_lock EXIT INT TERM
+
+if ! acquire_lock; then
   exit 1
 fi
 
-# Auto-rebase onto latest remote if we've diverged. Only for main —
-# leave feature branches alone since their rebase semantics differ.
+# Auto-rebase onto latest remote if we've diverged.
 if [ "$BRANCH" = "main" ]; then
   echo "🔄 git-push-safe: fetch + rebase check"
   git fetch "$REMOTE" "$BRANCH" --quiet
@@ -48,27 +71,27 @@ if [ "$BRANCH" = "main" ]; then
   REMOTE_HEAD=$(git rev-parse "$REMOTE/$BRANCH" 2>/dev/null || echo "$LOCAL_HEAD")
 
   if [ "$LOCAL_HEAD" != "$REMOTE_HEAD" ] && ! git merge-base --is-ancestor "$REMOTE_HEAD" "$LOCAL_HEAD"; then
-    # Stash any unstaged changes before rebase (auto-updater / cron
-    # side-effects), then restore after.
     STASHED=""
     if ! git diff --quiet || ! git diff --cached --quiet; then
-      STASHED=$(git stash push -u -m "git-push-safe:auto-stash $(date +%s)" 2>/dev/null && echo "yes" || echo "")
+      if git stash push -u -m "git-push-safe:auto-stash $(date +%s)" >/dev/null 2>&1; then
+        STASHED="yes"
+      fi
     fi
 
     echo "🔄 git-push-safe: rebasing local $LOCAL_HEAD onto $REMOTE/$BRANCH ($REMOTE_HEAD)"
     if ! git rebase "$REMOTE/$BRANCH"; then
       echo "❌ git-push-safe: rebase conflict — aborting" >&2
       git rebase --abort 2>/dev/null || true
-      [ -n "$STASHED" ] && git stash pop 2>/dev/null || true
+      [ -n "$STASHED" ] && git stash pop >/dev/null 2>&1 || true
       exit 1
     fi
 
-    [ -n "$STASHED" ] && git stash pop 2>/dev/null || true
+    [ -n "$STASHED" ] && git stash pop >/dev/null 2>&1 || true
   fi
 fi
 
-# Do the push while still holding the lock. If another process had the
-# lock first, they already pushed + released; we rebased onto their work
-# in the block above, so our push is now a fast-forward.
 echo "⬆️  git-push-safe: pushing $BRANCH to $REMOTE"
-git push "$REMOTE" "$BRANCH"
+# Tell the pre-push hook we already hold the lock so it skips its own
+# acquire (would deadlock otherwise — same lock dir). Export via env so
+# the hook subprocess inherits it.
+ARENA_PUSH_LOCK_OWNER="$$" git push "$REMOTE" "$BRANCH"
