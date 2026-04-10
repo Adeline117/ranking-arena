@@ -86,8 +86,9 @@ async function getPlatformHealthData(): Promise<PlatformHealth[]> {
       emptyResponse as { data: Array<{ job_name: string; records_processed: number }> | null; error: unknown },
       'pipeline_logs records_processed'
     ),
-    // RPC executes server-side GROUP BY — returns one row per platform.
-    // Falls back to 50000-row query if RPC doesn't exist.
+    // RPC executes server-side GROUP BY (24ms) — but needs DB connection from pool.
+    // During cron storms, pool may be exhausted → connection wait adds seconds.
+    // 20s deadline to handle pool wait time.
     withDeadline(
       supabase.rpc('get_leaderboard_latest_by_source').then(
         r => r.error ? supabase
@@ -98,7 +99,7 @@ async function getPlatformHealthData(): Promise<PlatformHealth[]> {
           .limit(50000)
         : r
       ) as unknown as PromiseLike<{ data: Array<{ source: string; computed_at?: string; latest?: string }> | null; error: unknown }>,
-      10_000,
+      20_000,
       emptyResponse as { data: Array<{ source: string; computed_at?: string; latest?: string }> | null; error: unknown },
       'leaderboard_latest_by_source'
     ),
