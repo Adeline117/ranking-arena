@@ -1,29 +1,20 @@
 'use client'
 
 import { useState, useEffect, useCallback, useRef } from 'react'
-import Image from 'next/image'
 import dynamic from 'next/dynamic'
-import { useRouter } from 'next/navigation'
 import { tokens } from '@/lib/design-tokens'
 import { supabase } from '@/lib/supabase/client'
 import { Box, Text } from '../base'
-import { getAvatarGradient, getAvatarInitial, isWalletAddress, generateBlockieSvg } from '@/lib/utils/avatar'
 import { EXCHANGE_NAMES } from '@/lib/constants/exchanges'
 import { formatDisplayName } from '@/app/components/ranking/utils'
-import { ProBadgeOverlay } from '../ui/ProBadge'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import { useToast } from '@/app/components/ui/Toast'
-import TraderFollowButton from '../ui/TraderFollowButton'
-import WatchlistToggleButton from './WatchlistToggleButton'
-import UserFollowButton from '../ui/UserFollowButton'
-import ShareButton from '../common/ShareButton'
-import ShareRankCardButtons from './ShareRankCardButtons'
 import {
   formatAum, getActiveDays, formatActiveDays,
-  ActionButton,
 } from './TraderHeaderHelpers'
 import { TraderHeaderBadges } from './TraderHeaderBadges'
-import { useComparisonStore } from '@/lib/stores'
+import { TraderHeaderAvatar } from './TraderHeaderAvatar'
+import { TraderHeaderActions } from './TraderHeaderActions'
 
 // Lazy-load rarely-used components
 const _OnChainBadge = dynamic(() => import('./OnChainBadge').then(m => ({ default: m.OnChainBadge })), { ssr: false })
@@ -89,55 +80,9 @@ interface TraderHeaderProps {
 }
 
 // Helpers extracted to ./TraderHeaderHelpers.tsx
+// Avatar block extracted to ./TraderHeaderAvatar.tsx
+// Action buttons block extracted to ./TraderHeaderActions.tsx (incl. CompareToggle)
 // Exchange links (copy-trade, DEX view, referral) moved to ExchangeLinksBar below header
-
-
-/** Reactive Compare toggle button (P0-4) */
-function CompareToggle({ traderId, handle, source, avatarUrl }: { traderId: string; handle: string; source: string; avatarUrl?: string }) {
-  const isSelected = useComparisonStore(s => s.isSelected(traderId))
-  const addTrader = useComparisonStore(s => s.addTrader)
-  const removeTrader = useComparisonStore(s => s.removeTrader)
-  const canAddMore = useComparisonStore(s => s.canAddMore())
-  const { t } = useLanguage()
-
-  const handleToggle = () => {
-    if (isSelected) {
-      removeTrader(traderId)
-    } else {
-      addTrader({ id: traderId, handle, source, avatarUrl })
-    }
-  }
-
-  const label = isSelected ? (t('comparing') || 'Comparing') : (t('compare') || 'Compare')
-  const titleText = isSelected
-    ? (t('removeFromCompare') || 'Remove from Compare')
-    : !canAddMore
-      ? (t('compareListFull') || 'Compare list full (max 10)')
-      : (t('addToCompare') || 'Add to Compare')
-
-  return (
-    <ActionButton
-      onClick={handleToggle}
-      variant={isSelected ? 'accent' : 'ghost'}
-      icon={
-        isSelected ? (
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <polyline points="20 6 9 17 4 12" />
-          </svg>
-        ) : (
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
-            <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
-          </svg>
-        )
-      }
-    >
-      <span title={titleText} style={{ opacity: (!isSelected && !canAddMore) ? 0.5 : 1 }}>
-        {label}
-      </span>
-    </ActionButton>
-  )
-}
 
 export default function TraderHeader({
   handle,
@@ -180,10 +125,6 @@ export default function TraderHeader({
 }: TraderHeaderProps): React.ReactElement {
   const [userId, setUserId] = useState<string | null>(externalUserId ?? null)
   const [mounted, setMounted] = useState(false)
-  const [avatarHovered, setAvatarHovered] = useState(false)
-  const [avatarError, setAvatarError] = useState(false)
-  // Fade-in state: show gradient initial underneath until real avatar loads
-  const [avatarLoaded, setAvatarLoaded] = useState(false)
   const [followerCount, setFollowerCount] = useState(followers)
   // #34: Track follower count changes for animation
   const [followerAnimating, setFollowerAnimating] = useState(false)
@@ -196,9 +137,6 @@ export default function TraderHeader({
       return () => clearTimeout(timer)
     }
   }, [followerCount])
-  const [_badgesExpanded, _setBadgesExpanded] = useState(false)
-  const [_moreMenuOpen, _setMoreMenuOpen] = useState(false)
-  const router = useRouter()
   const [handleCopied, setHandleCopied] = useState(false)
   const { t } = useLanguage()
   const { showToast: _showToast } = useToast()
@@ -298,92 +236,13 @@ export default function TraderHeader({
         }}
       >
         {/* Avatar — compact 48px, scrolls to top on click */}
-        <Box
-          style={{ position: 'relative', flexShrink: 0, cursor: 'pointer' }}
-          onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
-          onMouseEnter={() => setAvatarHovered(true)}
-          onMouseLeave={() => setAvatarHovered(false)}
-        >
-          <Box
-            className="profile-header-avatar"
-            style={{
-              width: 48,
-              height: 48,
-              borderRadius: tokens.radius.full,
-              // Always use the gradient as background — it shows through as a blur
-              // placeholder until the real avatar image loads (and then gets covered).
-              // Previously the bg was flat bg.secondary (gray box) when avatarUrl
-              // existed, causing a jarring pop-in.
-              background: getAvatarGradient(traderId),
-              border: `2px solid ${avatarHovered ? tokens.colors.accent.primary : tokens.colors.border.primary}`,
-              display: 'grid',
-              placeItems: 'center',
-              fontWeight: tokens.typography.fontWeight.black,
-              fontSize: tokens.typography.fontSize.base,
-              color: tokens.colors.white,
-              overflow: 'hidden',
-              boxShadow: avatarHovered
-                ? `0 4px 16px var(--color-accent-primary-40)`
-                : `0 2px 8px var(--color-overlay-light)`,
-              transition: 'all 0.3s ease',
-              transform: avatarHovered ? 'scale(1.05)' : 'scale(1)',
-              cursor: 'pointer',
-              position: 'relative',
-            }}
-          >
-            {/* Initial letter shows behind the avatar until it loads */}
-            {effectiveAvatarUrl && !avatarError && !avatarLoaded && (
-              <Text
-                weight="black"
-                style={{
-                  position: 'absolute',
-                  inset: 0,
-                  display: 'grid',
-                  placeItems: 'center',
-                  color: tokens.colors.white,
-                  fontSize: '20px',
-                  lineHeight: '1',
-                  pointerEvents: 'none',
-                }}
-              >
-                {getAvatarInitial(handle)}
-              </Text>
-            )}
-            {effectiveAvatarUrl && !avatarError ? (
-              <Image
-                src={`/api/avatar?url=${encodeURIComponent(effectiveAvatarUrl)}`}
-                alt={handle}
-                width={48}
-                height={48}
-                sizes="(max-width: 640px) 40px, 48px"
-                priority
-                style={{
-                  width: '100%',
-                  height: '100%',
-                  objectFit: 'cover',
-                  position: 'relative',
-                  opacity: avatarLoaded ? 1 : 0,
-                  transition: 'opacity 0.3s ease-out',
-                }}
-                onLoad={() => setAvatarLoaded(true)}
-                onError={() => setAvatarError(true)}
-              />
-            ) : isWalletAddress(traderId) ? (
-              <img
-                src={generateBlockieSvg(traderId, 96)}
-                alt={handle}
-                width={48}
-                height={48}
-                style={{ width: '100%', height: '100%', objectFit: 'cover', imageRendering: 'pixelated' }}
-              />
-            ) : (
-              <Text weight="black" style={{ color: tokens.colors.white, fontSize: '20px', lineHeight: '1' }}>
-                {getAvatarInitial(handle)}
-              </Text>
-            )}
-          </Box>
-          {proBadgeTier === 'pro' && <ProBadgeOverlay position="bottom-right" />}
-        </Box>
+        <TraderHeaderAvatar
+          traderId={traderId}
+          handle={handle}
+          avatarUrl={avatarUrl}
+          claimedAvatarUrl={claimedAvatarUrl}
+          proBadgeTier={proBadgeTier}
+        />
 
         {/* Name + badges + subtitle */}
         <Box style={{ flex: 1, minWidth: 0 }}>
@@ -491,90 +350,20 @@ export default function TraderHeader({
       </Box>
 
       {/* Action buttons — Follow + Share (exchange links moved to ExchangeLinksBar below) */}
-      <Box
-        className="profile-header-actions action-buttons"
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          gap: 6,
-          flexShrink: 0,
-          position: 'relative',
-          zIndex: 1,
-        }}
-      >
-        {isOwnProfile && (
-          <ActionButton
-            onClick={() => router.push('/settings')}
-            variant="accent"
-            icon={
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
-                <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
-              </svg>
-            }
-          >
-            {t('editProfile')}
-          </ActionButton>
-        )}
-
-        {/* Follow icon */}
-        {!isOwnProfile && userId && (
-          isRegistered ? (
-            <UserFollowButton targetUserId={traderId} currentUserId={userId} size="sm" />
-          ) : (
-            <TraderFollowButton
-              traderId={traderId}
-              userId={userId}
-              onFollowChange={(isFollowing) => {
-                setFollowerCount(prev => isFollowing ? prev + 1 : Math.max(0, prev - 1))
-              }}
-            />
-          )
-        )}
-
-        {/* Watchlist star */}
-        {source && (
-          <WatchlistToggleButton
-            source={source}
-            sourceTraderID={traderId}
-            handle={handle}
-          />
-        )}
-
-        {/* Compare toggle (P0-4) */}
-        {!isOwnProfile && (
-          <CompareToggle
-            traderId={traderId}
-            handle={handle}
-            source={source || ''}
-            avatarUrl={effectiveAvatarUrl}
-          />
-        )}
-
-        {/* Share rank card buttons (Copy Link + Share on X) */}
-        <ShareRankCardButtons
-          handle={handle}
-          displayName={displayNameProp || formatDisplayName(handle, source)}
-          platform={source}
-          rank={rank}
-          roi={roi90d}
-          arenaScore={arenaScore}
-        />
-
-        {/* Share dropdown (Telegram, WhatsApp, etc.) */}
-        <ShareButton
-          data={{
-            type: 'trader',
-            url: typeof window !== 'undefined' ? window.location.href : `https://www.arenafi.org/trader/${encodeURIComponent(handle)}`,
-            traderName: displayNameProp || formatDisplayName(handle, source),
-            roi: roi90d,
-            period: '90D',
-          }}
-          size="sm"
-          variant="ghost"
-          showLabel={false}
-        />
-      </Box>
+      <TraderHeaderActions
+        traderId={traderId}
+        handle={handle}
+        source={source}
+        displayName={displayNameProp}
+        effectiveAvatarUrl={effectiveAvatarUrl}
+        isOwnProfile={isOwnProfile}
+        isRegistered={isRegistered}
+        userId={userId}
+        rank={rank}
+        roi90d={roi90d}
+        arenaScore={arenaScore}
+        onFollowChange={(delta) => setFollowerCount(prev => Math.max(0, prev + delta))}
+      />
 
     </Box>
   )

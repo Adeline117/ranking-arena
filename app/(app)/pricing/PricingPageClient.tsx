@@ -189,6 +189,7 @@ export default function PricingPageClient({ lifetimeCount = 0 }: PricingPageClie
             </ul>
             <Link
               href={ctaHref}
+              onClick={() => trackEvent('click_upgrade_cta', { plan: 'free', billing })}
               style={{
                 display: 'block',
                 padding: '14px 0',
@@ -265,6 +266,7 @@ export default function PricingPageClient({ lifetimeCount = 0 }: PricingPageClie
 
             <Link
               href={ctaHref}
+              onClick={() => trackEvent('click_upgrade_cta', { plan: 'pro', billing })}
               style={{
                 display: 'block',
                 padding: '14px 0',
@@ -389,6 +391,7 @@ export default function PricingPageClient({ lifetimeCount = 0 }: PricingPageClie
 
             <Link
               href={ctaHref}
+              onClick={() => trackEvent('click_upgrade_cta', { plan: 'lifetime' })}
               style={{
                 display: 'block',
                 padding: '14px 0',

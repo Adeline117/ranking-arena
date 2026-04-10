@@ -9,6 +9,7 @@ import { usePremium, FEATURE_LIMITS } from '@/lib/premium/hooks'
 import { ButtonSpinner } from '@/app/components/ui/LoadingSpinner'
 import { useToast } from '@/app/components/ui/Toast'
 import { logger } from '@/lib/logger'
+import { trackEvent } from '@/lib/analytics/track'
 import { supabase } from '@/lib/supabase/client'
 import { getCsrfHeaders } from '@/lib/api/client'
 import { type MembershipInfo, type PlanType } from './membership-config'
@@ -66,6 +67,10 @@ export default function MembershipContent() {
 
   const handleSubscribe = async () => {
     setSubscribing(true)
+    // Funnel event #2: user clicked the subscribe button. CEO review
+    // 2026-04-09 flagged that there's no visibility between view_pricing and
+    // pro_subscribe (the success page) — start_checkout closes that gap.
+    trackEvent('start_checkout', { plan: selectedPlan })
     try {
       let { data: { session } } = await supabase.auth.getSession()
       if (!session?.access_token) {
