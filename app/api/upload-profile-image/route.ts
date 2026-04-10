@@ -6,6 +6,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getAuthUser, getSupabaseAdmin } from '@/lib/supabase/server'
 import { checkRateLimit, RateLimitPresets } from '@/lib/utils/rate-limit'
+import { sniffImageFile } from '@/lib/utils/image-magic-bytes'
 import logger from '@/lib/logger'
 
 export async function POST(request: NextRequest) {
@@ -39,16 +40,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Invalid bucket' }, { status: 400 })
     }
 
-    // Validate file type
-    const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/webp']
-    if (!allowedTypes.includes(file.type)) {
-      return NextResponse.json({
-        error: 'Only JPG, PNG, GIF, WebP formats are supported',
-        code: 'INVALID_FILE_TYPE'
-      }, { status: 400 })
-    }
-
-    // Validate file size
+    // Validate file size FIRST so we don't load a huge attacker file into memory
     const maxSize = bucket === 'avatars' ? 5 * 1024 * 1024 : 10 * 1024 * 1024
     if (file.size > maxSize) {
       return NextResponse.json({
@@ -57,18 +49,27 @@ export async function POST(request: NextRequest) {
       }, { status: 400 })
     }
 
+    // SECURITY (audit P1-SEC-2 follow-up): magic-byte sniff.
+    // file.type and file.name are client-controlled and trivially spoofable.
+    const sniffed = await sniffImageFile(file, ['jpeg', 'png', 'gif', 'webp', 'avif'])
+    if (!sniffed) {
+      return NextResponse.json({
+        error: 'Only JPG, PNG, GIF, WebP, AVIF formats are supported',
+        code: 'INVALID_FILE_TYPE'
+      }, { status: 400 })
+    }
+
     // Create Supabase client with service role (bypasses RLS)
     const supabase = getSupabaseAdmin()
 
-    // Generate unique filename
-    const fileExt = file.name.split('.').pop()?.toLowerCase() || 'jpg'
-    const fileName = `${userId}-${Date.now()}.${fileExt}`
+    // Generate unique filename — use SERVER-derived extension from sniffed magic bytes
+    const fileName = `${userId}-${Date.now()}.${sniffed.extension}`
 
-    // Upload file
+    // Upload file with SNIFFED Content-Type, not client-supplied
     const { error: uploadError } = await supabase.storage
       .from(bucket)
       .upload(fileName, file, {
-        contentType: file.type,
+        contentType: sniffed.mime,
         upsert: true
       })
 
