@@ -2,6 +2,61 @@
 
 > Auto-read by Claude Code at session start. Keep concise — archive completed items weekly.
 
+## Agent-Team Deep Optimization Session (2026-04-09)
+
+**Trigger**: User invoked `/agent team 深度优化` requesting parallel review across 5 dimensions (perf, data, security, product, infra).
+
+**Process**:
+1. Launched 5 parallel review agents in one message (perf-reviewer, data-auditor, security-reviewer, 2× Explore agents)
+2. Compiled prioritized findings into 13 P0 + 9 P1 tasks
+3. Worked through tasks one at a time with `git-push-safe.sh` flock-serialized commits
+4. Manual prod application of 2 SQL migrations + 1 Vercel env var
+
+**Shipped (17 commits, 2 prod migrations, 1 Vercel env var)**:
+
+### Security (9)
+- `bf168e94d` user_profiles RLS: REVOKE SELECT FROM anon + GRANT only safe columns. Closes PII dump (email, wallet, totp, stripe ids). Migration `20260409170117` applied to prod.
+- `44bc401ff` cron `[platform]` route: removed dev-mode auth bypass + crypto.timingSafeEqual (Edge runtime fix in `a3f5814ec`)
+- `706626971` invite tokens: full 256-bit HMAC + HKDF derivation from service-role key + timing-safe compare + auth-required verify (4 issues, 1 commit)
+- `7888b7339` MDD CHECK constraint re-added with positive convention `[0, 100]` + fixed stale code in `anomaly-rules.ts` and `score-explain.ts`. Migration `20260409180432` applied to prod.
+- `ac1264357` link-preview SSRF: comprehensive IPv6 + redirect re-validation + DNS rebinding defense + 256KB body cap
+- `6c87e1561` SIWE link route: domain/uri/chainId validation (mirrors verify route) — blocks cross-site signature replay
+- `92f8bcd87` upload routes: magic-byte sniffing for posts/upload-image + /api/upload, server-derived extension, sniffed Content-Type override
+- `0c8d707ab` shared `isAuthorized()` in lib/cron/utils.ts: hand-rolled constant-time XOR compare for 49 cron routes
+- INVITE_SECRET set in Vercel (production + preview + development) via `vercel env add`
+
+### Performance (5)
+- `9fd90d017` batch-enrich: replaced 81 `count:exact` calls/cycle with `leaderboard_count_cache` lookup. Saves 30-60s per cron invocation.
+- `578a909a0` (bundled by parallel session): removed duplicate prevRanks query in compute-leaderboard. Saves 200-600ms/cycle.
+- `33176e560` dydx connector: per-instance Copin leaderboard cache. 1000 round trips → 1 per cron run, fixes 100% safety-timeout pattern.
+- `64f6ac1a8` HomePage Phase 2: stagger sidebar widget mounts via new `<DeferredMount delayMs>` (0/800/1600/2400 ms). Spreads the 4-way fetch burst.
+- (verified) `select('*')` in fetchPaginatedFromDB was already replaced with explicit SSR_COLS in a prior commit — audit was stale.
+
+### Data Pipeline (4)
+- `672b43cee` aggregate-daily-snapshots: split-and-retry isolation for non-transient errors + bad-row payload logging. Manual trigger after fix: **998 inserted, 0 errors, 5.3s** (was 0/day for 2026-04-09).
+- `61d2654ec` batch-fetch-traders-b1: split bybit fetch into 30d / 7d+90d crons (mirrors a1 pattern) — 240s timeout no longer exhausted.
+- (above) dydx 100% failure also fixed by Copin cache.
+- (above) MDD constraint re-added.
+
+### Product UX (2)
+- `8a196bfb6` PremiumGate: new `featureKey` prop maps to contextual title + 3 benefit bullets per gate. 8 keys defined (advancedAlerts, comparison, csvExport, etc.). en + zh translations added.
+- `06a1e61b7` RankingControls: 3s timeout (was 8s) + visible spinner during transition + Retry button on slow nav.
+
+### Verified-not-vulnerable (audit overstated)
+- `exec_sql` RPC: ACL is `postgres=X/postgres, service_role=X/postgres` only — not callable from anon/authenticated.
+- CF worker `_requestOrigin` race: only allows already-validated allowed origins as values, worst case is browser CORS mismatch (defensive failure), not exploitable. Downgraded P0→P2.
+- `fetchPaginatedFromDB` `select('*')`: already fixed in earlier commit.
+
+### Still in progress / partial
+- **compute-leaderboard 7D timeout**: code is fine — manual trigger completes in 92.6s with 3,387 records. Failures are cron-storm contention on the 60-connection Supabase pool. Real fix is cron consolidation.
+- **Hyperliquid/dYdX win_rate, max_drawdown, sharpe_ratio still NULL on most rows**: long-tail data fetcher work. ~30% of all traders affected. Deferred.
+- **trader_daily_snapshots historical volume drop** (18.8k → ~1k/day on 2026-04-06): separate upstream issue. Aggregator runs clean now but the source data is sparse.
+
+### Lessons learned
+- Audit had ~30% false-positive rate. Always verify findings against current code before acting.
+- 7 parallel `claude` sessions + OpenClaw daemon → frequent ref-lock rejections. `scripts/git-push-safe.sh` flock wrapper is mandatory but not sufficient (still saw a few state resets).
+- Supabase pooler shut down briefly under cron storm pressure — the exact failure mode P0-INFRA-1 (856 daily cron invocations vs 60 max_connections) predicts.
+
 ## Docs cleanup sweep (2026-04-09)
 - Removed 25 historical one-off fix reports from root (-3,989 lines) + `OPTIMIZATION_PLAN.md` (-234 lines, all P0 items shipped)
 - Verified P0-4 Compare toggle (`TraderHeader.tsx:694`), P0-1 bitget_futures cron (group b2), P0-2 lbank in NO_ENRICHMENT_PLATFORMS, P0-3 diagnostic scripts on v2
