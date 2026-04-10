@@ -9,11 +9,11 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getSupabaseAdmin, requireAuth, checkRateLimit, RateLimitPresets } from '@/lib/api'
 import { randomBytes } from 'crypto'
 import logger from '@/lib/logger'
+import { sniffImageFile } from '@/lib/utils/image-magic-bytes'
 
 export const dynamic = 'force-dynamic'
 
 const MAX_FILE_SIZE = 2 * 1024 * 1024 // 2MB
-const ALLOWED_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/gif']
 const ALLOWED_BUCKETS = ['reports', 'avatars', 'posts']
 
 export async function POST(request: NextRequest) {
@@ -38,20 +38,27 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'File too large (max 2MB)' }, { status: 400 })
     }
 
-    if (!ALLOWED_TYPES.includes(file.type)) {
-      return NextResponse.json({ error: 'Invalid file type. Allowed: JPEG, PNG, WebP, GIF' }, { status: 400 })
+    // SECURITY (audit P1-SEC-2): sniff magic bytes — DO NOT trust client
+    // file.type or file.name extension. See lib/utils/image-magic-bytes.ts.
+    const sniffed = await sniffImageFile(file, ['jpeg', 'png', 'gif', 'webp', 'avif'])
+    if (!sniffed) {
+      return NextResponse.json(
+        { error: 'Invalid file type. Allowed: JPEG, PNG, WebP, GIF, AVIF' },
+        { status: 400 },
+      )
     }
 
     const supabase = getSupabaseAdmin()
-    const ext = file.name.split('.').pop() || 'png'
-    const fileName = `${user.id}/${randomBytes(8).toString('hex')}.${ext}`
+    // Use SERVER-derived extension from sniffed magic bytes (not client filename).
+    const fileName = `${user.id}/${randomBytes(8).toString('hex')}.${sniffed.extension}`
 
     const buffer = Buffer.from(await file.arrayBuffer())
 
     const { error: uploadError } = await supabase.storage
       .from(bucket)
       .upload(fileName, buffer, {
-        contentType: file.type,
+        // Use sniffed Content-Type, not client-supplied. Prevents MIME confusion attacks.
+        contentType: sniffed.mime,
         upsert: false,
       })
 
