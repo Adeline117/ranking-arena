@@ -13,7 +13,13 @@
 
 ## 🔴 P0 - Critical
 
-_None currently_
+### 2026-05-09 Commercial Go/No-Go (30 days from paywall live)
+- [ ] **Decision point: paying subs ≥ 20 by 2026-05-09?**
+      Current: 2 (per `/admin/pro-metrics` + weekly-metrics Telegram push).
+      If YES → accelerate product on core path (live signals, copy flow).
+      If NO → re-evaluate per CEO review 2026-04-09: pivot to B2B data API,
+      or execute scope kill list (`docs/reviews/scope-audit-2026-04-09.md`).
+      Source: `docs/reviews/2026-04-09-full-review.md` bottom line.
 
 ---
 
@@ -28,6 +34,22 @@ _None currently_
 - [ ] BloFin Sharpe: now Mac Mini only (geo-blocked from VPS + CF). Watch
       `scripts/openclaw/fetch-blofin.mjs` success rate
 - [ ] eToro CopySim: retry after 24h IP cooldown
+
+### Follow-ups from 5-agent review 2026-04-09
+- [ ] TraderHeader complete decomp: extract avatar block + actions block
+      (badge row already extracted in b11eeeea1). 40-prop interface still
+      needs trimming.
+- [ ] compute-leaderboard main loop split: computeSeason + main season loop
+      still in route.ts (2000 lines). Post-processing already extracted in
+      fc9142bee.
+- [ ] Execute scope audit P0 deletions: `/frame`, `/kol`, `/tip`,
+      `/channels`. Spec at `docs/reviews/scope-audit-2026-04-09.md`.
+- [ ] PostHog instrumentation on pricing checkout funnel — signup rate /
+      paywall hit rate / cart abandonment. weekly-metrics only sees the
+      result, not the funnel.
+- [ ] Trust ratio metric: needs dedicated RPC or materialized view. Current
+      query against `leaderboard_ranks` times out at 30s Supabase statement
+      limit (known in weekly-metrics.mjs). Add `get_top_trust_ratio()` RPC.
 
 ---
 
