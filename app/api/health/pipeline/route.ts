@@ -14,7 +14,7 @@ import { PipelineLogger } from '@/lib/services/pipeline-logger'
 import { DEAD_BLOCKED_PLATFORMS, EXCHANGE_CONFIG } from '@/lib/constants/exchanges'
 import { getSupportedPlatforms } from '@/lib/cron/fetchers'
 import { getSupabaseAdmin } from '@/lib/supabase/server'
-import { tieredGetOrSet } from '@/lib/cache/redis-layer'
+import { tieredGet, tieredSet } from '@/lib/cache/redis-layer'
 import { getFireAndForgetStats } from '@/lib/utils/logger'
 
 export const dynamic = 'force-dynamic'
@@ -176,11 +176,26 @@ export async function GET(req: NextRequest) {
   }
 
   try {
-    // Cache the entire health response for 2 minutes (health data doesn't change fast)
+    // Cache the entire health response for 2 minutes (health data doesn't change fast).
+    //
+    // ROOT CAUSE FIX (2026-04-09): previously used tieredGetOrSet which cached
+    // EVERY response — including degraded ones where per-query deadlines fired
+    // and returned empty fallbacks. A single transient PostgREST schema cache
+    // blip would poison the cache for 15 minutes, making status=critical stick
+    // around long after the underlying issue resolved.
+    //
+    // Fix: read cache first; if miss, compute; if computed result is degraded
+    // (all queries returned empty fallbacks), return directly WITHOUT writing
+    // to cache so the next request retries the underlying queries.
     const CACHE_KEY = 'api:health:pipeline'
-    const result = await tieredGetOrSet(
-      CACHE_KEY,
-      async () => {
+    const cached = await tieredGet(CACHE_KEY, 'warm')
+    if (cached.data !== null) {
+      return NextResponse.json(cached.data, {
+        headers: { 'Cache-Control': 'no-store', 'X-Cache': 'HIT' },
+      })
+    }
+
+    const compute = async () => {
         // Hard per-query deadlines: if any one query gets stuck, we still return
         // a (partial) response instead of hanging the monitor's fetch.
         const [jobStatuses, jobStats, recentFailuresRaw, platformHealth] = await Promise.all([
@@ -271,13 +286,29 @@ export async function GET(req: NextRequest) {
           recentFailures,
           backgroundFailures,
         }
-      },
-      'warm', // warm tier: 2 min memory, 15 min Redis (we override with custom TTL via tier)
-      ['pipeline-health']
-    )
+    }
+
+    const result = await compute()
+
+    // Detect degraded response: all underlying queries returned their empty
+    // fallback, meaning per-query deadlines fired or PostgREST was unreachable.
+    // Skip cache write so the next request retries the actual queries.
+    const isDegraded =
+      result.jobs.length === 0 &&
+      result.stats.length === 0 &&
+      result.platformHealth.length === 0
+
+    if (!isDegraded) {
+      // Fire-and-forget cache write — don't block the response on Redis.
+      tieredSet(CACHE_KEY, result, 'warm', ['pipeline-health']).catch(() => {})
+    }
 
     return NextResponse.json(result, {
-      headers: { 'Cache-Control': 'no-store' },
+      headers: {
+        'Cache-Control': 'no-store',
+        'X-Cache': 'MISS',
+        'X-Degraded': isDegraded ? '1' : '0',
+      },
     })
   } catch (_err) {
     return NextResponse.json(
