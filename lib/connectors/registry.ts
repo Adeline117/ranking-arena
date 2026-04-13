@@ -224,7 +224,7 @@ export async function initializeConnectors(): Promise<void> {
   lazy('bingx:futures', () => import('./platforms/bingx-futures'), 'BingxFuturesConnector', 'bingx')
   lazy('gateio:futures', () => import('./platforms/gateio-futures'), 'GateioFuturesConnector', 'gateio')
   lazy('xt:futures', () => import('./platforms/xt-futures'), 'XtFuturesConnector', 'xt')
-  lazy('lbank:futures', () => import('./platforms/lbank-futures'), 'LbankFuturesConnector', 'lbank')
+  // lbank: DEAD (API 404 since 2026-04) — connector removed 2026-04-13
   lazy('blofin:futures', () => import('./platforms/blofin-futures'), 'BlofinFuturesConnector', 'blofin')
 
   // New CEX Connectors
@@ -234,7 +234,7 @@ export async function initializeConnectors(): Promise<void> {
   lazy('toobit:futures', () => import('./platforms/toobit-futures'), 'ToobitFuturesConnector', 'toobit')
   // crypto_com: DELETED — no copy trading feature on web (2026-03-19)
   lazy('etoro:spot', () => import('./platforms/etoro-spot'), 'EtoroSpotConnector', 'etoro')
-  lazy('bitget_spot:spot', () => import('./platforms/bitget-spot'), 'BitgetSpotConnector', 'bitget_spot')
+  // bitget_spot: DEAD (no leaderboard API) — connector removed 2026-04-13
   lazy('binance_spot:spot', () => import('./platforms/binance-spot'), 'BinanceSpotConnector', 'binance_spot')
 
   // DEX Connectors
@@ -242,11 +242,8 @@ export async function initializeConnectors(): Promise<void> {
   lazy('dydx:perp', () => import('./platforms/dydx-perp'), 'DydxPerpConnector', 'dydx')
   lazy('gmx:perp', () => import('./platforms/gmx-perp'), 'GmxPerpConnector', 'gmx')
   lazy('gains:perp', () => import('./platforms/gains-perp'), 'GainsPerpConnector', 'gains')
-  lazy('kwenta:perp', () => import('./platforms/kwenta-perp'), 'KwentaPerpConnector', 'kwenta')
-  connectorRegistry.registerLazy('mux:perp' as RegistryKey, async () => {
-    const { MuxPerpConnector } = await import('./platforms/mux-perp')
-    return new MuxPerpConnector()
-  })
+  // kwenta: DEAD (needs TheGraph API key, suspended) — connector removed 2026-04-13
+  // mux: DEAD (needs TheGraph API key) — connector removed 2026-04-13
   lazy('aevo:perp', () => import('./platforms/aevo-perp'), 'AevoPerpConnector', 'aevo')
   lazy('jupiter_perps:perp', () => import('./platforms/jupiter-perps-perp'), 'JupiterPerpsPerpConnector', 'jupiter_perps')
   lazy('drift:perp', () => import('./platforms/drift-perp'), 'DriftPerpConnector', 'drift')
