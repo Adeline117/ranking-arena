@@ -78,7 +78,7 @@ export const PLATFORM_ROUTES: Record<string, RouteConfig> = {
   phemex:          { routes: ['mac_mini'],                     notes: 'CloudFront geo-blocks SG VPS. Mac Mini only.' },
 
   // ─── FIXED (2026-03-15) ───────────────────────────────────────
-  htx_futures:     { routes: ['direct', 'vps_sg'],             notes: 'Switched to futures.htx.com ranking API (GET)' },
+  htx_futures:     { routes: ['direct', 'vps_sg', 'vps_jp', 'residential'], notes: 'futures.htx.com ranking API — geo-blocks Vercel hnd1 + VPS SG intermittently (260h stale 2026-04-13). Added JP + residential fallback.' },
   xt:              { routes: ['scraper_sg'],                    notes: 'API 404 but /fapi/user/v1 works via Playwright page.evaluate' },
 
   // ─── DEX (special handling) ──────────────────────────────────
