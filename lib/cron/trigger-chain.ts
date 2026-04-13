@@ -21,6 +21,44 @@ const DEDUP_WINDOW_MS = 5 * 60 * 1000 // 5 minutes — skip if last trigger was 
 // In-memory fallback dedup when Redis is unavailable
 let memoryLastRun = 0
 
+/**
+ * Fetch with retry + exponential backoff for downstream job triggers.
+ * Replaces bare fetch() calls that silently failed on transient errors.
+ */
+async function fetchWithRetry(
+  url: string,
+  headers: Record<string, string>,
+  timeoutMs: number,
+  maxRetries: number,
+  source: string
+): Promise<Record<string, unknown> | null> {
+  let lastError: Error | null = null
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    try {
+      const res = await fetch(url, {
+        method: 'GET',
+        headers,
+        signal: AbortSignal.timeout(timeoutMs),
+      })
+      const body = await res.json().catch(() => null)
+      if (res.ok) return body as Record<string, unknown>
+      // Non-retryable status codes
+      if (res.status === 401 || res.status === 404) {
+        throw new Error(`HTTP ${res.status} (non-retryable)`)
+      }
+      lastError = new Error(`HTTP ${res.status}`)
+    } catch (err) {
+      lastError = err instanceof Error ? err : new Error(String(err))
+    }
+    if (attempt < maxRetries) {
+      const delay = Math.min(1000 * Math.pow(2, attempt), 10_000)
+      logger.warn(`[${source}] Retry ${attempt + 1}/${maxRetries} in ${delay}ms: ${lastError?.message}`)
+      await new Promise(r => setTimeout(r, delay))
+    }
+  }
+  throw lastError ?? new Error('fetchWithRetry: unknown error')
+}
+
 /** Structured metadata passed from upstream job to downstream (Anthropic harness handoff pattern) */
 export interface TraceMetadata {
   trace_id: string
@@ -84,15 +122,10 @@ export function triggerDownstreamRefresh(source: string, trace?: TraceMetadata):
       const traceQs = trace ? `?trace_id=${trace.trace_id}&platforms=${trace.platforms_updated.join(',')}` : ''
       logger.info(`[${source}] Triggering compute-leaderboard (trace=${traceId})...`)
       const computeStart = Date.now()
-      const computeRes = await fetch(`${baseUrl}/api/cron/compute-leaderboard${traceQs}`, {
-        method: 'GET',
-        headers,
-        signal: AbortSignal.timeout(240_000), // 4min timeout (compute can be slow)
-      })
-      const computeBody = await computeRes.json().catch(() => null)
+      const computeBody = await fetchWithRetry(`${baseUrl}/api/cron/compute-leaderboard${traceQs}`, headers, 240_000, 2, source)
       const rolledBack = computeBody?.rolled_back as string[] | undefined
       logger.info(
-        `[${source}] compute-leaderboard: ${computeRes.status} (${Date.now() - computeStart}ms, trace=${traceId})${rolledBack?.length ? ` rolled_back=[${rolledBack.join(',')}]` : ''}`
+        `[${source}] compute-leaderboard: ok (${Date.now() - computeStart}ms, trace=${traceId})${rolledBack?.length ? ` rolled_back=[${rolledBack.join(',')}]` : ''}`
       )
 
       // If ALL seasons rolled back due to degradation, skip downstream — data didn't change
@@ -105,14 +138,9 @@ export function triggerDownstreamRefresh(source: string, trace?: TraceMetadata):
       logger.info(`[${source}] Triggering pipeline-evaluate (trace=${traceId})...`)
       const evalStart = Date.now()
       try {
-        const evalRes = await fetch(`${baseUrl}/api/cron/pipeline-evaluate${traceQs}`, {
-          method: 'GET',
-          headers,
-          signal: AbortSignal.timeout(60_000), // 60s timeout
-        })
-        const evalBody = await evalRes.json().catch(() => null)
+        const evalBody = await fetchWithRetry(`${baseUrl}/api/cron/pipeline-evaluate${traceQs}`, headers, 60_000, 1, source)
         logger.info(
-          `[${source}] pipeline-evaluate: ${evalRes.status} score=${evalBody?.score ?? '?'}/100 (${Date.now() - evalStart}ms, trace=${traceId})`
+          `[${source}] pipeline-evaluate: score=${evalBody?.score ?? '?'}/100 (${Date.now() - evalStart}ms, trace=${traceId})`
         )
       } catch (evalErr) {
         // Evaluator failure must not block cache warming
@@ -122,13 +150,9 @@ export function triggerDownstreamRefresh(source: string, trace?: TraceMetadata):
       // ── 3. Trigger warm-cache ────────────────────────────────────
       logger.info(`[${source}] Triggering warm-cache...`)
       const cacheStart = Date.now()
-      const cacheRes = await fetch(`${baseUrl}/api/cron/warm-cache`, {
-        method: 'GET',
-        headers,
-        signal: AbortSignal.timeout(30_000), // 30s timeout (warm-cache is lightweight)
-      })
+      await fetchWithRetry(`${baseUrl}/api/cron/warm-cache`, headers, 30_000, 1, source)
       logger.info(
-        `[${source}] warm-cache: ${cacheRes.status} (${Date.now() - cacheStart}ms)`
+        `[${source}] warm-cache: ok (${Date.now() - cacheStart}ms)`
       )
 
       logger.info(`[${source}] Downstream refresh complete (trace=${traceId})`)
