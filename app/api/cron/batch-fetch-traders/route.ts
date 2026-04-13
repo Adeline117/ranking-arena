@@ -237,9 +237,13 @@ export async function GET(request: NextRequest) {
     okx_web3: 120000,
     // Fast direct APIs
     okx_spot: 120000, // Was 60s — too tight: fetch + enrich both need budget. Observed enrich timing out at 22s
-    bitunix: 120000, // Increased from 60s: VPS proxy adds latency, observed 137s during outage
+    bitunix: 180000, // Was 120s but observed 137s during outage — 180s gives 30% headroom
     coinex: 120000,  // Was 90s — same enrichment squeeze pattern
     dydx: 240000, // Copin API: 500/page × 2 pages × 3 windows + DB writes (upsert 3000 rows). Needs generous timeout.
+    // Platforms that timed out at 90s default (pipeline health 2026-04-13):
+    gains: 120000, // /open-trades endpoint can be slow; 4 enrichment timeouts in 48h
+    etoro: 120000, // sapi rankings can be slow; 4 enrichment timeouts in 48h
+    weex: 150000,  // VPS scraper, described as "slow" in group comments
     // Others: default 90s (PLATFORM_TIMEOUT_MS)
   }
 
