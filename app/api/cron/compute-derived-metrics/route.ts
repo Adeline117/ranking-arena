@@ -10,6 +10,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { logger } from '@/lib/logger'
 import { getSupabaseAdmin } from '@/lib/supabase/server'
+import { getReadReplica } from '@/lib/supabase/read-replica'
 import { PipelineLogger } from '@/lib/services/pipeline-logger'
 import { env } from '@/lib/env'
 import { DATA_QUALITY_BOUNDARY, VALIDATION_BOUNDS } from '@/lib/pipeline/types'
@@ -25,12 +26,13 @@ export async function GET(request: NextRequest) {
   }
 
   const supabase = getSupabaseAdmin()
+  const readDb = getReadReplica() // Read replica for heavy analytical reads
   const startTime = Date.now()
   const plog = await PipelineLogger.start('compute-derived-metrics')
 
   try {
     // Get all active platforms from leaderboard_ranks
-    const { data: _platformRows } = await supabase
+    const { data: _platformRows } = await readDb
       .from('leaderboard_ranks')
       .select('source')
       .eq('season_id', '90D')
@@ -43,7 +45,7 @@ export async function GET(request: NextRequest) {
     const ninetyDaysAgo = rawNinetyDaysAgo > DATA_QUALITY_BOUNDARY ? rawNinetyDaysAgo : DATA_QUALITY_BOUNDARY
 
     // Fetch all platform names from recent daily snapshots
-    const { data: distinctPlatforms } = await supabase
+    const { data: distinctPlatforms } = await readDb
       .from('trader_daily_snapshots')
       .select('platform')
       .gte('date', ninetyDaysAgo)
@@ -69,7 +71,7 @@ export async function GET(request: NextRequest) {
       let offset = 0
       let hasMore = true
       while (hasMore) {
-        const { data: platformDaily } = await supabase
+        const { data: platformDaily } = await readDb
           .from('trader_daily_snapshots')
           .select('platform, trader_key, date, daily_return_pct, roi')
           .eq('platform', platform)
@@ -168,7 +170,7 @@ export async function GET(request: NextRequest) {
     const betaAlphaUpdates: Array<{ key: string; beta_btc: number; beta_eth: number; alpha: number | null }> = []
 
     // Fetch BTC and ETH daily returns from market_benchmarks table
-    const { data: benchmarkRows } = await supabase
+    const { data: benchmarkRows } = await readDb
       .from('market_benchmarks')
       .select('symbol, date, daily_return_pct')
       .in('symbol', ['BTC', 'ETH'])

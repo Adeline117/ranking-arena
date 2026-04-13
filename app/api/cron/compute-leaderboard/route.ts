@@ -11,6 +11,7 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { getSupabaseAdmin } from '@/lib/api'
+import { getReadReplica } from '@/lib/supabase/read-replica'
 import {
   calculateArenaScore,
   wilsonConfidenceMultiplier,
@@ -112,6 +113,7 @@ export async function GET(request: NextRequest) {
   }
 
   const supabase = getSupabaseAdmin()
+  const readDb = getReadReplica() // Read replica for SELECT queries (falls back to primary if not configured)
   const startTime = Date.now()
   const stats = { seasons: {} as Record<string, number> }
   const warnings: string[] = []
@@ -123,7 +125,7 @@ export async function GET(request: NextRequest) {
     // PERF FIX: was count:exact (25s+ per season × 3 = 75s wasted)
     const previousCounts: Record<string, number> = {}
     for (const season of targetSeasons) {
-      const { data: cacheRow } = await supabase
+      const { data: cacheRow } = await readDb
         .from('leaderboard_count_cache')
         .select('total_count')
         .eq('season_id', season)
@@ -221,7 +223,7 @@ export async function GET(request: NextRequest) {
       try {
         const recentCutoff = new Date(Date.now() - 7 * 24 * 3600 * 1000).toISOString()
         // Fetch recent v2 rows missing scores
-        const { data: missingScores } = await supabase
+        const { data: missingScores } = await readDb
           .from('trader_snapshots_v2')
           .select('id, platform, trader_key, window')
           .is('arena_score', null)
@@ -231,7 +233,7 @@ export async function GET(request: NextRequest) {
         if (missingScores && missingScores.length > 0) {
           // Batch lookup from leaderboard_ranks
           const traderKeys = [...new Set(missingScores.map(r => r.trader_key))]
-          const { data: ranks } = await supabase
+          const { data: ranks } = await readDb
             .from('leaderboard_ranks')
             .select('source, source_trader_id, season_id, arena_score')
             .in('source_trader_id', traderKeys.slice(0, 500))

@@ -15,6 +15,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { DATA_QUALITY_BOUNDARY } from '@/lib/pipeline/types'
 import { PipelineLogger } from '@/lib/services/pipeline-logger'
 import { getSupabaseAdmin } from '@/lib/supabase/server'
+import { getReadReplica } from '@/lib/supabase/read-replica'
 import {
   calculateSortinoRatio,
   calculateCalmarRatio,
@@ -38,6 +39,7 @@ export async function POST(request: NextRequest) {
   }
 
   const supabase = getSupabaseAdmin()
+  const readDb = getReadReplica() // Read replica for heavy analytical reads
   const plog = await PipelineLogger.start('calculate-advanced-metrics')
 
   const startTime = Date.now()
@@ -59,7 +61,7 @@ export async function POST(request: NextRequest) {
       win_rate: string | null
     }> | null = null
 
-    const { data: tradersResult, error: fetchError } = await supabase
+    const { data: tradersResult, error: fetchError } = await readDb
       .from('trader_snapshots_v2')
       .select('id, platform, trader_key, window, roi_pct, pnl_usd, max_drawdown, win_rate')
       .is('sortino_ratio', null)
@@ -71,7 +73,7 @@ export async function POST(request: NextRequest) {
       // If columns don't exist yet, fall back to simpler query
       if (fetchError.message?.includes('sortino_ratio') || fetchError.code === '42703') {
         logger.warn('Advanced metric columns not found, using fallback query', {})
-        const { data: fallback, error: fallbackError } = await supabase
+        const { data: fallback, error: fallbackError } = await readDb
           .from('trader_snapshots_v2')
           .select('id, platform, trader_key, window, roi_pct, pnl_usd, max_drawdown, win_rate')
           .not('roi_pct', 'is', null)
@@ -112,7 +114,7 @@ export async function POST(request: NextRequest) {
         const platformTraders = (traders || []).filter(t => t.platform === platform).map(t => t.trader_key)
         if (platformTraders.length === 0) continue
 
-        const { data: eqRows } = await supabase
+        const { data: eqRows } = await readDb
           .from('trader_equity_curve')
           .select('source_trader_id, data_date, roi_pct')
           .eq('source', platform)
@@ -151,7 +153,7 @@ export async function POST(request: NextRequest) {
         const earliestStart = new Date()
         earliestStart.setDate(earliestStart.getDate() - 90)
         const earliestDateStr = earliestStart.toISOString().split('T')[0]
-        const { data: allDailySnaps } = await supabase
+        const { data: allDailySnaps } = await readDb
           .from('trader_daily_snapshots')
           .select('trader_key, date, daily_return_pct')
           .in('trader_key', missingTraders)
