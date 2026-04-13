@@ -590,8 +590,15 @@ export async function runConnectorBatch(
 
       for (const [key, donor] of traderByKey) {
         if (!existingKeys.has(key)) {
-          // Clone the trader entry for this window (metrics stay from the donor window)
-          missingTraders.push({ ...donor, trader_key: key })
+          // Clone identity fields only — NULL out raw data so window-specific
+          // metrics (ROI, PnL, arena_score) are not polluted from the donor window.
+          // The receiving window gets a placeholder row: trader exists but has no
+          // metrics for this period. writeDiscoverResult → normalize({}) yields nulls.
+          missingTraders.push({
+            ...donor,
+            trader_key: key,
+            raw: null,
+          })
         }
       }
 
