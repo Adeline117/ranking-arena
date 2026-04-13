@@ -125,6 +125,7 @@ import { captureMessage } from '@/lib/utils/logger'
 import { sendRateLimitedAlert } from '@/lib/alerts/send-alert'
 import { logger } from '@/lib/logger'
 import { PipelineLogger } from '@/lib/services/pipeline-logger'
+import { PipelineState } from '@/lib/services/pipeline-state'
 import { LR, V2 } from '@/lib/types/schema-mapping'
 
 // Retry config: 3 attempts with shared AbortSignal from per-trader timeout.
@@ -607,6 +608,20 @@ export async function runEnrichment(params: {
     logger.info(`[enrich] Skipping ${platformParam} - enrichment not supported`)
     await plog.success(0, { reason: 'platform does not support enrichment' })
     return { ok: true, duration: 0, period, summary: { total: 0, enriched: 0, failed: 0, suppressedErrors: 0 }, results: {} }
+  }
+
+  // Skip platforms that are circuit-broken in batch-fetch-traders.
+  // If fetch consistently returns 0 traders, enrichment will also fail.
+  try {
+    const deadKey = `dead:consecutive:${platformParam}`
+    const deadEntry = await PipelineState.get(deadKey)
+    if (typeof deadEntry === 'number' && deadEntry >= 3) {
+      logger.info(`[enrich] Skipping ${platformParam} - fetch circuit breaker active (${deadEntry} consecutive failures)`)
+      await plog.success(0, { reason: `fetch circuit breaker: ${deadEntry} failures` })
+      return { ok: true, duration: 0, period, summary: { total: 0, enriched: 0, failed: 0, suppressedErrors: 0 }, results: {} }
+    }
+  } catch {
+    // Non-blocking: if PipelineState is down, proceed with enrichment
   }
 
   const supabase = getSupabaseAdmin()
