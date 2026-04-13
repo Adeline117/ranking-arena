@@ -30,6 +30,7 @@ import { fileURLToPath } from 'url'
 import { config as dotenvConfig } from 'dotenv'
 import { createClient } from '@supabase/supabase-js'
 import puppeteer from 'puppeteer'
+import { validateRow } from './validate-snapshot.mjs'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 dotenvConfig({ path: path.resolve(__dirname, '../../.env') })
@@ -333,7 +334,23 @@ async function saveTraders(traders) {
 
   // v1 writes removed — v2 is sole snapshot table since 2026-03-18
 
-  const snapshotsV2 = traders.map(t => ({
+  // Validate each trader before writing to trader_snapshots_v2
+  const validTraders = []
+  let rejectedCount = 0
+  for (const t of traders) {
+    const result = validateRow(t)
+    if (result.valid) {
+      validTraders.push(t)
+    } else {
+      rejectedCount++
+      console.warn(`  [VALIDATION] Skipping ${t.source}/${t.source_trader_id}: ${result.reason}`)
+    }
+  }
+  if (rejectedCount > 0) {
+    console.warn(`  [VALIDATION] Rejected ${rejectedCount}/${traders.length} traders`)
+  }
+
+  const snapshotsV2 = validTraders.map(t => ({
     platform: t.source, market_type: 'futures', trader_key: t.source_trader_id, window: t.season_id, as_of_ts: t.captured_at,
     metrics: {
       roi: t.roi ?? 0, pnl: t.pnl ?? 0, win_rate: t.win_rate ?? null,
@@ -344,10 +361,12 @@ async function saveTraders(traders) {
     quality_flags: { is_suspicious: false, suspicion_reasons: [], data_completeness: 0.8 },
     updated_at: new Date().toISOString(),
   }))
-  const { error: v2Err } = await supabase.from('trader_snapshots_v2').upsert(snapshotsV2, { onConflict: 'platform,market_type,trader_key,window,as_of_ts' })
-  if (v2Err && !v2Err.message.includes('duplicate') && !v2Err.message.includes('unique')) console.error('v2 error:', v2Err.message)
+  if (snapshotsV2.length > 0) {
+    const { error: v2Err } = await supabase.from('trader_snapshots_v2').upsert(snapshotsV2, { onConflict: 'platform,market_type,trader_key,window,as_of_ts' })
+    if (v2Err && !v2Err.message.includes('duplicate') && !v2Err.message.includes('unique')) console.error('v2 error:', v2Err.message)
+  }
 
-  return { total: traders.length, saved: traders.length }
+  return { total: traders.length, saved: validTraders.length, rejected: rejectedCount }
 }
 
 async function sendTelegram(text) {
