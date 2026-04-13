@@ -261,7 +261,26 @@ export async function upsertStatsDetail(
       if (v2Err) {
         log.warn(`v2 stats sync failed for ${source}/${traderId}`, { error: v2Err.message })
       } else if (v2Count === 0) {
-        log.warn(`v2 stats sync matched 0 rows for ${source}/${traderId} (hour range ${truncateToHour()} — no snapshot found)`)
+        // Retry with previous hour: enrichment may run in hour H+1 while
+        // the v2 snapshot was written in hour H. Without this retry, enriched
+        // metrics are computed but never reach trader_snapshots_v2.
+        const prevHour = new Date()
+        prevHour.setUTCMinutes(0, 0, 0)
+        prevHour.setUTCHours(prevHour.getUTCHours() - 1)
+        const prevHourEnd = new Date(prevHour)
+        prevHourEnd.setUTCHours(prevHourEnd.getUTCHours() + 1)
+        const { count: retryCount } = await supabase
+          .from('trader_snapshots_v2')
+          .update(v2Update, { count: 'exact' })
+          .eq('platform', source)
+          .eq('trader_key', traderId)
+          .gte('as_of_ts', prevHour.toISOString())
+          .lt('as_of_ts', prevHourEnd.toISOString())
+          .order('as_of_ts', { ascending: false })
+          .limit(1)
+        if (!retryCount) {
+          log.warn(`v2 stats sync matched 0 rows for ${source}/${traderId} (tried current + previous hour)`)
+        }
       }
     }
   }

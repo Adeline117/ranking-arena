@@ -114,7 +114,10 @@ async function aggregateForDate(supabase: any, dateStr: string, _plog: any): Pro
       // Fetch per-platform: each platform gets its own query with a per-platform limit
       // This ensures small platforms (bingx: 228, toobit: 1597) aren't crowded out by
       // large platforms (gmx: 156K, hyperliquid: 155K)
-      const PER_PLATFORM_LIMIT = 2000
+      // Was 2000 — Hyperliquid (155K) and GMX (156K) were silently losing 98%
+      // of their traders. Bumped to 10000 to cover top-ranked traders on large
+      // platforms while keeping query time reasonable (~3s/platform at 10K).
+      const PER_PLATFORM_LIMIT = 10000
       for (const platform of distinctPlatforms) {
         try {
           const { data: platformData, error: platformError } = await readDb
