@@ -168,15 +168,19 @@ export async function buildFreshnessReport(): Promise<FreshnessReport> {
         // Guard: a single garbage row can make a broken platform appear fresh.
         // Check recent row count to confirm real data is flowing.
         if (status === 'fresh' && typeof count === 'number') {
-          const { count: recentCount } = await supabase
-            .from('trader_snapshots_v2')
-            .select('id', { count: 'estimated', head: true })
-            .eq('platform', platform)
-            .gte('created_at', new Date(now - staleThreshold).toISOString())
-          if (typeof recentCount === 'number' && recentCount < 5) {
-            status = 'stale'
-            stalePlatforms.push(platform)
-            logger.warn(`[freshness] ${platform}: latest row is recent but only ${recentCount} rows in window — marking stale`)
+          try {
+            const { count: recentCount } = await supabase
+              .from('trader_snapshots_v2')
+              .select('id', { count: 'estimated', head: true })
+              .eq('platform', platform)
+              .gte('created_at', new Date(now - staleThreshold).toISOString())
+            if (typeof recentCount === 'number' && recentCount < 5) {
+              status = 'stale'
+              stalePlatforms.push(platform)
+              logger.warn(`[freshness] ${platform}: latest row is recent but only ${recentCount} rows in window — marking stale`)
+            }
+          } catch {
+            // Non-blocking: if the recent count query fails, trust the timestamp check
           }
         }
       }
