@@ -665,7 +665,7 @@ async function computeSeason(
           message: `${season}: ${scored.length}/${baselineCount} traders (${(ratio * 100).toFixed(1)}%). Data preserved but stale. Force-compute at skip ${MAX_CONSECUTIVE_SKIPS}.`,
           level: consecutiveSkips >= 2 ? 'critical' : 'warning',
           details: { season, scored: scored.length, baseline: baselineCount, ratio, skip: consecutiveSkips },
-        }, `leaderboard-degrade:${season}`, 60 * 60 * 1000).catch(() => {/* non-blocking */})
+        }, `leaderboard-degrade:${season}`, 60 * 60 * 1000).catch(err => logger.warn(`[compute-leaderboard] Degradation alert failed: ${err instanceof Error ? err.message : String(err)}`))
 
         // ROOT CAUSE FIX: Run stale-row cleanup EVEN ON DEGRADATION SKIP.
         // Previously, if degradation was detected, we returned immediately and

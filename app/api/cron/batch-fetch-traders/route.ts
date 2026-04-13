@@ -342,7 +342,7 @@ export async function GET(request: NextRequest) {
             }, `count-drop:${platform}`, 3 * 3600 * 1000)
           }
           await PipelineState.set(lastCountKey, totalSaved)
-        }).catch(() => {/* non-blocking */})
+        }).catch(err => logger.warn(`[batch-fetch-traders-${group}] Count drop tracking failed for ${platform}`, { error: err instanceof Error ? err.message : String(err) }))
       }
 
       if ((hasErrors && totalSaved === 0) || (totalSaved === 0 && !hasErrors)) {
