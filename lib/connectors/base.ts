@@ -644,6 +644,33 @@ export abstract class BaseConnector implements PlatformConnector {
       }
     }
 
+    // Residential proxy: HTTP CONNECT tunnel via proxy URL (http://user:pass@host:port)
+    if (route === 'residential') {
+      const proxyUrl = resolveRouteUrl(route as RouteType)
+      if (!proxyUrl) return null
+      try {
+        // Use undici ProxyAgent if available, otherwise fall back to direct
+        const { ProxyAgent } = await import('undici')
+        const agent = new ProxyAgent(proxyUrl)
+        const res = await fetch(url, {
+          method,
+          headers: {
+            'User-Agent': this.config.userAgent,
+            Accept: 'application/json',
+            ...options?.headers,
+          },
+          body: options?.body ? (typeof options.body === 'string' ? options.body : JSON.stringify(options.body)) : undefined,
+          signal: AbortSignal.timeout(timeoutMs),
+          dispatcher: agent,
+        } as RequestInit & { dispatcher: unknown })
+        if (!res.ok) throw new Error(`Residential proxy returned ${res.status}`)
+        return await res.json() as T
+      } catch (err) {
+        exchangeLogger.warn(`[${this.platform}] Residential proxy failed: ${(err as Error).message}`)
+        return null
+      }
+    }
+
     // Proxy routes: vps_sg, vps_jp, scraper_sg, mac_mini
     const proxyUrl = resolveRouteUrl(route as RouteType)
     const proxyKey = resolveRouteKey(route as RouteType)
