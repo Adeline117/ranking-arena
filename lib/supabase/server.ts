@@ -34,11 +34,10 @@ const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://placeholder
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || 'placeholder-service-key'
 
 // Admin client query timeout.
-// Bumped from 30s → 60s (2026-04-09) because cron jobs run under contention at
-// :00/:15/:17/:30 quarter-hour marks (compute-leaderboard 7D/30D/90D +
-// snapshot-positions + batch-enrich) and need more headroom than public SSR
-// queries. The public anon client in lib/supabase/client.ts keeps its shorter
-// timeout (15s) so user-facing SSR still fails fast when Supabase is degraded.
+// Bumped from 30s → 60s (2026-04-09) due to cron storm contention.
+// 2026-04-13: Cron schedule rewritten to eliminate storms (compute-leaderboard
+// shifted to :01/:21/:41, heavy batch jobs staggered ≥3min apart).
+// Keeping 60s for now as safety margin; can revert to 45s after 48h monitoring.
 const ADMIN_QUERY_TIMEOUT_MS = 60_000
 
 // 缓存 admin 客户端实例（单例模式，复用连接）

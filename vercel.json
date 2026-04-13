@@ -10,15 +10,15 @@
     },
     {
       "path": "/api/cron/compute-leaderboard?season=90D",
-      "schedule": "0 * * * *"
+      "schedule": "1 * * * *"
     },
     {
       "path": "/api/cron/compute-leaderboard?season=30D",
-      "schedule": "20 * * * *"
+      "schedule": "21 * * * *"
     },
     {
       "path": "/api/cron/compute-leaderboard?season=7D",
-      "schedule": "40 * * * *"
+      "schedule": "41 * * * *"
     },
     {
       "path": "/api/cron/sync-meilisearch",
@@ -54,7 +54,7 @@
     },
     {
       "path": "/api/cron/fetch-details?tier=normal&concurrency=10&limit=200",
-      "schedule": "22 */4 * * *"
+      "schedule": "33 */4 * * *"
     },
     {
       "path": "/api/cron/batch-5min",
@@ -110,11 +110,11 @@
     },
     {
       "path": "/api/cron/generate-activities",
-      "schedule": "41 */6 * * *"
+      "schedule": "44 */6 * * *"
     },
     {
       "path": "/api/cron/fetch-funding-rates",
-      "schedule": "26 */4 * * *"
+      "schedule": "56 */4 * * *"
     },
     {
       "path": "/api/cron/fetch-open-interest",
@@ -126,11 +126,11 @@
     },
     {
       "path": "/api/cron/batch-fetch-traders?group=a1&windows=7d,90d",
-      "schedule": "32 */2 * * *"
+      "schedule": "36 */2 * * *"
     },
     {
       "path": "/api/cron/batch-fetch-traders?group=a2",
-      "schedule": "5 */2 * * *"
+      "schedule": "7 */2 * * *"
     },
     {
       "path": "/api/cron/batch-fetch-traders?group=b1&windows=30d",
@@ -158,7 +158,7 @@
     },
     {
       "path": "/api/cron/batch-fetch-traders?group=d1a",
-      "schedule": "20 */4 * * *"
+      "schedule": "35 */4 * * *"
     },
     {
       "path": "/api/cron/batch-fetch-traders?group=d2",
@@ -166,11 +166,11 @@
     },
     {
       "path": "/api/cron/batch-fetch-traders?group=d1b",
-      "schedule": "32 */4 * * *"
+      "schedule": "38 */4 * * *"
     },
     {
       "path": "/api/cron/batch-fetch-traders?group=e1",
-      "schedule": "36 */6 * * *"
+      "schedule": "9 */6 * * *"
     },
     {
       "path": "/api/cron/batch-fetch-traders?group=e2",
@@ -186,7 +186,7 @@
     },
     {
       "path": "/api/cron/batch-fetch-traders?group=g",
-      "schedule": "54 */8 * * *"
+      "schedule": "8 */8 * * *"
     },
     {
       "path": "/api/cron/batch-enrich?period=90D",
@@ -198,7 +198,7 @@
     },
     {
       "path": "/api/cron/batch-enrich?period=7D",
-      "schedule": "53 */6 * * *"
+      "schedule": "15 */6 * * *"
     },
     {
       "path": "/api/cron/check-trader-alerts",
@@ -210,7 +210,7 @@
     },
     {
       "path": "/api/cron/backfill-data?type=snapshots&limit=50",
-      "schedule": "40 */2 * * *"
+      "schedule": "49 */2 * * *"
     },
     {
       "path": "/api/cron/weekly-report",
@@ -258,7 +258,7 @@
     },
     {
       "path": "/api/cron/cleanup-violations",
-      "schedule": "0 */6 * * *"
+      "schedule": "57 */6 * * *"
     },
     {
       "path": "/api/cron/scan-data-quality",
