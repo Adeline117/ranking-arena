@@ -232,30 +232,32 @@ export function enhanceStatsWithDerivedMetrics(
   positions?: PositionHistoryItem[]
 ): StatsDetail {
   // From equity curve
-  if (!stats.volatility && curve.length >= 3) {
+  // NOTE: Use `== null` (not `!`) to allow overwriting 0 values.
+  // `!0` is true, so `!stats.sharpeRatio` would skip a trader with Sharpe=0.
+  if (stats.volatility == null && curve.length >= 3) {
     stats.volatility = calculateVolatility(curve)
   }
 
-  if (!stats.currentDrawdown && curve.length >= 2) {
+  if (stats.currentDrawdown == null && curve.length >= 2) {
     stats.currentDrawdown = calculateCurrentDrawdown(curve)
   }
 
-  if (!stats.maxDrawdown && curve.length >= 2) {
+  if (stats.maxDrawdown == null && curve.length >= 2) {
     const calculatedMdd = calculateMaxDrawdown(curve)
     if (calculatedMdd) {
       stats.maxDrawdown = calculatedMdd
     }
   }
 
-  if (!stats.sharpeRatio && curve.length >= 4) {
+  if (stats.sharpeRatio == null && curve.length >= 4) {
     stats.sharpeRatio = calculateSharpeRatio(curve, period)
   }
 
-  if (!stats.sortinoRatio && curve.length >= 4) {
+  if (stats.sortinoRatio == null && curve.length >= 4) {
     stats.sortinoRatio = calculateSortinoRatio(curve, period)
   }
 
-  if (!stats.calmarRatio && curve.length >= 4) {
+  if (stats.calmarRatio == null && curve.length >= 4) {
     stats.calmarRatio = calculateCalmarRatio(curve, period)
   }
 
