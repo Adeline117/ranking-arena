@@ -38,8 +38,13 @@ import { validatePlatform } from '@/lib/config/platforms'
 import { triggerDownstreamRefresh } from '@/lib/cron/trigger-chain'
 
 const DEAD_COUNTER_PREFIX = 'dead:consecutive:'
-const DEAD_THRESHOLD = 20 // consecutive failures before circuit-breaking (increased from 10 — VPS outages cause ~15 failures across 3h cycle, 10 was too aggressive)
-const DEAD_COUNTER_MAX_AGE_MS = 30 * 60 * 1000 // Auto-reset counters older than 30min (was 2h — too slow; single transient failure caused 2h data gap)
+// Circuit breaker: skip platforms after N consecutive zero-trader fetches.
+// Was threshold=20, max_age=30min — but since cron intervals are 1-8h,
+// the 30min auto-reset meant the counter ALWAYS reset between runs and
+// could never reach 20. The circuit breaker was effectively a no-op.
+// Fix: threshold=3 (reasonable for 1-8h intervals), max_age=12h (retry daily).
+const DEAD_THRESHOLD = 3
+const DEAD_COUNTER_MAX_AGE_MS = 12 * 60 * 60 * 1000 // 12h — retry after half a day
 
 export const runtime = 'nodejs' // Required: edge runtime has 30s timeout, nodejs supports maxDuration
 export const dynamic = 'force-dynamic'
