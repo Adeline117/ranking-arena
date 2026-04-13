@@ -14,6 +14,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { logger } from '@/lib/logger'
 import { getSupabaseAdmin } from '@/lib/supabase/server'
+import { getReadReplica } from '@/lib/supabase/read-replica'
 import { PipelineLogger } from '@/lib/services/pipeline-logger'
 import { env } from '@/lib/env'
 import { validateBeforeWrite, logRejectedWrites } from '@/lib/pipeline/validate-before-write'
@@ -66,12 +67,13 @@ export async function GET(request: NextRequest) {
 }
 
 async function aggregateForDate(supabase: any, dateStr: string, _plog: any): Promise<{ inserted: number; errors: number }> {
+    const readDb = getReadReplica() // Read replica for heavy SELECT queries
     const today = new Date()
     const _todayStr = today.toISOString().split('T')[0]
 
     // Step 1: Fetch ALL yesterday's snapshots in one query using RPC or direct query
     // Use distinct on (source, source_trader_id) ordered by captured_at desc to get latest per trader
-    const { data: snapshots, error: snapshotError } = await supabase
+    const { data: snapshots, error: snapshotError } = await readDb
       .rpc('get_latest_snapshots_for_date', { target_date: dateStr })
 
     let snapshotMap: Map<string, {
@@ -95,7 +97,7 @@ async function aggregateForDate(supabase: any, dateStr: string, _plog: any): Pro
 
       // First, get distinct platform names — use traders table (small, indexed)
       // instead of scanning 1.5M v2 rows with limit(50000) which misses small platforms
-      const { data: platformList, error: platformListError } = await supabase
+      const { data: platformList, error: platformListError } = await readDb
         .from('traders')
         .select('platform')
         .eq('is_active', true)
@@ -115,7 +117,7 @@ async function aggregateForDate(supabase: any, dateStr: string, _plog: any): Pro
       const PER_PLATFORM_LIMIT = 2000
       for (const platform of distinctPlatforms) {
         try {
-          const { data: platformData, error: platformError } = await supabase
+          const { data: platformData, error: platformError } = await readDb
             .from('trader_snapshots_v2')
             .select('platform, trader_key, window, roi_pct, pnl_usd, win_rate, max_drawdown, followers, trades_count, as_of_ts')
             .eq('platform', platform)
@@ -161,7 +163,7 @@ async function aggregateForDate(supabase: any, dateStr: string, _plog: any): Pro
 
     // Step 2: Fill gaps from leaderboard_ranks (always has 100% roi/pnl coverage)
     {
-      const { data: lrRows } = await supabase
+      const { data: lrRows } = await readDb
         .from('leaderboard_ranks')
         .select('source, source_trader_id, roi, pnl, win_rate, max_drawdown, followers, trades_count')
         .eq('season_id', '90D')
@@ -207,7 +209,7 @@ async function aggregateForDate(supabase: any, dateStr: string, _plog: any): Pro
     // Step 3: Fetch ALL previous daily snapshots in one query
     const platforms = [...new Set(Array.from(snapshotMap.values()).map(s => s.source))]
 
-    const { data: prevSnapshots, error: prevError } = await supabase
+    const { data: prevSnapshots, error: prevError } = await readDb
       .rpc('get_latest_prev_snapshots', {
         target_platforms: platforms,
         before_date: dateStr,

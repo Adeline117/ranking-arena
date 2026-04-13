@@ -5,6 +5,7 @@
 
 import { validatePlatform } from '@/lib/config/platforms'
 import { getSupabaseAdmin } from '@/lib/supabase/server'
+import { getReadReplica } from '@/lib/supabase/read-replica'
 import { raceWithTimeout } from '@/lib/utils/race-with-timeout'
 import {
   fetchBinanceEquityCurve,
@@ -625,6 +626,7 @@ export async function runEnrichment(params: {
   }
 
   const supabase = getSupabaseAdmin()
+  const readDb = getReadReplica() // Read replica for leaderboard_ranks lookups
 
   const platforms = [platformParam].filter((p) => p in ENRICHMENT_PLATFORM_CONFIGS)
   if (platforms.length === 0) {
@@ -665,7 +667,7 @@ export async function runEnrichment(params: {
       // Standard enrichment: read from leaderboard_ranks (canonical, has latest trader keys)
       // LR columns: source → platform, source_trader_id → traderKey, season_id → period
       // Primary: fetch by arena_score (most valuable traders first)
-      let { data: dbTraders, error: fetchError } = await supabase
+      let { data: dbTraders, error: fetchError } = await readDb
         .from('leaderboard_ranks')
         .select(LR.source_trader_id)
         .eq(LR.source, platformKey)
@@ -677,7 +679,7 @@ export async function runEnrichment(params: {
       // Fallback: if no scored traders found, fetch by rank (handles compute-leaderboard lag)
       if (!fetchError && (!dbTraders || dbTraders.length === 0)) {
         logger.warn(`[enrich] ${platformKey}/${period}: no scored traders, falling back to rank-based query`)
-        const fallback = await supabase
+        const fallback = await readDb
           .from('leaderboard_ranks')
           .select(LR.source_trader_id)
           .eq(LR.source, platformKey)
