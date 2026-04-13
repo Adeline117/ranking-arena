@@ -242,7 +242,7 @@ export async function GET(request: NextRequest) {
     // Fast direct APIs
     okx_spot: 120000, // Was 60s — too tight: fetch + enrich both need budget. Observed enrich timing out at 22s
     bitunix: 180000, // Was 120s but observed 137s during outage — 180s gives 30% headroom
-    coinex: 120000,  // Was 90s — same enrichment squeeze pattern
+    coinex: 180000,  // Was 120s — consistently timing out in d1b group (2026-04-13 DB check)
     dydx: 240000, // Copin API: 500/page × 2 pages × 3 windows + DB writes (upsert 3000 rows). Needs generous timeout.
     // Platforms that timed out at 90s default (pipeline health 2026-04-13):
     gains: 120000, // /open-trades endpoint can be slow; 4 enrichment timeouts in 48h
