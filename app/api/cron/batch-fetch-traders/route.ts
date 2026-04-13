@@ -118,6 +118,10 @@ const PLATFORM_LIMITS: Record<string, number> = {
   // Reduced to 50: 50 traders × 3 windows = ~3 VPS calls = ~90s (fits 240s timeout)
   bybit: 50,
   bybit_spot: 50,
+  // Hyperliquid: default 2000 + 3 windows + inline enrichment was hitting 240s timeout.
+  // Cap at 500 — still covers top traders by volume. HL has 33K+ traders but only top 500
+  // contribute meaningfully to ranking. Reduces fetch+write from ~200s to ~80s.
+  hyperliquid: 500,
   // Copin API has max 1000 traders per statisticType — no point requesting 2000
   dydx: 1000,
 }
