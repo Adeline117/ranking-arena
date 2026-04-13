@@ -79,7 +79,7 @@ export const PLATFORM_ROUTES: Record<string, RouteConfig> = {
 
   // ─── FIXED (2026-03-15) ───────────────────────────────────────
   htx_futures:     { routes: ['direct', 'vps_sg', 'vps_jp', 'residential'], notes: 'futures.htx.com ranking API — geo-blocks Vercel hnd1 + VPS SG intermittently (260h stale 2026-04-13). Added JP + residential fallback.' },
-  xt:              { routes: ['scraper_sg'],                    notes: 'API 404 but /fapi/user/v1 works via Playwright page.evaluate' },
+  xt:              { routes: ['residential', 'scraper_sg', 'direct'], notes: 'CF-protected, residential proxy preferred (tested 2026-04-13). Direct only works from residential IP. VPS scraper as fallback.' },
 
   // ─── DEX (special handling) ──────────────────────────────────
   dydx:            { routes: ['direct'],                        notes: 'Uses Copin leaderboard API (indexer 404 since 2026-03)' },
