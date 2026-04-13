@@ -16,7 +16,7 @@
  * Vercel-side: GET /api/test/route-matrix?platforms=all
  */
 
-export type RouteType = 'direct' | 'vps_sg' | 'vps_jp' | 'scraper_sg' | 'mac_mini'
+export type RouteType = 'direct' | 'vps_sg' | 'vps_jp' | 'scraper_sg' | 'mac_mini' | 'residential'
 
 export interface RouteConfig {
   /** Ordered routes to try (first = preferred) */
@@ -73,7 +73,7 @@ export const PLATFORM_ROUTES: Record<string, RouteConfig> = {
 
   // ─── BROWSER_ONLY (no public JSON API) ───────────────────────
   toobit:          { routes: ['scraper_sg'],                   notes: 'VPS scraper works (65 traders). Direct returns HTML.' },
-  blofin:          { routes: ['mac_mini'],                      notes: 'CF challenge + geo-block. Mac Mini headless:new Chrome bypasses. openapi 401 without API key. Removed from batch-enrich Vercel loop 2026-04-09 — scripts/openclaw/fetch-blofin.mjs writes leaderboard_ranks directly.' },
+  blofin:          { routes: ['residential', 'mac_mini'],       notes: 'CF challenge + geo-block. Residential proxy preferred (bypasses geo-block); Mac Mini fallback. openapi 401 without API key. scripts/openclaw/fetch-blofin.mjs writes leaderboard_ranks directly.' },
   lbank:           { routes: ['mac_mini'],                     notes: 'VPS scraper fails (no data). Mac Mini only.' },
   phemex:          { routes: ['mac_mini'],                     notes: 'CloudFront geo-blocks SG VPS. Mac Mini only.' },
 
@@ -122,7 +122,8 @@ export const ROUTE_ENV_MAP: Record<RouteType, { urlEnv: string; fallbackEnv?: st
   vps_sg:     { urlEnv: 'VPS_PROXY_SG', fallbackEnv: 'VPS_PROXY_URL', keyEnv: 'VPS_PROXY_KEY' },
   vps_jp:     { urlEnv: 'VPS_PROXY_JP', keyEnv: 'VPS_PROXY_KEY' },
   scraper_sg: { urlEnv: 'VPS_SCRAPER_SG', fallbackEnv: 'VPS_SCRAPER_HOST', keyEnv: 'VPS_PROXY_KEY' },
-  mac_mini:   { urlEnv: 'MAC_MINI_URL', keyEnv: 'VPS_PROXY_KEY' },
+  mac_mini:     { urlEnv: 'MAC_MINI_URL', keyEnv: 'VPS_PROXY_KEY' },
+  residential:  { urlEnv: 'RESIDENTIAL_PROXY_URL', keyEnv: 'RESIDENTIAL_PROXY_KEY' },
 }
 
 /**
