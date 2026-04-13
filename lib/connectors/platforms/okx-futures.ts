@@ -67,8 +67,15 @@ export class OkxFuturesConnector extends BaseConnector {
           this.config.timeout
         )
       } catch (err) {
-        log.warn(`Page ${page} failed: ${err instanceof Error ? err.message : String(err)}`)
-        break // Stop pagination on error instead of hanging
+        const msg = err instanceof Error ? err.message : String(err)
+        log.warn(`Page ${page} failed: ${msg}`)
+        // If first page fails, propagate so caller sees the real error
+        // instead of a silent empty result (which flipped to status:error
+        // with empty message in the batch wrapper).
+        if (allTraders.length === 0) {
+          throw new Error(`OKX leaderboard fetch failed on page ${page}: ${msg}`)
+        }
+        break // Later page: return what we have (partial success)
       }
       const data = warnValidate(OkxFuturesLeaderboardResponseSchema, _rawLb, 'okx-futures/leaderboard')
 

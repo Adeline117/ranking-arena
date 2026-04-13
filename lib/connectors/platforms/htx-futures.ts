@@ -55,8 +55,17 @@ export class HtxFuturesConnector extends BaseConnector {
           PAGE_TIMEOUT_MS
         )
       } catch (err) {
-        this.logger.debug('HTX leaderboard page fallback:', err instanceof Error ? err.message : String(err))
-        break // Skip remaining pages on timeout/error — return what we have
+        const msg = err instanceof Error ? err.message : String(err)
+        this.logger.warn(`HTX leaderboard page ${page} failed: ${msg}`)
+        // ROOT CAUSE FIX (2026-04-09): if this is the FIRST page and we have
+        // no traders yet, propagate the error instead of silently returning
+        // an empty result. A silent empty result was being flipped to
+        // `status: 'error', error: ""` by the batch wrapper, hiding the
+        // actual failure for days (167h stale).
+        if (allTraders.length === 0) {
+          throw new Error(`HTX leaderboard fetch failed on page ${page}: ${msg}`)
+        }
+        break // Later page failure: return what we have (partial success)
       }
 
       const data = warnValidate(HtxFuturesLeaderboardResponseSchema, _rawLb, 'htx-futures/leaderboard')
