@@ -7,6 +7,7 @@
  */
 
 import { getSupabaseAdmin } from '@/lib/supabase/server'
+import type { SupabaseClient } from '@supabase/supabase-js'
 import { logger } from '@/lib/logger'
 
 export class PipelineState {
@@ -16,7 +17,7 @@ export class PipelineState {
    */
   static async get<T = unknown>(key: string): Promise<T | null> {
     try {
-      const supabase = getSupabaseAdmin()
+      const supabase = getSupabaseAdmin() as SupabaseClient
       const { data, error } = await supabase
         .from('pipeline_state')
         .select('value')
@@ -36,7 +37,7 @@ export class PipelineState {
    */
   static async set(key: string, value: unknown): Promise<void> {
     try {
-      const supabase = getSupabaseAdmin()
+      const supabase = getSupabaseAdmin() as SupabaseClient
       await supabase
         .from('pipeline_state')
         .upsert(
@@ -53,7 +54,7 @@ export class PipelineState {
    */
   static async del(key: string): Promise<void> {
     try {
-      const supabase = getSupabaseAdmin()
+      const supabase = getSupabaseAdmin() as SupabaseClient
       await supabase
         .from('pipeline_state')
         .delete()
@@ -70,7 +71,7 @@ export class PipelineState {
    */
   static async incr(key: string): Promise<number> {
     try {
-      const supabase = getSupabaseAdmin()
+      const supabase = getSupabaseAdmin() as SupabaseClient
       // Read current value
       const { data } = await supabase
         .from('pipeline_state')
@@ -102,7 +103,7 @@ export class PipelineState {
    */
   static async cleanupStale(maxAgeMs: number = 7 * 24 * 3600 * 1000): Promise<number> {
     try {
-      const supabase = getSupabaseAdmin()
+      const supabase = getSupabaseAdmin() as SupabaseClient
       const cutoff = new Date(Date.now() - maxAgeMs).toISOString()
       const { count, error } = await supabase
         .from('pipeline_state')
@@ -125,7 +126,7 @@ export class PipelineState {
    */
   static async getByPrefix(prefix: string): Promise<Array<{ key: string; value: unknown; updated_at: string }>> {
     try {
-      const supabase = getSupabaseAdmin()
+      const supabase = getSupabaseAdmin() as SupabaseClient
       const { data, error } = await supabase
         .from('pipeline_state')
         .select('key, value, updated_at')

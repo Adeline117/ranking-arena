@@ -9,6 +9,7 @@
 import { NextResponse } from 'next/server'
 import { PipelineLogger } from '@/lib/services/pipeline-logger'
 import { getSupabaseAdmin } from '@/lib/supabase/server'
+import type { SupabaseClient } from '@supabase/supabase-js'
 import { env } from '@/lib/env'
 import { createLogger } from '@/lib/utils/logger'
 import { parseLimit } from '@/lib/utils/safe-parse'
@@ -437,7 +438,7 @@ export async function GET(request: Request) {
     }, { status: 400 })
   }
 
-  const supabase = getSupabaseAdmin()
+  const supabase = getSupabaseAdmin() as SupabaseClient
 
   const result: AvatarResult = { platform, total: 0, updated: 0, errors: 0 }
 

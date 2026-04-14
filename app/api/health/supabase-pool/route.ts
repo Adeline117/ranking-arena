@@ -11,6 +11,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { env } from '@/lib/env'
 import { getSupabaseAdmin } from '@/lib/supabase/server'
+import type { SupabaseClient } from '@supabase/supabase-js'
 import { createLogger } from '@/lib/utils/logger'
 import { safeParseInt } from '@/lib/utils/safe-parse'
 import { verifyCronSecret } from '@/lib/auth/verify-service-auth'
@@ -36,7 +37,7 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    const supabase = getSupabaseAdmin()
+    const supabase = getSupabaseAdmin() as SupabaseClient
 
     // Query active connections via pg_stat_activity
     const { data, error } = await supabase.rpc('get_active_connections')

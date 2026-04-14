@@ -4,7 +4,7 @@ import Link from 'next/link'
 import Image from 'next/image'
 import useSWR from 'swr'
 // Supabase: dynamic import — only used for auth check in translate call (non-critical)
-const getSb = () => import('@/lib/supabase/client').then(m => m.supabase)
+const getSb = () => import('@/lib/supabase/client').then(m => m.supabase as import('@supabase/supabase-js').SupabaseClient)
 import { tokens } from '@/lib/design-tokens'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import SidebarCard from './SidebarCard'

@@ -16,6 +16,7 @@ import {
   validateBoolean,
   validateNumber,
 } from '@/lib/api'
+import type { SupabaseClient } from '@supabase/supabase-js'
 import { checkRateLimit, RateLimitPresets } from '@/lib/utils/rate-limit'
 import logger from '@/lib/logger'
 
@@ -25,7 +26,7 @@ type RouteContext = { params: Promise<{ id: string }> }
 export async function GET(request: NextRequest, context: RouteContext) {
   try {
     const { id } = await context.params
-    const supabase = getSupabaseAdmin()
+    const supabase = getSupabaseAdmin() as SupabaseClient
     const { searchParams } = new URL(request.url)
     
     const limit = validateNumber(searchParams.get('limit'), { min: 1, max: 50 }) ?? 20
@@ -182,7 +183,7 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
   try {
     const { id } = await context.params
     const user = await requireAuth(request)
-    const supabase = getSupabaseAdmin()
+    const supabase = getSupabaseAdmin() as SupabaseClient
 
     // 检查收藏夹是否存在且属于当前用户
     const { data: folder, error: folderError } = await supabase
@@ -262,7 +263,7 @@ export async function DELETE(request: NextRequest, context: RouteContext) {
   try {
     const { id } = await context.params
     const user = await requireAuth(request)
-    const supabase = getSupabaseAdmin()
+    const supabase = getSupabaseAdmin() as SupabaseClient
 
     // 检查收藏夹是否存在且属于当前用户
     const { data: folder, error: folderError } = await supabase

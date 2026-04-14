@@ -8,7 +8,9 @@
  * Storage key: 'arena_search_history'
  */
 
-import { supabase } from '@/lib/supabase/client'
+import { supabase as _supabase } from '@/lib/supabase/client'
+import type { SupabaseClient } from '@supabase/supabase-js'
+const supabase = _supabase as SupabaseClient
 import { logger } from '@/lib/logger'
 
 const STORAGE_KEY = 'arena_search_history'

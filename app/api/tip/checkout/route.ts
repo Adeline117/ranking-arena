@@ -8,6 +8,7 @@ import Stripe from 'stripe'
 import logger from '@/lib/logger'
 import { checkRateLimit, RateLimitPresets } from '@/lib/utils/rate-limit'
 import { getSupabaseAdmin } from '@/lib/supabase/server'
+import type { SupabaseClient } from '@supabase/supabase-js'
 import { env } from '@/lib/env'
 
 export const dynamic = 'force-dynamic'
@@ -30,7 +31,7 @@ export async function POST(request: NextRequest) {
   if (rateLimitResp) return rateLimitResp
 
   try {
-    const supabase = getSupabaseAdmin()
+    const supabase = getSupabaseAdmin() as SupabaseClient
     
     // 验证用户
     const authHeader = request.headers.get('authorization')

@@ -5,6 +5,7 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { getSupabaseAdmin } from '@/lib/supabase/server'
+import type { SupabaseClient } from '@supabase/supabase-js'
 import { verifyAuth } from '@/lib/api/auth'
 import { hasFeatureAccess } from '@/lib/premium'
 import { createLogger } from '@/lib/utils/logger'
@@ -42,7 +43,7 @@ export async function GET(request: NextRequest) {
     }
     
     // 调用数据库函数获取用户的官方群信息
-    const { data, error } = await getSupabaseAdmin().rpc('get_user_pro_official_group', {
+    const { data, error } = await (getSupabaseAdmin() as SupabaseClient).rpc('get_user_pro_official_group', {
       p_user_id: user.id
     })
     
@@ -90,7 +91,7 @@ export async function POST(request: NextRequest) {
     }
     
     // 调用数据库函数加入官方群
-    const { data, error } = await getSupabaseAdmin().rpc('join_pro_official_group', {
+    const { data, error } = await (getSupabaseAdmin() as SupabaseClient).rpc('join_pro_official_group', {
       p_user_id: user.id
     })
     
@@ -143,7 +144,7 @@ export async function DELETE(request: NextRequest) {
     const { user } = authResult
     
     // 调用数据库函数离开官方群
-    const { data, error } = await getSupabaseAdmin().rpc('leave_pro_official_group', {
+    const { data, error } = await (getSupabaseAdmin() as SupabaseClient).rpc('leave_pro_official_group', {
       p_user_id: user.id
     })
     
@@ -173,7 +174,7 @@ export async function joinProOfficialGroup(userId: string): Promise<{
 }> {
   try {
     // 先检查函数是否存在，如果不存在则使用备用逻辑
-    const { data, error } = await getSupabaseAdmin().rpc('join_pro_official_group', {
+    const { data, error } = await (getSupabaseAdmin() as SupabaseClient).rpc('join_pro_official_group', {
       p_user_id: userId
     })
     
@@ -217,14 +218,14 @@ async function joinProOfficialGroupFallback(userId: string): Promise<{
 }> {
   try {
     // 检查用户是否已在官方群
-    const { data: existingMembership } = await getSupabaseAdmin()
+    const { data: existingMembership } = await (getSupabaseAdmin() as SupabaseClient)
       .from('pro_official_group_members')
       .select('pro_group_id')
       .eq('user_id', userId)
       .single()
     
     if (existingMembership) {
-      const { data: groupInfo } = await getSupabaseAdmin()
+      const { data: groupInfo } = await (getSupabaseAdmin() as SupabaseClient)
         .from('pro_official_groups')
         .select('group_id')
         .eq('id', existingMembership.pro_group_id)
@@ -238,7 +239,7 @@ async function joinProOfficialGroupFallback(userId: string): Promise<{
     }
     
     // 获取可用的群
-    const { data: availableGroup } = await getSupabaseAdmin()
+    const { data: availableGroup } = await (getSupabaseAdmin() as SupabaseClient)
       .from('pro_official_groups')
       .select('id, group_id')
       .eq('is_active', true)
@@ -264,7 +265,7 @@ async function joinProOfficialGroupFallback(userId: string): Promise<{
     }
     
     // 加入官方群记录
-    const { error: memberError } = await getSupabaseAdmin()
+    const { error: memberError } = await (getSupabaseAdmin() as SupabaseClient)
       .from('pro_official_group_members')
       .insert({ user_id: userId, pro_group_id: proGroupId })
     
@@ -274,7 +275,7 @@ async function joinProOfficialGroupFallback(userId: string): Promise<{
     }
     
     // 加入 group_members（使用 upsert 处理冲突）
-    await getSupabaseAdmin()
+    await (getSupabaseAdmin() as SupabaseClient)
       .from('group_members')
       .upsert({ group_id: groupId, user_id: userId, role: 'member' }, {
         onConflict: 'group_id,user_id'
@@ -301,7 +302,7 @@ async function createNewProOfficialGroup(): Promise<{
 }> {
   try {
     // 获取群主 ID
-    const { data: owner } = await getSupabaseAdmin()
+    const { data: owner } = await (getSupabaseAdmin() as SupabaseClient)
       .from('user_profiles')
       .select('id')
       .eq('email', OWNER_EMAIL)
@@ -313,7 +314,7 @@ async function createNewProOfficialGroup(): Promise<{
     }
     
     // 获取下一个群序号
-    const { data: maxNumber } = await getSupabaseAdmin()
+    const { data: maxNumber } = await (getSupabaseAdmin() as SupabaseClient)
       .from('pro_official_groups')
       .select('group_number')
       .order('group_number', { ascending: false })
@@ -323,7 +324,7 @@ async function createNewProOfficialGroup(): Promise<{
     const nextNumber = (maxNumber?.group_number || 0) + 1
     
     // 创建群组
-    const { data: newGroup, error: groupError } = await getSupabaseAdmin()
+    const { data: newGroup, error: groupError } = await (getSupabaseAdmin() as SupabaseClient)
       .from('groups')
       .insert({
         name: `Arena Pro 会员群 #${nextNumber}`,
@@ -343,7 +344,7 @@ async function createNewProOfficialGroup(): Promise<{
     }
     
     // 创建官方群配置
-    const { data: proGroup, error: proGroupError } = await getSupabaseAdmin()
+    const { data: proGroup, error: proGroupError } = await (getSupabaseAdmin() as SupabaseClient)
       .from('pro_official_groups')
       .insert({
         group_id: newGroup.id,
@@ -358,7 +359,7 @@ async function createNewProOfficialGroup(): Promise<{
     }
     
     // 将群主加入群成员
-    await getSupabaseAdmin()
+    await (getSupabaseAdmin() as SupabaseClient)
       .from('group_members')
       .insert({ group_id: newGroup.id, user_id: owner.id, role: 'owner' })
     
@@ -381,7 +382,7 @@ async function createNewProOfficialGroup(): Promise<{
  */
 async function sendWelcomeNotification(userId: string, groupId: string) {
   try {
-    await getSupabaseAdmin()
+    await (getSupabaseAdmin() as SupabaseClient)
       .from('notifications')
       .insert({
         user_id: userId,
@@ -401,13 +402,13 @@ async function sendWelcomeNotification(userId: string, groupId: string) {
  */
 export async function leaveProOfficialGroup(userId: string): Promise<boolean> {
   try {
-    const { data, error } = await getSupabaseAdmin().rpc('leave_pro_official_group', {
+    const { data, error } = await (getSupabaseAdmin() as SupabaseClient).rpc('leave_pro_official_group', {
       p_user_id: userId
     })
     
     if (error) {
       // 备用逻辑
-      const { data: membership } = await getSupabaseAdmin()
+      const { data: membership } = await (getSupabaseAdmin() as SupabaseClient)
         .from('pro_official_group_members')
         .select('pro_group_id')
         .eq('user_id', userId)
@@ -415,21 +416,21 @@ export async function leaveProOfficialGroup(userId: string): Promise<boolean> {
       
       if (!membership) return false
       
-      const { data: proGroup } = await getSupabaseAdmin()
+      const { data: proGroup } = await (getSupabaseAdmin() as SupabaseClient)
         .from('pro_official_groups')
         .select('group_id')
         .eq('id', membership.pro_group_id)
         .single()
       
       if (proGroup) {
-        await getSupabaseAdmin()
+        await (getSupabaseAdmin() as SupabaseClient)
           .from('group_members')
           .delete()
           .eq('group_id', proGroup.group_id)
           .eq('user_id', userId)
       }
       
-      await getSupabaseAdmin()
+      await (getSupabaseAdmin() as SupabaseClient)
         .from('pro_official_group_members')
         .delete()
         .eq('user_id', userId)

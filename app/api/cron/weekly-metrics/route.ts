@@ -20,6 +20,7 @@
 
 import type { NextRequest } from 'next/server'
 import { getSupabaseAdmin } from '@/lib/supabase/server'
+import type { SupabaseClient } from '@supabase/supabase-js'
 import { sendTelegramAlert } from '@/lib/notifications/telegram'
 import { withCronBudget } from '@/lib/cron/with-cron-budget'
 import { createLogger } from '@/lib/utils/logger'
@@ -40,7 +41,7 @@ export async function GET(request: NextRequest) {
       request,
     },
     async () => {
-      const supabase = getSupabaseAdmin()
+      const supabase = getSupabaseAdmin() as SupabaseClient
       const weekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString()
 
       // All reads in parallel — independent.

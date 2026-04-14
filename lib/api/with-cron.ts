@@ -17,13 +17,14 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server'
+import type { SupabaseClient } from '@supabase/supabase-js'
 import { PipelineLogger, type PipelineLogHandle } from '@/lib/services/pipeline-logger'
 import { getSupabaseAdmin } from '@/lib/supabase/server'
 import { logger } from '@/lib/logger'
 
 interface CronContext {
   plog: PipelineLogHandle
-  supabase: ReturnType<typeof getSupabaseAdmin>
+  supabase: SupabaseClient
 }
 
 interface CronOptions {
@@ -62,7 +63,7 @@ export function withCron(
 
     // 3. Start pipeline logger
     const plog = await PipelineLogger.start(jobName, metadata)
-    const supabase = getSupabaseAdmin()
+    const supabase = getSupabaseAdmin() as SupabaseClient
 
     // 4. Safety timeout
     let safetyFired = false

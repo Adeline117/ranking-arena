@@ -11,6 +11,7 @@ import {
   success,
   handleError,
 } from '@/lib/api'
+import type { SupabaseClient } from '@supabase/supabase-js'
 import { checkRateLimit, RateLimitPresets } from '@/lib/utils/rate-limit'
 import logger from '@/lib/logger'
 import { socialFeatureGuard } from '@/lib/features'
@@ -27,7 +28,7 @@ export async function GET(request: NextRequest, context: RouteContext) {
     if (rateLimitResponse) return rateLimitResponse
 
     const { id: postId } = await context.params
-    const supabase = getSupabaseAdmin()
+    const supabase = getSupabaseAdmin() as SupabaseClient
     
     // 尝试获取用户（可选，未登录也可以查看）
     let userId: string | null = null
@@ -103,7 +104,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
   try {
     const { id: postId } = await context.params
     const user = await requireAuth(request)
-    const supabase = getSupabaseAdmin()
+    const supabase = getSupabaseAdmin() as SupabaseClient
 
     const body = await request.json()
     const optionIndexes: number[] = body.optionIndexes

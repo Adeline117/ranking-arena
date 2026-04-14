@@ -5,6 +5,7 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { getSupabaseAdmin } from '@/lib/supabase/server'
+import type { SupabaseClient } from '@supabase/supabase-js'
 import { verifyCronSecret } from '@/lib/auth/verify-service-auth'
 import logger from '@/lib/logger'
 import { checkRateLimit, RateLimitPresets } from '@/lib/utils/rate-limit'
@@ -37,7 +38,7 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Invalid format. Use csv or json.' }, { status: 400 })
     }
 
-    const supabase = getSupabaseAdmin()
+    const supabase = getSupabaseAdmin() as SupabaseClient
 
     let query = supabase
       .from('leaderboard_ranks')

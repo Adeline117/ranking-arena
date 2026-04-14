@@ -5,6 +5,7 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { getSupabaseAdmin } from '@/lib/supabase/server'
+import type { SupabaseClient } from '@supabase/supabase-js'
 import { checkRateLimit, RateLimitPresets } from '@/lib/utils/rate-limit'
 import { createLogger } from '@/lib/utils/logger'
 
@@ -19,7 +20,7 @@ export async function GET(
 
   try {
     const { id } = await params
-    const supabase = getSupabaseAdmin()
+    const supabase = getSupabaseAdmin() as SupabaseClient
 
     // Fetch bot source - try by slug first, then by UUID
     let botQuery = supabase.from('bot_sources').select('id, slug, name, description, avatar_url, exchange, strategy_type, status, created_at, updated_at')

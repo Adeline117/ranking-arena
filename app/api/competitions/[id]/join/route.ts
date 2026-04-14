@@ -4,6 +4,7 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { getSupabaseAdmin, getAuthUser } from '@/lib/supabase/server'
+import type { SupabaseClient } from '@supabase/supabase-js'
 import { checkRateLimitFull, RateLimitPresets } from '@/lib/utils/rate-limit'
 import { createLogger } from '@/lib/utils/logger'
 
@@ -41,7 +42,7 @@ export async function POST(
     )
   }
 
-  const supabase = getSupabaseAdmin()
+  const supabase = getSupabaseAdmin() as SupabaseClient
 
   // Fetch competition
   const { data: competition, error: compError } = await supabase

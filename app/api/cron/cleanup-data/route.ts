@@ -16,6 +16,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { logger } from '@/lib/logger'
 import { getSupabaseAdmin } from '@/lib/supabase/server'
+import type { SupabaseClient } from '@supabase/supabase-js'
 import { PipelineLogger } from '@/lib/services/pipeline-logger'
 import { refreshComputedMetrics } from '@/lib/cron/metrics-backfill'
 import { env } from '@/lib/env'
@@ -29,7 +30,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
-  const supabase = getSupabaseAdmin()
+  const supabase = getSupabaseAdmin() as SupabaseClient
   const startTime = Date.now()
   const plog = await PipelineLogger.start('cleanup-data')
 

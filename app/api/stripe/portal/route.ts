@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@supabase/supabase-js'
+import { createClient, type SupabaseClient } from '@supabase/supabase-js'
 import { getSupabaseAdmin } from '@/lib/supabase/server'
 import { createPortalSession } from '@/lib/stripe'
 import { checkRateLimit, RateLimitPresets } from '@/lib/utils/rate-limit'
@@ -55,7 +55,7 @@ export async function POST(request: NextRequest) {
 
     if (authHeader?.startsWith('Bearer ')) {
       const token = authHeader.substring(7)
-      const { data, error } = await getSupabaseAdmin().auth.getUser(token)
+      const { data, error } = await (getSupabaseAdmin() as SupabaseClient).auth.getUser(token)
       user = data?.user
       authError = error
     } else {
@@ -84,7 +84,7 @@ export async function POST(request: NextRequest) {
     const session = { user }
 
     // 获取用户的 Stripe Customer ID
-    const { data: profile } = await getSupabaseAdmin()
+    const { data: profile } = await (getSupabaseAdmin() as SupabaseClient)
       .from('user_profiles')
       .select('stripe_customer_id')
       .eq('id', session.user.id)

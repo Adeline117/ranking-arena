@@ -12,6 +12,7 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { getSupabaseAdmin } from '@/lib/supabase/server'
+import type { SupabaseClient } from '@supabase/supabase-js'
 import { validateBeforeWrite, logRejectedWrites } from '@/lib/pipeline/validate-before-write'
 import { PipelineLogger } from '@/lib/services/pipeline-logger'
 import { logger } from '@/lib/logger'
@@ -98,7 +99,7 @@ export async function POST(request: NextRequest) {
       'trader_snapshots_v2'
     )
 
-    const supabase = getSupabaseAdmin()
+    const supabase = getSupabaseAdmin() as SupabaseClient
     if (rejected.length) logRejectedWrites(rejected, supabase)
 
     // Batch upsert

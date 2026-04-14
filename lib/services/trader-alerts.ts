@@ -365,7 +365,7 @@ export async function runTraderAlertDetection(
   notificationsSaved: number
   errors: number
 }> {
-  const supabase = getSupabaseAdmin()
+  const supabase = getSupabaseAdmin() as SupabaseClient
 
   // 1. 获取有人关注的交易员列表（去重）
   const { data: follows, error: followsError } = await supabase

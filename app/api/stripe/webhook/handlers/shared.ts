@@ -1,9 +1,10 @@
 import { createLogger } from '@/lib/utils/logger'
+import type { SupabaseClient } from '@supabase/supabase-js'
 import { getSupabaseAdmin } from '@/lib/supabase/server'
 
 export const logger = createLogger('stripe-webhook')
 
-export { getSupabaseAdmin as getSupabase }
+export const getSupabase = () => getSupabaseAdmin() as SupabaseClient
 
 // Retry wrapper for database operations
 export async function withRetry<T>(

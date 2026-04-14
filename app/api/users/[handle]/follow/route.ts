@@ -11,6 +11,7 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { getSupabaseAdmin, getAuthUser } from '@/lib/supabase/server'
+import type { SupabaseClient } from '@supabase/supabase-js'
 import logger from '@/lib/logger'
 import { socialFeatureGuard } from '@/lib/features'
 
@@ -185,7 +186,7 @@ export async function GET(
       return NextResponse.json({ error: 'Missing handle' }, { status: 400 })
     }
 
-    const supabase = getSupabaseAdmin()
+    const supabase = getSupabaseAdmin() as SupabaseClient
     const searchParams = request.nextUrl.searchParams
     const list = searchParams.get('list') // 'followers' | 'following'
     // Derive requesterId from auth token, not query params (prevents IDOR)

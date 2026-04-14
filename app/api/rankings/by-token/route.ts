@@ -13,6 +13,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { getSupabaseAdmin } from '@/lib/api'
+import type { SupabaseClient } from '@supabase/supabase-js'
 import { checkRateLimit, RateLimitPresets } from '@/lib/utils/rate-limit'
 import { tieredGetOrSet } from '@/lib/cache/redis-layer'
 
@@ -64,7 +65,7 @@ async function handlePopularTokens(): Promise<NextResponse> {
     const result = await tieredGetOrSet<PopularToken[]>(
       'rankings:popular-tokens',
       async () => {
-        const supabase = getSupabaseAdmin()
+        const supabase = getSupabaseAdmin() as SupabaseClient
 
         // Use AbortController with 10s timeout
         const controller = new AbortController()
@@ -138,7 +139,7 @@ export async function GET(request: NextRequest) {
     const result = await tieredGetOrSet<{ traders: TokenTrader[]; token: string; period: string; total: number }>(
       CACHE_KEY,
       async () => {
-        const supabase = getSupabaseAdmin()
+        const supabase = getSupabaseAdmin() as SupabaseClient
         const lookbackDays = PERIOD_DAYS[period] || 90
         const cutoffDate = new Date()
         cutoffDate.setDate(cutoffDate.getDate() - lookbackDays)

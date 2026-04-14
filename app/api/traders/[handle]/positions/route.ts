@@ -6,6 +6,7 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { getSupabaseAdmin } from '@/lib/supabase/server'
+import type { SupabaseClient } from '@supabase/supabase-js'
 import { checkRateLimit, RateLimitPresets } from '@/lib/api'
 import { resolveTrader } from '@/lib/data/unified'
 import { getServerCache, setServerCache, CacheTTL } from '@/lib/utils/server-cache'
@@ -66,7 +67,7 @@ export async function GET(
       return cachedResponse
     }
 
-    const supabase = getSupabaseAdmin()
+    const supabase = getSupabaseAdmin() as SupabaseClient
 
     // 查找交易员 via unified resolveTrader
     const resolved = await resolveTrader(supabase, { handle })

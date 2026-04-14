@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { env } from '@/lib/env'
 import { getSupabaseAdmin } from '@/lib/supabase/server'
+import type { SupabaseClient } from '@supabase/supabase-js'
 import { logger } from '@/lib/logger'
 import { PipelineLogger } from '@/lib/services/pipeline-logger'
 import { verifyCronSecret } from '@/lib/auth/verify-service-auth'
@@ -13,7 +14,7 @@ export async function POST(request: NextRequest) {
   const plog = await PipelineLogger.start('ranking-change-notifications')
 
   try {
-    const supabase = getSupabaseAdmin()
+    const supabase = getSupabaseAdmin() as SupabaseClient
     let notificationsCreated = 0
 
     const { data: prefs } = await supabase

@@ -11,6 +11,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { createLogger, traceMessage } from '@/lib/utils/logger'
 import { getAuthUser, getSupabaseAdmin } from '@/lib/supabase/server'
+import type { SupabaseClient } from '@supabase/supabase-js'
 import { checkRateLimit, RateLimitPresets } from '@/lib/utils/rate-limit'
 import { socialFeatureGuard } from '@/lib/features'
 import { parseLimit } from '@/lib/utils/safe-parse'
@@ -64,7 +65,7 @@ export async function GET(request: NextRequest) {
     const limitParam = request.nextUrl.searchParams.get('limit')
     const limit = parseLimit(limitParam, DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE)
 
-    const supabase = getSupabaseAdmin()
+    const supabase = getSupabaseAdmin() as SupabaseClient
 
     // 验证用户是否有权限访问此会话
     const { data: conversation, error: convError } = await supabase
@@ -203,7 +204,7 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const supabase = getSupabaseAdmin()
+    const supabase = getSupabaseAdmin() as SupabaseClient
 
     // Permission check via single RPC call (replaces 5-7 separate queries)
     const { data: permCheck, error: permError } = await supabase

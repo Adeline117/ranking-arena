@@ -6,6 +6,7 @@
 
 import { NextResponse } from 'next/server'
 import { getSupabaseAdmin, verifyAdmin } from '@/lib/admin/auth'
+import type { SupabaseClient } from '@supabase/supabase-js'
 import { createLogger } from '@/lib/utils/logger'
 
 const logger = createLogger('admin-alert-config')
@@ -14,7 +15,7 @@ export const dynamic = 'force-dynamic'
 
 export async function GET(req: Request) {
   try {
-    const supabase = getSupabaseAdmin()
+    const supabase = getSupabaseAdmin() as SupabaseClient
     const authHeader = req.headers.get('authorization')
     
     const admin = await verifyAdmin(supabase, authHeader)
@@ -54,7 +55,7 @@ export async function GET(req: Request) {
 
 export async function POST(req: Request) {
   try {
-    const supabase = getSupabaseAdmin()
+    const supabase = getSupabaseAdmin() as SupabaseClient
     const authHeader = req.headers.get('authorization')
     
     const admin = await verifyAdmin(supabase, authHeader)

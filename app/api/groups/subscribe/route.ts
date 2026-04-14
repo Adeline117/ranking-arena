@@ -15,6 +15,7 @@ import {
   checkRateLimit,
   RateLimitPresets,
 } from '@/lib/api'
+import type { SupabaseClient } from '@supabase/supabase-js'
 import logger from '@/lib/logger'
 import { socialFeatureGuard } from '@/lib/features'
 
@@ -30,7 +31,7 @@ export async function GET(request: NextRequest) {
 
   try {
     const user = await requireAuth(request)
-    const supabase = getSupabaseAdmin()
+    const supabase = getSupabaseAdmin() as SupabaseClient
     const { searchParams } = new URL(request.url)
     const groupId = searchParams.get('group_id')
 
@@ -102,7 +103,7 @@ export async function POST(request: NextRequest) {
 
   try {
     const user = await requireAuth(request)
-    const supabase = getSupabaseAdmin()
+    const supabase = getSupabaseAdmin() as SupabaseClient
     const body = await request.json()
 
     const groupId = validateString(body.group_id, { required: true, fieldName: 'group_id' })
@@ -300,7 +301,7 @@ export async function DELETE(request: NextRequest) {
 
   try {
     const user = await requireAuth(request)
-    const supabase = getSupabaseAdmin()
+    const supabase = getSupabaseAdmin() as SupabaseClient
     const { searchParams } = new URL(request.url)
     const subscriptionId = validateString(searchParams.get('id'), { required: true, fieldName: 'id' })
 

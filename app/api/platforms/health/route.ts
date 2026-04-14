@@ -7,7 +7,8 @@
  */
 
 import { NextResponse } from 'next/server';
-import { getSupabaseAdmin } from '@/lib/supabase/server';
+import { getSupabaseAdmin } from '@/lib/supabase/server'
+import type { SupabaseClient } from '@supabase/supabase-js';
 import { getOrSetWithLock } from '@/lib/cache';
 import logger from '@/lib/logger'
 
@@ -31,7 +32,7 @@ export async function GET() {
 }
 
 async function computePlatformHealth() {
-  const supabase = getSupabaseAdmin();
+  const supabase = getSupabaseAdmin() as SupabaseClient;
 
   // Run both queries in parallel instead of sequentially
   const [healthResult, pipelineLogsResult] = await Promise.all([

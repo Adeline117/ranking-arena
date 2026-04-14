@@ -7,6 +7,7 @@
  */
 
 import type { MetadataRoute } from "next"
+import type { SupabaseClient } from '@supabase/supabase-js'
 import { getSupabaseAdmin } from "@/lib/supabase/server"
 import { dataLogger } from "@/lib/utils/logger"
 import { BASE_URL } from '@/lib/constants/urls'
@@ -28,7 +29,7 @@ const EXTRA_SITEMAP_ID = 999 // posts, groups, user profiles
  */
 async function getAllTraders(): Promise<Array<{ handle: string; updated_at: string }>> {
   try {
-    const supabase = getSupabaseAdmin()
+    const supabase = getSupabaseAdmin() as SupabaseClient
 
     const { data, error } = await supabase
       .from('leaderboard_ranks')
@@ -63,7 +64,7 @@ async function getAllTraders(): Promise<Array<{ handle: string; updated_at: stri
 
 async function getPopularPosts(): Promise<Array<{ id: string; updated_at: string }>> {
   try {
-    const supabase = getSupabaseAdmin()
+    const supabase = getSupabaseAdmin() as SupabaseClient
     const { data, error } = await supabase
       .from('posts')
       .select('id, updated_at, created_at')
@@ -76,7 +77,7 @@ async function getPopularPosts(): Promise<Array<{ id: string; updated_at: string
 
 async function getUserProfiles(): Promise<Array<{ handle: string; updated_at: string }>> {
   try {
-    const supabase = getSupabaseAdmin()
+    const supabase = getSupabaseAdmin() as SupabaseClient
     const { data, error } = await supabase
       .from('user_profiles')
       .select('handle, updated_at')
@@ -94,7 +95,7 @@ async function getUserProfiles(): Promise<Array<{ handle: string; updated_at: st
 
 async function getAllGroups(): Promise<Array<{ id: string; updated_at: string }>> {
   try {
-    const supabase = getSupabaseAdmin()
+    const supabase = getSupabaseAdmin() as SupabaseClient
     const { data, error } = await supabase
       .from('groups')
       .select('id, created_at')

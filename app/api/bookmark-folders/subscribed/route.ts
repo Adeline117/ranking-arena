@@ -11,11 +11,12 @@ import {
   handleError,
   validateNumber,
 } from '@/lib/api'
+import type { SupabaseClient } from '@supabase/supabase-js'
 
 export async function GET(request: NextRequest) {
   try {
     const user = await requireAuth(request)
-    const supabase = getSupabaseAdmin()
+    const supabase = getSupabaseAdmin() as SupabaseClient
     const { searchParams } = new URL(request.url)
 
     const limit = validateNumber(searchParams.get('limit'), { min: 1, max: 50 }) ?? 20

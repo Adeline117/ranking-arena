@@ -14,6 +14,7 @@
 
 import { logger, fireAndForget } from '@/lib/logger'
 import { getSupabaseAdmin } from '@/lib/supabase/server'
+import type { SupabaseClient } from '@supabase/supabase-js'
 import { sendAlert, sendRateLimitedAlert } from '@/lib/alerts/send-alert'
 import { syncPipelineLog } from '@/lib/analytics/dual-write'
 import { pingHealthcheck } from '@/lib/utils/healthcheck'
@@ -37,7 +38,7 @@ async function withDbTimeout<T>(thenable: PromiseLike<T>, label: string): Promis
 }
 
 function getClient() {
-  return getSupabaseAdmin()
+  return getSupabaseAdmin() as SupabaseClient
 }
 
 export interface PipelineLogHandle {

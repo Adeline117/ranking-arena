@@ -10,6 +10,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { traceMessage } from '@/lib/utils/logger'
 import { getAuthUser, getSupabaseAdmin } from '@/lib/supabase/server'
+import type { SupabaseClient } from '@supabase/supabase-js'
 import { checkRateLimit, RateLimitPresets } from '@/lib/utils/rate-limit'
 import logger from '@/lib/logger'
 import { socialFeatureGuard } from '@/lib/features'
@@ -58,7 +59,7 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const supabase = getSupabaseAdmin()
+    const supabase = getSupabaseAdmin() as SupabaseClient
 
     // Permission check via single RPC call (replaces multiple queries)
     const { data: permCheck, error: permError } = await supabase

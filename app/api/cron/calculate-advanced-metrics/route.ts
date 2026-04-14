@@ -15,6 +15,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { DATA_QUALITY_BOUNDARY } from '@/lib/pipeline/types'
 import { PipelineLogger } from '@/lib/services/pipeline-logger'
 import { getSupabaseAdmin } from '@/lib/supabase/server'
+import type { SupabaseClient } from '@supabase/supabase-js'
 import { getReadReplica } from '@/lib/supabase/read-replica'
 import {
   calculateSortinoRatio,
@@ -37,8 +38,8 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
-  const supabase = getSupabaseAdmin()
-  const readDb = getReadReplica() // Read replica for heavy analytical reads
+  const supabase = getSupabaseAdmin() as SupabaseClient
+  const readDb = getReadReplica() as SupabaseClient // Read replica for heavy analytical reads
   const plog = await PipelineLogger.start('calculate-advanced-metrics')
 
   const startTime = Date.now()

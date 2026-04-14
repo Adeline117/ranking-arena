@@ -9,6 +9,7 @@
 import { NextResponse } from 'next/server'
 import logger from '@/lib/logger'
 import { getSupabaseAdmin } from '@/lib/supabase/server'
+import type { SupabaseClient } from '@supabase/supabase-js'
 import { PipelineLogger } from '@/lib/services/pipeline-logger'
 import { getPushNotificationService } from '@/lib/services/push-notification'
 import { sendEmail, buildTraderAlertEmail } from '@/lib/services/email'
@@ -87,7 +88,7 @@ export async function GET(req: Request) {
       return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
     }
 
-    const supabase = getSupabaseAdmin()
+    const supabase = getSupabaseAdmin() as SupabaseClient
 
     // 1. 获取启用的提醒配置（限制最大数量防止内存爆炸）
     const MAX_ALERTS_PER_RUN = 1000

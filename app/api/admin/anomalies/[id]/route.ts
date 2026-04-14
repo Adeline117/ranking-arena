@@ -8,6 +8,7 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { getSupabaseAdmin } from '@/lib/supabase/server'
+import type { SupabaseClient } from '@supabase/supabase-js'
 import { updateAnomalyStatus } from '@/lib/services/anomaly-manager'
 import logger from '@/lib/logger'
 
@@ -19,7 +20,7 @@ async function verifyAdminAndGetUserId(request: NextRequest): Promise<string | n
   }
 
   const token = authHeader.substring(7)
-  const supabase = getSupabaseAdmin()
+  const supabase = getSupabaseAdmin() as SupabaseClient
 
   const { data: { user }, error } = await supabase.auth.getUser(token)
 
@@ -57,7 +58,7 @@ export async function GET(
 
     const anomalyId = params.id
 
-    const supabase = getSupabaseAdmin()
+    const supabase = getSupabaseAdmin() as SupabaseClient
 
     const { data, error } = await supabase
       .from('trader_anomalies')

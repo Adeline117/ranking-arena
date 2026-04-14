@@ -12,6 +12,7 @@
  */
 
 import { getSupabaseAdmin } from '@/lib/supabase/server'
+import type { SupabaseClient } from '@supabase/supabase-js'
 import { PipelineState } from '@/lib/services/pipeline-state'
 import { sendRateLimitedAlert } from '@/lib/alerts/send-alert'
 import { logger } from '@/lib/logger'
@@ -155,7 +156,7 @@ export class PipelineEvaluator {
   private static async checkDataFreshness(
     platformsHint?: string[]
   ): Promise<{ check: EvaluationCheck; issues: EvaluationIssue[] }> {
-    const supabase = getSupabaseAdmin()
+    const supabase = getSupabaseAdmin() as SupabaseClient
     const issues: EvaluationIssue[] = []
 
     // Query distinct platforms with their latest computed_at from leaderboard_ranks.
@@ -252,7 +253,7 @@ export class PipelineEvaluator {
    * Compare current snapshot counts vs 24h ago — flag drops > 20%.
    */
   private static async checkRecordCounts(): Promise<{ check: EvaluationCheck; issues: EvaluationIssue[] }> {
-    const supabase = getSupabaseAdmin()
+    const supabase = getSupabaseAdmin() as SupabaseClient
     const issues: EvaluationIssue[] = []
 
     // Use leaderboard_ranks count (more reliable than trader_snapshots_v2 which
@@ -326,7 +327,7 @@ export class PipelineEvaluator {
    * Find traders with impossible ROI values (< -100% or > 50000%).
    */
   private static async checkROIAnomalies(): Promise<{ check: EvaluationCheck; issues: EvaluationIssue[] }> {
-    const supabase = getSupabaseAdmin()
+    const supabase = getSupabaseAdmin() as SupabaseClient
     const issues: EvaluationIssue[] = []
 
     // Find anomalous ROI values in leaderboard_ranks (the display table).
@@ -384,7 +385,7 @@ export class PipelineEvaluator {
    * Ensure >90% of leaderboard traders have non-null Arena Scores.
    */
   private static async checkArenaScoreCoverage(): Promise<{ check: EvaluationCheck; issues: EvaluationIssue[] }> {
-    const supabase = getSupabaseAdmin()
+    const supabase = getSupabaseAdmin() as SupabaseClient
     const issues: EvaluationIssue[] = []
 
     // Total in leaderboard
@@ -433,7 +434,7 @@ export class PipelineEvaluator {
    * Verify no duplicate traders, reasonable rank distribution.
    */
   private static async checkLeaderboardIntegrity(): Promise<{ check: EvaluationCheck; issues: EvaluationIssue[] }> {
-    const supabase = getSupabaseAdmin()
+    const supabase = getSupabaseAdmin() as SupabaseClient
     const issues: EvaluationIssue[] = []
 
     // Check for duplicate (source, source_trader_id, season_id) in leaderboard_ranks
@@ -496,7 +497,7 @@ export class PipelineEvaluator {
    * Verify >60% of top-ranked traders have enrichment data (win_rate, sharpe, etc.)
    */
   private static async checkEnrichmentCoverage(): Promise<{ check: EvaluationCheck; issues: EvaluationIssue[] }> {
-    const supabase = getSupabaseAdmin()
+    const supabase = getSupabaseAdmin() as SupabaseClient
     const issues: EvaluationIssue[] = []
 
     // Check enrichment coverage by sampling 500 top traders and checking
@@ -554,7 +555,7 @@ export class PipelineEvaluator {
    * Check 7: Platform Coverage — all expected platforms have leaderboard data.
    */
   private static async checkPlatformCoverage(): Promise<{ check: EvaluationCheck; issues: EvaluationIssue[] }> {
-    const supabase = getSupabaseAdmin()
+    const supabase = getSupabaseAdmin() as SupabaseClient
     const issues: EvaluationIssue[] = []
     const EXPECTED = [
       'binance_futures', 'bybit', 'okx_futures', 'bitget_futures', 'mexc',
@@ -867,7 +868,7 @@ export class PipelineEvaluator {
    * Samples top traders per platform and checks field population rates.
    */
   private static async checkPerPlatformDataCoverage(): Promise<{ check: EvaluationCheck; issues: EvaluationIssue[] }> {
-    const supabase = getSupabaseAdmin()
+    const supabase = getSupabaseAdmin() as SupabaseClient
     const issues: EvaluationIssue[] = []
 
     const PLATFORMS = [
@@ -938,7 +939,7 @@ export class PipelineEvaluator {
    * verify the /api/traders/[handle] endpoint returns complete data.
    */
   private static async checkTraderDetailIntegrity(): Promise<{ check: EvaluationCheck; issues: EvaluationIssue[] }> {
-    const supabase = getSupabaseAdmin()
+    const supabase = getSupabaseAdmin() as SupabaseClient
     const issues: EvaluationIssue[] = []
     const baseUrl = process.env.NEXT_PUBLIC_SITE_URL
       || (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : null)
@@ -1054,7 +1055,7 @@ export class PipelineEvaluator {
    * Check 15: Cron Success Rate — past 1h success rate across all cron jobs.
    */
   private static async checkCronSuccessRate(): Promise<{ check: EvaluationCheck; issues: EvaluationIssue[] }> {
-    const supabase = getSupabaseAdmin()
+    const supabase = getSupabaseAdmin() as SupabaseClient
     const issues: EvaluationIssue[] = []
 
     const oneHourAgo = new Date(Date.now() - 3600_000).toISOString()
@@ -1218,7 +1219,7 @@ export class PipelineEvaluator {
     const TOLERANCE = 0.001 // 0.1% — LR and V2 should have same source data
 
     try {
-      const supabase = getSupabaseAdmin()
+      const supabase = getSupabaseAdmin() as SupabaseClient
 
       // Sample 3 traders with high scores (more likely to have data in both tables)
       const { data: sample } = await supabase

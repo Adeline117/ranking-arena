@@ -14,6 +14,7 @@ import {
   checkRateLimit,
   RateLimitPresets,
 } from '@/lib/api'
+import type { SupabaseClient } from '@supabase/supabase-js'
 import { createLogger } from '@/lib/utils/logger'
 
 const logger = createLogger('tip-api')
@@ -28,7 +29,7 @@ export async function POST(request: NextRequest) {
   try {
     // 验证用户身份
     const user = await requireAuth(request)
-    const supabase = getSupabaseAdmin()
+    const supabase = getSupabaseAdmin() as SupabaseClient
     
     const body = await request.json()
 

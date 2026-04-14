@@ -28,6 +28,7 @@ import {
   ApiError,
   ErrorCode,
 } from '@/lib/api'
+import type { SupabaseClient } from '@supabase/supabase-js'
 import { socialFeatureGuard } from '@/lib/features'
 import { getPosts, createPost, getUserPostReactions, getUserPostVotes } from '@/lib/data/posts'
 import { getWeightedPosts } from '@/lib/data/posts-weighted'
@@ -88,7 +89,7 @@ export async function GET(request: NextRequest) {
   if (rateLimitResponse) return rateLimitResponse
 
   try {
-    const supabase = getSupabaseAdmin()
+    const supabase = getSupabaseAdmin() as SupabaseClient
     const { searchParams } = new URL(request.url)
     
     const limit = validateNumber(searchParams.get('limit'), { min: 1, max: 100 }) ?? 20
@@ -324,7 +325,7 @@ export async function POST(request: NextRequest) {
 
   try {
     const user = await requireAuth(request)
-    const supabase = getSupabaseAdmin()
+    const supabase = getSupabaseAdmin() as SupabaseClient
     const body = await request.json()
 
     // Zod 输入验证

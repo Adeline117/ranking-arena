@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getSupabaseAdmin } from '@/lib/supabase/server'
+import type { SupabaseClient } from '@supabase/supabase-js'
 
 export type ActivityItem = {
   id: string
@@ -18,7 +19,7 @@ export async function GET(
 ) {
   try {
     const { handle } = await params
-    const supabase = getSupabaseAdmin()
+    const supabase = getSupabaseAdmin() as SupabaseClient
     const limit = Math.min(Number(req.nextUrl.searchParams.get('limit') || 20), 50)
 
     // Resolve user

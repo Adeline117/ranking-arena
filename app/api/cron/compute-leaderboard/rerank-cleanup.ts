@@ -18,6 +18,7 @@
  */
 
 import { getSupabaseAdmin } from '@/lib/api'
+import type { SupabaseClient } from '@supabase/supabase-js'
 import type { Period } from '@/lib/utils/arena-score'
 import { createLogger } from '@/lib/utils/logger'
 
@@ -33,7 +34,7 @@ const STALE_ROW_AGE_MS = 5 * 24 * 60 * 60 * 1000
  * logged and swallowed so the cron returns success.
  */
 export async function rerankAllRows(
-  supabase: ReturnType<typeof getSupabaseAdmin>,
+  supabase: SupabaseClient,
   season: Period,
 ): Promise<void> {
   try {
@@ -75,7 +76,7 @@ export async function rerankAllRows(
  * budget; the next cron picks up where this one left off.
  */
 export async function cleanupStaleRows(
-  supabase: ReturnType<typeof getSupabaseAdmin>,
+  supabase: SupabaseClient,
   season: Period,
 ): Promise<number> {
   const cutoff = new Date(Date.now() - STALE_ROW_AGE_MS).toISOString()

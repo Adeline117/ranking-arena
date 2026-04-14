@@ -16,6 +16,7 @@ import {
   checkRateLimit,
   RateLimitPresets,
 } from '@/lib/api'
+import type { SupabaseClient } from '@supabase/supabase-js'
 import { ARENA_SCORE_SCHEMA_UID } from '@/lib/web3/contracts'
 import { logger } from '@/lib/logger'
 
@@ -25,7 +26,7 @@ export async function POST(request: NextRequest) {
 
   try {
     const user = await requireAuth(request)
-    const supabase = getSupabaseAdmin()
+    const supabase = getSupabaseAdmin() as SupabaseClient
 
     // Must be a verified trader
     const { data: verifiedTrader } = await supabase
@@ -139,7 +140,7 @@ export async function GET(request: NextRequest) {
   if (rateLimitResponse) return rateLimitResponse
 
   try {
-    const supabase = getSupabaseAdmin()
+    const supabase = getSupabaseAdmin() as SupabaseClient
     const { searchParams } = new URL(request.url)
     const handle = searchParams.get('handle')
 
