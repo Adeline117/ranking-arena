@@ -129,21 +129,21 @@ export async function upsertEquityCurve(
           }
         }
 
+        const fourHoursAgo = new Date(Date.now() - 4 * 3600_000).toISOString()
         const { error: v2Err, count: v2Count } = await supabase
           .from('trader_snapshots_v2')
           .update(v2Update, { count: 'exact' })
           .eq('platform', source)
           .eq('trader_key', traderId)
           .eq('window', v2Window)
-          .gte('as_of_ts', truncateToHour())
-          .lt('as_of_ts', nextHour())
+          .gte('as_of_ts', fourHoursAgo)
           .order('as_of_ts', { ascending: false })
           .limit(1)
 
         if (v2Err) {
           log.warn(`equity ROI sync failed for ${source}/${traderId}/${v2Window}`, { error: v2Err.message })
         } else if (v2Count === 0) {
-          log.warn(`equity ROI sync matched 0 rows for ${source}/${traderId}/${v2Window} (hour range ${truncateToHour()} — no snapshot found)`)
+          log.warn(`equity ROI sync matched 0 rows for ${source}/${traderId}/${v2Window} (4h lookback from ${fourHoursAgo} — no snapshot found)`)
         }
       }
     }
@@ -304,39 +304,20 @@ export async function upsertStatsDetail(
 
       // Update all matching v2 rows (removed .is('win_rate', null) guard
       // so stale win_rate values get refreshed with latest enrichment data)
+      const fourHoursAgo = new Date(Date.now() - 4 * 3600_000).toISOString()
       const { error: v2Err, count: v2Count } = await supabase
         .from('trader_snapshots_v2')
         .update(v2Update, { count: 'exact' })
         .eq('platform', source)
         .eq('trader_key', traderId)
-        .gte('as_of_ts', truncateToHour())
-        .lt('as_of_ts', nextHour())
+        .gte('as_of_ts', fourHoursAgo)
         .order('as_of_ts', { ascending: false })
         .limit(1)
 
       if (v2Err) {
         log.warn(`v2 stats sync failed for ${source}/${traderId}`, { error: v2Err.message })
       } else if (v2Count === 0) {
-        // Retry with previous hour: enrichment may run in hour H+1 while
-        // the v2 snapshot was written in hour H. Without this retry, enriched
-        // metrics are computed but never reach trader_snapshots_v2.
-        const prevHour = new Date()
-        prevHour.setUTCMinutes(0, 0, 0)
-        prevHour.setUTCHours(prevHour.getUTCHours() - 1)
-        const prevHourEnd = new Date(prevHour)
-        prevHourEnd.setUTCHours(prevHourEnd.getUTCHours() + 1)
-        const { count: retryCount } = await supabase
-          .from('trader_snapshots_v2')
-          .update(v2Update, { count: 'exact' })
-          .eq('platform', source)
-          .eq('trader_key', traderId)
-          .gte('as_of_ts', prevHour.toISOString())
-          .lt('as_of_ts', prevHourEnd.toISOString())
-          .order('as_of_ts', { ascending: false })
-          .limit(1)
-        if (!retryCount) {
-          log.warn(`v2 stats sync matched 0 rows for ${source}/${traderId} (tried current + previous hour)`)
-        }
+        log.warn(`v2 stats sync matched 0 rows for ${source}/${traderId} (4h lookback from ${fourHoursAgo})`)
       }
     }
   }

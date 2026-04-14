@@ -125,6 +125,7 @@ async function aggregateForDate(supabase: any, dateStr: string, _plog: any): Pro
             .from('trader_snapshots_v2')
             .select('platform, trader_key, window, roi_pct, pnl_usd, win_rate, max_drawdown, followers, trades_count, as_of_ts')
             .eq('platform', platform)
+            .eq('window', '90D')
             .gte('updated_at', recentCutoffStr)
             .order('updated_at', { ascending: false })
             .limit(PER_PLATFORM_LIMIT)
