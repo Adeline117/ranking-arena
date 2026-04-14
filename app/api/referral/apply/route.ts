@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getAuthUser, getSupabaseAdmin } from '@/lib/supabase/server'
+import type { SupabaseClient } from '@supabase/supabase-js'
 import { createLogger } from '@/lib/utils/logger'
 import { checkRateLimit, RateLimitPresets } from '@/lib/utils/rate-limit'
 
@@ -32,7 +33,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Invalid referral code' }, { status: 400 })
     }
 
-    const supabase = getSupabaseAdmin()
+    const supabase = getSupabaseAdmin() as SupabaseClient
 
     // Check if user already has a referrer
     const { data: currentProfile } = await supabase

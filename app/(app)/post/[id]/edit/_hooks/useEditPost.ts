@@ -2,7 +2,9 @@
 
 import { useState, useEffect, useRef } from 'react'
 import { useParams, useRouter } from 'next/navigation'
-import { supabase } from '@/lib/supabase/client'
+import { supabase as _supabase } from '@/lib/supabase/client'
+import type { SupabaseClient } from '@supabase/supabase-js'
+const supabase = _supabase as SupabaseClient
 import { useToast } from '@/app/components/ui/Toast'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import { getCsrfHeaders } from '@/lib/api/client'

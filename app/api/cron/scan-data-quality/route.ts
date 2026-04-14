@@ -11,6 +11,7 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { getSupabaseAdmin } from '@/lib/supabase/server'
+import type { SupabaseClient } from '@supabase/supabase-js'
 import { PipelineLogger } from '@/lib/services/pipeline-logger'
 import { verifyCronSecret } from '@/lib/auth/verify-service-auth'
 
@@ -30,7 +31,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
-  const supabase = getSupabaseAdmin()
+  const supabase = getSupabaseAdmin() as SupabaseClient
   const plog = await PipelineLogger.start('scan-data-quality')
 
   try {

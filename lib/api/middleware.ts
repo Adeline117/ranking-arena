@@ -4,7 +4,7 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server'
-import { User } from '@supabase/supabase-js'
+import { User, type SupabaseClient } from '@supabase/supabase-js'
 import { getAuthUser, getSupabaseAdmin } from '@/lib/supabase/server'
 import { checkRateLimitFull, addRateLimitHeaders, RateLimitPresets, type RateLimitConfig, type RateLimitResult } from '@/lib/utils/rate-limit'
 import { createLogger } from '@/lib/utils/logger'
@@ -27,7 +27,7 @@ interface ApiContext {
   /** 认证用户（如果需要认证） */
   user?: User | null
   /** Supabase 管理员客户端 */
-  supabase: ReturnType<typeof getSupabaseAdmin>
+  supabase: SupabaseClient
   /** 请求对象 */
   request: NextRequest
   /** API 版本上下文 */
@@ -238,7 +238,7 @@ export function withApiMiddleware<T>(
       }
 
       // 4. 获取 Supabase 客户端
-      const supabase = getSupabaseAdmin()
+      const supabase = getSupabaseAdmin() as SupabaseClient
 
       // 5. 执行处理函数（传入版本上下文）
       const result = await handler({ user, supabase, request, version: versionContext })

@@ -7,7 +7,9 @@
  * Extracted from trader.ts to reduce file size.
  */
 
-import { supabase } from '@/lib/supabase/client'
+import { supabase as _supabase } from '@/lib/supabase/client'
+import type { SupabaseClient } from '@supabase/supabase-js'
+const supabase = _supabase as SupabaseClient
 import * as cache from '@/lib/cache'
 import { CacheKey, CACHE_TTL } from '@/lib/cache'
 import { createLogger } from '@/lib/utils/logger'

@@ -5,7 +5,9 @@ import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { tokens } from '@/lib/design-tokens'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
-import { supabase } from '@/lib/supabase/client'
+import { supabase as _supabase } from '@/lib/supabase/client'
+import type { SupabaseClient } from '@supabase/supabase-js'
+const supabase = _supabase as SupabaseClient
 import { features } from '@/lib/features'
 
 interface UserInfo {

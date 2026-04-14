@@ -6,7 +6,8 @@ import { logger } from '@/lib/logger'
 // Lazy import supabase — @supabase/supabase-js is 167KB; keep it out of the
 // initial bundle so it loads after FCP.
 async function getSupabase() {
-  const { supabase } = await import('@/lib/supabase/client')
+  const { supabase: _sb } = await import('@/lib/supabase/client')
+  const supabase = _sb as import('@supabase/supabase-js').SupabaseClient
   return supabase
 }
 

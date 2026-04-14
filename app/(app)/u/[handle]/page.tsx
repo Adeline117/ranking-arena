@@ -1,6 +1,7 @@
 import type { Metadata } from 'next'
 import { Suspense } from 'react'
 import { getSupabaseAdmin } from '@/lib/supabase/server'
+import type { SupabaseClient } from '@supabase/supabase-js'
 import UserProfileClient from './UserProfileClient'
 import { logger } from '@/lib/logger'
 import { BASE_URL } from '@/lib/constants/urls'
@@ -19,7 +20,7 @@ export async function generateMetadata({ params }: { params: Promise<{ handle: s
   let avatarUrl: string | null = null
   let traderMeta: { roi?: number; score?: number; platform?: string } | null = null
   try {
-    const supabase = getSupabaseAdmin()
+    const supabase = getSupabaseAdmin() as SupabaseClient
     const { data } = await Promise.race([
       supabase
         .from('user_profiles')
@@ -87,7 +88,7 @@ export async function generateStaticParams() {
   if (process.env.NEXT_PHASE === 'phase-production-build') return []
 
   try {
-    const supabase = getSupabaseAdmin()
+    const supabase = getSupabaseAdmin() as SupabaseClient
     const { data } = await supabase
       .from('user_profiles')
       .select('handle')
@@ -122,7 +123,7 @@ interface UserProfileData {
 }
 
 async function fetchUserProfile(handle: string): Promise<UserProfileData | null> {
-  const supabase = getSupabaseAdmin()
+  const supabase = getSupabaseAdmin() as SupabaseClient
   const decodedHandle = decodeURIComponent(handle)
 
   // Parallel lookup: by handle + by UUID (if applicable)

@@ -10,6 +10,7 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { getSupabaseAdmin } from '@/lib/supabase/server'
+import type { SupabaseClient } from '@supabase/supabase-js'
 import { PipelineLogger } from '@/lib/services/pipeline-logger'
 import { createLogger } from '@/lib/utils/logger'
 import { env } from '@/lib/env'
@@ -31,7 +32,7 @@ export async function GET(request: NextRequest) {
   let processed = 0
 
   try {
-    const supabase = getSupabaseAdmin()
+    const supabase = getSupabaseAdmin() as SupabaseClient
 
     // 1. Activate upcoming competitions whose start_at has passed
     const { data: activated } = await supabase

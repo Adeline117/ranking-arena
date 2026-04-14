@@ -9,6 +9,7 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { getSupabaseAdmin } from '@/lib/supabase/server'
+import type { SupabaseClient } from '@supabase/supabase-js'
 import { PipelineLogger } from '@/lib/services/pipeline-logger'
 import { createLogger } from '@/lib/utils/logger'
 import { verifyCronSecret } from '@/lib/auth/verify-service-auth'
@@ -34,7 +35,7 @@ export async function GET(request: NextRequest) {
   const plog = await PipelineLogger.start('link-entities')
 
   try {
-    const supabase = getSupabaseAdmin()
+    const supabase = getSupabaseAdmin() as SupabaseClient
 
     // Fetch all traders with 0x wallet addresses (DEX traders)
     // Use trader_snapshots_v2 which has the freshest data across all platforms

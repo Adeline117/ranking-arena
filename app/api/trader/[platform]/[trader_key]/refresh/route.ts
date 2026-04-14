@@ -10,6 +10,7 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { getSupabaseAdmin } from '@/lib/supabase/server'
+import type { SupabaseClient } from '@supabase/supabase-js'
 import { checkRateLimit, RateLimitPresets, requireAuth } from '@/lib/api'
 import type {
   JobType,
@@ -76,7 +77,7 @@ export async function POST(
     // Empty body is fine, use defaults
   }
 
-  const supabase = getSupabaseAdmin()
+  const supabase = getSupabaseAdmin() as SupabaseClient
 
   // Check for existing active job (deduplication)
   const { data: existingJob } = await supabase

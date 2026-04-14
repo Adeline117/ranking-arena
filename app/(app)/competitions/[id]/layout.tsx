@@ -1,6 +1,7 @@
 import type { Metadata } from 'next'
 import { BASE_URL } from '@/lib/constants/urls'
 import { getSupabaseAdmin } from '@/lib/supabase/server'
+import type { SupabaseClient } from '@supabase/supabase-js'
 
 interface LayoutProps {
   children: React.ReactNode
@@ -15,7 +16,7 @@ export async function generateMetadata({ params }: LayoutProps): Promise<Metadat
   let description = 'Compete with traders worldwide on Arena.'
 
   try {
-    const supabase = getSupabaseAdmin()
+    const supabase = getSupabaseAdmin() as SupabaseClient
     const { data } = await supabase
       .from('competitions')
       .select('title, description, metric, status, prize_pool_cents')

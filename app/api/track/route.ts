@@ -6,6 +6,7 @@
 
 import { NextRequest } from 'next/server'
 import { getAuthUser, getSupabaseAdmin } from '@/lib/supabase/server'
+import type { SupabaseClient } from '@supabase/supabase-js'
 import { createLogger } from '@/lib/utils/logger'
 import { checkRateLimit, RateLimitPresets } from '@/lib/utils/rate-limit'
 import { z } from 'zod'
@@ -41,7 +42,7 @@ export async function POST(request: NextRequest) {
     }
     const { type, post_id, metadata } = parsed.data
 
-    const supabase = getSupabaseAdmin()
+    const supabase = getSupabaseAdmin() as SupabaseClient
 
     // Insert interaction record
     const { error: insertError } = await supabase.from('user_interactions').insert({

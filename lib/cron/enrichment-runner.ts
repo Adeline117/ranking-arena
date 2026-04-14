@@ -5,6 +5,7 @@
 
 import { validatePlatform } from '@/lib/config/platforms'
 import { getSupabaseAdmin } from '@/lib/supabase/server'
+import type { SupabaseClient } from '@supabase/supabase-js'
 import { getReadReplica } from '@/lib/supabase/read-replica'
 import { raceWithTimeout } from '@/lib/utils/race-with-timeout'
 import {
@@ -627,7 +628,7 @@ export async function runEnrichment(params: {
     // Non-blocking: if PipelineState is down, proceed with enrichment
   }
 
-  const supabase = getSupabaseAdmin()
+  const supabase = getSupabaseAdmin() as SupabaseClient
   const readDb = getReadReplica() // Read replica for leaderboard_ranks lookups
 
   const platforms = [platformParam].filter((p) => p in ENRICHMENT_PLATFORM_CONFIGS)

@@ -7,6 +7,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { timingSafeEqual } from 'crypto'
 import { env } from '@/lib/env'
 import { getSupabaseAdmin } from '@/lib/supabase/server'
+import type { SupabaseClient } from '@supabase/supabase-js'
 import { createLogger } from '@/lib/utils/logger'
 
 export const dynamic = 'force-dynamic'
@@ -40,7 +41,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
   }
 
-  const supabase = getSupabaseAdmin()
+  const supabase = getSupabaseAdmin() as SupabaseClient
 
   try {
     const days = Number(request.nextUrl.searchParams.get('days') || '7')

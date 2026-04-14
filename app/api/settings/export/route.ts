@@ -6,6 +6,7 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { getAuthUser, getSupabaseAdmin } from '@/lib/supabase/server'
+import type { SupabaseClient } from '@supabase/supabase-js'
 import { validateCsrfToken, CSRF_COOKIE_NAME, CSRF_HEADER_NAME } from '@/lib/utils/csrf'
 import logger from '@/lib/logger'
 import { checkRateLimit, RateLimitPresets } from '@/lib/utils/rate-limit'
@@ -59,7 +60,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'CSRF validation failed' }, { status: 403 })
     }
 
-    const supabase = getSupabaseAdmin()
+    const supabase = getSupabaseAdmin() as SupabaseClient
 
     // Check rate limit: 1 export per 24 hours
     const { data: profile, error: profileError } = await supabase

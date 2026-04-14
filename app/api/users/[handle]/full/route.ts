@@ -5,6 +5,7 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { getSupabaseAdmin } from '@/lib/supabase/server'
+import type { SupabaseClient } from '@supabase/supabase-js'
 import { getTraderByHandle, getTraderPerformance, getTraderStats, getTraderPortfolio } from '@/lib/data/trader'
 import logger from '@/lib/logger'
 import { checkRateLimit, RateLimitPresets } from '@/lib/utils/rate-limit'
@@ -61,7 +62,7 @@ export async function GET(
       // here instead of issuing two COUNT(*) queries on user_follows.
       (async () => {
         try {
-          const { data } = await getSupabaseAdmin()
+          const { data } = await (getSupabaseAdmin() as SupabaseClient)
             .from('user_profiles')
             .select('subscription_tier, show_pro_badge, follower_count, following_count')
             .eq('handle', handle)
@@ -74,7 +75,7 @@ export async function GET(
       // 相似交易员 (runs in parallel now instead of sequentially)
       (async () => {
         if (!profile.source) return []
-        const { data: similar } = await getSupabaseAdmin()
+        const { data: similar } = await (getSupabaseAdmin() as SupabaseClient)
           .from('traders')
           .select('id, handle, source, roi_90d, followers')
           .eq('source', profile.source)

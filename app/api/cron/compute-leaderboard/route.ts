@@ -11,6 +11,7 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { getSupabaseAdmin } from '@/lib/api'
+import type { SupabaseClient } from '@supabase/supabase-js'
 import { getReadReplica } from '@/lib/supabase/read-replica'
 import {
   calculateArenaScore,
@@ -107,8 +108,8 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ ok: true, message: `Already running (atomic lock${lockSuffix})`, cached: true })
   }
 
-  const supabase = getSupabaseAdmin()
-  const readDb = getReadReplica() // Read replica for SELECT queries (falls back to primary if not configured)
+  const supabase = getSupabaseAdmin() as SupabaseClient
+  const readDb = getReadReplica() as SupabaseClient // Read replica for SELECT queries (falls back to primary if not configured)
   const startTime = Date.now()
   const stats = { seasons: {} as Record<string, number> }
   const warnings: string[] = []
@@ -679,7 +680,7 @@ async function computeSeason(
             .lt('computed_at', cutoff)
             .limit(1000)
           if (staleRows && staleRows.length > 0) {
-            const staleIds = staleRows.map((r: { id: string }) => r.id)
+            const staleIds = staleRows.map((r: { id: number }) => r.id)
             // Batch size 200 (down from 500) to reduce lock hold time
             for (let i = 0; i < staleIds.length; i += 200) {
               await supabase.from('leaderboard_ranks').delete().in('id', staleIds.slice(i, i + 200))
@@ -727,7 +728,7 @@ async function computeSeason(
       if (!currentScores?.length) break
       for (const r of currentScores) {
         currentScoreMap.set(`${r.source}:${r.source_trader_id}`, {
-          arena_score: r.arena_score,
+          arena_score: r.arena_score ?? 0,
           rank: r.rank,
           handle: r.handle,
           avatar_url: r.avatar_url,
@@ -832,7 +833,7 @@ async function computeSeason(
     if (validBatch.length > 0) {
       const { error } = await supabase
         .from('leaderboard_ranks')
-        .upsert(validBatch, { onConflict: 'season_id,source,source_trader_id' })
+        .upsert(validBatch as any, { onConflict: 'season_id,source,source_trader_id' })
 
       if (error) {
         logger.error(`Upsert error for ${season} batch ${i}:`, error)

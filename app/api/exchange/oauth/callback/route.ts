@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import crypto from 'crypto'
 import { createLogger } from '@/lib/utils/logger'
 import { getAuthUser, getSupabaseAdmin } from '@/lib/supabase/server'
+import type { SupabaseClient } from '@supabase/supabase-js'
 import { validateCsrfToken, CSRF_COOKIE_NAME, CSRF_HEADER_NAME } from '@/lib/utils/csrf'
 import { checkRateLimit, RateLimitPresets } from '@/lib/utils/rate-limit'
 import { env } from '@/lib/env'
@@ -83,7 +84,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Missing required parameters' }, { status: 400 })
     }
 
-    const supabase = getSupabaseAdmin()
+    const supabase = getSupabaseAdmin() as SupabaseClient
 
     // 验证 state 并获取 code_verifier（如果使用 PKCE）
     const { data: stateData, error: stateError } = await supabase

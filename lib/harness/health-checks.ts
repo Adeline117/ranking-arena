@@ -10,6 +10,7 @@
  */
 
 import { getSupabaseAdmin } from '@/lib/supabase/server'
+import type { SupabaseClient } from '@supabase/supabase-js'
 import { logger } from '@/lib/logger'
 
 // ── Types ────────────────────────────────────────────────────────
@@ -165,7 +166,7 @@ export async function checkAPIHealth(baseUrl: string): Promise<HealthCheck[]> {
 // ── Data Quality Checks ──────────────────────────────────────────
 
 export async function checkDataQuality(): Promise<HealthCheck[]> {
-  const supabase = getSupabaseAdmin()
+  const supabase = getSupabaseAdmin() as SupabaseClient
   const checks: HealthCheck[] = []
 
   // Run all checks in parallel

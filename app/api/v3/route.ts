@@ -13,6 +13,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { getSupabaseAdmin } from '@/lib/supabase/server'
+import type { SupabaseClient } from '@supabase/supabase-js'
 import { getLeaderboard, getTraderDetail, searchTraders } from '@/lib/data/unified'
 import type { TradingPeriod } from '@/lib/data/unified'
 import { checkRateLimitFull } from '@/lib/utils/rate-limit'
@@ -35,7 +36,7 @@ async function validateApiKey(key: string): Promise<boolean> {
 
   // Check database api_keys table (if it exists)
   try {
-    const supabase = getSupabaseAdmin()
+    const supabase = getSupabaseAdmin() as SupabaseClient
     const { data } = await supabase
       .from('api_keys')
       .select('id')
@@ -134,7 +135,7 @@ async function handleRankings(params: URLSearchParams) {
     return { error: 'Invalid parameters', status: 400 }
   }
 
-  const supabase = getSupabaseAdmin()
+  const supabase = getSupabaseAdmin() as SupabaseClient
   const { platform, period, limit, offset } = parsed.data
   const result = await getLeaderboard(supabase, { platform, period: period as TradingPeriod, limit, offset })
   return { data: result.traders, total: result.total }
@@ -146,7 +147,7 @@ async function handleTrader(params: URLSearchParams) {
     return { error: 'Missing required params: platform, trader_key', status: 400 }
   }
 
-  const supabase = getSupabaseAdmin()
+  const supabase = getSupabaseAdmin() as SupabaseClient
   const detail = await getTraderDetail(supabase, { platform: parsed.data.platform, traderKey: parsed.data.trader_key })
   if (!detail) {
     return { error: 'Trader not found', status: 404 }
@@ -160,7 +161,7 @@ async function handleSearch(params: URLSearchParams) {
     return { error: parsed.error.issues[0]?.message || 'Invalid search parameters', status: 400 }
   }
 
-  const supabase = getSupabaseAdmin()
+  const supabase = getSupabaseAdmin() as SupabaseClient
   const { q, limit, platform } = parsed.data
   const traders = await searchTraders(supabase, { query: q, limit, platform })
   return { data: traders, total: traders.length }

@@ -8,6 +8,7 @@ import { getConnector } from '@/connectors'
 import { calculateArenaScore as calculateArenaScoreV1 } from '@/workers/arena-score'
 import type { Platform, MarketType, Window, LeaderboardEntry } from '@/connectors/base/types'
 import { getSupabaseAdmin } from '@/lib/supabase/server'
+import type { SupabaseClient } from '@supabase/supabase-js'
 import { del as cacheDelete } from '@/lib/cache'
 import { decrypt } from '@/lib/crypto/encryption'
 import { SOURCE_TYPE_MAP } from '@/lib/constants/exchanges'
@@ -44,7 +45,7 @@ export async function runWorkerInline(): Promise<InlineJobResult> {
   const start = Date.now()
   const name = 'run-worker'
   try {
-    const supabase = getSupabaseAdmin()
+    const supabase = getSupabaseAdmin() as SupabaseClient
     const workerId = `vercel-${Date.now()}`
     const MAX_JOBS = 3
     const results: Array<{ job_id: string; platform: string; status: string; error?: string }> = []
@@ -248,7 +249,7 @@ export async function runWorkerInline(): Promise<InlineJobResult> {
 }
 
 async function upsertLeaderboardData(
-  supabase: ReturnType<typeof getSupabaseAdmin>,
+  supabase: SupabaseClient,
   platform: Platform, _market_type: MarketType, window: Window,
   entries: LeaderboardEntry[], provenance: Record<string, unknown>,
 ) {
@@ -323,7 +324,7 @@ export async function refreshHotScoresInline(): Promise<InlineJobResult> {
   const start = Date.now()
   const name = 'refresh-hot-scores'
   try {
-    const supabase = getSupabaseAdmin()
+    const supabase = getSupabaseAdmin() as SupabaseClient
 
     // Step 1: Velocity + report counts (non-blocking)
     const { error: velErr } = await supabase.rpc('update_post_velocity')
@@ -424,7 +425,7 @@ export async function syncTradersInline(): Promise<InlineJobResult> {
   const start = Date.now()
   const name = 'trader-sync'
   try {
-    const supabase = getSupabaseAdmin()
+    const supabase = getSupabaseAdmin() as SupabaseClient
 
     const { data: authorizations, error: authErr } = await supabase
       .from('trader_authorizations')

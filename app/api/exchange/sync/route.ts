@@ -12,6 +12,7 @@ import {
   handleError,
   validateEnum,
 } from '@/lib/api'
+import type { SupabaseClient } from '@supabase/supabase-js'
 import { checkRateLimit, RateLimitPresets } from '@/lib/utils/rate-limit'
 import { decrypt } from '@/lib/exchange/encryption'
 import { type Exchange, SUPPORTED_EXCHANGES } from '@/lib/exchange'
@@ -52,7 +53,7 @@ export async function POST(request: NextRequest) {
 
   try {
     const user = await requireAuth(request)
-    const supabase = getSupabaseAdmin()
+    const supabase = getSupabaseAdmin() as SupabaseClient
 
     const body = await request.json()
     const exchange = validateEnum(body.exchange, SUPPORTED_EXCHANGES, {

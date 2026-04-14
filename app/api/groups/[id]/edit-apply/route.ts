@@ -54,7 +54,7 @@ export async function POST(
     }
 
     const token = authHeader.slice(7)
-    const supabase = getSupabaseAdmin()
+    const supabase = getSupabaseAdmin() as SupabaseClient
 
     const { data: { user }, error: authError } = await supabase.auth.getUser(token)
     if (authError || !user) {
@@ -169,7 +169,7 @@ export async function GET(
     }
 
     const token = authHeader.slice(7)
-    const supabase = getSupabaseAdmin()
+    const supabase = getSupabaseAdmin() as SupabaseClient
 
     const { data: { user }, error: authError } = await supabase.auth.getUser(token)
     if (authError || !user) {

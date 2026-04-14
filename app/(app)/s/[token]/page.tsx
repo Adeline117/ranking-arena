@@ -8,6 +8,7 @@
 import { Metadata } from 'next'
 import { notFound } from 'next/navigation'
 import { getSupabaseAdmin } from '@/lib/supabase/server'
+import type { SupabaseClient } from '@supabase/supabase-js'
 import SnapshotViewerClient from './SnapshotViewerClient'
 
 export const revalidate = 300
@@ -27,7 +28,7 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
   const { token } = await params
   let snapshot: { title: string | null; time_range: string; total_traders: number; top_trader_handle: string; top_trader_roi: number; data_captured_at: string } | null = null
   try {
-    const supabase = getSupabaseAdmin()
+    const supabase = getSupabaseAdmin() as SupabaseClient
     const { data } = await Promise.race([
       supabase
         .from('ranking_snapshots')
@@ -85,7 +86,7 @@ export default async function SnapshotViewerPage({ params }: PageProps) {
   let traders: Record<string, unknown>[] | null = null
 
   try {
-    const supabase = getSupabaseAdmin()
+    const supabase = getSupabaseAdmin() as SupabaseClient
 
     // Fetch snapshot metadata with timeout
     const { data: snapshotData, error: snapshotError } = await Promise.race([

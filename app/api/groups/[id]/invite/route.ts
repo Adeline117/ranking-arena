@@ -5,6 +5,7 @@ import { createLogger } from '@/lib/utils/logger'
 import { checkRateLimit, RateLimitPresets } from '@/lib/utils/rate-limit'
 import { socialFeatureGuard } from '@/lib/features'
 import { getSupabaseAdmin, getAuthUser } from '@/lib/supabase/server'
+import type { SupabaseClient } from '@supabase/supabase-js'
 
 const log = createLogger('api:group-invite')
 
@@ -137,7 +138,7 @@ export async function GET(request: NextRequest, context: RouteContext) {
     }
 
     // Check usage limits in group_invites table
-    const supabase = getSupabaseAdmin()
+    const supabase = getSupabaseAdmin() as SupabaseClient
     const tokenHash = crypto.createHash('sha256').update(token).digest('hex')
 
     const { data: invite } = await supabase
@@ -183,7 +184,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
     }
 
     const token = authHeader.slice(7)
-    const supabase = getSupabaseAdmin()
+    const supabase = getSupabaseAdmin() as SupabaseClient
 
     const { data: { user }, error: authError } = await supabase.auth.getUser(token)
     if (authError || !user) {

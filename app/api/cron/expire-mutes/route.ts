@@ -8,6 +8,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { isAuthorized } from '@/lib/cron/utils'
 import { getSupabaseAdmin } from '@/lib/supabase/server'
+import type { SupabaseClient } from '@supabase/supabase-js'
 import logger from '@/lib/logger'
 import { PipelineLogger } from '@/lib/services/pipeline-logger'
 
@@ -23,7 +24,7 @@ export async function GET(request: NextRequest) {
   const plog = await PipelineLogger.start('expire-mutes')
 
   try {
-    const supabase = getSupabaseAdmin()
+    const supabase = getSupabaseAdmin() as SupabaseClient
     const now = new Date().toISOString()
     let mutesCleared = 0
     let bansCleared = 0

@@ -11,6 +11,7 @@ import {
   success,
   handleError,
 } from '@/lib/api'
+import type { SupabaseClient } from '@supabase/supabase-js'
 import { checkRateLimit, RateLimitPresets } from '@/lib/utils/rate-limit'
 import { socialFeatureGuard } from '@/lib/features'
 
@@ -29,7 +30,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
 
     const { id: postId } = await context.params
     const user = await requireAuth(request)
-    const supabase = getSupabaseAdmin()
+    const supabase = getSupabaseAdmin() as SupabaseClient
 
     const body = await request.json()
     const emoji = body.emoji as string
@@ -94,7 +95,7 @@ export async function GET(request: NextRequest, context: RouteContext) {
 
   try {
     const { id: postId } = await context.params
-    const supabase = getSupabaseAdmin()
+    const supabase = getSupabaseAdmin() as SupabaseClient
 
     const { data: reactions } = await supabase
       .from('post_emoji_reactions')

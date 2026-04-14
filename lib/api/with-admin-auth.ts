@@ -4,6 +4,7 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server'
+import type { SupabaseClient } from '@supabase/supabase-js'
 import { getSupabaseAdmin, verifyAdmin } from '@/lib/admin/auth'
 import { handleError, error as errorResponse } from './response'
 import { ErrorCode } from './errors'
@@ -19,7 +20,7 @@ interface AdminContext {
   /** Verified admin user */
   admin: { id: string; email: string }
   /** Supabase admin client */
-  supabase: ReturnType<typeof getSupabaseAdmin>
+  supabase: SupabaseClient
   /** Original request */
   request: NextRequest
 }

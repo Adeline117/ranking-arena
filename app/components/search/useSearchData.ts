@@ -1,7 +1,9 @@
 'use client'
 
 import { useEffect, useState, useCallback, useRef, useMemo } from 'react'
-import { supabase } from '@/lib/supabase/client'
+import { supabase as _supabase } from '@/lib/supabase/client'
+import type { SupabaseClient } from '@supabase/supabase-js'
+const supabase = _supabase as SupabaseClient
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import {
   initializeHistory,

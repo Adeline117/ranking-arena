@@ -13,6 +13,7 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { getSupabaseAdmin } from '@/lib/supabase/server'
+import type { SupabaseClient } from '@supabase/supabase-js'
 import { checkHealth as checkCacheHealth, getCacheStats } from '@/lib/cache'
 import { getSupportedPlatforms } from '@/lib/cron/utils'
 import { DEAD_BLOCKED_PLATFORMS } from '@/lib/constants/exchanges'
@@ -100,7 +101,7 @@ async function checkDatabaseAndCron(): Promise<{
   const start = Date.now()
 
   try {
-    const supabase = getSupabaseAdmin()
+    const supabase = getSupabaseAdmin() as SupabaseClient
 
     // 1. 测试数据库连接
     const { error: dbError } = await supabase
@@ -267,7 +268,7 @@ async function getConnectorsSection(request: Request) {
     return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
   }
 
-  const supabase = getSupabaseAdmin()
+  const supabase = getSupabaseAdmin() as SupabaseClient
 
   const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString()
 

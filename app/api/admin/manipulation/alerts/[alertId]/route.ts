@@ -11,6 +11,7 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { getSupabaseAdmin } from '@/lib/supabase/server'
+import type { SupabaseClient } from '@supabase/supabase-js'
 import { logger } from '@/lib/logger'
 
 export const dynamic = 'force-dynamic'
@@ -28,7 +29,7 @@ export async function GET(
   request: NextRequest,
   { params }: { params: { alertId: string } }
 ) {
-  const supabase = getSupabaseAdmin()
+  const supabase = getSupabaseAdmin() as SupabaseClient
 
   // Auth check - require admin role
   const authHeader = request.headers.get('authorization')
@@ -103,7 +104,7 @@ export async function PATCH(
   request: NextRequest,
   { params }: { params: { alertId: string } }
 ) {
-  const supabase = getSupabaseAdmin()
+  const supabase = getSupabaseAdmin() as SupabaseClient
 
   const { alertId } = params
 

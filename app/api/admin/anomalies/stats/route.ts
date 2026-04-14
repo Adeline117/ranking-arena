@@ -7,6 +7,7 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { getSupabaseAdmin } from '@/lib/supabase/server'
+import type { SupabaseClient } from '@supabase/supabase-js'
 import { getAnomalyStats } from '@/lib/services/anomaly-manager'
 import logger from '@/lib/logger'
 
@@ -18,7 +19,7 @@ async function verifyAdmin(request: NextRequest): Promise<boolean> {
   }
 
   const token = authHeader.substring(7)
-  const supabase = getSupabaseAdmin()
+  const supabase = getSupabaseAdmin() as SupabaseClient
 
   const { data: { user }, error } = await supabase.auth.getUser(token)
 

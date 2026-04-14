@@ -12,6 +12,7 @@
 
 import { NextResponse } from 'next/server'
 import { getSupabaseAdmin } from '@/lib/supabase/server'
+import type { SupabaseClient } from '@supabase/supabase-js'
 import { createLogger, fireAndForget } from '@/lib/utils/logger'
 import { safeParseInt } from '@/lib/utils/safe-parse'
 import { withAuth } from '@/lib/api/middleware'
@@ -56,7 +57,7 @@ export async function invalidateFollowingCache(userId: string): Promise<void> {
 type FollowingResult = { items: FollowItem[]; traderCount: number; userCount: number }
 
 async function fetchFollowingItems(userId: string): Promise<FollowingResult> {
-  const supabase = getSupabaseAdmin()
+  const supabase = getSupabaseAdmin() as SupabaseClient
 
   const QUERY_TIMEOUT_MS = 5000
 

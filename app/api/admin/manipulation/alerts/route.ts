@@ -11,6 +11,7 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { getSupabaseAdmin } from '@/lib/supabase/server'
+import type { SupabaseClient } from '@supabase/supabase-js'
 import { verifyAdminAuth } from '@/lib/auth/verify-service-auth'
 import { logger } from '@/lib/logger'
 import { parseLimit, parseOffset } from '@/lib/utils/safe-parse'
@@ -30,7 +31,7 @@ interface ManipulationAlert {
 // ============================================
 
 export async function GET(request: NextRequest) {
-  const supabase = getSupabaseAdmin()
+  const supabase = getSupabaseAdmin() as SupabaseClient
 
   // Auth check
   const authHeader = request.headers.get('authorization')
@@ -119,7 +120,7 @@ export async function GET(request: NextRequest) {
 // ============================================
 
 export async function POST(request: NextRequest) {
-  const supabase = getSupabaseAdmin()
+  const supabase = getSupabaseAdmin() as SupabaseClient
 
   // Auth check (allow cron secret or admin JWT)
   if (!(await verifyAdminAuth(request))) {

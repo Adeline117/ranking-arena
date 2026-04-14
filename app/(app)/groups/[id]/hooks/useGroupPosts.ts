@@ -1,7 +1,9 @@
 'use client'
 
 import { useState, useCallback, useRef, useEffect, useMemo } from 'react'
-import { supabase } from '@/lib/supabase/client'
+import { supabase as _supabase } from '@/lib/supabase/client'
+import type { SupabaseClient } from '@supabase/supabase-js'
+const supabase = _supabase as SupabaseClient
 import { getCsrfHeaders } from '@/lib/api/client'
 import { logger } from '@/lib/logger'
 

@@ -1,5 +1,6 @@
 import { Metadata } from 'next'
 import { getSupabaseAdmin } from '@/lib/supabase/server'
+import type { SupabaseClient } from '@supabase/supabase-js'
 import { logger } from '@/lib/logger'
 import { BASE_URL } from '@/lib/constants/urls'
 
@@ -9,7 +10,7 @@ export async function generateMetadata({ params }: { params: Promise<{ id: strin
   const canonicalUrl = `${BASE_URL}/post/${postId}`
   
   try {
-    const supabase = getSupabaseAdmin()
+    const supabase = getSupabaseAdmin() as SupabaseClient
     const { data: post } = await supabase
       .from('posts')
       .select('id, title, content, author_handle, created_at, images')

@@ -15,6 +15,7 @@ import {
   checkRateLimit,
   RateLimitPresets,
 } from '@/lib/api'
+import type { SupabaseClient } from '@supabase/supabase-js'
 import { tieredGetOrSet } from '@/lib/cache/redis-layer'
 import logger from '@/lib/logger'
 
@@ -49,7 +50,7 @@ export async function GET(request: NextRequest) {
   if (rateLimitResponse) return rateLimitResponse
 
   try {
-    const supabase = getSupabaseAdmin()
+    const supabase = getSupabaseAdmin() as SupabaseClient
     const { searchParams } = new URL(request.url)
 
     // 解析查询参数
@@ -142,7 +143,7 @@ export async function POST(request: NextRequest) {
 
   try {
     const user = await requireAuth(request)
-    const supabase = getSupabaseAdmin()
+    const supabase = getSupabaseAdmin() as SupabaseClient
 
     // 检查管理员权限
     const { data: userProfile } = await supabase
@@ -228,7 +229,7 @@ export async function PUT(request: NextRequest) {
 
   try {
     const user = await requireAuth(request)
-    const supabase = getSupabaseAdmin()
+    const supabase = getSupabaseAdmin() as SupabaseClient
 
     // 检查管理员权限
     const { data: userProfile } = await supabase
@@ -314,7 +315,7 @@ export async function PUT(request: NextRequest) {
 export async function DELETE(request: NextRequest) {
   try {
     const user = await requireAuth(request)
-    const supabase = getSupabaseAdmin()
+    const supabase = getSupabaseAdmin() as SupabaseClient
 
     // 检查管理员权限
     const { data: userProfile } = await supabase

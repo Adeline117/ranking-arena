@@ -6,6 +6,7 @@
 import { NextResponse } from 'next/server'
 import { withPublic, withAuth } from '@/lib/api/middleware'
 import { getSupabaseAdmin } from '@/lib/supabase/server'
+import type { SupabaseClient } from '@supabase/supabase-js'
 import { parseLimit, parseOffset } from '@/lib/utils/safe-parse'
 
 // GET: List competitions
@@ -16,7 +17,7 @@ export const GET = withPublic(
     const limit = parseLimit(searchParams.get('limit'), 20, 50)
     const offset = parseOffset(searchParams.get('offset'))
 
-    const supabase = getSupabaseAdmin()
+    const supabase = getSupabaseAdmin() as SupabaseClient
 
     const [dataResult, countResult] = await Promise.all([
       supabase
@@ -111,7 +112,7 @@ export const POST = withAuth(
     const validMetrics = ['roi', 'pnl', 'sharpe', 'max_drawdown']
     const finalMetric = validMetrics.includes(metric) ? metric : 'roi'
 
-    const supabase = getSupabaseAdmin()
+    const supabase = getSupabaseAdmin() as SupabaseClient
 
     const { data: competition, error } = await supabase
       .from('competitions')

@@ -4,6 +4,7 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { getSupabaseAdmin } from '@/lib/supabase/server'
+import type { SupabaseClient } from '@supabase/supabase-js'
 
 export async function GET(
   _request: NextRequest,
@@ -16,7 +17,7 @@ export async function GET(
   }
 
   try {
-    const supabase = getSupabaseAdmin()
+    const supabase = getSupabaseAdmin() as SupabaseClient
 
     // Fetch competition + entries in parallel
     const [compResult, entriesResult] = await Promise.all([

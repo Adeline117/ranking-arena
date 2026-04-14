@@ -13,6 +13,7 @@ import {
   success,
   handleError,
 } from '@/lib/api'
+import type { SupabaseClient } from '@supabase/supabase-js'
 import { checkRateLimit, RateLimitPresets } from '@/lib/utils/rate-limit'
 
 type RouteContext = { params: Promise<{ id: string }> }
@@ -27,7 +28,7 @@ export async function GET(request: NextRequest, context: RouteContext) {
       return success({ is_subscribed: false })
     }
 
-    const supabase = getSupabaseAdmin()
+    const supabase = getSupabaseAdmin() as SupabaseClient
 
     // 检查是否已订阅
     const { data: subscription, error } = await supabase
@@ -61,7 +62,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
   try {
     const { id: folderId } = await context.params
     const user = await requireAuth(request)
-    const supabase = getSupabaseAdmin()
+    const supabase = getSupabaseAdmin() as SupabaseClient
 
     // 获取收藏夹信息，检查是否存在、是否公开、是否是自己的
     const { data: folder, error: folderError } = await supabase
@@ -140,7 +141,7 @@ export async function DELETE(request: NextRequest, context: RouteContext) {
   try {
     const { id: folderId } = await context.params
     const user = await requireAuth(request)
-    const supabase = getSupabaseAdmin()
+    const supabase = getSupabaseAdmin() as SupabaseClient
 
     // 检查是否已订阅
     const { data: subscription, error: findError } = await supabase

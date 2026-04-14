@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getSupabaseAdmin, getAuthUser } from '@/lib/supabase/server'
+import type { SupabaseClient } from '@supabase/supabase-js'
 import { logger } from '@/lib/logger'
 import { checkRateLimit, RateLimitPresets } from '@/lib/utils/rate-limit'
 import { socialFeatureGuard } from '@/lib/features'
@@ -28,7 +29,7 @@ export async function POST(
       return NextResponse.json({ error: 'Invalid action' }, { status: 400 })
     }
 
-    const supabase = getSupabaseAdmin()
+    const supabase = getSupabaseAdmin() as SupabaseClient
 
     // Verify group exists
     const { data: group, error: groupErr } = await supabase

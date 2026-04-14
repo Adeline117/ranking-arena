@@ -14,12 +14,12 @@
  * → /api/health/pipeline → OpenClaw Telegram alert.
  */
 
-import type { getSupabaseAdmin } from '@/lib/supabase/server'
+import type { SupabaseClient } from '@supabase/supabase-js'
 import { createLogger } from '@/lib/utils/logger'
 
 const logger = createLogger('compute-leaderboard:post')
 
-type SupabaseAdmin = ReturnType<typeof getSupabaseAdmin>
+type SupabaseAdmin = SupabaseClient
 
 /**
  * Sync sub-scores + advanced metrics: leaderboard_ranks → trader_snapshots_v2.

@@ -8,6 +8,7 @@
 import { logger } from '@/lib/logger'
 import { isClickHouseAvailable, query } from './clickhouse'
 import { getSupabaseAdmin } from '@/lib/supabase/server'
+import type { SupabaseClient } from '@supabase/supabase-js'
 
 const chLogger = logger.child('ClickHouse:Queries')
 
@@ -78,7 +79,7 @@ export async function getTraderHistory(
   }
 
   // Fallback: Supabase
-  const supabase = getSupabaseAdmin()
+  const supabase = getSupabaseAdmin() as SupabaseClient
   const since = new Date(Date.now() - days * 86400_000).toISOString()
 
   const { data, error } = await supabase
@@ -136,7 +137,7 @@ export async function getPipelineStats(days = 7): Promise<PipelineStat[]> {
   }
 
   // Fallback: Supabase view
-  const supabase = getSupabaseAdmin()
+  const supabase = getSupabaseAdmin() as SupabaseClient
   const { data, error } = await supabase
     .from('pipeline_job_stats')
     .select('job_name, total_runs, success_count, error_count, success_rate, avg_duration_ms')
@@ -211,7 +212,7 @@ export async function getTopMovers(
 
   // Fallback: Supabase — limited to current snapshots only (no historical diff)
   // Returns traders with highest current scores as a rough proxy
-  const supabase = getSupabaseAdmin()
+  const supabase = getSupabaseAdmin() as SupabaseClient
   const { data, error } = await supabase
     .from('trader_snapshots_v2')
     .select('platform, trader_key, window, arena_score')

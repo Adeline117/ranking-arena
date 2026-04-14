@@ -5,7 +5,9 @@
  * If not, creates one. Does NOT create a Supabase Auth session.
  */
 
-import { supabase } from '@/lib/supabase/client';
+import { supabase as _supabase } from '@/lib/supabase/client';
+import type { SupabaseClient } from '@supabase/supabase-js';
+const supabase = _supabase as SupabaseClient;
 import { logger } from '@/lib/logger';
 
 interface PrivyUserInfo {
