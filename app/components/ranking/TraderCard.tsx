@@ -18,7 +18,7 @@ import {
   areTraderPropsEqual,
   getScoreStyle,
 } from './shared/TraderDisplay'
-import { useComparisonStore } from '@/lib/stores'
+import { useComparisonStore } from '@/lib/stores/comparisonStore'
 import { getPlatformNote } from '@/lib/constants/platform-metrics'
 import { EXCHANGE_NAMES } from '@/lib/constants/exchanges'
 
