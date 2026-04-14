@@ -1,6 +1,7 @@
 'use client'
 
-import { useEffect, useState, useMemo } from 'react'
+import { useState, useMemo } from 'react'
+import useSWR from 'swr'
 import Link from 'next/link'
 import { Box, Text } from '@/app/components/base'
 import ExchangeLogo from '@/app/components/ui/ExchangeLogo'
@@ -32,23 +33,20 @@ function isCex(source: string): boolean {
   return config.sourceType === 'futures' || config.sourceType === 'spot'
 }
 
+const platformStatsFetcher = (url: string) => fetch(url).then(r => {
+  if (!r.ok) throw new Error(`platform-stats: ${r.status}`)
+  return r.json().then(d => d.platforms as PlatformStat[])
+})
+
 export default function RankingsIndexClient({ initialPlatforms = [] }: { initialPlatforms?: PlatformStat[] }) {
   const { t } = useLanguage()
-  const [platforms, setPlatforms] = useState<PlatformStat[]>(initialPlatforms)
-  const [loading, setLoading] = useState(initialPlatforms.length === 0)
+  const { data: platforms = initialPlatforms, isLoading } = useSWR(
+    '/api/rankings/platform-stats',
+    platformStatsFetcher,
+    { fallbackData: initialPlatforms.length > 0 ? initialPlatforms : undefined, revalidateOnFocus: false, refreshInterval: 300_000 }
+  )
+  const loading = isLoading && initialPlatforms.length === 0
   const [tab, setTab] = useState<TabType>('all')
-
-  useEffect(() => {
-    // Refresh client-side (non-blocking) even when SSR data exists
-    fetch('/api/rankings/platform-stats')
-      .then(r => {
-        if (!r.ok) throw new Error(`platform-stats: ${r.status}`)
-        return r.json()
-      })
-      .then(data => { if (data.platforms) setPlatforms(data.platforms) })
-      .catch(() => { /* fire-and-forget: SSR data is the fallback */ }) // eslint-disable-line no-restricted-syntax
-      .finally(() => setLoading(false))
-  }, [])
 
   const allPlatforms = useMemo(() => {
     const statsMap = new Map(platforms.map(p => [p.platform, p]))
