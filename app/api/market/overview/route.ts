@@ -4,7 +4,6 @@ import { createLogger } from '@/lib/utils/logger'
 import { get, set } from '@/lib/cache'
 
 export const runtime = 'edge'
-export const dynamic = 'force-dynamic'
 
 interface MarketOverviewData {
   btcPrice: number
