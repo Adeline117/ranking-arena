@@ -14,6 +14,16 @@ import { createLogger } from '@/lib/utils/logger'
 
 const log = createLogger('api:phemex-proxy')
 
+const ALLOWED_RESPONSE_TYPES = new Set([
+  'application/json',
+  'text/plain',  // phemex sometimes returns text/plain for JSON
+])
+function safeContentType(upstream: string | null): string {
+  if (!upstream) return 'application/json'
+  const base = upstream.split(';')[0].trim().toLowerCase()
+  return ALLOWED_RESPONSE_TYPES.has(base) ? base : 'application/json'
+}
+
 export const runtime = 'edge'
 export const preferredRegion = ['iad1'] // US East — different from default hnd1
 
@@ -50,7 +60,10 @@ export async function GET(req: NextRequest) {
     // Pass through the response
     return new NextResponse(text, {
       status: resp.status,
-      headers: { 'Content-Type': resp.headers.get('Content-Type') || 'application/json' },
+      headers: {
+        'Content-Type': safeContentType(resp.headers.get('Content-Type')),
+        'X-Content-Type-Options': 'nosniff',
+      },
     })
   } catch (e) {
     log.error('Upstream error', { error: (e as Error).message })
