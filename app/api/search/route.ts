@@ -19,7 +19,7 @@
 import { z } from 'zod'
 import { withPublic } from '@/lib/api/middleware'
 import { success } from '@/lib/api/response'
-import { get as cacheGet, set as cacheSet } from '@/lib/cache'
+import { get as cacheGet, set as cacheSet, getOrSetWithLock } from '@/lib/cache'
 import { fireAndForget } from '@/lib/utils/logger'
 import { features } from '@/lib/features'
 import { searchTraders as unifiedSearchTraders, getSearchSuggestions } from '@/lib/data/unified'
@@ -126,81 +126,66 @@ interface TrendingSearchResponse {
 }
 
 async function handleTrendingSearch(supabase: Parameters<Parameters<typeof withPublic>[0]>[0]['supabase']) {
-  const cacheKey = 'search:trending:queries'
+  const trending = await getOrSetWithLock('search:trending:queries', async () => {
+    const sevenDaysAgo = new Date()
+    sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7)
 
-  try {
-    const cached = await cacheGet<TrendingSearchResponse>(cacheKey)
-    if (cached) {
-      return success(cached)
-    }
-  } catch {
-    // Intentionally swallowed: Redis cache miss or unavailable, fall through to DB query
-  }
+    const { data: analyticsData, error } = await supabase
+      .from('search_analytics')
+      .select('query, result_count, created_at')
+      .gte('created_at', sevenDaysAgo.toISOString())
+      .gte('result_count', 1)
+      .limit(1000)
 
-  const sevenDaysAgo = new Date()
-  sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7)
+    let trendingItems: TrendingSearchItem[] = []
 
-  const { data: analyticsData, error } = await supabase
-    .from('search_analytics')
-    .select('query, result_count, created_at')
-    .gte('created_at', sevenDaysAgo.toISOString())
-    .gte('result_count', 1)
-    .limit(1000)
+    if (!error && analyticsData?.length) {
+      const queryStats = new Map<string, { count: number; totalResults: number }>()
 
-  let trending: TrendingSearchItem[] = []
-
-  if (!error && analyticsData?.length) {
-    const queryStats = new Map<string, { count: number; totalResults: number }>()
-
-    analyticsData.forEach(({ query, result_count }: { query: string; result_count: number }) => {
-      if (!query || query.length < 2) return
-      const normalizedQuery = query.toLowerCase().trim()
-      if (normalizedQuery.length < 2) return
-      const current = queryStats.get(normalizedQuery) || { count: 0, totalResults: 0 }
-      current.count += 1
-      current.totalResults += result_count || 0
-      queryStats.set(normalizedQuery, current)
-    })
-
-    const sortedQueries = Array.from(queryStats.entries())
-      .filter(([, stats]) => stats.count >= 3)
-      .sort(([, a], [, b]) => {
-        const scoreA = a.count * 2 + (a.totalResults / a.count) * 0.1
-        const scoreB = b.count * 2 + (b.totalResults / b.count) * 0.1
-        return scoreB - scoreA
+      analyticsData.forEach(({ query, result_count }: { query: string; result_count: number }) => {
+        if (!query || query.length < 2) return
+        const normalizedQuery = query.toLowerCase().trim()
+        if (normalizedQuery.length < 2) return
+        const current = queryStats.get(normalizedQuery) || { count: 0, totalResults: 0 }
+        current.count += 1
+        current.totalResults += result_count || 0
+        queryStats.set(normalizedQuery, current)
       })
-      .slice(0, 20)
 
-    trending = sortedQueries.map(([q, stats], index) => {
-      let category: TrendingSearchItem['category'] = 'general'
-      if (/^[A-Z]{2,6}$/.test(q.toUpperCase())) {
-        category = 'token'
-      } else if (q.includes('@') || /binance|bybit|okx|bitget|mexc/i.test(q)) {
-        category = 'trader'
-      }
-      return { query: q, searchCount: stats.count, rank: index + 1, category }
-    })
-  }
+      const sortedQueries = Array.from(queryStats.entries())
+        .filter(([, stats]) => stats.count >= 3)
+        .sort(([, a], [, b]) => {
+          const scoreA = a.count * 2 + (a.totalResults / a.count) * 0.1
+          const scoreB = b.count * 2 + (b.totalResults / b.count) * 0.1
+          return scoreB - scoreA
+        })
+        .slice(0, 20)
 
-  const fallbackQueries = [
-    'BTC', 'ETH', 'SOL', 'PEPE', 'WIF',
-    'Binance', 'Bybit', 'OKX', 'Bitget',
-    'Futures', 'Spot', 'Options', 'NFT', 'DeFi',
-  ]
+      trendingItems = sortedQueries.map(([q, stats], index) => {
+        let category: TrendingSearchItem['category'] = 'general'
+        if (/^[A-Z]{2,6}$/.test(q.toUpperCase())) {
+          category = 'token'
+        } else if (q.includes('@') || /binance|bybit|okx|bitget|mexc/i.test(q)) {
+          category = 'trader'
+        }
+        return { query: q, searchCount: stats.count, rank: index + 1, category }
+      })
+    }
 
-  const result: TrendingSearchResponse = {
-    trending: trending.length >= 5 ? trending : [],
-    fallback: fallbackQueries,
-    lastUpdated: new Date().toISOString(),
-  }
+    const fallbackQueries = [
+      'BTC', 'ETH', 'SOL', 'PEPE', 'WIF',
+      'Binance', 'Bybit', 'OKX', 'Bitget',
+      'Futures', 'Spot', 'Options', 'NFT', 'DeFi',
+    ]
 
-  try {
-    await cacheSet(cacheKey, result, { ttl: 3600 })
-  } catch {
-    // Intentionally swallowed: cache write failure is non-critical
-  }
+    return {
+      trending: trendingItems.length >= 5 ? trendingItems : [],
+      fallback: fallbackQueries,
+      lastUpdated: new Date().toISOString(),
+    } satisfies TrendingSearchResponse
+  }, { ttl: 300 })
 
-  return success(result, 200, {
+  return success(trending, 200, {
     'Cache-Control': 'public, s-maxage=1800, stale-while-revalidate=3600',
   })
 }
