@@ -15,6 +15,9 @@ import { resolveTrader as resolveTraderUnified } from '@/lib/data/unified'
 import WrappedCardClient from '@/app/(app)/wrapped/[handle]/WrappedCardClient'
 import type { WrappedTraderData } from '@/app/(app)/wrapped/[handle]/page'
 import { BASE_URL } from '@/lib/constants/urls'
+import { createLogger } from '@/lib/utils/logger'
+
+const logger = createLogger('share-rank')
 
 export const revalidate = 300
 
@@ -101,7 +104,7 @@ async function resolveTraderForWrapped(
 
     return { handle: resolved.handle || null, data }
   } catch (error) {
-    console.warn('[share/rank] resolve failed:', error instanceof Error ? error.message : String(error))
+    logger.warn('[share/rank] resolve failed:', error instanceof Error ? error.message : String(error))
     return { handle: null, data: null }
   }
 }

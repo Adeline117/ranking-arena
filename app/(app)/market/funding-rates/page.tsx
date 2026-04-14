@@ -2,6 +2,9 @@ import { Metadata } from 'next'
 import { getSupabaseAdmin } from '@/lib/supabase/server'
 import FundingRatesClient from './FundingRatesClient'
 import { BASE_URL } from '@/lib/constants/urls'
+import { createLogger } from '@/lib/utils/logger'
+
+const logger = createLogger('funding-rates')
 
 export const metadata: Metadata = {
   title: 'Funding Rates | Arena',
@@ -56,7 +59,7 @@ async function getFundingRates(): Promise<FundingRateRow[]> {
     .limit(500)
 
   if (error) {
-    console.error('[funding-rates] fetch error:', error.message)
+    logger.error('[funding-rates] fetch error:', error.message)
     return []
   }
 

@@ -605,23 +605,25 @@ export default function TraderProfileClient({ data, serverTraderData, claimedUse
                   const lLoss = (perf?.largest_loss as number | null) ?? null
                   if (sortino == null && calmar == null && profitFactor == null && avgProfitVal == null && lWin == null) return null
                   return (
-                    <AdvancedMetricsCard
-                      metrics={{
-                        sortino_ratio: sortino,
-                        calmar_ratio: calmar,
-                        profit_factor: profitFactor,
-                        recovery_factor: null,
-                        max_consecutive_wins: null,
-                        max_consecutive_losses: null,
-                        avg_holding_hours: avgHolding,
-                        volatility_pct: null,
-                        downside_volatility_pct: null,
-                      }}
-                      avgProfit={avgProfitVal}
-                      avgLoss={avgLossVal}
-                      largestWin={lWin}
-                      largestLoss={lLoss}
-                    />
+                    <SectionErrorBoundary>
+                      <AdvancedMetricsCard
+                        metrics={{
+                          sortino_ratio: sortino,
+                          calmar_ratio: calmar,
+                          profit_factor: profitFactor,
+                          recovery_factor: null,
+                          max_consecutive_wins: null,
+                          max_consecutive_losses: null,
+                          avg_holding_hours: avgHolding,
+                          volatility_pct: null,
+                          downside_volatility_pct: null,
+                        }}
+                        avgProfit={avgProfitVal}
+                        avgLoss={avgLossVal}
+                        largestWin={lWin}
+                        largestLoss={lLoss}
+                      />
+                    </SectionErrorBoundary>
                   )
                 })()}
 

@@ -15,6 +15,9 @@ import TopNav from '@/app/components/layout/TopNav'
 import { tokens } from '@/lib/design-tokens'
 import { RankingSkeleton } from '@/app/components/ui/Skeleton'
 import { BASE_URL } from '@/lib/constants/urls'
+import { createLogger } from '@/lib/utils/logger'
+
+const logger = createLogger('feed')
 
 export const revalidate = 60 // ISR: 1 minute
 
@@ -72,7 +75,7 @@ async function fetchInitialActivities(): Promise<{
       nextCursor,
     }
   } catch (error) {
-    console.warn('[feed] fetchActivities failed:', error instanceof Error ? error.message : String(error))
+    logger.warn('[feed] fetchActivities failed:', error instanceof Error ? error.message : String(error))
     return { activities: [], hasMore: false, nextCursor: null }
   }
 }
