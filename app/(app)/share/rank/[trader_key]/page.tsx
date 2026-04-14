@@ -18,6 +18,10 @@ import { BASE_URL } from '@/lib/constants/urls'
 
 export const revalidate = 300
 
+// SSR timeout: during cron contention, resolveTrader can block on row locks
+// for 30+ seconds. Race against this timeout so users see a fast 404 instead.
+const SSR_TIMEOUT_MS = 3000
+
 const PLATFORM_LABELS: Record<string, string> = {
   binance_futures: 'Binance', binance_spot: 'Binance Spot', binance_web3: 'Binance Web3',
   bybit: 'Bybit', bybit_spot: 'Bybit Spot',
@@ -46,8 +50,12 @@ async function resolveTraderForWrapped(
     }
     const seasonId = seasonMap[windowParam] ?? '7D'
 
-    // Use unified resolveTrader instead of direct trader_sources queries
-    const resolved = await resolveTraderUnified(supabase, { handle: traderKey, platform })
+    // Use unified resolveTrader with timeout — this is the call that hangs
+    // during compute-leaderboard cron contention
+    const resolved = await Promise.race([
+      resolveTraderUnified(supabase, { handle: traderKey, platform }),
+      new Promise<null>((resolve) => setTimeout(() => resolve(null), SSR_TIMEOUT_MS)),
+    ])
 
     if (!resolved) return { handle: null, data: null }
 
@@ -55,21 +63,27 @@ async function resolveTraderForWrapped(
     const platformLabel = PLATFORM_LABELS[effectivePlatform]
       ?? effectivePlatform.replace(/_/g, ' ').replace(/\b\w/g, (c: string) => c.toUpperCase())
 
-    const { data: lr } = await supabase
-      .from('leaderboard_ranks')
-      .select('rank, roi, win_rate, arena_score, max_drawdown, season_id')
-      .eq('source', resolved.platform)
-      .eq('source_trader_id', resolved.traderKey)
-      .eq('season_id', seasonId)
-      .maybeSingle()
+    const { data: lr } = await Promise.race([
+      supabase
+        .from('leaderboard_ranks')
+        .select('rank, roi, win_rate, arena_score, max_drawdown, season_id')
+        .eq('source', resolved.platform)
+        .eq('source_trader_id', resolved.traderKey)
+        .eq('season_id', seasonId)
+        .maybeSingle(),
+      new Promise<{ data: null }>((resolve) => setTimeout(() => resolve({ data: null }), SSR_TIMEOUT_MS)),
+    ])
 
     // Estimated — displayed as "Rank X of ~N" on a shareable rank card;
     // N is a marketing number, rounded integer percentile is unaffected.
-    const { count } = await supabase
-      .from('leaderboard_ranks')
-      .select('*', { count: 'estimated', head: true })
-      .eq('source', resolved.platform)
-      .eq('season_id', seasonId)
+    const { count } = await Promise.race([
+      supabase
+        .from('leaderboard_ranks')
+        .select('*', { count: 'estimated', head: true })
+        .eq('source', resolved.platform)
+        .eq('season_id', seasonId),
+      new Promise<{ count: null }>((resolve) => setTimeout(() => resolve({ count: null }), SSR_TIMEOUT_MS)),
+    ])
 
     const data: WrappedTraderData = {
       handle: resolved.handle || traderKey,

@@ -7,6 +7,10 @@ import { BASE_URL } from '@/lib/constants/urls'
 
 export const revalidate = 60
 
+// SSR timeout: during cron contention, Supabase queries can block on row locks
+// for 30+ seconds. Race against this timeout so users see a fast fallback.
+const SSR_TIMEOUT_MS = 4000
+
 export async function generateMetadata({ params }: { params: Promise<{ handle: string }> }): Promise<Metadata> {
   const { handle } = await params
   const decoded = decodeURIComponent(handle)
@@ -16,22 +20,28 @@ export async function generateMetadata({ params }: { params: Promise<{ handle: s
   let traderMeta: { roi?: number; score?: number; platform?: string } | null = null
   try {
     const supabase = getSupabaseAdmin()
-    const { data } = await supabase
-      .from('user_profiles')
-      .select('avatar_url, bio, trader_source, trader_source_id')
-      .eq('handle', decoded)
-      .maybeSingle()
+    const { data } = await Promise.race([
+      supabase
+        .from('user_profiles')
+        .select('avatar_url, bio, trader_source, trader_source_id')
+        .eq('handle', decoded)
+        .maybeSingle(),
+      new Promise<{ data: null }>((resolve) => setTimeout(() => resolve({ data: null }), SSR_TIMEOUT_MS)),
+    ])
     avatarUrl = data?.avatar_url || null
 
     // If user claimed a trader, fetch their trading stats for meta description
     if (data?.trader_source && data?.trader_source_id) {
-      const { data: lr } = await supabase
-        .from('leaderboard_ranks')
-        .select('roi, arena_score, source')
-        .eq('source', data.trader_source)
-        .eq('source_trader_id', data.trader_source_id)
-        .eq('season_id', '90D')
-        .maybeSingle()
+      const { data: lr } = await Promise.race([
+        supabase
+          .from('leaderboard_ranks')
+          .select('roi, arena_score, source')
+          .eq('source', data.trader_source)
+          .eq('source_trader_id', data.trader_source_id)
+          .eq('season_id', '90D')
+          .maybeSingle(),
+        new Promise<{ data: null }>((resolve) => setTimeout(() => resolve({ data: null }), SSR_TIMEOUT_MS)),
+      ])
       if (lr) {
         traderMeta = { roi: lr.roi, score: lr.arena_score, platform: lr.source }
       }
@@ -121,13 +131,18 @@ async function fetchUserProfile(handle: string): Promise<UserProfileData | null>
   // follower_count / following_count are cached columns — avoid re-counting.
   const selectFields = 'id, handle, bio, avatar_url, cover_url, show_followers, show_following, subscription_tier, show_pro_badge, role, follower_count, following_count'
 
-  const [handleResult, handleIlikeResult, uuidResult] = await Promise.all([
-    supabase.from('user_profiles').select(selectFields).eq('handle', decodedHandle).maybeSingle(),
-    // Case-insensitive fallback
-    supabase.from('user_profiles').select(selectFields).ilike('handle', decodedHandle).maybeSingle(),
-    uuidRegex.test(handle)
-      ? supabase.from('user_profiles').select(selectFields).eq('id', handle).maybeSingle()
-      : Promise.resolve({ data: null }),
+  const [handleResult, handleIlikeResult, uuidResult] = await Promise.race([
+    Promise.all([
+      supabase.from('user_profiles').select(selectFields).eq('handle', decodedHandle).maybeSingle(),
+      // Case-insensitive fallback
+      supabase.from('user_profiles').select(selectFields).ilike('handle', decodedHandle).maybeSingle(),
+      uuidRegex.test(handle)
+        ? supabase.from('user_profiles').select(selectFields).eq('id', handle).maybeSingle()
+        : Promise.resolve({ data: null }),
+    ]),
+    new Promise<[{ data: null }, { data: null }, { data: null }]>((resolve) =>
+      setTimeout(() => resolve([{ data: null }, { data: null }, { data: null }]), SSR_TIMEOUT_MS)
+    ),
   ])
 
   const userProfile = handleResult.data || handleIlikeResult.data || uuidResult.data
@@ -150,10 +165,15 @@ async function fetchUserProfile(handle: string): Promise<UserProfileData | null>
   following = (userProfile as { following_count?: number | null }).following_count ?? 0
 
   try {
-    const [tradersRes, subscriptionData, claimedTraderRes] = await Promise.all([
-      supabase.from('trader_follows').select('id', { count: 'estimated', head: true }).eq('user_id', userProfile.id),
-      supabase.from('subscriptions').select('tier, status').eq('user_id', userProfile.id).in('status', ['active', 'trialing']).order('created_at', { ascending: false }).limit(1).maybeSingle(),
-      supabase.from('trader_authorizations').select('id, trader_id').eq('user_id', userProfile.id).eq('status', 'active').limit(1).maybeSingle(),
+    const [tradersRes, subscriptionData, claimedTraderRes] = await Promise.race([
+      Promise.all([
+        supabase.from('trader_follows').select('id', { count: 'estimated', head: true }).eq('user_id', userProfile.id),
+        supabase.from('subscriptions').select('tier, status').eq('user_id', userProfile.id).in('status', ['active', 'trialing']).order('created_at', { ascending: false }).limit(1).maybeSingle(),
+        supabase.from('trader_authorizations').select('id, trader_id').eq('user_id', userProfile.id).eq('status', 'active').limit(1).maybeSingle(),
+      ]),
+      new Promise<[{ count: null }, { data: null }, { data: null }]>((resolve) =>
+        setTimeout(() => resolve([{ count: null }, { data: null }, { data: null }]), SSR_TIMEOUT_MS)
+      ),
     ])
     tradersCount = tradersRes.count || 0
     hasPro = hasPro || subscriptionData?.data?.tier === 'pro'

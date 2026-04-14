@@ -6,6 +6,10 @@ import { getSupabaseAdmin } from '@/lib/supabase/server'
 
 export const revalidate = 3600 // ISR: 1 hour (matches API cache)
 
+// SSR timeout: getPopularTokens scans up to 50k rows and can be very slow
+// during cron contention. First request (cache miss) is vulnerable.
+const SSR_TIMEOUT_MS = 4000
+
 export const metadata: Metadata = {
   title: 'Token Rankings — Who Trades BTC Best? | Arena',
   description:
@@ -100,7 +104,15 @@ const getPopularTokens = unstable_cache(
 )
 
 export default async function TokensPage() {
-  const initialTokens = await getPopularTokens()
+  let initialTokens: PopularToken[] = []
+  try {
+    initialTokens = await Promise.race([
+      getPopularTokens(),
+      new Promise<PopularToken[]>((resolve) => setTimeout(() => resolve([]), SSR_TIMEOUT_MS)),
+    ])
+  } catch {
+    // Timeout or error — render with empty data, client can fetch
+  }
 
   return <TokensIndexClient initialTokens={initialTokens} />
 }
