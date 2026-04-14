@@ -21,7 +21,8 @@ export default function PasswordInput({ wrapperStyle, style, ...props }: Passwor
         type="button"
         onClick={() => setShow(v => !v)}
         aria-label={show ? 'Hide password' : 'Show password'}
-        tabIndex={-1}
+        tabIndex={0}
+        className="focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-current"
         style={{
           position: 'absolute',
           right: 8,

@@ -322,6 +322,7 @@ function RankingSearchInner({ value, onChange, resultCount, language: _language 
           ref={dropdownRef}
           role="listbox"
           aria-label={t('searchHistory')}
+          aria-live="polite"
           style={{
             position: 'absolute',
             top: '100%',
