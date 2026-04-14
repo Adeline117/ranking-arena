@@ -352,9 +352,23 @@ async function getRankingsFallback(rankingsQuery: RankingsQuery, _cursor?: strin
   const seasonIdUpper = seasonId;
   const availableSources = await getAvailableSources(supabase, seasonIdUpper);
 
-  // Freshness check from computed_at
+  // Freshness check: use most recent pipeline run, not displayed rows' computed_at.
+  // computed_at only updates when a trader's score changes, so stable top traders
+  // can have old computed_at even when the pipeline ran minutes ago — causing
+  // false is_stale=true warnings for users.
   let latestCapturedAt: number;
-  if (paginatedRows.length > 0) {
+  const { data: lastRun } = await supabase
+    .from('pipeline_logs')
+    .select('ended_at')
+    .like('job_name', 'compute-leaderboard%')
+    .eq('status', 'success')
+    .order('ended_at', { ascending: false })
+    .limit(1)
+    .maybeSingle()
+  if (lastRun?.ended_at) {
+    latestCapturedAt = new Date(lastRun.ended_at).getTime();
+  } else if (paginatedRows.length > 0) {
+    // Fallback: use row computed_at if no pipeline_logs available
     latestCapturedAt = Math.max(
       ...paginatedRows.map((r: Record<string, unknown>) => new Date(r.computed_at as string).getTime()).filter(t => t > 0)
     );
