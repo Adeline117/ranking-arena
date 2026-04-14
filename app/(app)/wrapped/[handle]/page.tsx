@@ -60,6 +60,10 @@ interface Props {
   searchParams: Promise<{ platform?: string; window?: string }>
 }
 
+// SSR timeout: during cron contention, resolveTrader can block on row locks
+// for 30+ seconds. Race against this timeout so users see a fast 404 instead.
+const SSR_TIMEOUT_MS = 3000
+
 async function fetchWrappedData(handle: string, platform?: string, windowParam = '7d'): Promise<WrappedTraderData | null> {
   try {
     const supabase = getSupabaseAdmin()
@@ -71,8 +75,12 @@ async function fetchWrappedData(handle: string, platform?: string, windowParam =
     }
     const seasonId = seasonMap[windowParam] ?? '7D'
 
-    // Use unified resolveTrader instead of direct trader_sources query
-    const resolved = await resolveTrader(supabase, { handle, platform })
+    // Use unified resolveTrader with timeout — this is the call that hangs
+    // during compute-leaderboard cron contention
+    const resolved = await Promise.race([
+      resolveTrader(supabase, { handle, platform }),
+      new Promise<null>((resolve) => setTimeout(() => resolve(null), SSR_TIMEOUT_MS)),
+    ])
 
     if (!resolved) return null
 
@@ -80,22 +88,28 @@ async function fetchWrappedData(handle: string, platform?: string, windowParam =
     const platformLabel = PLATFORM_LABELS[effectivePlatform] ?? effectivePlatform.replace(/_/g, ' ').replace(/\b\w/g, (c: string) => c.toUpperCase())
 
     // Fetch leaderboard rank for this trader + window
-    const { data: lr } = await supabase
-      .from('leaderboard_ranks')
-      .select('rank, roi, win_rate, arena_score, max_drawdown, season_id')
-      .eq('source', resolved.platform)
-      .eq('source_trader_id', resolved.traderKey)
-      .eq('season_id', seasonId)
-      .maybeSingle()
+    const { data: lr } = await Promise.race([
+      supabase
+        .from('leaderboard_ranks')
+        .select('rank, roi, win_rate, arena_score, max_drawdown, season_id')
+        .eq('source', resolved.platform)
+        .eq('source_trader_id', resolved.traderKey)
+        .eq('season_id', seasonId)
+        .maybeSingle(),
+      new Promise<{ data: null }>((resolve) => setTimeout(() => resolve({ data: null }), SSR_TIMEOUT_MS)),
+    ])
 
     // Fetch total traders on this platform for percentile
     // Estimated — wrapped/year-in-review page shows a rounded "ranked
     // X of ~N" headline; N is a marketing number.
-    const { count } = await supabase
-      .from('leaderboard_ranks')
-      .select('*', { count: 'estimated', head: true })
-      .eq('source', resolved.platform)
-      .eq('season_id', seasonId)
+    const { count } = await Promise.race([
+      supabase
+        .from('leaderboard_ranks')
+        .select('*', { count: 'estimated', head: true })
+        .eq('source', resolved.platform)
+        .eq('season_id', seasonId),
+      new Promise<{ count: null }>((resolve) => setTimeout(() => resolve({ count: null }), SSR_TIMEOUT_MS)),
+    ])
 
     return {
       handle: resolved.handle || handle,
