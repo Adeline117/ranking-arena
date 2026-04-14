@@ -9,11 +9,9 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getSupabaseAdmin } from '@/lib/supabase/server'
 import { randomBytes } from 'crypto'
 import { createLogger } from '@/lib/utils/logger'
+import { checkRateLimit, RateLimitPresets } from '@/lib/utils/rate-limit'
 
 const logger = createLogger('ranking-snapshot')
-
-// Simple in-memory rate limiter for snapshot creation
-const snapshotRateLimit = new Map<string, number[]>()
 
 export async function GET() {
   return NextResponse.json(
@@ -23,19 +21,9 @@ export async function GET() {
 }
 
 export async function POST(request: NextRequest) {
-  // Rate limit to prevent abuse (no auth required for sharing, but limit writes)
-  const ip = request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || 'unknown'
-  const rateLimitKey = `snapshot:${ip}`
-  const now = Date.now()
-  const windowMs = 60_000
-  const maxRequests = 5
-  if (!snapshotRateLimit.has(rateLimitKey)) snapshotRateLimit.set(rateLimitKey, [])
-  const timestamps = snapshotRateLimit.get(rateLimitKey)!.filter(t => now - t < windowMs)
-  if (timestamps.length >= maxRequests) {
-    return NextResponse.json({ error: 'Too many snapshot requests. Try again later.' }, { status: 429 })
-  }
-  timestamps.push(now)
-  snapshotRateLimit.set(rateLimitKey, timestamps)
+  // Redis-based rate limiting (shared across serverless instances)
+  const rateLimitResponse = await checkRateLimit(request, RateLimitPresets.write)
+  if (rateLimitResponse) return rateLimitResponse
 
   try {
     const body = await request.json()

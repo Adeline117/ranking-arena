@@ -33,7 +33,7 @@ export const POST = withAuth(
     if (!isSelfTarget) {
       // Check admin role
       const { data: profile } = await supabase
-        .from('profiles')
+        .from('user_profiles')
         .select('role')
         .eq('id', user.id)
         .single()
