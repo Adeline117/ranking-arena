@@ -133,8 +133,8 @@ function useRealtimePooled<T extends Record<string, unknown>>(
       }
     )
 
-    // Check connection after a short delay
-    setTimeout(() => {
+    // Check connection after a short delay (cleanup on unmount)
+    const statusTimer = setTimeout(() => {
       if (channelPool.hasChannel(schema, table, event, filter)) {
         setStatus('connected')
         onConnect?.()
@@ -142,6 +142,7 @@ function useRealtimePooled<T extends Record<string, unknown>>(
     }, 100)
 
     return () => {
+      clearTimeout(statusTimer)
       if (unsubscribeRef.current) {
         unsubscribeRef.current()
         unsubscribeRef.current = null
@@ -329,18 +330,10 @@ function useRealtimeDirect<T extends Record<string, unknown>>(
   }, [clearRetryTimeout, connect])
 
   useEffect(() => {
+    if (!enabled) return
     connect()
     return () => disconnect()
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- run once on mount; connect/disconnect are stable refs
-  }, [])
-
-  useEffect(() => {
-    if (enabled) {
-      if (status === 'disconnected') connect()
-    } else {
-      disconnect()
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- only toggle connection when enabled changes; connect/disconnect are stable refs
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- connect/disconnect are stable refs; enabled guards initial connect
   }, [enabled])
 
   useEffect(() => {
