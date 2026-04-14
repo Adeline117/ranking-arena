@@ -25,12 +25,12 @@ export async function GET(
       return NextResponse.json({ error: 'Handle is required' }, { status: 400 })
     }
 
-    // 并行获取所有数据
+    // 并行获取所有数据 (DataResult-aware: unwrap .data, handle .ok === false)
     const [
-      profile,
-      performance,
-      stats,
-      portfolio,
+      profileResult,
+      performanceResult,
+      statsResult,
+      portfolioResult,
       subscriptionData,
     ] = await Promise.all([
       // 用户/交易员基本信息
@@ -40,7 +40,7 @@ export async function GET(
       // 统计数据
       getTraderStats(handle).catch(() => null),
       // 持仓数据
-      getTraderPortfolio(handle).catch(() => []),
+      getTraderPortfolio(handle).catch(() => null),
       // 订阅状态 + 粉丝/关注缓存计数（如果是用户）
       // follower_count / following_count are cached columns kept in sync by
       // updateFollowCounts() on every follow/unfollow, so we read them
@@ -59,7 +59,19 @@ export async function GET(
       })(),
     ])
 
+    // Unwrap DataResult: distinguish "not found" from "data layer error"
+    const profile = profileResult?.ok ? profileResult.data : null
+    const profileError = profileResult && !profileResult.ok ? profileResult.error : null
+    const performance = performanceResult?.ok ? performanceResult.data : null
+    const stats = statsResult?.ok ? statsResult.data : null
+    const portfolio = portfolioResult?.ok ? portfolioResult.data : []
+
     if (!profile) {
+      // If data layer failed (vs genuine not-found), return 502 so callers can distinguish
+      if (profileError) {
+        logger.error('[API] Data layer error fetching trader profile:', profileError)
+        return NextResponse.json({ error: 'Data layer error', detail: profileError }, { status: 502 })
+      }
       return NextResponse.json({ error: 'User not found' }, { status: 404 })
     }
 
@@ -73,7 +85,7 @@ export async function GET(
         .neq('handle', handle)
         .order('roi_90d', { ascending: false })
         .limit(5)
-      
+
       similarTraders = similar || []
     }
 
@@ -92,6 +104,12 @@ export async function GET(
       stats,
       portfolio,
       similarTraders,
+      // Flag partial failures so UI can show appropriate indicators
+      _errors: {
+        performance: performanceResult && !performanceResult.ok ? performanceResult.error : undefined,
+        stats: statsResult && !statsResult.ok ? statsResult.error : undefined,
+        portfolio: portfolioResult && !portfolioResult.ok ? portfolioResult.error : undefined,
+      },
       // 元信息
       meta: {
         timestamp: new Date().toISOString(),
