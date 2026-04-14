@@ -107,15 +107,16 @@ export default function RegisterForm({
     <>
       {/* Username input */}
       <div style={{ marginBottom: 20 }}>
-        <label style={{ display: 'block', marginBottom: 8, fontSize: 13, fontWeight: 600, color: 'var(--color-text-secondary)' }}>
+        <label htmlFor="register-handle" style={{ display: 'block', marginBottom: 8, fontSize: 13, fontWeight: 600, color: 'var(--color-text-secondary)' }}>
           {t('loginHandle')}
         </label>
         <input
+          id="register-handle"
           type="text"
           className="login-input"
-          style={{ 
-            width: '100%', 
-            padding: '14px 16px', 
+          style={{
+            width: '100%',
+            padding: '14px 16px',
             borderRadius: tokens.radius.lg,
             border: `1px solid ${touchedFields.handle && !handleValidation.valid ? 'var(--color-accent-error)' : 'var(--glass-border-light)'}`,
             background: 'var(--color-bg-tertiary)',
@@ -128,9 +129,11 @@ export default function RegisterForm({
           onChange={(e) => setHandle(e.target.value)}
           onBlur={() => markTouched('handle')}
           autoComplete="username"
+          aria-invalid={touchedFields.handle && handle ? !handleValidation.valid : undefined}
+          aria-describedby={touchedFields.handle && handle && !handleValidation.valid ? 'register-handle-error' : undefined}
         />
         {touchedFields.handle && handle && !handleValidation.valid && (
-          <div style={{ marginTop: 6, fontSize: 12 }}>
+          <div id="register-handle-error" style={{ marginTop: 6, fontSize: 12 }}>
             <span style={{ color: 'var(--color-accent-error)' }}>X - {t(handleValidation.messageKey)}</span>
           </div>
         )}
@@ -138,16 +141,17 @@ export default function RegisterForm({
       
       {/* Password input */}
       <div style={{ marginBottom: 20 }}>
-        <label style={{ display: 'block', marginBottom: 8, fontSize: 13, fontWeight: 600, color: 'var(--color-text-secondary)' }}>
+        <label htmlFor="register-password" style={{ display: 'block', marginBottom: 8, fontSize: 13, fontWeight: 600, color: 'var(--color-text-secondary)' }}>
           {t('loginPassword')}
         </label>
         <div style={{ position: 'relative' }}>
           <input
+            id="register-password"
             type={showPassword ? 'text' : 'password'}
             className="login-input"
-            style={{ 
-              width: '100%', 
-              padding: '14px 16px', 
+            style={{
+              width: '100%',
+              padding: '14px 16px',
               paddingRight: 50,
               borderRadius: tokens.radius.lg,
               border: `1px solid ${touchedFields.password && !passwordValidation.valid ? 'var(--color-accent-error)' : 'var(--glass-border-light)'}`,
@@ -161,6 +165,7 @@ export default function RegisterForm({
             onChange={(e) => setPassword(e.target.value)}
             onBlur={() => markTouched('password')}
             autoComplete="new-password"
+            aria-invalid={touchedFields.password ? !passwordValidation.valid : undefined}
           />
           <button
             type="button"
