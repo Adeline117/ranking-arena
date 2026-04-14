@@ -13,6 +13,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { env } from '@/lib/env'
 import { getSupabaseAdmin } from '@/lib/supabase/server'
 import { logger } from '@/lib/logger'
+import { parseLimit, parseOffset } from '@/lib/utils/safe-parse'
 
 export const dynamic = 'force-dynamic'
 
@@ -63,8 +64,8 @@ export async function GET(request: NextRequest) {
     const status = searchParams.get('status') || 'active'
     const severity = searchParams.get('severity')
     const alertType = searchParams.get('alert_type')
-    const limit = Math.min(parseInt(searchParams.get('limit') || '100', 10) || 100, 500)
-    const offset = Math.max(0, parseInt(searchParams.get('offset') || '0', 10) || 0)
+    const limit = parseLimit(searchParams.get('limit'), 100, 500)
+    const offset = parseOffset(searchParams.get('offset'))
 
     // Build query
     // KEEP 'exact' — manipulation_alerts is a moderation queue actionable

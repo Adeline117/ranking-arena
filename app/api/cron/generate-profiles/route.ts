@@ -13,6 +13,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getSupabaseAdmin } from '@/lib/supabase/server'
 import { generateAutoBio, generateAutoTags, type AutoProfileInput } from '@/lib/utils/auto-profile'
 import { PipelineLogger } from '@/lib/services/pipeline-logger'
+import { safeParseInt } from '@/lib/utils/safe-parse'
 import { logger } from '@/lib/logger'
 import { env } from '@/lib/env'
 
@@ -35,7 +36,7 @@ export async function POST(request: NextRequest) {
 
   try {
     const url = new URL(request.url)
-    const limit = parseInt(url.searchParams.get('limit') || '500', 10)
+    const limit = safeParseInt(url.searchParams.get('limit'), 500)
     const force = url.searchParams.get('force') === 'true'
 
     const supabase = getSupabaseAdmin()

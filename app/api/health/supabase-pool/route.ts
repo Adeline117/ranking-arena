@@ -12,6 +12,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { env } from '@/lib/env'
 import { getSupabaseAdmin } from '@/lib/supabase/server'
 import { createLogger } from '@/lib/utils/logger'
+import { safeParseInt } from '@/lib/utils/safe-parse'
 
 const log = createLogger('api:supabase-pool')
 
@@ -74,7 +75,7 @@ export async function GET(request: NextRequest) {
       })
     }
 
-    const activeConnections = typeof data === 'number' ? data : parseInt(String(data), 10)
+    const activeConnections = typeof data === 'number' ? data : safeParseInt(String(data), 0)
     const utilizationPct = Math.round((activeConnections / MAX_CONNECTIONS) * 10000) / 100
 
     let status: 'healthy' | 'warning' | 'critical'

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getSupabaseAdmin } from '@/lib/supabase/server'
 import { createLogger } from '@/lib/utils/logger'
+import { parseLimit, parseOffset } from '@/lib/utils/safe-parse'
 
 const logger = createLogger('api:user-activities')
 
@@ -12,8 +13,8 @@ export async function GET(
     const { handle } = await params
     const supabase = getSupabaseAdmin()
     const { searchParams } = new URL(request.url)
-    const limit = Math.min(parseInt(searchParams.get('limit') || '20', 10) || 20, 50)
-    const offset = Math.max(parseInt(searchParams.get('offset') || '0', 10) || 0, 0)
+    const limit = parseLimit(searchParams.get('limit'), 20, 50)
+    const offset = parseOffset(searchParams.get('offset'))
 
     // Resolve handle to user_id
     const { data: profile } = await supabase

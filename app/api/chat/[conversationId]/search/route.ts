@@ -9,6 +9,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getAuthUser, getSupabaseAdmin } from '@/lib/supabase/server'
 import logger from '@/lib/logger'
+import { parseLimit } from '@/lib/utils/safe-parse'
 
 export const dynamic = 'force-dynamic'
 
@@ -28,7 +29,7 @@ export async function GET(
 
     const searchParams = request.nextUrl.searchParams
     const query = searchParams.get('q')
-    const limit = Math.min(parseInt(searchParams.get('limit') || '20'), 50)
+    const limit = parseLimit(searchParams.get('limit'), 20, 50)
     const cursor = searchParams.get('cursor') // message created_at for pagination
     const fromDate = searchParams.get('from') // optional: filter start date
     const toDate = searchParams.get('to') // optional: filter end date

@@ -11,6 +11,7 @@ import { PipelineLogger } from '@/lib/services/pipeline-logger'
 import { getSupabaseAdmin } from '@/lib/supabase/server'
 import { env } from '@/lib/env'
 import { createLogger } from '@/lib/utils/logger'
+import { parseLimit } from '@/lib/utils/safe-parse'
 
 const log = createLogger('cron:backfill-avatars')
 
@@ -387,7 +388,7 @@ export async function GET(request: Request) {
 
   const url = new URL(request.url)
   const platform = url.searchParams.get('platform')
-  const limit = Math.min(parseInt(url.searchParams.get('limit') || '200', 10) || 200, 500)
+  const limit = parseLimit(url.searchParams.get('limit'), 200, 500)
   const mode = url.searchParams.get('mode') || 'auto' // 'bulk', 'individual', 'auto'
   const plog = await PipelineLogger.start(`backfill-avatars-${platform || 'unknown'}`)
 

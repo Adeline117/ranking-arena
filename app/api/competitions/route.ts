@@ -6,14 +6,15 @@
 import { NextResponse } from 'next/server'
 import { withPublic, withAuth } from '@/lib/api/middleware'
 import { getSupabaseAdmin } from '@/lib/supabase/server'
+import { parseLimit, parseOffset } from '@/lib/utils/safe-parse'
 
 // GET: List competitions
 export const GET = withPublic(
   async ({ request }) => {
     const { searchParams } = new URL(request.url)
     const status = searchParams.get('status') || 'active' // upcoming, active, completed
-    const limit = Math.min(parseInt(searchParams.get('limit') || '20', 10) || 20, 50)
-    const offset = Math.max(0, parseInt(searchParams.get('offset') || '0', 10) || 0)
+    const limit = parseLimit(searchParams.get('limit'), 20, 50)
+    const offset = parseOffset(searchParams.get('offset'))
 
     const supabase = getSupabaseAdmin()
 

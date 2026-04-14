@@ -7,6 +7,7 @@ import { withAdminAuth } from '@/lib/api/with-admin-auth'
 import { successWithPagination } from '@/lib/api/response'
 import { ApiError } from '@/lib/api/errors'
 import { createLogger } from '@/lib/utils/logger'
+import { parsePage, parseLimit } from '@/lib/utils/safe-parse'
 
 const logger = createLogger('admin-users')
 
@@ -15,8 +16,8 @@ export const dynamic = 'force-dynamic'
 export const GET = withAdminAuth(
   async ({ supabase, request }) => {
     const { searchParams } = new URL(request.url)
-    const page = Math.max(1, parseInt(searchParams.get('page') || '1', 10) || 1)
-    const limit = Math.min(parseInt(searchParams.get('limit') || '20', 10) || 20, 200)
+    const page = parsePage(searchParams.get('page'))
+    const limit = parseLimit(searchParams.get('limit'), 20, 200)
     const search = searchParams.get('search') || ''
     const filter = searchParams.get('filter') || 'all' // all, banned, active
 

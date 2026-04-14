@@ -13,6 +13,7 @@ import { createLogger, traceMessage } from '@/lib/utils/logger'
 import { getAuthUser, getSupabaseAdmin } from '@/lib/supabase/server'
 import { checkRateLimit, RateLimitPresets } from '@/lib/utils/rate-limit'
 import { socialFeatureGuard } from '@/lib/features'
+import { parseLimit } from '@/lib/utils/safe-parse'
 
 const logger = createLogger('messages-api')
 
@@ -61,7 +62,7 @@ export async function GET(request: NextRequest) {
     // 分页参数
     const before = request.nextUrl.searchParams.get('before') // cursor: created_at of oldest loaded message
     const limitParam = request.nextUrl.searchParams.get('limit')
-    const limit = Math.min(Math.max(parseInt(limitParam || String(DEFAULT_PAGE_SIZE), 10) || DEFAULT_PAGE_SIZE, 1), MAX_PAGE_SIZE)
+    const limit = parseLimit(limitParam, DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE)
 
     const supabase = getSupabaseAdmin()
 

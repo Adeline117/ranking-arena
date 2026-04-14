@@ -9,6 +9,7 @@
 
 import { ImageResponse } from 'next/og'
 import { NextRequest } from 'next/server'
+import { safeParseInt } from '@/lib/utils/safe-parse'
 
 export const runtime = 'edge'
 
@@ -94,8 +95,8 @@ export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url)
 
   const name = searchParams.get('name') || searchParams.get('handle') || 'Trader'
-  const rank = parseInt(searchParams.get('rank') || '0', 10)
-  const total = parseInt(searchParams.get('total') || '0', 10)
+  const rank = safeParseInt(searchParams.get('rank'), 0)
+  const total = safeParseInt(searchParams.get('total'), 0)
   const roi = parseFloat(searchParams.get('roi') || 'NaN')
   const winRate = parseFloat(searchParams.get('winRate') || 'NaN')
   const score = parseFloat(searchParams.get('score') || 'NaN')

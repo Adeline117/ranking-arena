@@ -10,6 +10,7 @@ import { success as apiSuccess } from '@/lib/api/response'
 import { ApiError } from '@/lib/api/errors'
 import { createLogger } from '@/lib/utils/logger'
 import { autoEscalate } from '@/lib/services/moderation'
+import { parsePage, parseLimit } from '@/lib/utils/safe-parse'
 
 const logger = createLogger('api:moderation-queue')
 
@@ -21,8 +22,8 @@ export const dynamic = 'force-dynamic'
 export const GET = withAdminAuth(
   async ({ supabase, request }) => {
     const { searchParams } = new URL(request.url)
-    const page = Math.max(1, parseInt(searchParams.get('page') || '1', 10))
-    const limit = Math.min(100, Math.max(1, parseInt(searchParams.get('limit') || '20', 10)))
+    const page = parsePage(searchParams.get('page'))
+    const limit = parseLimit(searchParams.get('limit'), 20, 100)
 
     // Get all pending reports
     const { data: reports, error: reportsError } = await supabase

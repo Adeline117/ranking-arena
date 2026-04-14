@@ -22,6 +22,7 @@ import { PipelineLogger } from '@/lib/services/pipeline-logger'
 import { connectorRegistry, initializeConnectors } from '@/lib/connectors/registry'
 import { runConnectorBatch } from '@/lib/pipeline/connector-db-adapter'
 import { SOURCE_TO_CONNECTOR_MAP } from '@/lib/constants/exchanges'
+import { safeParseInt } from '@/lib/utils/safe-parse'
 import { env } from '@/lib/env'
 
 export const dynamic = 'force-dynamic'
@@ -261,7 +262,7 @@ export async function GET(req: NextRequest) {
 
   const platformParam = req.nextUrl.searchParams.get('platform')
   const periodParam = req.nextUrl.searchParams.get('period')
-  const limit = parseInt(req.nextUrl.searchParams.get('limit') || '100', 10) || 100
+  const limit = safeParseInt(req.nextUrl.searchParams.get('limit'), 100)
   const type = req.nextUrl.searchParams.get('type') || 'all'
 
   const platforms = platformParam
