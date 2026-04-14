@@ -176,7 +176,7 @@ describe('getTraderByHandle', () => {
 
   test('should return null for empty handle', async () => {
     const result = await getTraderByHandle('')
-    expect(result).toBeNull()
+    expect(result).toEqual({ ok: true, data: null })
   })
 
   test('should return null when trader not found', async () => {
@@ -184,7 +184,8 @@ describe('getTraderByHandle', () => {
     ;(mockSupabase.order as jest.Mock).mockResolvedValue({ data: [], error: null })
 
     const result = await getTraderByHandle('nonexistent')
-    expect(result).toBeNull()
+    expect(result.ok).toBe(true)
+    expect(result.data).toBeNull()
   })
 })
 
@@ -204,14 +205,16 @@ describe('getTraderStats', () => {
     ;(mockSupabase.order as jest.Mock).mockResolvedValue({ data: [], error: null })
 
     const result = await getTraderStats('nonexistent')
-    expect(result).toEqual({ additionalStats: {} })
+    expect(result.ok).toBe(true)
+    expect(result.data).toEqual({ additionalStats: {} })
   })
 
   test('should return stats object structure', async () => {
-    // The function always returns a TraderStats object, never null
+    // The function always returns a DataResult wrapping TraderStats
     ;(mockSupabase.order as jest.Mock).mockResolvedValue({ data: [], error: null })
 
     const result = await getTraderStats('testTrader')
-    expect(result).toHaveProperty('additionalStats')
+    expect(result.ok).toBe(true)
+    expect(result.data).toHaveProperty('additionalStats')
   })
 })
