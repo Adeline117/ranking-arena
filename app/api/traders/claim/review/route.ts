@@ -14,6 +14,7 @@ import {
   checkRateLimit,
   RateLimitPresets,
 } from '@/lib/api'
+import { ApiError } from '@/lib/api/errors'
 import { reviewClaim } from '@/lib/data/trader-claims'
 
 export async function POST(request: NextRequest) {
@@ -32,7 +33,7 @@ export async function POST(request: NextRequest) {
       .single()
 
     if (!profile || profile.role !== 'admin') {
-      return handleError(new Error('Admin access required'), 'claim review')
+      throw ApiError.forbidden('Admin access required')
     }
 
     const body = await request.json()
@@ -41,7 +42,7 @@ export async function POST(request: NextRequest) {
     const rejectReason = body.rejectReason || undefined
 
     if (!claimId) {
-      return handleError(new Error('claimId is required'), 'claim review')
+      throw ApiError.validation('claimId is required')
     }
 
     const claim = await reviewClaim(supabase, claimId, user.id, approved, rejectReason)

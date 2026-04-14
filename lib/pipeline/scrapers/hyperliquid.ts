@@ -95,7 +95,8 @@ export class HyperliquidScraper implements PlatformScraper {
       if (response.ok) {
         const data = await response.json()
         // 可能返回 { leaderboardRows: [...] } 或直接 [...]
-        return data.leaderboardRows || data || []
+        const rows = data.leaderboardRows || data
+        return Array.isArray(rows) ? rows : []
       }
     } catch (error) {
       log.warn('stats-data endpoint failed', { error: error instanceof Error ? error.message : String(error) })
@@ -111,7 +112,8 @@ export class HyperliquidScraper implements PlatformScraper {
 
       if (response.ok) {
         const data = await response.json()
-        return data.leaderboardRows || data || []
+        const rows = data.leaderboardRows || data
+        return Array.isArray(rows) ? rows : []
       }
     } catch (error) {
       log.warn('info POST endpoint failed', { error: error instanceof Error ? error.message : String(error) })

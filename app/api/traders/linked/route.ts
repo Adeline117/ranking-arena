@@ -14,6 +14,7 @@ import {
   checkRateLimit,
   RateLimitPresets,
 } from '@/lib/api'
+import { ApiError } from '@/lib/api/errors'
 import { logger } from '@/lib/logger'
 
 /**
@@ -86,7 +87,7 @@ export async function PATCH(request: NextRequest) {
     const { id, label, display_order, is_primary } = body
 
     if (!id) {
-      return handleError(new Error('Missing linked trader id'), 'linked traders PATCH')
+      throw ApiError.validation('Missing linked trader id')
     }
 
     // Build update object
@@ -151,7 +152,7 @@ export async function DELETE(request: NextRequest) {
 
     const { id } = body
     if (!id) {
-      return handleError(new Error('Missing linked trader id'), 'linked traders DELETE')
+      throw ApiError.validation('Missing linked trader id')
     }
 
     // Get the record first to check if it's primary
@@ -163,7 +164,7 @@ export async function DELETE(request: NextRequest) {
       .single()
 
     if (!existing) {
-      return handleError(new Error('Linked trader not found'), 'linked traders DELETE')
+      throw ApiError.notFound('Linked trader not found')
     }
 
     // Delete the link

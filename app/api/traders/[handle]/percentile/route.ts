@@ -10,7 +10,10 @@ import {
   success,
   error,
   handleError,
+  checkRateLimit,
+  RateLimitPresets,
 } from '@/lib/api'
+import type { SupabaseClient } from '@supabase/supabase-js'
 import { resolveTrader } from '@/lib/data/unified'
 import { hasFeatureAccess } from '@/lib/types/premium'
 import _logger from '@/lib/logger'
@@ -70,9 +73,12 @@ export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ handle: string }> }
 ) {
+  const rl = await checkRateLimit(request, RateLimitPresets.read)
+  if (rl) return rl
+
   try {
     const user = await requireAuth(request)
-    const supabase = getSupabaseAdmin()
+    const supabase = getSupabaseAdmin() as SupabaseClient
 
     // 获取用户订阅等级
     const { data: subscription } = await supabase

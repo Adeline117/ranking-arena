@@ -13,6 +13,7 @@ import {
   checkRateLimit,
   RateLimitPresets,
 } from '@/lib/api'
+import { ApiError } from '@/lib/api/errors'
 import {
   getVerifiedTrader,
   getUserVerifiedTrader,
@@ -74,7 +75,7 @@ export async function PUT(request: NextRequest) {
     // Check user has a verified trader
     const existing = await getUserVerifiedTrader(supabase, user.id)
     if (!existing) {
-      return handleError(new Error('You do not have a verified trader profile'), 'verified trader PUT')
+      throw ApiError.forbidden('You do not have a verified trader profile')
     }
 
     const body = await request.json()
