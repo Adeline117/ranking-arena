@@ -16,6 +16,9 @@ import { ACTIVITY_META } from '@/lib/types/activities'
 import TopNav from '@/app/components/layout/TopNav'
 import { tokens } from '@/lib/design-tokens'
 import { BASE_URL } from '@/lib/constants/urls'
+import { createLogger } from '@/lib/utils/logger'
+
+const logger = createLogger('feed-detail')
 
 export const revalidate = 300 // ISR: 5 minutes
 
@@ -36,7 +39,7 @@ const fetchActivity = cache(async function fetchActivity(id: string): Promise<Tr
     if (error || !data) return null
     return data as TraderActivity
   } catch (error) {
-    console.warn('[feed/id] fetchActivity failed:', error instanceof Error ? error.message : String(error))
+    logger.warn('[feed/id] fetchActivity failed:', error instanceof Error ? error.message : String(error))
     return null
   }
 })

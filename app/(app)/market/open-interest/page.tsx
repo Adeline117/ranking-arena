@@ -2,6 +2,9 @@ import { Metadata } from 'next'
 import { getSupabaseAdmin } from '@/lib/supabase/server'
 import OpenInterestClient from './OpenInterestClient'
 import { BASE_URL } from '@/lib/constants/urls'
+import { createLogger } from '@/lib/utils/logger'
+
+const logger = createLogger('open-interest')
 
 export const metadata: Metadata = {
   title: 'Open Interest | Arena',
@@ -56,7 +59,7 @@ async function getOpenInterest(): Promise<OpenInterestRow[]> {
     .limit(500)
 
   if (error) {
-    console.error('[open-interest] fetch error:', error.message)
+    logger.error('[open-interest] fetch error:', error.message)
     return []
   }
 
