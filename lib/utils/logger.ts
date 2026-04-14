@@ -725,6 +725,28 @@ export async function safeExecute<T>(
 
 /** In-memory failure counts per label, for health check observability */
 const _fireAndForgetFailures = new Map<string, { count: number; lastError: string; lastAt: number }>()
+const FIRE_AND_FORGET_MAX_ENTRIES = 100
+const FIRE_AND_FORGET_MAX_AGE_MS = 60 * 60 * 1000 // 1 hour
+
+// Periodic cleanup: remove entries older than 1 hour and cap at 100 entries
+if (typeof setInterval !== 'undefined') {
+  setInterval(() => {
+    const now = Date.now()
+    for (const [label, data] of _fireAndForgetFailures) {
+      if (now - data.lastAt > FIRE_AND_FORGET_MAX_AGE_MS) {
+        _fireAndForgetFailures.delete(label)
+      }
+    }
+    // If still over max, remove oldest entries
+    if (_fireAndForgetFailures.size > FIRE_AND_FORGET_MAX_ENTRIES) {
+      const sorted = [..._fireAndForgetFailures.entries()].sort((a, b) => a[1].lastAt - b[1].lastAt)
+      const toRemove = sorted.slice(0, sorted.length - FIRE_AND_FORGET_MAX_ENTRIES)
+      for (const [label] of toRemove) {
+        _fireAndForgetFailures.delete(label)
+      }
+    }
+  }, 60_000).unref?.()
+}
 
 /** Escalation threshold: log at error level after this many consecutive failures */
 const FIRE_AND_FORGET_ERROR_THRESHOLD = 3

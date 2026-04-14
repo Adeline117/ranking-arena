@@ -138,5 +138,5 @@ export const POST = withAuth(
 
     return NextResponse.json({ success: true, data: competition })
   },
-  { rateLimit: 'write', name: 'competitions-create', skipCsrf: true }
+  { rateLimit: 'write', name: 'competitions-create' }
 )
