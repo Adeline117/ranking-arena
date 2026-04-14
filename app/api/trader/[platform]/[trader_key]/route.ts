@@ -1,4 +1,9 @@
 /**
+ * @deprecated Use `/api/traders/:handle` instead. This endpoint is the legacy
+ * trader detail API that requires platform+traderKey routing. The canonical
+ * endpoint at `/api/traders/:handle` resolves platform automatically and
+ * bundles all data (claim, aggregate, rank_history) in a single response.
+ *
  * GET /api/trader/:platform/:trader_key
  * Returns trader profile + latest snapshots (7/30/90) + timeseries + staleness.
  * Pure DB read - never fetches external data synchronously.
