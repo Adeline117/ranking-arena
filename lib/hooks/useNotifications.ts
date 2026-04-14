@@ -49,6 +49,7 @@ export function useNotifications(options: UseNotificationsOptions = {}): UseNoti
   const [offset, setOffset] = useState(0)
 
   const pendingRef = useRef(false)
+  const mountedRef = useRef(true)
 
   const fetchNotifications = useCallback(async (fetchOffset = 0, append = false) => {
     if (!accessToken || pendingRef.current) return
@@ -68,6 +69,7 @@ export function useNotifications(options: UseNotificationsOptions = {}): UseNoti
       if (!res.ok) throw new Error('Failed to fetch')
 
       const result = await res.json()
+      if (!mountedRef.current) return
       const data = result.data || result
       const items: NotificationWithActor[] = data.notifications || []
       const count = data.unread_count ?? 0
@@ -84,7 +86,7 @@ export function useNotifications(options: UseNotificationsOptions = {}): UseNoti
     } catch (err) {
       logger.error('[useNotifications] fetch error:', err)
     } finally {
-      setLoading(false)
+      if (mountedRef.current) setLoading(false)
       pendingRef.current = false
     }
   }, [accessToken, limit, unreadOnly, setUnreadNotifications])
@@ -184,9 +186,11 @@ export function useNotifications(options: UseNotificationsOptions = {}): UseNoti
   }, [accessToken, notifications, unreadCount, setUnreadNotifications])
 
   useEffect(() => {
+    mountedRef.current = true
     if (autoFetch && accessToken) {
       fetchNotifications(0, false)
     }
+    return () => { mountedRef.current = false }
   }, [autoFetch, accessToken, fetchNotifications])
 
   return {

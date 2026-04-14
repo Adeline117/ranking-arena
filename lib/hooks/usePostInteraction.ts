@@ -12,7 +12,7 @@
  * 4. Failed operations are visible and retryable
  */
 
-import { useState, useCallback, useRef } from 'react'
+import { useState, useCallback, useRef, useEffect } from 'react'
 import { getCsrfHeaders } from '@/lib/api/client'
 import { useAuthSession } from './useAuthSession'
 import { logger } from '@/lib/logger'
@@ -49,6 +49,7 @@ export function usePostComments({ postId, pageSize = 10 }: UsePostCommentsOption
   const [submitState, setSubmitState] = useState<CommentSubmitState>('idle')
   const [submitError, setSubmitError] = useState<string | null>(null)
   const offsetRef = useRef(0)
+  const submitIdleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   /** Load initial comments for a post */
   const loadComments = useCallback(async (targetPostId?: string) => {
@@ -174,7 +175,8 @@ export function usePostComments({ postId, pageSize = 10 }: UsePostCommentsOption
         setSubmitState('success')
 
         // Reset to idle after a brief success indicator
-        setTimeout(() => setSubmitState('idle'), 500)
+        if (submitIdleTimerRef.current) clearTimeout(submitIdleTimerRef.current)
+        submitIdleTimerRef.current = setTimeout(() => setSubmitState('idle'), 500)
 
         options?.onSuccess?.(serverComment)
         return serverComment
@@ -193,6 +195,13 @@ export function usePostComments({ postId, pageSize = 10 }: UsePostCommentsOption
     }
   }, [postId, getAuthHeaders])
 
+  // Clean up submit idle timer on unmount
+  useEffect(() => {
+    return () => {
+      if (submitIdleTimerRef.current) clearTimeout(submitIdleTimerRef.current)
+    }
+  }, [])
+
   /** Reset comment state (when closing modal, switching posts, etc.) */
   const reset = useCallback(() => {
     setComments([])
@@ -202,6 +211,7 @@ export function usePostComments({ postId, pageSize = 10 }: UsePostCommentsOption
     setSubmitState('idle')
     setSubmitError(null)
     offsetRef.current = 0
+    if (submitIdleTimerRef.current) clearTimeout(submitIdleTimerRef.current)
   }, [])
 
   return {

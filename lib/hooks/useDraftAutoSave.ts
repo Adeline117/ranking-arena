@@ -50,6 +50,7 @@ export function useDraftAutoSave<T extends DraftData>({
   const [hasDraft, setHasDraft] = useState(false)
   const [restoredDraft, setRestoredDraft] = useState<T | null>(null)
   const mountedRef = useRef(false)
+  const flashTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   // Check for existing draft on mount
   useEffect(() => {
@@ -74,13 +75,21 @@ export function useDraftAutoSave<T extends DraftData>({
           localStorage.setItem(key, JSON.stringify({ ...data, _savedAt: Date.now() }))
           setHasDraft(true)
           setDraftSaved(true)
-          setTimeout(() => setDraftSaved(false), 2000)
+          if (flashTimerRef.current) clearTimeout(flashTimerRef.current)
+          flashTimerRef.current = setTimeout(() => setDraftSaved(false), 2000)
         } catch { /* quota exceeded or unavailable */ }
       }
     }, debounceMs)
 
     return () => clearTimeout(timer)
   }, [key, data, hasContent, debounceMs, enabled])
+
+  // Clean up flash timer on unmount
+  useEffect(() => {
+    return () => {
+      if (flashTimerRef.current) clearTimeout(flashTimerRef.current)
+    }
+  }, [])
 
   const loadDraft = useCallback((): T | null => {
     if (typeof window === 'undefined') return null
