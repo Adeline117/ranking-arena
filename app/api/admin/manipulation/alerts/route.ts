@@ -214,7 +214,7 @@ export async function POST(request: NextRequest) {
       alert_id: insertedAlert.id,
       action: 'created',
       new_status: 'active',
-      notes: `Alert created via ${isCronJob ? 'automated detection' : 'admin API'}`,
+      notes: 'Alert created via admin API',
     })
 
     return NextResponse.json({

@@ -54,7 +54,7 @@ export interface OverviewTabProps {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any -- data blob from SWR, typed generically at shell level
   traderProfile: any
   traderPerformance: any
-  traderEquityCurve: { '90D': Array<{ date: string; roi: number; pnl: number }>; '30D': Array<{ date: string; roi: number; pnl: number }>; '7D': Array<{ date: string; roi: number; pnl: number }> } | undefined
+  traderEquityCurve: Record<string, Array<{ date: string; roi: number; pnl: number }>> | undefined
   traderSimilar: (TraderProfile & { roi_90d?: number; arena_score?: number })[]
   positionSummary: { avgLeverage: number | null; longPositions: number | null; shortPositions: number | null } | null | undefined
 
@@ -159,7 +159,7 @@ const OverviewTab = React.memo(function OverviewTab({
         {traderEquityCurve && (
           <SectionErrorBoundary>
             <EquityCurveSection
-              equityCurve={traderEquityCurve}
+              equityCurve={traderEquityCurve as { '90D': Array<{ date: string; roi: number; pnl: number }>; '30D': Array<{ date: string; roi: number; pnl: number }>; '7D': Array<{ date: string; roi: number; pnl: number }> } | undefined}
               traderHandle={(traderProfile?.handle as string) || data.handle}
               delay={0}
             />
