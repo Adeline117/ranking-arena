@@ -46,7 +46,7 @@ export async function POST(
   // Fetch competition
   const { data: competition, error: compError } = await supabase
     .from('competitions')
-    .select('*')
+    .select('id, status, max_participants, metric')
     .eq('id', competitionId)
     .single()
 

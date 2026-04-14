@@ -145,7 +145,7 @@ export async function GET(request: Request) {
     let cleanupComplete = false
     try {
       const supabase = getSupabaseAdmin()
-      const { data: cleanupStatus } = await supabase.from('pipeline_logs').select('*').eq('job_name', 'cleanup-violations').order('started_at', { ascending: false }).limit(1).single()
+      const { data: cleanupStatus } = await supabase.from('pipeline_logs').select('metadata').eq('job_name', 'cleanup-violations').order('started_at', { ascending: false }).limit(1).single()
       if (cleanupStatus?.metadata && typeof cleanupStatus.metadata === 'object') {
         const meta = cleanupStatus.metadata as Record<string, unknown>
         if (meta.done === true || meta.fixed === 0) {

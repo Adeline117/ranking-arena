@@ -44,7 +44,7 @@ export async function GET(request: NextRequest) {
       getUserVerifiedTrader(supabase, user.id),
       supabase
         .from('user_linked_traders')
-        .select('*')
+        .select('id, user_id, trader_id, source, label, is_primary, display_order, verified_at, verification_method, created_at, updated_at')
         .eq('user_id', user.id)
         .order('display_order', { ascending: true }),
     ])

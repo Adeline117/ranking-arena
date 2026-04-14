@@ -31,7 +31,7 @@ export async function GET(request: NextRequest) {
     // Get linked traders
     const { data: linked, error } = await supabase
       .from('user_linked_traders')
-      .select('*')
+      .select('id, user_id, trader_id, source, label, is_primary, display_order, verified_at, verification_method, created_at, updated_at')
       .eq('user_id', user.id)
       .order('display_order', { ascending: true })
 
@@ -157,7 +157,7 @@ export async function DELETE(request: NextRequest) {
     // Get the record first to check if it's primary
     const { data: existing } = await supabase
       .from('user_linked_traders')
-      .select('*')
+      .select('id, trader_id, source, is_primary')
       .eq('id', id)
       .eq('user_id', user.id)
       .single()
