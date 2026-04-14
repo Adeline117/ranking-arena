@@ -26,6 +26,7 @@ import {
   isTraderClaimed,
 } from '@/lib/data/trader-claims'
 import { notifyTraderClaim } from '@/lib/notifications/activity-alerts'
+import { verifyWalletOwnership } from '@/lib/services/wallet-verification'
 import { logger } from '@/lib/logger'
 
 /**
@@ -150,22 +151,18 @@ export async function POST(request: NextRequest) {
         throw ApiError.validation('Wallet address does not match trader account')
       }
 
-      // Signature verification is done in /api/traders/claim/verify-wallet
-      // If we reach here, it was already verified client-side.
-      // But we double-check the signature here for security.
-      const verifyUrl = new URL('/api/traders/claim/verify-wallet', request.url)
-      const verifyRes = await fetch(verifyUrl, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: request.headers.get('Authorization') || '',
-        },
-        body: JSON.stringify({ wallet_address, signature, message, platform: source }),
-      })
-
-      if (!verifyRes.ok) {
-        const verifyData = await verifyRes.json().catch(() => ({}))
-        throw ApiError.validation(verifyData.error || 'Wallet signature verification failed')
+      // Verify wallet ownership directly (no HTTP self-fetch)
+      try {
+        await verifyWalletOwnership(supabase, user.id, {
+          wallet_address,
+          signature,
+          message,
+          platform: source,
+          trader_key: trader_id,
+        })
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : 'Wallet signature verification failed'
+        throw ApiError.validation(msg)
       }
     }
 

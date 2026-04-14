@@ -10,40 +10,25 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { createLogger } from '@/lib/utils/logger'
 import { checkRateLimit, RateLimitPresets } from '@/lib/utils/rate-limit'
+import { getAuthUser } from '@/lib/supabase/server'
 
 const log = createLogger('api:watchlist')
-
-function getAuthenticatedUser(request: NextRequest) {
-  const authHeader = request.headers.get('authorization')
-  if (!authHeader?.startsWith('Bearer ')) return null
-  return authHeader.slice(7) // access token
-}
-
-function getSupabaseWithAuth(accessToken: string) {
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL || ''
-  const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || ''
-  return createClient(url, anonKey, {
-    global: { headers: { Authorization: `Bearer ${accessToken}` } },
-  })
-}
 
 export async function GET(request: NextRequest) {
   try {
     const rl = await checkRateLimit(request, RateLimitPresets.read)
     if (rl) return rl
 
-    const token = getAuthenticatedUser(request)
-    if (!token) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
-
-    const supabase = getSupabaseWithAuth(token)
-    const { data: { user } } = await supabase.auth.getUser()
+    const user = await getAuthUser(request)
     if (!user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    const { data, error } = await supabase
+    const adminUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || ''
+    const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || ''
+    const admin = createClient(adminUrl, serviceKey)
+
+    const { data, error } = await admin
       .from('trader_watchlist')
       .select('source, source_trader_id, handle, created_at')
       .eq('user_id', user.id)
@@ -57,36 +42,31 @@ export async function GET(request: NextRequest) {
     const watchlist = data || []
 
     // Enrich watchlist items with leaderboard snapshot data (ROI, PnL, rank, arena_score)
-    if (watchlist.length > 0) {
-      const adminUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || ''
-      const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || ''
-      if (serviceKey) {
-        const admin = createClient(adminUrl, serviceKey)
-        // Build filter for all watchlist items
-        const _keys = watchlist.map(w => `${w.source}:${w.source_trader_id}`)
-        const { data: ranks } = await admin
-          .from('leaderboard_ranks')
-          .select('source, source_trader_id, roi, pnl, rank, arena_score, win_rate, avatar_url')
-          .eq('season_id', '90D')
-          .in('source', [...new Set(watchlist.map(w => w.source))])
-          .in('source_trader_id', [...new Set(watchlist.map(w => w.source_trader_id))])
+    if (watchlist.length > 0 && serviceKey) {
+      // Build filter for all watchlist items
+      const _keys = watchlist.map(w => `${w.source}:${w.source_trader_id}`)
+      const { data: ranks } = await admin
+        .from('leaderboard_ranks')
+        .select('source, source_trader_id, roi, pnl, rank, arena_score, win_rate, avatar_url')
+        .eq('season_id', '90D')
+        .in('source', [...new Set(watchlist.map(w => w.source))])
+        .in('source_trader_id', [...new Set(watchlist.map(w => w.source_trader_id))])
 
-        if (ranks && ranks.length > 0) {
-          type RankRow = { source: string; source_trader_id: string; roi: unknown; pnl: unknown; rank: unknown; arena_score: unknown; win_rate: unknown; avatar_url: unknown }
-          const rankMap = new Map(ranks.map(r => [`${(r as RankRow).source}:${(r as RankRow).source_trader_id}`, r as RankRow]))
-          for (const item of watchlist) {
-            const key = `${item.source}:${item.source_trader_id}`
-            const rank = rankMap.get(key)
-            if (rank) {
-              Object.assign(item, {
-                roi: rank.roi,
-                pnl: rank.pnl,
-                rank: rank.rank,
-                arena_score: rank.arena_score,
-                win_rate: rank.win_rate,
-                avatar_url: rank.avatar_url,
-              })
-            }
+      if (ranks && ranks.length > 0) {
+        type RankRow = { source: string; source_trader_id: string; roi: unknown; pnl: unknown; rank: unknown; arena_score: unknown; win_rate: unknown; avatar_url: unknown }
+        const rankMap = new Map(ranks.map(r => [`${(r as RankRow).source}:${(r as RankRow).source_trader_id}`, r as RankRow]))
+        for (const item of watchlist) {
+          const key = `${item.source}:${item.source_trader_id}`
+          const rank = rankMap.get(key)
+          if (rank) {
+            Object.assign(item, {
+              roi: rank.roi,
+              pnl: rank.pnl,
+              rank: rank.rank,
+              arena_score: rank.arena_score,
+              win_rate: rank.win_rate,
+              avatar_url: rank.avatar_url,
+            })
           }
         }
       }
@@ -104,16 +84,14 @@ export async function POST(request: NextRequest) {
     const rl = await checkRateLimit(request, RateLimitPresets.write)
     if (rl) return rl
 
-    const token = getAuthenticatedUser(request)
-    if (!token) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
-
-    const supabase = getSupabaseWithAuth(token)
-    const { data: { user } } = await supabase.auth.getUser()
+    const user = await getAuthUser(request)
     if (!user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
+
+    const adminUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || ''
+    const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || ''
+    const admin = createClient(adminUrl, serviceKey)
 
     let body: Record<string, unknown>
     try {
@@ -133,7 +111,7 @@ export async function POST(request: NextRequest) {
     // Enforce max watchlist size (200)
     // KEEP 'exact' — limit enforcement, scoped per-user via (user_id)
     // index. Must be accurate to block the 201st add.
-    const { count } = await supabase
+    const { count } = await admin
       .from('trader_watchlist')
       .select('id', { count: 'exact', head: true })
       .eq('user_id', user.id)
@@ -141,7 +119,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Watchlist full (max 200)' }, { status: 400 })
     }
 
-    const { error } = await supabase
+    const { error } = await admin
       .from('trader_watchlist')
       .upsert({
         user_id: user.id,
@@ -157,13 +135,13 @@ export async function POST(request: NextRequest) {
     }
 
     // Return updated watchlist so client can mutate SWR cache immediately
-    const { data: updated } = await supabase
+    const { data: updated } = await admin
       .from('trader_watchlist')
       .select('source, source_trader_id, handle, created_at')
       .eq('user_id', user.id)
       .order('created_at', { ascending: false })
 
-    return NextResponse.json({ ok: true, watchlist: updated ?? [] })
+    return NextResponse.json({ watchlist: updated ?? [] })
   } catch (error) {
     log.error('POST failed', { error: error instanceof Error ? error.message : String(error) })
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
@@ -175,16 +153,14 @@ export async function DELETE(request: NextRequest) {
     const rl = await checkRateLimit(request, RateLimitPresets.write)
     if (rl) return rl
 
-    const token = getAuthenticatedUser(request)
-    if (!token) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
-
-    const supabase = getSupabaseWithAuth(token)
-    const { data: { user } } = await supabase.auth.getUser()
+    const user = await getAuthUser(request)
     if (!user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
+
+    const adminUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || ''
+    const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || ''
+    const admin = createClient(adminUrl, serviceKey)
 
     let body: Record<string, unknown>
     try {
@@ -198,7 +174,7 @@ export async function DELETE(request: NextRequest) {
       return NextResponse.json({ error: 'source and source_trader_id required' }, { status: 400 })
     }
 
-    const { error } = await supabase
+    const { error } = await admin
       .from('trader_watchlist')
       .delete()
       .eq('user_id', user.id)
@@ -210,13 +186,13 @@ export async function DELETE(request: NextRequest) {
     }
 
     // Return updated watchlist so client can mutate SWR cache immediately
-    const { data: updated } = await supabase
+    const { data: updated } = await admin
       .from('trader_watchlist')
       .select('source, source_trader_id, handle, created_at')
       .eq('user_id', user.id)
       .order('created_at', { ascending: false })
 
-    return NextResponse.json({ ok: true, watchlist: updated ?? [] })
+    return NextResponse.json({ watchlist: updated ?? [] })
   } catch (error) {
     log.error('DELETE failed', { error: error instanceof Error ? error.message : String(error) })
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
