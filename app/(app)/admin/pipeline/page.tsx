@@ -188,18 +188,18 @@ const styles = {
 // ============================================
 
 export default function PipelineDashboard() {
-  const { email, isAdmin, authChecking } = useAdminAuth()
+  const { email, accessToken, isAdmin, authChecking } = useAdminAuth()
   const [data, setData] = useState<SelfHealData | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [filter, setFilter] = useState<'all' | 'warning' | 'critical'>('all')
 
   const fetchData = useCallback(async () => {
+    if (!accessToken) return
     try {
       setLoading(true)
-      const cronSecret = process.env.NEXT_PUBLIC_CRON_SECRET || ''
       const res = await fetch('/api/admin/pipeline/self-heal', {
-        headers: { 'x-admin-token': cronSecret },
+        headers: { Authorization: `Bearer ${accessToken}` },
       })
       if (!res.ok) throw new Error(`HTTP ${res.status}`)
       const json = await res.json()
@@ -211,15 +211,15 @@ export default function PipelineDashboard() {
     } finally {
       setLoading(false)
     }
-  }, [])
+  }, [accessToken])
 
   useEffect(() => {
-    if (isAdmin) {
+    if (isAdmin && accessToken) {
       fetchData()
       const interval = setInterval(fetchData, 60_000)
       return () => clearInterval(interval)
     }
-  }, [isAdmin, fetchData])
+  }, [isAdmin, accessToken, fetchData])
 
   if (authChecking) {
     return <div style={styles.loading}>Verifying permissions...</div>

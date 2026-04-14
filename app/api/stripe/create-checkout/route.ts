@@ -117,8 +117,26 @@ export async function POST(request: NextRequest) {
       userId: user.id,
       plan: plan,
     }
-    const sUrl = successUrl || `${env.NEXT_PUBLIC_APP_URL}/pricing/success?session_id={CHECKOUT_SESSION_ID}`
-    const cUrl = cancelUrl || `${env.NEXT_PUBLIC_APP_URL}/pricing`
+
+    // Validate redirect URLs to prevent open redirect attacks
+    const appOrigin = new URL(env.NEXT_PUBLIC_APP_URL || 'https://www.arenafi.org').origin
+    const defaultSuccessUrl = `${env.NEXT_PUBLIC_APP_URL}/pricing/success?session_id={CHECKOUT_SESSION_ID}`
+    const defaultCancelUrl = `${env.NEXT_PUBLIC_APP_URL}/pricing`
+
+    let sUrl = defaultSuccessUrl
+    let cUrl = defaultCancelUrl
+    if (successUrl && typeof successUrl === 'string') {
+      try {
+        const parsed = new URL(successUrl, appOrigin)
+        if (parsed.origin === appOrigin) sUrl = parsed.href
+      } catch { /* invalid URL — use default */ }
+    }
+    if (cancelUrl && typeof cancelUrl === 'string') {
+      try {
+        const parsed = new URL(cancelUrl, appOrigin)
+        if (parsed.origin === appOrigin) cUrl = parsed.href
+      } catch { /* invalid URL — use default */ }
+    }
 
     let checkoutSession
 
