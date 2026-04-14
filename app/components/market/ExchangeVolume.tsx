@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import { tokens } from '@/lib/design-tokens'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import type { ExchangeInfo } from '@/lib/utils/coingecko'
+import { apiFetch } from '@/lib/utils/api-fetch'
 
 function formatBTC(value: number): string {
   if (value >= 1e6) return `${(value / 1e6).toFixed(1)}M`
@@ -26,8 +27,7 @@ export default function ExchangeVolume() {
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
-    fetch('/api/market/exchanges', { signal: AbortSignal.timeout(15000) })
-      .then((r) => { if (!r.ok) throw new Error(`HTTP ${r.status}`); return r.json() })
+    apiFetch<ExchangeInfo[]>('/api/market/exchanges')
       .then((json) => { if (Array.isArray(json)) setExchanges(json) })
       .catch((err) => {
         if (err instanceof Error && err.name === 'AbortError') return

@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState, useCallback } from 'react'
 import { tokens } from '@/lib/design-tokens'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
+import { apiFetch } from '@/lib/utils/api-fetch'
 
 interface CoinData {
   symbol: string
@@ -148,8 +149,7 @@ export default function SectorTreemap({ onSectorClick }: { onSectorClick?: (cate
   // Fetch real data from /api/market/spot
   const fetchData = useCallback(async () => {
     try {
-      const res = await fetch('/api/market/spot')
-      const data: CoinData[] = await res.json()
+      const data = await apiFetch<CoinData[]>('/api/market/spot')
       if (!Array.isArray(data)) return
 
       const mapped = data

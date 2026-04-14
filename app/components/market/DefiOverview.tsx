@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import { tokens } from '@/lib/design-tokens'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import type { DefiOverview as DefiOverviewData } from '@/lib/utils/defillama'
+import { apiFetch } from '@/lib/utils/api-fetch'
 
 function formatTVL(value: number): string {
   if (value >= 1e12) return `$${(value / 1e12).toFixed(2)}T`
@@ -27,8 +28,7 @@ export default function DefiOverview() {
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
-    fetch('/api/market/defi', { signal: AbortSignal.timeout(15000) })
-      .then((r) => { if (!r.ok) throw new Error(`HTTP ${r.status}`); return r.json() })
+    apiFetch<DefiOverviewData & { error?: string }>('/api/market/defi')
       .then((json) => { if (!json.error) setData(json) })
       .catch((err) => {
         if (err instanceof Error && err.name === 'AbortError') return

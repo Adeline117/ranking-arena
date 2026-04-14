@@ -3,6 +3,7 @@
 import { useEffect, useState, useCallback } from 'react'
 import { tokens } from '@/lib/design-tokens'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
+import { apiFetch } from '@/lib/utils/api-fetch'
 
 interface CrossExchangeOpp {
   type: 'cross-exchange'
@@ -37,9 +38,7 @@ export default function ArbitrageOpportunities() {
 
   const fetchPriceComparisons = useCallback(async () => {
     try {
-      const res = await fetch('/api/market/spot', { signal: AbortSignal.timeout(15000) })
-      if (!res.ok) throw new Error(`HTTP ${res.status}`)
-      const data = await res.json()
+      const data = await apiFetch<Array<{ symbol: string; price: number }>>('/api/market/spot')
       if (!Array.isArray(data)) return
 
       // Get BTC and ETH prices from the spot data as baseline
@@ -71,8 +70,7 @@ export default function ArbitrageOpportunities() {
   }, [])
 
   useEffect(() => {
-    fetch('/api/market/arbitrage', { signal: AbortSignal.timeout(15000) })
-      .then((r) => { if (!r.ok) throw new Error(`HTTP ${r.status}`); return r.json() })
+    apiFetch<{ ok?: boolean; opportunities?: ArbOpp[] }>('/api/market/arbitrage')
       .then((json) => {
         if (json.ok && Array.isArray(json.opportunities)) {
           setOpps(json.opportunities.slice(0, 4))

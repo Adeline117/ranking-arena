@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { tokens } from '@/lib/design-tokens'
 import SidebarCard from './SidebarCard'
 import { useLanguage } from '../Providers/LanguageProvider'
+import { apiFetch } from '@/lib/utils/api-fetch'
 
 interface Hashtag {
   id: string
@@ -20,9 +21,8 @@ export default memo(function TrendingHashtags() {
   useEffect(() => {
     async function load() {
       try {
-        const res = await fetch('/api/hashtags/trending')
-        const data = await res.json()
-        if (res.ok && data.data?.hashtags) {
+        const data = await apiFetch<{ data?: { hashtags?: Hashtag[] } }>('/api/hashtags/trending')
+        if (data.data?.hashtags) {
           setHashtags(data.data.hashtags.slice(0, 10))
         }
       } catch {
