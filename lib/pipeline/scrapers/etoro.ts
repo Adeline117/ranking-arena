@@ -8,6 +8,7 @@
 
 import { RawFetchResult, RawTraderEntry, TimeWindow } from '../types'
 import { PlatformScraper, registerScraper } from '../runner'
+import { logger } from '@/lib/logger'
 
 const WINDOW_MAP: Record<TimeWindow, string> = {
   '7d': 'CurrMonth',
@@ -99,7 +100,7 @@ export class EtoroScraper implements PlatformScraper {
         if (allTraders.length >= 2000) break
         await this.delay(300) // eToro rate limits
       } catch (err) {
-        console.warn('[scraper-etoro] page fetch fallback:', err instanceof Error ? err.message : String(err))
+        logger.warn('[scraper-etoro] page fetch fallback:', err instanceof Error ? err.message : String(err))
         break
       }
     }

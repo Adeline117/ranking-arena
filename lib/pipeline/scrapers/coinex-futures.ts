@@ -8,6 +8,7 @@
 
 import { RawFetchResult, RawTraderEntry, TimeWindow } from '../types'
 import { PlatformScraper, registerScraper } from '../runner'
+import { logger } from '@/lib/logger'
 
 export class CoinexFuturesScraper implements PlatformScraper {
   readonly platform = 'coinex'
@@ -85,7 +86,7 @@ export class CoinexFuturesScraper implements PlatformScraper {
         currentPage++
         await this.delay(200)
       } catch (err) {
-        console.warn('[scraper-coinex] page fetch fallback:', err instanceof Error ? err.message : String(err))
+        logger.warn('[scraper-coinex] page fetch fallback:', err instanceof Error ? err.message : String(err))
         break
       }
     }

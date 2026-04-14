@@ -8,6 +8,7 @@
 
 import { RawFetchResult, RawTraderEntry, TimeWindow } from '../types'
 import { PlatformScraper, registerScraper } from '../runner'
+import { logger } from '@/lib/logger'
 
 export class GateioFuturesScraper implements PlatformScraper {
   readonly platform = 'gateio'
@@ -76,7 +77,7 @@ export class GateioFuturesScraper implements PlatformScraper {
         if (allTraders.length >= 750) break
         await this.delay(200)
       } catch (err) {
-        console.warn('[scraper-gateio] page fetch fallback:', err instanceof Error ? err.message : String(err))
+        logger.warn('[scraper-gateio] page fetch fallback:', err instanceof Error ? err.message : String(err))
         break
       }
     }

@@ -246,7 +246,7 @@ export function createSupabaseAdmin(): SupabaseClient | null {
   try {
     return getSupabaseAdmin()
   } catch (err) {
-    console.error('[cron/utils] Failed to create Supabase admin client:', err instanceof Error ? err.message : String(err))
+    cronLogger.error('[cron/utils] Failed to create Supabase admin client:', err instanceof Error ? err.message : String(err))
     return null
   }
 }

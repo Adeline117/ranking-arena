@@ -60,7 +60,7 @@ async function isDeduplicated(key: string, ttlSeconds: number = DEDUP_TTL_SECOND
       return false
     }
   } catch (err) {
-    console.error('[telegram] Redis dedup failed:', err instanceof Error ? err.message : String(err))
+    logger.error('[telegram] Redis dedup failed:', err instanceof Error ? err.message : String(err))
   }
 
   // In-memory fallback (won't survive Vercel cold starts, but better than nothing)
@@ -77,7 +77,7 @@ async function clearDedup(key: string): Promise<void> {
       await redis.del(`alert:dedup:${key}`)
     }
   } catch (err) {
-    console.error('[telegram] Redis dedup clear failed:', err instanceof Error ? err.message : String(err))
+    logger.error('[telegram] Redis dedup clear failed:', err instanceof Error ? err.message : String(err))
   }
   inMemoryMap.delete(key)
 }
@@ -139,7 +139,7 @@ export async function sendTelegramAlert(opts: TelegramAlertOptions): Promise<boo
     try {
       await recordWarningForDigest(opts)
     } catch (err) {
-      console.error('[telegram] warning digest recording failed:', err instanceof Error ? err.message : String(err))
+      logger.error('[telegram] warning digest recording failed:', err instanceof Error ? err.message : String(err))
     }
     return false
   }
@@ -253,7 +253,7 @@ async function recordWarningForDigest(opts: TelegramAlertOptions): Promise<void>
     await redis.zremrangebyscore('alert:warnings:24h', 0, cutoff)
     await redis.zremrangebyrank('alert:warnings:24h', 0, -1001)
   } catch (err) {
-    console.error('[telegram] Redis warning aggregation failed:', err instanceof Error ? err.message : String(err))
+    logger.error('[telegram] Redis warning aggregation failed:', err instanceof Error ? err.message : String(err))
   }
 }
 
@@ -272,7 +272,7 @@ async function getBufferedWarnings(): Promise<Array<{ source: string; title: str
       catch (_err) { return null }
     }).filter(Boolean)
   } catch (err) {
-    console.error('[telegram] getBufferedWarnings failed:', err instanceof Error ? err.message : String(err))
+    logger.error('[telegram] getBufferedWarnings failed:', err instanceof Error ? err.message : String(err))
     return []
   }
 }

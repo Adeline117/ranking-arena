@@ -66,7 +66,7 @@ export function withAdminAuth(
       }
 
       // SECURITY: Audit log for admin access
-      console.warn(`[ADMIN-AUDIT] ${admin.email} accessed ${request.method} ${request.url}`)
+      logger.warn(`[ADMIN-AUDIT] ${admin.email} accessed ${request.method} ${request.url}`)
 
       // Rate limit authenticated admin requests (300/min for admin operations)
       const rateLimitResponse = await checkRateLimit(request, { requests: 300, window: 60, prefix: 'admin' })

@@ -7,6 +7,7 @@
 
 import { RawFetchResult, RawTraderEntry, TimeWindow } from '../types'
 import { PlatformScraper, registerScraper } from '../runner'
+import { logger } from '@/lib/logger'
 
 const WINDOW_MAP: Record<TimeWindow, string> = { '7d': '7', '30d': '30', '90d': '90' }
 
@@ -76,7 +77,7 @@ export class BlofinFuturesScraper implements PlatformScraper {
           break // Got data, stop trying other endpoints
         }
       } catch (err) {
-        console.warn('[scraper-blofin] endpoint fetch fallback:', err instanceof Error ? err.message : String(err))
+        logger.warn('[scraper-blofin] endpoint fetch fallback:', err instanceof Error ? err.message : String(err))
         continue
       }
     }

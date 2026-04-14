@@ -10,6 +10,7 @@
  */
 
 import { z } from 'zod'
+import { logger } from '@/lib/logger'
 
 // ─── Zod Schema (critical vars) ─────────────────────────────────────────────
 //
@@ -48,7 +49,7 @@ if (!criticalResult.success) {
       .filter(([k]) => k !== '_errors')
       .map(([k, v]) => `  - ${k}: ${(v as { _errors?: string[] })?._errors?.join(', ') ?? 'invalid'}`)
       .join('\n')
-    console.error(`[env] Critical environment validation failed:\n${messages}`)
+    logger.error(`[env] Critical environment validation failed:\n${messages}`)
     // Do not throw in test/dev to avoid breaking HMR; throw in production
     if (process.env.NODE_ENV === 'production') {
       throw new Error(`Critical environment validation failed:\n${messages}`)
