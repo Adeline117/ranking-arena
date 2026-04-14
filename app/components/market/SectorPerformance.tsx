@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import { tokens } from '@/lib/design-tokens'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import type { CryptoCategory } from '@/lib/utils/coingecko'
+import { apiFetch } from '@/lib/utils/api-fetch'
 
 const SECTOR_LABELS: Record<string, string> = {
   'layer-1': 'L1',
@@ -31,8 +32,7 @@ export default function SectorPerformance() {
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
-    fetch('/api/market/sectors', { signal: AbortSignal.timeout(15000) })
-      .then((r) => { if (!r.ok) throw new Error(`HTTP ${r.status}`); return r.json() })
+    apiFetch<CryptoCategory[]>('/api/market/sectors')
       .then((json) => { if (Array.isArray(json)) setSectors(json.slice(0, 4)) })
       .catch((err) => {
         if (err instanceof Error && err.name === 'AbortError') return

@@ -6,6 +6,7 @@ import Image from 'next/image'
 import { tokens } from '@/lib/design-tokens'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import dynamic from 'next/dynamic'
+import { apiFetch } from '@/lib/utils/api-fetch'
 import type { OHLCVDataPoint } from '@/app/components/charts/TradingViewChart'
 import type { Time } from 'lightweight-charts'
 
@@ -173,9 +174,8 @@ export default function TokenSidePanel({ token, onClose }: {
   useEffect(() => {
     if (!token) return
     setCoinDetail(null)
-    fetch(`/api/market/coin/${token.id}`)
-      .then(r => r.ok ? r.json() : null)
-      .then(d => d && setCoinDetail(d))
+    apiFetch<CoinDetail>(`/api/market/coin/${token.id}`)
+      .then(d => setCoinDetail(d))
       .catch(err => console.warn('[TokenSidePanel] fetch failed', err))
   // eslint-disable-next-line react-hooks/exhaustive-deps -- token.id is sufficient
   }, [token?.id])
@@ -184,9 +184,7 @@ export default function TokenSidePanel({ token, onClose }: {
   const fetchOhlc = useCallback(async (id: string, days: string) => {
     setChartLoading(true)
     try {
-      const r = await fetch(`/api/market/ohlc/${id}?days=${days}`)
-      if (!r.ok) return
-      const raw: number[][] = await r.json()
+      const raw = await apiFetch<number[][]>(`/api/market/ohlc/${id}?days=${days}`)
       const data: OHLCVDataPoint[] = raw.map(([ts, o, h, l, c]) => ({
         time: (ts / 1000) as Time,
         open: o,

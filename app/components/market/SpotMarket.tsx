@@ -7,6 +7,7 @@ import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import { useRealtimePrices, type PriceFlashInfo } from '@/lib/hooks/useRealtimePrices'
 import MarketTable, { Column } from './MarketTable'
 import Sparkline from './PriceSparkline'
+import { apiFetch } from '@/lib/utils/api-fetch'
 
 interface SpotCoin {
   id: string
@@ -114,8 +115,7 @@ export default function SpotMarket({ onTokenClick, sectorFilter, initialData }: 
   const { prices: realtimePrices, flashes } = useRealtimePrices({ enabled: true })
 
   useEffect(() => {
-    fetch('/api/market/spot', { signal: AbortSignal.timeout(15000) })
-      .then((r) => { if (!r.ok) throw new Error(`HTTP ${r.status}`); return r.json() })
+    apiFetch<SpotCoin[]>('/api/market/spot')
       .then((d) => { if (Array.isArray(d)) setData(d) })
       .catch(err => { if (err instanceof Error && err.name === 'AbortError') return; console.warn('[SpotMarket] fetch failed', err) })
       .finally(() => setLoading(false))
@@ -123,8 +123,7 @@ export default function SpotMarket({ onTokenClick, sectorFilter, initialData }: 
 
   // Fetch 7-day sparkline data for top 50 coins (cached 4h on server, stale-while-revalidate)
   useEffect(() => {
-    fetch('/api/market/sparklines', { signal: AbortSignal.timeout(15000) })
-      .then((r) => { if (!r.ok) throw new Error(`HTTP ${r.status}`); return r.json() })
+    apiFetch<unknown>('/api/market/sparklines')
       .then((d: unknown) => {
         if (!Array.isArray(d)) return
         const map = new Map<string, SparklineEntry>()

@@ -5,6 +5,7 @@ import { getLocaleFromLanguage } from '@/lib/utils/format'
 import { tokens } from '@/lib/design-tokens'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import type { FearGreedData } from '@/lib/utils/fear-greed'
+import { apiFetch } from '@/lib/utils/api-fetch'
 
 function getColor(value: number): string {
   if (value <= 25) return '#ea3943'
@@ -30,8 +31,7 @@ export default function FearGreedGauge() {
   }
 
   useEffect(() => {
-    fetch('/api/market/fear-greed', { signal: AbortSignal.timeout(15000) })
-      .then((r) => { if (!r.ok) throw new Error(`HTTP ${r.status}`); return r.json() })
+    apiFetch<{ current?: FearGreedData }>('/api/market/fear-greed')
       .then((json) => {
         if (json.current) {
           // Hide stale data: if timestamp is older than 24 hours, hide entirely

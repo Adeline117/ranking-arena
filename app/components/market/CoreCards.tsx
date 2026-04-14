@@ -5,6 +5,7 @@ import { tokens } from '@/lib/design-tokens'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import CryptoIcon from '@/app/components/common/CryptoIcon'
 import Link from 'next/link'
+import { apiFetch } from '@/lib/utils/api-fetch'
 
 interface CoinRow {
   symbol: string
@@ -327,8 +328,7 @@ export default function CoreCards() {
             .catch(() => { if (alive) setMarketLoaded(true) })
         })
 
-      fetch('/api/market/exchanges', { signal: controller.signal })
-        .then(r => r.json())
+      apiFetch<ExchangeInfo[]>('/api/market/exchanges', { signal: controller.signal })
         .then(json => { if (alive && Array.isArray(json)) setExchanges(json.slice(0, 5)) })
         .catch(err => console.warn('[CoreCards] fetch failed', err))
     }

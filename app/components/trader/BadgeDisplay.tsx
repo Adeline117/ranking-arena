@@ -10,6 +10,7 @@ import { useState, useEffect, type ReactNode } from 'react'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import { tokens } from '@/lib/design-tokens'
 import type { EarnedBadge } from '@/lib/badges'
+import { apiFetch } from '@/lib/utils/api-fetch'
 
 interface BadgeDisplayProps {
   traderHandle: string
@@ -111,12 +112,9 @@ export function BadgeDisplay({
 
     async function fetchBadges() {
       try {
-        const res = await fetch(`/api/traders/${encodeURIComponent(traderHandle)}/badges`)
+        const data = await apiFetch<{ badges?: EarnedBadge[] }>(`/api/traders/${encodeURIComponent(traderHandle)}/badges`)
         if (!alive) return
-        if (res.ok) {
-          const data = await res.json()
-          if (alive) setBadges(data.badges || [])
-        }
+        setBadges(data.badges || [])
       } catch {
         // Failed to fetch badges
       } finally {
