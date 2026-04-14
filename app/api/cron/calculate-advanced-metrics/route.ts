@@ -24,7 +24,7 @@ import {
 } from '@/lib/utils/advanced-metrics'
 import type { Period } from '@/lib/utils/arena-score'
 import { logger } from '@/lib/logger'
-import { env } from '@/lib/env'
+import { verifyCronSecret } from '@/lib/auth/verify-service-auth'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 300 // 5 minutes
@@ -33,8 +33,7 @@ const BATCH_SIZE = 500
 
 export async function POST(request: NextRequest) {
   // Verify cron secret
-  const authHeader = request.headers.get('authorization')
-  if (authHeader !== `Bearer ${env.CRON_SECRET}`) {
+  if (!verifyCronSecret(request)) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
@@ -91,7 +90,7 @@ export async function POST(request: NextRequest) {
 
     // Process in batches
     const windows: Period[] = ['7D', '30D', '90D']
-    const processingMap = new Map<string, typeof traders[0][]>()
+    const processingMap = new Map<string, NonNullable<typeof traders>[0][]>()
 
     // Group by trader
     for (const trader of traders || []) {

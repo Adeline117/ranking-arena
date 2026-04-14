@@ -50,7 +50,7 @@ async function getAvailableSources(
 ): Promise<string[]> {
   return tieredGetOrSet<string[]>(
     `rankings:available-sources:${seasonId}`,
-    async () => {
+    async (): Promise<string[]> => {
       const { data: sourceRows } = await supabase
         .from('leaderboard_count_cache')
         .select('source')

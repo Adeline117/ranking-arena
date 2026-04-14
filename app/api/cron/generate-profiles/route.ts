@@ -88,7 +88,7 @@ export async function POST(request: NextRequest) {
           .select('*', { count: 'estimated', head: true })
           .eq('platform', platform)
 
-        platformCounts[platform] = count ?? 0
+        platformCounts[platform as string] = count ?? 0
       })
     )
 

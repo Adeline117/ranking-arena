@@ -72,7 +72,8 @@ export async function GET(request: NextRequest) {
           .in('source_trader_id', [...new Set(watchlist.map(w => w.source_trader_id))])
 
         if (ranks && ranks.length > 0) {
-          const rankMap = new Map(ranks.map(r => [`${r.source}:${r.source_trader_id}`, r]))
+          type RankRow = { source: string; source_trader_id: string; roi: unknown; pnl: unknown; rank: unknown; arena_score: unknown; win_rate: unknown; avatar_url: unknown }
+          const rankMap = new Map(ranks.map(r => [`${(r as RankRow).source}:${(r as RankRow).source_trader_id}`, r as RankRow]))
           for (const item of watchlist) {
             const key = `${item.source}:${item.source_trader_id}`
             const rank = rankMap.get(key)

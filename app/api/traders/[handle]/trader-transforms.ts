@@ -419,7 +419,7 @@ async function fetchSimilarTraders(
       similarTraders = dedupedSnapshots
         .filter(snap => sourceMap.has(snap.source_trader_id))
         .map(snap => {
-          const src = sourceMap.get(snap.source_trader_id)!
+          const src = sourceMap.get(snap.source_trader_id) as { source_trader_id: string; handle: string | null; profile_url: string | null; avatar_url: string | null }
           return {
             handle: src.handle || snap.source_trader_id,
             id: snap.source_trader_id,

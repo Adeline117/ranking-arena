@@ -348,7 +348,7 @@ async function handleBatchTranslate(
         .eq('target_lang', targetLang)
 
       if (cached) {
-        const cachedMap = new Map(cached.map(c => [c.content_id, c]))
+        const cachedMap = new Map(cached.map(c => [c.content_id, c] as [string, { content_id: string; translated_text: string; content_hash: string }]))
         
         for (const item of limitedItems.filter(i => i.contentType === contentType)) {
           const cachedItem = cachedMap.get(item.contentId)
