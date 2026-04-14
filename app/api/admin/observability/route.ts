@@ -9,9 +9,9 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server'
-import { env } from '@/lib/env'
 import { getSupabaseAdmin } from '@/lib/supabase/server'
 import { createLogger } from '@/lib/utils/logger'
+import { verifyCronSecret } from '@/lib/auth/verify-service-auth'
 
 const logger = createLogger('api:observability')
 
@@ -19,10 +19,7 @@ export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
 
 function verifyAuth(req: NextRequest): boolean {
-  const auth = req.headers.get('authorization')
-  const cronSecret = env.CRON_SECRET
-  if (!cronSecret) return false
-  return auth === `Bearer ${cronSecret}`
+  return verifyCronSecret(req)
 }
 
 interface JobAggregate {
