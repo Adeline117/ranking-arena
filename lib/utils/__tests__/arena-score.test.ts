@@ -21,6 +21,7 @@ import {
   type TraderScoreInput,
   type ScoreConfidence as _ScoreConfidence,
   getScoreConfidence,
+  wilsonConfidenceMultiplier,
 } from '../arena-score'
 
 // ============================================
@@ -891,6 +892,201 @@ describe('Arena Score — confidenceMultiplier config', () => {
     )
     // V3 simplified: same score regardless of MDD/WR data availability
     expect(withFull.totalScore).toBe(withNone.totalScore)
+  })
+})
+
+describe('Arena Score — NaN/Infinity/BigInt edge cases', () => {
+  test('ROI = NaN produces 0 return score', () => {
+    expect(calculateReturnScore(NaN, '30D')).toBe(0)
+    expect(calculateReturnScore(NaN, '7D')).toBe(0)
+    expect(calculateReturnScore(NaN, '90D')).toBe(0)
+  })
+
+  test('ROI = Infinity produces 0 return score', () => {
+    expect(calculateReturnScore(Infinity, '30D')).toBe(0)
+    expect(calculateReturnScore(-Infinity, '30D')).toBe(0)
+  })
+
+  test('PnL = NaN produces 0 pnl score', () => {
+    expect(calculatePnlScore(NaN, '30D')).toBe(0)
+    expect(calculatePnlScore(NaN, '7D')).toBe(0)
+    expect(calculatePnlScore(NaN, '90D')).toBe(0)
+  })
+
+  test('PnL = Infinity produces 0 pnl score', () => {
+    expect(calculatePnlScore(Infinity, '30D')).toBe(0)
+    expect(calculatePnlScore(-Infinity, '30D')).toBe(0)
+  })
+
+  test('BigInt ROI is handled via Number() conversion', () => {
+    const score = calculateReturnScore(BigInt(50), '30D')
+    const scoreFromNumber = calculateReturnScore(50, '30D')
+    expect(score).toBe(scoreFromNumber)
+  })
+
+  test('BigInt PnL is handled via Number() conversion', () => {
+    const score = calculatePnlScore(BigInt(5000), '30D')
+    const scoreFromNumber = calculatePnlScore(5000, '30D')
+    expect(score).toBe(scoreFromNumber)
+  })
+
+  test('calculateArenaScore with NaN ROI produces 0 total', () => {
+    const result = calculateArenaScore(
+      { roi: NaN, pnl: 0, maxDrawdown: null, winRate: null },
+      '30D'
+    )
+    expect(result.totalScore).toBe(0)
+    expect(result.returnScore).toBe(0)
+  })
+
+  test('calculateArenaScore with NaN PnL produces score from ROI only', () => {
+    const result = calculateArenaScore(
+      { roi: 50, pnl: NaN, maxDrawdown: null, winRate: null },
+      '30D'
+    )
+    expect(result.pnlScore).toBe(0)
+    expect(result.returnScore).toBeGreaterThan(0)
+    expect(result.totalScore).toBe(result.returnScore)
+  })
+
+  test('ROI = 100 (100%) produces positive score across all periods', () => {
+    for (const period of ['7D', '30D', '90D'] as const) {
+      const score = calculateReturnScore(100, period)
+      expect(score).toBeGreaterThan(0)
+      expect(score).toBeLessThanOrEqual(ARENA_CONFIG.MAX_RETURN_SCORE)
+    }
+  })
+
+  test('ROI = -50 produces 0 score', () => {
+    expect(calculateReturnScore(-50, '7D')).toBe(0)
+    expect(calculateReturnScore(-50, '30D')).toBe(0)
+    expect(calculateReturnScore(-50, '90D')).toBe(0)
+  })
+
+  test('ROI = 10000 (cap) produces near max score', () => {
+    const score = calculateReturnScore(10000, '30D')
+    expect(score).toBeGreaterThan(ARENA_CONFIG.MAX_RETURN_SCORE * 0.9)
+    expect(score).toBeLessThanOrEqual(ARENA_CONFIG.MAX_RETURN_SCORE)
+  })
+
+  test('PnL = $1,000,000 produces near max (40) score', () => {
+    const score = calculatePnlScore(1000000, '30D')
+    expect(score).toBeGreaterThan(ARENA_CONFIG.MAX_PNL_SCORE * 0.8)
+    expect(score).toBeLessThanOrEqual(ARENA_CONFIG.MAX_PNL_SCORE)
+  })
+
+  test('PnL = -1000 produces 0 score', () => {
+    expect(calculatePnlScore(-1000, '30D')).toBe(0)
+  })
+
+  test('PnL = 1000 produces moderate positive score', () => {
+    const score = calculatePnlScore(1000, '30D')
+    expect(score).toBeGreaterThan(0)
+    expect(score).toBeLessThan(ARENA_CONFIG.MAX_PNL_SCORE * 0.5)
+  })
+
+  test('7D, 30D, 90D use different coefficients for return score', () => {
+    const roi = 50
+    const s7d = calculateReturnScore(roi, '7D')
+    const s30d = calculateReturnScore(roi, '30D')
+    const s90d = calculateReturnScore(roi, '90D')
+    // All should be different because tanhCoeff and roiExponent differ
+    const scores = new Set([s7d.toFixed(4), s30d.toFixed(4), s90d.toFixed(4)])
+    expect(scores.size).toBe(3)
+  })
+
+  test('7D, 30D, 90D use different PnL params', () => {
+    const pnl = 5000
+    const s7d = calculatePnlScore(pnl, '7D')
+    const s30d = calculatePnlScore(pnl, '30D')
+    const s90d = calculatePnlScore(pnl, '90D')
+    const scores = new Set([s7d.toFixed(4), s30d.toFixed(4), s90d.toFixed(4)])
+    expect(scores.size).toBe(3)
+  })
+})
+
+describe('calculateArenaScore — input combinations', () => {
+  test('complete valid input produces score between 0-100', () => {
+    const result = calculateArenaScore(
+      { roi: 50, pnl: 5000, maxDrawdown: 10, winRate: 65 },
+      '30D'
+    )
+    expect(result.totalScore).toBeGreaterThan(0)
+    expect(result.totalScore).toBeLessThanOrEqual(100)
+  })
+
+  test('missing PnL (null) gives score based only on ROI', () => {
+    const result = calculateArenaScore(
+      { roi: 50, pnl: null, maxDrawdown: null, winRate: null },
+      '30D'
+    )
+    expect(result.returnScore).toBeGreaterThan(0)
+    expect(result.pnlScore).toBe(0)
+    expect(result.totalScore).toBe(result.returnScore)
+  })
+
+  test('all zeros produces 0', () => {
+    const result = calculateArenaScore(
+      { roi: 0, pnl: 0, maxDrawdown: 0, winRate: 0 },
+      '30D'
+    )
+    expect(result.totalScore).toBe(0)
+  })
+})
+
+describe('calculateOverallScore — penalty multipliers', () => {
+  test('missing 90D applies MISSING_90D_PENALTY (0.85)', () => {
+    const score = calculateOverallScore({
+      score7d: 50,
+      score30d: 50,
+      score90d: null,
+    })
+    // base: (0.80 * 50 + 0.20 * 50) * 0.85 = 42.5
+    // momentum: clip(50/50 - 1, -0.2, 0.5) * 5 = 0
+    expect(score).toBeCloseTo(42.5, 1)
+  })
+
+  test('only 7D applies ONLY_7D_PENALTY (0.70)', () => {
+    const score = calculateOverallScore({
+      score7d: 100,
+      score30d: null,
+      score90d: null,
+    })
+    // 100 * 0.70 = 70
+    expect(score).toBeCloseTo(70, 1)
+  })
+})
+
+describe('wilsonConfidenceMultiplier — detailed', () => {
+  test('all metrics available produces multiplier near 1.0', () => {
+    const mult = wilsonConfidenceMultiplier(50, 5000, -10, 60, 1.5)
+    expect(mult).toBeGreaterThan(0.6)
+    expect(mult).toBeLessThanOrEqual(1.0)
+  })
+
+  test('no metrics available produces minimum 0.3', () => {
+    const mult = wilsonConfidenceMultiplier(null, null, null, null, null)
+    expect(mult).toBeCloseTo(0.3, 1)
+  })
+
+  test('partial metrics produce intermediate value', () => {
+    const mult2of5 = wilsonConfidenceMultiplier(50, 5000, null, null, null)
+    const mult5of5 = wilsonConfidenceMultiplier(50, 5000, -10, 60, 1.5)
+    const mult0of5 = wilsonConfidenceMultiplier(null, null, null, null, null)
+    expect(mult2of5).toBeGreaterThan(mult0of5)
+    expect(mult2of5).toBeLessThan(mult5of5)
+  })
+
+  test('0 values count as available (non-null)', () => {
+    // 0 is a valid metric value, not null
+    const mult = wilsonConfidenceMultiplier(0, 0, 0, 0, 0)
+    expect(mult).toBeGreaterThan(0.6)
+  })
+
+  test('undefined treated same as null', () => {
+    const withNull = wilsonConfidenceMultiplier(null, null, null, null, null)
+    const withUndef = wilsonConfidenceMultiplier(undefined, undefined, undefined, undefined, undefined)
+    expect(withNull).toBe(withUndef)
   })
 })
 
