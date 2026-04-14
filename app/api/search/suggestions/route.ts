@@ -30,7 +30,7 @@ export const GET = withPublic(
   async ({ supabase, request }) => {
     const searchParams = request.nextUrl.searchParams
     const query = searchParams.get('q')?.trim()
-    const limit = Math.min(parseInt(searchParams.get('limit') || '10'), 20)
+    const limit = Math.min(parseInt(searchParams.get('limit') || '10', 10) || 10, 20)
 
     if (!query || query.length < 1) {
       return success({ suggestions: [] })
