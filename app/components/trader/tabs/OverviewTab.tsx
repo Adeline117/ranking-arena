@@ -204,7 +204,7 @@ const OverviewTab = React.memo(function OverviewTab({
             returnPct: Math.abs(curve[i].roi ?? 0) > 0.001
               ? ((point.roi - curve[i].roi) / Math.abs(curve[i].roi)) * 100
               : (point.roi - curve[i].roi),
-          })).filter(d => Number.isFinite(d.returnPct))
+          })).filter((d: { returnPct: number }) => Number.isFinite(d.returnPct))
           if (dailyReturns.length <= 5) return null
           return (
             <Box
