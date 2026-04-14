@@ -270,7 +270,10 @@ export default function CoreCards() {
 
     const fetchMarketData = () => {
       fetch('/api/market', { signal: controller.signal })
-        .then(r => r.json())
+        .then(r => {
+          if (!r.ok) throw new Error(`market: ${r.status}`)
+          return r.json()
+        })
         .then(async json => {
           if (!alive) return
           const rows: CoinRow[] = json.rows ?? []
@@ -283,6 +286,7 @@ export default function CoreCards() {
           if (primaryLosers.length < 5 || primaryGainers.length < 5) {
             try {
               const spotRes = await fetch('/api/market/spot', { signal: controller.signal })
+              if (!spotRes.ok) throw new Error(`market/spot supplement: ${spotRes.status}`)
               const spots: Array<{ symbol: string; price: number; change24h: number }> = await spotRes.json()
               if (Array.isArray(spots)) {
                 const spotRows = spotRowsToCoins(spots)
@@ -315,7 +319,10 @@ export default function CoreCards() {
           // Fallback: use spot market data for gainers/losers
           if (!alive) return
           fetch('/api/market/spot', { signal: controller.signal })
-            .then(r => r.json())
+            .then(r => {
+              if (!r.ok) throw new Error(`market/spot fallback: ${r.status}`)
+              return r.json()
+            })
             .then((spots: Array<{ symbol: string; price: number; change24h: number }>) => {
               if (!alive || !Array.isArray(spots)) return
               const rows = spotRowsToCoins(spots)

@@ -142,6 +142,7 @@ export default function TokenSidePanel({ token, onClose }: {
   const [ohlcData, setOhlcData] = useState<OHLCVDataPoint[]>([])
   const [selectedPeriod, setSelectedPeriod] = useState('30')
   const [chartLoading, setChartLoading] = useState(false)
+  const [chartError, setChartError] = useState(false)
   const [chartTheme, setChartTheme] = useState<'dark' | 'light'>('dark')
 
   useEffect(() => {
@@ -183,6 +184,7 @@ export default function TokenSidePanel({ token, onClose }: {
   // Fetch OHLC data
   const fetchOhlc = useCallback(async (id: string, days: string) => {
     setChartLoading(true)
+    setChartError(false)
     try {
       const raw = await apiFetch<number[][]>(`/api/market/ohlc/${id}?days=${days}`)
       const data: OHLCVDataPoint[] = raw.map(([ts, o, h, l, c]) => ({
@@ -194,7 +196,8 @@ export default function TokenSidePanel({ token, onClose }: {
       }))
       setOhlcData(data)
     } catch {
-      // Chart data fetch failed; panel still shows token info without chart
+      setChartError(true)
+      setOhlcData([])
     } finally {
       setChartLoading(false)
     }
@@ -371,6 +374,19 @@ export default function TokenSidePanel({ token, onClose }: {
                     fontSize: 13,
                   }}>
                     {t('loading')}
+                  </div>
+                )}
+                {chartError && !chartLoading && (
+                  <div style={{
+                    position: 'absolute',
+                    inset: 0,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    color: tokens.colors.text.tertiary,
+                    fontSize: 13,
+                  }}>
+                    {t('chartUnavailable') || 'Chart data unavailable'}
                   </div>
                 )}
                 {ohlcData.length > 0 && (
