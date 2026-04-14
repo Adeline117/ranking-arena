@@ -20,8 +20,8 @@ export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url)
     const _sortBy = searchParams.get('sort_by') || 'member_count'
-    const limit = Math.min(parseInt(searchParams.get('limit') || '10'), 50)
-    const offset = parseInt(searchParams.get('offset') || '0')
+    const limit = Math.min(parseInt(searchParams.get('limit') || '10', 10) || 10, 50)
+    const offset = Math.max(parseInt(searchParams.get('offset') || '0', 10) || 0, 0)
 
     const cacheKey = `api:groups:${_sortBy}:${limit}:${offset}`
 

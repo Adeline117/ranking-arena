@@ -12,8 +12,8 @@ export async function GET(
     const { handle } = await params
     const supabase = getSupabaseAdmin()
     const { searchParams } = new URL(request.url)
-    const limit = Math.min(parseInt(searchParams.get('limit') || '20'), 50)
-    const offset = parseInt(searchParams.get('offset') || '0')
+    const limit = Math.min(parseInt(searchParams.get('limit') || '20', 10) || 20, 50)
+    const offset = Math.max(parseInt(searchParams.get('offset') || '0', 10) || 0, 0)
 
     // Resolve handle to user_id
     const { data: profile } = await supabase

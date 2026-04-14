@@ -20,7 +20,7 @@ export async function GET(request: NextRequest) {
     if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
     const q = request.nextUrl.searchParams.get('q')?.trim()
-    const limit = Math.min(parseInt(request.nextUrl.searchParams.get('limit') || '10'), 20)
+    const limit = Math.min(parseInt(request.nextUrl.searchParams.get('limit') || '10', 10) || 10, 20)
 
     if (!q) return NextResponse.json({ users: [] })
 

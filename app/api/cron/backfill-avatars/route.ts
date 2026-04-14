@@ -387,7 +387,7 @@ export async function GET(request: Request) {
 
   const url = new URL(request.url)
   const platform = url.searchParams.get('platform')
-  const limit = Math.min(parseInt(url.searchParams.get('limit') || '200'), 500)
+  const limit = Math.min(parseInt(url.searchParams.get('limit') || '200', 10) || 200, 500)
   const mode = url.searchParams.get('mode') || 'auto' // 'bulk', 'individual', 'auto'
   const plog = await PipelineLogger.start(`backfill-avatars-${platform || 'unknown'}`)
 

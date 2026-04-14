@@ -90,7 +90,7 @@ export async function GET(request: NextRequest) {
 
   try {
   const url = new URL(request.url)
-  const threshold = parseInt(url.searchParams.get('threshold') || '12') || 12
+  const threshold = parseInt(url.searchParams.get('threshold') || '12', 10) || 12
   const format = url.searchParams.get('format') || 'json'
 
   const supabase = getSupabaseAdmin()
