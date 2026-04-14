@@ -36,7 +36,7 @@ export async function GET(
   // Resolve trader via unified layer
   const resolved = await resolveTrader(supabase, { handle })
   if (!resolved) {
-    return NextResponse.json({ badges: [] })
+    return NextResponse.json({ error: 'Trader not found' }, { status: 404 })
   }
 
   // Fetch trader data from leaderboard_ranks (precomputed, fast)
