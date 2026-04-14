@@ -10,8 +10,8 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server'
-import { env } from '@/lib/env'
 import { getSupabaseAdmin } from '@/lib/supabase/server'
+import { verifyAdminAuth } from '@/lib/auth/verify-service-auth'
 import { logger } from '@/lib/logger'
 import { parseLimit, parseOffset } from '@/lib/utils/safe-parse'
 
@@ -121,31 +121,9 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   const supabase = getSupabaseAdmin()
 
-  // Auth check (allow cron secret or admin)
-  const authHeader = request.headers.get('authorization')
-  if (!authHeader) {
+  // Auth check (allow cron secret or admin JWT)
+  if (!(await verifyAdminAuth(request))) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  }
-
-  // Check if it's cron secret
-  const isCronJob = env.CRON_SECRET && authHeader === `Bearer ${env.CRON_SECRET}`
-
-  // If not cron, verify admin role
-  if (!isCronJob) {
-    const { data: { user }, error: authError } = await supabase.auth.getUser(
-      authHeader.replace('Bearer ', '')
-    )
-    if (authError || !user) {
-      return NextResponse.json({ error: 'Invalid token' }, { status: 401 })
-    }
-    const { data: profile } = await supabase
-      .from('user_profiles')
-      .select('role')
-      .eq('user_id', user.id)
-      .single()
-    if (profile?.role !== 'admin') {
-      return NextResponse.json({ error: 'Admin access required' }, { status: 403 })
-    }
   }
 
   try {
