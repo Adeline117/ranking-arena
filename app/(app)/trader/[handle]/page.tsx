@@ -62,8 +62,12 @@ const cachedResolveTrader = cache(
           setTimeout(() => resolve(null), SSR_QUERY_TIMEOUT_MS)
         ),
       ])
-    } catch {
-      return null
+    } catch (err) {
+      // Timeout resolves to null (not thrown) — errors here are real DB failures.
+      // Log and re-throw so Next.js error boundary catches them instead of
+      // silently converting DB outages into 404 pages.
+      console.error('[trader/page] resolveTrader failed:', err instanceof Error ? err.message : err)
+      throw err
     }
   }
 )
@@ -102,7 +106,14 @@ const cachedGetTraderDetail = async (platform: string, traderKey: string) => {
         setTimeout(() => resolve(null), SSR_DETAIL_TIMEOUT_MS)
       ),
     ])
-  } catch {
+  } catch (err) {
+    // TRADER_DETAIL_NULL is expected (thrown by cachedGetTraderDetailISR to avoid
+    // caching null results). Other errors are real DB failures — log but return
+    // null to let client-side fetch retry.
+    const msg = err instanceof Error ? err.message : ''
+    if (msg !== 'TRADER_DETAIL_NULL') {
+      console.error('[trader/page] getTraderDetail failed:', msg)
+    }
     return null
   }
 }
