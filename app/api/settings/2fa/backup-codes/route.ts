@@ -1,6 +1,7 @@
 /**
  * 2FA Backup Codes API
- * GET: Regenerate backup codes for the authenticated user
+ * POST: Regenerate backup codes for the authenticated user
+ * (Changed from GET to POST — regenerating security credentials is a mutation)
  */
 
 import { NextRequest, NextResponse } from 'next/server'
@@ -11,7 +12,7 @@ import logger from '@/lib/logger'
 
 export const dynamic = 'force-dynamic'
 
-export async function GET(request: NextRequest) {
+export async function POST(request: NextRequest) {
   try {
     const rateLimitResponse = await checkRateLimit(request, RateLimitPresets.auth)
     if (rateLimitResponse) return rateLimitResponse
