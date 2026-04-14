@@ -25,16 +25,30 @@ export async function GET(
       return NextResponse.json({ error: 'Handle is required' }, { status: 400 })
     }
 
-    // 并行获取所有数据 (DataResult-aware: unwrap .data, handle .ok === false)
+    // Phase 1: fetch profile first (needed for similarTraders source filter)
+    const profileResult = await getTraderByHandle(handle)
+
+    // Unwrap DataResult: distinguish "not found" from "data layer error"
+    const profile = profileResult?.ok ? profileResult.data : null
+    const profileError = profileResult && !profileResult.ok ? profileResult.error : null
+
+    if (!profile) {
+      // If data layer failed (vs genuine not-found), return 502 so callers can distinguish
+      if (profileError) {
+        logger.error('[API] Data layer error fetching trader profile:', profileError)
+        return NextResponse.json({ error: 'Data layer error', detail: profileError }, { status: 502 })
+      }
+      return NextResponse.json({ error: 'User not found' }, { status: 404 })
+    }
+
+    // Phase 2: parallel-fetch everything else (including similarTraders now that we have profile.source)
     const [
-      profileResult,
       performanceResult,
       statsResult,
       portfolioResult,
       subscriptionData,
+      similarTradersData,
     ] = await Promise.all([
-      // 用户/交易员基本信息
-      getTraderByHandle(handle),
       // 绩效数据
       getTraderPerformance(handle, '90D').catch(() => null),
       // 统计数据
@@ -57,37 +71,24 @@ export async function GET(
           return null
         }
       })(),
+      // 相似交易员 (runs in parallel now instead of sequentially)
+      (async () => {
+        if (!profile.source) return []
+        const { data: similar } = await getSupabaseAdmin()
+          .from('traders')
+          .select('id, handle, source, roi_90d, followers')
+          .eq('source', profile.source)
+          .neq('handle', handle)
+          .order('roi_90d', { ascending: false })
+          .limit(5)
+        return similar || []
+      })(),
     ])
 
-    // Unwrap DataResult: distinguish "not found" from "data layer error"
-    const profile = profileResult?.ok ? profileResult.data : null
-    const profileError = profileResult && !profileResult.ok ? profileResult.error : null
     const performance = performanceResult?.ok ? performanceResult.data : null
     const stats = statsResult?.ok ? statsResult.data : null
     const portfolio = portfolioResult?.ok ? portfolioResult.data : []
-
-    if (!profile) {
-      // If data layer failed (vs genuine not-found), return 502 so callers can distinguish
-      if (profileError) {
-        logger.error('[API] Data layer error fetching trader profile:', profileError)
-        return NextResponse.json({ error: 'Data layer error', detail: profileError }, { status: 502 })
-      }
-      return NextResponse.json({ error: 'User not found' }, { status: 404 })
-    }
-
-    // 获取相似交易员
-    let similarTraders: Array<{ id: string; handle: string; source: string; roi_90d?: number; followers?: number }> = []
-    if (profile.source) {
-      const { data: similar } = await getSupabaseAdmin()
-        .from('traders')
-        .select('id, handle, source, roi_90d, followers')
-        .eq('source', profile.source)
-        .neq('handle', handle)
-        .order('roi_90d', { ascending: false })
-        .limit(5)
-
-      similarTraders = similar || []
-    }
+    const similarTraders = similarTradersData
 
     // 粉丝/关注数 — served from cached columns fetched above
     // (subscriptionData). Falls back to profile.followers (trader row)
