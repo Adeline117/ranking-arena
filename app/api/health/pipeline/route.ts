@@ -15,7 +15,7 @@ import { DEAD_BLOCKED_PLATFORMS, EXCHANGE_CONFIG } from '@/lib/constants/exchang
 import { getSupportedPlatforms } from '@/lib/cron/fetchers'
 import { getSupabaseAdmin } from '@/lib/supabase/server'
 import { tieredGet, tieredSet } from '@/lib/cache/redis-layer'
-import { getFireAndForgetStats } from '@/lib/utils/logger'
+import { getFireAndForgetStats, logger } from '@/lib/utils/logger'
 import { verifyAdminAuth } from '@/lib/auth/verify-service-auth'
 
 export const dynamic = 'force-dynamic'
@@ -31,7 +31,7 @@ async function withDeadline<T>(promise: PromiseLike<T>, ms: number, fallback: T,
   return Promise.race([
     Promise.resolve(promise),
     new Promise<T>((resolve) => setTimeout(() => {
-      console.warn(`[health/pipeline] ${label} exceeded ${ms}ms, returning fallback`)
+      logger.warn(`[health/pipeline] ${label} exceeded ${ms}ms, returning fallback`)
       resolve(fallback)
     }, ms)),
   ])

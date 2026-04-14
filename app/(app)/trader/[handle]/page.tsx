@@ -13,6 +13,7 @@ import { LR } from '@/lib/types/schema-mapping'
 import { BASE_URL } from '@/lib/constants/urls'
 import { generateTraderProfilePageSchema, type TraderSchemaInput } from '@/lib/seo/structured-data'
 import { SSR_QUERY_TIMEOUT_MS } from '@/lib/constants/timeouts'
+import { logger } from '@/lib/logger'
 
 // Derive display names from central config
 const EXCHANGE_DISPLAY: Record<string, string> = Object.fromEntries(
@@ -66,7 +67,7 @@ const cachedResolveTrader = cache(
       // Timeout resolves to null (not thrown) — errors here are real DB failures.
       // Log and re-throw so Next.js error boundary catches them instead of
       // silently converting DB outages into 404 pages.
-      console.error('[trader/page] resolveTrader failed:', err instanceof Error ? err.message : err)
+      logger.error('[trader/page] resolveTrader failed:', err instanceof Error ? err.message : err)
       throw err
     }
   }
@@ -112,7 +113,7 @@ const cachedGetTraderDetail = async (platform: string, traderKey: string) => {
     // null to let client-side fetch retry.
     const msg = err instanceof Error ? err.message : ''
     if (msg !== 'TRADER_DETAIL_NULL') {
-      console.error('[trader/page] getTraderDetail failed:', msg)
+      logger.error('[trader/page] getTraderDetail failed:', msg)
     }
     return null
   }
