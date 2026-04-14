@@ -12,6 +12,7 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { getSupabaseAdmin } from '@/lib/supabase/server'
+import { getReadReplica } from '@/lib/supabase/read-replica'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { tieredSet } from '@/lib/cache/redis-layer'
 import { PLATFORM_CATEGORY } from '@/lib/types/leaderboard'
@@ -38,7 +39,8 @@ export async function GET(request: NextRequest) {
   }
 
   const startTime = Date.now()
-  const supabase = getSupabaseAdmin() as SupabaseClient
+  // Use read replica for heavy SELECT queries (no writes in this job)
+  const supabase = getReadReplica() as SupabaseClient
   const plog = await PipelineLogger.start('precompute-composite')
 
   try {
