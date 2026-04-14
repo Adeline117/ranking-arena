@@ -75,7 +75,11 @@ import { POST } from '../route'
  * Create a mock NextRequest-like object that works in jsdom.
  */
 function makeRequest(body: Record<string, unknown>, token?: string) {
-  const headers: Record<string, string> = { 'content-type': 'application/json' }
+  const headers: Record<string, string> = {
+    'content-type': 'application/json',
+    'host': 'www.arenafi.org',
+    'origin': 'https://www.arenafi.org',
+  }
   if (token) headers['authorization'] = `Bearer ${token}`
   return {
     json: async () => body,
@@ -130,7 +134,7 @@ describe('POST /api/auth/siwe/link', () => {
     mockGetAuthUser.mockResolvedValue(MOCK_USER)
     mockVerify.mockResolvedValue({
       success: true,
-      data: { address: 'not-an-address' },
+      data: { address: 'not-an-address', domain: 'www.arenafi.org', uri: 'https://www.arenafi.org', chainId: 8453 },
     })
     mockIsAddress.mockReturnValueOnce(false)
 
@@ -144,7 +148,7 @@ describe('POST /api/auth/siwe/link', () => {
     mockGetAuthUser.mockResolvedValue(MOCK_USER)
     mockVerify.mockResolvedValue({
       success: true,
-      data: { address: VALID_ADDRESS },
+      data: { address: VALID_ADDRESS, domain: 'www.arenafi.org', uri: 'https://www.arenafi.org', chainId: 8453 },
     })
     mockMaybeSingle.mockResolvedValue({ data: { id: 'other-user' }, error: null })
 
@@ -158,7 +162,7 @@ describe('POST /api/auth/siwe/link', () => {
     mockGetAuthUser.mockResolvedValue(MOCK_USER)
     mockVerify.mockResolvedValue({
       success: true,
-      data: { address: VALID_ADDRESS },
+      data: { address: VALID_ADDRESS, domain: 'www.arenafi.org', uri: 'https://www.arenafi.org', chainId: 8453 },
     })
     mockMaybeSingle.mockResolvedValue({ data: null, error: null })
 
