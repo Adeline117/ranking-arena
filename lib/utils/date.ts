@@ -136,3 +136,14 @@ export function isWithinDays(date: Date | string, days: number): boolean {
   return daysBetween(d, now) <= days
 }
 
+/**
+ * Truncate an ISO timestamp to the hour boundary.
+ * The partitioned trader_snapshots_v2 table has as_of_ts in its unique constraint.
+ * Without truncation, every upsert creates a new row instead of updating.
+ */
+export function truncateToHour(isoOrDate?: string | Date | null): string {
+  const d = isoOrDate ? new Date(isoOrDate) : new Date()
+  d.setUTCMinutes(0, 0, 0)
+  return d.toISOString()
+}
+

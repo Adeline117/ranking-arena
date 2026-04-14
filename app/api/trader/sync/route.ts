@@ -20,14 +20,7 @@ import { SOURCE_TYPE_MAP } from '@/lib/constants/exchanges'
 import type { Period } from '@/lib/utils/arena-score'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import type { TraderData } from '@/lib/adapters/types'
-
-/** Truncate timestamp to hour boundary for partitioned upsert dedup */
-function truncateToHour(): string {
-  const d = new Date()
-  d.setUTCMinutes(0, 0, 0)
-  return d.toISOString()
-}
-
+import { truncateToHour } from '@/lib/utils/date'
 import { checkRateLimit, RateLimitPresets } from '@/lib/utils/rate-limit'
 
 export const dynamic = 'force-dynamic'

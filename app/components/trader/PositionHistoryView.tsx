@@ -4,7 +4,7 @@ import { tokens } from '@/lib/design-tokens'
 import { useLanguage } from '../Providers/LanguageProvider'
 import { Box, Text } from '../base'
 import CryptoIcon from '@/app/components/common/CryptoIcon'
-import PortfolioEmptyState from './PortfolioEmptyState'
+import EmptyState from '@/app/components/ui/EmptyState'
 import PositionHistoryCard from './PositionHistoryCard'
 import { thStyle, formatPrice, formatDateTime } from './portfolio-table-utils'
 import type { ExtendedPositionHistoryItem } from './portfolio-table-utils'
@@ -41,9 +41,10 @@ export default function PositionHistoryView({
 
   if (sortedHistory.length === 0) {
     return (
-      <PortfolioEmptyState
-        message={t('noPositionHistory')}
-        subMessage={t('noPositionHistoryDesc')}
+      <EmptyState
+        title={t('noPositionHistory')}
+        description={t('noPositionHistoryDesc')}
+        variant="compact"
       />
     )
   }

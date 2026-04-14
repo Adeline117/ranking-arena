@@ -7,6 +7,7 @@ import type { EquityCurvePoint, PositionHistoryItem, StatsDetail, AssetBreakdown
 import { createLogger } from '@/lib/utils/logger'
 import { VALIDATION_BOUNDS } from '@/lib/pipeline/types'
 import { sanitizeRow, logRejectedWrites } from '@/lib/pipeline/validate-before-write'
+import { truncateToHour } from '@/lib/utils/date'
 
 const log = createLogger('enrichment-db')
 
@@ -24,13 +25,6 @@ export interface V2EnrichUpdate {
   sharpe_ratio?: number | null
   roi_pct?: number | null
   pnl_usd?: number | null
-}
-
-/** Truncate to current hour — matches storage.ts key generation */
-function truncateToHour(): string {
-  const d = new Date()
-  d.setUTCMinutes(0, 0, 0)
-  return d.toISOString()
 }
 
 /** Start of the next hour — used as exclusive upper bound for hour-range queries */

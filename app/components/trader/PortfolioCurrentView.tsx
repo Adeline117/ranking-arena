@@ -4,7 +4,7 @@ import { tokens } from '@/lib/design-tokens'
 import { useLanguage } from '../Providers/LanguageProvider'
 import { Box, Text } from '../base'
 import CryptoIcon from '@/app/components/common/CryptoIcon'
-import PortfolioEmptyState from './PortfolioEmptyState'
+import EmptyState from '@/app/components/ui/EmptyState'
 import { thStyle } from './portfolio-table-utils'
 import type { PortfolioItem } from '@/lib/data/trader'
 
@@ -27,9 +27,10 @@ export default function PortfolioCurrentView({
 
   if (items.length === 0) {
     return (
-      <PortfolioEmptyState
-        message={t('noCurrentPositions')}
-        subMessage={t('noCurrentPositionsDesc')}
+      <EmptyState
+        title={t('noCurrentPositions')}
+        description={t('noCurrentPositionsDesc')}
+        variant="compact"
       />
     )
   }

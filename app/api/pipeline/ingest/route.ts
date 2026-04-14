@@ -18,6 +18,7 @@ import { PipelineLogger } from '@/lib/services/pipeline-logger'
 import { logger } from '@/lib/logger'
 import { env } from '@/lib/env'
 import { SOURCE_TYPE_MAP } from '@/lib/constants/exchanges'
+import { truncateToHour } from '@/lib/utils/date'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 120
@@ -41,12 +42,6 @@ interface IngestBody {
   platform: string
   window: string // '7D', '30D', '90D'
   traders: IngestTrader[]
-}
-
-function truncateToHour(): string {
-  const d = new Date()
-  d.setUTCMinutes(0, 0, 0)
-  return d.toISOString()
 }
 
 export async function POST(request: NextRequest) {

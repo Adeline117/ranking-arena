@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@supabase/supabase-js'
 import { getSupabaseAdmin } from '@/lib/supabase/server'
 import {
   STRIPE_PRICE_IDS,
@@ -10,6 +9,7 @@ import {
 import { createLogger } from '@/lib/utils/logger'
 import { checkRateLimit, RateLimitPresets } from '@/lib/utils/rate-limit'
 import { env } from '@/lib/env'
+import { extractUserFromRequest } from '@/lib/auth/extract-user'
 
 export async function POST(request: NextRequest) {
   // 敏感操作限流
@@ -29,50 +29,10 @@ export async function POST(request: NextRequest) {
 
     const { plan, successUrl, cancelUrl, promotionCode } = await request.json()
 
-    // 优先从 Authorization header 获取 token
-    const authHeader = request.headers.get('authorization')
-    let user = null
-    let userError = null
+    const { user, error: userError } = await extractUserFromRequest(request)
 
-    if (authHeader?.startsWith('Bearer ')) {
-      // 使用 token 验证
-      const token = authHeader.substring(7)
-      const { data, error } = await getSupabaseAdmin().auth.getUser(token)
-      user = data?.user
-      userError = error
-    } else {
-      // 回退到 cookie 验证
-      const cookieHeader = request.headers.get('cookie') || ''
-      const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
-      const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
-      if (!anonKey || !supabaseUrl) {
-        return NextResponse.json(
-          { error: 'Server configuration error' },
-          { status: 500 }
-        )
-      }
-      const supabase = createClient(
-        supabaseUrl,
-        anonKey,
-        {
-          global: {
-            headers: {
-              cookie: cookieHeader,
-            },
-          },
-          auth: {
-            persistSession: false,
-            detectSessionInUrl: false,
-          },
-        }
-      )
-      const { data, error } = await supabase.auth.getUser()
-      user = data?.user
-      userError = error
-    }
-    
     const logger = createLogger('stripe-create-checkout')
-    
+
     if (userError || !user) {
       logger.warn('Auth error', { error: userError })
       return NextResponse.json(
