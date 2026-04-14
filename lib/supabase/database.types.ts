@@ -9428,8 +9428,8 @@ export type Database = {
         }
         Returns: number
       }
-      bulk_update_snapshot_metrics: { Args: { updates: Json }; Returns: number }
       bulk_enrich_sync_v2: { Args: { updates: Json }; Returns: number }
+      bulk_update_snapshot_metrics: { Args: { updates: Json }; Returns: number }
       bytea_to_text: { Args: { data: string }; Returns: string }
       calculate_arena_score:
         | {
@@ -10486,4 +10486,3 @@ export const Constants = {
     },
   },
 } as const
-
