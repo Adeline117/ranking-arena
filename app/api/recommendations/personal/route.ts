@@ -10,6 +10,7 @@ import { getPersonalRecommendations } from '@/lib/recommendations/personal'
 import { tieredGetOrSet } from '@/lib/cache/redis-layer'
 import { createLogger } from '@/lib/utils/logger'
 import type { PersonalRecommendation } from '@/lib/recommendations/personal'
+import { parseLimit } from '@/lib/utils/safe-parse'
 
 const _logger = createLogger('api-rec-personal')
 
@@ -19,7 +20,7 @@ export const preferredRegion = ['sfo1', 'hnd1']
 
 export const GET = withAuth(async ({ user, request }) => {
   const { searchParams } = new URL(request.url)
-  const limit = Math.min(50, Math.max(1, parseInt(searchParams.get('limit') || '20', 10)))
+  const limit = parseLimit(searchParams.get('limit'), 20, 50)
 
   const cacheKey = `recommendations:personal:${user.id}`
 

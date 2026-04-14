@@ -13,6 +13,7 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { logger } from '@/lib/logger'
+import { safeParseInt } from '@/lib/utils/safe-parse'
 import { getSupabaseAdmin } from '@/lib/supabase/server'
 import { getReadReplica } from '@/lib/supabase/read-replica'
 import { PipelineLogger } from '@/lib/services/pipeline-logger'
@@ -37,7 +38,7 @@ export async function GET(request: NextRequest) {
 
   try {
     // Support ?days_back=N to backfill multiple past days (default: 1 = yesterday only)
-    const daysBack = Math.min(Math.max(parseInt(request.nextUrl.searchParams.get('days_back') || '1', 10) || 1, 1), 30)
+    const daysBack = Math.min(Math.max(safeParseInt(request.nextUrl.searchParams.get('days_back'), 1), 1), 30)
     let totalInserted = 0
     let totalErrors = 0
 

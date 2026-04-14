@@ -18,6 +18,7 @@ import { isAuthorized, createSupabaseAdmin, logCronExecution } from '@/lib/cron/
 import { PipelineLogger } from '@/lib/services/pipeline-logger'
 import { createScheduleManager } from '@/lib/services/schedule-manager'
 import { ActivityTier } from '@/lib/services/smart-scheduler'
+import { safeParseInt } from '@/lib/utils/safe-parse'
 import {
   fetchBinanceEquityCurve,
   fetchBinancePositionHistory,
@@ -176,12 +177,12 @@ export async function GET(req: Request) {
     const source = requestUrl.searchParams.get('source') || ''
     const limitParam = requestUrl.searchParams.get('limit') || '200'
     const concurrencyParam = requestUrl.searchParams.get('concurrency') || '10'
-    const skipRecent = parseInt(requestUrl.searchParams.get('skipRecent') || '6', 10)
+    const skipRecent = safeParseInt(requestUrl.searchParams.get('skipRecent'), 6)
     const force = requestUrl.searchParams.get('force') === 'true'
     const tierParam = requestUrl.searchParams.get('tier') as ActivityTier | null
 
-    let limit = parseInt(limitParam, 10)
-    let concurrency = parseInt(concurrencyParam, 10)
+    let limit = safeParseInt(limitParam, 200)
+    let concurrency = safeParseInt(concurrencyParam, 10)
     let smartSchedulerUsed = false
 
     // Smart Scheduler integration

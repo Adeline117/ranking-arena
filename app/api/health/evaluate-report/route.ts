@@ -9,6 +9,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { PipelineState } from '@/lib/services/pipeline-state'
 import { sendRateLimitedAlert } from '@/lib/alerts/send-alert'
 import { env } from '@/lib/env'
+import { safeParseInt } from '@/lib/utils/safe-parse'
 
 export const dynamic = 'force-dynamic'
 
@@ -18,7 +19,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
   }
 
-  const score = parseInt(request.nextUrl.searchParams.get('score') || '0', 10)
+  const score = safeParseInt(request.nextUrl.searchParams.get('score'), 0)
   const source = request.nextUrl.searchParams.get('source') || 'unknown'
 
   // Write to pipeline_state

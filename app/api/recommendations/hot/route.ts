@@ -12,6 +12,7 @@ import { tieredGetOrSet } from '@/lib/cache/redis-layer'
 import { createLogger } from '@/lib/utils/logger'
 import type { HotTrader } from '@/lib/recommendations/hot-score'
 import { socialFeatureGuard } from '@/lib/features'
+import { parseLimit } from '@/lib/utils/safe-parse'
 
 const _logger = createLogger('api-rec-hot')
 
@@ -26,7 +27,7 @@ export const GET = withPublic(async ({ request }) => {
   if (guard) return guard
 
   const { searchParams } = new URL(request.url)
-  const limit = Math.min(100, Math.max(1, parseInt(searchParams.get('limit') || '20', 10)))
+  const limit = parseLimit(searchParams.get('limit'), 20, 100)
 
   const traders = await tieredGetOrSet<HotTrader[]>(
     CACHE_KEY,

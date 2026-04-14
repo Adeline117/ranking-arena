@@ -3,6 +3,7 @@ import { logger } from '@/lib/logger'
 import { getOrSetWithLock } from '@/lib/cache'
 import { socialFeatureGuard } from '@/lib/features'
 import { getSupabaseAdmin } from '@/lib/supabase/server'
+import { parseLimit, parseOffset } from '@/lib/utils/safe-parse'
 
 /**
  * GET /api/groups
@@ -20,8 +21,8 @@ export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url)
     const _sortBy = searchParams.get('sort_by') || 'member_count'
-    const limit = Math.min(parseInt(searchParams.get('limit') || '10', 10) || 10, 50)
-    const offset = Math.max(parseInt(searchParams.get('offset') || '0', 10) || 0, 0)
+    const limit = parseLimit(searchParams.get('limit'), 10, 50)
+    const offset = parseOffset(searchParams.get('offset'))
 
     const cacheKey = `api:groups:${_sortBy}:${limit}:${offset}`
 

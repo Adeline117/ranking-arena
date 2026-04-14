@@ -3,6 +3,7 @@ import { checkRateLimit, RateLimitPresets } from '@/lib/utils/rate-limit'
 import logger from '@/lib/logger'
 import { socialFeatureGuard } from '@/lib/features'
 import { lookup as dnsLookup } from 'node:dns/promises'
+import { safeParseInt } from '@/lib/utils/safe-parse'
 
 // Body size cap (bytes) — link preview only needs the head of the document.
 // 256KB is plenty for <head> + meta tags; rejects payload-flood attacks.
@@ -149,7 +150,7 @@ async function fetchWithBodyCap(url: string): Promise<{ ok: boolean; status: num
   }
 
   // Reject obvious oversize responses via Content-Length when available.
-  const contentLength = parseInt(response.headers.get('Content-Length') || '0', 10)
+  const contentLength = safeParseInt(response.headers.get('Content-Length'), 0)
   if (contentLength > MAX_BODY_BYTES) {
     return { ok: false, status: 413, body: '' }
   }

@@ -30,6 +30,7 @@ import { tieredGetOrSet } from '@/lib/cache/redis-layer';
 import { ApiError } from '@/lib/api/errors';
 import { success as apiSuccess, withCache } from '@/lib/api/response';
 import { withPublic } from '@/lib/api/middleware'
+import { parseLimit, parseOffset } from '@/lib/utils/safe-parse'
 
 // availableSources cache via Redis (tieredGetOrSet, warm tier).
 //
@@ -103,8 +104,8 @@ export const GET = withPublic(async ({ request }) => {
 
     const sortDir = (searchParams.get('sort_dir') || 'desc') as 'asc' | 'desc';
 
-    const limit = Math.min(parseInt(searchParams.get('limit') || '100', 10) || 100, 500);
-    const offset = parseInt(searchParams.get('offset') || '0', 10) || 0;
+    const limit = parseLimit(searchParams.get('limit'), 100, 500);
+    const offset = parseOffset(searchParams.get('offset'));
     const cursor = searchParams.get('cursor') || undefined; // format: "score:id" for keyset pagination
     const minPnl = searchParams.get('min_pnl') ? Number(searchParams.get('min_pnl')) : undefined;
     const minTrades = searchParams.get('min_trades') ? Number(searchParams.get('min_trades')) : undefined;

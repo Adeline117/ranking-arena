@@ -13,6 +13,7 @@ import {
   error,
   handleError,
 } from '@/lib/api'
+import { parseLimit, parseOffset } from '@/lib/utils/safe-parse'
 import logger from '@/lib/logger'
 
 export const runtime = 'nodejs'
@@ -28,8 +29,8 @@ export async function GET(request: NextRequest) {
 
     const { searchParams } = new URL(request.url)
     const alertId = searchParams.get('alert_id')
-    const limit = Math.min(parseInt(searchParams.get('limit') || '50', 10) || 50, 100)
-    const offset = Math.max(parseInt(searchParams.get('offset') || '0', 10) || 0, 0)
+    const limit = parseLimit(searchParams.get('limit'), 50, 100)
+    const offset = parseOffset(searchParams.get('offset'))
 
     // KEEP 'exact' — per-user alert history pagination. Scoped via
     // eq(user_id) to a single user's small row set, cheap via (user_id,

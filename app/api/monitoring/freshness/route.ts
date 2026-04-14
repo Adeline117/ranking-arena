@@ -14,6 +14,7 @@ import { getSupabaseAdmin } from '@/lib/supabase/server'
 import logger from '@/lib/logger'
 import { DEAD_BLOCKED_PLATFORMS } from '@/lib/constants/exchanges'
 import { env } from '@/lib/env'
+import { safeParseInt } from '@/lib/utils/safe-parse'
 
 const PLATFORM_THRESHOLDS: Record<string, number> = {
   // Tier 1: High-frequency platforms (every 3h)
@@ -90,7 +91,7 @@ export async function GET(request: NextRequest) {
 
   try {
   const url = new URL(request.url)
-  const threshold = parseInt(url.searchParams.get('threshold') || '12', 10) || 12
+  const threshold = safeParseInt(url.searchParams.get('threshold'), 12)
   const format = url.searchParams.get('format') || 'json'
 
   const supabase = getSupabaseAdmin()

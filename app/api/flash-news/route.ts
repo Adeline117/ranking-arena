@@ -4,6 +4,7 @@
  */
 
 import { NextRequest } from 'next/server'
+import { parsePage, parseLimit } from '@/lib/utils/safe-parse'
 import {
   getSupabaseAdmin,
   requireAuth,
@@ -52,11 +53,8 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url)
 
     // 解析查询参数
-    const page = Math.max(parseInt(searchParams.get('page') || '1', 10) || 1, 1)
-    const limit = Math.min(
-      MAX_ITEMS_PER_PAGE,
-      Math.max(1, parseInt(searchParams.get('limit') || ITEMS_PER_PAGE.toString(), 10) || ITEMS_PER_PAGE)
-    )
+    const page = parsePage(searchParams.get('page'))
+    const limit = parseLimit(searchParams.get('limit'), ITEMS_PER_PAGE, MAX_ITEMS_PER_PAGE)
     const category = searchParams.get('category')
     const importance = searchParams.get('importance')
     const offset = (page - 1) * limit

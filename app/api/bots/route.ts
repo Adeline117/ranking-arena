@@ -16,6 +16,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getSupabaseAdmin } from '@/lib/supabase/server'
 import { checkRateLimit, RateLimitPresets } from '@/lib/utils/rate-limit'
 import { createLogger } from '@/lib/utils/logger'
+import { parseLimit, parseOffset } from '@/lib/utils/safe-parse'
 
 const logger = createLogger('bots-api')
 
@@ -33,8 +34,8 @@ export async function GET(request: NextRequest) {
     const category = searchParams.get('category')
     const sortBy = searchParams.get('sort_by') || 'arena_score'
     const sortDir = (searchParams.get('sort_dir') || 'desc') as 'asc' | 'desc'
-    const limit = Math.min(parseInt(searchParams.get('limit') || '50', 10) || 50, 100)
-    const offset = Math.max(parseInt(searchParams.get('offset') || '0', 10) || 0, 0)
+    const limit = parseLimit(searchParams.get('limit'), 50, 100)
+    const offset = parseOffset(searchParams.get('offset'))
 
     if (!VALID_WINDOWS.includes(window)) {
       return NextResponse.json({ error: 'Invalid window' }, { status: 400 })

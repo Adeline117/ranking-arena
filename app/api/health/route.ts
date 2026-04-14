@@ -10,6 +10,7 @@
 import { NextResponse } from 'next/server'
 import { getSupabaseAdmin } from '@/lib/supabase/server'
 import { getSharedRedis } from '@/lib/cache/redis-client'
+import { safeParseInt } from '@/lib/utils/safe-parse'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'edge'
@@ -17,7 +18,7 @@ export const runtime = 'edge'
 const startTime = Date.now()
 const version = process.env.npm_package_version || '0.1.0'
 // Deploy timestamp from env (set at build time), fallback to module load time
-const deployTime = process.env.NEXT_PUBLIC_DEPLOY_TIME ? parseInt(process.env.NEXT_PUBLIC_DEPLOY_TIME, 10) : startTime
+const deployTime = process.env.NEXT_PUBLIC_DEPLOY_TIME ? safeParseInt(process.env.NEXT_PUBLIC_DEPLOY_TIME, startTime) : startTime
 
 /**
  * Race any check against a timeout to prevent health endpoint from hanging.

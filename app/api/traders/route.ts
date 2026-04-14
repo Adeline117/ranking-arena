@@ -16,6 +16,7 @@ import { z } from 'zod'
 import { withPublic } from '@/lib/api/middleware'
 import { getOrSetWithLock } from '@/lib/cache'
 import type { Period } from '@/lib/utils/arena-score'
+import { safeParseInt } from '@/lib/utils/safe-parse'
 import { createLogger } from '@/lib/utils/logger'
 import { sanitizeDisplayName } from '@/lib/utils/profanity'
 import { validateTradersResponse } from '@/lib/api/traders-response-schema'
@@ -78,7 +79,7 @@ export const GET = withPublic(
           categoryFilter: categoryFilter ?? null,
           sortBy: effectiveSortBy,
           order,
-          cursor: cursor ? parseInt(cursor, 10) : null,
+          cursor: cursor ? safeParseInt(cursor, 0) : null,
           limit,
           useLegacyPaging,
           page: useLegacyPaging ? Math.max(0, page) : 0,

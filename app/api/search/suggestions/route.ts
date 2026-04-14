@@ -12,6 +12,7 @@ import { get as cacheGet, set as cacheSet } from '@/lib/cache'
 import { fireAndForget } from '@/lib/utils/logger'
 import { searchTraders } from '@/lib/data/unified'
 import { EXCHANGE_CONFIG } from '@/lib/constants/exchanges'
+import { parseLimit } from '@/lib/utils/safe-parse'
 
 export const dynamic = 'force-dynamic'
 
@@ -30,7 +31,7 @@ export const GET = withPublic(
   async ({ supabase, request }) => {
     const searchParams = request.nextUrl.searchParams
     const query = searchParams.get('q')?.trim()
-    const limit = Math.min(parseInt(searchParams.get('limit') || '10', 10) || 10, 20)
+    const limit = parseLimit(searchParams.get('limit'), 10, 20)
 
     if (!query || query.length < 1) {
       return success({ suggestions: [] })

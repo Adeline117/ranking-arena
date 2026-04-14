@@ -13,6 +13,7 @@
 import { NextResponse } from 'next/server'
 import { getSupabaseAdmin } from '@/lib/supabase/server'
 import { createLogger, fireAndForget } from '@/lib/utils/logger'
+import { safeParseInt } from '@/lib/utils/safe-parse'
 import { withAuth } from '@/lib/api/middleware'
 import { tieredGet, tieredSet, tieredDel } from '@/lib/cache/redis-layer'
 import { features } from '@/lib/features'
@@ -220,8 +221,8 @@ export const GET = withAuth(async ({ user: authUser, request }) => {
   }
 
   // Apply pagination if limit is provided
-  const limit = limitParam ? Math.min(Math.max(parseInt(limitParam, 10) || 50, 1), 200) : undefined
-  const offset = offsetParam ? Math.max(parseInt(offsetParam, 10) || 0, 0) : 0
+  const limit = limitParam ? Math.min(Math.max(safeParseInt(limitParam, 50), 1), 200) : undefined
+  const offset = offsetParam ? Math.max(safeParseInt(offsetParam, 0), 0) : 0
 
   const paginatedItems = limit !== undefined ? items.slice(offset, offset + limit) : items
 
