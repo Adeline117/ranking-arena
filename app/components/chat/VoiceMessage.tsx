@@ -23,17 +23,22 @@ export default function VoiceMessage({ url, duration }: VoiceMessageProps) {
     const audio = new Audio(url)
     audioRef.current = audio
 
-    audio.addEventListener('loadedmetadata', () => {
+    const handleLoadedMetadata = () => {
       if (audio.duration && isFinite(audio.duration)) {
         setAudioDuration(audio.duration)
       }
-    })
-    audio.addEventListener('ended', () => {
+    }
+    const handleEnded = () => {
       setPlaying(false)
       setCurrentTime(0)
-    })
+    }
+
+    audio.addEventListener('loadedmetadata', handleLoadedMetadata)
+    audio.addEventListener('ended', handleEnded)
 
     return () => {
+      audio.removeEventListener('loadedmetadata', handleLoadedMetadata)
+      audio.removeEventListener('ended', handleEnded)
       audio.pause()
       audio.src = ''
       if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current)
