@@ -57,7 +57,7 @@ const CHANNEL_HANDLERS: Record<AlertChannel, (payload: AlertPayload) => Promise<
         if (res.ok) return true
         if (res.status >= 400 && res.status < 500) return false // Don't retry 4xx
       } catch (err) {
-        console.error('[send-alert] webhook request failed:', err instanceof Error ? err.message : String(err))
+        logger.error('[send-alert] webhook request failed:', err instanceof Error ? err.message : String(err))
       }
       if (attempt < maxRetries - 1) {
         await new Promise(r => setTimeout(r, 1000 * Math.pow(2, attempt))) // 1s, 2s, 4s
@@ -265,7 +265,7 @@ export async function sendRateLimitedAlert(
       return { ...result, rateLimited: false }
     }
   } catch (err) {
-    console.error('[send-alert] Redis rate limit failed:', err instanceof Error ? err.message : String(err))
+    logger.error('[send-alert] Redis rate limit failed:', err instanceof Error ? err.message : String(err))
   }
 
   // In-memory fallback

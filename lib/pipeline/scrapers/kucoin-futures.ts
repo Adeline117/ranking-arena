@@ -7,6 +7,7 @@
 
 import { RawFetchResult, RawTraderEntry, TimeWindow } from '../types'
 import { PlatformScraper, registerScraper } from '../runner'
+import { logger } from '@/lib/logger'
 
 const WINDOW_MAP: Record<TimeWindow, string> = { '7d': 'SEVEN_DAY', '30d': 'THIRTY_DAY', '90d': 'NINETY_DAY' }
 
@@ -95,7 +96,7 @@ export class KucoinFuturesScraper implements PlatformScraper {
         if (allTraders.length >= 500) break
         await this.delay(200)
       } catch (err) {
-        console.warn('[scraper-kucoin] page fetch fallback:', err instanceof Error ? err.message : String(err))
+        logger.warn('[scraper-kucoin] page fetch fallback:', err instanceof Error ? err.message : String(err))
         break
       }
     }
