@@ -197,7 +197,7 @@ export default function ConversationPage({ params }: { params: Promise<{ convers
       }}
     >
       {fileHook.isDragging && (
-        <Box style={{ position: 'absolute', inset: 0, zIndex: 999, background: 'var(--color-accent-primary-15)', border: `3px dashed ${tokens.colors.accent.brand}`, borderRadius: tokens.radius.lg, display: 'flex', alignItems: 'center', justifyContent: 'center', pointerEvents: 'none' }}>
+        <Box style={{ position: 'absolute', inset: 0, zIndex: tokens.zIndex.max, background: 'var(--color-accent-primary-15)', border: `3px dashed ${tokens.colors.accent.brand}`, borderRadius: tokens.radius.lg, display: 'flex', alignItems: 'center', justifyContent: 'center', pointerEvents: 'none' }}>
           <Text size="lg" weight="bold" style={{ color: tokens.colors.accent.brand }}>{t('dragDropHint')}</Text>
         </Box>
       )}

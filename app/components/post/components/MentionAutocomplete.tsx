@@ -123,7 +123,7 @@ export function MentionAutocomplete({
         borderRadius: tokens.radius.md,
         boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
         overflow: 'hidden',
-        zIndex: 100,
+        zIndex: tokens.zIndex.popover,
         minWidth: 200,
         maxWidth: 300,
         ...style,

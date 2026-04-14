@@ -68,7 +68,7 @@ export default function HomeHero({ traderCount: traderCountProp, exchangeCount: 
         gap: tokens.spacing[6],
         flexWrap: 'wrap',
         position: 'relative',
-        zIndex: 1,
+        zIndex: tokens.zIndex.dropdown,
       }}>
         {/* Left: Headline + subtitle */}
         <div style={{ flex: '1 1 400px', minWidth: 0 }}>
@@ -139,7 +139,7 @@ export default function HomeHero({ traderCount: traderCountProp, exchangeCount: 
         gap: tokens.spacing[3],
         marginTop: tokens.spacing[3],
         position: 'relative',
-        zIndex: 1,
+        zIndex: tokens.zIndex.dropdown,
         flexWrap: 'wrap',
       }}>
         <button

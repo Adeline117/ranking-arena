@@ -137,7 +137,7 @@ export function ProBadgeOverlay({
         justifyContent: 'center',
         boxShadow: `0 2px 6px ${config.glow}, 0 0 10px var(--color-pro-gold-glow), 0 0 0 2px var(--color-bg-primary)`,
         animation: 'proBadgeGlow 3s ease-in-out infinite',
-        zIndex: 10,
+        zIndex: tokens.zIndex.dropdown,
       }}
     >
       <StarIcon size={11} color={config.iconColor} />

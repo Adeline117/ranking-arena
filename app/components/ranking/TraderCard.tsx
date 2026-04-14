@@ -100,7 +100,7 @@ export const TraderCard = memo(function TraderCard({
             justifyContent: 'center',
             opacity: isSelected ? 1 : 0,
             transition: 'opacity 0.15s ease',
-            zIndex: 2,
+            zIndex: tokens.zIndex.dropdown,
           }}
         >
           <input
