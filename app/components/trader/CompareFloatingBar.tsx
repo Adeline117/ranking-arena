@@ -14,14 +14,12 @@ import { EXCHANGE_NAMES } from '@/lib/constants/exchanges'
  */
 function CompareFloatingBar() {
   const { t } = useLanguage()
-  const {
-    selectedTraders,
-    isBarExpanded,
-    removeTrader,
-    clearAll,
-    toggleBar,
-    getCompareUrl,
-  } = useComparisonStore()
+  const selectedTraders = useComparisonStore(s => s.selectedTraders)
+  const isBarExpanded = useComparisonStore(s => s.isBarExpanded)
+  const removeTrader = useComparisonStore(s => s.removeTrader)
+  const clearAll = useComparisonStore(s => s.clearAll)
+  const toggleBar = useComparisonStore(s => s.toggleBar)
+  const getCompareUrl = useComparisonStore(s => s.getCompareUrl)
 
   // Don't render if no traders selected
   if (selectedTraders.length === 0) {
