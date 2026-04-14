@@ -330,10 +330,10 @@ export function DialogProvider({ children }: { children: ReactNode }) {
                     : `${tokens.colors.accent.primary}30`}`,
                 }}
               >
-                <span style={{ 
+                <span aria-hidden="true" style={{
                   fontSize: 24,
-                  color: state.options.type === 'danger' 
-                    ? tokens.colors.accent.error 
+                  color: state.options.type === 'danger'
+                    ? tokens.colors.accent.error
                     : tokens.colors.accent.primary,
                 }}>
                   {getDialogIcon(state.options.type)}

@@ -20,6 +20,7 @@ function CopyButton({ text }: { text: string }) {
           setTimeout(() => setCopied(false), 1500)
         })
       }}
+      aria-label={copied ? 'Copied' : 'Copy trader ID'}
       title={t('copy')}
       style={{
         background: 'none', border: 'none', cursor: 'pointer',

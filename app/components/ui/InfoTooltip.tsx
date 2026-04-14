@@ -106,6 +106,7 @@ export default function InfoTooltip({ text, size = 12 }: InfoTooltipProps) {
         role="button"
         tabIndex={0}
         aria-label={text}
+        aria-expanded={show}
         onClick={handleClick}
         onMouseEnter={handleMouseEnter}
         onMouseLeave={handleMouseLeave}

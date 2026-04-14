@@ -618,11 +618,15 @@ export const TraderRow = memo(function TraderRow({
       {onToggleExpand && (trader.profitability_score != null || trader.risk_control_score != null || trader.execution_score != null) && (
         <Box
           onClick={(e: React.MouseEvent) => { e.preventDefault(); e.stopPropagation(); onToggleExpand(trader.id) }}
+          role="button"
+          aria-label="Toggle score breakdown"
+          aria-expanded={isExpanded}
           style={EXPAND_BTN_STYLE}
           className="expand-btn"
           title={t('expandScoreDetails')}
         >
           <svg width={10} height={10} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"
+            aria-hidden="true"
             style={isExpanded ? CHEVRON_EXPANDED_STYLE : CHEVRON_COLLAPSED_STYLE}>
             <path d="M6 9l6 6 6-6" />
           </svg>

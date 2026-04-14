@@ -281,7 +281,7 @@ function ToastItem({ toast, onClose }: { toast: Toast; onClose: () => void }) {
         <button
           onClick={handleClose}
           aria-label="Dismiss notification"
-          className="btn-press toast-close-btn"
+          className="btn-press toast-close-btn focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-current"
           style={{
             background: 'transparent',
             border: 'none',

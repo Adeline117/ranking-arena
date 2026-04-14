@@ -262,6 +262,7 @@ export function Dropdown<T = string>({
           strokeWidth="2"
           strokeLinecap="round"
           strokeLinejoin="round"
+          aria-hidden="true"
           style={{
             flexShrink: 0,
             transition: tokens.transition.fast,
@@ -318,6 +319,7 @@ export function Dropdown<T = string>({
                   }
                 }}
                 placeholder="Search..."
+                aria-label={`Search ${label || 'options'}`}
                 style={{
                   width: '100%',
                   padding: `${tokens.spacing[2]} ${tokens.spacing[3]}`,

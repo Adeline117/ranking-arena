@@ -215,6 +215,7 @@ export default function BottomSheet({
             <button
               onClick={handleClose}
               aria-label="Close"
+              className="focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-current"
               style={{
                 width: 44,
                 height: 44,
