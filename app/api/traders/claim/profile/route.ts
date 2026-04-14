@@ -15,6 +15,7 @@ import {
   checkRateLimit,
   RateLimitPresets,
 } from '@/lib/api'
+import { ApiError } from '@/lib/api/errors'
 import { getUserVerifiedTrader, updateVerifiedTrader } from '@/lib/data/trader-claims'
 
 export async function PUT(request: NextRequest) {
@@ -28,10 +29,7 @@ export async function PUT(request: NextRequest) {
     // Verify the user has a verified trader profile
     const verified = await getUserVerifiedTrader(supabase, user.id)
     if (!verified) {
-      return handleError(
-        new Error('You do not have a verified trader profile. Claim a profile first.'),
-        'claim profile PUT'
-      )
+      throw ApiError.forbidden('You do not have a verified trader profile. Claim a profile first.')
     }
 
     const body = await request.json()
@@ -42,7 +40,7 @@ export async function PUT(request: NextRequest) {
     if (body.display_name !== undefined) {
       const name = typeof body.display_name === 'string' ? body.display_name.trim() : null
       if (name && name.length > 50) {
-        return handleError(new Error('Display name must be 50 characters or less'), 'claim profile PUT')
+        throw ApiError.validation('Display name must be 50 characters or less')
       }
       updates.display_name = name || null
     }
@@ -50,7 +48,7 @@ export async function PUT(request: NextRequest) {
     if (body.bio !== undefined) {
       const bio = typeof body.bio === 'string' ? body.bio.trim() : null
       if (bio && bio.length > 280) {
-        return handleError(new Error('Bio must be 280 characters or less'), 'claim profile PUT')
+        throw ApiError.validation('Bio must be 280 characters or less')
       }
       updates.bio = bio || null
     }
@@ -72,7 +70,7 @@ export async function PUT(request: NextRequest) {
       if (body[field] !== undefined) {
         const value = typeof body[field] === 'string' ? body[field].trim() : null
         if (value && !isValidUrl(value)) {
-          return handleError(new Error(`Invalid URL for ${field}`), 'claim profile PUT')
+          throw ApiError.validation(`Invalid URL for ${field}`)
         }
         updates[field] = value || null
       }
@@ -86,7 +84,7 @@ export async function PUT(request: NextRequest) {
     if (body.avatar_url !== undefined) {
       const value = typeof body.avatar_url === 'string' ? body.avatar_url.trim() : null
       if (value && !isValidUrl(value)) {
-        return handleError(new Error('Invalid avatar URL'), 'claim profile PUT')
+        throw ApiError.validation('Invalid avatar URL')
       }
       updates.avatar_url = value || null
     }
@@ -96,7 +94,7 @@ export async function PUT(request: NextRequest) {
     }
 
     if (Object.keys(updates).length === 0) {
-      return handleError(new Error('No fields to update'), 'claim profile PUT')
+      throw ApiError.validation('No fields to update')
     }
 
     const updated = await updateVerifiedTrader(supabase, user.id, updates)

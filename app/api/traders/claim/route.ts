@@ -19,6 +19,7 @@ import {
   checkRateLimit,
   RateLimitPresets,
 } from '@/lib/api'
+import { ApiError } from '@/lib/api/errors'
 import {
   getUserClaim,
   getUserVerifiedTrader,
@@ -94,13 +95,13 @@ export async function POST(request: NextRequest) {
     )
 
     if (!trader_id || !source || !verification_method) {
-      return handleError(new Error('Missing required parameters'), 'trader claim POST')
+      throw ApiError.validation('Missing required parameters')
     }
 
     // Early check if already claimed (optimization — DB unique constraint is the real guard against race conditions)
     const isClaimed = await isTraderClaimed(supabase, trader_id, source)
     if (isClaimed) {
-      return handleError(new Error('This trader account has been claimed or is under review'), 'trader claim POST')
+      throw ApiError.validation('This trader account has been claimed or is under review')
     }
 
     // Check how many linked traders the user already has (for is_primary logic)
@@ -115,10 +116,7 @@ export async function POST(request: NextRequest) {
       const verifiedUid = body.verification_data?.verified_uid
 
       if (!verifiedUid) {
-        return handleError(
-          new Error('API key verification required. Please complete the verification step first.'),
-          'trader claim POST'
-        )
+        throw ApiError.validation('API key verification required. Please complete the verification step first.')
       }
 
       // Double-check: the verified_uid in the exchange connection must match trader_id
@@ -135,10 +133,7 @@ export async function POST(request: NextRequest) {
           userId: user.id,
           platform: source,
         })
-        return handleError(
-          new Error('Verification mismatch. Your verified account does not match this trader.'),
-          'trader claim POST'
-        )
+        throw ApiError.validation('Verification mismatch. Your verified account does not match this trader.')
       }
     }
 
@@ -147,18 +142,12 @@ export async function POST(request: NextRequest) {
       const { wallet_address, signature, message } = body.verification_data || {}
 
       if (!wallet_address || !signature || !message) {
-        return handleError(
-          new Error('Wallet signature verification requires wallet_address, signature, and message'),
-          'trader claim POST'
-        )
+        throw ApiError.validation('Wallet signature verification requires wallet_address, signature, and message')
       }
 
       // Verify that wallet_address matches trader_id
       if (wallet_address.toLowerCase() !== trader_id.toLowerCase()) {
-        return handleError(
-          new Error('Wallet address does not match trader account'),
-          'trader claim POST'
-        )
+        throw ApiError.validation('Wallet address does not match trader account')
       }
 
       // Signature verification is done in /api/traders/claim/verify-wallet
@@ -176,10 +165,7 @@ export async function POST(request: NextRequest) {
 
       if (!verifyRes.ok) {
         const verifyData = await verifyRes.json().catch(() => ({}))
-        return handleError(
-          new Error(verifyData.error || 'Wallet signature verification failed'),
-          'trader claim POST'
-        )
+        throw ApiError.validation(verifyData.error || 'Wallet signature verification failed')
       }
     }
 
@@ -213,7 +199,7 @@ export async function POST(request: NextRequest) {
 
     if (claimError) {
       if (claimError.code === '23505') {
-        return handleError(new Error('This trader has already been claimed'), 'trader claim POST')
+        throw ApiError.validation('This trader has already been claimed')
       }
       throw claimError
     }

@@ -22,6 +22,7 @@ import {
   RateLimitPresets,
   getSupabaseAdmin,
 } from '@/lib/api'
+import { ApiError } from '@/lib/api/errors'
 import { isSolanaPlatform, isDexWalletPlatform } from '@/lib/validators/exchange-uid-resolver'
 import { logger } from '@/lib/logger'
 import { resolveTrader } from '@/lib/data/unified'
@@ -106,36 +107,24 @@ export async function POST(request: NextRequest) {
 
     // Validate required fields
     if (!wallet_address || !signature || !message || !platform) {
-      return handleError(
-        new Error('Missing required fields: wallet_address, signature, message, platform'),
-        'verify-wallet'
-      )
+      throw ApiError.validation('Missing required fields: wallet_address, signature, message, platform')
     }
 
     // Validate platform is a DEX
     if (!isDexWalletPlatform(platform)) {
-      return handleError(
-        new Error(`Platform ${platform} does not support wallet signature verification`),
-        'verify-wallet'
-      )
+      throw ApiError.validation(`Platform ${platform} does not support wallet signature verification`)
     }
 
     // Parse and validate the message
     const parsed = parseClaimMessage(message)
     if (!parsed) {
-      return handleError(
-        new Error(`Invalid message format. Expected: "${MESSAGE_PREFIX} {trader_key} on Arena. Timestamp: {unix}"`),
-        'verify-wallet'
-      )
+      throw ApiError.validation(`Invalid message format. Expected: "${MESSAGE_PREFIX} {trader_key} on Arena. Timestamp: {unix}"`)
     }
 
     // Check message freshness (prevent replay attacks)
     const messageAge = Date.now() - parsed.timestamp
     if (messageAge > MAX_MESSAGE_AGE_MS || messageAge < -60000) {
-      return handleError(
-        new Error('Signature message has expired. Please sign a new message.'),
-        'verify-wallet'
-      )
+      throw ApiError.validation('Signature message has expired. Please sign a new message.')
     }
 
     // Replay prevention: check if this exact signature was already used (Redis dedup, 10min TTL)
@@ -145,7 +134,7 @@ export async function POST(request: NextRequest) {
         const sigKey = `wallet-sig:${signature.slice(0, 32)}`
         const existing = await redis.get(sigKey)
         if (existing) {
-          return handleError(new Error('This signature has already been used. Please sign a new message.'), 'verify-wallet')
+          throw ApiError.validation('This signature has already been used. Please sign a new message.')
         }
         await redis.set(sigKey, '1', { ex: 600 }) // 10min TTL (covers the 5min message age window + buffer)
       }
@@ -155,10 +144,7 @@ export async function POST(request: NextRequest) {
 
     // If trader_key is provided, validate it matches the message
     if (trader_key && parsed.traderKey !== trader_key) {
-      return handleError(
-        new Error('Message trader key does not match the claimed trader'),
-        'verify-wallet'
-      )
+      throw ApiError.validation('Message trader key does not match the claimed trader')
     }
 
     // Verify the signature
@@ -177,10 +163,7 @@ export async function POST(request: NextRequest) {
         platform,
         chain: isSolana ? 'solana' : 'evm',
       })
-      return handleError(
-        new Error('Wallet signature verification failed. Please try signing again.'),
-        'verify-wallet'
-      )
+      throw ApiError.validation('Wallet signature verification failed. Please try signing again.')
     }
 
     // Verify wallet_address matches the trader's source_trader_id (unified data layer)
@@ -205,10 +188,7 @@ export async function POST(request: NextRequest) {
         userId: user.id,
         platform,
       })
-      return handleError(
-        new Error('Your wallet address does not match this trader account.'),
-        'verify-wallet'
-      )
+      throw ApiError.validation('Your wallet address does not match this trader account.')
     }
 
     logger.info('[verify-wallet] Wallet verification passed', {
