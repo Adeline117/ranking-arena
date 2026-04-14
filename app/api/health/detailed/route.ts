@@ -12,7 +12,6 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server'
-import { env } from '@/lib/env'
 import { getSupabaseAdmin } from '@/lib/supabase/server'
 import { checkHealth as checkCacheHealth, getCacheStats } from '@/lib/cache'
 import { getSupportedPlatforms } from '@/lib/cron/utils'
@@ -262,9 +261,9 @@ const ACTIVE_PLATFORMS = [
   'okx_web3', 'binance_web3', 'web3_bot',
 ]
 
-async function getConnectorsSection(cronSecret: string | undefined, authHeader: string | null) {
-  // Connectors section requires CRON_SECRET auth
-  if (!cronSecret || authHeader !== `Bearer ${cronSecret}`) {
+async function getConnectorsSection(request: Request) {
+  // Connectors section requires CRON_SECRET auth (timing-safe)
+  if (!verifyCronSecret(request)) {
     return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
   }
 
@@ -435,8 +434,7 @@ export async function GET(request: NextRequest) {
 
   // Route to specific section
   if (section === 'connectors') {
-    const authHeader = request.headers.get('authorization')
-    return getConnectorsSection(env.CRON_SECRET, authHeader)
+    return getConnectorsSection(request)
   }
   if (section === 'dependencies') {
     return getDependenciesSection()
@@ -450,17 +448,7 @@ export async function GET(request: NextRequest) {
   //
   // Gate behind CRON_SECRET — used by openclaw + monitoring scripts.
   // Public liveness probes should hit /api/health (basic, no internals).
-  const authHeader = request.headers.get('authorization') || ''
-  const expectedBearer = env.CRON_SECRET ? `Bearer ${env.CRON_SECRET}` : null
-  let authorized = false
-  if (expectedBearer && authHeader.length === expectedBearer.length) {
-    let mismatch = 0
-    for (let i = 0; i < authHeader.length; i++) {
-      mismatch |= authHeader.charCodeAt(i) ^ expectedBearer.charCodeAt(i)
-    }
-    if (mismatch === 0) authorized = true
-  }
-  if (!authorized) {
+  if (!verifyCronSecret(request)) {
     return NextResponse.json(
       { error: 'Unauthorized — use /api/health for public liveness' },
       { status: 401 },

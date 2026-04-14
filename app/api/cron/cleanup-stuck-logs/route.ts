@@ -12,22 +12,14 @@ import { getSupabaseAdmin } from '@/lib/supabase/server'
 import { logger } from '@/lib/logger'
 import { PipelineLogger } from '@/lib/services/pipeline-logger'
 import { sendRateLimitedAlert } from '@/lib/alerts/send-alert'
-import { env } from '@/lib/env'
 import { verifyCronSecret } from '@/lib/auth/verify-service-auth'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 60
 
 export async function GET(request: NextRequest) {
-  // Verify cron secret
-  const authHeader = request.headers.get('authorization')
-  const cronSecret = env.CRON_SECRET
-  
-  if (!cronSecret) {
-    if (process.env.NODE_ENV !== 'development') {
-      return NextResponse.json({ error: 'CRON_SECRET not configured' }, { status: 500 })
-    }
-  } else if (authHeader !== `Bearer ${cronSecret}`) {
+  // Verify cron secret (timing-safe)
+  if (!verifyCronSecret(request)) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
