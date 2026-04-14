@@ -170,6 +170,11 @@ const ko = {
     // Leaderboard
     source: '출처',
     allExchanges: '전체',
+    tradersAcrossExchanges: '{exchanges}개 거래소에서 {count}명의 트레이더',
+    labelTraders: '트레이더',
+    labelAvgScore: '평균 점수',
+    labelAvgRoi: '평균 ROI',
+    labelAvgWinRate: '평균 승률',
     // Trader profile
     similarTraders: '비슷한 트레이더',
     traderNotRegistered: '미등록 트레이더',

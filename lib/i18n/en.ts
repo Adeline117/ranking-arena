@@ -170,6 +170,11 @@ const en = {
     // Leaderboard
     source: 'Source',
     allExchanges: 'All',
+    tradersAcrossExchanges: '{count} traders across {exchanges} exchanges',
+    labelTraders: 'Traders',
+    labelAvgScore: 'Avg Score',
+    labelAvgRoi: 'Avg ROI',
+    labelAvgWinRate: 'Avg Win Rate',
     // Trader profile
     similarTraders: 'Similar Traders',
     traderNotRegistered: 'Trader Not Registered',

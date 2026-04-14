@@ -85,7 +85,7 @@ export default function RankingsIndexClient({ initialPlatforms = [] }: { initial
           {t('rankings') || 'Rankings'}
         </Text>
         <Text size="sm" style={{ color: tokens.colors.text.secondary }}>
-          {totalTraders.toLocaleString('en-US')} traders across {allPlatforms.length} exchanges
+          {t('tradersAcrossExchanges')?.replace('{count}', totalTraders.toLocaleString()).replace('{exchanges}', String(allPlatforms.length)) || `${totalTraders.toLocaleString()} traders across ${allPlatforms.length} exchanges`}
         </Text>
       </Box>
       {/* Token Rankings CTA */}
@@ -174,22 +174,22 @@ export default function RankingsIndexClient({ initialPlatforms = [] }: { initial
                   </Box>
                   <Box style={{ display: 'flex', gap: 16, flexWrap: 'wrap' }}>
                     <Box>
-                      <Text size="xs" style={{ color: tokens.colors.text.tertiary, marginBottom: 2 }}>Traders</Text>
+                      <Text size="xs" style={{ color: tokens.colors.text.tertiary, marginBottom: 2 }}>{t('labelTraders') || 'Traders'}</Text>
                       <Text size="base" weight="bold" style={{ color: tokens.colors.text.primary }}>{p.traderCount > 0 ? p.traderCount.toLocaleString('en-US') : '-'}</Text>
                     </Box>
                     <Box>
-                      <Text size="xs" style={{ color: tokens.colors.text.tertiary, marginBottom: 2 }}>Avg Score</Text>
+                      <Text size="xs" style={{ color: tokens.colors.text.tertiary, marginBottom: 2 }}>{t('labelAvgScore') || 'Avg Score'}</Text>
                       <Text size="base" weight="bold" style={{ color: tokens.colors.accent.primary }}>{p.avgScore > 0 ? p.avgScore.toFixed(1) : '-'}</Text>
                     </Box>
                     <Box>
-                      <Text size="xs" style={{ color: tokens.colors.text.tertiary, marginBottom: 2 }}>Avg ROI</Text>
+                      <Text size="xs" style={{ color: tokens.colors.text.tertiary, marginBottom: 2 }}>{t('labelAvgRoi') || 'Avg ROI'}</Text>
                       <Text size="base" weight="bold" style={{ color: p.avgRoi > 0 ? tokens.colors.sentiment.bull : p.avgRoi < 0 ? tokens.colors.sentiment.bear : tokens.colors.text.secondary }}>
                         {p.avgRoi !== 0 ? `${p.avgRoi > 0 ? '+' : ''}${p.avgRoi.toFixed(1)}%` : '-'}
                       </Text>
                     </Box>
                     {p.avgWinRate != null && p.avgWinRate > 0 && (
                       <Box>
-                        <Text size="xs" style={{ color: tokens.colors.text.tertiary, marginBottom: 2 }}>Avg Win Rate</Text>
+                        <Text size="xs" style={{ color: tokens.colors.text.tertiary, marginBottom: 2 }}>{t('labelAvgWinRate') || 'Avg Win Rate'}</Text>
                         <Text size="base" weight="bold" style={{ color: tokens.colors.text.primary }}>{p.avgWinRate.toFixed(1)}%</Text>
                       </Box>
                     )}
