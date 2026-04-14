@@ -10,13 +10,7 @@
 
 import { SupabaseClient } from '@supabase/supabase-js'
 import { getSupabaseAdmin } from '../supabase/server'
-
-/** Truncate timestamp to hour boundary for partitioned upsert dedup */
-function truncateToHour(): string {
-  const d = new Date()
-  d.setUTCMinutes(0, 0, 0)
-  return d.toISOString()
-}
+import { truncateToHour } from '../utils/date'
 import type {
   RefreshJob,
   JobType,

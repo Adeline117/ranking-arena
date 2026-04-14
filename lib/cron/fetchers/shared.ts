@@ -14,16 +14,9 @@ import { sanitizeRow } from '@/lib/pipeline/validate-before-write'
 
 /** Resolve market_type from SOURCE_TYPE_MAP for trader_profiles_v2 */
 
-/**
- * Truncate an ISO timestamp to the hour boundary.
- * The partitioned trader_snapshots_v2 table has as_of_ts in its unique constraint.
- * Without truncation, every upsert creates a new row instead of updating.
- */
-export function truncateToHour(isoOrDate?: string | Date | null): string {
-  const d = isoOrDate ? new Date(isoOrDate) : new Date()
-  d.setUTCMinutes(0, 0, 0)
-  return d.toISOString()
-}
+// Import + re-export from canonical location for backward compat
+import { truncateToHour } from '@/lib/utils/date'
+export { truncateToHour }
 
 function getMarketType(source: string): string {
   return SOURCE_TYPE_MAP[source] || 'futures'

@@ -1,10 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient, type SupabaseClient } from '@supabase/supabase-js'
+import { type SupabaseClient } from '@supabase/supabase-js'
 import { getSupabaseAdmin } from '@/lib/supabase/server'
 import { createPortalSession } from '@/lib/stripe'
 import { checkRateLimit, RateLimitPresets } from '@/lib/utils/rate-limit'
 import logger from '@/lib/logger'
 import { env } from '@/lib/env'
+import { extractUserFromRequest } from '@/lib/auth/extract-user'
 
 export async function POST(request: NextRequest) {
   // 敏感操作限流
@@ -19,16 +20,6 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(
         { error: 'Payment system not configured. Please contact support.' },
         { status: 503 }
-      )
-    }
-
-    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
-    const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
-
-    if (!supabaseUrl || !anonKey) {
-      return NextResponse.json(
-        { error: 'Server configuration error' },
-        { status: 500 }
       )
     }
 
@@ -48,30 +39,8 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // 获取当前用户 - 优先从 Authorization header，回退到 cookie
-    const authHeader = request.headers.get('authorization')
-    let user = null
-    let authError = null
-
-    if (authHeader?.startsWith('Bearer ')) {
-      const token = authHeader.substring(7)
-      const { data, error } = await (getSupabaseAdmin() as SupabaseClient).auth.getUser(token)
-      user = data?.user
-      authError = error
-    } else {
-      const cookieHeader = request.headers.get('cookie') || ''
-      const supabaseClient = createClient(
-        supabaseUrl,
-        anonKey,
-        {
-          global: { headers: { cookie: cookieHeader } },
-          auth: { persistSession: false, detectSessionInUrl: false },
-        }
-      )
-      const { data, error } = await supabaseClient.auth.getUser()
-      user = data?.user
-      authError = error
-    }
+    // 获取当前用户
+    const { user, error: authError } = await extractUserFromRequest(request)
 
     if (authError || !user) {
       return NextResponse.json(

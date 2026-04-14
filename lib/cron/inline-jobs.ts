@@ -20,13 +20,7 @@ import { createLogger } from '@/lib/utils/logger'
 import { calculateArenaScore } from '@/lib/utils/arena-score'
 import type { Period } from '@/lib/utils/arena-score'
 import type { TraderData } from '@/lib/adapters/types'
-
-/** Truncate timestamp to hour boundary for partitioned upsert dedup */
-function truncateToHour(isoOrDate?: string | Date | null): string {
-  const d = isoOrDate ? new Date(isoOrDate) : new Date()
-  d.setUTCMinutes(0, 0, 0)
-  return d.toISOString()
-}
+import { truncateToHour } from '@/lib/utils/date'
 
 const hotScoreLogger = createLogger('refresh-hot-scores')
 

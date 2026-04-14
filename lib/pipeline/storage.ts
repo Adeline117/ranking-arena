@@ -11,16 +11,10 @@ import { EnrichedTraderData, PersistResult } from './types'
 import { createLogger } from '@/lib/utils/logger'
 import { SOURCE_TYPE_MAP } from '@/lib/constants/exchanges'
 import { validateBeforeWrite, logRejectedWrites } from './validate-before-write'
+import { truncateToHour } from '@/lib/utils/date'
 
 
 const log = createLogger('pipeline:storage')
-
-/** Truncate timestamp to hour boundary for partitioned upsert dedup */
-function truncateToHour(isoOrDate?: string | Date | null): string {
-  const d = isoOrDate ? new Date(isoOrDate) : new Date()
-  d.setUTCMinutes(0, 0, 0)
-  return d.toISOString()
-}
 
 // =============================================================================
 // Main Storage Class
