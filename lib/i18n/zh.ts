@@ -170,6 +170,11 @@ const zh = {
     // 排行榜
     source: '来源',
     allExchanges: '全部',
+    tradersAcrossExchanges: '{count} 位交易员，覆盖 {exchanges} 个交易所',
+    labelTraders: '交易员',
+    labelAvgScore: '平均评分',
+    labelAvgRoi: '平均收益率',
+    labelAvgWinRate: '平均胜率',
     // 交易员主页
     similarTraders: '相似交易员',
     traderNotRegistered: '交易员未入驻',
