@@ -12,14 +12,13 @@ import { env } from '@/lib/env'
 import { getSupabaseAdmin } from '@/lib/supabase/server'
 import { formatDailyTopMovers, postTweet, type TopMover } from '@/lib/services/twitter-bot'
 import { logger } from '@/lib/logger'
+import { verifyCronSecret } from '@/lib/auth/verify-service-auth'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 30
 
 export async function GET(request: NextRequest) {
-  const authHeader = request.headers.get('authorization')
-  const cronSecret = env.CRON_SECRET
-  if (!cronSecret || authHeader !== `Bearer ${cronSecret}`) {
+  if (!verifyCronSecret(request)) {
     return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
   }
 

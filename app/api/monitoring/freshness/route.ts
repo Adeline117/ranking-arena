@@ -15,6 +15,7 @@ import logger from '@/lib/logger'
 import { DEAD_BLOCKED_PLATFORMS } from '@/lib/constants/exchanges'
 import { env } from '@/lib/env'
 import { safeParseInt } from '@/lib/utils/safe-parse'
+import { safeCompare } from '@/lib/auth/verify-service-auth'
 
 const PLATFORM_THRESHOLDS: Record<string, number> = {
   // Tier 1: High-frequency platforms (every 3h)
@@ -82,10 +83,10 @@ interface FreshnessResult {
 }
 
 export async function GET(request: NextRequest) {
-  // Security: Verify CRON_SECRET or ADMIN_SECRET
+  // Security: Verify CRON_SECRET or ADMIN_SECRET (timing-safe)
   const authHeader = request.headers.get('authorization')
   const validSecret = env.ADMIN_SECRET || env.CRON_SECRET
-  if (!validSecret || authHeader !== `Bearer ${validSecret}`) {
+  if (!validSecret || !authHeader || !safeCompare(authHeader, `Bearer ${validSecret}`)) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 

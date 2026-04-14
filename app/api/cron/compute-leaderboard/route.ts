@@ -48,6 +48,7 @@ import { PipelineState } from '@/lib/services/pipeline-state'
 import { env } from '@/lib/env'
 import { sendRateLimitedAlert } from '@/lib/alerts/send-alert'
 import { validateBeforeWrite, logRejectedWrites } from '@/lib/pipeline/validate-before-write'
+import { verifyCronSecret } from '@/lib/auth/verify-service-auth'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 300

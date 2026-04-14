@@ -15,7 +15,7 @@ import { PipelineLogger } from '@/lib/services/pipeline-logger'
 import { runEnrichment, type EnrichmentResult } from '@/lib/cron/enrichment-runner'
 import { getSupabaseAdmin } from '@/lib/supabase/server'
 import { createLogger } from '@/lib/utils/logger'
-import { env } from '@/lib/env'
+import { verifyCronSecret } from '@/lib/auth/verify-service-auth'
 import { triggerDownstreamRefresh } from '@/lib/cron/trigger-chain'
 import { PipelineCheckpoint } from '@/lib/harness/pipeline-checkpoint'
 
@@ -108,9 +108,7 @@ interface BatchResult {
 }
 
 export async function GET(request: NextRequest) {
-  const authHeader = request.headers.get('authorization')
-  const cronSecret = env.CRON_SECRET
-  if (!cronSecret || authHeader !== `Bearer ${cronSecret}`) {
+  if (!verifyCronSecret(request)) {
     return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
   }
 

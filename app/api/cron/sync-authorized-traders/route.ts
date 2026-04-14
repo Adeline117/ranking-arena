@@ -10,6 +10,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { env } from '@/lib/env'
 import { createLogger } from '@/lib/utils/logger'
 import { PipelineLogger } from '@/lib/services/pipeline-logger'
+import { verifyCronSecret } from '@/lib/auth/verify-service-auth'
 
 const logger = createLogger('cron-sync-authorized')
 
@@ -18,8 +19,7 @@ export const maxDuration = 300
 
 export async function GET(request: NextRequest) {
   // Verify cron secret
-  const authHeader = request.headers.get('authorization')
-  if (authHeader !== `Bearer ${env.CRON_SECRET}`) {
+  if (!verifyCronSecret(request)) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 

@@ -13,6 +13,7 @@ import { env } from '@/lib/env'
 import { getSupabaseAdmin } from '@/lib/supabase/server'
 import { createLogger } from '@/lib/utils/logger'
 import { safeParseInt } from '@/lib/utils/safe-parse'
+import { verifyCronSecret } from '@/lib/auth/verify-service-auth'
 
 const log = createLogger('api:supabase-pool')
 
@@ -30,8 +31,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: 'Server misconfigured' }, { status: 503 })
   }
 
-  const authHeader = request.headers.get('authorization')
-  if (!env.CRON_SECRET || authHeader !== `Bearer ${env.CRON_SECRET}`) {
+  if (!verifyCronSecret(request)) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 

@@ -19,6 +19,7 @@ import { PipelineLogger } from '@/lib/services/pipeline-logger'
 import _logger from '@/lib/logger'
 import { env } from '@/lib/env'
 import { getSupabaseAdmin } from '@/lib/supabase/server'
+import { verifyCronSecret } from '@/lib/auth/verify-service-auth'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 300
@@ -109,9 +110,7 @@ async function discoverRankingsInline(): Promise<BatchResult> {
 }
 
 export async function GET(request: NextRequest) {
-  const authHeader = request.headers.get('authorization')
-  const cronSecret = env.CRON_SECRET
-  if (!cronSecret || authHeader !== `Bearer ${cronSecret}`) {
+  if (!verifyCronSecret(request)) {
     return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
   }
 

@@ -21,6 +21,7 @@ import { fireAndForget } from '@/lib/utils/logger'
 import { recordFetchResult } from '@/lib/utils/pipeline-monitor'
 import { PipelineLogger } from '@/lib/services/pipeline-logger'
 import { env } from '@/lib/env'
+import { verifyCronSecret } from '@/lib/auth/verify-service-auth'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 60
@@ -30,8 +31,7 @@ const COINGECKO_API = 'https://api.coingecko.com/api/v3'
 
 export async function POST(request: NextRequest) {
   // Verify cron secret
-  const authHeader = request.headers.get('authorization')
-  if (authHeader !== `Bearer ${env.CRON_SECRET}`) {
+  if (!verifyCronSecret(request)) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 

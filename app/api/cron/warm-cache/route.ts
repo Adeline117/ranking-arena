@@ -17,6 +17,7 @@ import { env } from '@/lib/env'
 import { fetchLeaderboardFromDB } from '@/lib/getInitialTraders'
 import { PipelineLogger } from '@/lib/services/pipeline-logger'
 import { createLogger } from '@/lib/utils/logger'
+import { verifyCronSecret } from '@/lib/auth/verify-service-auth'
 
 const logger = createLogger('warm-cache')
 
@@ -24,8 +25,7 @@ export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
 
 export async function GET(request: NextRequest) {
-  const authHeader = request.headers.get('authorization')
-  if (authHeader !== `Bearer ${env.CRON_SECRET}`) {
+  if (!verifyCronSecret(request)) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 

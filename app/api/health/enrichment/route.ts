@@ -19,16 +19,10 @@ import {
   ENRICHMENT_PLATFORM_CONFIGS,
   NO_ENRICHMENT_PLATFORMS,
 } from '@/lib/cron/enrichment-runner'
+import { verifyAdminAuth } from '@/lib/auth/verify-service-auth'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
-
-function verifyAuth(req: NextRequest): boolean {
-  const auth = req.headers.get('authorization')
-  const cronSecret = env.CRON_SECRET
-  if (!cronSecret) return false
-  return auth === `Bearer ${cronSecret}`
-}
 
 interface PlatformEnrichmentStats {
   platform: string
@@ -41,7 +35,7 @@ interface PlatformEnrichmentStats {
 }
 
 export async function GET(req: NextRequest) {
-  if (!verifyAuth(req)) {
+  if (!(await verifyAdminAuth(req))) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 

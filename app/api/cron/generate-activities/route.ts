@@ -11,6 +11,7 @@ import { getSupabaseAdmin } from '@/lib/api'
 import { PipelineLogger } from '@/lib/services/pipeline-logger'
 import { env } from '@/lib/env'
 import { createLogger } from '@/lib/utils/logger'
+import { verifyCronSecret } from '@/lib/auth/verify-service-auth'
 
 const log = createLogger('cron:generate-activities')
 
@@ -29,8 +30,7 @@ function exchangeName(source: string): string {
 }
 
 export async function GET(request: NextRequest) {
-  const authHeader = request.headers.get('authorization')
-  if (authHeader !== `Bearer ${env.CRON_SECRET}`) {
+  if (!verifyCronSecret(request)) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 

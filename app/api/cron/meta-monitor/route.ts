@@ -11,6 +11,7 @@ import { sendRateLimitedAlert } from '@/lib/alerts/send-alert'
 import { env } from '@/lib/env'
 import { logger } from '@/lib/logger'
 import { getSupabaseAdmin } from '@/lib/supabase/server'
+import { verifyCronSecret } from '@/lib/auth/verify-service-auth'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -70,8 +71,7 @@ const EXPECTED_INTERVALS: Record<string, number> = {
 }
 
 export async function GET(request: Request) {
-  const authHeader = request.headers.get('authorization')
-  if (env.CRON_SECRET && authHeader !== `Bearer ${env.CRON_SECRET}`) {
+  if (!verifyCronSecret(request)) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 

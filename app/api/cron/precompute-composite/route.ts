@@ -18,6 +18,7 @@ import type { GranularPlatform } from '@/lib/types/leaderboard'
 import { createLogger } from '@/lib/utils/logger'
 import { PipelineLogger } from '@/lib/services/pipeline-logger'
 import { env } from '@/lib/env'
+import { verifyCronSecret } from '@/lib/auth/verify-service-auth'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 120
@@ -31,8 +32,7 @@ const _CACHE_TTL_SECONDS = 10800 // 3 hours (cron runs every 2h, overlap for saf
 const _FRESHNESS_HOURS = 168 // 7 days — resilient to intermittent fetch failures
 
 export async function GET(request: NextRequest) {
-  const authHeader = request.headers.get('authorization')
-  if (env.CRON_SECRET && authHeader !== `Bearer ${env.CRON_SECRET}`) {
+  if (!verifyCronSecret(request)) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 

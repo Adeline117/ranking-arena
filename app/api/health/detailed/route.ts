@@ -18,6 +18,7 @@ import { checkHealth as checkCacheHealth, getCacheStats } from '@/lib/cache'
 import { getSupportedPlatforms } from '@/lib/cron/utils'
 import { DEAD_BLOCKED_PLATFORMS } from '@/lib/constants/exchanges'
 import { getFireAndForgetStats } from '@/lib/utils/logger'
+import { verifyCronSecret } from '@/lib/auth/verify-service-auth'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'

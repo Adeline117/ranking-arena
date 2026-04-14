@@ -13,6 +13,7 @@ import { logger } from '@/lib/logger'
 import { PipelineLogger } from '@/lib/services/pipeline-logger'
 import { sendRateLimitedAlert } from '@/lib/alerts/send-alert'
 import { env } from '@/lib/env'
+import { verifyCronSecret } from '@/lib/auth/verify-service-auth'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 60

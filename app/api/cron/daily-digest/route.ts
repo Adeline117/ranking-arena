@@ -17,14 +17,13 @@ import { sendDailyDigest, type DailyDigestData } from '@/lib/notifications/teleg
 import { DEAD_BLOCKED_PLATFORMS } from '@/lib/constants/exchanges'
 import { getSupportedInlinePlatforms } from '@/lib/cron/fetchers'
 import { env } from '@/lib/env'
+import { verifyCronSecret } from '@/lib/auth/verify-service-auth'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 120
 
 export async function GET(request: NextRequest) {
-  const authHeader = request.headers.get('authorization')
-  const cronSecret = env.CRON_SECRET
-  if (!cronSecret || authHeader !== `Bearer ${cronSecret}`) {
+  if (!verifyCronSecret(request)) {
     return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
   }
 

@@ -19,6 +19,7 @@ import { PipelineState } from '@/lib/services/pipeline-state'
 import { EXCHANGE_CONFIG } from '@/lib/constants/exchanges'
 import { env } from '@/lib/env'
 import { getSharedRedis } from '@/lib/cache/redis-client'
+import { verifyCronSecret } from '@/lib/auth/verify-service-auth'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 120 // Increased from 60s — paginated Supabase queries can be slow
@@ -46,8 +47,7 @@ async function meiliRequest(path: string, method: string, body?: unknown) {
 }
 
 export async function GET(request: NextRequest) {
-  const authHeader = request.headers.get('authorization')
-  if (!env.CRON_SECRET || authHeader !== `Bearer ${env.CRON_SECRET}`) {
+  if (!verifyCronSecret(request)) {
     return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
   }
 

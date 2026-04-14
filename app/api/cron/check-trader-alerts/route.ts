@@ -13,6 +13,7 @@ import { PipelineLogger } from '@/lib/services/pipeline-logger'
 import { getPushNotificationService } from '@/lib/services/push-notification'
 import { sendEmail, buildTraderAlertEmail } from '@/lib/services/email'
 import { env } from '@/lib/env'
+import { verifyCronSecret } from '@/lib/auth/verify-service-auth'
 
 export const runtime = 'nodejs'
 export const preferredRegion = 'sfo1'

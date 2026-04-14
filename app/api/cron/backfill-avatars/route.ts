@@ -12,6 +12,7 @@ import { getSupabaseAdmin } from '@/lib/supabase/server'
 import { env } from '@/lib/env'
 import { createLogger } from '@/lib/utils/logger'
 import { parseLimit } from '@/lib/utils/safe-parse'
+import { verifyCronSecret } from '@/lib/auth/verify-service-auth'
 
 const log = createLogger('cron:backfill-avatars')
 
@@ -23,10 +24,7 @@ export const maxDuration = 300
 const sleep = (ms: number) => new Promise(r => setTimeout(r, ms))
 
 function isAuthorized(request: Request): boolean {
-  const authHeader = request.headers.get('authorization')
-  const cronSecret = env.CRON_SECRET
-  if (!cronSecret) return false
-  return authHeader === `Bearer ${cronSecret}`
+  return verifyCronSecret(request)
 }
 
 interface AvatarResult {

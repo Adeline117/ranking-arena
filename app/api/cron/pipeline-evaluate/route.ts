@@ -13,14 +13,14 @@ import { PipelineLogger } from '@/lib/services/pipeline-logger'
 import { PipelineEvaluator } from '@/lib/harness/pipeline-evaluator'
 import { PipelineState } from '@/lib/services/pipeline-state'
 import { env } from '@/lib/env'
+import { verifyCronSecret } from '@/lib/auth/verify-service-auth'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 export const maxDuration = 240 // 4min — 17 checks including HTTP requests + VPS health
 
 export async function GET(request: NextRequest) {
-  const authHeader = request.headers.get('authorization')
-  if (!env.CRON_SECRET || authHeader !== `Bearer ${env.CRON_SECRET}`) {
+  if (!verifyCronSecret(request)) {
     return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
   }
 

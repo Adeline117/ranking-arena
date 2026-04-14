@@ -15,6 +15,7 @@ import { getSupabaseAdmin } from '@/lib/supabase/server'
 import { checkNFTMembership } from '@/lib/web3/nft'
 import { PipelineLogger } from '@/lib/services/pipeline-logger'
 import { env } from '@/lib/env'
+import { verifyCronSecret } from '@/lib/auth/verify-service-auth'
 
 export const runtime = 'nodejs'
 export const preferredRegion = 'sfo1'

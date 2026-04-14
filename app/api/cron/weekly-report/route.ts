@@ -9,12 +9,12 @@ import { PipelineLogger } from '@/lib/services/pipeline-logger'
 import { sendAlert } from '@/lib/alerts/send-alert'
 import { logger } from '@/lib/logger'
 import { env } from '@/lib/env'
+import { verifyCronSecret } from '@/lib/auth/verify-service-auth'
 
 export const maxDuration = 30
 
 export async function GET(request: NextRequest) {
-  const authHeader = request.headers.get('authorization')
-  if (authHeader !== `Bearer ${env.CRON_SECRET}`) {
+  if (!verifyCronSecret(request)) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
