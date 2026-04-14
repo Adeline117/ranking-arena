@@ -535,8 +535,8 @@ export async function warmupCache<T>(
       data: entry.data,
       tier,
       cachedAt: now,
-      expiresAt: now + config.redisTtlSeconds * 1000,
-  
+      expiresAt: now + (config.redisTtlSeconds + config.staleWhileRevalidate) * 1000,
+      softExpiresAt: now + config.redisTtlSeconds * 1000,
     }
 
     // 写入内存

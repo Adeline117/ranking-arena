@@ -24,7 +24,7 @@ import {
   deleteNotification,
 } from '@/lib/data/notifications'
 import { features } from '@/lib/features'
-import { getOrSet } from '@/lib/cache'
+import { getOrSet, delByPattern } from '@/lib/cache'
 
 const SOCIAL_NOTIFICATION_TYPES = ['post_reply', 'new_follower', 'group_update', 'like', 'comment', 'follow', 'mention']
 
@@ -83,6 +83,7 @@ export async function PUT(request: NextRequest) {
 
     if (mark_all) {
       await markAllNotificationsAsRead(supabase, user.id)
+      await delByPattern(`notifications:${user.id}:*`)
       return success({ message: 'All notifications marked as read' })
     } else if (notification_ids && notification_ids.length > 0) {
       // Batch mark-read: update all IDs belonging to this user
@@ -91,9 +92,11 @@ export async function PUT(request: NextRequest) {
         .update({ read: true, read_at: new Date().toISOString() })
         .in('id', notification_ids)
         .eq('user_id', user.id)
+      await delByPattern(`notifications:${user.id}:*`)
       return success({ message: `${notification_ids.length} notifications marked as read` })
     } else if (notification_id) {
       await markNotificationAsRead(supabase, notification_id, user.id)
+      await delByPattern(`notifications:${user.id}:*`)
       return success({ message: 'Marked as read' })
     } else {
       return handleError(new Error('Please provide notification_id, notification_ids, or set mark_all to true'), 'notifications PUT')
@@ -119,6 +122,7 @@ export async function DELETE(request: NextRequest) {
     }
 
     await deleteNotification(supabase, notification_id, user.id)
+    await delByPattern(`notifications:${user.id}:*`)
     return success({ message: 'Notification deleted' })
   } catch (error: unknown) {
     return handleError(error, 'notifications DELETE')
