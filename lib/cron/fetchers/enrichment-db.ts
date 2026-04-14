@@ -10,6 +10,22 @@ import { sanitizeRow, logRejectedWrites } from '@/lib/pipeline/validate-before-w
 
 const log = createLogger('enrichment-db')
 
+/**
+ * Payload shape for batched v2 sync via bulk_enrich_sync_v2 RPC.
+ * Collected when skipV2Sync=true and flushed in bulk by the enrichment runner.
+ */
+export interface V2EnrichUpdate {
+  platform: string
+  trader_key: string
+  window: string
+  win_rate?: number | null
+  max_drawdown?: number | null
+  trades_count?: number | null
+  sharpe_ratio?: number | null
+  roi_pct?: number | null
+  pnl_usd?: number | null
+}
+
 /** Truncate to current hour — matches storage.ts key generation */
 function truncateToHour(): string {
   const d = new Date()
@@ -30,8 +46,9 @@ export async function upsertEquityCurve(
   source: string,
   traderId: string,
   period: string,
-  curve: EquityCurvePoint[]
-): Promise<{ saved: number; error?: string }> {
+  curve: EquityCurvePoint[],
+  options?: { skipV2Sync?: boolean }
+): Promise<{ saved: number; error?: string; v2Update?: V2EnrichUpdate }> {
   if (curve.length === 0) return { saved: 0 }
 
   const capturedAt = new Date().toISOString()
@@ -97,6 +114,21 @@ export async function upsertEquityCurve(
       const v2Window = windowMap[period]
 
       if (v2Window) {
+        // When skipV2Sync is true, return the payload instead of executing per-row UPDATE.
+        // The caller (enrichment-runner) will batch these and flush via bulk_enrich_sync_v2 RPC.
+        if (options?.skipV2Sync) {
+          return {
+            saved,
+            v2Update: {
+              platform: source,
+              trader_key: traderId,
+              window: v2Window,
+              roi_pct: v2Update.roi_pct as number | undefined,
+              pnl_usd: v2Update.pnl_usd as number | undefined,
+            },
+          }
+        }
+
         const { error: v2Err, count: v2Count } = await supabase
           .from('trader_snapshots_v2')
           .update(v2Update, { count: 'exact' })
@@ -167,8 +199,9 @@ export async function upsertStatsDetail(
   source: string,
   traderId: string,
   period: string,
-  stats: StatsDetail
-): Promise<{ saved: boolean; error?: string }> {
+  stats: StatsDetail,
+  options?: { skipV2Sync?: boolean }
+): Promise<{ saved: boolean; error?: string; v2Update?: V2EnrichUpdate }> {
   const capturedAt = new Date().toISOString()
 
   const record = {
@@ -244,10 +277,33 @@ export async function upsertStatsDetail(
       }
     }
 
-    // Update all matching v2 rows (removed .is('win_rate', null) guard
-    // so stale win_rate values get refreshed with latest enrichment data)
     // Only run update if there are valid fields to sync
     if (Object.keys(v2Update).length > 0) {
+      // When skipV2Sync is true, return the payload instead of executing per-row UPDATE.
+      // The caller (enrichment-runner) will batch these and flush via bulk_enrich_sync_v2 RPC.
+      if (options?.skipV2Sync) {
+        // Map enrichment period names to v2 window column values
+        const windowMap: Record<string, string> = {
+          '7D': '7D', '30D': '30D', '90D': '90D',
+          'WEEKLY': '7D', 'MONTHLY': '30D', 'QUARTERLY': '90D',
+          '7d': '7D', '30d': '30D', '90d': '90D',
+        }
+        return {
+          saved: true,
+          v2Update: {
+            platform: source,
+            trader_key: traderId,
+            window: windowMap[period] || period,
+            win_rate: v2Update.win_rate as number | undefined,
+            max_drawdown: v2Update.max_drawdown as number | undefined,
+            trades_count: v2Update.trades_count as number | undefined,
+            sharpe_ratio: v2Update.sharpe_ratio as number | undefined,
+          },
+        }
+      }
+
+      // Update all matching v2 rows (removed .is('win_rate', null) guard
+      // so stale win_rate values get refreshed with latest enrichment data)
       const { error: v2Err, count: v2Count } = await supabase
         .from('trader_snapshots_v2')
         .update(v2Update, { count: 'exact' })
