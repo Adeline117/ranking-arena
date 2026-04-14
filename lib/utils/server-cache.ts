@@ -15,6 +15,18 @@ interface CacheEntry<T> {
 // 全局缓存存储
 const cacheStore = new Map<string, CacheEntry<unknown>>()
 
+// Periodic cleanup of expired entries (prevents unbounded growth)
+if (typeof setInterval !== 'undefined') {
+  setInterval(() => {
+    const now = Date.now()
+    for (const [key, entry] of cacheStore) {
+      if (now - entry.timestamp > entry.ttl) {
+        cacheStore.delete(key)
+      }
+    }
+  }, 60_000).unref?.()
+}
+
 // 默认 TTL：5分钟
 const DEFAULT_TTL = 5 * 60 * 1000
 

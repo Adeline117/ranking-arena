@@ -362,6 +362,18 @@ export async function tieredDelByTag(tag: string): Promise<number> {
 const inFlightRequests = new Map<string, { promise: Promise<unknown>; createdAt: number }>()
 const IN_FLIGHT_MAX_AGE_MS = 30_000 // Evict entries older than 30s (hung promises)
 
+// Periodic cleanup of stale in-flight entries (prevents unbounded growth)
+if (typeof setInterval !== 'undefined') {
+  setInterval(() => {
+    const now = Date.now()
+    for (const [key, { createdAt }] of inFlightRequests) {
+      if (now - createdAt > 60_000) {
+        inFlightRequests.delete(key)
+      }
+    }
+  }, 60_000).unref?.()
+}
+
 export async function tieredGetOrSet<T>(
   key: string,
   fetcher: () => Promise<T>,
