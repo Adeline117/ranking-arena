@@ -423,6 +423,7 @@ export const TraderRow = memo(function TraderRow({
       style={{ ...LINK_BASE_STYLE, '--row-index': rank } as React.CSSProperties}
       aria-label={`#${rank} ${displayName}, ROI ${Number(trader.roi ?? 0) >= 0 ? '+' : ''}${Number(trader.roi ?? 0).toFixed(2)}%`}
       tabIndex={0}
+      onKeyDown={(e) => { if (e.key === ' ') { e.preventDefault(); e.currentTarget.click() } }}
       onMouseEnter={handleMouseEnter}
       onMouseLeave={handleMouseLeave}
     >

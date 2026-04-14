@@ -436,7 +436,7 @@ export function useMarketData() {
     {
       ...defaultConfig,
       refreshInterval: 30 * 1000, // 优化为 30 秒刷新，减少请求频率
-      revalidateOnFocus: true,
+      revalidateOnFocus: false, // Already refreshing every 30s; focus refetch adds flicker
     }
   )
 }
@@ -500,7 +500,7 @@ export function useNotifications(userId: string | undefined, token?: string) {
     {
       ...defaultConfig,
       refreshInterval: 60 * 1000, // 优化为 1 分钟刷新，减少请求频率
-      revalidateOnFocus: true,
+      revalidateOnFocus: false, // Already refreshing every 60s; focus refetch adds redundant request
     }
   )
 }
