@@ -98,13 +98,13 @@ export default function ReferralClient() {
     <div style={{ minHeight: '100vh', background: tokens.colors.bg.primary, color: tokens.colors.text.primary }}>
       <TopNav email={email} />
 
-      <div style={{ maxWidth: 700, margin: '0 auto', padding: '24px 16px 60px' }}>
+      <div style={{ maxWidth: 700, margin: '0 auto', padding: `${tokens.spacing[6]} ${tokens.spacing[4]} ${tokens.spacing[16]}` }}>
         {/* Header */}
-        <div style={{ marginBottom: 32, textAlign: 'center' }}>
-          <h1 style={{ fontSize: 28, fontWeight: 700, margin: 0, letterSpacing: '-0.5px' }}>
+        <div style={{ marginBottom: tokens.spacing[8], textAlign: 'center' }}>
+          <h1 style={{ fontSize: tokens.typography.fontSize.hero, fontWeight: tokens.typography.fontWeight.bold, margin: 0, letterSpacing: '-0.5px' }}>
             Referral Program
           </h1>
-          <p style={{ fontSize: 14, color: tokens.colors.text.secondary, marginTop: 6 }}>
+          <p style={{ fontSize: tokens.typography.fontSize.base, color: tokens.colors.text.secondary, marginTop: tokens.spacing[2] }}>
             Invite friends to Arena and track your referrals.
           </p>
         </div>
@@ -112,34 +112,34 @@ export default function ReferralClient() {
         {/* Auth gate */}
         {isAuthenticated === false && (
           <div style={{
-            padding: '60px 20px',
+            padding: `${tokens.spacing[16]} ${tokens.spacing[5]}`,
             textAlign: 'center',
             background: tokens.glass.bg.secondary,
             borderRadius: tokens.radius.lg,
             border: tokens.glass.border.light,
           }}>
-            <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" style={{ opacity: 0.4, marginBottom: 16 }}>
+            <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" style={{ opacity: 0.4, marginBottom: tokens.spacing[4] }}>
               <path d="M16 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2" />
               <circle cx="8.5" cy="7" r="4" />
               <line x1="20" y1="8" x2="20" y2="14" />
               <line x1="23" y1="11" x2="17" y2="11" />
             </svg>
-            <h2 style={{ fontSize: 18, fontWeight: 600, margin: '0 0 8px' }}>
+            <h2 style={{ fontSize: tokens.typography.fontSize.lg, fontWeight: tokens.typography.fontWeight.semibold, margin: `0 0 ${tokens.spacing[2]}` }}>
               Sign in to get your referral link
             </h2>
-            <p style={{ fontSize: 14, color: tokens.colors.text.secondary, margin: '0 0 20px' }}>
+            <p style={{ fontSize: tokens.typography.fontSize.base, color: tokens.colors.text.secondary, margin: `0 0 ${tokens.spacing[5]}` }}>
               Create an account or log in to start inviting friends.
             </p>
             <Link
               href="/auth/login"
               style={{
                 display: 'inline-block',
-                padding: '10px 24px',
+                padding: `${tokens.spacing[3]} ${tokens.spacing[6]}`,
                 background: 'var(--color-accent-primary)',
-                color: '#fff',
+                color: tokens.colors.white,
                 borderRadius: tokens.radius.md,
-                fontWeight: 600,
-                fontSize: 14,
+                fontWeight: tokens.typography.fontWeight.semibold,
+                fontSize: tokens.typography.fontSize.base,
                 textDecoration: 'none',
               }}
             >
@@ -160,44 +160,44 @@ export default function ReferralClient() {
             <div style={{
               display: 'grid',
               gridTemplateColumns: 'repeat(2, 1fr)',
-              gap: 12,
-              marginBottom: 24,
+              gap: tokens.spacing[3],
+              marginBottom: tokens.spacing[6],
             }}>
               <div style={{
-                padding: '24px',
+                padding: tokens.spacing[6],
                 background: tokens.glass.bg.secondary,
                 borderRadius: tokens.radius.lg,
                 border: tokens.glass.border.light,
                 textAlign: 'center',
               }}>
                 <div style={{
-                  fontSize: 36,
-                  fontWeight: 700,
+                  fontSize: tokens.typography.fontSize['3xl'],
+                  fontWeight: tokens.typography.fontWeight.bold,
                   fontFamily: 'var(--font-mono, monospace)',
                   color: 'var(--color-accent-primary)',
                 }}>
                   {referral?.referral_count ?? 0}
                 </div>
-                <div style={{ fontSize: 13, color: tokens.colors.text.secondary, marginTop: 4 }}>
+                <div style={{ fontSize: tokens.typography.fontSize.sm, color: tokens.colors.text.secondary, marginTop: tokens.spacing[1] }}>
                   Friends Invited
                 </div>
               </div>
               <div style={{
-                padding: '24px',
+                padding: tokens.spacing[6],
                 background: tokens.glass.bg.secondary,
                 borderRadius: tokens.radius.lg,
                 border: tokens.glass.border.light,
                 textAlign: 'center',
               }}>
                 <div style={{
-                  fontSize: 36,
-                  fontWeight: 700,
+                  fontSize: tokens.typography.fontSize['3xl'],
+                  fontWeight: tokens.typography.fontWeight.bold,
                   fontFamily: 'var(--font-mono, monospace)',
                   color: tokens.colors.accent.success,
                 }}>
                   {referral?.referral_count ?? 0}
                 </div>
-                <div style={{ fontSize: 13, color: tokens.colors.text.secondary, marginTop: 4 }}>
+                <div style={{ fontSize: tokens.typography.fontSize.sm, color: tokens.colors.text.secondary, marginTop: tokens.spacing[1] }}>
                   Active Referrals
                 </div>
               </div>
@@ -205,29 +205,29 @@ export default function ReferralClient() {
 
             {/* Referral link */}
             <div style={{
-              padding: '24px',
+              padding: tokens.spacing[6],
               background: tokens.glass.bg.secondary,
               borderRadius: tokens.radius.lg,
               border: tokens.glass.border.light,
-              marginBottom: 24,
+              marginBottom: tokens.spacing[6],
             }}>
-              <h3 style={{ fontSize: 16, fontWeight: 600, margin: '0 0 12px' }}>
+              <h3 style={{ fontSize: tokens.typography.fontSize.md, fontWeight: tokens.typography.fontWeight.semibold, margin: `0 0 ${tokens.spacing[3]}` }}>
                 Your Referral Link
               </h3>
               {referral?.referral_code ? (
                 <>
                   <div style={{
                     display: 'flex',
-                    gap: 8,
+                    gap: tokens.spacing[2],
                     alignItems: 'center',
                   }}>
                     <div style={{
                       flex: 1,
-                      padding: '10px 14px',
+                      padding: `${tokens.spacing[3]} ${tokens.spacing[4]}`,
                       background: tokens.colors.bg.tertiary,
                       borderRadius: tokens.radius.md,
                       fontFamily: 'var(--font-mono, monospace)',
-                      fontSize: 13,
+                      fontSize: tokens.typography.fontSize.sm,
                       color: tokens.colors.text.secondary,
                       overflow: 'hidden',
                       textOverflow: 'ellipsis',
@@ -238,16 +238,16 @@ export default function ReferralClient() {
                     <button
                       onClick={handleCopy}
                       style={{
-                        padding: '10px 20px',
+                        padding: `${tokens.spacing[3]} ${tokens.spacing[5]}`,
                         borderRadius: tokens.radius.md,
                         border: 'none',
                         background: copied ? tokens.colors.accent.success : 'var(--color-accent-primary)',
-                        color: '#fff',
-                        fontSize: 13,
-                        fontWeight: 600,
+                        color: tokens.colors.white,
+                        fontSize: tokens.typography.fontSize.sm,
+                        fontWeight: tokens.typography.fontWeight.semibold,
                         cursor: 'pointer',
                         whiteSpace: 'nowrap',
-                        transition: 'background 0.2s',
+                        transition: `background ${tokens.transition.fast}`,
                       }}
                     >
                       {copied ? 'Copied!' : 'Copy'}
@@ -259,13 +259,13 @@ export default function ReferralClient() {
                     onClick={handleGenerate}
                     disabled={generating}
                     style={{
-                      marginTop: 12,
-                      padding: '6px 14px',
+                      marginTop: tokens.spacing[3],
+                      padding: `${tokens.spacing[2]} ${tokens.spacing[4]}`,
                       borderRadius: tokens.radius.sm,
                       border: tokens.glass.border.light,
                       background: 'transparent',
                       color: tokens.colors.text.tertiary,
-                      fontSize: 12,
+                      fontSize: tokens.typography.fontSize.xs,
                       cursor: generating ? 'not-allowed' : 'pointer',
                     }}
                   >
@@ -277,13 +277,13 @@ export default function ReferralClient() {
                   onClick={handleGenerate}
                   disabled={generating}
                   style={{
-                    padding: '12px 24px',
+                    padding: `${tokens.spacing[3]} ${tokens.spacing[6]}`,
                     borderRadius: tokens.radius.md,
                     border: 'none',
                     background: 'var(--color-accent-primary)',
-                    color: '#fff',
-                    fontSize: 14,
-                    fontWeight: 600,
+                    color: tokens.colors.white,
+                    fontSize: tokens.typography.fontSize.base,
+                    fontWeight: tokens.typography.fontWeight.semibold,
                     cursor: generating ? 'not-allowed' : 'pointer',
                   }}
                 >
@@ -295,15 +295,15 @@ export default function ReferralClient() {
             {/* Share buttons */}
             {referral?.referral_link && (
               <div style={{
-                padding: '24px',
+                padding: tokens.spacing[6],
                 background: tokens.glass.bg.secondary,
                 borderRadius: tokens.radius.lg,
                 border: tokens.glass.border.light,
               }}>
-                <h3 style={{ fontSize: 16, fontWeight: 600, margin: '0 0 12px' }}>
+                <h3 style={{ fontSize: tokens.typography.fontSize.md, fontWeight: tokens.typography.fontWeight.semibold, margin: `0 0 ${tokens.spacing[3]}` }}>
                   Share
                 </h3>
-                <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+                <div style={{ display: 'flex', gap: tokens.spacing[3], flexWrap: 'wrap' }}>
                   <a
                     href={`https://x.com/intent/post?text=${encodeURIComponent(shareText)}&url=${encodeURIComponent(shareUrl)}`}
                     target="_blank"
@@ -351,15 +351,15 @@ export default function ReferralClient() {
 const shareBtnStyle: React.CSSProperties = {
   display: 'inline-flex',
   alignItems: 'center',
-  gap: 8,
-  padding: '10px 20px',
-  borderRadius: '8px',
-  border: '1px solid var(--color-border-primary)',
-  background: 'var(--color-bg-secondary)',
-  color: 'var(--color-text-secondary)',
-  fontSize: 13,
-  fontWeight: 500,
+  gap: tokens.spacing[2],
+  padding: `${tokens.spacing[3]} ${tokens.spacing[5]}`,
+  borderRadius: tokens.radius.md,
+  border: `1px solid ${tokens.colors.border.primary}`,
+  background: tokens.colors.bg.secondary,
+  color: tokens.colors.text.secondary,
+  fontSize: tokens.typography.fontSize.sm,
+  fontWeight: tokens.typography.fontWeight.medium,
   textDecoration: 'none',
   cursor: 'pointer',
-  transition: 'border-color 0.15s',
+  transition: `border-color ${tokens.transition.fast}`,
 }

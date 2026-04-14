@@ -392,7 +392,7 @@ function BotsContent() {
                 textTransform: 'uppercase',
                 letterSpacing: '0.5px',
                 fontSize: 11,
-                position: 'sticky', top: 0, zIndex: 20,
+                position: 'sticky', top: 0, zIndex: tokens.zIndex.sticky,
                 background: 'var(--color-bg-secondary, var(--color-bg-primary))',
               }}
             >

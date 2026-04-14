@@ -131,7 +131,7 @@ export default function DesktopSidebar() {
         display: 'flex',
         flexDirection: 'column',
         gap: tokens.spacing[2],
-        zIndex: 30,
+        zIndex: tokens.zIndex.sticky,
         overflowY: 'auto',
         scrollbarWidth: 'thin',
         transition: `all ${tokens.transition.base}`,

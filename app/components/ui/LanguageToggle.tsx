@@ -92,7 +92,7 @@ export default function LanguageToggle() {
           border: `1px solid ${tokens.colors.border.primary}`,
           borderRadius: tokens.radius.md,
           overflow: 'hidden',
-          zIndex: 50,
+          zIndex: tokens.zIndex.dropdown,
           minWidth: 120,
           boxShadow: '0 4px 12px var(--color-overlay-medium, rgba(0,0,0,0.3))',
         }}>
