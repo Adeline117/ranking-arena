@@ -163,8 +163,11 @@ export async function checkConnectorHealth(
     logger.warn(`[connector-health] ${platform}/${window} ${severity}: ${reasons.join('; ')}`)
   }
 
-  // Always save the new snapshot (even when degraded)
-  await saveSnapshot(stateKey, current)
+  // Only save the new snapshot when not critically degraded — prevents a degraded
+  // run from becoming the baseline, which would mask the next normal run as a false positive
+  if (severity !== 'critical') {
+    await saveSnapshot(stateKey, current)
+  }
 
   return { isDegraded: severity !== 'none', severity: severity as DegradationCheck['severity'], reasons }
 }
