@@ -156,13 +156,13 @@ describe('OkxFuturesConnector', () => {
       expect(url).toContain('pageNo=3')
     })
 
-    test('returns empty on network error (catches internally)', async () => {
+    test('throws on network error when no traders fetched yet', async () => {
       const connector = createConnector()
       mockFetchNetworkError()
 
-      // OKX discoverLeaderboard catches errors and breaks the loop
-      const result = await connector.discoverLeaderboard('7d')
-      expect(result.traders).toHaveLength(0)
+      // OKX discoverLeaderboard now propagates errors on first page
+      // to surface the real failure instead of silently returning empty
+      await expect(connector.discoverLeaderboard('7d')).rejects.toThrow(/OKX leaderboard fetch failed/)
     })
 
     test('total_available equals number of fetched traders', async () => {
@@ -256,7 +256,7 @@ describe('OkxFuturesConnector', () => {
   // ============================================
 
   describe('error handling', () => {
-    test('returns empty on server error (500) — leaderboard catches internally', async () => {
+    test('throws on server error (500) when no traders fetched yet', async () => {
       const connector = createConnector()
       mockFetch.mockResolvedValueOnce({
         ok: false,
@@ -265,9 +265,8 @@ describe('OkxFuturesConnector', () => {
         json: async () => ({ error: 'Internal Server Error' }),
       })
 
-      // OKX discoverLeaderboard catches errors — returns empty
-      const result = await connector.discoverLeaderboard('7d')
-      expect(result.traders).toHaveLength(0)
+      // OKX discoverLeaderboard now propagates errors on first page
+      await expect(connector.discoverLeaderboard('7d')).rejects.toThrow(/OKX leaderboard fetch failed/)
     })
 
     test('handles invalid JSON response gracefully via warnValidate', async () => {

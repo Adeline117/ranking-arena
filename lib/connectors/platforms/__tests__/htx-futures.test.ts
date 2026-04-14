@@ -122,24 +122,23 @@ describe('HtxFuturesConnector', () => {
       expect(url).toContain('pageNo=1')
     })
 
-    test('returns empty array on network error', async () => {
+    test('throws on network error when no traders fetched yet', async () => {
       const connector = createConnector()
       mockFetchNetworkError()
 
-      const result = await connector.discoverLeaderboard('7d')
-      expect(result.traders).toHaveLength(0)
+      await expect(connector.discoverLeaderboard('7d')).rejects.toThrow(/HTX leaderboard fetch failed/)
     })
 
-    test('returns empty array on rate limit (429)', async () => {
+    test('throws on rate limit (429) when no traders fetched yet', async () => {
       const connector = createConnector()
       mockFetch.mockResolvedValueOnce({
+        ok: false,
         status: 429,
         headers: { get: () => '60' },
         json: async () => ({}),
       })
 
-      const result = await connector.discoverLeaderboard('7d')
-      expect(result.traders).toHaveLength(0)
+      await expect(connector.discoverLeaderboard('7d')).rejects.toThrow(/HTX leaderboard fetch failed/)
     })
   })
 
@@ -305,28 +304,28 @@ describe('HtxFuturesConnector', () => {
   // ============================================
 
   describe('error handling', () => {
-    test('returns empty array on server error (500)', async () => {
+    test('throws on server error (500) when no traders fetched yet', async () => {
       const connector = createConnector()
       mockFetch.mockResolvedValueOnce({
+        ok: false,
         status: 500,
         headers: { get: (key: string) => key === 'content-type' ? 'application/json' : null },
         json: async () => ({}),
       })
 
-      const result = await connector.discoverLeaderboard('7d')
-      expect(result.traders).toHaveLength(0)
+      await expect(connector.discoverLeaderboard('7d')).rejects.toThrow(/HTX leaderboard fetch failed/)
     })
 
-    test('returns empty array on client error (403)', async () => {
+    test('throws on client error (403) when no traders fetched yet', async () => {
       const connector = createConnector()
       mockFetch.mockResolvedValueOnce({
+        ok: false,
         status: 403,
         headers: { get: (key: string) => key === 'content-type' ? 'application/json' : null },
         json: async () => ({ message: 'Forbidden' }),
       })
 
-      const result = await connector.discoverLeaderboard('7d')
-      expect(result.traders).toHaveLength(0)
+      await expect(connector.discoverLeaderboard('7d')).rejects.toThrow(/HTX leaderboard fetch failed/)
     })
 
     test('handles malformed response gracefully', async () => {
