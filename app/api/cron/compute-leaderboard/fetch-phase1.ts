@@ -78,12 +78,17 @@ export async function fetchPhase1FromV2(
         let data: any[] | null = null
         let error: { message: string; code?: string } | null = null
         try {
+          // PERF FIX: add as_of_ts filter for partition pruning. Without it,
+          // Postgres scans ALL monthly partitions (22.9s avg). With it, only
+          // the current month's partition is scanned (~2-4s).
+          const partitionPruneDate = new Date(Date.now() - 31 * 24 * 3600 * 1000).toISOString()
           const result = await queryWithTimeout(supabase
             .from('trader_snapshots_v2')
             .select('platform, trader_key, roi_pct, pnl_usd, win_rate, max_drawdown, trades_count, followers, copiers, arena_score, updated_at, sharpe_ratio, sortino_ratio, calmar_ratio, volatility_pct, downside_volatility_pct, metrics')
             .eq('platform', source)
             .eq('window', v2Window)
             .gte('updated_at', freshnessISO)
+            .gte('as_of_ts', partitionPruneDate)
             .order('updated_at', { ascending: false })
             .limit(1000))
           data = result.data as TraderRow[] | null
