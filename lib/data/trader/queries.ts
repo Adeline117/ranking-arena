@@ -22,6 +22,7 @@ import {
 } from './mappers'
 import { fetchSimilarTraders } from './similar'
 import { LR, V2, ENRICH } from '@/lib/types/schema-mapping'
+import { SSR_HEAVY_QUERY_TIMEOUT_MS } from '@/lib/constants/timeouts'
 
 // ============================================================
 // INTERNAL: Safe query helper
@@ -51,7 +52,11 @@ export async function safeQuery<T>(
   }
 }
 
-/** Promise timeout wrapper. */
+/**
+ * Promise timeout wrapper (legacy — prefer AbortSignal for new code).
+ * For individual Supabase queries, use `.abortSignal(AbortSignal.timeout(ms))`
+ * which actually cancels the HTTP request vs just abandoning it.
+ */
 export function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
   const timeout = new Promise<T>((_, reject) =>
     setTimeout(() => reject(new Error(`Query timeout after ${ms}ms`)), ms)
@@ -134,11 +139,11 @@ export async function getLeaderboard(supabase: SupabaseClient, params: {
 
   query = query.range(offset, offset + limit - 1)
 
-  // 10s timeout — leaderboard queries should be fast (indexed table)
-  const { data, error } = await withTimeout(
-    query as unknown as Promise<{ data: Record<string, unknown>[] | null; error: { message: string } | null }>,
-    10_000
-  ).catch(() => ({ data: null as Record<string, unknown>[] | null, error: { message: 'Query timeout after 10000ms' } }))
+  // AbortSignal.timeout cancels the PostgREST HTTP request on timeout
+  // (vs Promise.race/withTimeout which abandons the query in the background)
+  const { data, error } = await Promise.resolve(
+    query.abortSignal(AbortSignal.timeout(SSR_HEAVY_QUERY_TIMEOUT_MS))
+  ).catch(() => ({ data: null as Record<string, unknown>[] | null, error: { message: `Query timeout after ${SSR_HEAVY_QUERY_TIMEOUT_MS}ms` } }))
 
   if (error) {
     logger.error('[unified.getLeaderboard] Query error:', error.message)
@@ -173,6 +178,8 @@ export async function getTraderDetail(supabase: SupabaseClient, params: {
   // --- Phase 1: Fetch basic data + profile in parallel (4 queries) ---
   // Profile queries (traders + trader_profiles_v2) don't depend on LR/v2 results,
   // so run them all in one Promise.all to save a sequential round trip (~100-200ms).
+  // Each query carries AbortSignal so PostgREST requests are cancelled on timeout.
+  const phase1Signal = AbortSignal.timeout(SSR_HEAVY_QUERY_TIMEOUT_MS)
   const [lrResult, v2Result, sourceProfile, profileV2] = await withTimeout(
     Promise.all([
       // leaderboard_ranks: all periods (precomputed, primary source)
@@ -188,6 +195,7 @@ export async function getTraderDetail(supabase: SupabaseClient, params: {
           .eq(LR.source, platform)
           .eq(LR.source_trader_id, traderKey)
           .limit(5)
+          .abortSignal(phase1Signal)
       ),
       // trader_snapshots_v2: all windows (fallback)
       // Uses v2 column names: platform, trader_key, window
@@ -199,6 +207,7 @@ export async function getTraderDetail(supabase: SupabaseClient, params: {
           .eq(V2.trader_key, traderKey)
           .order('created_at', { ascending: false })
           .limit(5)
+          .abortSignal(phase1Signal)
       ),
       // Profile from traders table
       safeQuery(() =>
@@ -208,6 +217,7 @@ export async function getTraderDetail(supabase: SupabaseClient, params: {
           .eq('platform', platform)
           .eq('trader_key', traderKey)
           .limit(1)
+          .abortSignal(phase1Signal)
           .maybeSingle()
       ) as Promise<Record<string, unknown> | null>,
       // Bio from trader_profiles_v2
@@ -218,10 +228,11 @@ export async function getTraderDetail(supabase: SupabaseClient, params: {
           .eq('platform', platform)
           .eq('trader_key', traderKey)
           .limit(1)
+          .abortSignal(phase1Signal)
           .maybeSingle()
       ) as Promise<Record<string, unknown> | null>,
     ]),
-    20000 // 20s: parallel queries compete for Supabase pool; 10s was too tight
+    SSR_HEAVY_QUERY_TIMEOUT_MS + 1000 // outer fallback: AbortSignal should fire first
   )
 
   const lrRows = (lrResult || []) as Record<string, unknown>[]
@@ -302,6 +313,8 @@ export async function getTraderDetail(supabase: SupabaseClient, params: {
   // --- Phase 2: Fetch enrichment data in parallel ---
   // Enrichment tables use v1 naming: source + source_trader_id
   // Merge 3 equity_curve + 3 asset_breakdown queries into 2 (6→2, saves 4 round trips)
+  // Each query carries AbortSignal so PostgREST requests are cancelled on timeout.
+  const phase2Signal = AbortSignal.timeout(SSR_HEAVY_QUERY_TIMEOUT_MS)
   const [
     allEquityCurveResult,
     allAssetBreakdownResult,
@@ -320,6 +333,7 @@ export async function getTraderDetail(supabase: SupabaseClient, params: {
           .in(ENRICH.source, sourceAliases).eq(ENRICH.source_trader_id, traderKey)
           .in('period', ['90D', '30D', '7D'])
           .order('data_date', { ascending: true }).limit(130)
+          .abortSignal(phase2Signal)
       ),
       // Asset breakdowns — all periods in single query, split client-side
       safeQuery(() =>
@@ -328,6 +342,7 @@ export async function getTraderDetail(supabase: SupabaseClient, params: {
           .in(ENRICH.source, sourceAliases).eq(ENRICH.source_trader_id, traderKey)
           .in('period', ['90D', '30D', '7D'])
           .order('weight_pct', { ascending: false }).limit(60)
+          .abortSignal(phase2Signal)
       ),
       // Stats detail (all periods) — enrichment tables use v1 naming
       safeQuery(() =>
@@ -335,6 +350,7 @@ export async function getTraderDetail(supabase: SupabaseClient, params: {
           .select('sharpe_ratio, copiers_pnl, copiers_count, winning_positions, total_positions, total_trades, profitable_trades_pct, avg_holding_time_hours, avg_profit, avg_loss, largest_win, largest_loss, aum, period')
           .in(ENRICH.source, sourceAliases).eq(ENRICH.source_trader_id, traderKey)
           .order('captured_at', { ascending: false }).limit(3)
+          .abortSignal(phase2Signal)
       ),
       // Portfolio — enrichment tables use v1 naming
       safeQuery(() =>
@@ -342,6 +358,7 @@ export async function getTraderDetail(supabase: SupabaseClient, params: {
           .select('symbol, direction, invested_pct, entry_price, pnl')
           .in(ENRICH.source, sourceAliases).eq(ENRICH.source_trader_id, traderKey)
           .order('captured_at', { ascending: false }).limit(50)
+          .abortSignal(phase2Signal)
       ),
       // Position history — enrichment tables use v1 naming
       // Filter to last 90 days to avoid scanning thousands of rows on 11GB table
@@ -351,13 +368,16 @@ export async function getTraderDetail(supabase: SupabaseClient, params: {
           .in(ENRICH.source, sourceAliases).eq(ENRICH.source_trader_id, traderKey)
           .gte('open_time', new Date(Date.now() - 90 * 86400000).toISOString())
           .order('open_time', { ascending: false }).limit(100)
+          .abortSignal(phase2Signal)
       ),
       // Tracked since (earliest v2 snapshot)
       safeQuery(() =>
         supabase.from('trader_snapshots_v2')
           .select('created_at')
           .eq(V2.platform, platform).eq(V2.trader_key, traderKey)
-          .order('created_at', { ascending: true }).limit(1).maybeSingle()
+          .order('created_at', { ascending: true }).limit(1)
+          .abortSignal(phase2Signal)
+          .maybeSingle()
       ),
       // Similar traders (by arena score range)
       fetchSimilarTraders(supabase, platform, traderKey, trader.arenaScore, trader.roi),
@@ -366,10 +386,11 @@ export async function getTraderDetail(supabase: SupabaseClient, params: {
         supabase.from('trader_position_summary')
           .select('avg_leverage, long_positions, short_positions, total_positions, total_margin_usd, total_unrealized_pnl')
           .eq('platform', platform).eq('trader_key', traderKey)
+          .abortSignal(phase2Signal)
           .maybeSingle()
       ),
     ]),
-    20000 // 20s: parallel queries compete for Supabase pool; 10s was too tight
+    SSR_HEAVY_QUERY_TIMEOUT_MS + 1000 // outer fallback: AbortSignal should fire first
   )
 
   // Map equity curves — split merged result by period

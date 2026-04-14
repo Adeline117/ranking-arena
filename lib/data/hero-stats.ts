@@ -8,6 +8,7 @@
 import { getSupabaseAdmin } from '@/lib/supabase/server'
 import { tieredGet, tieredSet } from '@/lib/cache/redis-layer'
 import { logger } from '@/lib/logger'
+import { SSR_QUERY_TIMEOUT_MS, ssrRace } from '@/lib/constants/timeouts'
 
 // 默认值 - 当缓存和数据库都不可用时的回退
 // Must be close to actual 90D ranked count (~17K) to avoid inflated display.
@@ -56,12 +57,15 @@ export async function getHeroStats(): Promise<HeroStats> {
     }
 
     // 3. Query DB (3s timeout — SSR must never hang)
+    // ssrRace cancels the PostgREST HTTP request on timeout (vs Promise.race
+    // which abandons the query in the background, wasting a connection).
     const supabase = getSupabaseAdmin()
-    const rpcPromise = supabase.rpc('get_hero_stats').single()
-    const timeoutPromise = new Promise<{ data: null; error: { code: string; message: string } }>((resolve) =>
-      setTimeout(() => resolve({ data: null, error: { code: 'TIMEOUT', message: 'SSR hero stats timeout' } }), 3000)
+    const result = await ssrRace(
+      (signal) => supabase.rpc('get_hero_stats').abortSignal(signal).single(),
+      SSR_QUERY_TIMEOUT_MS,
+      { data: null, error: { code: 'TIMEOUT', message: 'SSR hero stats timeout' } as const },
     )
-    const { data, error } = await Promise.race([rpcPromise, timeoutPromise])
+    const { data, error } = result ?? { data: null, error: { code: 'TIMEOUT', message: 'SSR hero stats timeout' } as const }
 
     if (error) {
       if (error.code === 'TIMEOUT' || error.code === 'PGRST202') {

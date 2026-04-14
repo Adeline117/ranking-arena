@@ -685,8 +685,9 @@ async function computeSeason(
             .limit(1000)
           if (staleRows && staleRows.length > 0) {
             const staleIds = staleRows.map((r: { id: string }) => r.id)
-            for (let i = 0; i < staleIds.length; i += 500) {
-              await supabase.from('leaderboard_ranks').delete().in('id', staleIds.slice(i, i + 500))
+            // Batch size 200 (down from 500) to reduce lock hold time
+            for (let i = 0; i < staleIds.length; i += 200) {
+              await supabase.from('leaderboard_ranks').delete().in('id', staleIds.slice(i, i + 200))
             }
             logger.info(`${season}: cleaned ${staleIds.length} stale rows (>5d old) despite degradation skip`)
           }
@@ -875,8 +876,10 @@ async function computeSeason(
           break
         }
         // Batch update all excluded traders for this source in one query
-        for (let i = 0; i < ids.length; i += 200) {
-          const batch = ids.slice(i, i + 200)
+        // Batch size 100 (down from 200) to reduce lock hold time on
+        // leaderboard_ranks — large updates block SSR SELECTs.
+        for (let i = 0; i < ids.length; i += 100) {
+          const batch = ids.slice(i, i + 100)
           const { error: zeroErr } = await supabase
             .from('leaderboard_ranks')
             .update({ arena_score: 0, computed_at: new Date().toISOString() })

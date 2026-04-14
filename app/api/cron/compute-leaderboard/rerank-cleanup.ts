@@ -49,8 +49,10 @@ export async function rerankAllRows(
         .order('arena_score', { ascending: false, nullsFirst: false })
       if (allRows?.length) {
         const rerankUpdates = allRows.map((r: { id: string }, idx: number) => ({ id: r.id, rank: idx + 1 }))
-        for (let i = 0; i < rerankUpdates.length; i += 500) {
-          await supabase.from('leaderboard_ranks').upsert(rerankUpdates.slice(i, i + 500), { onConflict: 'id' })
+        // Batch size 100 (down from 500) to reduce lock hold time — large upserts
+        // hold row locks that block concurrent SSR SELECT queries on leaderboard_ranks.
+        for (let i = 0; i < rerankUpdates.length; i += 100) {
+          await supabase.from('leaderboard_ranks').upsert(rerankUpdates.slice(i, i + 100), { onConflict: 'id' })
         }
         logger.info(`${season}: re-ranked ${rerankUpdates.length} rows (inline fallback)`)
       }
