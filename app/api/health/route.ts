@@ -11,6 +11,7 @@ import { NextResponse } from 'next/server'
 import { getSupabaseAdmin } from '@/lib/supabase/server'
 import { getSharedRedis } from '@/lib/cache/redis-client'
 import { safeParseInt } from '@/lib/utils/safe-parse'
+import { logger } from '@/lib/logger'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'edge'
@@ -33,7 +34,7 @@ function withTimeout<T>(promise: Promise<T> | PromiseLike<T>, fallback: T, label
   return Promise.race([
     promise,
     new Promise<T>((resolve) => setTimeout(() => {
-      console.warn(`[health] ${label} timed out after ${ms}ms`)
+      logger.warn(`[health] ${label} timed out after ${ms}ms`)
       resolve(fallback)
     }, ms)),
   ])

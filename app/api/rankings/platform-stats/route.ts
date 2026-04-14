@@ -14,6 +14,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getSupabaseAdmin } from '@/lib/api'
 import { tieredGetOrSet } from '@/lib/cache/redis-layer'
 import { checkRateLimit, RateLimitPresets } from '@/lib/utils/rate-limit'
+import { logger } from '@/lib/logger'
 
 // Remove force-dynamic so Vercel CDN can cache this response.
 // The tieredGetOrSet below caches at the Redis layer (1h TTL).
@@ -72,7 +73,7 @@ export async function GET(request: NextRequest) {
     )
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Unknown error'
-    console.error('[platform-stats]', message)
+    logger.error('[platform-stats]', message)
     return NextResponse.json(
       { error: 'Internal server error' },
       { status: 500 }

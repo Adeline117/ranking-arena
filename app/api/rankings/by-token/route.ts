@@ -16,6 +16,7 @@ import { getSupabaseAdmin } from '@/lib/api'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { checkRateLimit, RateLimitPresets } from '@/lib/utils/rate-limit'
 import { tieredGetOrSet } from '@/lib/cache/redis-layer'
+import { logger } from '@/lib/logger'
 
 export const runtime = 'nodejs'
 
@@ -287,7 +288,7 @@ export async function GET(request: NextRequest) {
       },
     })
   } catch (err) {
-    console.error('[by-token]', err instanceof Error ? err.message : String(err))
+    logger.error('[by-token]', err instanceof Error ? err.message : String(err))
     return NextResponse.json(
       { error: 'Internal server error' },
       { status: 500 }
