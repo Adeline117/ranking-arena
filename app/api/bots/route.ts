@@ -33,8 +33,8 @@ export async function GET(request: NextRequest) {
     const category = searchParams.get('category')
     const sortBy = searchParams.get('sort_by') || 'arena_score'
     const sortDir = (searchParams.get('sort_dir') || 'desc') as 'asc' | 'desc'
-    const limit = Math.min(parseInt(searchParams.get('limit') || '50', 10), 100)
-    const offset = parseInt(searchParams.get('offset') || '0', 10)
+    const limit = Math.min(parseInt(searchParams.get('limit') || '50', 10) || 50, 100)
+    const offset = Math.max(parseInt(searchParams.get('offset') || '0', 10) || 0, 0)
 
     if (!VALID_WINDOWS.includes(window)) {
       return NextResponse.json({ error: 'Invalid window' }, { status: 400 })
