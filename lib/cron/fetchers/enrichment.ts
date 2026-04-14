@@ -143,6 +143,7 @@ export {
   upsertAssetBreakdown,
   upsertPortfolio,
 } from './enrichment-db'
+export type { V2EnrichUpdate } from './enrichment-db'
 
 // On-chain wallet data (AUM, portfolio)
 export {
