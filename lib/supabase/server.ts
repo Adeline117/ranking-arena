@@ -9,7 +9,6 @@
  */
 
 import { createClient, SupabaseClient, User } from '@supabase/supabase-js'
-import type { Database } from './database.types'
 import { NextRequest } from 'next/server'
 import { logger } from '@/lib/logger'
 
@@ -43,7 +42,7 @@ const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || 'placeholder
 const ADMIN_QUERY_TIMEOUT_MS = 45_000
 
 // 缓存 admin 客户端实例（单例模式，复用连接）
-let adminClientInstance: SupabaseClient<Database> | null = null
+let adminClientInstance: SupabaseClient | null = null
 
 /**
  * 获取 Supabase Admin 客户端（使用 Service Role Key）
@@ -55,13 +54,13 @@ let adminClientInstance: SupabaseClient<Database> | null = null
  * Correlation ID is automatically injected into headers from AsyncLocalStorage context
  * when available, enabling distributed tracing across Supabase queries.
  */
-export function getSupabaseAdmin(): SupabaseClient<Database> {
+export function getSupabaseAdmin(): SupabaseClient {
   if (!adminClientInstance) {
     // Re-read env vars at runtime (build time uses placeholders, runtime has real values)
     const url = process.env.NEXT_PUBLIC_SUPABASE_URL || supabaseUrl
     const key = process.env.SUPABASE_SERVICE_ROLE_KEY || supabaseServiceKey
 
-    adminClientInstance = createClient<Database>(url, key, {
+    adminClientInstance = createClient(url, key, {
       auth: {
         persistSession: false,
         autoRefreshToken: false,
