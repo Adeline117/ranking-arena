@@ -23,6 +23,15 @@ export interface MetricBadgesGridProps {
   isVisible: boolean
 }
 
+// Metrics beyond this threshold indicate data corruption (division by zero, numerical instability).
+// Applied to Sharpe, Sortino, Calmar — all ratio metrics that can overflow.
+const RATIO_OVERFLOW_THRESHOLD = 100
+
+/** Check if a ratio metric is valid (non-null, finite, within bounds) */
+function isValidRatio(v: number | undefined): v is number {
+  return v != null && Number.isFinite(v) && Math.abs(v) < RATIO_OVERFLOW_THRESHOLD
+}
+
 export function MetricBadgesGrid({
   sharpeRatio,
   maxDrawdown,
@@ -56,9 +65,9 @@ export function MetricBadgesGrid({
     >
       <MetricBadge
         label={t('sharpe')}
-        value={sharpeRatio != null && sharpeRatio < 9000 ? sharpeRatio.toFixed(2) : '—'}
-        highlight={sharpeRatio != null && sharpeRatio > 1 && sharpeRatio < 9000}
-        tooltip={sharpeRatio == null || sharpeRatio >= 9000 ? t('sharpeNotAvailable') : (t('sharpeTooltip') || 'Risk-adjusted return per unit of risk. > 1 good, > 2 excellent.')}
+        value={isValidRatio(sharpeRatio) ? sharpeRatio.toFixed(2) : '—'}
+        highlight={isValidRatio(sharpeRatio) && sharpeRatio > 1}
+        tooltip={!isValidRatio(sharpeRatio) ? t('sharpeNotAvailable') : (t('sharpeTooltip') || 'Risk-adjusted return per unit of risk. > 1 good, > 2 excellent.')}
       />
       <MetricBadge
         label={t('maxDrawdownShort')}
@@ -81,25 +90,21 @@ export function MetricBadgesGrid({
           ? t('positionStatsNotAvailable')
           : `${winningPositions} winning out of ${totalPositions} total positions`}
       />
-      {sortinoRatio != null && (
-        <MetricBadge
-          label="Sortino"
-          value={sortinoRatio.toFixed(2)}
-          highlight={sortinoRatio >= 2}
-          tooltip={t('sortinoTooltip') || 'Risk-adjusted return using downside volatility'}
-        />
-      )}
-      {calmarRatio != null && (
-        <MetricBadge
-          label="Calmar"
-          value={calmarRatio.toFixed(2)}
-          highlight={calmarRatio >= 3}
-          tooltip={t('calmarTooltip') || 'Annualized return / max drawdown'}
-        />
-      )}
+      <MetricBadge
+        label={t('sortino') || 'Sortino'}
+        value={isValidRatio(sortinoRatio) ? sortinoRatio.toFixed(2) : '—'}
+        highlight={isValidRatio(sortinoRatio) && sortinoRatio >= 2}
+        tooltip={!isValidRatio(sortinoRatio) ? (t('sortinoNotAvailable') || 'Not enough data') : (t('sortinoTooltip') || 'Risk-adjusted return using downside volatility')}
+      />
+      <MetricBadge
+        label={t('calmar') || 'Calmar'}
+        value={isValidRatio(calmarRatio) ? calmarRatio.toFixed(2) : '—'}
+        highlight={isValidRatio(calmarRatio) && calmarRatio >= 3}
+        tooltip={!isValidRatio(calmarRatio) ? (t('calmarNotAvailable') || 'Not enough data') : (t('calmarTooltip') || 'Annualized return / max drawdown')}
+      />
       {alpha != null && (
         <MetricBadge
-          label="Alpha"
+          label={t('alpha') || 'Alpha'}
           value={`${alpha >= 0 ? '+' : ''}${alpha.toFixed(2)}%`}
           highlight={alpha > 0}
           negative={alpha < 0}
