@@ -118,6 +118,7 @@ export function useRealtimeRankings({
   const flushTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const pulseTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const previousDataRef = useRef<string>('') // JSON fingerprint for change detection
+  const abortControllerRef = useRef<AbortController | null>(null)
 
   const flush = useCallback(() => {
     if (bufferRef.current.size === 0) return
@@ -141,8 +142,10 @@ export function useRealtimeRankings({
 
       try {
         dispatch({ type: 'FETCH_START' })
+        abortControllerRef.current?.abort()
+        abortControllerRef.current = new AbortController()
         const url = `/api/rankings/live?period=${period}&limit=${limit}&offset=0`
-        const res = await fetch(url)
+        const res = await fetch(url, { signal: abortControllerRef.current.signal })
 
         if (!res.ok) {
           dispatch({ type: 'FETCH_ERROR' })
@@ -176,6 +179,7 @@ export function useRealtimeRankings({
 
         dispatch({ type: 'FETCH_SUCCESS', dataSource: json.source || null, lastUpdatedAt: Date.now() })
       } catch (_err) {
+        if (_err instanceof DOMException && _err.name === 'AbortError') return
         /* non-critical: live rankings fetch failed, will retry on next poll */
         dispatch({ type: 'FETCH_ERROR' })
       } finally {
@@ -211,6 +215,7 @@ export function useRealtimeRankings({
 
     return () => {
       aborted = true
+      abortControllerRef.current?.abort()
       clearInterval(intervalId)
       supabase.removeChannel(channel)
       if (flushTimerRef.current) clearTimeout(flushTimerRef.current)

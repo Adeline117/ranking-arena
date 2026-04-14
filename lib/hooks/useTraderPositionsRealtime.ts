@@ -222,11 +222,14 @@ export function useTraderPositionsRealtime(
       return
     }
 
+    let aborted = false
+
     const fetchInitialPositions = async () => {
       setIsLoading(true)
       try {
         // Import supabase client dynamically to avoid SSR issues
         const { supabase } = await import('@/lib/supabase/client')
+        if (aborted) return
 
         let query = supabase
           .from('trader_positions_live')
@@ -241,6 +244,7 @@ export function useTraderPositionsRealtime(
         }
 
         const { data, error: fetchError } = await query
+        if (aborted) return
 
         if (fetchError) {
           logger.error('Error fetching initial positions:', fetchError)
@@ -254,13 +258,15 @@ export function useTraderPositionsRealtime(
           setPositions(Array.from(positionsRef.current.values()))
         }
       } catch (err) {
+        if (aborted) return
         logger.error('Error in fetchInitialPositions:', err)
       } finally {
-        setIsLoading(false)
+        if (!aborted) setIsLoading(false)
       }
     }
 
     fetchInitialPositions()
+    return () => { aborted = true }
   }, [enabled, platform, traderKey])
 
   // Calculate derived values
