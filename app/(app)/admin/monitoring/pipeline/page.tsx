@@ -303,7 +303,7 @@ const sty = {
 // ============================================
 
 export default function PipelineMonitoringDashboard() {
-  const { email, isAdmin, authChecking } = useAdminAuth()
+  const { email, accessToken, isAdmin, authChecking } = useAdminAuth()
   const [pipelineData, setPipelineData] = useState<PipelineData | null>(null)
   const [enrichmentData, setEnrichmentData] = useState<EnrichmentData | null>(null)
   const [loading, setLoading] = useState(true)
@@ -312,16 +312,16 @@ export default function PipelineMonitoringDashboard() {
   const [autoRefresh, setAutoRefresh] = useState(true)
 
   const fetchData = useCallback(async () => {
+    if (!accessToken) return
     try {
       setLoading(true)
-      const cronSecret = process.env.NEXT_PUBLIC_CRON_SECRET || ''
 
       const [pipelineRes, enrichmentRes] = await Promise.all([
         fetch('/api/health/pipeline', {
-          headers: { Authorization: `Bearer ${cronSecret}` },
+          headers: { Authorization: `Bearer ${accessToken}` },
         }),
         fetch('/api/health/enrichment?period=90D', {
-          headers: { Authorization: `Bearer ${cronSecret}` },
+          headers: { Authorization: `Bearer ${accessToken}` },
         }),
       ])
 
@@ -341,11 +341,11 @@ export default function PipelineMonitoringDashboard() {
     } finally {
       setLoading(false)
     }
-  }, [])
+  }, [accessToken])
 
   useEffect(() => {
-    if (isAdmin) fetchData()
-  }, [isAdmin, fetchData])
+    if (isAdmin && accessToken) fetchData()
+  }, [isAdmin, accessToken, fetchData])
 
   // Auto-refresh every 60s
   useEffect(() => {
