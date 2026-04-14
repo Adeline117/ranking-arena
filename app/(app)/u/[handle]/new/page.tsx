@@ -239,14 +239,22 @@ export default function NewPostPage() {
       const xhr = new XMLHttpRequest()
 
       const uploadPromise = new Promise<{ url: string; fileName: string; fileSize: number }>((resolve, reject) => {
-        xhr.upload.addEventListener('progress', (event) => {
+        const onProgress = (event: ProgressEvent) => {
           if (event.lengthComputable) {
             const progress = Math.round((event.loaded / event.total) * 100)
             setVideoUploadProgress(progress)
           }
-        })
+        }
 
-        xhr.addEventListener('load', () => {
+        const cleanup = () => {
+          xhr.upload.removeEventListener('progress', onProgress)
+          xhr.removeEventListener('load', onLoad)
+          xhr.removeEventListener('error', onError)
+          xhr.removeEventListener('abort', onAbort)
+        }
+
+        const onLoad = () => {
+          cleanup()
           if (xhr.status >= 200 && xhr.status < 300) {
             try {
               const data = JSON.parse(xhr.responseText)
@@ -262,11 +270,22 @@ export default function NewPostPage() {
               reject(new Error(`${t('uploadFailed')} (${xhr.status})`))
             }
           }
-        })
+        }
 
-        xhr.addEventListener('error', () => {
+        const onError = () => {
+          cleanup()
           reject(new Error(t('networkErrorRetry')))
-        })
+        }
+
+        const onAbort = () => {
+          cleanup()
+          reject(new Error('Upload aborted'))
+        }
+
+        xhr.upload.addEventListener('progress', onProgress)
+        xhr.addEventListener('load', onLoad)
+        xhr.addEventListener('error', onError)
+        xhr.addEventListener('abort', onAbort)
 
         xhr.open('POST', '/api/posts/upload-video')
 

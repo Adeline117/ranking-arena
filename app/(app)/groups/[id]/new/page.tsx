@@ -289,20 +289,35 @@ export default function NewGroupPostPage(): React.ReactElement {
           const csrfHeaders = getCsrfHeaders()
           Object.entries(csrfHeaders).forEach(([k, v]) => xhr.setRequestHeader(k, v as string))
 
-          xhr.upload.onprogress = (e) => {
+          const onProgress = (e: ProgressEvent) => {
             if (e.lengthComputable) {
               const fileProgress = e.loaded / e.total
               setUploadProgress(Math.round(((completed + fileProgress) / totalFiles) * 100))
             }
           }
-          xhr.onload = () => {
+
+          const cleanup = () => {
+            xhr.upload.removeEventListener('progress', onProgress)
+            xhr.removeEventListener('load', onLoad)
+            xhr.removeEventListener('error', onError)
+            xhr.removeEventListener('abort', onAbort)
+          }
+
+          const onLoad = () => {
+            cleanup()
             try {
               const result = JSON.parse(xhr.responseText)
               if (xhr.status >= 200 && xhr.status < 300) resolve(result)
               else reject(new Error(result.error || `Upload failed (${xhr.status})`))
             } catch { reject(new Error('Invalid response')) }
           }
-          xhr.onerror = () => reject(new Error('Network error'))
+          const onError = () => { cleanup(); reject(new Error('Network error')) }
+          const onAbort = () => { cleanup(); reject(new Error('Upload aborted')) }
+
+          xhr.upload.addEventListener('progress', onProgress)
+          xhr.addEventListener('load', onLoad)
+          xhr.addEventListener('error', onError)
+          xhr.addEventListener('abort', onAbort)
           xhr.send(formData)
         })
 
@@ -372,13 +387,21 @@ export default function NewGroupPostPage(): React.ReactElement {
       const data = await new Promise<{ url: string; fileName: string; fileSize: number }>((resolve, reject) => {
         const xhr = new XMLHttpRequest()
 
-        xhr.upload.addEventListener('progress', (event) => {
+        const onProgress = (event: ProgressEvent) => {
           if (event.lengthComputable) {
             setVideoUploadProgress(Math.round((event.loaded / event.total) * 100))
           }
-        })
+        }
 
-        xhr.addEventListener('load', () => {
+        const cleanup = () => {
+          xhr.upload.removeEventListener('progress', onProgress)
+          xhr.removeEventListener('load', onLoad)
+          xhr.removeEventListener('error', onError)
+          xhr.removeEventListener('abort', onAbort)
+        }
+
+        const onLoad = () => {
+          cleanup()
           if (xhr.status >= 200 && xhr.status < 300) {
             try {
               resolve(JSON.parse(xhr.responseText))
@@ -389,9 +412,15 @@ export default function NewGroupPostPage(): React.ReactElement {
             const error = JSON.parse(xhr.responseText).error || `${t('uploadFailed')} (${xhr.status})`
             reject(new Error(error))
           }
-        })
+        }
 
-        xhr.addEventListener('error', () => reject(new Error(t('networkError'))))
+        const onError = () => { cleanup(); reject(new Error(t('networkError'))) }
+        const onAbort = () => { cleanup(); reject(new Error('Upload aborted')) }
+
+        xhr.upload.addEventListener('progress', onProgress)
+        xhr.addEventListener('load', onLoad)
+        xhr.addEventListener('error', onError)
+        xhr.addEventListener('abort', onAbort)
 
         xhr.open('POST', '/api/posts/upload-video')
         Object.entries(getCsrfHeaders()).forEach(([key, value]) => {
