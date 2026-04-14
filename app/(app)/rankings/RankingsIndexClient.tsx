@@ -41,9 +41,12 @@ export default function RankingsIndexClient({ initialPlatforms = [] }: { initial
   useEffect(() => {
     // Refresh client-side (non-blocking) even when SSR data exists
     fetch('/api/rankings/platform-stats')
-      .then(r => r.json())
+      .then(r => {
+        if (!r.ok) throw new Error(`platform-stats: ${r.status}`)
+        return r.json()
+      })
       .then(data => { if (data.platforms) setPlatforms(data.platforms) })
-      .catch(() => {}) // eslint-disable-line no-restricted-syntax -- fire-and-forget
+      .catch(() => { /* fire-and-forget: SSR data is the fallback */ }) // eslint-disable-line no-restricted-syntax
       .finally(() => setLoading(false))
   }, [])
 

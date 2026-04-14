@@ -94,11 +94,14 @@ export default function TokensIndexClient({ initialTokens }: TokensIndexClientPr
 
   useEffect(() => {
     fetch('/api/rankings/by-token?action=popular-tokens')
-      .then(r => r.json())
+      .then(r => {
+        if (!r.ok) throw new Error(`popular-tokens: ${r.status}`)
+        return r.json()
+      })
       .then(data => {
         if (data.tokens) setPopularTokens(data.tokens)
       })
-      .catch(() => {}) // eslint-disable-line no-restricted-syntax -- fire-and-forget
+      .catch(() => { /* fire-and-forget: SSR data is the fallback */ })
       .finally(() => setLoading(false))
   }, [])
 

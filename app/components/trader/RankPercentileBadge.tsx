@@ -20,7 +20,10 @@ interface RankPercentileBadgeProps {
   platform: string | undefined
 }
 
-const fetcher = (url: string) => fetch(url).then(r => r.json())
+const fetcher = (url: string) => fetch(url).then(r => {
+  if (!r.ok) throw new Error(`${r.status}`)
+  return r.json()
+})
 
 // Badge color tiers
 function getBadgeStyle(percentile: number): { bg: string; color: string; border: string } {

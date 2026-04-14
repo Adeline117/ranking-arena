@@ -48,16 +48,22 @@ export function useWatchlist() {
   const addToWatchlist = useCallback(
     async (source: string, sourceTraderID: string, handle?: string) => {
       if (!isLoggedIn) return
+      const previousData = watchlist
       const newItem: WatchlistItem = { source, source_trader_id: sourceTraderID, handle: handle || null, created_at: new Date().toISOString() }
       mutate([...watchlist, newItem], false)
-      const headers = await getAuthHeadersAsync()
-      await fetch(WATCHLIST_KEY, {
-        method: 'POST',
-        headers: { ...headers, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ source, source_trader_id: sourceTraderID, handle }),
-      })
-      mutate()
-      tryUnlock('first_watchlist')
+      try {
+        const headers = await getAuthHeadersAsync()
+        const res = await fetch(WATCHLIST_KEY, {
+          method: 'POST',
+          headers: { ...headers, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ source, source_trader_id: sourceTraderID, handle }),
+        })
+        if (!res.ok) throw new Error(`watchlist add: ${res.status}`)
+        mutate()
+        tryUnlock('first_watchlist')
+      } catch {
+        mutate(previousData, false)
+      }
     },
     [isLoggedIn, watchlist, mutate, getAuthHeadersAsync, tryUnlock]
   )
@@ -65,17 +71,23 @@ export function useWatchlist() {
   const removeFromWatchlist = useCallback(
     async (source: string, sourceTraderID: string) => {
       if (!isLoggedIn) return
+      const previousData = watchlist
       mutate(
         watchlist.filter((w) => !(w.source === source && w.source_trader_id === sourceTraderID)),
         false
       )
-      const headers = await getAuthHeadersAsync()
-      await fetch(WATCHLIST_KEY, {
-        method: 'DELETE',
-        headers: { ...headers, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ source, source_trader_id: sourceTraderID }),
-      })
-      mutate()
+      try {
+        const headers = await getAuthHeadersAsync()
+        const res = await fetch(WATCHLIST_KEY, {
+          method: 'DELETE',
+          headers: { ...headers, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ source, source_trader_id: sourceTraderID }),
+        })
+        if (!res.ok) throw new Error(`watchlist remove: ${res.status}`)
+        mutate()
+      } catch {
+        mutate(previousData, false)
+      }
     },
     [isLoggedIn, watchlist, mutate, getAuthHeadersAsync]
   )
