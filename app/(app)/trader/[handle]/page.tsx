@@ -12,6 +12,7 @@ import { isDead } from '@/lib/connectors/route-config'
 import { LR } from '@/lib/types/schema-mapping'
 import { BASE_URL } from '@/lib/constants/urls'
 import { generateTraderProfilePageSchema, type TraderSchemaInput } from '@/lib/seo/structured-data'
+import { SSR_QUERY_TIMEOUT_MS } from '@/lib/constants/timeouts'
 
 // Derive display names from central config
 const EXCHANGE_DISPLAY: Record<string, string> = Object.fromEntries(
@@ -42,21 +43,23 @@ const cachedResolveTraderISR = unstable_cache(
 // Both generateMetadata and the page component call this — one DB round-trip.
 // Catches the TRADER_RESOLVE_NULL sentinel so callers get null (not an exception).
 //
-// Timeout race (3s): during compute-leaderboard cron contention, resolveTrader
+// Timeout (3s): during compute-leaderboard cron contention, resolveTrader
 // can take 30+ seconds (the underlying queries against `traders` and
 // `leaderboard_ranks` block on the same row locks the cron is upserting).
 // Without a timeout, the ENTIRE page.tsx await chain stalls at the resolve
 // step and the user sees an indefinite hang. With a 3s timeout, slow paths
 // resolve to null → page.tsx calls notFound() → user sees a fast 404 instead.
 // Stale cached resolves still hit the unstable_cache layer immediately.
-const SSR_RESOLVE_TIMEOUT_MS = 3000
+//
+// AbortSignal.timeout actually cancels the underlying HTTP request to
+// PostgREST, freeing the connection. Promise.race just abandons it.
 const cachedResolveTrader = cache(
   async (handle: string, platform?: string) => {
     try {
       return await Promise.race([
         cachedResolveTraderISR(handle, platform),
         new Promise<null>((resolve) =>
-          setTimeout(() => resolve(null), SSR_RESOLVE_TIMEOUT_MS)
+          setTimeout(() => resolve(null), SSR_QUERY_TIMEOUT_MS)
         ),
       ])
     } catch {
@@ -78,15 +81,19 @@ const cachedGetTraderDetailISR = unstable_cache(
   { revalidate: 300, tags: ['trader-profile'] }
 )
 
-// SSR hard timeout — must complete within 4s or page renders without
-// detail data. Without this, during compute-leaderboard cron contention
-// the underlying queries spike to 15-30s, the entire page.tsx await
-// chain blocks, and Next.js never streams past the Suspense placeholders.
+// SSR hard timeout — must complete within the SSR budget or page renders
+// without detail data. Without this, during compute-leaderboard cron
+// contention the underlying queries spike to 15-30s, the entire page.tsx
+// await chain blocks, and Next.js never streams past the Suspense placeholders.
 // Search bots see <main><!--$?--><template id="B:1"></template><!--/$--></main>
 // with NO content and NO JSON-LD. Falling back to null lets the page
 // render the SSR shell + JsonLd immediately, and TraderProfileClient
 // fetches fresh data client-side.
-const SSR_DETAIL_TIMEOUT_MS = 4000
+//
+// NOTE: The individual queries inside getTraderDetail now carry their own
+// AbortSignal.timeout (SSR_HEAVY_QUERY_TIMEOUT_MS) which actually cancels
+// the HTTP request. This outer Promise.race is a safety net only.
+const SSR_DETAIL_TIMEOUT_MS = SSR_QUERY_TIMEOUT_MS + 1000 // 4s: 1s headroom over inner AbortSignal
 const cachedGetTraderDetail = async (platform: string, traderKey: string) => {
   try {
     return await Promise.race([
