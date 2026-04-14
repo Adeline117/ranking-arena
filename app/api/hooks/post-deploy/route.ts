@@ -12,14 +12,13 @@ import { PipelineEvaluator } from '@/lib/harness/pipeline-evaluator'
 import { PipelineState } from '@/lib/services/pipeline-state'
 import { sendRateLimitedAlert } from '@/lib/alerts/send-alert'
 import { logger } from '@/lib/logger'
-import { env } from '@/lib/env'
+import { verifyCronSecret } from '@/lib/auth/verify-service-auth'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 240
 
 export async function POST(request: NextRequest) {
-  const authHeader = request.headers.get('authorization')
-  if (env.CRON_SECRET && authHeader !== `Bearer ${env.CRON_SECRET}`) {
+  if (!verifyCronSecret(request)) {
     return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
   }
 

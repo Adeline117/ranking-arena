@@ -18,6 +18,7 @@ import { logger } from '@/lib/logger'
 import { getSupabaseAdmin } from '@/lib/supabase/server'
 import { PipelineLogger } from '@/lib/services/pipeline-logger'
 import { env } from '@/lib/env'
+import { verifyCronSecret } from '@/lib/auth/verify-service-auth'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 120
@@ -64,10 +65,7 @@ interface PlatformGapReport {
 }
 
 function isAuthorized(req: Request): boolean {
-  const secret = env.CRON_SECRET
-  if (!secret) return false
-  const authHeader = req.headers.get('authorization')
-  return authHeader === `Bearer ${secret}`
+  return verifyCronSecret(req)
 }
 
 async function analyzePlatform(

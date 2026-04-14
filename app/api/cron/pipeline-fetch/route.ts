@@ -23,6 +23,7 @@ import type { TimeWindow, PipelineRunResult } from '@/lib/pipeline'
 // Import scrapers to register them
 import '@/lib/pipeline/scrapers'
 import { createLogger } from '@/lib/utils/logger'
+import { verifyCronSecret } from '@/lib/auth/verify-service-auth'
 
 const log = createLogger('cron:pipeline-fetch')
 
@@ -60,8 +61,7 @@ const SUPPORTED_PLATFORMS = [
 
 export async function GET(request: NextRequest) {
   // 验证 cron secret
-  const authHeader = request.headers.get('authorization')
-  if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
+  if (!verifyCronSecret(request)) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 

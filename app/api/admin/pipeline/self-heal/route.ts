@@ -12,9 +12,9 @@
  */
 
 import { NextRequest } from 'next/server'
-import { env } from '@/lib/env'
 import { success as apiSuccess, handleError } from '@/lib/api/response'
 import { ApiError } from '@/lib/api/errors'
+import { verifyAdminAuth } from '@/lib/auth/verify-service-auth'
 import { getSupabaseAdmin } from '@/lib/supabase/server'
 import { getSupportedPlatforms } from '@/lib/cron/fetchers'
 import { DEAD_BLOCKED_PLATFORMS, EXCHANGE_CONFIG } from '@/lib/constants/exchanges'
@@ -23,19 +23,9 @@ import { getRouteConfig } from '@/lib/connectors/route-config'
 
 export const dynamic = 'force-dynamic'
 
-function isAuthorized(request: NextRequest): boolean {
-  const cronSecret = env.CRON_SECRET
-  if (!cronSecret) return false
-  const authHeader = request.headers.get('authorization')
-  if (authHeader === `Bearer ${cronSecret}`) return true
-  const adminToken = request.headers.get('x-admin-token')
-  if (adminToken === cronSecret) return true
-  return false
-}
-
 export async function GET(request: NextRequest) {
   try {
-    if (!isAuthorized(request)) {
+    if (!(await verifyAdminAuth(request))) {
       throw ApiError.unauthorized()
     }
 

@@ -13,6 +13,7 @@ import { PipelineLogger } from '@/lib/services/pipeline-logger'
 import { env } from '@/lib/env'
 import { getSupabaseAdmin } from '@/lib/supabase/server'
 import { BASE_URL } from '@/lib/constants/urls'
+import { verifyCronSecret } from '@/lib/auth/verify-service-auth'
 
 type AnySupabase = SupabaseClient
 
@@ -23,9 +24,7 @@ const SYSTEM_USER_ID = '00000000-0000-0000-0000-000000000001'
 const SYSTEM_HANDLE = 'arena_bot'
 
 export async function GET(request: NextRequest) {
-  const authHeader = request.headers.get('authorization')
-  const cronSecret = env.CRON_SECRET
-  if (!cronSecret || authHeader !== `Bearer ${cronSecret}`) {
+  if (!verifyCronSecret(request)) {
     return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
   }
 

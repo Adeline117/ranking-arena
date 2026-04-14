@@ -24,6 +24,7 @@ import { runConnectorBatch } from '@/lib/pipeline/connector-db-adapter'
 import { SOURCE_TO_CONNECTOR_MAP } from '@/lib/constants/exchanges'
 import { safeParseInt } from '@/lib/utils/safe-parse'
 import { env } from '@/lib/env'
+import { verifyCronSecret } from '@/lib/auth/verify-service-auth'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 300
@@ -67,11 +68,7 @@ interface BackfillResult {
 }
 
 function isAuthorized(req: Request): boolean {
-  const secret = env.CRON_SECRET
-  if (!secret) return false
-
-  const authHeader = req.headers.get('authorization')
-  return authHeader === `Bearer ${secret}`
+  return verifyCronSecret(req)
 }
 
 /**

@@ -17,13 +17,13 @@ import { sendRateLimitedAlert } from '@/lib/alerts/send-alert'
 import { PipelineState } from '@/lib/services/pipeline-state'
 import { logger } from '@/lib/logger'
 import { env } from '@/lib/env'
+import { verifyCronSecret } from '@/lib/auth/verify-service-auth'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 60
 
 export async function GET(request: NextRequest) {
-  const authHeader = request.headers.get('authorization')
-  if (env.CRON_SECRET && authHeader !== `Bearer ${env.CRON_SECRET}`) {
+  if (!verifyCronSecret(request)) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 

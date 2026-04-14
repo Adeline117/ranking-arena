@@ -36,6 +36,7 @@ import { sendRateLimitedAlert } from '@/lib/alerts/send-alert'
 import { env } from '@/lib/env'
 import { validatePlatform } from '@/lib/config/platforms'
 import { triggerDownstreamRefresh } from '@/lib/cron/trigger-chain'
+import { verifyCronSecret } from '@/lib/auth/verify-service-auth'
 
 const DEAD_COUNTER_PREFIX = 'dead:consecutive:'
 // Circuit breaker: skip platforms after N consecutive zero-trader fetches.
@@ -152,9 +153,7 @@ interface BatchResult {
 let connectorsInitialized = false
 
 export async function GET(request: NextRequest) {
-  const authHeader = request.headers.get('authorization')
-  const cronSecret = env.CRON_SECRET
-  if (!cronSecret || authHeader !== `Bearer ${cronSecret}`) {
+  if (!verifyCronSecret(request)) {
     return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
   }
 

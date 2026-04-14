@@ -17,6 +17,7 @@ import { env } from '@/lib/env'
 import { getSupabaseAdmin } from '@/lib/supabase/server'
 import { BASE_URL } from '@/lib/constants/urls'
 import { createLogger } from '@/lib/utils/logger'
+import { verifyCronSecret } from '@/lib/auth/verify-service-auth'
 
 const log = createLogger('cron:auto-post-market-summary')
 
@@ -47,9 +48,7 @@ interface TopTrader {
 }
 
 export async function GET(request: NextRequest) {
-  const authHeader = request.headers.get('authorization')
-  const cronSecret = env.CRON_SECRET
-  if (!cronSecret || authHeader !== `Bearer ${cronSecret}`) {
+  if (!verifyCronSecret(request)) {
     return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
   }
 

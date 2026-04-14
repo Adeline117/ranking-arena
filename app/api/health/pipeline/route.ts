@@ -16,17 +16,11 @@ import { getSupportedPlatforms } from '@/lib/cron/fetchers'
 import { getSupabaseAdmin } from '@/lib/supabase/server'
 import { tieredGet, tieredSet } from '@/lib/cache/redis-layer'
 import { getFireAndForgetStats } from '@/lib/utils/logger'
+import { verifyAdminAuth } from '@/lib/auth/verify-service-auth'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
 export const maxDuration = 60
-
-function verifyAuth(req: NextRequest): boolean {
-  const auth = req.headers.get('authorization')
-  const cronSecret = env.CRON_SECRET
-  if (!cronSecret) return false
-  return auth === `Bearer ${cronSecret}`
-}
 
 /**
  * Race any promise against a hard timeout — returns fallback if it exceeds the deadline.
@@ -163,7 +157,7 @@ async function getPlatformHealthData(): Promise<PlatformHealth[]> {
 }
 
 export async function GET(req: NextRequest) {
-  if (!verifyAuth(req)) {
+  if (!(await verifyAdminAuth(req))) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 

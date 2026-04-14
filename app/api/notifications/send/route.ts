@@ -24,6 +24,7 @@ import {
 } from '@/lib/api'
 import { checkRateLimit, RateLimitPresets } from '@/lib/utils/rate-limit'
 import logger from '@/lib/logger'
+import { verifyServiceAuth as verifyServiceAuthShared } from '@/lib/auth/verify-service-auth'
 
 export const dynamic = 'force-dynamic'
 
@@ -34,26 +35,12 @@ const VALID_TYPES = [
 ]
 
 /**
- * Verify caller is an internal/service caller.
+ * Verify caller is an internal/service caller (timing-safe).
  * Accepts either CRON_SECRET (Bearer) or INTERNAL_API_KEY (x-internal-key).
  * Regular user JWT tokens are NOT accepted — notifications must be system-generated.
  */
 function verifyServiceAuth(request: NextRequest): boolean {
-  // Check x-internal-key header
-  const internalKey = request.headers.get('x-internal-key')
-  const configuredInternalKey = process.env.INTERNAL_API_KEY
-  if (configuredInternalKey && internalKey && internalKey === configuredInternalKey) {
-    return true
-  }
-
-  // Check Authorization: Bearer <CRON_SECRET>
-  const authHeader = request.headers.get('authorization')
-  const cronSecret = process.env.CRON_SECRET
-  if (cronSecret && authHeader === `Bearer ${cronSecret}`) {
-    return true
-  }
-
-  return false
+  return verifyServiceAuthShared(request)
 }
 
 export async function POST(request: NextRequest) {

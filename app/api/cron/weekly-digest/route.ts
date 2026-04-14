@@ -15,6 +15,7 @@ import { generateUnsubscribeToken } from '@/lib/utils/unsubscribe-token'
 import { BASE_URL } from '@/lib/constants/urls'
 import { env } from '@/lib/env'
 import { createLogger } from '@/lib/utils/logger'
+import { verifyCronSecret } from '@/lib/auth/verify-service-auth'
 
 const logger = createLogger('weekly-digest')
 
@@ -22,8 +23,7 @@ export const dynamic = 'force-dynamic'
 export const maxDuration = 120
 
 export async function GET(request: NextRequest) {
-  const authHeader = request.headers.get('authorization')
-  if (!env.CRON_SECRET || authHeader !== `Bearer ${env.CRON_SECRET}`) {
+  if (!verifyCronSecret(request)) {
     return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
   }
 

@@ -29,6 +29,7 @@ import {
 } from '@/lib/cron/inline-jobs'
 import { env } from '@/lib/env'
 import { createLogger } from '@/lib/utils/logger'
+import { verifyCronSecret } from '@/lib/auth/verify-service-auth'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 300 // 5 minutes — longest of the three
