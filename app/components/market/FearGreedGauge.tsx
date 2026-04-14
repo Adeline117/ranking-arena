@@ -31,7 +31,7 @@ export default function FearGreedGauge() {
 
   useEffect(() => {
     fetch('/api/market/fear-greed', { signal: AbortSignal.timeout(15000) })
-      .then((r) => r.json())
+      .then((r) => { if (!r.ok) throw new Error(`HTTP ${r.status}`); return r.json() })
       .then((json) => {
         if (json.current) {
           // Hide stale data: if timestamp is older than 24 hours, hide entirely
