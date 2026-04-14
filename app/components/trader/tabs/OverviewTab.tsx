@@ -199,7 +199,7 @@ const OverviewTab = React.memo(function OverviewTab({
         {(() => {
           const curve = traderEquityCurve?.[selectedPeriod] ?? traderEquityCurve?.['90D']
           if (!curve || curve.length <= 5) return null
-          const dailyReturns = curve.slice(1).map((point, i) => ({
+          const dailyReturns = curve.slice(1).map((point: { date: string; roi: number }, i: number) => ({
             date: point.date,
             returnPct: Math.abs(curve[i].roi ?? 0) > 0.001
               ? ((point.roi - curve[i].roi) / Math.abs(curve[i].roi)) * 100
