@@ -79,9 +79,11 @@ const GROUPS: Record<string, string[]> = {
   // Group D2: Web3 + Gate.io + BTCC (every 6h)
   d2: ['binance_web3', 'okx_web3', 'gateio', 'btcc'],
   // Group E1: DEX + social (every 12h) — split from E (7 platforms exceeded 300s limit)
-  // drift(120s) + aevo(90s) + toobit(90s) = ~120s with concurrency=3
+  // aevo(90s) + toobit(90s) = ~90s with concurrency=3
+  // drift: PAUSED — $270M exploit 2026-04-01, protocol in recovery, API returns empty data.
+  //   Will auto-recover when Drift resumes (endpoint unchanged). Monitor: drift.trade/stats
   // web3_bot: REMOVED — excluded from scoring (commit 51d8de5fc), zero ranking impact
-  e1: ['drift', 'aevo', 'toobit'],
+  e1: ['aevo', 'toobit'],
   // Group E2: CEX scrapers (every 8h) — jupiter + xt + etoro
   // jupiter(90s) + xt(90s) + etoro(90s) = ~90s with concurrency=3
   e2: ['jupiter_perps', 'xt', 'etoro'],
