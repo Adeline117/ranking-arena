@@ -6,14 +6,11 @@
 import { NextRequest, NextResponse } from 'next/server'
 import logger from '@/lib/logger'
 import { PipelineLogger } from '@/lib/services/pipeline-logger'
-import { env } from '@/lib/env'
 import { getSupabaseAdmin } from '@/lib/supabase/server'
 import { verifyCronSecret } from '@/lib/auth/verify-service-auth'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 30
-
-const CRON_SECRET = env.CRON_SECRET
 
 interface RSSItem {
   title: string
@@ -92,13 +89,8 @@ export async function POST(req: NextRequest) {
 }
 
 async function handleFetch(req: NextRequest) {
-  // Auth check
-  const authHeader = req.headers.get('authorization')
-  if (!CRON_SECRET) {
-    if (process.env.NODE_ENV !== 'development') {
-      return NextResponse.json({ error: 'CRON_SECRET not configured' }, { status: 500 })
-    }
-  } else if (authHeader !== `Bearer ${CRON_SECRET}`) {
+  // Auth check (timing-safe)
+  if (!verifyCronSecret(req)) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 

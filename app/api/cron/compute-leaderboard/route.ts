@@ -45,7 +45,6 @@ import { sanitizeDisplayName } from '@/lib/utils/profanity'
 import { generateIdenticonSvg } from '@/lib/utils/avatar'
 import { tieredGet, tieredSet, tieredDel } from '@/lib/cache/redis-layer'
 import { PipelineState } from '@/lib/services/pipeline-state'
-import { env } from '@/lib/env'
 import { sendRateLimitedAlert } from '@/lib/alerts/send-alert'
 import { validateBeforeWrite, logRejectedWrites } from '@/lib/pipeline/validate-before-write'
 import { verifyCronSecret } from '@/lib/auth/verify-service-auth'
@@ -73,13 +72,8 @@ const ROI_ANOMALY_THRESHOLDS: Record<Period, number> = {
 }
 
 export async function GET(request: NextRequest) {
-  // Verify cron secret in production
-  const authHeader = request.headers.get('authorization')
-  if (!env.CRON_SECRET) {
-    if (process.env.NODE_ENV !== 'development') {
-      return NextResponse.json({ error: 'CRON_SECRET not configured' }, { status: 500 })
-    }
-  } else if (authHeader !== `Bearer ${env.CRON_SECRET}`) {
+  // Verify cron secret (timing-safe)
+  if (!verifyCronSecret(request)) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 

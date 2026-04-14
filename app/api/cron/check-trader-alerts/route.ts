@@ -12,7 +12,6 @@ import { getSupabaseAdmin } from '@/lib/supabase/server'
 import { PipelineLogger } from '@/lib/services/pipeline-logger'
 import { getPushNotificationService } from '@/lib/services/push-notification'
 import { sendEmail, buildTraderAlertEmail } from '@/lib/services/email'
-import { env } from '@/lib/env'
 import { verifyCronSecret } from '@/lib/auth/verify-service-auth'
 
 export const runtime = 'nodejs'
@@ -20,17 +19,9 @@ export const preferredRegion = 'sfo1'
 export const dynamic = 'force-dynamic'
 export const maxDuration = 120
 
-// 验证 Cron 密钥
+// 验证 Cron 密钥 (timing-safe)
 function isAuthorized(req: Request): boolean {
-  const authHeader = req.headers.get('authorization')
-  const cronSecret = env.CRON_SECRET
-
-  if (!cronSecret) {
-    logger.warn('[TraderAlerts Cron] CRON_SECRET 未配置')
-    return false
-  }
-
-  return authHeader === `Bearer ${cronSecret}`
+  return verifyCronSecret(req)
 }
 
 interface TraderData {

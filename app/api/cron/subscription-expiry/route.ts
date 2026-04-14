@@ -14,7 +14,6 @@ import { createLogger } from '@/lib/utils/logger'
 import { getSupabaseAdmin } from '@/lib/supabase/server'
 import { checkNFTMembership } from '@/lib/web3/nft'
 import { PipelineLogger } from '@/lib/services/pipeline-logger'
-import { env } from '@/lib/env'
 import { verifyCronSecret } from '@/lib/auth/verify-service-auth'
 
 export const runtime = 'nodejs'
@@ -24,16 +23,9 @@ export const maxDuration = 60
 
 const logger = createLogger('subscription-expiry')
 
-// 验证 Cron 请求
+// 验证 Cron 请求 (timing-safe)
 function isAuthorized(req: NextRequest): boolean {
-  const authHeader = req.headers.get('authorization')
-  const cronSecret = env.CRON_SECRET
-
-  if (!cronSecret && process.env.NODE_ENV === 'development') {
-    return true
-  }
-
-  return authHeader === `Bearer ${cronSecret}`
+  return verifyCronSecret(req)
 }
 
 export async function GET(request: NextRequest) {
