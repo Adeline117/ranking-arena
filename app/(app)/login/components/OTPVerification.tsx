@@ -31,15 +31,16 @@ export default function OTPVerification({
   return (
     <>
       <div style={{ marginBottom: 20 }}>
-        <label style={{ display: 'block', marginBottom: 8, fontSize: 13, fontWeight: 600, color: 'var(--color-text-secondary)' }}>
+        <label htmlFor="otp-code" style={{ display: 'block', marginBottom: 8, fontSize: 13, fontWeight: 600, color: 'var(--color-text-secondary)' }}>
           {t('loginVerificationCode')}
         </label>
         <input
+          id="otp-code"
           type="text"
           className="login-input"
-          style={{ 
-            width: '100%', 
-            padding: '14px 16px', 
+          style={{
+            width: '100%',
+            padding: '14px 16px',
             borderRadius: tokens.radius.lg,
             border: '1px solid var(--glass-border-light)',
             background: 'var(--color-bg-tertiary)',

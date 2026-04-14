@@ -56,16 +56,17 @@ export default function LoginForm({
       <>
         {/* Password login */}
         <div style={{ marginBottom: 20 }}>
-          <label style={{ display: 'block', marginBottom: 8, fontSize: 13, fontWeight: 600, color: 'var(--color-text-secondary)' }}>
+          <label htmlFor="login-password" style={{ display: 'block', marginBottom: 8, fontSize: 13, fontWeight: 600, color: 'var(--color-text-secondary)' }}>
             {t('loginPassword')}
           </label>
           <div style={{ position: 'relative' }}>
             <input
+              id="login-password"
               type={showPassword ? 'text' : 'password'}
               className="login-input"
-              style={{ 
-                width: '100%', 
-                padding: '14px 16px', 
+              style={{
+                width: '100%',
+                padding: '14px 16px',
                 paddingRight: 50,
                 borderRadius: tokens.radius.lg,
                 border: `1px solid ${touchedFields.password && password && !passwordValidation.valid ? 'var(--color-accent-error)' : 'var(--glass-border-light)'}`,
@@ -84,6 +85,7 @@ export default function LoginForm({
                 }
               }}
               autoComplete="current-password"
+              aria-invalid={touchedFields.password && password ? !passwordValidation.valid : undefined}
             />
             <button
               type="button"
