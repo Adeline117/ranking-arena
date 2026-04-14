@@ -52,10 +52,10 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url)
 
     // 解析查询参数
-    const page = Math.max(1, parseInt(searchParams.get('page') || '1'))
+    const page = Math.max(parseInt(searchParams.get('page') || '1', 10) || 1, 1)
     const limit = Math.min(
       MAX_ITEMS_PER_PAGE,
-      Math.max(1, parseInt(searchParams.get('limit') || ITEMS_PER_PAGE.toString()))
+      Math.max(1, parseInt(searchParams.get('limit') || ITEMS_PER_PAGE.toString(), 10) || ITEMS_PER_PAGE)
     )
     const category = searchParams.get('category')
     const importance = searchParams.get('importance')

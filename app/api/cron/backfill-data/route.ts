@@ -261,7 +261,7 @@ export async function GET(req: NextRequest) {
 
   const platformParam = req.nextUrl.searchParams.get('platform')
   const periodParam = req.nextUrl.searchParams.get('period')
-  const limit = parseInt(req.nextUrl.searchParams.get('limit') || '100')
+  const limit = parseInt(req.nextUrl.searchParams.get('limit') || '100', 10) || 100
   const type = req.nextUrl.searchParams.get('type') || 'all'
 
   const platforms = platformParam
