@@ -16,6 +16,7 @@ import { BitgetAdapter } from '@/lib/adapters/bitget-adapter'
 import { logger } from '@/lib/logger'
 import { calculateArenaScore } from '@/lib/utils/arena-score'
 import { sanitizeRow, logRejectedWrites } from '@/lib/pipeline/validate-before-write'
+import { SOURCE_TYPE_MAP } from '@/lib/constants/exchanges'
 import type { Period } from '@/lib/utils/arena-score'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import type { TraderData } from '@/lib/adapters/types'
@@ -322,6 +323,7 @@ async function storeSyncedData(
   // Insert/update snapshot — validated by gatekeeper
   const syncPayload = {
     platform: authorization.platform,
+    market_type: SOURCE_TYPE_MAP[authorization.platform] || 'futures',
     trader_key: authorization.trader_id,
     window: period,
     roi_pct: traderData.roi,
