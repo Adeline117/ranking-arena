@@ -27,7 +27,7 @@ export default function ExchangeVolume() {
 
   useEffect(() => {
     fetch('/api/market/exchanges', { signal: AbortSignal.timeout(15000) })
-      .then((r) => r.json())
+      .then((r) => { if (!r.ok) throw new Error(`HTTP ${r.status}`); return r.json() })
       .then((json) => { if (Array.isArray(json)) setExchanges(json) })
       .catch((err) => {
         if (err instanceof Error && err.name === 'AbortError') return

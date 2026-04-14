@@ -115,7 +115,7 @@ export default function SpotMarket({ onTokenClick, sectorFilter, initialData }: 
 
   useEffect(() => {
     fetch('/api/market/spot', { signal: AbortSignal.timeout(15000) })
-      .then((r) => r.json())
+      .then((r) => { if (!r.ok) throw new Error(`HTTP ${r.status}`); return r.json() })
       .then((d) => { if (Array.isArray(d)) setData(d) })
       .catch(err => { if (err instanceof Error && err.name === 'AbortError') return; console.warn('[SpotMarket] fetch failed', err) })
       .finally(() => setLoading(false))
@@ -124,7 +124,7 @@ export default function SpotMarket({ onTokenClick, sectorFilter, initialData }: 
   // Fetch 7-day sparkline data for top 50 coins (cached 4h on server, stale-while-revalidate)
   useEffect(() => {
     fetch('/api/market/sparklines', { signal: AbortSignal.timeout(15000) })
-      .then((r) => r.json())
+      .then((r) => { if (!r.ok) throw new Error(`HTTP ${r.status}`); return r.json() })
       .then((d: unknown) => {
         if (!Array.isArray(d)) return
         const map = new Map<string, SparklineEntry>()

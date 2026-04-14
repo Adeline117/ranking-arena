@@ -28,7 +28,7 @@ export default function DefiOverview() {
 
   useEffect(() => {
     fetch('/api/market/defi', { signal: AbortSignal.timeout(15000) })
-      .then((r) => r.json())
+      .then((r) => { if (!r.ok) throw new Error(`HTTP ${r.status}`); return r.json() })
       .then((json) => { if (!json.error) setData(json) })
       .catch((err) => {
         if (err instanceof Error && err.name === 'AbortError') return

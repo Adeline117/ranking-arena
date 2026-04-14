@@ -37,7 +37,8 @@ export default function ArbitrageOpportunities() {
 
   const fetchPriceComparisons = useCallback(async () => {
     try {
-      const res = await fetch('/api/market/spot')
+      const res = await fetch('/api/market/spot', { signal: AbortSignal.timeout(15000) })
+      if (!res.ok) throw new Error(`HTTP ${res.status}`)
       const data = await res.json()
       if (!Array.isArray(data)) return
 
@@ -70,8 +71,8 @@ export default function ArbitrageOpportunities() {
   }, [])
 
   useEffect(() => {
-    fetch('/api/market/arbitrage')
-      .then((r) => r.json())
+    fetch('/api/market/arbitrage', { signal: AbortSignal.timeout(15000) })
+      .then((r) => { if (!r.ok) throw new Error(`HTTP ${r.status}`); return r.json() })
       .then((json) => {
         if (json.ok && Array.isArray(json.opportunities)) {
           setOpps(json.opportunities.slice(0, 4))
