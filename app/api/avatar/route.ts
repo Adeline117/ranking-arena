@@ -20,6 +20,22 @@ export const preferredRegion = 'hnd1'
 // This prevents repeat requests to the serverless function for the same avatar.
 const CACHE_MAX_AGE = 60 * 60 * 24 * 365
 
+// SECURITY (audit P1-3, 2026-04-09): coerce upstream Content-Type to a
+// strict image whitelist. Previously the proxy passed through whatever the
+// upstream returned, including text/html or image/svg+xml with embedded
+// scripts. With dangerouslyAllowSVG=true in next.config and our img-src
+// CSP, an attacker who controls one of the allowed avatar sources (or who
+// finds a content-injection on an exchange CDN) could ship a same-origin
+// XSS payload via this proxy.
+const ALLOWED_IMAGE_TYPES = new Set([
+  'image/jpeg', 'image/png', 'image/webp', 'image/gif', 'image/avif',
+])
+function safeImageContentType(upstream: string | null): string {
+  if (!upstream) return 'image/png'
+  const base = upstream.split(';')[0].trim().toLowerCase()
+  return ALLOWED_IMAGE_TYPES.has(base) ? base : 'image/png'
+}
+
 export async function GET(request: NextRequest) {
   // Rate limit: 60 req/min per IP (avatar proxy is public but must not be abused)
   const rateLimitResp = await checkRateLimit(request, RateLimitPresets.search)
@@ -193,12 +209,13 @@ export async function GET(request: NextRequest) {
         }).finally(() => clearTimeout(timeout2))
 
         if (retryResponse.ok) {
-          const ct = retryResponse.headers.get('content-type') || 'image/png'
+          const ct = safeImageContentType(retryResponse.headers.get('content-type'))
           const buf = await retryResponse.arrayBuffer()
           const origin2 = request.headers.get('Origin')
           return new NextResponse(buf, {
             headers: {
               'Content-Type': ct,
+              'X-Content-Type-Options': 'nosniff',
               // 1-year immutable cache — avatars for a given seed/URL never change.
               'Cache-Control': `public, max-age=${CACHE_MAX_AGE}, immutable`,
               'Surrogate-Control': `max-age=${CACHE_MAX_AGE}`,
@@ -216,13 +233,14 @@ export async function GET(request: NextRequest) {
       return new NextResponse('Failed to fetch image', { status: response.status })
     }
 
-    const contentType = response.headers.get('content-type') || 'image/png'
+    const contentType = safeImageContentType(response.headers.get('content-type'))
     const buffer = await response.arrayBuffer()
 
     const origin = request.headers.get('Origin')
     return new NextResponse(buffer, {
       headers: {
         'Content-Type': contentType,
+        'X-Content-Type-Options': 'nosniff',
         // 1-year immutable cache — avatars for a given seed/URL never change.
         'Cache-Control': `public, max-age=${CACHE_MAX_AGE}, immutable`,
         'Surrogate-Control': `max-age=${CACHE_MAX_AGE}`,

@@ -68,24 +68,24 @@ test.describe('交易员详情页 - SSR fallback', () => {
     const traderResp = await request.get(traderHref)
     const traderHtml = await traderResp.text()
 
-    // Assert that AT LEAST ONE JSON-LD block is present in the SSR output
-    // referencing schema.org. Currently the trader page on prod only renders
-    // the root-layout WebSite schema (inherited from app/layout.tsx); the
-    // trader-specific ProfilePage + BreadcrumbList schema generated in
-    // page.tsx and TraderProfileClient is NOT appearing in the SSR HTML —
-    // verified via direct curl. This is a separate prod-only SSR bug
-    // (filed as a follow-up) that's outside the TraderProfileClient refactor
-    // scope. This test only guards against TOTAL JSON-LD removal regression.
+    // Assert that the trader-specific JSON-LD is present in the SSR output.
+    // Trader pages should have AT LEAST 3 schema blocks:
+    //   1. Root-layout WebSite schema (inherited from app/layout.tsx)
+    //   2. ProfilePage from page.tsx <JsonLd data={jsonLd} />
+    //   3. ProfilePage + BreadcrumbList combined from TraderProfileClient
+    //      (memoized via combineSchemas)
     //
-    // TODO(seo): debug why <JsonLd data={jsonLd} /> in trader/[handle]/page.tsx
-    // doesn't appear in the rendered HTML. May be related to the Suspense
-    // boundary, dynamic params, or React's renderToReadableStream ordering.
+    // Previously SOFTENED to /schema.org/ because the prod page was hung
+    // on cachedGetTraderDetail and Next.js streamed only Suspense
+    // placeholders. Fixed in commits e189c823a (4s SSR detail timeout) +
+    // 9e094253b (lowercase ETH addresses) + the resolveTrader timeout.
+    // Tightened back to require ProfilePage|Person|BreadcrumbList.
     const schemaBlocks = [...traderHtml.matchAll(
       /<script[^>]*type="application\/ld\+json"[^>]*>([\s\S]*?)<\/script>/g
     )]
     expect(schemaBlocks.length).toBeGreaterThan(0)
 
     const allSchemas = schemaBlocks.map((m) => m[1]).join('\n')
-    expect(allSchemas).toMatch(/schema\.org/)
+    expect(allSchemas).toMatch(/ProfilePage|Person|BreadcrumbList/)
   })
 })
