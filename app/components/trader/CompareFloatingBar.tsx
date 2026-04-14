@@ -4,7 +4,7 @@ import { memo } from 'react'
 import Link from 'next/link'
 import { X, BarChart3, ChevronUp, ChevronDown } from 'lucide-react'
 import { tokens } from '@/lib/design-tokens'
-import { useComparisonStore } from '@/lib/stores'
+import { useComparisonStore } from '@/lib/stores/comparisonStore'
 import { useLanguage } from '../Providers/LanguageProvider'
 import { EXCHANGE_NAMES } from '@/lib/constants/exchanges'
 

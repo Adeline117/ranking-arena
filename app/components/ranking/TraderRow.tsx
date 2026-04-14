@@ -25,7 +25,7 @@ import {
 } from './shared/TraderDisplay'
 import { getScoreColor } from '@/lib/utils/score-colors'
 import { CopyButton } from './HeroSection'
-import { useComparisonStore } from '@/lib/stores'
+import { useComparisonStore } from '@/lib/stores/comparisonStore'
 import { classifyStyle, getStyleInfo, type TradingStyle } from '@/lib/utils/trading-style'
 import { t as i18nTFn } from '@/lib/i18n'
 

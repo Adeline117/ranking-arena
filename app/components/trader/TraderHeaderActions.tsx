@@ -3,7 +3,7 @@
 import { useRouter } from 'next/navigation'
 import { Box } from '../base'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
-import { useComparisonStore } from '@/lib/stores'
+import { useComparisonStore } from '@/lib/stores/comparisonStore'
 import TraderFollowButton from '../ui/TraderFollowButton'
 import UserFollowButton from '../ui/UserFollowButton'
 import WatchlistToggleButton from './WatchlistToggleButton'

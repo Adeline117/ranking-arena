@@ -1,8 +1,8 @@
 'use client'
 
-import { useEffect, useState, Suspense, useCallback, useRef } from 'react'
+import { useEffect, useState, useReducer, Suspense, useCallback, useRef } from 'react'
 import { useSearchParams, useRouter } from 'next/navigation'
-import { supabase } from '@/lib/supabase/client'
+import { useAuthSession } from '@/lib/hooks/useAuthSession'
 import TopNav from '@/app/components/layout/TopNav'
 // MobileBottomNav is rendered by root layout — do not duplicate here
 import { useToast } from '@/app/components/ui/Toast'
@@ -32,39 +32,86 @@ const getSearchHistory = getLocalHistory
 const saveSearchHistory = (query: string) => { addToHistory(query) }
 const clearSearchHistory = () => { clearHistory() }
 
+// ============================================
+// Search state reducer — replaces 14 useState
+// ============================================
+
+interface SearchState {
+  loading: boolean
+  searchError: boolean
+  traderResults: SearchResult[]
+  traderTotal: number
+  postResults: SearchResult[]
+  postTotal: number
+  libraryResults: SearchResult[]
+  libTotal: number
+  groupResults: SearchResult[]
+  groupTotal: number
+  availablePlatforms: string[]
+  didYouMean: string[]
+}
+
+const initialSearchState: SearchState = {
+  loading: false,
+  searchError: false,
+  traderResults: [],
+  traderTotal: 0,
+  postResults: [],
+  postTotal: 0,
+  libraryResults: [],
+  libTotal: 0,
+  groupResults: [],
+  groupTotal: 0,
+  availablePlatforms: [],
+  didYouMean: [],
+}
+
+type SearchAction =
+  | { type: 'SEARCH_START' }
+  | { type: 'SEARCH_SUCCESS'; payload: Omit<SearchState, 'loading' | 'searchError'> }
+  | { type: 'SEARCH_ERROR' }
+  | { type: 'SEARCH_CLEAR' }
+
+function searchReducer(state: SearchState, action: SearchAction): SearchState {
+  switch (action.type) {
+    case 'SEARCH_START':
+      return { ...state, loading: true, searchError: false }
+    case 'SEARCH_SUCCESS':
+      return { ...state, loading: false, searchError: false, ...action.payload }
+    case 'SEARCH_ERROR':
+      return { ...state, loading: false, searchError: true }
+    case 'SEARCH_CLEAR':
+      return { ...initialSearchState }
+    default:
+      return state
+  }
+}
+
 function SearchContent() {
   const searchParams = useSearchParams()
   const _router = useRouter()
   const { t } = useLanguage()
+  const { email } = useAuthSession()
   const query = searchParams.get('q') || ''
   const activeTab = searchParams.get('tab') || 'all'
   const platformFilter = searchParams.get('platform') || ''
-  const [loading, setLoading] = useState(false)
-  const [email, setEmail] = useState<string | null>(null)
-  const [searchError, setSearchError] = useState(false)
   const [searchHistory, setSearchHistory] = useState<string[]>([])
   const [trendingSearches, setTrendingSearches] = useState<string[]>(['BTC', 'ETH', 'Binance', 'Bitget', 'SOL'])
   const { showToast } = useToast()
 
-  const [libraryResults, setLibraryResults] = useState<SearchResult[]>([])
-  const [groupResults, setGroupResults] = useState<SearchResult[]>([])
-  const [postResults, setPostResults] = useState<SearchResult[]>([])
-  const [traderResults, setTraderResults] = useState<SearchResult[]>([])
-  const [libTotal, setLibTotal] = useState(0)
-  const [groupTotal, setGroupTotal] = useState(0)
-  const [postTotal, setPostTotal] = useState(0)
-  const [traderTotal, setTraderTotal] = useState(0)
-  const [didYouMean, setDidYouMean] = useState<string[]>([])
-  const [_matchedExchange, setMatchedExchange] = useState<string | null>(null)
-  const [availablePlatforms, setAvailablePlatforms] = useState<string[]>([])
+  const [searchState, dispatch] = useReducer(searchReducer, initialSearchState)
+  const {
+    loading, searchError,
+    libraryResults, libTotal,
+    groupResults, groupTotal,
+    postResults, postTotal,
+    traderResults, traderTotal,
+    availablePlatforms, didYouMean,
+  } = searchState
 
   useEffect(() => {
-     
-    supabase.auth.getUser().then(({ data }) => {
-      setEmail(data.user?.email ?? null)
-    }).catch(() => { /* Auth check non-critical on search page */ }) // eslint-disable-line no-restricted-syntax -- intentional fire-and-forget
     setSearchHistory(getSearchHistory())
-    
+
     // 加载热门搜索数据
     const loadTrendingSearches = async () => {
       try {
@@ -72,11 +119,11 @@ function SearchContent() {
         if (response.ok) {
           const result = await response.json()
           const data = result.data || result
-          
+
           // 使用真实热门搜索或退回到fallback
           const trending = data.trending || []
           const fallback = data.fallback || ['BTC', 'ETH', 'Binance', 'Bitget', 'SOL']
-          
+
           if (trending.length >= 3) {
             setTrendingSearches(trending.slice(0, 6).map((item: { query: string }) => item.query))
           } else {
@@ -88,7 +135,7 @@ function SearchContent() {
         void _error
       }
     }
-    
+
     loadTrendingSearches()
   }, [])
 
@@ -122,16 +169,12 @@ function SearchContent() {
 
   useEffect(() => {
     if (!query.trim()) {
-      setLibraryResults([])
-      setGroupResults([])
-      setPostResults([])
-      setTraderResults([])
+      dispatch({ type: 'SEARCH_CLEAR' })
       return
     }
 
     const doSearch = async () => {
-      setLoading(true)
-      setSearchError(false)
+      dispatch({ type: 'SEARCH_START' })
 
       // Abort previous request
       if (abortControllerRef.current) {
@@ -155,51 +198,55 @@ function SearchContent() {
           const json = await apiRes.json()
           const data: UnifiedSearchResponse = json.data || json
 
-          // Library
-          setLibTotal(data.results.library.length)
-          setLibraryResults(data.results.library.map(item => ({
+          const mappedLibrary = data.results.library.map(item => ({
             type: 'library' as const,
             id: item.id,
             title: item.title,
             subtitle: item.subtitle || undefined,
             meta: item.meta?.category as string || undefined,
-          })))
+          }))
 
-          // Posts
-          setPostTotal(data.results.posts.length)
-          setPostResults(data.results.posts.map(p => ({
+          const mappedPosts = data.results.posts.map(p => ({
             type: 'post' as const,
             id: p.id,
             title: p.title,
             subtitle: p.subtitle ? `${t('searchPostBy')}: ${p.subtitle}` : undefined,
-          })))
+          }))
 
-          // Traders
-          setTraderTotal(data.results.traders.length)
-          setTraderResults(data.results.traders.map(tr => ({
+          const mappedTraders = data.results.traders.map(tr => ({
             type: 'trader' as const,
             id: tr.href.replace('/trader/', ''),
             title: tr.title,
             subtitle: tr.subtitle || undefined,
-          })))
-          // Extract unique platforms for filter UI
-          const platforms = [...new Set(data.results.traders.map(tr => tr.meta?.platform as string).filter(Boolean))]
-          setAvailablePlatforms(platforms)
+          }))
 
-          // Groups
+          const platforms = [...new Set(data.results.traders.map(tr => tr.meta?.platform as string).filter(Boolean))]
+
           const groupsResults = data.results.groups || []
-          setGroupTotal(groupsResults.length)
-          setGroupResults(groupsResults.map(g => ({
+          const mappedGroups = groupsResults.map(g => ({
             type: 'group' as const,
             id: g.id,
             title: g.title,
             subtitle: g.meta?.member_count ? `${(g.meta.member_count as number).toLocaleString('en-US')} ${t('members')}` : undefined,
             meta: g.subtitle ? (g.subtitle.slice(0, 60)) : undefined,
-          })))
+          }))
 
-          // Capture suggestions and exchange match
-          setDidYouMean(data.suggestions || [])
-          setMatchedExchange(data.matchedExchange || null)
+          // Single atomic dispatch — sets all result state at once (no re-render storm)
+          dispatch({
+            type: 'SEARCH_SUCCESS',
+            payload: {
+              libraryResults: mappedLibrary,
+              libTotal: data.results.library.length,
+              postResults: mappedPosts,
+              postTotal: data.results.posts.length,
+              traderResults: mappedTraders,
+              traderTotal: data.results.traders.length,
+              groupResults: mappedGroups,
+              groupTotal: groupsResults.length,
+              availablePlatforms: platforms,
+              didYouMean: data.suggestions || [],
+            },
+          })
 
           // Save to history only after results are received
           const totalReceived = data.results.library.length + data.results.posts.length + data.results.traders.length + groupsResults.length
@@ -208,24 +255,27 @@ function SearchContent() {
             setSearchHistory(getSearchHistory())
           }
         } else {
-          setLibraryResults([])
-          setPostResults([])
-          setTraderResults([])
-          setGroupResults([])
-          setLibTotal(0)
-          setPostTotal(0)
-          setTraderTotal(0)
-          setGroupTotal(0)
+          dispatch({
+            type: 'SEARCH_SUCCESS',
+            payload: {
+              libraryResults: [],
+              libTotal: 0,
+              postResults: [],
+              postTotal: 0,
+              traderResults: [],
+              traderTotal: 0,
+              groupResults: [],
+              groupTotal: 0,
+              availablePlatforms: [],
+              didYouMean: [],
+            },
+          })
         }
       } catch (error) {
         if (error instanceof Error && error.name === 'AbortError') return
         logger.error('Search error:', error)
-        setSearchError(true)
+        dispatch({ type: 'SEARCH_ERROR' })
         showToast(t('searchFailedToast'), 'error')
-      } finally {
-        if (!controller.signal.aborted) {
-          setLoading(false)
-        }
       }
     }
 
