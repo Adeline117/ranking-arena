@@ -20,6 +20,7 @@ import type {
   TraderFeedItem,
 } from './trader-types'
 import { findTraderAcrossSources, getTraderArenaFollowersCountBatch } from './trader-utils'
+import { type DataResult, success, failure } from '@/lib/types/result'
 
 // ============================================
 // Public API functions
@@ -28,19 +29,19 @@ import { findTraderAcrossSources, getTraderArenaFollowersCountBatch } from './tr
 /**
  * 根据 handle 获取交易员基本信息
  */
-export async function getTraderByHandle(handle: string): Promise<TraderProfile | null> {
-  if (!handle) return null
+export async function getTraderByHandle(handle: string): Promise<DataResult<TraderProfile | null>> {
+  if (!handle) return success(null)
 
   const cacheKey = CacheKey.traders.detail(handle)
 
   return cache.getOrSet(
     cacheKey,
-    async () => {
+    async (): Promise<DataResult<TraderProfile | null>> => {
       try {
         const source = await findTraderAcrossSources(handle)
 
         if (!source) {
-          return null
+          return success(null)
         }
 
         const [followersCount, profileData] = await Promise.all([
@@ -63,7 +64,7 @@ export async function getTraderByHandle(handle: string): Promise<TraderProfile |
           })()
         ])
 
-        return {
+        return success({
           handle: source.handle || source.source_trader_id,
           id: source.source_trader_id,
           bio: profileData?.bio || undefined,
@@ -73,11 +74,11 @@ export async function getTraderByHandle(handle: string): Promise<TraderProfile |
           cover_url: profileData?.cover_url || undefined,
           isRegistered: !!profileData,
           source: source.source,
-        }
+        })
       } catch (error) {
         const logger = createLogger('trader-data')
         logger.error('Error in getTraderByHandle', { error, handle })
-        return null
+        return failure(error instanceof Error ? error.message : 'Unknown error in getTraderByHandle')
       }
     },
     { ttl: CACHE_TTL.TRADER_DETAIL }
@@ -90,17 +91,17 @@ export async function getTraderByHandle(handle: string): Promise<TraderProfile |
 export async function getTraderPerformance(
   handle: string,
   period: '7D' | '30D' | '90D' | '1Y' | '2Y' | 'All' = '90D'
-): Promise<TraderPerformance> {
+): Promise<DataResult<TraderPerformance>> {
   const cacheKey = CacheKey.traders.performance(handle, period)
 
   return cache.getOrSet(
     cacheKey,
-    async () => {
+    async (): Promise<DataResult<TraderPerformance>> => {
       try {
         const source = await findTraderAcrossSources(handle)
 
         if (!source) {
-          return { roi_90d: 0 }
+          return success({ roi_90d: 0 })
         }
 
         // Single query for all 3 windows from v2
@@ -122,7 +123,7 @@ export async function getTraderPerformance(
         const data7d = byWindow.get('7D') || null
         const data30d = byWindow.get('30D') || null
 
-        return {
+        return success({
           roi_90d: data90d?.roi_pct ?? 0,
           roi_7d: data7d?.roi_pct ?? undefined,
           roi_30d: data30d?.roi_pct ?? undefined,
@@ -137,11 +138,11 @@ export async function getTraderPerformance(
           max_drawdown_30d: data30d?.max_drawdown ?? undefined,
           roi_1y: undefined,
           roi_2y: undefined,
-        }
+        })
       } catch (error) {
         const logger = createLogger('trader-data')
         logger.error('Error in getTraderPerformance', { error, handle })
-        return { roi_90d: 0 }
+        return failure(error instanceof Error ? error.message : 'Unknown error in getTraderPerformance')
       }
     },
     { ttl: CACHE_TTL.TRADER_PERFORMANCE }
@@ -151,17 +152,17 @@ export async function getTraderPerformance(
 /**
  * 获取交易员统计数据 (cached)
  */
-export async function getTraderStats(handle: string): Promise<TraderStats> {
+export async function getTraderStats(handle: string): Promise<DataResult<TraderStats>> {
   const cacheKey = CacheKey.traders.detail(handle) + ':stats'
 
   return cache.getOrSet(
     cacheKey,
-    async () => {
+    async (): Promise<DataResult<TraderStats>> => {
       try {
         const source = await findTraderAcrossSources(handle)
 
         if (!source) {
-          return { additionalStats: {} }
+          return success({ additionalStats: {} })
         }
 
         // Phase 1: Get latest snapshot + history in parallel (using v2)
@@ -206,7 +207,7 @@ export async function getTraderStats(handle: string): Promise<TraderStats> {
         const yearlyData = yearlyResult.data || []
 
         if (snapshots.length === 0) {
-          return { additionalStats: {} }
+          return success({ additionalStats: {} })
         }
 
         // Phase 2: Use captured_at from latestSnapshot (eliminates redundant sub-query)
@@ -255,7 +256,7 @@ export async function getTraderStats(handle: string): Promise<TraderStats> {
           value: item.roi ?? 0,
         }))
 
-        return {
+        return success({
           expectedDividends: undefined,
           trading: latestSnapshot ? {
             totalTrades12M: (latestSnapshot as Record<string, unknown>).trades_count as number ?? 0,
@@ -276,11 +277,11 @@ export async function getTraderStats(handle: string): Promise<TraderStats> {
           },
           monthlyPerformance: monthlyPerformance.length > 0 ? monthlyPerformance : undefined,
           yearlyPerformance: yearlyPerformance.length > 0 ? yearlyPerformance : undefined,
-        }
+        })
       } catch (error) {
         const logger = createLogger('trader-data')
         logger.error('Error in getTraderStats', { error, handle })
-        return { additionalStats: {} }
+        return failure(error instanceof Error ? error.message : 'Unknown error in getTraderStats')
       }
     },
     { ttl: CACHE_TTL.TRADER_PERFORMANCE }
@@ -290,17 +291,17 @@ export async function getTraderStats(handle: string): Promise<TraderStats> {
 /**
  * 获取交易员频繁交易资产
  */
-export async function getTraderFrequentlyTraded(handle: string): Promise<Array<{
+export async function getTraderFrequentlyTraded(handle: string): Promise<DataResult<Array<{
   symbol: string
   weightPct: number
   count: number
   avgProfit: number
   avgLoss: number
   profitablePct: number
-}>> {
+}>>> {
   try {
     const source = await findTraderAcrossSources(handle)
-    if (!source) return []
+    if (!source) return success([])
 
     const { data: latestSnapshot } = await supabase
       .from('trader_snapshots_v2')
@@ -311,7 +312,7 @@ export async function getTraderFrequentlyTraded(handle: string): Promise<Array<{
       .limit(1)
       .maybeSingle()
 
-    if (!latestSnapshot) return []
+    if (!latestSnapshot) return success([])
 
     const { data } = await supabase
       .from('trader_frequently_traded')
@@ -322,9 +323,9 @@ export async function getTraderFrequentlyTraded(handle: string): Promise<Array<{
       .order('weight_pct', { ascending: false })
       .limit(10)
 
-    if (!data) return []
+    if (!data) return success([])
 
-    return data.map((item: {
+    return success(data.map((item: {
       symbol: string
       weight_pct: number | null
       trade_count: number | null
@@ -338,21 +339,21 @@ export async function getTraderFrequentlyTraded(handle: string): Promise<Array<{
       avgProfit: item.avg_profit ?? 0,
       avgLoss: item.avg_loss ?? 0,
       profitablePct: item.profitable_pct ?? 0,
-    }))
+    })))
   } catch (error) {
     const logger = createLogger('trader-data')
     logger.error('Error in getTraderFrequentlyTraded', { error, handle })
-    return []
+    return failure(error instanceof Error ? error.message : 'Unknown error in getTraderFrequentlyTraded')
   }
 }
 
 /**
  * 获取交易员月度表现
  */
-export async function getTraderMonthlyPerformance(handle: string): Promise<Array<{ month: string; value: number }>> {
+export async function getTraderMonthlyPerformance(handle: string): Promise<DataResult<Array<{ month: string; value: number }>>> {
   try {
     const source = await findTraderAcrossSources(handle)
-    if (!source) return []
+    if (!source) return success([])
 
     const { data } = await supabase
       .from('trader_monthly_performance')
@@ -363,26 +364,26 @@ export async function getTraderMonthlyPerformance(handle: string): Promise<Array
       .order('month', { ascending: false })
       .limit(12)
 
-    if (!data) return []
+    if (!data) return success([])
 
-    return data.map((item: { year: number; month: number; roi: number | null }) => ({
+    return success(data.map((item: { year: number; month: number; roi: number | null }) => ({
       month: `${item.year}-${String(item.month).padStart(2, '0')}`,
       value: item.roi ?? 0,
-    }))
+    })))
   } catch (error) {
     const logger = createLogger('trader-data')
     logger.error('Error in getTraderMonthlyPerformance', { error, handle })
-    return []
+    return failure(error instanceof Error ? error.message : 'Unknown error in getTraderMonthlyPerformance')
   }
 }
 
 /**
  * 获取交易员年度表现
  */
-export async function getTraderYearlyPerformance(handle: string): Promise<Array<{ year: number; value: number }>> {
+export async function getTraderYearlyPerformance(handle: string): Promise<DataResult<Array<{ year: number; value: number }>>> {
   try {
     const source = await findTraderAcrossSources(handle)
-    if (!source) return []
+    if (!source) return success([])
 
     const { data } = await supabase
       .from('trader_yearly_performance')
@@ -392,26 +393,26 @@ export async function getTraderYearlyPerformance(handle: string): Promise<Array<
       .order('year', { ascending: false })
       .limit(5)
 
-    if (!data) return []
+    if (!data) return success([])
 
-    return data.map((item: { year: number; roi: number | null }) => ({
+    return success(data.map((item: { year: number; roi: number | null }) => ({
       year: item.year,
       value: item.roi ?? 0,
-    }))
+    })))
   } catch (error) {
     const logger = createLogger('trader-data')
     logger.error('Error in getTraderYearlyPerformance', { error, handle })
-    return []
+    return failure(error instanceof Error ? error.message : 'Unknown error in getTraderYearlyPerformance')
   }
 }
 
 /**
  * 获取交易员投资组合
  */
-export async function getTraderPortfolio(handle: string): Promise<PortfolioItem[]> {
+export async function getTraderPortfolio(handle: string): Promise<DataResult<PortfolioItem[]>> {
   try {
     const source = await findTraderAcrossSources(handle)
-    if (!source) return []
+    if (!source) return success([])
 
     const { data } = await supabase
       .from('trader_portfolio')
@@ -421,9 +422,9 @@ export async function getTraderPortfolio(handle: string): Promise<PortfolioItem[
       .order('updated_at', { ascending: false })
       .limit(100)
 
-    if (!data) return []
+    if (!data) return success([])
 
-    return data.map((item: {
+    return success(data.map((item: {
       symbol: string | null
       direction: string | null
       weight_pct: number | null
@@ -437,21 +438,21 @@ export async function getTraderPortfolio(handle: string): Promise<PortfolioItem[
       value: item.weight_pct ?? 0,
       price: item.entry_price ?? 0,
       priceChange: undefined,
-    }))
+    })))
   } catch (error) {
     const logger = createLogger('trader-data')
     logger.error('Error in getTraderPortfolio', { error, handle })
-    return []
+    return failure(error instanceof Error ? error.message : 'Unknown error in getTraderPortfolio')
   }
 }
 
 /**
  * 获取交易员历史订单
  */
-export async function getTraderPositionHistory(handle: string): Promise<PositionHistoryItem[]> {
+export async function getTraderPositionHistory(handle: string): Promise<DataResult<PositionHistoryItem[]>> {
   try {
     const source = await findTraderAcrossSources(handle, { includeWeb3: false })
-    if (!source) return []
+    if (!source) return success([])
 
     const { data } = await supabase
       .from('trader_position_history')
@@ -462,9 +463,9 @@ export async function getTraderPositionHistory(handle: string): Promise<Position
       .order('open_time', { ascending: false })
       .limit(50)
 
-    if (!data) return []
+    if (!data) return success([])
 
-    return data.map((item: {
+    return success(data.map((item: {
       symbol: string | null
       direction: string | null
       entry_price: number | null
@@ -480,11 +481,11 @@ export async function getTraderPositionHistory(handle: string): Promise<Position
       pnlPct: item.pnl_pct || 0,
       openTime: item.open_time || '',
       closeTime: item.close_time || '',
-    }))
+    })))
   } catch (error) {
     const logger = createLogger('trader-data')
     logger.error('Error in getTraderPositionHistory', { error, handle })
-    return []
+    return failure(error instanceof Error ? error.message : 'Unknown error in getTraderPositionHistory')
   }
 }
 
