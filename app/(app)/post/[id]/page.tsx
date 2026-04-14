@@ -4,6 +4,8 @@ import { notFound, redirect } from 'next/navigation'
 import { features } from '@/lib/features'
 import { getSupabaseAdmin } from '@/lib/supabase/server'
 import PostDetailClient from './PostDetailClient'
+import { JsonLd } from '@/app/components/Providers/JsonLd'
+import { generatePostArticleSchema } from '@/lib/seo/structured-data'
 import { BASE_URL as APP_URL } from '@/lib/constants/urls'
 
 export const revalidate = 60
@@ -13,7 +15,7 @@ const getPostMeta = cache(async (id: string) => {
     const supabase = getSupabaseAdmin()
     const { data } = await supabase
       .from('posts')
-      .select('id, title, content, author_handle, created_at')
+      .select('id, title, content, author_handle, created_at, updated_at, like_count, comment_count, view_count')
       .eq('id', id)
       .maybeSingle()
     return data
@@ -81,5 +83,23 @@ export default async function PostDetailPage({ params }: { params: Promise<{ id:
     notFound()
   }
 
-  return <PostDetailClient postId={id} />
+  // Server-side JSON-LD for crawlers (client component also renders it after hydration)
+  const postJsonLd = generatePostArticleSchema({
+    id: data.id,
+    title: data.title,
+    content: data.content ?? undefined,
+    authorHandle: data.author_handle ?? 'anonymous',
+    createdAt: data.created_at,
+    updatedAt: data.updated_at ?? undefined,
+    likeCount: data.like_count ?? undefined,
+    commentCount: data.comment_count ?? undefined,
+    viewCount: data.view_count ?? undefined,
+  })
+
+  return (
+    <>
+      <JsonLd data={postJsonLd} />
+      <PostDetailClient postId={id} />
+    </>
+  )
 }
