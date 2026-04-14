@@ -88,6 +88,23 @@ type PostStoreActions = {
   clear: () => void
 }
 
+// LRU cache limits to prevent unbounded memory growth in long sessions
+const MAX_CACHED_POSTS = 200
+const MAX_CACHED_COMMENT_SETS = 50
+
+/** Evict oldest entries from a record to stay under maxSize */
+function evictOldest<T>(record: Record<string, T>, maxSize: number): Record<string, T> {
+  const keys = Object.keys(record)
+  if (keys.length <= maxSize) return record
+  // Keep the most recent entries (last N keys — insertion order is preserved)
+  const keysToKeep = keys.slice(-maxSize)
+  const result: Record<string, T> = {}
+  for (const key of keysToKeep) {
+    result[key] = record[key]
+  }
+  return result
+}
+
 export const usePostStore = create<PostStoreState & PostStoreActions>((set) => ({
   posts: {},
   comments: {},
@@ -95,7 +112,7 @@ export const usePostStore = create<PostStoreState & PostStoreActions>((set) => (
   feedRefreshTrigger: 0,
 
   setPost: (post) => set((state) => ({
-    posts: { ...state.posts, [post.id]: post },
+    posts: evictOldest({ ...state.posts, [post.id]: post }, MAX_CACHED_POSTS),
   })),
 
   setPosts: (posts) => set((state) => {
@@ -103,7 +120,7 @@ export const usePostStore = create<PostStoreState & PostStoreActions>((set) => (
     for (const post of posts) {
       updated[post.id] = post
     }
-    return { posts: updated }
+    return { posts: evictOldest(updated, MAX_CACHED_POSTS) }
   }),
 
   updatePostReaction: (postId, data) => set((state) => {
@@ -123,7 +140,7 @@ export const usePostStore = create<PostStoreState & PostStoreActions>((set) => (
   }),
 
   setComments: (postId, comments) => set((state) => ({
-    comments: { ...state.comments, [postId]: comments },
+    comments: evictOldest({ ...state.comments, [postId]: comments }, MAX_CACHED_COMMENT_SETS),
   })),
 
   appendComments: (postId, newComments) => set((state) => {
