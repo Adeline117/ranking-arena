@@ -233,7 +233,7 @@ export async function getWeightedPosts(
   // 处理原始帖子
   const originalPostMap = new Map<string, OriginalPostSummary>()
   if (originalPostsResult.data && originalPostsResult.data.length > 0) {
-    const originalAuthorIds = [...new Set(originalPostsResult.data.map((p) => p.author_id).filter(Boolean))]
+    const originalAuthorIds = [...new Set(originalPostsResult.data.map((p) => p.author_id).filter((id): id is string => typeof id === 'string' && !!id))]
     const missingIds = originalAuthorIds.filter(id => !authorProfileMap.has(id))
 
     if (missingIds.length > 0) {

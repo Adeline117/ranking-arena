@@ -106,8 +106,8 @@ async function fetchHotPosts(_key: string, limit: number, targetLang?: string): 
       .eq('target_lang', targetLang)
       .in('content_id', postIds)
 
-    const titleMap = new Map((titleCache || []).map((t: { content_id: string; translated_text: string }) => [t.content_id, t.translated_text]))
-    const contentMap = new Map((contentCache || []).map((t: { content_id: string; translated_text: string }) => [t.content_id, t.translated_text]))
+    const titleMap = new Map<string, string>((titleCache || []).map((t: { content_id: string; translated_text: string }) => [t.content_id, t.translated_text]))
+    const contentMap = new Map<string, string>((contentCache || []).map((t: { content_id: string; translated_text: string }) => [t.content_id, t.translated_text]))
 
     // Apply cached translations
     const needsTranslation: Array<{ id: string; text: string; contentType: string; contentId: string }> = []
