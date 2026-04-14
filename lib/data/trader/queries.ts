@@ -23,15 +23,19 @@ import {
 import { fetchSimilarTraders } from './similar'
 import { LR, V2, ENRICH } from '@/lib/types/schema-mapping'
 import { SSR_HEAVY_QUERY_TIMEOUT_MS } from '@/lib/constants/timeouts'
+import { type DataResult, success, failure } from '@/lib/types/result'
 
 // ============================================================
 // INTERNAL: Safe query helper
 // ============================================================
 
-/** Run a Supabase query, returning null on error (including missing table). */
+/**
+ * Run a Supabase query, returning DataResult to distinguish errors from empty results.
+ * Known non-fatal errors (missing table during migration) return success(null).
+ */
 export async function safeQuery<T>(
   queryFn: () => PromiseLike<{ data: T | null; error: { code?: string; message?: string } | null }>
-): Promise<T | null> {
+): Promise<DataResult<T | null>> {
   try {
     const result = await queryFn()
     if (result.error && (
@@ -39,17 +43,23 @@ export async function safeQuery<T>(
       result.error.message?.includes('does not exist') ||
       result.error.message?.includes('relation')
     )) {
-      return null
+      // Known non-fatal errors (table doesn't exist during migration, etc.)
+      return success(null)
     }
     if (result.error) {
       logger.warn('[unified] Query error:', result.error.message)
-      return null
+      return failure(result.error.message || 'Unknown query error')
     }
-    return result.data
+    return success(result.data)
   } catch (err) {
     logger.error('[unified] safeQuery unexpected exception:', err instanceof Error ? err.message : String(err))
-    return null
+    return failure(err instanceof Error ? err.message : 'Unexpected query error')
   }
+}
+
+/** Extract data from a DataResult, returning null on failure (for graceful degradation). */
+function unwrap<T>(result: DataResult<T>): T | undefined {
+  return result.ok ? result.data : undefined
 }
 
 /**
@@ -180,7 +190,7 @@ export async function getTraderDetail(supabase: SupabaseClient, params: {
   // so run them all in one Promise.all to save a sequential round trip (~100-200ms).
   // Each query carries AbortSignal so PostgREST requests are cancelled on timeout.
   const phase1Signal = AbortSignal.timeout(SSR_HEAVY_QUERY_TIMEOUT_MS)
-  const [lrResult, v2Result, sourceProfile, profileV2] = await withTimeout(
+  const [lrResult, v2Result, sourceProfileResult, profileV2Result] = await withTimeout(
     Promise.all([
       // leaderboard_ranks: all periods (precomputed, primary source)
       // Uses v1 column names: source, source_trader_id, season_id
@@ -219,7 +229,7 @@ export async function getTraderDetail(supabase: SupabaseClient, params: {
           .limit(1)
           .abortSignal(phase1Signal)
           .maybeSingle()
-      ) as Promise<Record<string, unknown> | null>,
+      ),
       // Bio from trader_profiles_v2
       safeQuery(() =>
         supabase
@@ -230,13 +240,16 @@ export async function getTraderDetail(supabase: SupabaseClient, params: {
           .limit(1)
           .abortSignal(phase1Signal)
           .maybeSingle()
-      ) as Promise<Record<string, unknown> | null>,
+      ),
     ]),
     SSR_HEAVY_QUERY_TIMEOUT_MS + 1000 // outer fallback: AbortSignal should fire first
   )
 
-  const lrRows = (lrResult || []) as Record<string, unknown>[]
-  const v2Rows = (v2Result || []) as Record<string, unknown>[]
+  // Extract data from DataResult wrappers (failures treated as empty/null for graceful degradation)
+  const lrRows = (unwrap(lrResult) || []) as Record<string, unknown>[]
+  const v2Rows = (unwrap(v2Result) || []) as Record<string, unknown>[]
+  const sourceProfile = unwrap(sourceProfileResult) as Record<string, unknown> | null | undefined
+  const profileV2 = unwrap(profileV2Result) as Record<string, unknown> | null | undefined
 
   // Build per-period data using fallback chain: LR -> v2
   const periods: Record<TradingPeriod, Partial<UnifiedTrader> | null> = {
@@ -395,7 +408,7 @@ export async function getTraderDetail(supabase: SupabaseClient, params: {
 
   // Map equity curves — split merged result by period
   type EqRow = { period: string; data_date: string; roi_pct: number | null; pnl_usd: number | null }
-  const allEqRows = (allEquityCurveResult || []) as EqRow[]
+  const allEqRows = (unwrap(allEquityCurveResult) || []) as EqRow[]
   const mapEquity = (period: string): EquityPoint[] =>
     allEqRows.filter(r => r.period === period).map(r => ({ date: r.data_date, roi: r.roi_pct, pnl: r.pnl_usd }))
 
@@ -407,7 +420,7 @@ export async function getTraderDetail(supabase: SupabaseClient, params: {
 
   // Map asset breakdowns — split merged result by period
   type AbRow = { period: string; symbol: string; weight_pct: number }
-  const allAbRows = (allAssetBreakdownResult || []) as AbRow[]
+  const allAbRows = (unwrap(allAssetBreakdownResult) || []) as AbRow[]
   const mapAssets = (period: string): AssetWeight[] =>
     allAbRows.filter(r => r.period === period).map(r => ({ symbol: r.symbol, weightPct: r.weight_pct }))
 
@@ -425,7 +438,7 @@ export async function getTraderDetail(supabase: SupabaseClient, params: {
     avg_holding_time_hours: number | null; avg_profit: number | null; avg_loss: number | null
     largest_win: number | null; largest_loss: number | null; aum: number | null; period: string | null
   }
-  const statsRows = (statsDetailResult || []) as StatsRow[]
+  const statsRows = (unwrap(statsDetailResult) || []) as StatsRow[]
   // Prefer 90D row with actual data (non-null fields) over empty newer rows
   const hasData = (s: StatsRow) => s.avg_profit != null || s.largest_win != null || s.sharpe_ratio != null || s.winning_positions != null || s.total_trades != null
   const statsPrimary = statsRows.find(s => s.period === '90D' && hasData(s))
@@ -450,7 +463,7 @@ export async function getTraderDetail(supabase: SupabaseClient, params: {
 
   // Map portfolio
   type PortRow = { symbol: string | null; direction: string | null; invested_pct: number | null; entry_price: number | null; pnl: number | null }
-  const portfolio: TraderPosition[] = ((portfolioResult || []) as PortRow[]).map(r => ({
+  const portfolio: TraderPosition[] = ((unwrap(portfolioResult) || []) as PortRow[]).map(r => ({
     symbol: r.symbol || '',
     direction: r.direction || null,
     openTime: null,
@@ -468,7 +481,7 @@ export async function getTraderDetail(supabase: SupabaseClient, params: {
     entry_price: number | null; exit_price: number | null
     pnl_usd: number | null; pnl_pct: number | null; status: string | null
   }
-  const positionHistory: TraderPosition[] = ((positionHistoryResult || []) as PosRow[]).map(r => ({
+  const positionHistory: TraderPosition[] = ((unwrap(positionHistoryResult) || []) as PosRow[]).map(r => ({
     symbol: r.symbol || '',
     direction: r.direction || null,
     openTime: r.open_time,
@@ -481,10 +494,10 @@ export async function getTraderDetail(supabase: SupabaseClient, params: {
   }))
 
   // Tracked since
-  const trackedSince = (trackedSinceResult as Record<string, unknown> | null)?.created_at as string | null ?? null
+  const trackedSince = (unwrap(trackedSinceResult) as Record<string, unknown> | null)?.created_at as string | null ?? null
 
   // Position summary (live positions: avg leverage, long/short)
-  const posSummary = positionSummaryResult as {
+  const posSummary = unwrap(positionSummaryResult) as {
     avg_leverage?: number | null
     long_positions?: number | null
     short_positions?: number | null

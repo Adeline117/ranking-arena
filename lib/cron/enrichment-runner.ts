@@ -98,6 +98,7 @@ import {
   type EquityCurvePoint,
   type PositionHistoryItem,
   type PortfolioPosition,
+  type V2EnrichUpdate,
 } from '@/lib/cron/fetchers/enrichment'
 import {
   fetchOkxSpotEquityCurve,
@@ -649,6 +650,10 @@ export async function runEnrichment(params: {
     let suppressedErrors = 0
     let walletEnrichFailCount = 0
 
+    // Accumulate v2 sync payloads — flushed in bulk after each concurrency batch
+    // instead of per-row UPDATEs. See specs/batch-enrichment-v2-sync.md.
+    const pendingV2Updates: V2EnrichUpdate[] = []
+
     // Per-platform timeout: isolate each platform so one hanging platform
     // doesn't burn the entire batch's time budget
     const platformTimeoutMs = getPlatformTimeout(platformKey)
@@ -851,7 +856,8 @@ export async function runEnrichment(params: {
 
                 // --- Phase 3: Sequential DB writes (depend on fetch results) ---
                 if (curve.length > 0) {
-                  await withRetry(() => upsertEquityCurve(supabase, platformKey, traderId, period, curve), `${platformKey}:${traderId} save equity curve`, RETRY_CONFIG, traderSignal)
+                  const ecResult = await withRetry(() => upsertEquityCurve(supabase, platformKey, traderId, period, curve, { skipV2Sync: true }), `${platformKey}:${traderId} save equity curve`, RETRY_CONFIG, traderSignal)
+                  if (ecResult.v2Update) pendingV2Updates.push(ecResult.v2Update)
                 }
 
                 if (config.fetchPositionHistory && positions.length > 0) {
@@ -881,7 +887,8 @@ export async function runEnrichment(params: {
                 if (config.fetchStatsDetail && stats) {
                   // Pass position history to derive avg_holding_hours, avg_profit/loss, etc.
                   stats = enhanceStatsWithDerivedMetrics(stats, curve, period, positions.length > 0 ? positions : undefined)
-                  await withRetry(() => upsertStatsDetail(supabase, platformKey, traderId, period, stats!), `${platformKey}:${traderId} save stats detail`, RETRY_CONFIG, traderSignal)
+                  const sdResult = await withRetry(() => upsertStatsDetail(supabase, platformKey, traderId, period, stats!, { skipV2Sync: true }), `${platformKey}:${traderId} save stats detail`, RETRY_CONFIG, traderSignal)
+                  if (sdResult.v2Update) pendingV2Updates.push(sdResult.v2Update)
                 }
 
                 // Always sync key metrics back to trader_snapshots_v2 from stats + equity curve.
@@ -1031,9 +1038,42 @@ export async function runEnrichment(params: {
         })
       }
 
+      // Flush accumulated v2 updates in batches of 500 to avoid oversized RPC payloads
+      if (pendingV2Updates.length >= 500) {
+        const toFlush = pendingV2Updates.splice(0, 500)
+        try {
+          const { data: updatedCount, error: rpcErr } = await supabase.rpc('bulk_enrich_sync_v2', { updates: toFlush })
+          if (rpcErr) {
+            logger.warn(`[enrich] bulk_enrich_sync_v2 mid-batch flush failed: ${rpcErr.message}`)
+          } else {
+            logger.info(`[enrich] ${platformKey}: flushed ${toFlush.length} v2 updates (${updatedCount} rows updated)`)
+          }
+        } catch (flushErr) {
+          logger.warn(`[enrich] bulk_enrich_sync_v2 mid-batch flush exception: ${flushErr instanceof Error ? flushErr.message : String(flushErr)}`)
+        }
+      }
+
       if (i + config.concurrency < traders.length) {
         await sleep(config.delayMs)
       }
+    }
+
+    // Flush remaining v2 updates after all traders processed for this platform
+    if (pendingV2Updates.length > 0) {
+      for (let fi = 0; fi < pendingV2Updates.length; fi += 500) {
+        const batch = pendingV2Updates.slice(fi, fi + 500)
+        try {
+          const { data: updatedCount, error: rpcErr } = await supabase.rpc('bulk_enrich_sync_v2', { updates: batch })
+          if (rpcErr) {
+            logger.warn(`[enrich] bulk_enrich_sync_v2 final flush failed: ${rpcErr.message}`)
+          } else {
+            logger.info(`[enrich] ${platformKey}: final flush ${batch.length} v2 updates (${updatedCount} rows updated)`)
+          }
+        } catch (flushErr) {
+          logger.warn(`[enrich] bulk_enrich_sync_v2 final flush exception: ${flushErr instanceof Error ? flushErr.message : String(flushErr)}`)
+        }
+      }
+      pendingV2Updates.length = 0
     }
         })(), platformTimeoutMs, `platform:${platformKey}`)
     } catch (err) {

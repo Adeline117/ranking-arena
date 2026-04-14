@@ -21,6 +21,9 @@ export type {
   TraderFeedItem,
 } from './trader-types'
 
+// Re-export DataResult type for consumers
+export type { DataResult } from '@/lib/types/result'
+
 export {
   TRADER_SOURCES,
   TRADER_SOURCES_WITH_WEB3,
