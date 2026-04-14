@@ -41,10 +41,24 @@ const cachedResolveTraderISR = unstable_cache(
 // React cache() deduplicates the ISR-cached call within a single request.
 // Both generateMetadata and the page component call this — one DB round-trip.
 // Catches the TRADER_RESOLVE_NULL sentinel so callers get null (not an exception).
+//
+// Timeout race (3s): during compute-leaderboard cron contention, resolveTrader
+// can take 30+ seconds (the underlying queries against `traders` and
+// `leaderboard_ranks` block on the same row locks the cron is upserting).
+// Without a timeout, the ENTIRE page.tsx await chain stalls at the resolve
+// step and the user sees an indefinite hang. With a 3s timeout, slow paths
+// resolve to null → page.tsx calls notFound() → user sees a fast 404 instead.
+// Stale cached resolves still hit the unstable_cache layer immediately.
+const SSR_RESOLVE_TIMEOUT_MS = 3000
 const cachedResolveTrader = cache(
   async (handle: string, platform?: string) => {
     try {
-      return await cachedResolveTraderISR(handle, platform)
+      return await Promise.race([
+        cachedResolveTraderISR(handle, platform),
+        new Promise<null>((resolve) =>
+          setTimeout(() => resolve(null), SSR_RESOLVE_TIMEOUT_MS)
+        ),
+      ])
     } catch {
       return null
     }
