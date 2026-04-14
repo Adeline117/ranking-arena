@@ -12,6 +12,10 @@ import SnapshotViewerClient from './SnapshotViewerClient'
 
 export const revalidate = 300
 
+// SSR timeout: during cron contention, Supabase queries can block on row locks
+// for 30+ seconds. Race against this timeout so users see a fast 404 instead.
+const SSR_TIMEOUT_MS = 3000
+
 const BASE_URL = process.env.NEXT_PUBLIC_BASE_URL || 'https://www.arenafi.org'
 
 interface PageProps {
@@ -21,14 +25,20 @@ interface PageProps {
 // Generate metadata for SEO and social sharing
 export async function generateMetadata({ params }: PageProps): Promise<Metadata> {
   const { token } = await params
-  const supabase = getSupabaseAdmin()
-
-  const { data: snapshot } = await supabase
-    .from('ranking_snapshots')
-    .select('title, time_range, total_traders, top_trader_handle, top_trader_roi, data_captured_at')
-    .eq('share_token', token)
-    .eq('is_public', true)
-    .single()
+  let snapshot: { title: string | null; time_range: string; total_traders: number; top_trader_handle: string; top_trader_roi: number; data_captured_at: string } | null = null
+  try {
+    const supabase = getSupabaseAdmin()
+    const { data } = await Promise.race([
+      supabase
+        .from('ranking_snapshots')
+        .select('title, time_range, total_traders, top_trader_handle, top_trader_roi, data_captured_at')
+        .eq('share_token', token)
+        .eq('is_public', true)
+        .single(),
+      new Promise<{ data: null }>((resolve) => setTimeout(() => resolve({ data: null }), SSR_TIMEOUT_MS)),
+    ])
+    snapshot = data
+  } catch { /* timeout or error — use default metadata */ }
 
   if (!snapshot) {
     return {
@@ -71,109 +81,130 @@ export default async function SnapshotViewerPage({ params }: PageProps) {
     notFound()
   }
 
-  const supabase = getSupabaseAdmin()
+  let snapshot: Record<string, unknown> | null = null
+  let traders: Record<string, unknown>[] | null = null
 
-  // Fetch snapshot metadata
-  const { data: snapshot, error: snapshotError } = await supabase
-    .from('ranking_snapshots')
-    .select(`
-      id,
-      share_token,
-      time_range,
-      exchange,
-      category,
-      total_traders,
-      top_trader_handle,
-      top_trader_roi,
-      data_captured_at,
-      data_delay_minutes,
-      is_public,
-      view_count,
-      expires_at,
-      title,
-      description,
-      created_at
-    `)
-    .eq('share_token', token)
-    .single()
+  try {
+    const supabase = getSupabaseAdmin()
 
-  // Check if snapshot exists and is public
-  if (snapshotError || !snapshot || !snapshot.is_public) {
+    // Fetch snapshot metadata with timeout
+    const { data: snapshotData, error: snapshotError } = await Promise.race([
+      supabase
+        .from('ranking_snapshots')
+        .select(`
+          id,
+          share_token,
+          time_range,
+          exchange,
+          category,
+          total_traders,
+          top_trader_handle,
+          top_trader_roi,
+          data_captured_at,
+          data_delay_minutes,
+          is_public,
+          view_count,
+          expires_at,
+          title,
+          description,
+          created_at
+        `)
+        .eq('share_token', token)
+        .single(),
+      new Promise<{ data: null; error: { message: string } }>((resolve) =>
+        setTimeout(() => resolve({ data: null, error: { message: 'SSR timeout' } }), SSR_TIMEOUT_MS)
+      ),
+    ])
+
+    if (snapshotError || !snapshotData || !snapshotData.is_public) {
+      notFound()
+    }
+    snapshot = snapshotData
+
+    // Fetch traders in the snapshot with timeout
+    const { data: tradersData } = await Promise.race([
+      supabase
+        .from('snapshot_traders')
+        .select(`
+          rank,
+          trader_id,
+          handle,
+          source,
+          avatar_url,
+          roi,
+          pnl,
+          win_rate,
+          max_drawdown,
+          trades_count,
+          followers,
+          arena_score,
+          return_score,
+          drawdown_score,
+          stability_score,
+          data_availability
+        `)
+        .eq('snapshot_id', snapshotData.id)
+        .order('rank', { ascending: true }),
+      new Promise<{ data: null }>((resolve) =>
+        setTimeout(() => resolve({ data: null }), SSR_TIMEOUT_MS)
+      ),
+    ])
+    traders = tradersData
+  } catch {
     notFound()
   }
 
+  // snapshot is guaranteed non-null here (notFound() returns never in all null/error paths above)
+  const snap = snapshot!
+
   // Check if snapshot is expired
-  const isExpired = snapshot.expires_at && new Date(snapshot.expires_at) < new Date()
+  const isExpired = snap.expires_at && new Date(snap.expires_at as string) < new Date()
 
-  // Fetch traders in the snapshot
-  const { data: traders } = await supabase
-    .from('snapshot_traders')
-    .select(`
-      rank,
-      trader_id,
-      handle,
-      source,
-      avatar_url,
-      roi,
-      pnl,
-      win_rate,
-      max_drawdown,
-      trades_count,
-      followers,
-      arena_score,
-      return_score,
-      drawdown_score,
-      stability_score,
-      data_availability
-    `)
-    .eq('snapshot_id', snapshot.id)
-    .order('rank', { ascending: true })
-
-  // Increment view count (server action)
+  // Increment view count (fire-and-forget, no timeout needed)
   if (!isExpired) {
-    supabase.rpc('increment_snapshot_view_count', { snapshot_share_token: token })
+    getSupabaseAdmin().rpc('increment_snapshot_view_count', { snapshot_share_token: token })
   }
 
   // Transform data for client component
-  const snapshotData = {
-    id: snapshot.id,
-    shareToken: snapshot.share_token,
-    timeRange: snapshot.time_range,
-    exchange: snapshot.exchange,
-    category: snapshot.category,
-    totalTraders: snapshot.total_traders,
+  const snapshotPayload = {
+    id: snap.id as string,
+    shareToken: snap.share_token as string,
+    timeRange: snap.time_range as string,
+    exchange: snap.exchange as string,
+    category: snap.category as string,
+    totalTraders: snap.total_traders as number,
     topTrader: {
-      handle: snapshot.top_trader_handle,
-      roi: snapshot.top_trader_roi,
+      handle: snap.top_trader_handle as string,
+      roi: snap.top_trader_roi as number,
     },
-    dataCapturedAt: snapshot.data_captured_at,
-    dataDelayMinutes: snapshot.data_delay_minutes,
-    viewCount: snapshot.view_count,
-    expiresAt: snapshot.expires_at,
-    title: snapshot.title,
-    description: snapshot.description,
-    createdAt: snapshot.created_at,
-    isExpired,
+    dataCapturedAt: snap.data_captured_at as string,
+    dataDelayMinutes: snap.data_delay_minutes as number,
+    viewCount: snap.view_count as number,
+    expiresAt: (snap.expires_at as string) || undefined,
+    title: (snap.title as string) || undefined,
+    description: (snap.description as string) || undefined,
+    createdAt: snap.created_at as string,
+    isExpired: !!isExpired,
   }
 
-  const tradersData = (traders || []).map(t => ({
-    rank: t.rank,
-    id: t.trader_id,
-    handle: t.handle,
-    source: t.source,
-    avatarUrl: t.avatar_url,
-    roi: t.roi,
-    pnl: t.pnl,
-    winRate: t.win_rate,
-    maxDrawdown: t.max_drawdown,
-    tradesCount: t.trades_count,
-    followers: t.followers,
-    arenaScore: t.arena_score,
-    returnScore: t.return_score,
-    drawdownScore: t.drawdown_score,
-    stabilityScore: t.stability_score,
-    dataAvailability: t.data_availability,
+  const tradersPayload = (traders || []).map((t: Record<string, unknown>) => ({
+    rank: t.rank as number,
+    id: t.trader_id as string,
+    handle: t.handle as string,
+    source: t.source as string,
+    avatarUrl: (t.avatar_url as string) || undefined,
+    roi: (t.roi as number) ?? null,
+    pnl: (t.pnl as number) ?? undefined,
+    winRate: (t.win_rate as number) ?? undefined,
+    maxDrawdown: (t.max_drawdown as number) ?? undefined,
+    tradesCount: (t.trades_count as number) ?? undefined,
+    followers: (t.followers as number) ?? undefined,
+    arenaScore: (t.arena_score as number) ?? undefined,
+    returnScore: (t.return_score as number) ?? undefined,
+    drawdownScore: (t.drawdown_score as number) ?? undefined,
+    stabilityScore: (t.stability_score as number) ?? undefined,
+    dataAvailability: (t.data_availability as Record<string, boolean>) ?? undefined,
   }))
 
-  return <SnapshotViewerClient snapshot={snapshotData} traders={tradersData} />
+  return <SnapshotViewerClient snapshot={snapshotPayload} traders={tradersPayload} />
 }
