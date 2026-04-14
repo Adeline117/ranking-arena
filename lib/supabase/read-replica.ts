@@ -15,18 +15,17 @@
  */
 
 import { createClient, type SupabaseClient } from '@supabase/supabase-js'
-import type { Database } from './database.types'
 import { getSupabaseAdmin } from './server'
 
-let readReplicaClient: SupabaseClient<Database> | null = null
+let readReplicaClient: SupabaseClient | null = null
 
-export function getReadReplica(): SupabaseClient<Database> {
+export function getReadReplica(): SupabaseClient {
   // If read replica URL is configured, use it
   const replicaUrl = process.env.SUPABASE_READ_REPLICA_URL
   if (replicaUrl) {
     if (!readReplicaClient) {
       const key = process.env.SUPABASE_SERVICE_ROLE_KEY!
-      readReplicaClient = createClient<Database>(replicaUrl, key, {
+      readReplicaClient = createClient(replicaUrl, key, {
         auth: { persistSession: false },
         db: { schema: 'public' },
       })

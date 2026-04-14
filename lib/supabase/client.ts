@@ -1,7 +1,6 @@
 // lib/supabase/client.ts
 import { createClient } from "@supabase/supabase-js";
 import type { SupabaseClient } from "@supabase/supabase-js";
-import type { Database } from './database.types';
 
 // Singleton — created once on first access to avoid multiple GoTrue instances.
 // The module is eagerly imported by Next.js so we keep createClient() cheap:
@@ -10,7 +9,7 @@ import type { Database } from './database.types';
 const url = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://placeholder.supabase.co';
 const anon = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'placeholder-anon-key';
 
-export const supabase: SupabaseClient<Database> = createClient<Database>(url, anon, {
+export const supabase: SupabaseClient = createClient(url, anon, {
   auth: {
     persistSession: true,
     storageKey: 'arena-auth',
