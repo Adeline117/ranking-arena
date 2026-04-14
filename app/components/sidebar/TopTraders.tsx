@@ -108,8 +108,8 @@ export default function TopTraders() {
     fetcher,
     {
       revalidateOnFocus: false,
-      dedupingInterval: 60000, // 1 minute dedup
-      refreshInterval: 60000, // Refresh every 1 minute
+      dedupingInterval: 300000, // 5 minute dedup
+      refreshInterval: 600000, // Refresh every 10 min (data updates hourly via cron)
       errorRetryCount: 2,
     }
   )

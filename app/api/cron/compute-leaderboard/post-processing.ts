@@ -106,6 +106,16 @@ export async function revalidateRankingPages(): Promise<void> {
     revalidatePath(`/rankings/${exchange}`)
   }
   revalidatePath('/') // homepage
+
+  // Invalidate Redis cache so API routes serve fresh data immediately
+  // (ISR revalidation only refreshes server-rendered pages, not API responses)
+  try {
+    const { tieredDelByTag } = await import('@/lib/cache/redis-layer')
+    await tieredDelByTag('rankings')
+    logger.info('[post-processing] Rankings Redis cache invalidated')
+  } catch (e) {
+    logger.warn('[post-processing] Failed to invalidate rankings cache:', e)
+  }
 }
 
 /**
