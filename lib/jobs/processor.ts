@@ -265,41 +265,8 @@ export class JobProcessor {
       throw new Error(`Upsert trader_snapshots_v2 failed: ${v2Error.message}`)
     }
 
-    // Also upsert to trader_snapshots (v1) for legacy compatibility
-    const { error: v1Error } = await this.supabase
-      .from('trader_snapshots')
-      .upsert({
-        source: job.platform,
-        source_trader_id: job.trader_key,
-        market_type: job.market_type,
-        window: job.window,
-        season_id: windowUpper,
-        as_of_ts: truncateToHour(),
-        roi: result.metrics.roi,
-        pnl: result.metrics.pnl,
-        win_rate: result.metrics.win_rate,
-        max_drawdown: result.metrics.max_drawdown,
-        followers: result.metrics.followers,
-        trades_count: result.metrics.trades_count,
-        arena_score: result.metrics.arena_score,
-        return_score: result.metrics.return_score,
-        drawdown_score: result.metrics.drawdown_score,
-        stability_score: result.metrics.stability_score,
-        sharpe_ratio: result.metrics.sharpe_ratio,
-        sortino_ratio: result.metrics.sortino_ratio,
-        copiers: result.metrics.copiers,
-        aum: result.metrics.aum,
-        platform_rank: result.metrics.platform_rank,
-        metrics: result.metrics,
-        quality_flags: result.quality_flags,
-        captured_at: now,
-      }, {
-        onConflict: 'source,market_type,source_trader_id,window,as_of_ts',
-      })
-
-    if (v1Error && v1Error.code !== '23505') {
-      jobLogger.warn(`[Snapshot] v1 upsert failed (non-critical): ${v1Error.message}`)
-    }
+    // v1 trader_snapshots write REMOVED 2026-04-14 — all reads migrated to v2.
+    // Keeping comment for git history traceability.
 
     jobLogger.info(`[Snapshot] Updated ${job.platform}/${job.trader_key}/${window}: score=${result.metrics.arena_score}`)
   }

@@ -7,6 +7,7 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { getSupabaseAdmin } from '@/lib/supabase/server'
+import type { SupabaseClient } from '@supabase/supabase-js'
 import { z } from 'zod'
 import { verifyQStashSignature } from '@/lib/cron/qstash-client'
 import { createLogger } from '@/lib/utils/logger'
@@ -182,25 +183,28 @@ export async function POST(
     }
 
     // 6. 写入数据库
-    const supabase = getSupabaseAdmin()
+    const supabase = getSupabaseAdmin() as SupabaseClient
 
+    // Write to v2 (primary table used by compute-leaderboard)
+    const now = new Date()
+    now.setUTCMinutes(0, 0, 0)
+    const asOfTs = now.toISOString()
     const { error: upsertError } = await supabase
-      .from('trader_snapshots')
+      .from('trader_snapshots_v2')
       .upsert(
         validTraders.map((trader: PlatformData) => ({
           platform,
+          market_type: 'futures',
           trader_key: trader.trader_key,
-          nickname: trader.nickname,
-          avatar_url: trader.avatar_url,
-          season_id: '90D',
-          roi: trader.roi,
-          pnl: trader.pnl,
+          window: '90D',
+          roi_pct: trader.roi,
+          pnl_usd: trader.pnl,
           win_rate: trader.win_rate,
           max_drawdown: trader.max_drawdown,
-          copiers_count: trader.copiers_count,
-          updated_at: new Date().toISOString(),
+          copiers: trader.copiers_count,
+          as_of_ts: asOfTs,
         })),
-        { onConflict: 'platform,trader_key,season_id' }
+        { onConflict: 'platform,market_type,trader_key,window,as_of_ts' }
       )
 
     if (upsertError) {
