@@ -78,9 +78,8 @@ describe('Pipeline Self-Heal', () => {
     })
 
     it('should reset failures on successful fetch', async () => {
-      ;(cache.get as jest.Mock)
-        .mockResolvedValueOnce(0)  // failure key reset
-        .mockResolvedValueOnce(null) // last_count (no prior)
+      // When recordCount > 0: set(failureKey, 0), get(lastCountKey), set(lastCountKey, recordCount)
+      ;(cache.get as jest.Mock).mockResolvedValueOnce(null) // last_count (no prior)
 
       await recordPlatformFetchResult('binance_futures', 50)
 
@@ -92,9 +91,9 @@ describe('Pipeline Self-Heal', () => {
     })
 
     it('should alert on data drop below 30% threshold', async () => {
-      ;(cache.get as jest.Mock)
-        .mockResolvedValueOnce(0)    // failure key
-        .mockResolvedValueOnce(100)  // last_count was 100
+      // When recordCount > 0, code path is: set(failureKey), get(lastCountKey), set(lastCountKey)
+      // Only one cache.get call: for lastCountKey
+      ;(cache.get as jest.Mock).mockResolvedValueOnce(100) // last_count was 100
 
       await recordPlatformFetchResult('binance_futures', 20) // 20% of previous = below 30%
 
@@ -106,9 +105,8 @@ describe('Pipeline Self-Heal', () => {
     })
 
     it('should not alert when data count is stable', async () => {
-      ;(cache.get as jest.Mock)
-        .mockResolvedValueOnce(0)    // failure key
-        .mockResolvedValueOnce(100)  // last_count
+      // Only one cache.get: for lastCountKey
+      ;(cache.get as jest.Mock).mockResolvedValueOnce(100) // last_count
 
       await recordPlatformFetchResult('binance_futures', 90) // 90% of previous = above 30%
 
@@ -150,7 +148,8 @@ describe('Pipeline Self-Heal', () => {
     })
 
     it('should detect stale data (>12h) as warning', async () => {
-      ;(cache.get as jest.Mock).mockResolvedValue(0) // no consecutive failures
+      // getConsecutiveFailures calls cache.get once per platform
+      ;(cache.get as jest.Mock).mockResolvedValueOnce(0) // consecutive failures = 0 for bybit
 
       const alerts = await evaluateAndAlert([
         { platform: 'bybit', ageHours: 15, recordCount: 50 },
@@ -162,7 +161,9 @@ describe('Pipeline Self-Heal', () => {
     })
 
     it('should return empty array when everything is healthy', async () => {
-      ;(cache.get as jest.Mock).mockResolvedValue(0)
+      ;(cache.get as jest.Mock)
+        .mockResolvedValueOnce(0)  // binance_futures consecutive failures
+        .mockResolvedValueOnce(0)  // bybit consecutive failures
 
       const alerts = await evaluateAndAlert([
         { platform: 'binance_futures', ageHours: 1, recordCount: 100 },
