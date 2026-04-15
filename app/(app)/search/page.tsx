@@ -254,7 +254,36 @@ function SearchContent() {
     accentColor: string,
     accentBg: string,
   ) => {
-    if (results.length === 0) return null
+    if (results.length === 0) {
+      return (
+        <section style={{
+          background: tokens.colors.bg.secondary,
+          border: `1px solid ${tokens.colors.border.primary}`,
+          borderRadius: 14,
+          overflow: 'hidden',
+        }}>
+          <div style={{
+            display: 'flex', alignItems: 'center', gap: 10,
+            padding: '14px 18px',
+          }}>
+            <div style={{
+              width: 28, height: 28, borderRadius: tokens.radius.md,
+              background: accentBg,
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              fontSize: 12, fontWeight: 700, color: accentColor,
+            }}>
+              {iconLetter}
+            </div>
+            <span style={{
+              fontSize: 14, color: tokens.colors.text.tertiary,
+              fontWeight: 500,
+            }}>
+              {t('searchNoSectionResults').replace('{type}', title)}
+            </span>
+          </div>
+        </section>
+      )
+    }
     return (
       <section style={{
         background: tokens.colors.bg.secondary,

@@ -1869,6 +1869,7 @@ const ko = {
     loginVerificationFailed: '인증에 실패했습니다',
     loginSetupFailed: '설정에 실패했습니다',
     loginFailed: '로그인에 실패했습니다',
+    loginTimeout: '로그인에 시간이 걸리고 있습니다. 연결을 확인하고 다시 시도해 주세요.',
     loginWithPassword: '비밀번호로 로그인',
     loginUsernamePlaceholder: '사용자 이름',
     loginSetPasswordPlaceholder: '비밀번호 설정 (최소 6자)',
@@ -3837,6 +3838,7 @@ const ko = {
     searchGroupMembers: '멤버',
     searchDidYouMean: '혹시 이것을 찾으셨나요:',
     searchShowingTopTraders: '상위 트레이더 표시:',
+    searchNoSectionResults: '{type}을(를) 찾을 수 없습니다',
 
     // Book detail - language labels
     bookLanguageChinese: '중국어',
