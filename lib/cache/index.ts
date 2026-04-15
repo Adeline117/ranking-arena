@@ -9,6 +9,7 @@
 import { dataLogger } from '@/lib/utils/logger'
 import { getMemoryCache } from './memory-fallback'
 import { getSharedRedis, recordRedisError, isRedisAvailable, pingRedis } from './redis-client'
+import type { CacheEntry as TieredCacheEntry } from './redis-layer'
 import type { ZodSchema } from 'zod'
 
 // ============================================
@@ -22,6 +23,39 @@ interface CacheOptions {
   tags?: string[]
   /** 是否跳过内存缓存 */
   skipMemory?: boolean
+}
+
+/**
+ * Detect whether a value is a CacheEntry envelope written by redis-layer.ts.
+ * If so, unwrap and return the inner data; otherwise return the value as-is.
+ */
+function unwrapCacheEntry<T>(value: unknown): T {
+  if (
+    value !== null &&
+    typeof value === 'object' &&
+    'data' in value &&
+    'tier' in value &&
+    'cachedAt' in value &&
+    'expiresAt' in value
+  ) {
+    return (value as TieredCacheEntry<T>).data
+  }
+  return value as T
+}
+
+/**
+ * Wrap a raw value in the same CacheEntry envelope that redis-layer.ts uses.
+ * This ensures both cache layers write the same format to Redis.
+ */
+function wrapCacheEntry<T>(value: T, ttlSeconds: number): TieredCacheEntry<T> {
+  const now = Date.now()
+  return {
+    data: value,
+    tier: 'warm',
+    cachedAt: now,
+    expiresAt: now + ttlSeconds * 1000,
+    softExpiresAt: now + ttlSeconds * 1000,
+  }
 }
 
 interface CacheStats {
@@ -96,9 +130,10 @@ export async function get<T>(key: string): Promise<T | null> {
   const redis = await getRedis()
   if (redis) {
     try {
-      const data = await redis.get<T>(key)
-      if (data !== null) {
+      const raw = await redis.get<T | TieredCacheEntry<T>>(key)
+      if (raw !== null) {
         stats.hits++
+        const data = unwrapCacheEntry<T>(raw)
         // 回填内存缓存（加速后续访问）
         memoryCache.set(key, data, 60)
         return data
@@ -128,19 +163,21 @@ export async function set<T>(key: string, value: T, options: CacheOptions = {}):
   }
 
   // 2. 尝试写入 Redis (single pipeline for SET + tags)
+  // Wrap in CacheEntry envelope for format compatibility with redis-layer.ts
   if (redis) {
     try {
+      const entry = wrapCacheEntry(value, ttl)
       if (tags && tags.length > 0) {
         // Pipeline: SET + SADD + EXPIRE in one round-trip
         const pipeline = redis.pipeline()
-        pipeline.set(key, value, { ex: ttl })
+        pipeline.set(key, entry, { ex: ttl })
         for (const tag of tags) {
           pipeline.sadd(`tag:${tag}`, key)
           pipeline.expire(`tag:${tag}`, ttl * 2)
         }
         await pipeline.exec()
       } else {
-        await redis.set(key, value, { ex: ttl })
+        await redis.set(key, entry, { ex: ttl })
       }
 
       return true
@@ -517,11 +554,12 @@ export async function mget<T>(keys: string[]): Promise<(T | null)[]> {
     if (redis) {
       try {
         const missKeys = missIndices.map(i => keys[i])
-        const redisResults = await redis.mget<(T | null)[]>(...missKeys)
+        const redisResults = await redis.mget<(T | TieredCacheEntry<T> | null)[]>(...missKeys)
         for (let j = 0; j < missIndices.length; j++) {
-          const val = redisResults[j]
+          const raw = redisResults[j]
           const idx = missIndices[j]
-          if (val !== null) {
+          if (raw !== null) {
+            const val = unwrapCacheEntry<T>(raw)
             results[idx] = val
             stats.hits++
             // Backfill memory cache
@@ -563,12 +601,13 @@ export async function mset(
     memoryCache.set(key, value, ttlSeconds)
   }
 
-  // 写入 Redis
+  // 写入 Redis (wrap in CacheEntry envelope for format compatibility)
   if (redis) {
     try {
       const pipeline = redis.pipeline()
       for (const { key, value } of entries) {
-        pipeline.set(key, value, { ex: ttlSeconds })
+        const entry = wrapCacheEntry(value, ttlSeconds)
+        pipeline.set(key, entry, { ex: ttlSeconds })
       }
       await pipeline.exec()
       return true

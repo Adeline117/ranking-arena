@@ -131,7 +131,7 @@ export class MemoryCache {
   }
 
   constructor(options: MemoryCacheOptions = {}) {
-    this.maxSize = options.maxSize || 2000
+    this.maxSize = options.maxSize || 5000
     const defaultMaxBytes = parseInt(process.env.MEMORY_CACHE_MAX_BYTES || '', 10) || 50 * 1024 * 1024
     this.maxBytes = options.maxBytes || defaultMaxBytes // default 50 MB, configurable via MEMORY_CACHE_MAX_BYTES
     this.partition = options.partition || 'default'
@@ -402,7 +402,7 @@ class PartitionedCacheManager {
   private partitions: Map<string, MemoryCache> = new Map()
 
   private defaultOptions: MemoryCacheOptions = {
-    maxSize: 2000,
+    maxSize: 5000,
     maxBytes: 50 * 1024 * 1024,
     cleanupIntervalMs: 30000,
   }
@@ -499,7 +499,7 @@ let partitionedCacheManager: PartitionedCacheManager | null = null
 export function getMemoryCache(): MemoryCache {
   if (!globalMemoryCache) {
     globalMemoryCache = new MemoryCache({
-      maxSize: 2000,
+      maxSize: 5000,
       maxBytes: 50 * 1024 * 1024, // 50 MB
       cleanupIntervalMs: 30000,
       partition: 'global',
