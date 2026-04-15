@@ -108,7 +108,7 @@ html.theme-transition #main-content {
   /* Text colors (WCAG AA on #0B0A10 — minimum 4.5:1 contrast) */
   --color-text-primary: #F0F0F0;
   --color-text-secondary: #B8B8C3;
-  --color-text-tertiary: #A8A8BA; /* Raised from #9E9EB0 for WCAG AA 4.5:1 contrast */
+  --color-text-tertiary: #B0B0C4; /* Raised from #A8A8BA for WCAG AA ≥4.5:1 on bg-secondary #14121C */
   --color-text-quaternary: #8585A0;
   
   /* Border colors */

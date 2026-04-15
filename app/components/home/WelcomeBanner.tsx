@@ -15,7 +15,7 @@ function WelcomeBannerInner() {
     if (sessionStorage.getItem('welcome-shown')) return
     sessionStorage.setItem('welcome-shown', '1')
     setShow(true)
-    const timer = setTimeout(() => setShow(false), 8000)
+    const timer = setTimeout(() => setShow(false), 15000)
     return () => clearTimeout(timer)
   }, [searchParams])
 
