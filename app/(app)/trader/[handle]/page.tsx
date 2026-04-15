@@ -11,7 +11,7 @@ import { resolveTrader, getTraderDetail, toTraderPageData } from '@/lib/data/uni
 import { isDead } from '@/lib/connectors/route-config'
 import { LR } from '@/lib/types/schema-mapping'
 import { BASE_URL } from '@/lib/constants/urls'
-import { generateTraderProfilePageSchema, type TraderSchemaInput } from '@/lib/seo/structured-data'
+import { generateTraderProfilePageSchema, generateBreadcrumbSchema, type TraderSchemaInput } from '@/lib/seo/structured-data'
 import { SSR_QUERY_TIMEOUT_MS } from '@/lib/constants/timeouts'
 import { logger } from '@/lib/logger'
 
@@ -358,10 +358,16 @@ export default async function TraderPage({ params, searchParams }: { params: Pro
     arenaScore: traderData.arena_score ?? undefined,
   }
   const jsonLd = generateTraderProfilePageSchema(traderSchemaInput)
+  const breadcrumbJsonLd = generateBreadcrumbSchema([
+    { name: 'Arena', url: BASE_URL },
+    { name: 'Rankings', url: `${BASE_URL}/rankings` },
+    { name: traderData.handle, url: `${BASE_URL}/trader/${encodeURIComponent(decodedHandle)}` },
+  ])
 
   return (
     <>
       <JsonLd data={jsonLd} />
+      <JsonLd data={breadcrumbJsonLd} />
       <ErrorBoundary pageType="trader-profile">
         <TraderProfileClient data={traderData} serverTraderData={serverTraderData as import('@/app/(app)/u/[handle]/components/types').TraderPageData | null} claimedUser={claimedUserProfile} />
       </ErrorBoundary>
