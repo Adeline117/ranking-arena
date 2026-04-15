@@ -23,9 +23,8 @@ const SectorTreemap = lazy(() => import('@/app/components/market/SectorTreemap')
 const SpotMarket = lazy(() => import('@/app/components/market/SpotMarket'))
 const TokenSidePanel = lazy(() => import('@/app/components/market/TokenSidePanel'))
 const MobileMarketTabs = lazy(() => import('@/app/components/market/MobileMarketTabs'))
-// ArbitrageOpportunities and LiveTradesFeed: removed from render — no data pipeline
-// const ArbitrageOpportunities = lazy(() => import('@/app/components/market/ArbitrageOpportunities'))
-// const LiveTradesFeed = lazy(() => import('@/app/components/market/LiveTradesFeed'))
+const ArbitrageOpportunities = lazy(() => import('@/app/components/market/ArbitrageOpportunities'))
+const LiveTradesFeed = lazy(() => import('@/app/components/market/LiveTradesFeed'))
 
 const LoadingCard = memo(function LoadingCard({ height = 64, lines }: { height?: number; lines?: number }) {
   const skeletonItems = useMemo(() => {
@@ -256,18 +255,24 @@ function MarketPageContent({ initialSpotData }: { initialSpotData?: SpotCoinSSR[
             </SectionErrorBoundary>
           </section>
 
-          {/* Fear & Greed gauge — only widget with a working data source */}
-          <section style={{ marginBottom: 16, display: 'grid', gridTemplateColumns: '1fr', gap: 12, maxWidth: 400 }}>
+          {/* Fear & Greed + Arbitrage + Live Trades — 3-column widget row */}
+          <section style={{ marginBottom: 16, display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12, minHeight: 200 }}>
             <SectionErrorBoundary fallbackMessage="Failed to load Fear &amp; Greed index">
               <Suspense fallback={<LoadingCard height={160} />}>
                 <FearGreedGauge />
               </Suspense>
             </SectionErrorBoundary>
+            <SectionErrorBoundary fallbackMessage="Failed to load arbitrage">
+              <Suspense fallback={<LoadingCard height={160} />}>
+                <ArbitrageOpportunities />
+              </Suspense>
+            </SectionErrorBoundary>
+            <SectionErrorBoundary fallbackMessage="Failed to load live trades">
+              <Suspense fallback={<LoadingCard height={160} />}>
+                <LiveTradesFeed />
+              </Suspense>
+            </SectionErrorBoundary>
           </section>
-          {/* ArbitrageOpportunities and LiveTradesFeed removed:
-              No data pipeline backs these components — they permanently show
-              "0 opps" and "Waiting for trade data..." which damages credibility.
-              Re-enable when real data sources are connected. */}
 
           {/* L2: Data Table — ranking table immediately visible after dashboard */}
           <section style={{ marginBottom: 24 }}>
