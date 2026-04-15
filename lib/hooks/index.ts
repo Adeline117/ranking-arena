@@ -103,3 +103,7 @@ export type {
 } from './useSWR'
 
 export { usePWAInstall } from './usePWAInstall'
+
+// Market Spot (shared across market page components — single fetch)
+export { useMarketSpotData } from './useMarketSpot'
+export type { SpotCoin as MarketSpotCoin } from './useMarketSpot'
