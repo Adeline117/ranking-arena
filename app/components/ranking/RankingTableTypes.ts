@@ -5,28 +5,11 @@ export type ColumnKey = 'score' | 'roi' | 'pnl' | 'winrate' | 'mdd' | 'sharpe' |
 export const ALL_TOGGLEABLE_COLUMNS: ColumnKey[] = ['score', 'roi', 'pnl', 'winrate', 'mdd', 'sharpe', 'followers', 'trades']
 export const DEFAULT_VISIBLE_COLUMNS: ColumnKey[] = ['score', 'roi', 'pnl', 'winrate', 'mdd']
 export const LS_KEY_COLUMNS = 'ranking-visible-columns'
-export const LS_KEY_VIEW_MODE = 'ranking-view-mode'
-export const LS_KEY_VIEW_MANUAL = 'ranking-view-manual'
-
-// View mode type
+// View mode type — auto-detected only (mobile→card, desktop→table), no manual toggle
 export type ViewMode = 'table' | 'card'
 
 export type SortColumn = 'score' | 'roi' | 'pnl' | 'winrate' | 'mdd' | 'sortino' | 'alpha'
 export type SortDir = 'asc' | 'desc'
-
-export function getStoredViewMode(): ViewMode {
-  if (typeof window === 'undefined') return 'table'
-  try {
-    const stored = localStorage.getItem(LS_KEY_VIEW_MODE)
-    if (stored === 'table' || stored === 'card') return stored
-  } catch { /* ignore */ }
-  return 'table'
-}
-
-export function getStoredManualFlag(): boolean {
-  if (typeof window === 'undefined') return false
-  try { return localStorage.getItem(LS_KEY_VIEW_MANUAL) === 'true' } catch { return false }
-}
 
 export function getStoredColumns(): ColumnKey[] {
   if (typeof window === 'undefined') return DEFAULT_VISIBLE_COLUMNS
