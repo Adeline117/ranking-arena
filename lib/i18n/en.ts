@@ -1910,6 +1910,7 @@ const en = {
     loginVerificationFailed: 'Verification failed',
     loginSetupFailed: 'Setup failed',
     loginFailed: 'Login failed',
+    loginTimeout: 'Login is taking too long. Please check your connection and try again.',
     loginWithPassword: 'Login with password',
     loginUsernamePlaceholder: 'Username',
     loginSetPasswordPlaceholder: 'Set password (min 6 chars)',
@@ -3882,6 +3883,7 @@ searchTradersSection: 'Traders',
 searchGroupMembers: 'members',
 searchDidYouMean: 'Did you mean:',
 searchShowingTopTraders: 'Showing top traders on',
+    searchNoSectionResults: 'No {type} found',
 
 // Book detail - language labels
 bookLanguageChinese: 'Chinese',

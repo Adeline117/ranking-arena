@@ -1760,6 +1760,7 @@ const ja = {
     loginVerificationFailed: '認証に失敗しました',
     loginSetupFailed: 'セットアップに失敗しました',
     loginFailed: 'ログインに失敗しました',
+    loginTimeout: 'ログインに時間がかかっています。接続を確認して再度お試しください。',
     loginWithPassword: 'パスワードでログイン',
     loginUsernamePlaceholder: 'ユーザー名',
     loginSetPasswordPlaceholder: 'パスワードを設定（6文字以上）',
@@ -3606,6 +3607,7 @@ const ja = {
     searchGroupMembers: 'メンバー',
     searchDidYouMean: 'もしかして:',
     searchShowingTopTraders: 'トップトレーダーを表示中:',
+    searchNoSectionResults: '{type}が見つかりません',
 
     bookLanguageChinese: '中国語',
     bookLanguageEnglish: '英語',

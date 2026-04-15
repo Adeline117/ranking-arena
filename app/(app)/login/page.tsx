@@ -287,6 +287,14 @@ export default function LoginPage() {
     submittingRef.current = true
     setError(null)
     setLoading(true)
+
+    // 10-second timeout — allows retry without page refresh
+    const timeoutId = setTimeout(() => {
+      setError(t('loginTimeout'))
+      setLoading(false)
+      submittingRef.current = false
+    }, 10_000)
+
     try {
       // When adding a second account, sign out current session first
       if (isAddAccount) {
@@ -294,6 +302,7 @@ export default function LoginPage() {
       }
       const { error: loginError } = await supabase.auth.signInWithPassword({ email, password })
       if (loginError) {
+        clearTimeout(timeoutId)
         const msg = loginError.message
         if (msg.includes('Invalid login credentials')) setError(lang === 'zh' ? '邮箱或密码不正确，请重试' : 'Incorrect email or password. Please try again.')
         else if (msg.includes('Email not confirmed')) setError(lang === 'zh' ? '邮箱尚未验证，请检查收件箱' : 'Email not yet verified. Please check your inbox.')
@@ -302,13 +311,17 @@ export default function LoginPage() {
         setLoading(false)
         return
       }
+      clearTimeout(timeoutId)
       await saveNewAccountToStore()
       const { data: { user } } = await supabase.auth.getUser()
       if (user) {
         const { data: userProfile } = await supabase.from('user_profiles').select('handle').eq('id', user.id).maybeSingle()
         router.push(getRedirectUrl(userProfile?.handle, user.email))
       } else { router.push(getRedirectUrl()) }
-    } catch (err: unknown) { setError((err instanceof Error ? err.message : undefined) || t('loginFailed')) }
+    } catch (err: unknown) {
+      clearTimeout(timeoutId)
+      setError((err instanceof Error ? err.message : undefined) || t('loginFailed'))
+    }
     finally { setLoading(false); submittingRef.current = false }
   }
 

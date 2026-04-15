@@ -1911,6 +1911,7 @@ const zh = {
     loginVerificationFailed: '验证失败',
     loginSetupFailed: '设置失败',
     loginFailed: '登录失败',
+    loginTimeout: '登录超时，请检查网络连接后重试。',
     loginWithPassword: '使用密码登录',
     loginUsernamePlaceholder: '用户名',
     loginSetPasswordPlaceholder: '设置密码（至少6位）',
@@ -3888,6 +3889,7 @@ searchTradersSection: '交易员',
 searchGroupMembers: '成员',
 searchDidYouMean: '你是否要找:',
 searchShowingTopTraders: '显示顶级交易员来自',
+    searchNoSectionResults: '未找到{type}',
 searchFailedToast: '搜索失败',
 
 // Book detail - language labels
