@@ -269,7 +269,6 @@
       "schedule": "0 6 * * *"
     }
   ],
-  "_headers_note": "IMPORTANT: Route handlers that set their own Cache-Control header in code will OVERRIDE these values at runtime. We removed entries for routes that set headers in code (api/traders, api/market/*, api/search/*, api/flash-news, api/avoid-list, api/og, api/avatar, api/v2/rankings, api/rankings/platform-stats, api/rankings/movers, api/trader/:path*) to avoid confusion. Entries below are ONLY for routes that do NOT set headers in code.",
   "headers": [
     {
       "source": "/api/posts",
