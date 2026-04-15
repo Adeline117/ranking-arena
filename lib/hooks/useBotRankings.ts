@@ -54,17 +54,18 @@ export interface UseBotRankingsOptions {
   category?: string
   sortBy?: string
   sortDir?: 'asc' | 'desc'
+  fallbackData?: BotRankingsResponse
 }
 
 export function useBotRankings(opts: UseBotRankingsOptions = {}) {
-  const { window = '90D', category, sortBy = 'arena_score', sortDir = 'desc' } = opts
+  const { window = '90D', category, sortBy = 'arena_score', sortDir = 'desc', fallbackData } = opts
   const params = new URLSearchParams({ window, sort_by: sortBy, sort_dir: sortDir })
   if (category) params.set('category', category)
 
   const { data, error, isLoading, isValidating } = useSWR<BotRankingsResponse>(
     `/api/bots?${params.toString()}`,
     fetcher,
-    { revalidateOnFocus: false, keepPreviousData: true, refreshInterval: 15 * 60 * 1000 }
+    { revalidateOnFocus: false, keepPreviousData: true, refreshInterval: 15 * 60 * 1000, fallbackData }
   )
 
   return { data, error, isLoading, isValidating }
