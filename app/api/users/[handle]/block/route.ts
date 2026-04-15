@@ -6,6 +6,7 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { getSupabaseAdmin } from '@/lib/supabase/server'
+import { extractUserFromRequest } from '@/lib/auth/extract-user'
 import { checkRateLimit, RateLimitPresets } from '@/lib/utils/rate-limit'
 import logger from '@/lib/logger'
 
@@ -20,16 +21,11 @@ export async function POST(request: NextRequest, context: RouteContext) {
     const rateLimitResponse = await checkRateLimit(request, RateLimitPresets.write)
     if (rateLimitResponse) return rateLimitResponse
 
-    const authHeader = request.headers.get('authorization')
-    if (!authHeader?.startsWith('Bearer ')) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
-    const token = authHeader.substring(7)
-    const supabase = getSupabaseAdmin()
-    const { data: { user }, error: authError } = await supabase.auth.getUser(token)
+    const { user, error: authError } = await extractUserFromRequest(request)
     if (authError || !user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
+    const supabase = getSupabaseAdmin()
 
     const { handle: targetUserId } = await context.params
 
@@ -87,16 +83,11 @@ export async function POST(request: NextRequest, context: RouteContext) {
 
 export async function DELETE(request: NextRequest, context: RouteContext) {
   try {
-    const authHeader = request.headers.get('authorization')
-    if (!authHeader?.startsWith('Bearer ')) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
-    const token = authHeader.substring(7)
-    const supabase = getSupabaseAdmin()
-    const { data: { user }, error: authError } = await supabase.auth.getUser(token)
+    const { user, error: authError } = await extractUserFromRequest(request)
     if (authError || !user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
+    const supabase = getSupabaseAdmin()
 
     const { handle: targetUserId } = await context.params
 

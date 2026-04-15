@@ -40,15 +40,10 @@ async function updateFollowCounts(
 /**
  * 验证用户身份并返回用户ID
  */
- 
-async function authenticateUser(request: NextRequest, supabase: ReturnType<typeof getSupabaseAdmin>): Promise<{ userId: string } | { error: string; status: number }> {
-  const authHeader = request.headers.get('Authorization')
-  if (!authHeader?.startsWith('Bearer ')) {
-    return { error: 'Unauthorized: missing auth token', status: 401 }
-  }
 
-  const token = authHeader.slice(7)
-  const { data: { user }, error: authError } = await supabase.auth.getUser(token)
+async function authenticateUser(request: NextRequest, _supabase: ReturnType<typeof getSupabaseAdmin>): Promise<{ userId: string } | { error: string; status: number }> {
+  const { extractUserFromRequest } = await import('@/lib/auth/extract-user')
+  const { user, error: authError } = await extractUserFromRequest(request)
 
   if (authError || !user) {
     return { error: 'Authentication failed', status: 401 }

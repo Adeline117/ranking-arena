@@ -5,12 +5,16 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import Stripe from 'stripe'
-import logger from '@/lib/logger'
+import { createLogger } from '@/lib/utils/logger'
 import { checkRateLimit, RateLimitPresets } from '@/lib/utils/rate-limit'
 import { getSupabaseAdmin } from '@/lib/supabase/server'
+import { extractUserFromRequest } from '@/lib/auth/extract-user'
+import { withApiHandler } from '@/lib/api/with-handler'
 import { env } from '@/lib/env'
 
 export const dynamic = 'force-dynamic'
+
+const logger = createLogger('checkout')
 
 // 初始化 Stripe（延迟初始化，避免环境变量缺失时报错）
 function getStripe(): Stripe {
@@ -31,43 +35,33 @@ const PLANS: Record<string, { priceId: string; name: string }> = {
   },
 }
 
-export async function POST(request: NextRequest) {
+export const POST = withApiHandler('checkout', async (request: NextRequest) => {
   const rateLimitResp = await checkRateLimit(request, RateLimitPresets.sensitive)
   if (rateLimitResp) return rateLimitResp
 
+  // 获取请求体
+  const body = await request.json()
+  const { plan, billingCycle: _billingCycle = 'monthly' } = body
+
+  if (!plan || !PLANS[plan]) {
+    return NextResponse.json(
+      { error: 'Invalid plan. Valid option: pro' },
+      { status: 400 }
+    )
+  }
+
+  // 获取当前用户
+  const { user, error: authError } = await extractUserFromRequest(request)
+  if (authError || !user) {
+    return NextResponse.json(
+      { error: 'Unauthorized. Please log in.' },
+      { status: 401 }
+    )
+  }
+
+  const supabase = getSupabaseAdmin()
+
   try {
-    // 获取请求体
-    const body = await request.json()
-    const { plan, billingCycle: _billingCycle = 'monthly' } = body
-
-    if (!plan || !PLANS[plan]) {
-      return NextResponse.json(
-        { error: 'Invalid plan. Valid option: pro' },
-        { status: 400 }
-      )
-    }
-
-    // 获取当前用户
-    const supabase = getSupabaseAdmin()
-    const authHeader = request.headers.get('authorization')
-    
-    if (!authHeader?.startsWith('Bearer ')) {
-      return NextResponse.json(
-        { error: 'Unauthorized. Please log in.' },
-        { status: 401 }
-      )
-    }
-
-    const token = authHeader.substring(7)
-    const { data: { user }, error: authError } = await supabase.auth.getUser(token)
-
-    if (authError || !user) {
-      return NextResponse.json(
-        { error: 'Invalid token' },
-        { status: 401 }
-      )
-    }
-
     const stripe = getStripe()
     const planConfig = PLANS[plan]
 
@@ -121,10 +115,9 @@ export async function POST(request: NextRequest) {
       url: session.url,
     })
   } catch (error: unknown) {
-    logger.error('[Checkout] Error:', error)
-
     // SECURITY: Never leak internal error details to client
     const internalMessage = error instanceof Error ? error.message : 'Unknown error'
+    logger.error('[Checkout] Error:', { error: internalMessage })
 
     // 特殊处理 Stripe 未配置的情况
     if (internalMessage.includes('STRIPE_SECRET_KEY')) {
@@ -139,4 +132,4 @@ export async function POST(request: NextRequest) {
       { status: 500 }
     )
   }
-}
+})
