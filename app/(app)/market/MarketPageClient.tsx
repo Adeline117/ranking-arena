@@ -70,21 +70,21 @@ const useIsMobile = () => {
 }
 
 // Mobile-specific components
-function MobileOverviewTab() {
+function MobileOverviewTab({ spotData }: { spotData?: SpotCoin[] }) {
   return (
     <SectionErrorBoundary fallbackMessage="Failed to load core metrics">
       <Suspense fallback={<LoadingCard height={200} />}>
-        <CoreCards />
+        <CoreCards spotData={spotData} />
       </Suspense>
     </SectionErrorBoundary>
   )
 }
 
-function MobileMoversTab({ initialSpotData }: { initialSpotData?: SpotCoinSSR[] }) {
+function MobileMoversTab({ spotData, initialSpotData }: { spotData?: SpotCoin[]; initialSpotData?: SpotCoinSSR[] }) {
   return (
     <SectionErrorBoundary fallbackMessage="Market data failed to load">
       <Suspense fallback={<LoadingCard height={300} />}>
-        <SpotMarket initialData={initialSpotData as SpotCoin[] | undefined} />
+        <SpotMarket spotData={spotData} initialData={initialSpotData} />
       </Suspense>
     </SectionErrorBoundary>
   )
@@ -99,33 +99,26 @@ const MOBILE_SECTOR_CATEGORY_MAP: Record<string, string> = {
   AXS: 'GameFi', GALA: 'GameFi', SAND: 'GameFi', MANA: 'GameFi',
 }
 
-function MobileSectorsTab() {
+function MobileSectorsTab({ spotData, spotLoading }: { spotData?: SpotCoin[]; spotLoading: boolean }) {
   const { t } = useLanguage()
-  const [sectors, setSectors] = useState<{ name: string; change: number }[]>([])
-  const [loading, setLoading] = useState(true)
 
-  useEffect(() => {
-    fetch('/api/market/spot')
-      .then(r => { if (!r.ok) throw new Error('fetch failed'); return r.json() })
-      .then((data: { symbol: string; change24h: number | null; marketCap: number }[]) => {
-        if (!Array.isArray(data)) return
-        const grouped: Record<string, { totalCap: number; weightedChange: number }> = {}
-        for (const c of data) {
-          const cat = MOBILE_SECTOR_CATEGORY_MAP[c.symbol]
-          if (!cat || c.change24h == null || c.marketCap <= 0) continue
-          if (!grouped[cat]) grouped[cat] = { totalCap: 0, weightedChange: 0 }
-          grouped[cat].totalCap += c.marketCap
-          grouped[cat].weightedChange += c.change24h * c.marketCap
-        }
-        setSectors(Object.entries(grouped)
-          .map(([name, v]) => ({ name, change: v.weightedChange / v.totalCap }))
-          .sort((a, b) => b.change - a.change))
-      })
-      .catch(() => {})
-      .finally(() => setLoading(false))
-  }, [])
+  const sectors = useMemo(() => {
+    if (!spotData || spotData.length === 0) return []
+    const grouped: Record<string, { totalCap: number; weightedChange: number }> = {}
+    for (const c of spotData) {
+      const cat = MOBILE_SECTOR_CATEGORY_MAP[c.symbol]
+      if (!cat || c.change24h == null || c.marketCap <= 0) continue
+      if (!grouped[cat]) grouped[cat] = { totalCap: 0, weightedChange: 0 }
+      grouped[cat].totalCap += c.marketCap
+      grouped[cat].weightedChange += c.change24h * c.marketCap
+    }
+    return Object.entries(grouped)
+      .map(([name, v]) => ({ name, change: v.weightedChange / v.totalCap }))
+      .sort((a, b) => b.change - a.change)
+  }, [spotData])
 
-  if (loading) return <LoadingSkeleton variant="list" count={4} />
+  if (spotLoading) return <LoadingSkeleton variant="list" count={4} />
+  if (!spotData) return <ErrorState title={t('loadFailed')} variant="compact" />
   if (sectors.length === 0) return (
     <div style={{ height: 160, display: 'flex', alignItems: 'center', justifyContent: 'center', color: tokens.colors.text.tertiary, fontSize: 14 }}>
       {t('noData') || 'No sector data available'}
@@ -240,9 +233,9 @@ function MarketPageContent({ initialSpotData }: { initialSpotData?: SpotCoinSSR[
         <Suspense fallback={<LoadingCard height={400} />}>
           <MobileMarketTabs>
             {{
-              overview: <MobileOverviewTab />,
-              movers: <MobileMoversTab initialSpotData={initialSpotData} />,
-              sectors: <MobileSectorsTab />,
+              overview: <MobileOverviewTab spotData={spotData} />,
+              movers: <MobileMoversTab spotData={spotData} initialSpotData={initialSpotData} />,
+              sectors: <MobileSectorsTab spotData={spotData} spotLoading={spotLoading} />,
               watchlist: <WatchlistPlaceholder />,
             }}
           </MobileMarketTabs>
@@ -258,7 +251,7 @@ function MarketPageContent({ initialSpotData }: { initialSpotData?: SpotCoinSSR[
           <section style={{ marginBottom: 20 }}>
             <SectionErrorBoundary fallbackMessage="Failed to load core metrics">
               <Suspense fallback={<LoadingCard height={160} />}>
-                <CoreCards />
+                <CoreCards spotData={spotData} />
               </Suspense>
             </SectionErrorBoundary>
           </section>
@@ -280,7 +273,7 @@ function MarketPageContent({ initialSpotData }: { initialSpotData?: SpotCoinSSR[
           <section style={{ marginBottom: 24 }}>
             <SectionErrorBoundary fallbackMessage="Market data failed to load">
               <Suspense fallback={<LoadingCard height={400} />}>
-                <SpotMarket onTokenClick={handleTokenClick} sectorFilter={sectorFilter} initialData={initialSpotData} />
+                <SpotMarket spotData={spotData} onTokenClick={handleTokenClick} sectorFilter={sectorFilter} initialData={initialSpotData} />
               </Suspense>
             </SectionErrorBoundary>
           </section>
@@ -289,7 +282,7 @@ function MarketPageContent({ initialSpotData }: { initialSpotData?: SpotCoinSSR[
           <section style={{ marginBottom: 24 }}>
             <SectionErrorBoundary fallbackMessage="Failed to load sector heatmap">
               <Suspense fallback={<LoadingCard height={300} />}>
-                <SectorTreemap onSectorClick={handleSectorClick} />
+                <SectorTreemap spotData={spotData} onSectorClick={handleSectorClick} />
               </Suspense>
             </SectionErrorBoundary>
             {sectorFilter && (
