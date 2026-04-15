@@ -459,17 +459,9 @@
   .profile-header-actions {
     width: 100%;
     justify-content: center !important;
-    overflow-x: auto;
-    overflow-y: hidden;
-    -webkit-overflow-scrolling: touch;
-    scrollbar-width: none;
-    flex-wrap: nowrap !important;
+    flex-wrap: wrap !important;
     gap: 6px !important;
     padding-bottom: 4px;
-  }
-
-  .profile-header-actions::-webkit-scrollbar {
-    display: none;
   }
 
   .profile-header-info {
@@ -1580,22 +1572,18 @@
    ============================================ */
 
 @media (max-width: 767px) {
-  /* 1. Trader detail: action buttons — smaller on mobile, scrollable, 44px touch target */
+  /* 1. Trader detail: action buttons — smaller on mobile, wrap to second row */
   .profile-header-actions button {
     font-size: 11px !important;
     padding: 8px 10px !important;
     min-height: 44px;
     white-space: nowrap;
-    flex-shrink: 0;
   }
 
-  /* Ensure scroll container has edge padding so first/last items aren't clipped */
+  /* Ensure wrap container has edge padding so items aren't clipped */
   .profile-header-actions {
     padding-left: 4px !important;
     padding-right: 4px !important;
-    margin-left: -4px;
-    margin-right: -4px;
-    scroll-padding: 0 4px;
   }
 
   /* 2. Founding Member banner: prevent CTA button clipping */
