@@ -195,17 +195,47 @@ export function RankingFilters({
 
   return (
     <>
-      {/* Toolbar row — category tabs removed, unified single list */}
+      {/* Toolbar row — all controls in one compact row */}
       <Box className="ranking-toolbar-row" style={{
-        padding: `${tokens.spacing[2]} ${tokens.spacing[4]}`,
-        display: 'flex', alignItems: 'center', justifyContent: 'flex-end',
+        padding: `6px ${tokens.spacing[4]}`,
+        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
         gap: tokens.spacing[2],
         borderBottom: '1px solid var(--glass-border-light)',
         background: tokens.glass.bg.light,
         borderRadius: 0,
+        flexWrap: 'wrap',
       }}>
+        {/* Trader type filter — inline in toolbar */}
+        {onTraderTypeFilterChange && (
+          <Box style={{ display: 'flex', alignItems: 'center', gap: 4, flexShrink: 0 }}>
+            {([
+              { value: 'all' as const, label: t('allTraderTypes') },
+              { value: 'human' as const, label: t('isHuman') },
+              { value: 'bot' as const, label: t('isBot') },
+            ]).map(opt => (
+              <button
+                key={opt.value}
+                onClick={() => onTraderTypeFilterChange(opt.value)}
+                style={{
+                  padding: '4px 10px', borderRadius: tokens.radius.lg, minHeight: 32,
+                  border: traderTypeFilter === opt.value
+                    ? `1px solid ${tokens.colors.accent.primary}80`
+                    : `1px solid transparent`,
+                  background: traderTypeFilter === opt.value ? `${tokens.colors.accent.primary}15` : 'transparent',
+                  color: traderTypeFilter === opt.value ? tokens.colors.accent.primary : tokens.colors.text.tertiary,
+                  fontSize: 12, fontWeight: traderTypeFilter === opt.value ? 700 : 500,
+                  cursor: 'pointer', transition: `all ${tokens.transition.fast}`,
+                }}
+              >
+                {opt.value === 'bot' && <span style={{ marginRight: 2 }}>{'⚡'}</span>}
+                {opt.label}
+              </button>
+            ))}
+          </Box>
+        )}
+
         {/* Tool buttons */}
-        <Box style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[1], flexShrink: 0 }}>
+        <Box style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[1], flexShrink: 0, marginLeft: 'auto' }}>
           {/* View toggle */}
           <Box className="view-toggle-group">
             <button onClick={() => onToggleViewMode('table')} title={t('tableView')} aria-label={t('tableView')} aria-pressed={viewMode === 'table'} className={`view-toggle-btn touch-target-sm${viewMode === 'table' ? ' view-toggle-active' : ''}`}>
@@ -321,42 +351,7 @@ export function RankingFilters({
         </Box>
       </Box>
 
-      {/* Trader type filter row (human/bot/all) */}
-      {onTraderTypeFilterChange && (
-        <Box style={{
-          display: 'flex', alignItems: 'center', gap: tokens.spacing[1],
-          padding: `${tokens.spacing[1]} ${tokens.spacing[4]}`,
-          borderBottom: '1px solid var(--glass-border-light)',
-          flexWrap: 'wrap', background: tokens.glass.bg.light, minHeight: 44,
-        }}>
-          <Text size="xs" weight="bold" color="tertiary" style={{ flexShrink: 0 }}>
-            {t('traderTypeFilter')}:
-          </Text>
-          {([
-            { value: 'all' as const, label: t('allTraderTypes') },
-            { value: 'human' as const, label: t('isHuman') },
-            { value: 'bot' as const, label: t('isBot') },
-          ]).map(opt => (
-            <button
-              key={opt.value}
-              onClick={() => onTraderTypeFilterChange(opt.value)}
-              style={{
-                padding: '6px 12px', borderRadius: tokens.radius.lg, minHeight: 36,
-                border: traderTypeFilter === opt.value
-                  ? `1px solid ${tokens.colors.accent.primary}80`
-                  : `1px solid ${tokens.colors.border.primary}`,
-                background: traderTypeFilter === opt.value ? `${tokens.colors.accent.primary}20` : 'transparent',
-                color: traderTypeFilter === opt.value ? tokens.colors.accent.primary : tokens.colors.text.secondary,
-                fontSize: 12, fontWeight: traderTypeFilter === opt.value ? 700 : 500,
-                cursor: 'pointer', transition: `all ${tokens.transition.fast}`,
-              }}
-            >
-              {opt.value === 'bot' && <span style={{ marginRight: 3 }}>{'⚡'}</span>}
-              {opt.label}
-            </button>
-          ))}
-        </Box>
-      )}
+      {/* Trader type filter moved inline into toolbar row above */}
 
       {/* Inline style filter row */}
       {hasStyleData && (

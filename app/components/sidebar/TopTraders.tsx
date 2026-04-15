@@ -211,44 +211,21 @@ export default function TopTraders() {
                   </div>
                 </div>
 
-                {/* Arena Score + ROI */}
-                <div style={{ textAlign: 'right', flexShrink: 0 }}>
-                  {trader.arena_score != null && (
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 3 }}>
-                      <span style={{
-                        fontSize: 10,
-                        fontWeight: tokens.typography.fontWeight.bold,
-                        color: 'var(--color-text-tertiary)',
-                        letterSpacing: '0.04em',
-                        textTransform: 'uppercase',
-                        lineHeight: tokens.typography.lineHeight.tight,
-                      }}>
-                        Score
-                      </span>
-                      <span style={{
-                        fontSize: tokens.typography.fontSize.xs,
-                        fontWeight: tokens.typography.fontWeight.bold,
-                        color: getScoreColor(trader.arena_score!),
-                        lineHeight: tokens.typography.lineHeight.tight,
-                        ...(trader.arena_score >= 90 ? { textShadow: '0 0 8px var(--color-accent-primary-60)' } : {}),
-                      }}>
-                        {trader.arena_score.toFixed(0)}
-                      </span>
-                    </div>
-                  )}
-                  {roiStr && (
-                    <div
-                      style={{
-                        fontSize: tokens.typography.fontSize.xs,
-                        fontWeight: tokens.typography.fontWeight.semibold,
-                        color: trader.roi! >= 0 ? tokens.colors.accent.success : tokens.colors.accent.error,
-                        lineHeight: tokens.typography.lineHeight.tight,
-                      }}
-                    >
-                      {roiStr}
-                    </div>
-                  )}
-                </div>
+                {/* Arena Score only — clean and readable */}
+                {trader.arena_score != null && (
+                  <span style={{
+                    fontSize: 13,
+                    fontWeight: tokens.typography.fontWeight.bold,
+                    color: getScoreColor(trader.arena_score!),
+                    lineHeight: tokens.typography.lineHeight.tight,
+                    flexShrink: 0,
+                    minWidth: 28,
+                    textAlign: 'right',
+                    ...(trader.arena_score >= 90 ? { textShadow: '0 0 8px var(--color-accent-primary-60)' } : {}),
+                  }}>
+                    {trader.arena_score.toFixed(0)}
+                  </span>
+                )}
               </Link>
             )
           })}

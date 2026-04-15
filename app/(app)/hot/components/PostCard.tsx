@@ -27,10 +27,15 @@ export function PostCard({
   isExpanded, onToggleExpand, onOpenPost, localizedName, t,
 }: PostCardProps) {
   const displayBody = translatedBody || p.body
-  const isLongContent = displayBody.length > 100
-  const contentToShow = isExpanded || !isLongContent
-    ? displayBody
-    : displayBody.slice(0, 100) + '...'
+  const displayTitle = translatedTitle || (p.title && p.title !== 'Untitled' && p.title !== 'untitled' ? p.title : '')
+  // Skip body when it's the same as the title (avoid duplication)
+  const bodyIsDuplicate = displayBody.trim() === displayTitle.trim() || displayBody.trim() === p.title?.trim()
+  const isLongContent = !bodyIsDuplicate && displayBody.length > 100
+  const contentToShow = bodyIsDuplicate
+    ? ''
+    : isExpanded || !isLongContent
+      ? displayBody
+      : displayBody.slice(0, 100) + '...'
 
   return (
     <Box
@@ -143,16 +148,18 @@ export function PostCard({
         </Text>
       </Link>
 
-      {/* Body preview */}
-      <Text className="hot-post-body" size="sm" color="secondary" style={{
-        marginBottom: tokens.spacing[1],
-        lineHeight: 1.5,
-        fontSize: '12px',
-        color: translatedBody ? 'var(--color-text-tertiary)' : 'var(--color-text-secondary)',
-      }}>
-        {renderContentWithLinks(contentToShow)}
-      </Text>
-      {isLongContent && (
+      {/* Body preview — hidden when duplicate of title */}
+      {contentToShow && (
+        <Text className="hot-post-body" size="sm" color="secondary" style={{
+          marginBottom: tokens.spacing[1],
+          lineHeight: 1.5,
+          fontSize: '12px',
+          color: translatedBody ? 'var(--color-text-tertiary)' : 'var(--color-text-secondary)',
+        }}>
+          {renderContentWithLinks(contentToShow)}
+        </Text>
+      )}
+      {isLongContent && !bodyIsDuplicate && (
         <button
           onClick={(e) => {
             e.stopPropagation()

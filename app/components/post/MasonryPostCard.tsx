@@ -114,28 +114,38 @@ export default function MasonryPostCard({ post, language = 'zh', onLike, onComme
             </Text>
           </Box>
 
-          {/* Action row */}
+          {/* Action row — hide zero counts, show CTA when no engagement */}
           <Box style={{
             marginTop: tokens.spacing[2],
             paddingTop: tokens.spacing[2],
             borderTop: `1px solid ${tokens.colors.border.primary}`,
             display: 'flex',
             gap: tokens.spacing[3],
+            alignItems: 'center',
           }}>
-            <Box
-              style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[1] }}
-              onClick={(e) => { e.preventDefault(); e.stopPropagation(); onLike?.(post.id) }}
-            >
-              <ThumbsUpIcon size={12} />
-              <Text size="xs" color="secondary">{post.like_count || 0}</Text>
-            </Box>
-            <Box
-              style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[1] }}
-              onClick={(e) => { e.preventDefault(); e.stopPropagation(); onComment?.(post.id) }}
-            >
-              <CommentIcon size={12} />
-              <Text size="xs" color="secondary">{post.comment_count || 0}</Text>
-            </Box>
+            {(post.like_count ?? 0) > 0 && (
+              <Box
+                style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[1] }}
+                onClick={(e) => { e.preventDefault(); e.stopPropagation(); onLike?.(post.id) }}
+              >
+                <ThumbsUpIcon size={12} />
+                <Text size="xs" color="secondary">{post.like_count}</Text>
+              </Box>
+            )}
+            {(post.comment_count ?? 0) > 0 && (
+              <Box
+                style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[1] }}
+                onClick={(e) => { e.preventDefault(); e.stopPropagation(); onComment?.(post.id) }}
+              >
+                <CommentIcon size={12} />
+                <Text size="xs" color="secondary">{post.comment_count}</Text>
+              </Box>
+            )}
+            {!(post.like_count ?? 0) && !(post.comment_count ?? 0) && (
+              <Text size="xs" color="tertiary" style={{ fontStyle: 'italic' }}>
+                {t('beFirstToComment')}
+              </Text>
+            )}
           </Box>
         </Box>
 
