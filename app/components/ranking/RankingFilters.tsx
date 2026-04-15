@@ -186,7 +186,7 @@ function FilterChip({ active, label, color, onClick }: {
         borderRadius: 20,
         minHeight: 32,
         border: active
-          ? `1.5px solid ${activeColor}`
+          ? `1px solid ${activeColor}`
           : `1px solid ${tokens.colors.border.primary}`,
         background: active ? `color-mix(in srgb, ${activeColor} 15%, transparent)` : 'transparent',
         color: active ? activeColor : tokens.colors.text.secondary,
