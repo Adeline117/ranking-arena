@@ -968,22 +968,24 @@ export async function runEnrichment(params: {
                     }
                   }
 
-                  // Only write non-null updates, and only overwrite NULL fields in snapshot
-                  // Always touch updated_at so freshness checks pass for platforms without leaderboard API
-                  snapshotUpdate.updated_at = new Date().toISOString()
+                  // Batch v2 sync: push to pendingV2Updates instead of per-row UPDATE.
+                  // The flush happens after each concurrency batch (line ~1042).
+                  // This eliminates ~5,000-6,000 per-row UPDATEs per enrichment cycle.
                   const updates = Object.fromEntries(
                     Object.entries(snapshotUpdate).filter(([, v]) => v != null)
                   )
                   if (Object.keys(updates).length > 0) {
-                    const { error: snapUpdateErr } = await supabase
-                      .from('trader_snapshots_v2')
-                      .update(updates)
-                      .eq(V2.platform, platformKey)
-                      .eq(V2.trader_key, traderId)
-                      .eq(V2.window, period)
-                    if (snapUpdateErr) {
-                      logger.warn(`[enrich] Snapshot update failed for ${platformKey}/${traderId}: ${snapUpdateErr.message}`)
-                    }
+                    pendingV2Updates.push({
+                      platform: platformKey,
+                      trader_key: traderId,
+                      window: period,
+                      ...(updates.win_rate != null ? { win_rate: updates.win_rate as number } : {}),
+                      ...(updates.max_drawdown != null ? { max_drawdown: updates.max_drawdown as number } : {}),
+                      ...(updates.trades_count != null ? { trades_count: updates.trades_count as number } : {}),
+                      ...(updates.sharpe_ratio != null ? { sharpe_ratio: updates.sharpe_ratio as number } : {}),
+                      ...(updates.roi_pct != null ? { roi_pct: updates.roi_pct as number } : {}),
+                      ...(updates.pnl_usd != null ? { pnl_usd: updates.pnl_usd as number } : {}),
+                    })
                   }
                 }
 

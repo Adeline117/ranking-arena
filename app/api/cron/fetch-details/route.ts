@@ -87,13 +87,13 @@ async function enrichTrader(
           fetchBinanceStatsDetail(traderId),
         ])
         if (curve.length > 0) {
-          await upsertEquityCurve(supabase, source, traderId, '90D', curve)
+          await upsertEquityCurve(supabase, source, traderId, '90D', curve, { skipV2Sync: true })
         }
         if (positions.length > 0) {
           await upsertPositionHistory(supabase, source, traderId, positions)
         }
         if (stats) {
-          await upsertStatsDetail(supabase, source, traderId, '90D', stats)
+          await upsertStatsDetail(supabase, source, traderId, '90D', stats, { skipV2Sync: true })
         }
         return { success: true }
       }
@@ -105,13 +105,13 @@ async function enrichTrader(
           fetchBybitStatsDetail(traderId),
         ])
         if (curve.length > 0) {
-          await upsertEquityCurve(supabase, source, traderId, '90D', curve)
+          await upsertEquityCurve(supabase, source, traderId, '90D', curve, { skipV2Sync: true })
         }
         if (positions.length > 0) {
           await upsertPositionHistory(supabase, source, traderId, positions)
         }
         if (stats) {
-          await upsertStatsDetail(supabase, source, traderId, '90D', stats)
+          await upsertStatsDetail(supabase, source, traderId, '90D', stats, { skipV2Sync: true })
         }
         return { success: true }
       }
@@ -122,7 +122,7 @@ async function enrichTrader(
           fetchOkxCurrentPositions(traderId),
         ])
         if (stats) {
-          await upsertStatsDetail(supabase, source, traderId, '90D', stats)
+          await upsertStatsDetail(supabase, source, traderId, '90D', stats, { skipV2Sync: true })
         }
         if (positions.length > 0) {
           await upsertPositionHistory(supabase, source, traderId, positions)
