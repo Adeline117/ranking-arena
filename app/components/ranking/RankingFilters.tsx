@@ -271,7 +271,7 @@ export function RankingFilters({
                 key={opt.value}
                 onClick={() => onTraderTypeFilterChange(opt.value)}
                 style={{
-                  padding: '4px 10px', borderRadius: tokens.radius.lg, minHeight: 32,
+                  padding: '4px 10px', borderRadius: tokens.radius.lg, minHeight: 36,
                   border: traderTypeFilter === opt.value
                     ? `1px solid ${tokens.colors.accent.primary}80`
                     : `1px solid transparent`,
