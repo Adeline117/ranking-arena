@@ -30,6 +30,14 @@ const COLUMN_LABELS: Record<ColumnKey, { zh: string; en: string }> = {
   trades: { zh: '交易次数', en: 'Trades' },
 }
 
+const SCORE_TIERS = [
+  { value: 'S' as const, range: '90+', color: 'var(--color-score-legendary, #8b5cf6)' },
+  { value: 'A' as const, range: '70-89', color: 'var(--color-score-great, #10b981)' },
+  { value: 'B' as const, range: '50-69', color: 'var(--color-score-average, #eab308)' },
+  { value: 'C' as const, range: '30-49', color: 'var(--color-score-below, #f97316)' },
+  { value: 'D' as const, range: '<30', color: 'var(--color-score-low, #ef4444)' },
+]
+
 interface ExportRankingButtonProps {
   traders: { id: string; handle: string | null; source?: string; arena_score?: number; roi: number; pnl?: number | null; win_rate?: number | null; max_drawdown?: number | null; followers: number }[]
   source?: string
@@ -137,8 +145,9 @@ interface RankingFiltersProps {
   onCategoryChange: (c: CategoryType) => void
   isPro: boolean
   onProRequired?: () => void
-  // Filter
-  onFilterToggle?: () => void
+  // Filter panel
+  filterOpen: boolean
+  onFilterToggle: () => void
   hasActiveFilters?: boolean
   // Column settings
   visibleColumns: ColumnKey[]
@@ -150,6 +159,9 @@ interface RankingFiltersProps {
   styleFilter: TradingStyle | 'all'
   onStyleFilterChange: (style: TradingStyle | 'all') => void
   hasStyleData: boolean
+  // Score grade filter
+  scoreGradeFilter: 'all' | 'S' | 'A' | 'B' | 'C' | 'D'
+  onScoreGradeFilterChange: (grade: 'all' | 'S' | 'A' | 'B' | 'C' | 'D') => void
   // Trader type filter (human/bot/all)
   traderTypeFilter?: 'all' | 'human' | 'bot'
   onTraderTypeFilterChange?: (type: 'all' | 'human' | 'bot') => void
@@ -161,19 +173,51 @@ interface RankingFiltersProps {
   categoryCounts?: { all: number; futures: number; spot: number; onchain: number }
 }
 
+/** Pill-style filter chip */
+function FilterChip({ active, label, color, onClick }: {
+  active: boolean; label: string; color?: string; onClick: () => void
+}) {
+  const activeColor = color || tokens.colors.accent.primary
+  return (
+    <button
+      onClick={onClick}
+      style={{
+        padding: '5px 12px',
+        borderRadius: 20,
+        minHeight: 32,
+        border: active
+          ? `1.5px solid ${activeColor}`
+          : `1px solid ${tokens.colors.border.primary}`,
+        background: active ? `color-mix(in srgb, ${activeColor} 15%, transparent)` : 'transparent',
+        color: active ? activeColor : tokens.colors.text.secondary,
+        fontSize: 12,
+        fontWeight: active ? 700 : 500,
+        cursor: 'pointer',
+        transition: `all ${tokens.transition.fast}`,
+        whiteSpace: 'nowrap',
+      }}
+    >
+      {label}
+    </button>
+  )
+}
+
 /**
- * RankingFilters — toolbar with category tabs, view toggle, filters, column settings, export
+ * RankingFilters — toolbar with filter button, compare, column settings, export.
+ * Style + Score filters live in the expandable panel triggered by the Filter button.
  */
 export function RankingFilters({
   category, onCategoryChange, isPro, onProRequired,
-  onFilterToggle, hasActiveFilters,
+  filterOpen, onFilterToggle, hasActiveFilters,
   visibleColumns, showColumnSettings, onShowColumnSettings, onToggleColumn, onResetColumns,
   styleFilter, onStyleFilterChange, hasStyleData,
+  scoreGradeFilter, onScoreGradeFilterChange,
   traderTypeFilter = 'all', onTraderTypeFilterChange,
   traders, source, timeRange, categoryCounts,
 }: RankingFiltersProps) {
   const { t, language } = useLanguage()
   const columnSettingsRef = useRef<HTMLDivElement>(null)
+  const filterPanelRef = useRef<HTMLDivElement>(null)
 
   // Close column dropdown on outside click
   useEffect(() => {
@@ -187,9 +231,25 @@ export function RankingFilters({
     return () => document.removeEventListener('click', handler, true)
   }, [showColumnSettings, onShowColumnSettings])
 
+  // Close filter panel on outside click
+  useEffect(() => {
+    if (!filterOpen) return
+    const handler = (e: MouseEvent) => {
+      if (filterPanelRef.current && !filterPanelRef.current.contains(e.target as Node)) {
+        const target = e.target as HTMLElement
+        if (target.closest?.('[data-filter-toggle]')) return
+        onFilterToggle()
+      }
+    }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [filterOpen, onFilterToggle])
+
+  const activeFilterCount = (styleFilter !== 'all' ? 1 : 0) + (scoreGradeFilter !== 'all' ? 1 : 0) + (traderTypeFilter !== 'all' ? 1 : 0)
+
   return (
     <>
-      {/* Toolbar row — all controls in one compact row */}
+      {/* Toolbar row */}
       <Box className="ranking-toolbar-row" style={{
         padding: `6px ${tokens.spacing[4]}`,
         display: 'flex', alignItems: 'center', justifyContent: 'space-between',
@@ -199,7 +259,7 @@ export function RankingFilters({
         borderRadius: 0,
         flexWrap: 'wrap',
       }}>
-        {/* Trader type filter — inline in toolbar */}
+        {/* Trader type filter — inline */}
         {onTraderTypeFilterChange && (
           <Box style={{ display: 'flex', alignItems: 'center', gap: 4, flexShrink: 0 }}>
             {([
@@ -230,29 +290,35 @@ export function RankingFilters({
 
         {/* Tool buttons */}
         <Box style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[1], flexShrink: 0, marginLeft: 'auto' }}>
-          {/* Filter button */}
-          <Box onClick={onFilterToggle} onKeyDown={(e: React.KeyboardEvent) => { if ((e.key === 'Enter' || e.key === ' ') && onFilterToggle) { e.preventDefault(); onFilterToggle() } }} title={t('advancedFilter')} aria-label={t('advancedFilter')} role="button" tabIndex={0}
-            className={`toolbar-btn touch-target-sm${hasActiveFilters ? ' toolbar-btn-active' : ''}`}
+          {/* Filter toggle */}
+          <Box
+            data-filter-toggle
+            onClick={onFilterToggle}
+            onKeyDown={(e: React.KeyboardEvent) => { if ((e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); onFilterToggle() } }}
+            title={t('advancedFilter')}
+            aria-label={t('advancedFilter')}
+            aria-expanded={filterOpen}
+            role="button"
+            tabIndex={0}
+            className={`toolbar-btn touch-target-sm${filterOpen || hasActiveFilters ? ' toolbar-btn-active' : ''}`}
             style={{ position: 'relative', gap: 4 }}
           >
             <FilterIcon size={11} />
             <span>{t('filter')}</span>
-            {!isPro && !BETA_PRO_FEATURES_FREE && <LockIconSmall size={7} />}
-            {BETA_PRO_FEATURES_FREE && (
+            {activeFilterCount > 0 && (
               <span style={{
-                fontSize: 8, fontWeight: 700, padding: '1px 4px', borderRadius: 4,
-                background: 'color-mix(in srgb, var(--color-pro-gradient-start, #a78bfa) 20%, transparent)',
-                color: 'var(--color-pro-gradient-start, #a78bfa)',
-                border: '1px solid color-mix(in srgb, var(--color-pro-gradient-start, #a78bfa) 40%, transparent)',
-                whiteSpace: 'nowrap', lineHeight: 1.4,
-              }}>Pro</span>
-            )}
-            {hasActiveFilters && (
-              <Box style={{ position: 'absolute', top: 2, right: 2, width: 4, height: 4, borderRadius: '50%', background: tokens.colors.accent.primary }} />
+                fontSize: 10, fontWeight: 700, lineHeight: 1,
+                padding: '1px 5px', borderRadius: 8,
+                background: tokens.colors.accent.primary,
+                color: '#fff',
+                minWidth: 16, textAlign: 'center',
+              }}>
+                {activeFilterCount}
+              </span>
             )}
           </Box>
 
-          {/* Compare button */}
+          {/* Compare */}
           <Link href="/compare" prefetch={false} title={t('compareTraders')} className="toolbar-btn touch-target-sm" style={{ gap: 4 }}>
             <CompareIcon size={11} />
             <span>{t('compare')}</span>
@@ -330,42 +396,86 @@ export function RankingFilters({
         </Box>
       </Box>
 
-      {/* Trader type filter moved inline into toolbar row above */}
+      {/* Expandable filter panel */}
+      {filterOpen && (
+        <div
+          ref={filterPanelRef}
+          style={{
+            padding: `${tokens.spacing[3]} ${tokens.spacing[4]}`,
+            borderBottom: '1px solid var(--glass-border-light)',
+            background: 'var(--color-bg-secondary, #14121C)',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: 14,
+          }}
+        >
+          {/* Style filter */}
+          {hasStyleData && (
+            <div>
+              <Text size="xs" weight="bold" color="tertiary" style={{ marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                {t('rankingStyleLabel')}
+              </Text>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                <FilterChip
+                  active={styleFilter === 'all'}
+                  label={t('rankingStyleAll')}
+                  onClick={() => onStyleFilterChange('all')}
+                />
+                {getFilterableStyles().map(s => (
+                  <FilterChip
+                    key={s.style}
+                    active={styleFilter === s.style}
+                    label={localizedLabel(s.label, s.labelEn, language)}
+                    onClick={() => onStyleFilterChange(s.style)}
+                  />
+                ))}
+              </div>
+            </div>
+          )}
 
-      {/* Inline style filter row */}
-      {hasStyleData && (
-        <Box style={{
-          display: 'flex', alignItems: 'center', gap: tokens.spacing[1],
-          padding: `${tokens.spacing[1]} ${tokens.spacing[4]}`,
-          borderBottom: '1px solid var(--glass-border-light)',
-          flexWrap: 'wrap', background: tokens.glass.bg.light, minHeight: 44,
-        }}>
-          <Text size="xs" weight="bold" color="tertiary" style={{ flexShrink: 0 }}>
-            {t('rankingStyleLabel')}:
-          </Text>
-          {[
-            { value: 'all' as const, label: t('rankingStyleAll') },
-            ...getFilterableStyles().map(s => ({ value: s.style, label: localizedLabel(s.label, s.labelEn, language) })),
-          ].map(opt => (
+          {/* Score grade filter */}
+          <div>
+            <Text size="xs" weight="bold" color="tertiary" style={{ marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+              Score
+            </Text>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+              <FilterChip
+                active={scoreGradeFilter === 'all'}
+                label={t('rankingStyleAll')}
+                onClick={() => onScoreGradeFilterChange('all')}
+              />
+              {SCORE_TIERS.map(tier => (
+                <FilterChip
+                  key={tier.value}
+                  active={scoreGradeFilter === tier.value}
+                  label={`${tier.value} ${tier.range}`}
+                  color={tier.color}
+                  onClick={() => onScoreGradeFilterChange(tier.value)}
+                />
+              ))}
+            </div>
+          </div>
+
+          {/* Clear all */}
+          {(styleFilter !== 'all' || scoreGradeFilter !== 'all') && (
             <button
-              key={opt.value}
-              onClick={() => onStyleFilterChange(opt.value)}
+              onClick={() => { onStyleFilterChange('all'); onScoreGradeFilterChange('all') }}
               style={{
-                padding: '6px 12px', borderRadius: tokens.radius.lg, minHeight: 36,
-                border: styleFilter === opt.value
-                  ? `1px solid ${tokens.colors.accent.primary}80`
-                  : `1px solid ${tokens.colors.border.primary}`,
-                background: styleFilter === opt.value ? `${tokens.colors.accent.primary}20` : 'transparent',
-                color: styleFilter === opt.value ? tokens.colors.accent.primary : tokens.colors.text.secondary,
-                fontSize: 12, fontWeight: styleFilter === opt.value ? 700 : 500,
-                cursor: 'pointer', transition: `all ${tokens.transition.fast}`,
+                alignSelf: 'flex-start',
+                padding: '4px 12px',
+                fontSize: 12,
+                fontWeight: 600,
+                color: tokens.colors.accent.error,
+                background: 'transparent',
+                border: `1px solid ${tokens.colors.accent.error}40`,
+                borderRadius: tokens.radius.sm,
+                cursor: 'pointer',
               }}
             >
-              {opt.label}
+              {t('clearAll') || 'Clear All'}
             </button>
-          ))}
-          <Box style={{ width: 1, height: 16, background: tokens.colors.border.primary, margin: `0 ${tokens.spacing[1]}` }} />
-        </Box>
+          )}
+        </div>
       )}
     </>
   )
