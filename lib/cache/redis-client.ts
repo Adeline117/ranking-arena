@@ -77,7 +77,10 @@ export async function getSharedRedis(): Promise<UpstashRedisType | null> {
 export function recordRedisError(_error: unknown): void {
   consecutiveErrors++
   if (consecutiveErrors >= MAX_CONSECUTIVE_ERRORS && healthy) {
-    dataLogger.warn(`[Redis] ${consecutiveErrors} consecutive errors, switching to memory cache`)
+    dataLogger.error('[Redis] Falling back to memory cache after consecutive failures', {
+      lastError: _error instanceof Error ? _error.message : String(_error),
+      consecutiveErrors,
+    })
     healthy = false
     lastHealthCheck = Date.now()
     // Alert on Redis transition to unhealthy (dynamic import to avoid circular deps)

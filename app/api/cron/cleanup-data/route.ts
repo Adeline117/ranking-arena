@@ -2,7 +2,7 @@
  * GET /api/cron/cleanup-data
  *
  * Handles data maintenance tasks:
- * - Cleanup ephemeral data (hot_topics, flash_news, read notifications, pipeline_logs)
+ * - Cleanup ephemeral data (hot_topics, flash_news, notifications, pipeline_logs, trader_activities, authorization_sync_logs)
  * - Refresh computed metrics from equity curves
  * - Run orphaned/stale data cleanup via RPC
  *
@@ -139,12 +139,12 @@ export async function GET(request: NextRequest) {
       skippedSteps.push('notifications')
     }
 
-    // Cleanup old pipeline_logs (>90 days) — operational logs only
+    // Cleanup old pipeline_logs (>30 days) — operational logs only
     // Uses batched delete (5k/batch) to stay within 30s statement_timeout
     let pipelineLogsCleaned = 0
     if (hasTimeBudget()) {
       try {
-        const logsCutoff = new Date(Date.now() - 90 * 24 * 3600 * 1000).toISOString()
+        const logsCutoff = new Date(Date.now() - 30 * 24 * 3600_000).toISOString()
         let batchDeleted = 0
         const MAX_BATCHES = 10 // Cap at 10 batches (50k total) per run
         let batchCount = 0
@@ -167,13 +167,91 @@ export async function GET(request: NextRequest) {
           batchCount++
         } while (batchDeleted === DELETE_BATCH_SIZE && batchCount < MAX_BATCHES)
         if (pipelineLogsCleaned > 0) {
-          logger.info(`[cleanup-data] Cleaned up ${pipelineLogsCleaned} old pipeline_logs (>90d) in ${batchCount} batches`)
+          logger.info(`[cleanup-data] Cleaned up ${pipelineLogsCleaned} old pipeline_logs (>30d) in ${batchCount} batches`)
         }
       } catch (err) {
         logger.warn(`[cleanup-data] pipeline_logs cleanup failed: ${err}`)
       }
     } else {
       skippedSteps.push('pipeline_logs')
+    }
+
+    // Cleanup old trader_activities (>90 days) — ephemeral activity feed
+    // Uses batched delete (5k/batch) to stay within 30s statement_timeout
+    let traderActivitiesCleaned = 0
+    if (hasTimeBudget()) {
+      try {
+        const activitiesCutoff = new Date(Date.now() - 90 * 24 * 3600_000).toISOString()
+        let batchDeleted = 0
+        const MAX_ACT_BATCHES = 10
+        let batchCount = 0
+        do {
+          if (!hasTimeBudget()) {
+            logger.warn(`[cleanup-data] trader_activities: time budget exceeded after ${batchCount} batches, ${traderActivitiesCleaned} deleted`)
+            break
+          }
+          const { count, error: actErr } = await supabase
+            .from('trader_activities')
+            .delete({ count: 'exact' })
+            .lt('created_at', activitiesCutoff)
+            .limit(DELETE_BATCH_SIZE)
+          if (actErr) {
+            if (!actErr.message?.includes('does not exist')) {
+              logger.warn(`[cleanup-data] trader_activities cleanup error: ${actErr.message}`)
+            }
+            break
+          }
+          batchDeleted = count ?? 0
+          traderActivitiesCleaned += batchDeleted
+          batchCount++
+        } while (batchDeleted === DELETE_BATCH_SIZE && batchCount < MAX_ACT_BATCHES)
+        if (traderActivitiesCleaned > 0) {
+          logger.info(`[cleanup-data] Cleaned up ${traderActivitiesCleaned} old trader_activities (>90d) in ${batchCount} batches`)
+        }
+      } catch (err) {
+        logger.warn(`[cleanup-data] trader_activities cleanup failed: ${err}`)
+      }
+    } else {
+      skippedSteps.push('trader_activities')
+    }
+
+    // Cleanup old authorization_sync_logs (>30 days) — auth sync diagnostic logs
+    // Uses batched delete (5k/batch) to stay within 30s statement_timeout
+    let authSyncLogsCleaned = 0
+    if (hasTimeBudget()) {
+      try {
+        const authSyncCutoff = new Date(Date.now() - 30 * 24 * 3600_000).toISOString()
+        let batchDeleted = 0
+        const MAX_AUTH_BATCHES = 10
+        let batchCount = 0
+        do {
+          if (!hasTimeBudget()) {
+            logger.warn(`[cleanup-data] authorization_sync_logs: time budget exceeded after ${batchCount} batches, ${authSyncLogsCleaned} deleted`)
+            break
+          }
+          const { count, error: syncErr } = await supabase
+            .from('authorization_sync_logs')
+            .delete({ count: 'exact' })
+            .lt('created_at', authSyncCutoff)
+            .limit(DELETE_BATCH_SIZE)
+          if (syncErr) {
+            if (!syncErr.message?.includes('does not exist')) {
+              logger.warn(`[cleanup-data] authorization_sync_logs cleanup error: ${syncErr.message}`)
+            }
+            break
+          }
+          batchDeleted = count ?? 0
+          authSyncLogsCleaned += batchDeleted
+          batchCount++
+        } while (batchDeleted === DELETE_BATCH_SIZE && batchCount < MAX_AUTH_BATCHES)
+        if (authSyncLogsCleaned > 0) {
+          logger.info(`[cleanup-data] Cleaned up ${authSyncLogsCleaned} old authorization_sync_logs (>30d) in ${batchCount} batches`)
+        }
+      } catch (err) {
+        logger.warn(`[cleanup-data] authorization_sync_logs cleanup failed: ${err}`)
+      }
+    } else {
+      skippedSteps.push('authorization_sync_logs')
     }
 
     // Cleanup old pipeline_rejected_writes (>7 days) — diagnostic data, ~18k rows/day
@@ -318,7 +396,7 @@ export async function GET(request: NextRequest) {
     const duration = Date.now() - startTime
     const hasErrors = stepErrors.length > 0
 
-    const totalCleaned = hotTopicsCleaned + flashNewsCleaned + notificationsCleaned + pipelineLogsCleaned + stripeEventsCleaned + liquidationsCleaned + pipelineStateCleaned
+    const totalCleaned = hotTopicsCleaned + flashNewsCleaned + notificationsCleaned + pipelineLogsCleaned + traderActivitiesCleaned + authSyncLogsCleaned + stripeEventsCleaned + liquidationsCleaned + pipelineStateCleaned
 
     if (skippedSteps.length > 0) {
       logger.warn(`[cleanup-data] Time budget: skipped ${skippedSteps.length} steps after ${Math.round(duration / 1000)}s: ${skippedSteps.join(', ')}`)
@@ -329,6 +407,8 @@ export async function GET(request: NextRequest) {
       flashNewsCleaned,
       notificationsCleaned,
       pipelineLogsCleaned,
+      traderActivitiesCleaned,
+      authSyncLogsCleaned,
       stripeEventsCleaned,
       liquidationsCleaned,
       pipelineStateCleaned,

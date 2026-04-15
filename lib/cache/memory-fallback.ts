@@ -132,7 +132,8 @@ export class MemoryCache {
 
   constructor(options: MemoryCacheOptions = {}) {
     this.maxSize = options.maxSize || 2000
-    this.maxBytes = options.maxBytes || 50 * 1024 * 1024 // 50 MB default
+    const defaultMaxBytes = parseInt(process.env.MEMORY_CACHE_MAX_BYTES || '', 10) || 50 * 1024 * 1024
+    this.maxBytes = options.maxBytes || defaultMaxBytes // default 50 MB, configurable via MEMORY_CACHE_MAX_BYTES
     this.partition = options.partition || 'default'
 
     const cleanupIntervalMs = options.cleanupIntervalMs || 30000 // 30 seconds default

@@ -7,6 +7,24 @@
 #
 # Output: prints the full path to an empty new migration file, ready for editing.
 #
+# ── Migration Rollback Guide ──────────────────────────────────────────
+#
+# Supabase Pro includes Point-in-Time Recovery (PITR):
+#   1. Go to Supabase Dashboard → Database → Backups
+#   2. Choose "Restore to point in time" before the migration was applied
+#   3. This rolls back ALL changes (schema + data) to that exact moment
+#   Note: PITR restores the entire database — not just one migration.
+#
+# For non-destructive migrations (ADD COLUMN, CREATE INDEX, etc.):
+#   Write a compensating "down" migration instead of using PITR:
+#     scripts/new-migration.sh rollback_add_trader_stats_index
+#   Then write the reverse SQL (DROP INDEX, DROP COLUMN, etc.)
+#
+# For destructive migrations (DROP TABLE, ALTER COLUMN type, etc.):
+#   PITR is the only safe rollback path. Always test destructive migrations
+#   on a Supabase branch first (see `list_branches` / `create_branch`).
+# ──────────────────────────────────────────────────────────────────────
+#
 # ROOT CAUSE FIX (2026-04-09): the previous convention used
 # YYYYMMDD<letter>_description.sql (e.g. 20260408h_foo.sql). Two agents
 # creating migrations on the same day would independently guess the next
