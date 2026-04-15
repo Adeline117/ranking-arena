@@ -10,9 +10,9 @@ import { useLanguage } from '../Providers/LanguageProvider'
 import { useToast } from '../ui/Toast'
 import { type CategoryType } from './CategoryRankingTabs'
 import {
-  FilterIcon, CompareIcon, TableViewIcon, CardViewIcon, SettingsIcon, LockIconSmall,
+  FilterIcon, CompareIcon, SettingsIcon, LockIconSmall,
 } from './Icons'
-import type { ColumnKey, ViewMode } from './RankingTable'
+import type { ColumnKey } from './RankingTable'
 import { getFilterableStyles, type TradingStyle } from '@/lib/utils/trading-style'
 
 const ALL_TOGGLEABLE_COLUMNS: ColumnKey[] = ['score', 'roi', 'pnl', 'winrate', 'mdd', 'sharpe', 'followers', 'trades']
@@ -137,11 +137,6 @@ interface RankingFiltersProps {
   onCategoryChange: (c: CategoryType) => void
   isPro: boolean
   onProRequired?: () => void
-  // View mode
-  viewMode: ViewMode
-  onToggleViewMode: (mode: ViewMode) => void
-  onResetViewModeToAuto: () => void
-  hasManualViewMode: boolean
   // Filter
   onFilterToggle?: () => void
   hasActiveFilters?: boolean
@@ -171,7 +166,6 @@ interface RankingFiltersProps {
  */
 export function RankingFilters({
   category, onCategoryChange, isPro, onProRequired,
-  viewMode, onToggleViewMode, onResetViewModeToAuto, hasManualViewMode,
   onFilterToggle, hasActiveFilters,
   visibleColumns, showColumnSettings, onShowColumnSettings, onToggleColumn, onResetColumns,
   styleFilter, onStyleFilterChange, hasStyleData,
@@ -236,21 +230,6 @@ export function RankingFilters({
 
         {/* Tool buttons */}
         <Box style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[1], flexShrink: 0, marginLeft: 'auto' }}>
-          {/* View toggle */}
-          <Box className="view-toggle-group">
-            <button onClick={() => onToggleViewMode('table')} title={t('tableView')} aria-label={t('tableView')} aria-pressed={viewMode === 'table'} className={`view-toggle-btn touch-target-sm${viewMode === 'table' ? ' view-toggle-active' : ''}`}>
-              <TableViewIcon size={12} />
-            </button>
-            <button onClick={() => onToggleViewMode('card')} title={t('cardView')} aria-label={t('cardView')} aria-pressed={viewMode === 'card'} className={`view-toggle-btn touch-target-sm${viewMode === 'card' ? ' view-toggle-active' : ''}`}>
-              <CardViewIcon size={12} />
-            </button>
-            {hasManualViewMode && (
-              <button onClick={onResetViewModeToAuto} title={t('resetAutoLayout')} className="view-toggle-btn touch-target-sm" style={{ fontSize: tokens.typography.fontSize.xs, opacity: 0.6 }}>
-                Auto
-              </button>
-            )}
-          </Box>
-
           {/* Filter button */}
           <Box onClick={onFilterToggle} onKeyDown={(e: React.KeyboardEvent) => { if ((e.key === 'Enter' || e.key === ' ') && onFilterToggle) { e.preventDefault(); onFilterToggle() } }} title={t('advancedFilter')} aria-label={t('advancedFilter')} role="button" tabIndex={0}
             className={`toolbar-btn touch-target-sm${hasActiveFilters ? ' toolbar-btn-active' : ''}`}

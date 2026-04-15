@@ -42,10 +42,6 @@ import {
   type ViewMode,
   DEFAULT_VISIBLE_COLUMNS,
   LS_KEY_COLUMNS,
-  LS_KEY_VIEW_MODE,
-  LS_KEY_VIEW_MANUAL,
-  getStoredViewMode,
-  getStoredManualFlag,
   getStoredColumns,
 } from './RankingTableTypes'
 
@@ -204,63 +200,32 @@ function RankingTableInner(props: {
   const [visibleColumns, setVisibleColumns] = useState<ColumnKey[]>(DEFAULT_VISIBLE_COLUMNS)
   const [showColumnSettings, setShowColumnSettings] = useState(false)
   const [viewMode, setViewMode] = useState<ViewMode>('table')
-  // Cache getStoredManualFlag() in a ref to avoid synchronous localStorage reads during render.
-  // Previously called as a prop value in JSX (getStoredManualFlag()) on every render.
-  const storedManualFlagRef = useRef<boolean>(false)
 
   // Trading style filter
   const [styleFilter, setStyleFilter] = useState<TradingStyle | 'all'>('all')
+  // Score grade filter
+  const [scoreGradeFilter, setScoreGradeFilter] = useState<'all' | 'S' | 'A' | 'B' | 'C' | 'D'>('all')
   // Trader type filter (human/bot/all)
   const [traderTypeFilter, setTraderTypeFilter] = useState<'all' | 'human' | 'bot'>('all')
+  // Filter panel open state
+  const [filterOpen, setFilterOpen] = useState(false)
   // Expanded row for score breakdown
   const [expandedRowId, setExpandedRowId] = useState<string | null>(null)
 
   useEffect(() => {
     setVisibleColumns(getStoredColumns())
 
-    // Mobile auto-switch: respect manual choice, otherwise follow screen width
-    // Read localStorage once on mount and cache in ref to avoid repeated sync reads
-    const isManual = getStoredManualFlag()
-    storedManualFlagRef.current = isManual
-    if (isManual) {
-      setViewMode(getStoredViewMode())
-    } else {
-      const isMobile = window.matchMedia('(max-width: 767px)').matches
-      setViewMode(isMobile ? 'card' : 'table')
-    }
+    // Auto-detect: mobile → card, desktop → table
+    const isMobile = window.matchMedia('(max-width: 767px)').matches
+    setViewMode(isMobile ? 'card' : 'table')
 
-    // Auto-switch on resize when user hasn't manually chosen
     const mql = window.matchMedia('(max-width: 767px)')
     const handleResize = (e: MediaQueryListEvent) => {
-      if (!storedManualFlagRef.current) {
-        setViewMode(e.matches ? 'card' : 'table')
-      }
+      setViewMode(e.matches ? 'card' : 'table')
     }
     mql.addEventListener('change', handleResize)
     return () => mql.removeEventListener('change', handleResize)
   }, [])
-
-  // Column settings click-outside is handled by RankingFilters
-
-  const toggleViewMode = (mode: ViewMode) => {
-    setViewMode(mode)
-    storedManualFlagRef.current = true
-    try {
-      localStorage.setItem(LS_KEY_VIEW_MODE, mode)
-      localStorage.setItem(LS_KEY_VIEW_MANUAL, 'true')
-    } catch { /* localStorage unavailable in SSR/private browsing */ }
-  }
-
-  const resetViewModeToAuto = () => {
-    storedManualFlagRef.current = false
-    try {
-      localStorage.removeItem(LS_KEY_VIEW_MANUAL)
-      localStorage.removeItem(LS_KEY_VIEW_MODE)
-    } catch { /* localStorage unavailable in SSR/private browsing */ }
-    // Re-apply auto logic based on current screen width
-    const isMobile = window.matchMedia('(max-width: 767px)').matches
-    setViewMode(isMobile ? 'card' : 'table')
-  }
 
   const toggleColumn = (col: ColumnKey) => {
     setVisibleColumns(prev => {
@@ -343,7 +308,7 @@ function RankingTableInner(props: {
     // last computation AND content fingerprint unchanged, reuse the cached
     // reference (identity stable → downstream components can bail out of
     // re-render via React.memo / reference equality).
-    const key = `${sortColumn}|${sortDir}|${debouncedSearch}|${styleFilter}|${traderTypeFilter}`
+    const key = `${sortColumn}|${sortDir}|${debouncedSearch}|${styleFilter}|${scoreGradeFilter}|${traderTypeFilter}`
     if (prevSortedRef.current && prevSortedRef.current.fp === tradersFingerprint && prevSortedRef.current.key === key) {
       return prevSortedRef.current.data
     }
@@ -374,6 +339,20 @@ function RankingTableInner(props: {
         return style === styleFilter
       })
     }
+    // Apply score grade filter
+    if (scoreGradeFilter !== 'all') {
+      data = data.filter(t => {
+        const s = t.arena_score ?? 0
+        switch (scoreGradeFilter) {
+          case 'S': return s >= 90
+          case 'A': return s >= 70 && s < 90
+          case 'B': return s >= 50 && s < 70
+          case 'C': return s >= 30 && s < 50
+          case 'D': return s < 30
+          default: return true
+        }
+      })
+    }
     const sorted = [...data].sort((a, b) => {
       // Use null to distinguish "no data" from actual 0 — nulls always sort last
       let aRaw: number | null = null, bRaw: number | null = null
@@ -394,7 +373,7 @@ function RankingTableInner(props: {
     })
     prevSortedRef.current = { fp: tradersFingerprint, key, data: sorted }
     return sorted
-  }, [traders, sortColumn, sortDir, debouncedSearch, styleFilter, traderTypeFilter, tradersFingerprint])
+  }, [traders, sortColumn, sortDir, debouncedSearch, styleFilter, scoreGradeFilter, traderTypeFilter, tradersFingerprint])
 
 
   // Server-side pagination: use serverTotalCount for total pages.
@@ -424,7 +403,7 @@ function RankingTableInner(props: {
 
   // Reset scroll position on page/sort/filter changes
   const tableScrollRef = useRef<HTMLDivElement>(null)
-  const resetKey = useMemo(() => `${currentPage}-${sortColumn}-${sortDir}-${debouncedSearch}-${styleFilter}-${traderTypeFilter}`, [currentPage, sortColumn, sortDir, debouncedSearch, styleFilter, traderTypeFilter])
+  const resetKey = useMemo(() => `${currentPage}-${sortColumn}-${sortDir}-${debouncedSearch}-${styleFilter}-${scoreGradeFilter}-${traderTypeFilter}`, [currentPage, sortColumn, sortDir, debouncedSearch, styleFilter, scoreGradeFilter, traderTypeFilter])
   useEffect(() => {
     if (tableScrollRef.current) tableScrollRef.current.scrollTop = 0
   }, [resetKey])
@@ -497,10 +476,6 @@ function RankingTableInner(props: {
           onCategoryChange={onCategoryChange}
           isPro={isPro}
           onProRequired={onProRequired}
-          viewMode={viewMode}
-          onToggleViewMode={toggleViewMode}
-          onResetViewModeToAuto={resetViewModeToAuto}
-          hasManualViewMode={storedManualFlagRef.current}
           onFilterToggle={onFilterToggle}
           hasActiveFilters={hasActiveFilters}
           visibleColumns={visibleColumns}
