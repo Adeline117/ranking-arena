@@ -83,7 +83,7 @@ const TradeRow = memo(function TradeRow({ trade, index }: { trade: NormalizedTra
       {/* 交易所 badge */}
       <span style={{
         display: 'inline-block',
-        padding: '1px 5px',
+        padding: `1px ${tokens.spacing[1]}`,
         borderRadius: tokens.radius.sm,
         background: exchBg,
         color: exchColor,
@@ -221,7 +221,7 @@ export default function LiveTradesFeed() {
               fontSize: 10,
               color: tokens.colors.text.tertiary,
               fontWeight: 500,
-              padding: '1px 6px',
+              padding: `1px ${tokens.spacing[1]}`,
               borderRadius: tokens.radius.sm,
               background: tokens.colors.bg.tertiary,
             }}>
@@ -239,7 +239,7 @@ export default function LiveTradesFeed() {
                 key={ex}
                 onClick={() => toggleExchange(ex)}
                 style={{
-                  padding: '1px 6px',
+                  padding: `1px ${tokens.spacing[1]}`,
                   fontSize: 10,
                   fontWeight: 600,
                   borderRadius: tokens.radius.sm,
@@ -341,7 +341,7 @@ export default function LiveTradesFeed() {
           fontSize: 10,
           color: tokens.colors.accent.warning,
           fontWeight: 600,
-          padding: '2px 6px',
+          padding: `2px ${tokens.spacing[1]}`,
           borderRadius: tokens.radius.sm,
           background: 'var(--color-orange-subtle)',
         }}>
