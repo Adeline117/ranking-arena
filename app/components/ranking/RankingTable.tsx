@@ -80,6 +80,57 @@ function CardLoadMoreSentinel({ onVisible }: { onVisible: () => void }) {
   return <div ref={ref} style={{ height: 1 }} aria-hidden />
 }
 
+/** Score color legend — shows the 5 grade tiers as colored chips */
+const SCORE_LEGEND_TIERS = [
+  { letter: 'S', range: '90+', color: 'var(--color-score-legendary, #8b5cf6)' },
+  { letter: 'A', range: '70-89', color: 'var(--color-score-great, #10b981)' },
+  { letter: 'B', range: '50-69', color: 'var(--color-score-average, #eab308)' },
+  { letter: 'C', range: '30-49', color: 'var(--color-score-below, #f97316)' },
+  { letter: 'D', range: '<30', color: 'var(--color-score-low, #ef4444)' },
+] as const
+
+function ScoreLegend() {
+  return (
+    <div
+      style={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: 6,
+        padding: '6px 16px',
+        borderBottom: '1px solid var(--glass-border-light)',
+        overflowX: 'auto',
+        WebkitOverflowScrolling: 'touch',
+      }}
+    >
+      <span style={{ fontSize: 11, color: 'var(--color-text-tertiary)', whiteSpace: 'nowrap', marginRight: 2 }}>
+        Score
+      </span>
+      {SCORE_LEGEND_TIERS.map(tier => (
+        <span
+          key={tier.letter}
+          style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: 3,
+            padding: '2px 8px',
+            borderRadius: 10,
+            fontSize: 11,
+            fontWeight: 600,
+            whiteSpace: 'nowrap',
+            color: tier.color,
+            background: `color-mix(in srgb, ${tier.color} 12%, transparent)`,
+            border: `1px solid color-mix(in srgb, ${tier.color} 25%, transparent)`,
+            lineHeight: 1.4,
+          }}
+        >
+          {tier.letter}
+          <span style={{ fontWeight: 400, opacity: 0.8 }}>{tier.range}</span>
+        </span>
+      ))}
+    </div>
+  )
+}
+
 /**
  * 排行榜页面 - 核心功能，突出前三名
  */
@@ -471,6 +522,9 @@ function RankingTableInner(props: {
 
       {/* Search removed - use top nav search instead */}
       {/* Inline style filter is rendered inside RankingFilters when onCategoryChange is provided */}
+
+      {/* Score color legend — single row of colored chips explaining the grade tiers */}
+      <ScoreLegend />
 
       {/* Table Header (only in table view) - sticky */}
       {viewMode === 'table' && (

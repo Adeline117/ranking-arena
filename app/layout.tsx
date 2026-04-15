@@ -61,13 +61,6 @@ export const metadata: Metadata = {
   formatDetection: { telephone: false },
   alternates: {
     canonical: BASE_URL,
-    languages: {
-      'en': BASE_URL,
-      'zh-CN': BASE_URL,
-      'ja': BASE_URL,
-      'ko': BASE_URL,
-      'x-default': BASE_URL,
-    },
   },
   openGraph: {
     type: "website",
