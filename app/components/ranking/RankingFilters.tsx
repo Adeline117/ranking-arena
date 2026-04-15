@@ -251,7 +251,7 @@ export function RankingFilters({
     <>
       {/* Toolbar row */}
       <Box className="ranking-toolbar-row" style={{
-        padding: `6px ${tokens.spacing[4]}`,
+        padding: `${tokens.spacing[2]} ${tokens.spacing[4]}`,
         display: 'flex', alignItems: 'center', justifyContent: 'space-between',
         gap: tokens.spacing[2],
         borderBottom: '1px solid var(--glass-border-light)',
@@ -406,7 +406,7 @@ export function RankingFilters({
             background: 'var(--color-bg-secondary, #14121C)',
             display: 'flex',
             flexDirection: 'column',
-            gap: 14,
+            gap: tokens.spacing[3],
           }}
         >
           {/* Style filter */}
