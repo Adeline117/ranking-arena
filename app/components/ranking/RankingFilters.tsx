@@ -184,7 +184,7 @@ function FilterChip({ active, label, color, onClick }: {
       style={{
         padding: '5px 12px',
         borderRadius: 20,
-        minHeight: 32,
+        minHeight: 36,
         border: active
           ? `1px solid ${activeColor}`
           : `1px solid ${tokens.colors.border.primary}`,
@@ -193,7 +193,7 @@ function FilterChip({ active, label, color, onClick }: {
         fontSize: 12,
         fontWeight: active ? 700 : 500,
         cursor: 'pointer',
-        transition: `all ${tokens.transition.fast}`,
+        transition: 'all 0.15s ease, transform 0.1s ease',
         whiteSpace: 'nowrap',
       }}
     >
