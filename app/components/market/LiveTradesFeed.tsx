@@ -182,6 +182,7 @@ export default function LiveTradesFeed() {
       borderRadius: tokens.radius.xl,
       overflow: 'hidden',
       width: '100%',
+      minHeight: 220,
       maxHeight: 480,
       display: 'flex',
       flexDirection: 'column',
