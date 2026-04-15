@@ -461,7 +461,7 @@ function createNoOpHandle(): PipelineLogHandle {
       logger.error(`[PipelineLogger:no-op] error — ${msg}`)
     },
     async partialSuccess(recordsProcessed = 0, failedItems: string[] = []) {
-      console.warn(`[PipelineLogger:no-op] partial_success — ${recordsProcessed} processed, ${failedItems.length} failed`)
+      logger.warn(`[PipelineLogger:no-op] partial_success — ${recordsProcessed} processed, ${failedItems.length} failed`)
     },
     async timeout() {
       logger.warn('[PipelineLogger:no-op] timeout')

@@ -3,17 +3,62 @@ set -euo pipefail
 
 ###############################################################################
 # Arena Supabase 数据库备份脚本 (简化版)
-# 
+#
 # 用途：快速手动备份Supabase数据库到本地
 # 使用：./supabase-backup.sh [--output-dir DIR] [--tables-only]
-# 
+#
 # 注意：生产环境请使用 scripts/maintenance/backup-to-r2.mjs
 #       这个脚本仅用于应急备份或本地测试
-# 
+#
 # 前置要求：
 #   1. PostgreSQL 17 客户端：brew install postgresql@17
 #   2. .env文件包含DATABASE_URL
 #   3. 足够的磁盘空间（估计1-2GB）
+#
+# ─── Backup & Recovery SLA ──────────────────────────────────────────────────
+#
+# RTO (Recovery Time Objective): 4 hours
+#   Restore from latest backup + re-run cron jobs to backfill any gap.
+#
+# RPO (Recovery Point Objective): 24 hours max (manual backup schedule)
+#   - Manual backups: run this script or `npm run backup:r2` daily
+#   - Supabase Pro: point-in-time recovery (PITR) available for finer RPO
+#   - Automated backups: scripts/maintenance/backup-to-r2.mjs uploads to
+#     Cloudflare R2 on a schedule
+#
+# Recovery Procedure:
+#   1. Obtain the latest backup file (local or from R2):
+#        - Local:  ls -lt backups/arena-full-backup-*.sql.gz | head -1
+#        - R2:     npm run backup:r2 -- --list   (then download latest)
+#
+#   2. Restore with pg_restore / psql:
+#        createdb arena_restore
+#        gunzip -c backups/arena-full-backup-YYYYMMDD-HHMMSS.sql.gz \
+#          | psql arena_restore
+#      For Supabase hosted DB, use the connection string from the dashboard:
+#        gunzip -c backup.sql.gz | psql "$DATABASE_URL"
+#
+#   3. Verify data integrity:
+#        psql "$DATABASE_URL" -c "
+#          SELECT 'trader_sources' AS tbl, count(*) FROM trader_sources
+#          UNION ALL
+#          SELECT 'trader_snapshots', count(*) FROM trader_snapshots
+#          UNION ALL
+#          SELECT 'leaderboard_ranks', count(*) FROM leaderboard_ranks;
+#        "
+#      Compare row counts against expected values (34k+ traders, etc.).
+#
+#   4. Re-run leaderboard computation to rebuild derived data:
+#        curl -X POST https://www.arenafi.org/api/cron/compute-leaderboard \
+#          -H "Authorization: Bearer $CRON_SECRET"
+#
+#   5. Trigger enrichment crons to fill any gap between backup and now:
+#        curl -X POST https://www.arenafi.org/api/cron/batch-enrich \
+#          -H "Authorization: Bearer $CRON_SECRET"
+#
+#   6. Verify the live site returns fresh data (check /api/health/pipeline).
+#
+# ────────────────────────────────────────────────────────────────────────────
 ###############################################################################
 
 # 颜色定义

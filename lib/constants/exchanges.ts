@@ -9,6 +9,10 @@
  * All constants here must match those DB values exactly.
  */
 
+import { createLogger } from '@/lib/utils/logger'
+
+const logger = createLogger('exchanges')
+
 // ---------------------------------------------------------------------------
 // Source type
 // ---------------------------------------------------------------------------
@@ -537,7 +541,7 @@ export function validateExchangeConfig(): string[] {
 
   // Log warnings
   for (const w of warnings) {
-    console.warn(w)
+    logger.warn(w)
   }
 
   return warnings
