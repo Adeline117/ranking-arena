@@ -149,7 +149,7 @@ export const usePostStore = create<PostStoreState & PostStoreActions>((set) => (
     const existingIds = new Set(existing.map(c => c.id))
     const unique = newComments.filter(c => !existingIds.has(c.id))
     return {
-      comments: { ...state.comments, [postId]: [...existing, ...unique] },
+      comments: evictOldest({ ...state.comments, [postId]: [...existing, ...unique] }, MAX_CACHED_COMMENT_SETS),
     }
   }),
 
