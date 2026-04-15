@@ -376,7 +376,7 @@ export function TraderLinksSection({ userId }: { userId: string }) {
                       borderRadius: tokens.radius.sm,
                       background: `${tokens.colors.accent.primary}20`,
                       color: tokens.colors.accent.primary,
-                      fontSize: 10,
+                      fontSize: tokens.typography.fontSize.xs /* TODO: add 10px token */,
                       fontWeight: 700,
                       letterSpacing: '0.5px',
                       textTransform: 'uppercase',
