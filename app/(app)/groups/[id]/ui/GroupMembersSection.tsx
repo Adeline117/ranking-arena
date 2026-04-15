@@ -1,8 +1,9 @@
 'use client'
 
-import { useEffect } from 'react'
+import { useEffect, useRef } from 'react'
 import Link from 'next/link'
 import Image from 'next/image'
+import { useVirtualizer } from '@tanstack/react-virtual'
 import { getLocaleFromLanguage } from '@/lib/utils/format'
 import { tokens } from '@/lib/design-tokens'
 import { Box, Text, Button } from '@/app/components/base'
@@ -326,6 +327,50 @@ function MemberRow({ member }: MemberRowProps): React.ReactElement {
   )
 }
 
+// Virtualized member list for large groups (>20 members)
+const MEMBER_ROW_HEIGHT = 52 // px, matches padding + avatar size
+const VIRTUALIZE_THRESHOLD = 20
+
+function VirtualizedMemberList({ members }: { members: GroupMember[] }): React.ReactElement {
+  const parentRef = useRef<HTMLDivElement>(null)
+
+  const virtualizer = useVirtualizer({
+    count: members.length,
+    getScrollElement: () => parentRef.current,
+    estimateSize: () => MEMBER_ROW_HEIGHT,
+    overscan: 10,
+  })
+
+  return (
+    <div
+      ref={parentRef}
+      style={{
+        maxHeight: 400,
+        overflow: 'auto',
+      }}
+    >
+      <div style={{ height: virtualizer.getTotalSize(), width: '100%', position: 'relative' }}>
+        {virtualizer.getVirtualItems().map(virtualItem => (
+          <div
+            key={members[virtualItem.index].user_id}
+            style={{
+              position: 'absolute',
+              top: 0,
+              left: 0,
+              width: '100%',
+              transform: `translateY(${virtualItem.start}px)`,
+            }}
+            data-index={virtualItem.index}
+            ref={virtualizer.measureElement}
+          >
+            <MemberRow member={members[virtualItem.index]} />
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
 export function MembersListModal({ members, memberCount, loading, language: _language, onClose }: MembersListModalProps): React.ReactElement {
   const { t } = useLanguage()
   useModalBehavior(onClose)
@@ -341,6 +386,10 @@ export function MembersListModal({ members, memberCount, loading, language: _lan
           {t('noMembersData')}
         </Text>
       )
+    }
+    // Use virtualization for large lists, simple render for small ones
+    if (members.length > VIRTUALIZE_THRESHOLD) {
+      return <VirtualizedMemberList members={members} />
     }
     return (
       <Box style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[2] }}>
