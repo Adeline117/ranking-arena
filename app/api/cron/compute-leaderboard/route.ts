@@ -15,7 +15,6 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 import { getReadReplica } from '@/lib/supabase/read-replica'
 import {
   calculateArenaScore,
-  wilsonConfidenceMultiplier,
   type Period,
 } from '@/lib/utils/arena-score'
 import {
@@ -549,11 +548,13 @@ async function computeSeason(
       season
     )
 
-    // Wilson confidence: smooth curve based on actual data availability
-    // Replaces hardcoded 'full' from calculateArenaScore() which ignored missing metrics
-    const confidenceMultiplier = wilsonConfidenceMultiplier(
-      t.roi, t.pnl, t.max_drawdown, t.win_rate, t.sharpe_ratio
-    )
+    // V3 only scores ROI + PnL, so confidence is based on those 2 signals only.
+    // Previous Wilson(5-signal) was wrong: even 5/5 capped multiplier at 0.696.
+    const hasRoi = t.roi != null
+    const hasPnl = t.pnl != null && Number(t.pnl) > 0
+    const confidenceMultiplier = (hasRoi && hasPnl) ? 1.0
+      : hasRoi ? 0.85   // ROI only, no PnL data
+      : 0.50            // neither (shouldn't happen, but safe fallback)
     // Estimation penalty kept for future use — currently always 1.0 since Phase 5 estimation was removed
     const estimationPenalty = t.metrics_estimated ? 0.92 : 1.0
     // Low trade count penalty: traders with very few trades have unreliable metrics
