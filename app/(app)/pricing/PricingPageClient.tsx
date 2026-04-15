@@ -91,6 +91,32 @@ export default function PricingPageClient({ lifetimeCount = 0 }: PricingPageClie
           {resolved(t('pricingSubtitle'), 'pricingSubtitle', 'Unlock all premium features')}
         </p>
 
+        {/* Limited-time free banner — prominent top placement */}
+        <div style={{
+          maxWidth: 560,
+          margin: `0 auto ${tokens.spacing[8]}`,
+          padding: `${tokens.spacing[4]} ${tokens.spacing[6]}`,
+          background: 'linear-gradient(135deg, color-mix(in srgb, var(--color-accent-success, #16c784) 12%, var(--color-bg-secondary)) 0%, color-mix(in srgb, var(--color-accent-success, #16c784) 6%, var(--color-bg-secondary)) 100%)',
+          border: '1px solid color-mix(in srgb, var(--color-accent-success, #16c784) 25%, transparent)',
+          borderRadius: tokens.radius.lg,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          gap: tokens.spacing[3],
+        }}>
+          <span style={{ fontSize: 18 }} aria-hidden="true">🎉</span>
+          <span style={{
+            fontSize: 15,
+            fontWeight: 700,
+            color: 'var(--color-accent-success, #16c784)',
+            letterSpacing: '-0.01em',
+          }}>
+            {locale === 'zh'
+              ? '限时优惠：所有 Pro 功能目前免费开放！'
+              : 'Limited Time: All Pro features are currently free!'}
+          </span>
+        </div>
+
         {/* Social proof stats */}
         <div style={{
           display: 'flex',
